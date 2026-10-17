@@ -132,7 +132,7 @@ fn finite_reveals_and_history_presence_stop_requesting_frames() {
 
 #[test]
 fn ornaments_animate_without_runtime_work_and_stop_when_reduced_or_cleared() {
-    use nanatype::ui::{Ui, dialogue};
+    use nanatype::ui::{Ui, dialogue, shader_effects};
     use nanatype_core::{Cmd, Core, DisplayView};
     use nanatype_i18n::Locale;
     use nanatype_settings::Settings;
@@ -159,8 +159,12 @@ fn ornaments_animate_without_runtime_work_and_stop_when_reduced_or_cleared() {
         .sync_presentation_clock(Duration::from_millis(1000));
     session.flush().unwrap();
     assert!(
-        session.document().compositor_needs_tick(),
-        "visible decorations own live tracks"
+        shader_effects::animating(ui),
+        "visible WGSL ornaments request render-only frames"
+    );
+    assert!(
+        !session.document().compositor_needs_tick(),
+        "WGSL loops must not drive the Runtime compositor clock"
     );
     let layout = session.document().context().world().layout_generation();
     session
@@ -177,18 +181,18 @@ fn ornaments_animate_without_runtime_work_and_stop_when_reduced_or_cleared() {
     ui.reduced_motion.set(true);
     session.flush().unwrap();
     assert!(
-        !session.document().compositor_needs_tick(),
+        !shader_effects::animating(ui),
         "reduced motion removes ornament loops"
     );
     ui.reduced_motion.set(false);
     session.flush().unwrap();
-    assert!(session.document().compositor_needs_tick());
+    assert!(shader_effects::animating(ui));
     ui.display
         .set(Arc::new(DisplayView::empty(core.display().entrance)));
     ui.now.set(10_000);
     nanatype::clock::capture_at(10_000, || session.flush().unwrap());
     assert!(
-        !session.document().compositor_needs_tick(),
+        !shader_effects::animating(ui),
         "an empty display never retains ornament loops"
     );
 }
@@ -344,6 +348,7 @@ fn sweep_nine_slice_alpha_and_failed_reload_keep_the_surface_route() {
         slice: [2; 4],
         scale: 1.0,
         repeat: false,
+        layout_inset: true,
     };
     for scale in [1.0, 1.5, 2.0] {
         let surface = Surface {

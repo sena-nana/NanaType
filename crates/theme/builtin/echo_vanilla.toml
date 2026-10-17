@@ -2,12 +2,13 @@
 # CC0-1.0 below covers NanaType's own contributions to this local skin implementation.
 [meta]
 id = "nanatype.echo_vanilla"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["streaming", "minimal"]
 name = { zh-CN = "Echo-Live 原版", en-US = "Echo-Live Vanilla", ja-JP = "Echo-Live オリジナル" }
 description = { zh-CN = "还原 Echo-Live 的原版主题：白底、顶部灰线、右上角三角、名字左凸，底部灰色菜单栏", en-US = "Echo-Live's vanilla theme: white bar, grey top rule, corner notch, a hanging name and the grey menu row", ja-JP = "Echo-Live のオリジナルテーマを再現：白地に灰色の上線、右上の三角、はみ出す名前、下段の灰色メニュー" }
+schema = 2
 
 [chrome]
 accent = "#606266"
@@ -27,6 +28,7 @@ weight = 400
 [dialogue]
 region = [1280, 180]
 padding = [226, 52, 333, 44]
+shader_effects = []
 
 [dialogue.box]
 color = "#ffffff"
@@ -36,6 +38,8 @@ border_widths = [1.5, 0, 0, 0]
 radius = 0
 
 # The grey notch in the top-right corner.
+frame = { image = "echo_vanilla/still.png", slice = [10, 24, 10, 100], layout_inset = false }
+
 [[dialogue.decor]]
 anchor = "top_right"
 size = [13, 13]

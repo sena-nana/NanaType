@@ -1,11 +1,12 @@
 [meta]
 id = "nanatype.vanilla"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["streaming", "minimal"]
 name = { zh-CN = "香草", en-US = "Vanilla", ja-JP = "バニラ" }
 description = { zh-CN = "极简白条与左侧强调色，名字收在框内，适合直播字幕", en-US = "A minimal white bar with an accent stripe and the name inside; made for streams", ja-JP = "左にアクセントラインのシンプルな白帯、名前は枠内に。配信向け" }
+schema = 2
 
 [chrome]
 accent = "#4a7dff"
@@ -15,9 +16,10 @@ text = "#22263a"
 [dialogue]
 region = [760, 170]
 padding = [26, 46, 26, 14]
+shader_effects = []
 
 [dialogue.box]
-contour = "slant"
+contour = "rounded"
 color = "#fffffff2"
 border_color = "#4a7dff"
 border_width = 0
@@ -26,18 +28,7 @@ radius = 0
 radii = [0, 6, 6, 0]
 gradient = { angle = 90, stops = [[0, "#eef3fff2"], [0.35, "#fffffff2"]] }
 shadows = [{ color = "#22263a26", dy = 4, blur = 14 }]
-
-[[dialogue.decor]]
-anchor = "bottom_right"
-offset = [-14, -10]
-size = [30, 1]
-color = "#4a7dff40"
-
-[[dialogue.decor]]
-anchor = "bottom_right"
-offset = [-49, -10]
-size = [6, 1]
-color = "#4a7dff80"
+frame = { image = "vanilla/still.png", slice = [44, 70, 18, 26], layout_inset = false }
 
 [dialogue.text]
 color = "#22263a"
@@ -61,7 +52,7 @@ motion = "pulse"
 period_s = 1.0
 
 [history]
-bubble_contour = "slant"
+bubble_contour = "rounded"
 name_color = "#4a7dff"
 bubble_color = "#fffffff2"
 bubble_border = "#4a7dff"

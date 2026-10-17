@@ -52,18 +52,43 @@ pub fn is_image(path: &Path) -> bool {
 
 /// `skin:<path>` → URL for local, embedded and inherited skin artwork.
 pub fn skin_urls(files: &dyn nanatype_theme::SkinFiles) -> HashMap<String, String> {
-    files
-        .list()
+    skin_image_urls(files, files.list())
+}
+
+/// Static picker artwork only. GPU input textures are decoded by the effect
+/// loader and need not also be materialized into the UI's image cache.
+pub fn skin_preview_urls(
+    skin: &nanatype_theme::Skin,
+    files: &dyn nanatype_theme::SkinFiles,
+) -> HashMap<String, String> {
+    let mut paths: Vec<_> = skin
+        .referenced_files()
+        .into_iter()
+        .filter(|(field, _, kind)| {
+            matches!(
+                kind,
+                nanatype_theme::FileKind::Image | nanatype_theme::FileKind::NineSlice(_)
+            ) && *field != "shaders.textures"
+        })
+        .map(|(_, path, _)| path.to_owned())
+        .collect();
+    paths.sort();
+    paths.dedup();
+    skin_image_urls(files, paths)
+}
+
+fn skin_image_urls(
+    files: &dyn nanatype_theme::SkinFiles,
+    paths: Vec<String>,
+) -> HashMap<String, String> {
+    paths
         .into_iter()
         .filter(|path| is_image(Path::new(path)))
         .filter_map(|path| {
-            let url = if let Some(root) = files.root().filter(|root| root.join(&path).exists()) {
-                // Do not bypass the root check for existing symlinks/junctions.
-                skin_file_url(root, &path)?
-            } else {
-                let bytes = files.read(&path).ok()?;
-                media::global()?.bytes_url(&path, &bytes)?
-            };
+            // SkinFiles enforces its resource jail. Immutable content URLs
+            // invalidate the painter when a local image is saved in place.
+            let bytes = files.read(&path).ok()?;
+            let url = media::global()?.bytes_url(&path, &bytes)?;
             Some((format!("skin:{path}"), url))
         })
         .collect()
@@ -155,6 +180,9 @@ impl AssetLibrary {
 
     /// A URL NanaUI will load for `asset`, or `None` when it cannot be shown.
     pub fn url(&self, asset: &AssetRef, skin: Option<&LoadedSkin>) -> Option<String> {
+        if let AssetRef::Skin(path) = asset {
+            return skin_image_urls(&*skin?.files, vec![path.clone()]).remove(&asset.to_string());
+        }
         let (path, root) = self.locate(asset, skin)?;
         media::url(&path, root.as_deref())
     }

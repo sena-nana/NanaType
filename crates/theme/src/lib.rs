@@ -16,6 +16,8 @@ mod geometry;
 mod load;
 mod manifest;
 mod registry;
+mod shader;
+pub use shader::*;
 
 #[cfg(test)]
 mod tests;
@@ -33,6 +35,7 @@ pub use geometry::*;
 pub use load::{
     BaseResolver, LoadedSkin, MANIFEST, MAX_DECOR, MAX_IMAGE_SIDE, MAX_SHADOWS, MAX_STOPS,
     SKIN_TAGS, Severity, SkinDiagnostic, SkinOrigin, deep_merge, load, read_manifest,
+    standalone_manifest,
 };
 pub use manifest::*;
 pub use registry::{DEFAULT_SKIN, InstallOutcome, SkinEntry, SkinRegistry};

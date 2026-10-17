@@ -1,0 +1,39 @@
+[meta]
+schema = 2
+id = "nanatype.citrus"
+version = "1.1.2"
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["streaming", "cute"]
+name = { zh-CN = "柠檬汽水", en-US = "Citrus Soda", ja-JP = "シトラスソーダ" }
+description = { zh-CN = "汽水标签、水果剖面与网点拼贴；完整程序版画", en-US = "Original procedural print artwork", ja-JP = "オリジナルのプロシージャル版画" }
+
+[chrome]
+appearance = "light"
+accent = "#F4A340"
+surface = "#FFF8DD"
+text = "#644A28"
+
+[dialogue]
+region = [920, 220]
+overscan = 16
+padding = [69, 68, 202, 28]
+shader_effects = [{ shader = "artwork", target = "artwork" }]
+box = { color = "#FFF8DD", border_color = "#73BDA8", frame = { image = "citrus/still.png", slice = [0, 0, 0, 0] } }
+text = { color = "#644A28", size = 26, line_height = 1.45 }
+nameplate = { color = "#F4A340", text_color = "#4C351D", border_color = "#FFF8DD", border_width = 1, gradient = { angle = 180, stops = [[0, "#FFD17C"], [1, "#F4A340"]] }, shadows = [{ color = "#73BDA87A", dy = 2, blur = 0 }], radius = 3, padding = [12, 3], offset = [69, 12], rotate = -2, size = 19 }
+continue = { glyph = "· · ·", color = "#F4A340", motion = "none" }
+
+[shaders.artwork]
+source = "citrus/artwork.wgsl"
+period_s = 16
+intensity = 1
+textures = ["citrus/ornament.png"]
+
+[history]
+name_color = "#644A28"
+bubble_color = "#FFF8DD"
+bubble_border = "#73BDA870"
+bubble_border_width = 1
+bubble_radius = 18
+text = { color = "#644A28" }

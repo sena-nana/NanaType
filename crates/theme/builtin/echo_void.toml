@@ -2,7 +2,7 @@
 # CC0-1.0 below covers NanaType's own contributions to this local skin implementation.
 [meta]
 id = "nanatype.echo_void"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["streaming", "minimal"]
@@ -40,7 +40,7 @@ offset = [169, -8]
 size = [46, 22]
 text = "SAVE"
 when = "display"
-text_color = "#888888"
+text_color = "#73767C"
 text_size = 18
 font = "body"
 
@@ -50,7 +50,7 @@ offset = [228, -8]
 size = [48, 22]
 text = "LOAD"
 when = "display"
-text_color = "#888888"
+text_color = "#73767C"
 text_size = 18
 font = "body"
 
@@ -60,7 +60,7 @@ offset = [289, -8]
 size = [62, 22]
 text = "Q.SAVE"
 when = "display"
-text_color = "#888888"
+text_color = "#73767C"
 text_size = 18
 font = "body"
 
@@ -70,7 +70,7 @@ offset = [364, -8]
 size = [64, 22]
 text = "Q.LOAD"
 when = "display"
-text_color = "#888888"
+text_color = "#73767C"
 text_size = 18
 font = "body"
 
@@ -80,7 +80,7 @@ offset = [441, -8]
 size = [52, 22]
 text = "« ‹ › »"
 when = "display"
-text_color = "#888888"
+text_color = "#73767C"
 text_size = 18
 font = "body"
 
@@ -90,7 +90,7 @@ offset = [506, -8]
 size = [78, 22]
 text = "HISTORY"
 when = "display"
-text_color = "#888888"
+text_color = "#73767C"
 text_size = 18
 font = "body"
 
@@ -100,17 +100,17 @@ offset = [597, -8]
 size = [18, 22]
 text = "✕"
 when = "display"
-text_color = "#888888"
+text_color = "#73767C"
 text_size = 18
 font = "body"
 
 [dialogue.text]
-color = "#000000"
+color = "#202124"
 size = 27
 
 [dialogue.nameplate]
 color = "#00000000"
-text_color = "#000000"
+text_color = "#202124"
 size = 27
 radius = 0
 padding = [0, 0]

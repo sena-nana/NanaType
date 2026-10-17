@@ -61,6 +61,7 @@ webm-iterable = "0.7.1"
 shiguredo_libvpx = "=2026.2.0-canary.3"
 url = "2"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+pollster = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
@@ -73,7 +74,7 @@ objc2-metal = "0.3"
 shiguredo_libvpx = { version = "=2026.2.0-canary.3", features = ["source-build"] }
 
 [target.'cfg(windows)'.dependencies]
-nanalive-spout = { git = "https://github.com/sena-nana/nanalive-spout", rev = "106e124cdbe3a5eb9ee104715ee1d54c3903b217", default-features = false, features = ["gpu-dx11-shared"] }
+nanalive-spout = { git = "https://github.com/sena-nana/nanalive-spout", rev = "72352c0da9bec2e11c2f4f6b28ddfd020525fbb7", default-features = false, features = ["gpu-dx11-shared"] }
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",

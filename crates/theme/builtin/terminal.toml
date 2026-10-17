@@ -1,11 +1,12 @@
 [meta]
 id = "nanatype.terminal"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["retro", "minimal"]
 name = { zh-CN = "终端", en-US = "Terminal", ja-JP = "ターミナル" }
 description = { zh-CN = "黑底绿字的命令行窗口，带标题栏与闪烁光标", en-US = "A green-on-black console window with a title bar and a blinking cursor", ja-JP = "黒地に緑文字のコンソール。タイトルバーと点滅カーソル付き" }
+schema = 2
 
 [chrome]
 appearance = "dark"
@@ -27,6 +28,7 @@ weight = 400
 
 [dialogue]
 padding = [22, 40, 22, 14]
+shader_effects = [{ shader = "artwork", target = "artwork" }]
 
 [dialogue.box]
 contour = "terminal"
@@ -36,55 +38,7 @@ border_width = 1
 radius = 4
 shadows = [{ color = "#33ff6626", blur = 16 }]
 
-# Title bar with window dots.
-[[dialogue.decor]]
-contour = "terminal"
-anchor = "top"
-size = ["100%", 24]
-radii = [4, 4, 0, 0]
-color = "#132a17"
-border_color = "#1f5f2a"
-border_widths = [0, 0, 1, 0]
-
-[[dialogue.decor]]
-anchor = "top_left"
-offset = [12, 8]
-size = [8, 8]
-radius = 4
-color = "#33ff66"
-shadows = [{ color = "#33ff6699", blur = 6 }]
-
-[[dialogue.decor]]
-anchor = "top_left"
-offset = [26, 8]
-size = [8, 8]
-radius = 4
-color = "#33ff6699"
-
-[[dialogue.decor]]
-anchor = "top_left"
-offset = [40, 8]
-size = [8, 8]
-radius = 4
-color = "#33ff6644"
-
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-104, 7]
-size = [1, 10]
-color = "#33ff6640"
-
-[[dialogue.decor]]
-anchor = "bottom_left"
-offset = [9, -8]
-size = [18, 1]
-color = "#33ff6680"
-
-[[dialogue.decor]]
-anchor = "bottom_left"
-offset = [31, -8]
-size = [6, 1]
-color = "#33ff6640"
+frame = { image = "terminal/still.png", slice = [28, 28, 16, 54], layout_inset = false }
 
 [dialogue.text]
 color = "#33ff66"
@@ -134,3 +88,8 @@ shadow = { color = "#33ff6660", blur = 4 }
 [effects]
 # Coloured runs under 3:1 on the box get a 1.5px outline in the darkest ink.
 contrast_guard = 3.0
+
+[shaders.artwork]
+source = "terminal/artwork.wgsl"
+period_s = 16
+intensity = 1

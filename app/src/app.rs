@@ -111,6 +111,9 @@ pub struct App {
     /// Family registered for each skin font role (body, name, accent).
     skin_families: [Option<String>; 3],
     skin_watch: Option<crate::services::watch::Watch>,
+    skin_reload: crate::services::watch::ReloadGate,
+    skin_reload_scan: bool,
+    prepared_skin_urls: Option<HashMap<String, String>>,
     sticker_watch: Option<crate::services::watch::Watch>,
     /// Toasts for the host to show in the settings, input and chat windows.
     pub toasts: Vec<ToastRequest>,
@@ -157,7 +160,7 @@ impl App {
             }
         });
         let registry = SkinRegistry::new(Some(paths.skins()), env!("CARGO_PKG_VERSION"));
-        let (loaded, fallback) = registry.load_or_default(&settings.skin.id);
+        let (loaded, fallback) = registry.load_scanned_or_default(&settings.skin.id);
         let skin = Arc::new(skin_theme::with_overrides(
             &loaded.skin,
             &settings.skin.overrides,
@@ -277,6 +280,9 @@ impl App {
             builtin_fonts: Default::default(),
             skin_families: [None, None, None],
             skin_watch: None,
+            skin_reload: Default::default(),
+            skin_reload_scan: false,
+            prepared_skin_urls: None,
             sticker_watch: None,
             toasts: Vec::new(),
             tray_error: None,
@@ -521,9 +527,16 @@ impl App {
     // ---- skins and assets ------------------------------------------------
 
     fn refresh_skin_rows(&mut self) {
+        self.skin_reload.invalidate();
+        let previous = self.ui.skins.with_untracked(|rows| {
+            rows.iter()
+                .flat_map(|r| r.image_urls.values().cloned())
+                .collect::<Vec<_>>()
+        });
         let locale = self.ui.locale.get_untracked();
         let rows = crate::ui::skin_rows(&self.registry, locale);
         self.ui.skins.set(Arc::new(rows));
+        crate::ui::retire_skin_urls(self.ui, previous);
     }
 
     fn sync_tray_skins(&mut self) {
@@ -550,12 +563,20 @@ impl App {
 
     /// Asset URLs for skin files and stickers, for the views.
     fn refresh_assets(&mut self) {
+        let previous = self.ui.asset_urls.with_untracked(|urls| {
+            urls.iter()
+                .filter(|(key, _)| key.starts_with("skin:"))
+                .map(|(_, url)| url.clone())
+                .collect::<Vec<_>>()
+        });
         let locale = self.ui.locale.get_untracked();
         let mut seen = HashSet::new();
         let mut stickers = Vec::new();
         let mut rows = Vec::new();
         let mut images = Vec::new();
-        let mut urls = crate::assets::skin_urls(&*self.loaded.files);
+        let mut urls = self.prepared_skin_urls.take().unwrap_or_else(|| {
+            crate::assets::skin_preview_urls(&self.loaded.skin, &*self.loaded.files)
+        });
         for dir in &self.settings.assets.sticker_dirs {
             let root = crate::stickers::folder(std::path::Path::new(dir));
             if let Some(pack) = self.sticker_manager.loaded.get(&root) {
@@ -631,6 +652,7 @@ impl App {
         self.ui.asset_urls.set(Arc::new(urls));
         self.ui.stickers.set(Arc::new(rows));
         self.ui.portraits.set(Arc::new(portraits));
+        crate::ui::retire_skin_urls(self.ui, previous);
     }
 
     fn load_sounds(&self) {
@@ -646,8 +668,42 @@ impl App {
         });
     }
 
-    fn reload_skin(&mut self) {
-        let (loaded, fallback) = self.registry.load_or_default(&self.settings.skin.id);
+    fn reload_skin(&mut self, from_scan: bool) {
+        if !from_scan {
+            self.request_skin_reload(false);
+            return;
+        }
+        // A watcher/install already validated this scan. A manual switch must
+        // re-read inactive authoring folders, which are not being watched.
+        let result = self.registry.load_scanned(&self.settings.skin.id);
+        self.apply_loaded_skin(result);
+    }
+
+    fn apply_loaded_skin(
+        &mut self,
+        result: Result<LoadedSkin, Vec<nanatype_theme::SkinDiagnostic>>,
+    ) {
+        let (loaded, fallback) = match result {
+            Ok(loaded) => (loaded, None),
+            // Invalid edits keep the author's last working skin.
+            Err(errors) if self.settings.skin.id == self.loaded.skin.meta.id => {
+                self.notice(
+                    errors
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    true,
+                );
+                return;
+            }
+            Err(errors) => (
+                self.registry
+                    .load(nanatype_theme::DEFAULT_SKIN)
+                    .expect("built-in default loads"),
+                Some(errors),
+            ),
+        };
         if let Some(errors) = fallback {
             let detail = errors.first().map(|d| d.to_string()).unwrap_or_default();
             let text = self.ui.tr(
@@ -665,6 +721,51 @@ impl App {
             self.load_sounds();
         }
         self.refresh_assets();
+        self.refresh_watches();
+    }
+
+    fn scan_skins(&mut self, ticket: u64) {
+        let mut registry = self.registry.clone();
+        let scanned = self.skin_reload_scan;
+        let id = self.settings.skin.id.clone();
+        let ctx = self.ctx.clone();
+        if let Err(error) = std::thread::Builder::new()
+            .name("skin-scan".into())
+            .spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    if scanned {
+                        registry.rescan();
+                    }
+                    let loaded = if scanned {
+                        registry.load_scanned(&id)
+                    } else {
+                        registry.load(&id)
+                    };
+                    let image_urls = loaded
+                        .as_ref()
+                        .ok()
+                        .map(|skin| crate::assets::skin_preview_urls(&skin.skin, &*skin.files));
+                    Box::new(crate::services::watch::PreparedSkins {
+                        registry,
+                        loaded,
+                        scanned,
+                        image_urls,
+                    })
+                }))
+                .map_err(|_| "Skin scan worker failed".to_owned());
+                ctx.dispatch(Msg::SkinScanReady { ticket, result });
+            })
+        {
+            self.skin_reload.cancel();
+            self.notice(error.to_string(), true);
+        }
+    }
+
+    fn request_skin_reload(&mut self, scan: bool) {
+        self.skin_reload_scan |= scan;
+        if let Some(ticket) = self.skin_reload.request() {
+            self.scan_skins(ticket);
+        }
     }
 
     /// Register the skin's packaged fonts, replacing the previous skin's.
@@ -810,11 +911,11 @@ impl App {
             move |m: Msg| ctx.dispatch(m)
         };
         let skin_dir = self
-            .loaded
-            .files
-            .root()
-            .filter(|_| self.settings.skin.hot_reload)
-            .map(|p| vec![p.to_path_buf()]);
+            .settings
+            .skin
+            .hot_reload
+            .then(|| self.loaded.files.watch_roots())
+            .filter(|paths| !paths.is_empty());
         let current = self.skin_watch.as_ref().map(|w| w.paths().to_vec());
         if skin_dir != current {
             self.skin_watch = skin_dir.map(|paths| {
@@ -850,6 +951,9 @@ impl App {
         let locale = self.ui.locale.get_untracked();
         self.spout
             .sync(&self.settings, locale, self.peer.handle.is_some());
+        if let Some(at) = self.spout.take_cleanup_schedule() {
+            self.scheduler.output_cleanup(at);
+        }
         let display = self
             .spout
             .status
@@ -960,7 +1064,7 @@ impl App {
             }
         }
         if skin_changed {
-            self.reload_skin();
+            self.reload_skin(false);
             self.sync_tray_skins();
         } else if look_changed {
             self.apply_skin();
@@ -1504,7 +1608,7 @@ impl App {
                     };
                     self.notice(text, false);
                     if id == self.settings.skin.id {
-                        self.reload_skin();
+                        self.reload_skin(true);
                     } else {
                         self.edit(|s| s.skin.id = id);
                     }
@@ -1750,6 +1854,7 @@ impl App {
             }
             // The host removes toasts from its documents.
             Msg::ToastDismissed(..) => {}
+            Msg::OutputCleanup => self.refresh_spout_status(),
             Msg::Wake { epoch, reason } => self.run(Cmd::Wake { epoch, reason }),
             Msg::Cue(kind) => self.run(Cmd::CueFired(kind)),
             Msg::Audio(status) => {
@@ -1881,9 +1986,45 @@ impl App {
                 self.refresh_assets();
             }
             Msg::SkinFilesChanged => {
-                self.registry.rescan();
-                self.reload_skin();
-                self.refresh_skin_rows();
+                self.request_skin_reload(true);
+            }
+            Msg::SkinScanReady { ticket, result } => match self.skin_reload.finish(ticket) {
+                Err(latest) => {
+                    if let Ok(prepared) = result {
+                        crate::ui::retire_skin_urls(
+                            self.ui,
+                            prepared
+                                .image_urls
+                                .into_iter()
+                                .flat_map(|urls| urls.into_values()),
+                        );
+                    }
+                    self.scan_skins(latest);
+                }
+                Ok(()) => match result {
+                    Ok(prepared) => {
+                        self.skin_reload_scan = false;
+                        self.registry = prepared.registry;
+                        self.prepared_skin_urls = prepared.image_urls;
+                        self.apply_loaded_skin(prepared.loaded);
+                        if prepared.scanned {
+                            self.refresh_skin_rows();
+                        }
+                    }
+                    Err(error) => self.notice(error, true),
+                },
+            },
+            Msg::PrepareSkinPreview(id) => {
+                if let Err(errors) = crate::ui::prepare_skin_preview(self.ui, &self.registry, &id) {
+                    self.notice(
+                        errors
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                        true,
+                    );
+                }
             }
             Msg::SecondInstance => {
                 self.update(Msg::ShowWindow(WindowKind::Input));

@@ -68,6 +68,10 @@ pub trait SkinFiles: Send + Sync + std::fmt::Debug {
     fn root(&self) -> Option<&Path> {
         None
     }
+    /// All mutable layers contributing resources to this skin.
+    fn watch_roots(&self) -> Vec<PathBuf> {
+        self.root().map(Path::to_path_buf).into_iter().collect()
+    }
     fn list(&self) -> Vec<String>;
 }
 
@@ -112,7 +116,12 @@ impl DirFiles {
 impl SkinFiles for DirFiles {
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
         let path = clean_path(path)?;
-        let full = self.root.join(&path);
+        let root = fs::canonicalize(&self.root).map_err(|_| FileError::Missing(path.clone()))?;
+        let full =
+            fs::canonicalize(root.join(&path)).map_err(|_| FileError::Missing(path.clone()))?;
+        if !full.starts_with(&root) {
+            return Err(FileError::UnsafePath(path));
+        }
         let meta = fs::metadata(&full).map_err(|_| FileError::Missing(path.clone()))?;
         if meta.len() > MAX_FILE_BYTES {
             return Err(FileError::TooLarge {

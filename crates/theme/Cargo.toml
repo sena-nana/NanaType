@@ -21,6 +21,9 @@ toml = { version = "1.1", default-features = false, features = ["parse", "serde"
 zip = { version = "8.6", default-features = false, features = ["deflate"] }
 imagesize = "0.15"
 ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
+naga = { version = "=30.0.1", features = ["wgsl-in"] }
+blake3 = "1"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 
 [dev-dependencies]
 tempfile = "3"

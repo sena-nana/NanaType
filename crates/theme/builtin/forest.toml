@@ -1,0 +1,39 @@
+[meta]
+schema = 2
+id = "nanatype.forest"
+version = "1.1.2"
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["streaming", "cute"]
+name = { zh-CN = "森林精灵", en-US = "Forest Sprite", ja-JP = "森の妖精" }
+description = { zh-CN = "植物标本、装订孔与无涂层纸张；完整程序版画", en-US = "Original procedural print artwork", ja-JP = "オリジナルのプロシージャル版画" }
+
+[chrome]
+appearance = "light"
+accent = "#88A68A"
+surface = "#F3F1E5"
+text = "#263D32"
+
+[dialogue]
+region = [920, 220]
+overscan = 16
+padding = [56, 65, 181, 27]
+shader_effects = [{ shader = "artwork", target = "artwork" }]
+box = { color = "#F3F1E5", border_color = "#314C40", frame = { image = "forest/still.png", slice = [0, 0, 0, 0] } }
+text = { color = "#263D32", size = 25, line_height = 1.45 }
+nameplate = { color = "#F3F1E500", text_color = "#314C40", border_color = "#88A68A", border_widths = [0, 0, 0.8, 0], radius = 0, padding = [0, 0], offset = [56, 17], size = 19 }
+continue = { glyph = "· · ·", color = "#88A68A", motion = "none" }
+
+[shaders.artwork]
+source = "forest/artwork.wgsl"
+period_s = 16
+intensity = 1
+textures = ["forest/ornament.png"]
+
+[history]
+name_color = "#314C40"
+bubble_color = "#F3F1E5"
+bubble_border = "#314C4070"
+bubble_border_width = 1
+bubble_radius = 8
+text = { color = "#263D32" }

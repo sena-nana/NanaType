@@ -1,0 +1,20 @@
+[meta]
+schema = 2
+id = "example.aurora"
+version = "1.0.0"
+base = "nanatype.halo"
+name = { zh-CN = "极光示例", en-US = "Aurora Example", ja-JP = "オーロラの例" }
+description = { zh-CN = "带静态降级的受限 WGSL 示例", en-US = "Restricted WGSL with a static fallback", ja-JP = "静止画にフォールバックするWGSLの例" }
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["streaming"]
+
+[shaders.aurora]
+source = "effects/aurora.wgsl"
+period_s = 12
+intensity = 0.16
+params = [0.35]
+
+[[dialogue.shader_effects]]
+shader = "aurora"
+target = "background"

@@ -1,11 +1,12 @@
 [meta]
 id = "nanatype.bubble"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["streaming", "cute"]
 name = { zh-CN = "气泡", en-US = "Bubble", ja-JP = "バブル" }
 description = { zh-CN = "粗描边圆润对话气泡，带小尾巴和倾斜名牌", en-US = "A chunky outlined speech bubble with a tail and a tilted name tag", ja-JP = "太い縁取りの丸い吹き出しに、しっぽと傾いた名札" }
+schema = 2
 
 [chrome]
 accent = "#ff7aa8"
@@ -25,6 +26,7 @@ weight = 400
 [dialogue]
 region = [760, 170]
 padding = [30, 30, 30, 18]
+shader_effects = [{ shader = "artwork", target = "artwork" }]
 
 [dialogue.box]
 contour = "rounded"
@@ -34,6 +36,7 @@ border_width = 4
 radius = 30
 margin = [0, 0, 26, 0]
 shadows = [{ color = "#2b2b3a40", dy = 6 }]
+frame = { image = "bubble/still.png", slice = [32, 74, 36, 34], layout_inset = false }
 
 [dialogue.tail]
 side = "bottom"
@@ -42,44 +45,19 @@ width = 34
 length = 24
 lean = -10
 
-# Sparkle on the top-right corner.
-[[dialogue.decor]]
-motif = "sparkle"
-anchor = "top_right"
-# Curved four-point sparkles.
-offset = [-20, -12]
-size = [30, 30]
-color = "#ffb020"
-rotate = 12
-motion = { kind = "breathe", period_s = 5, amplitude = 0.12 }
-
-[[dialogue.decor]]
-motif = "sparkle"
-anchor = "top_right"
-offset = [-50, -3]
-size = [16, 16]
-color = "#7ec8ff"
-rotate = -10
-
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-63, 8]
-size = [5, 5]
-radius = 3
-color = "#ff7aa8"
-
 [dialogue.text]
 color = "#2b2b3a"
 
 [dialogue.nameplate]
 color = "#ff7aa8"
-text_color = "#ffffff"
+text_color = "#6A2445"
 radius = 999
 padding = [14, 3]
 offset = [28, -18]
 border_color = "border"
 border_width = 3
-rotate = -3
+rotate = -2
+gradient = { angle = 180, stops = [[0, "#FF95B8"], [1, "#F36D9D"]] }
 
 [dialogue.continue]
 color = "#ff7aa8"
@@ -103,3 +81,8 @@ color = "#2b2b3a"
 [effects]
 # Coloured runs under 3:1 on the box get a 1.5px outline in the darkest ink.
 contrast_guard = 3.0
+
+[shaders.artwork]
+source = "bubble/artwork.wgsl"
+period_s = 16
+intensity = 1

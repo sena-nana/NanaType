@@ -1,11 +1,12 @@
 [meta]
 id = "nanatype.ink"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["elegant"]
 name = { zh-CN = "水墨", en-US = "Ink Wash", ja-JP = "水墨" }
 description = { zh-CN = "宣纸底色、墨竹画作与朱红印章，配楷书", en-US = "Rice paper, an ink bamboo painting and a red seal, set in a brush-script face", ja-JP = "和紙の地に墨竹と朱の落款、楷書体で" }
+schema = 2
 
 [chrome]
 accent = "#b0302a"
@@ -29,6 +30,7 @@ weight = 700
 
 [dialogue]
 padding = [28, 40, 64, 18]
+shader_effects = []
 
 [dialogue.box]
 color = "#faf7effa"
@@ -39,6 +41,8 @@ gradient = { kind = "radial", stops = [[0, "#fffdf8fa"], [1, "#e8dfccf5"]] }
 shadows = [{ color = "#2222221f", dy = 4, blur = 16 }]
 
 # A public-domain Zheng Xie bamboo detail, overlaid without redrawing.
+frame = { image = "ink/still.png", slice = [34, 90, 24, 64], layout_inset = false }
+
 [[dialogue.decor]]
 image = "ink/bamboo.png"
 anchor = "bottom_right"

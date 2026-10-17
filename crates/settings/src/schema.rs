@@ -251,6 +251,7 @@ impl SkinOverrides {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SkinSettings {
+    pub advanced_effects: bool,
     pub id: String,
     pub overrides: SkinOverrides,
     /// Independent application appearance; path retained for saved-settings compatibility.
@@ -262,6 +263,7 @@ pub struct SkinSettings {
 impl Default for SkinSettings {
     fn default() -> Self {
         Self {
+            advanced_effects: true,
             id: DEFAULT_SKIN.into(),
             overrides: SkinOverrides::default(),
             chrome: ChromeMode::System,

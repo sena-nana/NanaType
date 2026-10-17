@@ -100,7 +100,14 @@ pub fn nine_slice(frame: &NineSlice, url: String) -> (BorderImageSpec, [f32; 4])
     let mut spec = BorderImageSpec::from_source(BackgroundImage::url(url));
     spec.slice = frame.slice.map(|v| BorderImageSlice::Number(v as f32));
     spec.fill = true;
-    (spec, frame.slice.map(|v| v as f32 * frame.scale))
+    (
+        spec,
+        if frame.layout_inset {
+            frame.slice.map(|v| v as f32 * frame.scale)
+        } else {
+            [0.; 4]
+        },
+    )
 }
 
 /// A real outline behind the glyphs.
@@ -169,18 +176,39 @@ impl Surface {
     /// The dialogue box: fill, gradient, border, shadow layers, or a frame image.
     pub fn dialogue_box(skin: &Skin, frame_url: Option<String>) -> Self {
         let b = &skin.dialogue.box_;
-        Self::framed(b.frame.as_ref(), frame_url).unwrap_or_else(|| Self {
-            tail: skin.dialogue.tail.clone(),
-            shadows: shadows(skin, &b.shadow_layers()),
-            ..Self::shaped(
-                skin,
-                Some(b.color.into()),
-                &b.shape,
-                b.radius,
-                Some(b.border_color.into()),
-                b.border_width,
-            )
-        })
+        Self::framed(b.frame.as_ref(), frame_url)
+            .map(|mut s| {
+                // A procedural plate replaces the fill and keyline. Keep its
+                // authored external shadow, which lives outside the plate canvas.
+                if skin.has_dialogue_artwork() {
+                    // The bitmap cuts retain their painted corner/header
+                    // dimensions. They are not layout borders: artwork and
+                    // native text share the original full border-box canvas.
+                    if let Some((_, widths)) = &mut s.frame {
+                        *widths = [0.; 4];
+                    }
+                    s.shadows = shadows(skin, &b.shadow_layers())
+                        .into_iter()
+                        .filter(|s| !s.inset)
+                        .collect();
+                    if !s.shadows.is_empty() {
+                        s.radii = b.shape.radii(b.radius);
+                    }
+                }
+                s
+            })
+            .unwrap_or_else(|| Self {
+                tail: skin.dialogue.tail.clone(),
+                shadows: shadows(skin, &b.shadow_layers()),
+                ..Self::shaped(
+                    skin,
+                    Some(b.color.into()),
+                    &b.shape,
+                    b.radius,
+                    Some(b.border_color.into()),
+                    b.border_width,
+                )
+            })
     }
 
     pub fn nameplate(skin: &Skin, frame_url: Option<String>) -> Self {
@@ -326,7 +354,14 @@ impl Surface {
                     BorderStyleSpec::Dotted => BorderStyle::Dotted,
                 });
             }
-            l.paint.box_shadows = self.shadows.clone();
+        }
+        // External shadows belong to the box, including an image-backed box.
+        // They must survive the frame route as well as the ordinary fill route.
+        l.paint.box_shadows = self.shadows.clone();
+        if self.frame.is_some() {
+            l.border_radius = Some(self.radii[0]);
+            l.paint.border_radii = (self.radii.iter().any(|r| *r != self.radii[0]))
+                .then(|| self.radii.map(LengthSpec::Px));
         }
         l.paint.clip_path = self
             .polygon
@@ -566,11 +601,62 @@ mod tests {
             slice: [8; 4],
             scale: 1.0,
             repeat: false,
+            layout_inset: true,
         });
         let framed = Surface::dialogue_box(&skin, Some("file:///frame.png".into()));
         assert!(!framed.is_vector() && !framed.integrates_tail());
+        assert!(
+            !framed.shadows.is_empty(),
+            "external shadow lost under baked plate"
+        );
+        let mut layout = LayoutStyle::default();
+        framed.apply(&mut layout);
+        assert_eq!(layout.paint.box_shadows, framed.shadows);
+        assert_eq!(layout.border_top_width, Some(0.));
+        let (image, _) = framed.frame.as_ref().unwrap();
+        assert_eq!(image.tiles(24., 24., 100., 80.)[0].dest_w, 8.);
+        let mut ordinary_frame = skin.clone();
+        ordinary_frame.dialogue.shader_effects.clear();
+        assert!(
+            Surface::dialogue_box(&ordinary_frame, Some("file:///frame.png".into()))
+                .shadows
+                .is_empty()
+        );
         let fallback = Surface::dialogue_box(&skin, None);
         assert!(fallback.is_vector() && fallback.integrates_tail());
+    }
+
+    #[test]
+    fn static_authored_plates_keep_layout_shadows_and_user_colour_without_a_shader() {
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        for name in [
+            "parchment",
+            "adv",
+            "vanilla",
+            "comic",
+            "ink",
+            "echo_vanilla",
+            "echo_bubble",
+        ] {
+            let skin = registry.load(&format!("nanatype.{name}")).unwrap().skin;
+            assert!(skin.dialogue.shader_effects.is_empty());
+            let surface = Surface::dialogue_box(&skin, Some("plate.png".into()));
+            let (image, widths) = surface.frame.as_ref().unwrap();
+            assert_eq!(*widths, [0.; 4], "{name}");
+            assert!(
+                image
+                    .slice
+                    .iter()
+                    .any(|s| matches!(s, BorderImageSlice::Number(v) if *v > 0.))
+            );
+            let overrides = nanatype_settings::SkinOverrides {
+                box_color: Some(Rgba8::rgb(1, 2, 3)),
+                ..Default::default()
+            };
+            let personalised = crate::skin_theme::with_overrides(&skin, &overrides);
+            assert!(personalised.dialogue.box_.frame.is_none());
+            assert_eq!(personalised.dialogue.box_.color, Rgba8::rgb(1, 2, 3));
+        }
     }
 
     #[test]
@@ -626,6 +712,13 @@ mod tests {
             )),
             Rgba8::rgb(1, 2, 3)
         );
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let original = registry.load("nanatype.halo").unwrap().skin;
+        let personalised = crate::skin_theme::with_overrides(&original, &overrides);
+        assert!(original.dialogue.box_.frame.is_some());
+        assert!(personalised.dialogue.box_.frame.is_none());
+        assert!(personalised.dialogue.shader_effects.is_empty());
+        assert_eq!(personalised.dialogue.box_.color, Rgba8::rgb(1, 2, 3));
     }
 
     #[test]
@@ -651,6 +744,7 @@ mod tests {
             slice: [8, 4, 8, 4],
             scale: 2.0,
             repeat: false,
+            layout_inset: true,
         };
         let (_, widths) = nine_slice(&frame, "file:///f.png".into());
         assert_eq!(widths, [16.0, 8.0, 16.0, 8.0]);
@@ -674,6 +768,7 @@ mod tests {
                 slice: [4; 4],
                 scale: 1.0,
                 repeat: false,
+                layout_inset: true,
             },
             "file:///frame.png".into(),
         ));

@@ -1,11 +1,12 @@
 [meta]
 id = "nanatype.comic"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["game", "cute"]
 name = { zh-CN = "漫画", en-US = "Comic", ja-JP = "コミック" }
 description = { zh-CN = "黑色粗线、硬投影和带影子的尾巴，黄色倾斜名牌", en-US = "Heavy black lines, a hard drop shadow, a shadowed tail and a tilted yellow tag", ja-JP = "太い黒線とベタ影、影つきのしっぽ、傾いた黄色の名札" }
+schema = 2
 
 [chrome]
 accent = "#ffcc00"
@@ -21,6 +22,7 @@ weight = 900
 [dialogue]
 region = [760, 202]
 padding = [28, 30, 28, 18]
+shader_effects = []
 
 [dialogue.box]
 contour = "comic"
@@ -30,6 +32,7 @@ border_width = 4
 radius = 14
 margin = [32, 8, 30, 0]
 shadows = [{ color = "#000000", dx = 8, dy = 8 }]
+frame = { image = "comic/still.png", slice = [52, 86, 32, 32], layout_inset = false }
 
 [dialogue.tail]
 side = "bottom"
@@ -37,34 +40,6 @@ at = 0.12
 width = 36
 length = 28
 lean = -12
-
-[[dialogue.decor]]
-motif = "halftone"
-anchor = "top_right"
-offset = [-18, 9]
-size = [42, 26]
-color = "#11111159"
-
-[[dialogue.decor]]
-anchor = "bottom_left"
-offset = [18, -10]
-size = [14, 2]
-color = "#ffd400"
-rotate = -25
-
-[[dialogue.decor]]
-anchor = "bottom_left"
-offset = [36, -10]
-size = [7, 2]
-color = "#111111"
-rotate = -25
-
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-26, -12]
-size = [40, 24]
-motif = "rays"
-color = "#111111b3"
 
 [dialogue.text]
 color = "#111111"
@@ -78,8 +53,9 @@ padding = [14, 3]
 offset = [22, -20]
 border_color = "#000000"
 border_width = 3
-rotate = -4
+rotate = -3
 shadows = [{ color = "#000000", dx = 4, dy = 4 }]
+gradient = { angle = 180, stops = [[0, "#FFDE40"], [1, "#FFCA00"]] }
 
 [dialogue.continue]
 glyph = "▶"

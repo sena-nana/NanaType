@@ -1,0 +1,39 @@
+[meta]
+schema = 2
+id = "nanatype.lantern"
+version = "1.1.2"
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["streaming", "elegant"]
+name = { zh-CN = "朱砂华灯", en-US = "Vermilion Lantern", ja-JP = "朱の華灯" }
+description = { zh-CN = "朱砂侧栏、金色窗棂与华灯；完整程序版画", en-US = "Original procedural print artwork", ja-JP = "オリジナルのプロシージャル版画" }
+
+[chrome]
+appearance = "light"
+accent = "#B83B38"
+surface = "#FAF0DD"
+text = "#55312A"
+
+[dialogue]
+region = [920, 220]
+overscan = 16
+padding = [66, 66, 155, 28]
+shader_effects = [{ shader = "artwork", target = "artwork" }]
+box = { color = "#FAF0DD", border_color = "#C6A15B", frame = { image = "lantern/still.png", slice = [0, 0, 0, 0] } }
+text = { color = "#55312A", size = 25, line_height = 1.45 }
+nameplate = { color = "#B83B38", text_color = "#FAF0DD", contour = "seal", border_color = "#D9B77A", border_width = 0.8, gradient = { angle = 180, stops = [[0, "#BC4540"], [1, "#A23030"]] }, radius = 1, padding = [10, 4], offset = [66, 11], size = 19 }
+continue = { glyph = "· · ·", color = "#B83B38", motion = "none" }
+
+[shaders.artwork]
+source = "lantern/artwork.wgsl"
+period_s = 16
+intensity = 1
+textures = ["lantern/ornament.png"]
+
+[history]
+name_color = "#B83B38"
+bubble_color = "#FAF0DD"
+bubble_border = "#C6A15B70"
+bubble_border_width = 1
+bubble_radius = 8
+text = { color = "#55312A" }

@@ -1,11 +1,12 @@
 [meta]
 id = "nanatype.night"
-version = "2.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["classic"]
 name = { zh-CN = "夜色", en-US = "Night", ja-JP = "夜色" }
 description = { zh-CN = "深蓝玻璃底、霓虹描边与流光下划线", en-US = "Deep-blue glass with a neon edge and a glowing underline", ja-JP = "深い青のガラスにネオンの縁取りと光るライン" }
+schema = 2
 
 [chrome]
 appearance = "dark"
@@ -15,6 +16,7 @@ text = "#e6edf5"
 
 [dialogue]
 padding = [26, 26, 26, 16]
+shader_effects = [{ shader = "artwork", target = "artwork" }]
 
 [dialogue.box]
 contour = "hud"
@@ -28,38 +30,7 @@ gradient = { stops = [[0, "#101c2cf2"], [1, "#0b1220f2"]] }
 shadows = [{ color = "#5cb8ff30", blur = 14, inset = true }]
 
 # Neon underline fading out at both ends.
-[[dialogue.decor]]
-anchor = "bottom"
-offset = [0, 1]
-size = ["70%", 2]
-gradient = { angle = 90, stops = [[0, "#55ccff00"], [0.3, "#55ccff"], [0.7, "#a07cff"], [1, "#a07cff00"]] }
-shadows = [{ color = "#5cb8ff80", blur = 6 }]
-motion = { kind = "breathe", period_s = 6, amplitude = 0.12 }
-
-[[dialogue.decor]]
-color = "#7acbff99"
-motif = "circuit"
-anchor = "top_left"
-offset = [-22, 6]
-size = [64, 14]
-
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-38, 9]
-size = [28, 2]
-color = "#5cb8ff80"
-
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-72, 9]
-size = [10, 2]
-color = "#a07cff80"
-
-[[dialogue.decor]]
-anchor = "bottom_left"
-offset = [30, -9]
-size = [24, 2]
-color = "#5cb8ff59"
+frame = { image = "night/still.png", slice = [32, 110, 22, 28], layout_inset = false }
 
 [dialogue.text]
 color = "#bae0ff"
@@ -69,13 +40,14 @@ shadow = { color = "#5cb8ff88", blur = 6 }
 contour = "hud"
 color = "#0b1220"
 text_color = "#e4f4ff"
-radius = 6
+radius = 3
 padding = [12, 3]
 offset = [20, -15]
 border_color = "#5cb8ff"
 border_width = 1.5
 shadows = [{ color = "#5cb8ff66", blur = 10 }]
 text_shadow = { color = "#5cb8ff", blur = 8 }
+gradient = { angle = 180, stops = [[0, "#193953"], [1, "#101D30"]] }
 
 [dialogue.continue]
 color = "#5cb8ff"
@@ -94,3 +66,8 @@ avatar = { shape = "circle", size = 40, ring_color = "#5cb8ff", ring_width = 1.5
 
 [history.text]
 color = "#d4ebff"
+
+[shaders.artwork]
+source = "night/artwork.wgsl"
+period_s = 16
+intensity = 1

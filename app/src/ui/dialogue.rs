@@ -566,6 +566,21 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
         .into_any()
     });
     // Only replace the container's paint/layout; the editor stays mounted.
+    let shaders = shader_layers(ui, &ctx, &box_surface, DecorLayer::Above);
+    let shaders_below = shader_layers(ui, &ctx, &box_surface, DecorLayer::Below);
+    let shader_art: Vec<_> = ctx
+        .skin
+        .dialogue
+        .decor
+        .iter()
+        .filter(|d| {
+            source != Source::Draft
+                && d.layer == DecorLayer::Above
+                && d.shader.is_some()
+                && decor_shown(d, source)
+        })
+        .map(|d| decor_view(ui, &ctx, d))
+        .collect();
     let box_stack = move || {
         let (surface, padding) = if plain() {
             (Surface::default(), [0.0; 4])
@@ -604,27 +619,133 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
                         LengthSpec::Px(px)
                     }
                 };
-                l.padding_left = Some(horizontal(padding[0]));
-                l.padding_top = Some(LengthSpec::Px(padding[1]));
-                l.padding_right = Some(horizontal(padding[2]));
-                l.padding_bottom = Some(LengthSpec::Px(padding[3]));
+                // Display GPU layers use the border box as their coordinate
+                // space. Keep text padding in a separate child, otherwise
+                // absolute ornaments inherit a shifted, smaller content box.
+                let p = if source == Source::Draft {
+                    padding
+                } else {
+                    [0.; 4]
+                };
+                l.padding_left = Some(horizontal(p[0]));
+                l.padding_top = Some(LengthSpec::Px(p[1]));
+                l.padding_right = Some(horizontal(p[2]));
+                l.padding_bottom = Some(LengthSpec::Px(p[3]));
             })
     };
     let mut the_box = widget(box_stack());
     if source == Source::Draft {
         the_box = the_box.bind(move |s: &mut Stack| *s = box_stack());
     }
+    let text = text_port(ui, source, content);
+    let text = if source == Source::Draft {
+        text
+    } else {
+        widget(Stack::fill_column(0.).with_layout(move |l| {
+            l.padding_left = Some(LengthSpec::Px(padding[0]));
+            l.padding_top = Some(LengthSpec::Px(padding[1]));
+            l.padding_right = Some(LengthSpec::Px(padding[2]));
+            l.padding_bottom = Some(LengthSpec::Px(padding[3]));
+            l.min_width = Some(LengthSpec::Px(0.));
+            l.min_height = Some(LengthSpec::Px(0.));
+        }))
+        .children(((source == Source::Display).then(|| reply_quote(ui)), text))
+        .into_any()
+    };
     let the_box = the_box.children((
         input_skin_layer(ui, source, sweep),
-        (source == Source::Display).then(|| reply_quote(ui)),
-        text_port(ui, source, content),
+        shader_art,
+        shaders,
+        text,
     ));
 
     outer.children(frame.children((
         input_skin_layer(ui, source, (below, tail_below)),
+        shaders_below,
         the_box,
         input_skin_layer(ui, source, (tail_above, above, portrait, plate, cont)),
     )))
+}
+
+/// Custom GPU paint always precedes the text, even for ornaments whose
+/// static artwork is drawn above the box.
+fn shader_layers(ui: Ui, ctx: &BoxCtx, surface: &Surface, layer: DecorLayer) -> Vec<AnyView> {
+    if ctx.source == Source::Draft {
+        return Vec::new();
+    }
+    let mut layers = Vec::new();
+    for effect in ctx
+        .skin
+        .dialogue
+        .shader_effects
+        .iter()
+        .filter(|_| layer == DecorLayer::Above)
+    {
+        if let Some(v) = super::shader_effects::view(
+            ui,
+            ctx.source,
+            &ctx.skin,
+            &effect.shader,
+            surface.clone(),
+            effect.target,
+        ) {
+            layers.push(v);
+        }
+    }
+    for dec in &ctx.skin.dialogue.decor {
+        if dec.layer != layer {
+            continue;
+        }
+        let Some(id) = &dec.shader else {
+            continue;
+        };
+        if !decor_shown(dec, ctx.source) {
+            continue;
+        }
+        let shape =
+            Surface::decor_image(&ctx.skin, dec, dec.image.as_ref().and_then(|p| ctx.url(p)));
+        let Some(v) = super::shader_effects::view(
+            ui,
+            ctx.source,
+            &ctx.skin,
+            id,
+            shape,
+            nanatype_theme::ShaderTarget::Background,
+        ) else {
+            continue;
+        };
+        let placement = place(dec.anchor, dec.offset, dec.size);
+        let [width, height] = dec.size.map(len);
+        let dec = dec.clone();
+        let source = ctx.source;
+        layers.push(
+            widget(Stack::row(0.).with_layout(move |l| {
+                overlay(l);
+                if let Some([t, r, b, left]) = dec.inset {
+                    l.offset_top = Some(LengthSpec::Px(t));
+                    l.offset_right = Some(LengthSpec::Px(r));
+                    l.offset_bottom = Some(LengthSpec::Px(b));
+                    l.offset_left = Some(LengthSpec::Px(left));
+                } else {
+                    l.offset_left = Some(calc(placement.left.percent, placement.left.px));
+                    l.offset_top = Some(calc(placement.top.percent, placement.top.px));
+                    l.width = Some(width);
+                    l.height = Some(height);
+                }
+                // The proxy rotates its quad and samples in ornament-local
+                // coordinates; NanaUI's custom GPU context exposes only AABBs.
+                l.opacity = Some(dec.opacity);
+            }))
+            .visible(move || {
+                source == Source::Preview
+                    || dec.when != DecorWhen::Speaker
+                    || !drawn(ui).speaker.name.trim().is_empty()
+            })
+            .children(v)
+            .into_any(),
+        );
+    }
+    layers
 }
 
 /// Only the input editor can hide its skin, without unmounting the text.
@@ -761,6 +882,11 @@ fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
     let p = skin.dialogue.nameplate.clone();
     // Reserve the corner ornaments' strip for long names. Ordinary names
     // keep their content width; only an overflowing label is ellipsized.
+    let artwork_clearance = if skin.has_dialogue_artwork() {
+        skin.dialogue.padding[2]
+    } else {
+        0.
+    };
     let right_clearance = if p.anchor == Anchor::TopLeft {
         skin.dialogue
             .decor
@@ -770,7 +896,7 @@ fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
                 nanatype_theme::Len::Px(w) => Some((w - d.offset[0]).max(0.0) + 8.0),
                 _ => None,
             })
-            .fold(0.0_f32, f32::max)
+            .fold(artwork_clearance, f32::max)
     } else {
         0.0
     };
@@ -785,6 +911,8 @@ fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
         l.white_space_nowrap = true;
         if right_clearance > 0.0 {
             l.min_width = Some(LengthSpec::Px(0.0));
+            l.max_width = Some(LengthSpec::Percent(100.0));
+            l.flex_shrink = Some(1.0);
             l.text_overflow_ellipsis = true;
         }
         if let Some(stroke) = &p.stroke {
@@ -808,6 +936,7 @@ fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
                     .with_layout(move |l| {
                         l.transform = Some(affine(ox, oy, rotate, 1.0));
                         if right_clearance > 0.0 {
+                            l.min_width = Some(LengthSpec::Px(0.0));
                             l.max_width = Some(calc(100.0, -ox.max(0.0) - right_clearance));
                         }
                     }),
@@ -991,6 +1120,7 @@ fn decor_views(ui: Ui, ctx: &BoxCtx, layer: DecorLayer) -> Vec<AnyView> {
         .decor
         .iter()
         .filter(|d| d.layer == layer && decor_shown(d, ctx.source))
+        .filter(|d| ctx.source == Source::Draft || d.shader.is_none() || layer == DecorLayer::Below)
         .map(|d| decor_view(ui, ctx, d))
         .collect()
 }
@@ -1007,7 +1137,13 @@ fn tail(ctx: &BoxCtx, surface: &Surface) -> (Vec<AnyView>, Vec<AnyView>) {
         return (Vec::new(), Vec::new());
     }
     let edge = t.side;
-    let border = b.border_widths()[edge.index()];
+    let border = if skin.has_dialogue_artwork() {
+        // The baked procedural plate contains its own keyline; a native tail
+        // still needs the matching authored stroke outside that canvas.
+        b.shape.border_widths(b.border_width)[edge.index()]
+    } else {
+        b.border_widths()[edge.index()]
+    };
     let g = tail_geometry(t, border);
     let fill = c(skin.color(t.color.unwrap_or(ColorRef::Role(ColorRole::Box))));
     let along = t.at * 100.0;
@@ -1204,6 +1340,69 @@ pub fn has_effects(doc: &Document) -> bool {
 #[cfg(test)]
 mod decor_tests {
     use super::*;
+
+    #[test]
+    fn artwork_nameplates_shrink_the_text_before_the_ornament_strip() {
+        use nana_ui::runtime::{DocumentId, RuntimeDocument};
+        use nana_ui_devtools::agent::RuntimeAgentSession;
+
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        for theme in [
+            "gothic",
+            "celestial",
+            "forest",
+            "tidal",
+            "lantern",
+            "citrus",
+        ] {
+            let skin = registry.load(&format!("nanatype.{theme}")).unwrap().skin;
+            let ui = Ui::new(
+                Arc::new(nanatype_settings::Settings::default()),
+                skin.clone(),
+                nanatype_i18n::Locale::ZhCn,
+            );
+            for name in ["奈奈", "奈奈与联机伙伴・A Very Long Speaker Name"] {
+                let ctx = BoxCtx {
+                    skin: skin.clone(),
+                    urls: Arc::new(HashMap::new()),
+                    source: Source::Preview,
+                    preview_name: name.into(),
+                };
+                let id = DocumentId::new(1).unwrap();
+                let mut doc = RuntimeDocument::new(id);
+                doc.context_mut()
+                    .mount_view_root(id, move || {
+                        widget(
+                            Stack::column(0.)
+                                .width(LengthSpec::Px(528.))
+                                .height(LengthSpec::Px(220.))
+                                .with_layout(|l| l.position = PositionSpec::Relative),
+                        )
+                        .children(nameplate(ui, &ctx))
+                    })
+                    .unwrap();
+                let mut session = RuntimeAgentSession::new(doc, 528, 220).unwrap();
+                session.screenshot_rgba().unwrap();
+                let label = session
+                    .accessibility_dump()
+                    .into_iter()
+                    .find(|n| n.label.as_deref() == Some(name))
+                    .expect("nameplate text keeps its accessible name");
+                assert!(label.bounds.width > 0., "{theme}: name is visible");
+                assert!(
+                    label.bounds.x + label.bounds.width <= 528. - skin.dialogue.padding[2] + 2.,
+                    "{theme}: name extends into the ornament strip: {:?}",
+                    label.bounds
+                );
+                if name == "奈奈" {
+                    assert!(
+                        label.bounds.width < skin.dialogue.nameplate.size * 3.,
+                        "{theme}: short names keep their natural width"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn a_populated_initial_mount_is_opaque_even_at_clock_zero() {

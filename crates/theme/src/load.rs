@@ -94,6 +94,13 @@ impl SkinFiles for LayeredFiles {
         self.layers.first().and_then(|l| l.root())
     }
 
+    fn watch_roots(&self) -> Vec<PathBuf> {
+        let mut roots: Vec<_> = self.layers.iter().flat_map(|l| l.watch_roots()).collect();
+        roots.sort();
+        roots.dedup();
+        roots
+    }
+
     fn list(&self) -> Vec<String> {
         let mut all: Vec<String> = self.layers.iter().flat_map(|l| l.list()).collect();
         all.sort();
@@ -141,6 +148,34 @@ pub fn deep_merge(base: &mut Table, over: &Table) {
             }
         }
     }
+}
+
+/// A self-contained manifest with contextual defaults omitted. Only use this
+/// on a resolved skin: removing defaults from a partial child would change
+/// inheritance (in particular explicit empty arrays).
+pub fn standalone_manifest(skin: &Skin) -> Result<Table, toml::ser::Error> {
+    fn prune(table: &mut Table, defaults: &Table) {
+        table.retain(|key, value| {
+            let Some(default) = defaults.get(key) else {
+                return true;
+            };
+            if value == default {
+                return false;
+            }
+            if let (Value::Table(t), Value::Table(d)) = (value, default) {
+                prune(t, d);
+                return !t.is_empty();
+            }
+            true
+        });
+    }
+    let mut resolved = skin.clone();
+    resolved.meta.base = None;
+    let Value::Table(mut table) = Value::try_from(resolved)? else {
+        unreachable!()
+    };
+    prune(&mut table, &DEFAULT_TABLE);
+    Ok(table)
 }
 
 fn base_id(table: &Table) -> Option<String> {
@@ -194,6 +229,26 @@ pub fn load(
     origin: SkinOrigin,
     resolver: &dyn BaseResolver,
     app_version: &str,
+) -> Result<LoadedSkin, Vec<SkinDiagnostic>> {
+    load_impl(files, origin, resolver, app_version, true)
+}
+
+/// Only immutable, embedded catalogue entries may defer GPU preparation.
+/// User folders and archives always go through the complete validator above.
+pub(crate) fn builtin_preview(
+    files: Arc<dyn SkinFiles>,
+    resolver: &dyn BaseResolver,
+    app_version: &str,
+) -> Result<LoadedSkin, Vec<SkinDiagnostic>> {
+    load_impl(files, SkinOrigin::Builtin, resolver, app_version, false)
+}
+
+fn load_impl(
+    files: Arc<dyn SkinFiles>,
+    origin: SkinOrigin,
+    resolver: &dyn BaseResolver,
+    app_version: &str,
+    prepare_shaders: bool,
 ) -> Result<LoadedSkin, Vec<SkinDiagnostic>> {
     let raw = read_manifest(&*files).map_err(|d| vec![d])?;
     let mut diagnostics = Vec::new();
@@ -255,7 +310,7 @@ pub fn load(
         }
     }
 
-    let skin: Skin = match Value::Table(merged).try_into() {
+    let mut skin: Skin = match Value::Table(merged).try_into() {
         Ok(skin) => skin,
         Err(e) => {
             return Err(vec![SkinDiagnostic::error(
@@ -274,6 +329,9 @@ pub fn load(
         Arc::new(LayeredFiles { layers })
     };
     validate(&skin, &*files, app_version, &mut diagnostics);
+    if prepare_shaders {
+        crate::shader::load_shaders(&mut skin, &*files, &mut diagnostics);
+    }
     if diagnostics.iter().any(|d| d.severity == Severity::Error) {
         diagnostics.sort_by_key(|d| std::cmp::Reverse(d.severity));
         return Err(diagnostics);
@@ -409,6 +467,7 @@ fn validate(skin: &Skin, files: &dyn SkinFiles, app_version: &str, out: &mut Vec
             }
         };
         match kind {
+            FileKind::Shader => {} // Parsed and checked by load_shaders.
             FileKind::Image | FileKind::NineSlice(_) => match imagesize::blob_size(&bytes) {
                 Ok(size) => {
                     if size.width > MAX_IMAGE_SIDE || size.height > MAX_IMAGE_SIDE {

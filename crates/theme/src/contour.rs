@@ -108,7 +108,13 @@ impl ContourPreset {
     ];
 }
 impl MotifPreset {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 15] = [
+        Self::Rose,
+        Self::Moon,
+        Self::Leaf,
+        Self::Jellyfish,
+        Self::Lantern,
+        Self::CitrusSlice,
         Self::Orbit,
         Self::Sparkle,
         Self::Blossom,
@@ -389,6 +395,90 @@ pub fn motif_paths(motif: MotifPreset, size: [f32; 2]) -> Vec<MotifPath> {
     let mut p = ShapePath::default();
     use MotifPreset::*;
     match motif {
+        Rose => {
+            for i in 0..7 {
+                let a = i as f32 * TAU / 7.;
+                let center = pt(0.5 + 0.19 * a.cos(), 0.5 + 0.19 * a.sin());
+                let mut petal = ShapePath::default();
+                petal.ellipse_arc(center, [w * 0.23, h * 0.23], 0., TAU, true);
+                petal.close();
+                add(petal, false, 0.9, 1.4);
+            }
+            p.ellipse_arc(pt(0.5, 0.5), [w * 0.12, h * 0.12], 0., TAU, true);
+            p.close();
+            add(p, false, 1., 1.5);
+        }
+        Moon => {
+            p.m(pt(0.72, 0.08));
+            p.c(pt(0.12, 0.02), pt(0.02, 0.86), pt(0.66, 0.94));
+            p.c(pt(0.95, 0.96), pt(0.97, 0.7), pt(0.96, 0.66));
+            p.c(pt(0.39, 0.94), pt(0.25, 0.25), pt(0.72, 0.08));
+            p.close();
+            add(p, true, 1., 0.);
+        }
+        Leaf => {
+            p.m(pt(0.08, 0.92));
+            p.c(pt(0.02, 0.35), pt(0.43, 0.05), pt(0.93, 0.07));
+            p.c(pt(0.98, 0.58), pt(0.58, 0.98), pt(0.08, 0.92));
+            p.close();
+            add(p, true, 0.7, 0.);
+            let mut vein = ShapePath::default();
+            vein.m(pt(0.08, 0.92));
+            vein.q(pt(0.6, 0.5), pt(0.88, 0.12));
+            vein.m(pt(0.39, 0.65));
+            vein.l(pt(0.25, 0.35));
+            vein.m(pt(0.57, 0.47));
+            vein.l(pt(0.8, 0.6));
+            add(vein, false, 1., 1.2);
+        }
+        Jellyfish => {
+            p.m(pt(0.12, 0.48));
+            p.c(pt(0.05, 0.01), pt(0.95, 0.01), pt(0.88, 0.48));
+            p.q(pt(0.69, 0.62), pt(0.5, 0.5));
+            p.q(pt(0.31, 0.62), pt(0.12, 0.48));
+            p.close();
+            add(p, true, 0.7, 0.);
+            for i in 0..4 {
+                let x = 0.25 + i as f32 * 0.16;
+                let mut t = ShapePath::default();
+                t.m(pt(x, 0.48));
+                t.c(pt(x - 0.13, 0.69), pt(x + 0.13, 0.76), pt(x - 0.02, 0.96));
+                add(t, false, 0.8, 1.2);
+            }
+        }
+        Lantern => {
+            p.m(pt(0.3, 0.16));
+            p.l(pt(0.7, 0.16));
+            p.c(pt(1., 0.35), pt(1., 0.65), pt(0.7, 0.8));
+            p.l(pt(0.3, 0.8));
+            p.c(pt(0., 0.65), pt(0., 0.35), pt(0.3, 0.16));
+            p.close();
+            add(p, true, 0.75, 0.);
+            let mut ribs = ShapePath::default();
+            for x in [0.35, 0.5, 0.65] {
+                ribs.m(pt(x, 0.16));
+                ribs.q(pt(0.5 + (x - 0.5) * 1.7, 0.48), pt(x, 0.8));
+            }
+            ribs.m(pt(0.25, 0.12));
+            ribs.l(pt(0.75, 0.12));
+            ribs.m(pt(0.25, 0.84));
+            ribs.l(pt(0.75, 0.84));
+            ribs.m(pt(0.5, 0.84));
+            ribs.l(pt(0.5, 0.98));
+            add(ribs, false, 1., 1.3);
+        }
+        CitrusSlice => {
+            p.ellipse_arc(pt(0.5, 0.5), [w * 0.46, h * 0.46], 0., TAU, true);
+            p.close();
+            add(p, false, 1., 2.);
+            let mut pulp = ShapePath::default();
+            for i in 0..8 {
+                let a = i as f32 * TAU / 8.;
+                pulp.m(pt(0.5 + 0.12 * a.cos(), 0.5 + 0.12 * a.sin()));
+                pulp.l(pt(0.5 + 0.36 * a.cos(), 0.5 + 0.36 * a.sin()));
+            }
+            add(pulp, false, 0.9, 2.5);
+        }
         Orbit => {
             p.ellipse_arc(
                 pt(0.5, 0.5),

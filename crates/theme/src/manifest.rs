@@ -8,7 +8,7 @@ use nanatype_model::{EntranceKind, Overflow, Rgba8};
 use nanatype_playback::{PacingParams, PunctPauses, TypingSoundRule};
 use serde::{Deserialize, Serialize};
 
-pub const SKIN_SCHEMA: u32 = 1;
+pub const SKIN_SCHEMA: u32 = 2;
 
 /// Localized display strings keyed by BCP-47 tag (`zh-CN`, `en-US`, `ja-JP`).
 pub type Localized = BTreeMap<String, String>;
@@ -60,6 +60,14 @@ pub struct NineSlice {
     pub scale: f32,
     #[serde(default)]
     pub repeat: bool,
+    /// Reserve the painted slices in layout. False makes a complete plate
+    /// preserve its own corner cuts without adding to the authored padding.
+    #[serde(default = "yes")]
+    pub layout_inset: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 fn one() -> f32 {
@@ -312,6 +320,12 @@ pub enum ContourPreset {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MotifPreset {
+    Rose,
+    Moon,
+    Leaf,
+    Jellyfish,
+    Lantern,
+    CitrusSlice,
     Orbit,
     Sparkle,
     Blossom,
@@ -451,6 +465,7 @@ impl Default for DecorMotionSpec {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DecorSpec {
+    pub shader: Option<String>,
     /// Transparent packaged artwork, fitted without stretching.
     pub image: Option<String>,
     pub motif: Option<MotifPreset>,
@@ -485,6 +500,7 @@ pub struct DecorSpec {
 impl Default for DecorSpec {
     fn default() -> Self {
         Self {
+            shader: None,
             image: None,
             motif: None,
             layer: DecorLayer::Above,
@@ -551,7 +567,7 @@ pub struct Meta {
 impl Default for Meta {
     fn default() -> Self {
         Self {
-            schema: SKIN_SCHEMA,
+            schema: 1,
             id: String::new(),
             version: "1.0.0".into(),
             min_app: "0.1.0".into(),
@@ -944,6 +960,7 @@ impl Default for RevealSpec {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Dialogue {
+    pub shader_effects: Vec<crate::ShaderEffect>,
     /// Logical size of the dialogue region; the display window and the input
     /// stage are this size (plus `overscan` on every side).
     pub region: [f32; 2],
@@ -1065,6 +1082,7 @@ impl Default for HistoryChatSpec {
 impl Default for Dialogue {
     fn default() -> Self {
         Self {
+            shader_effects: Vec::new(),
             region: [760.0, 150.0],
             overscan: 18.0,
             padding: [20.0, 22.0, 20.0, 14.0],
@@ -1408,6 +1426,9 @@ impl Default for EffectDefaults {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Skin {
+    pub shaders: BTreeMap<String, crate::ShaderSpec>,
+    #[serde(skip)]
+    pub shader_programs: BTreeMap<String, std::sync::Arc<crate::ShaderProgram>>,
     pub meta: Meta,
     pub chrome: Chrome,
     pub fonts: Fonts,
@@ -1419,6 +1440,20 @@ pub struct Skin {
 }
 
 impl Skin {
+    /// Full authored dialogue artwork, either a static plate or a live effect.
+    pub fn has_dialogue_artwork(&self) -> bool {
+        self.dialogue
+            .box_
+            .frame
+            .as_ref()
+            .is_some_and(|f| !f.layout_inset)
+            || self
+                .dialogue
+                .shader_effects
+                .iter()
+                .any(|e| e.target == crate::ShaderTarget::Artwork)
+    }
+
     pub fn display_name(&self, locale: &str) -> String {
         localized(&self.meta.name, locale, &self.meta.id)
     }
@@ -1458,6 +1493,12 @@ impl Skin {
     /// Every packaged file the manifest refers to, with the field that names it.
     pub fn referenced_files(&self) -> Vec<(&'static str, &str, FileKind)> {
         let mut out: Vec<(&'static str, &str, FileKind)> = Vec::new();
+        for spec in self.shaders.values().take(16) {
+            out.push(("shaders.source", &spec.source, FileKind::Shader));
+            for path in spec.textures.iter().take(2) {
+                out.push(("shaders.textures", path, FileKind::Image));
+            }
+        }
         for (field, path) in [
             ("meta.preview", &self.meta.preview),
             ("dialogue.background", &self.dialogue.background),
@@ -1519,6 +1560,7 @@ impl Skin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKind {
+    Shader,
     Image,
     NineSlice([u32; 4]),
     Font,

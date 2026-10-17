@@ -1,0 +1,39 @@
+[meta]
+schema = 2
+id = "nanatype.celestial"
+version = "1.1.2"
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["streaming", "elegant"]
+name = { zh-CN = "星月魔法", en-US = "Celestial", ja-JP = "星月の魔法" }
+description = { zh-CN = "偏心天球仪、月相与夜空星图；完整程序版画", en-US = "Original procedural print artwork", ja-JP = "オリジナルのプロシージャル版画" }
+
+[chrome]
+appearance = "dark"
+accent = "#B5A1E8"
+surface = "#211C39"
+text = "#F4EEFF"
+
+[dialogue]
+region = [920, 220]
+overscan = 16
+padding = [36, 65, 217, 28]
+shader_effects = [{ shader = "artwork", target = "artwork" }]
+box = { color = "#211C39", border_color = "#E7CC94", frame = { image = "celestial/still.png", slice = [0, 0, 0, 0] } }
+text = { color = "#F4EEFF", size = 26, line_height = 1.45 }
+nameplate = { color = "#211C39", text_color = "#E7CC94", border_color = "#E7CC94", border_width = 1, gradient = { angle = 180, stops = [[0, "#393153"], [0.5, "#211C39"], [1, "#29223F"]] }, radius = 12, padding = [12, 3], offset = [36, -4], size = 19 }
+continue = { glyph = "· · ·", color = "#B5A1E8", motion = "none" }
+
+[shaders.artwork]
+source = "celestial/artwork.wgsl"
+period_s = 16
+intensity = 1
+textures = ["celestial/ornament.png"]
+
+[history]
+name_color = "#E7CC94"
+bubble_color = "#211C39"
+bubble_border = "#E7CC9470"
+bubble_border_width = 1
+bubble_radius = 18
+text = { color = "#F4EEFF" }

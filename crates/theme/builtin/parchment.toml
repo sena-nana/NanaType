@@ -1,11 +1,12 @@
 [meta]
 id = "nanatype.parchment"
-version = "2.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["classic", "elegant"]
 name = { zh-CN = "羊皮纸", en-US = "Parchment", ja-JP = "羊皮紙" }
 description = { zh-CN = "暖色纸张、双线边框与花饰，配宋体", en-US = "Warm paper with a double rule, a fleuron and a serif face", ja-JP = "温かい紙に二重罫と花飾り、明朝体" }
+schema = 2
 
 [chrome]
 accent = "#7a4824"
@@ -26,6 +27,7 @@ weight = 400
 
 [dialogue]
 padding = [28, 28, 28, 18]
+shader_effects = []
 
 [dialogue.box]
 color = "#f4e4c4"
@@ -35,47 +37,7 @@ radius = 6
 gradient = { kind = "radial", stops = [[0, "#fbf1dc"], [1, "#ecd6ae"]] }
 shadow = { color = "#3c1e0a59", dy = 6, blur = 14 }
 
-# Inner rule: the second line of the double frame.
-[[dialogue.decor]]
-inset = [5, 5, 5, 5]
-radius = 3
-border_color = "#7a543099"
-border_width = 1
-
-# Fleuron medallion sitting on the top border.
-[[dialogue.decor]]
-motif = "flourish"
-anchor = "top"
-offset = [0, -12]
-size = [58, 26]
-color = "#7a5430"
-
-[[dialogue.decor]]
-anchor = "top_left"
-offset = [10, 10]
-size = [18, 18]
-border_color = "#7a5430b3"
-border_widths = [2, 0, 0, 2]
-
-[[dialogue.decor]]
-anchor = "bottom_right"
-offset = [-10, -10]
-size = [18, 18]
-border_color = "#7a5430b3"
-border_widths = [0, 2, 2, 0]
-
-[[dialogue.decor]]
-anchor = "bottom"
-offset = [0, -6]
-size = [42, 2]
-color = "#7a543066"
-
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-10, 9]
-size = [24, 18]
-motif = "fold"
-color = "#9c754866"
+frame = { image = "parchment/still.png", slice = [60, 152, 60, 152], layout_inset = false }
 
 [dialogue.text]
 color = "#3e2a1c"
@@ -89,6 +51,9 @@ radius = 2
 padding = [14, 3]
 offset = [24, -16]
 shadows = [{ color = "#3c1e0a40", dy = 2, blur = 4 }]
+border_color = "#C9A46A"
+border_width = 1
+gradient = { angle = 180, stops = [[0, "#75462B"], [1, "#51301F"]] }
 
 [dialogue.continue]
 color = "#7a4824"

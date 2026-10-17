@@ -1,0 +1,39 @@
+[meta]
+schema = 2
+id = "nanatype.gothic"
+version = "1.1.2"
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["streaming", "elegant"]
+name = { zh-CN = "蔷薇哥特", en-US = "Rose Gothic", ja-JP = "薔薇ゴシック" }
+description = { zh-CN = "玫瑰窗、酒红书脊与蚀刻尖拱；完整程序版画", en-US = "Original procedural print artwork", ja-JP = "オリジナルのプロシージャル版画" }
+
+[chrome]
+appearance = "dark"
+accent = "#9E3153"
+surface = "#18131C"
+text = "#F5E8ED"
+
+[dialogue]
+region = [920, 220]
+overscan = 16
+padding = [145, 70, 128, 28]
+shader_effects = [{ shader = "artwork", target = "artwork" }]
+box = { color = "#18131C", border_color = "#C7AB76", frame = { image = "gothic/still.png", slice = [0, 0, 0, 0] } }
+text = { color = "#F5E8ED", size = 24, line_height = 1.45 }
+nameplate = { color = "#9E3153", text_color = "#F5E8ED", contour = "terminal", border_color = "#C7AB76", border_width = 0.8, gradient = { angle = 180, stops = [[0, "#A13D5D"], [1, "#76263F"]] }, radius = 2, padding = [12, 3], offset = [140, 12], size = 19 }
+continue = { glyph = "· · ·", color = "#9E3153", motion = "none" }
+
+[shaders.artwork]
+source = "gothic/artwork.wgsl"
+period_s = 16
+intensity = 1
+textures = ["gothic/ornament.png"]
+
+[history]
+name_color = "#F5E8ED"
+bubble_color = "#18131C"
+bubble_border = "#C7AB7670"
+bubble_border_width = 1
+bubble_radius = 8
+text = { color = "#F5E8ED" }

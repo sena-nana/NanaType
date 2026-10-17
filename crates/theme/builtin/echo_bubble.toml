@@ -2,12 +2,13 @@
 # CC0-1.0 below covers NanaType's own contributions to this local skin implementation.
 [meta]
 id = "nanatype.echo_bubble"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["streaming", "cute"]
 name = { zh-CN = "Echo-Live 气泡", en-US = "Echo-Live Bubble", ja-JP = "Echo-Live バブル" }
 description = { zh-CN = "还原 Echo-Live 的气泡主题：白色圆角框、灰色粗边与右下硬投影", en-US = "Echo-Live's bubble theme: a white rounded box with a thick grey border and a hard drop shadow", ja-JP = "Echo-Live のバブルテーマを再現：白い角丸の枠、太い灰色の縁と右下のハードシャドウ" }
+schema = 2
 
 [chrome]
 accent = "#888888"
@@ -28,6 +29,8 @@ region = [1280, 180]
 padding = [66, 50, 54, 40]
 
 # The box gives up 16px (here 11) on the right and bottom for its shadow.
+shader_effects = []
+
 [dialogue.box]
 color = "#ffffff"
 border_color = "#888888"
@@ -37,6 +40,8 @@ margin = [0, 11, 11, 0]
 shadows = [{ color = "#888888", dx = 11, dy = 11 }]
 
 # SAVE LOAD Q.SAVE Q.LOAD ⭰ ⯬ 🡄 🡆 ⯮ ⭲ HISTORY ╳.
+frame = { image = "echo_bubble/still.png", slice = [28, 90, 28, 28], layout_inset = false }
+
 [[dialogue.decor]]
 anchor = "bottom_left"
 offset = [62, -12]

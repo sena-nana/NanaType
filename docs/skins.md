@@ -10,16 +10,16 @@
 
 | id | 名称 | 标签 | 特点 |
 |---|---|---|---|
-| `nanatype.halo` | 光环 | classic, minimal | 默认。柔光白卡片、偏心轨道弧线、渐变名牌 |
+| `nanatype.halo` | 光环 | classic, minimal | 默认。精简蓝白圆润卡片、轻阴影、天蓝胶囊名牌，无右上角动效 |
 | `nanatype.night` | 夜色 | classic | 深蓝玻璃、切角仪表框、霓虹描边与呼吸光带 |
-| `nanatype.parchment` | 羊皮纸 | classic, elegant | 平直双线框、暖色纸张、折角与卷叶花饰、宋体 |
-| `nanatype.adv` | ADV 经典 | game | 1280×240 宽幅剧情框、端部缺口、金色姓名层级 |
+| `nanatype.parchment` | 羊皮纸 | classic, elegant | 双线压印框、暖色纸纤维、卷草包角、宋体 |
+| `nanatype.adv` | ADV 经典 | game | 1280×180 宽幅剧情框、端部缺口、金色姓名基线 |
 | `nanatype.rpg` | RPG 窗口 | game, retro | 蓝色渐变窗口、阶梯切角、白色嵌套框线 |
-| `nanatype.vanilla` | 香草 | streaming, minimal | 斜切收尾白条、左侧强调线、名字在框内 |
+| `nanatype.vanilla` | 香草 | streaming, minimal | 端正白条、竖直左侧强调色、名字在框内 |
 | `nanatype.bubble` | 气泡 | streaming, cute | 平滑圆角气泡、连续曲线尾巴、胶囊名牌与圆润星芒 |
 | `nanatype.subtitle` | 字幕 | streaming, minimal | 无框，居中粗描边白字 |
-| `nanatype.livechat` | 直播弹幕 | streaming | 圆形头像、名字胶囊、连续圆角评论气泡与 LIVE 标识 |
-| `nanatype.comic` | 漫画 | game, cute | 不规则分镜框、尖角尾巴、网点与放射线、黑色硬投影 |
+| `nanatype.livechat` | 直播弹幕 | streaming | 圆形头像、纯文字姓名、圆角评论气泡与 LIVE 标识 |
+| `nanatype.comic` | 漫画 | game, cute | 分镜框、尖角尾巴、渐疏网点、黑色硬投影 |
 | `nanatype.terminal` | 终端 | retro, minimal | 黑底绿字、机壳切角、分隔标题栏、闪烁光标 |
 | `nanatype.pixel` | 掌机像素 | game, retro | 四阶绿色、阶梯框与像素凹槽、像素字 |
 | `nanatype.sakura` | 樱花 | cute | 柔和圆角框、带缺口的五瓣樱花、粉色渐变与爱心提示 |
@@ -28,12 +28,20 @@
 | `nanatype.echo_glass` | Echo-Live 玻璃 | streaming | 还原 Echo-Live 玻璃：自下而上黑色渐变、黑边白字、菜单栏靠右 |
 | `nanatype.echo_bubble` | Echo-Live 气泡 | streaming, cute | 还原 Echo-Live 气泡：白色圆角框、灰色粗边、右下硬投影 |
 | `nanatype.echo_void` | Echo-Live 虚空 | streaming, minimal | 还原 Echo-Live 虚空：完全透明，只有黑字和灰色菜单栏 |
+| `nanatype.gothic` | 蔷薇哥特 | streaming, elegant | 酒红书脊、蚀刻玫瑰窗与金色尖拱 |
+| `nanatype.celestial` | 星月魔法 | streaming, elegant | 偏心天球仪、金色月相与轨道刻度 |
+| `nanatype.forest` | 森林精灵 | streaming, cute | 植物标本手札、装订孔与纸张颗粒 |
+| `nanatype.tidal` | 潮汐水族馆 | streaming, elegant | 流体玻璃、水母标本与深海阅读面 |
+| `nanatype.lantern` | 朱砂华灯 | streaming, elegant | 朱砂版画侧栏、菱格窗棂与垂灯 |
+| `nanatype.citrus` | 柠檬汽水 | streaming, cute | 薄荷斜向包纸、水果剖面与网点标签 |
 
 ![内置皮肤一览](skins-preview.png)
 
-设置 › 皮肤 顶部的预览卡会用示例台词实时画出所选皮肤（含个性化设置），点击某一行即可预览而不切换（行尾的“⋯”菜单里有复制、导出等操作）；标签和浅色 / 深色可用来筛选列表。水墨内置开放授权墨竹素材，其余内置皮肤不带图片；想改造它们时用「复制为可编辑」。缩略图使用与展示框相同的静态装饰、尾巴与表面绘制，并为外扩装饰和阴影留出空间；无继续提示的皮肤不显示占位圆点。
+设置 › 皮肤 顶部的预览卡会用示例台词实时画出所选皮肤（含个性化设置），点击某一行即可预览而不切换（行尾的“⋯”菜单里有复制、导出等操作）；标签和浅色 / 深色可用来筛选列表。水墨保留开放授权墨竹素材，程序版画携带同源静态回退，复杂花枝与卷草使用原创透明纹理；想改造它们时用「复制为可编辑」。缩略图使用与展示框相同的静态装饰、尾巴与表面绘制，并为外扩装饰和阴影留出空间；无继续提示的皮肤不显示占位圆点。
 
-夜色底部光带以 6 秒周期轻微呼吸，气泡的一颗星以 5 秒周期轻微呼吸；樱花的两片花瓣分别以 6／8 秒周期上下漂浮。其余新增细节保持静态。右上角有装饰时，左侧名牌会为角饰预留空间，超长姓名在名牌内省略，原始姓名不变。
+原有十八套按各自特征重新确定设计，光环回归精简胶囊卡片，香草使用端正轮廓，直播姓名使用纯文字，漫画使用网点，羊皮纸加强纸浆与纤维材质，详见[经典皮肤设计记录](classic-skin-refinement.md)。七套使用物件或状态动效：电路数据点、准备水晶、弹性爱心、打字三点、终端符号、液晶格和花枝；十一套以纸张、线条和排版保持静态，不携带运行时 WGSL。关闭高级动效后保留静态外观。完整画面为超长姓名预留空间，姓名在名牌内省略，原始姓名不变。显式设置个性化框色时优先使用所选颜色与原生框体。
+
+六套新增主题的[原速动效预览](skins-motion.webp)包括水母倾斜游动、叶片弯动、灯笼轻摆、星轨与金边游光、果片后方上升的气泡。文字、名牌和框体位置保持稳定；动幅、周期与逐帧检查方法见[设计说明](skin-art-direction.md#装饰自身的运动)。
 
 水墨直接叠加大都会博物馆开放图像中郑燮 [Bamboo and Poem](https://www.metmuseum.org/art/collection/search/52946) 的墨竹局部（Public Domain）。只裁切并去掉纸底，不重绘线条或改色；来源与处理记录随皮肤附在 `ink/ART-LICENSE.txt` 中。
 
@@ -146,6 +154,7 @@ padding = [10, 4]
 anchor = "top_left"               # 名牌自己的这个点对齐框的同名点
 offset = [16, -12]                # 再偏移；负值压在边框上
 frame = { image = "images/nameplate.png", slice = [8, 8, 8, 8] }
+# 完整框图可指定 layout_inset = false，保留九宫格切片而不增加布局内边距；默认 true。
 stroke = { color = "#000000", width = 3 }   # 名字描边
 text_shadow = { color = "#e86a92", blur = 8 }
 gradient = { angle = 90, stops = [[0, "#ff8fb8"], [1, "#ffb3cf"]] }
@@ -268,6 +277,58 @@ screen_shake_px = 6
 contrast_guard = 3.0              # 自带颜色的文字与框色对比低于 3:1 时加 1.5px 描边（0 = 关）
 ```
 
+## 受限 WGSL 动效（schema 2）
+
+皮肤根目录的 `skin.toml` 声明 `meta.schema = 2`，即可通过 `shaders` 表定义效果，并用 `shader_effects` 或装饰的 `shader` 引用。schema 1 继续支持；未写 schema 的旧皮肤按 1 处理。带 WGSL 的皮肤导出时会展开继承并带齐资源，导出的包无需保留原始皮肤目录。数组仍整体替换，`shader_effects = []` 清空继承的展示框效果，`decor = []` 清空装饰效果。命名效果表按键合并；继承来的效果若不再被引用就不绘制。
+
+```toml
+[meta]
+schema = 2
+id = "my.aurora"
+base = "nanatype.halo"
+
+[shaders.world]
+source = "effects/aurora.wgsl"
+period_s = 12                    # 0.5–3600 秒
+intensity = 0.16                 # 0–1，最终由宿主乘入透明度
+textures = []                    # 最多两张皮肤内图片，采样返回线性 RGBA
+params = [0.35]                  # 最多八个有限浮点数
+
+[[dialogue.shader_effects]]
+shader = "world"
+target = "background"           # background | border | artwork
+
+[[dialogue.decor]]
+shader = "world"                # 在此装饰的形状内叠加效果
+motif = "moon"
+color = "#B5A1E8"
+anchor = "top_right"
+offset = [-12, -12]
+size = [36, 36]
+```
+
+WGSL 文件只实现 `fn effect(input: EffectInput) -> vec4<f32>`，可添加纯辅助函数。返回非预乘的线性 RGBA；宿主限制颜色范围、乘入覆盖遮罩及强度，然后预乘并交由输出管线完成色彩转换。正文、姓名和引用始终在这些效果之上，效果不能读取画面或改变文字。
+
+`EffectInput` 包含 `uv: vec2<f32>`（局部 0–1）、`size: vec2<f32>`（逻辑像素）、`phase: f32`（循环相位 0–1）、`seed: f32`（固定种子）；`line_age` / `speaker_age` 是对应事件后的秒数，`reveal` 是当前页面的打字进度，`waiting` 为 0 或 1；`base`、`accent`、`border`、`text` 为线性 `vec4<f32>` 主题色；`params0` / `params1` 各包含四个参数，未提供的值为零。
+
+宿主提供 `sample0(uv)`、`sample1(uv)` 和 `particles(uv, phase, seed)`。采样仅访问声明的图片，UV 限制在图片边缘，没有绑定图片时返回透明。`particles` 使用固定十六个点，无需跨帧状态。程序可用 phase、三角函数和固定种子组合流光、焦散、星环、气泡及短暂事件响应。
+
+```wgsl
+fn effect(i: EffectInput) -> vec4<f32> {
+    let wave = 0.5 + 0.5 * sin(i.uv.x * 12.0 + i.phase * 6.28318);
+    let event = 1.0 - clamp(i.line_age, 0.0, 1.0);
+    return vec4(i.accent.rgb, wave * (0.15 + event * 0.15));
+}
+```
+
+限制：每框最多四个效果实例，最多十六个命名定义；源码 UTF-8、单份最多 64 KiB；IR 和按调用展开的复杂度各最多 4096 节点，调用深度最多八层。用户函数禁止循环、自定义入口、全局变量、绑定、指针接口、原子、存储资源、discard、扩展和诊断指令；`fx_` 为宿主保留前缀。固定数组最多 64 个元素，单个类型最多 4096 字节，单函数局部变量最多 16 KiB。每张纹理最长边 2048，单皮肤解码后的纹理最多 32 MiB；代理的纹理与遮罩缓存总预算 64 MiB。应用内限制不承诺隔离驱动故障。
+
+设置 › 皮肤 › 皮肤高级动效 默认开启；减少动态效果时不执行自定义 WGSL。编辑器、历史和缩略图保持静态，预览卡点“播放动效”才播放当前主题。循环只请求绘制帧，独立循环为 30 fps；打字等动画可提高到 60 fps。导入错误显示文件路径和 WGSL 诊断（行列号直接对应皮肤文件）；无效热重载保留上一份有效皮肤，GPU 编译失败则禁用该效果并保留静态外观。
+
+完整作者示例见 [aurora/skin.toml](examples/aurora/skin.toml)，可直接导入 [aurora.ntskin](examples/aurora.ntskin)。六套新内置主题每套使用一个 WGSL、一张透明装饰纹理、零自定义参数、零装饰节点，构图和静态回退见[设计说明](skin-art-direction.md)，素材参考与矢量源图见[来源记录](skin-art-sources.md)。
+
+`target = "artwork"` 用于完整画面：程序自行绘制透明轮廓、材质、边框和装饰，宿主提供展示框矩形画布，不再使用原有框体的覆盖遮罩。配置 `dialogue.box.frame` 作为完整静态回退；可以运行 `cargo run -p nanatype --example skin_artwork -- crates/theme/builtin` 重新烘焙内置图。回退与 WGSL 都绘制在正文、引用和姓名之前；关闭动效时不提交用户代码。
+
 ## 内容配色参考（chrome）
 
 `[chrome]` 只包含 `appearance`、`accent`、`surface` 和 `text`。`appearance` 用于皮肤选择器的明暗分类；`accent` 提供装饰、引用昵称和行内标签等的强调色；`surface` 用于编辑器行内标记的底色；`text` 为内容文字的对比描边提供候选色。
@@ -344,6 +405,12 @@ NanaUI 一次只用一个字体名，NanaType 会从 `families` 里挑第一个�
 ## 热重载
 
 制作皮肤时，在 设置 › 皮肤 打开「文件变化时自动重载」，修改文件夹中的文件后展示框会立即更新。
+
+皮肤目录只供静态选择器使用。内置 WGSL 在应用皮肤或播放当前预览时才校验、解码纹理，之后复用结果；刷新选择器或重新扫描目录不会重复准备内置程序。浏览未应用的皮肤仍可单独播放动效，不会修改当前皮肤。用户文件夹和导入包仍完整校验，热重载后选择器和展示使用同一次扫描结果；手动切换用户皮肤或播放其预览时重新读取文件，兼容未启用文件监听的编辑。校验失败时继续显示上一有效版本。直接使用主题库的 `load` 会重新读取用户文件，`load_scanned` 则返回最近一次扫描的快照。
+
+包含 WGSL 的导出包仍会展开继承、携带资源，但独立清单省略与上下文默认值相同的字段。原始继承清单保持原样，`decor = []` 等显式清空操作不会被裁减。作者工具可用 `standalone_manifest` 将已解析的皮肤生成同样的独立清单，不应拿它裁剪尚未合并的子皮肤。
+
+完整 Artwork 自己提供透明轮廓，因此其覆盖遮罩复用单个白色像素，不随尺寸或 DPI 重建。背景、边框和装饰仍使用对应的真实遮罩。预览只加载静态绘制需要的图片；活动皮肤仍可通过 `skin:` 使用包内其他图片。全主题测量与复现方法见 [配置链路与性能验证](skin-pipeline-validation.md)。
 
 ## 文字组合动效与对话框扫光
 

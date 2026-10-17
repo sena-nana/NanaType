@@ -5,6 +5,7 @@ pub mod bilibili;
 pub mod danmaku;
 pub mod dialogue;
 pub mod douyin;
+mod effect_uniforms;
 pub mod feedback;
 pub mod history;
 pub mod input;
@@ -16,11 +17,12 @@ pub mod p2p;
 pub mod quote;
 pub mod rich;
 pub mod settings;
+pub mod shader_effects;
 pub mod surface;
 pub mod sweep;
 
 use std::collections::HashMap;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Mutex, Weak};
 
 use nana_ui::runtime::view::{Computed, NodeRef, Signal, computed, node_ref, signal};
 use nanatype_core::{DisplayView, HistoryRow};
@@ -188,6 +190,7 @@ pub struct Ui {
     pub portraits: Signal<Arc<HashMap<String, String>>>,
     /// Motion is reduced: the setting, or the system preference.
     pub reduced_motion: Signal<bool>,
+    pub shader_preview: Signal<bool>,
     /// The system's own reduce-motion preference, as last reported.
     pub system_reduced_motion: Signal<bool>,
     /// Whether the input window is shown by the application's presence policy.
@@ -287,6 +290,7 @@ impl Ui {
             asset_urls: signal(Arc::new(HashMap::new())),
             portraits: signal(Arc::new(HashMap::new())),
             reduced_motion: signal(false),
+            shader_preview: signal(false),
             system_reduced_motion: signal(false),
             input_shown: signal(true),
             onboard_step: signal(0),
@@ -344,7 +348,31 @@ impl Ui {
     }
 }
 
-/// The skin picker's rows, built-ins first.
+fn picker_image_urls(entry: &nanatype_theme::SkinEntry) -> Arc<HashMap<String, String>> {
+    type Cached = (Weak<Skin>, Arc<HashMap<String, String>>);
+    static BUILTIN_IMAGES: LazyLock<Mutex<HashMap<String, Cached>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+    let (Some(skin), Some(files)) = (&entry.skin, entry.files()) else {
+        return Arc::default();
+    };
+    // Cache only immutable embedded resources. Directory edits must always
+    // produce fresh content URLs, even when file length/mtime do not change.
+    if entry.is_builtin() && crate::services::media::global().is_some() {
+        let mut cache = BUILTIN_IMAGES.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((previous, urls)) = cache.get(&entry.id)
+            && previous.upgrade().is_some_and(|s| Arc::ptr_eq(&s, skin))
+        {
+            return urls.clone();
+        }
+        let urls = Arc::new(crate::assets::skin_preview_urls(skin, files));
+        cache.insert(entry.id.clone(), (Arc::downgrade(skin), urls.clone()));
+        urls
+    } else {
+        Arc::new(crate::assets::skin_preview_urls(skin, files))
+    }
+}
+
+/// The skin picker's static rows, built-ins first.
 pub fn skin_rows(registry: &nanatype_theme::SkinRegistry, locale: Locale) -> Vec<SkinRow> {
     registry
         .entries()
@@ -364,18 +392,12 @@ pub fn skin_rows(registry: &nanatype_theme::SkinRegistry, locale: Locale) -> Vec
                     nanatype_theme::SkinOrigin::Directory(p) => Some(p.clone()),
                     _ => None,
                 },
-                image_urls: Arc::new(
-                    registry
-                        .load(&e.id)
-                        .ok()
-                        .map(|loaded| crate::assets::skin_urls(&*loaded.files))
-                        .unwrap_or_default(),
-                ),
+                image_urls: picker_image_urls(e),
                 accent: [0.5; 4],
                 box_color: [0.5; 4],
                 text_color: [0.5; 4],
                 fallback_font: false,
-                skin: e.skin.clone(),
+                skin: e.prepared_skin().cloned().or_else(|| e.skin.clone()),
             };
             if let Some(s) = &e.skin {
                 let b = &s.dialogue.box_;
@@ -396,6 +418,62 @@ pub fn skin_rows(registry: &nanatype_theme::SkinRegistry, locale: Locale) -> Vec
             row
         })
         .collect()
+}
+
+/// Prepare only the playing preview, preserving the active skin and the
+/// other catalogue models. A row change rebuilds this one preview once.
+pub fn prepare_skin_preview(
+    ui: Ui,
+    registry: &nanatype_theme::SkinRegistry,
+    id: &str,
+) -> Result<(), Vec<nanatype_theme::SkinDiagnostic>> {
+    if !shader_effects::enabled(ui) {
+        ui.shader_preview.set(false);
+        return Ok(());
+    }
+    let loaded = registry
+        .load(id)
+        .inspect_err(|_| ui.shader_preview.set(false))?;
+    let previous = ui.skins.with_untracked(|rows| {
+        rows.iter()
+            .find(|r| r.id == id)
+            .map(|r| r.image_urls.values().cloned().collect::<Vec<_>>())
+            .unwrap_or_default()
+    });
+    ui.skins.update(|rows| {
+        if let Some(row) = Arc::make_mut(rows).iter_mut().find(|r| r.id == id) {
+            if !row.builtin {
+                row.image_urls = Arc::new(crate::assets::skin_preview_urls(
+                    &loaded.skin,
+                    &*loaded.files,
+                ));
+            }
+            row.skin = Some(loaded.skin);
+        }
+    });
+    retire_skin_urls(ui, previous);
+    ui.shader_preview.set(true);
+    Ok(())
+}
+
+pub fn retire_skin_urls(ui: Ui, previous: impl IntoIterator<Item = String>) {
+    let Some(media) = crate::services::media::global() else {
+        return;
+    };
+    let mut keep: std::collections::HashSet<String> = ui
+        .asset_urls
+        .with_untracked(|u| u.values().cloned().collect());
+    ui.skins.with_untracked(|rows| {
+        keep.extend(rows.iter().flat_map(|r| r.image_urls.values().cloned()))
+    });
+    ui.portraits
+        .with_untracked(|urls| keep.extend(urls.values().cloned()));
+    if let Some(path) = ui.settings.with_untracked(|s| s.general.avatar.clone())
+        && let Some(url) = crate::services::media::url(std::path::Path::new(&path), None)
+    {
+        keep.insert(url);
+    }
+    media.retire_urls(previous, &keep);
 }
 
 /// Rewrite a bound stack's layout in place.

@@ -61,13 +61,152 @@ fn errors(result: Result<LoadedSkin, Vec<SkinDiagnostic>>) -> Vec<String> {
 }
 
 #[test]
+fn builtin_catalogue_defers_effects_and_reuses_validated_models_across_scans() {
+    let mut registry = SkinRegistry::new(None, APP);
+    let mut loaded = Vec::new();
+    for entry in registry.entries() {
+        assert!(entry.skin.as_ref().unwrap().shader_programs.is_empty());
+        let a = registry.load(&entry.id).unwrap();
+        let b = registry.load(&entry.id).unwrap();
+        assert!(Arc::ptr_eq(&a.skin, &b.skin), "{}", entry.id);
+        assert!(Arc::ptr_eq(&a.files, &b.files), "{}", entry.id);
+        assert_eq!(a.skin.shader_programs.len(), a.skin.shaders.len());
+        loaded.push(a);
+    }
+    registry.rescan();
+    for previous in loaded {
+        let current = registry.load(&previous.skin.meta.id).unwrap();
+        assert!(Arc::ptr_eq(&previous.skin, &current.skin));
+    }
+}
+
+#[test]
+fn directory_loads_and_inherited_edits_remain_fresh_without_rescan() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base = tmp.path().join("user.base");
+    let child = tmp.path().join("user.child");
+    let manifest = "[meta]\nid='user.base'\n[dialogue.text]\ncolor='#123456'\n";
+    write_skin(&base, manifest, &[]);
+    write_skin(&child, "[meta]\nid='user.child'\nbase='user.base'\n", &[]);
+    let mut registry = SkinRegistry::new(Some(tmp.path().to_owned()), APP);
+    let old = registry.load("user.child").unwrap();
+    let mut watched = old.files.watch_roots();
+    watched.sort();
+    let mut expected = vec![base.clone(), child.clone()];
+    expected.sort();
+    assert_eq!(watched, expected);
+    let scanned = registry.load_scanned("user.child").unwrap();
+    assert!(Arc::ptr_eq(
+        &scanned.skin,
+        &registry.load_scanned("user.child").unwrap().skin
+    ));
+    // Same byte length: neither an id cache nor a size-only resource cache
+    // may hide an edit to an ancestor.
+    write_skin(&base, &manifest.replace("#123456", "#654321"), &[]);
+    let new = registry.load("user.child").unwrap();
+    assert_ne!(old.skin.dialogue.text.color, new.skin.dialogue.text.color);
+    registry.rescan();
+    assert_ne!(
+        scanned.skin.dialogue.text.color,
+        registry
+            .load_scanned("user.child")
+            .unwrap()
+            .skin
+            .dialogue
+            .text
+            .color
+    );
+    assert_eq!(
+        registry
+            .entry("user.child")
+            .unwrap()
+            .skin
+            .as_ref()
+            .unwrap()
+            .dialogue
+            .text
+            .color,
+        new.skin.dialogue.text.color
+    );
+    write_skin(&base, "invalid TOML = [", &[]);
+    assert!(registry.load("user.child").is_err());
+    registry.rescan();
+    assert!(registry.load_scanned("user.child").is_err());
+    // Already loaded content stays usable after a failed authoring edit.
+    assert_eq!(new.skin.meta.id, "user.child");
+}
+
+#[test]
+fn unchanged_user_effects_share_validation_and_decoding_but_changed_sources_are_rechecked() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("user.effect");
+    write_skin(
+        &dir,
+        "[meta]\nid='user.effect'\nbase='nanatype.tidal'\n[shaders.artwork]\nsource='effect.wgsl'\n",
+        &[(
+            "effect.wgsl",
+            b"fn effect(i:EffectInput)->vec4<f32>{return vec4(0.);}".to_vec(),
+        )],
+    );
+    let mut registry = SkinRegistry::new(Some(tmp.path().to_owned()), APP);
+    let a = registry.load("user.effect").unwrap();
+    for _ in 0..4 {
+        registry.rescan();
+        let b = registry.load_scanned("user.effect").unwrap();
+        assert!(Arc::ptr_eq(
+            &a.skin.shader_programs["artwork"],
+            &b.skin.shader_programs["artwork"]
+        ));
+    }
+    fs::write(
+        dir.join("effect.wgsl"),
+        "fn effect(i:EffectInput)->vec4<f32>{return vec4(1.);}",
+    )
+    .unwrap();
+    let changed = registry.load("user.effect").unwrap();
+    assert!(!Arc::ptr_eq(
+        &a.skin.shader_programs["artwork"],
+        &changed.skin.shader_programs["artwork"]
+    ));
+    fs::write(
+        dir.join("effect.wgsl"),
+        "fn effect(i:EffectInput)->vec4<f32>{loop{} return vec4(1.);}",
+    )
+    .unwrap();
+    assert!(registry.load("user.effect").is_err());
+}
+
+#[test]
+fn compact_standalone_manifests_preserve_all_builtin_designs() {
+    let registry = SkinRegistry::new(None, APP);
+    let tmp = tempfile::tempdir().unwrap();
+    for entry in registry.entries() {
+        let loaded = registry.load(&entry.id).unwrap();
+        let table = standalone_manifest(&loaded.skin).unwrap();
+        let compact = toml::to_string_pretty(&table).unwrap();
+        assert!(compact.len() < toml::to_string_pretty(&*loaded.skin).unwrap().len());
+        let mut files = Vec::new();
+        for path in loaded.files.list().into_iter().filter(|p| p != MANIFEST) {
+            files.push((path.clone(), loaded.files.read(&path).unwrap()));
+        }
+        let refs: Vec<_> = files.iter().map(|(p, b)| (p.as_str(), b.clone())).collect();
+        let dir = tmp.path().join(&entry.id);
+        write_skin(&dir, &compact, &refs);
+        let restored = load(Arc::new(DirFiles::new(dir)), SkinOrigin::Builtin, &(), APP).unwrap();
+        let mut expected = (*loaded.skin).clone();
+        expected.meta.base = None;
+        assert_eq!(*restored.skin, expected, "{}", entry.id);
+    }
+}
+
+#[test]
 fn every_builtin_loads_without_warnings() {
     let registry = SkinRegistry::new(None, APP);
-    assert_eq!(registry.entries().len(), 18);
+    assert_eq!(registry.entries().len(), 24);
     let mut ids: Vec<&str> = registry.entries().iter().map(|e| e.id.as_str()).collect();
     ids.sort();
     ids.dedup();
-    assert_eq!(ids.len(), 18);
+    assert_eq!(ids.len(), 24);
     assert!(registry.load(DEFAULT_SKIN).is_ok());
     for entry in registry.entries() {
         assert!(entry.loads(), "{}: {:?}", entry.id, entry.errors);
@@ -117,6 +256,281 @@ fn every_builtin_loads_without_warnings() {
     assert_eq!(night.skin.history.layout, HistoryLayout::Stack);
     assert!(night.skin.history.panel.is_none());
     assert!(!night.skin.history.hide_latest);
+}
+
+#[test]
+fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut registry = SkinRegistry::new(Some(tmp.path().join("skins")), APP);
+    for name in [
+        "gothic",
+        "celestial",
+        "forest",
+        "tidal",
+        "lantern",
+        "citrus",
+    ] {
+        let id = format!("nanatype.{name}");
+        let original = registry.load(&id).unwrap();
+        assert_eq!(original.skin.meta.schema, 2);
+        assert_eq!(original.skin.shader_programs.len(), 1);
+        assert!(original.skin.dialogue.decor.is_empty());
+        assert_eq!(original.skin.dialogue.shader_effects.len(), 1);
+        assert_eq!(
+            original.skin.dialogue.shader_effects[0].target,
+            ShaderTarget::Artwork
+        );
+        assert!(original.skin.shaders["artwork"].params.is_empty());
+        assert_eq!(original.skin.shaders["artwork"].textures.len(), 1);
+        let file = tmp.path().join(format!("{name}.ntskin"));
+        registry.export(&id, &file).unwrap();
+        let loaded = registry.inspect_archive(&file).unwrap();
+        assert_eq!(loaded.skin.shader_programs, original.skin.shader_programs);
+        let texture = &original.skin.shaders["artwork"].textures[0];
+        assert_eq!(
+            loaded.files.read(texture).unwrap(),
+            original.files.read(texture).unwrap()
+        );
+        let fallback = &original.skin.dialogue.box_.frame.as_ref().unwrap().image;
+        assert_eq!(
+            loaded.files.read(fallback).unwrap(),
+            original.files.read(fallback).unwrap()
+        );
+        let still = image::load_from_memory(&loaded.files.read(fallback).unwrap())
+            .unwrap()
+            .to_rgba8();
+        assert_eq!(still.dimensions(), (920, 220));
+        assert_eq!(
+            still.get_pixel(0, 0).0[3],
+            0,
+            "{name}: transparent canvas edge"
+        );
+        assert_eq!(
+            still.get_pixel(460, 110).0[3],
+            255,
+            "{name}: static reading plane missing"
+        );
+        registry
+            .duplicate(
+                &id,
+                &format!("my.{name}"),
+                &Localized::from([("en-US".into(), name.into())]),
+                &TomlTable::new(),
+            )
+            .unwrap();
+        assert_eq!(
+            registry
+                .load(&format!("my.{name}"))
+                .unwrap()
+                .skin
+                .shader_programs,
+            original.skin.shader_programs
+        );
+    }
+    let artwork_sample =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/examples/lunar-atlas.ntskin");
+    registry.install(&artwork_sample).unwrap();
+    let sample = registry.load("example.lunar_atlas").unwrap();
+    assert!(sample.skin.meta.base.is_none());
+    assert_eq!(
+        sample.skin.dialogue.shader_effects[0].target,
+        ShaderTarget::Artwork
+    );
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/examples/aurora.ntskin");
+    registry.install(&file).unwrap();
+    registry
+        .duplicate(
+            "example.aurora",
+            "my.detached",
+            &Localized::from([("en-US".into(), "Detached".into())]),
+            &TomlTable::new(),
+        )
+        .unwrap();
+    let detached = tmp.path().join("detached.ntskin");
+    registry.export("my.detached", &detached).unwrap();
+    registry.remove("my.detached").unwrap();
+    registry.remove("example.aurora").unwrap();
+    registry.install(&detached).unwrap();
+    let loaded = registry.load("my.detached").unwrap();
+    assert!(loaded.skin.meta.base.is_none());
+    // Halo is deliberately static; the example contributes its only program.
+    assert!(loaded.skin.shader_programs.contains_key("aurora"));
+    assert_eq!(loaded.skin.shader_programs.len(), 1);
+    assert_eq!(loaded.skin.dialogue.shader_effects.len(), 1);
+    assert_eq!(loaded.skin.dialogue.shader_effects[0].shader, "aurora");
+    registry.install(&file).unwrap();
+    assert_eq!(
+        registry
+            .load("example.aurora")
+            .unwrap()
+            .skin
+            .shader_programs
+            .len(),
+        1
+    );
+    // Exercise named-table merging using an actually animated base, rather
+    // than requiring the default minimal skin to carry an unrelated effect.
+    write_skin(
+        &tmp.path().join("skins/my.merge"),
+        "[meta]\nschema=2\nid='my.merge'\nbase='nanatype.night'\n[dialogue]\nshader_effects=[{shader='extra',target='background'}]\n[shaders.extra]\nsource='extra.wgsl'\n",
+        &[(
+            "extra.wgsl",
+            b"fn effect(i:EffectInput)->vec4<f32>{return vec4(i.accent.rgb,.1);}".to_vec(),
+        )],
+    );
+    registry.rescan();
+    let merged = registry.load("my.merge").unwrap();
+    assert_eq!(merged.skin.shader_programs.len(), 2);
+    assert_eq!(merged.skin.dialogue.shader_effects.len(), 1);
+    let archive = tmp.path().join("merged.ntskin");
+    registry.export("my.merge", &archive).unwrap();
+    let exported = registry.inspect_archive(&archive).unwrap();
+    assert_eq!(exported.skin.shader_programs, merged.skin.shader_programs);
+    assert!(exported.skin.meta.base.is_none());
+}
+
+#[test]
+fn classic_artwork_exports_its_complete_static_fallback_and_keeps_special_layouts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let registry = SkinRegistry::new(Some(tmp.path().join("skins")), APP);
+    for name in [
+        "halo",
+        "night",
+        "parchment",
+        "adv",
+        "rpg",
+        "vanilla",
+        "bubble",
+        "livechat",
+        "comic",
+        "terminal",
+        "pixel",
+        "sakura",
+        "ink",
+        "echo_vanilla",
+        "echo_glass",
+        "echo_bubble",
+    ] {
+        let id = format!("nanatype.{name}");
+        let original = registry.load(&id).unwrap();
+        let skin = &original.skin;
+        assert_eq!(skin.meta.schema, 2, "{name}");
+        let animated = [
+            "night", "rpg", "bubble", "livechat", "terminal", "pixel", "sakura",
+        ]
+        .contains(&name);
+        assert_eq!(skin.shader_programs.len(), usize::from(animated), "{name}");
+        assert_eq!(
+            skin.dialogue.shader_effects.len(),
+            usize::from(animated),
+            "{name}"
+        );
+        if animated {
+            assert_eq!(
+                skin.dialogue.shader_effects[0].target,
+                ShaderTarget::Artwork
+            );
+            assert!(skin.shaders["artwork"].params.is_empty());
+            assert!(skin.shaders["artwork"].textures.len() <= 1);
+        } else {
+            assert!(
+                skin.shaders.is_empty(),
+                "{name}: static print must not compile a shader"
+            );
+        }
+        let archive = tmp.path().join(format!("{name}.ntskin"));
+        registry.export(&id, &archive).unwrap();
+        let exported = registry.inspect_archive(&archive).unwrap();
+        assert_eq!(exported.skin.shader_programs, skin.shader_programs);
+        for (_, resource, _) in skin.referenced_files() {
+            if !resource.starts_with("builtin:") {
+                assert_eq!(
+                    exported.files.read(resource).unwrap(),
+                    original.files.read(resource).unwrap(),
+                    "{name}: {resource}"
+                );
+            }
+        }
+        if name == "echo_glass" {
+            assert!(skin.dialogue.box_.frame.is_none());
+            assert!(skin.dialogue.box_.shape.gradient.is_some());
+            assert_eq!(skin.dialogue.box_.color.a, 0);
+            continue;
+        }
+        let frame = skin.dialogue.box_.frame.as_ref().unwrap();
+        assert!(
+            !frame.layout_inset,
+            "{name}: plate must preserve native padding"
+        );
+        assert!(skin.has_dialogue_artwork());
+        let image = &frame.image;
+        let still = image::load_from_memory(&original.files.read(image).unwrap())
+            .unwrap()
+            .to_rgba8();
+        assert!(
+            still.width() > 600 && still.height() > 90,
+            "{name}: placeholder plate"
+        );
+        assert!(still.pixels().any(|p| p.0[3] > 100), "{name}: empty plate");
+    }
+    for name in ["subtitle", "echo_void"] {
+        let skin = registry.load(&format!("nanatype.{name}")).unwrap().skin;
+        assert!(
+            skin.shaders.is_empty(),
+            "transparent typography should sleep"
+        );
+        assert_eq!(skin.dialogue.box_.color.a, 0);
+        assert!(skin.dialogue.box_.frame.is_none());
+    }
+    for name in ["bubble", "comic", "sakura"] {
+        assert!(
+            registry
+                .load(&format!("nanatype.{name}"))
+                .unwrap()
+                .skin
+                .dialogue
+                .tail
+                .is_some()
+        );
+    }
+}
+
+#[test]
+fn shader_manifests_fail_closed_on_schema_resources_and_limits() {
+    let tmp = tempfile::tempdir().unwrap();
+    let shader = b"fn effect(i:EffectInput)->vec4<f32>{return vec4(0.);}".to_vec();
+    let good = "[meta]\nschema=2\nid='shader-test'\n[shaders.test]\nsource='effect.wgsl'\n[[dialogue.shader_effects]]\nshader='test'\n";
+    for manifest in [
+        good.replace("schema=2", "schema=1"),
+        good.replace("effect.wgsl", "../effect.wgsl"),
+        good.replace("effect.wgsl", "missing.wgsl"),
+        good.replace(
+            "source='effect.wgsl'",
+            "source='effect.wgsl'\nparams=[1,2,3,4,5,6,7,8,9]",
+        ),
+        good.replace(
+            "source='effect.wgsl'",
+            "source='effect.wgsl'\nintensity=nan",
+        ),
+        good.replace("shader='test'", "shader='missing'"),
+        format!(
+            "{good}{}",
+            "[[dialogue.shader_effects]]\nshader='test'\n".repeat(4)
+        ),
+        good.replace(
+            "source='effect.wgsl'",
+            "source='effect.wgsl'\ntextures=['big.png']",
+        ),
+    ] {
+        write_skin(
+            tmp.path(),
+            &manifest,
+            &[("effect.wgsl", shader.clone()), ("big.png", png(2049, 16))],
+        );
+        assert!(load_dir(tmp.path()).is_err(), "accepted {manifest}");
+    }
+    write_skin(tmp.path(), good, &[("effect.wgsl", shader)]);
+    assert!(load_dir(tmp.path()).is_ok());
 }
 
 #[test]
@@ -1110,6 +1524,7 @@ fn manifest_keys() -> std::collections::BTreeSet<String> {
         "meta.description",
         "dialogue.portrait.variants",
         "sounds.se",
+        "shaders",
     ];
     fn walk(prefix: &str, v: &toml::Value, out: &mut std::collections::BTreeSet<String>) {
         match v {
@@ -1348,4 +1763,37 @@ fn the_bundled_fonts_serve_the_skins_that_name_them() {
             assert!(face.glyph_index(ch).is_some(), "{reference} lacks {ch:?}");
         }
     }
+}
+
+#[test]
+fn directory_resources_reject_links_escaping_the_selected_skin_root() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("skin");
+    let outside = tmp.path().join("outside");
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    fs::write(root.join("ok.txt"), b"inside").unwrap();
+    fs::write(outside.join("secret.txt"), b"outside").unwrap();
+    let link = root.join("escape");
+    #[cfg(windows)]
+    assert!(
+        std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&link)
+            .arg(&outside)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&outside, &link).unwrap();
+    let files = DirFiles::new(&root);
+    assert_eq!(files.read("ok.txt").unwrap(), b"inside");
+    assert!(matches!(
+        files.read("escape/secret.txt"),
+        Err(FileError::UnsafePath(_))
+    ));
+    // An explicitly selected linked directory remains a valid root.
+    assert_eq!(DirFiles::new(&link).read("secret.txt").unwrap(), b"outside");
 }

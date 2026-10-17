@@ -1,0 +1,39 @@
+[meta]
+schema = 2
+id = "nanatype.tidal"
+version = "1.1.2"
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["streaming", "elegant"]
+name = { zh-CN = "潮汐水族馆", en-US = "Tidal Aquarium", ja-JP = "潮のアクアリウム" }
+description = { zh-CN = "流体玻璃、水母标本与深海阅读面；完整程序版画", en-US = "Original procedural print artwork", ja-JP = "オリジナルのプロシージャル版画" }
+
+[chrome]
+appearance = "dark"
+accent = "#79D4CE"
+surface = "#103D49"
+text = "#E5F8F5"
+
+[dialogue]
+region = [920, 220]
+overscan = 16
+padding = [38, 66, 211, 30]
+shader_effects = [{ shader = "artwork", target = "artwork" }]
+box = { color = "#103D49", border_color = "#EEF9F6", frame = { image = "tidal/still.png", slice = [0, 0, 0, 0] } }
+text = { color = "#E5F8F5", size = 26, line_height = 1.45 }
+nameplate = { color = "#EEF9F6", text_color = "#103D49", border_color = "#79D4CE", border_width = 1, gradient = { angle = 160, stops = [[0, "#FFFFFF"], [0.45, "#EEF9F6"], [1, "#CBE6DF"]] }, radius = 14, padding = [12, 3], offset = [38, 13], size = 19 }
+continue = { glyph = "· · ·", color = "#79D4CE", motion = "none" }
+
+[shaders.artwork]
+source = "tidal/artwork.wgsl"
+period_s = 16
+intensity = 1
+textures = ["tidal/ornament.png"]
+
+[history]
+name_color = "#79D4CE"
+bubble_color = "#103D49"
+bubble_border = "#EEF9F670"
+bubble_border_width = 1
+bubble_radius = 18
+text = { color = "#E5F8F5" }

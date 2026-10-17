@@ -15,7 +15,8 @@ fn scanned_ink_loads_from_embedded_and_inherited_skin_files() {
     let mut registry = SkinRegistry::new(Some(root.join("skins")), env!("CARGO_PKG_VERSION"));
     let loaded = registry.load("nanatype.ink").unwrap();
     let urls = nanatype::assets::skin_urls(&*loaded.files);
-    assert_eq!(urls.len(), 1);
+    assert!(urls.contains_key("skin:ink/bamboo.png"));
+    assert!(urls.contains_key("skin:ink/still.png"));
     let names = Localized::from([("en-US".to_owned(), "My Ink".to_owned())]);
     registry
         .duplicate("nanatype.ink", "my-ink", &names, &TomlTable::new())

@@ -10,7 +10,7 @@
 //!
 //! A miniature is worked out once per loaded skin and cached ([`thumb`]);
 //! its ornament glyphs come from the skin, independent of the UI locale. The nodes it builds
-//! are still, so 18 cards cost nothing per frame.
+//! are still, so 24 cards cost nothing per frame.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -132,7 +132,15 @@ impl Thumb {
         let [mt, mr, mb, ml] = d.box_.margin;
         let bh = (d.region[1] - mt - mb).max(24.0);
         let native_width = (d.region[0] - ml - mr) * d.box_.width_fraction;
-        let bw = native_width.clamp(bh, bh * MAX_ASPECT);
+        let artwork = d
+            .shader_effects
+            .iter()
+            .any(|e| e.target == nanatype_theme::ShaderTarget::Artwork);
+        let bw = if artwork {
+            native_width.max(bh)
+        } else {
+            native_width.clamp(bh, bh * MAX_ASPECT)
+        };
         let sx = bw / native_width.max(1.0);
         let mut box_surface =
             Surface::dialogue_box(skin, d.box_.frame.as_ref().and_then(|f| url(&f.image)));
@@ -348,8 +356,18 @@ impl Thumb {
 
 /// Cached miniatures by skin id, with the skin they were made from: a
 /// reloaded skin is a new `Arc` and is worked out again.
-type ThumbCache =
-    Mutex<Option<HashMap<String, (Arc<Skin>, Arc<Thumb>, Arc<HashMap<String, String>>)>>>;
+type ThumbCache = Mutex<
+    Option<
+        HashMap<
+            String,
+            (
+                std::sync::Weak<Skin>,
+                Arc<Thumb>,
+                Arc<HashMap<String, String>>,
+            ),
+        >,
+    >,
+>;
 static CACHE: ThumbCache = Mutex::new(None);
 
 /// The miniature of `row`, from the cache when its skin has not changed.
@@ -359,8 +377,9 @@ pub fn thumb(row: &SkinRow) -> Arc<Thumb> {
     };
     let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
     let cache = cache.get_or_insert_with(HashMap::new);
+    cache.retain(|_, (s, _, _)| s.strong_count() > 0);
     if let Some((cached, t, urls)) = cache.get(&row.id)
-        && Arc::ptr_eq(cached, skin)
+        && cached.upgrade().is_some_and(|s| Arc::ptr_eq(&s, skin))
         && **urls == *row.image_urls
     {
         return t.clone();
@@ -368,7 +387,7 @@ pub fn thumb(row: &SkinRow) -> Arc<Thumb> {
     let t = Arc::new(Thumb::of(skin, &row.image_urls));
     cache.insert(
         row.id.clone(),
-        (skin.clone(), t.clone(), row.image_urls.clone()),
+        (Arc::downgrade(skin), t.clone(), row.image_urls.clone()),
     );
     t
 }
@@ -542,6 +561,22 @@ pub fn miniature(t: &Thumb) -> AnyView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn miniature_cache_does_not_keep_a_removed_skin_or_its_programs_alive() {
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let mut row = crate::ui::skin_rows(&registry, nanatype_i18n::Locale::EnUs).remove(0);
+        row.id = "removed-test-skin".into();
+        row.skin = Some(Arc::new((**row.skin.as_ref().unwrap()).clone()));
+        let weak = Arc::downgrade(row.skin.as_ref().unwrap());
+        let _thumb = thumb(&row);
+        row.skin = None;
+        assert_eq!(
+            weak.strong_count(),
+            0,
+            "thumbnail retained decoded shader textures"
+        );
+    }
 
     #[test]
     fn every_builtin_miniature_fits_its_slot() {

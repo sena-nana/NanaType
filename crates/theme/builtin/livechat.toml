@@ -1,11 +1,12 @@
 [meta]
 id = "nanatype.livechat"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["streaming"]
 name = { zh-CN = "直播弹幕", en-US = "Live Chat", ja-JP = "ライブチャット" }
-description = { zh-CN = "仿直播评论栏：圆形头像、名字胶囊与白色消息气泡", en-US = "Like a stream chat: round avatar, name pill and white message bubbles", ja-JP = "配信コメント欄風：丸いアイコン、名前ピル、白い吹き出し" }
+description = { zh-CN = "仿直播评论栏：圆形头像、纯文字姓名与白色消息气泡", en-US = "Like a stream chat: round avatar, plain name and white message bubbles", ja-JP = "配信コメント欄風：丸いアイコン、文字の名前、白い吹き出し" }
+schema = 2
 
 [chrome]
 accent = "#23ade5"
@@ -19,6 +20,7 @@ weight = 700
 [dialogue]
 region = [800, 176]
 padding = [20, 42, 22, 14]
+shader_effects = [{ shader = "artwork", target = "artwork" }]
 
 [dialogue.box]
 contour = "rounded"
@@ -31,6 +33,8 @@ margin = [0, 0, 0, 60]
 shadows = [{ color = "#1f2a3633", dy = 4, blur = 14 }]
 
 # The round "avatar" left of the bubble.
+frame = { image = "livechat/still.png", slice = [40, 82, 22, 24], layout_inset = false }
+
 [[dialogue.decor]]
 anchor = "top_left"
 offset = [-56, -2]
@@ -55,24 +59,18 @@ text = "LIVE"
 text_color = "#ffffff"
 text_size = 10
 
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-65, 19]
-size = [5, 5]
-radius = 3
-color = "#ff5c7a"
-
 [dialogue.text]
 color = "#1f2a36"
 size = 26
 
 [dialogue.nameplate]
-color = "#23ade5"
-text_color = "#ffffff"
+color = "#00000000"
+text_color = "#137C9A"
 size = 16
-radius = 999
-padding = [12, 3]
+radius = 0
+padding = [0, 2]
 offset = [18, 12]
+border_width = 0
 
 [dialogue.continue]
 color = "#23ade5"
@@ -80,14 +78,13 @@ size = 14
 
 [history]
 bubble_contour = "rounded"
-name_color = "#23ade5"
+name_color = "#137C9A"
 name_size = 13
 bubble_color = "#ffffff"
 bubble_radius = 14
 bubble_radii = [4, 14, 14, 14]
 bubble_border_width = 0
 bubble_shadows = [{ color = "#1f2a361f", dy = 2, blur = 8 }]
-name_plate = { color = "#23ade5", text_color = "#ffffff", radius = 9, padding = [9, 2] }
 avatar = { shape = "circle", size = 40, ring_color = "#ffffff", ring_width = 2 }
 time_color = "#8aa0b4"
 
@@ -97,3 +94,8 @@ color = "#1f2a36"
 [effects]
 # Coloured runs under 3:1 on the box get a 1.5px outline in the darkest ink.
 contrast_guard = 3.0
+
+[shaders.artwork]
+source = "livechat/artwork.wgsl"
+period_s = 16
+intensity = 1

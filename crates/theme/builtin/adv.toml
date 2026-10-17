@@ -1,11 +1,12 @@
 [meta]
 id = "nanatype.adv"
-version = "2.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["game"]
 name = { zh-CN = "ADV 经典", en-US = "ADV Classic", ja-JP = "ADVクラシック" }
 description = { zh-CN = "全宽深色玻璃条，金色描边名字，视觉小说风格", en-US = "Full-width dark glass bar with a gold outlined name, visual-novel style", ja-JP = "全幅のダークガラスに金色の縁取り名前、ノベルゲーム風" }
+schema = 2
 
 [chrome]
 appearance = "dark"
@@ -17,6 +18,7 @@ text = "#f2f2f5"
 region = [1280, 180]
 padding = [52, 54, 52, 22]
 overflow = "page"
+shader_effects = []
 
 [dialogue.box]
 contour = "cinema"
@@ -29,26 +31,7 @@ gradient = { stops = [[0, "#1a1a24cc"], [1, "#0a0a10e6"]] }
 shadows = [{ color = "#ffffff33", dy = 1, inset = true }]
 
 # Gold rule under the name, fading out.
-[[dialogue.decor]]
-anchor = "top_left"
-offset = [44, 46]
-size = ["48%", 1]
-gradient = { angle = 90, stops = [[0, "#ffd27fcc"], [1, "#ffd27f00"]] }
-when = "speaker"
-
-[[dialogue.decor]]
-anchor = "top_left"
-offset = [40, 44]
-size = [5, 5]
-color = "#ffd27fcc"
-rotate = 45
-when = "speaker"
-
-[[dialogue.decor]]
-anchor = "bottom_right"
-offset = [-16, -14]
-size = [42, 1]
-gradient = { angle = 90, stops = [[0, "#ffd27f00"], [1, "#ffd27f80"]] }
+frame = { image = "adv/still.png", slice = [52, 180, 22, 56], layout_inset = false }
 
 [dialogue.text]
 color = "#ffffff"

@@ -1,11 +1,12 @@
 [meta]
 id = "nanatype.sakura"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["cute"]
 name = { zh-CN = "樱花", en-US = "Sakura", ja-JP = "さくら" }
 description = { zh-CN = "粉色渐变圆角框，花瓣点缀与爱心提示", en-US = "A pink gradient box with petals and a heart continue mark", ja-JP = "ピンクのグラデーションに花びらとハートのマーク" }
+schema = 2
 
 [chrome]
 accent = "#f06a9c"
@@ -19,6 +20,7 @@ weight = 400
 [dialogue]
 region = [760, 210]
 padding = [30, 28, 28, 16]
+shader_effects = [{ shader = "artwork", target = "artwork" }]
 
 [dialogue.box]
 contour = "rounded"
@@ -29,6 +31,7 @@ radius = 24
 margin = [0, 0, 18, 0]
 gradient = { angle = 135, stops = [[0, "#fff0f5f5"], [1, "#ffe1ecf2"]] }
 shadows = [{ color = "#f7a8c466", dy = 6, blur = 18 }]
+frame = { image = "sakura/still.png", slice = [44, 142, 30, 30], layout_inset = false }
 
 [dialogue.tail]
 side = "bottom"
@@ -39,65 +42,19 @@ lean = 8
 color = "#ffe6efff"
 shadow = false
 
-# Drifting petals: leaf shapes with two rounded corners.
-[[dialogue.decor]]
-motif = "blossom"
-anchor = "top_right"
-offset = [-24, -10]
-size = [32, 32]
-rotate = -12
-motion = { kind = "float", period_s = 6, amplitude = 1.5, phase = 0 }
-gradient = { angle = 135, stops = [[0, "#ffd1e1"], [1, "#f490b5"]] }
-shadows = [{ color = "#f490b555", dy = 2, blur = 4 }]
-
-[[dialogue.decor]]
-motif = "petal"
-anchor = "top_right"
-offset = [-48, -4]
-size = [17, 11]
-rotate = 20
-motion = { kind = "float", period_s = 8, amplitude = 2, phase = 0.35 }
-gradient = { angle = 135, stops = [[0, "#ffe0ea"], [1, "#ffaecb"]] }
-shadows = [{ color = "#f490b555", dy = 2, blur = 4 }]
-
-[[dialogue.decor]]
-motif = "petal"
-anchor = "top_right"
-offset = [-8, 14]
-size = [13, 8]
-rotate = 60
-gradient = { angle = 135, stops = [[0, "#ffe0ea"], [1, "#ffaecb"]] }
-shadows = [{ color = "#f490b555", dy = 2, blur = 4 }]
-
-[[dialogue.decor]]
-motif = "petal"
-anchor = "bottom_left"
-offset = [20, 6]
-size = [18, 11]
-rotate = 35
-gradient = { angle = 135, stops = [[0, "#ffe0ea"], [1, "#f7a8c4"]] }
-shadows = [{ color = "#f490b555", dy = 2, blur = 4 }]
-
-[[dialogue.decor]]
-motif = "petal"
-anchor = "top_right"
-offset = [-70, 5]
-size = [14, 9]
-rotate = -12
-border_color = "#f490b580"
-border_width = 1
-
 [dialogue.text]
 color = "#7a3050"
 
 [dialogue.nameplate]
-color = "#ff8fb8"
+color = "#FAD7E5"
 text_color = "#7a3050"
-radius = 999
+radius = 12
 padding = [14, 3]
 offset = [24, -14]
-gradient = { angle = 90, stops = [[0, "#ff8fb8"], [1, "#ffb3cf"]] }
+gradient = { angle = 180, stops = [[0, "#FFEAF2"], [1, "#FACBDE"]] }
 shadows = [{ color = "#ff8fb855", dy = 3, blur = 8 }]
+border_color = "#F5B3CA"
+border_width = 0.8
 
 [dialogue.continue]
 glyph = "♥"
@@ -116,7 +73,7 @@ bubble_border_width = 1.5
 bubble_radius = 16
 bubble_gradient = { angle = 135, stops = [[0, "#fff0f5f5"], [1, "#ffe1ecf2"]] }
 bubble_shadows = [{ color = "#f7a8c433", dy = 3, blur = 10 }]
-name_plate = { color = "#ff8fb8", gradient = { angle = 90, stops = [[0, "#ff8fb8"], [1, "#ffb3cf"]] }, text_color = "#7a3050", radius = 9, padding = [8, 1] }
+name_plate = { color = "#FAD7E5", gradient = { angle = 180, stops = [[0, "#FFEAF2"], [1, "#FACBDE"]] }, text_color = "#7A3050", radius = 9, padding = [8, 1] }
 avatar = { shape = "circle", size = 40, ring_color = "#ffb3cf", ring_width = 2 }
 time_color = "#c48aa2"
 
@@ -126,3 +83,9 @@ color = "#7a3050"
 [effects]
 # Coloured runs under 3:1 on the box get a 1.5px outline in the darkest ink.
 contrast_guard = 3.0
+
+[shaders.artwork]
+source = "sakura/artwork.wgsl"
+period_s = 16
+intensity = 1
+textures = ["sakura/ornament.png"]

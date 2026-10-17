@@ -3,16 +3,17 @@
 //! NanaUI reads a local `url(...)` picture only when the file canonicalizes
 //! under one directory, the image URL base (`nana_ui::set_background_image_url_base`;
 //! the first call wins for the whole process, and without one it is the
-//! working directory). NanaType makes its data folder that base, so installed
-//! skins load in place. Every other picture (sticker folders, chat avatars
-//! saved in the cache folder, files the user picked) is copied once into
+//! working directory). NanaType makes its data folder that base. Skin artwork
+//! uses immutable content URLs there so in-place edits invalidate image caches.
+//! Pictures outside that base (sticker folders, chat avatars saved in the cache
+//! folder, files the user picked) are copied once into
 //! `<data>/media/<hash>.<ext>` and the copy's URL is handed out instead.
 //!
 //! The copy is named after the source's canonical path, size and modified
 //! time, so an edited picture gets a new name (and a new URL, which NanaUI's
 //! texture cache has not seen). Copies nobody used for [`Limits::max_age`]
 //! go, and the oldest go first when the folder grows past
-//! [`Limits::max_total`]; a copy handed out in this session is never removed.
+//! [`Limits::max_total`]; active copies stay pinned until explicitly retired.
 
 use std::collections::HashSet;
 use std::fs;
@@ -63,7 +64,7 @@ pub struct Media {
 struct State {
     /// Bytes in `dir`, as of the last prune plus copies since.
     total: u64,
-    /// Copies handed out this session; never pruned.
+    /// Copies handed out this session; pinned until explicitly retired.
     used: HashSet<String>,
 }
 
@@ -111,11 +112,7 @@ impl Media {
         {
             return None;
         }
-        let name = format!(
-            "embedded-{:016x}{:016x}.{ext}",
-            fnv64(bytes, 0xcbf2_9ce4_8422_2325),
-            fnv64(bytes, 0x6c62_272e_07bb_0142)
-        );
+        let name = format!("embedded-b3-{}.{ext}", blake3::hash(bytes));
         self.cache(&name, bytes.len() as u64, || Some(bytes.to_vec()))
             .map(|path| file_url(&path))
     }
@@ -201,6 +198,21 @@ impl Media {
     pub fn prune(&self) {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         self.prune_locked(&mut state);
+    }
+
+    /// Obsolete skin revisions can leave the session pin set once none of
+    /// the current views/catalogue references their URLs. Deletion still
+    /// follows the normal age/size policy, outside the transition itself.
+    pub fn retire_urls(&self, previous: impl IntoIterator<Item = String>, keep: &HashSet<String>) {
+        let prefix = format!("{}/", file_url(&self.dir()));
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        for url in previous {
+            if !keep.contains(&url)
+                && let Some(name) = url.strip_prefix(&prefix)
+            {
+                state.used.remove(name);
+            }
+        }
     }
 
     fn prune_locked(&self, state: &mut State) {
@@ -616,6 +628,28 @@ mod tests {
             m.path(&dir_link.join("secret.png"), Some(&dir_link))
                 .is_some()
         );
+    }
+
+    #[test]
+    fn retired_skin_revisions_become_prunable_but_visible_aliases_stay_pinned() {
+        let s = Scratch::new("skin-revisions");
+        let m = mirror(
+            &s,
+            Limits {
+                max_total: 5,
+                ..Limits::default()
+            },
+        );
+        let old = m.bytes_url("still.png", b"1111").unwrap();
+        let new = m.bytes_url("still.png", b"2222").unwrap();
+        m.retire_urls([old.clone(), new.clone()], &HashSet::from([new.clone()]));
+        m.prune();
+        let pinned = m.state.lock().unwrap();
+        assert_eq!(pinned.used.len(), 1);
+        drop(pinned);
+        let names: Vec<_> = fs::read_dir(m.dir()).unwrap().flatten().collect();
+        assert_eq!(names.len(), 1);
+        assert_eq!(fs::read(names[0].path()).unwrap(), b"2222");
     }
 
     #[test]

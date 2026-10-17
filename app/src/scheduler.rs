@@ -16,11 +16,13 @@ use crate::clock;
 use crate::msg::Msg;
 
 enum Job {
+    OutputCleanup,
     Wake(Wake),
     Cue { epoch: u64, kind: CueKind },
 }
 
 enum Command {
+    OutputCleanup(Option<Instant>),
     Add(Instant, Job),
     Cancel(u64),
 }
@@ -54,6 +56,9 @@ impl Ord for Entry {
 }
 
 impl Scheduler {
+    pub fn output_cleanup(&self, at: Option<u64>) {
+        let _ = self.tx.send(Command::OutputCleanup(at.map(clock::instant)));
+    }
     pub fn start(post: impl Fn(Msg) + Send + 'static) -> Self {
         let (tx, rx) = unbounded();
         thread::Builder::new()
@@ -92,6 +97,13 @@ fn run(rx: Receiver<Command>, post: impl Fn(Msg)) {
         };
         crossbeam_channel::select! {
             recv(rx) -> cmd => match cmd {
+                Ok(Command::OutputCleanup(at)) => {
+                    heap.retain(|Reverse(e)| !matches!(e.job, Job::OutputCleanup));
+                    if let Some(at) = at {
+                        seq += 1;
+                        heap.push(Reverse(Entry { at, seq, job: Job::OutputCleanup }));
+                    }
+                }
                 Ok(Command::Add(at, job)) => {
                     seq += 1;
                     heap.push(Reverse(Entry { at, seq, job }));
@@ -107,6 +119,7 @@ fn run(rx: Receiver<Command>, post: impl Fn(Msg)) {
         while heap.peek().is_some_and(|Reverse(e)| e.at <= now) {
             let Reverse(entry) = heap.pop().expect("peeked");
             match entry.job {
+                Job::OutputCleanup => post(Msg::OutputCleanup),
                 Job::Wake(w) => post(Msg::Wake {
                     epoch: w.epoch,
                     reason: w.reason,
@@ -114,5 +127,39 @@ fn run(rx: Receiver<Command>, post: impl Fn(Msg)) {
                 Job::Cue { kind, .. } => post(Msg::Cue(kind)),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn output_cleanup_replaces_and_cancels_a_single_deadline() {
+        let (tx, rx) = unbounded();
+        let (posted, received) = unbounded();
+        let worker = thread::spawn(move || {
+            run(rx, |msg| {
+                assert!(matches!(msg, Msg::OutputCleanup));
+                posted.send(()).unwrap();
+            })
+        });
+        let now = Instant::now();
+        for _ in 0..20 {
+            tx.send(Command::OutputCleanup(Some(
+                now + Duration::from_millis(100),
+            )))
+            .unwrap();
+        }
+        tx.send(Command::OutputCleanup(None)).unwrap();
+        tx.send(Command::OutputCleanup(Some(
+            now + Duration::from_millis(50),
+        )))
+        .unwrap();
+        received.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(received.recv_timeout(Duration::from_millis(150)).is_err());
+        drop(tx);
+        worker.join().unwrap();
     }
 }

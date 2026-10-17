@@ -31,6 +31,15 @@ pub fn with_overrides(skin: &Skin, o: &SkinOverrides) -> Skin {
         // A gradient would paint over the chosen colour.
         s.dialogue.box_.color = c;
         s.dialogue.box_.shape.gradient = None;
+        if s.has_dialogue_artwork() {
+            // Full authored plates have fixed print colours, including their
+            // baked fallback. An explicit personal box colour takes priority
+            // and uses the skin's native contour, tail and external shadow.
+            s.dialogue.box_.frame = None;
+            s.dialogue
+                .shader_effects
+                .retain(|e| e.target != nanatype_theme::ShaderTarget::Artwork);
+        }
     }
     if let Some(c) = o.accent {
         s.chrome.accent = c;
@@ -493,7 +502,7 @@ mod tests {
             assert!(r >= 4.5, "{}: on(accent) is {r:.2}:1", e.id);
             n += 1;
         }
-        assert_eq!(n, 18);
+        assert_eq!(n, 24);
     }
 
     #[test]
@@ -508,6 +517,34 @@ mod tests {
                 let fg = accent_fg(c.accent, c.surface, c.text, min);
                 let r = contrast(fg, c.surface);
                 assert!(r >= min, "{}: accent_fg {r:.2}:1 < {min}", e.id);
+            }
+        }
+    }
+
+    #[test]
+    fn new_streaming_nameplates_have_readable_foregrounds() {
+        let reg = SkinRegistry::new(None, "test");
+        for name in [
+            "gothic",
+            "celestial",
+            "forest",
+            "tidal",
+            "lantern",
+            "citrus",
+        ] {
+            let skin = reg.load(&format!("nanatype.{name}")).unwrap().skin;
+            let p = &skin.dialogue.nameplate;
+            assert!(
+                contrast(p.text_color, p.color) >= 4.5,
+                "{name}: nameplate contrast"
+            );
+            if let Some(gradient) = &p.shape.gradient {
+                for (position, color) in &gradient.stops {
+                    assert!(
+                        contrast(p.text_color, skin.color(*color)) >= 4.5,
+                        "{name}: nameplate gradient contrast at {position}"
+                    );
+                }
             }
         }
     }

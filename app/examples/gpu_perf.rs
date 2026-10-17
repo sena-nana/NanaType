@@ -30,21 +30,32 @@ fn distribution(mut samples: Vec<f64>) -> serde_json::Value {
 
 fn session(registry: &SkinRegistry, name: &'static str, track: usize) -> (Ui, RuntimeAgentSession) {
     clock::capture_at(0, || {
-        let mut skin = registry
-            .load(if name == "decor" {
+        let shader_id = format!(
+            "nanatype.{}",
+            name.trim_end_matches("_static")
+                .trim_end_matches("_multi_output")
+                .trim_start_matches("shader_")
+        );
+        let loaded = registry
+            .load(if name.starts_with("shader_") {
+                &shader_id
+            } else if name == "decor" {
                 "nanatype.sakura"
             } else {
                 "nanatype.vanilla"
             })
-            .unwrap()
-            .skin;
+            .unwrap();
+        let urls = nanatype::assets::skin_preview_urls(&loaded.skin, &*loaded.files);
+        let mut skin = loaded.skin;
         if name == "sweep" {
             Arc::make_mut(&mut skin).dialogue.sweep.enabled = true;
         }
         let mut settings = Settings::default();
+        settings.skin.advanced_effects = !name.ends_with("_static");
         settings.history.max_items = 1000;
         let settings = Arc::new(settings);
         let ui = Ui::new(settings.clone(), skin.clone(), Locale::ZhCn);
+        ui.asset_urls.set(Arc::new(urls));
         ui.reduced_motion.set(name == "reduced");
         ui.chat_width.set(960.0);
         let text = match name {
@@ -64,6 +75,23 @@ fn session(registry: &SkinRegistry, name: &'static str, track: usize) -> (Ui, Ru
             }
         }
         ui.display.set(Arc::new(core.display().clone()));
+        // Compare the same frozen content/status in both static and GPU
+        // variants; status-specific decorations must be measured while active.
+        if name.starts_with("shader_") {
+            ui.display.update(|v| {
+                let v = Arc::make_mut(v);
+                match skin.meta.id.as_str() {
+                    "nanatype.livechat" => {
+                        v.reveal.shown /= 2;
+                        v.reveal.segment = None;
+                        v.continue_indicator = false;
+                    }
+                    "nanatype.rpg" => v.continue_indicator = true,
+                    "nanatype.terminal" => v.continue_indicator = false,
+                    _ => {}
+                }
+            });
+        }
         ui.peer_display.set(ui.display.get_untracked());
         ui.history
             .set(Arc::new(core.history().iter().cloned().collect()));
@@ -92,6 +120,12 @@ fn session(registry: &SkinRegistry, name: &'static str, track: usize) -> (Ui, Ru
 }
 
 fn main() {
+    let output = std::path::PathBuf::from(std::env::args().nth(1).expect("output JSON path"));
+    let media = output
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join("perf-media");
+    nanatype::services::media::init(&media).expect("benchmark media mirror");
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::from_env().unwrap_or_default(),
         ..wgpu::InstanceDescriptor::new_without_display_handle()
@@ -154,19 +188,72 @@ fn main() {
         "multi_output",
         "pulse_flicker",
         "sweep",
+        "shader_gothic_static",
+        "shader_gothic",
+        "shader_celestial_static",
+        "shader_celestial",
+        "shader_forest_static",
+        "shader_forest",
+        "shader_tidal_static",
+        "shader_tidal",
+        "shader_lantern_static",
+        "shader_lantern",
+        "shader_citrus_static",
+        "shader_citrus",
+        "shader_tidal_multi_output",
+        "shader_halo_static",
+        "shader_night_static",
+        "shader_night",
+        "shader_parchment_static",
+        "shader_adv_static",
+        "shader_rpg_static",
+        "shader_rpg",
+        "shader_vanilla_static",
+        "shader_bubble_static",
+        "shader_bubble",
+        "shader_subtitle_static",
+        "shader_livechat_static",
+        "shader_livechat",
+        "shader_comic_static",
+        "shader_terminal_static",
+        "shader_terminal",
+        "shader_pixel_static",
+        "shader_pixel",
+        "shader_sakura_static",
+        "shader_sakura",
+        "shader_ink_static",
+        "shader_echo_vanilla_static",
+        "shader_echo_glass_static",
+        "shader_echo_bubble_static",
+        "shader_echo_void_static",
     ] {
-        let mut sessions: Vec<_> = (0..if name == "multi_output" { 3 } else { 1 })
+        if std::env::var("NANATYPE_GPU_CASES")
+            .is_ok_and(|v| !v.split(',').any(|s| s.trim() == name))
+        {
+            continue;
+        }
+        let multi = name == "multi_output" || name.ends_with("_multi_output");
+        let mut sessions: Vec<_> = (0..if multi { 3 } else { 1 })
             .map(|i| session(&registry, name, i))
             .collect();
-        let mut painter = SceneWgpuPainter::new(&gpu, GpuTextureFormat::BGRA8_UNORM_SRGB);
-        let outputs = if name == "multi_output" { 2 } else { 1 };
+        let outputs = if multi { 2 } else { 1 };
+        let format = |i: usize| {
+            if name.starts_with("shader_") && multi && i % outputs == 1 {
+                GpuTextureFormat::RGBA16_FLOAT
+            } else {
+                GpuTextureFormat::BGRA8_UNORM_SRGB
+            }
+        };
+        let mut painters: Vec<_> = (0..outputs)
+            .map(|i| SceneWgpuPainter::new(&gpu, format(i)))
+            .collect();
         let textures: Vec<_> = (0..sessions.len() * outputs)
-            .map(|_| {
+            .map(|i| {
                 gpu.create_texture(&GpuTextureDescriptor {
                     label: Some("benchmark target"),
                     width: 960,
                     height: 540,
-                    format: GpuTextureFormat::BGRA8_UNORM_SRGB,
+                    format: format(i),
                     usage: GpuTextureUsages::RENDER_TARGET,
                 })
                 .unwrap()
@@ -191,7 +278,9 @@ fn main() {
                     for (i, (ui, session)) in sessions.iter_mut().enumerate() {
                         let track_ui = if i == 1 { ui.remote() } else { *ui };
                         let runtime_animation = dialogue::display_animating(track_ui, ms);
-                        let animate = runtime_animation || nanatype::ui::sweep::animating(track_ui);
+                        let animate = runtime_animation
+                            || nanatype::ui::sweep::animating(track_ui)
+                            || nanatype::ui::shader_effects::animating(track_ui);
                         if runtime_animation {
                             track_ui.now.set(ms);
                         }
@@ -205,11 +294,12 @@ fn main() {
                             layouts += w.layout_nodes;
                         }
                         if frame == 0
+                            || name.starts_with("shader_")
                             || animate
                             || !update.is_idle()
                             || session.document().compositor_needs_tick()
                         {
-                            for output in 0..outputs {
+                            for (output, painter) in painters.iter_mut().enumerate().take(outputs) {
                                 let target = i * outputs + output;
                                 painter
                                     .paint_target(
@@ -252,6 +342,14 @@ fn main() {
                         .copy_buffer_to_buffer(resolve, 0, read, 0, 16);
                 }
                 let submission = commands.submit();
+                if frame == 0 {
+                    let started = Instant::now();
+                    while nanatype::ui::shader_effects::cache_stats().pending > 0
+                        && started.elapsed() < Duration::from_secs(10)
+                    {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                }
                 if frame >= 60 {
                     cpu.push(start.elapsed().as_secs_f64() * 1000.0);
                     rendered += count;
@@ -291,7 +389,7 @@ fn main() {
             }
             trials.push(serde_json::json!({"cpu_record_submit":distribution(cpu),"gpu_timestamp":distribution(gpu_times),"rendered_targets":rendered,"text_shaped":shaped,"layout_nodes":layouts,"draw_calls":draws,"upload_bytes":uploaded,"max_scene_primitives":primitives}));
         }
-        cases.push(serde_json::json!({"scenario":name,"trials":trials}));
+        cases.push(serde_json::json!({"scenario":name,"trials":trials,"shader_cache":nanatype::ui::shader_effects::cache_stats(),"shader_errors":nanatype::ui::shader_effects::take_notices()}));
     }
     let report = serde_json::json!({"schema":1,"adapter":info.name,"backend":format!("{:?}",info.backend),"timestamps_supported":supported,"measurement":"60 warmup + 120 measured ticks, 3 trials; GPU timestamps, no pixel readback; multi_output is 3 scenes x 2 retained targets on one device (does not include Spout receiver/fences)","cases":cases});
     let path = std::env::args().nth(1).expect("output JSON path");

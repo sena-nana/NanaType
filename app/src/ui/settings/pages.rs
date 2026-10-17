@@ -1275,12 +1275,24 @@ fn skins(ui: Ui) -> AnyView {
             section(
                 ui,
                 "skins-interface",
-                vec![row(
-                    ui,
-                    "skins-hot-reload",
-                    Some("skins-hot-reload-hint"),
-                    switch(ui, |s| s.skin.hot_reload, |s, v| s.skin.hot_reload = v),
-                )],
+                vec![
+                    row(
+                        ui,
+                        "skins-advanced-effects",
+                        Some("skins-advanced-effects-hint"),
+                        switch(
+                            ui,
+                            |s| s.skin.advanced_effects,
+                            |s, v| s.skin.advanced_effects = v,
+                        ),
+                    ),
+                    row(
+                        ui,
+                        "skins-hot-reload",
+                        Some("skins-hot-reload-hint"),
+                        switch(ui, |s| s.skin.hot_reload, |s, v| s.skin.hot_reload = v),
+                    ),
+                ],
             ),
         ))
         .into_any()
@@ -1501,10 +1513,13 @@ fn skin_list_row(
                 .auto_height(true),
         )
         .bind(move |i: &mut ListItem| i.selected = previewed())
-        .on(move |_: &Activate| {
+        .on_cx(move |_, _: &Activate, cx| {
             // A skin that does not load has nothing to show.
             if usable {
                 previewing.set(Some(pick_id.clone()));
+                if ui.shader_preview.get_untracked() {
+                    cx.dispatch_program_all(Msg::PrepareSkinPreview(pick_id.clone()));
+                }
             }
         })
         .leading(widget(Stack::row(4.0)).children((
@@ -1710,9 +1725,12 @@ fn skin_card(
             .auto_height(true),
     )
     .bind(move |i: &mut ListItem| i.selected = previewed())
-    .on(move |_: &Activate| {
+    .on_cx(move |_, _: &Activate, cx| {
         if usable {
             previewing.set(Some(pick_id.clone()));
+            if ui.shader_preview.get_untracked() {
+                cx.dispatch_program_all(Msg::PrepareSkinPreview(pick_id.clone()));
+            }
         }
     })
     .content(
@@ -1913,9 +1931,10 @@ fn skin_preview(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
             ui.skin.with(|s| Arc::as_ptr(s) as usize),
             ui.locale.get(),
             available_width.get(),
+            ui.shader_preview.get(),
         )
     };
-    let content = dynamic(key, move |(want, _, active, _, _, locale, width)| {
+    let content = dynamic(key, move |(want, _, active, _, _, locale, width, _)| {
         let locale = *locale;
         let id = want.clone().unwrap_or_else(|| active.clone());
         let rows = ui.skins.get_untracked();
@@ -2005,12 +2024,35 @@ fn skin_preview(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
         };
         let font_note = row.as_ref().and_then(|r| fallback_font_note(locale, r));
         let apply_id = id.clone();
+        let play_id = id.clone();
         let caption = widget(
             Stack::bar(12.0)
                 .align(AlignSpec::Center)
                 .width(LengthSpec::Px(w * scale + 2.0 * PREVIEW_INSET)),
         )
         .children((
+            (!skin.dialogue.shader_effects.is_empty()
+                || skin.dialogue.decor.iter().any(|d| d.shader.is_some()))
+            .then(|| {
+                widget(
+                    Button::new(I18N.t_in(
+                        locale,
+                        if ui.shader_preview.get_untracked() {
+                            "skins-stop-effects"
+                        } else {
+                            "skins-play-effects"
+                        },
+                    ))
+                    .size(ControlSize::Small),
+                )
+                .on_cx(move |_, _: &Activate, cx| {
+                    if ui.shader_preview.get_untracked() {
+                        ui.shader_preview.set(false);
+                    } else {
+                        cx.dispatch_program_all(Msg::PrepareSkinPreview(play_id.clone()));
+                    }
+                })
+            }),
             widget(Stack::column(4.0).grow(1.0).shrink(1.0).with_layout(|l| {
                 l.min_width = Some(LengthSpec::Px(0.0));
             }))

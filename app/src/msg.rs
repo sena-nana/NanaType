@@ -165,6 +165,8 @@ pub enum Msg {
         WindowKind,
         nana_ui::runtime::Entity<nana_ui::runtime::Toast>,
     ),
+    /// Release paused output resources at their bounded deadline.
+    OutputCleanup,
     /// A scheduled wake from the timer thread.
     Wake {
         epoch: u64,
@@ -186,6 +188,12 @@ pub enum Msg {
     TelegramEvent(crate::stickers::telegram::Event),
     /// A file of the active (folder) skin changed and hot reload is on.
     SkinFilesChanged,
+    SkinScanReady {
+        ticket: u64,
+        result: Result<Box<crate::services::watch::PreparedSkins>, String>,
+    },
+    /// Lazily prepare just the theme whose settings preview is playing.
+    PrepareSkinPreview(String),
     /// A second instance asked us to come forward.
     SecondInstance,
     /// Skin sounds finished decoding.

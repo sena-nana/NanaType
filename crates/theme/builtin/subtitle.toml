@@ -1,6 +1,6 @@
 [meta]
 id = "nanatype.subtitle"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["streaming", "minimal"]
@@ -31,19 +31,19 @@ radius = 0
 [dialogue.text]
 color = "#ffffff"
 size = 34
-line_height = 1.35
+line_height = 1.38
 align = "center"
 stroke = { color = "#000000", width = 5 }
-shadow = { color = "#000000b3", dy = 2, blur = 3 }
+shadow = { color = "#000000A0", dy = 2, blur = 2 }
 
 [dialogue.nameplate]
 color = "#00000000"
-text_color = "#ffd27f"
+text_color = "#FFE1A3"
 size = 19
 padding = [0, 0]
 anchor = "top"
 offset = [0, 7]
-stroke = { color = "#000000", width = 4 }
+stroke = { color = "#111115", width = 3.5 }
 
 [dialogue.continue]
 glyph = ""
@@ -53,7 +53,7 @@ kind = "fade"
 ms = 120
 
 [history]
-name_color = "#ffd27f"
+name_color = "#FFE1A3"
 name_stroke = { color = "#000000", width = 2.5 }
 # Like the dialogue: no box, outlined text.
 bubble_color = "#00000000"

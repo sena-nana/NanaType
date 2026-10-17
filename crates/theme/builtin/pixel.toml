@@ -1,11 +1,12 @@
 [meta]
 id = "nanatype.pixel"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["game", "retro"]
 name = { zh-CN = "掌机像素", en-US = "Pocket Pixel", ja-JP = "ポケットピクセル" }
 description = { zh-CN = "四阶绿色的复古掌机画面，方角粗框与像素字", en-US = "Four shades of green like an old handheld, with square frames and pixel type", ja-JP = "4階調の緑で昔の携帯ゲーム機風。角ばった枠とドット文字" }
+schema = 2
 
 [chrome]
 accent = "#306230"
@@ -25,6 +26,7 @@ weight = 400
 [dialogue]
 padding = [24, 26, 24, 16]
 overflow = "page"
+shader_effects = [{ shader = "artwork", target = "artwork" }]
 
 [dialogue.box]
 contour = "pixel"
@@ -37,44 +39,7 @@ shadows = [
     { color = "#30623055", blur = 22, inset = true },
 ]
 
-# Inner rule.
-[[dialogue.decor]]
-contour = "pixel"
-inset = [3, 3, 3, 3]
-border_color = "#306230"
-border_width = 2
-
-# Fusion Pixel is drawn on a 12 px grid: sizes and line heights in whole
-# multiples of 12 keep every stroke on a pixel (24 px text, 36 px lines).
-[[dialogue.decor]]
-anchor = "top_left"
-offset = [6, 6]
-size = [8, 8]
-color = "#306230"
-
-[[dialogue.decor]]
-anchor = "bottom_right"
-offset = [-6, -6]
-size = [8, 8]
-color = "#306230"
-
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-22, 7]
-size = [4, 2]
-color = "#306230"
-
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-30, 7]
-size = [4, 2]
-color = "#306230"
-
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-38, 7]
-size = [4, 2]
-color = "#306230"
+frame = { image = "pixel/still.png", slice = [18, 50, 18, 20], layout_inset = false }
 
 [dialogue.text]
 color = "#0f380f"
@@ -89,6 +54,8 @@ text_color = "#9bbc0f"
 radius = 0
 padding = [12, 3]
 offset = [14, -16]
+border_color = "#306230"
+border_width = 2
 
 [dialogue.continue]
 glyph = "▼"
@@ -128,3 +95,8 @@ color = "#0f380f"
 # Chat rows at the same 24 px, so they stay on the font's grid too.
 [history.chat]
 text_scale = 1.0
+
+[shaders.artwork]
+source = "pixel/artwork.wgsl"
+period_s = 16
+intensity = 1

@@ -116,8 +116,13 @@ fn avatar_sticker_and_skin_frame_are_drawn() {
     assert!(avatar.starts_with(&in_mirror), "{avatar}");
     assert!(sticker.starts_with(&in_mirror), "{sticker}");
     assert!(
-        !frame.starts_with(&in_mirror),
-        "a skin under data loads in place"
+        frame.starts_with(&in_mirror),
+        "skin artwork uses content URLs"
+    );
+    assert_eq!(
+        nanatype::assets::skin_urls(&nanatype_theme::DirFiles::new(&skin))["skin:frame.png"],
+        frame,
+        "unchanged artwork reuses its URL"
     );
 
     // The base alone is not enough: the same pictures by their own paths
@@ -141,13 +146,22 @@ fn avatar_sticker_and_skin_frame_are_drawn() {
         "raw sticker path outside the base loaded?"
     );
 
-    let framed = render(&root, "frame", vec![frame]);
+    let framed = render(&root, "frame", vec![frame.clone()]);
     let f = count(&framed, FRAME);
     println!("frame pixels: {f}");
+    assert!(f > 1500, "skin frame was not drawn ({f} px)");
+
+    solid(&skin.join("frame.png"), CONTROL);
+    let reloaded = nanatype::assets::skin_urls(&nanatype_theme::DirFiles::new(&skin))
+        .remove("skin:frame.png")
+        .unwrap();
+    assert_ne!(frame, reloaded, "an in-place edit changes the content URL");
+    let revised = render(&root, "reloaded", vec![frame, reloaded]);
     assert!(
-        f > 1500,
-        "skin frame under the data folder was not drawn ({f} px)"
+        count(&revised, FRAME) > 1500,
+        "old references retain their pixels"
     );
+    assert!(count(&revised, CONTROL) > 1500, "the edited frame is drawn");
 
     // Control: a `data:` picture is always allowed, so the renderer works.
     let mut png = Vec::new();

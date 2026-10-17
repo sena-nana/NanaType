@@ -1,69 +1,45 @@
 # Halo: the reference skin. Every other built-in starts from these defaults.
 [meta]
 id = "nanatype.halo"
-version = "2.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["classic", "minimal"]
 name = { zh-CN = "光环", en-US = "Halo", ja-JP = "ハロー" }
 description = { zh-CN = "柔光白卡片配天蓝渐变名牌，清爽百搭", en-US = "A soft white card with a sky-blue gradient name pill; clean and versatile", ja-JP = "やわらかな白いカードに空色グラデーションの名札。すっきり万能" }
+schema = 2
 
 [dialogue]
 padding = [28, 26, 24, 14]
+shader_effects = []
 
 [dialogue.box]
-contour = "orbit"
+contour = "rounded"
 color = "#fffffff2"
 border_color = "#ffffff"
 border_width = 1
-radius = 20
+radius = 30
 gradient = { angle = 160, stops = [[0, "#fffffff7"], [1, "#eef6fdf2"]] }
-shadows = [
-    { color = "#1b2f4b29", dy = 8, blur = 24 },
-    { color = "#ffffff", dy = 1, inset = true },
-]
+shadows = [{ color = "#2388C922", dy = 5, blur = 18 }]
 
-# Accent bar on the left edge, level with the first line of text.
-[[dialogue.decor]]
-anchor = "top_left"
-offset = [12, 30]
-size = [3, 40]
-radius = 2
-gradient = { stops = [[0, "accent"], [1, "#8fd3ff"]] }
-
-[[dialogue.decor]]
-motif = "orbit"
-color = "#7ebceba6"
-anchor = "top_right"
-offset = [-6, -3]
-size = [46, 28]
-radius = 23
-border_color = "#7ebceba6"
-border_widths = [0, 0, 0, 0]
-rotate = -8
-
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-68, 13]
-size = [5, 5]
-radius = 3
-color = "#e99ab38c"
+frame = { image = "halo/still.png", slice = [34, 34, 34, 34], layout_inset = false }
 
 [dialogue.nameplate]
-contour = "orbit"
 radius = 999
 padding = [16, 5]
 offset = [24, -15]
-gradient = { angle = 90, stops = [[0, "#0876d0"], [1, "#3aa6f0"]] }
-shadows = [{ color = "#0876d055", dy = 3, blur = 8 }]
+gradient = { angle = 90, stops = [[0, "#087FD1"], [1, "#249FDF"]] }
+shadows = [{ color = "#0876d033", dy = 2, blur = 6 }]
+border_color = "#D7EFFF"
+border_width = 0.8
 
 [history]
-bubble_contour = "orbit"
-bubble_radii = [4, 14, 14, 14]
+bubble_contour = "rounded"
+bubble_radii = [18, 18, 18, 18]
 bubble_gradient = { angle = 160, stops = [[0, "#fffffff5"], [1, "#eef6fdf0"]] }
 bubble_shadows = [{ color = "#1b2f4b1a", dy = 3, blur = 10 }, { color = "#b7def580", dy = 1, inset = true }]
 avatar = { shape = "circle", size = 40, ring_color = "#ffffff", ring_width = 2 }
-name_plate = { contour = "orbit", color = "name", gradient = { angle = 90, stops = [[0, "#0876d0"], [1, "#3aa6f0"]] }, text_color = "name_text", radius = 9, padding = [9, 2] }
+name_plate = { color = "name", gradient = { angle = 90, stops = [[0, "#087FD1"], [1, "#249FDF"]] }, text_color = "name_text", radius = 999, padding = [9, 2] }
 
 [effects]
 # Coloured runs under 3:1 on the box get a 1.5px outline in the darkest ink.

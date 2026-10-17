@@ -2,12 +2,13 @@
 # CC0-1.0 below covers NanaType's own contributions to this local skin implementation.
 [meta]
 id = "nanatype.echo_glass"
-version = "1.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["streaming"]
 name = { zh-CN = "Echo-Live 玻璃", en-US = "Echo-Live Glass", ja-JP = "Echo-Live ガラス" }
 description = { zh-CN = "还原 Echo-Live 的玻璃主题：自下而上的黑色渐变、黑边白字，菜单栏靠右", en-US = "Echo-Live's glass theme: a black fade rising from the bottom, outlined white text and a right-aligned menu row", ja-JP = "Echo-Live のガラステーマを再現：下から立ち上がる黒のグラデーション、縁取りの白文字、右寄せメニュー" }
+schema = 2
 
 [chrome]
 appearance = "dark"
@@ -28,6 +29,7 @@ weight = 400
 [dialogue]
 region = [1280, 180]
 padding = [173, 52, 173, 50]
+shader_effects = []
 
 [dialogue.box]
 color = "#00000000"
@@ -36,6 +38,7 @@ radius = 0
 gradient = { angle = 0, stops = [[0, "#00000099"], [0.45, "#00000080"], [1, "#00000000"]] }
 
 # The menu row's own darker fade.
+
 [[dialogue.decor]]
 anchor = "bottom"
 size = ["100%", 70]

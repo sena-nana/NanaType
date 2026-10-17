@@ -104,7 +104,8 @@ pub fn view(surface: Surface, spec: SweepSpec, animated: bool) -> AnyView {
 pub fn renderers() -> SceneGpuRendererRegistry {
     static REGISTRY: LazyLock<SceneGpuRendererRegistry> = LazyLock::new(|| {
         let mut registry = nana_ui::default_scene_gpu_renderers();
-        registry.insert(RENDERER, Arc::new(SweepRenderer::default()));
+        registry.insert(RENDERER, SHARED.clone());
+        super::shader_effects::register(&mut registry);
         registry
     });
     REGISTRY.clone()
@@ -120,20 +121,36 @@ struct Pipeline {
 #[derive(Debug)]
 struct Prepared {
     material: Weak<Material>,
-    uniform: wgpu::Buffer,
-    group: wgpu::BindGroup,
+    uniforms: super::effect_uniforms::Uniforms,
+    layout: wgpu::BindGroupLayout,
+    mask: wgpu::TextureView,
+    sampler: wgpu::Sampler,
     pipeline: wgpu::RenderPipeline,
     mask_bytes: usize,
 }
 #[derive(Debug, Default)]
 struct State {
+    generations: Vec<DeviceGeneration>,
     pipelines: HashMap<PipelineKey, Pipeline>,
     masks: HashMap<MaskKey, Prepared>,
-    scales: HashMap<(DeviceGeneration, u64), f32>,
+    scales: super::effect_uniforms::Scales,
 }
 #[derive(Debug, Default)]
 struct SweepRenderer {
     state: Mutex<State>,
+}
+static SHARED: LazyLock<Arc<SweepRenderer>> = LazyLock::new(|| Arc::new(SweepRenderer::default()));
+
+pub fn collect_garbage() {
+    let mut state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
+    let materials = MATERIALS.lock().unwrap_or_else(|e| e.into_inner());
+    state.masks.retain(|_, m| m.material.strong_count() > 0);
+    state.scales.retain(|(_, id, _)| materials.contains_key(id));
+}
+
+pub fn cache_counts() -> (usize, usize, usize) {
+    let state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
+    (state.pipelines.len(), state.masks.len(), state.scales.len())
 }
 
 fn bytes(values: &[f32; 12]) -> [u8; 48] {
@@ -158,7 +175,7 @@ impl State {
         material: &Arc<Material>,
         context: &SceneGpuPassContext<'_>,
         scale: f32,
-    ) -> &Prepared {
+    ) -> &mut Prepared {
         let pipeline_key = (
             context.gpu.generation(),
             context.target_format,
@@ -168,7 +185,7 @@ impl State {
         // Coverage depends on size and DPI, not the destination viewport.
         let key = (pipeline_key, material.id, extent, scale.to_bits());
         if self.masks.contains_key(&key) {
-            return &self.masks[&key];
+            return self.masks.get_mut(&key).unwrap();
         }
         self.masks
             .retain(|_, value| value.material.strong_count() > 0);
@@ -180,8 +197,19 @@ impl State {
         {
             self.masks.clear();
         }
-        self.pipelines
-            .retain(|(generation, _, _), _| *generation == context.gpu.generation());
+        let generation = context.gpu.generation();
+        if !self.generations.contains(&generation) {
+            self.generations.push(generation);
+            if self.generations.len() > 4 {
+                let retired = self.generations.remove(0);
+                self.pipelines.retain(|(g, _, _), _| *g != retired);
+                self.masks.retain(|((g, _, _), _, _, _), _| *g != retired);
+            }
+        }
+        let materials = MATERIALS.lock().unwrap_or_else(|e| e.into_inner());
+        self.scales
+            .retain(|(g, id, _)| self.generations.contains(g) && materials.contains_key(id));
+        drop(materials);
         let device = context.gpu.wgpu().device();
         let pipeline = self.pipelines.entry(pipeline_key).or_insert_with(|| {
             let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -281,41 +309,20 @@ impl State {
                 extent[0] * 4,
             )
             .expect("coverage upload");
-        let uniform = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("dialogue sweep parameters"),
-            size: 48,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("dialogue sweep mask"),
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("dialogue sweep"),
-            layout: &pipeline.layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: uniform.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(texture.wgpu_view()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
+        let layout = pipeline.layout.clone();
         let pipeline = pipeline.pipeline.clone();
         self.masks.entry(key).or_insert_with(|| Prepared {
             material: Arc::downgrade(material),
-            uniform,
-            group,
+            uniforms: Default::default(),
+            layout,
+            mask: texture.wgpu_view().clone(),
+            sampler,
             pipeline,
             mask_bytes,
         })
@@ -335,10 +342,19 @@ impl SceneGpuRenderer for SweepRenderer {
     fn preparation_version(&self, node: &CustomRenderNode) -> Option<u64> {
         Some(node.revision)
     }
+    fn content_version(&self, _: &CustomRenderNode) -> Option<u64> {
+        None // Time and dialogue events change pixels without rebuilding commands.
+    }
+
     fn prepare(&self, node: &SceneGpuNode, context: SceneGpuPrepareContext<'_>) {
+        let Some(material) = material(node) else {
+            return;
+        };
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        state.scales.insert(
-            (context.gpu.generation(), node.id.node.get()),
+        state.scales.record(
+            context.gpu.generation(),
+            material.id,
+            context.dest_size,
             context.scale_factor,
         );
     }
@@ -371,9 +387,7 @@ impl SceneGpuRenderer for SweepRenderer {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let scale = state
             .scales
-            .get(&(context.gpu.generation(), node.id.node.get()))
-            .copied()
-            .unwrap_or(1.0);
+            .get(context.gpu.generation(), material.id, context.dest_size);
         let prepared = state.prepare_mask(&material, &context, scale);
         let c = material.spec.color;
         let phase = if material.animated {
@@ -399,27 +413,58 @@ impl SceneGpuRenderer for SweepRenderer {
         let upload = bytes(&values);
         let interop = context.gpu.wgpu();
         let _submission = interop.lock_submission();
-        interop.queue().write_buffer(&prepared.uniform, 0, &upload);
+        let binding = prepared.uniforms.binding(
+            context.gpu,
+            &prepared.layout,
+            std::slice::from_ref(&prepared.mask),
+            &prepared.sampler,
+            super::effect_uniforms::output_key(&context, scale, node.opacity),
+            upload.len(),
+        );
+        interop.queue().write_buffer(&binding.buffer, 0, &upload);
         if let Some(work) = context.gpu_work {
             work.record_upload(upload.len());
             work.record_draw_call();
         }
         let raw = pass.wgpu();
         raw.set_pipeline(&prepared.pipeline);
-        raw.set_bind_group(0, &prepared.group, &[]);
+        raw.set_bind_group(0, &binding.group, &[]);
         raw.draw(0..6, 0..1);
         true
     }
 }
 
 /// Static alpha coverage, built once per physical size and surface revision.
-fn coverage(surface: &Surface, size: [u32; 2], scale: f32) -> Vec<u8> {
+pub(super) fn coverage(surface: &Surface, size: [u32; 2], scale: f32) -> Vec<u8> {
+    coverage_for(surface, size, scale, false)
+}
+pub(super) fn coverage_for(
+    surface: &Surface,
+    size: [u32; 2],
+    scale: f32,
+    stroke_only: bool,
+) -> Vec<u8> {
     let [w, h] = size;
     let logical = [w as f32 / scale, h as f32 / scale];
     if surface.route() == SurfaceRoute::Frame {
         // A failed image decode must not fall through to a rectangular mask.
-        return frame_coverage(surface, size, scale)
+        let mut mask = frame_coverage(surface, size, scale)
             .unwrap_or_else(|| vec![0; w as usize * h as usize * 4]);
+        if stroke_only && let Some((_, widths)) = &surface.frame {
+            let [top, right, bottom, left] = widths.map(|v| v * scale);
+            for y in 0..h {
+                for x in 0..w {
+                    if x as f32 >= left
+                        && (x as f32) < w as f32 - right
+                        && y as f32 >= top
+                        && (y as f32) < h as f32 - bottom
+                    {
+                        mask[((y * w + x) * 4 + 3) as usize] = 0;
+                    }
+                }
+            }
+        }
+        return mask;
     }
     let polygon = surface
         .polygon
@@ -540,7 +585,13 @@ fn coverage(surface: &Surface, size: [u32; 2], scale: f32) -> Vec<u8> {
             builder.close();
         }
         if let Some(path) = builder.finish() {
-            raster(&path, even_odd, None, 1.0);
+            let stroke = stroke_only.then(|| {
+                surface
+                    .border
+                    .as_ref()
+                    .map_or(1., |b| b.widths.into_iter().fold(0., f32::max))
+            });
+            raster(&path, even_odd, stroke, 1.0);
         }
     }
     out
@@ -780,6 +831,7 @@ mod tests {
                     slice: [4; 4],
                     scale: 1.0,
                     repeat: false,
+                    layout_inset: true,
                 },
                 "file:///nonexistent-nanatype-render-test/frame.png".into(),
             )),

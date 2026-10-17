@@ -85,14 +85,16 @@ fn frame_policy(
             }
             let track = if remote { ui.remote() } else { ui };
             let follow = if remote { peer_follow } else { follow };
+            let typing = dialogue::display_animating(track, now);
+            let movement = crate::ui::sweep::animating(track)
+                || follow.wants_frame()
+                || (!remote && pager.wants_frame());
             (
                 track.now,
-                dialogue::display_animating(track, now),
-                crate::ui::sweep::animating(track)
-                    || follow.wants_frame()
-                    || (!remote && pager.wants_frame()),
+                typing,
+                movement || crate::ui::shader_effects::animating(track),
                 follow.next_line_at(),
-                60,
+                if typing || movement { 60 } else { 30 },
             )
         }
         Some(WindowKind::History) => {
@@ -103,7 +105,7 @@ fn frame_policy(
         Some(WindowKind::Settings) => (
             ui.settings_pulse_ms,
             settings::links_pulsing(ui),
-            false,
+            crate::ui::shader_effects::preview_animating(ui),
             None,
             30,
         ),
@@ -205,6 +207,11 @@ impl Host {
     }
 
     fn finish(&mut self) -> RuntimeProgramUpdate {
+        crate::ui::shader_effects::collect_garbage();
+        crate::ui::sweep::collect_garbage();
+        for message in crate::ui::shader_effects::take_notices() {
+            self.app.notice(message, true);
+        }
         self.drive_editor();
         let language = self.app.ui.locale.get_untracked().tag();
         // The app's reduce-motion setting wins over the system's in every
@@ -737,7 +744,11 @@ impl RuntimeProgram for Host {
         Ok(self.docs.get_mut(&id).map(f))
     }
 
-    fn update(&mut self, message: Msg, _: &RuntimeProgramContext<Msg>) -> RuntimeProgramUpdate {
+    fn update(
+        &mut self,
+        message: Msg,
+        _context: &RuntimeProgramContext<Msg>,
+    ) -> RuntimeProgramUpdate {
         if let (Some(source), Some(doc)) = (self.source, self.docs.get(&WindowKind::Input.id())) {
             input::capture_source_selection(self.app.ui, doc.context(), source);
         }
@@ -758,6 +769,12 @@ impl RuntimeProgram for Host {
             Msg::ToastDismissed(kind, toast) => self.dismiss_toast(kind, toast),
             message => self.app.update(message),
         }
+        #[cfg(windows)]
+        self.app.spout.prepare(
+            &self.app.settings,
+            self.app.peer.handle.is_some(),
+            _context.gpu(),
+        );
         self.finish()
     }
 
@@ -804,6 +821,8 @@ impl RuntimeProgram for Host {
         self.stickers.discard(id);
         self.docs.remove(&id);
         self.toasts.remove(&id);
+        crate::ui::shader_effects::collect_garbage();
+        crate::ui::sweep::collect_garbage();
     }
 
     fn window_event(
@@ -1024,7 +1043,9 @@ impl RuntimeProgram for Host {
 
     fn window_output(&self, id: WindowId) -> Option<nana_ui::WindowOutputConfig> {
         let kind = WindowKind::from_id(id)?;
-        crate::output::resolve(kind, &self.app.settings, self.app.peer.handle.is_some()).config()
+        self.app
+            .spout
+            .config(kind, &self.app.settings, self.app.peer.handle.is_some())
     }
 
     fn window_frame_presented(
@@ -1032,6 +1053,8 @@ impl RuntimeProgram for Host {
         id: WindowId,
         _: &RuntimeProgramContext<Msg>,
     ) -> RuntimeProgramUpdate {
+        crate::ui::shader_effects::collect_garbage();
+        crate::ui::sweep::collect_garbage();
         if let Some(perf) = &mut self.perf {
             perf.frame(id, false, self.docs.get(&id));
         }
@@ -1047,16 +1070,18 @@ impl RuntimeProgram for Host {
         let Some(kind) = WindowKind::from_id(id) else {
             return;
         };
+        let paused = self.app.spout.paused_output(kind, clock::now_ms()).cloned();
         let Some(out) =
             crate::output::resolve(kind, &self.app.settings, self.app.peer.handle.is_some())
                 .output()
+                .or(paused.as_ref())
         else {
             return;
         };
         if let Some(perf) = &mut self.perf {
             perf.frame(id, true, self.docs.get(&id));
         }
-        if let Some((key, detail)) = self.app.spout.frame(kind, &out.name, frame, context.gpu()) {
+        if let Some((key, detail)) = self.app.spout.frame(kind, out, frame, context.gpu()) {
             crate::debug_log(&format!("spout {kind:?}: {detail}"));
             let locale = self.app.ui.locale.get_untracked();
             let state = crate::ui::link_text::spout_send(locale, key);
@@ -1065,6 +1090,15 @@ impl RuntimeProgram for Host {
                 self.app.refresh_spout_status();
                 context.dispatch(Msg::UiChanged);
             }
+        }
+        if paused.is_some()
+            && self
+                .app
+                .spout
+                .paused_output(kind, clock::now_ms())
+                .is_none()
+        {
+            context.dispatch(Msg::OutputCleanup);
         }
     }
 
@@ -1119,6 +1153,12 @@ impl RuntimeProgram for Host {
     }
 
     fn prepare_window_frame(&mut self, id: WindowId, context: &RuntimeProgramContext<Msg>) {
+        #[cfg(windows)]
+        self.app.spout.prepare(
+            &self.app.settings,
+            self.app.peer.handle.is_some(),
+            context.gpu(),
+        );
         if let Some(perf) = &mut self.perf {
             perf.begin(id);
         }

@@ -1,11 +1,12 @@
 [meta]
 id = "nanatype.rpg"
-version = "2.0.0"
+version = "2.1.0"
 author = "NanaType"
 license = "CC0-1.0"
 tags = ["game", "retro"]
 name = { zh-CN = "RPG 窗口", en-US = "RPG Window", ja-JP = "RPGウィンドウ" }
 description = { zh-CN = "蓝色渐变窗口加白色双线框，经典 RPG 消息窗", en-US = "Blue gradient window with a white double frame, the classic RPG message box", ja-JP = "青グラデーションに白い二重枠、王道RPGのメッセージ窓" }
+schema = 2
 
 [chrome]
 appearance = "dark"
@@ -26,6 +27,7 @@ weight = 400
 [dialogue]
 padding = [26, 28, 26, 18]
 overflow = "page"
+shader_effects = [{ shader = "artwork", target = "artwork" }]
 
 [dialogue.box]
 contour = "rpg"
@@ -37,38 +39,7 @@ gradient = { stops = [[0, "#2840a8f0"], [1, "#0c1450f0"]] }
 shadow = { color = "#000000aa", dy = 3 }
 
 # The inner rule of the window frame.
-[[dialogue.decor]]
-contour = "rpg"
-inset = [4, 4, 4, 4]
-radius = 3
-border_color = "#8fa8ff"
-border_width = 1
-
-# Fusion Pixel is drawn on a 12 px grid: sizes and line heights in whole
-# multiples of 12 keep every stroke on a pixel (24 px text, 36 px lines).
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-7, 7]
-size = [12, 4]
-color = "#d8e1ff"
-
-[[dialogue.decor]]
-anchor = "top_right"
-offset = [-7, 11]
-size = [4, 8]
-color = "#8fa8ff"
-
-[[dialogue.decor]]
-anchor = "bottom_left"
-offset = [7, -7]
-size = [12, 4]
-color = "#8fa8ff"
-
-[[dialogue.decor]]
-anchor = "bottom_left"
-offset = [7, -11]
-size = [4, 8]
-color = "#d8e1ff"
+frame = { image = "rpg/still.png", slice = [18, 24, 18, 24], layout_inset = false }
 
 [dialogue.text]
 color = "#ffffff"
@@ -81,10 +52,10 @@ contour = "rpg"
 size = 24
 color = "#10206e"
 text_color = "#ffffff"
-radius = 4
+radius = 0
 padding = [12, 3]
 offset = [14, -18]
-border_color = "#ffffff"
+border_color = "#EDF5FF"
 border_width = 2
 gradient = { stops = [[0, "#2840a8"], [1, "#0c1450"]] }
 shadows = [{ color = "#000000aa", dy = 2 }]
@@ -126,3 +97,8 @@ shadow = { color = "#000000", dx = 1, dy = 1 }
 # Chat rows at the same 24 px, so they stay on the font's grid too.
 [history.chat]
 text_scale = 1.0
+
+[shaders.artwork]
+source = "rpg/artwork.wgsl"
+period_s = 16
+intensity = 1

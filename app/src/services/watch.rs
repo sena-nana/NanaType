@@ -67,7 +67,13 @@ impl Watch {
             .spawn(move || {
                 while rx.recv().is_ok() {
                     // Wait for quiet.
-                    while rx.recv_timeout(QUIET).is_ok() {}
+                    loop {
+                        match rx.recv_timeout(QUIET) {
+                            Ok(()) => continue,
+                            Err(mpsc::RecvTimeoutError::Timeout) => break,
+                            Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                        }
+                    }
                     post(msg());
                 }
             })
@@ -80,5 +86,64 @@ impl Watch {
 
     pub fn paths(&self) -> &[PathBuf] {
         &self.paths
+    }
+}
+
+/// One scan in flight; newer changes supersede its result and coalesce into
+/// one follow-up. Catalogue mutations also invalidate an older snapshot.
+#[derive(Default)]
+pub struct ReloadGate {
+    revision: u64,
+    running: bool,
+}
+
+pub struct PreparedSkins {
+    pub registry: nanatype_theme::SkinRegistry,
+    pub loaded: Result<nanatype_theme::LoadedSkin, Vec<nanatype_theme::SkinDiagnostic>>,
+    pub scanned: bool,
+    pub image_urls: Option<std::collections::HashMap<String, String>>,
+}
+impl ReloadGate {
+    pub fn invalidate(&mut self) {
+        self.revision += 1;
+    }
+    pub fn request(&mut self) -> Option<u64> {
+        self.invalidate();
+        if self.running {
+            None
+        } else {
+            self.running = true;
+            Some(self.revision)
+        }
+    }
+    /// Ok commits; Err starts the newest scan without opening a second worker.
+    pub fn finish(&mut self, ticket: u64) -> Result<(), u64> {
+        if ticket == self.revision {
+            self.running = false;
+            Ok(())
+        } else {
+            Err(self.revision)
+        }
+    }
+    pub fn cancel(&mut self) {
+        self.running = false;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn reload_bursts_and_catalogue_mutations_never_commit_a_stale_scan() {
+        let mut gate = ReloadGate::default();
+        let first = gate.request().unwrap();
+        for _ in 0..100 {
+            assert!(gate.request().is_none());
+        }
+        let latest = gate.finish(first).unwrap_err();
+        gate.invalidate(); // install/remove/duplicate while that worker runs
+        let newest = gate.finish(latest).unwrap_err();
+        assert!(gate.finish(newest).is_ok());
+        assert!(gate.request().is_some());
     }
 }
