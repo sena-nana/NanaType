@@ -254,13 +254,14 @@ impl Surface {
     /// The pill behind a history row's name, when the skin has one.
     pub fn history_name_plate(skin: &Skin) -> Option<Self> {
         let p = skin.history.name_plate.as_ref()?;
-        Some(Self {
-            contour: p.contour,
-            fill: Some(c(skin.color(p.color))),
-            gradient: p.gradient.as_ref().map(|g| gradient(skin, g)),
-            radii: [p.radius; 4],
-            ..Self::default()
-        })
+        Some(Self::shaped(
+            skin,
+            Some(p.color),
+            &p.shape,
+            p.radius,
+            p.border_color,
+            p.border_width,
+        ))
     }
 
     /// The surface behind the whole history list, when the skin has one.

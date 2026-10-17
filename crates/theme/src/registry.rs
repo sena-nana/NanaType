@@ -147,7 +147,13 @@ fn builtin_files(b: &Builtin) -> Arc<dyn SkinFiles> {
     match b.id {
         "nanatype.halo" => still!("halo"),
         "nanatype.night" => plate!("night"),
-        "nanatype.parchment" => still!("parchment"),
+        "nanatype.parchment" => {
+            still!("parchment");
+            files.push((
+                "parchment/ornament.png",
+                include_bytes!("../builtin/parchment/ornament.png"),
+            ));
+        }
         "nanatype.adv" => still!("adv"),
         "nanatype.rpg" => plate!("rpg"),
         "nanatype.vanilla" => still!("vanilla"),

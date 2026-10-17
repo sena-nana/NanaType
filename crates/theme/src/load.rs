@@ -837,8 +837,20 @@ fn validate_shapes(skin: &Skin, out: &mut Vec<SkinDiagnostic>) {
     );
     check_shadows("history.bubble_shadows", &h.bubble_shadows, out);
     if let Some(np) = &h.name_plate {
-        check_gradient("history.name_plate.gradient", np.gradient.as_ref(), out);
-        check_corners("history.name_plate.radius", [np.radius; 4], out);
+        check_shape(
+            "history.name_plate",
+            &np.shape,
+            np.radius,
+            np.border_width,
+            &np.shape.shadows,
+            out,
+        );
+        if !np.padding.iter().all(|v| in_range(*v, 0.0, 1024.0)) {
+            out.push(SkinDiagnostic::error(
+                "history.name_plate.padding",
+                "must be 0–1024",
+            ));
+        }
     }
     check_borders("history.avatar.ring_width", [h.avatar.ring_width; 4], out);
     if !in_range(h.name_width, 0.0, 2048.0) {

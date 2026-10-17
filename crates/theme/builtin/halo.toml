@@ -39,7 +39,7 @@ bubble_radii = [18, 18, 18, 18]
 bubble_gradient = { angle = 160, stops = [[0, "#fffffff5"], [1, "#eef6fdf0"]] }
 bubble_shadows = [{ color = "#1b2f4b1a", dy = 3, blur = 10 }, { color = "#b7def580", dy = 1, inset = true }]
 avatar = { shape = "circle", size = 40, ring_color = "#ffffff", ring_width = 2 }
-name_plate = { color = "name", gradient = { angle = 90, stops = [[0, "#087FD1"], [1, "#249FDF"]] }, text_color = "name_text", radius = 999, padding = [9, 2] }
+name_plate = { color = "name", gradient = { angle = 90, stops = [[0, "#087FD1"], [1, "#249FDF"]] }, text_color = "name_text", border_color = "#D7EFFF", border_width = 0.8, radius = 999, padding = [9, 2] }
 
 [effects]
 # Coloured runs under 3:1 on the box get a 1.5px outline in the darkest ink.

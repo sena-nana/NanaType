@@ -32,8 +32,30 @@ textures = ["gothic/ornament.png"]
 
 [history]
 name_color = "#F5E8ED"
-bubble_color = "#18131C"
-bubble_border = "#C7AB7670"
+time_color = "#C7AB76"
+bubble_color = "#221720"
+bubble_border = "#C7AB7680"
 bubble_border_width = 1
-bubble_radius = 8
+bubble_contour = "terminal"
+bubble_radius = 3
+bubble_gradient = { angle = 180, stops = [[0, "#30202E"], [1, "#18131C"]] }
+bubble_shadows = [{ color = "#9E315340", dx = 3, inset = true }]
+name_plate = { contour = "terminal", color = "#9E3153", text_color = "#F5E8ED", gradient = { angle = 180, stops = [[0, "#A13D5D"], [1, "#76263F"]] }, border_color = "#C7AB76", border_width = 0.8, radius = 2, padding = [9, 2] }
+avatar = { shape = "square", size = 36, radius = 2, color = "#76263F", ring_color = "#C7AB76", ring_width = 1 }
+panel = { color = "#18131CF5", border_color = "#C7AB76", border_width = 1, radius = 3, padding = [14, 14, 14, 18], margin = [8, 8, 8, 8] }
+title = { text = "HISTORY", color = "#F5E8ED", background = "#76263F", size = 14, weight = 600, height = 52, padding = 18 }
 text = { color = "#F5E8ED" }
+
+[[history.decor]]
+inset = [5, 5, 5, 5]
+border_color = "#C7AB7640"
+border_width = 0.6
+radius = 1
+layer = "below"
+
+[[history.decor]]
+anchor = "top_right"
+offset = [-12, 7]
+size = [52, 38]
+image = "gothic/ornament.png"
+opacity = 0.85

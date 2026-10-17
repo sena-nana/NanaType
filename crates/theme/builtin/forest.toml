@@ -32,8 +32,64 @@ textures = ["forest/ornament.png"]
 
 [history]
 name_color = "#314C40"
+time_color = "#657B64"
 bubble_color = "#F3F1E5"
-bubble_border = "#314C4070"
-bubble_border_width = 1
-bubble_radius = 8
+bubble_border = "#88A68A"
+bubble_border_width = 0.8
+bubble_radius = 2
+bubble_gradient = { angle = 180, stops = [[0, "#FDFBEF"], [1, "#F3F1E5"]] }
+bubble_shadows = [{ color = "#314C401A", dy = 2 }]
+name_plate = { color = "#00000000", text_color = "#314C40", border_color = "#88A68A", border_widths = [0, 0, 1, 0], radius = 0, padding = [2, 1] }
+avatar = { shape = "square", size = 36, radius = 2, color = "#E0E7D5", ring_color = "#88A68A", ring_width = 1 }
+panel = { color = "#F3F1E5FA", border_color = "#88A68A", border_width = 1, radius = 2, padding = [20, 14, 12, 18], margin = [8, 8, 8, 8], shadows = [{ color = "#314C4020", dx = 2, dy = 3 }] }
+title = { text = "HISTORY", color = "#314C40", background = "#E5E8D9", size = 14, weight = 500, height = 52, padding = 20 }
 text = { color = "#263D32" }
+
+[[history.decor]]
+inset = [4, 4, 4, 4]
+motif = "paper"
+color = "#657B64"
+opacity = 0.10
+layer = "below"
+
+[[history.decor]]
+anchor = "top_right"
+offset = [-12, 4]
+size = [38, 44]
+image = "forest/ornament.png"
+
+[[history.decor]]
+anchor = "top_left"
+offset = [7, 72]
+size = [4, 4]
+radius = 2
+color = "#88A68A"
+
+[[history.decor]]
+anchor = "top_left"
+offset = [7, 160]
+size = [4, 4]
+radius = 2
+color = "#88A68A"
+
+[[history.decor]]
+anchor = "top_left"
+offset = [7, 248]
+size = [4, 4]
+radius = 2
+color = "#88A68A"
+
+[[history.decor]]
+anchor = "top_left"
+offset = [7, 336]
+size = [4, 4]
+radius = 2
+color = "#88A68A"
+
+[[history.decor]]
+anchor = "bottom_right"
+offset = [-12, -14]
+size = [72, 100]
+image = "forest/ornament.png"
+opacity = 0.12
+layer = "below"

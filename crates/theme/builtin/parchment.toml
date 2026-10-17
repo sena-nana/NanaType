@@ -59,6 +59,9 @@ gradient = { angle = 180, stops = [[0, "#75462B"], [1, "#51301F"]] }
 color = "#7a4824"
 
 [history]
+name_plate = { color = "#5C341C", text_color = "#FFF4DC", gradient = { angle = 180, stops = [[0, "#75462B"], [1, "#51301F"]] }, border_color = "#C9A46A", border_width = 1, radius = 2, padding = [9, 2], shadows = [{ color = "#3C1E0A20", dy = 1, blur = 2 }] }
+panel = { color = "#F4E4C4", gradient = { kind = "radial", stops = [[0, "#FBF1DC"], [1, "#ECD6AE"]] }, border_color = "#7A5430", border_width = 1, radius = 4, padding = [14, 14, 14, 18], margin = [8, 8, 8, 8], shadows = [{ color = "#3C1E0A20", dy = 2, blur = 6 }] }
+title = { text = "HISTORY", color = "#5C341C", size = 14, weight = 600, height = 52, padding = 18 }
 name_color = "#7a4824"
 bubble_color = "#f4e4c4f0"
 bubble_border = "#7a543099"
@@ -67,6 +70,28 @@ bubble_gradient = { kind = "radial", stops = [[0, "#fbf1dcf5"], [1, "#ecd6aef0"]
 bubble_shadows = [{ color = "#3c1e0a26", dy = 2, blur = 6 }]
 time_color = "#967e66"
 avatar = { shape = "circle", size = 40, ring_color = "#7a5430", ring_width = 2 }
+
+[[history.decor]]
+inset = [8, 8, 8, 8]
+motif = "paper"
+color = "#7A5430"
+opacity = 0.13
+layer = "below"
+
+[[history.decor]]
+inset = [5, 5, 5, 5]
+border_color = "#7A543080"
+border_width = 0.7
+radius = 2
+shadows = [{ color = "#FFF4DCA0", dy = 1, inset = true }]
+layer = "below"
+
+[[history.decor]]
+anchor = "top_right"
+offset = [-12, 6]
+size = [108, 40]
+image = "parchment/ornament.png"
+opacity = 0.7
 
 [history.text]
 color = "#3e2a1c"

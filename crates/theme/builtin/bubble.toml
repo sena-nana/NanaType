@@ -73,7 +73,7 @@ bubble_radius = 18
 bubble_radii = [5, 18, 18, 18]
 bubble_shadows = [{ color = "#2b2b3a40", dy = 3 }]
 avatar = { shape = "circle", size = 40, ring_color = "#2b2b3a", ring_width = 3 }
-name_plate = { color = "name", text_color = "name_text", radius = 9, padding = [9, 2] }
+name_plate = { color = "name", text_color = "name_text", border_color = "#2b2b3a", border_width = 2, radius = 999, padding = [9, 2] }
 
 [history.text]
 color = "#2b2b3a"

@@ -32,8 +32,36 @@ textures = ["lantern/ornament.png"]
 
 [history]
 name_color = "#B83B38"
+time_color = "#8B6B42"
 bubble_color = "#FAF0DD"
-bubble_border = "#C6A15B70"
-bubble_border_width = 1
-bubble_radius = 8
+bubble_border = "#C6A15B"
+bubble_border_width = 0.8
+bubble_radius = 2
+bubble_shadows = [{ color = "#B83B3840", dx = 3, inset = true }]
+name_plate = { contour = "seal", color = "#B83B38", text_color = "#FAF0DD", gradient = { angle = 180, stops = [[0, "#BC4540"], [1, "#A23030"]] }, border_color = "#D9B77A", border_width = 0.8, radius = 1, padding = [8, 2] }
+avatar = { shape = "square", size = 36, radius = 1, color = "#FAF0DD", ring_color = "#B83B38", ring_width = 2 }
+panel = { color = "#FAF0DDFA", border_color = "#C6A15B", border_width = 1, radius = 2, padding = [14, 14, 14, 18], margin = [8, 8, 8, 8], shadows = [{ color = "#B83B38", dx = 4, inset = true }] }
+title = { text = "HISTORY", color = "#B83B38", size = 14, weight = 600, height = 56, padding = 18 }
 text = { color = "#55312A" }
+
+[[history.decor]]
+inset = [6, 6, 6, 10]
+border_color = "#C6A15B70"
+border_width = 0.6
+layer = "below"
+
+[[history.decor]]
+anchor = "top_right"
+offset = [-12, 3]
+size = [34, 50]
+image = "lantern/ornament.png"
+
+[[history.decor]]
+anchor = "bottom_right"
+offset = [-14, -14]
+size = [54, 54]
+polygon = [[50, 0], [100, 50], [50, 100], [0, 50]]
+border_color = "#C6A15B"
+border_width = 1
+opacity = 0.25
+layer = "below"

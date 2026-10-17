@@ -32,8 +32,38 @@ textures = ["citrus/ornament.png"]
 
 [history]
 name_color = "#644A28"
+time_color = "#7B7650"
 bubble_color = "#FFF8DD"
-bubble_border = "#73BDA870"
+bubble_border = "#73BDA8"
 bubble_border_width = 1
-bubble_radius = 18
+bubble_contour = "slant"
+bubble_radius = 3
+bubble_gradient = { angle = 135, stops = [[0, "#FFFCED"], [1, "#FFF1C4"]] }
+bubble_shadows = [{ color = "#73BDA870", dx = 2, dy = 2 }]
+name_plate = { color = "#F4A340", text_color = "#4C351D", gradient = { angle = 180, stops = [[0, "#FFD17C"], [1, "#F4A340"]] }, border_color = "#FFF8DD", border_width = 1, shadows = [{ color = "#73BDA8", dy = 2 }], radius = 3, padding = [9, 2] }
+avatar = { shape = "square", size = 36, radius = 3, color = "#F4A340", ring_color = "#FFF8DD", ring_width = 1 }
+panel = { color = "#FFF8DDFA", border_color = "#73BDA8", border_width = 1, radius = 4, padding = [14, 14, 14, 18], margin = [8, 10, 10, 8], shadows = [{ color = "#73BDA8", dx = 2, dy = 2 }] }
+title = { text = "HISTORY", color = "#4C351D", background = "#D4EADF", size = 14, weight = 600, height = 56, padding = 18 }
 text = { color = "#644A28" }
+
+[[history.decor]]
+anchor = "top_right"
+size = [74, 56]
+polygon = [[30, 0], [100, 0], [100, 100], [0, 100]]
+color = "#73BDA8"
+layer = "below"
+
+[[history.decor]]
+anchor = "top_right"
+offset = [-12, 6]
+size = [44, 44]
+image = "citrus/ornament.png"
+
+[[history.decor]]
+anchor = "bottom_right"
+offset = [-14, -14]
+size = [64, 64]
+motif = "citrus_slice"
+color = "#F4A340"
+opacity = 0.14
+layer = "below"

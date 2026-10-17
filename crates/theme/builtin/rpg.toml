@@ -78,6 +78,10 @@ shake_px = 2
 jump_px = 4
 
 [history]
+name_size = 24
+name_weight = 400
+time_size = 12
+reply = { size = 12 }
 bubble_contour = "rpg"
 name_color = "#ffffff"
 bubble_color = "#10206ee0"
@@ -86,7 +90,7 @@ bubble_border_width = 2
 bubble_radius = 4
 bubble_gradient = { stops = [[0, "#2840a8e6"], [1, "#0c1450e6"]] }
 time_color = "#c0c8f0"
-avatar = { shape = "square", size = 40, ring_color = "#ffffff", ring_width = 2, radius = 4, color = "#2a3a9a" }
+avatar = { shape = "square", size = 40, ring_color = "#ffffff", ring_width = 2, radius = 0, color = "#2a3a9a" }
 
 [history.text]
 size = 24
@@ -97,6 +101,9 @@ shadow = { color = "#000000", dx = 1, dy = 1 }
 # Chat rows at the same 24 px, so they stay on the font's grid too.
 [history.chat]
 text_scale = 1.0
+
+[mention]
+scale = 1.0
 
 [shaders.artwork]
 source = "rpg/artwork.wgsl"

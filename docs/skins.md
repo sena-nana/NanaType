@@ -41,6 +41,20 @@
 
 原有十八套按各自特征重新确定设计，光环回归精简胶囊卡片，香草使用端正轮廓，直播姓名使用纯文字，漫画使用网点，羊皮纸加强纸浆与纤维材质，详见[经典皮肤设计记录](classic-skin-refinement.md)。七套使用物件或状态动效：电路数据点、准备水晶、弹性爱心、打字三点、终端符号、液晶格和花枝；十一套以纸张、线条和排版保持静态，不携带运行时 WGSL。关闭高级动效后保留静态外观。完整画面为超长姓名预留空间，姓名在名牌内省略，原始姓名不变。显式设置个性化框色时优先使用所选颜色与原生框体。
 
+历史记录延续展示框的名牌、框线和排版：纸张主题使用静态纤维、双线或朱印；六套新增主题各自保留酒红装订、星轨、装订孔、玻璃水线、朱砂印章和薄荷纸层。历史装饰保持静态，不执行展示框的动效。主播和观众的姓名底板、无图头像遵循同一套皮肤配色，真实头像保留原图。掌机像素和 RPG 的正文、姓名、时间与引用使用 12px 的整数倍字号；字幕不显示头像。
+
+重新生成全部皮肤的展示框／历史记录对照图，并在默认宽度与 300px 窄窗中检查长昵称、多行正文、回复引用和行距：
+
+```powershell
+cargo build -p nanatype --example snapshots --example chat_parity
+$env:NANATYPE_THEME_SNAPSHOTS_ONLY='1'
+$env:NANATYPE_SNAPSHOT_VIEWS='display,history'
+$env:NANATYPE_SNAPSHOT_TRANSPARENT='1'
+& target/debug/examples/snapshots.exe target/history-style-fixed all zh-CN
+python scripts/render-history-style-preview.py target/history-style-fixed
+& target/debug/examples/chat_parity.exe target/history-style-layout all zh-CN audit history
+```
+
 六套新增主题的[原速动效预览](skins-motion.webp)包括水母倾斜游动、叶片弯动、灯笼轻摆、星轨与金边游光、果片后方上升的气泡。文字、名牌和框体位置保持稳定；动幅、周期与逐帧检查方法见[设计说明](skin-art-direction.md#装饰自身的运动)。
 
 水墨直接叠加大都会博物馆开放图像中郑燮 [Bamboo and Poem](https://www.metmuseum.org/art/collection/search/52946) 的墨竹局部（Public Domain）。只裁切并去掉纸底，不重绘线条或改色；来源与处理记录随皮肤附在 `ink/ART-LICENSE.txt` 中。
@@ -197,19 +211,19 @@ entrance = { kind = "fade", ms = 140 }   # none | fade | pop | slide_up
 width = 420
 height = 560
 avatar = { shape = "circle", size = 40, ring_color = "#ffffff", ring_width = 2 }   # circle | square | none
-# 头像还可写 color（主播无图头像的底色，默认强调色渐变）与 radius（square 的圆角，默认边长的 18%）；
-# 观众的无图头像与名字胶囊按作者固定取 6 种颜色之一
+# 头像还可写 color（无图头像的底色，默认强调色渐变）与 radius（square 的圆角，默认边长的 18%）；
+# 主播与观众共用皮肤的无图头像配色和姓名样式；真实头像仍显示原图
 name_color = "#e86a92"
 name_size = 14
 name_stroke = { color = "#000000", width = 2 }
-name_plate = { color = "accent", text_color = "#ffffff", radius = 9, padding = [9, 2] }   # 名字胶囊（可选）
+name_plate = { color = "accent", text_color = "#ffffff", radius = 9, padding = [9, 2], border_color = "border", border_width = 1 }   # 名字底板（可选）；支持 contour、gradient、border_widths 和 shadows
 bubble_color = "#ffffffee"
 bubble_border = "#f0cfdc"
 bubble_border_width = 1
 bubble_radius = 14
 bubble_radii = [4, 14, 14, 14]
 bubble_gradient = { angle = 135, stops = [[0, "#fff0f5"], [1, "#ffe1ec"]] }
-bubble_shadows = [{ color = "#00000020", dy = 2, blur = 8 }]
+bubble_shadows = [{ color = "#00000020", dy = 2, blur = 8, spread = 0 }]  # spread：阴影扩张距离，内阴影可用于双线压印
 bubble_padding = [12, 8]          # 气泡内边距：水平 垂直
 bubble_frame = { image = "images/bubble.png", slice = [12, 12, 12, 12] }
 gap = 10                         # 间距参考：stack 按字号控制在 12–20px；同作者连续消息 8–12px；inline 8–14px
@@ -231,6 +245,7 @@ anchor = "top_right"
 size = [11, 11]
 polygon = [[0, 0], [100, 0], [100, 100]]
 color = "#00000026"
+# 纸张主题可用 motif = "paper" 绘制固定、稀疏的纸纤维；不加载图片或逐帧生成噪声。
 
 [history.text]
 color = "#3a2230"
@@ -238,7 +253,7 @@ size = 18
 
 [history.chat]                    # B 站弹幕行（设置 › 历史记录 › 弹幕 打开后出现）
 text_scale = 0.88                 # 弹幕文字相对 history.text 的大小
-bubble_opacity = 0.7              # 弹幕气泡相对 bubble_color 的不透明度
+bubble_opacity = 0.7              # 整个弹幕气泡底板的不透明度（含渐变、边框、阴影与九宫格图片）；正文保持不透明
 
 [history.reply]                   # 回复弹幕的台词，气泡上方的一行引用：头像 · 昵称：原文（inline 布局时在整行上方，对齐台词栏）
 visible = true

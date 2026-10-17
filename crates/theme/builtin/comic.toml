@@ -72,6 +72,8 @@ jump_px = 8
 screen_shake_px = 10
 
 [history]
+name_weight = 900
+time_color = "#666666"
 bubble_contour = "comic"
 name_color = "#111111"
 bubble_color = "#ffffff"
@@ -79,7 +81,7 @@ bubble_border = "#000000"
 bubble_border_width = 3
 bubble_radius = 8
 bubble_shadows = [{ color = "#000000", dx = 4, dy = 3 }]
-name_plate = { contour = "ribbon", color = "#ffd400", text_color = "#111111", radius = 3, padding = [9, 2] }
+name_plate = { contour = "ribbon", color = "#ffd400", text_color = "#111111", border_color = "#000000", border_width = 2, shadows = [{ color = "#000000", dx = 2, dy = 1 }], radius = 3, padding = [9, 2] }
 avatar = { shape = "circle", size = 40, ring_color = "#000000", ring_width = 3 }
 
 [history.text]

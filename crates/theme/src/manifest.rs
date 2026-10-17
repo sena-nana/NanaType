@@ -335,6 +335,7 @@ pub enum MotifPreset {
     Halftone,
     Fold,
     Circuit,
+    Paper,
 }
 
 impl ShapeSpec {
@@ -1066,7 +1067,7 @@ impl Default for MentionSpec {
 pub struct HistoryChatSpec {
     /// Chat text size relative to the history text.
     pub text_scale: f32,
-    /// Bubble opacity of chat rows.
+    /// Opacity of the complete chat bubble artwork, independent of its text.
     pub bubble_opacity: f32,
 }
 
@@ -1119,7 +1120,7 @@ pub struct HistoryAvatar {
     pub size: f32,
     pub ring_color: Option<ColorRef>,
     pub ring_width: f32,
-    /// The streamer's fallback avatar (no picture): a flat fill instead of
+    /// A speaker's fallback avatar (no picture): a flat fill instead of
     /// the accent gradient.
     pub color: Option<ColorRef>,
     /// Corner radius of a square avatar; default 18% of the size.
@@ -1153,23 +1154,26 @@ pub enum HistoryEntrance {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HistoryNamePlate {
-    pub contour: Option<ContourPreset>,
     pub color: ColorRef,
-    pub gradient: Option<GradientSpec>,
     pub text_color: ColorRef,
     pub radius: f32,
     pub padding: [f32; 2],
+    pub border_color: Option<ColorRef>,
+    pub border_width: f32,
+    #[serde(flatten)]
+    pub shape: ShapeSpec,
 }
 
 impl Default for HistoryNamePlate {
     fn default() -> Self {
         Self {
-            contour: None,
             color: ColorRef::Role(ColorRole::Name),
-            gradient: None,
             text_color: ColorRef::Role(ColorRole::NameText),
             radius: 10.0,
             padding: [9.0, 2.0],
+            border_color: None,
+            border_width: 0.0,
+            shape: ShapeSpec::default(),
         }
     }
 }

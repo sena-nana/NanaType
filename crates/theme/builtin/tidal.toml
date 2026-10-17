@@ -32,8 +32,37 @@ textures = ["tidal/ornament.png"]
 
 [history]
 name_color = "#79D4CE"
+time_color = "#A1CFCB"
 bubble_color = "#103D49"
-bubble_border = "#EEF9F670"
+bubble_border = "#EEF9F690"
 bubble_border_width = 1
-bubble_radius = 18
+bubble_contour = "chat"
+bubble_radius = 16
+bubble_gradient = { angle = 160, stops = [[0, "#245A65"], [0.4, "#154754"], [1, "#103D49"]] }
+bubble_shadows = [{ color = "#EEF9F633", spread = 2, inset = true }, { color = "#001E2926", dy = 2, blur = 6 }]
+name_plate = { color = "#EEF9F6", text_color = "#103D49", gradient = { angle = 160, stops = [[0, "#FFFFFF"], [0.45, "#EEF9F6"], [1, "#CBE6DF"]] }, border_color = "#79D4CE", border_width = 1, radius = 10, padding = [9, 2] }
+avatar = { shape = "circle", size = 36, color = "#CBE6DF", ring_color = "#79D4CE", ring_width = 1 }
+panel = { color = "#0B303BF5", border_color = "#79D4CE", border_width = 1, radius = 20, padding = [14, 14, 14, 18], margin = [8, 8, 8, 8], shadows = [{ color = "#EEF9F626", spread = 4, inset = true }] }
+title = { text = "HISTORY", color = "#EEF9F6", size = 14, weight = 500, height = 56, padding = 18 }
 text = { color = "#E5F8F5" }
+
+[[history.decor]]
+inset = [6, 6, 6, 6]
+border_color = "#79D4CE50"
+border_width = 0.8
+radius = 15
+layer = "below"
+
+[[history.decor]]
+anchor = "top_right"
+offset = [-12, 4]
+size = [40, 48]
+image = "tidal/ornament.png"
+
+[[history.decor]]
+anchor = "bottom_right"
+offset = [-12, -12]
+size = [64, 96]
+image = "tidal/ornament.png"
+opacity = 0.10
+layer = "below"

@@ -128,26 +128,43 @@ fn column_width(skin: &nanatype_theme::Skin, settings: &nanatype_settings::Setti
     (w - list_inset(&skin.history) - avatar).max(80.0)
 }
 
-/// Viewers' avatars and name pills take one of these, by who they are.
-const VIEWER_COLORS: [Rgba8; 6] = [
-    Rgba8::rgb(0xff, 0x9a, 0xb5),
-    Rgba8::rgb(0x7e, 0xc8, 0xf5),
-    Rgba8::rgb(0xff, 0xc9, 0x4d),
-    Rgba8::rgb(0x8f, 0xd1, 0x8a),
-    Rgba8::rgb(0xb7, 0x9c, 0xf2),
-    Rgba8::rgb(0xff, 0xa7, 0x7a),
-];
-/// Text on a viewer colour (all of them are light).
-const VIEWER_INK: Rgba8 = Rgba8::rgb(16, 22, 32);
-
-/// A viewer's colour: stable for a user id, else for the name.
-fn viewer_color(item: &HistoryItem) -> Rgba8 {
-    let id = item.uid.as_deref().unwrap_or(&item.author);
-    // FNV-1a, so the colour does not change between runs.
-    let hash = id.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
-        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    });
-    VIEWER_COLORS[(hash % VIEWER_COLORS.len() as u64) as usize]
+/// Fade the entire bubble artwork as one layer, leaving its text at full
+/// strength. Reserving the artwork's borders in the content padding keeps
+/// image frames, retained contours and ordinary CSS surfaces on the same path.
+fn bubble_view(surface: Surface, opacity: f32, pad: [f32; 2], max: f32, body: AnyView) -> AnyView {
+    let widths = surface.frame.as_ref().map_or_else(
+        || surface.border.as_ref().map_or([0.0; 4], |b| b.widths),
+        |(_, widths)| *widths,
+    );
+    let [top, right, bottom, left] = widths;
+    let backdrop = widget(Stack::column(0.0).with_layout(move |l| {
+        l.position = PositionSpec::Absolute;
+        // NanaUI anchors absolute children to the parent's content box.
+        // Extend through the reserved padding to paint its full outer box.
+        l.offset_top = Some(LengthSpec::Px(-pad[1] - top));
+        l.offset_right = Some(LengthSpec::Px(-pad[0] - right));
+        l.offset_bottom = Some(LengthSpec::Px(-pad[1] - bottom));
+        l.offset_left = Some(LengthSpec::Px(-pad[0] - left));
+        l.pointer_events = Some(PointerEventsSpec::None);
+        l.opacity = Some(opacity);
+    }))
+    // Opacity belongs to a parent group. A leaf's CSS gradient does not
+    // participate in NanaUI's primitive alpha path, unlike its solid border.
+    .children(widget(surface.stack(Stack::fill_column(0.0))));
+    widget(
+        Stack::column(0.0)
+            .width(LengthSpec::Shrink)
+            .with_layout(move |l| {
+                l.position = PositionSpec::Relative;
+                l.max_width = Some(LengthSpec::Px(max));
+                l.padding_top = Some(LengthSpec::Px(pad[1] + top));
+                l.padding_right = Some(LengthSpec::Px(pad[0] + right));
+                l.padding_bottom = Some(LengthSpec::Px(pad[1] + bottom));
+                l.padding_left = Some(LengthSpec::Px(pad[0] + left));
+            }),
+    )
+    .children((backdrop, body))
+    .into_any()
 }
 
 /// Rows of one speaker this close together share a header.
@@ -207,25 +224,12 @@ fn entry_view(ui: Ui, key: u64, first: bool, follows: bool) -> AnyView {
                 l.margin_top = Some(LengthSpec::Px(gap));
             }),
     )
-    .children(message_view(
-        ui,
-        super::danmaku::RowSource::History(key),
-        follows,
-        None,
-        None,
-    ))
+    .children(message_view(ui, key, follows))
     .into_any()
 }
 
-/// Shared history presentation. A panel supplies its own width and controls,
-/// while retaining its feed and reading lifetime rather than history's policies.
-pub(super) fn message_view(
-    ui: Ui,
-    source: super::danmaku::RowSource,
-    follows: bool,
-    panel_width: Option<f32>,
-    actions: Option<AnyView>,
-) -> AnyView {
+fn message_view(ui: Ui, key: u64, follows: bool) -> AnyView {
+    let source = super::danmaku::RowSource::History(key);
     let mut skin = ui.skin.get_untracked();
     let settings = ui.settings.get_untracked();
     let fitted = interaction_presentation(&skin);
@@ -235,16 +239,15 @@ pub(super) fn message_view(
         k.history.text.size = k.history.text.size.clamp(14.0, 17.0);
     }
     let h = skin.history.clone();
-    let exposed = h
+    let backdrop = h
         .panel
         .as_ref()
-        .and_then(|p| super::quote::backdrop(p.color, false))
-        .is_none();
+        .and_then(|p| super::quote::backdrop(p.color, false));
+    let exposed = backdrop.is_none();
     let show_avatar = settings.history.show_avatar && h.avatar.shape != AvatarShape::None;
-    let col_w = if panel_width.is_some() || fitted {
-        let width = panel_width.unwrap_or_else(|| {
-            crate::windows::size_of(crate::windows::WindowKind::History, &skin, &settings).0 - 38.0
-        });
+    let col_w = if fitted {
+        let width =
+            crate::windows::size_of(crate::windows::WindowKind::History, &skin, &settings).0 - 38.0;
         (width
             - if show_avatar {
                 h.avatar.size + 10.0
@@ -269,14 +272,10 @@ pub(super) fn message_view(
     // Chat rows name a saved picture (`blob:…`); the local speaker's avatar
     // is a path or a URL.
     let chat = row.item.kind != SourceKind::Typewriter;
-    // Chat rows are drawn a little lighter than the streamer's lines.
-    let skin = if chat {
-        let mut s = (*skin).clone();
-        let a = f32::from(s.history.bubble_color.a) * s.history.chat.bubble_opacity.clamp(0.0, 1.0);
-        s.history.bubble_color = s.history.bubble_color.with_alpha(a.round() as u8);
-        Arc::new(s)
+    let bubble_opacity = if chat {
+        h.chat.bubble_opacity.clamp(0.0, 1.0)
     } else {
-        skin
+        1.0
     };
     let quote = row
         .item
@@ -285,20 +284,14 @@ pub(super) fn message_view(
         .filter(|_| settings.history.show_quote && h.reply.visible)
         .map(|reply| {
             // The quote sits above the bubble, on the panel (if any).
-            let backdrop = h
-                .panel
-                .as_ref()
-                .and_then(|p| super::quote::backdrop(p.color, false));
             super::quote::quote_view(ui, &skin, &h.reply, &reply, &h.text, backdrop)
         });
-    let viewer = chat.then(|| viewer_color(&row.item));
-    // A picture-less avatar: the viewer's colour, the skin's fill, or the
-    // accent as a gradient for the streamer.
+    // All picture-less speakers use the skin's palette. Real profile pictures
+    // remain intact; speaker identity is carried by the name and role label.
     let accent = skin.chrome.accent;
-    let (fill, fill_gradient) = match (viewer, h.avatar.color) {
-        (Some(v), _) => (v, None),
-        (None, Some(col)) => (skin.color(col), None),
-        (None, None) => (accent, Some(avatar_gradient(accent, lighten(accent, 0.35)))),
+    let (fill, fill_gradient) = match h.avatar.color {
+        Some(col) => (skin.color(col), None),
+        None => (accent, Some(avatar_gradient(accent, lighten(accent, 0.35)))),
     };
     let ring = h
         .avatar
@@ -308,13 +301,16 @@ pub(super) fn message_view(
     let mut initial_style = NodeStyle::default();
     {
         let l = Arc::make_mut(&mut initial_style.layout);
-        l.font_size = Some(size * 0.45);
-        l.font_weight = Some(700);
-        l.color = Some(c(if viewer.is_some() {
-            VIEWER_INK
-        } else {
-            crate::skin_theme::on(fill)
-        }));
+        l.font_size = Some(h.name_size.min(size * 0.7));
+        l.font_weight = Some(h.name_weight);
+        l.font_family = skin.fonts.name.families.first().cloned();
+        l.color = Some(c(
+            if crate::skin_theme::contrast(h.text.color, fill) >= 4.5 {
+                h.text.color
+            } else {
+                crate::skin_theme::on(fill)
+            },
+        ));
     }
     let avatar: AnyView = if show_avatar && follows {
         // The group's later rows keep the slot, so bubbles line up.
@@ -371,9 +367,6 @@ pub(super) fn message_view(
         l.color = Some(c(h.name_color));
         if let Some(p) = &h.name_plate {
             l.color = Some(c(skin.color(p.text_color)));
-            if viewer.is_some() {
-                l.color = Some(c(VIEWER_INK));
-            }
         }
         if let Some(stroke) = &h.name_stroke {
             surface::text_stroke(l, stroke);
@@ -387,16 +380,17 @@ pub(super) fn message_view(
             );
         }
     }
-    let mut name_plate = Surface::history_name_plate(&skin);
-    if let (Some(plate), Some(v)) = (&mut name_plate, viewer) {
-        plate.fill = Some(c(v));
-        plate.gradient = None;
-    }
+    let name_plate = Surface::history_name_plate(&skin);
     let plate_pad = h.name_plate.as_ref().map_or([0.0; 2], |p| p.padding);
+    let plate_border = name_plate
+        .as_ref()
+        .and_then(|p| p.border.as_ref())
+        .map_or(0.0, |b| b.widths[1] + b.widths[3]);
     let mut time_style = NodeStyle::default();
     {
         let l = Arc::make_mut(&mut time_style.layout);
         l.font_size = Some(time_size(&h));
+        l.font_weight = Some(skin.fonts.body.weight);
         l.font_family = skin.fonts.body.families.first().cloned();
         l.color = Some(c(h.time_color));
         if exposed {
@@ -412,8 +406,7 @@ pub(super) fn message_view(
         super::tnum(l);
     }
     let show_name = settings.history.show_name && !row.item.author.is_empty() && !follows;
-    let show_time =
-        settings.history.show_time && !follows && panel_width.is_none_or(|w| w >= 332.0);
+    let show_time = settings.history.show_time && !follows;
     let inline_name_w = inline_name_width(&h, col_w, show_time);
     // Who is talking, once live chat shares the list.
     let role = (show_name && !inline && (chat || settings.history.chat.enabled)).then(|| {
@@ -426,19 +419,10 @@ pub(super) fn message_view(
     });
     let name = show_name.then(|| {
         let plate = name_plate.clone();
-        let action_width = if actions.is_some() {
-            super::danmaku::actions_width(ui)
-        } else {
-            0.0
-        };
-        let max_name = if inline {
-            inline_name_w
-        } else {
-            col_w - 64.0 - action_width
-        }
-        .max(if panel_width.is_some() { 24.0 } else { 32.0 });
-        Arc::make_mut(&mut name_style.layout).max_width =
-            Some(LengthSpec::Px((max_name - plate_pad[0] * 2.0).max(12.0)));
+        let max_name = if inline { inline_name_w } else { col_w - 64.0 }.max(32.0);
+        Arc::make_mut(&mut name_style.layout).max_width = Some(LengthSpec::Px(
+            (max_name - plate_pad[0] * 2.0 - plate_border).max(12.0),
+        ));
         widget(
             Surface::optional_stack(
                 plate.as_ref(),
@@ -507,7 +491,10 @@ pub(super) fn message_view(
                 Some(r) => Timing::Reveal(r.clone()),
                 None => Timing::Static,
             };
-            if exposed && skin.history.bubble_color.a < 128 && base.stroke.is_none() {
+            if exposed
+                && f32::from(skin.history.bubble_color.a) * bubble_opacity < 128.0
+                && base.stroke.is_none()
+            {
                 document(ui, &transparent_text(&row.doc, base.color), &base, timing)
             } else {
                 document(ui, &row.doc, &base, timing)
@@ -528,18 +515,13 @@ pub(super) fn message_view(
     } else {
         col_w
     };
-    let bubble = widget(
-        bubble_surface
-            .stack(
-                Stack::column(0.0)
-                    .width(LengthSpec::Shrink)
-                    .padding_xy(pad[0], pad[1]),
-            )
-            .with_layout(move |l| {
-                l.max_width = Some(LengthSpec::Px(bubble_max));
-            }),
-    )
-    .children(body);
+    let bubble = bubble_view(
+        bubble_surface,
+        bubble_opacity,
+        pad,
+        bubble_max,
+        body.into_any(),
+    );
     // Inline rows put the quote on its own line above the whole row (over
     // the text column), so the name, the first line and the time keep
     // sharing a baseline; stacked rows put it straight above the bubble.
@@ -555,11 +537,10 @@ pub(super) fn message_view(
         )
         .children((q, bubble))
         .into_any(),
-        None => bubble.into_any(),
+        None => bubble,
     };
 
-    // Inline skins keep their name/body/time baseline. Their operator controls
-    // get a separate header so they never squeeze that baseline's text column.
+    // Inline skins keep their name/body/time baseline.
     let content = if inline {
         let name_w = inline_name_w;
         let quote_indent = if show_name { name_w + 10.0 } else { 0.0 };
@@ -608,10 +589,6 @@ pub(super) fn message_view(
                 .children(t)
             }),
         ));
-        let actions = actions.map(|actions| {
-            widget(Stack::row(0.0).width(LengthSpec::Fill))
-                .children((widget(Stack::spacer()), actions))
-        });
         widget(
             Stack::column(2.0)
                 .width(LengthSpec::Px(col_w))
@@ -620,22 +597,16 @@ pub(super) fn message_view(
                     l.align_items = AlignSpec::Start;
                 }),
         )
-        .children((actions, quote_line, line))
+        .children((quote_line, line))
         .into_any()
     } else {
-        let header = (name.is_some() || time.is_some() || actions.is_some()).then(|| {
+        let header = (name.is_some() || time.is_some()).then(|| {
             widget(
                 Stack::row(6.0)
                     .align(AlignSpec::Center)
                     .width(LengthSpec::Fill),
             )
-            .children((
-                name,
-                role,
-                time,
-                actions.as_ref().map(|_| widget(Stack::spacer())),
-                actions,
-            ))
+            .children((name, role, time))
             .into_any()
         });
         widget(
@@ -650,10 +621,7 @@ pub(super) fn message_view(
         .into_any()
     };
 
-    let fade_after = settings
-        .history
-        .fade_after_s
-        .filter(|_| panel_width.is_none());
+    let fade_after = settings.history.fade_after_s;
     let at = row.item.at;
     let view = widget(
         Stack::row(10.0)
@@ -674,7 +642,7 @@ pub(super) fn message_view(
     // Inline rows drop the empty avatar slot, so the name sits at the edge.
     .children(((show_avatar || !inline).then_some(avatar), content))
     .into_any();
-    if fitted && panel_width.is_none() {
+    if fitted {
         widget(
             Stack::column(0.0)
                 .width(LengthSpec::Fill)
@@ -920,6 +888,71 @@ mod tests {
     use super::*;
 
     #[test]
+    fn translucent_bubble_artwork_keeps_its_content_opaque() {
+        use nana_ui::runtime::{DocumentId, RuntimeDocument};
+        use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
+        use nanatype_theme::{ColorRef, ContourPreset, GradientSpec};
+
+        for contour in [None, Some(ContourPreset::Rounded)] {
+            for opacity in [0.0, 0.35, 0.7, 1.0] {
+                let mut skin = Skin::default();
+                skin.history.bubble_color = Rgba8::rgb(160, 40, 60);
+                skin.history.bubble_border = Some(Rgba8::WHITE);
+                skin.history.bubble_border_width = 2.0;
+                skin.history.bubble_contour = contour;
+                skin.history.bubble_gradient = Some(GradientSpec {
+                    stops: vec![
+                        (0.0, ColorRef::from(Rgba8::rgb(200, 80, 100))),
+                        (1.0, ColorRef::from(Rgba8::rgb(100, 20, 40))),
+                    ],
+                    ..Default::default()
+                });
+                let surface = Surface::bubble(&skin, None);
+                let id = DocumentId::new(1).unwrap();
+                let mut doc = RuntimeDocument::new(id);
+                doc.context_mut()
+                    .mount_view_root(id, move || {
+                        let content = widget(
+                            Stack::row(0.0)
+                                .width(LengthSpec::Px(80.0))
+                                .height(LengthSpec::Px(12.0))
+                                .with_layout(|l| l.background = Some(c(Rgba8::WHITE))),
+                        )
+                        .into_any();
+                        widget(Stack::column(0.0).padding(12.0)).children(bubble_view(
+                            surface,
+                            opacity,
+                            [12.0, 8.0],
+                            160.0,
+                            content,
+                        ))
+                    })
+                    .unwrap();
+                let mut session = RuntimeAgentSession::new(doc, 200, 80).unwrap();
+                session.set_clear(Some([0.0; 4]));
+                let (size, pixels) = session.screenshot_rgba().unwrap();
+                let alpha = |x, y| pixels[(y * size.width as usize + x) * 4 + 3];
+                let expected = (opacity * 255.0).round() as i16;
+                assert!(
+                    (i16::from(alpha(20, 28)) - expected).abs() <= 2,
+                    "{contour:?} {opacity}: gradient alpha {}, expected {expected}",
+                    alpha(20, 28)
+                );
+                assert!(
+                    (i16::from(alpha(13, 28)) - expected).abs() <= 2,
+                    "{contour:?} {opacity}: border alpha {}, expected {expected}",
+                    alpha(13, 28)
+                );
+                assert_eq!(
+                    alpha(50, 28),
+                    255,
+                    "{contour:?} {opacity}: content must stay opaque"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn the_line_on_screen_waits_until_it_leaves() {
         let rows: Vec<_> = [(1, Some(LineId(10))), (2, None), (3, Some(LineId(11)))]
             .into_iter()
@@ -1053,14 +1086,5 @@ mod tests {
         assert_eq!(follow_ups(&rows, &shown), [1]);
         // The first shown row always has its header.
         assert_eq!(follow_ups(&rows, &shown[1..]), Vec::<u64>::new());
-    }
-
-    #[test]
-    fn a_viewer_keeps_their_colour() {
-        let a = item("路过的猫", SourceKind::Chat, 0);
-        assert_eq!(viewer_color(&a), viewer_color(&a.clone()));
-        let mut b = a.clone();
-        b.uid = Some("1002".into());
-        assert!(VIEWER_COLORS.contains(&viewer_color(&b)));
     }
 }

@@ -108,7 +108,7 @@ impl ContourPreset {
     ];
 }
 impl MotifPreset {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::Rose,
         Self::Moon,
         Self::Leaf,
@@ -124,6 +124,7 @@ impl MotifPreset {
         Self::Halftone,
         Self::Fold,
         Self::Circuit,
+        Self::Paper,
     ];
 }
 
@@ -584,6 +585,20 @@ pub fn motif_paths(motif: MotifPreset, size: [f32; 2]) -> Vec<MotifPath> {
                 }
             }
             add(p, true, 1.0, 0.0);
+        }
+        Paper => {
+            // Sparse, fixed paper fibres. Pixel lengths stay small on a tall
+            // history panel; the retained path is built once, with no RNG or
+            // animation and a constant geometry budget at any window size.
+            for i in 0..240 {
+                let x = (0.02 + ((i * 137 + 29) % 997) as f32 / 997.0 * 0.94) * w;
+                let y = (0.02 + ((i * 263 + 71) % 991) as f32 / 991.0 * 0.94) * h;
+                let dx = (1.0 + (i % 5) as f32).min(w * 0.02);
+                let dy = 0.6_f32.min(h * 0.01) * if i % 2 == 0 { 1.0 } else { -1.0 };
+                p.m([x, y]);
+                p.q([x + dx * 0.5, y - dy], [x + dx, y + dy]);
+            }
+            add(p, false, 0.7, 0.55);
         }
         Fold => {
             p.m(pt(0.05, 0.05));

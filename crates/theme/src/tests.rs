@@ -806,7 +806,14 @@ fn vector_presets_are_opt_in_and_unknown_presets_are_rejected() {
         Some(MotifPreset::Blossom)
     );
     assert_eq!(
-        loaded.skin.history.name_plate.as_ref().unwrap().contour,
+        loaded
+            .skin
+            .history
+            .name_plate
+            .as_ref()
+            .unwrap()
+            .shape
+            .contour,
         Some(ContourPreset::Ribbon)
     );
     for invalid in [
@@ -1125,6 +1132,21 @@ name_weight = 50
             &[],
         ),
         (
+            "history.name_plate.border_width",
+            "[meta]\nid='x'\n[history.name_plate]\nborder_widths=[0,-1,0,0]\n",
+            &[],
+        ),
+        (
+            "history.name_plate.padding",
+            "[meta]\nid='x'\n[history.name_plate]\npadding=[-1,2]\n",
+            &[],
+        ),
+        (
+            "history.name_plate.shadows",
+            "[meta]\nid='x'\n[history.name_plate]\nshadows=[{color='#000',blur=-1}]\n",
+            &[],
+        ),
+        (
             "history.panel.padding",
             "[meta]
 id = \"x\"
@@ -1401,9 +1423,27 @@ fn pixel_font_skins_stay_on_the_12px_grid() {
             ("history.text.size", h.text.size),
             ("history.text line", h.text.size * h.text.line_height),
             ("history chat text", h.text.size * h.chat.text_scale),
+            ("history mention text", h.text.size * skin.mention.scale),
+            (
+                "history.time_size",
+                h.time_size
+                    .expect("pixel metadata has an explicit grid size"),
+            ),
+            (
+                "history.reply.size",
+                h.reply
+                    .size
+                    .expect("pixel replies have an explicit grid size"),
+            ),
         ];
         if pixel(&skin.fonts.name) {
             sizes.push(("dialogue.nameplate.size", d.nameplate.size));
+            sizes.push(("history.name_size", h.name_size));
+            assert_eq!(
+                h.name_weight, skin.fonts.name.weight,
+                "{}: pixel names must not synthesize a heavier face",
+                e.id
+            );
         }
         for (what, px) in sizes {
             assert!(on_grid(px), "{}: {what} = {px}", e.id);

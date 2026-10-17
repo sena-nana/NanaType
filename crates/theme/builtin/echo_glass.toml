@@ -168,7 +168,7 @@ name_weight = 400
 name_color = "#ffffff"
 name_stroke = { color = "#000000", width = 1.5 }
 time_color = "#dddddd"
-panel = { color = "#00000000", padding = [18, 18, 18, 18], gradient = { stops = [[0, "#00000099"], [0.15, "#00000099"], [1, "#00000000"]] } }
+panel = { color = "#00000000", padding = [18, 18, 18, 18], gradient = { angle = 0, stops = [[0, "#00000099"], [0.15, "#00000099"], [1, "#00000000"]] } }
 
 [history.text]
 color = "#ffffff"

@@ -88,6 +88,10 @@ kind = "fade"
 ms = 220
 
 [history]
+name_weight = 400
+name_plate = { color = "#00000000", text_color = "#222222", border_color = "#B0302A", border_widths = [0, 0, 0, 3], radius = 0, padding = [7, 1] }
+panel = { color = "#F6F0E2F8", border_color = "#86775E52", border_width = 0.8, radius = 1, padding = [14, 14, 14, 18], margin = [8, 8, 8, 8] }
+title = { text = "HISTORY", color = "#222222", size = 14, weight = 400, height = 52, padding = 18 }
 name_color = "#222222"
 bubble_color = "#f6f0e2f2"
 bubble_radius = 4
@@ -97,6 +101,33 @@ bubble_gradient = { kind = "radial", stops = [[0, "#faf6eef5"], [1, "#ece4d4f0"]
 bubble_shadows = [{ color = "#2222221a", dy = 2, blur = 8 }]
 avatar = { shape = "square", size = 40, ring_color = "#b0302a", ring_width = 2 }
 time_color = "#8a8070"
+
+[[history.decor]]
+inset = [4, 4, 4, 4]
+motif = "paper"
+color = "#86775E"
+opacity = 0.08
+layer = "below"
+
+[[history.decor]]
+anchor = "top_right"
+offset = [-18, 12]
+size = [24, 24]
+contour = "seal"
+color = "#B0302A"
+text = "印"
+text_color = "#F6F0E2"
+text_size = 17
+font = "body"
+rotate = -6
+
+[[history.decor]]
+anchor = "bottom_right"
+offset = [-10, -12]
+size = [90, 132]
+image = "ink/bamboo.png"
+opacity = 0.16
+layer = "below"
 
 [history.text]
 color = "#222222"

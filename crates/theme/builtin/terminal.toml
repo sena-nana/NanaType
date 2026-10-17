@@ -72,13 +72,19 @@ kind = "none"
 ms = 0
 
 [history]
+name_size = 17
+name_weight = 400
+time_size = 12
+entrance = "none"
+panel = { color = "#0A0F0AF5", border_color = "#286637", border_width = 1, radius = 2, padding = [12, 12, 12, 12], margin = [8, 8, 8, 8] }
+title = { text = "> HISTORY", color = "#33FF66", background = "#102416", size = 13, weight = 400, height = 36, padding = 14 }
 bubble_contour = "terminal"
 name_color = "#33ff66"
 bubble_color = "#0a0f0ae6"
 bubble_border = "#286637"
 bubble_radius = 2
 time_color = "#4f8f5e"
-avatar = { shape = "square", size = 32, ring_color = "#33ff66", ring_width = 1 }
+avatar = { shape = "square", size = 32, radius = 0, color = "#0A0F0A", ring_color = "#33ff66", ring_width = 1 }
 
 [history.text]
 color = "#33ff66"

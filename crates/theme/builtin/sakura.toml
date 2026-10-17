@@ -73,7 +73,7 @@ bubble_border_width = 1.5
 bubble_radius = 16
 bubble_gradient = { angle = 135, stops = [[0, "#fff0f5f5"], [1, "#ffe1ecf2"]] }
 bubble_shadows = [{ color = "#f7a8c433", dy = 3, blur = 10 }]
-name_plate = { color = "#FAD7E5", gradient = { angle = 180, stops = [[0, "#FFEAF2"], [1, "#FACBDE"]] }, text_color = "#7A3050", radius = 9, padding = [8, 1] }
+name_plate = { color = "#FAD7E5", gradient = { angle = 180, stops = [[0, "#FFEAF2"], [1, "#FACBDE"]] }, text_color = "#7A3050", border_color = "#F5B3CA", border_width = 0.8, radius = 12, padding = [8, 1] }
 avatar = { shape = "circle", size = 40, ring_color = "#ffb3cf", ring_width = 2 }
 time_color = "#c48aa2"
 

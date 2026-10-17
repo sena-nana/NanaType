@@ -32,8 +32,31 @@ textures = ["celestial/ornament.png"]
 
 [history]
 name_color = "#E7CC94"
+time_color = "#C4B5D7"
 bubble_color = "#211C39"
-bubble_border = "#E7CC9470"
-bubble_border_width = 1
-bubble_radius = 18
+bubble_border = "#E7CC9480"
+bubble_border_width = 0.8
+bubble_contour = "orbit"
+bubble_radius = 14
+bubble_gradient = { angle = 160, stops = [[0, "#393153"], [1, "#211C39"]] }
+bubble_shadows = [{ color = "#E7CC9426", spread = 1, inset = true }]
+name_plate = { color = "#211C39", text_color = "#E7CC94", gradient = { angle = 180, stops = [[0, "#393153"], [1, "#211C39"]] }, border_color = "#E7CC94", border_width = 0.8, radius = 8, padding = [9, 2] }
+avatar = { shape = "circle", size = 36, color = "#393153", ring_color = "#E7CC94", ring_width = 1 }
+panel = { color = "#211C39F5", border_color = "#E7CC9480", border_width = 1, radius = 20, padding = [14, 14, 14, 18], margin = [8, 8, 8, 8], shadows = [{ color = "#E7CC9420", spread = 3, inset = true }] }
+title = { text = "HISTORY", color = "#E7CC94", size = 14, weight = 600, height = 56, padding = 18 }
 text = { color = "#F4EEFF" }
+
+[[history.decor]]
+anchor = "top_right"
+offset = [-12, 4]
+size = [48, 48]
+image = "celestial/ornament.png"
+
+[[history.decor]]
+anchor = "bottom_right"
+offset = [-12, -12]
+size = [96, 96]
+motif = "orbit"
+color = "#E7CC94"
+opacity = 0.12
+layer = "below"

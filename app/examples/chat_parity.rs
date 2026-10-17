@@ -44,6 +44,7 @@ fn document(id: u64, theme: Arc<nana_ui::CompiledTheme>, locale: Locale) -> Runt
 impl Rig {
     fn new(
         skin: Arc<nanatype_theme::Skin>,
+        urls: Arc<std::collections::HashMap<String, String>>,
         locale: Locale,
         profile: &str,
         panel_style: ChatPanelStyle,
@@ -66,6 +67,7 @@ impl Rig {
         }
         let panel_width = if profile == "narrow" { 300 } else { 400 };
         let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), locale);
+        ui.asset_urls.set(urls);
         ui.chat_width.set(panel_width as f32);
         ui.source_mode.set(profile == "source");
         ui.reduced_motion.set(profile == "reduced");
@@ -136,6 +138,14 @@ impl Rig {
         };
         rig.display.set_clear(Some([0.0; 4]));
         rig.history.set_clear(Some([0.0; 4]));
+        for session in [
+            &mut rig.panel,
+            &mut rig.display,
+            &mut rig.history,
+            &mut rig.input,
+        ] {
+            session.set_gpu_renderers(ui::sweep::renderers());
+        }
         if profile == "reduced" {
             for session in [
                 &mut rig.panel,
@@ -577,6 +587,12 @@ impl Rig {
     /// Preserve each skin's actual history layout while exercising difficult content.
     fn audit(&mut self, out: &Path) {
         let skin = self.ui.skin.get_untracked();
+        // This fixture checks short-log top alignment. Pixel-sized headers can
+        // legitimately make the interaction log overflow a 560px window; use
+        // a tall viewport here, then restore real sizes for both stress shots.
+        self.history
+            .set_viewport(skin.history.width as u32, 2000, 1.0)
+            .unwrap();
         self.history.flush().unwrap();
         std::fs::write(
             out.join("spacing-baseline.json"),
@@ -884,6 +900,10 @@ fn run() {
             &families,
             locale.tag(),
         ));
+        let urls = Arc::new(nanatype::assets::skin_preview_urls(
+            &loaded.skin,
+            &*loaded.files,
+        ));
         let dir = if args.get(1).is_some_and(|s| s == "all") {
             out.join(&id)
         } else {
@@ -896,7 +916,7 @@ fn run() {
             } else {
                 ChatPanelStyle::Compact
             };
-            let mut rig = Rig::new(skin, locale, profile, panel_style);
+            let mut rig = Rig::new(skin, urls, locale, profile, panel_style);
             for f in 0..150 {
                 nanatype::clock::capture_at(f * 1000 / 30, || {
                     rig.step(f, &dir, matches!(profile, "capture" | "capture-panel"))

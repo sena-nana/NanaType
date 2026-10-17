@@ -53,6 +53,7 @@ kind = "fade"
 ms = 120
 
 [history]
+avatar = { shape = "none" }
 name_color = "#FFE1A3"
 name_stroke = { color = "#000000", width = 2.5 }
 # Like the dialogue: no box, outlined text.
