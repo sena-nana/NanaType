@@ -639,6 +639,252 @@ fn unfocused_wheel_boundaries_hit_testing_caret_follow_and_edge_drag_use_one_vie
 }
 
 #[test]
+fn skin_preview_refreshes_without_resetting_either_editor() {
+    use nana_ui::runtime::{StableNodeId, Text};
+    use nana_ui_core::{BackgroundImage, BackgroundImageFit, LayoutStyle, LengthSpec};
+    use nanatype_model::Rgba8;
+    use nanatype_theme::{DecorLayer, DecorSpec, DecorWhen, Len, Side};
+
+    fn nodes(f: &Fixture, key: &str) -> Vec<StableNodeId> {
+        let cx = f.session.document().context();
+        cx.world()
+            .document_order(f.id())
+            .into_iter()
+            .filter(|id| {
+                cx.assembly_path(*id)
+                    .is_some_and(|p| p.rsplit('/').next() == Some(key))
+            })
+            .collect()
+    }
+    fn layout<'a>(f: &'a Fixture, key: &str) -> &'a LayoutStyle {
+        f.session
+            .document()
+            .context()
+            .world()
+            .node_style(nodes(f, key)[0])
+            .unwrap()
+            .layout
+            .as_ref()
+    }
+    fn decorations(f: &Fixture) -> Vec<StableNodeId> {
+        let cx = f.session.document().context();
+        cx.world()
+            .document_order(f.id())
+            .into_iter()
+            .filter_map(|id| {
+                cx.read(Entity::<Text>::from_stable_id(id), |t| {
+                    t.value.starts_with("skin-decor-")
+                })
+                .ok()
+                .filter(|tagged| *tagged)
+                .and_then(|_| cx.world().parent_id(id))
+            })
+            .collect()
+    }
+    fn flush(f: &mut Fixture) {
+        for _ in 0..4 {
+            f.session.flush().unwrap();
+        }
+    }
+
+    let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+    for source in [false, true] {
+        let mut f = Fixture::new(source, false, "切换前");
+        f.ui.settings
+            .update(|s| Arc::make_mut(s).general.input_skin_preview = true);
+        f.ui.speaker.update(|s| s.name = "皮肤切换测试".into());
+        f.focus();
+        f.key("End", CTRL);
+        f.event(InputPayload::Text(nana_ui_platform::CommittedText::new(
+            "输入",
+        )));
+        f.key(
+            "ArrowLeft",
+            InputModifiers {
+                shift: true,
+                ..Default::default()
+            },
+        );
+        let selection = f.selection();
+        assert_ne!(selection.0, selection.1);
+        let editor = f.node();
+        let retained = |f: &Fixture| {
+            assert_eq!(
+                f.session.document().context().world().focused(f.id()),
+                Some(editor)
+            );
+            assert_eq!(f.selection(), selection);
+            assert_eq!(f.text(), "切换前输入");
+        };
+
+        for (id, step) in [
+            ("nanatype.halo", 1),
+            ("nanatype.terminal", 2),
+            ("nanatype.subtitle", 0),
+            ("nanatype.halo", 1),
+        ] {
+            let mut skin = (*registry.load(id).unwrap().skin).clone();
+            let p = &mut skin.dialogue.portrait;
+            p.visible = step != 0;
+            p.side = if step == 2 { Side::Right } else { Side::Left };
+            p.size = [80. + step as f32 * 10., 100. + step as f32 * 20.];
+            p.offset = [step as f32 * 3., step as f32 * 4.];
+            p.radius = step as f32 * 5.;
+            skin.dialogue.decor = [DecorLayer::Below, DecorLayer::Above]
+                .into_iter()
+                .flat_map(|layer| {
+                    (0..step).map(move |i| DecorSpec {
+                        layer,
+                        text: format!("skin-decor-{layer:?}-{i}"),
+                        size: [Len::Px(21. + (step + i) as f32), Len::Px(31. + i as f32)],
+                        color: Some(Rgba8::rgb(10, 20, 30).into()),
+                        ..Default::default()
+                    })
+                })
+                .chain(std::iter::once(DecorSpec {
+                    when: DecorWhen::Display,
+                    text: "skin-decor-display".into(),
+                    ..Default::default()
+                }))
+                .collect();
+            let cs = &mut skin.dialogue.continue_;
+            cs.glyph = format!("continue-{step}");
+            cs.image = None;
+            let skin = Arc::new(skin);
+            f.ui.skin.set(skin.clone());
+            flush(&mut f);
+
+            let cx = f.session.document().context();
+            let world = cx.world();
+            let np = &skin.dialogue.nameplate;
+            let plate = nodes(&f, "dialogue-nameplate")[0];
+            let label = world.node(plate).unwrap().children[0];
+            let name = &world.node_style(label).unwrap().layout;
+            assert_eq!(
+                layout(&f, "dialogue-nameplate").border_radius,
+                Some(np.radius)
+            );
+            assert_eq!(
+                layout(&f, "dialogue-nameplate").padding_left,
+                Some(LengthSpec::Px(np.padding[0]))
+            );
+            assert_eq!(name.font_size, Some(np.size));
+            assert_eq!(name.font_family, skin.fonts.name.families.first().cloned());
+            assert_eq!(name.color, Some(crate::ui::c(np.text_color)));
+            let p = &skin.dialogue.portrait;
+            let portrait = layout(&f, "dialogue-portrait");
+            assert_eq!(
+                (portrait.width, portrait.height),
+                (
+                    Some(LengthSpec::Px(p.size[0])),
+                    Some(LengthSpec::Px(p.size[1]))
+                )
+            );
+            assert_eq!(portrait.border_radius, Some(p.radius));
+            assert_eq!(portrait.offset_bottom, Some(LengthSpec::Px(p.offset[1])));
+            let (left, right) = match p.side {
+                Side::Left => (Some(LengthSpec::Px(-p.size[0] * 0.5 + p.offset[0])), None),
+                Side::Right => (None, Some(LengthSpec::Px(-p.size[0] * 0.5 - p.offset[0]))),
+            };
+            assert_eq!((portrait.offset_left, portrait.offset_right), (left, right));
+            assert_eq!(
+                world
+                    .computed_style(nodes(&f, "dialogue-portrait")[0])
+                    .unwrap()
+                    .visible,
+                p.visible
+            );
+            let decor = decorations(&f);
+            assert_eq!(decor.len(), step as usize * 2);
+            for (node, spec) in decor.iter().zip(&skin.dialogue.decor) {
+                let style = &world.node_style(*node).unwrap().layout;
+                let [Len::Px(w), Len::Px(h)] = spec.size else {
+                    unreachable!()
+                };
+                assert_eq!(
+                    (style.width, style.height),
+                    (Some(LengthSpec::Px(w)), Some(LengthSpec::Px(h)))
+                );
+                assert_eq!(
+                    style.background,
+                    spec.color.map(|c| crate::ui::c(skin.color(c)))
+                );
+            }
+            let glyph = nodes(&f, "dialogue-continue-glyph")[0];
+            let cs = &skin.dialogue.continue_;
+            assert_eq!(
+                cx.read(Entity::<Text>::from_stable_id(glyph), |t| t.value.clone())
+                    .unwrap(),
+                cs.glyph
+            );
+            assert_eq!(
+                layout(&f, "dialogue-continue-glyph").font_size,
+                Some(cs.size)
+            );
+            assert_eq!(
+                layout(&f, "dialogue-continue-glyph").color,
+                Some(crate::ui::c(cs.color))
+            );
+            assert!(!world.computed_style(glyph).unwrap().visible);
+            retained(&f);
+        }
+
+        // Resolve images after applying the skin, without replacing either editor.
+        let mut skin = (*f.ui.skin.get_untracked()).clone();
+        for decor in &mut skin.dialogue.decor {
+            decor.image = Some("skin-parts.png".into());
+        }
+        skin.dialogue.continue_.image = Some("skin-parts.png".into());
+        f.ui.skin.set(Arc::new(skin));
+        flush(&mut f);
+        assert!(nodes(&f, "dialogue-continue-image").is_empty());
+        let url = crate::assets::file_url(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../crates/theme/builtin/halo/still.png"),
+        );
+        f.ui.asset_urls.update(|urls| {
+            Arc::make_mut(urls).insert("skin:skin-parts.png".into(), url.clone());
+        });
+        f.ui.portraits.update(|portraits| {
+            Arc::make_mut(portraits).insert("default".into(), url.clone());
+        });
+        flush(&mut f);
+        for key in ["dialogue-continue-image", "dialogue-portrait"] {
+            assert_eq!(
+                layout(&f, key).paint.background_image,
+                Some(BackgroundImage::url_with_fit(
+                    url.clone(),
+                    BackgroundImageFit::Contain
+                ))
+            );
+        }
+        let world = f.session.document().context().world();
+        for node in decorations(&f) {
+            assert!(
+                matches!(&world.node_style(node).unwrap().layout.paint.background_image, Some(BackgroundImage::Url { url: actual, .. }) if *actual == url)
+            );
+        }
+        assert!(
+            !world
+                .computed_style(nodes(&f, "dialogue-continue-image")[0])
+                .unwrap()
+                .visible
+        );
+        for preview in [false, true] {
+            f.ui.settings
+                .update(|s| Arc::make_mut(s).general.input_skin_preview = preview);
+            flush(&mut f);
+            assert_eq!(!nodes(&f, "dialogue-portrait").is_empty(), preview);
+            retained(&f);
+        }
+        f.action(TextEditAction::Undo);
+        assert_eq!(f.text(), "切换前");
+        f.action(TextEditAction::Redo);
+        assert_eq!(f.text(), "切换前输入");
+    }
+}
+
+#[test]
 fn host_handoff_preserves_selection_scroll_and_undo_through_tools_and_refresh() {
     let mut f = Fixture::new(true, false, "中文👩‍💻\n".repeat(80).as_str());
     f.focus();

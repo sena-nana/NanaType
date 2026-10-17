@@ -273,6 +273,11 @@ impl BoxCtx {
     fn url(&self, path: &str) -> Option<String> {
         self.urls.get(&format!("skin:{path}")).cloned()
     }
+
+    fn box_surface(&self) -> Surface {
+        let frame = self.skin.dialogue.box_.frame.as_ref();
+        Surface::dialogue_box(&self.skin, frame.and_then(|f| self.url(&f.image)))
+    }
 }
 
 /// A complete dialogue box filling its parent (region + overscan). In the
@@ -461,14 +466,7 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
     let [mt, mr, mb, ml] = d.box_.margin;
     let width_fraction = d.box_.width_fraction;
     let padding = d.padding;
-    let box_surface =
-        Surface::dialogue_box(&skin, d.box_.frame.as_ref().and_then(|f| ctx.url(&f.image)));
-    let (tail_below, tail_above) = tail(&ctx, &box_surface);
-    let below = decor_views(ui, &ctx, DecorLayer::Below);
-    let above = decor_views(ui, &ctx, DecorLayer::Above);
-    let plate = nameplate(ui, &ctx);
-    let portrait = portrait(ui, &ctx);
-    let cont = continue_indicator(ui, &ctx);
+    let box_surface = ctx.box_surface();
     let plain =
         move || source == Source::Draft && !ui.settings.with(|s| s.general.input_skin_preview);
 
@@ -555,16 +553,6 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
         });
     }
 
-    let sweep = super::sweep::effective(&ctx.skin.dialogue.sweep).then(|| {
-        let surface = box_surface.clone();
-        let spec = ctx.skin.dialogue.sweep.clone();
-        dynamic(
-            move || source == Source::Display && !ui.reduced_motion.get() && !drawn(ui).empty,
-            move |animated| super::sweep::view(surface.clone(), spec.clone(), *animated),
-        )
-        .css(nana_ui::runtime::view::css! { position: absolute; inset: 0; pointer-events: none; })
-        .into_any()
-    });
     // Only replace the container's paint/layout; the editor stays mounted.
     let shaders = shader_layers(ui, &ctx, &box_surface, DecorLayer::Above);
     let shaders_below = shader_layers(ui, &ctx, &box_surface, DecorLayer::Below);
@@ -653,17 +641,21 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
         .into_any()
     };
     let the_box = the_box.children((
-        input_skin_layer(ui, source, sweep),
+        input_skin_layer(ui, &ctx, sweep_layer),
         shader_art,
         shaders,
         text,
     ));
 
     outer.children(frame.children((
-        input_skin_layer(ui, source, (below, tail_below)),
+        input_skin_layer(ui, &ctx, |ui, ctx| {
+            skin_surroundings(ui, ctx, DecorLayer::Below)
+        }),
         shaders_below,
         the_box,
-        input_skin_layer(ui, source, (tail_above, above, portrait, plate, cont)),
+        input_skin_layer(ui, &ctx, |ui, ctx| {
+            skin_surroundings(ui, ctx, DecorLayer::Above)
+        }),
     )))
 }
 
@@ -748,22 +740,62 @@ fn shader_layers(ui: Ui, ctx: &BoxCtx, surface: &Surface, layer: DecorLayer) -> 
     layers
 }
 
-/// Only the input editor can hide its skin, without unmounting the text.
-fn input_skin_layer(ui: Ui, source: Source, content: impl IntoView) -> AnyView {
-    if source != Source::Draft {
-        return content.into_any();
+/// Rebuild only skin layers when the draft's skin or resolved images change.
+/// Both editors stay outside these scopes, retaining selection and undo history.
+fn input_skin_layer(ui: Ui, ctx: &BoxCtx, build: fn(Ui, &BoxCtx) -> AnyView) -> AnyView {
+    if ctx.source != Source::Draft {
+        return build(ui, ctx);
     }
-    widget(Stack::column(0.0).with_layout(|l| {
-        l.position = PositionSpec::Absolute;
-        l.offset_left = Some(LengthSpec::Px(0.0));
-        l.offset_top = Some(LengthSpec::Px(0.0));
-        l.width = Some(LengthSpec::Percent(100.0));
-        l.height = Some(LengthSpec::Percent(100.0));
-        l.pointer_events = Some(PointerEventsSpec::None);
-    }))
-    .visible(move || ui.settings.with(|s| s.general.input_skin_preview))
-    .children(content)
+    dynamic(
+        move || (
+            ui.skin.get(),
+            ui.asset_urls.get(),
+            ui.settings.with(|s| s.general.input_skin_preview),
+        ),
+        move |(skin, urls, preview)| {
+            preview.then(|| {
+                build(ui, &BoxCtx {
+                    skin: skin.clone(),
+                    urls: urls.clone(),
+                    source: Source::Draft,
+                    preview_name: String::new(),
+                })
+            })
+        },
+    )
+    .css(nana_ui::runtime::view::css! { position: absolute; inset: 0; pointer-events: none; overflow: visible; })
     .into_any()
+}
+
+fn skin_surroundings(ui: Ui, ctx: &BoxCtx, layer: DecorLayer) -> AnyView {
+    let (tail_below, tail_above) = tail(ctx, &ctx.box_surface());
+    let decor = decor_views(ui, ctx, layer);
+    match layer {
+        DecorLayer::Below => (decor, tail_below).into_any(),
+        DecorLayer::Above => (
+            tail_above,
+            decor,
+            portrait(ui, ctx),
+            nameplate(ui, ctx),
+            continue_indicator(ui, ctx),
+        )
+            .into_any(),
+    }
+}
+
+fn sweep_layer(ui: Ui, ctx: &BoxCtx) -> AnyView {
+    let source = ctx.source;
+    let sweep = super::sweep::effective(&ctx.skin.dialogue.sweep).then(|| {
+        let surface = ctx.box_surface();
+        let spec = ctx.skin.dialogue.sweep.clone();
+        dynamic(
+            move || source == Source::Display && !ui.reduced_motion.get() && !drawn(ui).empty,
+            move |animated| super::sweep::view(surface.clone(), spec.clone(), *animated),
+        )
+        .css(nana_ui::runtime::view::css! { position: absolute; inset: 0; pointer-events: none; })
+        .into_any()
+    });
+    sweep.into_any()
 }
 
 /// The chat message the line on the typewriter answers, above its text
@@ -941,6 +973,7 @@ fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
                         }
                     }),
             )
+            .key("dialogue-nameplate")
             .children(widget(Text::new("").style(st)).bind(move |t: &mut Text| {
                 let n = name();
                 if t.value != n {
@@ -968,6 +1001,7 @@ fn portrait(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
                 l.border_radius = Some(p.radius);
             }),
     )
+    .key("dialogue-portrait")
     .visible(move || {
         source != Source::Preview
             && ui.skin.with(|s| s.dialogue.portrait.visible)
@@ -1239,7 +1273,7 @@ fn continue_indicator_on(ui: Ui, ctx: &BoxCtx, animate: bool) -> impl IntoView +
                     }
                 });
             }
-            el.into_any()
+            el.key("dialogue-continue-image").into_any()
         }
         None => {
             let mut st = NodeStyle::default();
@@ -1249,7 +1283,9 @@ fn continue_indicator_on(ui: Ui, ctx: &BoxCtx, animate: bool) -> impl IntoView +
                 l.color = Some(c(cs.color));
                 l.white_space_nowrap = true;
             }
-            widget(Text::new(cs.glyph.clone()).decorative().style(st)).into_any()
+            widget(Text::new(cs.glyph.clone()).decorative().style(st))
+                .key("dialogue-continue-glyph")
+                .into_any()
         }
     };
     let [ox, oy] = cs.offset;
@@ -1265,6 +1301,7 @@ fn continue_indicator_on(ui: Ui, ctx: &BoxCtx, animate: bool) -> impl IntoView +
         mark = mark.node_ref(node);
     }
     widget(anchor_layer(cs.anchor, 3))
+        .key("dialogue-continue")
         .visible(move || {
             !hidden
                 && match source {
