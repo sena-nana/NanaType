@@ -7,15 +7,13 @@
 credentials.json
 /dist
 
-# promo (Remotion)
-promo/node_modules
-promo/out
-promo/public/real
-promo/tools/live2d-capture/target
-promo/public/haru
-promo/public/nana
-promo/public/media
-promo/public/audio
+# Local video and cover projects
+/promo/
+/artwork/cover/
 
-# Real NanaUI interaction capture, regenerated for the promo
-promo/public/chat-parity
+# Local Cargo configuration
+/.cargo/config.toml
+
+# Python cache
+__pycache__/
+*.py[cod]
