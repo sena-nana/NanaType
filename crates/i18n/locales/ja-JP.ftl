@@ -260,6 +260,18 @@ windows-reset = 位置をリセット
 windows-size = サイズ
 windows-size-skin = スキンに従う
 
+## オーバーレイの右クリックメニュー
+overlay-menu-skin = スキンを切り替え（全ウィンドウ）
+overlay-menu-adjust-skin = スキンを調整…
+overlay-menu-lock = ウィンドウをロック（クリック透過；トレイか設定で解除）
+overlay-menu-reset = 位置とサイズを初期状態に戻す
+overlay-menu-close = ウィンドウを閉じる
+overlay-menu-continue = 再生を続ける
+overlay-menu-skip = 現在の再生をスキップ
+overlay-menu-clear-display = 表示をクリア
+overlay-menu-confirm-clear = クリアを確定
+overlay-menu-clear-history-peer = 履歴をクリア（接続中は利用不可）
+
 ## 履歴
 history-max = 保持する件数
 history-visible = 表示する件数
@@ -538,7 +550,7 @@ skins-view-grid = カード
 skins-view-list = リスト
 windows-lock-locked-short = ロック
 windows-lock-tip = 操作可能（初期設定）：左ドラッグで移動、ホイールで拡大縮小、端のドラッグでサイズ変更します。ロック：マウス操作は下のウィンドウに透過します。
-windows-layout-hint = 表示・パートナー表示・履歴ウィンドウは初期設定のまま移動や拡大縮小ができます。ウィンドウ内を左ドラッグで移動し、ホイールを上に回すと拡大、下に回すと縦横比を保って縮小します。位置とサイズは自動保存されます。ロックするとマウス操作は下のウィンドウに透過します。
+windows-layout-hint = 表示・パートナー表示・履歴ウィンドウは初期設定のまま移動や拡大縮小ができます。ウィンドウ内を左ドラッグで移動し、ホイールを上に回すと拡大、下に回すと縦横比を保って縮小します。右クリックで閉じる、共通スキンの切り替え・調整、最前面表示、ロック、レイアウトの初期化ができます。表示には再生操作、履歴には表示オプションとクリア確認もあります。位置とサイズは自動保存されます。ロック中はマウス操作が透過するため、トレイか設定で解除してください。閉じても有効な OBS 出力は継続します。
 windows-background-tip = 透明：OBS 用にアルファを保ちます。クロマキー：アルファのないキャプチャ向けにウィンドウを緑で塗りつぶします。
 windows-reset-tip = リセットボタンでウィンドウをスキンが決める位置とサイズに戻します
 windows-input-na = 「—」は対象外：入力ウィンドウは常に操作可能で、キャプチャされません。

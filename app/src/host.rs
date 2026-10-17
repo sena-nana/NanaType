@@ -972,6 +972,20 @@ impl RuntimeProgram for Host {
         }
         if let Some(kind) = WindowKind::from_id(id)
             && let Some(settings) = kind.overlay(&self.app.settings)
+            && let Some(position) = overlay::menu_position(
+                kind,
+                settings.lock,
+                &input.event.payload,
+                input.disposition.handled,
+            )
+            && let Some(handle) = self.app.windows.handle(kind)
+            && let Some(menu) = crate::services::overlay_menu::Snapshot::new(kind, self.app.ui)
+        {
+            crate::services::overlay_menu::show(menu, handle, position, self.app.ctx.clone());
+            return Ok(RuntimeProgramUpdate::default());
+        }
+        if let Some(kind) = WindowKind::from_id(id)
+            && let Some(settings) = kind.overlay(&self.app.settings)
             && let Some(command) = overlay::command(
                 kind,
                 settings.lock,

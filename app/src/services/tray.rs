@@ -253,9 +253,56 @@ fn toggle_msg(kind: WindowKind) -> Msg {
     Msg::ToggleWindow(kind)
 }
 
+fn menu_message(id: &str) -> Option<Msg> {
+    if let Some(message) = super::overlay_menu::message(id) {
+        return Some(message);
+    }
+    Some(match id {
+        ID_INPUT => toggle_msg(WindowKind::Input),
+        ID_DISPLAY => toggle_msg(WindowKind::Display),
+        ID_HISTORY => toggle_msg(WindowKind::History),
+        ID_CHAT => toggle_msg(WindowKind::Chat),
+        ID_LOCK => Msg::Edit(Box::new(|s: &mut Settings| {
+            let locked = s.overlays.display.lock == Lock::Locked;
+            let lock = if locked {
+                Lock::Interactive
+            } else {
+                Lock::Locked
+            };
+            s.overlays.display.lock = lock;
+            s.overlays.peer_display.lock = lock;
+            s.overlays.history.lock = lock;
+        })),
+        ID_CONTINUE => Msg::Hotkey(GlobalAction::Continue),
+        ID_SAMPLE => Msg::PlaySample,
+        ID_COMPOSE => Msg::Edit(Box::new(|s: &mut Settings| {
+            s.general.input_mode = InputMode::Compose
+        })),
+        ID_MIRROR => Msg::Edit(Box::new(|s: &mut Settings| {
+            s.general.input_mode = InputMode::Mirror
+        })),
+        ID_SETTINGS => Msg::OpenSettings,
+        ID_OBS => Msg::SettingsPage(crate::ui::settings::Page::Output),
+        ID_QUIT => Msg::Quit,
+        other => {
+            let skin = other.strip_prefix(SKIN_PREFIX)?.to_owned();
+            Msg::Edit(Box::new(move |s: &mut Settings| s.skin.id = skin))
+        }
+    })
+}
+
 impl Tray {
     /// Build on the UI thread. `post` forwards menu actions.
     pub fn build(post: impl Fn(Msg) + Send + Sync + Clone + 'static) -> Result<Self, String> {
+        // One process-wide handler serves both tray and overlay native menus.
+        // Install before fallible tray setup so right-click still works if the
+        // notification-area icon cannot be created.
+        let menu_post = post.clone();
+        MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
+            if let Some(message) = menu_message(event.id.0.as_str()) {
+                menu_post(message);
+            }
+        }));
         let item = |id: &str| MenuItem::with_id(id, "", true, None);
         let check = |id: &str| CheckMenuItem::with_id(id, "", true, false, None);
         let input = item(ID_INPUT);
@@ -303,46 +350,6 @@ impl Tray {
             .build()
             .map_err(|e| e.to_string())?;
 
-        let menu_post = post.clone();
-        MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
-            let id = event.id.0.as_str();
-            let msg = match id {
-                ID_INPUT => toggle_msg(WindowKind::Input),
-                ID_DISPLAY => toggle_msg(WindowKind::Display),
-                ID_HISTORY => toggle_msg(WindowKind::History),
-                ID_CHAT => toggle_msg(WindowKind::Chat),
-                ID_LOCK => Msg::Edit(Box::new(|s: &mut Settings| {
-                    let locked = s.overlays.display.lock == Lock::Locked;
-                    let lock = if locked {
-                        Lock::Interactive
-                    } else {
-                        Lock::Locked
-                    };
-                    s.overlays.display.lock = lock;
-                    s.overlays.peer_display.lock = lock;
-                    s.overlays.history.lock = lock;
-                })),
-                ID_CONTINUE => Msg::Hotkey(GlobalAction::Continue),
-                ID_SAMPLE => Msg::PlaySample,
-                ID_COMPOSE => Msg::Edit(Box::new(|s: &mut Settings| {
-                    s.general.input_mode = InputMode::Compose
-                })),
-                ID_MIRROR => Msg::Edit(Box::new(|s: &mut Settings| {
-                    s.general.input_mode = InputMode::Mirror
-                })),
-                ID_SETTINGS => Msg::OpenSettings,
-                ID_OBS => Msg::SettingsPage(crate::ui::settings::Page::Output),
-                ID_QUIT => Msg::Quit,
-                other => match other.strip_prefix(SKIN_PREFIX) {
-                    Some(skin) => {
-                        let skin = skin.to_owned();
-                        Msg::Edit(Box::new(move |s: &mut Settings| s.skin.id = skin))
-                    }
-                    None => return,
-                },
-            };
-            menu_post(msg);
-        }));
         TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
@@ -539,6 +546,32 @@ pub fn tooltip(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_handler_keeps_tray_and_overlay_targets_separate() {
+        assert!(matches!(
+            menu_message(ID_DISPLAY),
+            Some(Msg::ToggleWindow(WindowKind::Display))
+        ));
+        assert!(matches!(
+            menu_message(ID_HISTORY),
+            Some(Msg::ToggleWindow(WindowKind::History))
+        ));
+        assert!(matches!(
+            menu_message("nt.overlay:peer_display:close"),
+            Some(Msg::OverlayAction(
+                WindowKind::PeerDisplay,
+                super::super::overlay_menu::Action::Close
+            ))
+        ));
+        let Some(Msg::Edit(edit)) = menu_message("nt.skin:nanatype.night") else {
+            panic!("tray skin edit")
+        };
+        let mut settings = Settings::default();
+        edit(&mut settings);
+        assert_eq!(settings.skin.id, "nanatype.night");
+        assert!(menu_message("nt.unknown").is_none());
+    }
 
     #[test]
     fn icon_sizes_come_from_the_ico() {

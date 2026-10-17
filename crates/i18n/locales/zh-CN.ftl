@@ -260,6 +260,18 @@ windows-reset = 重置位置
 windows-size = 尺寸
 windows-size-skin = 跟随皮肤
 
+## 叠加窗口右键菜单
+overlay-menu-skin = 切换皮肤（全局）
+overlay-menu-adjust-skin = 调整皮肤…
+overlay-menu-lock = 锁定窗口（鼠标穿透；从托盘或设置解锁）
+overlay-menu-reset = 恢复默认位置与尺寸
+overlay-menu-close = 关闭窗口
+overlay-menu-continue = 继续播放
+overlay-menu-skip = 跳过当前播放
+overlay-menu-clear-display = 清空展示
+overlay-menu-confirm-clear = 确认清空
+overlay-menu-clear-history-peer = 清空历史记录（联机期间不可用）
+
 ## 历史
 history-max = 保留条数
 history-visible = 显示条数
@@ -538,7 +550,7 @@ skins-view-grid = 卡片
 skins-view-list = 列表
 windows-lock-locked-short = 锁定
 windows-lock-tip = 可交互（默认）：按住鼠标左键拖动以移动，滚轮缩放，拖动边缘调整尺寸。锁定：鼠标操作穿透到下层窗口。
-windows-layout-hint = 展示框、联机伙伴展示框和历史记录窗口默认可直接操作：按住窗口内任意位置拖动即可移动；滚轮向上放大、向下缩小，保持宽高比例。位置和尺寸会自动保存。锁定窗口后，鼠标操作会穿透到下层窗口。
+windows-layout-hint = 展示框、联机伙伴展示框和历史记录窗口默认可直接操作：按住窗口内任意位置拖动即可移动；滚轮向上放大、向下缩小，保持宽高比例。右键可关闭窗口、切换或调整全局皮肤、置顶、锁定和恢复默认布局；展示框另有播放操作，历史记录另有显示选项和清空确认。位置和尺寸会自动保存。锁定后鼠标操作会穿透，请从托盘或设置解锁。关闭窗口不停止已启用的 OBS 输出。
 windows-background-tip = 透明：为 OBS 保留透明度。色键：用绿色填满窗口，供不支持透明度的捕获方式抠像。
 windows-reset-tip = 重置按钮会把窗口移回皮肤设定的位置，并恢复皮肤的尺寸
 windows-input-na = “—”表示不适用：输入框始终可交互，也不会被捕获。

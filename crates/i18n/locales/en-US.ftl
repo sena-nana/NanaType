@@ -263,6 +263,18 @@ windows-reset = Reset position
 windows-size = Size
 windows-size-skin = Follow skin
 
+## Overlay context menu
+overlay-menu-skin = Switch skin (all windows)
+overlay-menu-adjust-skin = Adjust skin…
+overlay-menu-lock = Lock window (click-through; unlock from tray or Settings)
+overlay-menu-reset = Restore default position and size
+overlay-menu-close = Close window
+overlay-menu-continue = Continue playback
+overlay-menu-skip = Skip current playback
+overlay-menu-clear-display = Clear display
+overlay-menu-confirm-clear = Confirm clear
+overlay-menu-clear-history-peer = Clear history (unavailable during a session)
+
 ## History
 history-max = Lines kept
 history-visible = Lines shown
@@ -544,7 +556,7 @@ skins-view-grid = Cards
 skins-view-list = List
 windows-lock-locked-short = Locked
 windows-lock-tip = Interactive (default): left-drag to move, use the wheel to scale, or drag an edge to resize. Locked: mouse input passes through to the window below.
-windows-layout-hint = The display, partner display, and history windows can be moved and scaled by default. Left-drag anywhere inside to move; scroll up to enlarge or down to shrink while keeping the aspect ratio. Position and size are saved automatically. Locking a window lets mouse input pass through to the window below.
+windows-layout-hint = The display, partner display, and history windows can be moved and scaled by default. Left-drag anywhere inside to move; scroll up to enlarge or down to shrink while keeping the aspect ratio. Right-click to close, switch or adjust the shared skin, toggle always on top, lock, or restore the default layout. The display also offers playback controls; history offers visibility options and a clear confirmation. Position and size are saved automatically. Locked windows pass mouse input through; unlock from the tray or Settings. Closing a window keeps enabled OBS outputs running.
 windows-background-tip = Transparent keeps the alpha for OBS. Chroma key fills the window green, for a capture that has no alpha.
 windows-reset-tip = The reset button puts the window back where the skin places it, at the skin's size
 windows-input-na = “—” does not apply: the input window is always interactive and is not captured.

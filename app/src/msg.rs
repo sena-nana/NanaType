@@ -141,6 +141,7 @@ pub enum Msg {
     HotkeyCaptured(Hotkey),
     ToggleWindow(WindowKind),
     ShowWindow(WindowKind),
+    OverlayAction(WindowKind, crate::services::overlay_menu::Action),
     HideInput,
     ResetWindow(WindowKind),
     OpenSettings,

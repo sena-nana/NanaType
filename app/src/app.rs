@@ -1730,6 +1730,15 @@ impl App {
                 }
             }
             Msg::HotkeyStatus(status) => self.ui.hotkeys.set(Arc::new(status)),
+            Msg::OverlayAction(kind, action) => {
+                // Native menus are snapshots. Recheck before applying an action
+                // if the window, connection or settings changed while tracking.
+                if crate::services::overlay_menu::Snapshot::new(kind, self.ui)
+                    .is_some_and(|menu| menu.enabled(&action))
+                {
+                    self.update(action.message(kind));
+                }
+            }
             Msg::ToggleWindow(kind) => match kind {
                 WindowKind::Input
                     if self.settings.general.input_presence == InputPresence::Summon =>

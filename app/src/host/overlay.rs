@@ -4,6 +4,38 @@ use nanatype_settings::{Lock, Placement};
 
 use crate::windows::{OVERLAY_MIN, WindowKind};
 
+fn interactive(kind: WindowKind, lock: Lock, handled: bool) -> bool {
+    lock != Lock::Locked
+        && !handled
+        && matches!(
+            kind,
+            WindowKind::Display | WindowKind::PeerDisplay | WindowKind::History
+        )
+}
+
+/// Only unhandled right-button releases open a menu; a press must never drag.
+pub(super) fn menu_position(
+    kind: WindowKind,
+    lock: Lock,
+    payload: &InputPayload,
+    handled: bool,
+) -> Option<(f32, f32)> {
+    if !interactive(kind, lock, handled) {
+        return None;
+    }
+    match payload {
+        InputPayload::Pointer(p)
+            if p.phase == PointerPhase::Up
+                && p.button == 2
+                && p.x.is_finite()
+                && p.y.is_finite() =>
+        {
+            Some((p.x, p.y))
+        }
+        _ => None,
+    }
+}
+
 pub(super) fn command(
     kind: WindowKind,
     lock: Lock,
@@ -11,13 +43,7 @@ pub(super) fn command(
     handled: bool,
     frame: Option<Placement>,
 ) -> Option<WindowCommand> {
-    if lock == Lock::Locked
-        || handled
-        || !matches!(
-            kind,
-            WindowKind::Display | WindowKind::PeerDisplay | WindowKind::History
-        )
-    {
+    if !interactive(kind, lock, handled) {
         return None;
     }
     match payload {
@@ -115,6 +141,61 @@ mod tests {
             command(WindowKind::Display, Lock::Interactive, &press, false, None),
             Some(WindowCommand::Drag(_))
         ));
+    }
+
+    #[test]
+    fn right_release_opens_only_unhandled_unlocked_broadcast_menus() {
+        let mut pointer = PointerInput::mouse(PointerPhase::Up, 40.0, 30.0);
+        pointer.button = 2;
+        for kind in WindowKind::ALL {
+            for lock in [Lock::Locked, Lock::Interactive] {
+                let payload = InputPayload::Pointer(pointer);
+                let allowed = lock == Lock::Interactive
+                    && matches!(
+                        kind,
+                        WindowKind::Display | WindowKind::PeerDisplay | WindowKind::History
+                    );
+                assert_eq!(
+                    menu_position(kind, lock, &payload, false),
+                    allowed.then_some((40.0, 30.0))
+                );
+                assert_eq!(menu_position(kind, lock, &payload, true), None);
+                assert!(command(kind, lock, &payload, false, Some(FRAME)).is_none());
+            }
+        }
+        for phase in [PointerPhase::Down, PointerPhase::Up] {
+            for button in [0, 1, 2] {
+                pointer.phase = phase;
+                pointer.button = button;
+                let payload = InputPayload::Pointer(pointer);
+                assert_eq!(
+                    menu_position(WindowKind::Display, Lock::Interactive, &payload, false)
+                        .is_some(),
+                    phase == PointerPhase::Up && button == 2
+                );
+                assert_eq!(
+                    command(
+                        WindowKind::Display,
+                        Lock::Interactive,
+                        &payload,
+                        false,
+                        Some(FRAME)
+                    )
+                    .is_some(),
+                    phase == PointerPhase::Down && button == 0
+                );
+            }
+        }
+        pointer.x = f32::NAN;
+        assert!(
+            menu_position(
+                WindowKind::Display,
+                Lock::Interactive,
+                &InputPayload::Pointer(pointer),
+                false
+            )
+            .is_none()
+        );
     }
 
     fn zoom(frame: Placement, delta: f32, unit: WheelUnit) -> ((f32, f32), (f32, f32)) {
