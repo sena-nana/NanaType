@@ -281,15 +281,46 @@ impl Inline {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ParagraphAlign {
+    Start,
+    Center,
+    End,
+}
+
+impl ParagraphAlign {
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::Center => "center",
+            Self::End => "end",
+        }
+    }
+    pub fn from_key(key: &str) -> Option<Self> {
+        match key {
+            "start" => Some(Self::Start),
+            "center" => Some(Self::Center),
+            "end" => Some(Self::End),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Paragraph {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align: Option<ParagraphAlign>,
     #[serde(default)]
     pub inlines: Vec<Inline>,
 }
 
 impl Paragraph {
     pub fn new(inlines: Vec<Inline>) -> Self {
-        Self { inlines }
+        Self {
+            inlines,
+            align: None,
+        }
     }
 }
 
@@ -503,7 +534,9 @@ impl Document {
 
         let source = std::mem::take(&mut self.paragraphs);
         let count = source.len();
+        let mut align = None;
         for (index, paragraph) in source.into_iter().enumerate() {
+            align = paragraph.align;
             for inline in paragraph.inlines {
                 match inline {
                     Inline::Text(run) => {
@@ -519,7 +552,10 @@ impl Document {
                                 },
                             );
                             if pieces.peek().is_some() {
-                                paragraphs.push(Paragraph::new(std::mem::take(&mut current)));
+                                paragraphs.push(Paragraph {
+                                    inlines: std::mem::take(&mut current),
+                                    align,
+                                });
                             }
                         }
                     }
@@ -547,10 +583,16 @@ impl Document {
                 }
             }
             if index + 1 < count {
-                paragraphs.push(Paragraph::new(std::mem::take(&mut current)));
+                paragraphs.push(Paragraph {
+                    inlines: std::mem::take(&mut current),
+                    align,
+                });
             }
         }
-        paragraphs.push(Paragraph::new(current));
+        paragraphs.push(Paragraph {
+            inlines: current,
+            align,
+        });
         self.paragraphs = paragraphs;
     }
 
@@ -577,6 +619,7 @@ impl Document {
                 .paragraphs
                 .iter()
                 .map(|p| Paragraph {
+                    align: p.align,
                     inlines: p
                         .inlines
                         .iter()
@@ -622,11 +665,17 @@ impl Document {
                     Inline::Marker(marker) => inlines.push(Inline::Marker(marker.clone())),
                 }
                 if left == 0 {
-                    paragraphs.push(Paragraph::new(inlines));
+                    paragraphs.push(Paragraph {
+                        inlines,
+                        align: paragraph.align,
+                    });
                     break 'outer;
                 }
             }
-            paragraphs.push(Paragraph::new(inlines));
+            paragraphs.push(Paragraph {
+                inlines,
+                align: paragraph.align,
+            });
         }
         let mut doc = Document { paragraphs };
         doc.normalize();
@@ -670,7 +719,10 @@ impl Document {
             if paragraphs.is_empty() && units == 0 {
                 continue;
             }
-            paragraphs.push(Paragraph::new(inlines));
+            paragraphs.push(Paragraph {
+                inlines,
+                align: paragraph.align,
+            });
         }
         let mut doc = Document { paragraphs };
         doc.normalize();

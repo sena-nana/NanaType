@@ -284,3 +284,29 @@ fn vts_markers_survive_json() {
     assert!(json.contains(r#""marker":"vts""#), "{json}");
     assert_eq!(serde_json::from_str::<Document>(&json).unwrap(), doc);
 }
+
+#[test]
+fn paragraph_attributes_survive_document_operations_and_old_json() {
+    let mut doc = Document::plain("first\nsecond\n");
+    for paragraph in &mut doc.paragraphs {
+        paragraph.align = Some(crate::ParagraphAlign::Center);
+    }
+    doc.normalize();
+    for candidate in [
+        doc.clone(),
+        doc.prefix(2),
+        doc.suffix(2),
+        doc.without_markers(),
+    ] {
+        assert!(
+            candidate
+                .paragraphs
+                .iter()
+                .all(|p| p.align == Some(crate::ParagraphAlign::Center))
+        );
+        let json = serde_json::to_string(&candidate).unwrap();
+        assert_eq!(serde_json::from_str::<Document>(&json).unwrap(), candidate);
+    }
+    let old: Document = serde_json::from_str(r#"{"paragraphs":[{"inlines":[]}]}"#).unwrap();
+    assert_eq!(old.paragraphs[0].align, None);
+}

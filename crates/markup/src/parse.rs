@@ -45,10 +45,10 @@ enum Attr {
     Underline(bool),
     Strike(bool),
     Color(Rgba8),
-    Size(Size),
+    Size(Option<Size>),
     Stroke(Stroke),
     Shadow(Shadow),
-    Font(FontSlot),
+    Font(Option<FontSlot>),
     Continuous(Continuous),
     Entrance(Entrance),
     Pace(Pace),
@@ -73,6 +73,9 @@ struct Builder<'a> {
     ruby: Option<RubyOpen>,
     paragraphs: Vec<Paragraph>,
     current: Vec<Inline>,
+    align: Option<nanatype_model::ParagraphAlign>,
+    align_open: Vec<(Option<nanatype_model::ParagraphAlign>, Range<usize>)>,
+    next_align: Option<Option<nanatype_model::ParagraphAlign>>,
     text: String,
     meta: LineMeta,
     started: bool,
@@ -87,6 +90,9 @@ pub fn parse(source: &str) -> Parsed {
         ruby: None,
         paragraphs: Vec::new(),
         current: Vec::new(),
+        align: None,
+        align_open: Vec::new(),
+        next_align: None,
         text: String::new(),
         meta: LineMeta::default(),
         started: false,
@@ -152,8 +158,13 @@ impl Builder<'_> {
                 return;
             }
             self.flush();
-            self.paragraphs
-                .push(Paragraph::new(std::mem::take(&mut self.current)));
+            self.paragraphs.push(Paragraph {
+                inlines: std::mem::take(&mut self.current),
+                align: self.align,
+            });
+            if let Some(align) = self.next_align.take() {
+                self.align = align;
+            }
             self.started = true;
             return;
         }
@@ -185,10 +196,10 @@ impl Builder<'_> {
                 Attr::Underline(v) => style.underline = Some(*v),
                 Attr::Strike(v) => style.strike = Some(*v),
                 Attr::Color(c) => style.color = Some(*c),
-                Attr::Size(s) => style.size = Some(*s),
+                Attr::Size(s) => style.size = *s,
                 Attr::Stroke(s) => style.stroke = Some(*s),
                 Attr::Shadow(s) => style.shadow = Some(*s),
-                Attr::Font(f) => style.font = Some(f.clone()),
+                Attr::Font(f) => style.font = f.clone(),
                 Attr::Continuous(c) => {
                     effects.continuous.retain(|e| e.kind != c.kind);
                     effects.continuous.push(*c);
@@ -226,6 +237,34 @@ impl Builder<'_> {
         };
         if tag.name.starts_with('@') {
             self.header(&tag, range);
+            return;
+        }
+        if tag.name == "align" {
+            if self.ruby.is_some() {
+                self.diag(range, DiagnosticKind::IgnoredInRuby(tag.name));
+                return;
+            }
+            self.flush();
+            if tag.close {
+                if let Some((previous, _)) = self.align_open.pop() {
+                    // Closing an aligned block keeps this paragraph's authored value;
+                    // the outer value becomes active after the next newline.
+                    self.next_align = Some(previous);
+                } else {
+                    self.diag(range.clone(), DiagnosticKind::UnmatchedClose(tag.name));
+                    self.literal(range);
+                }
+            } else if let Some(align) = tag
+                .value
+                .as_deref()
+                .and_then(nanatype_model::ParagraphAlign::from_key)
+            {
+                self.align_open.push((self.align, range));
+                self.align = Some(align);
+                self.next_align = None;
+            } else {
+                self.bad_value(&tag, range);
+            }
             return;
         }
         if tag.close {
@@ -473,6 +512,9 @@ impl Builder<'_> {
     }
 
     fn finish(mut self) -> Parsed {
+        for (_, range) in std::mem::take(&mut self.align_open) {
+            self.diag(range, DiagnosticKind::Unclosed("align".into()));
+        }
         if let Some(ruby) = self.ruby.take() {
             self.diag(ruby.range.clone(), DiagnosticKind::Unclosed("ruby".into()));
             let mut base = ruby.run;
@@ -493,8 +535,10 @@ impl Builder<'_> {
         for (range, kind) in unclosed {
             self.diag(range, kind);
         }
-        self.paragraphs
-            .push(Paragraph::new(std::mem::take(&mut self.current)));
+        self.paragraphs.push(Paragraph {
+            inlines: std::mem::take(&mut self.current),
+            align: self.align,
+        });
         let doc = Document {
             paragraphs: self.paragraphs,
         }
@@ -537,10 +581,22 @@ fn span_attr(tag: &Tag) -> Option<Option<Attr>> {
         "u" => Some(value::flag(v).map(Attr::Underline)),
         "s" => Some(value::flag(v).map(Attr::Strike)),
         "color" => with(|v| v.parse().ok().map(Attr::Color)),
-        "size" => with(|v| value::size(v).map(Attr::Size)),
+        "size" => with(|v| {
+            if v == "inherit" {
+                Some(Attr::Size(None))
+            } else {
+                value::size(v).map(|s| Attr::Size(Some(s)))
+            }
+        }),
         "stroke" => with(|v| value::stroke(v).map(Attr::Stroke)),
         "shadow" => with(|v| value::shadow(v).map(Attr::Shadow)),
-        "font" => with(|v| value::font(v).map(Attr::Font)),
+        "font" => with(|v| {
+            if v == "inherit" {
+                Some(Attr::Font(None))
+            } else {
+                value::font(v).map(|f| Attr::Font(Some(f)))
+            }
+        }),
         "speed" => with(|v| value::pace(v).map(Attr::Pace)),
         "instant" => Some(v.is_none().then_some(Attr::Pace(Pace::Instant))),
         name => {

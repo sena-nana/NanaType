@@ -1435,7 +1435,18 @@ impl App {
                 RichEditCommand::SetAttrs(s)
             }
             Tool::Color(c) => RichEditCommand::SetAttrs(RichSpanStyle::new().color(paint(c))),
-            Tool::Size(m) => RichEditCommand::SetAttrs(RichSpanStyle::new().size(look.size * m)),
+            Tool::Size(Some(nanatype_model::Size::Em(em))) => {
+                RichEditCommand::SetAttrs(RichSpanStyle::new().size_em(em))
+            }
+            Tool::Size(Some(nanatype_model::Size::Px(px))) => {
+                RichEditCommand::SetAttrs(RichSpanStyle::new().size(px))
+            }
+            Tool::Size(None) => RichEditCommand::ClearAttrs(RichAttrMask::SIZE),
+            Tool::Font(None) => RichEditCommand::ClearAttrs(RichAttrMask::FAMILY),
+            Tool::Font(Some(font)) => RichEditCommand::SetAttrs(look.font_style(&font)),
+            Tool::Align(align) => {
+                RichEditCommand::SetParagraphAlignment(align.map(crate::ui::rich::align_to_rich))
+            }
             Tool::Stroke(st) => {
                 let (w, c) = st
                     .map(|s| (s.width_px, s.color))
@@ -2500,13 +2511,51 @@ pub(crate) fn apply_source_markup(src: &mut crate::ui::Source, edit: MarkupEdit)
             src.selection = (a + tag.len(), a + tag.len());
             src.revision += 1;
         }
+        MarkupEdit::Align(align) => {
+            let (a, b) = clamp_sel(&src.text, src.selection);
+            let first = src.text[..a].bytes().filter(|v| *v == b'\n').count();
+            let last_byte = if b > a { b - 1 } else { b };
+            let last = src.text.as_bytes()[..last_byte]
+                .iter()
+                .filter(|v| **v == b'\n')
+                .count();
+            let mut parsed = parse(&src.text);
+            for paragraph in parsed.doc.paragraphs.iter_mut().take(last + 1).skip(first) {
+                paragraph.align = align;
+            }
+            src.text = nanatype_markup::serialize_line(&parsed.doc, &parsed.meta);
+            let start = src
+                .text
+                .split_inclusive('\n')
+                .take(first)
+                .map(str::len)
+                .sum::<usize>();
+            let end = src
+                .text
+                .split_inclusive('\n')
+                .take(last + 1)
+                .map(str::len)
+                .sum::<usize>()
+                .min(src.text.len());
+            src.selection = (start, end);
+            src.revision += 1;
+        }
         MarkupEdit::ClearFormat => {
             let (a, b) = clamp_sel(&src.text, src.selection);
             let (a, b) = if a == b { (0, src.text.len()) } else { (a, b) };
             let plain = strip_tags(&src.text[a..b]);
             src.text.replace_range(a..b, &plain);
             src.selection = (a, a + plain.len());
-            src.revision += 1;
+            if parse(&src.text)
+                .doc
+                .paragraphs
+                .iter()
+                .any(|p| p.align.is_some())
+            {
+                apply_source_markup(src, MarkupEdit::Align(None));
+            } else {
+                src.revision += 1;
+            }
         }
     }
 }
@@ -2527,6 +2576,9 @@ fn clamp_sel(text: &str, (a, b): (usize, usize)) -> (usize, usize) {
 fn strip_tags(text: &str) -> String {
     let parsed = parse(text);
     let mut doc = parsed.doc;
+    for paragraph in &mut doc.paragraphs {
+        paragraph.align = None;
+    }
     for run in doc.runs_mut() {
         run.style = Default::default();
         run.effects = Default::default();
@@ -2587,7 +2639,22 @@ pub(crate) fn markup_for(tool: &crate::msg::Tool) -> Option<MarkupEdit> {
         Tool::Underline => wrap("[u]".into(), "[/u]"),
         Tool::Strike => wrap("[s]".into(), "[/s]"),
         Tool::Color(c) => wrap(format!("[color={c}]"), "[/color]"),
-        Tool::Size(m) => wrap(format!("[size={m}]"), "[/size]"),
+        Tool::Size(Some(nanatype_model::Size::Em(em))) => wrap(format!("[size={em}]"), "[/size]"),
+        Tool::Size(Some(nanatype_model::Size::Px(px))) => wrap(format!("[size={px}px]"), "[/size]"),
+        Tool::Size(None) => wrap("[size=inherit]".into(), "[/size]"),
+        Tool::Font(font) => {
+            let value = match font {
+                None => "inherit".into(),
+                Some(nanatype_model::FontSlot::Body) => "body".into(),
+                Some(nanatype_model::FontSlot::Name) => "name".into(),
+                Some(nanatype_model::FontSlot::Accent) => "accent".into(),
+                Some(nanatype_model::FontSlot::Family(f)) => {
+                    format!("\"{}\"", f.replace('\\', "\\\\").replace('\"', "\\\""))
+                }
+            };
+            wrap(format!("[font={value}]"), "[/font]")
+        }
+        Tool::Align(align) => MarkupEdit::Align(*align),
         Tool::Stroke(Some(s)) => wrap(format!("[stroke={},{}]", s.color, s.width_px), "[/stroke]"),
         Tool::Shadow(Some(s)) => wrap(
             format!("[shadow={},{},{},{}]", s.color, s.dx, s.dy, s.blur),
@@ -2679,5 +2746,34 @@ mod tests {
             true
         ));
         assert_eq!(source.text, "text only");
+    }
+}
+
+#[cfg(test)]
+mod typography_tests {
+    use super::*;
+    #[test]
+    fn source_alignment_targets_whole_paragraphs_and_preserves_meta_and_styles() {
+        let mut src = crate::ui::Source {
+            text: "[@auto=50][b]one[/b]\n[size=32px]two[/size]\n".into(),
+            selection: (0, 25),
+            revision: 0,
+        };
+        let boundary = src.text.find('\n').unwrap() + 1;
+        src.selection = (1, boundary);
+        let before = parse(&src.text);
+        apply_source_markup(
+            &mut src,
+            MarkupEdit::Align(Some(nanatype_model::ParagraphAlign::Center)),
+        );
+        let after = parse(&src.text);
+        assert_eq!(after.meta, before.meta);
+        assert_eq!(
+            after.doc.paragraphs[0].align,
+            Some(nanatype_model::ParagraphAlign::Center)
+        );
+        assert_eq!(after.doc.paragraphs[1], before.doc.paragraphs[1]);
+        apply_source_markup(&mut src, MarkupEdit::Align(None));
+        assert_eq!(parse(&src.text).doc, before.doc);
     }
 }

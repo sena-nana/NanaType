@@ -393,3 +393,43 @@ fn pulse_flicker_and_nested_continuous_effects_roundtrip() {
     let markup = crate::serialize(&parsed.doc);
     assert_eq!(parse(&markup).doc, parsed.doc);
 }
+
+#[test]
+fn paragraph_alignment_empty_blocks_and_nested_resets_roundtrip() {
+    let parsed = parse("[align=center]一\n二[/align]\n默认\n[align=end][/align]");
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+    assert_eq!(
+        parsed
+            .doc
+            .paragraphs
+            .iter()
+            .map(|p| p.align)
+            .collect::<Vec<_>>(),
+        vec![
+            Some(nanatype_model::ParagraphAlign::Center),
+            Some(nanatype_model::ParagraphAlign::Center),
+            None,
+            Some(nanatype_model::ParagraphAlign::End)
+        ]
+    );
+    assert_eq!(parse(&serialize(&parsed.doc)).doc, parsed.doc);
+    let doc = parse(
+        "[size=32px]a[size=inherit]b[/size]c[/size][font=accent]d[font=inherit]e[/font]f[/font]",
+    )
+    .doc;
+    let runs = doc.paragraphs[0]
+        .inlines
+        .iter()
+        .filter_map(|i| {
+            if let nanatype_model::Inline::Text(t) = i {
+                Some(t)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(runs[1].style.size, None);
+    assert_eq!(runs[4].style.font, None);
+    assert_eq!(parse(&serialize(&doc)).doc, doc);
+    assert!(parse("[align=bad]x[/align]").diagnostics.len() >= 1);
+}

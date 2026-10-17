@@ -44,6 +44,23 @@ pub struct Look {
     pub ink: Option<BoxInk>,
 }
 
+impl Look {
+    /// Resolve the authored font identically for toolbar edits and rendering.
+    pub fn font_style(&self, font: &FontSlot) -> RichSpanStyle {
+        let (family, alias) = match font {
+            FontSlot::Body => (self.body.as_ref(), Some("body")),
+            FontSlot::Name => (self.name.as_ref(), Some("name")),
+            FontSlot::Accent => (self.accent.as_ref(), Some("accent")),
+            FontSlot::Family(f) => (Some(f), None),
+        };
+        let style = RichSpanStyle::new().family(family.cloned().unwrap_or_default());
+        match alias {
+            Some(alias) => style.family_alias(alias),
+            None => style,
+        }
+    }
+}
+
 /// What a run's own colour, glow and the skin's text shadow are measured
 /// against on the display: the box colour and the skin's inks.
 #[derive(Debug, Clone, PartialEq)]
@@ -578,7 +595,10 @@ fn span_style(style: &Style, effects: &Effects, pace: Pace, look: &Look) -> Rich
         s = s.color(color(c));
     }
     if let Some(size) = style.size {
-        s = s.size(size.resolve(look.size));
+        s = match size {
+            Size::Em(em) => s.size_em(em),
+            Size::Px(px) => s.size(px),
+        };
     }
     match style.bold {
         Some(true) => s = s.weight(700.max(look.weight + 200).min(900)),
@@ -588,15 +608,10 @@ fn span_style(style: &Style, effects: &Effects, pace: Pace, look: &Look) -> Rich
     if let Some(i) = style.italic {
         s = s.italic(i);
     }
-    let family = match &style.font {
-        Some(FontSlot::Name) => look.name.clone(),
-        Some(FontSlot::Accent) => look.accent.clone(),
-        Some(FontSlot::Family(f)) => Some(f.clone()),
-        Some(FontSlot::Body) | None => None,
-    };
-    if let Some(f) = family {
-        s = s.family(f);
+    if let Some(font) = &style.font {
+        s = s.overlay(&look.font_style(font));
     }
+
     if style.underline == Some(true) {
         s = s.underline();
     }
@@ -747,6 +762,11 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
         }
     }
     let mut rich = b.build();
+    for (i, para) in doc.paragraphs.iter().enumerate() {
+        if let Some(align) = para.align {
+            rich.set_paragraph_alignment(i, Some(align_to_rich(align)));
+        }
+    }
     for (start, style) in object_spans {
         rich.set_span(start..start + replacement, style);
     }
@@ -755,7 +775,7 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
 
 // ---- rich text → document -------------------------------------------------
 
-fn style_back(s: Option<&RichSpanStyle>, look: &Look) -> (Style, Effects, Pace) {
+fn style_back(s: Option<&RichSpanStyle>, _look: &Look) -> (Style, Effects, Pace) {
     let Some(s) = s else {
         return (Style::default(), Effects::default(), Pace::Inherit);
     };
@@ -765,24 +785,22 @@ fn style_back(s: Option<&RichSpanStyle>, look: &Look) -> (Style, Effects, Pace) 
         let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
         style.color = Some(Rgba8::rgba(q(r), q(g), q(b), q(a)));
     }
-    if let Some(px) = s.shape.size_px {
-        let em = (px / look.size.max(1.0) * 1000.0).round() / 1000.0;
-        if (em - 1.0).abs() > 0.001 {
-            style.size = Some(Size::Em(em));
-        }
-    }
+    style.size = s
+        .shape
+        .size_em
+        .map(Size::Em)
+        .or_else(|| s.shape.size_px.map(Size::Px));
     if let Some(w) = s.shape.weight {
         style.bold = Some(w >= 600);
     }
     style.italic = s.shape.italic;
     if let Some(f) = &s.shape.family {
         let f = f.to_string();
-        style.font = Some(if Some(&f) == look.accent.as_ref() {
-            FontSlot::Accent
-        } else if Some(&f) == look.name.as_ref() {
-            FontSlot::Name
-        } else {
-            FontSlot::Family(f)
+        style.font = Some(match s.shape.family_alias.as_deref() {
+            Some("body") => FontSlot::Body,
+            Some("name") => FontSlot::Name,
+            Some("accent") => FontSlot::Accent,
+            _ => FontSlot::Family(f),
         });
     }
     if let Some(TextDecorationLine {
@@ -905,6 +923,9 @@ pub fn from_rich(rich: &RichText, look: &Look) -> Document {
         }));
         pos = end;
     }
+    for (i, para) in paragraphs.iter_mut().enumerate() {
+        para.align = rich.paragraph_alignment(i).and_then(align_from_rich);
+    }
     Document { paragraphs }.normalized()
 }
 
@@ -1015,8 +1036,40 @@ mod tests {
     }
 
     #[test]
+    fn changing_skins_preserves_fixed_sizes_and_authored_font_roles() {
+        let doc = nanatype_markup::parse("[size=32px][font=name]固定[/font][/size][size=1.5][font=\"Name Font\"]相对[/font][/size]").doc;
+        let urls = HashMap::new();
+        let mut next = look();
+        next.size = 40.0;
+        next.name = Some("New Name Font".into());
+        for look in [look(), next] {
+            let rich = to_rich(
+                &doc,
+                &Env {
+                    look: &look,
+                    urls: &urls,
+                    editor: true,
+                    locale: Locale::ZhCn,
+                },
+            );
+            assert_eq!(from_rich(&rich, &look), doc);
+            assert_eq!(
+                rich.style_at(0).unwrap().shape.family.as_deref(),
+                look.name.as_deref()
+            );
+            let last = rich.spans().iter().last().unwrap().1;
+            assert_eq!(last.shape.family.as_deref(), Some("Name Font"));
+            assert_eq!(last.shape.size_em, Some(1.5));
+        }
+    }
+
+    #[test]
     fn documents_survive_the_editor() {
         round_trip("你好[b]粗[/b][i]斜[/i][u]下[/u][s]删[/s]");
+        round_trip(
+            "[align=center][size=32px][font=body]固定[/font][/size][/align]\n[align=end][/align]",
+        );
+        round_trip("[size=1]倍率[/size][font=name]槽[/font][font=\"Name Font\"]同名字体[/font]");
         round_trip("[color=#e86a92]红[/color][size=1.5]大[/size][font=accent]装[/font]");
         round_trip("[stroke=#ffffff,2]描[/stroke][shadow=#000000aa,2,2,4]影[/shadow]");
         round_trip(
@@ -1276,5 +1329,28 @@ mod effect_cache_tests {
         let table = effect_table(&defaults, false);
         assert_eq!(table[index].0.len(), 2);
         assert!(effect_table(&defaults, true)[index].0.is_empty());
+    }
+}
+
+pub fn align_to_rich(align: nanatype_model::ParagraphAlign) -> nana_ui_core::TextAlignSpec {
+    match align {
+        nanatype_model::ParagraphAlign::Start => nana_ui_core::TextAlignSpec::Start,
+        nanatype_model::ParagraphAlign::Center => nana_ui_core::TextAlignSpec::Center,
+        nanatype_model::ParagraphAlign::End => nana_ui_core::TextAlignSpec::End,
+    }
+}
+
+pub fn align_from_rich(
+    align: nana_ui_core::TextAlignSpec,
+) -> Option<nanatype_model::ParagraphAlign> {
+    match align {
+        nana_ui_core::TextAlignSpec::Start | nana_ui_core::TextAlignSpec::Left => {
+            Some(nanatype_model::ParagraphAlign::Start)
+        }
+        nana_ui_core::TextAlignSpec::Center => Some(nanatype_model::ParagraphAlign::Center),
+        nana_ui_core::TextAlignSpec::End | nana_ui_core::TextAlignSpec::Right => {
+            Some(nanatype_model::ParagraphAlign::End)
+        }
+        _ => None,
     }
 }

@@ -1482,3 +1482,99 @@ fn base64(bytes: &[u8]) -> String {
     }
     out
 }
+
+#[test]
+fn typography_popovers_keep_selection_and_dispatch_authored_attributes() {
+    use nanatype_model::{FontSlot, ParagraphAlign, Size};
+    for (panel, choice, expected) in [
+        (
+            "tb-size",
+            "tb-apply-pixels",
+            Tool::Size(Some(Size::Px(28.0))),
+        ),
+        (
+            "tb-font",
+            "tb-font-accent",
+            Tool::Font(Some(FontSlot::Accent)),
+        ),
+        (
+            "tb-align",
+            "tb-align-center",
+            Tool::Align(Some(ParagraphAlign::Center)),
+        ),
+    ] {
+        let mut f = Fixture::new(false, false, "中文\nsecond");
+        f.sync(true, false, vec![RichEditCommand::Select(0..6)]);
+        let selection = f.selection();
+        let before = f.text();
+        let more = f.ui.now_t("tb-more");
+        let button = f
+            .session
+            .accessibility_dump()
+            .into_iter()
+            .find(|n| n.label.as_deref() == Some(more.as_str()))
+            .unwrap()
+            .bounds;
+        f.click(
+            button.x + button.width / 2.0,
+            button.y + button.height / 2.0,
+        );
+        let label = f.ui.now_t(panel);
+        let button = f
+            .session
+            .accessibility_dump()
+            .into_iter()
+            .find(|n| n.role == "menu-item" && n.label.as_deref() == Some(label.as_str()))
+            .unwrap()
+            .bounds;
+        f.click(
+            button.x + button.width / 2.0,
+            button.y + button.height / 2.0,
+        );
+        assert_eq!(f.text(), before, "opening {panel} must not change text");
+        assert_eq!(
+            f.selection(),
+            selection,
+            "opening {panel} must retain selection"
+        );
+        f.input.advance(Duration::from_millis(300));
+        f.session
+            .document_mut()
+            .context_mut()
+            .advance_animations(f.input.now());
+        f.session.flush().unwrap();
+        if let Some(out) = std::env::var_os("NANATYPE_TYPOGRAPHY_CAPTURE_DIR") {
+            let out = std::path::PathBuf::from(out);
+            std::fs::create_dir_all(&out).unwrap();
+            f.session
+                .screenshot_png(out.join(format!("{panel}.png")))
+                .unwrap();
+        }
+        let label = f.ui.now_t(choice);
+        let button = f
+            .session
+            .accessibility_dump()
+            .into_iter()
+            .find(|n| n.label.as_deref() == Some(label.as_str()))
+            .unwrap()
+            .bounds;
+        f.click(
+            button.x + button.width / 2.0,
+            button.y + button.height / 2.0,
+        );
+        let tool = f
+            .pending
+            .drain(..)
+            .find_map(|m| if let Msg::Tool(t) = m { Some(t) } else { None })
+            .expect("panel choice dispatches a tool");
+        if panel == "tb-size" {
+            let Tool::Size(Some(Size::Px(px))) = tool else {
+                panic!("pixel size command");
+            };
+            assert!(px >= 4.0 && px <= 400.0);
+        } else {
+            assert_eq!(tool, expected);
+        }
+        assert_eq!(f.selection(), selection);
+    }
+}

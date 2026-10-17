@@ -146,6 +146,10 @@ pub fn serialize(doc: &Document) -> String {
         if index > 0 {
             w.out.push('\n');
         }
+        if let Some(align) = paragraph.align {
+            w.transition(&[]);
+            w.out.push_str(&format!("[align={}]", align.key()));
+        }
         for inline in &paragraph.inlines {
             match inline {
                 Inline::Text(run) => {
@@ -206,6 +210,10 @@ pub fn serialize(doc: &Document) -> String {
                     w.out.push(']');
                 }
             }
+        }
+        if paragraph.align.is_some() {
+            w.transition(&[]);
+            w.out.push_str("[/align]");
         }
     }
     w.transition(&[]);

@@ -11,10 +11,11 @@ use nana_ui::runtime::view::{
 };
 use nana_ui::runtime::{
     ActionMenu, ActionMenuItem, Activate, Button, ColorChanged, ColorField, Divider,
-    FocusWithinChanged, IconButton, IconGlyph, NodeStyle, Popover, PopoverClosed, PopoverToggled,
-    RangeField, RangeInput, RichAttrMask, RichSelectionAttrs, RichTextEditor, RichTextEditorEvent,
-    ScrollAxes, ScrollView, ScrollViewportChanged, SegmentedControl, SizeChanged, Stack, Switch,
-    Text, TextArea, TextChanged, TextInput, TextSubmitted, ToggleChanged,
+    FocusWithinChanged, IconButton, IconGlyph, NodeStyle, NumberChanged, NumberInput, Popover,
+    PopoverClosed, PopoverToggled, RichAttrMask, RichSelectionAttrs, RichTextEditor,
+    RichTextEditorEvent, ScrollAxes, ScrollView, ScrollViewportChanged, SegmentedControl,
+    SizeChanged, Stack, Switch, Text, TextArea, TextChanged, TextInput, TextSubmitted,
+    ToggleChanged,
 };
 use nana_ui::theme::space;
 use nana_ui::{ButtonKind, ControlSize, PopoverPlacement};
@@ -26,7 +27,7 @@ use nanatype_core::Cmd;
 use nanatype_i18n::{Arg, Locale};
 use nanatype_model::{
     AssetRef, Atom, AtomKind, ContinuousKind, EntranceKind, Inline, Marker, Pace, Rgba8, Shadow,
-    Stroke, VtsAction,
+    Size, Stroke, VtsAction,
 };
 use nanatype_settings::{InputMode, SendKey, Settings};
 
@@ -407,38 +408,196 @@ fn color_panel(ui: Ui, open: Signal<bool>) -> AnyView {
         .into_any()
 }
 
-fn size_panel(ui: Ui, open: Signal<bool>) -> AnyView {
-    let value = signal(1.5_f64);
-    let presets: Vec<AnyView> = [0.75_f32, 1.25, 1.5, 2.0]
-        .into_iter()
-        .map(|v| {
-            widget(Button::new(format!("{v}×")).size(ControlSize::Small))
-                .on_cx(move |_, _: &Activate, cx| {
-                    open.set(false);
-                    cx.dispatch_program_all(act(Tool::Size(v)));
-                })
-                .into_any()
+fn typography_current(ui: Ui, value: &str) -> String {
+    I18N.tr_in(
+        ui.locale.get_untracked(),
+        "tb-current-value",
+        &[("value", value.into())],
+    )
+}
+
+fn panel_action(
+    label: String,
+    open: Signal<bool>,
+    action: impl Fn() -> Option<Tool> + Send + 'static,
+) -> AnyView {
+    widget(Button::new(label).size(ControlSize::Small))
+        .on_cx(move |_, _: &Activate, cx| {
+            if let Some(tool) = action() {
+                open.set(false);
+                cx.dispatch_program_all(act(tool));
+            }
         })
-        .collect();
+        .into_any()
+}
+
+fn size_panel(ui: Ui, open: Signal<bool>) -> AnyView {
+    dynamic(
+        move || open.get(),
+        move |_| {
+            let attrs = ui.sel_attrs.get_untracked();
+            let base = ui.skin.with_untracked(|s| s.dialogue.text.size);
+            let em = attrs
+                .style
+                .shape
+                .size_em
+                .unwrap_or_else(|| attrs.style.shape.size_px.map_or(1.0, |px| px / base));
+            let relative = signal(f64::from(em.clamp(0.5, 3.0)));
+            let pixels = signal(f64::from(
+                attrs
+                    .style
+                    .shape
+                    .size_px
+                    .unwrap_or(em * base)
+                    .clamp(4.0, 400.0),
+            ));
+            let current = if attrs.mixed.contains(RichAttrMask::SIZE) {
+                ui.now_t("tb-mixed")
+            } else if let Some(em) = attrs.style.shape.size_em {
+                format!("{em}×")
+            } else if let Some(px) = attrs.style.shape.size_px {
+                format!("{px}px")
+            } else {
+                ui.now_t("tb-inherit")
+            };
+            let presets = [0.75_f32, 1.25, 1.5, 2.0]
+                .into_iter()
+                .map(|v| {
+                    panel_action(format!("{v}×"), open, move || {
+                        Some(Tool::Size(Some(Size::Em(v))))
+                    })
+                })
+                .collect::<Vec<_>>();
+            widget(Stack::column(8.0).padding(4.0))
+                .children((
+                    widget(Text::new(typography_current(ui, &current))).key("size-current"),
+                    widget(Stack::row(6.0)).children(presets),
+                    widget(Text::new(format!("{} (×)", ui.now_t("tb-size-relative")))),
+                    widget(
+                        NumberInput::continuous(relative.get_untracked())
+                            .range(0.5, 3.0)
+                            .step(0.05)
+                            .label(ui.now_t("tb-size-relative")),
+                    )
+                    .key("size-relative")
+                    .on(move |e: &NumberChanged| relative.set(e.value)),
+                    panel_action(ui.now_t("tb-apply-relative"), open, move || {
+                        Some(Tool::Size(Some(Size::Em(relative.get_untracked() as f32))))
+                    }),
+                    widget(Text::new(format!("{} (px)", ui.now_t("tb-size-pixels")))),
+                    widget(
+                        NumberInput::continuous(pixels.get_untracked())
+                            .range(4.0, 400.0)
+                            .step(1.0)
+                            .label(ui.now_t("tb-size-pixels")),
+                    )
+                    .key("size-pixels")
+                    .on(move |e: &NumberChanged| pixels.set(e.value)),
+                    panel_action(ui.now_t("tb-apply-pixels"), open, move || {
+                        Some(Tool::Size(Some(Size::Px(pixels.get_untracked() as f32))))
+                    }),
+                    panel_action(ui.now_t("tb-inherit"), open, || Some(Tool::Size(None))),
+                ))
+                .into_any()
+        },
+    )
+    .into_any()
+}
+
+fn font_panel(ui: Ui, open: Signal<bool>) -> AnyView {
+    dynamic(
+        move || open.get(),
+        move |_| {
+            use nanatype_model::FontSlot;
+            let attrs = ui.sel_attrs.get_untracked();
+            let current = if attrs.mixed.contains(RichAttrMask::FAMILY) {
+                ui.now_t("tb-mixed")
+            } else if let Some(alias) = attrs.style.shape.family_alias.as_deref() {
+                ui.now_t(&format!("tb-font-{alias}"))
+            } else {
+                attrs
+                    .style
+                    .shape
+                    .family
+                    .as_ref()
+                    .map_or_else(|| ui.now_t("tb-inherit"), |f| f.to_string())
+            };
+            let initial = if attrs.style.shape.family_alias.is_none() {
+                attrs.style.shape.family.as_deref().unwrap_or("")
+            } else {
+                ""
+            };
+            let family = signal(initial.to_owned());
+            let selected = move || {
+                let name = family.get_untracked();
+                (!name.trim().is_empty())
+                    .then(|| Tool::Font(Some(FontSlot::Family(name.trim().into()))))
+            };
+            let choices = [
+                ("tb-inherit", None),
+                ("tb-font-body", Some(FontSlot::Body)),
+                ("tb-font-name", Some(FontSlot::Name)),
+                ("tb-font-accent", Some(FontSlot::Accent)),
+            ]
+            .into_iter()
+            .map(|(key, font)| {
+                panel_action(ui.now_t(key), open, move || Some(Tool::Font(font.clone())))
+            })
+            .collect::<Vec<_>>();
+            widget(Stack::column(8.0).padding(4.0))
+                .children((
+                    widget(Text::new(typography_current(ui, &current))).key("font-current"),
+                    choices,
+                    widget(TextInput::new(initial).placeholder(ui.now_t("tb-font-family")))
+                        .key("font-family")
+                        .on(move |e: &TextChanged| family.set(e.value.to_string()))
+                        .on_cx(move |_, _: &TextSubmitted, cx| {
+                            if let Some(tool) = selected() {
+                                open.set(false);
+                                cx.dispatch_program_all(act(tool));
+                            }
+                        }),
+                    panel_action(ui.now_t("common-apply"), open, selected),
+                ))
+                .into_any()
+        },
+    )
+    .into_any()
+}
+
+fn alignment_panel(ui: Ui, open: Signal<bool>) -> AnyView {
+    use nanatype_model::ParagraphAlign;
+    let choices = [
+        ("tb-inherit", None),
+        ("tb-align-start", Some(ParagraphAlign::Start)),
+        ("tb-align-center", Some(ParagraphAlign::Center)),
+        ("tb-align-end", Some(ParagraphAlign::End)),
+    ]
+    .into_iter()
+    .map(|(key, align)| panel_action(ui.now_t(key), open, move || Some(Tool::Align(align))))
+    .collect::<Vec<_>>();
     widget(Stack::column(8.0).padding(4.0))
         .children((
-            widget(Stack::row(6.0)).children(presets),
-            widget(
-                RangeField::new(1.5, 0.5, 3.0, 0.05)
-                    .label(ui.now_t("tb-size"))
-                    .unit("×"),
-            )
-            .on(move |e: &RangeInput| value.set(e.value)),
-            widget(
-                Button::new(ui.now_t("common-apply"))
-                    .kind(ButtonKind::Primary)
-                    .size(ControlSize::Small),
-            )
-            .on_cx(move |_, _: &Activate, cx| {
-                let v = (value.get_untracked() * 100.0).round() / 100.0;
-                open.set(false);
-                cx.dispatch_program_all(act(Tool::Size(v as f32)));
-            }),
+            widget(Text::new(""))
+                .key("alignment-current")
+                .bind(move |t: &mut Text| {
+                    let attrs = ui.sel_attrs.get();
+                    let key = if attrs.paragraph_alignment_mixed {
+                        "tb-mixed"
+                    } else {
+                        match attrs
+                            .paragraph_alignment
+                            .and_then(super::rich::align_from_rich)
+                        {
+                            None => "tb-inherit",
+                            Some(ParagraphAlign::Start) => "tb-align-start",
+                            Some(ParagraphAlign::Center) => "tb-align-center",
+                            Some(ParagraphAlign::End) => "tb-align-end",
+                        }
+                    };
+                    t.value = typography_current(ui, &ui.now_t(key));
+                }),
+            choices,
         ))
         .into_any()
 }
@@ -777,6 +936,8 @@ fn toolbar(ui: Ui) -> AnyView {
         let [
             color_open,
             size_open,
+            font_open,
+            align_open,
             ruby_open,
             fx_open,
             pace_open,
@@ -965,6 +1126,20 @@ fn toolbar(ui: Ui) -> AnyView {
                 size_open,
                 size_panel(ui, size_open),
             ),
+            popover(
+                ti::TYPOGRAPHY,
+                t("tb-font"),
+                260.0,
+                font_open,
+                font_panel(ui, font_open),
+            ),
+            popover(
+                ti::ALIGN_CENTER,
+                t("tb-align"),
+                200.0,
+                align_open,
+                alignment_panel(ui, align_open),
+            ),
         ];
         let stroke = popover(
             ti::BORDER_OUTER,
@@ -1049,6 +1224,8 @@ fn toolbar(ui: Ui) -> AnyView {
                 items.extend([
                     open_item(t("tb-color"), color_open),
                     open_item(t("tb-size"), size_open),
+                    open_item(t("tb-font"), font_open),
+                    open_item(t("tb-align"), align_open),
                     open_item(t("tb-effects"), fx_open),
                     open_item(t("tb-pacing"), pace_open),
                     open_item(t("tb-cheatsheet"), help_open),
@@ -1795,6 +1972,8 @@ mod tests {
                             "tb-italic",
                             "tb-color",
                             "tb-size",
+                            "tb-font",
+                            "tb-align",
                             "tb-effects",
                             "tb-pacing",
                             "tb-phrases",

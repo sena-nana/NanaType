@@ -261,8 +261,10 @@ pub enum Tool {
     Underline,
     Strike,
     Color(nanatype_model::Rgba8),
-    /// Multiple of the skin's text size.
-    Size(f32),
+    /// Relative size, fixed pixels, or None to inherit the skin.
+    Size(Option<nanatype_model::Size>),
+    Font(Option<nanatype_model::FontSlot>),
+    Align(Option<nanatype_model::ParagraphAlign>),
     Stroke(Option<nanatype_model::Stroke>),
     Shadow(Option<nanatype_model::Shadow>),
     Ruby(String),
@@ -282,9 +284,13 @@ pub enum MarkupEdit {
         selection: (usize, usize),
     },
     /// Wrap the selection in `open` … `close` (or insert both at the caret).
-    Wrap { open: String, close: String },
+    Wrap {
+        open: String,
+        close: String,
+    },
     /// Insert at the caret, replacing the selection.
     Insert(String),
     /// Remove every tag inside the selection.
+    Align(Option<nanatype_model::ParagraphAlign>),
     ClearFormat,
 }
