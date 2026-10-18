@@ -1003,3 +1003,29 @@ fn crayon_mirror_edit_cancels_old_retirement_and_deletes_immediately() {
     assert_eq!(core.display().doc.plain_text(), "蜡笔");
     assert!(!core.display().empty);
 }
+
+#[test]
+fn saving_skin_typography_and_dimensions_preserves_playback_progress() {
+    let mut core = core_with(|s| s.general.input_mode = InputMode::Compose);
+    type_and_send(&mut core, "保留逐字播放进度 Hello NanaType!", 1000);
+    let before = core.display().page();
+    let before = (before.0.clone(), before.1.clone());
+    let phase = core.phase();
+    let mut settings = core.settings().clone();
+    let mut profile = nanatype_settings::SkinPersonalization::default();
+    profile.display.size = Some([160.0, 96.0]);
+    profile.display.text_size = Some(48.0);
+    profile.history.line_height = Some(2.0);
+    settings
+        .skin
+        .personalizations
+        .insert(settings.skin.id.clone(), profile);
+    core.handle(Cmd::SetSettings(Box::new(settings)), 1010);
+    let mut modified_skin = (*skin()).clone();
+    modified_skin.dialogue.text.size = 48.0;
+    core.handle(Cmd::SetSkin(Arc::new(modified_skin)), 1010);
+    let after = core.display().page();
+    assert_eq!(after.0, before.0);
+    assert_eq!(after.1, before.1);
+    assert_eq!(core.phase(), phase);
+}

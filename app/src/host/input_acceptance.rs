@@ -1184,6 +1184,26 @@ fn resizing_and_dock_tabs_preserve_both_editors_selection_and_undo_history() {
                 assert_eq!((f.bounds().width, f.bounds().height), size);
             }
         }
+        let base_skin = f.ui.skin.get_untracked();
+        for (width, height, font_size) in [(160.0, 96.0, 48.0), (1200.0, 120.0, 16.0)] {
+            let mut settings = (*f.ui.settings.get_untracked()).clone();
+            let mut profile = nanatype_settings::SkinPersonalization::default();
+            profile.display.size = Some([width, height]);
+            profile.display.text_size = Some(font_size);
+            profile.display.line_height = Some(1.8);
+            profile.display.font_family = Some("Consolas".into());
+            settings
+                .skin
+                .personalizations
+                .insert(settings.skin.id.clone(), profile);
+            let skin = crate::skin_theme::personalized(&base_skin, &settings, &settings.skin.id);
+            f.ui.settings.set(Arc::new(settings));
+            f.ui.skin.set(Arc::new(skin));
+            f.sync(false, false, Vec::new());
+            assert_eq!(f.node(), editor);
+            assert_eq!(f.text(), text);
+            assert_eq!(f.selection(), selection);
+        }
         f.action(TextEditAction::Undo);
         assert_eq!(f.text(), "窗口调整前");
         f.action(TextEditAction::Redo);
