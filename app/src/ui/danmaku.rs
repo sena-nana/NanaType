@@ -461,6 +461,7 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
         body: None,
         name: None,
         accent: None,
+        latin: None,
         mention: MentionLook::for_ui(dark),
         ink: None,
     };

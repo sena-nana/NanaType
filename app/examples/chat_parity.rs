@@ -880,6 +880,8 @@ fn run() {
         ];
         let refs: Vec<_> = roles
             .iter()
+            .copied()
+            .chain(loaded.skin.fonts.latin.as_ref())
             .filter_map(|f| {
                 f.file
                     .clone()

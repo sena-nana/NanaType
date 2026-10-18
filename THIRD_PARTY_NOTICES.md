@@ -10,7 +10,7 @@ below identify those sections:
 | `LICENSE`, `LICENSE-MIT` | NanaType licensing scope and MIT licence for original code |
 | `Bilibili-API-collect-CC-BY-NC-4.0.txt`, `Bilibili-NOTICE.md` | Original Bilibili protocol documentation source, attribution and inherited material scope |
 | `DouyinLive-MIT.txt` | Douyin signing source, Copyright (c) 2025 今晚打打 |
-| `FusionPixel12pxProportionalSC.LICENSE.txt`, `LXGWWenKai-Regular.LICENSE.txt` | The fonts embedded for the built-in skins (also on the About page under "Open-source fonts") |
+| `FusionPixel12pxProportionalSC.LICENSE.txt`, `LXGWWenKai-Regular.LICENSE.txt`, `Tangerine-Bold.LICENSE.txt` | The fonts embedded for the built-in skins (also on the About page under "Open-source fonts"); Tangerine by Toshi Omagari, OFL-1.1 |
 | `NotoSansSC-OFL.txt` | NanaUI's interface font |
 | `rust-crates.txt` | Every Rust crate's own licence files, written at packaging time |
 | `libvpx-BSD.txt` | libvpx VP9 decoder, distributed through shiguredo_libvpx |

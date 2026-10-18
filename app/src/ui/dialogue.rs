@@ -46,6 +46,7 @@ pub struct Base {
     pub family: Option<String>,
     pub name_family: Option<String>,
     pub accent_family: Option<String>,
+    pub latin: Option<(String, u16)>,
     pub letter_spacing: f32,
     pub shadow: Option<SkinShadow>,
     pub stroke: Option<SkinStroke>,
@@ -53,6 +54,9 @@ pub struct Base {
     pub entrance: Entrance,
     pub reduced_motion: bool,
     pub masks: nana_ui_core::TextTransitions,
+    pub light: Option<nanatype_theme::TextLightSpec>,
+    pub light_exit: Option<(u64, u16)>,
+    pub light_preview: bool,
     pub align: TextAlign,
     pub mention: super::rich::MentionLook,
     /// The box under the text, for the display's contrast guard and
@@ -87,6 +91,9 @@ impl Base {
     ) -> Self {
         Self {
             responsive_text: false,
+            light: skin.dialogue.reveal.light.clone(),
+            light_exit: None,
+            light_preview: false,
             masks: nana_ui_core::TextTransitions {
                 entrance: if !reduced && entrance.kind != EntranceKind::None && entrance.ms > 0 {
                     let spec = &skin.dialogue.reveal.entrance;
@@ -112,6 +119,14 @@ impl Base {
                 .or_else(|| skin.fonts.body.families.first().cloned()),
             name_family: skin.fonts.name.families.first().cloned(),
             accent_family: skin.fonts.accent.families.first().cloned(),
+            latin: if t.font_family.is_none() {
+                skin.fonts
+                    .latin
+                    .as_ref()
+                    .and_then(|f| f.families.first().map(|family| (family.clone(), f.weight)))
+            } else {
+                None
+            },
             letter_spacing: t.letter_spacing,
             shadow: t.shadow.clone(),
             stroke: t.stroke.clone(),
@@ -147,18 +162,24 @@ impl Base {
             ink: None,
             material: None,
             masks: Default::default(),
+            light: None,
             ..Self::dialogue(skin, entrance, false)
         }
     }
 
     pub fn history(skin: &Skin, entrance: Entrance, reduced: bool) -> Self {
-        Self::from_text(
+        let mut base = Self::from_text(
             skin,
             &skin.history.text,
             skin.history.bubble_color,
             entrance,
             reduced,
-        )
+        );
+        base.light = None;
+        if skin.dialogue.reveal.light.is_some() {
+            base.masks = Default::default();
+        }
+        base
     }
 
     pub fn look(&self) -> Look {
@@ -170,6 +191,7 @@ impl Base {
             body: self.family.clone(),
             name: self.name_family.clone(),
             accent: self.accent_family.clone(),
+            latin: self.latin.clone(),
             mention: self.mention.clone(),
             ink: self.ink.clone(),
         }
@@ -257,6 +279,16 @@ fn document_on(
         Timing::Static => None,
         Timing::Reveal(r) => Some(RevealPlan::new(&rich, r, entrance)),
     };
+    let light_plan = base
+        .light
+        .clone()
+        .filter(|s| s.intensity > 0. && s.color.a > 0)
+        .filter(|_| !base.reduced_motion && super::materials::enabled(ui))
+        .zip(
+            reveal
+                .as_ref()
+                .map(|p| (p.at_ms.clone(), rich.text().to_owned())),
+        );
     if let (Some(key), Some(plan)) = (follow, &reveal) {
         overflow::publish_on(
             ui.track_slot,
@@ -282,7 +314,7 @@ fn document_on(
         let schedule = reveal.map(|plan| {
             plan.schedule(
                 std::time::Duration::ZERO,
-                if base.masks.exit.is_some() {
+                if (base.masks.exit.is_some() || base.light_exit.is_some()) && !base.light_preview {
                     drawn_untracked(ui)
                         .text_exit
                         .map_or_else(crate::clock::now_ms, |e| e.at_ms)
@@ -343,7 +375,7 @@ fn document_on(
             v.value = rich;
         }
     };
-    let view = widget(view).bind(move |v: &mut RichTextView| {
+    let update_view = move |v: &mut RichTextView| {
         update(v);
         if responsive {
             let [w, h] = ui.display_size.get();
@@ -366,7 +398,26 @@ fn document_on(
             l.offset_right = vertical.then_some(LengthSpec::Px(0.));
             l.offset_top = vertical.then_some(LengthSpec::Px(0.));
         }
-    });
+    };
+    let view = widget(view).bind(update_view);
+    if let Some((spec, (times, text))) = light_plan {
+        let node = if follow.is_some() {
+            ui.text_node
+        } else {
+            nana_ui::runtime::view::node_ref()
+        };
+        return super::text_light::wrap(
+            ui,
+            view.node_ref(node).into_any(),
+            node,
+            spec,
+            &times,
+            &text,
+            entrance.ms,
+            base.light_exit,
+            base.light_preview,
+        );
+    }
     let view = match follow {
         Some(_) => view.node_ref(ui.text_node).into_any(),
         None => view.into_any(),
@@ -599,6 +650,46 @@ fn drawn_untracked(ui: Ui) -> Arc<DisplayView> {
 /// A still box showing `doc` in `ctx.skin`, for the skin picker.
 pub fn preview_box(ui: Ui, mut ctx: BoxCtx, doc: &Document) -> AnyView {
     ctx.skin = super::materials::render_skin(ui, ctx.skin);
+    if (ctx.skin.dialogue.reveal.light.is_some())
+        && ui.shader_preview.get_untracked()
+        && !ui.reduced_motion.get_untracked()
+        && super::materials::enabled(ui)
+    {
+        let now = crate::clock::now_ms();
+        let spec = &ctx.skin.dialogue.reveal;
+        let entrance = Entrance {
+            kind: spec.entrance.kind,
+            ms: spec.entrance.ms,
+        };
+        let units = doc.unit_count() as u32;
+        let mut base = Base::dialogue(&ctx.skin, entrance, false);
+        base.light_preview = true;
+        let reveal = Reveal {
+            visible_from: 0,
+            shown: 0,
+            hidden_from: units,
+            segment: Some(nanatype_core::SegmentReveal {
+                origin_ms: now,
+                start: 0,
+                reveal_ms: (0..units).map(|i| i * 65).collect::<Vec<_>>().into(),
+            }),
+        };
+        let delay = u64::from(units) * 65 + u64::from(entrance.ms) + 800;
+        if let Some(exit) = &spec.exit {
+            base.masks.exit = skin_mask(
+                &ctx.skin,
+                exit.material.as_deref(),
+                exit.scope,
+                u64::from(exit.ms),
+            );
+            if let Some(mask) = &mut base.masks.exit {
+                mask.start = std::time::Duration::from_millis(delay);
+            }
+            base.light_exit = Some((now + delay, exit.ms));
+        }
+        let text = document(ui, doc, &base, Timing::Reveal(reveal));
+        return box_view(ui, ctx, text).into_any();
+    }
     let entrance = Entrance {
         kind: EntranceKind::None,
         ms: 0,
@@ -1152,6 +1243,7 @@ fn content(ui: Ui) -> impl IntoView {
             }
             let mut base = Base::dialogue(&skin, view.entrance, reduced);
             if let Some(exit) = view.text_exit {
+                base.light_exit = Some((exit.at_ms, exit.ms));
                 let elapsed = crate::clock::now_ms().saturating_sub(exit.at_ms);
                 if let Some(spec) = &skin.dialogue.reveal.exit {
                     // Rebase the remaining duration when the presentation is mounted.

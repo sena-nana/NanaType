@@ -21,6 +21,7 @@ pub mod settings;
 pub mod shader_effects;
 pub mod surface;
 pub mod sweep;
+pub mod text_light;
 
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, Weak};
@@ -472,12 +473,13 @@ pub fn prepare_skin_preview(
                 .shaders
                 .get(&e.shader)
                 .is_some_and(|s| s.animated)
-        }) || loaded
-            .skin
-            .dialogue
-            .decor
-            .iter()
-            .any(|d| d.shader.is_some()));
+        }) || loaded.skin.dialogue.reveal.light.is_some()
+            || loaded
+                .skin
+                .dialogue
+                .decor
+                .iter()
+                .any(|d| d.shader.is_some()));
     let previous = ui.skins.with_untracked(|rows| {
         rows.iter()
             .find(|r| r.id == id)

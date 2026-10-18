@@ -525,7 +525,12 @@ fn render_at(registry: &SkinRegistry, out: &std::path::Path, skin_id: &str, loca
             .clone()
             .filter(|p| nanatype_theme::is_builtin_font(p))
     };
-    let refs: Vec<String> = roles.iter().filter_map(builtin_ref).collect();
+    let refs: Vec<String> = roles
+        .iter()
+        .copied()
+        .chain(f.latin.as_ref())
+        .filter_map(|s| builtin_ref(&s))
+        .collect();
     for e in builtin.sync(
         refs.iter().map(String::as_str),
         nanatype_theme::builtin_font,

@@ -10,7 +10,7 @@ A build with no font files here works: skins fall back to their `families`.
 
 ## What is here
 
-Both fonts are subsets made on 2026-10-13 with fontTools 4.66.1. Neither
+The first two fonts are subsets made on 2026-10-13 with fontTools 4.66.1. Neither
 upstream licence declares a Reserved Font Name (checked in each `OFL.txt`,
 in the component licences and in the fonts' name tables), so the subsets keep
 the upstream family names and every name record.
@@ -18,7 +18,18 @@ the upstream family names and every name record.
 | File | Size | Used by |
 | --- | --- | --- |
 | `FusionPixel12pxProportionalSC.ttf` | 1,453,472 bytes | `pixel`, `rpg` (body, name) |
-| `LXGWWenKai-Regular.ttf` | 2,142,236 bytes | `ink` (body, name, accent) |
+| `LXGWWenKai-Regular.ttf` | 2,142,236 bytes | `ink` (body, name, accent), `crayon` and `sonnet` (body, name) |
+| `Tangerine-Bold.ttf` | 65,464 bytes | `sonnet` (default Latin body) |
+
+### Tangerine-Bold.ttf
+
+Added 2026-10-18, unmodified full font (no subsetting), family `Tangerine`,
+Bold, by Toshi Omagari. Source: [Google Fonts](https://github.com/google/fonts/tree/main/ofl/tangerine),
+upstream source commit `9b57a9f9be5ecfe95e7f8c0e6b2b827eedb9ad67`.
+SHA-256: `a35368c814c71c15928ffc60cbac32bc81461f03b895a4a607df9c64b3d1548b`.
+The complete upstream OFL 1.1 and copyright notice are preserved in
+`Tangerine-Bold.LICENSE.txt`, embedded and displayed on the About page.
+Sonnet reuses the existing WenKai subset for Chinese.
 
 ### FusionPixel12pxProportionalSC.ttf
 

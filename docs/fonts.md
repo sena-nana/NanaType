@@ -2,7 +2,7 @@
 
 内置皮肤只写系统字体名时，没装那些字体的电脑会用普通界面字体代替：像素、水墨这几套就失去了味道。这里说明程序带了哪些开源字体、怎样编进程序，以及以后加字体的规矩。
 
-> **状态**：已随附两款字体（2026-10-13，从官方 GitHub Release 下载并核实许可）：Fusion Pixel（`pixel`、`rpg`）与霞鹜文楷（`ink`）。来源、版本、SHA-256 与子集命令的逐项记录见 [crates/theme/fonts/README.md](../crates/theme/fonts/README.md)。
+> **状态**：随附 Fusion Pixel、霞鹜文楷与 Tangerine Bold 三款字体。前两款于 2026-10-13 从官方 GitHub Release 获取，Tangerine 于 2026-10-18 从 Google Fonts 获取；许可、来源、SHA-256 与子集记录见 [crates/theme/fonts/README.md](../crates/theme/fonts/README.md)。
 
 ## 机制
 
@@ -23,6 +23,8 @@
 嵌入是逐字节的，程序增大的体积就是 `fonts/` 里字体文件的总大小（不压缩；安装包的压缩会省一部分）。现在两款字体合计 3,595,708 字节（约 3.4 MiB）；调试版 `snapshots` 示例开、关 `builtin-fonts` 相差 3,621,376 字节（字体加许可全文与少量代码）。
 
 ## 随附的字体
+
+“十四行诗”另随附 Tangerine Bold（Version 1.3，65,464 字节，Toshi Omagari，OFL-1.1），用于默认英文花体，中文复用霞鹜文楷。2026-10-18 从 Google Fonts 获取完整字体，未修改或子集化；校验和与许可记录见字体目录 README。三款随附字体合计 3,661,172 字节。新增可选 `[fonts.latin]` 角色，字段与其他字体角色相同，仅用于未指定字体的拉丁文本段；显式字体及个人字体设置优先。
 
 | 皮肤 | 字体（注册的家族名） | 版本 | 作者 | 许可 | 上游文件 | 子集 | 文件 |
 | --- | --- | --- | --- | --- | --- | --- | --- |

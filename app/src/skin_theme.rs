@@ -130,6 +130,27 @@ pub fn prepare(
     language: &str,
 ) -> Skin {
     let mut skin = with_overrides(base, overrides);
+    if let Some(latin) = &mut skin.fonts.latin {
+        if let Some(family) = latin
+            .file
+            .as_deref()
+            .and_then(nanatype_theme::builtin_font)
+            .and_then(nanatype_theme::font_family)
+        {
+            if latin.families.first() != Some(&family) {
+                latin.families.insert(0, family);
+            }
+        } else if latin
+            .file
+            .as_deref()
+            .is_none_or(nanatype_theme::is_builtin_font)
+        {
+            if let Some(i) = latin.families.iter().position(|f| installed(f)) {
+                let family = latin.families.remove(i);
+                latin.families.insert(0, family);
+            }
+        }
+    }
     let locale_stack = FontSpec::locale_families(language);
     for (spec, family) in skin.fonts.roles_mut().into_iter().zip(bundled) {
         if spec.is_default_stack() {

@@ -110,6 +110,7 @@ pub struct App {
     builtin_fonts: crate::skin_fonts::BuiltinFontSet<nana_ui::HostFontScope>,
     /// Family registered for each skin font role (body, name, accent).
     skin_families: [Option<String>; 3],
+    skin_latin_family: Option<String>,
     skin_watch: Option<crate::services::watch::Watch>,
     skin_reload: crate::services::watch::ReloadGate,
     skin_reload_scan: bool,
@@ -284,6 +285,7 @@ impl App {
             fonts: nana_ui::HostFontScope::new(),
             builtin_fonts: Default::default(),
             skin_families: [None, None, None],
+            skin_latin_family: None,
             skin_watch: None,
             skin_reload: Default::default(),
             skin_reload_scan: false,
@@ -785,6 +787,7 @@ impl App {
         let mut wanted: Vec<String> = roles
             .iter()
             .copied()
+            .chain(f.latin.as_ref())
             .filter_map(|s| s.file.clone())
             .filter(|p| nanatype_theme::is_builtin_font(p))
             .collect();
@@ -813,9 +816,9 @@ impl App {
             nanatype_theme::builtin_font,
             crate::skin_fonts::register_with_nana_ui,
         );
-        let mut families = [None, None, None];
+        let mut families = [None, None, None, None];
         let mut packaged: HashMap<String, Option<String>> = HashMap::new();
-        for (i, spec) in roles.into_iter().enumerate() {
+        for (i, spec) in roles.into_iter().chain(f.latin.as_ref()).enumerate() {
             let Some(file) = &spec.file else {
                 continue;
             };
@@ -844,15 +847,20 @@ impl App {
             packaged.insert(file.clone(), family.clone());
             families[i] = family;
         }
-        self.skin_families = families;
+        self.skin_latin_family = families[3].take();
+        self.skin_families = [families[0].take(), families[1].take(), families[2].take()];
         for e in errors {
             self.notice(e, true);
         }
     }
 
     fn apply_skin(&mut self) {
-        let personalized =
+        let mut personalized =
             skin_theme::personalized(&self.loaded.skin, &self.settings, &self.settings.skin.id);
+        if let (Some(role), Some(family)) = (&mut personalized.fonts.latin, &self.skin_latin_family)
+        {
+            role.families.insert(0, family.clone());
+        }
         let skin = Arc::new(skin_theme::prepare(
             &personalized,
             &Default::default(),

@@ -106,6 +106,7 @@ pub fn renderers() -> SceneGpuRendererRegistry {
         let mut registry = nana_ui::default_scene_gpu_renderers();
         registry.insert(RENDERER, SHARED.clone());
         super::shader_effects::register(&mut registry);
+        super::text_light::register(&mut registry);
         registry
     });
     REGISTRY.clone()

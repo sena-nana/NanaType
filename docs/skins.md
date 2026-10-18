@@ -16,6 +16,7 @@
 |---|---|---|---|
 | `nanatype.crayon` | 蜡笔画 | cute, elegant | 米白画纸、柔彩蜡笔与小花涂鸦，深色彩铅文字；静态 GPU 材质 |
 | `nanatype.halo` | 光环 | classic, minimal | 默认。精简蓝白圆润卡片、轻阴影、天蓝胶囊名牌，无右上角动效 |
+| `nanatype.sonnet` | 十四行诗 | elegant, minimal | 透明诗句字幕，中文文楷与英文花体；逐字金光、星火光丝，整段同步化为光尘 |
 | `nanatype.night` | 夜色 | classic | 深蓝玻璃、切角仪表框、霓虹描边与呼吸光带 |
 | `nanatype.parchment` | 羊皮纸 | classic, elegant | 双线压印框、暖色纸纤维、卷草包角、宋体 |
 | `nanatype.adv` | ADV 经典 | game | 1280×180 宽幅剧情框、端部缺口、金色姓名基线 |
@@ -496,6 +497,7 @@ period_s = 4.0
 
 `dialogue.reveal.entrance.material` 引用 `materials`，`dialogue.reveal.entrance.scope` 为 `glyph`（默认）或 `text`；`kind` 为原生回退，`ms` 为每字时长。
 `dialogue.reveal.exit` 为可选退场表：`material`、`scope`（默认 `text`）、`ms`。它让清空、换句与翻页先退场再开始下一段。
+
 遮罩复用内容无关的 NanaUI `PresentationMask`，WGSL `material` 返回的 alpha 是覆盖率，RGB 不参与遮罩。`MaterialInput.progress` 为 0–1，`position`/`uv`/`size` 根据 scope 对应单字或正文视口；`target_position`、`target_size` 始终对应正文可见视口。`glyph_uv` 是文字适配层提供的字形局部坐标。
 蜡笔画逐字斜擦入 180ms，正文整体擦除 320ms；两者的分割线均沿左下—右上倾斜 45°，从左上向右下推进。姓名、引用与框体保持稳定，输入编辑器不播放遮罩。关闭高级效果使用原生回退；减少动态效果保留逐字节奏但不播放擦动或等待退场。继续键可立即完成退场，再开始下一段；连续替换遵循队列策略。已有的历史记录不随正文退场擦除。
 实际关键帧、复现步骤和验证结果见[文字过渡验收](text-transition-validation.md)。
@@ -534,4 +536,22 @@ layout = { padding = [12, 16, 48, 32], decor = [] }
 
 竖版与窄窗使用各皮肤的原版材质、轮廓和装饰资源：羊皮纸保留纸浆纤维与四角卷草，水墨保留宣纸、竹枝和印章，樱花保留原枝条，终端、夜色和像素保留各自状态图元。原来没有的通用花纹、侧栏和轨道不作为替代装饰；Citrus 竖版只保留底部斜切包装，不再重复横版左侧色带。极小窗口按声明选择 minimal 变体，只减少独立小物件，纹理和边框始终保留。选择皮肤时准备当前静态预览，只有显式播放才启动动效。
 
-`
+`[fonts.latin]` 可为拉丁文字指定独立的 `file`、`families` 和 `weight`；未指定时继续使用正文的字体与回退。
+
+### 十四行诗文字光效
+
+`nanatype.sonnet` 的正文逐字凝光（360ms），换句、翻页或清空时当前可见正文同步增亮并化为光尘（700ms）。历史记录保持静态。设置页的“播放特效”播放一次入场、停留与退场；停止后可再次播放。减少动态效果或关闭高级效果时取消动态光效和退场等待。
+
+```toml
+[fonts.latin]
+file = "builtin:fonts/Tangerine-Bold.ttf"
+families = ["Tangerine", "Segoe Script", "Noto Sans SC"]
+weight = 700
+
+[dialogue.reveal.light]
+color = "#FFD593"
+intensity = 1.0 # 0–2
+radius = 12.0   # 1–32 logical pixels
+```
+
+`light` 是可选的有限字形光效层，配合已有逐字入场／整段退场材质使用。遮罩只改变覆盖率，辉光、短光丝与光尘由独立 GPU 层绘制。字形几何与模糊遮罩按文字布局缓存，动画帧只更新时间；没有此配置的皮肤沿用既有渲染路径。

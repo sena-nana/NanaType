@@ -87,6 +87,7 @@ fn frame_policy(
             let follow = if remote { peer_follow } else { follow };
             let typing = dialogue::display_animating(track, now);
             let movement = crate::ui::sweep::animating(track)
+                || crate::ui::text_light::animating(track, now)
                 || follow.wants_frame()
                 || (!remote && pager.wants_frame());
             (
@@ -105,7 +106,8 @@ fn frame_policy(
         Some(WindowKind::Settings) => (
             ui.settings_pulse_ms,
             settings::links_pulsing(ui),
-            crate::ui::shader_effects::preview_animating(ui),
+            crate::ui::shader_effects::preview_animating(ui)
+                || crate::ui::text_light::preview_animating(ui, now),
             None,
             30,
         ),
@@ -209,6 +211,7 @@ impl Host {
     fn finish(&mut self) -> RuntimeProgramUpdate {
         crate::ui::shader_effects::collect_garbage();
         crate::ui::sweep::collect_garbage();
+        crate::ui::text_light::collect_garbage();
         for message in crate::ui::shader_effects::take_notices() {
             self.app.notice(message, true);
         }

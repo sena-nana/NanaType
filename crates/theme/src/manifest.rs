@@ -663,6 +663,8 @@ pub struct Fonts {
     pub body: FontSpec,
     pub name: FontSpec,
     pub accent: FontSpec,
+    /// Optional default Latin face; explicit authored fonts take precedence.
+    pub latin: Option<FontSpec>,
 }
 
 impl Default for Fonts {
@@ -676,6 +678,7 @@ impl Default for Fonts {
                 ..FontSpec::default()
             },
             accent: FontSpec::default(),
+            latin: None,
         }
     }
 }
@@ -991,6 +994,26 @@ pub struct RevealSpec {
     pub punct: PunctPauses,
     pub entrance: EntranceSpec,
     pub exit: Option<ExitSpec>,
+    pub light: Option<TextLightSpec>,
+}
+
+/// Finite glyph-attached light, rendered separately from the coverage mask.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TextLightSpec {
+    pub color: Rgba8,
+    pub intensity: f32,
+    pub radius: f32,
+}
+
+impl Default for TextLightSpec {
+    fn default() -> Self {
+        Self {
+            color: Rgba8::rgba(255, 213, 147, 255),
+            intensity: 1.0,
+            radius: 12.0,
+        }
+    }
 }
 
 impl Default for RevealSpec {
@@ -1003,6 +1026,7 @@ impl Default for RevealSpec {
             punct: p.punct,
             entrance: EntranceSpec::default(),
             exit: None,
+            light: None,
         }
     }
 }
@@ -1730,6 +1754,9 @@ impl Skin {
             if let Some(f) = &font.file {
                 out.push((field, f.as_str(), FileKind::Font));
             }
+        }
+        if let Some(f) = self.fonts.latin.as_ref().and_then(|f| f.file.as_deref()) {
+            out.push(("fonts.latin.file", f, FileKind::Font));
         }
         for f in &self.sounds.typing.files {
             out.push(("sounds.typing.files", f.as_str(), FileKind::Sound));

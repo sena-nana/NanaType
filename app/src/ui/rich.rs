@@ -38,6 +38,7 @@ pub struct Look {
     pub body: Option<String>,
     pub name: Option<String>,
     pub accent: Option<String>,
+    pub latin: Option<(String, u16)>,
     pub mention: MentionLook,
     /// The box the text is drawn on, for the display's skin-aware text
     /// effects. `None` in the editor, whose spans must convert back exactly.
@@ -1039,7 +1040,39 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
             match inline {
                 Inline::Text(run) => {
                     let s = span_style(&run.style, &run.effects, run.pace, env.look);
-                    if s.is_empty() {
+                    if let Some((family, weight)) = &env.look.latin
+                        && run.style.font.is_none()
+                    {
+                        // Keep whole Latin words together for cursive shaping.
+                        let mut start = 0;
+                        let mut previous = None;
+                        for (end, ch) in run
+                            .text
+                            .char_indices()
+                            .chain(std::iter::once((run.text.len(), '\0')))
+                        {
+                            let latin = ch.is_ascii()
+                                || matches!(ch as u32, 0x00c0..=0x024f | 0x0300..=0x036f | 0x1e00..=0x1eff);
+                            if previous.is_some_and(|last| last != latin) || end == run.text.len() {
+                                let mut part = s.clone();
+                                if previous == Some(true) {
+                                    part = part.family(family.clone()).family_alias(
+                                        if run.style.bold.is_none() {
+                                            "latin-default"
+                                        } else {
+                                            "latin-styled"
+                                        },
+                                    );
+                                    if run.style.bold.is_none() && !env.editor {
+                                        part = part.weight(*weight);
+                                    }
+                                }
+                                b.push(&run.text[start..end], part);
+                                start = end;
+                            }
+                            previous = Some(latin);
+                        }
+                    } else if s.is_empty() {
                         b.plain(&run.text);
                     } else {
                         b.push(&run.text, s);
@@ -1162,6 +1195,12 @@ fn style_back(s: Option<&RichSpanStyle>, _look: &Look) -> (Style, Effects, Pace)
             Some("accent") => FontSlot::Accent,
             _ => FontSlot::Family(f),
         });
+    }
+    if matches!(
+        s.shape.family_alias.as_deref(),
+        Some("latin-default" | "latin-styled")
+    ) {
+        style.font = None;
     }
     if let Some(TextDecorationLine {
         underline,
@@ -1362,6 +1401,79 @@ impl RevealPlan {
 mod tests {
     use super::*;
 
+    #[test]
+    fn latin_defaults_preserve_words_explicit_fonts_and_editor_roundtrip() {
+        let mut look = look();
+        look.latin = Some(("Tangerine".into(), 700));
+        let urls = HashMap::new();
+        let doc =
+            nanatype_markup::parse("中文 Sonnet café [b]Bold[/b] [font=Consolas]Code[/font]").doc;
+        let rich = to_rich(
+            &doc,
+            &Env {
+                look: &look,
+                urls: &urls,
+                editor: true,
+                locale: Locale::ZhCn,
+            },
+        );
+        assert_eq!(from_rich(&rich, &look), doc);
+        let sonnet = rich.text().find("Sonnet").unwrap();
+        assert_eq!(
+            rich.style_at(sonnet).unwrap().shape.family.as_deref(),
+            Some("Tangerine")
+        );
+        assert_eq!(
+            rich.style_at(sonnet).unwrap().shape.weight,
+            None,
+            "default script must not become an authored bold attribute"
+        );
+        let code = rich.text().find("Code").unwrap();
+        assert_eq!(
+            rich.style_at(code).unwrap().shape.family.as_deref(),
+            Some("Consolas")
+        );
+        assert!(
+            rich.spans()
+                .iter()
+                .any(|(range, _)| range.contains(&sonnet) && range.end >= sonnet + 6),
+            "cursive words must stay in one span"
+        );
+    }
+
+    #[test]
+    fn personalized_body_font_disables_default_latin_face_per_surface() {
+        let mut skin = (*nanatype_theme::SkinRegistry::new(None, "1.0.0")
+            .load("nanatype.sonnet")
+            .unwrap()
+            .skin)
+            .clone();
+        skin.dialogue.text.font_family = Some("Consolas".into());
+        let entrance = Entrance {
+            kind: EntranceKind::None,
+            ms: 0,
+        };
+        assert!(
+            super::super::dialogue::Base::dialogue(&skin, entrance, false)
+                .look()
+                .latin
+                .is_none()
+        );
+        assert!(
+            super::super::dialogue::Base::history(&skin, entrance, false)
+                .look()
+                .latin
+                .is_some()
+        );
+        skin.history.text.font_family = Some("Consolas".into());
+        assert!(
+            super::super::dialogue::Base::history(&skin, entrance, false)
+                .look()
+                .latin
+                .is_none()
+        );
+    }
+
     fn look() -> Look {
         Look {
             size: 28.0,
@@ -1371,6 +1483,7 @@ mod tests {
             body: None,
             name: Some("Name Font".into()),
             accent: Some("Accent Font".into()),
+            latin: None,
             mention: MentionLook::default(),
             ink: None,
         }

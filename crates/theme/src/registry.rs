@@ -23,6 +23,10 @@ struct Builtin {
 
 const BUILTINS: &[Builtin] = &[
     Builtin {
+        id: "nanatype.sonnet",
+        manifest: include_str!("../builtin/sonnet.toml"),
+    },
+    Builtin {
         id: "nanatype.crayon",
         manifest: include_str!("../builtin/crayon.toml"),
     },
@@ -141,6 +145,16 @@ fn builtin_files(b: &Builtin) -> Arc<dyn SkinFiles> {
         };
     }
     match b.id {
+        "nanatype.sonnet" => files.extend_from_slice(&[
+            (
+                "sonnet/appear.wgsl",
+                include_bytes!("../builtin/sonnet/appear.wgsl"),
+            ),
+            (
+                "sonnet/dissolve.wgsl",
+                include_bytes!("../builtin/sonnet/dissolve.wgsl"),
+            ),
+        ]),
         "nanatype.crayon" => files.extend_from_slice(&[
             (
                 "crayon/write.wgsl",

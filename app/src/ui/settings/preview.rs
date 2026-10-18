@@ -541,7 +541,7 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
             let Some(row) = row.filter(|r| r.skin.is_some() && r.error.is_none()) else {
                 return hint(ui.now_t("skin-edit-unavailable"));
             };
-            let raw = (*row.skin.unwrap()).clone();
+            let mut raw = (*row.skin.unwrap()).clone();
             let mut scope = nana_ui::HostFontScope::new();
             for font in nanatype_theme::BuiltinFonts::embedded().fonts() {
                 let _ = scope.add_bytes(font.bytes);
@@ -559,6 +559,11 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
                 scope.add_bytes(bytes?).ok()?.families().first().cloned()
             };
             let families = [&raw.fonts.body, &raw.fonts.name, &raw.fonts.accent].map(&mut register);
+            if let Some(role) = &mut raw.fonts.latin
+                && let Some(family) = register(role)
+            {
+                role.families.insert(0, family);
+            }
             let scope = Arc::new(scope);
             let base = Arc::new(crate::skin_theme::prepare(
                 &raw,

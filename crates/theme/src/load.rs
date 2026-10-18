@@ -482,6 +482,16 @@ fn validate(skin: &Skin, files: &dyn SkinFiles, app_version: &str, out: &mut Vec
             "must be 1–2000",
         ));
     }
+    if let Some(light) = &d.reveal.light {
+        for (field, value, lo, hi) in [
+            ("dialogue.reveal.light.intensity", light.intensity, 0.0, 2.0),
+            ("dialogue.reveal.light.radius", light.radius, 1.0, 32.0),
+        ] {
+            if !in_range(value, lo, hi) {
+                out.push(SkinDiagnostic::error(field, format!("must be {lo}–{hi}")));
+            }
+        }
+    }
     if !in_range(d.sweep.intensity, 0.0, 1.0) {
         out.push(SkinDiagnostic::error(
             "dialogue.sweep.intensity",

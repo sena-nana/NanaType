@@ -202,11 +202,11 @@ fn compact_standalone_manifests_preserve_all_builtin_designs() {
 #[test]
 fn every_builtin_loads_without_warnings() {
     let registry = SkinRegistry::new(None, APP);
-    assert_eq!(registry.entries().len(), 25);
+    assert_eq!(registry.entries().len(), 26);
     let mut ids: Vec<&str> = registry.entries().iter().map(|e| e.id.as_str()).collect();
     ids.sort();
     ids.dedup();
-    assert_eq!(ids.len(), 25);
+    assert_eq!(ids.len(), 26);
     assert!(registry.load(DEFAULT_SKIN).is_ok());
     for entry in registry.entries() {
         assert!(entry.loads(), "{}: {:?}", entry.id, entry.errors);
@@ -256,6 +256,49 @@ fn every_builtin_loads_without_warnings() {
     assert_eq!(night.skin.history.layout, HistoryLayout::Stack);
     assert!(night.skin.history.panel.is_none());
     assert!(!night.skin.history.hide_latest);
+}
+
+#[test]
+fn sonnet_declares_packaged_calligraphy_and_finite_whole_text_dissolve() {
+    let loaded = SkinRegistry::new(None, APP)
+        .load("nanatype.sonnet")
+        .unwrap();
+    let skin = &loaded.skin;
+    assert_eq!(skin.dialogue.box_.color.a, 0);
+    assert_eq!(skin.dialogue.reveal.entrance.ms, 360);
+    assert_eq!(skin.dialogue.reveal.entrance.scope, TransitionScope::Glyph);
+    let exit = skin.dialogue.reveal.exit.as_ref().unwrap();
+    assert_eq!(exit.ms, 700);
+    assert_eq!(exit.scope, TransitionScope::Text);
+    assert!(
+        skin.material_programs
+            .contains_key(exit.material.as_ref().unwrap())
+    );
+    assert_eq!(
+        skin.fonts.latin.as_ref().unwrap().file.as_deref(),
+        Some("builtin:fonts/Tangerine-Bold.ttf")
+    );
+    let standalone = standalone_manifest(skin).unwrap();
+    let restored: Skin = toml::Value::Table(standalone).try_into().unwrap();
+    assert_eq!(restored.fonts.latin, skin.fonts.latin);
+    assert_eq!(restored.dialogue.reveal.light, skin.dialogue.reveal.light);
+    let dir = tempfile::tempdir().unwrap();
+    write_skin(
+        dir.path(),
+        "[meta]\nid='user.bad-light'\n[dialogue.reveal.light]\nintensity=3\nradius=-1\n",
+        &[],
+    );
+    let errors = load_dir(dir.path()).unwrap_err();
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.field == "dialogue.reveal.light.intensity")
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.field == "dialogue.reveal.light.radius")
+    );
 }
 
 #[test]
@@ -1772,7 +1815,10 @@ fn this_builds_embedded_fonts_parse_and_carry_their_licence() {
     let registry = SkinRegistry::new(None, APP);
     for entry in registry.entries() {
         let skin = entry.skin.as_ref().unwrap();
-        for spec in [&skin.fonts.body, &skin.fonts.name, &skin.fonts.accent] {
+        for spec in [&skin.fonts.body, &skin.fonts.name, &skin.fonts.accent]
+            .into_iter()
+            .chain(skin.fonts.latin.as_ref())
+        {
             if let Some(f) = spec.file.as_deref().filter(|f| is_builtin_font(f)) {
                 assert!(fonts.knows(f), "{}: {f}", entry.id);
             }
