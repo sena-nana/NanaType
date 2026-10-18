@@ -36,6 +36,7 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
         Page::General => general(ui),
         Page::Playback => playback(ui),
         Page::Skins => skins(ui),
+        Page::Packages => super::super::plugins::settings(ui),
         Page::Windows => windows(ui),
         Page::History => history(ui),
         Page::Hotkeys => hotkeys(ui),
@@ -1756,7 +1757,6 @@ fn view_switch(ui: Ui, grid: Signal<bool>) -> AnyView {
 }
 
 /// Checkerboard showing around the previewed box.
-
 /// A 10px transparency checkerboard tile as a data URL, in light or dark
 /// chrome tones.
 pub(super) fn checker_url(dark: bool) -> String {

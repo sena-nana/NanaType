@@ -32,11 +32,11 @@ fn main() {
     };
     for name in names {
         nanatype::clock::capture_at(16_000, || {
-            let files = Arc::new(DirFiles::new(sources.clone()));
+            let files = Arc::new(DirFiles::new(sources.join(name)));
             // Each built-in is a manifest within the shared artwork root.
             // Layer the selected manifest over those files without copying.
             let mut manifest =
-                std::fs::read_to_string(sources.join(format!("{name}.toml"))).unwrap();
+                std::fs::read_to_string(sources.join(name).join("skin.toml")).unwrap();
             // Some designs deliberately have no runtime shader. Their WGSL
             // is an authoring tool only: load it for baking, never for playback
             // or export. Do not add an effect instance to the saved manifest.

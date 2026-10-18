@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 1
+
+schema = 3
+id = "nanatype.machine_learning"
+version = "1.0.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "minimal",
+    "game",
+]
+
+[name]
+en-US = "Machine Learning"
+ja-JP = "機械学習"
+zh-CN = "机器学习"
+
+[description]
+en-US = "A graphite neural lab: characters scramble, lock in, and vanish in random order"
+ja-JP = "黒鉛色のニューラルラボ。文字が高速に変換・収束し、ランダムに消える"
+zh-CN = "石墨黑神经实验室，字符快速演算并锁定，整段乱码随机消隐"

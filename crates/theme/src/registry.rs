@@ -1,9 +1,9 @@
 //! Built-in skins plus the user's skin folder: scan, load, install, export.
 
-use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
+use std::{collections::BTreeMap, fs};
 
 use toml::Table;
 
@@ -13,373 +13,58 @@ use crate::load::{
     load, read_manifest,
 };
 use crate::manifest::{Localized, Skin};
+use crate::package::{NamespaceFiles, PackageFiles, PrefixFiles, qualify_resources};
+use crate::{PACKAGE_MANIFEST, PackageCapability, PackageManifest};
 
 pub const DEFAULT_SKIN: &str = "nanatype.halo";
 
 struct Builtin {
     id: &'static str,
-    manifest: &'static str,
+    files: &'static [(&'static str, &'static [u8])],
+    package_json: &'static str,
+    skin_json: &'static str,
+    parsed: OnceLock<Arc<(Option<Table>, PackageManifest)>>,
 }
 
-const BUILTINS: &[Builtin] = &[
-    Builtin {
-        id: "nanatype.love_letter",
-        manifest: include_str!("../builtin/love_letter.toml"),
-    },
-    Builtin {
-        id: "nanatype.machine_learning",
-        manifest: include_str!("../builtin/machine_learning.toml"),
-    },
-    Builtin {
-        id: "nanatype.sonnet",
-        manifest: include_str!("../builtin/sonnet.toml"),
-    },
-    Builtin {
-        id: "nanatype.crayon",
-        manifest: include_str!("../builtin/crayon.toml"),
-    },
-    Builtin {
-        id: "nanatype.gothic",
-        manifest: include_str!("../builtin/gothic.toml"),
-    },
-    Builtin {
-        id: "nanatype.celestial",
-        manifest: include_str!("../builtin/celestial.toml"),
-    },
-    Builtin {
-        id: "nanatype.forest",
-        manifest: include_str!("../builtin/forest.toml"),
-    },
-    Builtin {
-        id: "nanatype.tidal",
-        manifest: include_str!("../builtin/tidal.toml"),
-    },
-    Builtin {
-        id: "nanatype.lantern",
-        manifest: include_str!("../builtin/lantern.toml"),
-    },
-    Builtin {
-        id: "nanatype.citrus",
-        manifest: include_str!("../builtin/citrus.toml"),
-    },
-    Builtin {
-        id: "nanatype.halo",
-        manifest: include_str!("../builtin/halo.toml"),
-    },
-    Builtin {
-        id: "nanatype.night",
-        manifest: include_str!("../builtin/night.toml"),
-    },
-    Builtin {
-        id: "nanatype.parchment",
-        manifest: include_str!("../builtin/parchment.toml"),
-    },
-    Builtin {
-        id: "nanatype.adv",
-        manifest: include_str!("../builtin/adv.toml"),
-    },
-    Builtin {
-        id: "nanatype.rpg",
-        manifest: include_str!("../builtin/rpg.toml"),
-    },
-    Builtin {
-        id: "nanatype.vanilla",
-        manifest: include_str!("../builtin/vanilla.toml"),
-    },
-    Builtin {
-        id: "nanatype.bubble",
-        manifest: include_str!("../builtin/bubble.toml"),
-    },
-    Builtin {
-        id: "nanatype.subtitle",
-        manifest: include_str!("../builtin/subtitle.toml"),
-    },
-    Builtin {
-        id: "nanatype.livechat",
-        manifest: include_str!("../builtin/livechat.toml"),
-    },
-    Builtin {
-        id: "nanatype.comic",
-        manifest: include_str!("../builtin/comic.toml"),
-    },
-    Builtin {
-        id: "nanatype.terminal",
-        manifest: include_str!("../builtin/terminal.toml"),
-    },
-    Builtin {
-        id: "nanatype.pixel",
-        manifest: include_str!("../builtin/pixel.toml"),
-    },
-    Builtin {
-        id: "nanatype.sakura",
-        manifest: include_str!("../builtin/sakura.toml"),
-    },
-    Builtin {
-        id: "nanatype.ink",
-        manifest: include_str!("../builtin/ink.toml"),
-    },
-    Builtin {
-        id: "nanatype.echo_vanilla",
-        manifest: include_str!("../builtin/echo_vanilla.toml"),
-    },
-    Builtin {
-        id: "nanatype.echo_glass",
-        manifest: include_str!("../builtin/echo_glass.toml"),
-    },
-    Builtin {
-        id: "nanatype.echo_bubble",
-        manifest: include_str!("../builtin/echo_bubble.toml"),
-    },
-    Builtin {
-        id: "nanatype.echo_void",
-        manifest: include_str!("../builtin/echo_void.toml"),
-    },
-];
+include!(concat!(env!("OUT_DIR"), "/builtin_packages.rs"));
 
 fn builtin_files(b: &Builtin) -> Arc<dyn SkinFiles> {
-    let mut files: Vec<(&'static str, &'static [u8])> = vec![(MANIFEST, b.manifest.as_bytes())];
-    macro_rules! plate {
-        ($name:literal) => {
-            files.extend_from_slice(&[
-                (
-                    concat!($name, "/artwork.wgsl"),
-                    include_bytes!(concat!("../builtin/", $name, "/artwork.wgsl")),
-                ),
-                (
-                    concat!($name, "/still.png"),
-                    include_bytes!(concat!("../builtin/", $name, "/still.png")),
-                ),
-            ])
-        };
+    let parsed = b
+        .parsed
+        .get_or_init(|| {
+            Arc::new((
+                serde_json::from_str(b.skin_json).expect("build-validated skin table"),
+                serde_json::from_str(b.package_json).expect("build-validated package metadata"),
+            ))
+        })
+        .clone();
+    Arc::new(EmbeddedPackage {
+        files: MemoryFiles::new(b.files),
+        parsed,
+    })
+}
+
+#[derive(Debug)]
+struct EmbeddedPackage {
+    files: MemoryFiles,
+    parsed: Arc<(Option<Table>, PackageManifest)>,
+}
+impl SkinFiles for EmbeddedPackage {
+    fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
+        self.files.read(path)
     }
-    match b.id {
-        "nanatype.love_letter" => files.extend_from_slice(&[
-            (
-                "love_letter/write.wgsl",
-                include_bytes!("../builtin/love_letter/write.wgsl"),
-            ),
-            (
-                "love_letter/dissolve.wgsl",
-                include_bytes!("../builtin/love_letter/dissolve.wgsl"),
-            ),
-            (
-                "love_letter/paper.wgsl",
-                include_bytes!("../builtin/love_letter/paper.wgsl"),
-            ),
-            (
-                "love_letter/strokes.nthz",
-                include_bytes!("../builtin/love_letter/strokes.nthz"),
-            ),
-            (
-                "love_letter/COPYING",
-                include_bytes!("../builtin/love_letter/COPYING"),
-            ),
-            (
-                "love_letter/ARPHICPL.TXT",
-                include_bytes!("../builtin/love_letter/ARPHICPL.TXT"),
-            ),
-            (
-                "love_letter/APL-zh_CN.UTF-8.txt",
-                include_bytes!("../builtin/love_letter/APL-zh_CN.UTF-8.txt"),
-            ),
-            (
-                "love_letter/APL-zh_TW.UTF-8.txt",
-                include_bytes!("../builtin/love_letter/APL-zh_TW.UTF-8.txt"),
-            ),
-            (
-                "love_letter/SOURCES.txt",
-                include_bytes!("../builtin/love_letter/SOURCES.txt"),
-            ),
-            (
-                "love_letter/fonts/LXGWWenKai-Regular.ttf",
-                include_bytes!("../fonts/LXGWWenKai-Regular.ttf"),
-            ),
-            (
-                "love_letter/fonts/OFL.txt",
-                include_bytes!("../fonts/LXGWWenKai-Regular.LICENSE.txt"),
-            ),
-        ]),
-        "nanatype.machine_learning" => files.extend_from_slice(&[(
-            "machine_learning/artwork.wgsl",
-            include_bytes!("../builtin/machine_learning/artwork.wgsl"),
-        )]),
-        "nanatype.sonnet" => files.extend_from_slice(&[
-            (
-                "sonnet/appear.wgsl",
-                include_bytes!("../builtin/sonnet/appear.wgsl"),
-            ),
-            (
-                "sonnet/dissolve.wgsl",
-                include_bytes!("../builtin/sonnet/dissolve.wgsl"),
-            ),
-        ]),
-        "nanatype.crayon" => files.extend_from_slice(&[
-            (
-                "crayon/write.wgsl",
-                include_bytes!("../builtin/crayon/write.wgsl"),
-            ),
-            (
-                "crayon/erase.wgsl",
-                include_bytes!("../builtin/crayon/erase.wgsl"),
-            ),
-            (
-                "crayon/paper-background.wgsl",
-                include_bytes!("../builtin/crayon/paper-background.wgsl"),
-            ),
-            (
-                "crayon/paper.wgsl",
-                include_bytes!("../builtin/crayon/paper.wgsl"),
-            ),
-            (
-                "crayon/pencil.wgsl",
-                include_bytes!("../builtin/crayon/pencil.wgsl"),
-            ),
-            (
-                "crayon/still.png",
-                include_bytes!("../builtin/crayon/still.png"),
-            ),
-            (
-                "crayon/bubble.png",
-                include_bytes!("../builtin/crayon/bubble.png"),
-            ),
-        ]),
-        "nanatype.halo" => plate!("halo"),
-        "nanatype.night" => plate!("night"),
-        "nanatype.parchment" => {
-            plate!("parchment");
-            files.push((
-                "parchment/ornament.png",
-                include_bytes!("../builtin/parchment/ornament.png"),
-            ));
-        }
-        "nanatype.adv" => plate!("adv"),
-        "nanatype.rpg" => plate!("rpg"),
-        "nanatype.vanilla" => plate!("vanilla"),
-        "nanatype.bubble" => plate!("bubble"),
-        "nanatype.livechat" => plate!("livechat"),
-        "nanatype.comic" => plate!("comic"),
-        "nanatype.terminal" => plate!("terminal"),
-        "nanatype.pixel" => plate!("pixel"),
-        "nanatype.sakura" => {
-            plate!("sakura");
-            files.push((
-                "sakura/ornament.png",
-                include_bytes!("../builtin/sakura/ornament.png"),
-            ));
-        }
-        "nanatype.ink" => plate!("ink"),
-        "nanatype.echo_vanilla" => plate!("echo_vanilla"),
-        "nanatype.echo_bubble" => plate!("echo_bubble"),
-        _ => {}
+    fn file_len(&self, path: &str) -> Result<u64, FileError> {
+        self.files.file_len(path)
     }
-    if b.id == "nanatype.ink" {
-        files.extend_from_slice(&[
-            (
-                "ink/bamboo.png",
-                include_bytes!("../builtin/ink/bamboo.png"),
-            ),
-            (
-                "ink/ART-LICENSE.txt",
-                include_bytes!("../builtin/ink/ART-LICENSE.txt"),
-            ),
-        ]);
+    fn list(&self) -> Vec<String> {
+        self.files.list()
     }
-    match b.id {
-        "nanatype.gothic" => files.extend_from_slice(&[
-            (
-                "gothic/rose.png",
-                include_bytes!("../builtin/gothic/rose.png"),
-            ),
-            (
-                "gothic/tracery.png",
-                include_bytes!("../builtin/gothic/tracery.png"),
-            ),
-            (
-                "gothic/artwork.wgsl",
-                include_bytes!("../builtin/gothic/artwork.wgsl"),
-            ),
-            (
-                "gothic/still.png",
-                include_bytes!("../builtin/gothic/still.png"),
-            ),
-            (
-                "gothic/ornament.png",
-                include_bytes!("../builtin/gothic/ornament.png"),
-            ),
-        ]),
-        "nanatype.celestial" => files.extend_from_slice(&[
-            (
-                "celestial/artwork.wgsl",
-                include_bytes!("../builtin/celestial/artwork.wgsl"),
-            ),
-            (
-                "celestial/still.png",
-                include_bytes!("../builtin/celestial/still.png"),
-            ),
-            (
-                "celestial/ornament.png",
-                include_bytes!("../builtin/celestial/ornament.png"),
-            ),
-        ]),
-        "nanatype.forest" => files.extend_from_slice(&[
-            (
-                "forest/artwork.wgsl",
-                include_bytes!("../builtin/forest/artwork.wgsl"),
-            ),
-            (
-                "forest/still.png",
-                include_bytes!("../builtin/forest/still.png"),
-            ),
-            (
-                "forest/ornament.png",
-                include_bytes!("../builtin/forest/ornament.png"),
-            ),
-        ]),
-        "nanatype.tidal" => files.extend_from_slice(&[
-            (
-                "tidal/artwork.wgsl",
-                include_bytes!("../builtin/tidal/artwork.wgsl"),
-            ),
-            (
-                "tidal/still.png",
-                include_bytes!("../builtin/tidal/still.png"),
-            ),
-            (
-                "tidal/ornament.png",
-                include_bytes!("../builtin/tidal/ornament.png"),
-            ),
-        ]),
-        "nanatype.lantern" => files.extend_from_slice(&[
-            (
-                "lantern/artwork.wgsl",
-                include_bytes!("../builtin/lantern/artwork.wgsl"),
-            ),
-            (
-                "lantern/still.png",
-                include_bytes!("../builtin/lantern/still.png"),
-            ),
-            (
-                "lantern/ornament.png",
-                include_bytes!("../builtin/lantern/ornament.png"),
-            ),
-        ]),
-        "nanatype.citrus" => files.extend_from_slice(&[
-            (
-                "citrus/artwork.wgsl",
-                include_bytes!("../builtin/citrus/artwork.wgsl"),
-            ),
-            (
-                "citrus/still.png",
-                include_bytes!("../builtin/citrus/still.png"),
-            ),
-            (
-                "citrus/ornament.png",
-                include_bytes!("../builtin/citrus/ornament.png"),
-            ),
-        ]),
-        _ => {}
+    fn cached_skin_manifest(&self) -> Option<&Table> {
+        self.parsed.0.as_ref()
     }
-    Arc::new(MemoryFiles::new(&files))
+    fn cached_package_manifest(&self) -> Option<&PackageManifest> {
+        Some(&self.parsed.1)
+    }
 }
 
 /// One row of the skin picker.
@@ -443,13 +128,35 @@ pub struct SkinRegistry {
     entries: Vec<SkinEntry>,
 }
 
-struct Resolver<'a>(&'a SkinRegistry);
-
-impl BaseResolver for Resolver<'_> {
+struct ScopedResolver(Arc<dyn SkinFiles>);
+impl BaseResolver for ScopedResolver {
     fn base(&self, id: &str) -> Option<(Table, Arc<dyn SkinFiles>)> {
-        let files = self.0.files_for(id)?;
-        let table = read_manifest(&*files).ok()?;
+        let files: Arc<dyn SkinFiles> = Arc::new(NamespaceFiles {
+            files: self.0.clone(),
+            id: id.into(),
+        });
+        let mut table = read_manifest(&*files).ok()?;
+        qualify_resources(&mut table, id);
         Some((table, files))
+    }
+}
+
+fn diagnostics(error: FileError) -> Vec<SkinDiagnostic> {
+    vec![SkinDiagnostic {
+        severity: Severity::Error,
+        field: PACKAGE_MANIFEST.into(),
+        message: error.to_string(),
+    }]
+}
+
+pub(crate) fn bundled_path(path: &str) -> Result<String, FileError> {
+    if let Some(rest) = path.strip_prefix("pkg:") {
+        let (id, path) = rest
+            .split_once('/')
+            .ok_or_else(|| FileError::UnsafePath(path.into()))?;
+        clean_path(&format!("dependencies/{id}/{path}"))
+    } else {
+        clean_path(path)
     }
 }
 
@@ -472,24 +179,220 @@ impl SkinRegistry {
         &self.entries
     }
 
+    /// All installed package capabilities, including packages without a skin.
+    pub fn packages(&self) -> Vec<(PackageManifest, SkinOrigin)> {
+        let mut packages = Vec::new();
+        for builtin in BUILTINS {
+            if let Ok(package) = PackageManifest::read(&*builtin_files(builtin)) {
+                packages.push((package, SkinOrigin::Builtin));
+            }
+        }
+        if let Some(dir) = &self.user_dir
+            && let Ok(entries) = fs::read_dir(dir)
+        {
+            let mut paths: Vec<_> = entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.is_dir())
+                .collect();
+            paths.sort();
+            for path in paths {
+                if let Ok(package) = PackageManifest::read(&DirFiles::new(&path))
+                    && !BUILTINS.iter().any(|b| b.id == package.meta.id)
+                {
+                    packages.push((package, SkinOrigin::Directory(path)));
+                }
+            }
+        }
+        packages
+    }
+
+    pub fn package_files(&self, id: &str) -> Result<Arc<dyn SkinFiles>, FileError> {
+        self.resolve_package(
+            self.raw_files_for(id)
+                .ok_or_else(|| FileError::Missing(id.into()))?,
+        )
+    }
+
+    pub fn inspect_package_archive(
+        &self,
+        archive: &Path,
+    ) -> Result<Arc<dyn SkinFiles>, Vec<SkinDiagnostic>> {
+        let files = self
+            .resolve_package(Arc::new(ZipFiles::open(archive).map_err(diagnostics)?))
+            .map_err(diagnostics)?;
+        let package = PackageManifest::read(&*files).map_err(diagnostics)?;
+        if package.capabilities.contains(&PackageCapability::Skin) {
+            let resolver = ScopedResolver(files.clone());
+            load(
+                files.clone(),
+                SkinOrigin::Archive(archive.into()),
+                &resolver,
+                &self.app_version,
+            )?;
+        }
+        if let Some(entry) = &package.entry {
+            let source = files.read(entry).map_err(diagnostics)?;
+            if source.len() > 128 * 1024
+                || source.first() == Some(&0x1b)
+                || std::str::from_utf8(&source).is_err()
+            {
+                return Err(diagnostics(FileError::Io(
+                    "plugin entry must be bounded UTF-8 Lua source".into(),
+                )));
+            }
+        }
+        Ok(files)
+    }
+
     pub fn entry(&self, id: &str) -> Option<&SkinEntry> {
         self.entries.iter().find(|e| e.id == id)
     }
 
     fn user_folder(&self, id: &str) -> Option<PathBuf> {
+        if !crate::package::valid_id(id) {
+            return None;
+        }
         let dir = self.user_dir.as_ref()?.join(id);
-        dir.join(MANIFEST).is_file().then_some(dir)
+        dir.join(PACKAGE_MANIFEST).is_file().then_some(dir)
     }
 
-    fn files_for(&self, id: &str) -> Option<Arc<dyn SkinFiles>> {
+    fn raw_files_for(&self, id: &str) -> Option<Arc<dyn SkinFiles>> {
         if let Some(b) = BUILTINS.iter().find(|b| b.id == id) {
-            if let Some(files) = self.entry(id).and_then(|e| e.files.clone()) {
-                return Some(files);
-            }
             return Some(builtin_files(b));
         }
         self.user_folder(id)
             .map(|dir| Arc::new(DirFiles::new(dir)) as Arc<dyn SkinFiles>)
+    }
+
+    fn files_for(&self, id: &str) -> Option<Arc<dyn SkinFiles>> {
+        self.resolve_package(self.raw_files_for(id)?).ok()
+    }
+
+    /// Resolve a closed, exactly versioned dependency graph without network access.
+    pub fn resolve_package(
+        &self,
+        root: Arc<dyn SkinFiles>,
+    ) -> Result<Arc<dyn SkinFiles>, FileError> {
+        fn resolve(
+            registry: &SkinRegistry,
+            files: Arc<dyn SkinFiles>,
+            bundle: &Arc<dyn SkinFiles>,
+            stack: &mut Vec<String>,
+            versions: &mut BTreeMap<String, String>,
+            all: &mut BTreeMap<String, Arc<dyn SkinFiles>>,
+        ) -> Result<Arc<dyn SkinFiles>, FileError> {
+            let package = PackageManifest::read(&*files)?;
+            if let (Some(required), Some(current)) = (
+                crate::load::version_tuple(&package.meta.min_app),
+                crate::load::version_tuple(&registry.app_version),
+            ) && required > current
+            {
+                return Err(FileError::Io(format!(
+                    "{} requires NanaType {}",
+                    package.meta.id, package.meta.min_app
+                )));
+            }
+            if versions.len() >= 64 {
+                return Err(FileError::Io(
+                    "package dependency graph exceeds 64 packages".into(),
+                ));
+            }
+            let id = package.meta.id.clone();
+            if stack.len() >= 16 || stack.contains(&id) {
+                return Err(FileError::Io(format!(
+                    "cyclic/deep package dependency {id}"
+                )));
+            }
+            if let Some(version) = versions.insert(id.clone(), package.meta.version.clone()) {
+                if version != package.meta.version {
+                    return Err(FileError::Io(format!(
+                        "conflicting package versions for {id}"
+                    )));
+                }
+                if let Some(existing) = all.get(&id) {
+                    return Ok(existing.clone());
+                }
+            }
+            stack.push(id.clone());
+            let mut dependencies = BTreeMap::new();
+            for (dependency, version) in &package.dependencies {
+                let prefix = format!("dependencies/{dependency}");
+                let dep_files: Arc<dyn SkinFiles> =
+                    if bundle.exists(&format!("{prefix}/{PACKAGE_MANIFEST}")) {
+                        Arc::new(PrefixFiles {
+                            files: bundle.clone(),
+                            prefix,
+                        })
+                    } else {
+                        registry.raw_files_for(dependency).ok_or_else(|| {
+                            FileError::Missing(format!("dependency {dependency}@{version}"))
+                        })?
+                    };
+                let meta = PackageManifest::read(&*dep_files)?;
+                if &meta.meta.id != dependency || &meta.meta.version != version {
+                    return Err(FileError::Io(format!(
+                        "dependency {dependency} needs exactly {version}"
+                    )));
+                }
+                let resolved = resolve(registry, dep_files, bundle, stack, versions, all)?;
+                for path in resolved.list() {
+                    if let Some((nested, _)) =
+                        path.strip_prefix("pkg:").and_then(|p| p.split_once('/'))
+                        && let Some(files) = all.get(nested)
+                    {
+                        dependencies.insert(nested.into(), files.clone());
+                    }
+                }
+                dependencies.insert(dependency.clone(), resolved);
+            }
+            stack.pop();
+            // A dependency's explicitly declared transitive closure is visible by ID.
+
+            let resolved: Arc<dyn SkinFiles> = Arc::new(PackageFiles {
+                manifest: package,
+                local: files,
+                dependencies,
+            });
+            all.insert(id, resolved.clone());
+            Ok(resolved)
+        }
+        let mut packages = BTreeMap::new();
+        let files = resolve(
+            self,
+            root.clone(),
+            &root,
+            &mut Vec::new(),
+            &mut BTreeMap::new(),
+            &mut packages,
+        )?;
+        let paths = files.list();
+        if paths.len() > 4096 {
+            return Err(FileError::Io(
+                "package closure exceeds 4096 resources".into(),
+            ));
+        }
+        let mut total = 0u64;
+        for path in paths {
+            let bytes = files.file_len(&path)?;
+            if bytes > crate::MAX_FILE_BYTES {
+                return Err(FileError::TooLarge { path, bytes });
+            }
+            total = total
+                .checked_add(bytes)
+                .ok_or_else(|| FileError::Io("package size overflow".into()))?;
+            if total > crate::MAX_PACKAGE_BYTES {
+                return Err(FileError::TooLarge {
+                    path: "package dependency closure".into(),
+                    bytes: total,
+                });
+            }
+        }
+        // Reject the complete closure's size before hashing any signed payloads.
+        for package in packages.values() {
+            crate::verify_integrity(&**package)?;
+        }
+        Ok(files)
     }
 
     /// Re-read the user folder. Built-ins always come first.
@@ -528,11 +431,17 @@ impl SkinRegistry {
     }
 
     fn describe(&self, id: String, files: Arc<dyn SkinFiles>, origin: SkinOrigin) -> SkinEntry {
-        let result = if origin == SkinOrigin::Builtin {
-            builtin_preview(files, &Resolver(self), &self.app_version)
-        } else {
-            load(files, origin.clone(), &Resolver(self), &self.app_version)
-        };
+        let result = self
+            .resolve_package(files)
+            .map_err(diagnostics)
+            .and_then(|files| {
+                let resolver = ScopedResolver(files.clone());
+                if origin == SkinOrigin::Builtin {
+                    builtin_preview(files, &resolver, &self.app_version)
+                } else {
+                    load(files, origin.clone(), &resolver, &self.app_version)
+                }
+            });
         match result {
             Ok(loaded) => {
                 let prepared = Arc::new(OnceLock::new());
@@ -628,7 +537,8 @@ impl SkinRegistry {
             Some(dir) if !BUILTINS.iter().any(|b| b.id == id) => SkinOrigin::Directory(dir),
             _ => SkinOrigin::Builtin,
         };
-        load(files, origin, &Resolver(self), &self.app_version)
+        let resolver = ScopedResolver(files.clone());
+        load(files, origin, &resolver, &self.app_version)
     }
 
     /// Reuse this scan's validated snapshot. UI selection and watcher reloads
@@ -676,10 +586,12 @@ impl SkinRegistry {
                 message: e.to_string(),
             }]
         })?;
+        let files = self.resolve_package(Arc::new(files)).map_err(diagnostics)?;
+        let resolver = ScopedResolver(files.clone());
         load(
-            Arc::new(files),
+            files,
             SkinOrigin::Archive(archive.to_path_buf()),
-            &Resolver(self),
+            &resolver,
             &self.app_version,
         )
     }
@@ -694,8 +606,9 @@ impl SkinRegistry {
                 message,
             }]
         };
-        let loaded = self.inspect_archive(archive)?;
-        let id = loaded.skin.meta.id.clone();
+        let files = self.inspect_package_archive(archive)?;
+        let package = PackageManifest::read(&*files).map_err(diagnostics)?;
+        let id = package.meta.id.clone();
         if BUILTINS.iter().any(|b| b.id == id) {
             return Err(err("meta.id", format!("`{id}` is a built-in skin id")));
         }
@@ -706,9 +619,9 @@ impl SkinRegistry {
         let staging = user_dir.join(format!(".{id}.installing"));
         let _ = fs::remove_dir_all(&staging);
         let write = || -> Result<(), FileError> {
-            for path in loaded.files.list() {
-                let clean = clean_path(&path)?;
-                let bytes = loaded.files.read(&clean)?;
+            for path in files.list() {
+                let clean = bundled_path(&path)?;
+                let bytes = files.read(&path)?;
                 let target = staging.join(&clean);
                 if let Some(parent) = target.parent() {
                     fs::create_dir_all(parent).map_err(|e| FileError::Io(e.to_string()))?;
@@ -739,40 +652,41 @@ impl SkinRegistry {
         })
     }
 
-    /// Write a `.ntskin` archive, including built-in artwork and its notices.
+    /// Write a complete `.ntpkg` archive including dependencies and notices.
     pub fn export(&self, id: &str, dest: &Path) -> Result<(), FileError> {
-        let mut files = self
-            .files_for(id)
-            .ok_or_else(|| FileError::Missing(id.to_owned()))?;
-        // GPU skins must travel with inherited WGSL/textures, including when
-        // their authoring base was another user folder. Flatten only these
-        // packages; existing static exports retain their original manifests.
-        let mut manifest = None;
-        if let Ok(loaded) = self.load(id)
-            && (!loaded.skin.shaders.is_empty()
-                || !loaded.skin.materials.is_empty()
-                || loaded.skin.dialogue.reveal.handwriting.is_some())
-        {
-            let compact = crate::load::standalone_manifest(&loaded.skin)
-                .map_err(|e| FileError::Io(e.to_string()))?;
-            manifest =
-                Some(toml::to_string_pretty(&compact).map_err(|e| FileError::Io(e.to_string()))?);
-            files = loaded.files;
+        let files = self.package_files(id)?;
+        if files.exists(crate::INTEGRITY_FILE) {
+            return crate::PackageProject::capture(&*files)?.export(dest);
         }
+        let mut package = PackageManifest::read(&*files)?;
+        let manifest = if package.capabilities.contains(&PackageCapability::Skin) {
+            let loaded = self.load(id).map_err(|e| FileError::Io(format!("{e:?}")))?;
+            package.meta.base = None;
+            let mut compact = crate::load::standalone_manifest(&loaded.skin)
+                .map_err(|e| FileError::Io(e.to_string()))?;
+            compact.remove("meta");
+            Some(toml::to_string_pretty(&compact).map_err(|e| FileError::Io(e.to_string()))?)
+        } else {
+            None
+        };
         let file = fs::File::create(dest).map_err(|e| FileError::Io(e.to_string()))?;
         let mut zip = zip::ZipWriter::new(file);
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated);
         for path in files.list() {
             let bytes = if path == MANIFEST {
-                match &manifest {
-                    Some(s) => s.as_bytes().to_vec(),
-                    None => files.read(&path)?,
-                }
+                manifest
+                    .as_ref()
+                    .map(|s| s.as_bytes().to_vec())
+                    .unwrap_or(files.read(&path)?)
+            } else if path == PACKAGE_MANIFEST {
+                toml::to_string_pretty(&package)
+                    .map_err(|e| FileError::Io(e.to_string()))?
+                    .into_bytes()
             } else {
                 files.read(&path)?
             };
-            zip.start_file(path.as_str(), options)
+            zip.start_file(bundled_path(&path)?, options)
                 .map_err(|e| FileError::Io(e.to_string()))?;
             zip.write_all(&bytes)
                 .map_err(|e| FileError::Io(e.to_string()))?;
@@ -814,8 +728,36 @@ impl SkinRegistry {
         }
         meta.insert("name".into(), names.into());
         table.insert("meta".into(), meta.into());
+        if !crate::package::valid_id(new_id) {
+            return Err(err("invalid package ID".into()));
+        }
+        let parent_files = self
+            .files_for(base)
+            .ok_or_else(|| err("missing base package".into()))?;
+        let parent = PackageManifest::read(&*parent_files).map_err(|e| err(e.to_string()))?;
+        let mut metadata: crate::Meta = table["meta"]
+            .clone()
+            .try_into()
+            .map_err(|e: toml::de::Error| err(e.to_string()))?;
+        metadata.schema = crate::SKIN_SCHEMA;
+        let package = PackageManifest {
+            format: crate::PACKAGE_FORMAT,
+            meta: metadata,
+            capabilities: vec![PackageCapability::Skin],
+            dependencies: BTreeMap::from([(base.into(), parent.meta.version)]),
+            catalogue_order: 0,
+            entry: None,
+            created_at: String::new(),
+            licensed_to: String::new(),
+        };
+        table.remove("meta");
         let dir = user_dir.join(new_id);
         fs::create_dir_all(&dir).map_err(|e| err(e.to_string()))?;
+        fs::write(
+            dir.join(PACKAGE_MANIFEST),
+            toml::to_string_pretty(&package).map_err(|e| err(e.to_string()))?,
+        )
+        .map_err(|e| err(e.to_string()))?;
         fs::write(
             dir.join(MANIFEST),
             toml::to_string_pretty(&table).unwrap_or_default(),
@@ -834,6 +776,22 @@ impl SkinRegistry {
 
     /// Delete a user skin. Built-ins cannot be removed.
     pub fn remove(&mut self, id: &str) -> Result<(), FileError> {
+        if let Some(dir) = &self.user_dir {
+            for entry in fs::read_dir(dir)
+                .map_err(|e| FileError::Io(e.to_string()))?
+                .flatten()
+            {
+                let files = DirFiles::new(entry.path());
+                if let Ok(package) = PackageManifest::read(&files)
+                    && package.dependencies.contains_key(id)
+                {
+                    return Err(FileError::Io(format!(
+                        "{} depends on {id}",
+                        package.meta.id
+                    )));
+                }
+            }
+        }
         let dir = self
             .user_folder(id)
             .filter(|_| !BUILTINS.iter().any(|b| b.id == id))

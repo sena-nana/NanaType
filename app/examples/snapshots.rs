@@ -118,6 +118,9 @@ fn main() {
     let skins = out.join("data").join("skins");
     framed_skin(&skins.join(FRAMED));
     fallback_skin(&skins.join(FALLBACK));
+    for name in [FRAMED, FALLBACK] {
+        fixture_package(&skins.join(name));
+    }
     let registry = SkinRegistry::new(Some(skins), env!("CARGO_PKG_VERSION"));
     if skin_id == "all" || skin_id.contains(',') {
         let ids: Vec<String> = if skin_id == "all" {
@@ -131,6 +134,33 @@ fn main() {
     } else {
         render(&registry, &out, &skin_id, locale);
     }
+}
+
+fn fixture_package(dir: &std::path::Path) {
+    use nanatype_theme::{DirFiles, Meta, PackageCapability, PackageManifest, TomlTable};
+    let mut table = nanatype_theme::read_manifest(&DirFiles::new(dir)).unwrap();
+    let meta: Meta = table.remove("meta").unwrap().try_into().unwrap();
+    let mut dependencies = std::collections::BTreeMap::new();
+    if let Some(base) = &meta.base {
+        let registry = SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        dependencies.insert(
+            base.clone(),
+            registry.load(base).unwrap().skin.meta.version.clone(),
+        );
+    }
+    let package = PackageManifest {
+        format: 1,
+        meta,
+        capabilities: vec![PackageCapability::Skin],
+        dependencies,
+        catalogue_order: 0,
+        entry: None,
+        created_at: String::new(),
+        licensed_to: String::new(),
+    };
+    std::fs::write(dir.join("package.toml"), package.to_toml().unwrap()).unwrap();
+    let _: &TomlTable = &table;
+    std::fs::write(dir.join("skin.toml"), table.to_string()).unwrap();
 }
 
 /// A user skin with pictures: render it with `snapshots <out> snap.framed`.
@@ -658,8 +688,20 @@ fn render_at(registry: &SkinRegistry, out: &std::path::Path, skin_id: &str, loca
     src.text = draft.into();
     ui.source.set(src);
     ui.display.set(Arc::new(core.display().clone()));
-    ui.history
-        .set(Arc::new(core.history().iter().cloned().collect()));
+    ui.history.set(Arc::new(
+        core.history()
+            .iter()
+            .cloned()
+            .map(|mut row| {
+                // Wall-clock timestamps also seed some effects. Keep pixel audits
+                // reproducible between independent before/after processes.
+                if row.item.kind == nanatype_model::SourceKind::Typewriter {
+                    row.item.at = 1_760_000_100_000;
+                }
+                row
+            })
+            .collect(),
+    ));
     ui.now.set(nanatype::clock::now_ms());
     ui.peer_now.set(nanatype::clock::now_ms());
     ui.history_now.set(nanatype::clock::now_ms());
@@ -1839,36 +1881,36 @@ fn responsive_audit(
             let scale = (1080. / w.max(h) as f32).min(1.);
             session.set_viewport(w, h, scale).unwrap();
             session.flush().unwrap();
-            if std::env::var_os("NANATYPE_RESPONSIVE_LONG_TEXT").is_some() {
-                if let Some(node) = ui.text_node.get_untracked() {
-                    let world = session.document().context().world();
-                    if let Some((_, layout)) = world.text_layout(node) {
-                        if layout.is_vertical() {
-                            let body = world.layout_box(node).unwrap();
-                            let port = world
-                                .layout_box(ui.text_port.get_untracked().unwrap())
-                                .unwrap();
-                            assert!(
-                                body.width + 0.5 >= layout.physical_size().0,
-                                "{name}: column stack is truncated"
-                            );
-                            assert!(
-                                (body.height - port.height).abs() < 1.,
-                                "{name}: wrapping height differs from viewport"
-                            );
-                            assert!(
-                                (body.x + body.width - port.x - port.width).abs() < 1.,
-                                "{name}: first column is not right aligned"
-                            );
-                            if let Some(first) = layout.objects.first() {
-                                let rect = layout.page_rect(first.rect, body.width);
-                                assert!(
-                                    body.x + rect.x >= port.x
-                                        && body.x + rect.x + rect.width <= port.x + port.width + 1.,
-                                    "{name}: leading inline object was clipped"
-                                );
-                            }
-                        }
+            if std::env::var_os("NANATYPE_RESPONSIVE_LONG_TEXT").is_some()
+                && let Some(node) = ui.text_node.get_untracked()
+            {
+                let world = session.document().context().world();
+                if let Some((_, layout)) = world.text_layout(node)
+                    && layout.is_vertical()
+                {
+                    let body = world.layout_box(node).unwrap();
+                    let port = world
+                        .layout_box(ui.text_port.get_untracked().unwrap())
+                        .unwrap();
+                    assert!(
+                        body.width + 0.5 >= layout.physical_size().0,
+                        "{name}: column stack is truncated"
+                    );
+                    assert!(
+                        (body.height - port.height).abs() < 1.,
+                        "{name}: wrapping height differs from viewport"
+                    );
+                    assert!(
+                        (body.x + body.width - port.x - port.width).abs() < 1.,
+                        "{name}: first column is not right aligned"
+                    );
+                    if let Some(first) = layout.objects.first() {
+                        let rect = layout.page_rect(first.rect, body.width);
+                        assert!(
+                            body.x + rect.x >= port.x
+                                && body.x + rect.x + rect.width <= port.x + port.width + 1.,
+                            "{name}: leading inline object was clipped"
+                        );
                     }
                 }
             }
@@ -1938,7 +1980,7 @@ fn responsive_audit(
                 );
             }
             session
-                .screenshot_png(&out.join(format!("{name}.png")))
+                .screenshot_png(out.join(format!("{name}.png")))
                 .unwrap();
             windows += 1;
         }

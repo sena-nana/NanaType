@@ -8,7 +8,7 @@ use nanatype_model::{EntranceKind, Overflow, Rgba8};
 use nanatype_playback::{PacingParams, PunctPauses, TypingSoundRule};
 use serde::{Deserialize, Serialize};
 
-pub const SKIN_SCHEMA: u32 = 2;
+pub const SKIN_SCHEMA: u32 = 3;
 
 /// Localized display strings keyed by BCP-47 tag (`zh-CN`, `en-US`, `ja-JP`).
 pub type Localized = BTreeMap<String, String>;
@@ -582,7 +582,7 @@ pub struct Meta {
 impl Default for Meta {
     fn default() -> Self {
         Self {
-            schema: 1,
+            schema: SKIN_SCHEMA,
             id: String::new(),
             version: "1.0.0".into(),
             min_app: "0.1.0".into(),
@@ -612,9 +612,9 @@ impl Default for Chrome {
     fn default() -> Self {
         Self {
             appearance: Appearance::Light,
-            accent: Rgba8::rgb(8, 118, 208),
+            accent: Rgba8::rgb(0, 0, 0),
             surface: Rgba8::rgb(255, 255, 255),
-            text: Rgba8::rgb(27, 47, 75),
+            text: Rgba8::rgb(0, 0, 0),
         }
     }
 }
@@ -726,12 +726,12 @@ pub struct BoxSpec {
 impl Default for BoxSpec {
     fn default() -> Self {
         Self {
-            color: Rgba8::rgb(255, 255, 255),
-            border_color: Rgba8::rgb(203, 224, 239),
-            border_width: 1.0,
+            color: Rgba8::rgba(0, 0, 0, 0),
+            border_color: Rgba8::rgba(0, 0, 0, 0),
+            border_width: 0.0,
             inner_border_color: None,
             inner_border_width: 0.0,
-            radius: 18.0,
+            radius: 0.0,
             glow: None,
             glow_blur: 12.0,
             shadow: None,
@@ -804,7 +804,7 @@ impl Default for TextSpec {
         Self {
             font_family: None,
             material: None,
-            color: Rgba8::rgb(27, 47, 75),
+            color: Rgba8::rgb(0, 0, 0),
             size: 28.0,
             line_height: 1.4,
             letter_spacing: 0.0,
@@ -845,12 +845,12 @@ impl Default for NameplateSpec {
     fn default() -> Self {
         Self {
             visible: true,
-            color: Rgba8::rgb(8, 118, 208),
-            text_color: Rgba8::rgb(255, 255, 255),
+            color: Rgba8::rgba(0, 0, 0, 0),
+            text_color: Rgba8::rgb(0, 0, 0),
             size: 18.0,
-            radius: 10.0,
+            radius: 0.0,
             padding: [10.0, 4.0],
-            offset: [16.0, -12.0],
+            offset: [0.0, 0.0],
             frame: None,
             stroke: None,
             border_color: None,
@@ -925,16 +925,16 @@ pub struct ContinueSpec {
 impl Default for ContinueSpec {
     fn default() -> Self {
         Self {
-            glyph: "▼".into(),
-            color: Rgba8::rgb(8, 118, 208),
+            glyph: String::new(),
+            color: Rgba8::rgb(0, 0, 0),
             size: 16.0,
             image: None,
             frames: 1,
             fps: 8.0,
             anchor: Anchor::BottomRight,
-            bob_px: 3.0,
+            bob_px: 0.0,
             offset: [-14.0, -8.0],
-            motion: ContinueMotion::Bob,
+            motion: ContinueMotion::None,
             period_s: 0.83,
             image_size: None,
         }
@@ -955,8 +955,8 @@ impl Default for EntranceSpec {
         Self {
             material: None,
             scope: TransitionScope::Glyph,
-            kind: EntranceKind::Fade,
-            ms: 140,
+            kind: EntranceKind::None,
+            ms: 0,
         }
     }
 }
@@ -1352,6 +1352,16 @@ impl Default for HistoryTitle {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct History {
+    /// Whether consecutive messages from one author share their header.
+    pub group_speakers: bool,
+    /// Panel-less window padding: left, top, right, bottom.
+    pub padding: [f32; 4],
+    /// Panel-less window margin: top, right, bottom, left.
+    pub margin: [f32; 4],
+    /// Extra horizontal room around each row.
+    pub row_padding: f32,
+    /// Additional width reserved beside the text column (independent of row paint).
+    pub column_inset: f32,
     pub width: f32,
     pub height: f32,
     pub avatar: HistoryAvatar,
@@ -1398,15 +1408,20 @@ pub struct History {
 impl Default for History {
     fn default() -> Self {
         Self {
+            group_speakers: true,
+            padding: [4.0, 8.0, 4.0, 8.0],
+            margin: [8.0; 4],
+            row_padding: 0.0,
+            column_inset: 0.0,
             width: 420.0,
             height: 560.0,
             avatar: HistoryAvatar::default(),
-            name_color: Rgba8::rgb(8, 118, 208),
+            name_color: Rgba8::rgb(0, 0, 0),
             name_size: 14.0,
             name_stroke: None,
-            bubble_color: Rgba8::rgba(255, 255, 255, 235),
+            bubble_color: Rgba8::rgba(0, 0, 0, 0),
             bubble_border: None,
-            bubble_radius: 14.0,
+            bubble_radius: 0.0,
             bubble_padding: [12.0, 8.0],
             bubble_frame: None,
             bubble_material: None,
@@ -1417,11 +1432,11 @@ impl Default for History {
                 ..TextSpec::default()
             },
             gap: 10.0,
-            entrance: HistoryEntrance::SlideUp,
-            time_color: Rgba8::rgb(0x8a, 0xa0, 0xb4),
+            entrance: HistoryEntrance::None,
+            time_color: Rgba8::rgb(96, 96, 96),
             bubble_gradient: None,
             bubble_radii: None,
-            bubble_border_width: 1.0,
+            bubble_border_width: 0.0,
             bubble_shadows: Vec::new(),
             name_plate: None,
             layout: HistoryLayout::Stack,

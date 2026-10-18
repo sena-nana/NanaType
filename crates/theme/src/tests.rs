@@ -30,6 +30,42 @@ fn write_skin(dir: &Path, manifest: &str, files: &[(&str, Vec<u8>)]) {
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(p, bytes).unwrap();
     }
+    if !files.iter().any(|(p, _)| *p == PACKAGE_MANIFEST)
+        && let Ok(table) = manifest.parse::<TomlTable>()
+        && let Some(value) = table.get("meta")
+        && let Ok(meta) = value.clone().try_into::<Meta>()
+    {
+        let mut dependencies = std::collections::BTreeMap::new();
+        if let Some(base) = &meta.base {
+            let registry = SkinRegistry::new(None, APP);
+            let version = registry
+                .load(base)
+                .ok()
+                .map(|l| l.skin.meta.version.clone())
+                .or_else(|| {
+                    PackageManifest::read(&DirFiles::new(dir.parent()?.join(base)))
+                        .ok()
+                        .map(|p| p.meta.version)
+                })
+                .unwrap_or_else(|| "1.0.0".into());
+            dependencies.insert(base.clone(), version);
+        }
+        let package = PackageManifest {
+            format: PACKAGE_FORMAT,
+            meta,
+            capabilities: vec![PackageCapability::Skin],
+            dependencies,
+            catalogue_order: 0,
+            entry: None,
+            created_at: String::new(),
+            licensed_to: String::new(),
+        };
+        fs::write(
+            dir.join(PACKAGE_MANIFEST),
+            toml::to_string_pretty(&package).unwrap(),
+        )
+        .unwrap();
+    }
 }
 
 fn load_dir(dir: &Path) -> Result<LoadedSkin, Vec<SkinDiagnostic>> {
@@ -351,7 +387,7 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
     ] {
         let id = format!("nanatype.{name}");
         let original = registry.load(&id).unwrap();
-        assert_eq!(original.skin.meta.schema, 2);
+        assert_eq!(original.skin.meta.schema, SKIN_SCHEMA);
         assert_eq!(original.skin.shader_programs.len(), 3);
         assert!(original.skin.dialogue.decor.is_empty());
         assert_eq!(original.skin.dialogue.shader_effects.len(), 1);
@@ -375,7 +411,7 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
             "responsive_compact"
         );
         assert_eq!(original.skin.shaders["artwork"].textures.len(), 1);
-        let file = tmp.path().join(format!("{name}.ntskin"));
+        let file = tmp.path().join(format!("{name}.ntpkg"));
         registry.export(&id, &file).unwrap();
         let loaded = registry.inspect_archive(&file).unwrap();
         assert_eq!(loaded.skin.shader_programs, original.skin.shader_programs);
@@ -421,7 +457,7 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
         );
     }
     let artwork_sample =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/examples/lunar-atlas.ntskin");
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/examples/lunar-atlas.ntpkg");
     registry.install(&artwork_sample).unwrap();
     let sample = registry.load("example.lunar_atlas").unwrap();
     assert!(sample.skin.meta.base.is_none());
@@ -429,7 +465,7 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
         sample.skin.dialogue.shader_effects[0].target,
         ShaderTarget::Artwork
     );
-    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/examples/aurora.ntskin");
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/examples/aurora.ntpkg");
     registry.install(&file).unwrap();
     registry
         .duplicate(
@@ -439,7 +475,7 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
             &TomlTable::new(),
         )
         .unwrap();
-    let detached = tmp.path().join("detached.ntskin");
+    let detached = tmp.path().join("detached.ntpkg");
     registry.export("my.detached", &detached).unwrap();
     registry.remove("my.detached").unwrap();
     registry.remove("example.aurora").unwrap();
@@ -465,7 +501,7 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
     // than requiring the default minimal skin to carry an unrelated effect.
     write_skin(
         &tmp.path().join("skins/my.merge"),
-        "[meta]\nschema=2\nid='my.merge'\nbase='nanatype.night'\n[dialogue]\nshader_effects=[{shader='extra',target='background'}]\n[shaders.extra]\nsource='extra.wgsl'\n",
+        "[meta]\nschema=3\nid='my.merge'\nbase='nanatype.night'\n[dialogue]\nshader_effects=[{shader='extra',target='background'}]\n[shaders.extra]\nsource='extra.wgsl'\n",
         &[(
             "extra.wgsl",
             b"fn effect(i:EffectInput)->vec4<f32>{return vec4(i.accent.rgb,.1);}".to_vec(),
@@ -475,7 +511,7 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
     let merged = registry.load("my.merge").unwrap();
     assert_eq!(merged.skin.shader_programs.len(), 5);
     assert_eq!(merged.skin.dialogue.shader_effects.len(), 1);
-    let archive = tmp.path().join("merged.ntskin");
+    let archive = tmp.path().join("merged.ntpkg");
     registry.export("my.merge", &archive).unwrap();
     let exported = registry.inspect_archive(&archive).unwrap();
     assert_eq!(exported.skin.shader_programs, merged.skin.shader_programs);
@@ -507,7 +543,7 @@ fn classic_artwork_exports_its_complete_static_fallback_and_keeps_special_layout
         let id = format!("nanatype.{name}");
         let original = registry.load(&id).unwrap();
         let skin = &original.skin;
-        assert_eq!(skin.meta.schema, 2, "{name}");
+        assert_eq!(skin.meta.schema, SKIN_SCHEMA, "{name}");
         let animated = [
             "night", "rpg", "bubble", "livechat", "terminal", "pixel", "sakura",
         ]
@@ -537,7 +573,7 @@ fn classic_artwork_exports_its_complete_static_fallback_and_keeps_special_layout
                 "{name}: static print must not schedule animation"
             );
         }
-        let archive = tmp.path().join(format!("{name}.ntskin"));
+        let archive = tmp.path().join(format!("{name}.ntpkg"));
         registry.export(&id, &archive).unwrap();
         let exported = registry.inspect_archive(&archive).unwrap();
         assert_eq!(exported.skin.shader_programs, skin.shader_programs);
@@ -598,9 +634,9 @@ fn classic_artwork_exports_its_complete_static_fallback_and_keeps_special_layout
 fn shader_manifests_fail_closed_on_schema_resources_and_limits() {
     let tmp = tempfile::tempdir().unwrap();
     let shader = b"fn effect(i:EffectInput)->vec4<f32>{return vec4(0.);}".to_vec();
-    let good = "[meta]\nschema=2\nid='shader-test'\n[shaders.test]\nsource='effect.wgsl'\n[[dialogue.shader_effects]]\nshader='test'\n";
+    let good = "[meta]\nschema=3\nid='shader-test'\n[shaders.test]\nsource='effect.wgsl'\n[[dialogue.shader_effects]]\nshader='test'\n";
     for manifest in [
-        good.replace("schema=2", "schema=1"),
+        good.replace("schema=3", "schema=1"),
         good.replace("effect.wgsl", "../effect.wgsl"),
         good.replace("effect.wgsl", "missing.wgsl"),
         good.replace(
@@ -665,7 +701,7 @@ fn builtin_ink_artwork_and_provenance_survive_export_and_inheritance() {
     let tmp = tempfile::tempdir().unwrap();
     let mut registry = SkinRegistry::new(Some(tmp.path().join("skins")), APP);
     let original = registry.load("nanatype.ink").unwrap();
-    let archive = tmp.path().join("ink.ntskin");
+    let archive = tmp.path().join("ink.ntpkg");
     registry.export("nanatype.ink", &archive).unwrap();
     let exported = registry.inspect_archive(&archive).unwrap();
     let names = Localized::from([("en-US".to_owned(), "My Ink".to_owned())]);
@@ -673,7 +709,7 @@ fn builtin_ink_artwork_and_provenance_survive_export_and_inheritance() {
         .duplicate("nanatype.ink", "my-ink", &names, &TomlTable::new())
         .unwrap();
     let inherited = registry.load("my-ink").unwrap();
-    for path in ["ink/bamboo.png", "ink/ART-LICENSE.txt"] {
+    for path in ["bamboo.png", "ART-LICENSE.txt"] {
         let bytes = original.files.read(path).unwrap();
         assert_eq!(exported.files.read(path).unwrap(), bytes);
         assert_eq!(inherited.files.read(path).unwrap(), bytes);
@@ -745,7 +781,7 @@ avatar = { shape = "circle", ring_color = "#fff", ring_width = 2 }
 }
 
 #[test]
-fn default_dialogue_has_a_plain_box_and_bobbing_continue_hint() {
+fn default_dialogue_is_unstyled_and_has_no_continue_animation() {
     let skin = Skin::default();
     let d = &skin.dialogue;
     assert!(d.tail.is_none());
@@ -753,7 +789,10 @@ fn default_dialogue_has_a_plain_box_and_bobbing_continue_hint() {
     assert!(d.box_.shape.gradient.is_none());
     assert_eq!(d.box_.margin, [0.0; 4]);
     assert_eq!(d.continue_.offset, [-14.0, -8.0]);
-    assert_eq!(d.continue_.motion, ContinueMotion::Bob);
+    assert_eq!(d.continue_.motion, ContinueMotion::None);
+    assert_eq!(d.box_.color.a, 0);
+    assert_eq!(d.box_.border_width, 0.0);
+    assert!(d.continue_.glyph.is_empty());
     assert_eq!(d.nameplate.anchor, Anchor::TopLeft);
 }
 
@@ -1031,8 +1070,8 @@ text = "x"
     );
     let skin = load_dir(&dir).unwrap();
     assert_eq!(skin.skin.dialogue.decor.len(), 1);
-    // Tags are inherited; identity is not.
-    assert_eq!(skin.skin.meta.tags, ["elegant"]);
+    // Package metadata belongs to the child, including its catalogue tags.
+    assert!(skin.skin.meta.tags.is_empty());
     let dir = tmp.path().join("b");
     write_skin(
         &dir,
@@ -1352,7 +1391,11 @@ at = 1.5
         let tmp = tempfile::tempdir().unwrap();
         write_skin(tmp.path(), manifest, files);
         let errs = errors(load_dir(tmp.path()));
-        assert!(errs.iter().any(|f| f == field), "{field}: {errs:?}");
+        assert!(
+            errs.iter()
+                .any(|f| f == field || (field.starts_with("meta.") && f == PACKAGE_MANIFEST)),
+            "{field}: {errs:?}"
+        );
     }
 }
 
@@ -1387,6 +1430,18 @@ fn a_valid_nine_slice_frame_loads() {
 #[test]
 fn clean_path_rejects_escapes() {
     assert_eq!(clean_path("./a\\b.png").unwrap(), "a/b.png");
+    for bad in [
+        "CON",
+        "NUL.png",
+        "AUX.txt",
+        "COM1.log",
+        "folder./x",
+        "folder /x",
+        "x\0.png",
+        "a?.png",
+    ] {
+        assert!(clean_path(bad).is_err(), "{bad:?}");
+    }
     for bad in ["../a", "/abs", "C:/x", "a/../../b", ""] {
         assert!(clean_path(bad).is_err(), "{bad}");
     }
@@ -1418,7 +1473,7 @@ fn install_export_duplicate_and_remove() {
         "[meta]\nid = \"cats\"\nversion = \"1.2.0\"\n[dialogue.portrait]\nvisible = true\nimage = \"p.png\"\n",
         &[("p.png", png(16, 16))],
     );
-    let archive = tmp.path().join("cats.ntskin");
+    let archive = tmp.path().join("cats.ntpkg");
     zip_dir(&src, &archive, Some("cats"));
 
     let mut registry = SkinRegistry::new(Some(user.clone()), APP);
@@ -1436,7 +1491,7 @@ fn install_export_duplicate_and_remove() {
         }
     );
 
-    let exported = tmp.path().join("out.ntskin");
+    let exported = tmp.path().join("out.ntpkg");
     registry.export("cats", &exported).unwrap();
     let back = registry.inspect_archive(&exported).unwrap();
     assert_eq!(back.skin.meta.version, "1.2.0");
@@ -1467,7 +1522,7 @@ fn builtin_ids_cannot_be_installed_over() {
     let tmp = tempfile::tempdir().unwrap();
     let src = tmp.path().join("src");
     write_skin(&src, "[meta]\nid = \"nanatype.halo\"\n", &[]);
-    let archive = tmp.path().join("x.ntskin");
+    let archive = tmp.path().join("x.ntpkg");
     zip_dir(&src, &archive, None);
     let user = tmp.path().join("skins");
     fs::create_dir_all(&user).unwrap();
@@ -1582,12 +1637,12 @@ fn builtin_tables() -> Vec<toml::Table> {
     let mut paths: Vec<_> = fs::read_dir(dir)
         .unwrap()
         .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+        .filter(|p| p.is_dir())
         .collect();
     paths.sort();
     paths
         .iter()
-        .map(|p| fs::read_to_string(p).unwrap().parse().unwrap())
+        .map(|p| read_manifest(&DirFiles::new(p)).unwrap())
         .collect()
 }
 
@@ -1619,7 +1674,7 @@ fn docs_list_exactly_the_builtin_skins() {
     let mut shipped: Vec<String> = registry.entries().iter().map(|e| e.id.clone()).collect();
     shipped.sort();
     let ids: Vec<String> = builtins.iter().map(|(id, _)| id.clone()).collect();
-    assert_eq!(shipped, ids, "registry vs builtin/*.toml");
+    assert_eq!(shipped, ids, "registry vs builtin/*/skin.toml");
 
     // docs/skins.md: one table row per skin, "| `id` | name | …".
     let docs = repo_file("docs/skins.md");
@@ -1962,7 +2017,7 @@ fn crayon_materials_are_lazy_validated_and_roundtrip_with_their_fallbacks() {
         &loaded.skin.material_programs["paper"],
         &other.skin.material_programs["paper"]
     ));
-    let archive = tmp.path().join("crayon.ntskin");
+    let archive = tmp.path().join("crayon.ntpkg");
     registry.export("nanatype.crayon", &archive).unwrap();
     let exported = registry.inspect_archive(&archive).unwrap();
     assert_eq!(
@@ -2044,7 +2099,7 @@ fn effect(i:EffectInput)->vec4<f32>{return material_param();}"
 }
 
 #[test]
-fn responsive_inheritance_requires_opt_in_and_exports_all_variant_assets() {
+fn responsive_inheritance_keeps_configuration_and_exports_all_variant_assets() {
     let dir = tempfile::tempdir().unwrap();
     let old = "[meta]\nid='user.legacy'\nbase='nanatype.gothic'\n";
     write_skin(dir.path(), old, &[]);
@@ -2054,16 +2109,12 @@ fn responsive_inheritance_requires_opt_in_and_exports_all_variant_assets() {
             .skin
             .dialogue
             .responsive
-            .is_none()
+            .is_some()
     );
     write_skin(dir.path(), &format!("{old}\n[dialogue.responsive]\n"), &[]);
     let loaded = load_dir(dir.path()).unwrap();
     assert!(loaded.skin.dialogue.responsive.is_some());
-    for path in [
-        "gothic/rose.png",
-        "gothic/tracery.png",
-        "gothic/artwork.wgsl",
-    ] {
+    for path in ["rose.png", "tracery.png", "artwork.wgsl"] {
         assert!(
             loaded
                 .skin

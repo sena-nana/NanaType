@@ -106,7 +106,7 @@ fn list_inset(h: &nanatype_theme::History) -> f32 {
             let [_, right, _, left] = p.shape.border_widths(p.border_width);
             p.margin[1] + p.margin[3] + left + right + p.padding[0] + p.padding[2]
         }
-        None => 16.0 + 8.0,
+        None => h.margin[1] + h.margin[3] + h.padding[0] + h.padding[2],
     }
 }
 
@@ -129,7 +129,11 @@ fn column_width(
     } else {
         0.0
     };
-    (w - list_inset(&skin.history) - avatar).max(1.0)
+    (w - list_inset(&skin.history)
+        - 2.0 * skin.history.row_padding
+        - skin.history.column_inset
+        - avatar)
+        .max(1.0)
 }
 
 fn viewport_width(ui: Ui, skin: &Skin, settings: &nanatype_settings::Settings) -> f32 {
@@ -227,12 +231,6 @@ fn follow_ups(rows: &[HistoryRow], shown: &[u64]) -> Vec<u64> {
         .collect()
 }
 
-/// Halo's presentation follows the approved interaction preview. Other skins
-/// retain their own log layout and speaker grouping. All histories start at the top.
-fn interaction_presentation(skin: &Skin) -> bool {
-    skin.meta.id == "nanatype.halo"
-}
-
 fn entry_view(ui: Ui, key: u64, first: bool, follows: bool) -> AnyView {
     let gap = if first {
         0.0
@@ -252,22 +250,8 @@ fn entry_view(ui: Ui, key: u64, first: bool, follows: bool) -> AnyView {
 
 fn message_view(ui: Ui, key: u64, follows: bool) -> AnyView {
     let source = super::danmaku::RowSource::History(key);
-    let mut skin = super::materials::render_skin(ui, ui.skin.get_untracked());
+    let skin = super::materials::render_skin(ui, ui.skin.get_untracked());
     let settings = ui.settings.get_untracked();
-    let fitted = interaction_presentation(&skin);
-    if fitted {
-        let k = Arc::make_mut(&mut skin);
-        k.history.avatar.size = k.history.avatar.size.min(36.0);
-        if settings
-            .skin
-            .personalizations
-            .get(&settings.skin.id)
-            .and_then(|p| p.history.text_size)
-            .is_none()
-        {
-            k.history.text.size = k.history.text.size.clamp(14.0, 17.0);
-        }
-    }
     let h = skin.history.clone();
     let backdrop = h
         .panel
@@ -275,22 +259,11 @@ fn message_view(ui: Ui, key: u64, follows: bool) -> AnyView {
         .and_then(|p| super::quote::backdrop(p.color, false));
     let exposed = backdrop.is_none();
     let show_avatar = settings.history.show_avatar && h.avatar.shape != AvatarShape::None;
-    let col_w = if fitted {
-        let width = viewport_width(ui, &skin, &settings) - 38.0;
-        (width
-            - if show_avatar {
-                h.avatar.size + 10.0
-            } else {
-                0.0
-            })
-        .max(1.0)
-    } else {
-        column_width(ui, &skin, &settings)
-    };
+    let col_w = column_width(ui, &skin, &settings);
     let Some(row) = source.get(ui) else {
         return widget(Stack::row(0.0)).into_any();
     };
-    let inline = h.layout == HistoryLayout::Inline && !fitted && col_w >= 160.0;
+    let inline = h.layout == HistoryLayout::Inline && col_w >= 160.0;
     // Echo-Live's log names every line; bubble lists group.
     let follows = follows && !inline;
     let size = h.avatar.size;
@@ -676,11 +649,11 @@ fn message_view(ui: Ui, key: u64, follows: bool) -> AnyView {
     // Inline rows drop the empty avatar slot, so the name sits at the edge.
     .children(((show_avatar || !inline).then_some(avatar), content))
     .into_any();
-    if fitted {
+    if h.row_padding > 0.0 {
         widget(
             Stack::column(0.0)
                 .width(LengthSpec::Fill)
-                .padding_xy(8.0, 0.0),
+                .padding_xy(h.row_padding, 0.0),
         )
         .children(view)
         .into_any()
@@ -763,7 +736,7 @@ pub(crate) fn fade_schedule(ui: Ui, now: u64) -> FadeSchedule {
 pub fn history_window(ui: Ui) -> impl IntoView {
     let items = computed(move || visible_keys(ui));
     let follows = computed(move || {
-        if ui.skin.with(|s| interaction_presentation(s)) {
+        if ui.skin.with(|s| !s.history.group_speakers) {
             return Vec::new();
         }
         let shown = items.get();
@@ -781,7 +754,6 @@ pub fn history_window(ui: Ui) -> impl IntoView {
     };
     dynamic(key, move |_| {
         let skin = super::materials::render_skin(ui, ui.skin.get_untracked());
-        let presentation = interaction_presentation(&skin);
         let ms = std::time::Duration::from_millis(ROW_ENTER_MS);
         // Reduced motion keeps the fade and drops the travel.
         let reduced = ui.reduced_motion.get_untracked();
@@ -815,18 +787,8 @@ pub fn history_window(ui: Ui) -> impl IntoView {
         let h = &skin.history;
         let height = viewport_height(ui, &skin, &ui.settings.get_untracked());
         let compact = height < 180.0;
-        let [mut mt, mr, mut mb, ml] = h
-            .panel
-            .as_ref()
-            .map_or(if presentation { [0.0; 4] } else { [8.0; 4] }, |p| p.margin);
-        let [pl, mut pt, pr, mut pb] = h.panel.as_ref().map_or(
-            if presentation {
-                [6.0, 16.0, 6.0, 16.0]
-            } else {
-                [4.0, 8.0, 4.0, 8.0]
-            },
-            |p| p.padding,
-        );
+        let [mut mt, mr, mut mb, ml] = h.panel.as_ref().map_or(h.margin, |p| p.margin);
+        let [pl, mut pt, pr, mut pb] = h.panel.as_ref().map_or(h.padding, |p| p.padding);
         if compact {
             mt = mt.min(4.0);
             mb = mb.min(4.0);
@@ -925,6 +887,7 @@ pub fn history_window(ui: Ui) -> impl IntoView {
                     .children(list),
                 ),
                 above,
+                super::plugins::mounted(ui, nanatype_plugins::Mount::History),
             )),
         )
     })

@@ -144,11 +144,10 @@ pub fn prepare(
             .file
             .as_deref()
             .is_none_or(nanatype_theme::is_builtin_font)
+            && let Some(i) = latin.families.iter().position(|f| installed(f))
         {
-            if let Some(i) = latin.families.iter().position(|f| installed(f)) {
-                let family = latin.families.remove(i);
-                latin.families.insert(0, family);
-            }
+            let family = latin.families.remove(i);
+            latin.families.insert(0, family);
         }
     }
     let locale_stack = FontSpec::locale_families(language);

@@ -1,0 +1,835 @@
+[chrome]
+accent = "#b5a1e8"
+appearance = "dark"
+surface = "#211c39"
+text = "#f4eeff"
+
+[dialogue]
+overscan = 16.0
+padding = [
+    36.0,
+    65.0,
+    217.0,
+    28.0,
+]
+region = [
+    920.0,
+    220.0,
+]
+
+[dialogue.box]
+border_color = "#e7cc94"
+border_width = 1.0
+color = "#211c39"
+radius = 18.0
+
+[dialogue.box.frame]
+fill = true
+image = "still.png"
+layout_inset = true
+repeat = false
+scale = 1.0
+slice = [
+    0,
+    0,
+    0,
+    0,
+]
+
+[dialogue.continue]
+bob_px = 3.0
+color = "#b5a1e8"
+glyph = "· · ·"
+
+[dialogue.nameplate]
+border_color = "#e7cc94"
+border_width = 1.0
+color = "#211c39"
+offset = [
+    36.0,
+    -4.0,
+]
+padding = [
+    12.0,
+    3.0,
+]
+radius = 12.0
+size = 19.0
+text_color = "#e7cc94"
+
+[dialogue.nameplate.gradient]
+angle = 180.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#393153",
+],
+    [
+    0.5,
+    "#211c39",
+],
+    [
+    1.0,
+    "#29223f",
+],
+]
+
+[dialogue.responsive.landscape]
+decor = []
+
+[dialogue.responsive.portrait]
+padding = [
+    20.0,
+    24.0,
+    56.0,
+    164.0,
+]
+
+[dialogue.responsive.portrait.box]
+border_color = "#e7cc94"
+border_style = "solid"
+border_width = 1.0
+color = "#211c39"
+glow_blur = 12.0
+inner_border_width = 0.0
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+radius = 18.0
+shadows = []
+width_fraction = 1.0
+
+[dialogue.responsive.portrait.continue]
+anchor = "bottom_left"
+bob_px = 3.0
+color = "#b5a1e8"
+fps = 8.0
+frames = 1
+glyph = "· · ·"
+motion = "none"
+offset = [
+    12.0,
+    -8.0,
+]
+period_s = 0.8299999833106995
+size = 16.0
+
+[[dialogue.responsive.portrait.decor]]
+anchor = "bottom_left"
+aspect_ratio = 0.800000011920929
+border_style = "solid"
+border_width = 0.0
+font = "accent"
+image = "ornament.png"
+layer = "above"
+max_fraction = [
+    0.3199999928474426,
+    0.18000000715255737,
+]
+offset = [
+    12.0,
+    -12.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    112.0,
+    140.0,
+]
+text = ""
+text_color = "text"
+text_size = 16.0
+when = "always"
+
+[dialogue.responsive.portrait.decor.motion]
+amplitude = 1.5
+kind = "float"
+period_s = 16.0
+phase = 0.0
+
+[dialogue.responsive.portrait.nameplate]
+anchor = "top_right"
+border_color = "#e7cc94"
+border_style = "solid"
+border_width = 1.0
+color = "#211c39"
+offset = [
+    -8.0,
+    12.0,
+]
+padding = [
+    4.0,
+    4.0,
+]
+radius = 12.0
+rotate = 0.0
+shadows = []
+size = 19.0
+text_color = "#e7cc94"
+visible = true
+
+[dialogue.responsive.portrait.nameplate.gradient]
+angle = 180.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#393153",
+],
+    [
+    0.5,
+    "#211c39",
+],
+    [
+    1.0,
+    "#29223f",
+],
+]
+
+[dialogue.responsive.portrait.portrait]
+offset = [
+    0.0,
+    0.0,
+]
+radius = 12.0
+side = "left"
+size = [
+    160.0,
+    200.0,
+]
+visible = false
+
+[dialogue.responsive.portrait.portrait.variants]
+
+[[dialogue.responsive.portrait.shader_effects]]
+shader = "responsive_artwork"
+target = "artwork"
+
+[[dialogue.responsive.rules]]
+max_height = 8192.0
+max_width = 600.0
+portrait = false
+
+[dialogue.responsive.rules.layout]
+padding = [
+    16.0,
+    40.0,
+    52.0,
+    16.0,
+]
+
+[dialogue.responsive.rules.layout.box]
+border_color = "#e7cc94"
+border_style = "solid"
+border_width = 1.0
+color = "#211c39"
+glow_blur = 12.0
+inner_border_width = 0.0
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+radius = 18.0
+shadows = []
+width_fraction = 1.0
+
+[[dialogue.responsive.rules.layout.decor]]
+anchor = "bottom_right"
+aspect_ratio = 0.800000011920929
+border_style = "solid"
+border_width = 0.0
+font = "accent"
+image = "ornament.png"
+layer = "above"
+min_window = [
+    280.0,
+    180.0,
+]
+offset = [
+    -8.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    32.0,
+    40.0,
+]
+text = ""
+text_color = "text"
+text_size = 16.0
+when = "always"
+
+[dialogue.responsive.rules.layout.nameplate]
+anchor = "top_left"
+border_color = "#e7cc94"
+border_style = "solid"
+border_width = 1.0
+color = "#211c39"
+offset = [
+    12.0,
+    4.0,
+]
+padding = [
+    12.0,
+    3.0,
+]
+radius = 12.0
+rotate = 0.0
+shadows = []
+size = 19.0
+text_color = "#e7cc94"
+visible = true
+
+[dialogue.responsive.rules.layout.nameplate.gradient]
+angle = 180.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#393153",
+],
+    [
+    0.5,
+    "#211c39",
+],
+    [
+    1.0,
+    "#29223f",
+],
+]
+
+[[dialogue.responsive.rules.layout.shader_effects]]
+shader = "responsive_compact"
+target = "artwork"
+
+[[dialogue.responsive.rules]]
+max_height = 160.0
+max_width = 8192.0
+portrait = false
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    16.0,
+    40.0,
+    16.0,
+    16.0,
+]
+
+[dialogue.responsive.rules.layout.box]
+border_color = "#e7cc94"
+border_style = "solid"
+border_width = 1.0
+color = "#211c39"
+glow_blur = 12.0
+inner_border_width = 0.0
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+radius = 18.0
+shadows = []
+width_fraction = 1.0
+
+[dialogue.responsive.rules.layout.nameplate]
+anchor = "top_left"
+border_color = "#e7cc94"
+border_style = "solid"
+border_width = 1.0
+color = "#211c39"
+offset = [
+    12.0,
+    4.0,
+]
+padding = [
+    12.0,
+    3.0,
+]
+radius = 12.0
+rotate = 0.0
+shadows = []
+size = 19.0
+text_color = "#e7cc94"
+visible = true
+
+[dialogue.responsive.rules.layout.nameplate.gradient]
+angle = 180.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#393153",
+],
+    [
+    0.5,
+    "#211c39",
+],
+    [
+    1.0,
+    "#29223f",
+],
+]
+
+[[dialogue.responsive.rules.layout.shader_effects]]
+shader = "responsive_compact"
+target = "artwork"
+
+[[dialogue.responsive.rules]]
+max_height = 8192.0
+max_width = 240.0
+portrait = true
+
+[dialogue.responsive.rules.layout]
+padding = [
+    12.0,
+    16.0,
+    48.0,
+    84.0,
+]
+
+[[dialogue.responsive.rules.layout.decor]]
+anchor = "bottom_left"
+aspect_ratio = 0.800000011920929
+border_style = "solid"
+border_width = 0.0
+font = "accent"
+image = "ornament.png"
+layer = "above"
+max_fraction = [
+    0.3199999928474426,
+    0.18000000715255737,
+]
+offset = [
+    12.0,
+    -12.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    112.0,
+    140.0,
+]
+text = ""
+text_color = "text"
+text_size = 16.0
+when = "always"
+
+[dialogue.responsive.rules.layout.decor.motion]
+amplitude = 1.5
+kind = "float"
+period_s = 16.0
+phase = 0.0
+
+[[dialogue.responsive.rules.layout.shader_effects]]
+shader = "responsive_artwork"
+target = "artwork"
+
+[[dialogue.responsive.rules]]
+max_height = 480.0
+max_width = 8192.0
+portrait = true
+
+[dialogue.responsive.rules.layout]
+padding = [
+    12.0,
+    16.0,
+    48.0,
+    92.0,
+]
+
+[[dialogue.responsive.rules.layout.decor]]
+anchor = "bottom_left"
+aspect_ratio = 0.800000011920929
+border_style = "solid"
+border_width = 0.0
+font = "accent"
+image = "ornament.png"
+layer = "above"
+max_fraction = [
+    0.3199999928474426,
+    0.18000000715255737,
+]
+min_window = [
+    160.0,
+    260.0,
+]
+offset = [
+    12.0,
+    -12.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    56.0,
+    70.0,
+]
+text = ""
+text_color = "text"
+text_size = 16.0
+when = "always"
+
+[dialogue.responsive.rules.layout.decor.motion]
+amplitude = 1.5
+kind = "float"
+period_s = 16.0
+phase = 0.0
+
+[[dialogue.responsive.rules]]
+max_height = 240.0
+max_width = 8192.0
+portrait = true
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    12.0,
+    12.0,
+    12.0,
+    12.0,
+]
+
+[dialogue.responsive.rules.layout.nameplate]
+anchor = "top_right"
+border_style = "solid"
+border_width = 0.0
+color = "#0876d0"
+offset = [
+    16.0,
+    -12.0,
+]
+padding = [
+    10.0,
+    4.0,
+]
+radius = 10.0
+rotate = 0.0
+shadows = []
+size = 18.0
+text_color = "#ffffff"
+visible = false
+
+[[dialogue.responsive.rules.layout.shader_effects]]
+shader = "responsive_artwork"
+target = "artwork"
+
+[[dialogue.responsive.rules]]
+max_height = 140.0
+max_width = 200.0
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    10.0,
+    12.0,
+    10.0,
+    12.0,
+]
+
+[dialogue.responsive.rules.layout.box]
+border_color = "#e7cc94"
+border_style = "solid"
+border_width = 1.0
+color = "#211c39"
+glow_blur = 12.0
+inner_border_width = 0.0
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+radius = 18.0
+shadows = []
+width_fraction = 1.0
+
+[dialogue.responsive.rules.layout.nameplate]
+anchor = "top_left"
+border_style = "solid"
+border_width = 0.0
+color = "#0876d0"
+offset = [
+    16.0,
+    -12.0,
+]
+padding = [
+    10.0,
+    4.0,
+]
+radius = 10.0
+rotate = 0.0
+shadows = []
+size = 18.0
+text_color = "#ffffff"
+visible = false
+
+[dialogue.responsive.rules.layout.portrait]
+offset = [
+    0.0,
+    0.0,
+]
+radius = 12.0
+side = "left"
+size = [
+    160.0,
+    200.0,
+]
+visible = false
+
+[dialogue.responsive.rules.layout.portrait.variants]
+
+[[dialogue.responsive.rules.layout.shader_effects]]
+shader = "responsive_compact"
+target = "artwork"
+
+[dialogue.reveal.entrance]
+kind = "fade"
+ms = 140
+
+[[dialogue.shader_effects]]
+shader = "artwork"
+target = "artwork"
+
+[dialogue.text]
+color = "#f4eeff"
+line_height = 1.4500000476837158
+size = 26.0
+
+[history]
+bubble_border = "#e7cc9480"
+bubble_border_width = 0.800000011920929
+bubble_color = "#211c39"
+bubble_contour = "orbit"
+bubble_radius = 14.0
+entrance = "slide_up"
+name_color = "#e7cc94"
+time_color = "#c4b5d7"
+
+[history.avatar]
+color = "#393153"
+ring_color = "#e7cc94"
+ring_width = 1.0
+size = 36.0
+
+[history.bubble_gradient]
+angle = 160.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#393153",
+],
+    [
+    1.0,
+    "#211c39",
+],
+]
+
+[[history.bubble_shadows]]
+blur = 0.0
+color = "#e7cc9426"
+dx = 0.0
+dy = 0.0
+inset = true
+spread = 1.0
+
+[[history.decor]]
+anchor = "top_right"
+border_style = "solid"
+border_width = 0.0
+font = "accent"
+image = "ornament.png"
+layer = "above"
+offset = [
+    -12.0,
+    4.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    48.0,
+    48.0,
+]
+text = ""
+text_color = "text"
+text_size = 16.0
+when = "always"
+
+[[history.decor]]
+anchor = "bottom_right"
+border_style = "solid"
+border_width = 0.0
+color = "#e7cc94"
+font = "accent"
+layer = "below"
+motif = "orbit"
+offset = [
+    -12.0,
+    -12.0,
+]
+opacity = 0.11999999731779099
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    96.0,
+    96.0,
+]
+text = ""
+text_color = "text"
+text_size = 16.0
+when = "always"
+
+[history.name_plate]
+border_color = "#e7cc94"
+border_style = "solid"
+border_width = 0.800000011920929
+color = "#211c39"
+padding = [
+    9.0,
+    2.0,
+]
+radius = 8.0
+shadows = []
+text_color = "#e7cc94"
+
+[history.name_plate.gradient]
+angle = 180.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#393153",
+],
+    [
+    1.0,
+    "#211c39",
+],
+]
+
+[history.panel]
+border_color = "#e7cc9480"
+border_style = "solid"
+border_width = 1.0
+color = "#211c39f5"
+margin = [
+    8.0,
+    8.0,
+    8.0,
+    8.0,
+]
+padding = [
+    14.0,
+    14.0,
+    14.0,
+    18.0,
+]
+radius = 20.0
+
+[[history.panel.shadows]]
+blur = 0.0
+color = "#e7cc9420"
+dx = 0.0
+dy = 0.0
+inset = true
+spread = 3.0
+
+[history.text]
+color = "#f4eeff"
+
+[history.title]
+background = "#00000000"
+color = "#e7cc94"
+height = 56.0
+padding = 18.0
+size = 14.0
+text = "HISTORY"
+weight = 600
+
+[shaders.artwork]
+animated = true
+intensity = 1.0
+params = []
+period_s = 16.0
+source = "artwork.wgsl"
+static_fallback = true
+textures = ["ornament.png"]
+
+[shaders.responsive_artwork]
+animated = true
+intensity = 1.0
+params = [
+    1.0,
+    1.0,
+]
+period_s = 16.0
+source = "artwork.wgsl"
+static_fallback = true
+textures = ["ornament.png"]
+
+[shaders.responsive_compact]
+animated = true
+intensity = 1.0
+params = [
+    1.0,
+    0.0,
+    1.0,
+]
+period_s = 16.0
+source = "artwork.wgsl"
+static_fallback = true
+textures = ["ornament.png"]

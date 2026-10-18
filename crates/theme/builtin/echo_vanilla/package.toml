@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 24
+
+schema = 3
+id = "nanatype.echo_vanilla"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "streaming",
+    "minimal",
+]
+
+[name]
+en-US = "Echo-Live Vanilla"
+ja-JP = "Echo-Live オリジナル"
+zh-CN = "Echo-Live 原版"
+
+[description]
+en-US = "Echo-Live's vanilla theme: white bar, grey top rule, corner notch, a hanging name and the grey menu row"
+ja-JP = "Echo-Live のオリジナルテーマを再現：白地に灰色の上線、右上の三角、はみ出す名前、下段の灰色メニュー"
+zh-CN = "还原 Echo-Live 的原版主题：白底、顶部灰线、右上角三角、名字左凸，底部灰色菜单栏"

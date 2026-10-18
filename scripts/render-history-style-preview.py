@@ -19,8 +19,8 @@ GROUPS = [
     ['gothic', 'celestial', 'forest', 'tidal', 'lantern', 'citrus'],
 ]
 known = {skin for group in GROUPS for skin in group}
-extra = sorted(path.stem for path in (ROOT / 'crates/theme/builtin').glob('*.toml')
-               if path.stem not in known)
+extra = sorted(path.name for path in (ROOT / 'crates/theme/builtin').iterdir() if path.is_dir()
+               if path.name not in known)
 GROUPS.extend(extra[start:start + 6] for start in range(0, len(extra), 6))
 FONT = ImageFont.truetype('C:/Windows/Fonts/msyh.ttc', 20)
 
@@ -41,9 +41,9 @@ for number, group in enumerate(GROUPS, 1):
     board = Image.new('RGB', (1470, 1460), '#eef1f5')
     draw = ImageDraw.Draw(board)
     for index, skin in enumerate(group):
-        manifest = tomllib.loads((ROOT / f'crates/theme/builtin/{skin}.toml').read_text('utf-8'))
+        manifest = tomllib.loads((ROOT / f'crates/theme/builtin/{skin}/skin.toml').read_text('utf-8'))
         x, y = index % 3 * 490, index // 3 * 730
-        draw.text((x + 14, y + 8), f"{manifest['meta']['name']['zh-CN']} / {skin}",
+        draw.text((x + 14, y + 8), f"{tomllib.loads((ROOT / f'crates/theme/builtin/{skin}/package.toml').read_text(encoding='utf-8'))['name']['zh-CN']} / {skin}",
                   font=FONT, fill='#151e30')
         for view, box in [('display', (x + 12, y + 42, 466, 116)),
                           ('history', (x + 35, y + 166, 420, 560))]:

@@ -358,11 +358,11 @@ pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec
     if (!skin.shaders.is_empty()
         || !skin.dialogue.shader_effects.is_empty()
         || skin.dialogue.decor.iter().any(|d| d.shader.is_some()))
-        && skin.meta.schema < 2
+        && skin.meta.schema != crate::SKIN_SCHEMA
     {
         errors.push((
             "meta.schema".to_owned(),
-            "WGSL effects require schema 2".to_owned(),
+            "WGSL effects require the current schema".to_owned(),
         ));
     }
     let instances = skin.dialogue.shader_effects.len()
@@ -432,7 +432,7 @@ pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec
             {
                 return Err("at most eight finite parameters and two textures".into());
             }
-            let path = crate::clean_path(&spec.source).map_err(|e| e.to_string())?;
+            let path = crate::clean_resource_path(&spec.source).map_err(|e| e.to_string())?;
             let bytes = files.read(&path).map_err(|e| e.to_string())?;
             let source = std::str::from_utf8(&bytes).map_err(|e| e.to_string())?;
             if bytes.len() > MAX_SHADER_BYTES {
@@ -442,7 +442,7 @@ pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec
                 .textures
                 .iter()
                 .map(|path| {
-                    let path = crate::clean_path(path).map_err(|e| e.to_string())?;
+                    let path = crate::clean_resource_path(path).map_err(|e| e.to_string())?;
                     let bytes = files.read(&path).map_err(|e| e.to_string())?;
                     Ok((path, bytes))
                 })

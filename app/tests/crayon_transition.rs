@@ -50,7 +50,9 @@ fn brush_edge_slants_bottom_left_to_top_right_and_moves_down_right() {
                 let image = capture(source, progress, scale);
                 assert!(
                     image
-                        .chunks_exact(4)
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
                         .all(|p| p[3] == if visible { 255 } else { 0 })
                 );
             }

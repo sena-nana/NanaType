@@ -7,7 +7,7 @@ use std::sync::{Arc, LazyLock};
 
 use toml::{Table, Value};
 
-use crate::files::{FileError, SkinFiles, clean_path};
+use crate::files::{FileError, SkinFiles};
 use crate::fonts::{BuiltinFonts, builtin_path, is_builtin_font};
 use crate::manifest::{
     DecorMotionKind, DecorSpec, FileKind, GradientSpec, Len, SKIN_SCHEMA, ShadowSpec, ShapeSpec,
@@ -67,7 +67,7 @@ pub enum SkinOrigin {
     Builtin,
     /// An installed or developer folder.
     Directory(PathBuf),
-    /// Previewed straight from a `.ntskin` file.
+    /// Previewed straight from a `.ntpkg` file.
     Archive(PathBuf),
 }
 
@@ -129,13 +129,31 @@ impl BaseResolver for () {
 }
 
 pub fn read_manifest(files: &dyn SkinFiles) -> Result<Table, SkinDiagnostic> {
-    let bytes = files
-        .read(MANIFEST)
-        .map_err(|e| SkinDiagnostic::error(MANIFEST, e.to_string()))?;
-    let text = String::from_utf8(bytes)
-        .map_err(|_| SkinDiagnostic::error(MANIFEST, "skin.toml is not UTF-8"))?;
-    text.parse::<Table>()
-        .map_err(|e| SkinDiagnostic::error(MANIFEST, e.to_string().trim().to_owned()))
+    let mut table = if let Some(table) = files.cached_skin_manifest() {
+        table.clone()
+    } else {
+        let bytes = files
+            .read(MANIFEST)
+            .map_err(|e| SkinDiagnostic::error(MANIFEST, e.to_string()))?;
+        if bytes.len() > 512 * 1024 {
+            return Err(SkinDiagnostic::error(
+                MANIFEST,
+                "skin manifest exceeds 512 KiB",
+            ));
+        }
+        let text = String::from_utf8(bytes)
+            .map_err(|_| SkinDiagnostic::error(MANIFEST, "skin.toml is not UTF-8"))?;
+        text.parse::<Table>()
+            .map_err(|e| SkinDiagnostic::error(MANIFEST, e.to_string().trim().to_owned()))?
+    };
+    if files.cached_package_manifest().is_some() || files.exists(crate::PACKAGE_MANIFEST) {
+        let package = crate::PackageManifest::read(files)
+            .map_err(|e| SkinDiagnostic::error(crate::PACKAGE_MANIFEST, e.to_string()))?;
+        let meta = Value::try_from(package.meta)
+            .map_err(|e| SkinDiagnostic::error(crate::PACKAGE_MANIFEST, e.to_string()))?;
+        table.insert("meta".into(), meta);
+    }
+    Ok(table)
 }
 
 /// `over` wins; tables merge recursively, everything else replaces.
@@ -215,7 +233,7 @@ fn unknown_in_value(raw: &Value, known: &Value, field: &str, out: &mut Vec<SkinD
     }
 }
 
-fn version_tuple(v: &str) -> Option<(u32, u32, u32)> {
+pub(crate) fn version_tuple(v: &str) -> Option<(u32, u32, u32)> {
     let mut parts = v.trim().split(['.', '-', '+']);
     let major = parts.next()?.parse().ok()?;
     let minor = parts.next().unwrap_or("0").parse().ok()?;
@@ -319,18 +337,6 @@ fn load_impl(
             )]);
         }
     };
-    // Older descendants often replace a base's geometry and artwork. Do not
-    // silently impose that base's new orientation/layout contract on them.
-    // An explicit (even empty) responsive table opts into inherited layouts.
-    if base_id(&raw).is_some()
-        && raw
-            .get("dialogue")
-            .and_then(Value::as_table)
-            .and_then(|d| d.get("responsive"))
-            .is_none()
-    {
-        skin.dialogue.responsive = None;
-    }
     if let Ok(Value::Table(known)) = Value::try_from(&skin) {
         unknown_keys(&raw, &known, "", &mut diagnostics);
     }
@@ -360,11 +366,11 @@ fn load_impl(
 
 fn validate(skin: &Skin, files: &dyn SkinFiles, app_version: &str, out: &mut Vec<SkinDiagnostic>) {
     let meta = &skin.meta;
-    if meta.schema > SKIN_SCHEMA {
+    if meta.schema != SKIN_SCHEMA {
         out.push(SkinDiagnostic::error(
             "meta.schema",
             format!(
-                "schema {} is newer than this app ({SKIN_SCHEMA})",
+                "schema {} is unsupported by this app ({SKIN_SCHEMA})",
                 meta.schema
             ),
         ));
@@ -556,7 +562,7 @@ fn validate(skin: &Skin, files: &dyn SkinFiles, app_version: &str, out: &mut Vec
             validate_builtin_font(field, path, &BuiltinFonts::embedded(), out);
             continue;
         }
-        let path = match clean_path(path) {
+        let path = match crate::clean_resource_path(path) {
             Ok(p) => p,
             Err(e) => {
                 out.push(SkinDiagnostic::error(field, e.to_string()));
@@ -942,6 +948,19 @@ fn validate_shapes(skin: &Skin, out: &mut Vec<SkinDiagnostic>) {
     }
 
     let h = &skin.history;
+    if !h
+        .padding
+        .iter()
+        .chain(&h.margin)
+        .all(|v| in_range(*v, 0.0, 1024.0))
+        || !in_range(h.row_padding, 0.0, 1024.0)
+        || !in_range(h.column_inset, 0.0, 1024.0)
+    {
+        out.push(SkinDiagnostic::error(
+            "history.padding",
+            "window spacing must be finite and within 0–1024",
+        ));
+    }
     check_gradient("history.bubble_gradient", h.bubble_gradient.as_ref(), out);
     check_corners(
         "history.bubble_radius",

@@ -77,4 +77,4 @@ textures = ["celestial/ornament.png"]
 
 `artwork` 目标覆盖展示框的矩形画布，自行返回轮廓透明度；原有 `background` 和 `border` 仍按宿主框体遮罩叠加。它沿用同一验证、资源预算和失败恢复流程，没有新增执行权限。
 
-可直接导入[星图版画示例包](examples/lunar-atlas.ntskin)。包内只有清单、一个 WGSL、一张装饰纹理和静态回退图，无父皮肤依赖。更新源文件后，运行 `python scripts/package-artwork-sample.py` 重建示例包。
+可直接导入[星图版画示例包](examples/lunar-atlas.ntpkg)。包内只有清单、一个 WGSL、一张装饰纹理和静态回退图，无父皮肤依赖。更新源文件后，运行 `python scripts/package-artwork-sample.py` 重建示例包。

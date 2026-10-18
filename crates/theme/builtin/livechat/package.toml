@@ -1,0 +1,21 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 18
+
+schema = 3
+id = "nanatype.livechat"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["streaming"]
+
+[name]
+en-US = "Live Chat"
+ja-JP = "ライブチャット"
+zh-CN = "直播弹幕"
+
+[description]
+en-US = "Like a stream chat: round avatar, plain name and white message bubbles"
+ja-JP = "配信コメント欄風：丸いアイコン、文字の名前、白い吹き出し"
+zh-CN = "仿直播评论栏：圆形头像、纯文字姓名与白色消息气泡"

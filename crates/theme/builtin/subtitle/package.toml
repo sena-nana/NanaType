@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 17
+
+schema = 3
+id = "nanatype.subtitle"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "streaming",
+    "minimal",
+]
+
+[name]
+en-US = "Subtitle"
+ja-JP = "字幕"
+zh-CN = "字幕"
+
+[description]
+en-US = "No box, just bold outlined white text that reads over any scene"
+ja-JP = "枠なし、太い縁取りの白文字だけ。どんな画面でも読みやすい"
+zh-CN = "没有框，只有粗描边白字，叠在任何画面上都清楚"

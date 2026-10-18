@@ -422,11 +422,14 @@ pub fn wrap(
     node: NodeRef,
     spec: ScrambleSpec,
     color: nanatype_model::Rgba8,
-    at_ms: &[Option<u64>],
-    value: &str,
-    exit: Option<(u64, u16)>,
-    preview: bool,
+    schedule: super::text_light::TextSchedule<'_>,
 ) -> AnyView {
+    let super::text_light::TextSchedule {
+        at_ms,
+        value,
+        exit,
+        preview,
+    } = schedule;
     let text = if exit.is_none_or(|(at, _)| crate::clock::now_ms() < at) {
         let lock_times: Vec<_> = at_ms
             .iter()
@@ -449,11 +452,13 @@ pub fn wrap(
                 intensity: 0.22,
                 radius: 1.,
             },
-            &lock_times,
-            value,
+            super::text_light::TextSchedule {
+                at_ms: &lock_times,
+                value,
+                exit: None,
+                preview,
+            },
             45,
-            None,
-            preview,
         )
     } else {
         text
@@ -594,12 +599,13 @@ struct Prepared {
     count: u32,
     bytes: usize,
 }
+type Placements = HashMap<(DeviceGeneration, u64, [u32; 2]), ([f32; 2], [f32; 2])>;
 #[derive(Debug, Default)]
 struct State {
     pipelines: HashMap<PipelineKey, Pipeline>,
     prepared: HashMap<PreparedKey, Prepared>,
     scales: super::effect_uniforms::Scales,
-    placements: HashMap<(DeviceGeneration, u64, [u32; 2]), ([f32; 2], [f32; 2])>,
+    placements: Placements,
 }
 #[derive(Debug, Default)]
 struct Renderer {

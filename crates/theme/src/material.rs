@@ -41,10 +41,12 @@ pub(crate) fn load_materials(
         message,
         severity: Severity::Error,
     };
-    if skin.materials.len() > 16 || (!skin.materials.is_empty() && skin.meta.schema < 2) {
+    if skin.materials.len() > 16
+        || (!skin.materials.is_empty() && skin.meta.schema != crate::SKIN_SCHEMA)
+    {
         diagnostics.push(error(
             "materials".into(),
-            "materials require schema 2 and at most sixteen definitions".into(),
+            "materials require the current schema and at most sixteen definitions".into(),
         ));
         return;
     }
@@ -66,13 +68,13 @@ pub(crate) fn load_materials(
             {
                 return Err("materials allow eight finite parameters and two textures".into());
             }
-            let path = crate::clean_path(&spec.source).map_err(|e| e.to_string())?;
+            let path = crate::clean_resource_path(&spec.source).map_err(|e| e.to_string())?;
             let source = files.read(&path).map_err(|e| e.to_string())?;
             let encoded: Vec<_> = spec
                 .textures
                 .iter()
                 .map(|path| {
-                    let path = crate::clean_path(path).map_err(|e| e.to_string())?;
+                    let path = crate::clean_resource_path(path).map_err(|e| e.to_string())?;
                     files.read(&path).map_err(|e| e.to_string())
                 })
                 .collect::<Result<_, _>>()?;

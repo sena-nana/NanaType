@@ -1,0 +1,10 @@
+format = 1
+schema = 3
+id = "example.counter"
+version = "1.0.0"
+name = { zh-CN = "台词计数器", en-US = "Line counter", ja-JP = "セリフカウンター" }
+description = { zh-CN = "统计播放台词，演示自定义组件、画布和本地命令", en-US = "Custom components, canvas and local commands" }
+author = "NanaType"
+license = "MIT"
+capabilities = ["lua"]
+entry = "main.lua"

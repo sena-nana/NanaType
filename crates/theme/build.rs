@@ -19,6 +19,7 @@ const DEFAULT_BUDGET_KB: u64 = 12 * 1024;
 
 fn main() {
     let root = env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR");
+    embed_packages(Path::new(&root));
     let dir = Path::new(&root).join("fonts");
     println!("cargo:rerun-if-changed=fonts");
     println!("cargo:rerun-if-env-changed=NANATYPE_BUILTIN_FONTS_BUDGET_KB");
@@ -84,4 +85,81 @@ fn main() {
     let dest =
         Path::new(&env::var("OUT_DIR").expect("cargo sets OUT_DIR")).join("builtin_fonts.rs");
     fs::write(dest, out).expect("write builtin_fonts.rs");
+}
+
+fn embed_packages(root: &Path) {
+    println!("cargo:rerun-if-changed=builtin");
+    fn walk(root: &Path, dir: &Path, files: &mut Vec<String>) {
+        for entry in fs::read_dir(dir).expect("read package directory") {
+            let entry = entry.expect("package entry");
+            let ty = entry.file_type().unwrap();
+            assert!(!ty.is_symlink(), "package resources cannot be symlinks");
+            if ty.is_dir() {
+                walk(root, &entry.path(), files);
+            } else if ty.is_file() {
+                files.push(
+                    entry
+                        .path()
+                        .strip_prefix(root)
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .replace('\\', "/"),
+                );
+            }
+        }
+    }
+    let mut packages = Vec::new();
+    for entry in fs::read_dir(root.join("builtin")).unwrap() {
+        let dir = entry.unwrap().path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let manifest = dir.join("package.toml");
+        let raw = fs::read_to_string(&manifest).expect("every built-in directory is a package");
+        assert!(raw.len() <= 64 * 1024, "package metadata exceeds 64 KiB");
+        let table: toml::Table = raw.parse().expect("valid package metadata");
+        let id = table["id"].as_str().expect("package id").to_owned();
+        let order = table
+            .get("catalogue_order")
+            .and_then(|v| v.as_integer())
+            .unwrap_or(0);
+        let mut files = Vec::new();
+        walk(&dir, &dir, &mut files);
+        files.sort();
+        let package_json = serde_json::to_string(&table).unwrap();
+        let skin_json = if dir.join("skin.toml").is_file() {
+            let raw = fs::read_to_string(dir.join("skin.toml")).unwrap();
+            assert!(raw.len() <= 512 * 1024, "skin manifest exceeds 512 KiB");
+            serde_json::to_string(&raw.parse::<toml::Table>().expect("valid skin syntax")).unwrap()
+        } else {
+            "null".into()
+        };
+        packages.push((order, id, dir, files, package_json, skin_json));
+    }
+    packages.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
+    let mut out = format!(
+        "// Generated from package directories; no skin-specific resource logic.\nstatic BUILTIN_PACKAGES: [Builtin; {}] = [\n",
+        packages.len()
+    );
+    let mut ids = std::collections::BTreeSet::new();
+    for (_, id, dir, files, package_json, skin_json) in packages {
+        assert!(ids.insert(id.clone()), "duplicate package {id}");
+        writeln!(out, "Builtin {{ id: {id:?}, files: &[").unwrap();
+        for path in files {
+            writeln!(
+                out,
+                "({path:?}, include_bytes!({:?})),",
+                dir.join(&path).display().to_string()
+            )
+            .unwrap();
+        }
+        writeln!(out,"], package_json: {package_json:?}, skin_json: {skin_json:?}, parsed: OnceLock::new() }},").unwrap();
+    }
+    out.push_str("];\nstatic BUILTINS: &[Builtin] = &BUILTIN_PACKAGES;\n");
+    fs::write(
+        Path::new(&env::var("OUT_DIR").unwrap()).join("builtin_packages.rs"),
+        out,
+    )
+    .unwrap();
 }

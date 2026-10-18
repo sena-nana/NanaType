@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 19
+
+schema = 3
+id = "nanatype.comic"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "game",
+    "cute",
+]
+
+[name]
+en-US = "Comic"
+ja-JP = "コミック"
+zh-CN = "漫画"
+
+[description]
+en-US = "Heavy black lines, a hard drop shadow, a shadowed tail and a tilted yellow tag"
+ja-JP = "太い黒線とベタ影、影つきのしっぽ、傾いた黄色の名札"
+zh-CN = "黑色粗线、硬投影和带影子的尾巴，黄色倾斜名牌"

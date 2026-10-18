@@ -15,17 +15,35 @@ fn scanned_ink_loads_from_embedded_and_inherited_skin_files() {
     let mut registry = SkinRegistry::new(Some(root.join("skins")), env!("CARGO_PKG_VERSION"));
     let loaded = registry.load("nanatype.ink").unwrap();
     let urls = nanatype::assets::skin_urls(&*loaded.files);
-    assert!(urls.contains_key("skin:ink/bamboo.png"));
-    assert!(urls.contains_key("skin:ink/still.png"));
+    assert!(urls.contains_key("skin:bamboo.png"));
+    assert!(urls.contains_key("skin:still.png"));
     let names = Localized::from([("en-US".to_owned(), "My Ink".to_owned())]);
     registry
         .duplicate("nanatype.ink", "my-ink", &names, &TomlTable::new())
         .unwrap();
     let copy = registry.load("my-ink").unwrap();
-    assert_eq!(nanatype::assets::skin_urls(&*copy.files), urls);
+    let copy_urls = nanatype::assets::skin_urls(&*copy.files);
+    for (path, url) in &urls {
+        let reference = format!(
+            "skin:pkg:nanatype.ink/{}",
+            path.strip_prefix("skin:").unwrap()
+        );
+        assert_eq!(copy_urls.get(&reference), Some(url));
+    }
     for row in nanatype::ui::skin_rows(&registry, nanatype_i18n::Locale::ZhCn) {
         if row.id == "my-ink" || row.id == "nanatype.ink" {
-            assert_eq!(*row.image_urls, urls, "picker resolves inherited artwork");
+            for (_, path, kind) in row.skin.as_ref().unwrap().referenced_files() {
+                if matches!(
+                    kind,
+                    nanatype_theme::FileKind::Image | nanatype_theme::FileKind::NineSlice(_)
+                ) {
+                    let key = format!("skin:{path}");
+                    assert!(
+                        row.image_urls.contains_key(&key),
+                        "picker resolves inherited artwork {key}"
+                    );
+                }
+            }
         }
     }
     let decor = loaded

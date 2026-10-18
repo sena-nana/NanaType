@@ -1,0 +1,21 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 22
+
+schema = 3
+id = "nanatype.sakura"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["cute"]
+
+[name]
+en-US = "Sakura"
+ja-JP = "さくら"
+zh-CN = "樱花"
+
+[description]
+en-US = "A pink gradient box with petals and a heart continue mark"
+ja-JP = "ピンクのグラデーションに花びらとハートのマーク"
+zh-CN = "粉色渐变圆角框，花瓣点缀与爱心提示"

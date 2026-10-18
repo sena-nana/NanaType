@@ -1890,7 +1890,12 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
             widget(Stack::fill_column(0.0).with_layout(|l| {
                 l.min_width = Some(LengthSpec::Px(0.0));
             }))
-            .children((layout_switch(ui), toolbar(ui), preview)),
+            .children((
+                layout_switch(ui),
+                toolbar(ui),
+                preview,
+                super::plugins::mounted(ui, nanatype_plugins::Mount::Input),
+            )),
         ),
         workspace::footer(ui, invitation, relay),
         super::feedback::toast_stack(toasts, crate::windows::INPUT_ACTIONS_H + 4.0, 2),

@@ -124,13 +124,21 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
     let rows = ui::skin_rows(&registry, Locale::ZhCn);
     let parent = rows.iter().find(|r| r.id == "nanatype.forest").unwrap();
     let child = rows.iter().find(|r| r.id == "user.forest").unwrap();
-    assert_eq!(parent.image_urls, child.image_urls);
+    for (key, url) in &*parent.image_urls {
+        let path = key.strip_prefix("skin:").unwrap();
+        assert_eq!(
+            child
+                .image_urls
+                .get(&format!("skin:pkg:nanatype.forest/{path}")),
+            Some(url)
+        );
+    }
     // Document images still have access to every packaged image, including
     // files absent from the static thumbnail's manifest references.
     let loaded = registry.load_scanned("user.forest").unwrap();
     let active = assets::skin_urls(&*loaded.files);
     assert!(active.len() > child.image_urls.len());
-    assert!(active.contains_key("skin:forest/ornament.png"));
+    assert!(active.contains_key("skin:pkg:nanatype.forest/ornament.png"));
     let library = assets::AssetLibrary::new(root.join("blobs"));
     assert!(
         library
@@ -162,21 +170,22 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
     );
     // Saving a local image in place must give the painter a new immutable URL;
     // repeated loads of the same bytes must still reuse the existing URL.
-    let frame_path = root.join("skins/user.forest/forest/still.png");
+    // An inherited resource keeps its owner. A local replacement is authored
+    // explicitly instead of shadowing the parent's filename.
+    let mut local_skin = (*loaded.skin).clone();
+    local_skin.dialogue.box_.frame.as_mut().unwrap().image = "local.png".into();
+    let frame_path = root.join("skins/user.forest/local.png");
     std::fs::create_dir_all(frame_path.parent().unwrap()).unwrap();
     let frame = |pixel| image::RgbaImage::from_pixel(2, 2, image::Rgba(pixel));
     frame([10, 20, 30, 40]).save(&frame_path).unwrap();
-    let before = assets::skin_preview_urls(&loaded.skin, &*loaded.files);
+    let before = assets::skin_preview_urls(&local_skin, &*loaded.files);
     assert_eq!(
         before,
-        assets::skin_preview_urls(&loaded.skin, &*loaded.files)
+        assets::skin_preview_urls(&local_skin, &*loaded.files)
     );
     frame([40, 30, 20, 10]).save(&frame_path).unwrap();
-    let after = assets::skin_preview_urls(&loaded.skin, &*loaded.files);
-    assert_ne!(
-        before["skin:forest/still.png"],
-        after["skin:forest/still.png"]
-    );
+    let after = assets::skin_preview_urls(&local_skin, &*loaded.files);
+    assert_ne!(before["skin:local.png"], after["skin:local.png"]);
 }
 
 #[test]

@@ -1,0 +1,739 @@
+[chrome]
+accent = "#0876d0"
+text = "#1b2f4b"
+
+[dialogue]
+padding = [
+    28.0,
+    26.0,
+    24.0,
+    14.0,
+]
+
+[dialogue.box]
+border_color = "#ffffff"
+border_width = 1.0
+color = "#fffffff2"
+contour = "rounded"
+radius = 30.0
+
+[dialogue.box.frame]
+fill = true
+image = "still.png"
+layout_inset = false
+repeat = false
+scale = 1.0
+slice = [
+    34,
+    34,
+    34,
+    34,
+]
+
+[dialogue.box.gradient]
+angle = 160.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#fffffff7",
+],
+    [
+    1.0,
+    "#eef6fdf2",
+],
+]
+
+[[dialogue.box.shadows]]
+blur = 18.0
+color = "#2388c922"
+dx = 0.0
+dy = 5.0
+inset = false
+spread = 0.0
+
+[dialogue.continue]
+bob_px = 3.0
+color = "#0876d0"
+glyph = "▼"
+motion = "bob"
+
+[dialogue.nameplate]
+border_color = "#d7efff"
+border_width = 0.800000011920929
+color = "#0876d0"
+offset = [
+    24.0,
+    -15.0,
+]
+padding = [
+    16.0,
+    5.0,
+]
+radius = 999.0
+text_color = "#ffffff"
+
+[dialogue.nameplate.gradient]
+angle = 90.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#087fd1",
+],
+    [
+    1.0,
+    "#249fdf",
+],
+]
+
+[[dialogue.nameplate.shadows]]
+blur = 6.0
+color = "#0876d033"
+dx = 0.0
+dy = 2.0
+inset = false
+spread = 0.0
+
+[dialogue.responsive.landscape]
+decor = []
+
+[dialogue.responsive.portrait]
+decor = []
+padding = [
+    20.0,
+    24.0,
+    56.0,
+    72.0,
+]
+
+[dialogue.responsive.portrait.box]
+border_color = "#ffffff"
+border_style = "solid"
+border_width = 1.0
+color = "#fffffff2"
+contour = "rounded"
+glow_blur = 12.0
+inner_border_width = 0.0
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+radius = 30.0
+width_fraction = 1.0
+
+[dialogue.responsive.portrait.box.gradient]
+angle = 160.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#fffffff7",
+],
+    [
+    1.0,
+    "#eef6fdf2",
+],
+]
+
+[[dialogue.responsive.portrait.box.shadows]]
+blur = 18.0
+color = "#2388c922"
+dx = 0.0
+dy = 5.0
+inset = false
+spread = 0.0
+
+[dialogue.responsive.portrait.continue]
+anchor = "bottom_left"
+bob_px = 3.0
+color = "#0876d0"
+fps = 8.0
+frames = 1
+glyph = "▼"
+motion = "bob"
+offset = [
+    12.0,
+    -8.0,
+]
+period_s = 0.8299999833106995
+size = 16.0
+
+[dialogue.responsive.portrait.nameplate]
+anchor = "top_right"
+border_color = "#d7efff"
+border_style = "solid"
+border_width = 0.800000011920929
+color = "#0876d0"
+offset = [
+    -8.0,
+    12.0,
+]
+padding = [
+    4.0,
+    4.0,
+]
+radius = 999.0
+rotate = 0.0
+size = 18.0
+text_color = "#ffffff"
+visible = true
+
+[dialogue.responsive.portrait.nameplate.gradient]
+angle = 90.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#087fd1",
+],
+    [
+    1.0,
+    "#249fdf",
+],
+]
+
+[[dialogue.responsive.portrait.nameplate.shadows]]
+blur = 6.0
+color = "#0876d033"
+dx = 0.0
+dy = 2.0
+inset = false
+spread = 0.0
+
+[dialogue.responsive.portrait.portrait]
+offset = [
+    0.0,
+    0.0,
+]
+radius = 12.0
+side = "left"
+size = [
+    160.0,
+    200.0,
+]
+visible = false
+
+[dialogue.responsive.portrait.portrait.variants]
+
+[[dialogue.responsive.portrait.shader_effects]]
+shader = "responsive_print"
+target = "artwork"
+
+[[dialogue.responsive.rules]]
+max_height = 8192.0
+max_width = 600.0
+portrait = false
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    16.0,
+    40.0,
+    16.0,
+    16.0,
+]
+
+[dialogue.responsive.rules.layout.box]
+border_color = "#ffffff"
+border_style = "solid"
+border_width = 1.0
+color = "#fffffff2"
+contour = "rounded"
+glow_blur = 12.0
+inner_border_width = 0.0
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+radius = 30.0
+width_fraction = 1.0
+
+[dialogue.responsive.rules.layout.box.gradient]
+angle = 160.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#fffffff7",
+],
+    [
+    1.0,
+    "#eef6fdf2",
+],
+]
+
+[[dialogue.responsive.rules.layout.box.shadows]]
+blur = 18.0
+color = "#2388c922"
+dx = 0.0
+dy = 5.0
+inset = false
+spread = 0.0
+
+[dialogue.responsive.rules.layout.nameplate]
+anchor = "top_left"
+border_color = "#d7efff"
+border_style = "solid"
+border_width = 0.800000011920929
+color = "#0876d0"
+offset = [
+    12.0,
+    4.0,
+]
+padding = [
+    16.0,
+    5.0,
+]
+radius = 999.0
+rotate = 0.0
+size = 18.0
+text_color = "#ffffff"
+visible = true
+
+[dialogue.responsive.rules.layout.nameplate.gradient]
+angle = 90.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#087fd1",
+],
+    [
+    1.0,
+    "#249fdf",
+],
+]
+
+[[dialogue.responsive.rules.layout.nameplate.shadows]]
+blur = 6.0
+color = "#0876d033"
+dx = 0.0
+dy = 2.0
+inset = false
+spread = 0.0
+
+[[dialogue.responsive.rules.layout.shader_effects]]
+shader = "compact_print"
+target = "artwork"
+
+[[dialogue.responsive.rules]]
+max_height = 160.0
+max_width = 8192.0
+portrait = false
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    16.0,
+    40.0,
+    16.0,
+    16.0,
+]
+
+[dialogue.responsive.rules.layout.box]
+border_color = "#ffffff"
+border_style = "solid"
+border_width = 1.0
+color = "#fffffff2"
+contour = "rounded"
+glow_blur = 12.0
+inner_border_width = 0.0
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+radius = 30.0
+width_fraction = 1.0
+
+[dialogue.responsive.rules.layout.box.gradient]
+angle = 160.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#fffffff7",
+],
+    [
+    1.0,
+    "#eef6fdf2",
+],
+]
+
+[[dialogue.responsive.rules.layout.box.shadows]]
+blur = 18.0
+color = "#2388c922"
+dx = 0.0
+dy = 5.0
+inset = false
+spread = 0.0
+
+[dialogue.responsive.rules.layout.nameplate]
+anchor = "top_left"
+border_color = "#d7efff"
+border_style = "solid"
+border_width = 0.800000011920929
+color = "#0876d0"
+offset = [
+    12.0,
+    4.0,
+]
+padding = [
+    16.0,
+    5.0,
+]
+radius = 999.0
+rotate = 0.0
+size = 18.0
+text_color = "#ffffff"
+visible = true
+
+[dialogue.responsive.rules.layout.nameplate.gradient]
+angle = 90.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#087fd1",
+],
+    [
+    1.0,
+    "#249fdf",
+],
+]
+
+[[dialogue.responsive.rules.layout.nameplate.shadows]]
+blur = 6.0
+color = "#0876d033"
+dx = 0.0
+dy = 2.0
+inset = false
+spread = 0.0
+
+[[dialogue.responsive.rules.layout.shader_effects]]
+shader = "compact_print"
+target = "artwork"
+
+[[dialogue.responsive.rules]]
+max_height = 8192.0
+max_width = 240.0
+portrait = true
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    12.0,
+    16.0,
+    48.0,
+    48.0,
+]
+
+[[dialogue.responsive.rules.layout.shader_effects]]
+shader = "responsive_print"
+target = "artwork"
+
+[[dialogue.responsive.rules]]
+max_height = 480.0
+max_width = 8192.0
+portrait = true
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    12.0,
+    16.0,
+    48.0,
+    24.0,
+]
+
+[[dialogue.responsive.rules.layout.shader_effects]]
+shader = "responsive_print"
+target = "artwork"
+
+[[dialogue.responsive.rules]]
+max_height = 140.0
+max_width = 200.0
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    10.0,
+    12.0,
+    10.0,
+    12.0,
+]
+
+[dialogue.responsive.rules.layout.box]
+border_color = "#ffffff"
+border_style = "solid"
+border_width = 1.0
+color = "#fffffff2"
+contour = "rounded"
+glow_blur = 12.0
+inner_border_width = 0.0
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+radius = 30.0
+width_fraction = 1.0
+
+[dialogue.responsive.rules.layout.box.gradient]
+angle = 160.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#fffffff7",
+],
+    [
+    1.0,
+    "#eef6fdf2",
+],
+]
+
+[[dialogue.responsive.rules.layout.box.shadows]]
+blur = 18.0
+color = "#2388c922"
+dx = 0.0
+dy = 5.0
+inset = false
+spread = 0.0
+
+[dialogue.responsive.rules.layout.nameplate]
+anchor = "top_left"
+border_style = "solid"
+border_width = 0.0
+color = "#0876d0"
+offset = [
+    16.0,
+    -12.0,
+]
+padding = [
+    10.0,
+    4.0,
+]
+radius = 10.0
+rotate = 0.0
+shadows = []
+size = 18.0
+text_color = "#ffffff"
+visible = false
+
+[dialogue.responsive.rules.layout.portrait]
+offset = [
+    0.0,
+    0.0,
+]
+radius = 12.0
+side = "left"
+size = [
+    160.0,
+    200.0,
+]
+visible = false
+
+[dialogue.responsive.rules.layout.portrait.variants]
+
+[[dialogue.responsive.rules.layout.shader_effects]]
+shader = "minimal_print"
+target = "artwork"
+
+[dialogue.reveal.entrance]
+kind = "fade"
+ms = 140
+
+[dialogue.text]
+color = "#1b2f4b"
+
+[effects]
+contrast_guard = 3.0
+
+[history]
+bubble_border_width = 1.0
+bubble_color = "#ffffffeb"
+bubble_contour = "rounded"
+bubble_radii = [
+    18.0,
+    18.0,
+    18.0,
+    18.0,
+]
+bubble_radius = 14.0
+column_inset = 10.0
+entrance = "slide_up"
+group_speakers = false
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+name_color = "#0876d0"
+padding = [
+    6.0,
+    16.0,
+    6.0,
+    16.0,
+]
+row_padding = 8.0
+time_color = "#8aa0b4"
+
+[history.avatar]
+ring_color = "#ffffff"
+ring_width = 2.0
+size = 36.0
+
+[history.bubble_gradient]
+angle = 160.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#fffffff5",
+],
+    [
+    1.0,
+    "#eef6fdf0",
+],
+]
+
+[[history.bubble_shadows]]
+blur = 10.0
+color = "#1b2f4b1a"
+dx = 0.0
+dy = 3.0
+inset = false
+spread = 0.0
+
+[[history.bubble_shadows]]
+blur = 0.0
+color = "#b7def580"
+dx = 0.0
+dy = 1.0
+inset = true
+spread = 0.0
+
+[history.name_plate]
+border_color = "#d7efff"
+border_style = "solid"
+border_width = 0.800000011920929
+color = "name"
+padding = [
+    9.0,
+    2.0,
+]
+radius = 999.0
+shadows = []
+text_color = "name_text"
+
+[history.name_plate.gradient]
+angle = 90.0
+center = [
+    50.0,
+    50.0,
+]
+circle = false
+kind = "linear"
+stops = [
+    [
+    0.0,
+    "#087fd1",
+],
+    [
+    1.0,
+    "#249fdf",
+],
+]
+
+[history.text]
+color = "#1b2f4b"
+size = 17.0
+
+[shaders.compact_print]
+animated = false
+intensity = 1.0
+params = [2.0]
+period_s = 16.0
+source = "artwork.wgsl"
+static_fallback = true
+textures = []
+
+[shaders.minimal_print]
+animated = false
+intensity = 1.0
+params = [
+    2.0,
+    1.0,
+]
+period_s = 16.0
+source = "artwork.wgsl"
+static_fallback = true
+textures = []
+
+[shaders.responsive_print]
+animated = false
+intensity = 1.0
+params = [1.0]
+period_s = 16.0
+source = "artwork.wgsl"
+static_fallback = true
+textures = []

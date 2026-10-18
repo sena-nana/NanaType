@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 15
+
+schema = 3
+id = "nanatype.vanilla"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "streaming",
+    "minimal",
+]
+
+[name]
+en-US = "Vanilla"
+ja-JP = "バニラ"
+zh-CN = "香草"
+
+[description]
+en-US = "A minimal white bar with an accent stripe and the name inside; made for streams"
+ja-JP = "左にアクセントラインのシンプルな白帯、名前は枠内に。配信向け"
+zh-CN = "极简白条与左侧强调色，名字收在框内，适合直播字幕"

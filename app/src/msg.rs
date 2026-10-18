@@ -101,6 +101,25 @@ pub enum FileTarget {
 }
 
 pub enum Msg {
+    RequestPluginActivation(String),
+    ConfirmPluginActivation,
+    CancelPluginActivation,
+    DisablePlugin(String),
+    RefreshPackages,
+    RemovePackage(String),
+    PluginCommand {
+        id: String,
+        command: String,
+    },
+    PluginInput {
+        id: String,
+        event: serde_json::Value,
+    },
+    PluginResult {
+        id: String,
+        generation: u64,
+        response: std::sync::Arc<nanatype_plugins::WorkerResponse>,
+    },
     PeerStart {
         invitation: Option<String>,
         relay: String,

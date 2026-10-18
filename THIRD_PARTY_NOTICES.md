@@ -148,7 +148,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 572 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 607 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -225,11 +225,12 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - hyper-rustls 0.27.10 — <https://github.com/rustls/hyper-rustls>
 - rustls 0.23.44 — <https://github.com/rustls/rustls>
 
-### Apache-2.0 OR MIT (363)
+### Apache-2.0 OR MIT (370)
 
 - accesskit 0.25.1 — <https://github.com/AccessKit/accesskit>
 - accesskit_consumer 0.39.1 — <https://github.com/AccessKit/accesskit>
 - accesskit_windows 0.35.1 — <https://github.com/AccessKit/accesskit>
+- addr2line 0.26.1 — <https://github.com/gimli-rs/addr2line>
 - aead 0.5.2 — <https://github.com/RustCrypto/traits>
 - aead 0.6.1 — <https://github.com/RustCrypto/traits>
 - aes 0.8.4 — <https://github.com/RustCrypto/block-ciphers>
@@ -237,6 +238,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - aes-gcm 0.10.3 — <https://github.com/RustCrypto/AEADs>
 - allocator-api2 0.2.21 — <https://github.com/zakarumych/allocator-api2>
 - anyhow 1.0.104 — <https://github.com/dtolnay/anyhow>
+- arbitrary 1.5.0 — <https://github.com/rust-fuzz/arbitrary>
 - arboard 3.6.1 — <https://github.com/1Password/arboard>
 - arc-swap 1.9.2 — <https://github.com/vorner/arc-swap>
 - arrayvec 0.7.8 — <https://github.com/bluss/arrayvec>
@@ -257,6 +259,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - block-buffer 0.12.1 — <https://github.com/RustCrypto/utils>
 - borsh 1.8.1 — <https://github.com/near/borsh-rs>
 - bs58 0.5.1 — <https://github.com/Nullus157/bs58-rs>
+- bumpalo 3.20.3 — <https://github.com/fitzgen/bumpalo>
 - cfg-if 1.0.4 — <https://github.com/rust-lang/cfg-if>
 - chacha20 0.10.2 — <https://github.com/RustCrypto/stream-ciphers>
 - chacha20poly1305 0.11.0 — <https://github.com/RustCrypto/AEADs>
@@ -267,6 +270,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - cobs 0.3.0 — <https://github.com/jamesmunns/cobs.rs>
 - const-oid 0.10.2 — <https://github.com/RustCrypto/formats>
 - core_detect 1.0.0 — <https://github.com/thomcc/core_detect>
+- cpp_demangle 0.5.1 — <https://github.com/gimli-rs/cpp_demangle>
 - cpubits 0.1.1 — <https://github.com/RustCrypto/utils>
 - cpufeatures 0.2.17 — <https://github.com/RustCrypto/utils>
 - cpufeatures 0.3.1 — <https://github.com/RustCrypto/utils>
@@ -310,6 +314,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - fluent-bundle 0.16.0 — <https://github.com/projectfluent/fluent-rs>
 - fluent-langneg 0.13.1 — <https://github.com/projectfluent/fluent-langneg-rs>
 - fluent-syntax 0.12.0 — <https://github.com/projectfluent/fluent-rs>
+- fnv 1.0.7 — <https://github.com/servo/rust-fnv>
 - font-types 0.12.5 — <https://github.com/googlefonts/fontations>
 - form_urlencoded 1.2.2 — <https://github.com/servo/rust-url>
 - futures 0.3.34 — <https://github.com/rust-lang/futures-rs>
@@ -326,6 +331,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - getrandom 0.4.3 — <https://github.com/rust-random/getrandom>
 - ghash 0.5.1 — <https://github.com/RustCrypto/universal-hashes>
 - gif 0.14.2 — <https://github.com/image-rs/image-gif>
+- gimli 0.33.0 — <https://github.com/gimli-rs/gimli>
 - glass_pumpkin 2.0.0 — <https://github.com/LF-Decentralized-Trust-labs/agora-glass_pumpkin>
 - gpu-allocator 0.28.0 — <https://github.com/Traverse-Research/gpu-allocator>
 - grammers-client 0.11.0 — <https://codeberg.org/Lonami/grammers>
@@ -376,6 +382,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - khronos-egl 6.0.0 — <https://github.com/timothee-haudebourg/khronos-egl>
 - kurbo 0.13.1 — <https://github.com/linebender/kurbo>
 - lazy_static 1.5.1 — <https://github.com/rust-lang-nursery/lazy-static.rs>
+- leb128fmt 0.1.0 — <https://github.com/bluk/leb128fmt>
 - libc 0.2.189 — <https://github.com/rust-lang/libc>
 - litrs 1.0.0 — <https://github.com/LukasKalbertodt/litrs>
 - locate-locale 0.2.0 — <https://github.com/snuk182/locate-locale>
@@ -426,6 +433,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - num-conv 0.2.2 — <https://github.com/jhpratt/num-conv>
 - num-integer 0.1.47 — <https://github.com/rust-num/num-integer>
 - num-traits 0.2.19 — <https://github.com/rust-num/num-traits>
+- object 0.40.0 — <https://github.com/gimli-rs/object>
 - once_cell 1.21.4 — <https://github.com/matklad/once_cell>
 - opaque-debug 0.3.1 — <https://github.com/RustCrypto/utils>
 - parking 2.2.1 — <https://github.com/smol-rs/parking>
@@ -449,7 +457,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - powerfmt 0.2.1 — <https://github.com/jhpratt/powerfmt>
 - prefix-trie 0.8.4 — <https://github.com/tiborschneider/prefix-trie>
 - presser 0.3.1 — <https://github.com/EmbarkStudios/presser>
-- proc-macro-crate 2.0.2 — <https://github.com/bkchr/proc-macro-crate>
 - proc-macro-crate 3.5.0 — <https://github.com/bkchr/proc-macro-crate>
 - proc-macro2 1.0.107 — <https://github.com/dtolnay/proc-macro2>
 - profiling 1.0.18 — <https://github.com/aclysma/profiling>
@@ -472,23 +479,25 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - resvg 0.48.1 — <https://github.com/linebender/resvg>
 - rosc 0.10.1 — <https://github.com/klingtnet/rosc>
 - roxmltree 0.21.1 — <https://github.com/RazrFalcon/roxmltree>
+- rustc-demangle 0.1.28 — <https://github.com/rust-lang/rustc-demangle>
 - rustc-hash 1.1.0 — <https://github.com/rust-lang-nursery/rustc-hash>
 - rustc-hash 2.1.3 — <https://github.com/rust-lang/rustc-hash>
 - rustls-pki-types 1.15.1 — <https://github.com/rustls/pki-types>
 - rustls-platform-verifier 0.7.1 — <https://github.com/rustls/rustls-platform-verifier>
 - rustversion 1.0.23 — <https://github.com/dtolnay/rustversion>
 - scopeguard 1.2.0 — <https://github.com/bluss/scopeguard>
+- semver 1.0.28 — <https://github.com/dtolnay/semver>
 - serde 1.0.229 — <https://github.com/serde-rs/serde>
 - serde_bytes 0.11.19 — <https://github.com/serde-rs/bytes>
 - serde_core 1.0.229 — <https://github.com/serde-rs/serde>
 - serde_derive 1.0.229 — <https://github.com/serde-rs/serde>
 - serde_json 1.0.151 — <https://github.com/serde-rs/json>
-- serde_spanned 0.6.9 — <https://github.com/toml-rs/toml>
 - serde_spanned 1.1.2 — <https://github.com/toml-rs/toml>
 - serde_with 3.24.0 — <https://github.com/jonasbb/serde_with>
 - serde_with_macros 3.24.0 — <https://github.com/jonasbb/serde_with>
 - serdect 0.4.3 — <https://github.com/RustCrypto/formats>
 - sha1 0.11.0 — <https://github.com/RustCrypto/hashes>
+- sha2 0.10.9 — <https://github.com/RustCrypto/hashes>
 - sha2 0.11.1 — <https://github.com/RustCrypto/hashes>
 - signature 3.0.0 — <https://github.com/RustCrypto/traits>
 - simdutf8 0.1.5 — <https://github.com/rusticstuff/simdutf8>
@@ -519,9 +528,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - time-macros 0.2.32 — <https://github.com/time-rs/time>
 - tokio-rustls 0.26.6 — <https://github.com/rustls/tokio-rustls>
 - toml 1.1.7+spec-1.1.0 — <https://github.com/toml-rs/toml>
-- toml_datetime 0.6.3 — <https://github.com/toml-rs/toml>
 - toml_datetime 1.1.2+spec-1.1.0 — <https://github.com/toml-rs/toml>
-- toml_edit 0.20.2 — <https://github.com/toml-rs/toml>
 - toml_edit 0.25.15+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_parser 1.1.4+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_writer 1.1.3+spec-1.1.0 — <https://github.com/toml-rs/toml>
@@ -606,6 +613,40 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - zune-core 0.5.3 — <https://github.com/etemesi254/zune-image>
 - zune-jpeg 0.5.15 — <https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpeg>
 
+### Apache-2.0 WITH LLVM-exception (25)
+
+- cranelift-assembler-x64 0.136.3 — <https://crates.io/crates/cranelift-assembler-x64>
+- cranelift-bforest 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-bitset 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-codegen 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-codegen-shared 0.136.3 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-control 0.136.3 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-entity 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-frontend 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-native 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
+- pulley-interpreter 49.0.0 — <https://github.com/bytecodealliance/wasmtime/tree/main/pulley>
+- pulley-macros 49.0.0 — <https://github.com/bytecodealliance/wasmtime/tree/main/pulley/macros>
+- regalloc2 0.15.2 — <https://github.com/bytecodealliance/regalloc2>
+- target-lexicon 0.13.5 — <https://github.com/bytecodealliance/target-lexicon>
+- wasmtime 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-environ 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-component-util 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-core 49.0.0 — <https://crates.io/crates/wasmtime-internal-core>
+- wasmtime-internal-cranelift 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-fiber 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-jit-debug 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-jit-icache-coherence 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-unwinder 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-versioned-export-macros 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-winch 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+- winch-codegen 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+
+### Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT (3)
+
+- wasm-encoder 0.258.3 — <https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder>
+- wasmparser 0.258.3 — <https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser>
+- wasmprinter 0.258.3 — <https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmprinter>
+
 ### BSD-2-Clause (4)
 
 - arrayref 0.3.9 — <https://github.com/droundy/arrayref>
@@ -656,7 +697,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - rustls-webpki 0.103.15 — <https://github.com/rustls/webpki>
 - untrusted 0.9.0 — <https://github.com/briansmith/untrusted>
 
-### MIT (85)
+### MIT (84)
 
 - bytes 1.12.1 — <https://github.com/tokio-rs/bytes>
 - color_quant 1.1.0 — <https://github.com/image-rs/color_quant>
@@ -738,13 +779,12 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - webview2-com 0.39.1 — <https://github.com/wravery/webview2-rs>
 - webview2-com-macros 0.8.1 — <https://github.com/wravery/webview2-rs>
 - webview2-com-sys 0.39.1 — <https://github.com/wravery/webview2-rs>
-- winnow 0.5.40 — <https://github.com/winnow-rs/winnow>
 - winnow 1.0.4 — <https://github.com/winnow-rs/winnow>
 - xmlwriter 0.1.0 — <https://github.com/RazrFalcon/xmlwriter>
 - zip 8.6.0 — <https://github.com/zip-rs/zip2>
 - zmij 1.0.23 — <https://github.com/dtolnay/zmij>
 
-### MIT OR Unlicense (12)
+### MIT OR Unlicense (13)
 
 - aho-corasick 1.1.5 — <https://github.com/BurntSushi/aho-corasick>
 - byteorder 1.5.0 — <https://github.com/BurntSushi/byteorder>
@@ -756,6 +796,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - jiff-tzdb-platform 0.1.3 — <https://github.com/BurntSushi/jiff>
 - memchr 2.8.3 — <https://github.com/BurntSushi/memchr>
 - same-file 1.0.6 — <https://github.com/BurntSushi/same-file>
+- termcolor 1.4.1 — <https://github.com/BurntSushi/termcolor>
 - walkdir 2.5.0 — <https://github.com/BurntSushi/walkdir>
 - winapi-util 0.1.11 — <https://github.com/BurntSushi/winapi-util>
 

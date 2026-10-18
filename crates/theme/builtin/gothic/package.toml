@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 4
+
+schema = 3
+id = "nanatype.gothic"
+version = "1.1.2"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "streaming",
+    "elegant",
+]
+
+[name]
+en-US = "Rose Gothic"
+ja-JP = "薔薇ゴシック"
+zh-CN = "蔷薇哥特"
+
+[description]
+en-US = "Original procedural print artwork"
+ja-JP = "オリジナルのプロシージャル版画"
+zh-CN = "玫瑰窗、酒红书脊与蚀刻尖拱；完整程序版画"

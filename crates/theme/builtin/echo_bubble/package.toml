@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 26
+
+schema = 3
+id = "nanatype.echo_bubble"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "streaming",
+    "cute",
+]
+
+[name]
+en-US = "Echo-Live Bubble"
+ja-JP = "Echo-Live バブル"
+zh-CN = "Echo-Live 气泡"
+
+[description]
+en-US = "Echo-Live's bubble theme: a white rounded box with a thick grey border and a hard drop shadow"
+ja-JP = "Echo-Live のバブルテーマを再現：白い角丸の枠、太い灰色の縁と右下のハードシャドウ"
+zh-CN = "还原 Echo-Live 的气泡主题：白色圆角框、灰色粗边与右下硬投影"

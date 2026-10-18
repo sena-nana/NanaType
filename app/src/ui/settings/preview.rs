@@ -104,6 +104,15 @@ pub struct Draft {
     pub history: Pane,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct InvalidProfile;
+impl std::fmt::Display for InvalidProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("invalid preview font, dimensions or color")
+    }
+}
+impl std::error::Error for InvalidProfile {}
+
 impl Draft {
     pub fn load(settings: &Settings, id: &str, ui: Ui) -> Self {
         let p = settings
@@ -159,10 +168,16 @@ impl Draft {
         }
     }
 
-    pub fn profile(&self, base: &Skin) -> Result<SkinPersonalization, ()> {
+    pub fn profile(&self, base: &Skin) -> Result<SkinPersonalization, InvalidProfile> {
         Ok(SkinPersonalization {
-            display: self.display.parse(default_size(base, false))?,
-            history: self.history.parse(default_size(base, true))?,
+            display: self
+                .display
+                .parse(default_size(base, false))
+                .map_err(|()| InvalidProfile)?,
+            history: self
+                .history
+                .parse(default_size(base, true))
+                .map_err(|()| InvalidProfile)?,
         })
     }
 }

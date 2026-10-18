@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 3
+
+schema = 3
+id = "nanatype.crayon"
+version = "1.0.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "cute",
+    "elegant",
+]
+
+[name]
+en-US = "Crayon"
+ja-JP = "クレヨン"
+zh-CN = "蜡笔画"
+
+[description]
+en-US = "Warm drawing paper, wax-crayon edges and a little flower, with dark colored-pencil lettering"
+ja-JP = "温かな画用紙、柔らかなクレヨンの線と小花、色鉛筆の文字"
+zh-CN = "米白画纸、柔彩蜡笔与小花涂鸦，文字带深色彩铅笔触"

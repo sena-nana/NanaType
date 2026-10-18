@@ -25,6 +25,9 @@ function Add-LicenseSource([string]$Name, [string]$Path, [string]$Category) {
 foreach ($name in @("LICENSE", "LICENSE-MIT", "THIRD_PARTY_NOTICES.md")) {
     Add-LicenseSource $name (Join-Path $repoRoot $name) "project"
 }
+foreach ($name in @("WASMOON-LICENSE", "LUA-LICENSE")) {
+    Add-LicenseSource $name (Join-Path $repoRoot "crates\plugins\runtime\$name") "plugins"
+}
 foreach ($file in (Get-ChildItem (Join-Path $repoRoot "crates\theme\fonts\*.LICENSE.txt") -File | Sort-Object Name)) {
     Add-LicenseSource $file.Name $file.FullName "fonts"
 }

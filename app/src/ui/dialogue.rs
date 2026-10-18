@@ -393,22 +393,20 @@ fn document_on(
             )
         });
         view = view.presentation_chains(effect_table(&base.effects, base.reduced_motion), schedule);
-        if super::materials::enabled(ui) && !base.reduced_motion {
-            if let Some(p) = &mut view.presentation {
-                p.transitions = base.masks.clone();
-                if let Some((spec, _)) = &scramble_plan {
-                    p.transitions = super::text_scramble::transitions(
-                        spec,
-                        base.light_exit,
-                        base.light_preview,
-                    );
-                }
-                if ui
-                    .settings
-                    .with_untracked(|s| s.playback.entrance.is_some())
-                {
-                    p.transitions.entrance = None;
-                }
+        if super::materials::enabled(ui)
+            && !base.reduced_motion
+            && let Some(p) = &mut view.presentation
+        {
+            p.transitions = base.masks.clone();
+            if let Some((spec, _)) = &scramble_plan {
+                p.transitions =
+                    super::text_scramble::transitions(spec, base.light_exit, base.light_preview);
+            }
+            if ui
+                .settings
+                .with_untracked(|s| s.playback.entrance.is_some())
+            {
+                p.transitions.entrance = None;
             }
         }
     }
@@ -520,10 +518,12 @@ fn document_on(
             node,
             spec,
             base.color,
-            &times,
-            &text,
-            base.light_exit,
-            base.light_preview,
+            super::text_light::TextSchedule {
+                at_ms: &times,
+                value: &text,
+                exit: base.light_exit,
+                preview: base.light_preview,
+            },
         );
     }
     let view = widget(view).bind(update_view);
@@ -538,18 +538,19 @@ fn document_on(
             view.node_ref(node).into_any(),
             node,
             spec,
-            &times,
-            &text,
+            super::text_light::TextSchedule {
+                at_ms: &times,
+                value: &text,
+                exit: base.light_exit,
+                preview: base.light_preview,
+            },
             entrance.ms,
-            base.light_exit,
-            base.light_preview,
         );
     }
-    let view = match follow {
+    match follow {
         Some(_) => view.node_ref(ui.text_node).into_any(),
         None => view.into_any(),
-    };
-    view
+    }
 }
 
 /// What a dialogue box shows.
@@ -668,7 +669,10 @@ pub fn dialogue_box(ui: Ui, source: Source, editor: Option<AnyView>) -> AnyView 
 
 /// Each native window owns one participant and one GPU output surface.
 pub fn display_window(ui: Ui) -> impl IntoView {
-    dialogue_box(ui, Source::Display, None)
+    widget(Stack::column(0.)).children((
+        dialogue_box(ui, Source::Display, None),
+        super::plugins::mounted(ui, nanatype_plugins::Mount::Display),
+    ))
 }
 
 pub fn peer_window(ui: Ui) -> impl IntoView {

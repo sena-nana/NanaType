@@ -19,6 +19,7 @@ pub mod output;
 pub mod p2p;
 pub mod paths;
 mod perf;
+pub mod plugins;
 pub mod scheduler;
 pub mod services;
 pub mod skin_fonts;
@@ -38,6 +39,10 @@ static INSTANCE: std::sync::OnceLock<std::net::TcpListener> = std::sync::OnceLoc
 
 /// Run the application; returns when the user quits.
 pub fn run() -> ExitCode {
+    if std::env::args().nth(1).as_deref() == Some("--plugin-worker") {
+        nanatype_plugins::run_worker();
+        return ExitCode::SUCCESS;
+    }
     debug_log("main start");
     let listener = match acquire() {
         Instance::Primary(listener) => listener,

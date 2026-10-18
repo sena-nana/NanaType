@@ -53,6 +53,7 @@ pub enum Page {
     General,
     Playback,
     Skins,
+    Packages,
     Windows,
     History,
     Hotkeys,
@@ -65,10 +66,11 @@ pub enum Page {
 }
 
 impl Page {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::General,
         Self::Playback,
         Self::Skins,
+        Self::Packages,
         Self::Windows,
         Self::History,
         Self::Hotkeys,
@@ -87,6 +89,7 @@ impl Page {
             Self::General => "settings-general",
             Self::Playback => "settings-playback",
             Self::Skins => "settings-skins",
+            Self::Packages => "settings-packages",
             Self::Windows => "settings-windows",
             Self::History => "settings-history",
             Self::Hotkeys => "settings-hotkeys",
@@ -105,6 +108,7 @@ impl Page {
             Self::General => "settings-general-sub",
             Self::Playback => "settings-playback-sub",
             Self::Skins => "settings-skins-sub",
+            Self::Packages => "settings-packages-sub",
             Self::Windows => "settings-windows-sub",
             Self::History => "settings-history-sub",
             Self::Hotkeys => "settings-hotkeys-sub",
@@ -122,6 +126,7 @@ impl Page {
             Self::General => ti::ADJUSTMENTS,
             Self::Playback => ti::PLAYER_PLAY,
             Self::Skins => ti::PALETTE,
+            Self::Packages => ti::PLUG_CONNECTED,
             Self::Windows => ti::APP_WINDOW,
             Self::History => ti::MESSAGES,
             Self::Hotkeys => ti::KEYBOARD,
@@ -205,6 +210,9 @@ fn sidebar(ui: Ui) -> AnyView {
     for (i, (caption, pages)) in GROUPS.into_iter().enumerate() {
         items.push(nav_caption(ui, caption, i == 0));
         items.extend(pages.into_iter().map(|page| nav_row(ui, page)));
+        if i == 1 {
+            items.push(nav_row(ui, Page::Packages));
+        }
         if i == 2 {
             items.push(nav_row(ui, Page::Bilibili));
             items.push(nav_row(ui, Page::Douyin));

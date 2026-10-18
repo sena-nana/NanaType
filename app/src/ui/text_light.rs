@@ -243,17 +243,28 @@ impl ComponentView for LightView {
     }
 }
 
+/// Timing and source shared by retained text effects.
+pub struct TextSchedule<'a> {
+    pub at_ms: &'a [Option<u64>],
+    pub value: &'a str,
+    pub exit: Option<(u64, u16)>,
+    pub preview: bool,
+}
+
 pub fn wrap(
     ui: Ui,
     text: AnyView,
     node: NodeRef,
     spec: TextLightSpec,
-    at_ms: &[Option<u64>],
-    value: &str,
+    schedule: TextSchedule<'_>,
     entrance_ms: u16,
-    exit: Option<(u64, u16)>,
-    preview: bool,
 ) -> AnyView {
+    let TextSchedule {
+        at_ms,
+        value,
+        exit,
+        preview,
+    } = schedule;
     let id = NEXT.fetch_add(1, Ordering::Relaxed);
     let light = Arc::new(Light {
         id,
@@ -362,11 +373,12 @@ struct Prepared {
     pipeline: wgpu::RenderPipeline,
     bytes: usize,
 }
+type Placements = HashMap<(DeviceGeneration, u64, [u32; 2]), (f32, [f32; 2], [f32; 2])>;
 #[derive(Debug, Default)]
 struct State {
     pipelines: HashMap<PipelineKey, Pipeline>,
     masks: HashMap<MaskKey, Prepared>,
-    placements: HashMap<(DeviceGeneration, u64, [u32; 2]), (f32, [f32; 2], [f32; 2])>,
+    placements: Placements,
 }
 #[derive(Debug, Default)]
 struct Renderer {

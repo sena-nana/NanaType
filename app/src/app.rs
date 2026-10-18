@@ -59,6 +59,7 @@ impl From<nana_ui::runtime::RichEditCommand> for EditorCommand {
 }
 
 pub struct App {
+    pub plugins: crate::plugins::Manager,
     pub paths: Paths,
     pub settings: Settings,
     pub readonly_settings: bool,
@@ -160,7 +161,7 @@ impl App {
                 })
             }
         });
-        let registry = SkinRegistry::new(Some(paths.skins()), env!("CARGO_PKG_VERSION"));
+        let registry = SkinRegistry::new(Some(paths.packages()), env!("CARGO_PKG_VERSION"));
         let (loaded, fallback) = registry.load_scanned_or_default(&settings.skin.id);
         let skin = Arc::new(skin_theme::personalized(
             &loaded.skin,
@@ -239,6 +240,7 @@ impl App {
             move |event| post(Msg::TelegramEvent(event))
         });
         let mut app = Self {
+            plugins: Default::default(),
             assets: AssetLibrary::new(paths.blobs()),
             sticker_manager,
             telegram,
@@ -369,6 +371,13 @@ impl App {
         }
         let ctx = ctx.clone();
         crate::listen_for_instances(move || ctx.dispatch(Msg::SecondInstance));
+        app.plugins.sync(
+            &app.registry,
+            &app.settings.enabled_plugins,
+            &app.settings.plugin_approvals,
+            app.ctx.clone(),
+            app.ui,
+        );
         app
     }
 
@@ -1163,6 +1172,17 @@ impl App {
         );
         self.apply_effects(fx);
         self.ui.settings.set(Arc::new(self.settings.clone()));
+        if prev.enabled_plugins != self.settings.enabled_plugins
+            || prev.plugin_approvals != self.settings.plugin_approvals
+        {
+            self.plugins.sync(
+                &self.registry,
+                &self.settings.enabled_plugins,
+                &self.settings.plugin_approvals,
+                self.ctx.clone(),
+                self.ui,
+            );
+        }
         if let Some(tray) = &self.tray {
             tray.sync(&self.settings);
         }
@@ -1356,6 +1376,11 @@ impl App {
             },
             Event::LineSubmitted(_) | Event::LineRevealed(_) | Event::Queued { .. } => return,
         };
+        if self.plugins.has_running()
+            && let Ok(event) = serde_json::to_value(&out)
+        {
+            self.plugins.broadcast(event, self.ui);
+        }
         self.bridge.emit(out);
     }
 
@@ -1624,7 +1649,7 @@ impl App {
             t("tb-image").trim_end_matches('…').to_owned(),
             ["png", "jpg", "jpeg", "gif", "webp", "bmp"],
         );
-        let skin_filter = FileFilter::new("NanaType skin", ["ntskin", "zip"]);
+        let skin_filter = FileFilter::new("NanaType package", ["ntpkg", "zip"]);
         let request = match target {
             FileTarget::Avatar => FileDialogRequest::new(id, FileDialogKind::OpenFile)
                 .title(t("general-avatar-pick"))
@@ -1639,7 +1664,7 @@ impl App {
                 .title(t("skins-export"))
                 .filters([skin_filter])
                 .file_name(format!(
-                    "{}.ntskin",
+                    "{}.ntpkg",
                     self.export_target.clone().unwrap_or_default()
                 )),
             FileTarget::StickerFolder => {
@@ -1691,9 +1716,18 @@ impl App {
                         }
                     };
                     self.notice(text, false);
+                    // An updated dependency may change another plugin's reviewed closure.
+                    self.plugins = Default::default();
+                    self.plugins.sync(
+                        &self.registry,
+                        &self.settings.enabled_plugins,
+                        &self.settings.plugin_approvals,
+                        self.ctx.clone(),
+                        self.ui,
+                    );
                     if id == self.settings.skin.id {
                         self.reload_skin(true);
-                    } else {
+                    } else if self.registry.entry(&id).is_some() {
                         self.edit(|s| s.skin.id = id);
                     }
                 }
@@ -1727,6 +1761,112 @@ impl App {
 
     pub fn update(&mut self, msg: Msg) {
         match msg {
+            Msg::RequestPluginActivation(id) => match crate::plugins::review(&self.registry, &id) {
+                Ok(review) => {
+                    self.ui.plugin_source_trusted.set(false);
+                    self.ui.plugin_activation.set(Some(Arc::new(review)));
+                }
+                Err(error) => self.notice(error, true),
+            },
+            Msg::CancelPluginActivation => {
+                self.ui.plugin_source_trusted.set(false);
+                self.ui.plugin_activation.set(None);
+            }
+            Msg::ConfirmPluginActivation => {
+                if self.ui.plugin_source_trusted.get_untracked()
+                    && let Some(reviewed) = self.ui.plugin_activation.get_untracked()
+                {
+                    match crate::plugins::review(&self.registry, &reviewed.id) {
+                        Ok(current) if current.digest == reviewed.digest => {
+                            let unchanged = self.settings.enabled_plugins.contains(&current.id)
+                                && crate::plugins::approval_matches(
+                                    &current,
+                                    self.settings.plugin_approvals.get(&current.id),
+                                );
+                            self.plugins.stop(&current.id, self.ui);
+                            self.edit(|s| {
+                                if !s.enabled_plugins.contains(&current.id) {
+                                    s.enabled_plugins.push(current.id.clone());
+                                }
+                                s.plugin_approvals.insert(
+                                    current.id,
+                                    nanatype_settings::PluginApproval {
+                                        digest: current.digest,
+                                        trusted_source: true,
+                                        policy: nanatype_settings::PLUGIN_CONSENT_POLICY,
+                                    },
+                                );
+                            });
+                            // Reconfirming identical bytes must also restart a stopped or failed worker.
+                            if unchanged {
+                                self.plugins.sync(
+                                    &self.registry,
+                                    &self.settings.enabled_plugins,
+                                    &self.settings.plugin_approvals,
+                                    self.ctx.clone(),
+                                    self.ui,
+                                );
+                            }
+                            self.ui.plugin_activation.set(None);
+                            self.ui.plugin_source_trusted.set(false);
+                        }
+                        Ok(_) => self.notice(self.ui.now_t("packages-changed-during-review"), true),
+                        Err(error) => self.notice(error, true),
+                    }
+                }
+            }
+            Msg::DisablePlugin(id) => {
+                self.plugins.stop(&id, self.ui);
+                self.edit(|s| {
+                    s.enabled_plugins.retain(|v| v != &id);
+                    s.plugin_approvals.remove(&id);
+                });
+            }
+            Msg::RefreshPackages => {
+                self.registry.rescan();
+                self.refresh_skin_rows();
+                self.plugins = Default::default();
+                self.plugins.sync(
+                    &self.registry,
+                    &self.settings.enabled_plugins,
+                    &self.settings.plugin_approvals,
+                    self.ctx.clone(),
+                    self.ui,
+                );
+            }
+            Msg::RemovePackage(id) => match self.registry.remove(&id) {
+                Ok(()) => {
+                    self.edit(|s| {
+                        s.enabled_plugins.retain(|p| p != &id);
+                        if s.skin.id == id {
+                            s.skin.id = nanatype_theme::DEFAULT_SKIN.into();
+                        }
+                    });
+                    self.refresh_skin_rows();
+                    self.plugins.refresh(&self.registry, self.ui);
+                }
+                Err(error) => self.notice(error.to_string(), true),
+            },
+            Msg::PluginResult {
+                id,
+                generation,
+                response,
+            } => self.plugins.receive(&id, generation, &response, self.ui),
+            Msg::PluginCommand { id, command } => {
+                let allowed = self.ui.plugin_views.with_untracked(|views| {
+                    views
+                        .get(&id)
+                        .is_some_and(|u| u.commands.iter().any(|c| c.id == command))
+                });
+                if allowed {
+                    let _ = self
+                        .plugins
+                        .event(&id, serde_json::json!({"type":"command","id":command}));
+                }
+            }
+            Msg::PluginInput { id, event } => {
+                let _ = self.plugins.event(&id, event);
+            }
             Msg::UiChanged => {}
             Msg::StickerImportFolders(paths) => self.import_sticker_folders(paths),
             Msg::Telegram(command) => {
@@ -1967,7 +2107,12 @@ impl App {
                 });
             }
             Msg::Bridge(status) => self.bridge_status(status),
-            Msg::Chat(message) => self.chat_message(message),
+            Msg::Chat(message) => {
+                if self.plugins.has_running() {
+                    self.plugins.broadcast(serde_json::json!({"type":"chat_message","platform":message.platform.source(),"author":message.user.name,"text":message.doc.plain_text()}),self.ui);
+                }
+                self.chat_message(message);
+            }
             Msg::Bilibili(event) => self.bilibili_event(event),
             Msg::Douyin(event) => self.douyin_event(event),
             Msg::DouyinRefresh => self.douyin_refresh(),

@@ -1,0 +1,21 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 13
+
+schema = 3
+id = "nanatype.adv"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["game"]
+
+[name]
+en-US = "ADV Classic"
+ja-JP = "ADVクラシック"
+zh-CN = "ADV 经典"
+
+[description]
+en-US = "Full-width dark glass bar with a gold outlined name, visual-novel style"
+ja-JP = "全幅のダークガラスに金色の縁取り名前、ノベルゲーム風"
+zh-CN = "全宽深色玻璃条，金色描边名字，视觉小说风格"

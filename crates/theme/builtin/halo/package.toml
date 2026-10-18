@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 10
+
+schema = 3
+id = "nanatype.halo"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "classic",
+    "minimal",
+]
+
+[name]
+en-US = "Halo"
+ja-JP = "ハロー"
+zh-CN = "光环"
+
+[description]
+en-US = "A soft white card with a sky-blue gradient name pill; clean and versatile"
+ja-JP = "やわらかな白いカードに空色グラデーションの名札。すっきり万能"
+zh-CN = "柔光白卡片配天蓝渐变名牌，清爽百搭"

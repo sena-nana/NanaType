@@ -437,6 +437,30 @@ fn main() {
     let skin_dir = out.parent().unwrap().join("hot-skins/user.lifecycle");
     std::fs::create_dir_all(&skin_dir).unwrap();
     std::fs::write(skin_dir.join("skin.toml"), "[meta]\nid='user.lifecycle'\nbase='nanatype.tidal'\n[shaders.artwork]\nsource='effect.wgsl'\n").unwrap();
+    let package = nanatype_theme::PackageManifest {
+        format: 1,
+        meta: nanatype_theme::Meta {
+            id: "user.lifecycle".into(),
+            base: Some("nanatype.tidal".into()),
+            ..Default::default()
+        },
+        capabilities: vec![nanatype_theme::PackageCapability::Skin],
+        dependencies: std::collections::BTreeMap::from([(
+            "nanatype.tidal".into(),
+            registry
+                .load("nanatype.tidal")
+                .unwrap()
+                .skin
+                .meta
+                .version
+                .clone(),
+        )]),
+        catalogue_order: 0,
+        entry: None,
+        created_at: String::new(),
+        licensed_to: String::new(),
+    };
+    std::fs::write(skin_dir.join("package.toml"), package.to_toml().unwrap()).unwrap();
     std::fs::write(
         skin_dir.join("effect.wgsl"),
         "fn effect(i:EffectInput)->vec4<f32>{return vec4(0.);}",

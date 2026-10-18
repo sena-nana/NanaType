@@ -70,7 +70,7 @@ Character lists (UTF-8 text files):
   0xB0–0xD7). Stands in for the 3,500-character 通用规范汉字表 level 1, which
   is not available offline; the two lists overlap almost entirely.
 - `app-text.txt`: every character above U+007E in
-  `crates/i18n/locales/*.ftl`, `crates/theme/builtin/*.toml`,
+  `crates/i18n/locales/*.ftl`, `crates/theme/builtin/*/skin.toml`,
   `app/src/**/*.rs` and `app/examples/*.rs` (UI strings, skin names, sample
   dialogue): 940 characters, 281 of them outside GB2312.
 

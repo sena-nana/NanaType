@@ -1,4 +1,4 @@
-//! Where a skin's files come from: the binary, a folder, or a `.ntskin` zip.
+//! Where a skin's files come from: the binary, a folder, or a `.ntpkg` zip.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -41,13 +41,47 @@ impl std::error::Error for FileError {}
 pub fn clean_path(path: &str) -> Result<String, FileError> {
     let unsafe_path = || FileError::UnsafePath(path.to_owned());
     let normalized = path.replace('\\', "/");
-    if normalized.is_empty() || normalized.starts_with('/') || normalized.contains(':') {
+    if normalized.is_empty()
+        || normalized.len() > 1024
+        || normalized.starts_with('/')
+        || normalized.contains(':')
+    {
         return Err(unsafe_path());
     }
     let mut parts = Vec::new();
     for component in Path::new(&normalized).components() {
         match component {
-            Component::Normal(part) => parts.push(part.to_str().ok_or_else(unsafe_path)?),
+            Component::Normal(part) => {
+                let part = part.to_str().ok_or_else(unsafe_path)?;
+                let stem = part.split('.').next().unwrap_or("").to_ascii_uppercase();
+                let device = matches!(
+                    stem.as_str(),
+                    "CON"
+                        | "PRN"
+                        | "AUX"
+                        | "NUL"
+                        | "CONIN$"
+                        | "CONOUT$"
+                        | "CLOCK$"
+                        | "COM¹"
+                        | "COM²"
+                        | "COM³"
+                        | "LPT¹"
+                        | "LPT²"
+                        | "LPT³"
+                ) || (stem.len() == 4
+                    && (stem.starts_with("COM") || stem.starts_with("LPT"))
+                    && matches!(stem.as_bytes()[3], b'1'..=b'9'));
+                if device
+                    || part.ends_with(['.', ' '])
+                    || part
+                        .chars()
+                        .any(|c| c.is_control() || matches!(c, '<' | '>' | '"' | '|' | '?' | '*'))
+                {
+                    return Err(unsafe_path());
+                }
+                parts.push(part);
+            }
             Component::CurDir => {}
             _ => return Err(unsafe_path()),
         }
@@ -55,12 +89,25 @@ pub fn clean_path(path: &str) -> Result<String, FileError> {
     if parts.is_empty() {
         return Err(unsafe_path());
     }
+    if parts.len() > 32 {
+        return Err(unsafe_path());
+    }
     Ok(parts.join("/"))
 }
 
 /// Read-only access to a skin's files by cleaned relative path.
 pub trait SkinFiles: Send + Sync + std::fmt::Debug {
+    /// Immutable sources may supply parsed data; mutable sources are read anew.
+    fn cached_skin_manifest(&self) -> Option<&toml::Table> {
+        None
+    }
+    fn cached_package_manifest(&self) -> Option<&crate::PackageManifest> {
+        None
+    }
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError>;
+    fn file_len(&self, path: &str) -> Result<u64, FileError> {
+        self.read(path).map(|b| b.len() as u64)
+    }
     fn exists(&self, path: &str) -> bool {
         self.read(path).is_ok()
     }
@@ -89,6 +136,13 @@ impl MemoryFiles {
 }
 
 impl SkinFiles for MemoryFiles {
+    fn file_len(&self, path: &str) -> Result<u64, FileError> {
+        let path = clean_path(path)?;
+        self.files
+            .get(&path)
+            .map(|b| b.len() as u64)
+            .ok_or(FileError::Missing(path))
+    }
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
         let path = clean_path(path)?;
         self.files
@@ -114,6 +168,18 @@ impl DirFiles {
 }
 
 impl SkinFiles for DirFiles {
+    fn file_len(&self, path: &str) -> Result<u64, FileError> {
+        let path = clean_path(path)?;
+        let root = fs::canonicalize(&self.root).map_err(|_| FileError::Missing(path.clone()))?;
+        let full =
+            fs::canonicalize(root.join(&path)).map_err(|_| FileError::Missing(path.clone()))?;
+        if !full.starts_with(root) {
+            return Err(FileError::UnsafePath(path));
+        }
+        fs::metadata(full)
+            .map(|m| m.len())
+            .map_err(|e| FileError::Io(e.to_string()))
+    }
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
         let path = clean_path(path)?;
         let root = fs::canonicalize(&self.root).map_err(|_| FileError::Missing(path.clone()))?;
@@ -162,7 +228,7 @@ impl SkinFiles for DirFiles {
     }
 }
 
-/// A `.ntskin` archive read in place (preview before installing).
+/// A `.ntpkg` archive read in place (preview before installing).
 #[derive(Debug)]
 pub struct ZipFiles {
     archive: Mutex<zip::ZipArchive<fs::File>>,
@@ -173,15 +239,36 @@ pub struct ZipFiles {
 impl ZipFiles {
     pub fn open(path: &Path) -> Result<Self, FileError> {
         let file = fs::File::open(path).map_err(|e| FileError::Io(e.to_string()))?;
+        let bytes = file
+            .metadata()
+            .map_err(|e| FileError::Io(e.to_string()))?
+            .len();
+        if bytes > MAX_PACKAGE_BYTES {
+            return Err(FileError::TooLarge {
+                path: path.display().to_string(),
+                bytes,
+            });
+        }
         let mut archive = zip::ZipArchive::new(file).map_err(|e| FileError::Io(e.to_string()))?;
+        if archive.len() > 4096 {
+            return Err(FileError::Io("package exceeds 4096 entries".into()));
+        }
         let mut total = 0u64;
         let mut names = Vec::new();
+        let mut unique = std::collections::BTreeSet::new();
         for i in 0..archive.len() {
             let entry = archive
                 .by_index_raw(i)
                 .map_err(|e| FileError::Io(e.to_string()))?;
             if entry.enclosed_name().is_none() {
                 return Err(FileError::UnsafePath(entry.name().to_owned()));
+            }
+            let name = entry.name().replace('\\', "/");
+            let clean = clean_path(name.trim_end_matches('/'))?;
+            if !unique.insert(clean.to_lowercase()) {
+                return Err(FileError::UnsafePath(format!(
+                    "duplicate/case-colliding archive entry {name}"
+                )));
             }
             if entry.size() > MAX_FILE_BYTES {
                 return Err(FileError::TooLarge {
@@ -198,13 +285,13 @@ impl ZipFiles {
                 bytes: total,
             });
         }
-        let prefix = if names.iter().any(|n| n == "skin.toml") {
+        let prefix = if names.iter().any(|n| n == crate::PACKAGE_MANIFEST) {
             String::new()
         } else {
             names
                 .iter()
                 .find_map(|n| {
-                    n.strip_suffix("skin.toml")
+                    n.strip_suffix(crate::PACKAGE_MANIFEST)
                         .filter(|p| p.matches('/').count() == 1)
                 })
                 .unwrap_or_default()
@@ -218,6 +305,15 @@ impl ZipFiles {
 }
 
 impl SkinFiles for ZipFiles {
+    fn file_len(&self, path: &str) -> Result<u64, FileError> {
+        let path = clean_path(path)?;
+        self.archive
+            .lock()
+            .expect("zip lock")
+            .by_name(&format!("{}{path}", self.prefix))
+            .map(|entry| entry.size())
+            .map_err(|_| FileError::Missing(path))
+    }
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
         let path = clean_path(path)?;
         let mut archive = self.archive.lock().expect("zip lock");

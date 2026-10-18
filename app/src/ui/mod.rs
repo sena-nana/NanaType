@@ -16,6 +16,7 @@ pub mod materials;
 pub mod motion;
 pub mod overflow;
 pub mod p2p;
+pub mod plugins;
 pub mod quote;
 pub mod rich;
 pub mod settings;
@@ -144,6 +145,11 @@ pub struct Source {
 /// Shared reactive state. `Copy`: views capture it freely.
 #[derive(Clone, Copy)]
 pub struct Ui {
+    pub packages: Signal<Arc<Vec<crate::plugins::PackageRow>>>,
+    pub plugin_views: Signal<Arc<HashMap<String, nanatype_plugins::PluginUpdate>>>,
+    pub plugin_errors: Signal<Arc<HashMap<String, String>>>,
+    pub plugin_activation: Signal<Option<Arc<crate::plugins::ActivationReview>>>,
+    pub plugin_source_trusted: Signal<bool>,
     pub bilibili: Signal<Arc<crate::app::bilibili::State>>,
     pub douyin: Signal<Arc<crate::app::douyin::State>>,
     /// Kept only in memory and cleared after import; never serialized with settings.
@@ -260,6 +266,11 @@ impl Ui {
         };
         let input_dock = nanatype_settings::InputDockLayout::default();
         Self {
+            packages: signal(Arc::new(Vec::new())),
+            plugin_views: signal(Arc::new(HashMap::new())),
+            plugin_errors: signal(Arc::new(HashMap::new())),
+            plugin_activation: signal(None),
+            plugin_source_trusted: signal(false),
             bilibili: signal(Arc::new(crate::app::bilibili::State::default())),
             douyin: signal(Arc::new(crate::app::douyin::State::default())),
             douyin_cookie: signal(String::new()),

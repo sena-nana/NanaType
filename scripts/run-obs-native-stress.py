@@ -41,14 +41,14 @@ def main():
    for skin in ['echo_vanilla','echo_void','forest','tidal']:
     command('skin',id='nanatype.'+skin);wait(1.5)
   obs.screenshot('Probe',root/'final.png');after=obs.call('GetStats');stop=obs.call('StopRecord');(root/'record-result.json').write_text(json.dumps({'before':before,'after':after,'record':stop}));command('outputs',enabled=False);command('visible',visible=False);wait(3);command('quit');return
- ids=[p.stem for p in sorted(Path('crates/theme/builtin').glob('*.toml'))]
+ ids=[p.name for p in sorted(Path('crates/theme/builtin').iterdir()) if p.is_dir()]
  for round in range(a.rounds):
   for skin in ids:
    command('skin',id='nanatype.'+skin);wait(1.5)
   command('skin',id='nanatype.tidal');wait(5)
   obs.screenshot('Probe',root/f'round-{round}.png')
  command('skin',id='user.nativeprobe');wait(3)
- source=Path('crates/theme/builtin/tidal/artwork.wgsl').read_text();effect=root/'app/data/skins/user.nativeprobe/effect.wgsl'
+ source=Path('crates/theme/builtin/tidal/artwork.wgsl').read_text();effect=root/'app/data/packages/user.nativeprobe/effect.wgsl'
  for i in range(20):
   text='fn effect(i:EffectInput)->vec4<f32>{loop{} return vec4(0.);}' if i%5==0 else source+f'\n// native reload revision {i}\n'
   effect.write_text(text);actions.append({'t':time.monotonic()-start,'hot_reload':i,'valid':i%5!=0});(root/'timeline.json').write_text(json.dumps(actions,ensure_ascii=False,indent=2));wait(1.5)

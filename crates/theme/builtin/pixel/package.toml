@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 21
+
+schema = 3
+id = "nanatype.pixel"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "game",
+    "retro",
+]
+
+[name]
+en-US = "Pocket Pixel"
+ja-JP = "ポケットピクセル"
+zh-CN = "掌机像素"
+
+[description]
+en-US = "Four shades of green like an old handheld, with square frames and pixel type"
+ja-JP = "4階調の緑で昔の携帯ゲーム機風。角ばった枠とドット文字"
+zh-CN = "四阶绿色的复古掌机画面，方角粗框与像素字"

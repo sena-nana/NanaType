@@ -87,7 +87,7 @@ pub(crate) fn load_handwriting(
         return;
     };
     let result = (|| {
-        let path = crate::clean_path(&spec.data).map_err(|e| e.to_string())?;
+        let path = crate::clean_resource_path(&spec.data).map_err(|e| e.to_string())?;
         let bytes = files.read(&path).map_err(|e| e.to_string())?;
         let hash = *blake3::hash(&bytes).as_bytes();
         let mut cache = DATA.lock().unwrap_or_else(|e| e.into_inner());
@@ -131,7 +131,7 @@ mod tests {
         assert_eq!(data.glyph('心').unwrap().strokes.len(), 4);
         assert!(data.glyph('A').is_none());
         let dir = tempfile::tempdir().unwrap();
-        let archive = dir.path().join("love-letter.ntskin");
+        let archive = dir.path().join("love-letter.ntpkg");
         registry.export("nanatype.love_letter", &archive).unwrap();
         let files = Arc::new(ZipFiles::open(&archive).unwrap());
         let restored = load(
@@ -142,14 +142,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(restored.skin.stroke_data, original.skin.stroke_data);
-        for path in [
-            "love_letter/fonts/LXGWWenKai-Regular.ttf",
-            "love_letter/fonts/OFL.txt",
-            "love_letter/ARPHICPL.TXT",
-            "love_letter/SOURCES.txt",
-            "love_letter/write.wgsl",
-            "love_letter/dissolve.wgsl",
-        ] {
+        for path in ["ARPHICPL.TXT", "SOURCES.txt", "write.wgsl", "dissolve.wgsl"] {
             assert!(!files.read(path).unwrap().is_empty(), "{path}");
         }
         if let Ok(destination) = std::env::var("NANATYPE_LOVE_LETTER_EXPORT") {
@@ -185,15 +178,9 @@ mod tests {
                 &TomlTable::new(),
             )
             .unwrap();
-        let archive = dir.path().join("child.ntskin");
+        let archive = dir.path().join("child.ntpkg");
         registry.export("test.inherited-letter", &archive).unwrap();
-        let loaded = load(
-            Arc::new(ZipFiles::open(&archive).unwrap()),
-            SkinOrigin::Archive(archive),
-            &Offline,
-            "1.0.0",
-        )
-        .unwrap();
+        let loaded = registry.inspect_archive(&archive).unwrap();
         assert_eq!(loaded.skin.stroke_data.as_ref().unwrap().len(), 6763);
     }
 

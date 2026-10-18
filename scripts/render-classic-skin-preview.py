@@ -23,12 +23,12 @@ def compose(names, title, dest):
     draw = ImageDraw.Draw(board)
     draw.text((22, 14), title, font=font, fill='#26364A')
     for index, name in enumerate(names):
-        manifest = tomllib.loads((root/f'crates/theme/builtin/{name}.toml').read_text(encoding='utf-8'))
+        manifest = tomllib.loads((root/f'crates/theme/builtin/{name}/skin.toml').read_text(encoding='utf-8'))
         x, y = 12 + index % 2 * 676, 54 + index // 2 * 226
         if index == len(names)-1 and len(names) % 2:
             x = (1360-660)//2
         draw.rounded_rectangle((x, y, x+660, y+214), 12, fill='white')
-        draw.text((x+14, y+8), manifest['meta']['name']['zh-CN'], font=small, fill='#26364A')
+        draw.text((x+14, y+8), tomllib.loads((root / f'crates/theme/builtin/{name}/package.toml').read_text(encoding='utf-8'))['name']['zh-CN'], font=small, fill='#26364A')
         folder = source if (source/f'nanatype.{name}/display.png').exists() else root/'target/shader-preview-alpha'
         shot = Image.open(folder/f'nanatype.{name}/display.png').convert('RGBA')
         shot.thumbnail((634, 170), Image.Resampling.LANCZOS)

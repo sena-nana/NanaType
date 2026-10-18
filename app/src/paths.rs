@@ -43,8 +43,8 @@ impl Paths {
         self.config.join("geometry.json")
     }
 
-    pub fn skins(&self) -> PathBuf {
-        self.data.join("skins")
+    pub fn packages(&self) -> PathBuf {
+        self.data.join("packages")
     }
 
     pub fn blobs(&self) -> PathBuf {
@@ -62,7 +62,7 @@ impl Paths {
             &self.data,
             &self.cache,
             &self.logs,
-            &self.skins(),
+            &self.packages(),
             &self.blobs(),
         ] {
             let _ = std::fs::create_dir_all(dir);

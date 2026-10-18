@@ -1,0 +1,21 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 11
+
+schema = 3
+id = "nanatype.night"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["classic"]
+
+[name]
+en-US = "Night"
+ja-JP = "夜色"
+zh-CN = "夜色"
+
+[description]
+en-US = "Deep-blue glass with a neon edge and a glowing underline"
+ja-JP = "深い青のガラスにネオンの縁取りと光るライン"
+zh-CN = "深蓝玻璃底、霓虹描边与流光下划线"

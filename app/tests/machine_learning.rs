@@ -110,7 +110,9 @@ fn scramble_renders_locks_and_retires_without_relayout() {
         frame(&mut session, ui, 100_140, 140, &format!("{case}-enter-140"));
         let full = frame(&mut session, ui, 101_200, 1200, &format!("{case}-stable"));
         let red = full
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .position(|p| p[0] > 245 && p[1].abs_diff(48) < 5 && p[2].abs_diff(24) < 5)
             .expect("inline picture must render its actual pixels");
         assert!(!text_scramble::animating(ui, 101_200));

@@ -1,0 +1,749 @@
+[chrome]
+accent = "#888888"
+
+[dialogue]
+padding = [
+    173.0,
+    52.0,
+    173.0,
+    44.0,
+]
+region = [
+    1280.0,
+    180.0,
+]
+
+[dialogue.box]
+border_color = "#cbe0ef"
+
+[dialogue.continue]
+bob_px = 3.0
+color = "#0876d0"
+
+[[dialogue.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+offset = [
+    169.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    46.0,
+    22.0,
+]
+text = "SAVE"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[[dialogue.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+offset = [
+    228.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    48.0,
+    22.0,
+]
+text = "LOAD"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[[dialogue.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+offset = [
+    289.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    62.0,
+    22.0,
+]
+text = "Q.SAVE"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[[dialogue.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+offset = [
+    364.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    64.0,
+    22.0,
+]
+text = "Q.LOAD"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[[dialogue.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+offset = [
+    441.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    52.0,
+    22.0,
+]
+text = "« ‹ › »"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[[dialogue.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+offset = [
+    506.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    78.0,
+    22.0,
+]
+text = "HISTORY"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[[dialogue.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+offset = [
+    597.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    18.0,
+    22.0,
+]
+text = "✕"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[dialogue.nameplate]
+offset = [
+    146.0,
+    14.0,
+]
+padding = [
+    0.0,
+    0.0,
+]
+size = 27.0
+text_color = "#202124"
+
+[[dialogue.responsive.landscape.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+min_window = [
+    1000.0,
+    160.0,
+]
+offset = [
+    169.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    46.0,
+    22.0,
+]
+text = "SAVE"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[[dialogue.responsive.landscape.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+min_window = [
+    1000.0,
+    160.0,
+]
+offset = [
+    228.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    48.0,
+    22.0,
+]
+text = "LOAD"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[[dialogue.responsive.landscape.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+min_window = [
+    1000.0,
+    160.0,
+]
+offset = [
+    289.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    62.0,
+    22.0,
+]
+text = "Q.SAVE"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[[dialogue.responsive.landscape.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+min_window = [
+    1000.0,
+    160.0,
+]
+offset = [
+    364.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    64.0,
+    22.0,
+]
+text = "Q.LOAD"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[[dialogue.responsive.landscape.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+min_window = [
+    1000.0,
+    160.0,
+]
+offset = [
+    441.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    52.0,
+    22.0,
+]
+text = "« ‹ › »"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[[dialogue.responsive.landscape.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+min_window = [
+    1000.0,
+    160.0,
+]
+offset = [
+    506.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    78.0,
+    22.0,
+]
+text = "HISTORY"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[[dialogue.responsive.landscape.decor]]
+anchor = "bottom_left"
+border_style = "solid"
+border_width = 0.0
+font = "body"
+layer = "above"
+min_window = [
+    1000.0,
+    160.0,
+]
+offset = [
+    597.0,
+    -8.0,
+]
+opacity = 1.0
+polygon = []
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = [
+    18.0,
+    22.0,
+]
+text = "✕"
+text_color = "#73767c"
+text_size = 18.0
+when = "display"
+
+[dialogue.responsive.portrait]
+decor = []
+padding = [
+    20.0,
+    24.0,
+    56.0,
+    72.0,
+]
+shader_effects = []
+
+[dialogue.responsive.portrait.box]
+border_color = "#cbe0ef"
+border_style = "solid"
+border_width = 0.0
+color = "#00000000"
+glow_blur = 12.0
+inner_border_width = 0.0
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+radius = 0.0
+shadows = []
+width_fraction = 1.0
+
+[dialogue.responsive.portrait.continue]
+anchor = "bottom_left"
+bob_px = 3.0
+color = "#0876d0"
+fps = 8.0
+frames = 1
+glyph = ""
+motion = "none"
+offset = [
+    12.0,
+    -8.0,
+]
+period_s = 0.8299999833106995
+size = 16.0
+
+[dialogue.responsive.portrait.nameplate]
+anchor = "top_right"
+border_style = "solid"
+border_width = 0.0
+color = "#00000000"
+offset = [
+    -8.0,
+    12.0,
+]
+padding = [
+    4.0,
+    4.0,
+]
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = 27.0
+text_color = "#202124"
+visible = true
+
+[dialogue.responsive.portrait.portrait]
+offset = [
+    0.0,
+    0.0,
+]
+radius = 12.0
+side = "left"
+size = [
+    160.0,
+    200.0,
+]
+visible = false
+
+[dialogue.responsive.portrait.portrait.variants]
+
+[[dialogue.responsive.rules]]
+max_height = 8192.0
+max_width = 600.0
+portrait = false
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    16.0,
+    40.0,
+    16.0,
+    16.0,
+]
+shader_effects = []
+
+[dialogue.responsive.rules.layout.box]
+border_color = "#cbe0ef"
+border_style = "solid"
+border_width = 0.0
+color = "#00000000"
+glow_blur = 12.0
+inner_border_width = 0.0
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+radius = 0.0
+shadows = []
+width_fraction = 1.0
+
+[dialogue.responsive.rules.layout.nameplate]
+anchor = "top_left"
+border_style = "solid"
+border_width = 0.0
+color = "#00000000"
+offset = [
+    12.0,
+    4.0,
+]
+padding = [
+    0.0,
+    0.0,
+]
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = 27.0
+text_color = "#202124"
+visible = true
+
+[[dialogue.responsive.rules]]
+max_height = 160.0
+max_width = 8192.0
+portrait = false
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    16.0,
+    40.0,
+    16.0,
+    16.0,
+]
+shader_effects = []
+
+[dialogue.responsive.rules.layout.box]
+border_color = "#cbe0ef"
+border_style = "solid"
+border_width = 0.0
+color = "#00000000"
+glow_blur = 12.0
+inner_border_width = 0.0
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+radius = 0.0
+shadows = []
+width_fraction = 1.0
+
+[dialogue.responsive.rules.layout.nameplate]
+anchor = "top_left"
+border_style = "solid"
+border_width = 0.0
+color = "#00000000"
+offset = [
+    12.0,
+    4.0,
+]
+padding = [
+    0.0,
+    0.0,
+]
+radius = 0.0
+rotate = 0.0
+shadows = []
+size = 27.0
+text_color = "#202124"
+visible = true
+
+[[dialogue.responsive.rules]]
+max_height = 8192.0
+max_width = 240.0
+portrait = true
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    12.0,
+    16.0,
+    48.0,
+    48.0,
+]
+shader_effects = []
+
+[[dialogue.responsive.rules]]
+max_height = 480.0
+max_width = 8192.0
+portrait = true
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    12.0,
+    16.0,
+    48.0,
+    24.0,
+]
+
+[[dialogue.responsive.rules]]
+max_height = 140.0
+max_width = 200.0
+
+[dialogue.responsive.rules.layout]
+decor = []
+padding = [
+    10.0,
+    12.0,
+    10.0,
+    12.0,
+]
+shader_effects = []
+
+[dialogue.responsive.rules.layout.box]
+border_color = "#cbe0ef"
+border_style = "solid"
+border_width = 0.0
+color = "#00000000"
+glow_blur = 12.0
+inner_border_width = 0.0
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+radius = 0.0
+shadows = []
+width_fraction = 1.0
+
+[dialogue.responsive.rules.layout.nameplate]
+anchor = "top_left"
+border_style = "solid"
+border_width = 0.0
+color = "#0876d0"
+offset = [
+    16.0,
+    -12.0,
+]
+padding = [
+    10.0,
+    4.0,
+]
+radius = 10.0
+rotate = 0.0
+shadows = []
+size = 18.0
+text_color = "#ffffff"
+visible = false
+
+[dialogue.responsive.rules.layout.portrait]
+offset = [
+    0.0,
+    0.0,
+]
+radius = 12.0
+side = "left"
+size = [
+    160.0,
+    200.0,
+]
+visible = false
+
+[dialogue.responsive.rules.layout.portrait.variants]
+
+[dialogue.reveal]
+base_ms = 30
+
+[dialogue.reveal.punct]
+comma_ms = 0
+ellipsis_ms = 0
+stop_ms = 0
+
+[dialogue.text]
+color = "#202124"
+size = 27.0
+
+[fonts.body]
+families = [
+    "Source Han Sans SC",
+    "思源黑体",
+    "Noto Sans CJK SC",
+    "Microsoft YaHei UI",
+    "PingFang SC",
+    "Noto Sans SC",
+]
+weight = 400
+
+[fonts.name]
+families = [
+    "Source Han Sans SC",
+    "思源黑体",
+    "Noto Sans CJK SC",
+    "Microsoft YaHei UI",
+    "PingFang SC",
+    "Noto Sans SC",
+]
+weight = 400
+
+[history]
+bubble_padding = [
+    0.0,
+    0.0,
+]
+gap = 9.0
+height = 480.0
+hide_latest = true
+layout = "inline"
+name_size = 17.0
+name_weight = 400
+name_width = 124.0
+time_color = "#888888"
+time_seconds = true
+time_size = 15.0
+width = 640.0
+
+[history.avatar]
+shape = "none"
+
+[history.panel]
+border_style = "solid"
+border_width = 0.0
+color = "#00000000"
+margin = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+padding = [
+    12.0,
+    12.0,
+    12.0,
+    12.0,
+]
+radius = 0.0
+shadows = []
+
+[history.text]
+line_height = 1.399999976158142

@@ -431,5 +431,5 @@ fn paragraph_alignment_empty_blocks_and_nested_resets_roundtrip() {
     assert_eq!(runs[1].style.size, None);
     assert_eq!(runs[4].style.font, None);
     assert_eq!(parse(&serialize(&doc)).doc, doc);
-    assert!(parse("[align=bad]x[/align]").diagnostics.len() >= 1);
+    assert!(!parse("[align=bad]x[/align]").diagnostics.is_empty());
 }

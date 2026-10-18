@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 20
+
+schema = 3
+id = "nanatype.terminal"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "retro",
+    "minimal",
+]
+
+[name]
+en-US = "Terminal"
+ja-JP = "ターミナル"
+zh-CN = "终端"
+
+[description]
+en-US = "A green-on-black console window with a title bar and a blinking cursor"
+ja-JP = "黒地に緑文字のコンソール。タイトルバーと点滅カーソル付き"
+zh-CN = "黑底绿字的命令行窗口，带标题栏与闪烁光标"

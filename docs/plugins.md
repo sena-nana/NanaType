@@ -1,0 +1,62 @@
+# 统一包与功能插件
+
+包的身份来自 `package.toml`，样式来自 `skin.toml`。`capabilities` 可组合 `skin`、`resources`、`lua`。内置皮肤与用户包采用相同格式和校验规则，内置资源由构建工具扫描目录生成，清单在构建时生成可缓存的解析数据；运行时仍使用同一份格式与校验规则，开发目录每次重载重新读取。皮肤 ID 仅用于选择、索引和依赖解析，不参与绘制决策。
+
+格式版本为 `format = 1`、`schema = 3`；统一存储于应用数据目录的 `packages/`。旧格式不兼容，旧 `skins/` 目录不自动迁移或删除。依赖使用 `[dependencies]` 的包 ID 与精确三段版本；资源引用为本包相对路径或 `pkg:<包ID>/<路径>`。常用字体可通过 `builtin:fonts/...` 引用。依赖缺失、冲突、循环及越界资源会拒绝加载。导出默认将依赖放入 `dependencies/<包ID>/`，携带素材授权。
+
+## Lua API 1
+
+功能包额外声明 `capabilities = ["lua"]` 和 `entry = "main.lua"`。脚本只接收值类型事件，并返回声明式视图；不接触应用内部对象或 Rust 消息枚举。
+
+```lua
+local count = 0
+return {
+    on_event = function(event)
+        if event.type == 'line_start' then count = count + 1 end
+    end,
+    view = function()
+        return {views = {{slot = 'panel', root = {
+            kind = 'text', id = 'counter', text = tostring(count)
+        }}}}
+    end,
+}
+```
+
+- 事件包括 `init`、`command`、播放开始／结束 `line_start`／`line_end`、`speaking`、`expression`、`portrait`、`shake`、`vts` 和 `chat_message`（平台、作者、纯文本）。事件字段是宿主已生成的本地值，不包含账户凭据。
+- `commands = {{id = 'reset', label = 'Reset'}}` 声明本地命令。宿主显示命令入口，激活后向原插件发回 `{type='command', id='reset'}`；命令不能调用任意应用动作。
+- 视图挂载点为 `display`、`history`、`input`、`panel`，分别对应展示、历史、输入内容区和插件面板。通用界面仍使用独立的中性主题。
+- 组件为 `column`、`row`、`text`、`button`、`canvas`，每个组件都需稳定且唯一的 `id`。Lua 函数可以组合返回这些节点以定义可复用组件。
+- 容器使用 `children`。`text` 使用字面文本，不执行富文本、链接或 HTML；`button` 通过 `command` 回传事件，支持宿主按钮已有的键盘和无障碍交互。
+- `canvas` 声明 `width`、`height` 与 `draw`。绘制支持 `rect`（`rect=[x,y,w,h]`、RGBA `color`、`radius`）和 `path`（`points`、`color`、`closed`、`width`）；宿主绘制并缓存结果，Lua 不进入每帧绘制路径。皮肤的高级动效继续通过受限 WGSL 接口表达。
+
+完整可安装示例位于 `docs/examples/counter-plugin/`。把该目录内容压缩为 `.ntpkg`，在“插件与资源包”导入并启用即可。它统计已播放台词，提供画布进度条和重置按钮。
+
+## 安全与生命周期
+
+设置中的“审查来源并请求启用”会逐个展示作者、制作日期、许可证、授权对象、脚本入口、包位置、签名状态及内容指纹。用户须主动勾选已确认来源可信且了解风险，再点击“同意并启动此插件”。确认前不运行代码。旧设置中的启用 ID 不会生成新的信任记录；同意绑定完整包及依赖内容，更新后必须重新确认。禁用同时撤销同意；重新加载只能复用仍与当前内容匹配的同意。
+
+`package.toml` 的 `author`、`created_at`（可选 `YYYY-MM-DD`）、`licensed_to` 和 `license` 对所有能力一致适用。授权对象是作者声明的个人、组织或所有用户，不做账号绑定。缺失信息显示“未提供”，不推断作者身份或制作日期。
+
+可选的 `package.integrity.json` 使用 Ed25519 签名覆盖保护策略、包内文件清单和受保护文件的 BLAKE3 摘要。`package.toml` 必须受保护；指定为 editable 的文件可修改，其余受保护内容或签名策略变化会拒绝加载。依赖包独立校验其签名，完整内容另由启用同意的指纹覆盖。签名包导出保留原始签名字节。源码始终可读，界面明确区分未签名、校验失败和签名校验通过，并显示脚本入口是否在保护范围内。
+
+有效签名只表示内容与该公钥匹配，不代表作者身份认证；允许编辑的文件不保证仍为作者原作。去除签名不会保持“签名有效”状态，内容指纹也会变化，使旧的启用同意失效。此机制不是加密或不可绕过的 DRM。作者签发及保护清单的可视化操作将随编辑器阶段提供。
+
+官方应用提供固定 Lua 解释器 Wasm，作者仅分发 UTF-8 Lua 源码。每个启用的插件在独立工作进程中运行；导入或引用资源不会自动执行脚本。禁用会终止工作进程并卸载对应视图，重新加载会创建新实例；Lua 内存状态不持久化。
+
+解释器未连接 WASI 或操作系统实现。其编译产物的文件、进程等导入全部绑定为拒绝执行；环境接口只返回空环境，不传递宿主环境。插件没有网络、文件、外部程序、剪贴板、账户、持久化存储或系统访问 API。`io`、`os`、`package`、`debug`、`require`、`load`、`loadfile`、`dofile`、`string.dump` 均不提供；脚本不能加载本机模块、字节码或替换解释器。宿主 UI 协议不接受 URL、路径或任意消息派发。
+
+默认上限：源码 128 KiB、单条 IPC 256 KiB、Wasm 线性内存 32 MiB、单次执行 2000 万 fuel 与约 50ms 中断预算、512 个组件、32 层组件嵌套、2048 条绘制指令、每条路径 256 个点、总计 8192 个几何点、组件文字合计 16 KiB、32 个排队事件、每插件最多约 30 次视图更新/秒、最多 8 个启用实例。宿主逐项校验有限数值、尺寸、文本长度、ID 唯一性及未知字段；不信任子进程自行完成的验证。
+
+工作进程启动可等待 15 秒，正常事件响应期限 200ms；超时、崩溃和非法响应会终止该插件。固定解释器在 Rust 构建时预编译，启动时从应用内嵌产物加载；IPC 在后台进行，UI 线程不等待。Wasmtime 陷阱和未捕获的 Lua 异常会使实例失效；插件出错后需显式重新加载。Lua 的 `pcall` 可以捕获普通脚本异常，但不能绕过执行限额。
+
+系统级 AppContainer／App Sandbox 加固后置。本版安全边界是固定 Wasm 解释器、缺省拒绝的宿主接口、数据校验、资源限额和独立进程，不宣称操作系统漏洞或运行时漏洞不存在。
+
+## 验证
+
+`cargo test -p nanatype-plugins` 验证正常事件、不可用系统接口、恶意输入、死循环与内存耗尽；`cargo test -p nanatype-theme` 验证包格式、依赖、继承、导入导出及皮肤配置。全部皮肤仍须通过展示／历史／输入截图与默认、300px 窄窗布局检查。
+
+解释器来源、校验值和许可证见 `crates/plugins/runtime/README.md`。插件运行时不需要用户安装 Lua、Node.js 或 Wasmtime。
+
+本次迁移的视觉、功能、安全及性能实测见[统一包架构验收记录](package-architecture-validation.md)。
+
+后续编辑器、自定义数据、声明式 Shader 管线及平台加固按[分阶段计划](package-roadmap.md)跟踪；未完成阶段不视为当前可用接口。

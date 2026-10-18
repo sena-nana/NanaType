@@ -299,9 +299,8 @@ def drop(section, key):
 
 def manifests():
     for name in NAMES:
-        path = BUILTIN / f'{name}.toml'
+        path = BUILTIN / name / 'skin.toml'
         text = path.read_text(encoding='utf-8')
-        text = replace_section(text, 'meta', lambda s: put(put(s, 'schema', '2'), 'version', '"2.1.0"'))
         # Already generated entries are replaced, never accumulated.
         text = re.sub(r'\n\[shaders\.artwork\]\n.*?(?=\n\[|\Z)', '', text, flags=re.S)
         effects = '[{ shader = "artwork", target = "artwork" }]' if name in ANIMATED else '[]'
@@ -309,15 +308,15 @@ def manifests():
         if name == 'echo_glass':
             text = replace_section(text, 'dialogue.box', lambda s: re.sub(r'(?m)^frame = .*\n?', '', s))
         else:
-            text = replace_section(text, 'dialogue.box', lambda s: put(s, 'frame', f'{{ image = "{name}/still.png", slice = {SLICES[name]}, layout_inset = false }}'))
+            text = replace_section(text, 'dialogue.box', lambda s: put(s, 'frame', f'{{ image = "still.png", slice = {SLICES[name]}, layout_inset = false }}'))
         if name not in ['ink', 'livechat', 'echo_vanilla', 'echo_glass', 'echo_bubble']:
             text = re.sub(r'\n\[\[dialogue\.decor\]\]\n.*?(?=\n\[|\Z)', '', text, flags=re.S)
         elif name == 'livechat':
             # Avatar and LIVE are actual labelled UI, not part of the plate.
             text = re.sub(r'\n\[\[dialogue\.decor\]\]\n(?:(?!\n\[).)*?size = \[5, 5\].*?(?=\n\[|\Z)', '', text, flags=re.S)
-        texture = f'textures = ["{name}/ornament.png"]\n' if name in ['parchment', 'sakura'] else ''
+        texture = f'textures = ["ornament.png"]\n' if name in ['parchment', 'sakura'] else ''
         if name in ANIMATED:
-            text += f'\n[shaders.artwork]\nsource = "{name}/artwork.wgsl"\nperiod_s = 16\nintensity = 1\n{texture}'
+            text += f'\n[shaders.artwork]\nsource = "artwork.wgsl"\nperiod_s = 16\nintensity = 1\n{texture}'
         # Nameplates have a material of their own, joined to the plate by its engraving.
         tweaks = {
             'halo': dict(radius='999', border_color='"#D7EFFF"', border_width='0.8', gradient='{ angle = 90, stops = [[0, "#087FD1"], [1, "#249FDF"]] }', shadows='[{ color = "#0876d033", dy = 2, blur = 6 }]'),
@@ -368,9 +367,8 @@ def manifests():
 
     # Transparent designs are typographic compositions, without a shader clock.
     for name in ['subtitle', 'echo_void']:
-        path = BUILTIN / f'{name}.toml'
+        path = BUILTIN / name / 'skin.toml'
         text = path.read_text(encoding='utf-8')
-        text = replace_section(text, 'meta', lambda s: put(s, 'version', '"2.1.0"'))
         if name == 'subtitle':
             text = replace_section(text, 'dialogue.text', lambda s: put(put(s, 'line_height', '1.38'), 'shadow', '{ color = "#000000A0", dy = 2, blur = 2 }'))
             text = replace_section(text, 'dialogue.nameplate', lambda s: put(put(s, 'text_color', '"#FFE1A3"'), 'stroke', '{ color = "#111115", width = 3.5 }'))

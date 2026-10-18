@@ -1,6 +1,6 @@
 # 情书
 
-[导入皮肤包](examples/love-letter.ntskin) · [实际书写与消融动效](love-letter-motion.webp) · [窄窗、竖版及历史记录对照](love-letter-layouts.png)
+[导入皮肤包](examples/love-letter.ntpkg) · [实际书写与消融动效](love-letter-motion.webp) · [窄窗、竖版及历史记录对照](love-letter-layouts.png)
 
 ![情书实际渲染](love-letter-preview.png)
 
@@ -14,7 +14,7 @@
 python scripts/build-love-letter-data.py
 ```
 
-精简数据、来源哈希、修改声明、原始 COPYING 与完整文鼎 APL 随皮肤分发；字体及其对应 OFL 亦在皮肤包内。导出的 `.ntskin` 不需要原目录、另装字体或运行时网络访问。设计授权只覆盖原创设计，各项资源继续使用各自授权。
+精简数据、来源哈希、修改声明、原始 COPYING 与完整文鼎 APL 随皮肤分发；字体及其对应 OFL 亦在皮肤包内。导出的 `.ntpkg` 不需要原目录、另装字体或运行时网络访问。设计授权只覆盖原创设计，各项资源继续使用各自授权。
 
 ## 皮肤接口
 
@@ -55,4 +55,4 @@ cargo test -p nanatype --test love_letter -- --test-threads=1
 python scripts/render-love-letter-preview.py target/love-letter/captures target/love-letter
 ```
 
-导出测试可通过 `NANATYPE_LOVE_LETTER_EXPORT` 指定保留 `.ntskin` 的路径。全皮肤回归沿用 `snapshots` 与 `chat_parity` 的默认宽度、300px 窄窗及历史记录检查。
+导出测试可通过 `NANATYPE_LOVE_LETTER_EXPORT` 指定保留 `.ntpkg` 的路径。全皮肤回归沿用 `snapshots` 与 `chat_parity` 的默认宽度、300px 窄窗及历史记录检查。

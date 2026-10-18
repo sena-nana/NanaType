@@ -1817,7 +1817,7 @@ fn typography_popovers_keep_selection_and_dispatch_authored_attributes() {
             let Tool::Size(Some(Size::Px(px))) = tool else {
                 panic!("pixel size command");
             };
-            assert!(px >= 4.0 && px <= 400.0);
+            assert!((4.0..=400.0).contains(&px));
         } else {
             assert_eq!(tool, expected);
         }

@@ -1,12 +1,37 @@
 # 皮肤格式
 
-皮肤是一个文件夹（或把它压缩成的 `.ntskin` 文件），根目录有一个 `skin.toml`，以及它引用的图片、字体和音效。设置 › 皮肤 › 导入皮肤 会先完整校验，通过后才安装；「复制为可编辑」会在数据目录里生成一个继承当前皮肤的副本并打开文件夹。
+皮肤是统一包体系的一种能力。每个目录包以 `package.toml` 声明身份、版本、能力和依赖，以 `skin.toml` 描述样式，并携带图片、着色器、字体、音效及授权文件。压缩分发格式为 `.ntpkg`；旧 `.ntskin` 格式不再支持。设置 › 插件与资源包 可以管理全部包，皮肤页只显示提供皮肤能力的包。
 
-所有字段都有默认值（即未加修饰的「光环」的样子）。用 `base` 继承另一个皮肤时只需写不同的部分；表格逐层合并，其它值（包括 `[[dialogue.decor]]` 这样的数组）整体替换，写 `decor = []` 可清空继承来的装饰。
+框架默认值是透明无框、系统字体、黑色正文和静态表现，不携带任何具体皮肤设计。全部 28 套内置皮肤分别声明自己的外观；光环只是应用默认选择的普通包。用包清单中的 `base` 继承另一皮肤时需同时声明精确版本依赖；表格逐层合并，数组整体替换，`decor = []` 可清空装饰。包身份、名称和标签不从父包继承。
+
+## 包身份和共享资源
+
+```toml
+# package.toml
+format = 1
+schema = 3
+id = "my.sakura"
+version = "1.0.0"
+capabilities = ["skin"]          # 可组合 skin、resources、lua
+name = { zh-CN = "樱", en-US = "Sakura" }
+author = "你的名字"
+license = "CC-BY-4.0"
+base = "nanatype.halo"           # 可选，只继承配置
+
+[dependencies]
+"nanatype.halo" = "2.1.0"
+"my.shared" = "1.0.0"
+```
+
+`skin.toml` 仅保存样式。包内文件使用相对路径；跨包引用使用 `pkg:my.shared/images/paper.png`。常用字体继续使用 `builtin:fonts/LXGWWenKai-Regular.ttf`。只有声明的依赖闭包可见；缺失、版本不符、冲突、循环和路径越界均会拒绝加载。继承来的相对资源保留父包所属命名空间，避免被子包同名文件覆盖。
+
+导出会携带完整依赖和授权文件，依赖保存在 `dependencies/<包ID>/` 下；同一依赖闭包内每个 ID 固定一个精确版本。引用其他包的资源不会执行该包的脚本。详情见[功能插件接口](plugins.md)。
 
 通用界面采用独立的 NanaUI 中性配色，在设置 › 常规 › 界面外观中选择跟随系统、浅色或深色。只有展示框（含对方展示框）、历史记录框和输入编辑区域随皮肤变化；皮肤选择器中的缩略图、示例及色板也保留皮肤效果。输入窗工具栏、状态栏和弹幕面板均使用通用配色。`chrome` 提供内容强调色、行内标签底色和文字对比色，不改变应用界面。
 
 ## 内置皮肤
+
+下表每一项均为独立皮肤包，其目录为 `crates/theme/builtin/<ID 去掉 nanatype. 前缀>/`；包清单、样式和素材随包分发。
 
 在设置 › 皮肤 › 预览中切换展示框或历史记录，可分别调整正文字体、字号、行高、颜色和窗口宽高，并编辑测试文本。改动先显示在预览里；点击「保存」才写入该皮肤的个人配置，保存其他皮肤不会切换正在使用的皮肤。字段留空表示跟随皮肤默认；「恢复皮肤默认」也需要保存才生效，关闭设置会丢弃未保存的草稿。个人配置不修改皮肤原文件。
 
@@ -71,10 +96,14 @@ python scripts/render-history-style-preview.py target/history-style-fixed
 
 `echo_vanilla`、`echo_glass`、`echo_bubble`、`echo_void` 四套皮肤的设计参考自 [sheep-realms/Echo-Live](https://github.com/sheep-realms/Echo-Live)，原作者为 Sheep-realms 及该项目贡献者。NanaType 使用本地 TOML 皮肤格式实现和适配这些样式。原项目采用 GPL-3.0-or-later，详见其 [授权协议与声明](https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md)；本地清单中的 CC0-1.0 声明仅覆盖 NanaType 自身的贡献。
 
+## 历史窗口的通用布局
+
+`history.group_speakers` 控制相邻同一说话人的消息是否共用姓名栏；`history.padding` 是无面板时的左、上、右、下内边距，`history.margin` 是上、右、下、左外边距；`history.row_padding` 是每行的水平留白，`history.column_inset` 是正文列旁额外预留的宽度。头像尺寸与 `history.text.size` 由皮肤配置，用户个性化设置正常覆盖，不存在按皮肤 ID 改写的流程。
+
 ## 清单
 
 ```toml
-[meta]
+[meta]                           # 以下身份字段实际放在 package.toml 根层；此处为字段索引
 id = "my.sakura"                  # a-z 0-9 . - _，最长 64
 version = "1.0.0"
 min_app = "0.1.0"                 # 需要的 NanaType 最低版本
@@ -117,6 +146,7 @@ glow = "#e86a9260"                # 可选的外发光
 glow_blur = 12                    # 外发光的模糊半径
 shadow = { color = "#00000030", dy = 3, blur = 8 }
 frame = { image = "images/frame.png", slice = [24, 24, 24, 24], scale = 1 }   # 九宫格贴图，替代上面的绘制
+# repeat = false                 # 九宫格中心默认拉伸；true 使用平铺
 width_fraction = 1.0              # 框宽占区域的比例
 gradient = { angle = 160, stops = [[0, "#ffffff"], [1, "#ffe9f1"]] }   # 渐变，画在 color 之上
 radii = [4, 18, 18, 18]           # 四个角分别的圆角：左上 右上 右下 左下（替代 radius）
@@ -301,16 +331,22 @@ screen_shake_px = 6
 contrast_guard = 3.0              # 自带颜色的文字与框色对比低于 3:1 时加 1.5px 描边（0 = 关）
 ```
 
-## 受限 WGSL 动效（schema 2）
+## 受限 WGSL 动效（schema 3）
 
-皮肤根目录的 `skin.toml` 声明 `meta.schema = 2`，即可通过 `shaders` 表定义效果，并用 `shader_effects` 或装饰的 `shader` 引用。schema 1 继续支持；未写 schema 的旧皮肤按 1 处理。带 WGSL 的皮肤导出时会展开继承并带齐资源，导出的包无需保留原始皮肤目录。数组仍整体替换，`shader_effects = []` 清空继承的展示框效果，`decor = []` 清空装饰效果。命名效果表按键合并；继承来的效果若不再被引用就不绘制。
+包根目录的 `package.toml` 声明 `format = 1`、`schema = 3` 与 `capabilities = ["skin"]`；`skin.toml` 通过 `shaders` 表定义效果，并用 `shader_effects` 或装饰的 `shader` 引用。旧格式不再支持。导出会携带依赖与完整资源，包可离线独立加载。数组整体替换，`shader_effects = []` 清空继承的展示框效果，`decor = []` 清空装饰效果。命名效果表按键合并；继承来的效果若不再被引用就不绘制。
 
 ```toml
-[meta]
-schema = 2
+# package.toml
+format = 1
+schema = 3
 id = "my.aurora"
+version = "1.0.0"
+capabilities = ["skin"]
 base = "nanatype.halo"
+[dependencies]
+"nanatype.halo" = "2.1.0"
 
+# 以下保存为 skin.toml
 [shaders.world]
 source = "effects/aurora.wgsl"
 period_s = 12                    # 0.5–3600 秒
@@ -349,7 +385,7 @@ fn effect(i: EffectInput) -> vec4<f32> {
 
 设置 › 皮肤 › 皮肤高级效果 默认开启；减少动态效果时停用本节的动态 WGSL，保留下节的静态通用材质。编辑器、历史和缩略图保持静态，预览卡点“播放动效”才播放当前主题。循环只请求绘制帧，独立循环为 30 fps；打字等动画可提高到 60 fps。导入错误显示文件路径和 WGSL 诊断（行列号直接对应皮肤文件）；无效热重载保留上一份有效皮肤，GPU 编译失败则禁用该效果并保留静态外观。
 
-完整作者示例见 [aurora/skin.toml](examples/aurora/skin.toml)，可直接导入 [aurora.ntskin](examples/aurora.ntskin)。六套新内置主题每套使用一个 WGSL、一张透明装饰纹理、零自定义参数、零装饰节点，构图和静态回退见[设计说明](skin-art-direction.md)，素材参考与矢量源图见[来源记录](skin-art-sources.md)。
+完整作者示例见 [aurora/skin.toml](examples/aurora/skin.toml)，可直接导入 [aurora.ntpkg](examples/aurora.ntpkg)。六套新内置主题每套使用一个 WGSL、一张透明装饰纹理、零自定义参数、零装饰节点，构图和静态回退见[设计说明](skin-art-direction.md)，素材参考与矢量源图见[来源记录](skin-art-sources.md)。
 
 `target = "artwork"` 用于完整画面：程序自行绘制透明轮廓、材质、边框和装饰，宿主提供展示框矩形画布，不再使用原有框体的覆盖遮罩。配置 `dialogue.box.frame` 作为完整静态回退；可以运行 `cargo run -p nanatype --example skin_artwork -- crates/theme/builtin` 重新烘焙内置图。回退与 WGSL 都绘制在正文、引用和姓名之前；未声明静态回退的第三方程序在关闭动效时不提交用户代码；`static_fallback = true` 的响应式版画冻结时钟以保留完整材质和装饰，停止申请动画帧。
 

@@ -114,7 +114,7 @@ def main():
         command('skin', id='user.nativeprobe')
         wait(2)
         source = Path('crates/theme/builtin/tidal/artwork.wgsl').read_text()
-        effect = root / 'app/data/skins/user.nativeprobe/effect.wgsl'
+        effect = root / 'app/data/packages/user.nativeprobe/effect.wgsl'
         for i in range(4):
             command('outputs', enabled=False)
             effect.write_text('fn effect(i:EffectInput)->vec4<f32>{loop{} return vec4(0.);}'

@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 0
+
+schema = 3
+id = "nanatype.love_letter"
+version = "1.0.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0 (design); Arphic Public License (stroke data); OFL-1.1 (font)"
+tags = [
+    "cute",
+    "elegant",
+]
+
+[name]
+en-US = "Love Letter"
+ja-JP = "ラブレター"
+zh-CN = "情书"
+
+[description]
+en-US = "Rose ink on cream stationery, overlapping handwritten strokes and a shared ink dissolve"
+ja-JP = "クリーム色の便箋に薔薇色のインク。筆順に沿って綴り、文章全体が溶けてゆく"
+zh-CN = "奶油信纸与玫瑰墨迹，按笔顺错峰书写，整段温柔消融"

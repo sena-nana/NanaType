@@ -1,11 +1,10 @@
 //! Skin packages.
 //!
-//! A skin is a folder (or a `.ntskin` zip of one) with a `skin.toml` and the
-//! images, fonts and sounds it names. It styles the dialogue box, the name
-//! plate, the portrait, the history bubbles, typing sounds and the app's own
-//! controls. Skins inherit from a `base` by deep-merging TOML tables, so a
-//! user skin only states what it changes. Only the backend-neutral NanaUI material contract is shared; the
-//! app maps a [`Skin`] onto its widgets.
+//! A package has a `package.toml`, optional `skin.toml`, and explicitly owned
+//! resources. Skins style dialogue, history and input content; operator controls
+//! keep the independent application palette. Inheritance merges configuration
+//! while retaining each resource's package owner. The renderer interprets the
+//! same generic schema for every skin and never selects behavior by skin ID.
 
 #![forbid(unsafe_code)]
 
@@ -18,6 +17,14 @@ pub use handwriting::{HandwritingSpec, StrokeCommand, StrokeData, StrokeGlyph};
 mod load;
 mod manifest;
 mod material;
+mod package;
+mod project;
+pub use package::{
+    PACKAGE_FORMAT, PACKAGE_MANIFEST, PackageCapability, PackageManifest, clean_resource_path,
+};
+pub use project::{
+    INTEGRITY_FILE, PackageProject, PackageSeal, SealIdentity, SealStatus, verify_integrity,
+};
 mod registry;
 mod responsive;
 pub use material::*;

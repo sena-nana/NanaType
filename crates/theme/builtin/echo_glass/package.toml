@@ -1,0 +1,21 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 25
+
+schema = 3
+id = "nanatype.echo_glass"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["streaming"]
+
+[name]
+en-US = "Echo-Live Glass"
+ja-JP = "Echo-Live ガラス"
+zh-CN = "Echo-Live 玻璃"
+
+[description]
+en-US = "Echo-Live's glass theme: a black fade rising from the bottom, outlined white text and a right-aligned menu row"
+ja-JP = "Echo-Live のガラステーマを再現：下から立ち上がる黒のグラデーション、縁取りの白文字、右寄せメニュー"
+zh-CN = "还原 Echo-Live 的玻璃主题：自下而上的黑色渐变、黑边白字，菜单栏靠右"

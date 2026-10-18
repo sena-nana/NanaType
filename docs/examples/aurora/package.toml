@@ -1,0 +1,14 @@
+format = 1
+capabilities = ["skin"]
+schema = 3
+id = "example.aurora"
+version = "1.0.0"
+base = "nanatype.halo"
+name = {"zh-CN" = "极光示例", "en-US" = "Aurora Example", "ja-JP" = "オーロラの例"}
+description = {"zh-CN" = "带静态降级的受限 WGSL 示例", "en-US" = "Restricted WGSL with a static fallback", "ja-JP" = "静止画にフォールバックするWGSLの例"}
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["streaming"]
+
+[dependencies]
+"nanatype.halo" = "2.1.0"

@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 6
+
+schema = 3
+id = "nanatype.forest"
+version = "1.1.2"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "streaming",
+    "cute",
+]
+
+[name]
+en-US = "Forest Sprite"
+ja-JP = "森の妖精"
+zh-CN = "森林精灵"
+
+[description]
+en-US = "Original procedural print artwork"
+ja-JP = "オリジナルのプロシージャル版画"
+zh-CN = "植物标本、装订孔与无涂层纸张；完整程序版画"

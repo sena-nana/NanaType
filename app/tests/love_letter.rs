@@ -38,10 +38,7 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
     let mut fonts = nana_ui::HostFontScope::new();
     let family = fonts
         .add_bytes(
-            loaded
-                .files
-                .read(loaded.skin.fonts.body.file.as_ref().unwrap())
-                .unwrap(),
+            nanatype_theme::builtin_font(loaded.skin.fonts.body.file.as_ref().unwrap()).unwrap(),
         )
         .unwrap()
         .families()

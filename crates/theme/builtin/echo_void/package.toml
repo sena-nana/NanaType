@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 27
+
+schema = 3
+id = "nanatype.echo_void"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "streaming",
+    "minimal",
+]
+
+[name]
+en-US = "Echo-Live Void"
+ja-JP = "Echo-Live ヴォイド"
+zh-CN = "Echo-Live 虚空"
+
+[description]
+en-US = "Echo-Live's void theme: fully transparent, just black text and the grey menu row"
+ja-JP = "Echo-Live のヴォイドテーマを再現：完全に透明で、黒い文字と灰色のメニューだけ"
+zh-CN = "还原 Echo-Live 的虚空主题：完全透明，只有黑色文字与灰色菜单栏"

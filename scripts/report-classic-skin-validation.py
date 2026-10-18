@@ -34,8 +34,8 @@ lines = [
 ]
 for name in names:
     static, animated = cases[f'shader_{name}_static'], cases[f'shader_{name}']
-    manifest = tomllib.loads((root/f'crates/theme/builtin/{name}.toml').read_text(encoding='utf-8'))
-    title = manifest['meta']['name']['zh-CN']
+    manifest = tomllib.loads((root/f'crates/theme/builtin/{name}/skin.toml').read_text(encoding='utf-8'))
+    title = tomllib.loads((root / f'crates/theme/builtin/{name}/package.toml').read_text(encoding='utf-8'))['name']['zh-CN']
     lines.append(f"| {title} | {maximum(static,'gpu_timestamp'):.4f} | {maximum(animated,'gpu_timestamp'):.4f} | {maximum(animated,'cpu_record_submit'):.4f} | {per_frame(static,'draw_calls'):.1f}/{per_frame(animated,'draw_calls'):.1f} | {per_frame(animated,'upload_bytes'):.0f} |")
 
 peak = max(c['shader_cache']['bytes'] for c in cases.values())/(1024*1024)

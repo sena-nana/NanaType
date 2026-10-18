@@ -75,7 +75,7 @@ mod tests {
         assert!(!super::super::shader_effects::animating(ui));
         ui.reduced_motion.set(true);
         assert!(enabled(ui));
-        assert!(render_skin(ui, skin.clone()).material_programs.len() > 0);
+        assert!(!render_skin(ui, skin.clone()).material_programs.is_empty());
         assert!(
             super::super::dialogue::Base::editor(&skin)
                 .material

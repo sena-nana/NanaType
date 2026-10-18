@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 2
+
+schema = 3
+id = "nanatype.sonnet"
+version = "1.0.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "elegant",
+    "minimal",
+]
+
+[name]
+en-US = "Sonnet"
+ja-JP = "ソネット"
+zh-CN = "十四行诗"
+
+[description]
+en-US = "Transparent poetry, calligraphy and golden sparks; letters gather light and dissolve together"
+ja-JP = "透明な詩句とカリグラフィー。文字に金の光が灯り、詩全体が光の粒へほどける"
+zh-CN = "透明诗句、手写花体与暖金星火，逐字凝光、整段化为光尘"

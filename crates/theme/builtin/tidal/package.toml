@@ -1,0 +1,24 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 7
+
+schema = 3
+id = "nanatype.tidal"
+version = "1.1.2"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = [
+    "streaming",
+    "elegant",
+]
+
+[name]
+en-US = "Tidal Aquarium"
+ja-JP = "潮のアクアリウム"
+zh-CN = "潮汐水族馆"
+
+[description]
+en-US = "Original procedural print artwork"
+ja-JP = "オリジナルのプロシージャル版画"
+zh-CN = "流体玻璃、水母标本与深海阅读面；完整程序版画"

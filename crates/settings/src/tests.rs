@@ -5,6 +5,37 @@ use nanatype_model::AfterLine;
 use crate::*;
 
 #[test]
+fn old_enabled_ids_do_not_create_trust_and_revoked_approvals_are_removed() {
+    let mut settings: Settings =
+        serde_json::from_str(r#"{"enabled_plugins":["example.plugin"]}"#).unwrap();
+    settings.sanitize();
+    assert!(settings.plugin_approvals.is_empty());
+    settings.plugin_approvals.insert(
+        "example.plugin".into(),
+        PluginApproval {
+            digest: "a".repeat(64),
+            trusted_source: false,
+            policy: 1,
+        },
+    );
+    settings.sanitize();
+    assert!(settings.plugin_approvals.is_empty());
+    settings.plugin_approvals.insert(
+        "example.plugin".into(),
+        PluginApproval {
+            digest: "a".repeat(64),
+            trusted_source: true,
+            policy: 1,
+        },
+    );
+    settings.sanitize();
+    assert_eq!(settings.plugin_approvals.len(), 1);
+    settings.enabled_plugins.clear();
+    settings.sanitize();
+    assert!(settings.plugin_approvals.is_empty());
+}
+
+#[test]
 fn telegram_download_preferences_are_backward_compatible_and_contain_no_login_secrets() {
     let mut settings: Settings =
         serde_json::from_str(r#"{"assets":{"sticker_dirs":["stickers/cats"]}}"#).unwrap();

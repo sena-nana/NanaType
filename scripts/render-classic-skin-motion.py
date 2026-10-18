@@ -20,7 +20,7 @@ assert all(c[k] for c in checks.values() for k in
 assert all(checks[n]['resting_status_stable'] for n in ['rpg', 'livechat', 'terminal'])
 font = ImageFont.truetype('C:/Windows/Fonts/msyh.ttc', 22)
 small = ImageFont.truetype('C:/Windows/Fonts/msyh.ttc', 18)
-styles = {n: tomllib.loads((root/f'crates/theme/builtin/{n}.toml').read_text(encoding='utf-8')) for n in names}
+styles = {n: tomllib.loads((root/f'crates/theme/builtin/{n}/skin.toml').read_text(encoding='utf-8')) for n in names}
 boards = []
 details = []
 labels = ['数据点沿电路传送', '等待时水晶跳格', '爱心挤压与回弹',
@@ -32,7 +32,7 @@ for index in range(count):
     for k, name in enumerate(names):
         x, y = 12 + k % 2 * 676, 54 + k // 2 * 190
         draw.rounded_rectangle((x, y, x+660, y+178), 10, fill='white')
-        draw.text((x+14, y+7), styles[name]['meta']['name']['zh-CN'], font=small, fill='#26364A')
+        draw.text((x+14, y+7), tomllib.loads((root / f'crates/theme/builtin/{name}/package.toml').read_text(encoding='utf-8'))['name']['zh-CN'], font=small, fill='#26364A')
         shot = Image.open(source/f'nanatype.{name}/motion-{index:03}.png').convert('RGBA')
         shot.thumbnail((634, 140), Image.Resampling.LANCZOS)
         dark = styles[name].get('chrome', {}).get('appearance') == 'dark'
@@ -48,7 +48,7 @@ for index in range(count):
     for k, name in enumerate(names):
         x, y = 12 + k % 4 * 338, 54 + k // 4 * 180
         draw.rounded_rectangle((x, y, x+326, y+168), 10, fill='white')
-        title = styles[name]['meta']['name']['zh-CN']
+        title = tomllib.loads((root / f'crates/theme/builtin/{name}/package.toml').read_text(encoding='utf-8'))['name']['zh-CN']
         draw.text((x+12, y+7), f'{title} · {labels[k]}', font=small, fill='#26364A')
         shot = Image.open(source/f'nanatype.{name}/motion-{index:03}.png').convert('RGBA')
         d = styles[name]['dialogue']

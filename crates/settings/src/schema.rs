@@ -11,6 +11,24 @@ use serde_json::Value;
 
 pub const SETTINGS_SCHEMA: u32 = 2;
 pub const DEFAULT_SKIN: &str = "nanatype.halo";
+pub const PLUGIN_CONSENT_POLICY: u32 = 1;
+pub const MAX_ENABLED_PLUGINS: usize = 8;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PluginApproval {
+    pub digest: String,
+    pub trusted_source: bool,
+    pub policy: u32,
+}
+
+impl PluginApproval {
+    pub fn is_current(&self) -> bool {
+        self.policy == PLUGIN_CONSENT_POLICY && self.trusted_source
+    }
+    pub fn matches(&self, digest: &str) -> bool {
+        self.is_current() && self.digest == digest
+    }
+}
 
 /// A key chord. `key` is a W3C `KeyboardEvent.code` name (`F8`, `KeyN`, `Digit1`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -732,6 +750,10 @@ pub struct TelegramSettings {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// Explicitly enabled functional packages. Pure skins never start a VM.
+    pub enabled_plugins: Vec<String>,
+    /// Approval binds explicit source trust to exact, reviewed package bytes.
+    pub plugin_approvals: BTreeMap<String, PluginApproval>,
     pub schema: u32,
     pub general: General,
     pub playback: PlaybackSettings,
@@ -752,6 +774,8 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             schema: SETTINGS_SCHEMA,
+            enabled_plugins: Vec::new(),
+            plugin_approvals: BTreeMap::new(),
             general: General::default(),
             playback: PlaybackSettings::default(),
             sound: SoundSettings::default(),
@@ -771,6 +795,24 @@ impl Settings {
     /// Clamp values a hand-edited file could break. Returns whether anything changed.
     pub fn sanitize(&mut self) -> bool {
         let before = self.clone();
+        let mut plugins = std::collections::BTreeSet::new();
+        self.enabled_plugins.retain(|id| {
+            !id.is_empty()
+                && id.len() <= 64
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"._-".contains(&b))
+                && id != "."
+                && id != ".."
+                && plugins.insert(id.clone())
+        });
+        self.enabled_plugins.truncate(MAX_ENABLED_PLUGINS);
+        self.plugin_approvals.retain(|id, approval| {
+            self.enabled_plugins.contains(id)
+                && approval.is_current()
+                && approval.digest.len() == 64
+                && approval.digest.bytes().all(|b| b.is_ascii_hexdigit())
+        });
         let p = &mut self.playback;
         p.speed_scale = finite_or(p.speed_scale, 1.0).clamp(0.1, 5.0);
         p.mirror_stagger_ms = p.mirror_stagger_ms.min(500);

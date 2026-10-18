@@ -1,0 +1,21 @@
+format = 1
+capabilities = ["skin"]
+catalogue_order = 23
+
+schema = 3
+id = "nanatype.ink"
+version = "2.1.0"
+min_app = "0.1.0"
+author = "NanaType"
+license = "CC0-1.0"
+tags = ["elegant"]
+
+[name]
+en-US = "Ink Wash"
+ja-JP = "水墨"
+zh-CN = "水墨"
+
+[description]
+en-US = "Rice paper, an ink bamboo painting and a red seal, set in a brush-script face"
+ja-JP = "和紙の地に墨竹と朱の落款、楷書体で"
+zh-CN = "宣纸底色、墨竹画作与朱红印章，配楷书"

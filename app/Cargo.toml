@@ -34,6 +34,7 @@ nanatype-bilibili.workspace = true
 nanatype-douyin.workspace = true
 nanatype-core.workspace = true
 nanatype-p2p.workspace = true
+nanatype-plugins.workspace = true
 nana-ui.workspace = true
 nana-text.workspace = true
 ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
@@ -98,6 +99,7 @@ embed-resource = "3"
 
 [dev-dependencies]
 pollster = "1"
+tempfile = "3"
 nana-ui-devtools = { workspace = true, features = ["runtime-agent"] }
 
 [target.'cfg(windows)'.dev-dependencies]
