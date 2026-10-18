@@ -236,7 +236,7 @@ impl ComponentView for LightView {
             id,
             Some(CustomRenderNode::new(
                 RENDERER,
-                self.light.id.to_string(),
+                format!("{RENDERER}:{}", self.light.id),
                 1,
             )),
         );
@@ -684,7 +684,14 @@ impl State {
 fn material(node: &SceneGpuNode) -> Option<Arc<Light>> {
     LIVE.lock()
         .unwrap_or_else(|e| e.into_inner())
-        .get(&node.custom.resource.parse().ok()?)?
+        .get(
+            &node
+                .custom
+                .resource
+                .strip_prefix("nanatype.text-light:")?
+                .parse()
+                .ok()?,
+        )?
         .upgrade()
 }
 impl SceneGpuRenderer for Renderer {

@@ -13,3 +13,6 @@ nanatype-playback.workspace = true
 nanatype-settings.workspace = true
 nanatype-theme.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

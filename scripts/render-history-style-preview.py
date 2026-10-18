@@ -1,4 +1,4 @@
-"""Compose native display/history captures for all 24 built-in skins.
+"""Compose native display/history captures for all built-in skins.
 
 python scripts/render-history-style-preview.py target/history-style-fixed
 Render first with snapshots and NANATYPE_SNAPSHOT_VIEWS=display,history.
@@ -18,6 +18,10 @@ GROUPS = [
     ['sakura', 'ink', 'echo_vanilla', 'echo_glass', 'echo_bubble', 'echo_void'],
     ['gothic', 'celestial', 'forest', 'tidal', 'lantern', 'citrus'],
 ]
+known = {skin for group in GROUPS for skin in group}
+extra = sorted(path.stem for path in (ROOT / 'crates/theme/builtin').glob('*.toml')
+               if path.stem not in known)
+GROUPS.extend(extra[start:start + 6] for start in range(0, len(extra), 6))
 FONT = ImageFont.truetype('C:/Windows/Fonts/msyh.ttc', 20)
 
 
@@ -52,4 +56,4 @@ for number, group in enumerate(GROUPS, 1):
                 board.paste(checkerboard(image), box[:2])
     board.save(SOURCE / f'comparison-{number}.png')
 (SOURCE / 'captures.json').write_text(json.dumps(captures, indent=2), encoding='utf-8')
-print(f'Composed {len(captures)} native captures into 4 comparison sheets in {SOURCE}')
+print(f'Composed {len(captures)} native captures into {len(GROUPS)} comparison sheets in {SOURCE}')

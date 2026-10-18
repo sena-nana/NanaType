@@ -14,6 +14,7 @@
 
 | id | 名称 | 标签 | 特点 |
 |---|---|---|---|
+| `nanatype.machine_learning` | 机器学习 | minimal, game | 石墨黑神经实验室、冰青正文与淡紫节点；字符快速演算后锁定，整段乱码随机消隐 |
 | `nanatype.crayon` | 蜡笔画 | cute, elegant | 米白画纸、柔彩蜡笔与小花涂鸦，深色彩铅文字；静态 GPU 材质 |
 | `nanatype.halo` | 光环 | classic, minimal | 默认。精简蓝白圆润卡片、轻阴影、天蓝胶囊名牌，无右上角动效 |
 | `nanatype.sonnet` | 十四行诗 | elegant, minimal | 透明诗句字幕，中文文楷与英文花体；逐字金光、星火光丝，整段同步化为光尘 |
@@ -500,6 +501,22 @@ period_s = 4.0
 `dialogue.reveal.entrance.material` 引用 `materials`，`dialogue.reveal.entrance.scope` 为 `glyph`（默认）或 `text`；`kind` 为原生回退，`ms` 为每字时长。
 `dialogue.reveal.exit` 为可选退场表：`material`、`scope`（默认 `text`）、`ms`。它让清空、换句与翻页先退场再开始下一段。
 
+「机器学习」使用可选的字符替换特效，仅改变展示绘制，编辑器、历史记录及传输内容保留原文。乱码在原字位中变化，不改变换行。实时镜像编辑保留未修改字符的时间；关闭高级动效或启用减少动态时跳过特效。
+
+```toml
+[dialogue.reveal]
+entrance = { kind = "fade", ms = 185 } # 140ms 乱码 + 45ms 锁定提亮
+exit = { ms = 400, scope = "text" }
+
+[dialogue.reveal.scramble]
+alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-=<>[]{}()/" # 1–128 个可见 ASCII 字符
+interval_ms = 25
+entrance_ms = 140
+exit_hold_ms = 80       # 整段先同时变乱码
+exit_ms = 400           # 随后在剩余 320ms 内全文随机消失
+```
+
+三个非零时长支持 1–2000ms，`exit_hold_ms` 必须短于 `exit_ms`；启用乱码时以 `scramble.exit_ms` 为退场总时长。空白保留原位，emoji 按完整字符簇处理，图片与行内头像在退场时保持原图淡出。动态预览播放一次后停止，静态缩略图显示收敛后的原文。
 遮罩复用内容无关的 NanaUI `PresentationMask`，WGSL `material` 返回的 alpha 是覆盖率，RGB 不参与遮罩。`MaterialInput.progress` 为 0–1，`position`/`uv`/`size` 根据 scope 对应单字或正文视口；`target_position`、`target_size` 始终对应正文可见视口。`glyph_uv` 是文字适配层提供的字形局部坐标。
 蜡笔画逐字斜擦入 180ms，正文整体擦除 320ms；两者的分割线均沿左下—右上倾斜 45°，从左上向右下推进。姓名、引用与框体保持稳定，输入编辑器不播放遮罩。关闭高级效果使用原生回退；减少动态效果保留逐字节奏但不播放擦动或等待退场。继续键可立即完成退场，再开始下一段；连续替换遵循队列策略。已有的历史记录不随正文退场擦除。
 实际关键帧、复现步骤和验证结果见[文字过渡验收](text-transition-validation.md)。

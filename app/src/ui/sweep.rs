@@ -107,6 +107,7 @@ pub fn renderers() -> SceneGpuRendererRegistry {
         registry.insert(RENDERER, SHARED.clone());
         super::shader_effects::register(&mut registry);
         super::text_light::register(&mut registry);
+        super::text_scramble::register(&mut registry);
         registry
     });
     REGISTRY.clone()

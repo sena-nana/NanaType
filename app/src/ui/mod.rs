@@ -23,6 +23,7 @@ pub mod shader_effects;
 pub mod surface;
 pub mod sweep;
 pub mod text_light;
+pub mod text_scramble;
 
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, Weak};
@@ -476,6 +477,7 @@ pub fn prepare_skin_preview(
                 .is_some_and(|s| s.animated)
         }) || loaded.skin.dialogue.reveal.light.is_some()
             || loaded.skin.dialogue.reveal.handwriting.is_some()
+            || loaded.skin.dialogue.reveal.scramble.is_some()
             || loaded
                 .skin
                 .dialogue

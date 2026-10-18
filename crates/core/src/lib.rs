@@ -13,6 +13,8 @@ mod core;
 mod view;
 
 #[cfg(test)]
+mod scramble_tests;
+#[cfg(test)]
 mod tests;
 
 pub use crate::core::{

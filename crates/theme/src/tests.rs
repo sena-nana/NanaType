@@ -202,11 +202,11 @@ fn compact_standalone_manifests_preserve_all_builtin_designs() {
 #[test]
 fn every_builtin_loads_without_warnings() {
     let registry = SkinRegistry::new(None, APP);
-    assert_eq!(registry.entries().len(), 27);
+    assert_eq!(registry.entries().len(), 28);
     let mut ids: Vec<&str> = registry.entries().iter().map(|e| e.id.as_str()).collect();
     ids.sort();
     ids.dedup();
-    assert_eq!(ids.len(), 27);
+    assert_eq!(ids.len(), 28);
     assert!(registry.load(DEFAULT_SKIN).is_ok());
     for entry in registry.entries() {
         assert!(entry.loads(), "{}: {:?}", entry.id, entry.errors);
@@ -299,6 +299,42 @@ fn sonnet_declares_packaged_calligraphy_and_finite_whole_text_dissolve() {
             .iter()
             .any(|e| e.field == "dialogue.reveal.light.radius")
     );
+}
+
+#[test]
+fn machine_learning_scramble_loads_roundtrips_and_rejects_invalid_timing() {
+    let registry = SkinRegistry::new(None, APP);
+    let loaded = registry.load("nanatype.machine_learning").unwrap();
+    assert!(loaded.warnings.is_empty());
+    let spec = loaded.skin.dialogue.reveal.scramble.as_ref().unwrap();
+    assert_eq!(spec, &ScrambleSpec::default());
+    assert_eq!(loaded.skin.dialogue.region, [860., 200.]);
+    assert_eq!(loaded.skin.dialogue.reveal.exit.as_ref().unwrap().ms, 400);
+    assert!(loaded.skin.shader_programs.contains_key("network"));
+    let manifest = standalone_manifest(&loaded.skin).unwrap();
+    let restored: Skin = toml::Value::Table(manifest).try_into().unwrap();
+    assert_eq!(restored.dialogue.reveal.scramble.as_ref(), Some(spec));
+    for invalid in [
+        "interval_ms=0",
+        "entrance_ms=0",
+        "exit_hold_ms=400",
+        "alphabet=''",
+        "alphabet='汉字'",
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        write_skin(
+            dir.path(),
+            &format!("[meta]\nid='user.bad-scramble'\n[dialogue.reveal.scramble]\n{invalid}\n"),
+            &[],
+        );
+        let errors = load_dir(dir.path()).unwrap_err();
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.field.starts_with("dialogue.reveal.scramble")),
+            "{invalid}: {errors:?}"
+        );
+    }
 }
 
 #[test]

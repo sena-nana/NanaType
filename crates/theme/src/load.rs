@@ -483,6 +483,35 @@ fn validate(skin: &Skin, files: &dyn SkinFiles, app_version: &str, out: &mut Vec
             "must be 1–2000",
         ));
     }
+    if let Some(scramble) = &d.reveal.scramble {
+        if scramble.alphabet.is_empty()
+            || scramble.alphabet.chars().count() > 128
+            || !scramble.alphabet.chars().all(|c| c.is_ascii_graphic())
+        {
+            out.push(SkinDiagnostic::error(
+                "dialogue.reveal.scramble.alphabet",
+                "must contain 1–128 printable ASCII characters",
+            ));
+        }
+        for (field, value) in [
+            ("interval_ms", scramble.interval_ms),
+            ("entrance_ms", scramble.entrance_ms),
+            ("exit_ms", scramble.exit_ms),
+        ] {
+            if value == 0 || value > 2000 {
+                out.push(SkinDiagnostic::error(
+                    format!("dialogue.reveal.scramble.{field}"),
+                    "must be 1–2000",
+                ));
+            }
+        }
+        if scramble.exit_hold_ms >= scramble.exit_ms {
+            out.push(SkinDiagnostic::error(
+                "dialogue.reveal.scramble.exit_hold_ms",
+                "must be shorter than exit_ms",
+            ));
+        }
+    }
     if let Some(light) = &d.reveal.light {
         for (field, value, lo, hi) in [
             ("dialogue.reveal.light.intensity", light.intensity, 0.0, 2.0),

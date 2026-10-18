@@ -996,6 +996,30 @@ pub struct RevealSpec {
     pub entrance: EntranceSpec,
     pub exit: Option<ExitSpec>,
     pub light: Option<TextLightSpec>,
+    /// Presentation-only character substitution; the source document stays intact.
+    pub scramble: Option<ScrambleSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScrambleSpec {
+    pub alphabet: String,
+    pub interval_ms: u16,
+    pub entrance_ms: u16,
+    pub exit_hold_ms: u16,
+    pub exit_ms: u16,
+}
+
+impl Default for ScrambleSpec {
+    fn default() -> Self {
+        Self {
+            alphabet: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-=<>[]{}()/".into(),
+            interval_ms: 25,
+            entrance_ms: 140,
+            exit_hold_ms: 80,
+            exit_ms: 400,
+        }
+    }
 }
 
 /// Finite glyph-attached light, rendered separately from the coverage mask.
@@ -1029,6 +1053,7 @@ impl Default for RevealSpec {
             entrance: EntranceSpec::default(),
             exit: None,
             light: None,
+            scramble: None,
         }
     }
 }

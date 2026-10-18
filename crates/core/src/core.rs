@@ -546,6 +546,26 @@ impl Core {
             &Document::new()
         };
         let delta = mirror_delta(prev_shown, &doc);
+        let mirror_times = self.skin.dialogue.reveal.scramble.as_ref().map(|_| {
+            let matches = nanatype_playback::mirror_matches(prev_shown, &doc);
+            let added = matches.iter().filter(|m| m.is_none()).count() as u32;
+            let mut offsets =
+                mirror_offsets(added, self.settings.playback.mirror_stagger_ms, 240).into_iter();
+            matches
+                .into_iter()
+                .map(|m| {
+                    m.map(|i| {
+                        self.display
+                            .mirror_reveal_ms
+                            .as_ref()
+                            .and_then(|t| t.get(i))
+                            .copied()
+                            .unwrap_or(0)
+                    })
+                    .unwrap_or_else(|| now.max(1) + u64::from(offsets.next().unwrap_or(0)))
+                })
+                .collect::<Arc<[u64]>>()
+        });
         let offsets = mirror_offsets(
             delta.appended,
             self.settings.playback.mirror_stagger_ms,
@@ -603,6 +623,7 @@ impl Core {
         self.display.speaker = self.speaker();
         self.display.reply = self.reply.clone();
         self.display.reveal = reveal;
+        self.display.mirror_reveal_ms = mirror_times;
         self.display.fade = None;
         self.display.continue_indicator = false;
         self.touch_display(fx);
@@ -784,6 +805,7 @@ impl Core {
         let units = timeline.unit_count;
         let (player, effects) = Player::start(line.id, timeline, after, auto, now);
         self.display.line = Some(line.id);
+        self.display.mirror_reveal_ms = None;
         self.display.doc = Arc::new(line.doc.clone());
         self.display.speaker = line.speaker.clone();
         self.display.reply = line.reply.as_deref().cloned();
@@ -879,22 +901,30 @@ impl Core {
         {
             return false;
         }
-        let Some(spec) = self
+        let Some(ms) = self
             .skin
             .dialogue
             .reveal
-            .exit
+            .scramble
             .as_ref()
-            .filter(|e| e.ms > 0)
-            .filter(|e| {
-                e.material
+            .map(|s| s.exit_ms)
+            .or_else(|| {
+                self.skin
+                    .dialogue
+                    .reveal
+                    .exit
                     .as_ref()
-                    .is_some_and(|m| self.skin.material_programs.contains_key(m))
+                    .filter(|e| e.ms > 0)
+                    .filter(|e| {
+                        e.material
+                            .as_ref()
+                            .is_some_and(|m| self.skin.material_programs.contains_key(m))
+                    })
+                    .map(|e| e.ms)
             })
         else {
             return false;
         };
-        let ms = spec.ms;
         self.cancel_cues(fx);
         self.display.text_exit = Some(crate::view::TextExit { at_ms: now, ms });
         self.display.fade = None;

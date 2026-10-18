@@ -27,6 +27,10 @@ const BUILTINS: &[Builtin] = &[
         manifest: include_str!("../builtin/love_letter.toml"),
     },
     Builtin {
+        id: "nanatype.machine_learning",
+        manifest: include_str!("../builtin/machine_learning.toml"),
+    },
+    Builtin {
         id: "nanatype.sonnet",
         manifest: include_str!("../builtin/sonnet.toml"),
     },
@@ -195,6 +199,10 @@ fn builtin_files(b: &Builtin) -> Arc<dyn SkinFiles> {
                 include_bytes!("../fonts/LXGWWenKai-Regular.LICENSE.txt"),
             ),
         ]),
+        "nanatype.machine_learning" => files.extend_from_slice(&[(
+            "machine_learning/artwork.wgsl",
+            include_bytes!("../builtin/machine_learning/artwork.wgsl"),
+        )]),
         "nanatype.sonnet" => files.extend_from_slice(&[
             (
                 "sonnet/appear.wgsl",

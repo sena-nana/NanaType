@@ -112,6 +112,9 @@ pub struct DisplayView {
     /// The chat message the line answers, quoted above it.
     pub reply: Option<ChatRef>,
     pub reveal: Reveal,
+    /// Per-unit mirror timestamps retained through edits. Older peers may omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mirror_reveal_ms: Option<Arc<[Millis]>>,
     #[serde(default)]
     pub text_exit: Option<TextExit>,
     /// Active portrait variant.
@@ -134,6 +137,7 @@ impl DisplayView {
             speaker: Speaker::default(),
             reply: None,
             reveal: Reveal::full(0),
+            mirror_reveal_ms: None,
             text_exit: None,
             portrait: None,
             continue_indicator: false,

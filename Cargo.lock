@@ -4613,6 +4613,7 @@ dependencies = [
  "nanatype-settings",
  "nanatype-theme",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

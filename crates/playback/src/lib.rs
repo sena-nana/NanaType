@@ -18,7 +18,7 @@ mod timeline;
 #[cfg(test)]
 mod tests;
 
-pub use mirror::{MirrorDelta, mirror_delta, mirror_offsets};
+pub use mirror::{MirrorDelta, mirror_delta, mirror_matches, mirror_offsets};
 pub use pacing::{PacingParams, PunctPauses, TypingSoundRule};
 pub use player::{Phase, Player, PlayerEffect, RevealSnapshot, WakeReason};
 pub use queue::{LineQueue, QueueDecision, QueuePolicy};

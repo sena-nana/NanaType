@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use std::collections::HashMap;
+use unicode_segmentation::UnicodeSegmentation;
 
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{
@@ -55,6 +56,7 @@ pub struct Base {
     pub reduced_motion: bool,
     pub masks: nana_ui_core::TextTransitions,
     pub light: Option<nanatype_theme::TextLightSpec>,
+    pub scramble: Option<nanatype_theme::ScrambleSpec>,
     pub handwriting: Option<Arc<nanatype_theme::StrokeData>>,
     pub light_exit: Option<(u64, u16)>,
     pub light_preview: bool,
@@ -93,6 +95,7 @@ impl Base {
         Self {
             responsive_text: false,
             light: skin.dialogue.reveal.light.clone(),
+            scramble: skin.dialogue.reveal.scramble.clone(),
             handwriting: None,
             light_exit: None,
             light_preview: false,
@@ -166,6 +169,7 @@ impl Base {
             material: None,
             masks: Default::default(),
             light: None,
+            scramble: None,
             handwriting: None,
             ..Self::dialogue(skin, entrance, false)
         }
@@ -180,7 +184,11 @@ impl Base {
             reduced,
         );
         base.light = None;
-        if skin.dialogue.reveal.light.is_some() || skin.dialogue.reveal.handwriting.is_some() {
+        base.scramble = None;
+        if skin.dialogue.reveal.light.is_some()
+            || skin.dialogue.reveal.scramble.is_some()
+            || skin.dialogue.reveal.handwriting.is_some()
+        {
             base.masks = Default::default();
         }
         base
@@ -268,7 +276,7 @@ fn document_on(
         locale: ui.locale.get_untracked(),
     };
     let rich = to_rich(doc, &env);
-    let entrance =
+    let mut entrance =
         ui.settings
             .with_untracked(|s| s.playback.entrance)
             .map_or(base.entrance, |kind| Entrance {
@@ -279,10 +287,57 @@ fn document_on(
                     base.entrance.ms
                 },
             });
-    let reveal = match &timing {
+    if base.scramble.is_some() && (base.reduced_motion || !super::materials::enabled(ui)) {
+        entrance = Entrance {
+            kind: EntranceKind::None,
+            ms: 0,
+        };
+    }
+    let mut reveal = match &timing {
         Timing::Static => None,
         Timing::Reveal(r) => Some(RevealPlan::new(&rich, r, entrance)),
     };
+    if base.scramble.is_some()
+        && let Timing::Reveal(r) = &timing
+        && r.segment.is_some()
+        && let Some(plan) = &mut reveal
+    {
+        for ((_, unit), at) in super::rich::unit_graphemes(rich.text()).zip(&mut plan.at_ms) {
+            // Zero is the native renderer's already-shown sentinel.
+            if unit.is_some_and(|u| u >= r.shown) && *at == Some(0) {
+                *at = Some(1);
+            }
+        }
+    }
+    if base.scramble.is_some()
+        && !base.light_preview
+        && let Some(plan) = &mut reveal
+        && let Some(times) = &drawn_untracked(ui).mirror_reveal_ms
+    {
+        let mut unit = 0;
+        for (i, g) in rich.text().graphemes(true).enumerate() {
+            if g != "\n" {
+                if plan.at_ms[i].is_some() {
+                    plan.at_ms[i] = times.get(unit).copied();
+                }
+                unit += 1;
+            }
+        }
+    }
+    let scramble_plan = base
+        .scramble
+        .clone()
+        .filter(|_| !base.reduced_motion && super::materials::enabled(ui))
+        .filter(|_| {
+            ui.settings
+                .with_untracked(|s| s.playback.entrance.is_none())
+                || base.light_exit.is_some()
+        })
+        .zip(
+            reveal
+                .as_ref()
+                .map(|p| (p.at_ms.clone(), rich.text().to_owned())),
+        );
     let light_plan = base
         .light
         .clone()
@@ -341,6 +396,13 @@ fn document_on(
         if super::materials::enabled(ui) && !base.reduced_motion {
             if let Some(p) = &mut view.presentation {
                 p.transitions = base.masks.clone();
+                if let Some((spec, _)) = &scramble_plan {
+                    p.transitions = super::text_scramble::transitions(
+                        spec,
+                        base.light_exit,
+                        base.light_preview,
+                    );
+                }
                 if ui
                     .settings
                     .with_untracked(|s| s.playback.entrance.is_some())
@@ -414,6 +476,55 @@ fn document_on(
     };
     if let Some(data) = handwriting {
         return super::handwriting::view(view, data, update_view, follow.map(|_| ui.text_node));
+    }
+    if let Some((spec, (times, text))) = scramble_plan {
+        let update = Arc::new(update_view);
+        let objects = base
+            .light_exit
+            .filter(|_| !view.value.objects().is_empty())
+            .map(|exit| {
+                let mut object_view = view.clone();
+                let mut object_base = base.clone();
+                object_base.color = Rgba8::rgba(0, 0, 0, 0);
+                object_base.stroke = None;
+                object_base.shadow = None;
+                object_base.material = None;
+                object_view.style = object_base.node_style();
+                if let Some(p) = &mut object_view.presentation {
+                    p.transitions.entrance = None;
+                    p.transitions.exit =
+                        Some(super::text_scramble::object_exit(exit, base.light_preview));
+                }
+                let update = update.clone();
+                widget(object_view)
+                    .bind(move |v: &mut RichTextView| {
+                        update(v);
+                        super::text_scramble::objects_only(&mut v.value);
+                        let l = Arc::make_mut(&mut v.style.layout);
+                        l.position = PositionSpec::Absolute;
+                        l.offset_top = Some(LengthSpec::Px(0.));
+                        l.pointer_events = Some(PointerEventsSpec::None);
+                    })
+                    .into_any()
+            });
+        let view = widget(view).bind(move |v: &mut RichTextView| update(v));
+        let node = if follow.is_some() {
+            ui.text_node
+        } else {
+            nana_ui::runtime::view::node_ref()
+        };
+        return super::text_scramble::wrap(
+            ui,
+            view.node_ref(node).into_any(),
+            objects,
+            node,
+            spec,
+            base.color,
+            &times,
+            &text,
+            base.light_exit,
+            base.light_preview,
+        );
     }
     let view = widget(view).bind(update_view);
     if let Some((spec, (times, text))) = light_plan {
@@ -666,7 +777,9 @@ fn drawn_untracked(ui: Ui) -> Arc<DisplayView> {
 /// A still box showing `doc` in `ctx.skin`, for the skin picker.
 pub fn preview_box(ui: Ui, mut ctx: BoxCtx, doc: &Document) -> AnyView {
     ctx.skin = super::materials::render_skin(ui, ctx.skin);
-    if (ctx.skin.dialogue.reveal.light.is_some() || ctx.skin.dialogue.reveal.handwriting.is_some())
+    if (ctx.skin.dialogue.reveal.light.is_some()
+        || ctx.skin.dialogue.reveal.scramble.is_some()
+        || ctx.skin.dialogue.reveal.handwriting.is_some())
         && ui.shader_preview.get_untracked()
         && !ui.reduced_motion.get_untracked()
         && super::materials::enabled(ui)
@@ -702,6 +815,9 @@ pub fn preview_box(ui: Ui, mut ctx: BoxCtx, doc: &Document) -> AnyView {
                 mask.start = std::time::Duration::from_millis(delay);
             }
             base.light_exit = Some((now + delay, exit.ms));
+        }
+        if let Some(scramble) = &spec.scramble {
+            base.light_exit = Some((now + delay, scramble.exit_ms));
         }
         let text = document(ui, doc, &base, Timing::Reveal(reveal));
         return box_view(ui, ctx, text).into_any();
