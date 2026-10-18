@@ -50,3 +50,15 @@ NanaUI 另通过引擎／包边界检查、打包单元及集成测试（72 项�
 ## 实现精简复核
 
 2026-10-18：shader 与材质共用片元沙箱校验，展示框与历史文本共用入场配置，退场直接设置剩余时长，材质实例缓存使用二进制 hash。相关 313 项测试再次通过；默认／300px 动画共 44 帧与精简前逐像素一致。提交清单与锁文件另经独立导出树的 `cargo metadata --locked --offline`、格式检查及 `cargo check --locked -p nanatype` 验证，排除原有打包、性能及原生拖动修改。25 套皮肤的默认／300px 共 50 个交互布局案例再次通过。日志：`target/refine-tests.log`、`target/refine-pixel-check.json`、`target/refine-parity.log`。
+
+## 历史记录专项复核
+
+2026-10-18：重新检查蜡笔皮肤的历史实际渲染。气泡使用 `paper.wgsl` 的紧凑参数，保留米白纸面、固定颗粒及四色蜡笔边线，省略展示框的大型花朵与太阳；正文、姓名、引用和注音沿用彩铅材质，显式文字颜色及彩色 emoji 保持原色。
+
+`snapshots` 的 `NANATYPE_TRANSITION_AUDIT=1` 现在同时捕获历史逐字入场，并断言展示框退场的全部关键帧及清空后的历史截图逐像素不变。历史与正文共用 180ms 入场遮罩，分割线沿左下—右上 45°，向右下推进；已完成的历史不播放正文退场。
+
+专项截图覆盖默认宽度及 300px、1×／2×、减少动态效果及关闭高级效果。`chat_parity` 默认／300px 的长姓名、引用、多行和连续记录布局检查通过；入场预设覆盖测试与实际 WGSL 的 1×／2× 方向测试通过。未修改皮肤或生产绘制逻辑。
+
+本地产物：`target/history-crayon-review`、`target/history-crayon-animation*`、`target/history-crayon-parity`；日志分别为同名前缀的 `.log`，测试日志为 `target/history-crayon-tests.log` 和 `target/history-crayon-gpu.log`。沿用上方复现命令即可获得 `history-enter-*`、`history-exit-*` 与 `history-after-clear.png`。
+
+验收实现共用场景初始化、宽度解析及截图读取，直接比较解码后的像素，以清空前的完整历史为基线，同时覆盖清空瞬间、退场过程及清空后的保留行为。截图继续使用框架的颜色转换与 PNG 导出路径。精简后重跑默认／300px、300px 2×、减少动态效果及关闭高级效果共 5 组，225 张关键帧除历史时间标签外与精简前逐像素一致，保留断言全部通过。截图及对比结果位于 `target/history-crayon-refined-final*`，格式及差异检查通过。
