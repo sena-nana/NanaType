@@ -770,3 +770,28 @@ tb-align-start = Align left
 tb-align-center = Center
 tb-align-end = Align right
 tb-current-value = Current: { $value }
+
+# Skin preview editor
+skin-edit-font = Body font
+skin-edit-font-presets = Font presets
+skin-edit-size = Body size (8–200 px)
+skin-edit-line = Line height (1–3 ×)
+skin-edit-color = Text color
+skin-edit-width = Width (160–8192 px)
+skin-edit-height = Height (96–8192 px)
+skin-edit-test-text = Sample text (preview only)
+skin-edit-sample-reset = Reset sample text
+skin-edit-reset = Restore skin defaults
+skin-edit-discard = Discard changes
+skin-edit-invalid = Enter valid numbers and a hex color. Leave fields empty for skin defaults.
+skin-edit-font-missing = This font is unavailable. A fallback font will be used.
+skin-edit-draft-hint = Changes appear only in this preview. Save updates this skin without switching the active skin. Empty fields use skin defaults.
+skin-edit-unavailable = This skin cannot be previewed right now.
+skin-edit-sample = Hello, NanaType! Test wrapping, font size and spacing. 你好，世界！0123456789
+    Second line: resize the window to inspect the actual layout.
+skin-edit-history-sample = Hello, NanaType! Welcome to the stream.
+    A longer history message to check wrapping, names and timestamps in a narrow window. 你好！0123456789
+    Third message: customize the font, color and line height separately.
+skin-edit-long-name = A long speaker name for narrow windows
+skin-edit-save = Save
+skin-edit-saved = Saved to this skin.

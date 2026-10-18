@@ -344,6 +344,7 @@ fn sweep_nine_slice_alpha_and_failed_reload_keep_the_surface_route() {
         .save(&path)
         .unwrap();
     let frame = nanatype_theme::NineSlice {
+        fill: true,
         image: "sweep-frame.png".into(),
         slice: [2; 4],
         scale: 1.0,

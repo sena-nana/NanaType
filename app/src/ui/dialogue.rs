@@ -13,7 +13,9 @@ use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
-use nana_ui::runtime::{NodeStyle, RichTextView, Stack, Text, TextHorizontalAlignment};
+use nana_ui::runtime::{
+    NodeStyle, RichTextView, SizeChanged, Stack, Text, TextHorizontalAlignment,
+};
 use nana_ui_core::{
     AlignSpec, BackgroundImage, BackgroundImageFit, BackgroundPosition, BackgroundRepeat,
     JustifySpec, LayoutStyle, LengthSpec, OverflowSpec, PointerEventsSpec, PositionSpec,
@@ -35,6 +37,7 @@ use super::{Ui, c, restyle};
 /// Base text look a document is drawn with (skin dialogue text or history text).
 #[derive(Clone, PartialEq)]
 pub struct Base {
+    pub responsive_text: bool,
     pub material: Option<nana_ui_core::MaterialRef>,
     pub color: Rgba8,
     pub size: f32,
@@ -83,6 +86,7 @@ impl Base {
         reduced: bool,
     ) -> Self {
         Self {
+            responsive_text: false,
             masks: nana_ui_core::TextTransitions {
                 entrance: if !reduced && entrance.kind != EntranceKind::None && entrance.ms > 0 {
                     let spec = &skin.dialogue.reveal.entrance;
@@ -102,7 +106,10 @@ impl Base {
             size: t.size,
             line_height: t.line_height,
             weight: skin.fonts.body.weight,
-            family: skin.fonts.body.families.first().cloned(),
+            family: t
+                .font_family
+                .clone()
+                .or_else(|| skin.fonts.body.families.first().cloned()),
             name_family: skin.fonts.name.families.first().cloned(),
             accent_family: skin.fonts.accent.families.first().cloned(),
             letter_spacing: t.letter_spacing,
@@ -118,13 +125,15 @@ impl Base {
     }
 
     pub fn dialogue(skin: &Skin, entrance: Entrance, reduced: bool) -> Self {
-        Self::from_text(
+        let mut base = Self::from_text(
             skin,
             &skin.dialogue.text,
             skin.dialogue.box_.color,
             entrance,
             reduced,
-        )
+        );
+        base.responsive_text = skin.dialogue.responsive.is_some();
+        base
     }
 
     /// The input editor's text: the dialogue text, nothing animating in.
@@ -134,6 +143,7 @@ impl Base {
             ms: 0,
         };
         Self {
+            responsive_text: false,
             ink: None,
             material: None,
             masks: Default::default(),
@@ -176,6 +186,8 @@ impl Base {
         l.font_family = self.family.clone();
         l.letter_spacing = Some(self.letter_spacing);
         l.white_space = nana_ui_core::WhiteSpaceSpec::PreWrap;
+        l.overflow_wrap = Some(nana_ui_core::OverflowWrapSpec::Anywhere);
+        l.min_width = Some(LengthSpec::Px(0.0));
         l.color = Some(c(self.color));
         l.line_height = Some(nana_ui_core::LineHeightSpec::Absolute(
             self.size * self.line_height,
@@ -295,9 +307,24 @@ fn document_on(
     }
     let doc = doc.clone();
     let look = look.clone();
-    let view = widget(view).bind(move |v: &mut RichTextView| {
+    let responsive = base.responsive_text;
+    let update = move |v: &mut RichTextView| {
+        if responsive {
+            let [w, h] = ui.display_size.get();
+            let vertical = h > w && w > 0.0;
+            let l = Arc::make_mut(&mut v.style.layout);
+            l.writing_mode = Some(if vertical {
+                nana_ui_core::WritingModeSpec::VerticalRl
+            } else {
+                nana_ui_core::WritingModeSpec::HorizontalTb
+            });
+            l.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
+            l.height = vertical.then(|| LengthSpec::Px(ui.text_area_height.get().max(1.)));
+            l.width = Some(LengthSpec::Fill);
+            l.flex_shrink = Some(0.0);
+        }
         let urls = ui.asset_urls.get();
-        let rich = to_rich(
+        let mut rich = to_rich(
             &doc,
             &Env {
                 look: &look,
@@ -306,14 +333,45 @@ fn document_on(
                 locale: ui.locale.get(),
             },
         );
+        if responsive {
+            let [w, h] = ui.display_size.get();
+            if h > w && w > 0. {
+                super::rich::vertical_objects(&mut rich, &look, h * 0.5);
+            }
+        }
         if v.value != rich {
             v.value = rich;
         }
+    };
+    let view = widget(view).bind(move |v: &mut RichTextView| {
+        update(v);
+        if responsive {
+            let [w, h] = ui.display_size.get();
+            let vertical = w > 0. && h > w;
+            let width = vertical.then(|| {
+                super::rich::vertical_extent(
+                    &v.value,
+                    &v.style,
+                    ui.text_area_height.get().max(1.),
+                    ui.locale.get(),
+                )
+            });
+            let l = Arc::make_mut(&mut v.style.layout);
+            l.width = Some(width.map_or(LengthSpec::Fill, LengthSpec::Px));
+            l.position = if vertical {
+                PositionSpec::Absolute
+            } else {
+                PositionSpec::Static
+            };
+            l.offset_right = vertical.then_some(LengthSpec::Px(0.));
+            l.offset_top = vertical.then_some(LengthSpec::Px(0.));
+        }
     });
-    match follow {
+    let view = match follow {
         Some(_) => view.node_ref(ui.text_node).into_any(),
         None => view.into_any(),
-    }
+    };
+    view
 }
 
 /// What a dialogue box shows.
@@ -340,6 +398,18 @@ pub struct BoxCtx {
 }
 
 impl BoxCtx {
+    fn resolved(&self, ui: Ui) -> Self {
+        if self.source == Source::Draft {
+            return self.clone();
+        }
+        Self {
+            skin: Arc::new(nanatype_theme::responsive_dialogue(
+                &self.skin,
+                canvas_size(ui, &self.skin),
+            )),
+            ..self.clone()
+        }
+    }
     fn active(ui: Ui, source: Source) -> Self {
         Self {
             skin: super::materials::render_skin(ui, ui.skin.get_untracked()),
@@ -354,9 +424,38 @@ impl BoxCtx {
     }
 
     fn box_surface(&self) -> Surface {
+        if self.source != Source::Draft
+            && self.skin.dialogue.shader_effects.iter().any(|e| {
+                e.target == nanatype_theme::ShaderTarget::Artwork
+                    && self
+                        .skin
+                        .shaders
+                        .get(&e.shader)
+                        .is_some_and(|s| s.static_fallback)
+                    && self.skin.shader_programs.contains_key(&e.shader)
+            })
+        {
+            // The same authored canvas supplies the still and moving silhouette.
+            // Do not paint a stretched raster or a second generic frame under it.
+            let native = Surface::dialogue_box(&self.skin, None);
+            return Surface {
+                radii: native.radii,
+                shadows: native.shadows.into_iter().filter(|s| !s.inset).collect(),
+                ..Default::default()
+            };
+        }
         let frame = self.skin.dialogue.box_.frame.as_ref();
         Surface::dialogue_box(&self.skin, frame.and_then(|f| self.url(&f.image)))
     }
+}
+
+pub(super) fn canvas_size(ui: Ui, skin: &Skin) -> [f32; 2] {
+    let size = ui.display_size.get();
+    if size[0] > 0.0 && size[1] > 0.0 {
+        return size;
+    }
+    let (w, h) = crate::windows::size_of(ui.display_kind(), skin, &ui.settings.get());
+    [w, h]
 }
 
 /// A complete dialogue box filling its parent (region + overscan). In the
@@ -374,7 +473,11 @@ pub fn dialogue_box(ui: Ui, source: Source, editor: Option<AnyView>) -> AnyView 
         let settings = ui.settings.get();
         (
             Arc::as_ptr(&skin) as usize,
-            Arc::as_ptr(&settings) as usize,
+            (
+                settings.playback.entrance,
+                settings.skin.advanced_effects,
+                ui.display_kind().overlay(&settings).map(|o| o.lock),
+            ),
             ui.locale.get(),
             ui.portraits.with(|p| Arc::as_ptr(p) as usize),
         )
@@ -543,10 +646,9 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
     let source = ctx.source;
     let d = &skin.dialogue;
     let overscan = d.overscan;
-    let [mt, mr, mb, ml] = d.box_.margin;
-    let width_fraction = d.box_.width_fraction;
-    let padding = d.padding;
-    let box_surface = ctx.box_surface();
+    let outer_ctx = ctx.clone();
+    let frame_ctx = ctx.clone();
+    let padding_ctx = ctx.clone();
     let plain =
         move || source == Source::Draft && !ui.settings.with(|s| s.general.input_skin_preview);
 
@@ -555,22 +657,32 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
             ui.skin
                 .with(|s| (s.dialogue.overscan, s.dialogue.box_.margin))
         } else {
-            (overscan, [mt, mr, mb, ml])
+            (overscan, outer_ctx.resolved(ui).skin.dialogue.box_.margin)
         };
         let [top, right, bottom, left] =
             margin.map(|m| LengthSpec::Px(if plain() { 16.0 } else { overscan + m }));
         l.min_width = Some(LengthSpec::Px(0.0));
         l.min_height = Some(LengthSpec::Px(0.0));
-        l.padding_left = Some(left);
-        l.padding_right = Some(right);
-        l.padding_top = Some(top);
-        l.padding_bottom = Some(bottom);
+        let cap = |v| match v {
+            LengthSpec::Px(px) if source != Source::Draft => LengthSpec::Min2(
+                nana_ui_core::LengthAtom::Px(px),
+                nana_ui_core::LengthAtom::Percent(20.0),
+            ),
+            v => v,
+        };
+        l.padding_left = Some(cap(left));
+        l.padding_right = Some(cap(right));
+        l.padding_top = Some(cap(top));
+        l.padding_bottom = Some(cap(bottom));
         l.align_items = AlignSpec::Center;
     };
-    let mut outer = widget(Stack::fill_column(0.0).with_layout(outer_layout));
-    if source == Source::Draft {
-        outer = outer.bind(move |s: &mut Stack| restyle(s, outer_layout));
-    }
+    let mut outer =
+        widget(Stack::fill_column(0.0).with_layout(&outer_layout)).on(move |e: &SizeChanged| {
+            if source != Source::Draft {
+                ui.display_size.set_if_changed([e.width, e.height]);
+            }
+        });
+    outer = outer.bind(move |s: &mut Stack| restyle(s, &outer_layout));
     // Moving and scaling the native window are the default gestures, so
     // dialogue content must leave pointer and wheel events for the host.
     let drag_window = source == Source::Display
@@ -584,7 +696,7 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
         } else if source == Source::Draft {
             ui.skin.with(|s| s.dialogue.box_.width_fraction)
         } else {
-            width_fraction
+            frame_ctx.resolved(ui).skin.dialogue.box_.width_fraction
         };
         l.width = Some(LengthSpec::Percent(fraction * 100.0));
         l.min_width = Some(LengthSpec::Px(0.0));
@@ -596,10 +708,8 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
             l.pointer_events = Some(PointerEventsSpec::None);
         }
     };
-    let mut frame = widget(Stack::fill_column(0.0).with_layout(frame_layout));
-    if source == Source::Draft {
-        frame = frame.bind(move |s: &mut Stack| restyle(s, frame_layout));
-    }
+    let mut frame = widget(Stack::fill_column(0.0).with_layout(&frame_layout));
+    frame = frame.bind(move |s: &mut Stack| restyle(s, &frame_layout));
     if source == Source::Display {
         frame = frame.bind(move |s: &mut Stack| {
             // Entrance and exit, whole-box fade and screen shake.
@@ -634,21 +744,8 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
     }
 
     // Only replace the container's paint/layout; the editor stays mounted.
-    let shaders = shader_layers(ui, &ctx, &box_surface, DecorLayer::Above);
-    let shaders_below = shader_layers(ui, &ctx, &box_surface, DecorLayer::Below);
-    let shader_art: Vec<_> = ctx
-        .skin
-        .dialogue
-        .decor
-        .iter()
-        .filter(|d| {
-            source != Source::Draft
-                && d.layer == DecorLayer::Above
-                && d.shader.is_some()
-                && decor_shown(d, source)
-        })
-        .map(|d| decor_view(ui, &ctx, d))
-        .collect();
+    let shaders = responsive_shaders(ui, &ctx, DecorLayer::Above);
+    let shaders_below = responsive_shaders(ui, &ctx, DecorLayer::Below);
     let box_stack = move || {
         let (surface, padding) = if plain() {
             (Surface::default(), [0.0; 4])
@@ -667,7 +764,8 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
                 skin.dialogue.padding,
             )
         } else {
-            (box_surface.clone(), padding)
+            let resolved = padding_ctx.resolved(ui);
+            (resolved.box_surface(), resolved.skin.dialogue.padding)
         };
         surface
             .materials(super::materials::enabled(ui))
@@ -703,38 +801,66 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
             })
     };
     let mut the_box = widget(box_stack());
-    if source == Source::Draft {
-        the_box = the_box.bind(move |s: &mut Stack| *s = box_stack());
-    }
+    the_box = the_box.bind(move |s: &mut Stack| *s = box_stack());
     let material_padding = ctx.skin.dialogue.box_.shape.material.is_some();
     let text = text_port(ui, source, content);
+    let text_ctx = ctx.clone();
     let text = if source == Source::Draft {
         text
     } else {
-        widget(Stack::fill_column(0.).with_layout(move |l| {
-            l.padding_left = Some(LengthSpec::Px(padding[0]));
-            l.padding_top = Some(LengthSpec::Px(padding[1]));
-            l.padding_right = Some(if material_padding {
-                LengthSpec::Min2(
-                    nana_ui_core::LengthAtom::Px(padding[2]),
-                    nana_ui_core::LengthAtom::Percent(18.),
-                )
-            } else {
-                LengthSpec::Px(padding[2])
-            });
-            l.padding_bottom = Some(LengthSpec::Px(padding[3]));
-            l.min_width = Some(LengthSpec::Px(0.));
-            l.min_height = Some(LengthSpec::Px(0.));
-        }))
-        .children(((source == Source::Display).then(|| reply_quote(ui)), text))
-        .into_any()
+        widget(Stack::fill_column(0.))
+            .bind(move |s: &mut Stack| {
+                let padding = text_ctx.resolved(ui).skin.dialogue.padding;
+                let vertical = nanatype_theme::dialogue_is_vertical(
+                    &text_ctx.skin,
+                    canvas_size(ui, &text_ctx.skin),
+                );
+                restyle(s, |l| {
+                    l.direction = Some(if vertical {
+                        nana_ui_core::FlexDirection::Row
+                    } else {
+                        nana_ui_core::FlexDirection::Column
+                    });
+                    l.flex_reverse = vertical;
+                    let cap = |px, percent| {
+                        LengthSpec::Min2(
+                            nana_ui_core::LengthAtom::Px(px),
+                            nana_ui_core::LengthAtom::Percent(percent),
+                        )
+                    };
+                    l.padding_left = Some(if vertical {
+                        LengthSpec::Px(padding[0])
+                    } else {
+                        cap(padding[0], 25.0)
+                    });
+                    l.padding_top = Some(if vertical {
+                        LengthSpec::Px(padding[1])
+                    } else {
+                        cap(padding[1], 20.0)
+                    });
+                    l.padding_right = Some(if vertical {
+                        LengthSpec::Px(padding[2])
+                    } else if material_padding {
+                        LengthSpec::Min2(
+                            nana_ui_core::LengthAtom::Px(padding[2]),
+                            nana_ui_core::LengthAtom::Percent(18.),
+                        )
+                    } else {
+                        cap(padding[2], 25.0)
+                    });
+                    l.padding_bottom = Some(if vertical {
+                        LengthSpec::Px(padding[3])
+                    } else {
+                        cap(padding[3], 20.0)
+                    });
+                    l.min_width = Some(LengthSpec::Px(0.));
+                    l.min_height = Some(LengthSpec::Px(0.));
+                });
+            })
+            .children(((source == Source::Display).then(|| reply_quote(ui)), text))
+            .into_any()
     };
-    let the_box = the_box.children((
-        input_skin_layer(ui, &ctx, sweep_layer),
-        shader_art,
-        shaders,
-        text,
-    ));
+    let the_box = the_box.children((input_skin_layer(ui, &ctx, sweep_layer), shaders, text));
 
     outer.children(frame.children((
         input_skin_layer(ui, &ctx, |ui, ctx| {
@@ -829,11 +955,25 @@ fn shader_layers(ui: Ui, ctx: &BoxCtx, surface: &Surface, layer: DecorLayer) -> 
     layers
 }
 
+fn responsive_shaders(ui: Ui, ctx: &BoxCtx, layer: DecorLayer) -> AnyView {
+    let ctx = ctx.clone();
+    dynamic(move || ui.display_size.get(), move |_| {
+        let ctx = ctx.resolved(ui);
+        let layers = shader_layers(ui, &ctx, &ctx.box_surface(), layer);
+        let art: Vec<_> = ctx.skin.dialogue.decor.iter()
+            .filter(|d| ctx.source != Source::Draft && d.layer == layer && d.shader.is_some() && decor_shown(d, ctx.source))
+            .map(|d| decor_view(ui, &ctx, d)).collect();
+        (art, layers).into_any()
+    }).css(nana_ui::runtime::view::css! { position: absolute; inset: 0; pointer-events: none; overflow: visible; }).into_any()
+}
+
 /// Rebuild only skin layers when the draft's skin or resolved images change.
 /// Both editors stay outside these scopes, retaining selection and undo history.
 fn input_skin_layer(ui: Ui, ctx: &BoxCtx, build: fn(Ui, &BoxCtx) -> AnyView) -> AnyView {
     if ctx.source != Source::Draft {
-        return build(ui, ctx);
+        let ctx = ctx.clone();
+        return dynamic(move || ui.display_size.get(), move |_| build(ui, &ctx.resolved(ui)))
+            .css(nana_ui::runtime::view::css! { position: absolute; inset: 0; pointer-events: none; overflow: visible; }).into_any();
     }
     dynamic(
         move || (
@@ -887,10 +1027,10 @@ fn sweep_layer(ui: Ui, ctx: &BoxCtx) -> AnyView {
     sweep.into_any()
 }
 
-/// The chat message the line on the typewriter answers, above its text
-/// (outside the text area, so following long text leaves it in place).
+/// A fixed quote above horizontal text or to the right of vertical text.
+/// It stays outside the body's scrollport when following long text.
 fn reply_quote(ui: Ui) -> AnyView {
-    dynamic(
+    let quote = dynamic(
         move || drawn(ui).revision,
         move |_| {
             let skin = ui.skin.get_untracked();
@@ -901,7 +1041,7 @@ fn reply_quote(ui: Ui) -> AnyView {
                     .settings
                     .with_untracked(|s| s.integrations.bilibili.quote_on_display);
             match view.reply.as_ref().filter(|_| shown) {
-                Some(reply) => super::quote::quote_view(
+                Some(reply) => super::quote::display_quote_view(
                     ui,
                     &skin,
                     &skin.dialogue.reply,
@@ -915,28 +1055,84 @@ fn reply_quote(ui: Ui) -> AnyView {
                 None => widget(Stack::column(0.0)).into_any(),
             }
         },
-    )
-    .into_any()
+    );
+    // A dynamic view owns a fill-width host. Bound the host as well as the
+    // quote itself so it cannot consume the body's column space in a row.
+    widget(Stack::column(0.))
+        .bind(move |s: &mut Stack| {
+            let skin = ui.skin.get();
+            let view = drawn(ui);
+            let shown = !view.empty
+                && view.reply.is_some()
+                && skin.dialogue.reply.visible
+                && ui
+                    .settings
+                    .with(|s| s.integrations.bilibili.quote_on_display);
+            let vertical = nanatype_theme::dialogue_is_vertical(&skin, ui.display_size.get());
+            restyle(s, |l| {
+                l.display = Some(if shown {
+                    nana_ui_core::DisplaySpec::Flex
+                } else {
+                    nana_ui_core::DisplaySpec::None
+                });
+                l.width = Some(if vertical {
+                    LengthSpec::Px(super::quote::column_width(
+                        &skin.dialogue.reply,
+                        &skin.dialogue.text,
+                    ))
+                } else {
+                    LengthSpec::Fill
+                });
+                l.height = Some(if vertical {
+                    LengthSpec::Fill
+                } else {
+                    LengthSpec::Shrink
+                });
+                l.flex_grow = Some(0.);
+                l.flex_shrink = Some(0.);
+            });
+        })
+        .children(quote)
+        .into_any()
 }
 
 /// The text area: clips at the box's padding edge. On the typewriter the
 /// text sits in a column the host scrolls up as typing passes the bottom.
 fn text_port(ui: Ui, source: Source, content: AnyView) -> AnyView {
     let port = widget(Stack::fill_column(0.0).with_layout(|l| {
+        l.position = PositionSpec::Relative;
         l.min_width = Some(LengthSpec::Px(0.0));
         l.min_height = Some(LengthSpec::Px(0.0));
         l.overflow_y = OverflowSpec::Hidden;
-    }));
+        l.overflow_x = OverflowSpec::Hidden;
+    }))
+    .on(move |e: &SizeChanged| {
+        if source != Source::Draft {
+            ui.text_area_height.set_if_changed(e.height);
+        }
+    });
     if source != Source::Display {
         return port.children(content).into_any();
     }
     let scroller = widget(Stack::column(0.0).width(LengthSpec::Fill).with_layout(|l| {
+        l.position = PositionSpec::Relative;
+        l.min_width = Some(LengthSpec::Px(0.0));
         l.flex_shrink = Some(0.0);
     }))
     .bind(move |s: &mut Stack| {
         let y = ui.text_scroll.get();
+        let vertical = ui
+            .skin
+            .with(|s| nanatype_theme::dialogue_is_vertical(s, ui.display_size.get()));
         restyle(s, |l| {
-            l.transform = (y != 0.0).then(|| affine(0.0, -y, 0.0, 1.0));
+            l.height = vertical.then_some(LengthSpec::Percent(100.0));
+            l.transform = (y != 0.0).then(|| {
+                if vertical {
+                    affine(y, 0.0, 0.0, 1.0)
+                } else {
+                    affine(0.0, -y, 0.0, 1.0)
+                }
+            });
         });
     })
     .children(content);
@@ -1013,10 +1209,11 @@ fn has_speaker(ui: Ui, ctx: &BoxCtx) -> impl Fn() -> bool + Send + 'static {
 
 fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
     let skin = ctx.skin.clone();
+    let source = ctx.source;
     let p = skin.dialogue.nameplate.clone();
     // Reserve the corner ornaments' strip for long names. Ordinary names
     // keep their content width; only an overflowing label is ellipsized.
-    let artwork_clearance = if skin.has_dialogue_artwork() {
+    let artwork_clearance = if skin.has_dialogue_artwork() || skin.dialogue.responsive.is_some() {
         skin.dialogue.padding[2]
     } else {
         0.
@@ -1046,7 +1243,7 @@ fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
         l.font_family = skin.fonts.name.families.first().cloned();
         l.color = Some(c(p.text_color));
         l.white_space_nowrap = true;
-        if right_clearance > 0.0 {
+        if right_clearance > 0.0 || ctx.source != Source::Draft {
             l.min_width = Some(LengthSpec::Px(0.0));
             l.max_width = Some(LengthSpec::Percent(100.0));
             l.flex_shrink = Some(1.0);
@@ -1063,6 +1260,18 @@ fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
     let name = speaker(ui, ctx);
     let named = has_speaker(ui, ctx);
     let [ox, oy] = p.offset;
+    let vertical = ctx.source != Source::Draft
+        && nanatype_theme::dialogue_is_vertical(&skin, ui.display_size.get_untracked());
+    if vertical {
+        let l = Arc::make_mut(&mut st.layout);
+        l.writing_mode = Some(nana_ui_core::WritingModeSpec::VerticalRl);
+        l.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
+        l.white_space_nowrap = true;
+        l.max_height = Some(LengthSpec::Px(
+            (ui.display_size.get_untracked()[1] * 0.25).max(p.size),
+        ));
+        l.text_overflow_ellipsis = true;
+    }
     let rotate = p.rotate;
     widget(anchor_layer(p.anchor, 3))
         .visible(move || visible && named())
@@ -1072,7 +1281,7 @@ fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
                     .stack(Stack::row(0.0).padding_xy(p.padding[0], p.padding[1]))
                     .with_layout(move |l| {
                         l.transform = Some(affine(ox, oy, rotate, 1.0));
-                        if right_clearance > 0.0 {
+                        if right_clearance > 0.0 || source != Source::Draft {
                             l.min_width = Some(LengthSpec::Px(0.0));
                             l.max_width = Some(calc(100.0, -ox.max(0.0) - right_clearance));
                         }
@@ -1145,9 +1354,10 @@ fn decor_view(ui: Ui, ctx: &BoxCtx, dec: &DecorSpec) -> AnyView {
         move || {
             let view = ui.display.get();
             motion_enabled
-                && source == Source::Display
+                && (source == Source::Display || source == Source::Preview && ui.shader_preview.get())
+                && ui.settings.with(|s| s.skin.advanced_effects)
                 && !ui.reduced_motion.get()
-                && !view.empty
+                && (source == Source::Preview || !view.empty)
                 && (!speaker_only || !view.speaker.name.trim().is_empty())
         },
         move |animate| {
@@ -1548,6 +1758,156 @@ mod decor_tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn responsive_resize_keeps_the_text_node_schedule_and_track_independence() {
+        use nana_ui::runtime::{DocumentId, RuntimeDocument};
+        use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let mut skin = (*registry.load("nanatype.halo").unwrap().skin).clone();
+        skin.dialogue.overflow = Overflow::Scroll;
+        let ui = Ui::new(
+            Arc::new(nanatype_settings::Settings::default()),
+            Arc::new(skin),
+            nanatype_i18n::Locale::ZhCn,
+        );
+        let text = nanatype_markup::parse(&format!(
+            "[at=42 name=奈奈] [sticker=nana/heart]{}",
+            "中文竖排：你好，世界！Hello 2026。[b]字体[/b]与[ruby=かんじ]漢字[/ruby]。\n"
+                .repeat(15)
+        ))
+        .doc;
+        ui.display.update(|v| {
+            let v = Arc::make_mut(v);
+            v.empty = false;
+            v.doc = Arc::new(text);
+            v.reveal = Reveal::full(600);
+            v.reply = Some(nanatype_model::ChatRef::new(
+                nanatype_model::ChatUser {
+                    name: "这是一位名字非常长的观众 Hello 2026".into(),
+                    ..Default::default()
+                },
+                "这是一条回复引用：中文标点，Hello 2026！需要跟随正文方向变化。",
+                nanatype_model::SourceKind::Chat,
+            ));
+        });
+        let original = ui.display.get_untracked();
+        let id = DocumentId::new(1).unwrap();
+        let mut doc = RuntimeDocument::new(id);
+        doc.context_mut()
+            .mount_view_root(id, move || display_window(ui))
+            .unwrap();
+        let mut session = RuntimeAgentSession::new(doc, 760, 220).unwrap();
+        session.flush().unwrap();
+        let node = ui.text_node.get_untracked().unwrap();
+        let quote_ids: Vec<_> = session
+            .accessibility_dump()
+            .into_iter()
+            .filter(|n| {
+                n.agent_path.as_deref().is_some_and(|p| {
+                    p.ends_with("reply-quote-name") || p.ends_with("reply-quote-text")
+                })
+            })
+            .map(|n| n.id)
+            .collect();
+        assert_eq!(quote_ids.len(), 2, "quote name and text are mounted");
+        let presentation = session
+            .document()
+            .context()
+            .world()
+            .glyph_presentation(node)
+            .cloned();
+        for (w, h) in [
+            (300, 600),
+            (400, 400),
+            (400, 401),
+            (1200, 120),
+            (300, 1200),
+            (760, 220),
+        ] {
+            session.set_viewport(w, h, 1.0).unwrap();
+            session.flush().unwrap();
+            assert_eq!(ui.text_node.get_untracked(), Some(node));
+            let world = session.document().context().world();
+            for &id in &quote_ids {
+                let quote_node = nana_ui::runtime::StableNodeId::new(id).unwrap();
+                let (_, quote_layout) = world.text_layout(quote_node).unwrap();
+                assert_eq!(
+                    quote_layout.is_vertical(),
+                    h > w,
+                    "reply quote follows its display's writing mode"
+                );
+                if h > w {
+                    let q = world.layout_box(quote_node).unwrap();
+                    let port = world
+                        .layout_box(ui.text_port.get_untracked().unwrap())
+                        .unwrap();
+                    assert!(
+                        q.x >= port.x + port.width - 1.,
+                        "vertical reply must sit to the right of the body: quote={q:?}, body={port:?}"
+                    );
+                    assert!(
+                        q.y >= port.y - 1. && q.y + q.height <= port.y + port.height + 1.,
+                        "reply remains inside the text viewport"
+                    );
+                }
+            }
+            assert_eq!(world.glyph_presentation(node), presentation.as_ref());
+            let style = &world.node_style(node).unwrap().layout;
+            assert_eq!(
+                style.writing_mode,
+                Some(if h > w {
+                    nana_ui_core::WritingModeSpec::VerticalRl
+                } else {
+                    nana_ui_core::WritingModeSpec::HorizontalTb
+                })
+            );
+            let (_, layout) = world.text_layout(node).unwrap();
+            assert!(layout.lines.len() > 1);
+            if h > w {
+                assert!(
+                    world.layout_box(node).unwrap().width + 0.5 >= layout.physical_size().0,
+                    "the full column stack must own the inline-object coordinate space: body={:?}, physical={:?}, viewport={w}x{h}",
+                    world.layout_box(node),
+                    layout.physical_size()
+                );
+                let port = world
+                    .layout_box(ui.text_port.get_untracked().unwrap())
+                    .unwrap();
+                let body = world.layout_box(node).unwrap();
+                assert!(
+                    port.width > w as f32 * 0.3,
+                    "reply must leave space for the body: {port:?}"
+                );
+                assert!(
+                    (body.height - port.height).abs() < 1.0,
+                    "columns must wrap at the actual text viewport height"
+                );
+                assert!(
+                    (body.x + body.width - port.x - port.width).abs() < 1.0,
+                    "column stack must anchor right for {w}x{h}: body={body:?}, port={port:?}, physical={:?}",
+                    layout.physical_size()
+                );
+                let writing = nana_ui_core::WritingContext::new(
+                    nana_ui_core::WritingModeSpec::VerticalRl,
+                    nana_ui_core::DirSpec::Ltr,
+                );
+                let physical = |i: usize| {
+                    let b = layout.lines[i].bounds;
+                    writing.line_rect_to_page((b.x, b.y, b.width, b.height), port.width)
+                };
+                assert!(physical(0).0 > physical(1).0, "columns must advance left");
+                assert!(physical(0).3 > physical(0).2);
+            }
+            assert!(Arc::ptr_eq(&ui.display.get_untracked(), &original));
+            assert_eq!(ui.remote().display_size.get_untracked(), [0.; 2]);
+            // The host remembers a resize through Settings without remounting the text.
+            ui.settings
+                .update(|s| Arc::make_mut(s).overlays.display.size = Some([w as f32, h as f32]));
+            session.flush().unwrap();
+            assert_eq!(ui.text_node.get_untracked(), Some(node));
         }
     }
 

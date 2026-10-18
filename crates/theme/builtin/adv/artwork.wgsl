@@ -19,15 +19,19 @@ fn decal(p:vec2<f32>,origin:vec2<f32>,extent:vec2<f32>)->vec4<f32> {
 }
 fn effect(i:EffectInput)->vec4<f32> {
  let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
+ // Portrait/compact instances reuse the original ink and material in logical pixels.
+ let portrait=i.params0.x>.5 && i.params0.x<1.5;
+ let details=i.params0.y<.5;
  let q=p-s*.5; let b=s*.5-vec2(1.);
  let opening=exp(-i.line_age*3.); let speaker=exp(-i.speaker_age*3.);
 // Cinema matte: a fixed brass name baseline, no ambient animation.
  let edge=max(rect(q,b,6.),abs(q.x)+abs(q.y)-b.x-b.y+12.);
  var c=mix(rgb(11.,12.,20.),rgb(25.,26.,36.),1.-i.uv.y);
  c=mix(c,rgb(106.,106.,121.),line(edge+1.,.4)*.65);
- let header=segment(p,vec2(42.,45.),vec2(min(s.x-70.,s.x*.53),45.),.45);
+ let header=segment(p,select(vec2(42.,45.),vec2(s.x-16.,52.),portrait),select(vec2(min(s.x-70.,s.x*.53),45.),vec2(s.x-16.,s.y-30.),portrait),.45);
  c=mix(c,rgb(207.,177.,115.),header*.55);
- let diamond=aa(abs(p.x-41.)+abs(p.y-45.)-2.7);
+ let mark=p-select(vec2(41.,45.),vec2(s.x-16.,52.),portrait);
+ let diamond=aa(abs(mark.x)+abs(mark.y)-2.7);
  c=mix(c,rgb(236.,211.,162.),diamond*.85);
  c=mix(c,rgb(207.,177.,115.),max(segment(p,vec2(13.,13.),vec2(26.,13.),.7),segment(p,vec2(s.x-13.,s.y-24.),vec2(s.x-13.,s.y-13.),.7))*.6);
  return vec4(c,aa(edge)*.96);

@@ -6,13 +6,13 @@ use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, widget}
 use nana_ui::runtime::{
     ActionMenu, ActionMenuItem, Activate, Button, Chip, IconButton, IconGlyph, ListItem,
     PopoverClosed, PopoverToggled, ScrollAxes, ScrollView, Select, SelectChanged, SelectOption,
-    SizeChanged, Stack, StatusBadge, Switch, Text, TextChanged, TextInput, ToggleChanged,
+    Stack, StatusBadge, Switch, Text, TextChanged, TextInput, ToggleChanged,
 };
 use nana_ui::theme::{space, type_scale};
 use nana_ui::{ButtonKind, ControlSize, StatusTone};
 use nana_ui_core::{
-    AlignSpec, BackgroundImage, JustifySpec, LengthSpec, OverflowSpec, PointerEventsSpec,
-    PositionSpec, SemanticColorRole, TransformOrigin,
+    AlignSpec, BackgroundImage, JustifySpec, LengthSpec, OverflowSpec, PositionSpec,
+    SemanticColorRole,
 };
 use nanatype_i18n::Locale;
 use nanatype_model::{AfterLine, EntranceKind, Overflow, VtsReset};
@@ -26,7 +26,6 @@ use super::Page;
 use super::controls::*;
 use crate::msg::{FileTarget, GlobalAction, Msg};
 use crate::services::hotkeys::HotkeyState;
-use crate::ui::dialogue::{self, BoxCtx, Source};
 use crate::ui::{I18N, LinkState, SkinRow, Ui};
 use crate::windows::WindowKind;
 
@@ -1169,17 +1168,6 @@ fn skins(ui: Ui) -> AnyView {
                 vec![
                     row(
                         ui,
-                        "skins-override-text",
-                        None,
-                        color(
-                            ui,
-                            fallback.dialogue.text.color,
-                            |s| s.skin.overrides.text_color,
-                            |s, v| s.skin.overrides.text_color = v,
-                        ),
-                    ),
-                    row(
-                        ui,
                         "skins-override-name",
                         None,
                         color(
@@ -1209,22 +1197,6 @@ fn skins(ui: Ui) -> AnyView {
                             fallback.chrome.accent,
                             |s| s.skin.overrides.accent,
                             |s, v| s.skin.overrides.accent = v,
-                        ),
-                    ),
-                    row(
-                        ui,
-                        "skins-override-size",
-                        None,
-                        // The step left of 12 px is "unset": the skin's own size.
-                        slider_with(
-                            ui,
-                            (11.0, 72.0, 1.0),
-                            "px",
-                            |locale, v| {
-                                (v < 12.0).then(|| I18N.t_in(locale, "common-skin-default"))
-                            },
-                            |s| f64::from(s.skin.overrides.text_size.unwrap_or(11.0)),
-                            |s, v| s.skin.overrides.text_size = (v >= 12.0).then_some(v as f32),
                         ),
                     ),
                     row(
@@ -1482,8 +1454,7 @@ fn skin_list_row(
     };
     let usable = skin.error.is_none();
     let previewed = previewed(ui, previewing, skin.id.clone());
-    let static_materials = skin.skin.as_ref().is_some_and(|s| !s.materials.is_empty());
-    let pick_id = skin.id.clone();
+    let pick = skin.clone();
     let trailing = widget(Stack::row(8.0).align(AlignSpec::Center)).children((
         selected.then(|| {
             widget(StatusBadge::new(ui.now_t("skins-active"), StatusTone::Success).compact(true))
@@ -1515,12 +1486,8 @@ fn skin_list_row(
         )
         .bind(move |i: &mut ListItem| i.selected = previewed())
         .on_cx(move |_, _: &Activate, cx| {
-            // A skin that does not load has nothing to show.
-            if usable {
-                previewing.set(Some(pick_id.clone()));
-                if ui.shader_preview.get_untracked() || static_materials {
-                    cx.dispatch_program_all(Msg::PrepareSkinPreview(pick_id.clone()));
-                }
+            if let Some(message) = super::preview::select(ui, previewing, &pick) {
+                cx.dispatch_program_all(message);
             }
         })
         .leading(widget(Stack::row(4.0)).children((
@@ -1598,20 +1565,6 @@ fn missing_family(row: &SkinRow) -> Option<&str> {
         .families
         .first()
         .map(String::as_str)
-}
-
-/// "Fusion Pixel 12px is not installed; showing a fallback font", for a
-/// skin whose own body font cannot be used here.
-fn fallback_font_note(locale: Locale, row: &SkinRow) -> Option<String> {
-    if !row.fallback_font || row.error.is_some() {
-        return None;
-    }
-    let family = missing_family(row)?;
-    Some(I18N.tr_in(
-        locale,
-        "skins-fallback-font-detail",
-        &[("family", family.into())],
-    ))
 }
 
 /// "Light · Classic": the skin's tone and tags on one line.
@@ -1706,8 +1659,7 @@ fn skin_card(
         (!current && usable).then(|| apply_button(ui, skin.id.clone(), previewed.clone())),
         skin_actions(ui, skin, locale),
     ));
-    let static_materials = skin.skin.as_ref().is_some_and(|s| !s.materials.is_empty());
-    let pick_id = skin.id.clone();
+    let pick = skin.clone();
     let card = widget(
         ListItem::new(skin.name.clone())
             .style({
@@ -1728,11 +1680,8 @@ fn skin_card(
     )
     .bind(move |i: &mut ListItem| i.selected = previewed())
     .on_cx(move |_, _: &Activate, cx| {
-        if usable {
-            previewing.set(Some(pick_id.clone()));
-            if ui.shader_preview.get_untracked() || static_materials {
-                cx.dispatch_program_all(Msg::PrepareSkinPreview(pick_id.clone()));
-            }
+        if let Some(message) = super::preview::select(ui, previewing, &pick) {
+            cx.dispatch_program_all(message);
         }
     })
     .content(
@@ -1807,11 +1756,10 @@ fn view_switch(ui: Ui, grid: Signal<bool>) -> AnyView {
 }
 
 /// Checkerboard showing around the previewed box.
-const PREVIEW_INSET: f32 = INSET;
 
 /// A 10px transparency checkerboard tile as a data URL, in light or dark
 /// chrome tones.
-fn checker_url(dark: bool) -> String {
+pub(super) fn checker_url(dark: bool) -> String {
     fn tile(a: [u8; 3], b: [u8; 3]) -> String {
         let img = image::RgbImage::from_fn(20, 20, |x, y| {
             image::Rgb(if (x / 10 + y / 10) % 2 == 0 { a } else { b })
@@ -1922,182 +1870,7 @@ fn skin_filters(ui: Ui, filter: Signal<Option<String>>, grid: Signal<bool>) -> A
 /// A live sample of the previewed skin (the active one by default) with the
 /// user's personalisation, scaled to fit the page.
 fn skin_preview(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
-    let available_width = signal(0.0_f32);
-    let key = move || {
-        // The overrides and the active skin both show up as a new `ui.skin`.
-        (
-            previewing.get(),
-            ui.chrome_dark.get(),
-            ui.settings.with(|s| s.skin.id.clone()),
-            ui.skins.with(|s| Arc::as_ptr(s) as usize),
-            ui.skin.with(|s| Arc::as_ptr(s) as usize),
-            ui.locale.get(),
-            available_width.get(),
-            (ui.shader_preview.get(), crate::ui::materials::enabled(ui)),
-        )
-    };
-    let content = dynamic(key, move |(want, _, active, _, _, locale, width, _)| {
-        let locale = *locale;
-        let id = want.clone().unwrap_or_else(|| active.clone());
-        let rows = ui.skins.get_untracked();
-        let row = rows.iter().find(|r| r.id == id).cloned();
-        let other = row
-            .as_ref()
-            .filter(|r| r.id != *active)
-            .and_then(|r| r.skin.clone().map(|s| (r.clone(), s)));
-        let is_active = other.is_none();
-        let (skin, urls) = match &other {
-            None => (ui.skin.get_untracked(), ui.asset_urls.get_untracked()),
-            Some((row, base)) => {
-                let skin = ui.settings.with_untracked(|s| {
-                    crate::skin_theme::prepare(
-                        base,
-                        &s.skin.overrides,
-                        &Default::default(),
-                        locale.tag(),
-                    )
-                });
-                (Arc::new(skin), row.image_urls.clone())
-            }
-        };
-        let d = &skin.dialogue;
-        let (w, h) = (
-            d.region[0] + d.overscan * 2.0,
-            d.region[1] + d.overscan * 2.0,
-        );
-        let scale = ((width - 2.0 * PREVIEW_INSET).max(0.0) / w).min(1.0);
-        let ctx = BoxCtx {
-            skin: skin.clone(),
-            urls,
-            source: Source::Preview,
-            preview_name: I18N.t_in(locale, "skins-preview-name"),
-        };
-        let doc = nanatype_markup::parse(&I18N.t_in(locale, "skins-preview-line")).doc;
-        let sample = dialogue::preview_box(ui, ctx, &doc);
-        // A transparency checkerboard in the chrome's tone, so boxless and
-        // translucent skins read as see-through.
-        let dark = ui.chrome_dark.get_untracked();
-        let backdrop = BackgroundImage::url(checker_url(dark));
-        let stage = widget(
-            Stack::row(0.0)
-                .width(LengthSpec::Px(w * scale))
-                .height(LengthSpec::Px(h * scale))
-                .with_layout(move |l| {
-                    l.position = PositionSpec::Relative;
-                    l.overflow_x = OverflowSpec::Hidden;
-                    l.overflow_y = OverflowSpec::Hidden;
-                }),
-        )
-        .key("skin-preview-box")
-        .children(
-            widget(
-                Stack::fill_column(0.0)
-                    .width(LengthSpec::Px(w))
-                    .height(LengthSpec::Px(h))
-                    .with_layout(move |l| {
-                        l.position = PositionSpec::Absolute;
-                        l.offset_left = Some(LengthSpec::Px(0.0));
-                        l.offset_top = Some(LengthSpec::Px(0.0));
-                        l.pointer_events = Some(PointerEventsSpec::None);
-                        l.transform = Some(crate::ui::surface::affine(0.0, 0.0, 0.0, scale));
-                        l.transform_origin = Some(TransformOrigin {
-                            x: LengthSpec::Px(0.0),
-                            y: LengthSpec::Px(0.0),
-                        });
-                    }),
-            )
-            .children(sample),
-        );
-        let stage = widget(
-            Stack::row(0.0)
-                .width(LengthSpec::Px(w * scale + 2.0 * PREVIEW_INSET))
-                .padding_xy(PREVIEW_INSET, PREVIEW_INSET)
-                .radius(nana_ui_core::RadiusTier::Md)
-                .with_layout(move |l| {
-                    l.overflow_x = OverflowSpec::Hidden;
-                    l.overflow_y = OverflowSpec::Hidden;
-                    l.paint.background_image = Some(backdrop);
-                }),
-        )
-        .children(stage);
-        let (name, description, badges) = match &row {
-            Some(r) => (r.name.clone(), r.description.clone(), badges(locale, r)),
-            None => (skin.display_name(locale.tag()), String::new(), Vec::new()),
-        };
-        let font_note = row.as_ref().and_then(|r| fallback_font_note(locale, r));
-        let apply_id = id.clone();
-        let play_id = id.clone();
-        let caption = widget(
-            Stack::bar(12.0)
-                .align(AlignSpec::Center)
-                .width(LengthSpec::Px(w * scale + 2.0 * PREVIEW_INSET)),
-        )
-        .children((
-            (!skin.dialogue.shader_effects.is_empty()
-                || skin.dialogue.decor.iter().any(|d| d.shader.is_some()))
-            .then(|| {
-                widget(
-                    Button::new(I18N.t_in(
-                        locale,
-                        if ui.shader_preview.get_untracked() {
-                            "skins-stop-effects"
-                        } else {
-                            "skins-play-effects"
-                        },
-                    ))
-                    .size(ControlSize::Small),
-                )
-                .on_cx(move |_, _: &Activate, cx| {
-                    if ui.shader_preview.get_untracked() {
-                        ui.shader_preview.set(false);
-                    } else {
-                        cx.dispatch_program_all(Msg::PrepareSkinPreview(play_id.clone()));
-                    }
-                })
-            }),
-            widget(Stack::column(4.0).grow(1.0).shrink(1.0).with_layout(|l| {
-                l.min_width = Some(LengthSpec::Px(0.0));
-            }))
-            .children((
-                widget(Stack::row(6.0).wrap(true).align(AlignSpec::Center))
-                    .children((label(name), badges)),
-                (!description.is_empty()).then(|| hint(description)),
-                font_note.map(hint),
-            )),
-            (!is_active).then(|| {
-                widget(crate::skin_theme::cta(
-                    Button::new(I18N.t_in(locale, "common-apply"))
-                        .kind(ButtonKind::Primary)
-                        .size(ControlSize::Small),
-                ))
-                .key("apply-preview")
-                .on_cx(move |_, _: &Activate, cx| {
-                    let id = apply_id.clone();
-                    cx.dispatch_program_all(edit(move |s| s.skin.id = id));
-                })
-            }),
-        ));
-        widget(Stack::column(space::LG))
-            .children((stage, caption))
-            .into_any()
-    });
-    // Measure a stable, page-width container, not the scaled sample itself.
-    // Otherwise the preview's intrinsic width can prevent it from shrinking.
-    widget(
-        Stack::column(0.0)
-            .width(LengthSpec::Fill)
-            .padding_xy(INSET, space::XL)
-            .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
-    )
-    .key("skin-preview")
-    .on(move |event: &SizeChanged| {
-        let width = (event.width - 2.0 * INSET).max(0.0);
-        if available_width.get_untracked() != width {
-            available_width.set(width);
-        }
-    })
-    .children(content)
-    .into_any()
+    super::preview::view(ui, previewing)
 }
 
 /// The overlay windows, in the matrix's column order.
@@ -2327,7 +2100,7 @@ fn windows(ui: Ui) -> AnyView {
         matrix_label(ui, "windows-size", Some("windows-reset-tip")),
         OVERLAYS.map(|kind| {
             let text = move || {
-                let size = ui.settings.with(|s| kind.overlay(s).and_then(|o| o.size));
+                let size = ui.settings.with(|s| kind.saved_size(s));
                 match size {
                     Some([w, h]) => format!("{}×{}", w.round(), h.round()),
                     None => I18N.t_in(ui.locale.get(), "windows-size-skin"),

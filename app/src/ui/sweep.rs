@@ -832,6 +832,7 @@ mod tests {
                     scale: 1.0,
                     repeat: false,
                     layout_inset: true,
+                    fill: true,
                 },
                 "file:///nonexistent-nanatype-render-test/frame.png".into(),
             )),

@@ -99,3 +99,63 @@ contrast_guard = 3.0
 source = "livechat/artwork.wgsl"
 period_s = 16
 intensity = 1
+
+
+[shaders.responsive_print]
+source = "livechat/artwork.wgsl"
+intensity = 1
+period_s = 16
+static_fallback = true
+animated = true
+params = [1]
+
+[shaders.compact_print]
+source = "livechat/artwork.wgsl"
+intensity = 1
+period_s = 16
+static_fallback = true
+animated = true
+params = [2]
+
+[shaders.minimal_print]
+source = "livechat/artwork.wgsl"
+intensity = 1
+period_s = 16
+static_fallback = true
+animated = false
+params = [2, 1]
+
+# Preserve the original print; resize its reading field, not a flattened plate.
+[dialogue.responsive]
+landscape = { decor = [{ anchor = "top_left", offset = [-56, -2], size = [42, 42], radius = 22, gradient = { angle = 135, stops = [[0, "#7ed0ff"], [1, "#ff9ec4"]] }, border_color = "#ffffff", border_width = 2, shadows = [{ color = "#1f2a3633", dy = 2, blur = 6 }], text = "♪", text_color = "#ffffff", text_size = 20 }, { anchor = "top_right", offset = [-14, 12], size = [44, 20], radius = 10, gradient = { angle = 90, stops = [[0, "#ff5c7a"], [1, "#ff8a5c"]] }, text = "LIVE", text_color = "#ffffff", text_size = 10 }] }
+portrait = { padding = [20, 24, 56, 72], box = { contour = "rounded", color = "#ffffff", border_width = 0, radius = 18, radii = [4, 18, 18, 18], width_fraction = 1, margin = [0, 0, 0, 0], shadows = [{ color = "#1f2a3633", dy = 4, blur = 14 }] }, nameplate = { color = "#00000000", text_color = "#137C9A", size = 16, radius = 0, padding = [4, 4], offset = [-8, 12], border_width = 0, anchor = "top_right", rotate = 0 }, continue = { color = "#23ade5", size = 14, anchor = "bottom_left", offset = [12, -8] }, portrait = { visible = false }, decor = [{ anchor = "bottom_left", offset = [12, -18], size = [32, 32], radius = 22, gradient = { angle = 135, stops = [[0, "#7ed0ff"], [1, "#ff9ec4"]] }, border_color = "#ffffff", border_width = 2, shadows = [{ color = "#1f2a3633", dy = 2, blur = 6 }], text = "♪", text_color = "#ffffff", text_size = 20, min_window = [200, 180] }, { anchor = "bottom_right", offset = [-14, -22], size = [44, 20], radius = 10, gradient = { angle = 90, stops = [[0, "#ff5c7a"], [1, "#ff8a5c"]] }, text = "LIVE", text_color = "#ffffff", text_size = 10, min_window = [200, 180] }], shader_effects = [{ shader = "responsive_print", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_width = 600
+portrait = false
+layout = { padding = [16, 46, 16, 16], nameplate = { color = "#00000000", text_color = "#137C9A", size = 16, radius = 0, padding = [0, 2], offset = [52, 6], border_width = 0, anchor = "top_left", rotate = 0 }, box = { contour = "rounded", color = "#ffffff", border_width = 0, radius = 18, radii = [4, 18, 18, 18], width_fraction = 1, margin = [0, 0, 0, 0], shadows = [{ color = "#1f2a3633", dy = 4, blur = 14 }] }, shader_effects = [{ shader = "compact_print", target = "artwork" }], decor = [{ anchor = "top_left", offset = [12, 5], size = [28, 28], radius = 22, gradient = { angle = 135, stops = [[0, "#7ed0ff"], [1, "#ff9ec4"]] }, border_color = "#ffffff", border_width = 2, shadows = [{ color = "#1f2a3633", dy = 2, blur = 6 }], text = "♪", text_color = "#ffffff", text_size = 20, min_window = [200, 180] }, { anchor = "top_right", offset = [-14, 12], size = [44, 20], radius = 10, gradient = { angle = 90, stops = [[0, "#ff5c7a"], [1, "#ff8a5c"]] }, text = "LIVE", text_color = "#ffffff", text_size = 10, min_window = [200, 180] }] }
+
+[[dialogue.responsive.rules]]
+max_height = 160
+portrait = false
+layout = { padding = [16, 40, 16, 16], nameplate = { color = "#00000000", text_color = "#137C9A", size = 16, radius = 0, padding = [0, 2], offset = [12, 6], border_width = 0, anchor = "top_left", rotate = 0 }, box = { contour = "rounded", color = "#ffffff", border_width = 0, radius = 18, radii = [4, 18, 18, 18], width_fraction = 1, margin = [0, 0, 0, 0], shadows = [{ color = "#1f2a3633", dy = 4, blur = 14 }] }, shader_effects = [{ shader = "compact_print", target = "artwork" }], decor = [] }
+
+[[dialogue.responsive.rules]]
+max_width = 240
+portrait = true
+layout = { padding = [12, 16, 48, 48], decor = [{ anchor = "bottom_left", offset = [12, -18], size = [32, 32], radius = 22, gradient = { angle = 135, stops = [[0, "#7ed0ff"], [1, "#ff9ec4"]] }, border_color = "#ffffff", border_width = 2, shadows = [{ color = "#1f2a3633", dy = 2, blur = 6 }], text = "♪", text_color = "#ffffff", text_size = 20, min_window = [200, 180] }, { anchor = "bottom_right", offset = [-14, -22], size = [44, 20], radius = 10, gradient = { angle = 90, stops = [[0, "#ff5c7a"], [1, "#ff8a5c"]] }, text = "LIVE", text_color = "#ffffff", text_size = 10, min_window = [200, 180] }], shader_effects = [{ shader = "responsive_print", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_height = 480
+portrait = true
+layout = { padding = [12, 16, 48, 72], decor = [{ anchor = "bottom_left", offset = [12, -18], size = [32, 32], radius = 22, gradient = { angle = 135, stops = [[0, "#7ed0ff"], [1, "#ff9ec4"]] }, border_color = "#ffffff", border_width = 2, shadows = [{ color = "#1f2a3633", dy = 2, blur = 6 }], text = "♪", text_color = "#ffffff", text_size = 20, min_window = [200, 180] }, { anchor = "bottom_right", offset = [-14, -22], size = [44, 20], radius = 10, gradient = { angle = 90, stops = [[0, "#ff5c7a"], [1, "#ff8a5c"]] }, text = "LIVE", text_color = "#ffffff", text_size = 10, min_window = [200, 180] }], shader_effects = [{ shader = "responsive_print", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_height = 240
+portrait = true
+layout = { padding = [12, 12, 12, 12], decor = [], shader_effects = [{ shader = "minimal_print", target = "artwork" }], nameplate = { visible = false, anchor = "top_right" } }
+
+[[dialogue.responsive.rules]]
+max_width = 200
+max_height = 140
+layout = { padding = [10, 12, 10, 12], nameplate = { visible = false }, portrait = { visible = false }, decor = [], shader_effects = [{ shader = "minimal_print", target = "artwork" }], box = { contour = "rounded", color = "#ffffff", border_width = 0, radius = 18, radii = [4, 18, 18, 18], width_fraction = 1, margin = [0, 0, 0, 0], shadows = [{ color = "#1f2a3633", dy = 4, blur = 14 }] } }

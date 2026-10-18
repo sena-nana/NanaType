@@ -10,6 +10,10 @@
 //! comparisons of built-in skins (self-contained manifests, no inheritance).
 //! `NANATYPE_SNAPSHOT_APPEARANCE=dark` selects neutral dark application chrome.
 //! `NANATYPE_SNAPSHOT_SCALE` captures at a physical pixel scale (default 1).
+//! `NANATYPE_PREVIEW_SCALE_AUDIT=1` captures tall/maximum logical canvases
+//! inside the settings preview, without allocating full-size desktop windows.
+//! `NANATYPE_RESPONSIVE_AUDIT=1` reuses native windows across both writing modes,
+//! static/effect/reduced states, and captures the matching settings previews.
 //! `NANATYPE_SNAPSHOT_MOTION_FRAMES=128` captures one complete artwork cycle
 //! in a single retained scene, checking the reading area, alpha and GPU caches.
 
@@ -648,6 +652,18 @@ fn render_at(registry: &SkinRegistry, out: &std::path::Path, skin_id: &str, loca
         (d.region[0] + d.overscan * 2.0) as u32,
         (d.region[1] + d.overscan * 2.0) as u32,
     );
+    if std::env::var_os("NANATYPE_RESPONSIVE_AUDIT").is_some() {
+        responsive_audit(ui, &skin, out, theme);
+        return;
+    }
+    if std::env::var_os("NANATYPE_PREVIEW_SCALE_AUDIT").is_some() {
+        preview_scale_audit(ui, out, theme);
+        return;
+    }
+    if std::env::var_os("NANATYPE_RESIZE_AUDIT").is_some() {
+        resize_audit(ui, skin.clone(), out, theme);
+        return;
+    }
     if std::env::var_os("NANATYPE_TRANSITION_AUDIT").is_some() {
         transition_audit(ui, out, w, h, theme);
         return;
@@ -1742,4 +1758,346 @@ fn transition_audit(
         "clearing the display changed completed history"
     );
     std::fs::write(out.join("transition-check.json"),serde_json::to_vec_pretty(&serde_json::json!({"entry_ms":180,"exit_ms":320,"scale":scale,"width":width,"history_width":history_width,"history_survives_clear":true,"exit_ink":ink,"finite_deadline":wake.is_some(),"advanced_effects":ui.settings.with_untracked(|s|s.skin.advanced_effects),"reduced_motion":ui.reduced_motion.get_untracked()})).unwrap()).unwrap();
+}
+
+fn responsive_audit(
+    ui: Ui,
+    skin: &nanatype_theme::Skin,
+    out: &std::path::Path,
+    theme: Arc<nana_ui::CompiledTheme>,
+) {
+    if std::env::var_os("NANATYPE_RESPONSIVE_LONG_TEXT").is_some() {
+        let text = format!("[at=1001 name=星野ほたる avatar=blob:bili-face-1001] [sticker=nana/heart]{}", "中文竖排：你好，世界！Hello 2026。[b]字体[/b]与[color=#E8505B]颜色[/color]。[ruby=かんじ]漢字[/ruby]。\n".repeat(12));
+        let doc = Arc::new(parse(&text).doc);
+        ui.display.update(|view| {
+            let view = Arc::make_mut(view);
+            view.reveal = nanatype_core::Reveal::full(doc.unit_count() as u32);
+            view.doc = doc;
+            view.reply = None;
+            view.revision += 1;
+        });
+    }
+    let requested = |name: &str| {
+        !std::env::var("NANATYPE_SNAPSHOT_VIEWS")
+            .is_ok_and(|views| !views.split(',').any(|v| v.trim() == name))
+    };
+    let (mut windows, mut previews) = (0, 0);
+    let default = [
+        (skin.dialogue.region[0] + 2. * skin.dialogue.overscan) as u32,
+        (skin.dialogue.region[1] + 2. * skin.dialogue.overscan) as u32,
+    ];
+    let id = DocumentId::new(1).unwrap();
+    let mut doc = RuntimeDocument::new(id);
+    doc.context_mut().set_theme_tokens(theme.clone()).unwrap();
+    doc.context_mut()
+        .mount_view_root(id, move || dialogue::display_window(ui))
+        .unwrap();
+    let mut session = RuntimeAgentSession::new(doc, default[0], default[1]).unwrap();
+    session.set_gpu_renderers(nanatype::ui::sweep::renderers());
+    session.set_clear(Some([0.; 4]));
+    for (state, enabled, reduced) in [
+        ("static", false, false),
+        ("effects", true, false),
+        ("reduced", true, true),
+    ] {
+        ui.settings
+            .update(|s| Arc::make_mut(s).skin.advanced_effects = enabled);
+        ui.reduced_motion.set(reduced);
+        for (case, [w, h]) in [
+            ("default", default),
+            ("narrow", [300, 240]),
+            ("portrait", [300, 1200]),
+            ("tall", [800, 2400]),
+            ("minimum", [160, 96]),
+            ("wide-short", [1200, 120]),
+            ("max-height", [160, 8192]),
+            ("max-width", [8192, 96]),
+            ("square", [400, 400]),
+            ("portrait-boundary", [400, 401]),
+        ] {
+            let name = format!("responsive-{state}-{case}");
+            if !requested(&name) {
+                continue;
+            }
+            let scale = (1080. / w.max(h) as f32).min(1.);
+            session.set_viewport(w, h, scale).unwrap();
+            session.flush().unwrap();
+            if std::env::var_os("NANATYPE_RESPONSIVE_LONG_TEXT").is_some() {
+                if let Some(node) = ui.text_node.get_untracked() {
+                    let world = session.document().context().world();
+                    if let Some((_, layout)) = world.text_layout(node) {
+                        if layout.is_vertical() {
+                            let body = world.layout_box(node).unwrap();
+                            let port = world
+                                .layout_box(ui.text_port.get_untracked().unwrap())
+                                .unwrap();
+                            assert!(
+                                body.width + 0.5 >= layout.physical_size().0,
+                                "{name}: column stack is truncated"
+                            );
+                            assert!(
+                                (body.height - port.height).abs() < 1.,
+                                "{name}: wrapping height differs from viewport"
+                            );
+                            assert!(
+                                (body.x + body.width - port.x - port.width).abs() < 1.,
+                                "{name}: first column is not right aligned"
+                            );
+                            if let Some(first) = layout.objects.first() {
+                                let rect = layout.page_rect(first.rect, body.width);
+                                assert!(
+                                    body.x + rect.x >= port.x
+                                        && body.x + rect.x + rect.width <= port.x + port.width + 1.,
+                                    "{name}: leading inline object was clipped"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            // Static authored backgrounds also prepare their GPU pipeline lazily.
+            let _ = session.screenshot_rgba().unwrap();
+            let started = std::time::Instant::now();
+            while nanatype::ui::shader_effects::cache_stats().pending > 0
+                && started.elapsed().as_secs() < 10
+            {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            if !enabled || reduced {
+                let first = nanatype::clock::capture_at(0, || session.screenshot_rgba().unwrap().1);
+                let later =
+                    nanatype::clock::capture_at(123_456, || session.screenshot_rgba().unwrap().1);
+                // Native gradient avatars can differ by two byte levels at
+                // antialiased edges between GPU submissions. Actual movement
+                // or a changed print must still fail, without logging whole frames.
+                let largest_delta = first
+                    .iter()
+                    .zip(&later)
+                    .map(|(a, b)| a.abs_diff(*b))
+                    .max()
+                    .unwrap_or(0);
+                assert!(
+                    largest_delta <= 2,
+                    "{name}: frozen artwork changed with time (maximum channel delta {largest_delta})"
+                );
+                if case == "portrait" && skin.meta.id == "nanatype.citrus" {
+                    let pixel_width = (w as f32 * scale).round() as usize;
+                    let sample = |x: f32, y: f32| {
+                        let index = ((y * scale).round() as usize * pixel_width
+                            + (x * scale).round() as usize)
+                            * 4;
+                        &first[index..index + 3]
+                    };
+                    let left = sample(skin.dialogue.overscan + 12., h as f32 * 0.6);
+                    let middle = sample(w as f32 * 0.37, h as f32 * 0.6);
+                    assert!(
+                        left.iter().zip(middle).all(|(a, b)| a.abs_diff(*b) < 12),
+                        "{name}: the portrait still has the extra left wrapper stripe"
+                    );
+                }
+                if case == "portrait" && skin.meta.id == "nanatype.parchment" {
+                    let pixel_width = (w as f32 * scale).round() as usize;
+                    let mut difference = 0u64;
+                    let mut samples = 0u64;
+                    for y in 400..600usize {
+                        for x in 45..80usize {
+                            let index = (y * pixel_width + x) * 4;
+                            for channel in 0..3 {
+                                difference += u64::from(
+                                    first[index + channel].abs_diff(first[index + 4 + channel]),
+                                );
+                                samples += 1;
+                            }
+                        }
+                    }
+                    assert!(
+                        difference as f64 / samples as f64 > 0.45,
+                        "{name}: the original paper fibres were replaced by a flat gradient"
+                    );
+                }
+                assert!(
+                    !nanatype::ui::shader_effects::animating(ui),
+                    "{name}: static artwork requests continuous frames"
+                );
+            }
+            session
+                .screenshot_png(&out.join(format!("{name}.png")))
+                .unwrap();
+            windows += 1;
+        }
+    }
+    ui.page.set(settings::Page::Skins);
+    ui.skins.update(|rows| {
+        if let Some(row) = Arc::make_mut(rows)
+            .iter_mut()
+            .find(|r| r.id == skin.meta.id)
+        {
+            row.skin = Some(Arc::new(skin.clone()));
+        }
+    });
+    ui.reduced_motion.set(false);
+    for (case, [w, h]) in [
+        ("landscape", [920, 220]),
+        ("portrait", [300, 1200]),
+        ("maximum", [8192, 8192]),
+    ] {
+        let skin_id = ui.settings.with_untracked(|s| s.skin.id.clone());
+        let mut draft = settings::preview::Draft::load(&ui.settings.get_untracked(), &skin_id, ui);
+        draft.display.width = w.to_string();
+        draft.display.height = h.to_string();
+        if case == "maximum" {
+            draft.display.size = "200".into();
+        }
+        ui.skin_drafts.update(|d| {
+            d.insert(skin_id.clone(), draft);
+        });
+        for (mode, play) in [("static", false), ("effects", true)] {
+            let name = format!("responsive-preview-{mode}-{case}");
+            if !requested(&name) {
+                continue;
+            }
+            ui.shader_preview.set(play);
+            shot(&name, out, 920, 1000, theme.clone(), |doc, id| {
+                doc.context_mut()
+                    .mount_view_root(id, move || settings::settings_window(ui))
+                    .unwrap();
+            });
+            previews += 1;
+        }
+    }
+    println!(
+        "responsive: {} passed {windows} window and {previews} settings captures",
+        skin.meta.id
+    );
+}
+
+fn preview_scale_audit(ui: Ui, out: &std::path::Path, theme: Arc<nana_ui::CompiledTheme>) {
+    ui.page.set(settings::Page::Skins);
+    let id = ui.settings.with_untracked(|s| s.skin.id.clone());
+    for (name, [w, h], font) in [
+        ("tall", [300, 1200], 48),
+        ("very-tall", [800, 2400], 48),
+        ("maximum-height", [160, 8192], 200),
+        ("maximum-square", [8192, 8192], 200),
+        ("maximum-width", [8192, 96], 48),
+    ] {
+        let mut draft = settings::preview::Draft::load(&ui.settings.get_untracked(), &id, ui);
+        for pane in [&mut draft.display, &mut draft.history] {
+            pane.width = w.to_string();
+            pane.height = h.to_string();
+            pane.size = font.to_string();
+        }
+        ui.skin_drafts.update(|drafts| {
+            drafts.insert(id.clone(), draft);
+        });
+        for history in [false, true] {
+            ui.skin_preview_history.set(history);
+            let mode = if history { "history" } else { "display" };
+            shot(
+                &format!("preview-{mode}-{name}"),
+                out,
+                920,
+                1000,
+                theme.clone(),
+                |doc, id| {
+                    doc.context_mut()
+                        .mount_view_root(id, move || settings::settings_window(ui))
+                        .unwrap();
+                },
+            );
+        }
+    }
+}
+
+/// All-skin native layout captures at independently varied client sizes.
+fn resize_audit(
+    ui: Ui,
+    base: Arc<nanatype_theme::Skin>,
+    out: &std::path::Path,
+    theme: Arc<nana_ui::CompiledTheme>,
+) {
+    use nanatype_settings::{SkinPersonalization, SurfacePersonalization};
+    let default_display = [
+        base.dialogue.region[0] + 2.0 * base.dialogue.overscan,
+        base.dialogue.region[1] + 2.0 * base.dialogue.overscan,
+    ];
+    let default_history = [base.history.width, base.history.height];
+    for (name, display, history_size, font) in [
+        ("default", default_display, default_history, None),
+        ("narrow", [300.0, 240.0], [300.0, 560.0], None),
+        ("minimum", [160.0, 96.0], [160.0, 96.0], None),
+        ("wide-short", [1200.0, 120.0], [1200.0, 120.0], None),
+        ("large-font", [300.0, 240.0], [300.0, 560.0], Some(48.0)),
+    ] {
+        let mut settings = (*ui.settings.get_untracked()).clone();
+        let p = SkinPersonalization {
+            display: SurfacePersonalization {
+                size: Some(display),
+                text_size: font,
+                line_height: font.map(|_| 1.8),
+                ..Default::default()
+            },
+            history: SurfacePersonalization {
+                size: Some(history_size),
+                text_size: font,
+                line_height: font.map(|_| 1.8),
+                ..Default::default()
+            },
+        };
+        settings
+            .skin
+            .personalizations
+            .insert(settings.skin.id.clone(), p);
+        let skin = Arc::new(nanatype::skin_theme::personalized(
+            &base,
+            &settings,
+            &settings.skin.id,
+        ));
+        ui.settings.set(Arc::new(settings));
+        ui.skin.set(skin);
+        shot(
+            &format!("display-{name}"),
+            out,
+            display[0] as u32,
+            display[1] as u32,
+            theme.clone(),
+            |doc, id| {
+                doc.context_mut()
+                    .mount_view_root(id, move || dialogue::display_window(ui))
+                    .unwrap();
+            },
+        );
+        shot(
+            &format!("history-{name}"),
+            out,
+            history_size[0] as u32,
+            history_size[1] as u32,
+            theme.clone(),
+            |doc, id| {
+                doc.context_mut()
+                    .mount_view_root(id, move || history::history_window(ui))
+                    .unwrap();
+            },
+        );
+    }
+    ui.page.set(settings::Page::Skins);
+    for history_mode in [false, true] {
+        ui.skin_preview_history.set(history_mode);
+        shot(
+            if history_mode {
+                "preview-history"
+            } else {
+                "preview-display"
+            },
+            out,
+            920,
+            1700,
+            theme.clone(),
+            |doc, id| {
+                doc.context_mut()
+                    .mount_view_root(id, move || settings::settings_window(ui))
+                    .unwrap();
+            },
+        );
+    }
 }

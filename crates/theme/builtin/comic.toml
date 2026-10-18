@@ -86,3 +86,58 @@ avatar = { shape = "circle", size = 40, ring_color = "#000000", ring_width = 3 }
 
 [history.text]
 color = "#111111"
+
+
+[shaders.responsive_print]
+source = "comic/artwork.wgsl"
+intensity = 1
+period_s = 16
+static_fallback = true
+animated = false
+params = [1]
+
+[shaders.compact_print]
+source = "comic/artwork.wgsl"
+intensity = 1
+period_s = 16
+static_fallback = true
+animated = false
+params = [2]
+
+[shaders.minimal_print]
+source = "comic/artwork.wgsl"
+intensity = 1
+period_s = 16
+static_fallback = true
+animated = false
+params = [2, 1]
+
+# Preserve the original print; resize its reading field, not a flattened plate.
+[dialogue.responsive]
+landscape = { decor = [] }
+portrait = { padding = [20, 24, 56, 72], box = { contour = "comic", color = "#ffffff", border_color = "#000000", border_width = 4, radius = 14, margin = [0, 8, 30, 0], shadows = [{ color = "#000000", dx = 8, dy = 8 }], width_fraction = 1 }, nameplate = { contour = "ribbon", color = "#ffd400", text_color = "#111111", radius = 4, padding = [4, 4], offset = [-8, 12], border_color = "#000000", border_width = 3, rotate = 0, shadows = [{ color = "#000000", dx = 4, dy = 4 }], gradient = { angle = 180, stops = [[0, "#FFDE40"], [1, "#FFCA00"]] }, anchor = "top_right" }, continue = { glyph = "▶", color = "#111111", motion = "pulse", period_s = 0.8, offset = [12, -8], anchor = "bottom_left" }, portrait = { visible = false }, decor = [], shader_effects = [{ shader = "responsive_print", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_width = 600
+portrait = false
+layout = { padding = [16, 40, 16, 16], nameplate = { contour = "ribbon", color = "#ffd400", text_color = "#111111", radius = 4, padding = [14, 3], offset = [12, 4], border_color = "#000000", border_width = 3, rotate = 0, shadows = [{ color = "#000000", dx = 4, dy = 4 }], gradient = { angle = 180, stops = [[0, "#FFDE40"], [1, "#FFCA00"]] }, anchor = "top_left" }, box = { contour = "comic", color = "#ffffff", border_color = "#000000", border_width = 4, radius = 14, margin = [0, 8, 30, 0], shadows = [{ color = "#000000", dx = 8, dy = 8 }], width_fraction = 1 }, shader_effects = [{ shader = "compact_print", target = "artwork" }], decor = [] }
+
+[[dialogue.responsive.rules]]
+max_height = 160
+portrait = false
+layout = { padding = [16, 40, 16, 16], nameplate = { contour = "ribbon", color = "#ffd400", text_color = "#111111", radius = 4, padding = [14, 3], offset = [12, 4], border_color = "#000000", border_width = 3, rotate = 0, shadows = [{ color = "#000000", dx = 4, dy = 4 }], gradient = { angle = 180, stops = [[0, "#FFDE40"], [1, "#FFCA00"]] }, anchor = "top_left" }, box = { contour = "comic", color = "#ffffff", border_color = "#000000", border_width = 4, radius = 14, margin = [0, 0, 0, 0], shadows = [{ color = "#000000", dx = 8, dy = 8 }], width_fraction = 1 }, shader_effects = [{ shader = "compact_print", target = "artwork" }], decor = [] }
+
+[[dialogue.responsive.rules]]
+max_width = 240
+portrait = true
+layout = { padding = [12, 16, 48, 48], decor = [], shader_effects = [{ shader = "responsive_print", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_height = 480
+portrait = true
+layout = { padding = [12, 16, 48, 24], decor = [], shader_effects = [{ shader = "responsive_print", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_width = 200
+max_height = 140
+layout = { padding = [10, 12, 10, 12], nameplate = { visible = false }, portrait = { visible = false }, decor = [], shader_effects = [{ shader = "minimal_print", target = "artwork" }], box = { contour = "comic", color = "#ffffff", border_color = "#000000", border_width = 4, radius = 14, margin = [0, 0, 0, 0], shadows = [{ color = "#000000", dx = 8, dy = 8 }], width_fraction = 1 } }

@@ -19,6 +19,9 @@ fn decal(p:vec2<f32>,origin:vec2<f32>,extent:vec2<f32>)->vec4<f32> {
 }
 fn effect(i:EffectInput)->vec4<f32> {
  let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
+ // Portrait/compact instances reuse the original ink and material in logical pixels.
+ let portrait=i.params0.x>.5 && i.params0.x<1.5;
+ let details=i.params0.y<.5;
  let q=p-s*.5; let b=s*.5-vec2(1.);
  let opening=exp(-i.line_age*3.); let speaker=exp(-i.speaker_age*3.);
 // Enamel game window: stepped corners, three bevel bands and inset rivets.
@@ -31,12 +34,14 @@ fn effect(i:EffectInput)->vec4<f32> {
  c=mix(c,rgb(121.,174.,240.),top*.65);
  let studs=max(aa(max(abs(p.x-12.),abs(p.y-s.y+12.))-2.),aa(max(abs(p.x-s.x+12.),abs(p.y-12.))-2.));
  c=mix(c,rgb(225.,238.,255.),studs*.8);
+ if details {
  // The READY crystal belongs to the game's top-right bezel. It only
  // takes two pixel-grid positions while waiting for the next page.
  let bob=select(0.,2.*step(0.,sin(t*4.)),i.waiting>.5);
- let crystal=p-vec2(s.x-36.,13.+bob);
+ let crystal=p-select(vec2(s.x-36.,13.+bob),vec2(25.,s.y-25.+bob),portrait);
  let diamond=aa(abs(crystal.x)+abs(crystal.y)-4.5);
  c=mix(c,rgb(168.,205.,255.),diamond*.95);
  c=mix(c,rgb(244.,247.,255.),diamond*step(crystal.x,0.)*.6);
+ }
  return vec4(c,aa(edge));
 }

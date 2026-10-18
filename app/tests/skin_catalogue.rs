@@ -2,15 +2,19 @@
 use nanatype::{assets, ui};
 use nanatype_i18n::Locale;
 use nanatype_theme::{Localized, SkinRegistry, TomlTable};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+// These cases intentionally inspect the process-wide immutable image cache.
+static PICKER_CACHE: Mutex<()> = Mutex::new(());
 
 #[test]
 fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
+    let _cache = PICKER_CACHE.lock().unwrap();
     let root = std::env::temp_dir().join(format!("nanatype-catalogue-{}", std::process::id()));
     nanatype::services::media::init(&root.join("media")).unwrap();
     let mut registry = SkinRegistry::new(Some(root.join("skins")), env!("CARGO_PKG_VERSION"));
     let first = ui::skin_rows(&registry, Locale::ZhCn);
-    assert_eq!(first.len(), 25);
+    assert_eq!(first.len(), registry.entries().len());
     for (entry, row) in registry.entries().iter().zip(&first) {
         let skin = entry.skin.as_ref().unwrap();
         assert!(skin.shader_programs.is_empty());
@@ -54,7 +58,7 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
     let active = registry.load("nanatype.halo").unwrap().skin;
     let ui = ui::Ui::new(Arc::new(Default::default()), active.clone(), Locale::ZhCn);
     ui.skins.set(Arc::new(second));
-    ui::prepare_skin_preview(ui, &registry, "nanatype.forest").unwrap();
+    ui::prepare_skin_preview(ui, &registry, "nanatype.forest", true).unwrap();
     assert!(ui.shader_preview.get_untracked());
     assert!(Arc::ptr_eq(&ui.skin.get_untracked(), &active));
     assert_eq!(
@@ -79,16 +83,16 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
             .is_empty()
     );
     ui.reduced_motion.set(true);
-    ui::prepare_skin_preview(ui, &registry, "nanatype.tidal").unwrap();
+    ui::prepare_skin_preview(ui, &registry, "nanatype.tidal", true).unwrap();
     assert!(!ui.shader_preview.get_untracked());
     assert!(
         registry
             .entry("nanatype.tidal")
             .unwrap()
             .prepared_skin()
-            .is_none()
+            .is_some_and(|skin| skin.shaders["artwork"].static_fallback)
     );
-    ui::prepare_skin_preview(ui, &registry, "nanatype.crayon").unwrap();
+    ui::prepare_skin_preview(ui, &registry, "nanatype.crayon", true).unwrap();
     assert_eq!(
         registry
             .entry("nanatype.crayon")
@@ -97,7 +101,7 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
             .unwrap()
             .material_programs
             .len(),
-        5
+        6
     );
     assert!(!ui::shader_effects::preview_animating(ui));
     assert!(
@@ -143,7 +147,7 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
     text.push_str("\n[dialogue]\nregion = [900, 260]\n");
     std::fs::write(path, text).unwrap();
     ui.reduced_motion.set(false);
-    ui::prepare_skin_preview(ui, &registry, "user.forest").unwrap();
+    ui::prepare_skin_preview(ui, &registry, "user.forest", true).unwrap();
     assert_eq!(
         ui.skins.with_untracked(|rows| rows
             .iter()
@@ -198,4 +202,38 @@ fn material_input_textures_are_not_loaded_by_static_previews() {
     let urls = assets::skin_preview_urls(&skin, &nanatype_theme::DirFiles::new(root));
     assert!(urls.contains_key("skin:fallback.png"));
     assert!(!urls.contains_key("skin:input.png"));
+}
+
+#[test]
+fn selecting_static_artwork_prepares_only_the_preview_and_keeps_motion_off() {
+    let _cache = PICKER_CACHE.lock().unwrap();
+    let registry = SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+    let active = registry.load("nanatype.halo").unwrap().skin;
+    let ui = ui::Ui::new(Arc::new(Default::default()), active.clone(), Locale::ZhCn);
+    ui.skins
+        .set(Arc::new(ui::skin_rows(&registry, Locale::ZhCn)));
+    for id in ["nanatype.parchment", "nanatype.sakura", "nanatype.ink"] {
+        ui::prepare_skin_preview(ui, &registry, id, false).unwrap();
+        assert!(
+            !ui.shader_preview.get_untracked(),
+            "{id}: selection started motion"
+        );
+        assert!(registry.entry(id).unwrap().prepared_skin().is_some());
+        let preview = ui.skins.with_untracked(|rows| {
+            rows.iter()
+                .find(|r| r.id == id)
+                .unwrap()
+                .skin
+                .clone()
+                .unwrap()
+        });
+        let portrait = nanatype_theme::responsive_dialogue(&preview, [300., 1200.]);
+        let effect = &portrait.dialogue.shader_effects[0];
+        assert!(portrait.shader_programs.contains_key(&effect.shader));
+        assert!(Arc::ptr_eq(&ui.skin.get_untracked(), &active));
+    }
+    ui::prepare_skin_preview(ui, &registry, "nanatype.sakura", true).unwrap();
+    assert!(ui.shader_preview.get_untracked());
+    ui::prepare_skin_preview(ui, &registry, "nanatype.sakura", false).unwrap();
+    assert!(!ui.shader_preview.get_untracked());
 }

@@ -19,6 +19,9 @@ fn decal(p:vec2<f32>,origin:vec2<f32>,extent:vec2<f32>)->vec4<f32> {
 }
 fn effect(i:EffectInput)->vec4<f32> {
  let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
+ // Portrait/compact instances reuse the original ink and material in logical pixels.
+ let portrait=i.params0.x>.5 && i.params0.x<1.5;
+ let details=i.params0.y<.5;
  let q=p-s*.5; let b=s*.5-vec2(1.);
  let opening=exp(-i.line_age*3.); let speaker=exp(-i.speaker_age*3.);
 // A data packet follows the actual etched PCB route, then docks.
@@ -26,18 +29,20 @@ fn effect(i:EffectInput)->vec4<f32> {
  var c=mix(rgb(10.,18.,32.),rgb(19.,33.,53.),1.-i.uv.y);
  c=mix(c,rgb(92.,184.,255.),line(edge+1.,.7)*.8);
  c=mix(c,rgb(47.,83.,119.),line(edge+7.,.4)*.8);
- let a=vec2(s.x-102.,12.); let z=vec2(s.x-54.,21.);
- let trace=max(segment(p,a,vec2(s.x-72.,12.),.65),max(segment(p,vec2(s.x-72.,12.),z,.65),segment(p,z,vec2(s.x-18.,21.),.65)));
+ if details {
+ let a=select(vec2(s.x-102.,12.),vec2(18.,s.y-31.),portrait); let turn=select(vec2(s.x-72.,12.),vec2(48.,s.y-31.),portrait); let z=select(vec2(s.x-54.,21.),vec2(66.,s.y-22.),portrait); let end=select(vec2(s.x-18.,21.),vec2(102.,s.y-22.),portrait); let dock=select(vec2(s.x-22.,21.),vec2(98.,s.y-22.),portrait);
+ let trace=max(segment(p,a,turn,.65),max(segment(p,turn,z,.65),segment(p,z,end,.65)));
  c=mix(c,rgb(92.,184.,255.),trace*.65);
  c=mix(c,rgb(180.,149.,245.),ring(p-a,2.6,.6)*.8);
  let travel=clamp((i.phase-.12)/.56,0.,1.);
- var packet=mix(a,vec2(s.x-72.,12.),clamp(travel*3.,0.,1.));
- if(travel>1./3.) { packet=mix(vec2(s.x-72.,12.),z,clamp(travel*3.-1.,0.,1.)); }
- if(travel>2./3.) { packet=mix(z,vec2(s.x-22.,21.),clamp(travel*3.-2.,0.,1.)); }
+ var packet=mix(a,turn,clamp(travel*3.,0.,1.));
+ if(travel>1./3.) { packet=mix(turn,z,clamp(travel*3.-1.,0.,1.)); }
+ if(travel>2./3.) { packet=mix(z,dock,clamp(travel*3.-2.,0.,1.)); }
  let envelope=smoothstep(.10,.15,i.phase)*(1.-smoothstep(.73,.82,i.phase));
  c=mix(c,rgb(181.,230.,255.),disc(p-packet,1.75)*envelope);
- c=mix(c,rgb(92.,184.,255.),ring(p-vec2(s.x-22.,21.),2.8,.55)*.65);
+ c=mix(c,rgb(92.,184.,255.),ring(p-dock,2.8,.55)*.65);
  let bracket=max(segment(p,vec2(19.,2.),vec2(19.,18.),1.),segment(p,vec2(19.,18.),vec2(34.,18.),1.));
  c=mix(c,rgb(128.,210.,255.),bracket*(.75+.2*speaker));
+ }
  return vec4(c,aa(edge));
 }

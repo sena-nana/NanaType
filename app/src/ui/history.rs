@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use nana_ui::runtime::view::{AnyView, IntoView, Transition, computed, dynamic, each, widget};
-use nana_ui::runtime::{NodeStyle, ScrollAxes, ScrollView, Stack, Text};
+use nana_ui::runtime::{NodeStyle, ScrollAxes, ScrollView, SizeChanged, Stack, Text};
 use nana_ui_core::{
     AlignSpec, BackgroundImage, CssGradient, Easing, GradientStop, LengthSpec, LinearGradient,
     OverflowSpec, PointerEventsSpec, PositionSpec,
@@ -118,14 +118,36 @@ fn initial(name: &str) -> String {
 }
 
 /// Width available to a row's text column.
-fn column_width(skin: &nanatype_theme::Skin, settings: &nanatype_settings::Settings) -> f32 {
-    let (w, _) = crate::windows::size_of(crate::windows::WindowKind::History, skin, settings);
+fn column_width(
+    ui: Ui,
+    skin: &nanatype_theme::Skin,
+    settings: &nanatype_settings::Settings,
+) -> f32 {
+    let w = viewport_width(ui, skin, settings);
     let avatar = if settings.history.show_avatar && skin.history.avatar.shape != AvatarShape::None {
         skin.history.avatar.size + 10.0
     } else {
         0.0
     };
-    (w - list_inset(&skin.history) - avatar).max(80.0)
+    (w - list_inset(&skin.history) - avatar).max(1.0)
+}
+
+fn viewport_width(ui: Ui, skin: &Skin, settings: &nanatype_settings::Settings) -> f32 {
+    let measured = ui.history_width.get();
+    if measured > 0.0 {
+        measured
+    } else {
+        crate::windows::size_of(crate::windows::WindowKind::History, skin, settings).0
+    }
+}
+
+fn viewport_height(ui: Ui, skin: &Skin, settings: &nanatype_settings::Settings) -> f32 {
+    let measured = ui.history_height.get();
+    if measured > 0.0 {
+        measured
+    } else {
+        crate::windows::size_of(crate::windows::WindowKind::History, skin, settings).1
+    }
 }
 
 /// Fade the entire bubble artwork as one layer, leaving its text at full
@@ -236,7 +258,15 @@ fn message_view(ui: Ui, key: u64, follows: bool) -> AnyView {
     if fitted {
         let k = Arc::make_mut(&mut skin);
         k.history.avatar.size = k.history.avatar.size.min(36.0);
-        k.history.text.size = k.history.text.size.clamp(14.0, 17.0);
+        if settings
+            .skin
+            .personalizations
+            .get(&settings.skin.id)
+            .and_then(|p| p.history.text_size)
+            .is_none()
+        {
+            k.history.text.size = k.history.text.size.clamp(14.0, 17.0);
+        }
     }
     let h = skin.history.clone();
     let backdrop = h
@@ -246,22 +276,21 @@ fn message_view(ui: Ui, key: u64, follows: bool) -> AnyView {
     let exposed = backdrop.is_none();
     let show_avatar = settings.history.show_avatar && h.avatar.shape != AvatarShape::None;
     let col_w = if fitted {
-        let width =
-            crate::windows::size_of(crate::windows::WindowKind::History, &skin, &settings).0 - 38.0;
+        let width = viewport_width(ui, &skin, &settings) - 38.0;
         (width
             - if show_avatar {
                 h.avatar.size + 10.0
             } else {
                 0.0
             })
-        .max(60.0)
+        .max(1.0)
     } else {
-        column_width(&skin, &settings)
+        column_width(ui, &skin, &settings)
     };
     let Some(row) = source.get(ui) else {
         return widget(Stack::row(0.0)).into_any();
     };
-    let inline = h.layout == HistoryLayout::Inline && !fitted;
+    let inline = h.layout == HistoryLayout::Inline && !fitted && col_w >= 160.0;
     // Echo-Live's log names every line; bubble lists group.
     let follows = follows && !inline;
     let size = h.avatar.size;
@@ -515,7 +544,7 @@ fn message_view(ui: Ui, key: u64, follows: bool) -> AnyView {
         } else {
             0.0
         };
-        (col_w - name_w - time_w).max(40.0)
+        (col_w - name_w - time_w).max(1.0)
     } else {
         col_w
     };
@@ -607,6 +636,7 @@ fn message_view(ui: Ui, key: u64, follows: bool) -> AnyView {
         let header = (name.is_some() || time.is_some()).then(|| {
             widget(
                 Stack::row(6.0)
+                    .wrap(col_w < 180.0)
                     .align(AlignSpec::Center)
                     .width(LengthSpec::Fill),
             )
@@ -742,7 +772,12 @@ pub fn history_window(ui: Ui) -> impl IntoView {
     let key = move || {
         let skin = ui.skin.get();
         let settings = ui.settings.get();
-        (Arc::as_ptr(&skin) as usize, Arc::as_ptr(&settings) as usize)
+        (
+            Arc::as_ptr(&skin) as usize,
+            Arc::as_ptr(&settings) as usize,
+            ui.history_width.get(),
+            ui.history_height.get(),
+        )
     };
     dynamic(key, move |_| {
         let skin = super::materials::render_skin(ui, ui.skin.get_untracked());
@@ -778,11 +813,13 @@ pub fn history_window(ui: Ui) -> impl IntoView {
             None => list,
         };
         let h = &skin.history;
-        let [mt, mr, mb, ml] = h
+        let height = viewport_height(ui, &skin, &ui.settings.get_untracked());
+        let compact = height < 180.0;
+        let [mut mt, mr, mut mb, ml] = h
             .panel
             .as_ref()
             .map_or(if presentation { [0.0; 4] } else { [8.0; 4] }, |p| p.margin);
-        let [pl, pt, pr, pb] = h.panel.as_ref().map_or(
+        let [pl, mut pt, pr, mut pb] = h.panel.as_ref().map_or(
             if presentation {
                 [6.0, 16.0, 6.0, 16.0]
             } else {
@@ -790,6 +827,12 @@ pub fn history_window(ui: Ui) -> impl IntoView {
             },
             |p| p.padding,
         );
+        if compact {
+            mt = mt.min(4.0);
+            mb = mb.min(4.0);
+            pt = pt.min(4.0);
+            pb = pb.min(4.0);
+        }
         let panel_surface = Surface::history_panel(&skin);
         let decor = |layer: DecorLayer| -> Vec<AnyView> {
             h.decor
@@ -800,18 +843,45 @@ pub fn history_window(ui: Ui) -> impl IntoView {
                         ui.asset_urls
                             .with_untracked(|urls| urls.get(&format!("skin:{path}")).cloned())
                     });
-                    dialogue::decor(&skin, d, None::<fn() -> bool>, image)
+                    let mut decor = d.clone();
+                    if compact {
+                        let extent = decor
+                            .size
+                            .iter()
+                            .filter_map(|v| match v {
+                                nanatype_theme::Len::Px(v) => Some(*v),
+                                _ => None,
+                            })
+                            .fold(1.0_f32, f32::max);
+                        let scale = (height * 0.25 / extent).min(1.0);
+                        for v in &mut decor.size {
+                            if let nanatype_theme::Len::Px(v) = v {
+                                *v *= scale;
+                            }
+                        }
+                        decor.offset = decor.offset.map(|v| v * scale);
+                        decor.text_size *= scale;
+                    }
+                    dialogue::decor(&skin, &decor, None::<fn() -> bool>, image)
                 })
                 .collect()
         };
         let (below, above) = (decor(DecorLayer::Below), decor(DecorLayer::Above));
-        let title = h.title.as_ref().map(|t| title_view(&skin, t));
+        let title = h
+            .title
+            .as_ref()
+            .filter(|_| !compact)
+            .map(|t| title_view(&skin, t));
         widget(Stack::fill_column(0.0).with_layout(move |l| {
             l.padding_top = Some(LengthSpec::Px(mt));
             l.padding_right = Some(LengthSpec::Px(mr));
             l.padding_bottom = Some(LengthSpec::Px(mb));
             l.padding_left = Some(LengthSpec::Px(ml));
         }))
+        .on(move |e: &SizeChanged| {
+            ui.history_width.set_if_changed(e.width);
+            ui.history_height.set_if_changed(e.height);
+        })
         .children(
             widget(
                 Surface::optional_stack(panel_surface.as_ref(), Stack::fill_column(0.0))

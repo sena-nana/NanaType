@@ -26,6 +26,9 @@ pub struct ShaderSpec {
     pub intensity: f32,
     pub textures: Vec<String>,
     pub params: Vec<f32>,
+    /// Render the same geometry with a frozen clock when motion is disabled.
+    pub static_fallback: bool,
+    pub animated: bool,
 }
 impl Default for ShaderSpec {
     fn default() -> Self {
@@ -35,6 +38,8 @@ impl Default for ShaderSpec {
             intensity: 0.18,
             textures: vec![],
             params: vec![],
+            static_fallback: false,
+            animated: true,
         }
     }
 }
@@ -373,6 +378,21 @@ pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec
             "at most four shader instances per box".into(),
         ));
     }
+    if let Some(responsive) = &skin.dialogue.responsive {
+        for layout in responsive.layouts() {
+            let effects = layout
+                .shader_effects
+                .as_ref()
+                .unwrap_or(&skin.dialogue.shader_effects);
+            let decor = layout.decor.as_ref().unwrap_or(&skin.dialogue.decor);
+            if effects.len() + decor.iter().filter(|d| d.shader.is_some()).count() > 4 {
+                errors.push((
+                    "dialogue.responsive".into(),
+                    "at most four shader instances per layout".into(),
+                ));
+            }
+        }
+    }
     if skin.shaders.len() > 16 {
         errors.push((
             "shaders".into(),
@@ -515,6 +535,19 @@ pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec
         .iter()
         .map(|e| &e.shader)
         .chain(skin.dialogue.decor.iter().filter_map(|d| d.shader.as_ref()))
+        .chain(
+            skin.dialogue
+                .responsive
+                .iter()
+                .flat_map(|r| r.layouts())
+                .flat_map(|l| {
+                    l.shader_effects
+                        .iter()
+                        .flatten()
+                        .map(|e| &e.shader)
+                        .chain(l.decor.iter().flatten().filter_map(|d| d.shader.as_ref()))
+                }),
+        )
     {
         if !skin.shaders.contains_key(id) {
             errors.push((

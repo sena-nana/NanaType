@@ -17,7 +17,9 @@ mod load;
 mod manifest;
 mod material;
 mod registry;
+mod responsive;
 pub use material::*;
+pub use responsive::*;
 mod shader;
 pub use shader::*;
 

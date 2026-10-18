@@ -24,12 +24,36 @@ fn decal(p:vec2<f32>, origin:vec2<f32>, extent:vec2<f32>) -> vec4<f32> {
     if(any(uv<vec2(0.)) || any(uv>vec2(1.))) { return vec4(0.); }
     return sample0(uv);
 }
+// Recompose the original print vocabulary in logical pixels; no scaled canvas.
+fn responsive_print(i: EffectInput) -> vec4<f32> {
+    let p=i.uv*i.size; let s=i.size; let compact=i.params0.z > .5;
+    let phase=i.phase*6.283185;
+    let edge=rect(p-s*.5,s*.5-vec2(3.),select(22.,12.,compact));
+    var c=mix(ink(17.,20.,43.),i.base.rgb,i.uv.x);
+    c=mix(c,i.border.rgb,line(edge+8.,.5)*.56);
+    c=mix(c,i.accent.rgb,line(edge+3.,.4)*.17);
+    let cells=vec2(147.,91.); let cell=floor(p/cells); let local=fract(p/cells)*cells;
+    let star=local-vec2(36.+31.*sin(cell.y*3.),24.+17.*cos(cell.x*7.));
+    let spark=max(aa(abs(star.x)+abs(star.y)-2.4),disc(star,1.));
+    c=mix(c,i.border.rgb,spark*(.42+.06*sin(phase+cell.x)));
+    if !compact {
+        let grid=aa(s.y-158.-p.y)*max(line(p.y-s.y+86.,.3),line(p.x-70.,.3));
+        c=mix(c,i.accent.rgb,grid*.2);
+        let ticks=line(fract((p.y-35.)/18.)*18.-9.,.35)*aa(abs(p.x-s.x+15.)-2.);
+        c=mix(c,i.border.rgb,ticks*.35);
+    }
+    c*=.992+.015*grain(p);
+    return vec4(c,aa(edge));
+}
 fn effect(i: EffectInput) -> vec4<f32> {
+    if(i.params0.y > .5 || i.params0.z > .5) { return responsive_print(i); }
     let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
     let edge=rect(p-s*.5,s*.5-vec2(3.),22.);
     var c=mix(ink(17.,20.,43.),i.base.rgb,i.uv.x);
     let center=vec2(s.x-87.,s.y*.5); let v=p-center; let r=length(v);
     let a=atan2(v.y,v.x);
+    // Responsive layouts place the subject in an independent aspect-locked layer.
+    if(i.params0.x < .5) {
     c=mix(c,ink(52.,43.,82.),disc(v,111.));
     c=mix(c,i.accent.rgb,disc(v,93.)*.08);
     let instrument=decal(p,vec2(s.x-203.,s.y*.5-145.),vec2(232.,290.));
@@ -43,6 +67,7 @@ fn effect(i: EffectInput) -> vec4<f32> {
     c=mix(c,i.border.rgb,disc(v-star_pos,1.8)*.8);
     let trail=ring(ellipse,91.,.65)*pow(max(0.,cos(atan2(ellipse.y,ellipse.x)+t)),28.);
     c+=i.border.rgb*trail*.07;
+    }
     let header=segment(p,vec2(35.,51.),vec2(s.x-217.,51.),.5);
     c=mix(c,i.accent.rgb,header*.45);
     let grid=step(s.x-205.,p.x)*max(line(p.y-s.y*.5,.3),line(p.x-center.x,.3));

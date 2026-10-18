@@ -764,3 +764,28 @@ tb-align-start = 左揃え
 tb-align-center = 中央揃え
 tb-align-end = 右揃え
 tb-current-value = 現在：{ $value }
+
+# Skin preview editor
+skin-edit-font = 本文フォント
+skin-edit-font-presets = フォント候補
+skin-edit-size = 本文サイズ（8–200 px）
+skin-edit-line = 行の高さ（1–3 倍）
+skin-edit-color = 文字色
+skin-edit-width = 幅（160–8192 px）
+skin-edit-height = 高さ（96–8192 px）
+skin-edit-test-text = テスト文（プレビュー専用）
+skin-edit-sample-reset = テスト文を戻す
+skin-edit-reset = スキンの既定値に戻す
+skin-edit-discard = 変更を破棄
+skin-edit-invalid = 有効な数値と16進数の色を入力してください。空欄はスキンの既定値です。
+skin-edit-font-missing = このフォントは利用できません。代替フォントを使用します。
+skin-edit-draft-hint = 変更はプレビューだけに反映されます。保存しても使用中のスキンは切り替わりません。空欄はスキンの既定値です。
+skin-edit-unavailable = このスキンは現在プレビューできません。
+skin-edit-sample = こんにちは、NanaType！文字サイズと折り返しのテストです。Hello, world! 0123456789
+    2行目：幅や高さ、フォント、行間を調整できます。
+skin-edit-history-sample = こんにちは！今日の配信へようこそ。Hello, NanaType!
+    狭いウィンドウでの折り返し、名前、時刻の配置を確認するための長いメッセージです。0123456789
+    3つ目のメッセージ：文字色と行間も個別に調整できます。
+skin-edit-long-name = 狭いウィンドウを確認する長い名前 NanaType
+skin-edit-save = 保存
+skin-edit-saved = このスキンに保存しました。

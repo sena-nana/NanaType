@@ -30,7 +30,38 @@ fn fizz(p:vec2<f32>, size:vec2<f32>, phase:f32, x:f32, r:f32, wobble:f32) -> f32
     let fade=smoothstep(15.,34.,p.y)*(1.-smoothstep(size.y-34.,size.y-15.,p.y));
     return ring(v,r,.55)*fade;
 }
+// Recompose the original print vocabulary in logical pixels; no scaled canvas.
+fn responsive_print(i: EffectInput) -> vec4<f32> {
+    let p=i.uv*i.size; let s=i.size; let compact=i.params0.z > .5;
+    let phase=i.phase*6.283185;
+    let edge=rect(p-s*.5,s*.5-vec2(5.),select(15.,9.,compact));
+    let band=aa(s.y-152.-p.y+(p.x-s.x*.5)*.13);
+    let left=aa(p.x-select(18.,10.,compact));
+    let right=aa(s.x-18.-p.x);
+    let print=select(band,max(left,right),compact);
+    var c=mix(i.base.rgb,i.border.rgb,print);
+    let dots=disc(fract(p/9.)*9.-vec2(4.5),1.05)*select(band,right,compact);
+    c=mix(c,ink(48.,116.,100.),dots*.26);
+    let seam=select(line(p.y-s.y+152.-(p.x-s.x*.5)*.13,.45),line(p.x-s.x+18.,.45),compact);
+    let holes=line(fract(select(p.x,p.y,compact)/8.)*8.-4.,1.5)*seam;
+    c=mix(c,ink(255.,252.,234.),holes*.8);
+    c=mix(c,i.border.rgb,line(edge+1.,.45)*.58);
+    c=mix(c,i.base.rgb,line(edge+5.,.6)*print*.7);
+    let rail=segment(p,vec2(s.x-18.,54.),vec2(s.x-18.,s.y-165.),.6);
+    if !compact { c=mix(c,i.accent.rgb,rail*.5); }
+    if !compact {
+        let sticker=rotate(p-vec2(s.x-64.,s.y-34.),-.22);
+        c=mix(c,i.accent.rgb,aa(rect(sticker,vec2(45.,13.),3.)));
+        let dash=line(fract((sticker.x+40.)/7.)*7.-3.5,.8)*aa(abs(sticker.y)-6.)*aa(abs(sticker.x)-34.);
+        c=mix(c,i.base.rgb,dash*.8);
+    }
+    let bubble=p-vec2(s.x-22.,s.y-42.-12.*sin(phase));
+    c=mix(c,i.base.rgb,ring(bubble,3.2,.55)*print*.25);
+    c*=.988+.02*grain(p);
+    return vec4(c,aa(edge));
+}
 fn effect(i: EffectInput) -> vec4<f32> {
+    if(i.params0.y > .5 || i.params0.z > .5) { return responsive_print(i); }
     let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
     let edge=rect(p-s*.5,s*.5-vec2(5.),15.);
     var c=i.base.rgb;
@@ -47,7 +78,7 @@ fn effect(i: EffectInput) -> vec4<f32> {
         +fizz(p,s,i.phase+.73,143.,2.,1.4)*.5;
     c=mix(c,i.base.rgb,bubbles*art*(.22+.06*typing));
     let fruit=decal(p,vec2(s.x-159.,s.y*.52-112.),vec2(160.,200.));
-    c=mix(c,fruit.rgb,fruit.a);
+    if(i.params0.x < .5) { c=mix(c,fruit.rgb,fruit.a); }
     let sticker=rotate(p-vec2(s.x-143.,s.y-37.),-.22);
     c=mix(c,i.accent.rgb,aa(rect(sticker,vec2(45.,13.),3.)));
     let dash=line(fract((sticker.x+40.)/7.)*7.-3.5,.8)*aa(abs(sticker.y)-6.)*aa(abs(sticker.x)-34.);

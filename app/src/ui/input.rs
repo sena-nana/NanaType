@@ -1758,9 +1758,7 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
         }
         let skin = ui.skin.get();
         let s = ui.settings.get();
-        let region = s.skin.overrides.region.unwrap_or(skin.dialogue.region);
-        let pad = skin.dialogue.overscan * 2.0;
-        (region[0] + pad, region[1] + pad)
+        crate::windows::size_of(crate::windows::WindowKind::Display, &skin, &s)
     };
     // Fit only the preview presentation. The editor still lays out at the
     // stream canvas size, so resizing the sidebar cannot change line breaks.

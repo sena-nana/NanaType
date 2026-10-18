@@ -101,7 +101,7 @@ fn shadows(skin: &Skin, list: &[ShadowSpec]) -> Vec<BoxShadowSpec> {
 pub fn nine_slice(frame: &NineSlice, url: String) -> (BorderImageSpec, [f32; 4]) {
     let mut spec = BorderImageSpec::from_source(BackgroundImage::url(url));
     spec.slice = frame.slice.map(|v| BorderImageSlice::Number(v as f32));
-    spec.fill = true;
+    spec.fill = frame.fill;
     (
         spec,
         if frame.layout_inset {
@@ -197,12 +197,23 @@ impl Surface {
                 Some(b.border_color.into()),
                 b.border_width,
             );
-            surface.gradient = frame_url
-                .map(|url| BackgroundImage::url_with_fit(url, BackgroundImageFit::Stretch));
+            if b.frame.as_ref().is_some_and(|f| !f.fill) {
+                surface.frame = b
+                    .frame
+                    .as_ref()
+                    .zip(frame_url)
+                    .map(|(frame, url)| nine_slice(frame, url));
+            } else {
+                surface.gradient = frame_url
+                    .map(|url| BackgroundImage::url_with_fit(url, BackgroundImageFit::Stretch));
+            }
             return surface;
         }
         Self::framed(b.frame.as_ref(), frame_url)
             .map(|mut s| {
+                if s.frame.as_ref().is_some_and(|(frame, _)| !frame.fill) {
+                    s.fill = Some(c(b.color));
+                }
                 // A procedural plate replaces the fill and keyline. Keep its
                 // authored external shadow, which lives outside the plate canvas.
                 if skin.has_dialogue_artwork() {
@@ -382,6 +393,9 @@ impl Surface {
         set_border_widths(l, [0.0; 4]);
         l.paint.box_shadows.clear();
         if let Some((spec, widths)) = &self.frame {
+            if !spec.fill {
+                l.background = self.fill;
+            }
             l.paint.border_image = Some(spec.clone());
             set_border_widths(l, *widths);
         } else {
@@ -647,6 +661,7 @@ mod tests {
             scale: 1.0,
             repeat: false,
             layout_inset: true,
+            fill: true,
         });
         let framed = Surface::dialogue_box(&skin, Some("file:///frame.png".into()));
         assert!(!framed.is_vector() && !framed.integrates_tail());
@@ -783,6 +798,19 @@ mod tests {
     }
 
     #[test]
+    fn responsive_paper_edges_do_not_stretch_the_illustrated_plate() {
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let skin = registry.load("nanatype.crayon").unwrap().skin;
+        let skin = nanatype_theme::responsive_dialogue(&skin, [300., 1200.]);
+        let surface = Surface::dialogue_box(&skin, Some("file:///paper.png".into()));
+        let mut style = LayoutStyle::default();
+        surface.materials(false).apply(&mut style);
+        assert!(!style.paint.border_image.as_ref().unwrap().fill);
+        assert_eq!(style.background, Some(c(skin.dialogue.box_.color)));
+        assert!(style.paint.background_image.is_none());
+    }
+
+    #[test]
     fn frames_draw_at_slice_times_scale() {
         let frame = NineSlice {
             image: "f.png".into(),
@@ -790,6 +818,7 @@ mod tests {
             scale: 2.0,
             repeat: false,
             layout_inset: true,
+            fill: true,
         };
         let (_, widths) = nine_slice(&frame, "file:///f.png".into());
         assert_eq!(widths, [16.0, 8.0, 16.0, 8.0]);
@@ -814,6 +843,7 @@ mod tests {
                 scale: 1.0,
                 repeat: false,
                 layout_inset: true,
+                fill: true,
             },
             "file:///frame.png".into(),
         ));

@@ -176,3 +176,34 @@ size = 18
 line_height = 1.4
 stroke = { color = "#000000", width = 1 }
 shadow = { color = "#000000", blur = 2 }
+
+
+# Keep original surfaces and non-menu decorations in every orientation.
+[dialogue.responsive]
+landscape = { decor = [{ anchor = "bottom", size = ["100%", 70], gradient = { angle = 0, stops = [[0, "#000000"], [1, "#00000000"]] } }, { anchor = "bottom_right", offset = [-569, -26], size = [46, 22], text = "SAVE", when = "display", text_color = "#dddddd", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_right", offset = [-508, -26], size = [48, 22], text = "LOAD", when = "display", text_color = "#dddddd", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_right", offset = [-433, -26], size = [62, 22], text = "Q.SAVE", when = "display", text_color = "#dddddd", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_right", offset = [-356, -26], size = [64, 22], text = "Q.LOAD", when = "display", text_color = "#dddddd", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_right", offset = [-291, -26], size = [52, 22], text = "« ‹ › »", when = "display", text_color = "#dddddd", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_right", offset = [-200, -26], size = [78, 22], text = "HISTORY", when = "display", text_color = "#dddddd", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_right", offset = [-169, -26], size = [18, 22], text = "✕", when = "display", text_color = "#dddddd", text_size = 18, font = "body", min_window = [1000, 160] }] }
+portrait = { padding = [20, 24, 56, 72], box = { color = "#00000000", border_width = 0, radius = 0, gradient = { angle = 0, stops = [[0, "#00000099"], [0.45, "#00000080"], [1, "#00000000"]] }, width_fraction = 1 }, nameplate = { color = "#00000000", text_color = "#ffffff", size = 27, radius = 0, padding = [4, 4], offset = [-8, 12], stroke = { color = "#000000", width = 1.5 }, text_shadow = { color = "#000000", blur = 2.5 }, anchor = "top_right", rotate = 0 }, continue = { glyph = "", motion = "none", anchor = "bottom_left", offset = [12, -8] }, portrait = { visible = false }, decor = [{ anchor = "bottom", size = ["100%", 70], gradient = { angle = 0, stops = [[0, "#000000"], [1, "#00000000"]] } }], shader_effects = [] }
+
+[[dialogue.responsive.rules]]
+max_width = 600
+portrait = false
+layout = { padding = [16, 40, 16, 16], nameplate = { color = "#00000000", text_color = "#ffffff", size = 27, radius = 0, padding = [0, 0], offset = [12, 4], stroke = { color = "#000000", width = 1.5 }, text_shadow = { color = "#000000", blur = 2.5 }, anchor = "top_left", rotate = 0 }, box = { color = "#00000000", border_width = 0, radius = 0, gradient = { angle = 0, stops = [[0, "#00000099"], [0.45, "#00000080"], [1, "#00000000"]] }, width_fraction = 1 }, shader_effects = [], decor = [{ anchor = "bottom", size = ["100%", 70], gradient = { angle = 0, stops = [[0, "#000000"], [1, "#00000000"]] } }] }
+
+[[dialogue.responsive.rules]]
+max_height = 160
+portrait = false
+layout = { padding = [16, 40, 16, 16], nameplate = { color = "#00000000", text_color = "#ffffff", size = 27, radius = 0, padding = [0, 0], offset = [12, 4], stroke = { color = "#000000", width = 1.5 }, text_shadow = { color = "#000000", blur = 2.5 }, anchor = "top_left", rotate = 0 }, box = { color = "#00000000", border_width = 0, radius = 0, gradient = { angle = 0, stops = [[0, "#00000099"], [0.45, "#00000080"], [1, "#00000000"]] }, width_fraction = 1 }, shader_effects = [], decor = [{ anchor = "bottom", size = ["100%", 70], gradient = { angle = 0, stops = [[0, "#000000"], [1, "#00000000"]] } }] }
+
+[[dialogue.responsive.rules]]
+max_width = 240
+portrait = true
+layout = { padding = [12, 16, 48, 48], decor = [{ anchor = "bottom", size = ["100%", 70], gradient = { angle = 0, stops = [[0, "#000000"], [1, "#00000000"]] } }], shader_effects = [] }
+
+[[dialogue.responsive.rules]]
+max_height = 480
+portrait = true
+layout = { padding = [12, 16, 48, 24], decor = [{ anchor = "bottom", size = ["100%", 70], gradient = { angle = 0, stops = [[0, "#000000"], [1, "#00000000"]] } }] }
+
+[[dialogue.responsive.rules]]
+max_width = 200
+max_height = 140
+layout = { padding = [10, 12, 10, 12], nameplate = { visible = false }, portrait = { visible = false }, decor = [{ anchor = "bottom", size = ["100%", 70], gradient = { angle = 0, stops = [[0, "#000000"], [1, "#00000000"]] } }], shader_effects = [], box = { color = "#00000000", border_width = 0, radius = 0, gradient = { angle = 0, stops = [[0, "#00000099"], [0.45, "#00000080"], [1, "#00000000"]] }, width_fraction = 1 } }

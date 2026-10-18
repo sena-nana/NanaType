@@ -24,7 +24,35 @@ fn decal(p:vec2<f32>, origin:vec2<f32>, extent:vec2<f32>) -> vec4<f32> {
     if(any(uv<vec2(0.)) || any(uv>vec2(1.))) { return vec4(0.); }
     return sample0(uv);
 }
+// Recompose the original print vocabulary in logical pixels; no scaled canvas.
+fn responsive_print(i: EffectInput) -> vec4<f32> {
+    let p=i.uv*i.size; let s=i.size; let compact=i.params0.z > .5;
+    let phase=i.phase*6.283185;
+    let edge=max(max(3.-p.x,p.x-s.x+3.),max(3.-p.y,p.y-s.y+3.));
+    var c=i.base.rgb;
+    c=mix(c,i.accent.rgb,aa(p.x-select(22.,10.,compact)));
+    let panel=select(aa(s.y-155.-p.y),aa(s.x-18.-p.x),compact);
+    c=mix(c,ink(236.,217.,180.),panel);
+    let diamond=abs(fract((p.x+p.y)/36.)*36.-18.);
+    let cross=abs(fract((p.x-p.y)/36.)*36.-18.);
+    let lattice=max(line(diamond,.55),line(cross,.55))*panel;
+    c=mix(c,i.border.rgb,lattice*.6);
+    let near=min(p,s-p);
+    let frame=max(line(near.x-11.,.5),line(near.y-11.,.55));
+    c=mix(c,i.border.rgb,frame*.65);
+    let joint=max(segment(near,vec2(0.,5.),vec2(12.,5.),.6),segment(near,vec2(5.,0.),vec2(5.,12.),.6));
+    c=mix(c,i.border.rgb,joint*.6);
+    c+=i.border.rgb*frame*.02*(1.+sin(phase));
+    if !compact {
+        let seal=(p-vec2(12.,s.y-27.))/.65;
+        c=mix(c,i.base.rgb,line(rect(seal,vec2(9.,12.),.5),.8));
+        c=mix(c,i.base.rgb,line(rect(seal,vec2(4.,7.),.2),.65));
+    }
+    c*=.978+.035*grain(p);
+    return vec4(c,aa(edge));
+}
 fn effect(i: EffectInput) -> vec4<f32> {
+    if(i.params0.y > .5 || i.params0.z > .5) { return responsive_print(i); }
     let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
     let edge=max(max(3.-p.x,p.x-s.x+3.),max(3.-p.y,p.y-s.y+3.));
     var c=i.base.rgb;
@@ -46,8 +74,8 @@ fn effect(i: EffectInput) -> vec4<f32> {
     let glow=(p-vec2(s.x-87.,s.y*.43+5.))/vec2(45.,65.);
     c+=i.border.rgb*exp(-dot(glow,glow)*2.)*.009*(.65+.35*sin(2.*t))
         *smoothstep(s.x-153.,s.x-134.,p.x);
-    c=mix(c,lamp.rgb,lamp.a);
-    c=mix(c,i.accent.rgb,segment(lamp_p,vec2(s.x-87.,9.),vec2(s.x-87.,s.y*.43-54.),.7));
+    if(i.params0.x < .5) { c=mix(c,lamp.rgb,lamp.a); }
+    if(i.params0.x < .5) { c=mix(c,i.accent.rgb,segment(lamp_p,vec2(s.x-87.,9.),vec2(s.x-87.,s.y*.43-54.),.7)); }
     let seal=p-vec2(20.,s.y-27.);
     c=mix(c,i.base.rgb,line(rect(seal,vec2(9.,12.),.5),.8));
     let sealglyph=line(rect(seal,vec2(4.,7.),.2),.65);
@@ -70,7 +98,7 @@ fn effect(i: EffectInput) -> vec4<f32> {
         segment(p,vec2(58.,28.),vec2(66.,28.),.55));
     c=mix(c,i.border.rgb,spine*.48+bracket*.7);
     c*=.978+.035*grain(p);
-    c+=i.border.rgb*lamp.a*.012*(.5+.5*sin(2.*t));
+    if(i.params0.x < .5) { c+=i.border.rgb*lamp.a*.012*(.5+.5*sin(2.*t)); }
     let travel=pow(max(0.,cos((p.x-51.)/(s.x-63.)*6.283185-t)),24.);
     c+=i.border.rgb*(top+lattice*.12)*travel*.035;
     c+=i.border.rgb*(bracket+top)*.1*exp(-i.speaker_age*4.);

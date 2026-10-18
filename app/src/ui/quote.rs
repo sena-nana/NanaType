@@ -1,6 +1,5 @@
-//! The chat message a line answers, quoted in one small line above it:
-//! a 3px accent bar, avatar · name: text. The dialogue box and history both
-//! draw it from the skin's `reply` spec.
+//! A quoted chat message: above horizontal text, beside vertical display text.
+//! History always keeps its horizontal quote. Both use the skin's `reply` spec.
 
 use std::sync::Arc;
 
@@ -77,10 +76,50 @@ pub fn quote_view(
     text: &TextSpec,
     backdrop: Option<Rgba8>,
 ) -> AnyView {
-    let size = spec
-        .size
-        .filter(|s| s.is_finite() && *s > 0.0)
-        .unwrap_or((text.size * 0.62).max(10.0));
+    quote_view_on(ui, skin, spec, reply, text, backdrop, false)
+}
+
+/// Display quotes follow their own window; history quotes always stay horizontal.
+pub fn display_quote_view(
+    ui: Ui,
+    skin: &Skin,
+    spec: &ReplySpec,
+    reply: &ChatRef,
+    text: &TextSpec,
+    backdrop: Option<Rgba8>,
+) -> AnyView {
+    quote_view_on(ui, skin, spec, reply, text, backdrop, true)
+}
+
+fn quote_size(spec: &ReplySpec, text: &TextSpec) -> f32 {
+    spec.size
+        .filter(|s| s.is_finite() && *s > 0.)
+        .unwrap_or((text.size * 0.62).max(10.))
+}
+
+/// Includes the separator and the gap to the body, but never stretches it.
+pub fn column_width(spec: &ReplySpec, text: &TextSpec) -> f32 {
+    let size = quote_size(spec, text);
+    (size * 1.4).round() + (size * 0.5).round().max(6.) + 9.
+}
+
+fn quote_view_on(
+    ui: Ui,
+    skin: &Skin,
+    spec: &ReplySpec,
+    reply: &ChatRef,
+    text: &TextSpec,
+    backdrop: Option<Rgba8>,
+    responsive: bool,
+) -> AnyView {
+    let vertical = move || {
+        responsive
+            && ui
+                .skin
+                .with(|s| nanatype_theme::dialogue_is_vertical(s, ui.display_size.get()))
+    };
+    let size = quote_size(spec, text);
+    let name_height = (reply.user.name.chars().count() + 1) as f32 * size;
     let (name_color, color) = colors(skin, spec, text.color, backdrop);
     let style = |color: Rgba8, weight: u16, name: bool| {
         let mut st = NodeStyle::default();
@@ -153,6 +192,48 @@ pub fn quote_view(
                 l.padding_left = Some(LengthSpec::Px((size * 0.5).round().max(6.0)));
             }),
     )
+    .key("reply-quote")
+    .bind(move |s: &mut Stack| {
+        let v = vertical();
+        super::restyle(s, |l| {
+            l.direction = Some(if v {
+                nana_ui_core::FlexDirection::Column
+            } else {
+                nana_ui_core::FlexDirection::Row
+            });
+            l.width = Some(if v {
+                LengthSpec::Px((size * 1.4).round() + (size * 0.5).round().max(6.) + 3.)
+            } else {
+                LengthSpec::Fill
+            });
+            l.height = v.then_some(LengthSpec::Fill);
+            l.min_height = Some(LengthSpec::Px(0.));
+            l.margin_bottom = Some(LengthSpec::Px(if v { 0. } else { 4. }));
+            l.margin_left = Some(LengthSpec::Px(if v { 6. } else { 0. }));
+            l.border_left_width = Some(if v { 0. } else { 3. });
+            l.border_right_width = Some(if v { 3. } else { 0. });
+            l.padding_left = Some(LengthSpec::Px(if v {
+                0.
+            } else {
+                (size * 0.5).round().max(6.)
+            }));
+            l.padding_right = Some(LengthSpec::Px(if v {
+                (size * 0.5).round().max(6.)
+            } else {
+                0.
+            }));
+            l.overflow_x = if v {
+                nana_ui_core::OverflowSpec::Hidden
+            } else {
+                nana_ui_core::OverflowSpec::Visible
+            };
+            l.overflow_y = if v {
+                nana_ui_core::OverflowSpec::Hidden
+            } else {
+                nana_ui_core::OverflowSpec::Visible
+            };
+        });
+    })
     .children((
         avatar,
         widget(
@@ -166,24 +247,76 @@ pub fn quote_view(
                     st
                 })
                 .truncating(),
-        ),
+        )
+        .key("reply-quote-name")
+        .bind(move |t: &mut Text| {
+            let v = vertical();
+            let l = Arc::make_mut(&mut t.style.layout);
+            l.writing_mode = Some(if v {
+                nana_ui_core::WritingModeSpec::VerticalRl
+            } else {
+                nana_ui_core::WritingModeSpec::HorizontalTb
+            });
+            l.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
+            l.width = v.then_some(LengthSpec::Px((size * 1.4).round()));
+            l.height = v.then_some(LengthSpec::Min2(
+                nana_ui_core::LengthAtom::Px(name_height),
+                nana_ui_core::LengthAtom::Percent(30.),
+            ));
+            l.max_width = (!v).then_some(LengthSpec::Percent(40.));
+            l.max_height = v.then_some(LengthSpec::Px((ui.display_size.get()[1] * 0.25).max(size)));
+        }),
         widget(Stack::row(0.0).width(LengthSpec::Fill).with_layout(|l| {
             l.flex_shrink = Some(1.0);
             l.min_width = Some(LengthSpec::Px(0.0));
             l.overflow_x = nana_ui_core::OverflowSpec::Hidden;
         }))
-        .children(widget(
-            Text::new(reply.text.clone())
-                .style({
-                    let mut st = style(color, 400, false);
-                    let l = Arc::make_mut(&mut st.layout);
-                    l.width = Some(LengthSpec::Fill);
-                    l.min_width = Some(LengthSpec::Px(0.0));
-                    l.max_width = Some(LengthSpec::Percent(100.0));
-                    st
-                })
-                .truncating(),
-        )),
+        .bind(move |s: &mut Stack| {
+            let v = vertical();
+            super::restyle(s, |l| {
+                l.width = Some(if v {
+                    LengthSpec::Px((size * 1.4).round())
+                } else {
+                    LengthSpec::Fill
+                });
+                l.height = v.then_some(LengthSpec::Fill);
+                l.flex_grow = Some(if v { 1. } else { 0. });
+                l.flex_basis = v.then_some(LengthSpec::Px(0.));
+                l.min_height = Some(LengthSpec::Px(0.));
+                l.overflow_y = if v {
+                    nana_ui_core::OverflowSpec::Hidden
+                } else {
+                    nana_ui_core::OverflowSpec::Visible
+                };
+            });
+        })
+        .children(
+            widget(
+                Text::new(reply.text.clone())
+                    .style({
+                        let mut st = style(color, 400, false);
+                        let l = Arc::make_mut(&mut st.layout);
+                        l.width = Some(LengthSpec::Fill);
+                        l.min_width = Some(LengthSpec::Px(0.0));
+                        l.max_width = Some(LengthSpec::Percent(100.0));
+                        st
+                    })
+                    .truncating(),
+            )
+            .key("reply-quote-text")
+            .bind(move |t: &mut Text| {
+                let v = vertical();
+                let l = Arc::make_mut(&mut t.style.layout);
+                l.writing_mode = Some(if v {
+                    nana_ui_core::WritingModeSpec::VerticalRl
+                } else {
+                    nana_ui_core::WritingModeSpec::HorizontalTb
+                });
+                l.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
+                l.height = v.then_some(LengthSpec::Fill);
+                l.min_height = Some(LengthSpec::Px(0.));
+            }),
+        ),
     ))
     .into_any()
 }
@@ -191,6 +324,106 @@ pub fn quote_view(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_peer_and_history_quotes_keep_independent_directions() {
+        use nana_ui::runtime::{DocumentId, RuntimeDocument, StableNodeId};
+        use nana_ui_devtools::agent::RuntimeAgentSession;
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let skin = registry.load("nanatype.halo").unwrap().skin;
+        let ui = Ui::new(
+            Arc::new(Default::default()),
+            skin,
+            nanatype_i18n::Locale::ZhCn,
+        );
+        ui.display_size.set([300., 1200.]);
+        ui.remote().display_size.set([1200., 300.]);
+        let id = DocumentId::new(1).unwrap();
+        let mut document = RuntimeDocument::new(id);
+        document
+            .context_mut()
+            .mount_view_root(id, move || {
+                let skin = ui.skin.get_untracked();
+                let quote = |label: &str| {
+                    ChatRef::new(
+                        nanatype_model::ChatUser {
+                            name: "很长的观众名字 Hello 2026".into(),
+                            ..Default::default()
+                        },
+                        label,
+                        nanatype_model::SourceKind::Chat,
+                    )
+                };
+                widget(
+                    Stack::row(8.)
+                        .width(LengthSpec::Fill)
+                        .height(LengthSpec::Fill),
+                )
+                .children((
+                    widget(Stack::fill_column(0.))
+                        .key("local")
+                        .children(display_quote_view(
+                            ui,
+                            &skin,
+                            &skin.dialogue.reply,
+                            &quote("本地回复"),
+                            &skin.dialogue.text,
+                            None,
+                        )),
+                    widget(Stack::fill_column(0.))
+                        .key("peer")
+                        .children(display_quote_view(
+                            ui.remote(),
+                            &skin,
+                            &skin.dialogue.reply,
+                            &quote("对方回复"),
+                            &skin.dialogue.text,
+                            None,
+                        )),
+                    widget(Stack::fill_column(0.))
+                        .key("history")
+                        .children(quote_view(
+                            ui,
+                            &skin,
+                            &skin.history.reply,
+                            &quote("历史引用"),
+                            &skin.history.text,
+                            None,
+                        )),
+                ))
+            })
+            .unwrap();
+        let mut session = RuntimeAgentSession::new(document, 900, 500).unwrap();
+        session.flush().unwrap();
+        let nodes: Vec<_> = ["本地回复", "对方回复", "历史引用"]
+            .iter()
+            .map(|label| {
+                let node = session
+                    .accessibility_dump()
+                    .into_iter()
+                    .find(|n| n.label.as_deref() == Some(*label))
+                    .unwrap();
+                StableNodeId::new(node.id).unwrap()
+            })
+            .collect();
+        for local_vertical in [true, false, true, false] {
+            ui.display_size.set(if local_vertical {
+                [300., 1200.]
+            } else {
+                [1200., 300.]
+            });
+            ui.remote().display_size.set(if local_vertical {
+                [1200., 300.]
+            } else {
+                [300., 1200.]
+            });
+            session.flush().unwrap();
+            let world = session.document().context().world();
+            for (&node, expected) in nodes.iter().zip([local_vertical, !local_vertical, false]) {
+                assert_eq!(world.text_layout(node).unwrap().1.is_vertical(), expected);
+            }
+        }
+    }
 
     #[test]
     fn quotes_read_on_every_builtin_box() {

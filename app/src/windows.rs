@@ -117,6 +117,56 @@ impl WindowKind {
         }
     }
 
+    pub fn saved_size(self, s: &Settings) -> Option<[f32; 2]> {
+        match (self, s.skin.personalizations.get(&s.skin.id)) {
+            (Self::Display, Some(p)) => p.display.size,
+            (Self::History, Some(p)) => p.history.size,
+            _ => self.overlay(s).and_then(|o| o.size),
+        }
+    }
+
+    /// Dragging a personalized window must not change the legacy baseline of other skins.
+    pub(crate) fn remember_size(
+        self,
+        s: &mut Settings,
+        size: [f32; 2],
+        legacy: Option<nanatype_settings::SkinPersonalization>,
+    ) {
+        if matches!(self, Self::Display | Self::History) {
+            if let Some(legacy) = legacy {
+                s.skin
+                    .personalizations
+                    .entry(s.skin.id.clone())
+                    .or_insert(legacy);
+            }
+            if let Some(p) = s.skin.personalizations.get_mut(&s.skin.id) {
+                match self {
+                    Self::Display => p.display.size = Some(size),
+                    _ => p.history.size = Some(size),
+                }
+                return;
+            }
+        }
+        if let Some(o) = self.overlay_mut(s) {
+            o.size = Some(size);
+        }
+    }
+
+    pub(crate) fn clear_saved_size(self, s: &mut Settings) {
+        if matches!(self, Self::Display | Self::History)
+            && let Some(p) = s.skin.personalizations.get_mut(&s.skin.id)
+        {
+            match self {
+                Self::Display => p.display.size = None,
+                _ => p.history.size = None,
+            }
+            return;
+        }
+        if let Some(o) = self.overlay_mut(s) {
+            o.size = None;
+        }
+    }
+
     pub fn material(self) -> MaterialEffect {
         match self {
             Self::Input | Self::Settings | Self::Chat => MaterialEffect::Solid,
@@ -135,13 +185,16 @@ pub fn debug_opaque() -> bool {
 /// Logical size of a window for the current skin and settings.
 pub fn size_of(kind: WindowKind, skin: &Skin, s: &Settings) -> (f32, f32) {
     let d = &skin.dialogue;
-    let region = s.skin.overrides.region.unwrap_or(d.region);
+    let profile = s.skin.personalizations.get(&s.skin.id);
+    let region = if profile.is_some() {
+        d.region
+    } else {
+        s.skin.overrides.region.unwrap_or(d.region)
+    };
     let pad = d.overscan * 2.0;
     match kind {
-        WindowKind::Display => s
-            .overlays
-            .display
-            .size
+        WindowKind::Display => profile
+            .map_or(s.overlays.display.size, |p| p.display.size)
             .map(|[w, h]| (w, h))
             .unwrap_or((region[0] + pad, region[1] + pad)),
         WindowKind::PeerDisplay => s
@@ -149,12 +202,13 @@ pub fn size_of(kind: WindowKind, skin: &Skin, s: &Settings) -> (f32, f32) {
             .peer_display
             .size
             .map(|[w, h]| (w, h))
-            .unwrap_or((region[0] + pad, region[1] + pad)),
+            .unwrap_or_else(|| {
+                let region = s.skin.overrides.region.unwrap_or(d.region);
+                (region[0] + pad, region[1] + pad)
+            }),
         WindowKind::Input => INPUT_SIZE,
-        WindowKind::History => s
-            .overlays
-            .history
-            .size
+        WindowKind::History => profile
+            .map_or(s.overlays.history.size, |p| p.history.size)
             .map(|[w, h]| (w, h))
             .unwrap_or((skin.history.width, skin.history.height)),
         WindowKind::Settings => (920.0, 660.0),
@@ -479,7 +533,7 @@ impl WindowManager {
             if !slot.placed && monitors_known {
                 let (pos, size) = match (*kind, placement) {
                     // Overlays whose size follows the skin keep that size.
-                    (WindowKind::Input | WindowKind::History | WindowKind::Chat, Some(p)) => {
+                    (WindowKind::Input | WindowKind::Chat, Some(p)) => {
                         let size = if *kind == WindowKind::Input {
                             (
                                 (p.w as f32).max(INPUT_MIN.0 as f32),
@@ -552,6 +606,63 @@ impl WindowManager {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dragging_and_resetting_one_skin_preserve_other_skins_legacy_geometry() {
+        let skin = skin();
+        let mut settings = Settings::default();
+        settings.overlays.display.size = Some([900.0, 200.0]);
+        let active = settings.skin.id.clone();
+        WindowKind::Display.remember_size(&mut settings, [300.0, 160.0], Some(Default::default()));
+        assert_eq!(
+            size_of(WindowKind::Display, &skin, &settings),
+            (300.0, 160.0)
+        );
+        assert_eq!(settings.overlays.display.size, Some([900.0, 200.0]));
+        settings.skin.id = "other".into();
+        assert_eq!(
+            size_of(WindowKind::Display, &skin, &settings),
+            (900.0, 200.0)
+        );
+        settings.skin.id = active;
+        WindowKind::Display.clear_saved_size(&mut settings);
+        assert_eq!(
+            settings.skin.personalizations[&settings.skin.id]
+                .display
+                .size,
+            None
+        );
+        assert_eq!(settings.overlays.display.size, Some([900.0, 200.0]));
+        WindowKind::PeerDisplay.remember_size(&mut settings, [600.0, 300.0], None);
+        assert_eq!(settings.overlays.peer_display.size, Some([600.0, 300.0]));
+        assert_eq!(settings.overlays.display.size, Some([900.0, 200.0]));
+    }
+
+    #[test]
+    fn saved_sizes_follow_the_selected_skin_and_peer_size_stays_independent() {
+        let skin = skin();
+        let mut s = Settings::default();
+        s.overlays.display.size = Some([900.0, 200.0]);
+        s.overlays.peer_display.size = Some([700.0, 180.0]);
+        let mut p = nanatype_settings::SkinPersonalization::default();
+        p.display.size = Some([160.0, 96.0]);
+        p.history.size = Some([300.0, 500.0]);
+        s.skin.personalizations.insert(s.skin.id.clone(), p);
+        assert_eq!(size_of(WindowKind::Display, &skin, &s), (160.0, 96.0));
+        assert_eq!(size_of(WindowKind::History, &skin, &s), (300.0, 500.0));
+        assert_eq!(size_of(WindowKind::PeerDisplay, &skin, &s), (700.0, 180.0));
+        s.overlays.peer_display.size = None;
+        s.skin.overrides.region = Some([555.0, 140.0]);
+        assert_eq!(
+            size_of(WindowKind::PeerDisplay, &skin, &s),
+            (
+                555.0 + skin.dialogue.overscan * 2.0,
+                140.0 + skin.dialogue.overscan * 2.0
+            )
+        );
+        s.skin.id = "other".into();
+        assert_eq!(size_of(WindowKind::Display, &skin, &s), (900.0, 200.0));
+    }
+
     use super::*;
 
     fn skin() -> Skin {

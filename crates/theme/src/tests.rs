@@ -273,7 +273,7 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
         let id = format!("nanatype.{name}");
         let original = registry.load(&id).unwrap();
         assert_eq!(original.skin.meta.schema, 2);
-        assert_eq!(original.skin.shader_programs.len(), 1);
+        assert_eq!(original.skin.shader_programs.len(), 3);
         assert!(original.skin.dialogue.decor.is_empty());
         assert_eq!(original.skin.dialogue.shader_effects.len(), 1);
         assert_eq!(
@@ -281,6 +281,20 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
             ShaderTarget::Artwork
         );
         assert!(original.skin.shaders["artwork"].params.is_empty());
+        let responsive = responsive_dialogue(&original.skin, [952., 252.]);
+        assert_eq!(responsive.dialogue.shader_effects[0].shader, "artwork");
+        assert!(responsive.shaders["artwork"].static_fallback);
+        let portrait = responsive_dialogue(&original.skin, [300., 1200.]);
+        assert_eq!(
+            portrait.dialogue.shader_effects[0].shader,
+            "responsive_artwork"
+        );
+        assert_eq!(portrait.shaders["responsive_artwork"].params, [1., 1.]);
+        let compact = responsive_dialogue(&original.skin, [300., 240.]);
+        assert_eq!(
+            compact.dialogue.shader_effects[0].shader,
+            "responsive_compact"
+        );
         assert_eq!(original.skin.shaders["artwork"].textures.len(), 1);
         let file = tmp.path().join(format!("{name}.ntskin"));
         registry.export(&id, &file).unwrap();
@@ -353,9 +367,9 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
     registry.install(&detached).unwrap();
     let loaded = registry.load("my.detached").unwrap();
     assert!(loaded.skin.meta.base.is_none());
-    // Halo is deliberately static; the example contributes its only program.
+    // Halo has static responsive print variants; the example contributes the only active base effect.
     assert!(loaded.skin.shader_programs.contains_key("aurora"));
-    assert_eq!(loaded.skin.shader_programs.len(), 1);
+    assert_eq!(loaded.skin.shader_programs.len(), 4);
     assert_eq!(loaded.skin.dialogue.shader_effects.len(), 1);
     assert_eq!(loaded.skin.dialogue.shader_effects[0].shader, "aurora");
     registry.install(&file).unwrap();
@@ -366,7 +380,7 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
             .skin
             .shader_programs
             .len(),
-        1
+        4
     );
     // Exercise named-table merging using an actually animated base, rather
     // than requiring the default minimal skin to carry an unrelated effect.
@@ -380,7 +394,7 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
     );
     registry.rescan();
     let merged = registry.load("my.merge").unwrap();
-    assert_eq!(merged.skin.shader_programs.len(), 2);
+    assert_eq!(merged.skin.shader_programs.len(), 5);
     assert_eq!(merged.skin.dialogue.shader_effects.len(), 1);
     let archive = tmp.path().join("merged.ntskin");
     registry.export("my.merge", &archive).unwrap();
@@ -419,7 +433,11 @@ fn classic_artwork_exports_its_complete_static_fallback_and_keeps_special_layout
             "night", "rpg", "bubble", "livechat", "terminal", "pixel", "sakura",
         ]
         .contains(&name);
-        assert_eq!(skin.shader_programs.len(), usize::from(animated), "{name}");
+        assert_eq!(
+            skin.shader_programs.len(),
+            usize::from(animated) + if name == "echo_glass" { 0 } else { 3 },
+            "{name}"
+        );
         assert_eq!(
             skin.dialogue.shader_effects.len(),
             usize::from(animated),
@@ -434,8 +452,10 @@ fn classic_artwork_exports_its_complete_static_fallback_and_keeps_special_layout
             assert!(skin.shaders["artwork"].textures.len() <= 1);
         } else {
             assert!(
-                skin.shaders.is_empty(),
-                "{name}: static print must not compile a shader"
+                skin.shaders
+                    .values()
+                    .all(|s| s.static_fallback && !s.animated),
+                "{name}: static print must not schedule animation"
             );
         }
         let archive = tmp.path().join(format!("{name}.ntskin"));
@@ -1847,8 +1867,14 @@ fn crayon_materials_are_lazy_validated_and_roundtrip_with_their_fallbacks() {
     assert!(entry.skin.as_ref().unwrap().material_programs.is_empty());
     let loaded = registry.load("nanatype.crayon").unwrap();
     assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
-    assert_eq!(loaded.skin.material_programs.len(), 5);
-    assert!(loaded.skin.shaders.is_empty());
+    assert_eq!(loaded.skin.material_programs.len(), 6);
+    assert!(
+        loaded
+            .skin
+            .shaders
+            .values()
+            .all(|s| s.static_fallback && !s.animated)
+    );
     let other = registry.load("nanatype.crayon").unwrap();
     assert!(std::sync::Arc::ptr_eq(
         &loaded.skin.material_programs["paper"],
@@ -1933,4 +1959,48 @@ fn effect(i:EffectInput)->vec4<f32>{return material_param();}"
         )
         .is_err()
     );
+}
+
+#[test]
+fn responsive_inheritance_requires_opt_in_and_exports_all_variant_assets() {
+    let dir = tempfile::tempdir().unwrap();
+    let old = "[meta]\nid='user.legacy'\nbase='nanatype.gothic'\n";
+    write_skin(dir.path(), old, &[]);
+    assert!(
+        load_dir(dir.path())
+            .unwrap()
+            .skin
+            .dialogue
+            .responsive
+            .is_none()
+    );
+    write_skin(dir.path(), &format!("{old}\n[dialogue.responsive]\n"), &[]);
+    let loaded = load_dir(dir.path()).unwrap();
+    assert!(loaded.skin.dialogue.responsive.is_some());
+    for path in [
+        "gothic/rose.png",
+        "gothic/tracery.png",
+        "gothic/artwork.wgsl",
+    ] {
+        assert!(
+            loaded
+                .skin
+                .referenced_files()
+                .iter()
+                .any(|(_, p, _)| *p == path)
+        );
+        assert!(!loaded.files.read(path).unwrap().is_empty());
+    }
+    let manifest = standalone_manifest(&loaded.skin).unwrap();
+    let roundtrip: Skin = toml::Value::Table(manifest).try_into().unwrap();
+    assert_eq!(
+        roundtrip.dialogue.responsive,
+        loaded.skin.dialogue.responsive
+    );
+    write_skin(
+        dir.path(),
+        &format!("{old}\n[dialogue.responsive.portrait]\ndecor=[{{aspect_ratio=0}}]\n"),
+        &[],
+    );
+    assert!(load_dir(dir.path()).is_err());
 }

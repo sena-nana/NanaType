@@ -88,7 +88,8 @@ pub fn glyphs(text: &str, at_ms: &[Option<u64>]) -> Vec<Glyph> {
         .collect()
 }
 
-/// A laid out line: its text and its vertical extent in the text node.
+/// A laid out line/column in the engine's line-relative coordinates.
+/// `top`/`bottom` are block-axis distances (down in horizontal, left in vertical).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LineSpan {
     pub bytes: Range<usize>,
@@ -164,6 +165,7 @@ pub fn page_breaks(lines: &[LineSpan], glyphs: &[Glyph], viewport: f32) -> Vec<u
 
 /// What the host reads back from the last layout of a page.
 pub struct Measure<'a> {
+    pub vertical: bool,
     pub lines: Vec<LineSpan>,
     pub viewport: f32,
     pub glyphs: &'a [Glyph],
@@ -181,6 +183,7 @@ struct Ease {
 /// and starts every page at its own top.
 #[derive(Debug, Default)]
 pub struct Follow {
+    vertical: bool,
     key: Option<PageKey>,
     /// A layout of this page has been read.
     measured: bool,
@@ -212,6 +215,8 @@ impl Follow {
             return 0.0;
         }
         if let Some(m) = measure {
+            let axis_changed = self.vertical != m.vertical;
+            self.vertical = m.vertical;
             let overflowing = m
                 .lines
                 .last()
@@ -228,7 +233,7 @@ impl Follow {
                 (0.0, None)
             };
             self.next_line_at = next;
-            if !self.measured || reduced {
+            if !self.measured || reduced || axis_changed {
                 self.measured = true;
                 self.current = target;
                 self.ease = None;
@@ -266,8 +271,8 @@ impl Follow {
 /// full, as units of the line.
 #[derive(Debug, Default)]
 pub struct Pager {
-    /// The page (and box height) last measured.
-    sent: Option<(PageKey, u32)>,
+    /// Include line/column wrapping, not just the viewport's block extent.
+    sent: Option<(PageKey, u64)>,
     /// A page not measured yet.
     waiting: bool,
 }
@@ -285,11 +290,20 @@ impl Pager {
         };
         self.waiting = self.sent.is_none_or(|(k, _)| k != key);
         let m = measure?;
-        let height = m.viewport.round() as u32;
-        if self.sent == Some((key, height)) {
+        use std::hash::{Hash, Hasher};
+        let mut geometry = std::collections::hash_map::DefaultHasher::new();
+        m.viewport.to_bits().hash(&mut geometry);
+        m.vertical.hash(&mut geometry);
+        for line in &m.lines {
+            line.bytes.hash(&mut geometry);
+            line.top.to_bits().hash(&mut geometry);
+            line.bottom.to_bits().hash(&mut geometry);
+        }
+        let geometry = geometry.finish();
+        if self.sent == Some((key, geometry)) {
             return None;
         }
-        self.sent = Some((key, height));
+        self.sent = Some((key, geometry));
         self.waiting = false;
         let breaks: Vec<u32> = page_breaks(&m.lines, m.glyphs, m.viewport)
             .into_iter()
@@ -377,6 +391,7 @@ mod tests {
         let l = lines(5, 10);
         let g = typed(50);
         let m = Measure {
+            vertical: false,
             lines: l,
             viewport: 120.0,
             glyphs: &g,
@@ -415,6 +430,7 @@ mod tests {
         let l = lines(7, 10);
         let g = typed(70);
         let m = Measure {
+            vertical: false,
             lines: l,
             viewport: 120.0,
             glyphs: &g,
@@ -434,6 +450,51 @@ mod tests {
     }
 
     #[test]
+    fn reflow_remeasures_columns_even_when_the_block_viewport_stays_the_same() {
+        let g = typed(70);
+        let key = Some(PageKey {
+            line: None,
+            visible_from: 0,
+        });
+        let mut pager = Pager::default();
+        let mut m = Measure {
+            vertical: false,
+            lines: lines(7, 10),
+            viewport: 120.,
+            glyphs: &g,
+        };
+        assert_eq!(pager.frame(key, Some(&m)), Some(vec![30, 60]));
+        m.lines = lines(14, 5);
+        assert_eq!(pager.frame(key, Some(&m)), Some(vec![15, 30, 45, 60]));
+        assert_eq!(pager.frame(key, Some(&m)), None);
+    }
+
+    #[test]
+    fn changing_writing_axis_snaps_to_the_revealed_frontier_without_restarting_the_page() {
+        let key = Some(PageKey {
+            line: None,
+            visible_from: 0,
+        });
+        let g = typed(50);
+        let mut follow = Follow::default();
+        let mut m = Measure {
+            vertical: false,
+            lines: lines(5, 10),
+            viewport: 120.,
+            glyphs: &g,
+        };
+        assert_eq!(follow.frame(key, Some(&m), 10000, false), 80.);
+        m.vertical = true;
+        m.viewport = 80.;
+        assert_eq!(follow.frame(key, Some(&m), 10001, false), 120.);
+        assert!(
+            !follow.wants_frame(),
+            "the old axis must not ease into the new one"
+        );
+        assert_eq!(follow.key, key);
+    }
+
+    #[test]
     fn reduced_motion_jumps() {
         let key = Some(PageKey {
             line: None,
@@ -443,6 +504,7 @@ mod tests {
         let g = typed(50);
         let mut f = Follow::default();
         let m = Measure {
+            vertical: false,
             lines: l,
             viewport: 120.0,
             glyphs: &g,

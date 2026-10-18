@@ -25,6 +25,9 @@ fn paper_noise(p:vec2<f32>)->f32 {
 }
 fn effect(i:EffectInput)->vec4<f32> {
  let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
+ // Portrait/compact instances reuse the original ink and material in logical pixels.
+ let portrait=i.params0.x>.5 && i.params0.x<1.5;
+ let details=i.params0.y<.5;
  let q=p-s*.5; let b=s*.5-vec2(1.);
  let opening=exp(-i.line_age*3.); let speaker=exp(-i.speaker_age*3.);
 // Warm, irregular paper pulp: mottling, fibres, flecks and edge wicking.
@@ -46,10 +49,11 @@ fn effect(i:EffectInput)->vec4<f32> {
  c=mix(c,rgb(128.,89.,48.),line(edge+1.8,.48)*.72*impression);
  c=mix(c,rgb(154.,117.,73.),line(edge+8.,.35)*.56*impression);
  c=mix(c,rgb(255.,245.,218.),line(edge+2.7,.32)*.42);
- let tl=decal(p,vec2(4.,2.),vec2(144.,56.));
- let tr=decal(vec2(s.x-p.x,p.y),vec2(4.,2.),vec2(144.,56.));
- let bl=decal(vec2(p.x,s.y-p.y),vec2(4.,2.),vec2(144.,56.));
- let br=decal(s-p,vec2(4.,2.),vec2(144.,56.));
+ let sprig=select(vec2(144.,56.),vec2(min(144.,s.x*.42),min(144.,s.x*.42)*56./144.),i.params0.x>.5);
+ let tl=decal(p,vec2(4.,2.),sprig);
+ let tr=decal(vec2(s.x-p.x,p.y),vec2(4.,2.),sprig);
+ let bl=decal(vec2(p.x,s.y-p.y),vec2(4.,2.),sprig);
+ let br=decal(s-p,vec2(4.,2.),sprig);
  let pressure=.78+.14*pulp;
  c=mix(c,tl.rgb,tl.a*pressure); c=mix(c,tr.rgb,tr.a*pressure);
  c=mix(c,bl.rgb,bl.a*pressure); c=mix(c,br.rgb,br.a*pressure);

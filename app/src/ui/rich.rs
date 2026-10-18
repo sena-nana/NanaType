@@ -403,6 +403,366 @@ impl MentionLook {
     }
 }
 
+/// Outline badge text through the same registered faces and fallback as body text.
+/// SVG image decoding deliberately does not load fonts or external font resources.
+fn badge_glyph_paths(
+    text: &str,
+    look: &Look,
+    font: f32,
+    x: f32,
+    baseline: f32,
+    fill: &str,
+    weight: u16,
+) -> String {
+    use nana_text::TextEngine;
+    use nana_ui::runtime::TextShaper;
+    use std::fmt::Write;
+    struct Outline(String);
+    impl ttf_parser::OutlineBuilder for Outline {
+        fn move_to(&mut self, x: f32, y: f32) {
+            let _ = write!(self.0, "M{x} {y}");
+        }
+        fn line_to(&mut self, x: f32, y: f32) {
+            let _ = write!(self.0, "L{x} {y}");
+        }
+        fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
+            let _ = write!(self.0, "Q{x1} {y1} {x} {y}");
+        }
+        fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
+            let _ = write!(self.0, "C{x1} {y1} {x2} {y2} {x} {y}");
+        }
+        fn close(&mut self) {
+            self.0.push('Z');
+        }
+    }
+    let Some(engine) = nana_ui::NanaTextShaper::default().text_engine() else {
+        return String::new();
+    };
+    let mut engine = engine.lock().unwrap_or_else(|e| e.into_inner());
+    let source = nana_text::TextSource::new(text);
+    let style = nana_text::TextStyle {
+        font_family: look.body.as_deref().map(Arc::from),
+        font_size_px: font,
+        font_weight: weight,
+        ..Default::default()
+    };
+    let layout = engine.layout(
+        nana_text::TextKind::Label,
+        &source,
+        &style,
+        &Default::default(),
+        &mut Default::default(),
+    );
+    let advance = layout.runs.iter().map(|r| r.advance_px).sum::<f32>();
+    let mut out = String::new();
+    for run in &layout.runs {
+        let Some(data) = engine.fonts().face_data(run.font) else {
+            continue;
+        };
+        let Ok(face) = ttf_parser::Face::parse(data.bytes(), data.index()) else {
+            continue;
+        };
+        let scale = font / f32::from(face.units_per_em());
+        let mut pen = x - advance * 0.5 + run.origin_x_px;
+        for glyph in &run.glyphs {
+            let mut path = Outline(String::new());
+            face.outline_glyph(ttf_parser::GlyphId(glyph.glyph_id as u16), &mut path);
+            let gx = pen + glyph.offset_x_px;
+            let gy = baseline - glyph.offset_y_px;
+            let _ = write!(
+                out,
+                r#"<path fill="{fill}" transform="translate({gx} {gy}) scale({scale} -{scale})" d="{}"/>"#,
+                path.0
+            );
+            pen += glyph.advance_px;
+        }
+    }
+    out
+}
+
+fn badge_icon_paths(source: &str, width: f32, round: bool) -> Option<String> {
+    use std::fmt::Write;
+    let path = nana_ui::resolve_background_image_url(source)?;
+    if std::fs::metadata(&path).ok()?.len() > 64 * 1024 {
+        return None;
+    }
+    let image = image::load_from_memory(&std::fs::read(path).ok()?).ok()?;
+    let side = (width - 4.).round().clamp(8., 32.) as u32;
+    let image = image
+        .resize_to_fill(side, side, image::imageops::FilterType::Triangle)
+        .to_rgba8();
+    let radius = if round { width * 0.5 - 2. } else { width * 0.2 };
+    let mut svg = format!(
+        r#"<defs><clipPath id="avatar"><rect x="2" y="2" width="{}" height="{}" rx="{radius}"/></clipPath></defs><g clip-path="url(#avatar)">"#,
+        width - 4.,
+        width - 4.
+    );
+    let step = (width - 4.) / side as f32;
+    for (x, y, pixel) in image.enumerate_pixels() {
+        let [r, g, b, a] = pixel.0;
+        if a == 0 {
+            continue;
+        }
+        let _ = write!(
+            svg,
+            r#"<rect x="{}" y="{}" width="{}" height="{}" fill="rgb({r},{g},{b})" fill-opacity="{}"/>"#,
+            2. + x as f32 * step,
+            2. + y as f32 * step,
+            step + 0.01,
+            step + 0.01,
+            a as f32 / 255.
+        );
+    }
+    svg.push_str("</g>");
+    Some(svg)
+}
+
+/// The engine's label glyph runs are horizontal-only. Preserve a label as
+/// one reveal/object unit by drawing its vertical badge as a contained SVG.
+/// Ordinary text still uses native vertical shaping and punctuation.
+pub fn vertical_objects(rich: &mut RichText, look: &Look, max_inline: f32) {
+    static CACHE: LazyLock<Mutex<HashMap<blake3::Hash, RichObject>>> =
+        LazyLock::new(Default::default);
+    let objects = rich.objects().to_vec();
+    for (offset, mut object) in objects {
+        match &object.content {
+            RichObjectContent::Label { label, style } => {
+                use nana_ui::runtime::TextShaper;
+                let generation = nana_ui::NanaTextShaper::default().font_generation();
+                let key = blake3::hash(
+                    format!(
+                        "{label:?}/{style:?}/{:?}/{}/{max_inline}/{generation}",
+                        look.body, look.size
+                    )
+                    .as_bytes(),
+                );
+                if let Some(mut cached) = CACHE
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .get(&key)
+                    .cloned()
+                {
+                    cached.id = object.id;
+                    rich.set_object(offset, cached);
+                    continue;
+                }
+                let font = look.size * style.scale;
+                let width = (font * 1.5).ceil().max(8.);
+                let icon_height = if style.icon.is_some() { width } else { 0. };
+                let cap = (((max_inline.max(font * 3.) - icon_height - font) / (font * 1.15))
+                    as usize)
+                    .clamp(1, 24);
+                let mut chars: Vec<_> =
+                    label.graphemes(true).take(cap).map(str::to_owned).collect();
+                if label.graphemes(true).count() > cap {
+                    chars.pop();
+                    chars.push("…".into());
+                }
+                let height = (font + icon_height + chars.len() as f32 * font * 1.15).ceil();
+                let color = |c: [f32; 4]| {
+                    format!(
+                        "rgba({},{},{},{})",
+                        (c[0] * 255.).round(),
+                        (c[1] * 255.).round(),
+                        (c[2] * 255.).round(),
+                        c[3]
+                    )
+                };
+                let mut svg = format!(
+                    r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{width}" height="{height}"><rect width="{width}" height="{height}" rx="{}" fill="{}"/>"#,
+                    width * 0.5,
+                    color(style.fill)
+                );
+                if let Some(icon) = style
+                    .icon
+                    .as_ref()
+                    .and_then(|url| badge_icon_paths(url, width, style.icon_round))
+                {
+                    svg.push_str(&icon);
+                }
+                for (i, ch) in chars.iter().enumerate() {
+                    let y = icon_height + font + i as f32 * font * 1.15;
+                    svg.push_str(&badge_glyph_paths(
+                        ch,
+                        look,
+                        font,
+                        width * 0.5,
+                        y,
+                        &color(style.text),
+                        style.weight.unwrap_or(700),
+                    ));
+                }
+                svg.push_str("</svg>");
+                // Swap line-relative dimensions: the image's physical badge stays upright.
+                object = RichObject::image(
+                    object.id,
+                    format!(
+                        "data:image/svg+xml;base64,{}",
+                        super::settings::controls::base64(svg.as_bytes())
+                    ),
+                    height,
+                    width,
+                )
+                .descent(width * 0.5);
+                let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+                if cache.len() >= 128 {
+                    cache.clear();
+                }
+                cache.insert(key, object.clone());
+            }
+            RichObjectContent::Image { .. } | RichObjectContent::HostTexture { .. } => {
+                std::mem::swap(&mut object.width_px, &mut object.height_px);
+                object.descent_px = object.height_px * 0.5;
+            }
+            _ => {}
+        }
+        rich.set_object(offset, object);
+    }
+}
+
+/// Measure the complete column stack with the same native engine that paints it.
+/// The layout box must own this extent: native inline objects use the full stack
+/// as their origin, whereas an auto-sized CSS box can be limited to its parent.
+pub fn vertical_extent(
+    rich: &RichText,
+    node: &nana_ui::runtime::NodeStyle,
+    height: f32,
+    locale: Locale,
+) -> f32 {
+    use nana_text::{TextEngine, TextSource, TextStyle};
+    use nana_ui::runtime::{TextShaper, nana_font_family};
+    let l = &node.layout;
+    let base = TextStyle {
+        font_family: l.font_family.as_deref().map(nana_font_family),
+        font_size_px: l.font_size.unwrap_or(16.),
+        font_weight: l.font_weight.unwrap_or(400),
+        line_height: l.line_height,
+        letter_spacing_px: l.letter_spacing.unwrap_or(0.),
+        language: nana_text::font::LanguageTag::new(locale.tag()),
+        ..Default::default()
+    };
+    let mut source = TextSource::new(rich.text());
+    source.set_spans(
+        rich.spans()
+            .iter()
+            .filter(|(_, s)| !s.shape.is_empty())
+            .map(|(range, s)| {
+                let shape = &s.shape;
+                let mut style = base.clone();
+                if let Some(family) = &shape.family {
+                    style.font_family = Some(nana_font_family(family));
+                }
+                if let Some(size) = shape
+                    .size_em
+                    .map(|em| em * base.font_size_px)
+                    .or(shape.size_px)
+                {
+                    style.font_size_px = size;
+                    if let Some(nana_ui_core::LineHeightSpec::Absolute(h)) = style.line_height {
+                        style.line_height = Some(nana_ui_core::LineHeightSpec::Relative(
+                            h / base.font_size_px,
+                        ));
+                    }
+                }
+                if let Some(weight) = shape.weight {
+                    style.font_weight = weight;
+                }
+                if let Some(italic) = shape.italic {
+                    style.italic = italic;
+                }
+                if let Some(spacing) = shape.letter_spacing_px {
+                    style.letter_spacing_px = spacing;
+                }
+                if let Some(features) = &shape.features {
+                    style.features = features.to_vec();
+                }
+                nana_text::TextSpan {
+                    range,
+                    style,
+                    composition: None,
+                }
+            })
+            .collect(),
+    );
+    source.set_objects(
+        rich.objects()
+            .iter()
+            .map(|(offset, object)| {
+                let [width_px, ascent_px, descent_px] = object.line_box();
+                nana_text::InlineObject {
+                    offset: *offset,
+                    id: object.id,
+                    metrics: nana_text::InlineObjectMetrics {
+                        width_px,
+                        ascent_px,
+                        descent_px,
+                        envelope: None,
+                    },
+                }
+            })
+            .collect(),
+    );
+    source.set_rubies(
+        rich.rubies()
+            .iter()
+            .map(|(range, text)| nana_text::RubySpan {
+                range: range.clone(),
+                text: Arc::clone(text),
+            })
+            .collect(),
+    );
+    let mut offset = 0;
+    if !rich.paragraph_alignments().is_empty() {
+        source.set_paragraph_alignments(
+            rich.text()
+                .split('\n')
+                .enumerate()
+                .map(|(i, text)| {
+                    let entry = (offset, rich.paragraph_alignment(i));
+                    offset += text.len() + 1;
+                    entry
+                })
+                .collect(),
+        );
+    }
+    let mut constraints = nana_text::TextConstraints {
+        max_height_px: Some(height.max(1.)),
+        wrap: Some(l.text_wrap_break()),
+        preserve_lines: true,
+        writing_mode: nana_ui_core::WritingModeSpec::VerticalRl,
+        text_orientation: nana_ui_core::TextOrientationSpec::Mixed,
+        wrap_style: nana_ui_core::TextWrapStyleSpec::Pretty,
+        align: match node.text_horizontal_alignment {
+            nana_ui::runtime::TextHorizontalAlignment::Start => nana_ui_core::TextAlignSpec::Start,
+            nana_ui::runtime::TextHorizontalAlignment::Center => {
+                nana_ui_core::TextAlignSpec::Center
+            }
+            nana_ui::runtime::TextHorizontalAlignment::End => nana_ui_core::TextAlignSpec::End,
+        },
+        ..Default::default()
+    };
+    nana_ui::runtime::apply_used_typography(
+        &mut constraints,
+        l.text_typography
+            .used(matches!(locale, Locale::ZhCn | Locale::JaJp)),
+    );
+    let engine = nana_ui::NanaTextShaper::default()
+        .text_engine()
+        .expect("native text engine");
+    nana_text::lock_text_engine(&engine)
+        .layout(
+            nana_text::TextKind::Paragraph,
+            &source,
+            &base,
+            &constraints,
+            &mut Default::default(),
+        )
+        .physical_size()
+        .0
+        .ceil()
+        .max(1.)
+}
+
 // ---- interned attribute combinations -----------------------------------
 
 static ATTRS: LazyLock<Mutex<Vec<(Effects, Pace)>>> = LazyLock::new(|| Mutex::new(Vec::new()));
@@ -1114,6 +1474,50 @@ mod tests {
         assert_ne!(mention_colors(&rpg).0.with_alpha(255), rpg.chrome.accent);
         let pixel = reg.load("nanatype.pixel").unwrap().skin;
         assert_eq!(mention_colors(&pixel).0, pixel.chrome.accent);
+    }
+
+    #[test]
+    fn vertical_inline_badges_keep_one_playback_unit_and_images_keep_physical_aspect() {
+        let mut builder = RichText::builder();
+        builder.object(RichObject::image(10, "file:///wide.png", 80., 40.));
+        builder.object(RichObject::label(
+            20,
+            "@奈奈 & <friend>",
+            RichLabelStyle::default(),
+        ));
+        let mut rich = builder.build();
+        let before = rich.text().to_owned();
+        let offsets: Vec<_> = rich.objects().iter().map(|(at, o)| (*at, o.id)).collect();
+        vertical_objects(&mut rich, &look(), 400.);
+        assert_eq!(rich.text(), before);
+        assert_eq!(
+            rich.objects()
+                .iter()
+                .map(|(at, o)| (*at, o.id))
+                .collect::<Vec<_>>(),
+            offsets
+        );
+        assert_eq!(rich.objects()[0].1.width_px, 40.);
+        assert_eq!(rich.objects()[0].1.height_px, 80.);
+        let object = &rich.objects()[1].1;
+        assert!(object.width_px > object.height_px);
+        let RichObjectContent::Image { source } = &object.content else {
+            panic!("vertical label image");
+        };
+        assert!(source.starts_with("data:image/svg+xml;base64,"));
+        let mut again = RichText::builder();
+        again.object(RichObject::label(
+            50,
+            "@奈奈 & <friend>",
+            RichLabelStyle::default(),
+        ));
+        let mut again = again.build();
+        vertical_objects(&mut again, &look(), 400.);
+        assert_eq!(
+            again.objects()[0].1.id,
+            50,
+            "cached pictures must not replace object identities"
+        );
     }
 
     #[test]

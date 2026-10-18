@@ -4,6 +4,7 @@
 
 pub(super) mod controls;
 mod pages;
+pub mod preview;
 mod skin_grid;
 mod telegram;
 

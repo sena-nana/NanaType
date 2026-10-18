@@ -428,22 +428,41 @@ impl Host {
         let measure = page.as_ref().and_then(|page| {
             let world = self.docs.get(&ui.display_kind().id())?.context().world();
             let (_, layout) = world.text_layout(ui.text_node.get_untracked()?)?;
+            let vertical = nanatype_theme::dialogue_is_vertical(
+                &self.app.skin,
+                ui.display_size.get_untracked(),
+            );
+            if layout.is_vertical() != vertical {
+                return None;
+            }
             // A layout of an older node until the new one is laid out.
             let end = layout.lines.last()?.source.end;
             if end < page.text_trimmed || end > page.text_len {
                 return None;
             }
             Some(Measure {
+                vertical,
                 lines: layout
                     .lines
                     .iter()
+                    // TextLayout stores line-relative axes even for vertical writing.
                     .map(|l| LineSpan {
                         bytes: l.source.clone(),
                         top: l.bounds.y,
                         bottom: l.bounds.y + l.bounds.height,
                     })
                     .collect(),
-                viewport: world.layout_box(ui.text_port.get_untracked()?)?.height,
+                viewport: {
+                    let port = world.layout_box(ui.text_port.get_untracked()?)?;
+                    if nanatype_theme::dialogue_is_vertical(
+                        &self.app.skin,
+                        ui.display_size.get_untracked(),
+                    ) {
+                        port.width
+                    } else {
+                        port.height
+                    }
+                },
                 glyphs: &page.glyphs,
             })
         });
@@ -892,11 +911,14 @@ impl RuntimeProgram for Host {
                         )
                         && ((current.0 - w).abs() > 1.0 || (current.1 - h).abs() > 1.0)
                     {
-                        self.app.edit(|s| {
-                            if let Some(o) = kind.overlay_mut(s) {
-                                o.size = Some([w, h]);
-                            }
-                        });
+                        let profile = crate::ui::settings::preview::Draft::load(
+                            &self.app.settings,
+                            &self.app.settings.skin.id,
+                            self.app.ui,
+                        )
+                        .profile(&self.app.skin)
+                        .ok();
+                        self.app.edit(|s| kind.remember_size(s, [w, h], profile));
                     }
                 }
             }
@@ -934,6 +956,9 @@ impl RuntimeProgram for Host {
                 }),
             },
             WindowEvent::Closed { id } => {
+                if id == WindowKind::Settings.id() {
+                    self.app.ui.skin_drafts.set(HashMap::new());
+                }
                 if let Some(kind) = WindowKind::from_id(id) {
                     self.app.windows.closed(kind);
                 }
@@ -1381,6 +1406,7 @@ mod redraw_tests {
             },
         ];
         let measure = Measure {
+            vertical: false,
             lines: vec![
                 LineSpan {
                     bytes: 0..1,

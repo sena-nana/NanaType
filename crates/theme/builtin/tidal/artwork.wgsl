@@ -24,7 +24,27 @@ fn decal(p:vec2<f32>, origin:vec2<f32>, extent:vec2<f32>) -> vec4<f32> {
     if(any(uv<vec2(0.)) || any(uv>vec2(1.))) { return vec4(0.); }
     return sample0(uv);
 }
+// Recompose the original print vocabulary in logical pixels; no scaled canvas.
+fn responsive_print(i: EffectInput) -> vec4<f32> {
+    let p=i.uv*i.size; let s=i.size; let compact=i.params0.z > .5;
+    let phase=i.phase*6.283185;
+    let wave=select(3.,1.4,compact)*sin(p.x*.045);
+    let edge=rect(p-s*.5+vec2(0.,wave),s*.5-vec2(5.,9.),select(29.,12.,compact));
+    var c=mix(ink(12.,44.,58.),i.base.rgb,i.uv.y);
+    let panel=select(aa(s.y-158.-p.y),aa(s.x-24.-p.x),compact);
+    let caustic=sin(p.x*.055+sin(p.y*.042+phase)*.9)+sin(p.y*.07-phase);
+    c=mix(c,i.accent.rgb,line(caustic,.045)*.035*panel);
+    let glass=line(edge+6.,.7); let inner=line(edge+11.,.45);
+    c=mix(c,i.accent.rgb,glass*.72+inner*.22);
+    let bevel=aa(edge+1.)*(1.-aa(edge+6.));
+    c=mix(c,i.accent.rgb,bevel*(.08+.1*(.5+.5*sin(i.uv.x*4.2-i.uv.y*2.4+.5))));
+    let bubble=p-vec2(s.x-26.+1.8*sin(phase),s.y-38.-12.*sin(phase));
+    c=mix(c,i.border.rgb,ring(bubble,3.8,.55)*.23);
+    c+=i.accent.rgb*glass*.025*(1.+sin(phase));
+    return vec4(c,aa(edge));
+}
 fn effect(i: EffectInput) -> vec4<f32> {
+    if(i.params0.y > .5 || i.params0.z > .5) { return responsive_print(i); }
     let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
     // Keep the glass silhouette aligned with the static fallback beneath it.
     // Reflections and caustics carry the motion without moving this alpha edge.
@@ -32,7 +52,7 @@ fn effect(i: EffectInput) -> vec4<f32> {
     let edge=rect(p-s*.5+vec2(0.,wave),s*.5-vec2(5.,9.),29.);
     var c=mix(ink(12.,44.,58.),i.base.rgb,i.uv.y);
     let v=p-vec2(s.x-93.,s.y*.49); let r=length(v);
-    c=mix(c,ink(34.,103.,116.),disc(v,94.)*.9);
+    if(i.params0.x < .5) { c=mix(c,ink(34.,103.,116.),disc(v,94.)*.9); }
     // Integer temporal harmonics close the 16s loop; fade into the water panel.
     let caustic=sin(p.x*.055+sin(p.y*.042+t)*.9)+sin(p.y*.07-t);
     let water=smoothstep(s.x-205.,s.x-110.,p.x);
@@ -55,9 +75,9 @@ fn effect(i: EffectInput) -> vec4<f32> {
     local.x=local.x*(1.+.18*squeeze*bell)+tail*drag;
     local.y=local.y*(1.-.10*squeeze*bell);
     let jelly=decal(local+pivot,vec2(s.x-163.4,s.y*.49-70.),vec2(140.8,176.));
-    c=mix(c,jelly.rgb,jelly.a);
+    if(i.params0.x < .5) { c=mix(c,jelly.rgb,jelly.a); }
     let halo=ring(v,87.,.45)*aa(v.x+55.);
-    c=mix(c,i.accent.rgb,halo*.58);
+    if(i.params0.x < .5) { c=mix(c,i.accent.rgb,halo*.58); }
     // Bubbles fade before wrapping, and stay inside the ornamental water strip.
     let bubble=p-vec2(s.x-30.+1.8*sin(2.*t),s.y+12.-fract(i.phase+.3)*(s.y+24.));
     let bubble2=p-vec2(s.x-156.+1.2*sin(t),s.y+12.-fract(i.phase+.78)*(s.y+24.));

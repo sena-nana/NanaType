@@ -158,3 +158,34 @@ panel = { color = "#00000000", padding = [12, 12, 12, 12] }
 color = "#000000"
 size = 18
 line_height = 1.4
+
+
+# Keep original surfaces and non-menu decorations in every orientation.
+[dialogue.responsive]
+landscape = { decor = [{ anchor = "bottom_left", offset = [169, -8], size = [46, 22], text = "SAVE", when = "display", text_color = "#73767C", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_left", offset = [228, -8], size = [48, 22], text = "LOAD", when = "display", text_color = "#73767C", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_left", offset = [289, -8], size = [62, 22], text = "Q.SAVE", when = "display", text_color = "#73767C", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_left", offset = [364, -8], size = [64, 22], text = "Q.LOAD", when = "display", text_color = "#73767C", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_left", offset = [441, -8], size = [52, 22], text = "« ‹ › »", when = "display", text_color = "#73767C", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_left", offset = [506, -8], size = [78, 22], text = "HISTORY", when = "display", text_color = "#73767C", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_left", offset = [597, -8], size = [18, 22], text = "✕", when = "display", text_color = "#73767C", text_size = 18, font = "body", min_window = [1000, 160] }] }
+portrait = { padding = [20, 24, 56, 72], box = { color = "#00000000", border_width = 0, radius = 0, width_fraction = 1 }, nameplate = { color = "#00000000", text_color = "#202124", size = 27, radius = 0, padding = [4, 4], offset = [-8, 12], anchor = "top_right", rotate = 0 }, continue = { glyph = "", motion = "none", anchor = "bottom_left", offset = [12, -8] }, portrait = { visible = false }, decor = [], shader_effects = [] }
+
+[[dialogue.responsive.rules]]
+max_width = 600
+portrait = false
+layout = { padding = [16, 40, 16, 16], nameplate = { color = "#00000000", text_color = "#202124", size = 27, radius = 0, padding = [0, 0], offset = [12, 4], anchor = "top_left", rotate = 0 }, box = { color = "#00000000", border_width = 0, radius = 0, width_fraction = 1 }, shader_effects = [], decor = [] }
+
+[[dialogue.responsive.rules]]
+max_height = 160
+portrait = false
+layout = { padding = [16, 40, 16, 16], nameplate = { color = "#00000000", text_color = "#202124", size = 27, radius = 0, padding = [0, 0], offset = [12, 4], anchor = "top_left", rotate = 0 }, box = { color = "#00000000", border_width = 0, radius = 0, width_fraction = 1 }, shader_effects = [], decor = [] }
+
+[[dialogue.responsive.rules]]
+max_width = 240
+portrait = true
+layout = { padding = [12, 16, 48, 48], decor = [], shader_effects = [] }
+
+[[dialogue.responsive.rules]]
+max_height = 480
+portrait = true
+layout = { padding = [12, 16, 48, 24], decor = [] }
+
+[[dialogue.responsive.rules]]
+max_width = 200
+max_height = 140
+layout = { padding = [10, 12, 10, 12], nameplate = { visible = false }, portrait = { visible = false }, decor = [], shader_effects = [], box = { color = "#00000000", border_width = 0, radius = 0, width_fraction = 1 } }

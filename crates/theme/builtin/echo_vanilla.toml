@@ -191,3 +191,58 @@ line_height = 1.4
 [effects]
 # Coloured runs under 3:1 on the box get a 1.5px outline in the darkest ink.
 contrast_guard = 3.0
+
+
+[shaders.responsive_print]
+source = "echo_vanilla/artwork.wgsl"
+intensity = 1
+period_s = 16
+static_fallback = true
+animated = false
+params = [1]
+
+[shaders.compact_print]
+source = "echo_vanilla/artwork.wgsl"
+intensity = 1
+period_s = 16
+static_fallback = true
+animated = false
+params = [2]
+
+[shaders.minimal_print]
+source = "echo_vanilla/artwork.wgsl"
+intensity = 1
+period_s = 16
+static_fallback = true
+animated = false
+params = [2, 1]
+
+# Preserve the original print; resize its reading field, not a flattened plate.
+[dialogue.responsive]
+landscape = { decor = [{ anchor = "top_right", size = [13, 13], polygon = [[0, 0], [100, 0], [100, 100]], color = "#cccccc" }, { anchor = "bottom_left", offset = [222, -8], size = [46, 22], text = "SAVE", when = "display", text_color = "#888888", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_left", offset = [281, -8], size = [48, 22], text = "LOAD", when = "display", text_color = "#888888", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_left", offset = [342, -8], size = [62, 22], text = "Q.SAVE", when = "display", text_color = "#888888", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_left", offset = [417, -8], size = [64, 22], text = "Q.LOAD", when = "display", text_color = "#888888", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_left", offset = [494, -8], size = [52, 22], text = "« ‹ › »", when = "display", text_color = "#888888", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_left", offset = [559, -8], size = [78, 22], text = "HISTORY", when = "display", text_color = "#888888", text_size = 18, font = "body", min_window = [1000, 160] }, { anchor = "bottom_left", offset = [650, -8], size = [18, 22], text = "✕", when = "display", text_color = "#888888", text_size = 18, font = "body", min_window = [1000, 160] }] }
+portrait = { padding = [20, 24, 56, 72], box = { color = "#ffffff", border_color = "#cccccc", border_width = 0, border_widths = [1.5, 0, 0, 0], radius = 0, width_fraction = 1 }, nameplate = { color = "#00000000", text_color = "#000000", size = 27, radius = 0, padding = [4, 4], offset = [-8, 12], anchor = "top_right", rotate = 0 }, continue = { glyph = "", motion = "none", anchor = "bottom_left", offset = [12, -8] }, portrait = { visible = false }, decor = [{ anchor = "top_right", size = [13, 13], polygon = [[0, 0], [100, 0], [100, 100]], color = "#cccccc" }], shader_effects = [{ shader = "responsive_print", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_width = 600
+portrait = false
+layout = { padding = [16, 40, 16, 16], nameplate = { color = "#00000000", text_color = "#000000", size = 27, radius = 0, padding = [0, 0], offset = [12, 4], anchor = "top_left", rotate = 0 }, box = { color = "#ffffff", border_color = "#cccccc", border_width = 0, border_widths = [1.5, 0, 0, 0], radius = 0, width_fraction = 1 }, shader_effects = [{ shader = "compact_print", target = "artwork" }], decor = [{ anchor = "top_right", size = [13, 13], polygon = [[0, 0], [100, 0], [100, 100]], color = "#cccccc" }] }
+
+[[dialogue.responsive.rules]]
+max_height = 160
+portrait = false
+layout = { padding = [16, 40, 16, 16], nameplate = { color = "#00000000", text_color = "#000000", size = 27, radius = 0, padding = [0, 0], offset = [12, 4], anchor = "top_left", rotate = 0 }, box = { color = "#ffffff", border_color = "#cccccc", border_width = 0, border_widths = [1.5, 0, 0, 0], radius = 0, width_fraction = 1 }, shader_effects = [{ shader = "compact_print", target = "artwork" }], decor = [{ anchor = "top_right", size = [13, 13], polygon = [[0, 0], [100, 0], [100, 100]], color = "#cccccc" }] }
+
+[[dialogue.responsive.rules]]
+max_width = 240
+portrait = true
+layout = { padding = [12, 16, 48, 48], decor = [{ anchor = "top_right", size = [13, 13], polygon = [[0, 0], [100, 0], [100, 100]], color = "#cccccc" }], shader_effects = [{ shader = "responsive_print", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_height = 480
+portrait = true
+layout = { padding = [12, 16, 48, 24], decor = [{ anchor = "top_right", size = [13, 13], polygon = [[0, 0], [100, 0], [100, 100]], color = "#cccccc" }], shader_effects = [{ shader = "responsive_print", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_width = 200
+max_height = 140
+layout = { padding = [10, 12, 10, 12], nameplate = { visible = false }, portrait = { visible = false }, decor = [{ anchor = "top_right", size = [13, 13], polygon = [[0, 0], [100, 0], [100, 100]], color = "#cccccc" }], shader_effects = [{ shader = "minimal_print", target = "artwork" }], box = { color = "#ffffff", border_color = "#cccccc", border_width = 0, border_widths = [1.5, 0, 0, 0], radius = 0, width_fraction = 1 } }

@@ -140,14 +140,6 @@ fn builtin_files(b: &Builtin) -> Arc<dyn SkinFiles> {
             ])
         };
     }
-    macro_rules! still {
-        ($name:literal) => {
-            files.push((
-                concat!($name, "/still.png"),
-                include_bytes!(concat!("../builtin/", $name, "/still.png")),
-            ))
-        };
-    }
     match b.id {
         "nanatype.crayon" => files.extend_from_slice(&[
             (
@@ -157,6 +149,10 @@ fn builtin_files(b: &Builtin) -> Arc<dyn SkinFiles> {
             (
                 "crayon/erase.wgsl",
                 include_bytes!("../builtin/crayon/erase.wgsl"),
+            ),
+            (
+                "crayon/paper-background.wgsl",
+                include_bytes!("../builtin/crayon/paper-background.wgsl"),
             ),
             (
                 "crayon/paper.wgsl",
@@ -175,21 +171,21 @@ fn builtin_files(b: &Builtin) -> Arc<dyn SkinFiles> {
                 include_bytes!("../builtin/crayon/bubble.png"),
             ),
         ]),
-        "nanatype.halo" => still!("halo"),
+        "nanatype.halo" => plate!("halo"),
         "nanatype.night" => plate!("night"),
         "nanatype.parchment" => {
-            still!("parchment");
+            plate!("parchment");
             files.push((
                 "parchment/ornament.png",
                 include_bytes!("../builtin/parchment/ornament.png"),
             ));
         }
-        "nanatype.adv" => still!("adv"),
+        "nanatype.adv" => plate!("adv"),
         "nanatype.rpg" => plate!("rpg"),
-        "nanatype.vanilla" => still!("vanilla"),
+        "nanatype.vanilla" => plate!("vanilla"),
         "nanatype.bubble" => plate!("bubble"),
         "nanatype.livechat" => plate!("livechat"),
-        "nanatype.comic" => still!("comic"),
+        "nanatype.comic" => plate!("comic"),
         "nanatype.terminal" => plate!("terminal"),
         "nanatype.pixel" => plate!("pixel"),
         "nanatype.sakura" => {
@@ -199,9 +195,9 @@ fn builtin_files(b: &Builtin) -> Arc<dyn SkinFiles> {
                 include_bytes!("../builtin/sakura/ornament.png"),
             ));
         }
-        "nanatype.ink" => still!("ink"),
-        "nanatype.echo_vanilla" => still!("echo_vanilla"),
-        "nanatype.echo_bubble" => still!("echo_bubble"),
+        "nanatype.ink" => plate!("ink"),
+        "nanatype.echo_vanilla" => plate!("echo_vanilla"),
+        "nanatype.echo_bubble" => plate!("echo_bubble"),
         _ => {}
     }
     if b.id == "nanatype.ink" {
@@ -218,6 +214,14 @@ fn builtin_files(b: &Builtin) -> Arc<dyn SkinFiles> {
     }
     match b.id {
         "nanatype.gothic" => files.extend_from_slice(&[
+            (
+                "gothic/rose.png",
+                include_bytes!("../builtin/gothic/rose.png"),
+            ),
+            (
+                "gothic/tracery.png",
+                include_bytes!("../builtin/gothic/tracery.png"),
+            ),
             (
                 "gothic/artwork.wgsl",
                 include_bytes!("../builtin/gothic/artwork.wgsl"),

@@ -76,3 +76,62 @@ source = "crayon/write.wgsl"
 
 [materials.erase]
 source = "crayon/erase.wgsl"
+
+[materials.responsive_paper]
+source = "crayon/paper.wgsl"
+params = [1]
+
+[shaders.paper_static]
+source = "crayon/paper-background.wgsl"
+intensity = 1
+static_fallback = true
+animated = false
+
+[shaders.paper_narrow]
+source = "crayon/paper-background.wgsl"
+intensity = 1
+static_fallback = true
+animated = false
+params = [2]
+
+[shaders.paper_compact]
+source = "crayon/paper-background.wgsl"
+intensity = 1
+static_fallback = true
+animated = false
+params = [1]
+
+# Native responsive dialogue: logical client dimensions select orientation.
+[dialogue.responsive]
+landscape = { decor = [], shader_effects = [{ shader = "paper_static", target = "artwork" }] }
+portrait = { padding = [20, 24, 56, 140], box = { color = "#FFFBef", border_color = "#C29477", border_width = 0, radius = 7, material = "responsive_paper", width_fraction = 1, frame = { image = "crayon/bubble.png", slice = [18, 18, 18, 18], layout_inset = false, fill = false } }, nameplate = { color = "#00000000", text_color = "#A65B49", radius = 0, padding = [4, 4], offset = [-8, 12], size = 20, anchor = "top_right", rotate = 0 }, continue = { glyph = "···", color = "#B46A58", motion = "none", offset = [12, -8], anchor = "bottom_left" }, portrait = { visible = false }, decor = [], shader_effects = [{ shader = "paper_static", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_width = 600
+portrait = false
+layout = { padding = [16, 40, 16, 72], nameplate = { color = "#00000000", text_color = "#A65B49", radius = 0, padding = [0, 0], offset = [12, 4], size = 20, anchor = "top_left", rotate = 0 }, box = { color = "#FFFBef", border_color = "#C29477", border_width = 0, radius = 7, material = "responsive_paper", width_fraction = 1, frame = { image = "crayon/bubble.png", slice = [18, 18, 18, 18], layout_inset = false, fill = false } }, shader_effects = [{ shader = "paper_narrow", target = "artwork" }], decor = [] }
+
+[[dialogue.responsive.rules]]
+max_height = 160
+portrait = false
+layout = { padding = [16, 40, 16, 16], nameplate = { color = "#00000000", text_color = "#A65B49", radius = 0, padding = [0, 0], offset = [12, 4], size = 20, anchor = "top_left", rotate = 0 }, box = { color = "#FFFBef", border_color = "#C29477", border_width = 0, radius = 7, material = "responsive_paper", width_fraction = 1, frame = { image = "crayon/bubble.png", slice = [18, 18, 18, 18], layout_inset = false, fill = false } }, shader_effects = [{ shader = "paper_compact", target = "artwork" }], decor = [] }
+
+[[dialogue.responsive.rules]]
+max_width = 240
+portrait = true
+layout = { padding = [12, 16, 48, 72], decor = [], shader_effects = [{ shader = "paper_narrow", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_height = 480
+portrait = true
+layout = { padding = [12, 16, 48, 72], decor = [], shader_effects = [{ shader = "paper_narrow", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_height = 240
+portrait = true
+layout = { padding = [12, 12, 12, 12], decor = [], shader_effects = [{ shader = "paper_compact", target = "artwork" }], nameplate = { visible = false, anchor = "top_right" } }
+
+[[dialogue.responsive.rules]]
+max_width = 200
+max_height = 140
+layout = { padding = [10, 12, 10, 12], nameplate = { visible = false }, portrait = { visible = false }, decor = [], shader_effects = [{ shader = "paper_compact", target = "artwork" }], box = { color = "#FFFBef", border_color = "#C29477", border_width = 0, radius = 7, material = "responsive_paper", width_fraction = 1, frame = { image = "crayon/bubble.png", slice = [18, 18, 18, 18], layout_inset = false, fill = false } } }

@@ -55,6 +55,9 @@ pub enum Anchor {
 pub struct NineSlice {
     pub image: String,
     pub slice: [u32; 4],
+    /// Draw the center too; false leaves a native/material background beneath the edges.
+    #[serde(default = "yes")]
+    pub fill: bool,
     /// Drawn size of the slice borders as a multiple of `slice`.
     #[serde(default = "one")]
     pub scale: f32,
@@ -468,6 +471,12 @@ impl Default for DecorMotionSpec {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DecorSpec {
+    /// Keep this physical width/height ratio while resolving window constraints.
+    pub aspect_ratio: Option<f32>,
+    /// Maximum fraction of the window available to this ornament (not a scale-up).
+    pub max_fraction: Option<[f32; 2]>,
+    /// Hide secondary details below either logical window dimension.
+    pub min_window: Option<[f32; 2]>,
     pub shader: Option<String>,
     /// Transparent packaged artwork, fitted without stretching.
     pub image: Option<String>,
@@ -503,6 +512,9 @@ pub struct DecorSpec {
 impl Default for DecorSpec {
     fn default() -> Self {
         Self {
+            aspect_ratio: None,
+            max_fraction: None,
+            min_window: None,
             shader: None,
             image: None,
             motif: None,
@@ -772,6 +784,8 @@ impl BoxSpec {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TextSpec {
+    /// Optional body-only font override; name and accent roles are unchanged.
+    pub font_family: Option<String>,
     pub material: Option<String>,
     pub color: Rgba8,
     pub size: f32,
@@ -785,6 +799,7 @@ pub struct TextSpec {
 impl Default for TextSpec {
     fn default() -> Self {
         Self {
+            font_family: None,
             material: None,
             color: Rgba8::rgb(27, 47, 75),
             size: 28.0,
@@ -995,6 +1010,7 @@ impl Default for RevealSpec {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Dialogue {
+    pub responsive: Option<crate::ResponsiveDialogue>,
     pub shader_effects: Vec<crate::ShaderEffect>,
     /// Logical size of the dialogue region; the display window and the input
     /// stage are this size (plus `overscan` on every side).
@@ -1117,6 +1133,7 @@ impl Default for HistoryChatSpec {
 impl Default for Dialogue {
     fn default() -> Self {
         Self {
+            responsive: None,
             shader_effects: Vec::new(),
             region: [760.0, 150.0],
             overscan: 18.0,
@@ -1553,6 +1570,24 @@ impl Skin {
                 refs.push((border, value.as_str()));
             }
         }
+        if let Some(responsive) = &self.dialogue.responsive {
+            for layout in responsive.layouts() {
+                let shapes = layout
+                    .box_
+                    .iter()
+                    .map(|v| &v.shape)
+                    .chain(layout.nameplate.iter().map(|v| &v.shape))
+                    .chain(layout.decor.iter().flatten().map(|v| &v.shape));
+                for shape in shapes {
+                    if let Some(v) = &shape.material {
+                        refs.push(("dialogue.responsive.material", v.as_str()));
+                    }
+                    if let Some(v) = &shape.border_material {
+                        refs.push(("dialogue.responsive.border_material", v.as_str()));
+                    }
+                }
+            }
+        }
         refs
     }
 
@@ -1652,6 +1687,40 @@ impl Skin {
         }
         for path in self.dialogue.portrait.variants.values() {
             out.push(("dialogue.portrait.variants", path.as_str(), FileKind::Image));
+        }
+        if let Some(responsive) = &self.dialogue.responsive {
+            for layout in responsive.layouts() {
+                for p in layout.portrait.iter().flat_map(|p| p.variants.values()) {
+                    out.push(("dialogue.responsive.portrait.variants", p, FileKind::Image));
+                }
+                for decor in layout.decor.iter().flatten() {
+                    if let Some(image) = &decor.image {
+                        out.push(("dialogue.responsive.decor.image", image, FileKind::Image));
+                    }
+                }
+                for frame in [
+                    layout.box_.as_ref().and_then(|v| v.frame.as_ref()),
+                    layout.nameplate.as_ref().and_then(|v| v.frame.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    out.push((
+                        "dialogue.responsive.frame",
+                        &frame.image,
+                        FileKind::NineSlice(frame.slice),
+                    ));
+                }
+                for image in [
+                    layout.portrait.as_ref().and_then(|v| v.image.as_ref()),
+                    layout.continue_.as_ref().and_then(|v| v.image.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    out.push(("dialogue.responsive.image", image, FileKind::Image));
+                }
+            }
         }
         for (field, font) in [
             ("fonts.body.file", &self.fonts.body),

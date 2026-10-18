@@ -35,6 +35,8 @@ nanatype-douyin.workspace = true
 nanatype-core.workspace = true
 nanatype-p2p.workspace = true
 nana-ui.workspace = true
+nana-text.workspace = true
+ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
 nana-ui-platform.workspace = true
 nana-ui-core.workspace = true
 serde.workspace = true

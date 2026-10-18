@@ -19,6 +19,9 @@ fn decal(p:vec2<f32>,origin:vec2<f32>,extent:vec2<f32>)->vec4<f32> {
 }
 fn effect(i:EffectInput)->vec4<f32> {
  let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
+ // Portrait/compact instances reuse the original ink and material in logical pixels.
+ let portrait=i.params0.x>.5 && i.params0.x<1.5;
+ let details=i.params0.y<.5;
  let q=p-s*.5; let b=s*.5-vec2(1.);
  let opening=exp(-i.line_age*3.); let speaker=exp(-i.speaker_age*3.);
 // A branch flexes about its attachment; the paper and pink rim stay still.
@@ -26,10 +29,13 @@ fn effect(i:EffectInput)->vec4<f32> {
  var c=mix(rgb(255.,244.,248.),rgb(253.,228.,238.),i.uv.y);
  c=mix(c,rgb(230.,150.,180.),line(edge+1.,.6)*.9);
  c=mix(c,rgb(255.,254.,251.),line(edge+5.,.55)*.9);
- let hinge=vec2(s.x-8.,29.); let v=p-hinge;
+ if details {
+ let origin=select(vec2(s.x-134.,0.),vec2(8.,s.y-49.),portrait);
+ let hinge=origin+vec2(126.,29.); let v=p-hinge;
  let angle=.020*sin(t)+.006*sin(t*2.);
  let bent=hinge+vec2(cos(angle)*v.x-sin(angle)*v.y,sin(angle)*v.x+cos(angle)*v.y);
- let branch=decal(bent,vec2(s.x-134.,0.),vec2(128.,32.));
+ let branch=decal(bent,origin,vec2(128.,32.));
  c=mix(c,branch.rgb,branch.a);
+ }
  return vec4(c,aa(edge));
 }

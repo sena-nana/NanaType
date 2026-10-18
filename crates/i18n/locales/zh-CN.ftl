@@ -764,3 +764,28 @@ tb-align-start = 左对齐
 tb-align-center = 居中
 tb-align-end = 右对齐
 tb-current-value = 当前：{ $value }
+
+# Skin preview editor
+skin-edit-font = 正文字体
+skin-edit-font-presets = 字体选项
+skin-edit-size = 正文字号（8–200 px）
+skin-edit-line = 行高（1–3 倍）
+skin-edit-color = 文字颜色
+skin-edit-width = 宽度（160–8192 px）
+skin-edit-height = 高度（96–8192 px）
+skin-edit-test-text = 测试文本（仅用于预览）
+skin-edit-sample-reset = 恢复默认样例
+skin-edit-reset = 恢复皮肤默认
+skin-edit-discard = 放弃修改
+skin-edit-invalid = 请输入有效数值和十六进制颜色。留空表示皮肤默认值。
+skin-edit-font-missing = 此字体不可用，将使用备用字体。
+skin-edit-draft-hint = 改动仅在预览中显示；保存后应用到此皮肤，不会切换当前皮肤。留空使用皮肤默认值。
+skin-edit-unavailable = 此皮肤暂时无法预览。
+skin-edit-sample = 你好，NanaType！这是一段用于检查字号与自动换行的测试文字。Hello, world! 0123456789
+    第二行：调整宽高、字体和行距，查看实际排版效果。
+skin-edit-history-sample = 大家好！欢迎来到今天的直播。Hello, NanaType!
+    这是一条较长的历史消息，用于检查窄窗口中的换行、姓名与时间排版。0123456789
+    第三条消息：字体、颜色与行距都可以分别调整。
+skin-edit-long-name = 用于检查窄窗换行的长姓名 NanaType
+skin-edit-save = 保存
+skin-edit-saved = 已保存到此皮肤。

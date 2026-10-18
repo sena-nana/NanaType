@@ -19,6 +19,9 @@ fn decal(p:vec2<f32>,origin:vec2<f32>,extent:vec2<f32>)->vec4<f32> {
 }
 fn effect(i:EffectInput)->vec4<f32> {
  let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
+ // Portrait/compact instances reuse the original ink and material in logical pixels.
+ let portrait=i.params0.x>.5 && i.params0.x<1.5;
+ let details=i.params0.y<.5;
  let q=p-s*.5; let b=s*.5-vec2(1.);
  let opening=exp(-i.line_age*3.); let speaker=exp(-i.speaker_age*3.);
 // Discrete LCD activity cells, exactly three solid ink tones, no breathing.
@@ -28,13 +31,16 @@ fn effect(i:EffectInput)->vec4<f32> {
  c=mix(c,rgb(48.,98.,48.),line(edge+5.5,.9));
  let edge_shade=aa(11.-p.y)*aa(p.y-7.);
  c=mix(c,rgb(139.,172.,15.),edge_shade*.55);
- let local=vec2(floor((s.x-p.x-17.)/8.),p.y-10.);
- let meter=aa(abs(local.y)-1.)*aa(abs(fract((s.x-p.x-17.)/8.)*8.-4.)-2.)*step(0.,local.x)*(1.-step(3.,local.x));
+ if details {
+ let meter_p=p-select(vec2(s.x-41.,10.),vec2(40.,s.y-23.),portrait);
+ let local=vec2(floor((24.-meter_p.x)/8.),meter_p.y);
+ let meter=aa(abs(local.y)-1.)*aa(abs(fract((24.-meter_p.x)/8.)*8.-4.)-2.)*step(0.,local.x)*(1.-step(3.,local.x));
  let current=floor(fract(i.phase*4.)*3.);
  let on=1.-step(.1,abs(local.x-current));
  let ink=mix(rgb(139.,172.,15.),rgb(48.,98.,48.),on);
  c=mix(c,ink,meter);
  let bolt=max(aa(max(abs(p.x-11.),abs(p.y-s.y+11.))-2.),aa(max(abs(p.x-s.x+11.),abs(p.y-11.))-2.));
  c=mix(c,rgb(15.,56.,15.),bolt);
+ }
  return vec4(c,aa(edge));
 }

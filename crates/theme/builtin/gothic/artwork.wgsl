@@ -29,7 +29,28 @@ fn decal(p:vec2<f32>, origin:vec2<f32>, extent:vec2<f32>, slot:f32) -> vec4<f32>
     if(any(uv<vec2(0.)) || any(uv>vec2(1.))) { return vec4(0.); }
     return sample0(vec2((uv.x+slot)*.5,uv.y));
 }
+// Recompose the original print vocabulary in logical pixels; no scaled canvas.
+fn responsive_print(i: EffectInput) -> vec4<f32> {
+    let p=i.uv*i.size; let s=i.size; let compact=i.params0.z > .5;
+    let phase=i.phase*6.283185;
+    let q=abs(p-s*.5)-s*.5+vec2(3.);
+    let edge=max(max(q.x,q.y),(q.x+q.y+select(17.,10.,compact))*.7071);
+    var c=i.base.rgb*(.94+.08*i.uv.x);
+    let spine=aa(p.x-select(22.,9.,compact));
+    c=mix(c,ink(72.,24.,44.),spine);
+    if !compact { c=mix(c,ink(47.,24.,36.),aa(s.y-158.-p.y)); }
+    c=mix(c,i.border.rgb,line(edge+2.,.4)*.24+line(edge+7.,.55)*.78);
+    let corner=min(p,s-p);
+    let fitting=max(segment(corner,vec2(23.,17.),vec2(40.,17.),.45),max(segment(corner,vec2(17.,23.),vec2(17.,40.),.45),segment(corner,vec2(17.,23.),vec2(23.,17.),.45)));
+    c=mix(c,i.border.rgb,fitting*.42);
+    let join=line(p.x-select(22.,9.,compact),.6);
+    c=mix(c,i.border.rgb,join*.45);
+    c+=i.border.rgb*line(edge+7.,.55)*(.012+.018*sin(phase));
+    c*=.987+.025*grain(p);
+    return vec4(c,aa(edge));
+}
 fn effect(i: EffectInput) -> vec4<f32> {
+    if(i.params0.y > .5 || i.params0.z > .5) { return responsive_print(i); }
     let p = i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
     let q = abs(p-s*.5)-s*.5+vec2(3.);
     let edge=max(max(q.x,q.y),(q.x+q.y+17.)*.7071);
@@ -40,9 +61,9 @@ fn effect(i: EffectInput) -> vec4<f32> {
     c=mix(c,i.border.rgb*.6,spine);
     let rose=p-vec2(61.,s.y*.52);
     let flower=decal(p,vec2(5.,s.y*.52-70.),vec2(112.,140.),0.);
-    c=mix(c,flower.rgb,flower.a);
+    if(i.params0.x < .5) { c=mix(c,flower.rgb,flower.a); }
     let tracery=decal(p,vec2(s.x-115.,s.y*.5-70.),vec2(112.,140.),1.);
-    c=mix(c,tracery.rgb,tracery.a*.44);
+    if(i.params0.x < .5) { c=mix(c,tracery.rgb,tracery.a*.44); }
     let rule=segment(p,vec2(139.,53.),vec2(s.x-113.,53.),.45);
     c=mix(c,i.border.rgb,rule*.6);
     let rim=line(edge+7.,.55);
@@ -70,7 +91,7 @@ fn effect(i: EffectInput) -> vec4<f32> {
     c+=i.border.rgb*(rim+fitting*.3)*(.025+.12*shimmer);
     // Light lives in the rose glass, rather than washing over the wine panel.
     let rose_light=disc(rose,37.)*flower.a;
-    c+=i.accent.rgb*rose_light*(.012*(1.-cos(2.*t))+.10*exp(-i.line_age*4.));
+    if(i.params0.x < .5) { c+=i.accent.rgb*rose_light*(.012*(1.-cos(2.*t))+.10*exp(-i.line_age*4.)); }
     c*=.987+.025*grain(p);
     return vec4(c,aa(edge));
 }

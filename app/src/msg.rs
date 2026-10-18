@@ -193,8 +193,15 @@ pub enum Msg {
         ticket: u64,
         result: Result<Box<crate::services::watch::PreparedSkins>, String>,
     },
-    /// Lazily prepare just the theme whose settings preview is playing.
-    PrepareSkinPreview(String),
+    /// Prepare only the selected preview; static selection must not start motion.
+    PrepareSkinPreview {
+        id: String,
+        play: bool,
+    },
+    SaveSkinPersonalization {
+        id: String,
+        profile: nanatype_settings::SkinPersonalization,
+    },
     /// A second instance asked us to come forward.
     SecondInstance,
     /// Skin sounds finished decoding.

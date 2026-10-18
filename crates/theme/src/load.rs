@@ -319,6 +319,18 @@ fn load_impl(
             )]);
         }
     };
+    // Older descendants often replace a base's geometry and artwork. Do not
+    // silently impose that base's new orientation/layout contract on them.
+    // An explicit (even empty) responsive table opts into inherited layouts.
+    if base_id(&raw).is_some()
+        && raw
+            .get("dialogue")
+            .and_then(Value::as_table)
+            .and_then(|d| d.get("responsive"))
+            .is_none()
+    {
+        skin.dialogue.responsive = None;
+    }
     if let Ok(Value::Table(known)) = Value::try_from(&skin) {
         unknown_keys(&raw, &known, "", &mut diagnostics);
     }
@@ -381,6 +393,57 @@ fn validate(skin: &Skin, files: &dyn SkinFiles, app_version: &str, out: &mut Vec
     }
 
     let d = &skin.dialogue;
+    if let Some(spec) = &d.responsive {
+        if spec.rules.len() > 16 {
+            out.push(SkinDiagnostic::error(
+                "dialogue.responsive.rules",
+                "at most 16 layout rules",
+            ));
+        }
+        for rule in &spec.rules {
+            if !in_range(rule.max_width, 1.0, 8192.0) || !in_range(rule.max_height, 1.0, 8192.0) {
+                out.push(SkinDiagnostic::error(
+                    "dialogue.responsive.rules",
+                    "thresholds must be finite and within 1–8192",
+                ));
+            }
+        }
+        for layout in spec.layouts() {
+            if layout
+                .padding
+                .is_some_and(|p| p.iter().any(|v| !in_range(*v, 0.0, 4096.0)))
+            {
+                out.push(SkinDiagnostic::error(
+                    "dialogue.responsive.padding",
+                    "must be finite and within 0–4096",
+                ));
+            }
+            let mut variant = skin.clone();
+            variant.dialogue.responsive = None;
+            layout.apply_to(&mut variant.dialogue);
+            let v = &variant.dialogue;
+            if !in_range(v.nameplate.size, 4.0, 400.0)
+                || !in_range(v.continue_.size, 4.0, 400.0)
+                || !in_range(v.box_.width_fraction, 0.1, 1.0)
+                || v.nameplate
+                    .offset
+                    .iter()
+                    .chain(v.portrait.offset.iter())
+                    .any(|v| !in_range(*v, -4096.0, 4096.0))
+                || v.nameplate
+                    .padding
+                    .iter()
+                    .any(|v| !in_range(*v, 0.0, 1024.0))
+                || v.portrait.size.iter().any(|v| !in_range(*v, 0.0, 4096.0))
+            {
+                out.push(SkinDiagnostic::error(
+                    "dialogue.responsive",
+                    "invalid label, portrait or box dimensions",
+                ));
+            }
+            validate_shapes(&variant, out);
+        }
+    }
     let in_range = |v: f32, lo: f32, hi: f32| v.is_finite() && (lo..=hi).contains(&v);
     if !in_range(d.region[0], 160.0, 4096.0) || !in_range(d.region[1], 60.0, 4096.0) {
         out.push(SkinDiagnostic::error(
@@ -655,6 +718,19 @@ fn check_decor(field: &str, decor: &[DecorSpec], out: &mut Vec<SkinDiagnostic>) 
     for (i, dec) in decor.iter().enumerate() {
         let prefix = format!("{field}.{i}");
         let f = |k: &str| format!("{prefix}.{k}");
+        if dec.aspect_ratio.is_some_and(|v| !in_range(v, 0.01, 100.0))
+            || dec
+                .max_fraction
+                .is_some_and(|v| v.iter().any(|v| !in_range(*v, 0.001, 4.0)))
+            || dec
+                .min_window
+                .is_some_and(|v| v.iter().any(|v| !in_range(*v, 0.0, 8192.0)))
+        {
+            out.push(SkinDiagnostic::error(
+                &prefix,
+                "invalid responsive ornament constraint",
+            ));
+        }
         if let Some(m) = dec.motion {
             if !in_range(m.period_s, 0.5, 120.0) {
                 out.push(SkinDiagnostic::error(

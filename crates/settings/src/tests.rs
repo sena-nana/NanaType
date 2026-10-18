@@ -623,3 +623,54 @@ fn application_appearance_accepts_legacy_skin_and_round_trips() {
         assert_eq!(load_settings(&path, None).value, loaded.value);
     }
 }
+
+#[test]
+fn per_skin_personalizations_survive_restart_and_keep_legacy_settings() {
+    let mut s = Settings::default();
+    s.skin.overrides.text_size = Some(31.0);
+    let mut p = SkinPersonalization::default();
+    p.display.font_family = Some("Consolas".into());
+    p.display.text_size = Some(42.0);
+    p.display.size = Some([300.0, 120.0]);
+    p.history.text_size = Some(18.0);
+    p.history.line_height = Some(1.7);
+    s.skin
+        .personalizations
+        .insert("test.skin".into(), p.clone());
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    save_json(&path, &s).unwrap();
+    let loaded: Settings = load_settings(&path, None).value;
+    assert_eq!(loaded.skin.personalizations["test.skin"], p);
+    assert_eq!(loaded.skin.overrides.text_size, Some(31.0));
+    assert_eq!(loaded.skin.id, s.skin.id);
+    let old: Settings = serde_json::from_str(r#"{"skin":{"overrides":{"text_size":35}}}"#).unwrap();
+    assert!(old.skin.personalizations.is_empty());
+    assert_eq!(old.skin.overrides.text_size, Some(35.0));
+}
+
+#[test]
+fn personalization_rejects_invalid_inputs_and_sanitizes_hand_edited_files() {
+    let p = SurfacePersonalization {
+        text_size: Some(f32::NAN),
+        line_height: Some(9.0),
+        size: Some([1.0, f32::INFINITY]),
+        font_family: Some("  ".into()),
+        ..Default::default()
+    };
+    assert!(!p.valid());
+    let mut s = Settings::default();
+    s.skin.personalizations.insert(
+        "test".into(),
+        SkinPersonalization {
+            display: p,
+            ..Default::default()
+        },
+    );
+    assert!(s.sanitize());
+    let p = &s.skin.personalizations["test"].display;
+    assert!(p.valid());
+    assert_eq!(p.size, Some([160.0, 200.0]));
+    assert_eq!(p.line_height, Some(3.0));
+    assert_eq!(p.font_family, None);
+}

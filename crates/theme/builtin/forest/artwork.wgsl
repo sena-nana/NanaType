@@ -28,7 +28,33 @@ fn decal(p:vec2<f32>, origin:vec2<f32>, extent:vec2<f32>) -> vec4<f32> {
     if(any(uv<vec2(0.)) || any(uv>vec2(1.))) { return vec4(0.); }
     return sample0(uv);
 }
+// Recompose the original print vocabulary in logical pixels; no scaled canvas.
+fn responsive_print(i: EffectInput) -> vec4<f32> {
+    let p=i.uv*i.size; let s=i.size; let compact=i.params0.z > .5;
+    let phase=i.phase*6.283185;
+    let edge=max(max(3.-p.x,p.x-s.x+3.),max(3.-p.y,p.y-s.y+3.));
+    var c=i.base.rgb;
+    let binding=select(29.,12.,compact);
+    c=mix(c,ink(232.,226.,204.),aa(p.x-binding));
+    c=mix(c,i.border.rgb,line(p.x-binding,.55)*.4);
+    let holes=line(fract((p.y-11.)/18.)*18.-9.,1.9)*line(p.x-binding*.48,1.8);
+    c=mix(c,i.border.rgb,holes*.7);
+    if !compact { c=mix(c,ink(218.,226.,204.),aa(s.y-155.-p.y)); }
+    c=mix(c,i.border.rgb,line(edge+1.,.45)*.23);
+    c=mix(c,ink(255.,252.,241.),line(edge+2.5,.4)*.65);
+    let corner=vec2(min(p.x-binding-7.,s.x-10.-p.x),min(p.y-11.,s.y-12.-p.y));
+    let registration=max(segment(corner,vec2(0.,0.),vec2(10.,0.),.4),segment(corner,vec2(0.,0.),vec2(0.,10.),.4));
+    c=mix(c,i.border.rgb,registration*.32);
+    if !compact {
+        let stamp=p-vec2(s.x-32.,s.y-29.);
+        c=mix(c,i.border.rgb,ring(stamp,12.,.6)*.48);
+        c=mix(c,i.border.rgb,segment(stamp,vec2(-6.,0.),vec2(6.,0.),.45)*.5);
+    }
+    c*=.975+.04*grain(p);
+    return vec4(c,aa(edge));
+}
 fn effect(i: EffectInput) -> vec4<f32> {
+    if(i.params0.y > .5 || i.params0.z > .5) { return responsive_print(i); }
     let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
     let edge=max(max(3.-p.x,p.x-s.x+3.),max(3.-p.y,p.y-s.y+3.));
     var c=i.base.rgb;
@@ -48,7 +74,7 @@ fn effect(i: EffectInput) -> vec4<f32> {
     leaf_p.y+=.45*bend*sin(2.*t)
         +tip*.65*(sin(2.*t+leaf_p.x*.055)-sin(leaf_p.x*.055));
     let specimen=decal(leaf_p+root,vec2(s.x-155.,s.y*.5-94.),vec2(150.,187.5));
-    c=mix(c,specimen.rgb,specimen.a);
+    if(i.params0.x < .5) { c=mix(c,specimen.rgb,specimen.a); }
     let stamp=p-vec2(s.x-132.,s.y-29.);
     c=mix(c,i.border.rgb,ring(stamp,12.,.6)*.48);
     c=mix(c,i.border.rgb,segment(stamp,vec2(-6.,0.),vec2(6.,0.),.45)*.5);

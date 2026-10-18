@@ -290,13 +290,20 @@ fn skin_preview_fits_first_run_and_settings_through_resizes() {
                 .into_iter()
                 .map(|(w, h)| {
                     f.session.set_viewport(w, h, 1.0).unwrap();
-                    f.preview(w, &skin)
+                    let sample_width = f.preview(w, &skin);
+                    let preview = f.keyed("skin-preview-stage-column").bounds;
+                    let controls = f.keyed("skin-preview-controls-column").bounds;
+                    assert!(sample_width <= preview.width - 24.0 + 0.5);
+                    if w == 720 {
+                        assert!((preview.x - controls.x).abs() < 1.0);
+                        assert!(controls.y >= preview.y + preview.height - 1.0);
+                    } else {
+                        assert!(controls.x >= preview.x + preview.width - 1.0);
+                    }
+                    sample_width
                 })
                 .collect();
-            assert!(
-                widths[0] < widths[1] && widths[1] < widths[2],
-                "not responsive: {widths:?}"
-            );
+            assert!(widths[1] < widths[2], "not responsive: {widths:?}");
             assert!((widths[0] - widths[3]).abs() < 0.5);
         }
     }

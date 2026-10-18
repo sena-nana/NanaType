@@ -34,7 +34,9 @@ impl Drop for CompileSlot {
     }
 }
 fn runnable(skin: &Skin, id: &str) -> bool {
-    skin.shaders.get(id).is_some_and(|s| s.intensity > 0.)
+    skin.shaders
+        .get(id)
+        .is_some_and(|s| s.intensity > 0. && s.animated)
         && skin.shader_programs.get(id).is_some_and(|p| {
             !DISABLED
                 .lock()
@@ -61,9 +63,15 @@ pub fn animating(ui: Ui) -> bool {
     if !NOTICES.lock().unwrap_or_else(|e| e.into_inner()).is_empty() {
         return true;
     }
+    if warming(ui, Source::Display) {
+        return true;
+    }
     enabled(ui)
         && !ui.display.with_untracked(|d| d.empty)
         && ui.skin.with_untracked(|s| {
+            let resolved =
+                nanatype_theme::responsive_dialogue(s, super::dialogue::canvas_size(ui, s));
+            let s = &resolved;
             s.dialogue
                 .shader_effects
                 .iter()
@@ -76,6 +84,9 @@ pub fn preview_animating(ui: Ui) -> bool {
     if !NOTICES.lock().unwrap_or_else(|e| e.into_inner()).is_empty() {
         return true;
     }
+    if warming(ui, Source::Preview) {
+        return true;
+    }
     enabled(ui)
         && ui.shader_preview.get_untracked()
         && ui.page.get_untracked() == super::settings::Page::Skins
@@ -86,6 +97,7 @@ pub fn preview_animating(ui: Ui) -> bool {
             .filter_map(Weak::upgrade)
             .any(|m| {
                 m.source == Source::Preview
+                    && m.spec.animated
                     && m.spec.intensity > 0.
                     && !DISABLED
                         .lock()
@@ -95,6 +107,9 @@ pub fn preview_animating(ui: Ui) -> bool {
 }
 
 struct Material {
+    warming: AtomicBool,
+    /// The untransformed layout canvas; preview scaling is paint-only.
+    logical_size: Arc<Mutex<[f32; 2]>>,
     id: u64,
     ui: Ui,
     source: Source,
@@ -103,6 +118,32 @@ struct Material {
     program: Arc<ShaderProgram>,
     spec: ShaderSpec,
     palette: [[f32; 4]; 4],
+}
+fn warming(ui: Ui, source: Source) -> bool {
+    // View reconciliation may create/drop materials while holding reactive
+    // state. Never read a signal under the global material registry lock.
+    let materials: Vec<_> = MATERIALS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .values()
+        .filter_map(Weak::upgrade)
+        .collect();
+    materials.into_iter().any(|m| {
+        m.source == source
+            && m.spec.static_fallback
+            && m.warming.load(Ordering::Relaxed)
+            && if source == Source::Preview {
+                m.ui.page.get_untracked() == super::settings::Page::Skins
+            } else {
+                m.ui.display == ui.display && !ui.display.with_untracked(|d| d.empty)
+            }
+    })
+}
+
+fn playing(m: &Material) -> bool {
+    m.spec.animated
+        && enabled(m.ui)
+        && (m.source != Source::Preview || m.ui.shader_preview.get_untracked())
 }
 impl PartialEq for Material {
     fn eq(&self, other: &Self) -> bool {
@@ -172,7 +213,10 @@ pub fn view(
         };
     }
     let id = NEXT.fetch_add(1, Ordering::Relaxed);
+    let logical_size = Arc::new(Mutex::new([0.0; 2]));
     let material = Arc::new(Material {
+        warming: AtomicBool::new(spec.static_fallback),
+        logical_size: logical_size.clone(),
         id,
         ui,
         source,
@@ -200,7 +244,13 @@ pub fn view(
     l.width = Some(LengthSpec::Percent(100.));
     l.height = Some(LengthSpec::Percent(100.));
     l.pointer_events = Some(PointerEventsSpec::None);
-    Some(widget(EffectView { base, material }).into_any())
+    Some(
+        widget(EffectView { base, material })
+            .on(move |e: &nana_ui::runtime::SizeChanged| {
+                *logical_size.lock().unwrap_or_else(|e| e.into_inner()) = [e.width, e.height];
+            })
+            .into_any(),
+    )
 }
 
 type PipelineKey = (
@@ -812,19 +862,34 @@ impl SceneGpuRenderer for Renderer {
         }) else {
             return true;
         };
-        if !enabled(m.ui)
-            || (m.source == Source::Preview && !preview_animating(m.ui))
+        let animated = playing(&m);
+        if (!animated && !m.spec.static_fallback)
             || (m.source == Source::Display && m.ui.display.with_untracked(|v| v.empty))
         {
             return true;
         }
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        let scale = state.scales.get(c.gpu.generation(), m.id, c.dest_size);
+        let registered_scale = state.scales.get(c.gpu.generation(), m.id, c.dest_size);
+        let logical = *m.logical_size.lock().unwrap_or_else(|e| e.into_inner());
+        let scale = if logical[0] > 0.0 && logical[1] > 0.0 {
+            (c.bounds.width as f32 / logical[0])
+                .min(c.bounds.height as f32 / logical[1])
+                .max(0.0001)
+        } else {
+            registered_scale
+        };
         let Some(prepared) = state.prepare(&m, &c, scale) else {
+            m.warming.store(
+                m.spec.static_fallback && COMPILING.load(Ordering::Relaxed) > 0,
+                Ordering::Relaxed,
+            );
             return true;
         };
-        let now = crate::clock::now_ms();
-        let events = if m.source == Source::Preview {
+        m.warming.store(false, Ordering::Relaxed);
+        let now = if animated { crate::clock::now_ms() } else { 0 };
+        let events = if !animated {
+            [2., 2., 1., 0.]
+        } else if m.source == Source::Preview {
             [2., 2., 1., 1.]
         } else {
             event_values(m.ui, now)
@@ -943,7 +1008,7 @@ mod tests {
         assert!(!preview_animating(ui));
     }
     #[test]
-    fn printed_classics_have_no_program_or_frame_schedule() {
+    fn printed_classics_have_no_animation_frame_schedule() {
         let ui = ui();
         let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
         ui.display.update(|v| Arc::make_mut(v).empty = false);
@@ -961,10 +1026,44 @@ mod tests {
             "echo_void",
         ] {
             let skin = registry.load(&format!("nanatype.{name}")).unwrap().skin;
-            assert!(skin.shaders.is_empty());
-            assert!(skin.shader_programs.is_empty());
+            assert!(skin.shaders.values().all(|s| !s.animated));
+            assert!(skin.dialogue.shader_effects.is_empty());
             ui.skin.set(skin);
-            assert!(!animating(ui), "{name}");
+            for size in [[952., 252.], [300., 1200.], [300., 240.], [160., 96.]] {
+                ui.display_size.set(size);
+                assert!(!animating(ui), "{name} {size:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn frozen_authored_artwork_does_not_request_an_animation_loop() {
+        let ui = ui();
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        ui.display.update(|v| Arc::make_mut(v).empty = false);
+        for name in [
+            "gothic",
+            "celestial",
+            "forest",
+            "tidal",
+            "lantern",
+            "citrus",
+            "crayon",
+        ] {
+            ui.skin
+                .set(registry.load(&format!("nanatype.{name}")).unwrap().skin);
+            for size in [[952., 252.], [300., 1200.], [300., 240.], [160., 96.]] {
+                ui.display_size.set(size);
+                ui.reduced_motion.set(true);
+                assert!(!animating(ui), "{name} {size:?}: reduced motion");
+                ui.reduced_motion.set(false);
+                ui.settings
+                    .update(|s| Arc::make_mut(s).skin.advanced_effects = false);
+                assert!(!animating(ui), "{name} {size:?}: effects disabled");
+                ui.settings
+                    .update(|s| Arc::make_mut(s).skin.advanced_effects = true);
+                assert_eq!(animating(ui), name != "crayon", "{name} {size:?}");
+            }
         }
     }
 

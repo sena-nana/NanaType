@@ -230,6 +230,70 @@ pub enum ChromeMode {
 /// User tweaks applied on top of the active skin.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
+pub struct SurfacePersonalization {
+    pub font_family: Option<String>,
+    pub text_size: Option<f32>,
+    pub line_height: Option<f32>,
+    pub text_color: Option<Rgba8>,
+    /// Native client size, including the skin's overscan.
+    pub size: Option<[f32; 2]>,
+}
+
+impl SurfacePersonalization {
+    pub fn valid(&self) -> bool {
+        self.text_size
+            .is_none_or(|v| v.is_finite() && (8.0..=200.0).contains(&v))
+            && self
+                .line_height
+                .is_none_or(|v| v.is_finite() && (1.0..=3.0).contains(&v))
+            && self.size.is_none_or(|[w, h]| {
+                w.is_finite()
+                    && h.is_finite()
+                    && (160.0..=8192.0).contains(&w)
+                    && (96.0..=8192.0).contains(&h)
+            })
+            && self
+                .font_family
+                .as_ref()
+                .is_none_or(|v| !v.trim().is_empty() && v.len() <= 256)
+    }
+
+    fn sanitize(&mut self) {
+        if let Some(v) = &mut self.text_size {
+            *v = finite_or(*v, 28.0).clamp(8.0, 200.0);
+        }
+        if let Some(v) = &mut self.line_height {
+            *v = finite_or(*v, 1.4).clamp(1.0, 3.0);
+        }
+        if let Some([w, h]) = &mut self.size {
+            *w = finite_or(*w, 760.0).clamp(160.0, 8192.0);
+            *h = finite_or(*h, 200.0).clamp(96.0, 8192.0);
+        }
+        self.font_family = self.font_family.take().and_then(|v| {
+            let mut v: String = v.trim().chars().take(256).collect();
+            while v.len() > 256 {
+                v.pop();
+            }
+            (!v.is_empty()).then_some(v)
+        });
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SkinPersonalization {
+    pub display: SurfacePersonalization,
+    pub history: SurfacePersonalization,
+}
+
+impl SkinPersonalization {
+    pub fn valid(&self) -> bool {
+        self.display.valid() && self.history.valid()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SkinOverrides {
     pub text_color: Option<Rgba8>,
     pub name_color: Option<Rgba8>,
@@ -254,6 +318,8 @@ pub struct SkinSettings {
     pub advanced_effects: bool,
     pub id: String,
     pub overrides: SkinOverrides,
+    /// An entry replaces legacy body overrides; None fields mean skin defaults.
+    pub personalizations: BTreeMap<String, SkinPersonalization>,
     /// Independent application appearance; path retained for saved-settings compatibility.
     pub chrome: ChromeMode,
     /// Reload folder skins when their files change (for skin authors).
@@ -266,6 +332,7 @@ impl Default for SkinSettings {
             advanced_effects: true,
             id: DEFAULT_SKIN.into(),
             overrides: SkinOverrides::default(),
+            personalizations: BTreeMap::new(),
             chrome: ChromeMode::System,
             hot_reload: false,
         }
@@ -721,6 +788,10 @@ impl Settings {
         h.visible_items = h.visible_items.clamp(1, h.max_items);
         if let Some(size) = self.skin.overrides.text_size.as_mut() {
             *size = finite_or(*size, 28.0).clamp(8.0, 200.0);
+        }
+        for profile in self.skin.personalizations.values_mut() {
+            profile.display.sanitize();
+            profile.history.sanitize();
         }
         for o in [
             &mut self.overlays.input,

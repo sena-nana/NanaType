@@ -25,10 +25,27 @@ nameplate = { color = "#9E3153", text_color = "#F5E8ED", contour = "terminal", b
 continue = { glyph = "· · ·", color = "#9E3153", motion = "none" }
 
 [shaders.artwork]
+static_fallback = true
 source = "gothic/artwork.wgsl"
 period_s = 16
 intensity = 1
 textures = ["gothic/ornament.png"]
+
+[shaders.responsive_artwork]
+static_fallback = true
+source = "gothic/artwork.wgsl"
+period_s = 16
+intensity = 1
+textures = ["gothic/ornament.png"]
+params = [1, 1]
+
+[shaders.responsive_compact]
+static_fallback = true
+source = "gothic/artwork.wgsl"
+period_s = 16
+intensity = 1
+textures = ["gothic/ornament.png"]
+params = [1, 0, 1]
 
 [history]
 name_color = "#F5E8ED"
@@ -59,3 +76,38 @@ offset = [-12, 7]
 size = [52, 38]
 image = "gothic/ornament.png"
 opacity = 0.85
+
+# Native responsive dialogue: logical client dimensions select orientation.
+[dialogue.responsive]
+landscape = { decor = [] }
+portrait = { padding = [20, 24, 56, 164], box = { color = "#18131C", border_color = "#C7AB76", width_fraction = 1, border_width = 1, radius = 18 }, nameplate = { color = "#9E3153", text_color = "#F5E8ED", contour = "terminal", border_color = "#C7AB76", border_width = 0.8, gradient = { angle = 180, stops = [[0, "#A13D5D"], [1, "#76263F"]] }, radius = 2, padding = [4, 4], offset = [-8, 12], size = 19, anchor = "top_right", rotate = 0 }, continue = { glyph = "· · ·", color = "#9E3153", motion = "none", anchor = "bottom_left", offset = [12, -8] }, portrait = { visible = false }, decor = [{ image = "gothic/rose.png", size = [112, 140], anchor = "bottom_left", offset = [12, -12], aspect_ratio = 0.8, max_fraction = [0.32, 0.18], motion = { kind = "float", period_s = 16, amplitude = 1.5 } }, { image = "gothic/tracery.png", size = [92, 115], anchor = "bottom_right", offset = [-16, -14], aspect_ratio = 0.8, max_fraction = [0.32, 0.15], min_window = [260, 500] }], shader_effects = [{ shader = "responsive_artwork", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_width = 600
+portrait = false
+layout = { padding = [16, 40, 52, 16], nameplate = { color = "#9E3153", text_color = "#F5E8ED", contour = "terminal", border_color = "#C7AB76", border_width = 0.8, gradient = { angle = 180, stops = [[0, "#A13D5D"], [1, "#76263F"]] }, radius = 2, padding = [12, 3], offset = [12, 4], size = 19, anchor = "top_left", rotate = 0 }, box = { color = "#18131C", border_color = "#C7AB76", width_fraction = 1, border_width = 1, radius = 18 }, shader_effects = [{ shader = "responsive_compact", target = "artwork" }], decor = [{ image = "gothic/rose.png", size = [32, 40], aspect_ratio = 0.8, anchor = "bottom_right", offset = [-8, -8], min_window = [280, 180] }] }
+
+[[dialogue.responsive.rules]]
+max_height = 160
+portrait = false
+layout = { padding = [16, 40, 16, 16], nameplate = { color = "#9E3153", text_color = "#F5E8ED", contour = "terminal", border_color = "#C7AB76", border_width = 0.8, gradient = { angle = 180, stops = [[0, "#A13D5D"], [1, "#76263F"]] }, radius = 2, padding = [12, 3], offset = [12, 4], size = 19, anchor = "top_left", rotate = 0 }, box = { color = "#18131C", border_color = "#C7AB76", width_fraction = 1, border_width = 1, radius = 18 }, shader_effects = [{ shader = "responsive_compact", target = "artwork" }], decor = [] }
+
+[[dialogue.responsive.rules]]
+max_width = 240
+portrait = true
+layout = { padding = [12, 16, 48, 84], decor = [{ image = "gothic/rose.png", size = [112, 140], anchor = "bottom_left", offset = [12, -12], aspect_ratio = 0.8, max_fraction = [0.32, 0.18], motion = { kind = "float", period_s = 16, amplitude = 1.5 } }], shader_effects = [{ shader = "responsive_artwork", target = "artwork" }] }
+
+[[dialogue.responsive.rules]]
+max_height = 480
+portrait = true
+layout = { padding = [12, 16, 48, 92], decor = [{ image = "gothic/rose.png", size = [56, 70], anchor = "bottom_left", offset = [12, -12], aspect_ratio = 0.8, max_fraction = [0.32, 0.18], motion = { kind = "float", period_s = 16, amplitude = 1.5 }, min_window = [160, 260] }, { image = "gothic/tracery.png", size = [46, 57.5], anchor = "bottom_right", offset = [-16, -14], aspect_ratio = 0.8, max_fraction = [0.32, 0.15], min_window = [260, 280] }] }
+
+[[dialogue.responsive.rules]]
+max_height = 240
+portrait = true
+layout = { padding = [12, 12, 12, 12], decor = [], shader_effects = [{ shader = "responsive_artwork", target = "artwork" }], nameplate = { visible = false, anchor = "top_right" } }
+
+[[dialogue.responsive.rules]]
+max_width = 200
+max_height = 140
+layout = { padding = [10, 12, 10, 12], nameplate = { visible = false }, portrait = { visible = false }, decor = [], shader_effects = [{ shader = "responsive_compact", target = "artwork" }], box = { color = "#18131C", border_color = "#C7AB76", width_fraction = 1, border_width = 1, radius = 18 } }

@@ -161,9 +161,10 @@ impl App {
         });
         let registry = SkinRegistry::new(Some(paths.skins()), env!("CARGO_PKG_VERSION"));
         let (loaded, fallback) = registry.load_scanned_or_default(&settings.skin.id);
-        let skin = Arc::new(skin_theme::with_overrides(
+        let skin = Arc::new(skin_theme::personalized(
             &loaded.skin,
-            &settings.skin.overrides,
+            &settings,
+            &settings.skin.id,
         ));
         let locale = locale_of(&settings);
         let system_dark = matches!(
@@ -721,6 +722,7 @@ impl App {
         self.loaded = loaded;
         self.register_fonts();
         self.apply_skin();
+        self.apply_saved_sizes();
         if changed_files {
             self.load_sounds();
         }
@@ -780,11 +782,34 @@ impl App {
         let f = self.loaded.skin.fonts.clone();
         let files = self.loaded.files.clone();
         let roles = [&f.body, &f.name, &f.accent];
+        let mut wanted: Vec<String> = roles
+            .iter()
+            .copied()
+            .filter_map(|s| s.file.clone())
+            .filter(|p| nanatype_theme::is_builtin_font(p))
+            .collect();
+        if let Some(p) = self
+            .settings
+            .skin
+            .personalizations
+            .get(&self.settings.skin.id)
+        {
+            for family in [&p.display.font_family, &p.history.font_family]
+                .into_iter()
+                .flatten()
+            {
+                for font in nanatype_theme::BuiltinFonts::embedded().fonts() {
+                    if font
+                        .family()
+                        .is_some_and(|f| f.eq_ignore_ascii_case(family))
+                    {
+                        wanted.push(format!("builtin:{}", font.path));
+                    }
+                }
+            }
+        }
         let mut errors = self.builtin_fonts.sync(
-            roles
-                .iter()
-                .filter_map(|s| s.file.as_deref())
-                .filter(|p| nanatype_theme::is_builtin_font(p)),
+            wanted.iter().map(String::as_str),
             nanatype_theme::builtin_font,
             crate::skin_fonts::register_with_nana_ui,
         );
@@ -826,17 +851,37 @@ impl App {
     }
 
     fn apply_skin(&mut self) {
+        let personalized =
+            skin_theme::personalized(&self.loaded.skin, &self.settings, &self.settings.skin.id);
         let skin = Arc::new(skin_theme::prepare(
-            &self.loaded.skin,
-            &self.settings.skin.overrides,
+            &personalized,
+            &Default::default(),
             &self.skin_families,
             self.ui.locale.get_untracked().tag(),
         ));
+        // Recording the first per-skin window size may establish an otherwise
+        // identical profile. Geometry alone must not replace the playing text.
+        if skin.as_ref() == self.skin.as_ref() {
+            return;
+        }
         self.skin = skin.clone();
 
         self.ui.skin.set(skin.clone());
         let fx = self.core.handle(Cmd::SetSkin(skin), clock::now_ms());
         self.apply_effects(fx);
+    }
+
+    fn apply_saved_sizes(&mut self) {
+        for kind in [WindowKind::Display, WindowKind::History] {
+            if let Some(frame) = self.windows.frame(kind) {
+                let size = self.window_size(kind);
+                self.commands.push(WindowCommand::SetBounds {
+                    id: kind.id(),
+                    position: (frame.x as f32, frame.y as f32),
+                    size,
+                });
+            }
+        }
     }
 
     /// Refresh operator chrome without reloading assets or changing content boxes.
@@ -1028,7 +1073,20 @@ impl App {
         let s = &self.settings;
         let locale_changed = locale_of(&prev) != locale_of(s);
         let skin_changed = prev.skin.id != s.skin.id;
-        let look_changed = prev.skin.overrides != s.skin.overrides;
+        let body_profile = |settings: &Settings| {
+            settings
+                .skin
+                .personalizations
+                .get(&s.skin.id)
+                .cloned()
+                .map(|mut p| {
+                    p.display.size = None;
+                    p.history.size = None;
+                    p
+                })
+        };
+        let active_profile_changed = body_profile(&prev) != body_profile(s);
+        let look_changed = prev.skin.overrides != s.skin.overrides || active_profile_changed;
         let chrome_changed = prev.skin.chrome != s.skin.chrome;
         let assets_changed = prev.assets.sticker_dirs != s.assets.sticker_dirs;
         let device_changed = prev.sound.device != s.sound.device;
@@ -1071,6 +1129,9 @@ impl App {
             self.reload_skin(false);
             self.sync_tray_skins();
         } else if look_changed {
+            if active_profile_changed {
+                self.register_fonts();
+            }
             self.apply_skin();
         }
         if assets_changed {
@@ -1776,11 +1837,7 @@ impl App {
             Msg::HideInput => self.set_input_visibility(false),
             Msg::ResetWindow(kind) => {
                 self.windows.forget(kind);
-                self.edit(|s| {
-                    if let Some(o) = kind.overlay_mut(s) {
-                        o.size = None;
-                    }
-                });
+                self.edit(|s| kind.clear_saved_size(s));
             }
             Msg::OpenSettings => self.open_settings(),
             Msg::SettingsPage(page) => {
@@ -2038,8 +2095,10 @@ impl App {
                     Err(error) => self.notice(error, true),
                 },
             },
-            Msg::PrepareSkinPreview(id) => {
-                if let Err(errors) = crate::ui::prepare_skin_preview(self.ui, &self.registry, &id) {
+            Msg::PrepareSkinPreview { id, play } => {
+                if let Err(errors) =
+                    crate::ui::prepare_skin_preview(self.ui, &self.registry, &id, play)
+                {
                     self.notice(
                         errors
                             .iter()
@@ -2048,6 +2107,17 @@ impl App {
                             .join("\n"),
                         true,
                     );
+                }
+            }
+            Msg::SaveSkinPersonalization { id, profile } => {
+                if profile.valid() && self.registry.entries().iter().any(|r| r.id == id) {
+                    let active = id == self.settings.skin.id;
+                    self.edit(move |s| {
+                        s.skin.personalizations.insert(id, profile);
+                    });
+                    if active {
+                        self.apply_saved_sizes();
+                    }
                 }
             }
             Msg::SecondInstance => {
@@ -2121,7 +2191,13 @@ impl App {
         name.insert(locale.tag().to_owned(), format!("{base_name} *"));
         // Bake the current personalisation into the copy.
         let mut over = TomlTable::new();
-        let o = &self.settings.skin.overrides;
+        let profile = self.settings.skin.personalizations.get(base).cloned();
+        let mut legacy = self.settings.skin.overrides.clone();
+        if profile.is_some() {
+            legacy.text_size = None;
+            legacy.text_color = None;
+        }
+        let o = &legacy;
         let mut dialogue = TomlTable::new();
         let mut text = TomlTable::new();
         if let Some(c) = o.text_color {
@@ -2156,6 +2232,9 @@ impl App {
                 self.refresh_skin_rows();
                 self.sync_tray_skins();
                 self.edit(|s| {
+                    if let Some(profile) = profile {
+                        s.skin.personalizations.insert(id.clone(), profile);
+                    }
                     s.skin.id = id;
                     s.skin.overrides = Default::default();
                 });

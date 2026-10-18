@@ -117,6 +117,18 @@ fn main() {
             let folder = out.join(name);
             std::fs::create_dir_all(&folder).unwrap();
             session.screenshot_png(folder.join("still.png")).unwrap();
+            if name == "gothic" {
+                // The original plate samples a two-cell atlas. Responsive
+                // native nodes need independent, aspect-preserving ornaments.
+                let atlas = image::open(sources.join("gothic/ornament.png")).unwrap();
+                let cell = atlas.width() / 2;
+                for (index, part) in ["rose", "tracery"].into_iter().enumerate() {
+                    atlas
+                        .crop_imm(index as u32 * cell, 0, cell, atlas.height())
+                        .save(folder.join(format!("{part}.png")))
+                        .unwrap();
+                }
+            }
             println!("{name}: {w}x{h}");
         });
     }

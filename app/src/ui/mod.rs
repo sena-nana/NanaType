@@ -148,6 +148,10 @@ pub struct Ui {
     pub speaker: Signal<nanatype_model::Speaker>,
     pub locale: Signal<Locale>,
     pub settings: Signal<Arc<Settings>>,
+    pub skin_drafts: Signal<HashMap<String, settings::preview::Draft>>,
+    pub skin_preview_history: Signal<bool>,
+    pub history_width: Signal<f32>,
+    pub history_height: Signal<f32>,
     pub skin: Signal<Arc<Skin>>,
     /// Resolved application appearance, independent of the selected skin.
     pub chrome_dark: Signal<bool>,
@@ -164,6 +168,8 @@ pub struct Ui {
     pub peer_text_node: NodeRef,
     pub peer_text_port: NodeRef,
     pub peer_text_scroll: Signal<f32>,
+    pub peer_display_size: Signal<[f32; 2]>,
+    pub peer_text_area_height: Signal<f32>,
     pub peer_portraits: Signal<Arc<HashMap<String, String>>>,
     pub peer_local_line: Signal<Option<nanatype_model::LineId>>,
     /// Stable slot for per-track animation and layout caches.
@@ -217,6 +223,8 @@ pub struct Ui {
     pub text_port: NodeRef,
     /// How far the typewriter's text is scrolled up (logical px).
     pub text_scroll: Signal<f32>,
+    pub display_size: Signal<[f32; 2]>,
+    pub text_area_height: Signal<f32>,
     /// Live chat, oldest first (capped).
     pub chat: Signal<Arc<Vec<Arc<crate::chat::ChatMessage>>>>,
     /// The chat message the next sent line answers.
@@ -261,6 +269,10 @@ impl Ui {
             input_split: node_ref(),
             locale: signal(locale),
             settings: signal(settings),
+            skin_drafts: signal(HashMap::new()),
+            skin_preview_history: signal(false),
+            history_width: signal(0.0),
+            history_height: signal(0.0),
             skin: signal(skin),
             display: signal(Arc::new(DisplayView::empty(entrance))),
             peer_display: signal(Arc::new(DisplayView::empty(entrance))),
@@ -269,6 +281,8 @@ impl Ui {
             peer_text_node: node_ref(),
             peer_text_port: node_ref(),
             peer_text_scroll: signal(0.0),
+            peer_display_size: signal([0.0; 2]),
+            peer_text_area_height: signal(0.),
             peer_portraits: signal(Arc::new(HashMap::new())),
             peer_local_line: signal(None),
             track_slot: 0,
@@ -304,6 +318,8 @@ impl Ui {
             text_node: node_ref(),
             text_port: node_ref(),
             text_scroll: signal(0.0),
+            display_size: signal([0.0; 2]),
+            text_area_height: signal(0.),
             chat: signal(Arc::new(Vec::new())),
             reply: signal(None),
             chat_width: signal(400.0),
@@ -328,6 +344,8 @@ impl Ui {
             text_node: self.peer_text_node,
             text_port: self.peer_text_port,
             text_scroll: self.peer_text_scroll,
+            display_size: self.peer_display_size,
+            text_area_height: self.peer_text_area_height,
             portraits: self.peer_portraits,
             track_slot: 1,
             ..self
@@ -427,8 +445,13 @@ pub fn prepare_skin_preview(
     ui: Ui,
     registry: &nanatype_theme::SkinRegistry,
     id: &str,
+    play: bool,
 ) -> Result<(), Vec<nanatype_theme::SkinDiagnostic>> {
     if !shader_effects::enabled(ui)
+        && !registry
+            .entry(id)
+            .and_then(|e| e.skin.as_ref())
+            .is_some_and(|s| s.shaders.values().any(|s| s.static_fallback))
         && !(materials::enabled(ui)
             && registry
                 .entry(id)
@@ -441,14 +464,20 @@ pub fn prepare_skin_preview(
     let loaded = registry
         .load(id)
         .inspect_err(|_| ui.shader_preview.set(false))?;
-    let animate = shader_effects::enabled(ui)
-        && (!loaded.skin.dialogue.shader_effects.is_empty()
-            || loaded
+    let animate = play
+        && shader_effects::enabled(ui)
+        && (loaded.skin.dialogue.shader_effects.iter().any(|e| {
+            loaded
                 .skin
-                .dialogue
-                .decor
-                .iter()
-                .any(|d| d.shader.is_some()));
+                .shaders
+                .get(&e.shader)
+                .is_some_and(|s| s.animated)
+        }) || loaded
+            .skin
+            .dialogue
+            .decor
+            .iter()
+            .any(|d| d.shader.is_some()));
     let previous = ui.skins.with_untracked(|rows| {
         rows.iter()
             .find(|r| r.id == id)
