@@ -24,6 +24,23 @@ fn main() {
         return;
     }
     if env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+        // Prebuilt libvpx omits vpxmd.pdb; Rust debug information is retained.
+        println!("cargo:rustc-link-arg=/IGNORE:4099");
+
+        if env::var("CARGO_CFG_TARGET_FEATURE")
+            .unwrap_or_default()
+            .split(',')
+            .any(|feature| feature == "crt-static")
+        {
+            // Bind libvpx's DLL-imported CRT functions to Rust's static CRT.
+            println!("cargo:rustc-link-arg=/NODEFAULTLIB:MSVCRT");
+            for symbol in ["_beginthreadex", "fopen", "round"] {
+                println!("cargo:rustc-link-arg=/INCLUDE:{symbol}");
+            }
+            // These are LINK's expected local-import fixups for that archive.
+            println!("cargo:rustc-link-arg=/IGNORE:4217,4286");
+        }
+
         // Standalone snapshot/performance tools link the same tray stack.
         // They need the embedded activation context too, including when copied.
         for target in [

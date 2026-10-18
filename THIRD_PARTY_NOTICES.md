@@ -1,8 +1,9 @@
 # Third-party notices
 
 NanaType includes the interface materials, third-party fonts, shader compiler and Rust
-crates below. Their licence texts ship with the program in the installer's
-(and the portable zip's) `licenses` folder, beside this file:
+crates below. Windows releases carry their complete licence texts as named
+sections of `THIRD_PARTY_LICENSES.txt`, beside the executable. The filenames
+below identify those sections:
 
 | File | What |
 | --- | --- |
@@ -147,9 +148,9 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 573 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 572 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
-licence files ship in the installer's `licenses\rust-crates.txt`.
+licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
 ### (Apache-2.0 OR MIT) AND BSD-3-Clause (1)
 
@@ -167,7 +168,7 @@ licence files ship in the installer's `licenses\rust-crates.txt`.
 
 - adler2 2.0.1 — <https://github.com/oyvindln/adler2>
 
-### Apache-2.0 (15)
+### Apache-2.0 (14)
 
 - backon 1.6.0 — <https://github.com/Xuanwo/backon>
 - calendrical_calculations 0.2.4 — <https://github.com/unicode-org/icu4x>
@@ -183,7 +184,6 @@ licence files ship in the installer's `licenses\rust-crates.txt`.
 - winit 0.31.0-beta.2 — <https://github.com/rust-windowing/winit>
 - winit-core 0.31.0-beta.2 — <https://github.com/rust-windowing/winit>
 - winit-win32 0.31.0-beta.2 — <https://github.com/rust-windowing/winit>
-- zopfli 0.8.3 — <https://github.com/zopfli-rs/zopfli>
 
 ### Apache-2.0 AND ISC (1)
 
@@ -257,7 +257,6 @@ licence files ship in the installer's `licenses\rust-crates.txt`.
 - block-buffer 0.12.1 — <https://github.com/RustCrypto/utils>
 - borsh 1.8.1 — <https://github.com/near/borsh-rs>
 - bs58 0.5.1 — <https://github.com/Nullus157/bs58-rs>
-- bumpalo 3.20.3 — <https://github.com/fitzgen/bumpalo>
 - cfg-if 1.0.4 — <https://github.com/rust-lang/cfg-if>
 - chacha20 0.10.2 — <https://github.com/RustCrypto/stream-ciphers>
 - chacha20poly1305 0.11.0 — <https://github.com/RustCrypto/AEADs>
@@ -450,7 +449,7 @@ licence files ship in the installer's `licenses\rust-crates.txt`.
 - powerfmt 0.2.1 — <https://github.com/jhpratt/powerfmt>
 - prefix-trie 0.8.4 — <https://github.com/tiborschneider/prefix-trie>
 - presser 0.3.1 — <https://github.com/EmbarkStudios/presser>
-- proc-macro-crate 1.3.1 — <https://github.com/bkchr/proc-macro-crate>
+- proc-macro-crate 2.0.2 — <https://github.com/bkchr/proc-macro-crate>
 - proc-macro-crate 3.5.0 — <https://github.com/bkchr/proc-macro-crate>
 - proc-macro2 1.0.107 — <https://github.com/dtolnay/proc-macro2>
 - profiling 1.0.18 — <https://github.com/aclysma/profiling>
@@ -484,6 +483,7 @@ licence files ship in the installer's `licenses\rust-crates.txt`.
 - serde_core 1.0.229 — <https://github.com/serde-rs/serde>
 - serde_derive 1.0.229 — <https://github.com/serde-rs/serde>
 - serde_json 1.0.151 — <https://github.com/serde-rs/json>
+- serde_spanned 0.6.9 — <https://github.com/toml-rs/toml>
 - serde_spanned 1.1.2 — <https://github.com/toml-rs/toml>
 - serde_with 3.24.0 — <https://github.com/jonasbb/serde_with>
 - serde_with_macros 3.24.0 — <https://github.com/jonasbb/serde_with>
@@ -521,7 +521,7 @@ licence files ship in the installer's `licenses\rust-crates.txt`.
 - toml 1.1.7+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_datetime 0.6.3 — <https://github.com/toml-rs/toml>
 - toml_datetime 1.1.2+spec-1.1.0 — <https://github.com/toml-rs/toml>
-- toml_edit 0.19.15 — <https://github.com/toml-rs/toml>
+- toml_edit 0.20.2 — <https://github.com/toml-rs/toml>
 - toml_edit 0.25.15+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_parser 1.1.4+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_writer 1.1.3+spec-1.1.0 — <https://github.com/toml-rs/toml>

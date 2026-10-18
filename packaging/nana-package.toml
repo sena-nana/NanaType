@@ -17,7 +17,10 @@ backend = "installer"
 [platform.windows]
 # NanaUI loads the DX12 shader compiler only from beside the executable;
 # scripts/package.ps1 stages it here.
-root_exceptions = [{ source = "../target/dxc/dxcompiler.dll", reason = "DX12 shader compiler: NanaUI loads it from the executable directory (startup about 2x faster than FXC)" }]
+root_exceptions = [
+    { source = "../target/dxc/dxcompiler.dll", reason = "DX12 shader compiler: NanaUI loads it from the executable directory (startup about 2x faster than FXC)" },
+    { source = "../target/licenses/THIRD_PARTY_LICENSES.txt", reason = "Complete redistribution licences in a readable text file beside the application" },
+]
 
 [platform.macos]
 minimum_system_version = "13.0"

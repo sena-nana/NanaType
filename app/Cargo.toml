@@ -52,7 +52,8 @@ ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
 blake3 = "1"
 gif = "0.14"
 flate2 = "1"
-grammers-client = { version = "=0.11.0", features = ["proxy"] }
+# Downloads use iter_download and our own cache writer, not its filesystem helpers.
+grammers-client = { version = "=0.11.0", default-features = false, features = ["proxy"] }
 grammers-session = { version = "=0.11.0", default-features = false, features = ["serde"] }
 tokio = { version = "1", features = ["rt", "sync", "time", "net"] }
 rasterlottie = { version = "=0.2.4", default-features = false }

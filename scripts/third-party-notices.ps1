@@ -99,7 +99,7 @@ $lines.Add("## Rust crates")
 $lines.Add("")
 $lines.Add("The $($sorted.Count) crates below are compiled into ``nanatype.exe`` (Windows, ``$target``), as")
 $lines.Add("locked in ``Cargo.lock``; NanaType's own crates are left out. Each crate's")
-$lines.Add("licence files ship in the installer's ``licenses\rust-crates.txt``.")
+$lines.Add("licence files ship in the ``rust-crates.txt`` section of ``THIRD_PARTY_LICENSES.txt``.")
 $group = $null
 foreach ($c in $sorted) {
     if ($c.License -cne $group) {

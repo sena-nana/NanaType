@@ -43,14 +43,7 @@ Name: "autostart"; Description: "Launch NanaType at login"; Flags: unchecked
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Licences of the fonts embedded in the executable (OFL 1.1 asks that they
-; travel with every copy), NanaUI's font, the notices that name them all, and
-; what scripts/package.ps1 staged: each Rust crate's licence files and a DXC
-; release's own licences.
-Source: "..\crates\theme\fonts\*.LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
-Source: "..\packaging\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
-Source: "..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}\licenses"; Flags: ignoreversion
-Source: "..\target\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs createallsubdirs
+; THIRD_PARTY_LICENSES.txt is already part of the validated package payload.
 
 [Icons]
 Name: "{group}\NanaType"; Filename: "{app}\NanaType.exe"

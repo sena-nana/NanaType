@@ -118,6 +118,14 @@ WebM 解码使用固定版本的 libvpx：Windows 和 Apple Silicon 首次构建
 cargo run -p nanatype
 ```
 
+开发构建保留工作区代码的完整调试信息，第三方依赖仅保留源码行号，以减少编译和链接时的调试数据；不影响应用功能，但调试第三方依赖时不包含变量和类型信息。
+
+发布默认使用 `dist`：`opt-level = "s"`、thin LTO、单 codegen unit，并单独生成 PDB。`dist-small` 使用 `z`，保留相同功能；[性能对比](docs/release-profile-performance.md)显示其便携包再缩小约 2 MiB，但关键场景 CPU 耗时增加约 16%～27%，因此保持可选。
+
+[混合优化实验](docs/release-profile-hybrid.md)仅再缩小约 178 KiB（0.49%），部分 P95 增加，实窗／Spout 尚待验证；配置作为实验资料保存，默认仍用纯 `s`。
+
+日常检查可用 `cargo check -p nanatype` 避免链接，`cargo build -p nanatype --timings` 查看编译耗时。
+
 ```bash
 cargo test --workspace --exclude nanatype
 ```
@@ -133,6 +141,8 @@ cargo run -p nanatype --example snapshots -- target/snapshots nanatype.night ja-
 ```bash
 pwsh scripts/package.ps1
 ```
+
+更小的便携包可用 `pwsh scripts/package.ps1 -Portable -Profile dist-small`。打包脚本固定关闭发布构建的增量编译并使用锁文件；编译、许可证或发布自检失败时停止。便携包排除自检产生的 `data/` 用户数据，首次运行时由应用创建；内置字体、解码器、GPU 后备渲染和异常恢复均保留。
 
 开发辅助环境变量（仅调试构建或显式设置时生效）：
 

@@ -46,6 +46,7 @@ nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "b76a5549e72b1cc1
     "wgpu-interop",
     "wgpu-backends",
     "icons-tabler",
+    # Also provides css!, used by the application even without view! templates.
     "view-macro",
     "native-export",
     "packaged-resources",
@@ -55,13 +56,24 @@ serde_json = "1"
 unicode-segmentation = "1"
 proptest = { version = "1", default-features = false, features = ["std"] }
 
+# Keep full debugger support for workspace code, but avoid generating third-party
+# type/variable information. Dependency backtraces still include source lines.
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
 [profile.release]
 debug = "line-tables-only"
 
-# Shipped builds: thin LTO, one codegen unit, stripped symbols kept in a PDB.
+# Shipped builds: optimize size while retaining loop vectorization and a PDB.
 [profile.dist]
 inherits = "release"
+opt-level = "s"
 lto = "thin"
 codegen-units = 1
 debug = "line-tables-only"
 split-debuginfo = "packed"
+
+# Optional all-z build; runtime tradeoffs: docs/release-profile-performance.md.
+[profile.dist-small]
+inherits = "dist"
+opt-level = "z"
