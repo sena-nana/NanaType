@@ -23,6 +23,10 @@ struct Builtin {
 
 const BUILTINS: &[Builtin] = &[
     Builtin {
+        id: "nanatype.love_letter",
+        manifest: include_str!("../builtin/love_letter.toml"),
+    },
+    Builtin {
         id: "nanatype.sonnet",
         manifest: include_str!("../builtin/sonnet.toml"),
     },
@@ -145,6 +149,52 @@ fn builtin_files(b: &Builtin) -> Arc<dyn SkinFiles> {
         };
     }
     match b.id {
+        "nanatype.love_letter" => files.extend_from_slice(&[
+            (
+                "love_letter/write.wgsl",
+                include_bytes!("../builtin/love_letter/write.wgsl"),
+            ),
+            (
+                "love_letter/dissolve.wgsl",
+                include_bytes!("../builtin/love_letter/dissolve.wgsl"),
+            ),
+            (
+                "love_letter/paper.wgsl",
+                include_bytes!("../builtin/love_letter/paper.wgsl"),
+            ),
+            (
+                "love_letter/strokes.nthz",
+                include_bytes!("../builtin/love_letter/strokes.nthz"),
+            ),
+            (
+                "love_letter/COPYING",
+                include_bytes!("../builtin/love_letter/COPYING"),
+            ),
+            (
+                "love_letter/ARPHICPL.TXT",
+                include_bytes!("../builtin/love_letter/ARPHICPL.TXT"),
+            ),
+            (
+                "love_letter/APL-zh_CN.UTF-8.txt",
+                include_bytes!("../builtin/love_letter/APL-zh_CN.UTF-8.txt"),
+            ),
+            (
+                "love_letter/APL-zh_TW.UTF-8.txt",
+                include_bytes!("../builtin/love_letter/APL-zh_TW.UTF-8.txt"),
+            ),
+            (
+                "love_letter/SOURCES.txt",
+                include_bytes!("../builtin/love_letter/SOURCES.txt"),
+            ),
+            (
+                "love_letter/fonts/LXGWWenKai-Regular.ttf",
+                include_bytes!("../fonts/LXGWWenKai-Regular.ttf"),
+            ),
+            (
+                "love_letter/fonts/OFL.txt",
+                include_bytes!("../fonts/LXGWWenKai-Regular.LICENSE.txt"),
+            ),
+        ]),
         "nanatype.sonnet" => files.extend_from_slice(&[
             (
                 "sonnet/appear.wgsl",
@@ -527,12 +577,21 @@ impl SkinRegistry {
                     let files = entry.files.clone().expect("valid catalogue has files");
                     let skin = entry.skin.clone().expect("valid catalogue has a skin");
                     let mut warnings = entry.warnings.clone();
-                    let skin = if skin.shaders.is_empty() && skin.materials.is_empty() {
+                    let skin = if skin.shaders.is_empty()
+                        && skin.materials.is_empty()
+                        && skin.dialogue.reveal.handwriting.is_none()
+                    {
                         skin
                     } else {
                         // The immutable manifest/resources already passed the
                         // catalogue validator; prepare only its GPU payload now.
                         let mut resolved = (*skin).clone();
+                        crate::handwriting::load_handwriting(
+                            &mut resolved,
+                            &*files,
+                            &mut warnings,
+                            false,
+                        );
                         crate::shader::load_shaders(&mut resolved, &*files, &mut warnings);
                         crate::material::load_materials(&mut resolved, &*files, &mut warnings);
                         if warnings.iter().any(|d| d.severity == Severity::Error) {
@@ -682,7 +741,9 @@ impl SkinRegistry {
         // packages; existing static exports retain their original manifests.
         let mut manifest = None;
         if let Ok(loaded) = self.load(id)
-            && (!loaded.skin.shaders.is_empty() || !loaded.skin.materials.is_empty())
+            && (!loaded.skin.shaders.is_empty()
+                || !loaded.skin.materials.is_empty()
+                || loaded.skin.dialogue.reveal.handwriting.is_some())
         {
             let compact = crate::load::standalone_manifest(&loaded.skin)
                 .map_err(|e| FileError::Io(e.to_string()))?;

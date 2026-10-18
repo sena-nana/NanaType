@@ -988,6 +988,7 @@ impl Default for ExitSpec {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RevealSpec {
+    pub handwriting: Option<crate::HandwritingSpec>,
     pub base_ms: u16,
     pub cjk_factor: f32,
     pub space_ms: u16,
@@ -1020,6 +1021,7 @@ impl Default for RevealSpec {
     fn default() -> Self {
         let p = PacingParams::default();
         Self {
+            handwriting: None,
             base_ms: p.base_ms,
             cjk_factor: p.cjk_factor,
             space_ms: p.space_ms,
@@ -1507,6 +1509,8 @@ impl Default for EffectDefaults {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Skin {
+    #[serde(skip)]
+    pub stroke_data: Option<std::sync::Arc<crate::StrokeData>>,
     pub materials: BTreeMap<String, crate::MaterialSpec>,
     #[serde(skip)]
     pub material_programs: BTreeMap<String, std::sync::Arc<crate::ShaderProgram>>,
@@ -1668,6 +1672,13 @@ impl Skin {
     /// Every packaged file the manifest refers to, with the field that names it.
     pub fn referenced_files(&self) -> Vec<(&'static str, &str, FileKind)> {
         let mut out: Vec<(&'static str, &str, FileKind)> = Vec::new();
+        if let Some(spec) = &self.dialogue.reveal.handwriting {
+            out.push((
+                "dialogue.reveal.handwriting.data",
+                &spec.data,
+                FileKind::StrokeData,
+            ));
+        }
         for spec in self.materials.values().take(16) {
             out.push(("materials.source", &spec.source, FileKind::Shader));
             for path in spec.textures.iter().take(2) {
@@ -1778,6 +1789,7 @@ impl Skin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKind {
+    StrokeData,
     Shader,
     Image,
     NineSlice([u32; 4]),

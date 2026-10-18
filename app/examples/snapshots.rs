@@ -538,7 +538,19 @@ fn render_at(registry: &SkinRegistry, out: &std::path::Path, skin_id: &str, loca
     ) {
         println!("font: {e}");
     }
-    let families = roles.map(|s| builtin_ref(&s).and_then(|r| builtin.family(&r)));
+    let mut packaged_fonts = nana_ui::HostFontScope::new();
+    let families = roles.map(|s| {
+        let path = s.file.as_ref()?;
+        if nanatype_theme::is_builtin_font(path) {
+            return builtin.family(path);
+        }
+        packaged_fonts
+            .add_bytes(loaded.files.read(path).ok()?)
+            .ok()?
+            .families()
+            .first()
+            .cloned()
+    });
     let mut skin = Arc::new(nanatype::skin_theme::prepare(
         &loaded.skin,
         &Default::default(),

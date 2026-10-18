@@ -895,7 +895,19 @@ fn run() {
         ) {
             eprintln!("font: {e}");
         }
-        let families = roles.map(|f| f.file.as_ref().and_then(|r| fonts.family(r)));
+        let mut packaged_fonts = nana_ui::HostFontScope::new();
+        let families = roles.map(|f| {
+            let path = f.file.as_ref()?;
+            if nanatype_theme::is_builtin_font(path) {
+                return fonts.family(path);
+            }
+            packaged_fonts
+                .add_bytes(loaded.files.read(path).ok()?)
+                .ok()?
+                .families()
+                .first()
+                .cloned()
+        });
         let skin = Arc::new(nanatype::skin_theme::prepare(
             &loaded.skin,
             &Default::default(),

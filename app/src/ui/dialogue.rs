@@ -55,6 +55,7 @@ pub struct Base {
     pub reduced_motion: bool,
     pub masks: nana_ui_core::TextTransitions,
     pub light: Option<nanatype_theme::TextLightSpec>,
+    pub handwriting: Option<Arc<nanatype_theme::StrokeData>>,
     pub light_exit: Option<(u64, u16)>,
     pub light_preview: bool,
     pub align: TextAlign,
@@ -92,6 +93,7 @@ impl Base {
         Self {
             responsive_text: false,
             light: skin.dialogue.reveal.light.clone(),
+            handwriting: None,
             light_exit: None,
             light_preview: false,
             masks: nana_ui_core::TextTransitions {
@@ -148,6 +150,7 @@ impl Base {
             reduced,
         );
         base.responsive_text = skin.dialogue.responsive.is_some();
+        base.handwriting = skin.stroke_data.clone();
         base
     }
 
@@ -163,6 +166,7 @@ impl Base {
             material: None,
             masks: Default::default(),
             light: None,
+            handwriting: None,
             ..Self::dialogue(skin, entrance, false)
         }
     }
@@ -176,7 +180,7 @@ impl Base {
             reduced,
         );
         base.light = None;
-        if skin.dialogue.reveal.light.is_some() {
+        if skin.dialogue.reveal.light.is_some() || skin.dialogue.reveal.handwriting.is_some() {
             base.masks = Default::default();
         }
         base
@@ -289,6 +293,15 @@ fn document_on(
                 .as_ref()
                 .map(|p| (p.at_ms.clone(), rich.text().to_owned())),
         );
+    let handwriting = base
+        .handwriting
+        .clone()
+        .filter(|_| reveal.is_some() && entrance.kind != EntranceKind::None && entrance.ms > 0)
+        .filter(|_| !base.reduced_motion && super::materials::enabled(ui))
+        .filter(|_| {
+            ui.settings
+                .with_untracked(|s| s.playback.entrance.is_none() && s.playback.typing)
+        });
     if let (Some(key), Some(plan)) = (follow, &reveal) {
         overflow::publish_on(
             ui.track_slot,
@@ -399,6 +412,9 @@ fn document_on(
             l.offset_top = vertical.then_some(LengthSpec::Px(0.));
         }
     };
+    if let Some(data) = handwriting {
+        return super::handwriting::view(view, data, update_view, follow.map(|_| ui.text_node));
+    }
     let view = widget(view).bind(update_view);
     if let Some((spec, (times, text))) = light_plan {
         let node = if follow.is_some() {
@@ -650,7 +666,7 @@ fn drawn_untracked(ui: Ui) -> Arc<DisplayView> {
 /// A still box showing `doc` in `ctx.skin`, for the skin picker.
 pub fn preview_box(ui: Ui, mut ctx: BoxCtx, doc: &Document) -> AnyView {
     ctx.skin = super::materials::render_skin(ui, ctx.skin);
-    if (ctx.skin.dialogue.reveal.light.is_some())
+    if (ctx.skin.dialogue.reveal.light.is_some() || ctx.skin.dialogue.reveal.handwriting.is_some())
         && ui.shader_preview.get_untracked()
         && !ui.reduced_motion.get_untracked()
         && super::materials::enabled(ui)

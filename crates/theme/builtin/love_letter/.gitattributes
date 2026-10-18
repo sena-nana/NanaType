@@ -1,0 +1,4 @@
+# Keep upstream licence files byte for byte, including their whitespace.
+ARPHICPL.TXT -text -whitespace
+APL-*.txt -text -whitespace
+COPYING -text -whitespace

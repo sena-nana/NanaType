@@ -7,6 +7,7 @@ pub mod dialogue;
 pub mod douyin;
 mod effect_uniforms;
 pub mod feedback;
+pub mod handwriting;
 pub mod history;
 pub mod input;
 pub mod keycap;
@@ -474,6 +475,7 @@ pub fn prepare_skin_preview(
                 .get(&e.shader)
                 .is_some_and(|s| s.animated)
         }) || loaded.skin.dialogue.reveal.light.is_some()
+            || loaded.skin.dialogue.reveal.handwriting.is_some()
             || loaded
                 .skin
                 .dialogue

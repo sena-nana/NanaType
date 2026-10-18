@@ -13,6 +13,8 @@ mod contour;
 mod files;
 mod fonts;
 mod geometry;
+mod handwriting;
+pub use handwriting::{HandwritingSpec, StrokeCommand, StrokeData, StrokeGlyph};
 mod load;
 mod manifest;
 mod material;

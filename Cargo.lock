@@ -4703,6 +4703,7 @@ name = "nanatype-theme"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "flate2",
  "image",
  "imagesize",
  "naga",
@@ -4710,6 +4711,7 @@ dependencies = [
  "nanatype-model",
  "nanatype-playback",
  "serde",
+ "serde_json",
  "tempfile",
  "toml 1.1.7+spec-1.1.0",
  "ttf-parser",

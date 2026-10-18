@@ -17,6 +17,7 @@
 | `nanatype.crayon` | 蜡笔画 | cute, elegant | 米白画纸、柔彩蜡笔与小花涂鸦，深色彩铅文字；静态 GPU 材质 |
 | `nanatype.halo` | 光环 | classic, minimal | 默认。精简蓝白圆润卡片、轻阴影、天蓝胶囊名牌，无右上角动效 |
 | `nanatype.sonnet` | 十四行诗 | elegant, minimal | 透明诗句字幕，中文文楷与英文花体；逐字金光、星火光丝，整段同步化为光尘 |
+| `nanatype.love_letter` | 情书 | cute, elegant | 奶油信纸、淡粉边饰与玫瑰墨迹；文楷按笔顺错峰书写，整段同步消融 |
 | `nanatype.night` | 夜色 | classic | 深蓝玻璃、切角仪表框、霓虹描边与呼吸光带 |
 | `nanatype.parchment` | 羊皮纸 | classic, elegant | 双线压印框、暖色纸纤维、卷草包角、宋体 |
 | `nanatype.adv` | ADV 经典 | game | 1280×180 宽幅剧情框、端部缺口、金色姓名基线 |
@@ -207,6 +208,7 @@ bob_px = 3
 # glyph = "" 且没有 image 时不显示
 
 [dialogue.reveal]                 # 打字节奏
+# handwriting = { data = "love_letter/strokes.nthz" }  # 可选：包内压缩笔顺数据
 base_ms = 50                      # 每个拉丁字符
 cjk_factor = 2.0                  # 中日韩字符等于几个拍子
 space_ms = 50                     # 每个空格

@@ -815,3 +815,16 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - zlib-rs 0.6.7 — <https://github.com/trifectatechfoundation/zlib-rs>
 
 <!-- END generated -->
+
+### Love Letter stroke-order data
+
+The `nanatype.love_letter` skin includes a GB2312 subset of Make Me a Hanzi
+`graphics.txt`, revision `bddc96d41bef78427ed0e034e9f7e31d71fd1b92`:
+<https://github.com/skishore/makemeahanzi>. The graphics derive from Arphic PL
+KaitiM GB and Arphic PL UKai and remain under the Arphic Public License,
+Copyright (C) 1999 Arphic Technology Co., Ltd. The skin carries the unchanged
+full APL, upstream COPYING, source SHA-256 and a prominent modification notice.
+Only the graphics are distributed; no dictionary data is included. The skin's
+LXGW WenKai font retains its separate SIL OFL 1.1 notice and licence.
+The subset is stored losslessly as a Unicode index, command/coordinate deltas
+and independent 64-character zlib blocks; geometry and stroke order are unchanged.

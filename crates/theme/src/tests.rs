@@ -202,11 +202,11 @@ fn compact_standalone_manifests_preserve_all_builtin_designs() {
 #[test]
 fn every_builtin_loads_without_warnings() {
     let registry = SkinRegistry::new(None, APP);
-    assert_eq!(registry.entries().len(), 26);
+    assert_eq!(registry.entries().len(), 27);
     let mut ids: Vec<&str> = registry.entries().iter().map(|e| e.id.as_str()).collect();
     ids.sort();
     ids.dedup();
-    assert_eq!(ids.len(), 26);
+    assert_eq!(ids.len(), 27);
     assert!(registry.load(DEFAULT_SKIN).is_ok());
     for entry in registry.entries() {
         assert!(entry.loads(), "{}: {:?}", entry.id, entry.errors);
