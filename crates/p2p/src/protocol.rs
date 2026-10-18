@@ -272,6 +272,22 @@ fn rebase_reveal(reveal: &mut Reveal, remote_now: u64, now: u64) {
 }
 
 pub fn rebase_display(view: &mut DisplayView, remote_now: u64, now: u64) {
+    if let Some(exit) = &mut view.text_exit {
+        // A peer may have a younger clock. Freeze the visible prefix, and
+        // never interpret the sender's absolute deadline on the local clock.
+        let first_hidden = (view.reveal.visible_from..view.reveal.hidden_from)
+            .find(|u| view.reveal.unit_at(*u).is_none_or(|at| at > exit.at_ms))
+            .unwrap_or(view.reveal.hidden_from);
+        view.reveal.hidden_from = first_hidden;
+        view.reveal.shown = first_hidden;
+        view.reveal.segment = None;
+        exit.ms = exit.ms.saturating_sub(
+            remote_now
+                .saturating_sub(exit.at_ms)
+                .min(u64::from(u16::MAX)) as u16,
+        );
+        exit.at_ms = now;
+    }
     rebase_reveal(&mut view.reveal, remote_now, now);
     if let Some((at, ms)) = &mut view.fade {
         let elapsed = remote_now.saturating_sub(*at);
@@ -361,6 +377,36 @@ mod tests {
         room.submit("a", 1, line.clone(), None);
         room.submit("b", 1, line.clone(), None);
         assert_ne!(room.render_id("a", line.id), room.render_id("b", line.id));
+    }
+    #[test]
+    fn rebasing_a_retirement_keeps_a_finite_local_deadline_and_frozen_prefix() {
+        let mut view = DisplayView::empty(nanatype_model::Entrance {
+            kind: nanatype_model::EntranceKind::Fade,
+            ms: 180,
+        });
+        view.empty = false;
+        view.reveal = Reveal {
+            visible_from: 0,
+            shown: 0,
+            hidden_from: 3,
+            segment: Some(nanatype_core::SegmentReveal {
+                origin_ms: 1000,
+                start: 0,
+                reveal_ms: vec![0, 100, 200].into(),
+            }),
+        };
+        view.text_exit = Some(nanatype_core::TextExit {
+            at_ms: 1150,
+            ms: 320,
+        });
+        rebase_display(&mut view, 1250, 10);
+        assert_eq!(
+            view.text_exit,
+            Some(nanatype_core::TextExit { at_ms: 10, ms: 220 })
+        );
+        assert_eq!(view.reveal.hidden_from, 2);
+        assert_eq!(view.reveal.unit_at(1), Some(0));
+        assert_eq!(view.reveal.unit_at(2), None);
     }
     #[test]
     fn rebase_handles_receiver_clock_younger_than_the_line() {

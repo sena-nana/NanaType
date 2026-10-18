@@ -230,7 +230,7 @@ fn entry_view(ui: Ui, key: u64, first: bool, follows: bool) -> AnyView {
 
 fn message_view(ui: Ui, key: u64, follows: bool) -> AnyView {
     let source = super::danmaku::RowSource::History(key);
-    let mut skin = ui.skin.get_untracked();
+    let mut skin = super::materials::render_skin(ui, ui.skin.get_untracked());
     let settings = ui.settings.get_untracked();
     let fitted = interaction_presentation(&skin);
     if fitted {
@@ -361,6 +361,9 @@ fn message_view(ui: Ui, key: u64, follows: bool) -> AnyView {
     let mut name_style = NodeStyle::default();
     {
         let l = Arc::make_mut(&mut name_style.layout);
+        l.paint.text_material = super::materials::enabled(ui)
+            .then(|| super::materials::resolve(&skin, h.text.material.as_deref()))
+            .flatten();
         l.font_size = Some(h.name_size);
         l.font_weight = Some(h.name_weight);
         l.font_family = skin.fonts.name.families.first().cloned();
@@ -449,7 +452,8 @@ fn message_view(ui: Ui, key: u64, follows: bool) -> AnyView {
         ui.asset_urls
             .with_untracked(|m| m.get(&format!("skin:{}", f.image)).cloned())
     });
-    let mut bubble_surface = Surface::bubble(&skin, frame_url);
+    let mut bubble_surface =
+        Surface::bubble(&skin, frame_url).materials(super::materials::enabled(ui));
     if follows {
         // Only a group's first bubble points at the avatar.
         bubble_surface.radii[0] = bubble_surface.radii[0].max(h.bubble_radius);
@@ -741,7 +745,7 @@ pub fn history_window(ui: Ui) -> impl IntoView {
         (Arc::as_ptr(&skin) as usize, Arc::as_ptr(&settings) as usize)
     };
     dynamic(key, move |_| {
-        let skin = ui.skin.get_untracked();
+        let skin = super::materials::render_skin(ui, ui.skin.get_untracked());
         let presentation = interaction_presentation(&skin);
         let ms = std::time::Duration::from_millis(ROW_ENTER_MS);
         // Reduced motion keeps the fade and drops the travel.

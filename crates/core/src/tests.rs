@@ -756,3 +756,250 @@ fn page_breaks_need_the_page_overflow() {
     );
     assert_eq!(core.display().reveal.hidden_from, 8);
 }
+
+fn crayon_core() -> Core {
+    let skin = SkinRegistry::new(None, "1.0.0")
+        .load("nanatype.crayon")
+        .unwrap()
+        .skin;
+    Core::new(Settings::default(), skin)
+}
+fn retire_wake(fx: &Effects) -> Wake {
+    *fx.wakes
+        .iter()
+        .find(|w| w.reason == WakeReason::PresentationDone)
+        .expect("finite retirement deadline")
+}
+#[test]
+fn crayon_replacement_defers_all_new_events_and_cancels_old_cues() {
+    let mut core = crayon_core();
+    type_and_send(&mut core, "旧台词很长", 1000);
+    let old = core.display().line;
+    let fx = type_and_send(&mut core, "新[ruby=しん]台词[/ruby]", 1050);
+    let wake = retire_wake(&fx);
+    assert_eq!(wake.at_ms, 1370);
+    assert_eq!(core.display().line, old);
+    assert!(core.display().text_exit.is_some());
+    assert!(fx.cues.is_empty());
+    assert!(!fx.events.iter().any(|e| matches!(e, Event::LineStarted(_))));
+    assert!(!fx.cancel_epochs.is_empty());
+    let fx = core.handle(
+        Cmd::Wake {
+            epoch: wake.epoch,
+            reason: wake.reason,
+        },
+        1370,
+    );
+    assert_ne!(core.display().line, old);
+    assert!(core.display().text_exit.is_none());
+    assert!(fx.events.iter().any(|e| matches!(e, Event::LineStarted(_))));
+    assert!(fx.cues.iter().all(|c| c.origin_ms >= 1370));
+    assert_eq!(core.display().reveal.unit_at(0), Some(1370));
+    let current = core.display().clone();
+    core.handle(
+        Cmd::Wake {
+            epoch: wake.epoch,
+            reason: wake.reason,
+        },
+        1500,
+    );
+    assert_eq!(
+        *core.display(),
+        current,
+        "stale retirement changed the new line"
+    );
+}
+#[test]
+fn crayon_clear_is_idempotent_and_continue_finishes_retirement() {
+    let mut core = crayon_core();
+    type_and_send(&mut core, "保留到擦完", 1000);
+    let fx = core.handle(Cmd::ClearDisplay, 1080);
+    let wake = retire_wake(&fx);
+    let exit = core.display().text_exit;
+    assert!(!core.display().empty);
+    let fx = core.handle(Cmd::ClearDisplay, 1100);
+    assert!(fx.wakes.is_empty());
+    assert_eq!(core.display().text_exit, exit);
+    core.handle(Cmd::Continue, 1110);
+    assert!(core.display().empty);
+    core.handle(
+        Cmd::Wake {
+            epoch: wake.epoch,
+            reason: wake.reason,
+        },
+        wake.at_ms,
+    );
+    assert!(core.display().empty);
+}
+#[test]
+fn crayon_repeated_replacements_keep_deadline_and_only_start_latest() {
+    let mut core = crayon_core();
+    type_and_send(&mut core, "第一句", 1000);
+    let fx = type_and_send(&mut core, "第二句", 1050);
+    let wake = retire_wake(&fx);
+    let fx = type_and_send(&mut core, "第三句", 1100);
+    assert!(fx.cues.is_empty());
+    assert!(fx.wakes.is_empty());
+    let fx = core.handle(Cmd::Skip, 1110);
+    assert_eq!(core.display().doc.plain_text(), "第三句");
+    assert_eq!(
+        fx.events
+            .iter()
+            .filter(|e| matches!(e, Event::LineStarted(_)))
+            .count(),
+        1
+    );
+    assert!(
+        core.handle(
+            Cmd::Wake {
+                epoch: wake.epoch,
+                reason: wake.reason
+            },
+            1370
+        )
+        .events
+        .is_empty()
+    );
+}
+#[test]
+fn crayon_page_waits_for_erase_and_accessibility_removes_wait() {
+    let mut core = crayon_core();
+    type_and_send(&mut core, "甲[page]乙", 1000);
+    core.handle(Cmd::Continue, 1100); // complete first segment
+    let fx = core.handle(Cmd::Continue, 1200);
+    let wake = retire_wake(&fx);
+    assert_eq!(core.display().reveal.visible_from, 0);
+    let fx = core.handle(
+        Cmd::Wake {
+            epoch: wake.epoch,
+            reason: wake.reason,
+        },
+        1520,
+    );
+    assert_eq!(core.display().reveal.visible_from, 1);
+    assert_eq!(core.display().reveal.unit_at(1), Some(1520));
+    assert!(fx.cues.iter().all(|c| c.origin_ms >= 1520));
+    core.handle(Cmd::SetReducedMotion(true), 1600);
+    assert!(core.handle(Cmd::ClearDisplay, 1610).wakes.is_empty());
+    assert!(core.display().empty);
+}
+
+#[test]
+fn crayon_completion_waits_for_last_glyph_mask_and_after_line_erase() {
+    let mut core = crayon_core();
+    let fx = type_and_send(&mut core, "字", 1000);
+    let wake = *fx
+        .wakes
+        .iter()
+        .find(|w| w.reason == WakeReason::SegmentEnd)
+        .unwrap();
+    let fx = core.handle(
+        Cmd::Wake {
+            epoch: wake.epoch,
+            reason: wake.reason,
+        },
+        wake.at_ms,
+    );
+    assert_eq!(core.phase(), Some(Phase::Revealing));
+    let tail = fx.wakes[0];
+    assert_eq!(tail.at_ms, 1180);
+    let fx = core.handle(
+        Cmd::Wake {
+            epoch: tail.epoch,
+            reason: tail.reason,
+        },
+        tail.at_ms,
+    );
+    assert!(
+        fx.events
+            .iter()
+            .any(|e| matches!(e, Event::LineRevealed(_)))
+    );
+    let mut settings = core.settings().clone();
+    settings.playback.after = AfterLine::Clear { delay_ms: 10 };
+    core.handle(Cmd::SetSettings(Box::new(settings)), 1200);
+    let fx = type_and_send(&mut core, "下一句", 1210);
+    let retirement = retire_wake(&fx);
+    let fx = core.handle(
+        Cmd::Wake {
+            epoch: retirement.epoch,
+            reason: retirement.reason,
+        },
+        retirement.at_ms,
+    );
+    assert!(fx.events.iter().any(|e| matches!(e, Event::LineStarted(_))));
+}
+
+#[test]
+fn crayon_skip_finishes_glyph_entry_and_stale_auto_page_wakes_are_ignored() {
+    let mut core = crayon_core();
+    type_and_send(&mut core, "旧[page]页", 1000);
+    core.handle(Cmd::Continue, 1010);
+    core.handle(
+        Cmd::Wake {
+            epoch: 0,
+            reason: WakeReason::AutoContinue,
+        },
+        1020,
+    );
+    assert!(core.display().text_exit.is_none());
+    core.handle(Cmd::Skip, 1030);
+    assert_eq!(
+        core.display().entrance.kind,
+        nanatype_model::EntranceKind::None
+    );
+}
+
+#[test]
+fn crayon_queue_does_not_replace_the_line_already_waiting_for_erasure() {
+    let mut settings = Settings::default();
+    settings.playback.queue = QueuePolicy::Queue;
+    settings.history.sync = HistorySync::OnSubmit;
+    let skin = SkinRegistry::new(None, "1.0.0")
+        .load("nanatype.crayon")
+        .unwrap()
+        .skin;
+    let mut core = Core::new(settings, skin);
+    type_and_send(&mut core, "甲", 1000);
+    core.handle(Cmd::Skip, 1010);
+    let fx = type_and_send(&mut core, "乙", 1100);
+    let wake = retire_wake(&fx);
+    let fx = type_and_send(&mut core, "丙", 1150);
+    assert!(fx.events.iter().any(|e| matches!(e, Event::Queued { .. })));
+    assert_eq!(core.history().len(), 1);
+    core.handle(
+        Cmd::Wake {
+            epoch: wake.epoch,
+            reason: wake.reason,
+        },
+        1420,
+    );
+    assert_eq!(core.display().doc.plain_text(), "乙");
+    assert_eq!(core.queued(), 1);
+    assert_eq!(core.history().len(), 2);
+}
+#[test]
+fn crayon_mirror_edit_cancels_old_retirement_and_deletes_immediately() {
+    let mut settings = Settings::default();
+    settings.general.input_mode = InputMode::Mirror;
+    let skin = SkinRegistry::new(None, "1.0.0")
+        .load("nanatype.crayon")
+        .unwrap()
+        .skin;
+    let mut core = Core::new(settings, skin);
+    core.handle(Cmd::DraftChanged(parse("蜡笔文字").doc), 1000);
+    let fx = core.handle(Cmd::ClearDisplay, 1100);
+    let wake = retire_wake(&fx);
+    core.handle(Cmd::DraftChanged(parse("蜡笔").doc), 1110);
+    assert!(core.display().text_exit.is_none());
+    assert_eq!(core.display().doc.plain_text(), "蜡笔");
+    core.handle(
+        Cmd::Wake {
+            epoch: wake.epoch,
+            reason: wake.reason,
+        },
+        1420,
+    );
+    assert_eq!(core.display().doc.plain_text(), "蜡笔");
+    assert!(!core.display().empty);
+}

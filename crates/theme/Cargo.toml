@@ -14,6 +14,7 @@ default = ["builtin-fonts"]
 builtin-fonts = []
 
 [dependencies]
+nana-ui-core.workspace = true
 nanatype-model.workspace = true
 nanatype-playback.workspace = true
 serde.workspace = true

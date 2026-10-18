@@ -10,7 +10,7 @@
 //!
 //! A miniature is worked out once per loaded skin and cached ([`thumb`]);
 //! its ornament glyphs come from the skin, independent of the UI locale. The nodes it builds
-//! are still, so 24 cards cost nothing per frame.
+//! are still, so the cards cost nothing per frame.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -127,6 +127,9 @@ impl Thumb {
     /// The miniature of a loaded skin. Frame images resolve against
     /// `urls` (`skin:<path>` → URL); without one the box takes its fill.
     pub fn of(skin: &Skin, urls: &HashMap<String, String>) -> Self {
+        let mut static_skin = skin.clone();
+        static_skin.material_programs.clear();
+        let skin = &static_skin;
         let d = &skin.dialogue;
         let url = |path: &str| urls.get(&format!("skin:{path}")).cloned();
         let [mt, mr, mb, ml] = d.box_.margin;

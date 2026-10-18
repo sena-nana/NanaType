@@ -283,6 +283,8 @@ pub enum BorderStyleSpec {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShapeSpec {
+    pub material: Option<String>,
+    pub border_material: Option<String>,
     /// Opt-in vector outline; absent keeps the original box or image frame.
     pub contour: Option<ContourPreset>,
     /// Painted over the fill colour.
@@ -770,6 +772,7 @@ impl BoxSpec {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TextSpec {
+    pub material: Option<String>,
     pub color: Rgba8,
     pub size: f32,
     pub line_height: f32,
@@ -782,6 +785,7 @@ pub struct TextSpec {
 impl Default for TextSpec {
     fn default() -> Self {
         Self {
+            material: None,
             color: Rgba8::rgb(27, 47, 75),
             size: 28.0,
             line_height: 1.4,
@@ -922,6 +926,8 @@ impl Default for ContinueSpec {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct EntranceSpec {
+    pub material: Option<String>,
+    pub scope: TransitionScope,
     pub kind: EntranceKind,
     pub ms: u16,
 }
@@ -929,8 +935,34 @@ pub struct EntranceSpec {
 impl Default for EntranceSpec {
     fn default() -> Self {
         Self {
+            material: None,
+            scope: TransitionScope::Glyph,
             kind: EntranceKind::Fade,
             ms: 140,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransitionScope {
+    #[default]
+    Glyph,
+    Text,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ExitSpec {
+    pub material: Option<String>,
+    pub scope: TransitionScope,
+    pub ms: u16,
+}
+impl Default for ExitSpec {
+    fn default() -> Self {
+        Self {
+            material: None,
+            scope: TransitionScope::Text,
+            ms: 320,
         }
     }
 }
@@ -943,6 +975,7 @@ pub struct RevealSpec {
     pub space_ms: u16,
     pub punct: PunctPauses,
     pub entrance: EntranceSpec,
+    pub exit: Option<ExitSpec>,
 }
 
 impl Default for RevealSpec {
@@ -954,6 +987,7 @@ impl Default for RevealSpec {
             space_ms: p.space_ms,
             punct: p.punct,
             entrance: EntranceSpec::default(),
+            exit: None,
         }
     }
 }
@@ -1261,6 +1295,7 @@ pub struct History {
     pub bubble_radius: f32,
     pub bubble_padding: [f32; 2],
     pub bubble_frame: Option<NineSlice>,
+    pub bubble_material: Option<String>,
     pub bubble_contour: Option<ContourPreset>,
     pub text: TextSpec,
     pub gap: f32,
@@ -1306,6 +1341,7 @@ impl Default for History {
             bubble_radius: 14.0,
             bubble_padding: [12.0, 8.0],
             bubble_frame: None,
+            bubble_material: None,
             bubble_contour: None,
             text: TextSpec {
                 size: 18.0,
@@ -1430,6 +1466,9 @@ impl Default for EffectDefaults {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Skin {
+    pub materials: BTreeMap<String, crate::MaterialSpec>,
+    #[serde(skip)]
+    pub material_programs: BTreeMap<String, std::sync::Arc<crate::ShaderProgram>>,
     pub shaders: BTreeMap<String, crate::ShaderSpec>,
     #[serde(skip)]
     pub shader_programs: BTreeMap<String, std::sync::Arc<crate::ShaderProgram>>,
@@ -1444,6 +1483,79 @@ pub struct Skin {
 }
 
 impl Skin {
+    pub fn material_references(&self) -> Vec<(&'static str, &str)> {
+        let mut refs = Vec::new();
+        if let Some(name) = &self.dialogue.reveal.entrance.material {
+            refs.push(("dialogue.reveal.entrance.material", name.as_str()));
+        }
+        if let Some(name) = self
+            .dialogue
+            .reveal
+            .exit
+            .as_ref()
+            .and_then(|e| e.material.as_ref())
+        {
+            refs.push(("dialogue.reveal.exit.material", name.as_str()));
+        }
+
+        for (field, value) in [
+            ("dialogue.text.material", &self.dialogue.text.material),
+            ("history.text.material", &self.history.text.material),
+            ("history.bubble_material", &self.history.bubble_material),
+        ] {
+            if let Some(value) = value {
+                refs.push((field, value.as_str()));
+            }
+        }
+        let shapes = std::iter::once((
+            "dialogue.box.material",
+            "dialogue.box.border_material",
+            &self.dialogue.box_.shape,
+        ))
+        .chain(std::iter::once((
+            "dialogue.nameplate.material",
+            "dialogue.nameplate.border_material",
+            &self.dialogue.nameplate.shape,
+        )))
+        .chain(self.dialogue.decor.iter().map(|d| {
+            (
+                "dialogue.decor.material",
+                "dialogue.decor.border_material",
+                &d.shape,
+            )
+        }))
+        .chain(self.history.decor.iter().map(|d| {
+            (
+                "history.decor.material",
+                "history.decor.border_material",
+                &d.shape,
+            )
+        }))
+        .chain(self.history.name_plate.iter().map(|p| {
+            (
+                "history.name_plate.material",
+                "history.name_plate.border_material",
+                &p.shape,
+            )
+        }))
+        .chain(self.history.panel.iter().map(|p| {
+            (
+                "history.panel.material",
+                "history.panel.border_material",
+                &p.shape,
+            )
+        }));
+        for (fill, border, shape) in shapes {
+            if let Some(value) = &shape.material {
+                refs.push((fill, value.as_str()));
+            }
+            if let Some(value) = &shape.border_material {
+                refs.push((border, value.as_str()));
+            }
+        }
+        refs
+    }
+
     /// Full authored dialogue artwork, either a static plate or a live effect.
     pub fn has_dialogue_artwork(&self) -> bool {
         self.dialogue
@@ -1497,6 +1609,12 @@ impl Skin {
     /// Every packaged file the manifest refers to, with the field that names it.
     pub fn referenced_files(&self) -> Vec<(&'static str, &str, FileKind)> {
         let mut out: Vec<(&'static str, &str, FileKind)> = Vec::new();
+        for spec in self.materials.values().take(16) {
+            out.push(("materials.source", &spec.source, FileKind::Shader));
+            for path in spec.textures.iter().take(2) {
+                out.push(("materials.textures", path, FileKind::Image));
+            }
+        }
         for spec in self.shaders.values().take(16) {
             out.push(("shaders.source", &spec.source, FileKind::Shader));
             for path in spec.textures.iter().take(2) {

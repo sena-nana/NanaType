@@ -23,6 +23,10 @@ struct Builtin {
 
 const BUILTINS: &[Builtin] = &[
     Builtin {
+        id: "nanatype.crayon",
+        manifest: include_str!("../builtin/crayon.toml"),
+    },
+    Builtin {
         id: "nanatype.gothic",
         manifest: include_str!("../builtin/gothic.toml"),
     },
@@ -145,6 +149,32 @@ fn builtin_files(b: &Builtin) -> Arc<dyn SkinFiles> {
         };
     }
     match b.id {
+        "nanatype.crayon" => files.extend_from_slice(&[
+            (
+                "crayon/write.wgsl",
+                include_bytes!("../builtin/crayon/write.wgsl"),
+            ),
+            (
+                "crayon/erase.wgsl",
+                include_bytes!("../builtin/crayon/erase.wgsl"),
+            ),
+            (
+                "crayon/paper.wgsl",
+                include_bytes!("../builtin/crayon/paper.wgsl"),
+            ),
+            (
+                "crayon/pencil.wgsl",
+                include_bytes!("../builtin/crayon/pencil.wgsl"),
+            ),
+            (
+                "crayon/still.png",
+                include_bytes!("../builtin/crayon/still.png"),
+            ),
+            (
+                "crayon/bubble.png",
+                include_bytes!("../builtin/crayon/bubble.png"),
+            ),
+        ]),
         "nanatype.halo" => still!("halo"),
         "nanatype.night" => plate!("night"),
         "nanatype.parchment" => {
@@ -479,13 +509,14 @@ impl SkinRegistry {
                     let files = entry.files.clone().expect("valid catalogue has files");
                     let skin = entry.skin.clone().expect("valid catalogue has a skin");
                     let mut warnings = entry.warnings.clone();
-                    let skin = if skin.shaders.is_empty() {
+                    let skin = if skin.shaders.is_empty() && skin.materials.is_empty() {
                         skin
                     } else {
                         // The immutable manifest/resources already passed the
                         // catalogue validator; prepare only its GPU payload now.
                         let mut resolved = (*skin).clone();
                         crate::shader::load_shaders(&mut resolved, &*files, &mut warnings);
+                        crate::material::load_materials(&mut resolved, &*files, &mut warnings);
                         if warnings.iter().any(|d| d.severity == Severity::Error) {
                             warnings.sort_by_key(|d| std::cmp::Reverse(d.severity));
                             return Err(warnings);
@@ -633,7 +664,7 @@ impl SkinRegistry {
         // packages; existing static exports retain their original manifests.
         let mut manifest = None;
         if let Ok(loaded) = self.load(id)
-            && !loaded.skin.shaders.is_empty()
+            && (!loaded.skin.shaders.is_empty() || !loaded.skin.materials.is_empty())
         {
             let compact = crate::load::standalone_manifest(&loaded.skin)
                 .map_err(|e| FileError::Io(e.to_string()))?;

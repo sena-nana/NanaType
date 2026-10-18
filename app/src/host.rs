@@ -409,6 +409,10 @@ impl Host {
             self.app.ui
         };
         let view = ui.display.get_untracked();
+        // Retirement freezes the visible viewport as well as the glyph clock.
+        if view.text_exit.is_some() {
+            return;
+        }
         let mut mode = if remote {
             Overflow::Scroll
         } else {

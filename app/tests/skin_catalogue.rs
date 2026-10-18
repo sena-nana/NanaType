@@ -10,16 +10,40 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
     nanatype::services::media::init(&root.join("media")).unwrap();
     let mut registry = SkinRegistry::new(Some(root.join("skins")), env!("CARGO_PKG_VERSION"));
     let first = ui::skin_rows(&registry, Locale::ZhCn);
-    assert_eq!(first.len(), 24);
+    assert_eq!(first.len(), 25);
     for (entry, row) in registry.entries().iter().zip(&first) {
         let skin = entry.skin.as_ref().unwrap();
         assert!(skin.shader_programs.is_empty());
+        assert!(skin.material_programs.is_empty());
         assert_eq!(
             *row.image_urls,
             assets::skin_preview_urls(skin, entry.files().unwrap())
         );
-        for texture in skin.shaders.values().flat_map(|s| &s.textures) {
-            assert!(!row.image_urls.contains_key(&format!("skin:{texture}")));
+        let static_paths: std::collections::HashSet<_> = skin
+            .referenced_files()
+            .into_iter()
+            .filter(|(field, _, kind)| {
+                !matches!(*field, "shaders.textures" | "materials.textures")
+                    && matches!(
+                        kind,
+                        nanatype_theme::FileKind::Image | nanatype_theme::FileKind::NineSlice(_)
+                    )
+            })
+            .map(|(_, path, _)| path)
+            .collect();
+        for texture in skin
+            .shaders
+            .values()
+            .flat_map(|s| &s.textures)
+            .chain(skin.materials.values().flat_map(|s| &s.textures))
+        {
+            if !static_paths.contains(texture.as_str()) {
+                assert!(
+                    !row.image_urls.contains_key(&format!("skin:{texture}")),
+                    "{}: GPU-only texture {texture}",
+                    entry.id
+                );
+            }
         }
     }
     registry.rescan();
@@ -64,6 +88,22 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
             .prepared_skin()
             .is_none()
     );
+    ui::prepare_skin_preview(ui, &registry, "nanatype.crayon").unwrap();
+    assert_eq!(
+        registry
+            .entry("nanatype.crayon")
+            .unwrap()
+            .prepared_skin()
+            .unwrap()
+            .material_programs
+            .len(),
+        5
+    );
+    assert!(!ui::shader_effects::preview_animating(ui));
+    assert!(
+        !ui.shader_preview.get_untracked(),
+        "static materials enabled the animation switch"
+    );
     registry
         .duplicate(
             "nanatype.forest",
@@ -72,6 +112,11 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
             &TomlTable::new(),
         )
         .unwrap();
+    std::fs::write(
+        root.join("skins/user.forest/unlisted.png"),
+        include_bytes!("../../crates/theme/builtin/crayon/still.png"),
+    )
+    .unwrap();
     let rows = ui::skin_rows(&registry, Locale::ZhCn);
     let parent = rows.iter().find(|r| r.id == "nanatype.forest").unwrap();
     let child = rows.iter().find(|r| r.id == "user.forest").unwrap();
@@ -86,11 +131,11 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
     assert!(
         library
             .url(
-                &nanatype_model::AssetRef::Skin("forest/ornament.png".into()),
+                &nanatype_model::AssetRef::Skin("unlisted.png".into()),
                 Some(&loaded)
             )
             .is_some(),
-        "unlisted document images must still resolve lazily from embedded bases"
+        "unlisted document images must still resolve lazily from skin files"
     );
     ui.skins.set(Arc::new(rows));
     let path = root.join("skins/user.forest/skin.toml");
@@ -128,4 +173,29 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
         before["skin:forest/still.png"],
         after["skin:forest/still.png"]
     );
+}
+
+#[test]
+fn material_input_textures_are_not_loaded_by_static_previews() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../target/material-preview-inputs")
+        .join(std::process::id().to_string());
+    std::fs::create_dir_all(&root).unwrap();
+    nanatype::services::media::init(&root.join("media")).unwrap();
+    let png = include_bytes!("../../crates/theme/builtin/crayon/still.png");
+    std::fs::write(root.join("fallback.png"), png).unwrap();
+    std::fs::write(root.join("input.png"), png).unwrap();
+    let mut skin = nanatype_theme::Skin::default();
+    skin.meta.preview = Some("fallback.png".into());
+    skin.materials.insert(
+        "test".into(),
+        nanatype_theme::MaterialSpec {
+            source: "input.wgsl".into(),
+            textures: vec!["input.png".into()],
+            ..Default::default()
+        },
+    );
+    let urls = assets::skin_preview_urls(&skin, &nanatype_theme::DirFiles::new(root));
+    assert!(urls.contains_key("skin:fallback.png"));
+    assert!(!urls.contains_key("skin:input.png"));
 }

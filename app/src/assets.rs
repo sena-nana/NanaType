@@ -68,7 +68,7 @@ pub fn skin_preview_urls(
             matches!(
                 kind,
                 nanatype_theme::FileKind::Image | nanatype_theme::FileKind::NineSlice(_)
-            ) && *field != "shaders.textures"
+            ) && !matches!(*field, "shaders.textures" | "materials.textures")
         })
         .map(|(_, path, _)| path.to_owned())
         .collect();

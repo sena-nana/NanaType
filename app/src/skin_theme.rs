@@ -31,6 +31,7 @@ pub fn with_overrides(skin: &Skin, o: &SkinOverrides) -> Skin {
         // A gradient would paint over the chosen colour.
         s.dialogue.box_.color = c;
         s.dialogue.box_.shape.gradient = None;
+        s.dialogue.box_.shape.material = None;
         if s.has_dialogue_artwork() {
             // Full authored plates have fixed print colours, including their
             // baked fallback. An explicit personal box colour takes priority
@@ -502,7 +503,7 @@ mod tests {
             assert!(r >= 4.5, "{}: on(accent) is {r:.2}:1", e.id);
             n += 1;
         }
-        assert_eq!(n, 24);
+        assert_eq!(n, 25);
     }
 
     #[test]

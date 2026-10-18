@@ -552,6 +552,9 @@ fn render_at(registry: &SkinRegistry, out: &std::path::Path, skin_id: &str, loca
     } else {
         nanatype_settings::ChromeMode::Light
     };
+    if std::env::var_os("NANATYPE_SNAPSHOT_MATERIALS_OFF").is_some() {
+        settings.skin.advanced_effects = false;
+    }
     let theme = nanatype::skin_theme::compile(dark);
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), locale);
     if std::env::var_os("NANATYPE_SNAPSHOT_STATIC").is_some() {
@@ -645,6 +648,10 @@ fn render_at(registry: &SkinRegistry, out: &std::path::Path, skin_id: &str, loca
         (d.region[0] + d.overscan * 2.0) as u32,
         (d.region[1] + d.overscan * 2.0) as u32,
     );
+    if std::env::var_os("NANATYPE_TRANSITION_AUDIT").is_some() {
+        transition_audit(ui, out, w, h, theme);
+        return;
+    }
     if let Ok(frames) = std::env::var("NANATYPE_SNAPSHOT_MOTION_FRAMES") {
         motion_capture(
             ui,
@@ -725,6 +732,9 @@ fn render_at(registry: &SkinRegistry, out: &std::path::Path, skin_id: &str, loca
                     .unwrap();
             },
         );
+        if std::env::var_os("NANATYPE_MATERIAL_AUDIT").is_some() && !skin.materials.is_empty() {
+            material_audit(ui, out, w, h, theme.clone());
+        }
         if std::env::var_os("NANATYPE_THEME_AUDIT").is_some() {
             theme_audit(ui, out, w, h, ih, theme);
         }
@@ -1500,7 +1510,9 @@ fn theme_audit(
     ui.now.set(150_000);
     // Wide visual-novel skins retain their original columns and menu row;
     // review them at 960px, compact dialogue skins at 560px.
-    let narrow_width = w.min(if skin.dialogue.region[0] >= 1100.0 {
+    let narrow_width = w.min(if skin.meta.id == "nanatype.crayon" {
+        300
+    } else if skin.dialogue.region[0] >= 1100.0 {
         960
     } else {
         560
@@ -1508,4 +1520,192 @@ fn theme_audit(
     display_shot("display-long", ui, w, h + 140);
     display_shot("display-narrow", ui, narrow_width, h + 140);
     input_shot("input-narrow", narrow_width, ih + 140);
+}
+
+fn material_audit(
+    ui: Ui,
+    out: &std::path::Path,
+    w: u32,
+    h: u32,
+    theme: Arc<nana_ui::CompiledTheme>,
+) {
+    let original = ui.display.get_untracked();
+    let settings = ui.settings.get_untracked();
+    let reduced = ui.reduced_motion.get_untracked();
+    let now = ui.now.get_untracked();
+    let text=parse("深色彩铅 Colored pencil [color=#B94F49]红色笔触[/color]\n[ruby=ものがたり]故事[/ruby] 与中文、Latin、😀").doc;
+    ui.display.update(|d| {
+        let d = Arc::make_mut(d);
+        d.doc = Arc::new(text.clone());
+        d.reveal = nanatype_core::Reveal::full(text.unit_count() as u32);
+        d.revision += 1;
+    });
+    ui.now.set(120_000);
+    ui.reduced_motion.set(false);
+    let id = DocumentId::new(1).unwrap();
+    let mut doc = RuntimeDocument::new(id);
+    doc.context_mut().set_theme_tokens(theme).unwrap();
+    doc.context_mut()
+        .mount_view_root(id, move || dialogue::display_window(ui))
+        .unwrap();
+    let mut session = RuntimeAgentSession::new(doc, w, h).unwrap();
+    session.set_clear(Some([0.; 4]));
+    let capture = |session: &mut RuntimeAgentSession| {
+        nanatype::clock::capture_at(120_000, || session.screenshot_rgba().unwrap().1)
+    };
+    let first = capture(&mut session);
+    let steady = capture(&mut session);
+    assert_eq!(first, steady, "static material changed without an event");
+    assert!(
+        !nanatype::ui::shader_effects::animating(ui),
+        "static material requested animation"
+    );
+    ui.reduced_motion.set(true);
+    assert_eq!(
+        first,
+        capture(&mut session),
+        "reduced motion removed static material"
+    );
+    ui.settings
+        .update(|s| Arc::make_mut(s).skin.advanced_effects = false);
+    let _ = capture(&mut session);
+    let fallback = capture(&mut session);
+    assert_ne!(first, fallback, "advanced effects did not disable material");
+    let emoji_pixels = |pixels: &[u8]| {
+        (130..215)
+            .flat_map(|y| (150..600).map(move |x| (y * w as usize + x) * 4))
+            .filter(|&p| {
+                pixels[p] > 200 && pixels[p + 1] > 100 && pixels[p + 2] < 90 && pixels[p + 3] > 150
+            })
+            .count()
+    };
+    assert!(emoji_pixels(&first) > 40, "emoji fixture was not colored");
+    assert!(
+        emoji_pixels(&fallback) > 40,
+        "material fallback lost the color emoji"
+    );
+    ui.settings.set(settings.clone());
+    ui.reduced_motion.set(false);
+    assert_eq!(
+        first,
+        capture(&mut session),
+        "material toggle did not restore the original pixels"
+    );
+    for (name, bytes) in [("material-enabled", first), ("material-fallback", fallback)] {
+        image::RgbaImage::from_raw(w, h, bytes)
+            .unwrap()
+            .save(out.join(format!("{name}.png")))
+            .unwrap();
+    }
+    std::fs::write(out.join("material-check.json"),serde_json::to_vec_pretty(&serde_json::json!({"static_frames_identical":true,"reduced_motion_preserves_materials":true,"advanced_effects_toggle_roundtrips":true,"requests_animation":false})).unwrap()).unwrap();
+    ui.display.set(original);
+    ui.settings.set(settings);
+    ui.reduced_motion.set(reduced);
+    ui.now.set(now);
+}
+
+/// Deterministic real retained-scene entry/retirement frames, with Core's
+/// authoritative timing. No CPU recreation of the author's shader effect.
+fn transition_audit(
+    ui: Ui,
+    out: &std::path::Path,
+    w: u32,
+    h: u32,
+    theme: Arc<nana_ui::CompiledTheme>,
+) {
+    use std::time::Duration;
+    let base = 100_000;
+    let mut settings = (*ui.settings.get_untracked()).clone();
+    settings.playback.punctuation_pauses = false;
+    let mut core = Core::new(settings, ui.skin.get_untracked());
+    core.handle(
+        Cmd::SetReducedMotion(ui.reduced_motion.get_untracked()),
+        base,
+    );
+    core.handle(
+        Cmd::SendMarkup(
+            "[ruby=いろ]彩铅[/ruby] Crayon 😀\n[color=#B94F49]斜向擦入，斜向擦除[/color]".into(),
+        ),
+        base,
+    );
+    ui.display.set(Arc::new(core.display().clone()));
+    ui.now.set(base);
+    let width = std::env::var("NANATYPE_TRANSITION_WIDTH")
+        .ok()
+        .map(|v| v.parse().unwrap())
+        .unwrap_or(w);
+    let scale = std::env::var("NANATYPE_SNAPSHOT_SCALE")
+        .ok()
+        .map(|v| v.parse().unwrap())
+        .unwrap_or(1.);
+    let id = DocumentId::new(1).unwrap();
+    let mut doc = RuntimeDocument::new(id);
+    doc.context_mut().set_theme_tokens(theme).unwrap();
+    nanatype::clock::capture_at(base, || {
+        doc.context_mut()
+            .mount_view_root(id, move || dialogue::display_window(ui))
+            .unwrap()
+    });
+    let mut session = RuntimeAgentSession::new_scaled(doc, width, h + 140, scale).unwrap();
+    session.set_clear(Some([0.; 4]));
+    let mut ink = Vec::new();
+    let capture = |session: &mut RuntimeAgentSession, t: u64, name: &str| {
+        ui.now.set(base + t);
+        session
+            .document_mut()
+            .sync_presentation_clock(Duration::from_millis(t));
+        nanatype::clock::capture_at(base + t, || {
+            session
+                .screenshot_png(out.join(format!("{name}.png")))
+                .unwrap();
+        });
+    };
+    for t in [
+        0, 40, 80, 120, 180, 240, 360, 600, 900, 1200, 1500, 1800, 2200,
+    ] {
+        capture(&mut session, t, &format!("enter-{t:04}"));
+    }
+    let fx = core.handle(Cmd::ClearDisplay, base + 2400);
+    let wake = fx
+        .wakes
+        .iter()
+        .find(|w| w.reason == nanatype_playback::WakeReason::PresentationDone)
+        .copied();
+    ui.display.set(Arc::new(core.display().clone()));
+    for t in [0, 40, 80, 120, 160, 200, 240, 280, 320] {
+        capture(&mut session, 2400 + t, &format!("exit-{t:03}"));
+        let image = image::open(out.join(format!("exit-{t:03}.png")))
+            .unwrap()
+            .to_rgba8();
+        let count = image
+            .enumerate_pixels()
+            .filter(|(x, y, p)| {
+                *y > (65. * scale) as u32
+                    && *y < (210. * scale) as u32
+                    && *x > (30. * scale) as u32
+                    && p[0] < 130
+                    && p[1] < 130
+                    && p[2] < 130
+                    && p[3] > 100
+            })
+            .count();
+        ink.push(count);
+    }
+    if wake.is_some() {
+        assert!(
+            ink[0] > ink[8] + 80,
+            "retirement mask did not erase the actual body: {ink:?}"
+        );
+    }
+    if let Some(w) = wake {
+        core.handle(
+            Cmd::Wake {
+                epoch: w.epoch,
+                reason: w.reason,
+            },
+            w.at_ms,
+        );
+        assert!(core.display().empty);
+    }
+    std::fs::write(out.join("transition-check.json"),serde_json::to_vec_pretty(&serde_json::json!({"entry_ms":180,"exit_ms":320,"scale":scale,"width":width,"exit_ink":ink,"finite_deadline":wake.is_some(),"advanced_effects":ui.settings.with_untracked(|s|s.skin.advanced_effects),"reduced_motion":ui.reduced_motion.get_untracked()})).unwrap()).unwrap();
 }

@@ -1482,6 +1482,7 @@ fn skin_list_row(
     };
     let usable = skin.error.is_none();
     let previewed = previewed(ui, previewing, skin.id.clone());
+    let static_materials = skin.skin.as_ref().is_some_and(|s| !s.materials.is_empty());
     let pick_id = skin.id.clone();
     let trailing = widget(Stack::row(8.0).align(AlignSpec::Center)).children((
         selected.then(|| {
@@ -1517,7 +1518,7 @@ fn skin_list_row(
             // A skin that does not load has nothing to show.
             if usable {
                 previewing.set(Some(pick_id.clone()));
-                if ui.shader_preview.get_untracked() {
+                if ui.shader_preview.get_untracked() || static_materials {
                     cx.dispatch_program_all(Msg::PrepareSkinPreview(pick_id.clone()));
                 }
             }
@@ -1705,6 +1706,7 @@ fn skin_card(
         (!current && usable).then(|| apply_button(ui, skin.id.clone(), previewed.clone())),
         skin_actions(ui, skin, locale),
     ));
+    let static_materials = skin.skin.as_ref().is_some_and(|s| !s.materials.is_empty());
     let pick_id = skin.id.clone();
     let card = widget(
         ListItem::new(skin.name.clone())
@@ -1728,7 +1730,7 @@ fn skin_card(
     .on_cx(move |_, _: &Activate, cx| {
         if usable {
             previewing.set(Some(pick_id.clone()));
-            if ui.shader_preview.get_untracked() {
+            if ui.shader_preview.get_untracked() || static_materials {
                 cx.dispatch_program_all(Msg::PrepareSkinPreview(pick_id.clone()));
             }
         }
@@ -1931,7 +1933,7 @@ fn skin_preview(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
             ui.skin.with(|s| Arc::as_ptr(s) as usize),
             ui.locale.get(),
             available_width.get(),
-            ui.shader_preview.get(),
+            (ui.shader_preview.get(), crate::ui::materials::enabled(ui)),
         )
     };
     let content = dynamic(key, move |(want, _, active, _, _, locale, width, _)| {

@@ -4,7 +4,7 @@
 //! images, fonts and sounds it names. It styles the dialogue box, the name
 //! plate, the portrait, the history bubbles, typing sounds and the app's own
 //! controls. Skins inherit from a `base` by deep-merging TOML tables, so a
-//! user skin only states what it changes. Nothing here depends on NanaUI; the
+//! user skin only states what it changes. Only the backend-neutral NanaUI material contract is shared; the
 //! app maps a [`Skin`] onto its widgets.
 
 #![forbid(unsafe_code)]
@@ -15,7 +15,9 @@ mod fonts;
 mod geometry;
 mod load;
 mod manifest;
+mod material;
 mod registry;
+pub use material::*;
 mod shader;
 pub use shader::*;
 

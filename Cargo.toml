@@ -37,10 +37,10 @@ nanatype-bilibili = { path = "crates/bilibili" }
 nanatype-douyin = { path = "crates/douyin" }
 nanatype-core = { path = "crates/core" }
 nanatype-p2p = { path = "crates/p2p" }
-nana-ui-platform = { git = "https://github.com/sena-nana/NanaUI", rev = "b76a5549e72b1cc12f975fc8bfdec67c126ff875", default-features = false }
-nana-ui-core = { git = "https://github.com/sena-nana/NanaUI", rev = "b76a5549e72b1cc12f975fc8bfdec67c126ff875", default-features = false }
-nana-ui-devtools = { git = "https://github.com/sena-nana/NanaUI", rev = "b76a5549e72b1cc12f975fc8bfdec67c126ff875" }
-nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "b76a5549e72b1cc12f975fc8bfdec67c126ff875", default-features = false, features = [
+nana-ui-platform = { git = "https://github.com/sena-nana/NanaUI", rev = "e06201ecd04d44933ca6f390cc45c1110af05580", default-features = false }
+nana-ui-core = { git = "https://github.com/sena-nana/NanaUI", rev = "e06201ecd04d44933ca6f390cc45c1110af05580", default-features = false }
+nana-ui-devtools = { git = "https://github.com/sena-nana/NanaUI", rev = "e06201ecd04d44933ca6f390cc45c1110af05580" }
+nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "e06201ecd04d44933ca6f390cc45c1110af05580", default-features = false, features = [
     "hosted",
     "bundled-fonts",
     "wgpu-interop",

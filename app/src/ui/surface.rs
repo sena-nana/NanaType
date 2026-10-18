@@ -30,6 +30,8 @@ pub struct Border {
 /// Everything a skin can paint on one node.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Surface {
+    pub material: Option<nana_ui_core::MaterialRef>,
+    pub border_material: Option<nana_ui_core::MaterialRef>,
     pub contour: Option<nanatype_theme::ContourPreset>,
     pub motif: Option<nanatype_theme::MotifPreset>,
     pub tail: Option<nanatype_theme::TailSpec>,
@@ -138,6 +140,14 @@ fn set_border_widths(l: &mut LayoutStyle, [t, r, b, left]: [f32; 4]) {
 }
 
 impl Surface {
+    pub fn materials(mut self, enabled: bool) -> Self {
+        if !enabled {
+            self.material = None;
+            self.border_material = None;
+        }
+        self
+    }
+
     /// A frame image, when the skin names one and it resolved to a URL.
     fn framed(frame: Option<&NineSlice>, url: Option<String>) -> Option<Self> {
         Some(Self {
@@ -157,6 +167,8 @@ impl Surface {
     ) -> Self {
         let widths = shape.border_widths(border_width);
         Self {
+            material: super::materials::resolve(skin, shape.material.as_deref()),
+            border_material: super::materials::resolve(skin, shape.border_material.as_deref()),
             contour: shape.contour,
             fill: fill.map(|f| c(skin.color(f))),
             gradient: shape.gradient.as_ref().map(|g| gradient(skin, g)),
@@ -176,6 +188,19 @@ impl Surface {
     /// The dialogue box: fill, gradient, border, shadow layers, or a frame image.
     pub fn dialogue_box(skin: &Skin, frame_url: Option<String>) -> Self {
         let b = &skin.dialogue.box_;
+        if b.shape.material.is_some() {
+            let mut surface = Self::shaped(
+                skin,
+                Some(b.color.into()),
+                &b.shape,
+                b.radius,
+                Some(b.border_color.into()),
+                b.border_width,
+            );
+            surface.gradient = frame_url
+                .map(|url| BackgroundImage::url_with_fit(url, BackgroundImageFit::Stretch));
+            return surface;
+        }
         Self::framed(b.frame.as_ref(), frame_url)
             .map(|mut s| {
                 // A procedural plate replaces the fill and keyline. Keep its
@@ -232,6 +257,23 @@ impl Surface {
     /// A history bubble.
     pub fn bubble(skin: &Skin, frame_url: Option<String>) -> Self {
         let h = &skin.history;
+        if h.bubble_material.is_some() {
+            let shape = ShapeSpec {
+                material: h.bubble_material.clone(),
+                ..Default::default()
+            };
+            let mut surface = Self::shaped(
+                skin,
+                Some(h.bubble_color.into()),
+                &shape,
+                h.bubble_radius,
+                h.bubble_border.map(ColorRef::from),
+                h.bubble_border_width,
+            );
+            surface.gradient = frame_url
+                .map(|url| BackgroundImage::url_with_fit(url, BackgroundImageFit::Stretch));
+            return surface;
+        }
         Self::framed(h.bubble_frame.as_ref(), frame_url).unwrap_or_else(|| {
             let shape = ShapeSpec {
                 contour: h.bubble_contour,
@@ -326,6 +368,8 @@ impl Surface {
 
     /// Write this surface into `l`. Leaves position, size and padding alone.
     pub fn apply(&self, l: &mut LayoutStyle) {
+        l.paint.background_material = self.material.clone();
+        l.paint.border_material = self.border_material.clone();
         // Surface owns these fields. Clear them even when changing routes on
         // the same retained node (image -> path -> ordinary box, for example).
         l.background = None;

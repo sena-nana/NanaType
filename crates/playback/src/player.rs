@@ -14,6 +14,8 @@ pub enum WakeReason {
     AfterLine,
     FadeDone,
     AutoAdvance,
+    /// Consumer-owned presentation deadline; the player does not schedule it.
+    PresentationDone,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,6 +140,17 @@ impl Player {
         (player, out)
     }
 
+    /// Passing this gate retires the current visible page.
+    pub fn next_clears_page(&self) -> bool {
+        if let State::Gated { seg } = self.state {
+            self.timeline
+                .segments
+                .get(seg + 1)
+                .is_some_and(|next| next.visible_from != self.timeline.segments[seg].visible_from)
+        } else {
+            false
+        }
+    }
     pub fn line(&self) -> LineId {
         self.line
     }

@@ -165,14 +165,21 @@ fn block_cost(block: &naga::Block, module: &naga::Module, depth: usize) -> Resul
     }
     Ok(cost)
 }
-fn trusted(f: &naga::Function) -> bool {
-    matches!(f.name.as_deref(), Some("sample0" | "sample1" | "particles"))
+fn trusted(f: &naga::Function, module: &naga::Module) -> bool {
+    match module.global_variables.len() {
+        3 => matches!(f.name.as_deref(), Some("sample0" | "sample1" | "particles")),
+        4 => matches!(
+            f.name.as_deref(),
+            Some("material_param" | "material_sample0" | "material_sample1")
+        ),
+        _ => false,
+    }
 }
 fn function_cost(f: &naga::Function, m: &naga::Module, depth: usize) -> Result<usize, String> {
     if depth > 8 {
         return Err("shader call depth exceeds eight".into());
     }
-    if trusted(f) {
+    if trusted(f, m) {
         return Ok(if f.name.as_deref() == Some("particles") {
             512
         } else {
@@ -211,7 +218,14 @@ fn function_cost(f: &naga::Function, m: &naga::Module, depth: usize) -> Result<u
     Ok(n)
 }
 
-pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
+/// Shared sandbox for the effect and material fragment contracts.
+pub(crate) fn validate_fragment(
+    source: &str,
+    prelude: &str,
+    entry: &str,
+    input: &str,
+    bindings: usize,
+) -> Result<(naga::Module, String), String> {
     if source.len() > MAX_SHADER_BYTES {
         return Err("shader exceeds 64 KiB".into());
     }
@@ -222,11 +236,11 @@ pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
     }
     // Keep the author's source first so WGSL line/column diagnostics map
     // directly to the packaged file. WGSL module declarations allow forwards.
-    let combined = format!("{source}\n{SHADER_PRELUDE}");
+    let combined = format!("{source}\n{prelude}");
     let module =
         naga::front::wgsl::parse_str(&combined).map_err(|e| e.emit_to_string(&combined))?;
     if !module.entry_points.is_empty()
-        || module.global_variables.len() != 3
+        || module.global_variables.len() != bindings
         || !module.overrides.is_empty()
     {
         return Err("custom entry points, globals, overrides and bindings are not allowed".into());
@@ -242,17 +256,25 @@ pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
     {
         return Err("shader exceeds 4096 IR nodes".into());
     }
-    for (_, ty) in module.types.iter() {
+    for (handle, ty) in module.types.iter() {
         if matches!(
             ty.inner,
             naga::TypeInner::Pointer { .. } | naga::TypeInner::Atomic(_)
         ) {
             return Err("pointer interfaces and atomic types are not allowed".into());
         }
-        if let naga::TypeInner::Array { size, .. } = ty.inner
-            && !matches!(size, naga::ArraySize::Constant(n) if n.get() <= 64)
-        {
-            return Err("only fixed arrays of at most 64 elements are allowed".into());
+        if let naga::TypeInner::Array { size, .. } = ty.inner {
+            // Runtime arrays are permitted only for the host's storage bindings.
+            let valid = match size {
+                naga::ArraySize::Constant(n) => n.get() <= 64,
+                naga::ArraySize::Dynamic => {
+                    module.global_variables.iter().any(|(_, v)| v.ty == handle)
+                }
+                _ => false,
+            };
+            if !valid {
+                return Err("only fixed arrays of at most 64 elements are allowed".into());
+            }
         }
     }
     let mut layouts = naga::proc::Layouter::default();
@@ -266,14 +288,14 @@ pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
     )
     .validate(&module)
     .map_err(|e| e.emit_to_string(&combined))?;
-    let (_, effect) = module
+    let (_, fragment) = module
         .functions
         .iter()
-        .find(|(_, f)| f.name.as_deref() == Some("effect"))
-        .ok_or("missing fn effect(input: EffectInput) -> vec4<f32>")?;
-    let valid_arg = effect.arguments.len() == 1
-        && module.types[effect.arguments[0].ty].name.as_deref() == Some("EffectInput");
-    let valid_result = effect.result.as_ref().is_some_and(|r| {
+        .find(|(_, f)| f.name.as_deref() == Some(entry))
+        .ok_or_else(|| format!("missing fn {entry}(input: {input}) -> vec4<f32>"))?;
+    let valid_arg = fragment.arguments.len() == 1
+        && module.types[fragment.arguments[0].ty].name.as_deref() == Some(input);
+    let valid_result = fragment.result.as_ref().is_some_and(|r| {
         matches!(
             module.types[r.ty].inner,
             naga::TypeInner::Vector {
@@ -286,12 +308,9 @@ pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
         )
     });
     if !valid_arg || !valid_result {
-        return Err("expected fn effect(input: EffectInput) -> vec4<f32>".into());
+        return Err(format!("expected fn {entry}(input: {input}) -> vec4<f32>"));
     }
     for (_, f) in module.functions.iter() {
-        if f.name.as_ref().is_some_and(|n| n.starts_with("fx_")) {
-            return Err("fx_ names are reserved for the host".into());
-        }
         function_cost(f, &module, 1)?;
         if f.local_variables
             .iter()
@@ -301,6 +320,18 @@ pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
         {
             return Err("shader locals exceed 16 KiB".into());
         }
+    }
+    Ok((module, combined))
+}
+
+pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
+    let (module, combined) = validate_fragment(source, SHADER_PRELUDE, "effect", "EffectInput", 3)?;
+    if module
+        .functions
+        .iter()
+        .any(|(_, f)| f.name.as_ref().is_some_and(|n| n.starts_with("fx_")))
+    {
+        return Err("fx_ names are reserved for the host".into());
     }
     let complete = format!("{combined}\n{SHADER_WRAPPER}");
     let full = naga::front::wgsl::parse_str(&complete).map_err(|e| e.emit_to_string(&complete))?;

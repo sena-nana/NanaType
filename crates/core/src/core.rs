@@ -53,6 +53,8 @@ pub enum Cmd {
     /// A timed cue reached its moment (portrait, shake, expression, speaking).
     CueFired(CueKind),
     SetSettings(Box<Settings>),
+    /// Effective accessibility preference, including the operating system.
+    SetReducedMotion(bool),
     SetSkin(Arc<Skin>),
     SetSpeaker(Option<Speaker>),
     RemoveHistoryRows(Vec<u64>),
@@ -141,7 +143,23 @@ struct Draft {
     meta: LineMeta,
 }
 
+enum AfterExit {
+    Clear,
+    Line(Line),
+    Advance,
+    Wake { epoch: u64, reason: WakeReason },
+    Finish(LineId),
+}
+struct Retiring {
+    epoch: u64,
+    next: AfterExit,
+}
+
 pub struct Core {
+    retiring: Option<Retiring>,
+    retirement_serial: u64,
+    bypass_exit: bool,
+    reduced_motion: bool,
     settings: Settings,
     skin: Arc<Skin>,
     pacing: PacingParams,
@@ -177,6 +195,10 @@ fn global(generation: u64, epoch: u64) -> u64 {
 impl Core {
     pub fn new(settings: Settings, skin: Arc<Skin>) -> Self {
         let mut core = Self {
+            retiring: None,
+            retirement_serial: 0,
+            bypass_exit: false,
+            reduced_motion: false,
             pacing: PacingParams::default(),
             sound_rule: TypingSoundRule::default(),
             queue: LineQueue::new(settings.playback.queue),
@@ -240,6 +262,9 @@ impl Core {
     }
 
     pub fn phase(&self) -> Option<Phase> {
+        if self.retiring.is_some() {
+            return Some(Phase::Fading);
+        }
         self.active.as_ref().map(|a| a.player.phase())
     }
 
@@ -306,6 +331,7 @@ impl Core {
                     self.submit(line, now, &mut fx);
                 }
             }
+            Cmd::Continue | Cmd::Skip if self.retiring.is_some() => self.finish_exit(now, &mut fx),
             Cmd::Continue => self.continue_key(now, &mut fx),
             Cmd::Skip => {
                 if let Some(active) = self.active.as_mut()
@@ -314,11 +340,68 @@ impl Core {
                     let effects = active.player.finish_reveal(now);
                     self.cancel_cues(&mut fx);
                     self.apply_player(effects, now, &mut fx);
+                    self.display.entrance = Entrance {
+                        kind: EntranceKind::None,
+                        ms: 0,
+                    };
+                    self.touch_display(&mut fx);
                 }
             }
-            Cmd::ClearDisplay => self.clear_display(&mut fx),
+            Cmd::ClearDisplay => self.clear_display(now, &mut fx),
             Cmd::Recall(dir) => self.recall(dir, now, &mut fx),
+            Cmd::Wake {
+                epoch,
+                reason: WakeReason::PresentationDone,
+            } => {
+                if self.retiring.as_ref().is_some_and(|r| r.epoch == epoch) {
+                    self.finish_exit(now, &mut fx);
+                }
+            }
             Cmd::Wake { epoch, reason } => {
+                if self.retiring.is_some() {
+                    return fx;
+                }
+                if reason == WakeReason::SegmentEnd
+                    && self.transitions_enabled()
+                    && self.settings.playback.entrance.is_none()
+                    && self
+                        .skin
+                        .dialogue
+                        .reveal
+                        .entrance
+                        .material
+                        .as_ref()
+                        .is_some_and(|m| self.skin.material_programs.contains_key(m))
+                    && self.active.as_ref().is_some_and(|a| {
+                        a.generation == epoch >> 32 && a.player.epoch() == epoch & 0xffff_ffff
+                    })
+                {
+                    let end = self
+                        .display
+                        .reveal
+                        .hidden_from
+                        .checked_sub(1)
+                        .and_then(|u| self.display.reveal.unit_at(u))
+                        .map(|at| at.saturating_add(u64::from(self.display.entrance.ms)));
+                    if let Some(at_ms) = end.filter(|end| now < *end) {
+                        fx.wakes.push(Wake {
+                            epoch,
+                            reason,
+                            at_ms,
+                        });
+                        return fx;
+                    }
+                }
+                if reason == WakeReason::AutoContinue
+                    && self.active.as_ref().is_some_and(|a| {
+                        a.generation == epoch >> 32
+                            && a.player.epoch() == epoch & 0xffff_ffff
+                            && a.player.next_clears_page()
+                    })
+                    && self.begin_exit(AfterExit::Wake { epoch, reason }, now, &mut fx)
+                {
+                    return fx;
+                }
                 let Some(active) = self.active.as_mut() else {
                     return fx;
                 };
@@ -329,7 +412,21 @@ impl Core {
                 self.apply_player(effects, now, &mut fx);
             }
             Cmd::CueFired(kind) => self.cue_fired(kind, now, &mut fx),
-            Cmd::SetSettings(settings) => self.set_settings(*settings, now, &mut fx),
+            Cmd::SetSettings(settings) => {
+                self.set_settings(*settings, now, &mut fx);
+                if self.retiring.is_some() && !self.transitions_enabled() {
+                    self.finish_exit(now, &mut fx);
+                }
+            }
+            Cmd::SetReducedMotion(reduced) => {
+                if self.reduced_motion != reduced {
+                    self.touch_display(&mut fx);
+                }
+                self.reduced_motion = reduced;
+                if reduced && self.retiring.is_some() {
+                    self.finish_exit(now, &mut fx);
+                }
+            }
             Cmd::SetSpeaker(speaker) => {
                 self.speaker_override = speaker;
                 if self.mode() == InputMode::Mirror
@@ -355,6 +452,9 @@ impl Core {
                     self.display.portrait = None;
                 }
                 self.touch_display(&mut fx);
+                if self.retiring.is_some() {
+                    self.finish_exit(now, &mut fx);
+                }
             }
             Cmd::External(item) => {
                 let doc = Arc::new(item.doc.without_markers());
@@ -392,6 +492,8 @@ impl Core {
             fx.history_changed = true;
         }
         if mode_changed {
+            self.retiring = None;
+            self.display.text_exit = None;
             self.queue.clear();
             self.stop_player(fx);
             self.mirror_committed = false;
@@ -435,6 +537,8 @@ impl Core {
 
     /// Mirror the draft: unchanged units stay, appended units ripple in.
     fn show_mirror(&mut self, doc: Document, previous: &Document, now: Millis, fx: &mut Effects) {
+        self.retiring = None;
+        self.display.text_exit = None;
         let units = doc.unit_count() as u32;
         let prev_shown = if self.display.line.is_none() && !self.display.empty {
             previous
@@ -601,10 +705,11 @@ impl Core {
 
     fn submit(&mut self, line: Line, now: Millis, fx: &mut Effects) {
         fx.events.push(Event::LineSubmitted(line.clone()));
-        let busy = self
-            .active
-            .as_ref()
-            .is_some_and(|a| matches!(a.player.phase(), Phase::Revealing | Phase::Gated));
+        let busy = self.retiring.is_some()
+            || self
+                .active
+                .as_ref()
+                .is_some_and(|a| matches!(a.player.phase(), Phase::Revealing | Phase::Gated));
         match self.queue.submit(line, busy) {
             QueueDecision::StartNow(line) => self.start_line(line, now, fx),
             QueueDecision::FinishCurrentThenStart(line) => {
@@ -634,6 +739,13 @@ impl Core {
     }
 
     fn start_line(&mut self, mut line: Line, now: Millis, fx: &mut Effects) {
+        if let Some(retiring) = &mut self.retiring {
+            retiring.next = AfterExit::Line(line);
+            return;
+        }
+        if self.begin_exit(AfterExit::Line(line.clone()), now, fx) {
+            return;
+        }
         if line.meta == LineMeta::default() {
             line.meta.auto_advance_ms = self.settings.playback.auto_advance_ms;
         }
@@ -676,6 +788,7 @@ impl Core {
         self.display.speaker = line.speaker.clone();
         self.display.reply = line.reply.as_deref().cloned();
         self.display.fade = None;
+        self.display.text_exit = None;
         self.display.shake = None;
         self.display.empty = false;
         self.display.reveal = if animate {
@@ -708,6 +821,9 @@ impl Core {
     }
 
     fn page_breaks(&mut self, line: LineId, breaks: &[u32], now: Millis, fx: &mut Effects) {
+        if self.retiring.is_some() {
+            return;
+        }
         if self.skin.dialogue.overflow != Overflow::Page || self.mode() == InputMode::Mirror {
             return;
         }
@@ -750,14 +866,96 @@ impl Core {
         self.touch_display(fx);
     }
 
-    fn clear_display(&mut self, fx: &mut Effects) {
+    fn transitions_enabled(&self) -> bool {
+        self.settings.skin.advanced_effects
+            && !self.settings.playback.reduced_motion
+            && !self.reduced_motion
+    }
+    fn begin_exit(&mut self, next: AfterExit, now: Millis, fx: &mut Effects) -> bool {
+        if self.bypass_exit
+            || self.display.empty
+            || self.display.doc.is_blank()
+            || !self.transitions_enabled()
+        {
+            return false;
+        }
+        let Some(spec) = self
+            .skin
+            .dialogue
+            .reveal
+            .exit
+            .as_ref()
+            .filter(|e| e.ms > 0)
+            .filter(|e| {
+                e.material
+                    .as_ref()
+                    .is_some_and(|m| self.skin.material_programs.contains_key(m))
+            })
+        else {
+            return false;
+        };
+        let ms = spec.ms;
+        self.cancel_cues(fx);
+        self.display.text_exit = Some(crate::view::TextExit { at_ms: now, ms });
+        self.display.fade = None;
+        self.display.continue_indicator = false;
+        self.retirement_serial += 1;
+        let epoch = (1u64 << 63) | self.retirement_serial;
+        self.retiring = Some(Retiring { epoch, next });
+        fx.wakes.push(Wake {
+            epoch,
+            at_ms: now + u64::from(ms),
+            reason: WakeReason::PresentationDone,
+        });
+        self.touch_display(fx);
+        true
+    }
+    fn finish_exit(&mut self, now: Millis, fx: &mut Effects) {
+        let Some(retiring) = self.retiring.take() else {
+            return;
+        };
+        self.bypass_exit = true;
+        self.display.text_exit = None;
+        match retiring.next {
+            AfterExit::Clear => self.clear_display(now, fx),
+            AfterExit::Line(line) => self.start_line(line, now, fx),
+            AfterExit::Advance => self.continue_key(now, fx),
+            AfterExit::Wake { epoch, reason } => {
+                if let Some(a) = self.active.as_mut().filter(|a| a.generation == epoch >> 32) {
+                    let effects = a.player.on_wake(epoch & 0xffff_ffff, reason, now);
+                    self.apply_player(effects, now, fx);
+                }
+            }
+            AfterExit::Finish(id) => {
+                self.apply_player(vec![PlayerEffect::LineFinished(id)], now, fx)
+            }
+        }
+        self.bypass_exit = false;
+        self.touch_display(fx);
+    }
+    fn clear_display(&mut self, now: Millis, fx: &mut Effects) {
         self.queue.clear();
+        if let Some(r) = self.retiring.as_mut() {
+            r.next = AfterExit::Clear;
+            return;
+        }
+        if self.begin_exit(AfterExit::Clear, now, fx) {
+            return;
+        }
         self.stop_player(fx);
         self.mirror_committed = false;
         self.blank_display(fx);
     }
 
     fn continue_key(&mut self, now: Millis, fx: &mut Effects) {
+        if self
+            .active
+            .as_ref()
+            .is_some_and(|a| a.player.next_clears_page())
+            && self.begin_exit(AfterExit::Advance, now, fx)
+        {
+            return;
+        }
         let Some(active) = self.active.as_mut() else {
             return;
         };
@@ -766,6 +964,11 @@ impl Core {
                 let (_, effects) = active.player.advance(now);
                 self.cancel_cues(fx);
                 self.apply_player(effects, now, fx);
+                self.display.entrance = Entrance {
+                    kind: EntranceKind::None,
+                    ms: 0,
+                };
+                self.touch_display(fx);
             }
             Phase::Gated => {
                 let (_, effects) = active.player.advance(now);
@@ -818,6 +1021,7 @@ impl Core {
                         hidden_from: s.units.end,
                     };
                     self.display.reveal = reveal.clone();
+                    self.display.entrance = self.entrance();
                     self.display.fade = None;
                     self.follow_row(reveal, fx);
                     self.touch_display(fx);
@@ -852,6 +1056,9 @@ impl Core {
                     }
                 }
                 PlayerEffect::FadeOut { at_ms, ms } => {
+                    if self.begin_exit(AfterExit::Finish(self.display.line.unwrap()), now, fx) {
+                        return;
+                    }
                     self.display.fade = Some((at_ms, ms));
                     self.touch_display(fx);
                 }
@@ -867,6 +1074,9 @@ impl Core {
                     fx.events.push(Event::LineRevealed(id));
                 }
                 PlayerEffect::LineFinished(id) => {
+                    if self.begin_exit(AfterExit::Finish(id), now, fx) {
+                        return;
+                    }
                     self.set_speaking(false, fx);
                     fx.events.push(Event::LineFinished(id));
                     self.active = None;

@@ -223,7 +223,11 @@ impl App {
             let post = post.clone();
             move |event| post(Msg::Douyin(event))
         });
-        let core = Core::new(settings.clone(), skin.clone());
+        let mut core = Core::new(settings.clone(), skin.clone());
+        core.handle(
+            Cmd::SetReducedMotion(settings.playback.reduced_motion || ctx.reduced_motion()),
+            clock::now_ms(),
+        );
         let sticker_manager = crate::stickers::Manager::new(&paths.data, {
             let post = post.clone();
             move |event| post(Msg::Stickers(event))
@@ -2394,12 +2398,16 @@ impl App {
     }
 
     /// Motion is reduced when the setting or the system asks for it.
-    pub fn sync_reduced_motion(&self) {
+    pub fn sync_reduced_motion(&mut self) {
         let reduced =
             self.settings.playback.reduced_motion || self.ui.system_reduced_motion.get_untracked();
         if self.ui.reduced_motion.get_untracked() != reduced {
             self.ui.reduced_motion.set(reduced);
         }
+        let fx = self
+            .core
+            .handle(Cmd::SetReducedMotion(reduced), clock::now_ms());
+        self.apply_effects(fx);
     }
 
     pub fn update_result(&mut self) -> RuntimeProgramUpdate {

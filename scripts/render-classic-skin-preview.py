@@ -41,7 +41,7 @@ def compose(names, title, dest):
 compose(classic, 'NanaType · 原有十八套皮肤细化（实际渲染）', 'docs/skins-classic-preview.png')
 compose(['night', 'parchment', 'rpg', 'bubble', 'comic', 'sakura'],
         'NanaType · 边框、名牌与材质细化', 'docs/skins-classic-details.png')
-compose(classic+new, 'NanaType · 24 套内置主题', 'docs/skins-preview.png')
+compose(classic+new+['crayon'], 'NanaType · 25 套内置主题', 'docs/skins-preview.png')
 
 compose(['halo', 'parchment', 'vanilla', 'livechat', 'comic'],
         'NanaType · 五套主题定向细化（实际渲染）', 'docs/skins-classic-refinements.png')

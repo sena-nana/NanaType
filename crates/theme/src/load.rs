@@ -331,6 +331,7 @@ fn load_impl(
     validate(&skin, &*files, app_version, &mut diagnostics);
     if prepare_shaders {
         crate::shader::load_shaders(&mut skin, &*files, &mut diagnostics);
+        crate::material::load_materials(&mut skin, &*files, &mut diagnostics);
     }
     if diagnostics.iter().any(|d| d.severity == Severity::Error) {
         diagnostics.sort_by_key(|d| std::cmp::Reverse(d.severity));

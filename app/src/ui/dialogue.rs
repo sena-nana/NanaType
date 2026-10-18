@@ -35,6 +35,7 @@ use super::{Ui, c, restyle};
 /// Base text look a document is drawn with (skin dialogue text or history text).
 #[derive(Clone, PartialEq)]
 pub struct Base {
+    pub material: Option<nana_ui_core::MaterialRef>,
     pub color: Rgba8,
     pub size: f32,
     pub line_height: f32,
@@ -48,11 +49,29 @@ pub struct Base {
     pub effects: EffectDefaults,
     pub entrance: Entrance,
     pub reduced_motion: bool,
+    pub masks: nana_ui_core::TextTransitions,
     pub align: TextAlign,
     pub mention: super::rich::MentionLook,
     /// The box under the text, for the display's contrast guard and
     /// skin-aware glows; `None` in the editor.
     pub ink: Option<super::rich::BoxInk>,
+}
+
+fn skin_mask(
+    skin: &Skin,
+    name: Option<&str>,
+    scope: nanatype_theme::TransitionScope,
+    ms: u64,
+) -> Option<nana_ui_core::PresentationMask> {
+    Some(nana_ui_core::PresentationMask {
+        material: super::materials::resolve(skin, name)?,
+        space: match scope {
+            nanatype_theme::TransitionScope::Glyph => nana_ui_core::PresentationMaskSpace::Local,
+            nanatype_theme::TransitionScope::Text => nana_ui_core::PresentationMaskSpace::Target,
+        },
+        start: std::time::Duration::ZERO,
+        duration: std::time::Duration::from_millis(ms),
+    })
 }
 
 impl Base {
@@ -64,6 +83,21 @@ impl Base {
         reduced: bool,
     ) -> Self {
         Self {
+            masks: nana_ui_core::TextTransitions {
+                entrance: if !reduced && entrance.kind != EntranceKind::None && entrance.ms > 0 {
+                    let spec = &skin.dialogue.reveal.entrance;
+                    skin_mask(
+                        skin,
+                        spec.material.as_deref(),
+                        spec.scope,
+                        u64::from(entrance.ms),
+                    )
+                } else {
+                    None
+                },
+                ..Default::default()
+            },
+            material: super::materials::resolve(skin, t.material.as_deref()),
             color: t.color,
             size: t.size,
             line_height: t.line_height,
@@ -84,8 +118,13 @@ impl Base {
     }
 
     pub fn dialogue(skin: &Skin, entrance: Entrance, reduced: bool) -> Self {
-        let fill = skin.dialogue.box_.color;
-        Self::from_text(skin, &skin.dialogue.text, fill, entrance, reduced)
+        Self::from_text(
+            skin,
+            &skin.dialogue.text,
+            skin.dialogue.box_.color,
+            entrance,
+            reduced,
+        )
     }
 
     /// The input editor's text: the dialogue text, nothing animating in.
@@ -96,13 +135,20 @@ impl Base {
         };
         Self {
             ink: None,
+            material: None,
+            masks: Default::default(),
             ..Self::dialogue(skin, entrance, false)
         }
     }
 
     pub fn history(skin: &Skin, entrance: Entrance, reduced: bool) -> Self {
-        let fill = skin.history.bubble_color;
-        Self::from_text(skin, &skin.history.text, fill, entrance, reduced)
+        Self::from_text(
+            skin,
+            &skin.history.text,
+            skin.history.bubble_color,
+            entrance,
+            reduced,
+        )
     }
 
     pub fn look(&self) -> Look {
@@ -124,6 +170,7 @@ impl Base {
     pub fn node_style(&self) -> NodeStyle {
         let mut st = NodeStyle::default();
         let l = Arc::make_mut(&mut st.layout);
+        l.paint.text_material = self.material.clone();
         l.font_size = Some(self.size);
         l.font_weight = Some(self.weight);
         l.font_family = self.family.clone();
@@ -183,9 +230,20 @@ fn document_on(
         locale: ui.locale.get_untracked(),
     };
     let rich = to_rich(doc, &env);
+    let entrance =
+        ui.settings
+            .with_untracked(|s| s.playback.entrance)
+            .map_or(base.entrance, |kind| Entrance {
+                kind,
+                ms: if kind == EntranceKind::None {
+                    0
+                } else {
+                    base.entrance.ms
+                },
+            });
     let reveal = match &timing {
         Timing::Static => None,
-        Timing::Reveal(r) => Some(RevealPlan::new(&rich, r, base.entrance)),
+        Timing::Reveal(r) => Some(RevealPlan::new(&rich, r, entrance)),
     };
     if let (Some(key), Some(plan)) = (follow, &reveal) {
         overflow::publish_on(
@@ -198,9 +256,13 @@ fn document_on(
             },
         );
     }
+    let mut text_style = base.node_style();
+    if !super::materials::enabled(ui) {
+        Arc::make_mut(&mut text_style.layout).paint.text_material = None;
+    }
     let mut view = RichTextView::new(rich)
         .decorative()
-        .style(base.node_style())
+        .style(text_style)
         .width(LengthSpec::Fill);
     if reveal.is_some() || has_effects(doc) {
         // The schedule's start is taken by the framework as the frame the
@@ -208,11 +270,28 @@ fn document_on(
         let schedule = reveal.map(|plan| {
             plan.schedule(
                 std::time::Duration::ZERO,
-                crate::clock::now_ms(),
+                if base.masks.exit.is_some() {
+                    drawn_untracked(ui)
+                        .text_exit
+                        .map_or_else(crate::clock::now_ms, |e| e.at_ms)
+                } else {
+                    crate::clock::now_ms()
+                },
                 base.reduced_motion,
             )
         });
         view = view.presentation_chains(effect_table(&base.effects, base.reduced_motion), schedule);
+        if super::materials::enabled(ui) && !base.reduced_motion {
+            if let Some(p) = &mut view.presentation {
+                p.transitions = base.masks.clone();
+                if ui
+                    .settings
+                    .with_untracked(|s| s.playback.entrance.is_some())
+                {
+                    p.transitions.entrance = None;
+                }
+            }
+        }
     }
     let doc = doc.clone();
     let look = look.clone();
@@ -263,7 +342,7 @@ pub struct BoxCtx {
 impl BoxCtx {
     fn active(ui: Ui, source: Source) -> Self {
         Self {
-            skin: ui.skin.get_untracked(),
+            skin: super::materials::render_skin(ui, ui.skin.get_untracked()),
             urls: ui.asset_urls.get_untracked(),
             source,
             preview_name: String::new(),
@@ -415,7 +494,8 @@ fn drawn_untracked(ui: Ui) -> Arc<DisplayView> {
 }
 
 /// A still box showing `doc` in `ctx.skin`, for the skin picker.
-pub fn preview_box(ui: Ui, ctx: BoxCtx, doc: &Document) -> AnyView {
+pub fn preview_box(ui: Ui, mut ctx: BoxCtx, doc: &Document) -> AnyView {
+    ctx.skin = super::materials::render_skin(ui, ctx.skin);
     let entrance = Entrance {
         kind: EntranceKind::None,
         ms: 0,
@@ -590,6 +670,7 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
             (box_surface.clone(), padding)
         };
         surface
+            .materials(super::materials::enabled(ui))
             .stack(Stack::fill_column(0.0))
             .with_layout(move |l| {
                 l.min_width = Some(LengthSpec::Px(0.0));
@@ -625,6 +706,7 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
     if source == Source::Draft {
         the_box = the_box.bind(move |s: &mut Stack| *s = box_stack());
     }
+    let material_padding = ctx.skin.dialogue.box_.shape.material.is_some();
     let text = text_port(ui, source, content);
     let text = if source == Source::Draft {
         text
@@ -632,7 +714,14 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
         widget(Stack::fill_column(0.).with_layout(move |l| {
             l.padding_left = Some(LengthSpec::Px(padding[0]));
             l.padding_top = Some(LengthSpec::Px(padding[1]));
-            l.padding_right = Some(LengthSpec::Px(padding[2]));
+            l.padding_right = Some(if material_padding {
+                LengthSpec::Min2(
+                    nana_ui_core::LengthAtom::Px(padding[2]),
+                    nana_ui_core::LengthAtom::Percent(18.),
+                )
+            } else {
+                LengthSpec::Px(padding[2])
+            });
             l.padding_bottom = Some(LengthSpec::Px(padding[3]));
             l.min_width = Some(LengthSpec::Px(0.));
             l.min_height = Some(LengthSpec::Px(0.));
@@ -865,7 +954,20 @@ fn content(ui: Ui) -> impl IntoView {
             if view.empty {
                 return widget(Stack::column(0.0)).into_any();
             }
-            let base = Base::dialogue(&skin, view.entrance, reduced);
+            let mut base = Base::dialogue(&skin, view.entrance, reduced);
+            if let Some(exit) = view.text_exit {
+                let elapsed = crate::clock::now_ms().saturating_sub(exit.at_ms);
+                if let Some(spec) = &skin.dialogue.reveal.exit {
+                    // Rebase the remaining duration when the presentation is mounted.
+                    base.masks.exit = skin_mask(
+                        &skin,
+                        spec.material.as_deref(),
+                        spec.scope,
+                        u64::from(exit.ms).saturating_sub(elapsed),
+                    );
+                }
+                base.masks.freeze_reveal = Some(std::time::Duration::ZERO);
+            }
             let (doc, reveal) = view.page();
             // Clipped text has nothing to follow.
             let follow = (ui.track_slot == 1 || skin.dialogue.overflow != Overflow::Clip)
@@ -936,6 +1038,9 @@ fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
     let mut st = NodeStyle::default();
     {
         let l = Arc::make_mut(&mut st.layout);
+        l.paint.text_material = super::materials::enabled(ui)
+            .then(|| super::materials::resolve(&skin, skin.dialogue.text.material.as_deref()))
+            .flatten();
         l.font_size = Some(p.size);
         l.font_weight = Some(skin.fonts.name.weight);
         l.font_family = skin.fonts.name.families.first().cloned();
@@ -1345,6 +1450,11 @@ pub fn display_animating(ui: Ui, now: u64) -> bool {
     if view.empty {
         return false;
     }
+    if let Some(exit) = view.text_exit
+        && now < exit.at_ms + u64::from(exit.ms)
+    {
+        return true;
+    }
     if let Some((at, ms)) = view.fade
         && now <= at + u64::from(ms) + 50
     {
@@ -1472,5 +1582,49 @@ mod decor_tests {
         );
         ui.reduced_motion.set(true);
         assert!(!display_animating(ui.remote(), 100_000));
+    }
+}
+
+#[cfg(test)]
+mod transition_override_tests {
+    use super::*;
+    use nana_ui::runtime::{DocumentId, RuntimeDocument};
+    #[test]
+    fn explicit_entrance_overrides_the_skin_mask_in_history_too() {
+        let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
+            .load("nanatype.crayon")
+            .unwrap()
+            .skin;
+        let mut settings = nanatype_settings::Settings::default();
+        settings.playback.entrance = Some(EntranceKind::Pop);
+        let ui = Ui::new(
+            Arc::new(settings),
+            skin.clone(),
+            nanatype_i18n::Locale::ZhCn,
+        );
+        let base = Base::history(
+            &skin,
+            Entrance {
+                kind: EntranceKind::Fade,
+                ms: 180,
+            },
+            false,
+        );
+        let text = nanatype_markup::parse("测试").doc;
+        let id = DocumentId::new(1).unwrap();
+        let mut doc = RuntimeDocument::new(id);
+        let root = doc
+            .context_mut()
+            .mount_view_root(id, move || {
+                document(ui, &text, &base, Timing::Reveal(Reveal::full(2)))
+            })
+            .unwrap();
+        let p = doc
+            .context()
+            .world()
+            .glyph_presentation(root.roots()[0])
+            .unwrap();
+        assert!(p.reveal.as_ref().unwrap().intro.pop);
+        assert!(p.transitions.entrance.is_none());
     }
 }

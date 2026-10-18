@@ -11,6 +11,7 @@ pub mod history;
 pub mod input;
 pub mod keycap;
 pub mod link_text;
+pub mod materials;
 pub mod motion;
 pub mod overflow;
 pub mod p2p;
@@ -427,13 +428,27 @@ pub fn prepare_skin_preview(
     registry: &nanatype_theme::SkinRegistry,
     id: &str,
 ) -> Result<(), Vec<nanatype_theme::SkinDiagnostic>> {
-    if !shader_effects::enabled(ui) {
+    if !shader_effects::enabled(ui)
+        && !(materials::enabled(ui)
+            && registry
+                .entry(id)
+                .and_then(|e| e.skin.as_ref())
+                .is_some_and(|s| !s.materials.is_empty()))
+    {
         ui.shader_preview.set(false);
         return Ok(());
     }
     let loaded = registry
         .load(id)
         .inspect_err(|_| ui.shader_preview.set(false))?;
+    let animate = shader_effects::enabled(ui)
+        && (!loaded.skin.dialogue.shader_effects.is_empty()
+            || loaded
+                .skin
+                .dialogue
+                .decor
+                .iter()
+                .any(|d| d.shader.is_some()));
     let previous = ui.skins.with_untracked(|rows| {
         rows.iter()
             .find(|r| r.id == id)
@@ -452,7 +467,7 @@ pub fn prepare_skin_preview(
         }
     });
     retire_skin_urls(ui, previous);
-    ui.shader_preview.set(true);
+    ui.shader_preview.set(animate);
     Ok(())
 }
 

@@ -93,6 +93,13 @@ pub struct ShakeView {
     pub ms: u32,
 }
 
+/// Retained old text during a finite presentation-only retirement.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TextExit {
+    pub at_ms: Millis,
+    pub ms: u16,
+}
+
 /// Everything the typewriter (and the input preview) needs to paint.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DisplayView {
@@ -105,6 +112,8 @@ pub struct DisplayView {
     /// The chat message the line answers, quoted above it.
     pub reply: Option<ChatRef>,
     pub reveal: Reveal,
+    #[serde(default)]
+    pub text_exit: Option<TextExit>,
     /// Active portrait variant.
     pub portrait: Option<String>,
     pub continue_indicator: bool,
@@ -125,6 +134,7 @@ impl DisplayView {
             speaker: Speaker::default(),
             reply: None,
             reveal: Reveal::full(0),
+            text_exit: None,
             portrait: None,
             continue_indicator: false,
             fade: None,

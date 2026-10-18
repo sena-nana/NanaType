@@ -85,6 +85,9 @@ pub fn quote_view(
     let style = |color: Rgba8, weight: u16, name: bool| {
         let mut st = NodeStyle::default();
         let l = Arc::make_mut(&mut st.layout);
+        l.paint.text_material = super::materials::enabled(ui)
+            .then(|| super::materials::resolve(skin, text.material.as_deref()))
+            .flatten();
         l.font_size = Some(size);
         l.font_weight = Some(weight);
         l.font_family = if name {

@@ -202,11 +202,11 @@ fn compact_standalone_manifests_preserve_all_builtin_designs() {
 #[test]
 fn every_builtin_loads_without_warnings() {
     let registry = SkinRegistry::new(None, APP);
-    assert_eq!(registry.entries().len(), 24);
+    assert_eq!(registry.entries().len(), 25);
     let mut ids: Vec<&str> = registry.entries().iter().map(|e| e.id.as_str()).collect();
     ids.sort();
     ids.dedup();
-    assert_eq!(ids.len(), 24);
+    assert_eq!(ids.len(), 25);
     assert!(registry.load(DEFAULT_SKIN).is_ok());
     for entry in registry.entries() {
         assert!(entry.loads(), "{}: {:?}", entry.id, entry.errors);
@@ -1565,6 +1565,7 @@ fn manifest_keys() -> std::collections::BTreeSet<String> {
         "dialogue.portrait.variants",
         "sounds.se",
         "shaders",
+        "materials",
     ];
     fn walk(prefix: &str, v: &toml::Value, out: &mut std::collections::BTreeSet<String>) {
         match v {
@@ -1836,4 +1837,100 @@ fn directory_resources_reject_links_escaping_the_selected_skin_root() {
     ));
     // An explicitly selected linked directory remains a valid root.
     assert_eq!(DirFiles::new(&link).read("secret.txt").unwrap(), b"outside");
+}
+
+#[test]
+fn crayon_materials_are_lazy_validated_and_roundtrip_with_their_fallbacks() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut registry = SkinRegistry::new(Some(tmp.path().join("skins")), APP);
+    let entry = registry.entry("nanatype.crayon").unwrap();
+    assert!(entry.skin.as_ref().unwrap().material_programs.is_empty());
+    let loaded = registry.load("nanatype.crayon").unwrap();
+    assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+    assert_eq!(loaded.skin.material_programs.len(), 5);
+    assert!(loaded.skin.shaders.is_empty());
+    let other = registry.load("nanatype.crayon").unwrap();
+    assert!(std::sync::Arc::ptr_eq(
+        &loaded.skin.material_programs["paper"],
+        &other.skin.material_programs["paper"]
+    ));
+    let archive = tmp.path().join("crayon.ntskin");
+    registry.export("nanatype.crayon", &archive).unwrap();
+    let exported = registry.inspect_archive(&archive).unwrap();
+    assert_eq!(
+        loaded.skin.material_programs,
+        exported.skin.material_programs
+    );
+    for (_, path, _) in loaded.skin.referenced_files() {
+        if !path.starts_with("builtin:") {
+            assert_eq!(
+                loaded.files.read(path).unwrap(),
+                exported.files.read(path).unwrap()
+            );
+        }
+    }
+    let names = Localized::from([("en-US".into(), "Pencil copy".into())]);
+    registry
+        .duplicate("nanatype.crayon", "my-crayon", &names, &toml::Table::new())
+        .unwrap();
+    let inherited = registry.load("my-crayon").unwrap();
+    assert_eq!(
+        inherited.skin.material_programs,
+        loaded.skin.material_programs
+    );
+    assert_eq!(
+        inherited.skin.history.text.material.as_deref(),
+        Some("pencil")
+    );
+    registry.export("my-crayon", &archive).unwrap();
+    let detached = registry.inspect_archive(&archive).unwrap();
+    let manifest = String::from_utf8(detached.files.read(MANIFEST).unwrap()).unwrap();
+    assert!(
+        !manifest.contains("base ="),
+        "material export retained an authoring base"
+    );
+    assert_eq!(
+        detached.skin.material_programs,
+        loaded.skin.material_programs
+    );
+}
+#[test]
+fn material_validation_rejects_untrusted_resources_loops_and_signatures() {
+    let valid = "fn material(i:MaterialInput)->vec4<f32>{return i.color;}";
+    assert!(crate::validate_material(valid).is_ok());
+    for body in [
+        "loop{} return vec4(1.);",
+        "var a:array<vec4<f32>,65>; return a[0];",
+        "var a:array<array<vec4<f32>,64>,64>; return a[0][0];",
+        "return vec4<f32>(dpdx(1.));",
+    ] {
+        let effect = format!("fn effect(i:EffectInput)->vec4<f32>{{{body}}}");
+        let material = format!("fn material(i:MaterialInput)->vec4<f32>{{{body}}}");
+        assert!(
+            crate::validate_shader(&effect).is_err(),
+            "accepted {effect}"
+        );
+        assert!(
+            crate::validate_material(&material).is_err(),
+            "accepted {material}"
+        );
+    }
+    for bad in [
+        "fn material(i:MaterialInput)->vec4<f32>{loop{} return i.color;}",
+        "fn material(i:MaterialInput)->vec4<f32>{return nm_parameters[0];}",
+        "fn material(i:MaterialInput)->f32{return 1.;}",
+        "fn sample0()->vec4<f32>{loop{} return vec4(0.);}
+fn material(i:MaterialInput)->vec4<f32>{return sample0();}",
+        "@group(0) @binding(0) var bad:texture_2d<f32>;
+fn material(i:MaterialInput)->vec4<f32>{return i.color;}",
+    ] {
+        assert!(crate::validate_material(bad).is_err(), "accepted {bad}");
+    }
+    assert!(
+        crate::validate_shader(
+            "fn material_param()->vec4<f32>{loop{} return vec4(0.);}
+fn effect(i:EffectInput)->vec4<f32>{return material_param();}"
+        )
+        .is_err()
+    );
 }

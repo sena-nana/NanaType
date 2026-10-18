@@ -10,6 +10,7 @@
 
 | id | 名称 | 标签 | 特点 |
 |---|---|---|---|
+| `nanatype.crayon` | 蜡笔画 | cute, elegant | 米白画纸、柔彩蜡笔与小花涂鸦，深色彩铅文字；静态 GPU 材质 |
 | `nanatype.halo` | 光环 | classic, minimal | 默认。精简蓝白圆润卡片、轻阴影、天蓝胶囊名牌，无右上角动效 |
 | `nanatype.night` | 夜色 | classic | 深蓝玻璃、切角仪表框、霓虹描边与呼吸光带 |
 | `nanatype.parchment` | 羊皮纸 | classic, elegant | 双线压印框、暖色纸纤维、卷草包角、宋体 |
@@ -338,7 +339,7 @@ fn effect(i: EffectInput) -> vec4<f32> {
 
 限制：每框最多四个效果实例，最多十六个命名定义；源码 UTF-8、单份最多 64 KiB；IR 和按调用展开的复杂度各最多 4096 节点，调用深度最多八层。用户函数禁止循环、自定义入口、全局变量、绑定、指针接口、原子、存储资源、discard、扩展和诊断指令；`fx_` 为宿主保留前缀。固定数组最多 64 个元素，单个类型最多 4096 字节，单函数局部变量最多 16 KiB。每张纹理最长边 2048，单皮肤解码后的纹理最多 32 MiB；代理的纹理与遮罩缓存总预算 64 MiB。应用内限制不承诺隔离驱动故障。
 
-设置 › 皮肤 › 皮肤高级动效 默认开启；减少动态效果时不执行自定义 WGSL。编辑器、历史和缩略图保持静态，预览卡点“播放动效”才播放当前主题。循环只请求绘制帧，独立循环为 30 fps；打字等动画可提高到 60 fps。导入错误显示文件路径和 WGSL 诊断（行列号直接对应皮肤文件）；无效热重载保留上一份有效皮肤，GPU 编译失败则禁用该效果并保留静态外观。
+设置 › 皮肤 › 皮肤高级效果 默认开启；减少动态效果时停用本节的动态 WGSL，保留下节的静态通用材质。编辑器、历史和缩略图保持静态，预览卡点“播放动效”才播放当前主题。循环只请求绘制帧，独立循环为 30 fps；打字等动画可提高到 60 fps。导入错误显示文件路径和 WGSL 诊断（行列号直接对应皮肤文件）；无效热重载保留上一份有效皮肤，GPU 编译失败则禁用该效果并保留静态外观。
 
 完整作者示例见 [aurora/skin.toml](examples/aurora/skin.toml)，可直接导入 [aurora.ntskin](examples/aurora.ntskin)。六套新内置主题每套使用一个 WGSL、一张透明装饰纹理、零自定义参数、零装饰节点，构图和静态回退见[设计说明](skin-art-direction.md)，素材参考与矢量源图见[来源记录](skin-art-sources.md)。
 
@@ -351,6 +352,50 @@ fn effect(i: EffectInput) -> vec4<f32> {
 界面明暗由设置 › 常规 › 界面外观决定，默认跟随系统。历史记录是否显示时间由设置 › 历史记录决定，列表统一从内容区顶部排列。
 
 通用界面使用 NanaUI 标准浅色、深色配色及固定强调色，保留现有圆角、间距、卡片阴影和动效。皮肤的个性化强调色只影响皮肤内容，不改变应用按钮或选中状态。
+
+## 通用材质
+
+![蜡笔画实际渲染](crayon-preview.png)
+
+schema 2 皮肤可以使用 NanaUI 的通用片元材质，在框体或字形内部绘制纹理。蜡笔画皮肤使用静态纸纹、蜡笔边框和彩铅排线；正文、姓名、引用和注音采用对应区域的文字材质，编辑器不启用文字材质。
+
+实际截图、GPU 与全部皮肤的回归结果见[蜡笔画材质验收](crayon-validation.md)。
+
+```toml
+[materials.paper]
+source = "materials/paper.wgsl"
+params = [0]                    # 最多八个有限浮点数；补零为两组 vec4
+textures = []                   # 最多两张图片，每张不超过 2048×2048
+
+[materials.pencil]
+source = "materials/pencil.wgsl"
+
+[dialogue.box]
+material = "paper"              # 背景填色材质
+# border_material = "paper"     # 独立边框材质
+
+[dialogue.text]
+material = "pencil"
+
+[history]
+bubble_material = "paper"
+
+[history.text]
+material = "pencil"
+```
+
+形状的公共字段 `material`、`border_material` 也可用于名牌、面板及普通几何装饰。当前材质适配普通矩形、圆角矩形和 polygon 裁剪；使用 contour/motif 的自定义路径绘制保持原样。表格按名称合并，文件引用随复制和导出完整打包。总共最多十六个材质定义，材质纹理解码总量上限 32 MiB；源码、文件路径与计算复杂度沿用皮肤 shader 的受限校验。
+
+WGSL 只实现 `fn material(i: MaterialInput) -> vec4<f32>`，可添加纯辅助函数。`i.position` 是局部逻辑像素，`i.uv` 是归一化坐标，`i.size` 是局部尺寸；文字的局部区域为当前字形单元，`i.glyph_uv` 为其归一化坐标，形状的该值为零。`i.color.rgb` 是已解析的线性文字或形状颜色，alpha 为 1；返回非预乘线性 RGBA，alpha 作为额外覆盖。框架统一乘入原始透明度、字形/形状遮罩与裁剪，材质不能扩大绘制范围。纹理通过 `material_sample0(uv)` / `material_sample1(uv)` 采样；`material_param(0u)`、`material_param(1u)` 读取参数。
+
+材质保持静态，不自动请求连续帧。减少动态效果时保留它；关闭高级效果时移除材质并显示静态框体和普通字体。编译失败或资源不可用时回退到基础样式。显式文字颜色、对比描边、打字机和已有文字动效仍有效；贴图和彩色 emoji 不套用文字材质。
+
+蜡笔画的静态框体由生产材质适配器生成，可复现：
+
+```powershell
+cargo run -p nanatype --example material_artwork -- crates/theme/builtin/crayon/paper.wgsl crates/theme/builtin/crayon/still.png 860 230
+cargo run -p nanatype --example material_artwork -- crates/theme/builtin/crayon/paper.wgsl crates/theme/builtin/crayon/bubble.png 320 108 1
+```
 
 ## 文字效果与对比度
 
@@ -395,7 +440,7 @@ NanaUI 一次只用一个字体名，NanaType 会从 `families` 里挑第一个�
 | 引用 | 字体 | 版本 | 大小 | 用到它的内置皮肤 |
 | --- | --- | --- | --- | --- |
 | `builtin:fonts/FusionPixel12pxProportionalSC.ttf` | Fusion Pixel 12px Proportional 简体（GB2312 子集） | 2026.09.25 | 1.39 MiB | `pixel`、`rpg` |
-| `builtin:fonts/LXGWWenKai-Regular.ttf` | 霞鹜文楷 Regular（3,755 常用字子集） | 1.522 | 2.04 MiB | `ink` |
+| `builtin:fonts/LXGWWenKai-Regular.ttf` | 霞鹜文楷 Regular（3,755 常用字子集） | 1.522 | 2.04 MiB | `ink`、`crayon` |
 
 `echo_*` 不带字体文件，`families` 末尾是 NanaUI 自带的 `"Noto Sans SC"`。
 
@@ -442,3 +487,11 @@ period_s = 4.0
 ```
 
 编辑框、皮肤预览和减少动态效果模式显示固定光位。展示框、伙伴展示框及 OBS 输出共享相同效果和透明度。扫光按框体轮廓、圆角、渐变透明度和九宫格图片透明度裁切；静态遮罩随尺寸或皮肤变化更新，动画帧只更新时间参数。
+
+## 文字过渡遮罩
+
+`dialogue.reveal.entrance.material` 引用 `materials`，`dialogue.reveal.entrance.scope` 为 `glyph`（默认）或 `text`；`kind` 为原生回退，`ms` 为每字时长。
+`dialogue.reveal.exit` 为可选退场表：`material`、`scope`（默认 `text`）、`ms`。它让清空、换句与翻页先退场再开始下一段。
+遮罩复用内容无关的 NanaUI `PresentationMask`，WGSL `material` 返回的 alpha 是覆盖率，RGB 不参与遮罩。`MaterialInput.progress` 为 0–1，`position`/`uv`/`size` 根据 scope 对应单字或正文视口；`target_position`、`target_size` 始终对应正文可见视口。`glyph_uv` 是文字适配层提供的字形局部坐标。
+蜡笔画逐字斜擦入 180ms，正文整体擦除 320ms；两者的分割线均沿左下—右上倾斜 45°，从左上向右下推进。姓名、引用与框体保持稳定，输入编辑器不播放遮罩。关闭高级效果使用原生回退；减少动态效果保留逐字节奏但不播放擦动或等待退场。继续键可立即完成退场，再开始下一段；连续替换遵循队列策略。已有的历史记录不随正文退场擦除。
+实际关键帧、复现步骤和验证结果见[文字过渡验收](text-transition-validation.md)。
