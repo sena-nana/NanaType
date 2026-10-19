@@ -1,10 +1,9 @@
 //! Actual GPU output and retained painter invalidation for third-party value trees.
-use nana_ui::runtime::{DocumentId, RuntimeDocument};
-use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
-use nanatype::{
-    skin_theme,
-    ui::{self, Ui},
-};
+
+mod common;
+
+use nana_ui_devtools::agent::AgentSession;
+use nanatype::ui::{self, Ui};
 use nanatype_i18n::Locale;
 use nanatype_plugins::{LuaSandbox, Mount};
 use std::{collections::HashMap, sync::Arc};
@@ -21,17 +20,9 @@ fn lua_canvas_is_host_rendered_updates_on_events_and_unmounts_cleanly() {
     let first = vm.event(&serde_json::json!({"type":"init"})).unwrap();
     root.plugin_views
         .set(Arc::new(HashMap::from([("example.counter".into(), first)])));
-    let id = DocumentId::new(1).unwrap();
-    let mut document = RuntimeDocument::new(id);
-    document
-        .context_mut()
-        .set_theme_tokens(skin_theme::compile(false))
-        .unwrap();
-    document
-        .context_mut()
-        .mount_view_root(id, move || ui::plugins::mounted(root, Mount::Panel))
-        .unwrap();
-    let mut session = RuntimeAgentSession::new(document, 320, 180).unwrap();
+    let mut session = common::session()
+        .themed(false)
+        .mount(320, 180, move || ui::plugins::mounted(root, Mount::Panel));
     session.set_clear(Some([0.; 4]));
     let (_, before) = session.screenshot_rgba().unwrap();
     for _ in 0..10 {

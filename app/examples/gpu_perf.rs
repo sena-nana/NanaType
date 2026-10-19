@@ -1,5 +1,8 @@
 //! Real retained GPU workload, without image readback in measured frames.
 //! cargo run --release -p nanatype --example gpu_perf -- target/render-perf/gpu-after.json
+mod common;
+
+use common::distribution;
 use nana_ui::runtime::view::IntoView;
 use nana_ui::runtime::{DocumentId, RuntimeDocument};
 use nana_ui::{
@@ -19,14 +22,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-
-fn distribution(mut samples: Vec<f64>) -> serde_json::Value {
-    if samples.is_empty() {
-        return serde_json::Value::Null;
-    }
-    samples.sort_by(f64::total_cmp);
-    serde_json::json!({"median_ms":samples[samples.len()/2],"p95_ms":samples[samples.len()*95/100]})
-}
 
 fn session(registry: &SkinRegistry, name: &'static str, track: usize) -> (Ui, RuntimeAgentSession) {
     clock::capture_at(0, || {

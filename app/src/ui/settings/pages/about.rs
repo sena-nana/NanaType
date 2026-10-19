@@ -1,0 +1,339 @@
+use super::*;
+
+pub(super) fn about(ui: Ui) -> AnyView {
+    let locale = ui.locale.get_untracked();
+    let build = I18N.tr_in(
+        locale,
+        "about-build",
+        &[("build", env!("NANATYPE_BUILD_ID").into())],
+    );
+    let paths = crate::paths::Paths::resolve();
+    let (logs, data) = (paths.logs.clone(), paths.data.clone());
+    let icon = widget(
+        Stack::row(0.0)
+            .width(LengthSpec::Px(48.0))
+            .height(LengthSpec::Px(48.0))
+            .with_layout(|l| {
+                l.flex_shrink = Some(0.0);
+                l.paint.background_image = Some(BackgroundImage::url_with_fit(
+                    format!("data:image/png;base64,{}", ICON_PNG_B64.as_str()),
+                    nana_ui_core::BackgroundImageFit::Contain,
+                ));
+            }),
+    );
+    let version_chip = widget(
+        Stack::row(0.0)
+            .padding_xy(space::MD, space::XXS)
+            .surface(SemanticColorRole::Subtle)
+            .outline(SemanticColorRole::BorderSoft, 1.0)
+            .radius_px(999.0),
+    )
+    .children(widget(
+        Text::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+            .style(mono_style(type_scale::META, type_scale::MEDIUM))
+            .color(SemanticColorRole::Muted),
+    ));
+    let header = widget(
+        Stack::row(space::XXL)
+            .padding_xy(INSET, INSET)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        icon,
+        widget(Stack::column(space::XS).grow(1.0).shrink(1.0)).children((
+            widget(Stack::row(space::MD).align(AlignSpec::Center)).children((
+                widget(
+                    Text::new("NanaType").style(text_style(type_scale::TITLE, type_scale::BOLD)),
+                ),
+                version_chip,
+            )),
+            hint_13(ui.now_t("app-tagline")),
+            hint(build),
+        )),
+    ));
+    let link = |key: &str, icon: nana_ui::runtime::Icon, msg: Box<dyn Fn() -> Msg + Send>| {
+        let mut button = Button::new(ui.now_t(key))
+            .kind(ButtonKind::Ghost)
+            .size(ControlSize::Small)
+            .icon(icon);
+        button.style.control_padding_x = None;
+        widget(button)
+            .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
+            .into_any()
+    };
+    let links = widget(
+        Stack::row(space::SM)
+            .padding_xy(INSET, space::LG)
+            .wrap(true),
+    )
+    .children(vec![
+        link(
+            "about-logs",
+            ti::FILE_TEXT,
+            Box::new(move || Msg::OpenFolder(logs.clone())),
+        ),
+        link(
+            "about-data",
+            ti::FOLDER_OPEN,
+            Box::new(move || Msg::OpenFolder(data.clone())),
+        ),
+        link(
+            "about-homepage",
+            ti::EXTERNAL_LINK,
+            Box::new(|| Msg::OpenUrl(HOMEPAGE)),
+        ),
+        // The first-run guide again, from its first step, on General.
+        {
+            let mut guide = Button::new(ui.now_t("about-setup-guide"))
+                .kind(ButtonKind::Ghost)
+                .size(ControlSize::Small)
+                .icon(ti::SPARKLES);
+            guide.style.control_padding_x = None;
+            widget(guide)
+        }
+        .on_cx(move |_, _: &Activate, cx| {
+            ui.onboard_step.set(0);
+            cx.dispatch_program_all(edit(|s| s.general.onboarding_done = false));
+            cx.dispatch_program_all(Msg::SettingsPage(Page::General));
+        })
+        .into_any(),
+    ]);
+    let mut rows = vec![(header.into_any(), None), (links.into_any(), None)];
+    rows.extend(interface_licences(ui));
+    rows.extend(design_sources(ui));
+    rows.extend(font_licences(ui));
+    widget(Stack::column(SECTION_GAP))
+        .children(section_with(ui, "", rows))
+        .into_any()
+}
+
+pub(super) fn design_sources(ui: Ui) -> Vec<(AnyView, Shown)> {
+    let link = |key: &str, url: &'static str| {
+        widget(
+            Button::new(ui.now_t(key))
+                .kind(ButtonKind::Ghost)
+                .size(ControlSize::Small)
+                .icon(ti::EXTERNAL_LINK),
+        )
+        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::OpenUrl(url)))
+    };
+    vec![(
+        widget(Stack::column(space::SM).padding_xy(INSET, space::LG))
+            .children((
+                widget(Text::new(ui.now_t("about-design")).style(text_style(13.0, 600))),
+                widget(Text::new("Echo-Live · Sheep-realms").style(text_style(13.0, 600))),
+                hint(ui.now_t("about-design-echo")),
+                widget(Stack::row(space::SM).wrap(true)).children((
+                    link(
+                        "about-source-repository",
+                        "https://github.com/sheep-realms/Echo-Live",
+                    ),
+                    link(
+                        "about-design-upstream-license",
+                        "https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md",
+                    ),
+                )),
+            ))
+            .into_any(),
+        None,
+    )]
+}
+
+/// Sources stay visible; each licence is embedded for offline reading.
+pub(super) fn interface_licences(ui: Ui) -> Vec<(AnyView, Shown)> {
+    let mut rows = vec![(
+        widget(Stack::column(space::SM).padding_xy(INSET, space::LG))
+            .children((
+                widget(Text::new(ui.now_t("about-interfaces")).style(text_style(13.0, 600))),
+                hint(ui.now_t("about-interfaces-hint")),
+            ))
+            .into_any(),
+        None,
+    )];
+    let entries = [
+        (
+            "NanaType · MIT AND CC-BY-NC-4.0",
+            "about-license-project",
+            HOMEPAGE,
+            None,
+            concat!(
+                include_str!("../../../../../LICENSE"),
+                "\n",
+                include_str!("../../../../../LICENSE-MIT")
+            ),
+        ),
+        (
+            "SocialSisterYi/bilibili-API-collect · CC BY-NC 4.0",
+            "about-source-api-collect",
+            "https://github.com/SocialSisterYi/bilibili-API-collect",
+            Some("https://github.com/bilibili-plugins/bilibili-api-collect"),
+            include_str!("../../../../../crates/bilibili/LICENSE-API-COLLECT"),
+        ),
+        (
+            "jwwsjlm/douyinLive · MIT",
+            "about-source-douyin",
+            "https://github.com/jwwsjlm/douyinLive/tree/0e506f3cf935beede946296602af2e52d57ecea2",
+            None,
+            include_str!("../../../../../crates/douyin/LICENSE-DOUYINLIVE"),
+        ),
+    ];
+    for (name, description, url, mirror, licence) in entries {
+        let open = signal(false);
+        let source_link = |key: &str, url: &'static str| {
+            widget(
+                Button::new(ui.now_t(key))
+                    .kind(ButtonKind::Ghost)
+                    .size(ControlSize::Small)
+                    .icon(ti::EXTERNAL_LINK),
+            )
+            .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::OpenUrl(url)))
+            .into_any()
+        };
+        let mut buttons = vec![source_link("about-source-repository", url)];
+        if let Some(mirror) = mirror {
+            buttons.push(source_link("about-source-mirror", mirror));
+        }
+        buttons.push(
+            widget(Button::new(ui.now_t("about-fonts-show")).size(ControlSize::Small))
+                .visible(move || !open.get())
+                .on(move |_: &Activate| open.set(true))
+                .into_any(),
+        );
+        buttons.push(
+            widget(Button::new(ui.now_t("about-fonts-hide")).size(ControlSize::Small))
+                .visible(move || open.get())
+                .on(move |_: &Activate| open.set(false))
+                .into_any(),
+        );
+        rows.push((
+            widget(Stack::column(space::SM).padding_xy(INSET, space::LG))
+                .children((
+                    widget(Text::new(name).style(text_style(13.0, 600))),
+                    hint(ui.now_t(description)),
+                    widget(Stack::row(space::SM).wrap(true)).children(buttons),
+                ))
+                .into_any(),
+            None,
+        ));
+        rows.push(shown_if(
+            widget(Stack::column(0.0).padding_xy(INSET, space::LG))
+                .children(
+                    widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
+                        l.height = Some(LengthSpec::Px(260.0));
+                    }))
+                    .children(widget(Stack::column(0.0)).children(licence_lines(licence))),
+                )
+                .into_any(),
+            move || open.get(),
+        ));
+    }
+    rows
+}
+
+/// The "Open-source fonts" row and, below it while open, a scrolling panel
+/// with each font this build embeds: its name, author, licence and the
+/// licence's full text (OFL 1.1 asks that it travel with the font). Nothing
+/// when the build embeds no fonts.
+pub(super) fn font_licences(ui: Ui) -> Vec<(AnyView, Shown)> {
+    let fonts = nanatype_theme::BuiltinFonts::embedded().fonts();
+    if fonts.is_empty() {
+        return Vec::new();
+    }
+    let open = signal(false);
+    let toggle = |key: &str, shown: bool| {
+        widget(Button::new(ui.now_t(key)).size(ControlSize::Small))
+            .visible(move || open.get() == shown)
+            .on(move |_: &Activate| open.set(!shown))
+            .into_any()
+    };
+    let row_view = row(
+        ui,
+        "about-fonts",
+        Some("about-fonts-hint"),
+        widget(Stack::row(0.0))
+            .children((
+                toggle("about-fonts-show", false),
+                toggle("about-fonts-hide", true),
+            ))
+            .into_any(),
+    );
+    vec![
+        (row_view, None),
+        shown_if(font_licence_panel(ui), move || open.get()),
+    ]
+}
+
+/// Each font this build embeds, its author, version and licence, and the
+/// licence's full text, in a scrolling panel. Shown under About's
+/// "Open-source fonts" row.
+pub fn font_licence_panel(ui: Ui) -> AnyView {
+    let fonts = nanatype_theme::BuiltinFonts::embedded().fonts();
+    let locale = ui.locale.get_untracked();
+    let entries: Vec<AnyView> = fonts
+        .iter()
+        .map(|font| {
+            let name = font.family().unwrap_or_else(|| font.path.to_owned());
+            let mut facts = Vec::new();
+            if let Some(author) = font.author() {
+                facts.push(I18N.tr_in(locale, "about-fonts-author", &[("author", author.into())]));
+            }
+            if let Some(version) = font.version() {
+                facts.push(I18N.tr_in(
+                    locale,
+                    "about-fonts-version",
+                    &[("version", version.into())],
+                ));
+            }
+            facts.push(match font.license_name() {
+                Some(l) => l.to_owned(),
+                None => I18N.t_in(locale, "about-fonts-license-other"),
+            });
+            widget(Stack::column(4.0))
+                .children((
+                    widget(Text::new(name).style(text_style(13.0, 600))),
+                    hint(facts.join(" · ")),
+                    widget(Stack::column(0.0).with_layout(|l| {
+                        l.padding_top = Some(LengthSpec::Px(space::SM));
+                    }))
+                    .children(licence_lines(font.license)),
+                ))
+                .into_any()
+        })
+        .collect();
+    widget(Stack::column(0.0).padding_xy(INSET, space::LG))
+        .children(
+            widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
+                l.height = Some(LengthSpec::Px(320.0));
+            }))
+            .children(
+                widget(Stack::column(space::XXXL).with_layout(|l| {
+                    l.padding_right = Some(LengthSpec::Px(space::XL));
+                }))
+                .children(entries),
+            ),
+        )
+        .into_any()
+}
+
+/// A licence's text as it is laid out upstream: one text per line (a text
+/// folds its line breaks), a blank line as a gap.
+pub(super) fn licence_lines(text: &str) -> Vec<AnyView> {
+    text.trim_end()
+        .lines()
+        .map(|line| {
+            if line.trim().is_empty() {
+                widget(Stack::column(0.0).height(LengthSpec::Px(8.0))).into_any()
+            } else {
+                widget(
+                    Text::new(line.to_owned())
+                        .style(mono_style(11.0, 400))
+                        .color(SemanticColorRole::Muted),
+                )
+                .into_any()
+            }
+        })
+        .collect()
+}
+
+/// Where the project lives.
+pub(super) const HOMEPAGE: &str = "https://github.com/sena-nana/NanaType";

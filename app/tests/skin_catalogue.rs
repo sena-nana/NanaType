@@ -1,4 +1,7 @@
 //! Catalogue refreshes reuse static artwork without preparing GPU effects.
+
+mod common;
+
 use nanatype::{assets, ui};
 use nanatype_i18n::Locale;
 use nanatype_theme::{Localized, SkinRegistry, TomlTable};
@@ -216,7 +219,7 @@ fn material_input_textures_are_not_loaded_by_static_previews() {
 #[test]
 fn selecting_static_artwork_prepares_only_the_preview_and_keeps_motion_off() {
     let _cache = PICKER_CACHE.lock().unwrap();
-    let registry = SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+    let registry = common::registry();
     let active = registry.load("nanatype.halo").unwrap().skin;
     let ui = ui::Ui::new(Arc::new(Default::default()), active.clone(), Locale::ZhCn);
     ui.skins

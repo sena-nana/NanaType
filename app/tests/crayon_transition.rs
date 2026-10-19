@@ -1,8 +1,11 @@
 //! Check the authored brush masks through the production material pipeline.
+
+mod common;
+
+use nana_ui::runtime::Stack;
 use nana_ui::runtime::view::widget;
-use nana_ui::runtime::{DocumentId, RuntimeDocument, Stack};
 use nana_ui_core::{LengthSpec, MaterialProgram, MaterialRef};
-use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
+use nana_ui_devtools::agent::AgentSession;
 use std::sync::Arc;
 
 fn capture(source: &str, progress: f32, scale: f32) -> Vec<u8> {
@@ -13,22 +16,17 @@ fn capture(source: &str, progress: f32, scale: f32) -> Vec<u8> {
     nanatype_theme::validate_material(&source).unwrap();
     let material = MaterialRef::new(MaterialProgram::new(source))
         .with_parameters(Arc::from([[progress, 0., 0., 0.]]));
-    let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
-    doc.context_mut()
-        .mount_view_root(id, move || {
-            widget(
-                Stack::row(0.)
-                    .width(LengthSpec::Px(160.))
-                    .height(LengthSpec::Px(80.))
-                    .with_layout(move |layout| {
-                        layout.background = Some([1.; 4]);
-                        layout.paint.background_material = Some(material);
-                    }),
-            )
-        })
-        .unwrap();
-    let mut session = RuntimeAgentSession::new_scaled(doc, 160, 80, scale).unwrap();
+    let mut session = common::session().scale(scale).mount(160, 80, move || {
+        widget(
+            Stack::row(0.)
+                .width(LengthSpec::Px(160.))
+                .height(LengthSpec::Px(80.))
+                .with_layout(move |layout| {
+                    layout.background = Some([1.; 4]);
+                    layout.paint.background_material = Some(material);
+                }),
+        )
+    });
     session.set_clear(Some([0.; 4]));
     session.screenshot_rgba().unwrap().1
 }

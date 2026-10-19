@@ -1,40 +1,20 @@
-use nana_ui::runtime::{DocumentId, RuntimeDocument};
-use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
-use nanatype::{
-    clock,
-    ui::{Ui, dialogue, sweep, text_light},
-};
+mod common;
+
+use nana_ui_devtools::agent::AgentSession;
+use nanatype::ui::{Ui, dialogue, sweep, text_light};
 use nanatype_core::{Cmd, Core};
 use nanatype_i18n::Locale;
 use nanatype_settings::Settings;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
-fn frame(session: &mut RuntimeAgentSession, ui: Ui, now: u64, elapsed: u64, name: &str) -> Vec<u8> {
-    ui.now.set(now);
-    session
-        .document_mut()
-        .sync_presentation_clock(Duration::from_millis(elapsed));
-    clock::capture_at(now, || {
-        let (size, rgba) = session.screenshot_rgba().unwrap();
-        if let Ok(dir) = std::env::var("NANATYPE_SONNET_CAPTURES") {
-            std::fs::create_dir_all(&dir).unwrap();
-            image::save_buffer(
-                std::path::Path::new(&dir).join(format!("{name}.png")),
-                &rgba,
-                size.width,
-                size.height,
-                image::ColorType::Rgba8,
-            )
-            .unwrap();
-        }
-        rgba
-    })
-}
+use common::frame;
+
+const CAPTURES: &str = "NANATYPE_SONNET_CAPTURES";
 
 #[test]
 fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
     let mut fonts = nanatype::skin_fonts::BuiltinFontSet::default();
-    let registry = nanatype_theme::SkinRegistry::new(None, "1.0.0");
+    let registry = common::registry();
     let loaded = registry.load("nanatype.sonnet").unwrap();
     let f = &loaded.skin.fonts;
     let wanted: Vec<_> = [&f.body, &f.name, &f.accent]
@@ -85,14 +65,8 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
             base,
         );
         ui.display.set(Arc::new(core.display().clone()));
-        let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
-        clock::capture_at(base, || {
-            doc.context_mut()
-                .mount_view_root(id, move || dialogue::display_window(ui))
-                .unwrap()
-        });
-        let mut session = RuntimeAgentSession::new(doc, width, height).unwrap();
+        let mut session =
+            common::session().mount_at(base, width, height, move || dialogue::display_window(ui));
         session.set_gpu_renderers(sweep::renderers());
         session.set_clear(Some([0.; 4]));
         let mut entry = Vec::new();
@@ -108,6 +82,7 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
                 base + t,
                 t,
                 &format!("{case}-enter-{t:04}"),
+                CAPTURES,
             );
             if t == 120 {
                 entry = pixels;
@@ -119,6 +94,7 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
             base + 2800,
             2800,
             &format!("{case}-stable"),
+            CAPTURES,
         );
         assert_ne!(entry, full, "{case}: reveal did not progress");
         assert!(
@@ -138,6 +114,7 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
             base + 2900,
             2900,
             &format!("{case}-stable-later"),
+            CAPTURES,
         );
         assert_eq!(
             session.document().context().world().layout_generation(),
@@ -159,6 +136,7 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
                 base + 3000 + t,
                 3000 + t,
                 &format!("{case}-exit-{t:03}"),
+                CAPTURES,
             ));
         }
         if wake.is_some() {
@@ -185,6 +163,7 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
             base + 4200,
             4200,
             &format!("{case}-cleared"),
+            CAPTURES,
         );
         assert!(!text_light::animating(ui, base + 4200));
         assert!(
@@ -197,38 +176,34 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
 
 #[test]
 fn sonnet_preview_plays_once_and_stops_its_clock() {
-    let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-        .load("nanatype.sonnet")
-        .unwrap()
-        .skin;
+    let skin = common::skin("nanatype.sonnet");
     let ui = Ui::new(Arc::new(Settings::default()), skin.clone(), Locale::ZhCn);
     ui.page.set(nanatype::ui::settings::Page::Skins);
     ui.shader_preview.set(true);
     let doc = nanatype_markup::parse("十四行诗 Sonnet").doc;
-    let id = DocumentId::new(1).unwrap();
-    let mut runtime = RuntimeDocument::new(id);
-    clock::capture_at(100_000, || {
-        runtime
-            .context_mut()
-            .mount_view_root(id, move || {
-                dialogue::preview_box(
-                    ui,
-                    dialogue::BoxCtx {
-                        skin: skin.clone(),
-                        urls: Arc::new(Default::default()),
-                        source: dialogue::Source::Preview,
-                        preview_name: "奈奈".into(),
-                    },
-                    &doc,
-                )
-            })
-            .unwrap()
+    let mut session = common::session().mount_at(100_000, 992, 222, move || {
+        dialogue::preview_box(
+            ui,
+            dialogue::BoxCtx {
+                skin: skin.clone(),
+                urls: Arc::new(Default::default()),
+                source: dialogue::Source::Preview,
+                preview_name: "奈奈".into(),
+            },
+            &doc,
+        )
     });
-    let mut session = RuntimeAgentSession::new(runtime, 992, 222).unwrap();
     session.set_gpu_renderers(sweep::renderers());
-    frame(&mut session, ui, 100_120, 120, "preview-enter");
+    frame(&mut session, ui, 100_120, 120, "preview-enter", CAPTURES);
     assert!(text_light::preview_animating(ui, 100_120));
-    frame(&mut session, ui, 106_000, 6000, "preview-finished");
+    frame(
+        &mut session,
+        ui,
+        106_000,
+        6000,
+        "preview-finished",
+        CAPTURES,
+    );
     assert!(!text_light::preview_animating(ui, 106_000));
     assert!(!session.document().compositor_needs_tick());
     ui.shader_preview.set(false);
@@ -237,10 +212,7 @@ fn sonnet_preview_plays_once_and_stops_its_clock() {
 
 #[test]
 fn sonnet_scrolling_reuses_glyph_masks_and_layout_during_retirement() {
-    let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-        .load("nanatype.sonnet")
-        .unwrap()
-        .skin;
+    let skin = common::skin("nanatype.sonnet");
     let settings = Settings::default();
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
     let mut core = Core::new(settings, skin);
@@ -250,28 +222,21 @@ fn sonnet_scrolling_reuses_glyph_masks_and_layout_during_retirement() {
     );
     core.handle(Cmd::Skip, 100_001);
     ui.display.set(Arc::new(core.display().clone()));
-    let id = DocumentId::new(1).unwrap();
-    let mut runtime = RuntimeDocument::new(id);
-    clock::capture_at(100_001, || {
-        runtime
-            .context_mut()
-            .mount_view_root(id, move || dialogue::display_window(ui))
-            .unwrap()
-    });
-    let mut session = RuntimeAgentSession::new(runtime, 992, 222).unwrap();
+    let mut session =
+        common::session().mount_at(100_001, 992, 222, move || dialogue::display_window(ui));
     session.set_gpu_renderers(sweep::renderers());
-    frame(&mut session, ui, 101_000, 999, "scroll-skipped");
+    frame(&mut session, ui, 101_000, 999, "scroll-skipped", CAPTURES);
     assert!(
         !text_light::animating(ui, 101_000),
         "skip must not replay every glyph's flash"
     );
     core.handle(Cmd::ClearDisplay, 101_100);
     ui.display.set(Arc::new(core.display().clone()));
-    frame(&mut session, ui, 101_200, 1199, "scroll-exit");
+    frame(&mut session, ui, 101_200, 1199, "scroll-exit", CAPTURES);
     let masks = text_light::cache_counts();
     let generation = session.document().context().world().layout_generation();
     ui.text_scroll.set(140.);
-    frame(&mut session, ui, 101_260, 1259, "scroll-shifted");
+    frame(&mut session, ui, 101_260, 1259, "scroll-shifted", CAPTURES);
     assert_eq!(
         session.document().context().world().layout_generation(),
         generation

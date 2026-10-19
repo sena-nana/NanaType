@@ -1,6 +1,9 @@
 //! The session card must remain usable without changing the streamer's draft.
+
+mod common;
+
+use nana_ui::runtime::Stack;
 use nana_ui::runtime::view::widget;
-use nana_ui::runtime::{DocumentId, RuntimeDocument, Stack};
 use nana_ui_core::LengthSpec;
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nanatype::{
@@ -40,27 +43,14 @@ fn click(session: &mut RuntimeAgentSession, label: &str, width: f32) -> Msg {
 fn card_actions_fit_and_preserve_the_draft_in_each_locale() {
     for locale in [Locale::ZhCn, Locale::EnUs, Locale::JaJp] {
         for width in [400, 796] {
-            let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-                .load("nanatype.halo")
-                .unwrap()
-                .skin;
+            let skin = common::skin("nanatype.halo");
             let ui = Ui::new(Arc::new(Default::default()), skin.clone(), locale);
             ui.peer_panel.set(true);
             let draft = nanatype_markup::parse("my [b]private draft[/b]").doc;
             ui.draft.set(Arc::new(draft.clone()));
-            let id = DocumentId::new(1).unwrap();
-            let mut document = RuntimeDocument::new(id);
-            document
-                .context_mut()
-                .set_theme_tokens(nanatype::skin_theme::compile(false))
-                .unwrap();
-            document
-                .context_mut()
-                .mount_view_root(id, move || {
-                    widget(Stack::column(0.0).width(LengthSpec::Fill)).children(p2p::card(ui))
-                })
-                .unwrap();
-            let mut session = RuntimeAgentSession::new(document, width, 170).unwrap();
+            let mut session = common::session().themed(false).mount(width, 170, move || {
+                widget(Stack::column(0.0).width(LengthSpec::Fill)).children(p2p::card(ui))
+            });
             session.flush().unwrap();
             let title = session
                 .accessibility_dump()

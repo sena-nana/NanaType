@@ -1,35 +1,15 @@
-use nana_ui::runtime::{DocumentId, RuntimeDocument};
-use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
-use nanatype::{
-    clock,
-    ui::{Ui, dialogue, sweep, text_scramble},
-};
+mod common;
+
+use nana_ui_devtools::agent::AgentSession;
+use nanatype::ui::{Ui, dialogue, sweep, text_scramble};
 use nanatype_core::{Cmd, Core};
 use nanatype_i18n::Locale;
 use nanatype_settings::Settings;
 use std::{sync::Arc, time::Duration};
 
-fn frame(session: &mut RuntimeAgentSession, ui: Ui, now: u64, elapsed: u64, name: &str) -> Vec<u8> {
-    ui.now.set(now);
-    session
-        .document_mut()
-        .sync_presentation_clock(Duration::from_millis(elapsed));
-    clock::capture_at(now, || {
-        let (size, rgba) = session.screenshot_rgba().unwrap();
-        if let Ok(dir) = std::env::var("NANATYPE_ML_CAPTURES") {
-            std::fs::create_dir_all(&dir).unwrap();
-            image::save_buffer(
-                std::path::Path::new(&dir).join(format!("{name}.png")),
-                &rgba,
-                size.width,
-                size.height,
-                image::ColorType::Rgba8,
-            )
-            .unwrap();
-        }
-        rgba
-    })
-}
+use common::frame;
+
+const CAPTURES: &str = "NANATYPE_ML_CAPTURES";
 
 #[test]
 fn scramble_renders_locks_and_retires_without_relayout() {
@@ -47,10 +27,7 @@ fn scramble_renders_locks_and_retires_without_relayout() {
     )
     .unwrap();
     let picture_url = nanatype::services::media::url(&picture, Some(&fixtures)).unwrap();
-    let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-        .load("nanatype.machine_learning")
-        .unwrap()
-        .skin;
+    let skin = common::skin("nanatype.machine_learning");
     for (case, w, h, reduced, enabled, remote) in [
         ("wide", 892, 232, false, true, false),
         ("narrow", 300, 260, false, true, false),
@@ -82,20 +59,35 @@ fn scramble_renders_locks_and_retires_without_relayout() {
         );
         let original = core.display().doc.clone();
         ui.display.set(Arc::new(core.display().clone()));
-        let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
-        clock::capture_at(100_000, || {
-            doc.context_mut()
-                .mount_view_root(id, move || dialogue::display_window(ui))
-                .unwrap()
-        });
-        let mut session = RuntimeAgentSession::new(doc, w, h).unwrap();
+        let mut session =
+            common::session().mount_at(100_000, w, h, move || dialogue::display_window(ui));
         session.set_gpu_renderers(sweep::renderers());
         session.set_clear(Some([0.; 4]));
-        frame(&mut session, ui, 100_000, 0, &format!("{case}-enter-000"));
-        let a = frame(&mut session, ui, 100_060, 60, &format!("{case}-enter-060"));
+        frame(
+            &mut session,
+            ui,
+            100_000,
+            0,
+            &format!("{case}-enter-000"),
+            CAPTURES,
+        );
+        let a = frame(
+            &mut session,
+            ui,
+            100_060,
+            60,
+            &format!("{case}-enter-060"),
+            CAPTURES,
+        );
         let generation = session.document().context().world().layout_generation();
-        let b = frame(&mut session, ui, 100_085, 85, &format!("{case}-enter-085"));
+        let b = frame(
+            &mut session,
+            ui,
+            100_085,
+            85,
+            &format!("{case}-enter-085"),
+            CAPTURES,
+        );
         if enabled && !reduced {
             assert_ne!(a, b, "{case}: substitution/reveal did not change");
             assert!(text_scramble::animating(ui, 100_060));
@@ -107,8 +99,22 @@ fn scramble_renders_locks_and_retires_without_relayout() {
             generation,
             "{case}: animation relaid out text"
         );
-        frame(&mut session, ui, 100_140, 140, &format!("{case}-enter-140"));
-        let full = frame(&mut session, ui, 101_200, 1200, &format!("{case}-stable"));
+        frame(
+            &mut session,
+            ui,
+            100_140,
+            140,
+            &format!("{case}-enter-140"),
+            CAPTURES,
+        );
+        let full = frame(
+            &mut session,
+            ui,
+            101_200,
+            1200,
+            &format!("{case}-stable"),
+            CAPTURES,
+        );
         let red = full
             .as_chunks::<4>()
             .0
@@ -139,6 +145,7 @@ fn scramble_renders_locks_and_retires_without_relayout() {
                 102_000 + t,
                 2000 + t,
                 &format!("{case}-exit-{t:03}"),
+                CAPTURES,
             ));
         }
         if let Some(wake) = wake {
@@ -168,7 +175,14 @@ fn scramble_renders_locks_and_retires_without_relayout() {
         }
         assert!(core.display().empty);
         ui.display.set(Arc::new(core.display().clone()));
-        frame(&mut session, ui, 103_000, 3000, &format!("{case}-cleared"));
+        frame(
+            &mut session,
+            ui,
+            103_000,
+            3000,
+            &format!("{case}-cleared"),
+            CAPTURES,
+        );
         assert!(!text_scramble::animating(ui, 103_000));
         assert!(
             !session.document().compositor_needs_tick(),
@@ -180,37 +194,34 @@ fn scramble_renders_locks_and_retires_without_relayout() {
 
 #[test]
 fn preview_is_finite_and_static_surfaces_do_not_scramble() {
-    let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-        .load("nanatype.machine_learning")
-        .unwrap()
-        .skin;
+    let skin = common::skin("nanatype.machine_learning");
     let ui = Ui::new(Arc::new(Settings::default()), skin.clone(), Locale::ZhCn);
     ui.page.set(nanatype::ui::settings::Page::Skins);
     ui.shader_preview.set(true);
     let text = nanatype_markup::parse("机器学习 ML").doc;
-    let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
-    clock::capture_at(100_000, || {
-        doc.context_mut()
-            .mount_view_root(id, move || {
-                dialogue::preview_box(
-                    ui,
-                    dialogue::BoxCtx {
-                        skin: skin.clone(),
-                        urls: Arc::new(Default::default()),
-                        source: dialogue::Source::Preview,
-                        preview_name: "奈奈".into(),
-                    },
-                    &text,
-                )
-            })
-            .unwrap()
+    let mut session = common::session().mount_at(100_000, 892, 232, move || {
+        dialogue::preview_box(
+            ui,
+            dialogue::BoxCtx {
+                skin: skin.clone(),
+                urls: Arc::new(Default::default()),
+                source: dialogue::Source::Preview,
+                preview_name: "奈奈".into(),
+            },
+            &text,
+        )
     });
-    let mut session = RuntimeAgentSession::new(doc, 892, 232).unwrap();
     session.set_gpu_renderers(sweep::renderers());
-    frame(&mut session, ui, 100_060, 60, "preview-enter");
+    frame(&mut session, ui, 100_060, 60, "preview-enter", CAPTURES);
     assert!(text_scramble::preview_animating(ui, 100_060));
-    frame(&mut session, ui, 106_000, 6000, "preview-finished");
+    frame(
+        &mut session,
+        ui,
+        106_000,
+        6000,
+        "preview-finished",
+        CAPTURES,
+    );
     assert!(!text_scramble::preview_animating(ui, 106_000));
     assert!(!session.document().compositor_needs_tick());
     let skin = ui.skin.get_untracked();
@@ -228,10 +239,7 @@ fn preview_is_finite_and_static_surfaces_do_not_scramble() {
 
 #[test]
 fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
-    let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-        .load("nanatype.machine_learning")
-        .unwrap()
-        .skin;
+    let skin = common::skin("nanatype.machine_learning");
     assert_eq!(
         skin.history.bubble_contour,
         skin.dialogue.box_.shape.contour
@@ -267,15 +275,8 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
         );
         core.handle(Cmd::Skip, 101_000);
         ui.display.set(Arc::new(core.display().clone()));
-        let id = DocumentId::new(1).unwrap();
-        let mut document = RuntimeDocument::new(id);
-        clock::capture_at(100_000, || {
-            document
-                .context_mut()
-                .mount_view_root(id, move || dialogue::display_window(ui))
-                .unwrap();
-        });
-        let mut session = RuntimeAgentSession::new(document, w, h).unwrap();
+        let mut session =
+            common::session().mount_at(100_000, w, h, move || dialogue::display_window(ui));
         session.set_gpu_renderers(sweep::renderers());
         session.set_clear(Some([0.; 4]));
         frame(
@@ -284,6 +285,7 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
             101_200,
             1200,
             &format!("portrait-rail-{w}"),
+            CAPTURES,
         );
         let started = std::time::Instant::now();
         while nanatype::ui::shader_effects::cache_stats().pending > 0 {
@@ -296,6 +298,7 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
             101_200,
             1200,
             &format!("portrait-rail-{w}"),
+            CAPTURES,
         );
         let label = session
             .accessibility_dump()
@@ -337,7 +340,7 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
 
 #[test]
 fn clipped_mirror_middle_edits_leave_the_unchanged_suffix_visible() {
-    let loaded = nanatype_theme::SkinRegistry::new(None, "1.0.0")
+    let loaded = common::registry()
         .load("nanatype.machine_learning")
         .unwrap();
     let mut skin = (*loaded.skin).clone();
@@ -352,23 +355,17 @@ fn clipped_mirror_middle_edits_leave_the_unchanged_suffix_visible() {
         100_000,
     );
     ui.display.set(Arc::new(core.display().clone()));
-    let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
-    clock::capture_at(100_000, || {
-        doc.context_mut()
-            .mount_view_root(id, move || dialogue::display_window(ui))
-            .unwrap()
-    });
-    let mut session = RuntimeAgentSession::new(doc, 892, 232).unwrap();
+    let mut session =
+        common::session().mount_at(100_000, 892, 232, move || dialogue::display_window(ui));
     session.set_gpu_renderers(sweep::renderers());
-    frame(&mut session, ui, 100_000, 0, "clip-initial");
-    let before = frame(&mut session, ui, 100_400, 400, "clip-before");
+    frame(&mut session, ui, 100_000, 0, "clip-initial", CAPTURES);
+    let before = frame(&mut session, ui, 100_400, 400, "clip-before", CAPTURES);
     core.handle(
         Cmd::DraftChanged(nanatype_model::Document::plain("11211")),
         100_500,
     );
     ui.display.set(Arc::new(core.display().clone()));
-    let after = frame(&mut session, ui, 100_501, 501, "clip-middle-edit");
+    let after = frame(&mut session, ui, 100_501, 501, "clip-middle-edit", CAPTURES);
     let region = |data: &[u8]| {
         (66..110)
             .flat_map(|y| {

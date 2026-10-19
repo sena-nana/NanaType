@@ -1,7 +1,9 @@
 //! User-flow regressions against the production settings view and pointer router.
+
+mod common;
+
 use std::{sync::Arc, time::Duration};
 
-use nana_ui::runtime::{DocumentId, RuntimeDocument};
 use nana_ui_devtools::agent::{AccessibilityDumpNode, AgentSession, RuntimeAgentSession};
 use nanatype::{
     msg::Msg,
@@ -20,7 +22,7 @@ struct Fixture {
 
 impl Fixture {
     fn new(locale: Locale, onboarding: bool, page: Page) -> Self {
-        let registry = nanatype_theme::SkinRegistry::new(None, "0.1.0");
+        let registry = common::registry();
         let skin = registry.load(nanatype_theme::DEFAULT_SKIN).unwrap().skin;
         let mut settings = Settings::default();
         settings.general.onboarding_done = !onboarding;
@@ -28,15 +30,9 @@ impl Fixture {
         ui.skins
             .set(Arc::new(nanatype::ui::skin_rows(&registry, locale)));
         ui.page.set(page);
-        let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
-        doc.context_mut()
-            .set_theme_tokens(nanatype::skin_theme::compile(false))
-            .unwrap();
-        doc.context_mut()
-            .mount_view_root(id, move || settings::settings_window(ui))
-            .unwrap();
-        let session = RuntimeAgentSession::new(doc, 720, 480).unwrap();
+        let session = common::session()
+            .themed(false)
+            .mount(720, 480, move || settings::settings_window(ui));
         Self { ui, session }
     }
 
