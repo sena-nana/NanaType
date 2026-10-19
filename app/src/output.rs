@@ -241,6 +241,56 @@ impl SenderLease {
     }
 }
 
+// A sender that failed to open or prepare waits before the next attempt:
+// prepare runs on every update and frame, and device creation is not free.
+#[cfg(any(windows, test))]
+const RETRY_FIRST_MS: u64 = 1_000;
+#[cfg(any(windows, test))]
+const RETRY_MAX_MS: u64 = 30_000;
+
+/// The last failure of one output's sender. The wait doubles while the same
+/// settings fail on the same device; anything else starts again at once.
+#[cfg(any(windows, test))]
+struct Retry<G> {
+    output: SpoutOutput,
+    device: G,
+    /// What the failure is called ([`SPOUT_ERROR_KEYS`]).
+    key: &'static str,
+    wait: u64,
+    at: u64,
+}
+#[cfg(any(windows, test))]
+impl<G: Copy + PartialEq> Retry<G> {
+    fn same(&self, out: &SpoutOutput, device: G) -> bool {
+        self.device == device && &self.output == out
+    }
+
+    fn waiting(&self, out: &SpoutOutput, device: G, now: u64) -> bool {
+        self.same(out, device) && now < self.at
+    }
+
+    fn after(
+        previous: Option<Self>,
+        out: &SpoutOutput,
+        device: G,
+        key: &'static str,
+        now: u64,
+    ) -> Self {
+        let wait = previous
+            .filter(|r| r.same(out, device))
+            .map_or(RETRY_FIRST_MS, |r| {
+                r.wait.saturating_mul(2).min(RETRY_MAX_MS)
+            });
+        Self {
+            output: out.clone(),
+            device,
+            key,
+            wait,
+            at: now.saturating_add(wait),
+        }
+    }
+}
+
 #[cfg(any(windows, test))]
 fn can_pause(kind: WindowKind, previous: &SpoutOutput, s: &Settings, peer_active: bool) -> bool {
     let Some(out) = settings_for(kind, s) else {
@@ -269,10 +319,18 @@ pub struct Spout {
     cleanup_scheduled: Option<u64>,
     #[cfg(windows)]
     bridge: Option<Bridge>,
+    #[cfg(windows)]
+    retries: HashMap<WindowKind, Retry<nana_ui::DeviceGeneration>>,
+    /// NanaUI's own last word per window, shown again once a failed sender
+    /// recovers.
+    #[cfg(windows)]
+    reported: HashMap<WindowKind, LinkState>,
     #[cfg(target_os = "macos")]
     syphon: syphon::Outputs,
     /// Last link state per window, for the settings page.
     pub status: HashMap<WindowKind, LinkState>,
+    /// `status` changed outside [`Spout::sync`] and the page has not heard.
+    status_dirty: bool,
 }
 
 fn t(locale: Locale, key: &str) -> String {
@@ -410,14 +468,81 @@ impl Spout {
             } else {
                 state
             };
+            // Likewise a Spout sender still waiting to be opened again.
+            #[cfg(windows)]
+            let state = {
+                self.reported.insert(kind, state.clone());
+                if let LinkState::Connected(_) = &state
+                    && let Some(retry) = self.retries.get(&kind)
+                {
+                    crate::ui::link_text::spout_send(locale, retry.key)
+                } else {
+                    state
+                }
+            };
             self.status.insert(kind, state);
+        }
+    }
+
+    /// Whether `status` changed since the last call, outside of
+    /// [`Spout::sync`] and the reports the host already applied.
+    pub fn take_status_changed(&mut self) -> bool {
+        std::mem::take(&mut self.status_dirty)
+    }
+
+    #[cfg(windows)]
+    fn retry_waiting(
+        &self,
+        kind: WindowKind,
+        out: &SpoutOutput,
+        generation: nana_ui::DeviceGeneration,
+        now: u64,
+    ) -> bool {
+        self.retries
+            .get(&kind)
+            .is_some_and(|retry| retry.waiting(out, generation, now))
+    }
+
+    #[cfg(windows)]
+    fn sender_failed(
+        &mut self,
+        kind: WindowKind,
+        out: &SpoutOutput,
+        generation: nana_ui::DeviceGeneration,
+        key: &'static str,
+        now: u64,
+    ) {
+        self.senders.remove(&kind);
+        let previous = self.retries.remove(&kind);
+        self.retries
+            .insert(kind, Retry::after(previous, out, generation, key, now));
+    }
+
+    #[cfg(windows)]
+    fn sender_recovered(&mut self, kind: WindowKind) {
+        if self.retries.remove(&kind).is_some() {
+            let state = self
+                .reported
+                .get(&kind)
+                .cloned()
+                .unwrap_or(LinkState::Connecting);
+            self.status.insert(kind, state);
+            self.status_dirty = true;
         }
     }
 
     /// Prepare names before rasterization so OBS discovery overlaps the first
     /// native export. Match-window extents register on the first actual frame.
+    /// A failure goes on the badge ([`Spout::take_status_changed`]) and is
+    /// not tried again until its retry is due.
     #[cfg(windows)]
-    pub(crate) fn prepare(&mut self, s: &Settings, peer: bool, gpu: &nana_ui::GpuContext) {
+    pub(crate) fn prepare(
+        &mut self,
+        s: &Settings,
+        peer: bool,
+        gpu: &nana_ui::GpuContext,
+        locale: Locale,
+    ) {
         // Invalidate even when all outputs are paused/disabled. An old device
         // must not survive restoration just because no frame is requested.
         if self
@@ -429,6 +554,7 @@ impl Spout {
             self.bridge = None;
         }
         let generation = gpu.generation();
+        let now = crate::clock::now_ms();
         let pending = KINDS.map(|kind| {
             resolve(kind, s, peer)
                 .output()
@@ -436,6 +562,7 @@ impl Spout {
                     self.senders
                         .get(&kind)
                         .is_none_or(|sender| !sender.matches(out, generation))
+                        && !self.retry_waiting(kind, out, generation, now)
                 })
                 .map(|out| (kind, out))
         });
@@ -452,28 +579,35 @@ impl Spout {
         let luid = unsafe { hal.raw_device().GetAdapterLuid() };
         let luid = (i64::from(luid.HighPart) << 32) | i64::from(luid.LowPart);
         for (kind, out) in pending.into_iter().flatten() {
-            // The frame path retains the normal readable publish error/fallback.
-            if let Ok(sender) = self.ensure_sender(kind, out, generation, luid)
-                && let Some([width, height]) = out.size
-            {
-                #[cfg(debug_assertions)]
-                let start = std::time::Instant::now();
-                let prepared = sender.sender.prepare(width, height);
-                #[cfg(debug_assertions)]
-                probe::lifecycle(
-                    "surface-prepared",
-                    Some(kind),
-                    start.elapsed().as_secs_f64() * 1000.,
-                );
-                if !matches!(
-                    prepared,
-                    Ok(nanalive_spout::GpuDx11PublishReport {
-                        status: nanalive_spout::SpoutPublishStatus::Sent,
-                        ..
-                    })
-                ) {
-                    self.senders.remove(&kind);
-                }
+            let failure = match self.ensure_sender(kind, out, generation, luid) {
+                Err(e) => Some((spout_error_key(&e), e.to_string())),
+                Ok(sender) => out.size.and_then(|[width, height]| {
+                    #[cfg(debug_assertions)]
+                    let start = std::time::Instant::now();
+                    let prepared = sender.sender.prepare(width, height);
+                    #[cfg(debug_assertions)]
+                    probe::lifecycle(
+                        "surface-prepared",
+                        Some(kind),
+                        start.elapsed().as_secs_f64() * 1000.,
+                    );
+                    match prepared {
+                        Ok(r) if r.status == nanalive_spout::SpoutPublishStatus::Sent => None,
+                        Ok(r) => Some((SPOUT_ERROR_KEYS[4], format!("prepare: {:?}", r.status))),
+                        Err(e) => Some((spout_error_key(&e), e.to_string())),
+                    }
+                }),
+            };
+            let Some((key, detail)) = failure else {
+                self.sender_recovered(kind);
+                continue;
+            };
+            crate::debug_log(&format!("spout {kind:?}: {detail}"));
+            self.sender_failed(kind, out, generation, key, now);
+            let state = crate::ui::link_text::spout_send(locale, key);
+            if self.status.get(&kind) != Some(&state) {
+                self.status.insert(kind, state);
+                self.status_dirty = true;
             }
         }
     }
@@ -575,13 +709,29 @@ impl Spout {
                 return None;
             };
             let luid = token.adapter_luid();
-            let sender = match self.ensure_sender(kind, out, gpu.generation(), luid) {
+            let generation = gpu.generation();
+            let now = crate::clock::now_ms();
+            // The failure is already on the badge.
+            if self.retry_waiting(kind, out, generation, now) {
+                return None;
+            }
+            let sender = match self.ensure_sender(kind, out, generation, luid) {
                 Ok(sender) => sender,
-                Err(e) => return Some((spout_error_key(&e), e.to_string())),
+                Err(e) => {
+                    let key = spout_error_key(&e);
+                    self.sender_failed(kind, out, generation, key, now);
+                    return Some((key, e.to_string()));
+                }
             };
             let mut textures = [std::ptr::null_mut(); nana_ui::NATIVE_EXPORT_SLOTS];
             for (slot, handle) in textures.iter_mut().enumerate() {
-                *handle = token.texture_handle(slot)?.as_raw_handle();
+                let Some(texture) = token.texture_handle(slot) else {
+                    return Some((
+                        SPOUT_ERROR_KEYS[2],
+                        format!("native export slot {slot} has no shared texture"),
+                    ));
+                };
+                *handle = texture.as_raw_handle();
             }
             let [width, height] = token.extent();
             let shared = nanalive_spout::SharedTextureFrame {
@@ -620,6 +770,9 @@ impl Spout {
                 );
             if paused_failed {
                 self.senders.remove(&kind);
+            }
+            if result.is_ok() {
+                self.sender_recovered(kind);
             }
             result.err().map(|e| (spout_error_key(&e), e.to_string()))
         }
@@ -670,6 +823,31 @@ mod tests {
         assert_eq!(idle.0, None);
         idle.reconcile(false, 40_000);
         assert_eq!(idle.0, Some(70_000));
+    }
+
+    #[test]
+    fn failed_sender_waits_longer_each_time_until_settings_or_device_change() {
+        let out = Settings::default().output.display;
+        let key = SPOUT_ERROR_KEYS[1];
+        let retry = Retry::after(None, &out, 1u8, key, 100);
+        assert_eq!((retry.key, retry.at), (key, 1_100));
+        assert!(retry.waiting(&out, 1, 1_099));
+        assert!(!retry.waiting(&out, 1, 1_100));
+        let mut retry = retry;
+        let mut at = 1_100;
+        for wait in [2_000, 4_000, 8_000, 16_000, 30_000, 30_000] {
+            retry = Retry::after(Some(retry), &out, 1, key, at);
+            assert_eq!((retry.wait, retry.at), (wait, at + wait));
+            at = retry.at;
+        }
+        // Another device or other settings neither wait nor inherit the wait.
+        assert!(!retry.waiting(&out, 2, at - 1));
+        let mut resized = out.clone();
+        resized.size = Some([640, 360]);
+        assert!(!retry.waiting(&resized, 1, at - 1));
+        assert_eq!(Retry::after(Some(retry), &resized, 1, key, at).wait, 1_000);
+        let again = Retry::after(None, &out, 1, key, at);
+        assert_eq!(Retry::after(Some(again), &out, 2, key, at).wait, 1_000);
     }
 
     #[test]

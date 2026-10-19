@@ -215,6 +215,27 @@ impl Host {
         }
     }
 
+    /// Open the Spout senders before rasterizing. A sender that fails waits
+    /// before its next try, and the settings page says why.
+    #[cfg(windows)]
+    fn prepare_outputs(&mut self, context: &RuntimeProgramContext<Msg>) {
+        let locale = self.app.ui.locale.get_untracked();
+        self.app.spout.prepare(
+            &self.app.settings,
+            self.app.peer.handle.is_some(),
+            context.gpu(),
+            locale,
+        );
+        self.spout_status_changed(context);
+    }
+
+    fn spout_status_changed(&mut self, context: &RuntimeProgramContext<Msg>) {
+        if self.app.spout.take_status_changed() {
+            self.app.refresh_spout_status();
+            context.dispatch(Msg::UiChanged);
+        }
+    }
+
     fn finish(&mut self) -> RuntimeProgramUpdate {
         crate::ui::collect_effect_garbage();
         for message in crate::ui::shader_effects::take_notices() {
@@ -808,11 +829,7 @@ impl RuntimeProgram for Host {
             message => self.app.update(message),
         }
         #[cfg(windows)]
-        self.app.spout.prepare(
-            &self.app.settings,
-            self.app.peer.handle.is_some(),
-            _context.gpu(),
-        );
+        self.prepare_outputs(_context);
         self.finish()
     }
 
@@ -1153,6 +1170,7 @@ impl RuntimeProgram for Host {
                 context.dispatch(Msg::UiChanged);
             }
         }
+        self.spout_status_changed(context);
         if paused.is_some()
             && self
                 .app
@@ -1216,11 +1234,7 @@ impl RuntimeProgram for Host {
 
     fn prepare_window_frame(&mut self, id: WindowId, context: &RuntimeProgramContext<Msg>) {
         #[cfg(windows)]
-        self.app.spout.prepare(
-            &self.app.settings,
-            self.app.peer.handle.is_some(),
-            context.gpu(),
-        );
+        self.prepare_outputs(context);
         if let Some(perf) = &mut self.perf {
             perf.begin(id);
         }
