@@ -216,3 +216,44 @@ fn data_requests_cannot_name_paths_urls_or_oversized_queries() {
         "IDs are strings"
     );
 }
+
+#[test]
+fn views_at_the_protocol_budget_fit_the_execution_budget() {
+    let draw = nanatype_plugins::MAX_DRAW_COMMANDS;
+    let source = format!(
+        "return {{view=function() local d={{}} for i=1,{draw} do d[i]={{kind='rect',rect={{i%300,(i*3)%160,6,6}},color={{i%255,80,200,255}},radius=2}} end return {{views={{{{slot='panel',root={{kind='canvas',id='c',width=320,height=180,draw=d}}}}}}}} end}}"
+    );
+    let mut vm = LuaSandbox::new(&source).unwrap();
+    for _ in 0..3 {
+        let update = vm.event(&json!({"type":"line_start"})).unwrap();
+        assert!(matches!(&update.views[0].root, Node::Canvas { draw: d, .. } if d.len() == draw));
+    }
+    let over = source.replace(&format!("1,{draw}"), &format!("1,{}", draw + 1));
+    assert!(LuaSandbox::new(&over).unwrap().event(&json!({})).is_err());
+}
+
+#[test]
+fn reading_results_runs_no_plugin_code_and_accepts_only_data() {
+    // Raw reads ignore metamethods: a trap in __index/__len/__pairs never fires.
+    let mut vm = LuaSandbox::new(
+        r#"
+      local trap = function() error('host ran plugin code while reading') end
+      local text = setmetatable({kind='text', id='t', text='raw'}, {__index=trap, __len=trap, __pairs=trap})
+      return {view=function() return {views={{slot='panel', root=text}}} end}
+    "#,
+    )
+    .unwrap();
+    let update = vm.event(&json!({})).unwrap();
+    assert!(matches!(&update.views[0].root, Node::Text { text, .. } if text == "raw"));
+    for bad in [
+        "{views={{slot='panel', root={kind='text', id='t', text=print or tostring}}}}",
+        "{views={{slot='panel', root={kind='text', id='t', text='\\255\\254'}}}}",
+        "{[1.5]='x'}",
+        "{views={{slot='panel', root={kind='text', id='t', text='x', [true]=1}}}}",
+        "{views={{slot='panel', root={kind='canvas', id='c', width=0/0, height=1}}}}",
+    ] {
+        let mut vm =
+            LuaSandbox::new(&format!("return {{view=function() return {bad} end}}")).unwrap();
+        assert!(vm.event(&json!({})).is_err(), "{bad}");
+    }
+}

@@ -226,3 +226,48 @@ fn bursts_coalesce_into_the_newest_view_instead_of_lagging_behind() {
         "{posts} posts for {accepted} events: not coalesced"
     );
 }
+
+#[test]
+fn heavy_canvases_repaint_less_often_than_light_views() {
+    let draw = nanatype_plugins::MAX_DRAW_COMMANDS;
+    let heavy = format!(
+        "local n=0 return {{on_event=function() n=n+1 end, view=function() local d={{}} for i=1,{draw} do d[i]={{kind='rect',rect={{(i+n)%300,(i*3)%160,6,6}},color={{i%255,80,200,255}},radius=2}} end return {{views={{{{slot='panel',root={{kind='canvas',id='c',width=320,height=180,draw=d}}}}}}}} end}}"
+    );
+    let light = "local n=0 return {on_event=function() n=n+1 end, view=function() return {views={{slot='panel',root={kind='text',id='t',text=tostring(n)}}}} end}";
+    let mut gaps = Vec::new();
+    for source in [heavy.as_str(), light] {
+        let (sender, receiver) = mpsc::channel();
+        let worker = PluginProcess::spawn(
+            Path::new(env!("CARGO_BIN_EXE_nanatype-plugin-worker")),
+            source.into(),
+            serde_json::json!({"type": "init"}),
+            no_data(),
+            move |_| {
+                let _ = sender.send(std::time::Instant::now());
+            },
+        )
+        .unwrap();
+        receiver.recv_timeout(Duration::from_secs(20)).unwrap();
+        for _ in 0..30 {
+            let _ = worker.event(serde_json::json!({"type": "tick"}));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let mut times = Vec::new();
+        while let Ok(at) = receiver.recv_timeout(Duration::from_millis(600)) {
+            times.push(at);
+        }
+        assert!(times.len() >= 2, "too few posts to measure");
+        gaps.push(times.windows(2).map(|w| w[1] - w[0]).min().unwrap());
+    }
+    // 2048 draw commands: four extra 33 ms windows between posts.
+    assert!(
+        gaps[0] >= Duration::from_millis(150),
+        "heavy gap {:?}",
+        gaps[0]
+    );
+    assert!(
+        gaps[1] < Duration::from_millis(100),
+        "light gap {:?}",
+        gaps[1]
+    );
+}

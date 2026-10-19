@@ -169,6 +169,26 @@ pub enum DrawCommand {
 }
 
 impl PluginUpdate {
+    /// Host painting cost of this update: draw commands, with long paths
+    /// weighing more. Used to pace repaints of heavy canvases.
+    pub fn paint_cost(&self) -> usize {
+        fn cost(node: &Node) -> usize {
+            match node {
+                Node::Column { children, .. } | Node::Row { children, .. } => {
+                    children.iter().map(cost).sum()
+                }
+                Node::Canvas { draw, .. } => draw
+                    .iter()
+                    .map(|d| match d {
+                        DrawCommand::Rect { .. } => 1,
+                        DrawCommand::Path { points, .. } => 1 + points.len() / 16,
+                    })
+                    .sum(),
+                Node::Text { .. } | Node::Button { .. } => 0,
+            }
+        }
+        self.views.iter().map(|v| cost(&v.root)).sum()
+    }
     pub fn validate(&self) -> Result<(), String> {
         fn id(value: &str) -> bool {
             !value.is_empty()

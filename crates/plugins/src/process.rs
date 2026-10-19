@@ -12,6 +12,19 @@ use std::{
 
 /// At most one view update per plugin reaches the UI in this interval (~30/s).
 const POST_INTERVAL: Duration = Duration::from_millis(33);
+/// Each this many draw commands add another interval before the next post:
+/// a canvas at the protocol budget repaints about six times a second, because
+/// the host paints it on the UI thread.
+const PAINT_COST_STEP: usize = 512;
+
+fn pace(posted: &WorkerResponse) -> Duration {
+    match posted {
+        WorkerResponse::Update { update, .. } => {
+            POST_INTERVAL * (1 + update.paint_cost() / PAINT_COST_STEP) as u32
+        }
+        _ => POST_INTERVAL,
+    }
+}
 
 /// Answers a script's data request on the supervisor thread, never the UI thread.
 pub type DataAnswer = Arc<dyn Fn(&DataRequest) -> DataReply + Send + Sync>;
@@ -91,6 +104,7 @@ impl PluginProcess {
                     // supervisor keeps the worker busy and posts only the newest
                     // view, at most once per throttle window.
                     let mut last_post = std::time::Instant::now() - Duration::from_secs(1);
+                    let mut interval = POST_INTERVAL;
                     let mut rounds = 0;
                     loop {
                         let mut response = responses
@@ -117,9 +131,10 @@ impl PluginProcess {
                             write_message(&mut input, &WorkerRequest::Data { results })?;
                             continue;
                         }
-                        if last_post.elapsed() >= POST_INTERVAL
+                        if last_post.elapsed() >= interval
                             && let Some(view) = pending.take()
                         {
+                            interval = pace(&view);
                             post(view);
                             last_post = std::time::Instant::now();
                         }
@@ -128,8 +143,9 @@ impl PluginProcess {
                             Err(mpsc::TryRecvError::Empty) => {
                                 if let Some(view) = pending.take() {
                                     std::thread::sleep(
-                                        POST_INTERVAL.saturating_sub(last_post.elapsed()),
+                                        interval.saturating_sub(last_post.elapsed()),
                                     );
+                                    interval = pace(&view);
                                     post(view);
                                     last_post = std::time::Instant::now();
                                 }
