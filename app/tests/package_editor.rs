@@ -7,7 +7,7 @@ mod common;
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nanatype::{
     msg::Msg,
-    package_editor::{self as pe, Action, KeyStore, MemoryKeys, Session, Tab},
+    package_editor::{self as pe, Action, KeyStore, Session, Tab},
     ui::{self, Ui},
 };
 use nanatype_i18n::Locale;
@@ -107,14 +107,25 @@ fn export_refuses_invalid_packages_and_writes_nothing() {
 
 #[test]
 fn protected_files_stay_read_only_and_the_signature_status_is_truthful() {
-    let keys = MemoryKeys::default();
+    let dir = tempfile::tempdir().unwrap();
+    #[cfg(windows)]
+    let keys = pe::SecretKeys::new(&dir.path().join("签名密钥 日本語"));
+    #[cfg(not(windows))]
+    let keys = pe::MemoryKeys::default();
     let key = SealIdentity::generate().unwrap();
     keys.save(&key).unwrap();
+    #[cfg(windows)]
+    let keys = pe::SecretKeys::new(&dir.path().join("签名密钥 日本語"));
     let key = keys.load().unwrap().unwrap();
     let mut session = pe::create(ProjectKind::Mixed, "editor.signed").unwrap();
     session
         .sign(&key, &BTreeSet::from(["main.lua".to_owned()]))
         .unwrap();
+    let mut registry = registry(dir.path());
+    let archive = dir.path().join("签名包.ntpkg");
+    pe::export(&registry, &session.project, &archive).unwrap();
+    registry.install(&archive).unwrap();
+    let mut session = pe::open_installed(&registry, "editor.signed").unwrap();
     let view = session.view(Some(&key), false);
     let seal = view.seal.clone().unwrap().unwrap();
     assert_eq!(seal.fingerprint, key.fingerprint());
@@ -157,11 +168,80 @@ fn protected_files_stay_read_only_and_the_signature_status_is_truthful() {
     copy.edit("main.lua", "return {}").unwrap();
     session.unseal(Some(&key)).unwrap();
     session.edit("main.lua", "return {}").unwrap();
+    #[cfg(windows)]
+    {
+        let store = nanatype_secrets::SecretStore::new(
+            &dir.path().join("签名密钥 日本語"),
+            "package-signing",
+        );
+        std::fs::write(
+            dir.path().join("签名密钥 日本語/package-signing.dpapi"),
+            b"broken",
+        )
+        .unwrap();
+        assert!(keys.load().is_err());
+        store.save(b"short key").unwrap();
+        assert!(keys.load().is_err());
+    }
+}
+
+#[test]
+fn drafts_replace_saved_content_and_keep_unsaved_work_on_failure() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafts = dir.path().join("草稿 日本語");
+    let mut session = pe::create(ProjectKind::Lua, "editor.draft").unwrap();
+    assert!(!session.request_close());
+    assert!(session.view(None, false).confirm_close);
+    session.cancel_close();
+    assert!(!session.view(None, false).confirm_close);
+    session.save(&drafts).unwrap();
+    session.edit("main.lua", "return {changed = true}").unwrap();
+    session.save(&drafts).unwrap();
+    let saved = session.project.files.clone();
+    session.edit("main.lua", "return {unsaved = true}").unwrap();
+    let file = dir.path().join("not-a-directory");
+    std::fs::write(&file, b"keep").unwrap();
+    assert!(session.save(&file).is_err());
+    assert!(session.dirty());
+    assert!(!session.request_close());
+    assert!(text(&session, "main.lua").contains("unsaved"));
+    assert_eq!(
+        pe::open_draft(&drafts, &session.info.id)
+            .unwrap()
+            .project
+            .files,
+        saved
+    );
+    session.revert();
+    assert_eq!(session.project.files, saved);
+    assert!(session.request_close());
+}
+
+#[test]
+fn validation_results_cannot_replace_newer_edits_or_another_session() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = registry(dir.path());
+    let mut session = pe::create(ProjectKind::Skin, "editor.validation").unwrap();
+    let (old_ticket, old_project) = session.validation_due().unwrap();
+    let old_report = Arc::new(pe::validate(&registry, &old_project));
+    session.edit(MANIFEST, "[chrome]\naccent = 3\n").unwrap();
+    session.validated(old_ticket, old_report.clone());
+    assert!(session.view(None, false).report.skin.is_none());
+    let (ticket, project) = session.validation_due().unwrap();
+    session.validated(ticket, Arc::new(pe::validate(&registry, &project)));
+    assert!(session.view(None, false).report.errors() > 0);
+    session.validated(old_ticket, old_report.clone());
+    assert!(session.view(None, false).report.errors() > 0);
+    let mut reopened = pe::create(ProjectKind::Skin, "editor.validation").unwrap();
+    reopened.validation_due().unwrap();
+    reopened.validated(old_ticket, old_report);
+    assert!(reopened.view(None, false).validating);
+    assert!(reopened.view(None, false).report.skin.is_none());
 }
 
 /// Run `source` in the debugger until it answers, returning how long the
 /// caller was blocked and what the session shows.
-fn debug(source: &str, events: &[serde_json::Value]) -> (Duration, pe::DebugView, Session) {
+fn debug(source: &str, events: &[serde_json::Value]) -> (Duration, pe::DebugView, Session, u64) {
     let mut session = pe::create(ProjectKind::Lua, "editor.debug").unwrap();
     session.edit("main.lua", source).unwrap();
     assert!(
@@ -179,11 +259,13 @@ fn debug(source: &str, events: &[serde_json::Value]) -> (Duration, pe::DebugView
     let mut blocked = started.elapsed();
     let deadline = Instant::now() + Duration::from_secs(20);
     let mut sent = false;
+    let mut last_generation = 0;
     while Instant::now() < deadline {
         let Ok((generation, response)) = results.recv_timeout(Duration::from_millis(100)) else {
             continue;
         };
         let update = matches!(response, WorkerResponse::Update { .. });
+        last_generation = generation;
         session.debug_result(generation, &response);
         if !session.debugging() {
             break;
@@ -203,12 +285,12 @@ fn debug(source: &str, events: &[serde_json::Value]) -> (Duration, pe::DebugView
         }
     }
     let view = session.view(None, false).debug;
-    (blocked, view, session)
+    (blocked, view, session, last_generation)
 }
 
 #[test]
 fn scripts_run_only_in_the_isolated_debugger_and_report_located_errors() {
-    let (blocked, view, mut session) = debug(
+    let (blocked, view, mut session, generation) = debug(
         "local n = 0\nreturn {on_event = function(e) if e.type == 'line_start' then n = n + 1 end end,\n view = function() return {views = {{slot = 'panel', root = {kind = 'text', id = 't', text = 'n=' .. n}}}} end}\n",
         &[serde_json::json!({"type": "line_start", "id": 1, "text": "x", "markup": "x"})],
     );
@@ -216,6 +298,25 @@ fn scripts_run_only_in_the_isolated_debugger_and_report_located_errors() {
     assert!(view.running && view.error.is_none(), "{view:?}");
     let update = view.update.unwrap();
     assert!(format!("{update:?}").contains("n=1"), "{update:?}");
+    // Stopped workers cannot publish success or failure, including after restart.
+    session.stop_debug();
+    let stopped = session.view(None, false).debug;
+    let late = WorkerResponse::Error {
+        message: "late".into(),
+    };
+    session.debug_result(
+        generation,
+        &WorkerResponse::Update {
+            update,
+            requests: vec![],
+        },
+    );
+    session.debug_result(generation, &late);
+    assert_eq!(session.view(None, false).debug, stopped);
+    session.start_debug(worker(), |_, _| {}).unwrap();
+    let running = session.view(None, false).debug;
+    session.debug_result(generation, &late);
+    assert_eq!(session.view(None, false).debug, running);
     // Editing revokes trust and stops the old instance.
     session.edit("main.lua", "return {}").unwrap();
     let view = session.view(None, false).debug;
@@ -239,7 +340,7 @@ fn scripts_run_only_in_the_isolated_debugger_and_report_located_errors() {
             None,
         ),
     ] {
-        let (blocked, view, session) = debug(source, &[]);
+        let (blocked, view, session, _) = debug(source, &[]);
         assert!(
             blocked < Duration::from_millis(500),
             "{source}: {blocked:?}"
@@ -270,6 +371,33 @@ fn messages(session: &mut RuntimeAgentSession) -> Vec<Msg> {
         .into_iter()
         .filter_map(|m| m.downcast::<Msg>().ok().map(|m| *m))
         .collect()
+}
+
+fn save_from_keyboard(agent: &mut RuntimeAgentSession) {
+    let save = keyed(&agent.accessibility_dump(), "package-editor-save")
+        .unwrap()
+        .id;
+    let focused = |agent: &RuntimeAgentSession| {
+        agent
+            .accessibility_dump()
+            .iter()
+            .any(|n| n.id == save && n.focused)
+    };
+    for _ in 0..40 {
+        if focused(agent) {
+            break;
+        }
+        agent.key_press("Tab", "Tab", Default::default()).unwrap();
+    }
+    assert!(focused(agent), "Save is reachable with Tab");
+    agent
+        .key_press("Enter", "Enter", Default::default())
+        .unwrap();
+    assert!(
+        messages(agent)
+            .iter()
+            .any(|m| matches!(m, Msg::PackageEditor(Action::Save)))
+    );
 }
 
 #[test]
@@ -333,6 +461,9 @@ fn the_editor_fits_narrow_widths_in_every_language_and_works_from_the_keyboard()
                             .join(format!("{}-{tab:?}-{width}.png", locale.tag()).to_lowercase()),
                     )
                     .unwrap();
+                if tab == Tab::Files {
+                    save_from_keyboard(&mut agent);
+                }
             }
         }
     }
@@ -377,36 +508,7 @@ fn the_editor_fits_narrow_widths_in_every_language_and_works_from_the_keyboard()
     agent
         .screenshot_png(captures.join("settings-window-900.png"))
         .unwrap();
-    let save = agent
-        .accessibility_dump()
-        .into_iter()
-        .find(|n| {
-            n.agent_path
-                .as_deref()
-                .is_some_and(|p| p.ends_with("package-editor-save"))
-        })
-        .unwrap();
-    let focused = |agent: &RuntimeAgentSession| {
-        agent
-            .accessibility_dump()
-            .iter()
-            .any(|n| n.id == save.id && n.focused)
-    };
-    for _ in 0..40 {
-        if focused(&agent) {
-            break;
-        }
-        agent.key_press("Tab", "Tab", Default::default()).unwrap();
-    }
-    assert!(focused(&agent), "Save is reachable with Tab");
-    agent
-        .key_press("Enter", "Enter", Default::default())
-        .unwrap();
-    assert!(
-        messages(&mut agent)
-            .iter()
-            .any(|m| matches!(m, Msg::PackageEditor(Action::Save)))
-    );
+    save_from_keyboard(&mut agent);
     // Typing into the editable source sends the edit for that file.
     let source = agent
         .accessibility_dump()

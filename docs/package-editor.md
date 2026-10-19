@@ -88,7 +88,9 @@
 
 ```sh
 cargo test -p nanatype-theme editor
-cargo test -p nanatype --test package_editor
+cargo test -p nanatype --test package_editor -- --test-threads=1
 ```
 
-界面测试会在 `target/package-editor/` 下生成截图，覆盖中文、英文、日文三种语言，900／440／300px 三种宽度，以及文件、包信息（含展开的数据与管线表单）、签名、调试、预览（含输入窗口）各页。
+GPU 界面测试串行执行，在 `target/package-editor/` 下生成中英日 × 900／440／300px 的文件、包信息（含数据／管线表单）、签名、调试与预览截图；九种组合均检查 Tab／Enter 保存。
+Windows 签名测试使用临时目录中的真实 DPAPI 密钥，覆盖重新加载、导出／安装及损坏存储拒绝读取；草稿失败恢复与过期校验各有独立回归，迟到的调试响应并入原有隔离调试测试。
+28 个内置皮肤的 168 张预览截图作为一次性 Windows 验收证据保存在 `target/package-editor/builtins/`，日常测试保留展示／历史及樱花输入预览。原生窗口 DPI、IME、系统文件选择器和安装包仍属于阶段 5 的平台验收。
