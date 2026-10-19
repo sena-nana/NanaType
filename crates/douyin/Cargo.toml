@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "Douyin live chat with native Rust signing, transport and decoding"
 
 [dependencies]
+nanatype-secrets.workspace = true
 serde_json.workspace = true
 crossbeam-channel = "0.5"
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
@@ -19,10 +20,6 @@ sm3 = "0.4"
 getrandom = "0.4"
 url = "2"
 
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
-[target.'cfg(target_os = "macos")'.dependencies]
-security-framework = "3"
 
 [dev-dependencies]
 tempfile = "3"

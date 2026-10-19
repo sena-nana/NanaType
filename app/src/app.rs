@@ -1376,10 +1376,22 @@ impl App {
             },
             Event::LineSubmitted(_) | Event::LineRevealed(_) | Event::Queued { .. } => return,
         };
-        if self.plugins.has_running()
-            && let Ok(event) = serde_json::to_value(&out)
-        {
-            self.plugins.broadcast(event, self.ui);
+        if self.plugins.has_running() {
+            // Plugins can draw into the streamed display slot: never hand
+            // them the user's absolute file paths.
+            let plugin_out = match (&out, event) {
+                (BridgeEvent::LineStart { id, text, .. }, Event::LineStarted(line)) => {
+                    BridgeEvent::LineStart {
+                        id: *id,
+                        text: text.clone(),
+                        markup: serialize(&without_local_paths(&line.doc)),
+                    }
+                }
+                _ => out.clone(),
+            };
+            if let Ok(event) = serde_json::to_value(&plugin_out) {
+                self.plugins.broadcast(event, self.ui);
+            }
         }
         self.bridge.emit(out);
     }
@@ -1838,6 +1850,7 @@ impl App {
                 Ok(()) => {
                     self.edit(|s| {
                         s.enabled_plugins.retain(|p| p != &id);
+                        s.plugin_approvals.remove(&id);
                         if s.skin.id == id {
                             s.skin.id = nanatype_theme::DEFAULT_SKIN.into();
                         }
@@ -3025,4 +3038,21 @@ mod typography_tests {
         apply_source_markup(&mut src, MarkupEdit::Align(None));
         assert_eq!(parse(&src.text).doc, before.doc);
     }
+}
+
+/// `doc` with picked files reduced to their names.
+fn without_local_paths(doc: &Document) -> Document {
+    let mut doc = doc.clone();
+    for inline in doc.paragraphs.iter_mut().flat_map(|p| p.inlines.iter_mut()) {
+        if let Inline::Atom(atom) = inline
+            && let AssetRef::File(path) = &atom.asset
+        {
+            let name = std::path::Path::new(path)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            atom.asset = AssetRef::File(name);
+        }
+    }
+    doc
 }

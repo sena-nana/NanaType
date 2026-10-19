@@ -99,3 +99,12 @@ fn protected_lua_errors_work_without_catching_host_execution_limits() {
     assert!(vm.event(&json!({})).unwrap().views.is_empty());
     assert!(LuaSandbox::new("pcall(function() while true do end end); return {}").is_err());
 }
+
+#[test]
+fn long_non_ascii_event_text_fits_the_source_budget() {
+    let mut vm=LuaSandbox::new("local n=0; return {on_event=function(e) n=#e.text end,view=function() return {views={{slot='panel',root={kind='text',id='x',text=tostring(n)}}}} end}").unwrap();
+    // 96 KiB of CJK: escaping every byte as \ddd used to quadruple it past 256 KiB.
+    let text = "字".repeat(32 * 1024);
+    let update = vm.event(&json!({"text":text})).unwrap();
+    assert!(matches!(&update.views[0].root,Node::Text{text,..} if text=="98304"));
+}

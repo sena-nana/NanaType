@@ -4748,6 +4748,7 @@ dependencies = [
  "nanatype-p2p",
  "nanatype-playback",
  "nanatype-plugins",
+ "nanatype-secrets",
  "nanatype-settings",
  "nanatype-theme",
  "notify",
@@ -4791,14 +4792,13 @@ dependencies = [
  "flate2",
  "md-5",
  "nanatype-model",
- "security-framework",
+ "nanatype-secrets",
  "serde",
  "serde_json",
  "tempfile",
  "tungstenite",
  "unicode-segmentation",
  "ureq",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4835,15 +4835,14 @@ dependencies = [
  "flate2",
  "getrandom 0.4.3",
  "md-5",
+ "nanatype-secrets",
  "prost",
- "security-framework",
  "serde_json",
  "sm3",
  "tempfile",
  "tungstenite",
  "ureq",
  "url",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4907,6 +4906,15 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "wasmtime",
+]
+
+[[package]]
+name = "nanatype-secrets"
+version = "0.1.0"
+dependencies = [
+ "security-framework",
+ "tempfile",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "Authenticated Bilibili live chat and typewriter delivery"
 
 [dependencies]
+nanatype-secrets.workspace = true
 nanatype-model.workspace = true
 serde.workspace = true
 unicode-segmentation.workspace = true
@@ -18,10 +19,6 @@ serde_json.workspace = true
 tungstenite = { version = "0.30", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
 crossbeam-channel = "0.5"
 
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
-[target.'cfg(target_os = "macos")'.dependencies]
-security-framework = "3"
 
 [dev-dependencies]
 tempfile = "3"

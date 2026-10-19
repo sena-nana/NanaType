@@ -1,6 +1,7 @@
 //! Only MTProto authorization keys and DC endpoints are persisted. No phone,
 //! API hash, password, contacts, messages, or update history is stored.
 use grammers_session::{BoxFuture, Session, SessionData, storages::MemorySession, types::*};
+use nanatype_secrets::SecretStore;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -16,57 +17,64 @@ struct Saved {
 }
 
 pub struct Store {
-    path: PathBuf,
+    secret: SecretStore,
     saved: Mutex<Saved>,
     memory: MemorySession,
 }
 
+/// The authorization key grants full account access, so it lives in protected
+/// storage: DPAPI ciphertext at `path` on Windows, the Keychain on macOS.
+fn secret(path: &Path) -> SecretStore {
+    SecretStore::at(path.to_owned(), "telegram")
+}
+
 impl Store {
     pub fn open(path: PathBuf) -> io::Result<Self> {
+        let secret = secret(&path);
         let data = SessionData::default();
-        let saved = match fs::read(&path) {
-            Ok(bytes) => {
-                serde_json::from_slice(&protect(&bytes, false)?).map_err(io::Error::other)?
-            }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => Saved {
-                home: data.home_dc,
-                dcs: data.dc_options,
+        let saved = match secret.load()? {
+            Some(bytes) => serde_json::from_slice(&bytes).map_err(io::Error::other)?,
+            None => match migrate_plaintext(&path, &secret)? {
+                Some(saved) => saved,
+                None => Saved {
+                    home: data.home_dc,
+                    dcs: data.dc_options,
+                },
             },
-            Err(e) => return Err(e),
         };
         Ok(Self {
-            path,
+            secret,
             saved: Mutex::new(saved),
             memory: Default::default(),
         })
     }
     fn save(&self, saved: &Saved) -> io::Result<()> {
-        let bytes = protect(&serde_json::to_vec(saved)?, true)?;
-        fs::create_dir_all(
-            self.path
-                .parent()
-                .ok_or_else(|| io::Error::other("Missing session directory"))?,
-        )?;
-        let temp = self.path.with_extension("part");
-        let mut options = fs::OpenOptions::new();
-        options.create(true).truncate(true).write(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        use std::io::Write;
-        let mut file = options.open(&temp)?;
-        file.write_all(&bytes)?;
-        file.sync_all()?;
-        drop(file);
-        fs::rename(temp, &self.path)
+        self.secret.save(&serde_json::to_vec(saved)?)
     }
     fn data(&self) -> io::Result<std::sync::MutexGuard<'_, Saved>> {
         self.saved
             .lock()
             .map_err(|_| io::Error::other("Telegram session lock poisoned"))
     }
+}
+
+/// Earlier macOS builds wrote the session as plain JSON at `path`; move it
+/// into the Keychain and delete the file.
+#[cfg(not(windows))]
+fn migrate_plaintext(path: &Path, secret: &SecretStore) -> io::Result<Option<Saved>> {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    let saved = serde_json::from_slice(&bytes).map_err(io::Error::other)?;
+    secret.save(&bytes)?;
+    fs::remove_file(path)?;
+    Ok(Some(saved))
+}
+#[cfg(windows)]
+fn migrate_plaintext(_: &Path, _: &SecretStore) -> io::Result<Option<Saved>> {
+    Ok(None)
 }
 
 impl Session for Store {
@@ -111,62 +119,16 @@ impl Session for Store {
     }
 }
 
-#[cfg(windows)]
-fn protect(bytes: &[u8], encrypt: bool) -> io::Result<Vec<u8>> {
-    use windows::{
-        Win32::{
-            Foundation::{HLOCAL, LocalFree},
-            Security::Cryptography::*,
-        },
-        core::PCWSTR,
-    };
-    let input = CRYPT_INTEGER_BLOB {
-        cbData: bytes.len() as u32,
-        pbData: bytes.as_ptr() as *mut u8,
-    };
-    let mut output = CRYPT_INTEGER_BLOB::default();
-    unsafe {
-        if encrypt {
-            CryptProtectData(
-                &input,
-                PCWSTR::null(),
-                None,
-                None,
-                None,
-                CRYPTPROTECT_UI_FORBIDDEN,
-                &mut output,
-            )
-        } else {
-            CryptUnprotectData(
-                &input,
-                None,
-                None,
-                None,
-                None,
-                CRYPTPROTECT_UI_FORBIDDEN,
-                &mut output,
-            )
-        }
-        .map_err(io::Error::other)?;
-        let bytes = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();
-        LocalFree(Some(HLOCAL(output.pbData.cast())));
-        Ok(bytes)
-    }
-}
-
-#[cfg(not(windows))]
-fn protect(bytes: &[u8], _: bool) -> io::Result<Vec<u8>> {
-    Ok(bytes.to_vec())
-}
-
 pub fn remove(path: &Path) -> io::Result<()> {
+    secret(path).clear()?;
     match fs::remove_file(path) {
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
         other => other,
     }
 }
 
-#[cfg(test)]
+// Real protected storage: DPAPI needs no prompt; the Keychain may.
+#[cfg(all(test, windows))]
 mod tests {
     use super::*;
     #[test]
@@ -184,7 +146,6 @@ mod tests {
             loaded.dc_option(4).unwrap().unwrap().auth_key,
             Some([42; 256])
         );
-        #[cfg(windows)]
         assert!(!String::from_utf8_lossy(&fs::read(&path).unwrap()).contains("auth_key"));
         remove(&path).unwrap();
     }

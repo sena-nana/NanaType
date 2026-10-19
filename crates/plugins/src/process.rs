@@ -98,15 +98,38 @@ impl PluginProcess {
             })?;
         Ok(Self { sender, child })
     }
-    pub fn event(&self, event: serde_json::Value) -> Result<(), String> {
-        if serde_json::to_vec(&event).map_err(|e| e.to_string())?.len()
+    pub fn event(&self, event: serde_json::Value) -> Result<(), EventError> {
+        if serde_json::to_vec(&event)
+            .map_err(|_| EventError::TooLarge)?
+            .len()
             > crate::MAX_MESSAGE_BYTES / 2
         {
-            return Err("plugin event exceeds budget".into());
+            return Err(EventError::TooLarge);
         }
         self.sender
             .try_send(WorkerRequest::Event { event })
-            .map_err(|_| "plugin event queue full or stopped".into())
+            .map_err(|e| match e {
+                mpsc::TrySendError::Full(_) => EventError::Busy,
+                mpsc::TrySendError::Disconnected(_) => EventError::Stopped,
+            })
+    }
+}
+
+/// Why an event was not queued. Only `Stopped` means the worker is gone;
+/// a busy or oversized event is dropped and the plugin keeps running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventError {
+    TooLarge,
+    Busy,
+    Stopped,
+}
+impl std::fmt::Display for EventError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::TooLarge => "plugin event exceeds budget",
+            Self::Busy => "plugin event queue full",
+            Self::Stopped => "plugin stopped",
+        })
     }
 }
 impl Drop for PluginProcess {

@@ -320,10 +320,14 @@ impl SkinFiles for ZipFiles {
         let mut entry = archive
             .by_name(&format!("{}{path}", self.prefix))
             .map_err(|_| FileError::Missing(path.clone()))?;
-        let mut out = Vec::with_capacity(entry.size() as usize);
+        // `open` budgeted the declared sizes, and the decoder does not enforce
+        // them: an entry inflating past its declaration would let an archive
+        // under the package budget write far more than it to disk.
+        let declared = entry.size();
+        let mut out = Vec::with_capacity(declared as usize);
         entry
             .by_ref()
-            .take(MAX_FILE_BYTES + 1)
+            .take(declared.min(MAX_FILE_BYTES) + 1)
             .read_to_end(&mut out)
             .map_err(|e| FileError::Io(e.to_string()))?;
         if out.len() as u64 > MAX_FILE_BYTES {
@@ -331,6 +335,11 @@ impl SkinFiles for ZipFiles {
                 path,
                 bytes: out.len() as u64,
             });
+        }
+        if out.len() as u64 != declared {
+            return Err(FileError::Io(format!(
+                "{path}: archive entry size does not match its declaration"
+            )));
         }
         Ok(out)
     }

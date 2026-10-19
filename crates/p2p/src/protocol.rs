@@ -11,6 +11,13 @@ pub const VERSION: u32 = 1;
 pub const MAX_FRAME: usize = 8 * 1024 * 1024;
 pub const MAX_ASSET: usize = 16 * 1024 * 1024;
 pub const MAX_ENTRIES: usize = 1000;
+/// Serialized budget of one participant's track, and of one submitted line.
+/// Two tracks plus history must fit in a room frame.
+pub const MAX_TRACK: usize = MAX_FRAME / 4;
+
+fn json_len<T: Serialize>(value: &T) -> usize {
+    serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Invite {
@@ -90,9 +97,31 @@ impl TrackSnapshot {
             return Err("Session state exceeds limits".into());
         }
         std::sync::Arc::make_mut(&mut self.display.doc).normalize();
+        let units = self.display.doc.unit_count() as u32;
+        self.display.reveal.clamp(units);
+        if let Some(mirror) = &mut self.display.mirror_reveal_ms
+            && mirror.len() > units as usize
+        {
+            *mirror = mirror[..units as usize].into();
+        }
         for row in &mut self.rows {
             row.item.doc.normalize();
             std::sync::Arc::make_mut(&mut row.doc).normalize();
+            let units = row.doc.unit_count() as u32;
+            if let Some(reveal) = &mut row.reveal {
+                reveal.clamp(units);
+            }
+        }
+        // Over budget: drop the oldest rows rather than the whole track.
+        let mut size = json_len(self);
+        let mut drop = 0;
+        while size > MAX_TRACK && drop < self.rows.len() {
+            size = size.saturating_sub(json_len(&self.rows[drop]) + 1);
+            drop += 1;
+        }
+        self.rows.drain(..drop);
+        if size > MAX_TRACK {
+            return Err("Session state exceeds limits".into());
         }
         Ok(())
     }
@@ -138,6 +167,9 @@ impl Room {
             return false;
         }
         line.doc.normalize();
+        if json_len(&line) > MAX_TRACK {
+            return false;
+        }
         self.accepted.insert(participant.into(), sequence);
         let id = MessageId {
             session: self.session.clone(),
@@ -175,22 +207,33 @@ impl Room {
 
     fn compact(&mut self) {
         // Leave room for the frame wrapper and both live display documents.
-        while !self.entries.is_empty()
-            && (self.entries.len() > MAX_ENTRIES
-                || serde_json::to_vec(self).is_ok_and(|bytes| bytes.len() > MAX_FRAME * 3 / 4))
+        // The size is tracked incrementally: re-serializing the room per
+        // dropped entry made a large room quadratic to compact.
+        let budget = MAX_FRAME * 3 / 4;
+        let mut size = json_len(self);
+        let mut drop = 0;
+        while drop < self.entries.len()
+            && (self.entries.len() - drop > MAX_ENTRIES || size > budget)
         {
-            let entry = self.entries.remove(0);
+            let entry = &self.entries[drop];
+            size = size.saturating_sub(json_len(entry) + 1);
             let retired = self
                 .retired_before
                 .entry(entry.id.participant.clone())
                 .or_default();
             *retired = (*retired).max(entry.line.id.0);
             if let Some(track) = self.tracks.get_mut(&entry.id.participant) {
-                track
-                    .rows
-                    .retain(|row| row.item.line.is_none_or(|line| line.0 > *retired));
+                track.rows.retain(|row| {
+                    let keep = row.item.line.is_none_or(|line| line.0 > *retired);
+                    if !keep {
+                        size = size.saturating_sub(json_len(row) + 1);
+                    }
+                    keep
+                });
             }
+            drop += 1;
         }
+        self.entries.drain(..drop);
     }
 
     /// Receiver-local IDs cannot collide with local process IDs or each other.
@@ -369,6 +412,43 @@ mod tests {
         assert_eq!(room.entries.len(), MAX_ENTRIES);
         assert!(!room.submit("a", 1, line, None));
         assert_eq!(room.entries[0].order, 3);
+    }
+    #[test]
+    fn untrusted_reveal_indices_are_bounded_by_the_document() {
+        let mut display = DisplayView::empty(nanatype_model::Entrance {
+            kind: nanatype_model::EntranceKind::Fade,
+            ms: 180,
+        });
+        display.doc = Document::plain("abc").into();
+        display.reveal = Reveal {
+            visible_from: 0,
+            shown: u32::MAX,
+            hidden_from: u32::MAX,
+            segment: None,
+        };
+        display.text_exit = Some(nanatype_core::TextExit { at_ms: 0, ms: 100 });
+        let mut track = TrackSnapshot {
+            revision: 1,
+            captured_ms: 0,
+            age_ms: 0,
+            name: "guest".into(),
+            display,
+            rows: Vec::new(),
+            portraits: Vec::new(),
+        };
+        track.validate().unwrap();
+        assert_eq!(track.display.reveal.hidden_from, 3);
+        // Previously iterated u32::MAX units on the UI thread.
+        rebase_display(&mut track.display, 0, 0);
+        assert_eq!(track.display.reveal.hidden_from, 3);
+    }
+    #[test]
+    fn oversized_submissions_are_refused() {
+        let mut room = Room::new("s".into(), "a".into());
+        let mut line = Line::new(Document::new(), Speaker::default());
+        line.speaker.name = "x".repeat(MAX_TRACK + 1);
+        assert!(!room.submit("b", 1, line, None));
+        assert!(room.entries.is_empty());
     }
     #[test]
     fn owners_with_the_same_local_line_id_get_distinct_render_ids() {

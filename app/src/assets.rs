@@ -15,6 +15,27 @@ use crate::services::media;
 
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp"];
 
+/// Decoder limits for images from outside the app: a few compressed bytes
+/// must not decode into hundreds of megabytes.
+pub fn image_limits(max_side: u32, max_alloc: u64) -> image::Limits {
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(max_side);
+    limits.max_image_height = Some(max_side);
+    limits.max_alloc = Some(max_alloc);
+    limits
+}
+
+/// Decode untrusted image bytes under [`image_limits`].
+pub fn decode_image(
+    bytes: &[u8],
+    max_side: u32,
+    max_alloc: u64,
+) -> image::ImageResult<image::DynamicImage> {
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format()?;
+    reader.limits(image_limits(max_side, max_alloc));
+    reader.decode()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sticker {
     pub lib: String,

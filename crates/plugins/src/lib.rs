@@ -3,6 +3,6 @@
 mod process;
 mod protocol;
 mod runtime;
-pub use process::{PluginProcess, run_worker};
+pub use process::{EventError, PluginProcess, run_worker};
 pub use protocol::*;
 pub use runtime::LuaSandbox;

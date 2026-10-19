@@ -230,11 +230,7 @@ fn read(path: &std::path::Path) -> Result<image::RgbaImage, String> {
         return Err("Cached frame exceeds size limit".into());
     }
     let mut reader = image::ImageReader::open(path).map_err(|e| e.to_string())?;
-    let mut limits = image::Limits::default();
-    limits.max_alloc = Some(16 * 1024 * 1024);
-    limits.max_image_width = Some(1024);
-    limits.max_image_height = Some(1024);
-    reader.limits(limits);
+    reader.limits(crate::assets::image_limits(1024, 16 * 1024 * 1024));
     Ok(reader.decode().map_err(|e| e.to_string())?.into_rgba8())
 }
 

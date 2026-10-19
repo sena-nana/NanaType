@@ -313,9 +313,18 @@ fn lua_value(value: &serde_json::Value) -> String {
         serde_json::Value::Bool(b) => b.to_string(),
         serde_json::Value::Number(n) => n.to_string(),
         serde_json::Value::String(s) => {
-            let mut out = String::from("\"");
-            for byte in s.as_bytes() {
-                out.push_str(&format!("\\{byte:03}"));
+            // Inside a quoted Lua string only quotes, backslashes and control
+            // bytes need escapes; UTF-8 passes through, so the source stays
+            // about the size of the event's JSON.
+            let mut out = String::with_capacity(s.len() + 2);
+            out.push('"');
+            for c in s.chars() {
+                match c {
+                    '"' => out.push_str("\\\""),
+                    '\\' => out.push_str("\\\\"),
+                    c if c.is_ascii_control() => out.push_str(&format!("\\{:03}", c as u8)),
+                    c => out.push(c),
+                }
             }
             out.push('"');
             out

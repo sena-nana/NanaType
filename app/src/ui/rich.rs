@@ -487,7 +487,8 @@ fn badge_icon_paths(source: &str, width: f32, round: bool) -> Option<String> {
     if std::fs::metadata(&path).ok()?.len() > 64 * 1024 {
         return None;
     }
-    let image = image::load_from_memory(&std::fs::read(path).ok()?).ok()?;
+    let image =
+        crate::assets::decode_image(&std::fs::read(path).ok()?, 1024, 16 * 1024 * 1024).ok()?;
     let side = (width - 4.).round().clamp(8., 32.) as u32;
     let image = image
         .resize_to_fill(side, side, image::imageops::FilterType::Triangle)

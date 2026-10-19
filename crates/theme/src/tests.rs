@@ -2137,3 +2137,27 @@ fn responsive_inheritance_keeps_configuration_and_exports_all_variant_assets() {
     );
     assert!(load_dir(dir.path()).is_err());
 }
+
+#[test]
+fn archive_entries_cannot_inflate_past_their_declared_size() {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = tmp.path().join("bomb.ntpkg");
+    let mut zip = zip::ZipWriter::new(fs::File::create(&archive).unwrap());
+    let opts = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file("a.txt", opts).unwrap();
+    zip.write_all(&[b'a'; 64 * 1024]).unwrap();
+    zip.finish().unwrap();
+    // Declare 1 byte in the central directory (uncompressed size, offset 24).
+    let mut bytes = fs::read(&archive).unwrap();
+    let central = bytes
+        .windows(4)
+        .rposition(|w| w == [0x50, 0x4b, 0x01, 0x02])
+        .unwrap();
+    bytes[central + 24..central + 28].copy_from_slice(&1u32.to_le_bytes());
+    fs::write(&archive, bytes).unwrap();
+
+    let files = ZipFiles::open(&archive).unwrap();
+    assert_eq!(files.file_len("a.txt").unwrap(), 1);
+    assert!(files.read("a.txt").is_err());
+}

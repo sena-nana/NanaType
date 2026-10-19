@@ -169,20 +169,25 @@ impl Manager {
             .ok_or_else(|| "plugin is not running".to_owned())?
             .1
             .event(event)
+            .map_err(|e| e.to_string())
     }
+    /// A plugin that cannot keep up (a busy chat) misses events; only a
+    /// stopped worker is removed.
     pub fn broadcast(&mut self, event: serde_json::Value, ui: Ui) {
-        let failed: Vec<_> = self
+        let stopped: Vec<_> = self
             .running
             .iter()
-            .filter_map(|(id, (_, process))| {
-                process
-                    .event(event.clone())
-                    .err()
-                    .map(|error| (id.clone(), error))
+            .filter(|(_, (_, process))| {
+                process.event(event.clone()) == Err(nanatype_plugins::EventError::Stopped)
             })
+            .map(|(id, _)| id.clone())
             .collect();
-        for (id, error) in failed {
-            self.remove(&id, Some(error), ui);
+        for id in stopped {
+            self.remove(
+                &id,
+                Some(nanatype_plugins::EventError::Stopped.to_string()),
+                ui,
+            );
         }
     }
 

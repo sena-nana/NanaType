@@ -63,6 +63,21 @@ impl Reveal {
         )
     }
 
+    /// Bound every index to `units` so a reveal from an untrusted peer can
+    /// never describe more units than its document has.
+    pub fn clamp(&mut self, units: u32) {
+        self.hidden_from = self.hidden_from.min(units);
+        self.shown = self.shown.min(units);
+        self.visible_from = self.visible_from.min(units);
+        if let Some(seg) = &mut self.segment {
+            seg.start = seg.start.min(units);
+            let len = (units - seg.start) as usize;
+            if seg.reveal_ms.len() > len {
+                seg.reveal_ms = seg.reveal_ms[..len].into();
+            }
+        }
+    }
+
     /// The same reveal for the page alone ([`Document::suffix`] from
     /// `visible_from`): unit `u` here is unit `u + visible_from` of the line.
     pub fn rebased(&self) -> Reveal {

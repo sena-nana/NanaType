@@ -743,7 +743,9 @@ pub struct AssetSettings {
 #[serde(default)]
 pub struct TelegramSettings {
     pub api_id: i32,
-    /// SOCKS5 URL. Login codes, API hashes and passwords are never settings.
+    /// SOCKS5 URL. Login codes, API hashes and account passwords are never
+    /// settings; a proxy's own `user:password@` part is, so the hint tells
+    /// users to prefer an unauthenticated local proxy.
     pub proxy: String,
 }
 

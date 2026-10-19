@@ -173,11 +173,20 @@ async fn write<T: Serialize>(send: &mut SendStream, value: &T) -> Result<(), Str
     .map_err(|_| "Session write timed out".to_string())?
 }
 
+/// An unauthenticated peer may only send a hello this large.
+const MAX_HELLO: usize = 1024;
+/// Sustained frames per second accepted from a peer; more are delayed.
+const MAX_FRAMES_PER_SECOND: u32 = 40;
+
 async fn read<T: DeserializeOwned>(recv: &mut RecvStream) -> Result<T, String> {
+    read_limited(recv, MAX_FRAME).await
+}
+
+async fn read_limited<T: DeserializeOwned>(recv: &mut RecvStream, max: usize) -> Result<T, String> {
     let mut len = [0; 4];
     recv.read_exact(&mut len).await.map_err(|e| e.to_string())?;
     let len = u32::from_be_bytes(len) as usize;
-    if len > MAX_FRAME {
+    if len > max {
         return Err("Session frame exceeds limit".into());
     }
     let mut bytes = vec![0; len];
@@ -372,11 +381,13 @@ async fn run(
                         }
                         let (mut send, mut recv) =
                             conn.accept_bi().await.map_err(|e| e.to_string())?;
-                        match read::<Frame>(&mut recv).await? {
+                        match read_limited::<Frame>(&mut recv, MAX_HELLO).await? {
+                            // blake3::Hash compares in constant time.
                             Frame::Hello { v, session, secret }
                                 if v == VERSION
                                     && session == invite.session
-                                    && secret == invite.secret => {}
+                                    && blake3::hash(secret.as_bytes())
+                                        == blake3::hash(invite.secret.as_bytes()) => {}
                             _ => {
                                 conn.close(1u8.into(), b"unauthorized");
                                 return Err("Invalid session credentials".into());
@@ -458,7 +469,19 @@ async fn run(
         }
         let (in_tx, mut in_rx) = mpsc::channel(32);
         let reader = tokio::spawn(async move {
+            let mut window = Instant::now();
+            let mut frames = 0;
             loop {
+                if window.elapsed() >= Duration::from_secs(1) {
+                    window = Instant::now();
+                    frames = 0;
+                } else if frames >= MAX_FRAMES_PER_SECOND {
+                    tokio::time::sleep(Duration::from_secs(1).saturating_sub(window.elapsed()))
+                        .await;
+                    window = Instant::now();
+                    frames = 0;
+                }
+                frames += 1;
                 let frame = read::<Frame>(&mut recv).await;
                 let done = frame.is_err();
                 if in_tx.send(frame).await.is_err() || done {

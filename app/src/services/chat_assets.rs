@@ -18,6 +18,23 @@ const MAX_BYTES: u64 = 4 * 1024 * 1024;
 const AVATAR_PX: u32 = 128;
 const EMOTE_PX: u32 = 160;
 const WORKERS: usize = 4;
+/// Downloaded viewer and peer pictures unused this long are deleted at start.
+/// Pasted images share the folder but are history content and never pruned.
+const CACHE_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 3600);
+const CACHE_PREFIXES: &[&str] = &["bili-", "douyin-", "p2p-"];
+
+/// Remove stale downloaded pictures; a later message downloads them again.
+fn prune_cache(dir: &Path) {
+    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if CACHE_PREFIXES.iter().any(|p| name.starts_with(p))
+            && file_age(&entry.path()).is_some_and(|age| age > CACHE_MAX_AGE)
+        {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
 
 /// Account artwork uses the same bounded image format/cache as viewer artwork.
 pub fn cache_profile_avatar(
@@ -119,6 +136,12 @@ impl ChatAssets {
         let (jobs, work) = bounded::<Job>(512);
         let requests = Arc::new(Mutex::new(Requests::default()));
         let ready = Arc::new(ready);
+        {
+            let dir = blob_dir.clone();
+            let _ = thread::Builder::new()
+                .name("nanatype-chat-prune".into())
+                .spawn(move || prune_cache(&dir));
+        }
         for n in 0..WORKERS {
             let work = work.clone();
             let dir = blob_dir.clone();
@@ -135,6 +158,7 @@ impl ChatAssets {
                             let mut state = requests.lock().unwrap();
                             state.pending.remove(&job.name);
                             if result.is_err() {
+                                state.failed.retain(|_, at| at.elapsed() < RETRY_AFTER);
                                 state.failed.insert(job.url.clone(), Instant::now());
                             }
                         }
@@ -235,6 +259,9 @@ impl Saver {
         }
     }
     fn download(&self, url: &str, path: &Path, px: u32) -> Result<(), String> {
+        if !(url.starts_with("https://") || url.starts_with("http://")) {
+            return Err("unsupported image URL".into());
+        }
         let mut response = self.agent.get(url).call().map_err(|e| e.to_string())?;
         let bytes = response
             .body_mut()
@@ -242,7 +269,8 @@ impl Saver {
             .limit(MAX_BYTES)
             .read_to_vec()
             .map_err(|e| e.to_string())?;
-        let image = image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
+        let image = crate::assets::decode_image(&bytes, 4096, 64 * 1024 * 1024)
+            .map_err(|e| e.to_string())?;
         let image = if image.width() > px || image.height() > px {
             image.thumbnail(px, px)
         } else {

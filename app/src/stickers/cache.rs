@@ -116,11 +116,7 @@ pub fn animations() -> Vec<Arc<CachedImage>> {
         .collect()
 }
 fn limits() -> image::Limits {
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(4096);
-    limits.max_image_height = Some(4096);
-    limits.max_alloc = Some(128 * 1024 * 1024);
-    limits
+    crate::assets::image_limits(4096, 128 * 1024 * 1024)
 }
 
 pub fn prepare(
