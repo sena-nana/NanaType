@@ -580,7 +580,11 @@ exit_ms = 400           # 随后在剩余 320ms 内全文随机消失
 
 继承皮肤同样需要显式声明才能启用此行为：`dialogue.responsive = {}` 可直接继承基础皮肤的两套布局和资源；省略该声明的旧子皮肤继续使用自己的原有布局。
 
-`landscape`、`portrait` 是布局覆盖，支持 `padding`、`box`、`nameplate`、`continue`、`portrait`（头像）、`decor`、`shader_effects`。每个出现的复合字段完整替换该部分，未出现的字段沿用基础皮肤；正文排版参数仍来自用户个性化设置。装饰应分层使用原生边框、九宫格与独立图片，不能用一张横版整图拉伸代替竖版构图。
+`landscape`、`portrait` 是布局覆盖，支持 `padding`、`box`、`nameplate`、`continue`、`portrait`（头像）、`decor`、`shader_effects`。其中 `box`、`nameplate`、`continue`、`portrait` 是局部覆盖：只写与基础展示框不同的字段，加载时深度合并到 `[dialogue]` 的同名部分（嵌套表逐字段合并）。数组不逐项合并而是整体替换，包括 `padding`、`decor`、`shader_effects` 以及各部分内部的 `shadows`、`stops`、`polygon` 等。基础中有、布局中要去掉的可选字段写进 `unset`，用点分路径列出，例如 `unset = ["box.frame", "nameplate.gradient"]`；它在合并之后执行，只作用于该布局写出的部分（可以是空表），路径不存在时给出警告。
+
+布局只要出现某个部分（哪怕是空表 `box = {}`），匹配时就用“基础展示框 + 该布局的差异”整体替换这一部分，同时覆盖方向布局或更早规则对它的设置；未出现的部分保持前一层的结果。正文排版参数仍来自用户个性化设置。早期写法中完整写出的部分仍是合法覆盖，只是其中省略的可选字段（如 `frame`）现在沿用基础值，需要去掉时改写进 `unset`。装饰应分层使用原生边框、九宫格与独立图片，不能用一张横版整图拉伸代替竖版构图。
+
+内置皮肤的 `skin.toml` 由 `cargo run -p nanatype-theme --example regenerate_builtin_skins` 统一生成：省略默认值，布局只保留与基础的差异，短数组写在一行；导出皮肤使用同一格式。生成后 `builtin_responsive_layouts_resolve_to_the_recorded_dialogues` 测试确认每套皮肤在各断点的解析结果不变，有意修改设计后以 `NANATYPE_BLESS=1` 重新记录。
 
 整幅程序版画的默认横版保留原始绘制和主体专属动效；竖版、窄窗使用独立构图，主体纹饰通过锁定比例的 `decor` 或按逻辑像素绘制的图元重新安排。每个布局只保留一个主体来源，避免重复装饰。
 
@@ -591,7 +595,13 @@ exit_ms = 400           # 随后在剩余 320ms 内全文随机消失
 ```toml
 [dialogue.responsive]
 landscape = { padding = [24, 40, 80, 20] }
-portrait = { padding = [20, 24, 56, 80], shader_effects = [] }
+
+[dialogue.responsive.portrait]
+padding = [20, 24, 56, 80]
+shader_effects = []
+unset = ["box.frame"]              # 竖版不用横版九宫格
+box = { margin = [0, 0, 0, 0] }    # 其余框体字段沿用 [dialogue.box]
+nameplate = { anchor = "top_right" }
 
 [[dialogue.responsive.rules]]
 max_width = 240

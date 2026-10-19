@@ -4,12 +4,7 @@ surface = "#fdfaf3"
 text = "#222222"
 
 [dialogue]
-padding = [
-    28.0,
-    40.0,
-    64.0,
-    18.0,
-]
+padding = [28.0, 40.0, 64.0, 18.0]
 
 [dialogue.box]
 border_color = "#86775e52"
@@ -23,31 +18,14 @@ image = "still.png"
 layout_inset = false
 repeat = false
 scale = 1.0
-slice = [
-    34,
-    90,
-    24,
-    64,
-]
+slice = [34, 90, 24, 64]
 
 [dialogue.box.gradient]
 angle = 180.0
-center = [
-    50.0,
-    50.0,
-]
+center = [50.0, 50.0]
 circle = false
 kind = "radial"
-stops = [
-    [
-    0.0,
-    "#fffdf8fa",
-],
-    [
-    1.0,
-    "#e8dfccf5",
-],
-]
+stops = [[0.0, "#fffdf8fa"], [1.0, "#e8dfccf5"]]
 
 [[dialogue.box.shadows]]
 blur = 16.0
@@ -62,10 +40,7 @@ bob_px = 3.0
 color = "#b0302a"
 glyph = "〆"
 motion = "bob"
-offset = [
-    -22.0,
-    -12.0,
-]
+offset = [-22.0, -12.0]
 size = 18.0
 
 [[dialogue.decor]]
@@ -75,19 +50,13 @@ border_width = 0.0
 font = "accent"
 image = "bamboo.png"
 layer = "above"
-offset = [
-    12.0,
-    14.0,
-]
+offset = [12.0, 14.0]
 opacity = 0.949999988079071
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    76.0,
-    138.0,
-]
+size = [76.0, 138.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -101,19 +70,13 @@ color = "#b0302a"
 contour = "seal"
 font = "accent"
 layer = "above"
-offset = [
-    -20.0,
-    16.0,
-]
+offset = [-20.0, 16.0]
 opacity = 1.0
 polygon = []
 radius = 4.0
 rotate = -6.0
 shadows = []
-size = [
-    30.0,
-    34.0,
-]
+size = [30.0, 34.0]
 text = "印"
 text_color = "#fff3ea"
 text_size = 19.0
@@ -121,20 +84,9 @@ when = "always"
 
 [dialogue.nameplate]
 border_color = "#b0302a"
-border_widths = [
-    0.0,
-    0.0,
-    0.0,
-    3.0,
-]
-offset = [
-    24.0,
-    12.0,
-]
-padding = [
-    8.0,
-    0.0,
-]
+border_widths = [0.0, 0.0, 0.0, 3.0]
+offset = [24.0, 12.0]
+padding = [8.0, 0.0]
 size = 20.0
 text_color = "#222222"
 
@@ -146,23 +98,14 @@ border_width = 0.0
 font = "accent"
 image = "bamboo.png"
 layer = "above"
-max_fraction = [
-    0.30000001192092896,
-    1.2000000476837158,
-]
-offset = [
-    12.0,
-    14.0,
-]
+max_fraction = [0.30000001192092896, 1.2000000476837158]
+offset = [12.0, 14.0]
 opacity = 0.949999988079071
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    76.0,
-    138.0,
-]
+size = [76.0, 138.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -176,89 +119,27 @@ color = "#b0302a"
 contour = "seal"
 font = "accent"
 layer = "above"
-offset = [
-    -20.0,
-    16.0,
-]
+offset = [-20.0, 16.0]
 opacity = 1.0
 polygon = []
 radius = 4.0
 rotate = -6.0
 shadows = []
-size = [
-    30.0,
-    34.0,
-]
+size = [30.0, 34.0]
 text = "印"
 text_color = "#fff3ea"
 text_size = 19.0
 when = "always"
 
 [dialogue.responsive.portrait]
-padding = [
-    20.0,
-    24.0,
-    56.0,
-    164.0,
-]
+padding = [20.0, 24.0, 56.0, 164.0]
+unset = ["box.frame"]
 
 [dialogue.responsive.portrait.box]
-border_color = "#86775e52"
-border_style = "solid"
-border_width = 0.800000011920929
-color = "#faf7effa"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
-radius = 4.0
-width_fraction = 1.0
-
-[dialogue.responsive.portrait.box.gradient]
-angle = 180.0
-center = [
-    50.0,
-    50.0,
-]
-circle = false
-kind = "radial"
-stops = [
-    [
-    0.0,
-    "#fffdf8fa",
-],
-    [
-    1.0,
-    "#e8dfccf5",
-],
-]
-
-[[dialogue.responsive.portrait.box.shadows]]
-blur = 16.0
-color = "#2222221f"
-dx = 0.0
-dy = 4.0
-inset = false
-spread = 0.0
 
 [dialogue.responsive.portrait.continue]
 anchor = "bottom_left"
-bob_px = 3.0
-color = "#b0302a"
-fps = 8.0
-frames = 1
-glyph = "〆"
-motion = "bob"
-offset = [
-    12.0,
-    -8.0,
-]
-period_s = 0.8299999833106995
-size = 18.0
+offset = [12.0, -8.0]
 
 [[dialogue.responsive.portrait.decor]]
 anchor = "bottom_left"
@@ -268,27 +149,15 @@ border_width = 0.0
 font = "accent"
 image = "bamboo.png"
 layer = "above"
-max_fraction = [
-    0.3199999928474426,
-    0.18000000715255737,
-]
-min_window = [
-    240.0,
-    360.0,
-]
-offset = [
-    14.0,
-    -14.0,
-]
+max_fraction = [0.3199999928474426, 0.18000000715255737]
+min_window = [240.0, 360.0]
+offset = [14.0, -14.0]
 opacity = 0.949999988079071
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    76.0,
-    138.0,
-]
+size = [76.0, 138.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -303,23 +172,14 @@ color = "#b0302a"
 contour = "seal"
 font = "accent"
 layer = "above"
-min_window = [
-    240.0,
-    360.0,
-]
-offset = [
-    -18.0,
-    -20.0,
-]
+min_window = [240.0, 360.0]
+offset = [-18.0, -20.0]
 opacity = 1.0
 polygon = []
 radius = 4.0
 rotate = -6.0
 shadows = []
-size = [
-    24.0,
-    28.0,
-]
+size = [24.0, 28.0]
 text = "印"
 text_color = "#fff3ea"
 text_size = 19.0
@@ -327,45 +187,10 @@ when = "always"
 
 [dialogue.responsive.portrait.nameplate]
 anchor = "top_right"
-border_color = "#b0302a"
-border_style = "solid"
-border_width = 0.0
-border_widths = [
-    0.0,
-    0.0,
-    0.0,
-    3.0,
-]
-color = "#00000000"
-offset = [
-    -8.0,
-    12.0,
-]
-padding = [
-    4.0,
-    4.0,
-]
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = 20.0
-text_color = "#222222"
-visible = true
+offset = [-8.0, 12.0]
+padding = [4.0, 4.0]
 
 [dialogue.responsive.portrait.portrait]
-offset = [
-    0.0,
-    0.0,
-]
-radius = 12.0
-side = "left"
-size = [
-    160.0,
-    200.0,
-]
-visible = false
-
-[dialogue.responsive.portrait.portrait.variants]
 
 [[dialogue.responsive.portrait.shader_effects]]
 shader = "responsive_print"
@@ -377,55 +202,10 @@ max_width = 600.0
 portrait = false
 
 [dialogue.responsive.rules.layout]
-padding = [
-    20.0,
-    44.0,
-    20.0,
-    68.0,
-]
+padding = [20.0, 44.0, 20.0, 68.0]
+unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
-border_color = "#86775e52"
-border_style = "solid"
-border_width = 0.800000011920929
-color = "#faf7effa"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
-radius = 4.0
-width_fraction = 1.0
-
-[dialogue.responsive.rules.layout.box.gradient]
-angle = 180.0
-center = [
-    50.0,
-    50.0,
-]
-circle = false
-kind = "radial"
-stops = [
-    [
-    0.0,
-    "#fffdf8fa",
-],
-    [
-    1.0,
-    "#e8dfccf5",
-],
-]
-
-[[dialogue.responsive.rules.layout.box.shadows]]
-blur = 16.0
-color = "#2222221f"
-dx = 0.0
-dy = 4.0
-inset = false
-spread = 0.0
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "bottom_right"
@@ -435,23 +215,14 @@ border_width = 0.0
 font = "accent"
 image = "bamboo.png"
 layer = "above"
-min_window = [
-    240.0,
-    180.0,
-]
-offset = [
-    -12.0,
-    -8.0,
-]
+min_window = [240.0, 180.0]
+offset = [-12.0, -8.0]
 opacity = 0.949999988079071
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    32.0,
-    58.0,
-]
+size = [32.0, 58.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -466,54 +237,21 @@ color = "#b0302a"
 contour = "seal"
 font = "accent"
 layer = "above"
-min_window = [
-    240.0,
-    180.0,
-]
-offset = [
-    12.0,
-    -14.0,
-]
+min_window = [240.0, 180.0]
+offset = [12.0, -14.0]
 opacity = 1.0
 polygon = []
 radius = 4.0
 rotate = -6.0
 shadows = []
-size = [
-    24.0,
-    28.0,
-]
+size = [24.0, 28.0]
 text = "印"
 text_color = "#fff3ea"
 text_size = 19.0
 when = "always"
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_color = "#b0302a"
-border_style = "solid"
-border_width = 0.0
-border_widths = [
-    0.0,
-    0.0,
-    0.0,
-    3.0,
-]
-color = "#00000000"
-offset = [
-    12.0,
-    4.0,
-]
-padding = [
-    8.0,
-    0.0,
-]
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = 20.0
-text_color = "#222222"
-visible = true
+offset = [12.0, 4.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "compact_print"
@@ -526,82 +264,13 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    16.0,
-    40.0,
-    16.0,
-    16.0,
-]
+padding = [16.0, 40.0, 16.0, 16.0]
+unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
-border_color = "#86775e52"
-border_style = "solid"
-border_width = 0.800000011920929
-color = "#faf7effa"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
-radius = 4.0
-width_fraction = 1.0
-
-[dialogue.responsive.rules.layout.box.gradient]
-angle = 180.0
-center = [
-    50.0,
-    50.0,
-]
-circle = false
-kind = "radial"
-stops = [
-    [
-    0.0,
-    "#fffdf8fa",
-],
-    [
-    1.0,
-    "#e8dfccf5",
-],
-]
-
-[[dialogue.responsive.rules.layout.box.shadows]]
-blur = 16.0
-color = "#2222221f"
-dx = 0.0
-dy = 4.0
-inset = false
-spread = 0.0
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_color = "#b0302a"
-border_style = "solid"
-border_width = 0.0
-border_widths = [
-    0.0,
-    0.0,
-    0.0,
-    3.0,
-]
-color = "#00000000"
-offset = [
-    12.0,
-    4.0,
-]
-padding = [
-    8.0,
-    0.0,
-]
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = 20.0
-text_color = "#222222"
-visible = true
+offset = [12.0, 4.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "compact_print"
@@ -613,12 +282,7 @@ max_width = 240.0
 portrait = true
 
 [dialogue.responsive.rules.layout]
-padding = [
-    12.0,
-    16.0,
-    48.0,
-    132.0,
-]
+padding = [12.0, 16.0, 48.0, 132.0]
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "bottom_left"
@@ -628,27 +292,15 @@ border_width = 0.0
 font = "accent"
 image = "bamboo.png"
 layer = "above"
-max_fraction = [
-    0.3199999928474426,
-    0.18000000715255737,
-]
-min_window = [
-    160.0,
-    260.0,
-]
-offset = [
-    14.0,
-    -14.0,
-]
+max_fraction = [0.3199999928474426, 0.18000000715255737]
+min_window = [160.0, 260.0]
+offset = [14.0, -14.0]
 opacity = 0.949999988079071
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    76.0,
-    138.0,
-]
+size = [76.0, 138.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -663,23 +315,14 @@ color = "#b0302a"
 contour = "seal"
 font = "accent"
 layer = "above"
-min_window = [
-    240.0,
-    360.0,
-]
-offset = [
-    -18.0,
-    -20.0,
-]
+min_window = [240.0, 360.0]
+offset = [-18.0, -20.0]
 opacity = 1.0
 polygon = []
 radius = 4.0
 rotate = -6.0
 shadows = []
-size = [
-    24.0,
-    28.0,
-]
+size = [24.0, 28.0]
 text = "印"
 text_color = "#fff3ea"
 text_size = 19.0
@@ -695,12 +338,7 @@ max_width = 8192.0
 portrait = true
 
 [dialogue.responsive.rules.layout]
-padding = [
-    12.0,
-    16.0,
-    48.0,
-    88.0,
-]
+padding = [12.0, 16.0, 48.0, 88.0]
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "bottom_left"
@@ -710,27 +348,15 @@ border_width = 0.0
 font = "accent"
 image = "bamboo.png"
 layer = "above"
-max_fraction = [
-    0.3199999928474426,
-    0.18000000715255737,
-]
-min_window = [
-    160.0,
-    260.0,
-]
-offset = [
-    14.0,
-    -14.0,
-]
+max_fraction = [0.3199999928474426, 0.18000000715255737]
+min_window = [160.0, 260.0]
+offset = [14.0, -14.0]
 opacity = 0.949999988079071
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    40.0,
-    72.63157653808594,
-]
+size = [40.0, 72.63157653808594]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -745,23 +371,14 @@ color = "#b0302a"
 contour = "seal"
 font = "accent"
 layer = "above"
-min_window = [
-    240.0,
-    260.0,
-]
-offset = [
-    -18.0,
-    -20.0,
-]
+min_window = [240.0, 260.0]
+offset = [-18.0, -20.0]
 opacity = 1.0
 polygon = []
 radius = 4.0
 rotate = -6.0
 shadows = []
-size = [
-    18.0,
-    21.0,
-]
+size = [18.0, 21.0]
 text = "印"
 text_color = "#fff3ea"
 text_size = 19.0
@@ -778,29 +395,15 @@ portrait = true
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    12.0,
-    12.0,
-    12.0,
-    12.0,
-]
+padding = [12.0, 12.0, 12.0, 12.0]
+unset = ["nameplate.border_color", "nameplate.border_widths"]
 
 [dialogue.responsive.rules.layout.nameplate]
 anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
 color = "#0876d0"
-offset = [
-    16.0,
-    -12.0,
-]
-padding = [
-    10.0,
-    4.0,
-]
+offset = [16.0, -12.0]
+padding = [10.0, 4.0]
 radius = 10.0
-rotate = 0.0
-shadows = []
 size = 18.0
 text_color = "#ffffff"
 visible = false
@@ -815,90 +418,21 @@ max_width = 200.0
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    10.0,
-    12.0,
-    10.0,
-    12.0,
-]
+padding = [10.0, 12.0, 10.0, 12.0]
+unset = ["box.frame", "nameplate.border_color", "nameplate.border_widths"]
 
 [dialogue.responsive.rules.layout.box]
-border_color = "#86775e52"
-border_style = "solid"
-border_width = 0.800000011920929
-color = "#faf7effa"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
-radius = 4.0
-width_fraction = 1.0
-
-[dialogue.responsive.rules.layout.box.gradient]
-angle = 180.0
-center = [
-    50.0,
-    50.0,
-]
-circle = false
-kind = "radial"
-stops = [
-    [
-    0.0,
-    "#fffdf8fa",
-],
-    [
-    1.0,
-    "#e8dfccf5",
-],
-]
-
-[[dialogue.responsive.rules.layout.box.shadows]]
-blur = 16.0
-color = "#2222221f"
-dx = 0.0
-dy = 4.0
-inset = false
-spread = 0.0
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
 color = "#0876d0"
-offset = [
-    16.0,
-    -12.0,
-]
-padding = [
-    10.0,
-    4.0,
-]
+offset = [16.0, -12.0]
+padding = [10.0, 4.0]
 radius = 10.0
-rotate = 0.0
-shadows = []
 size = 18.0
 text_color = "#ffffff"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
-offset = [
-    0.0,
-    0.0,
-]
-radius = 12.0
-side = "left"
-size = [
-    160.0,
-    200.0,
-]
-visible = false
-
-[dialogue.responsive.rules.layout.portrait.variants]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "minimal_print"
@@ -916,35 +450,17 @@ size = 30.0
 contrast_guard = 3.0
 
 [fonts.accent]
-families = [
-    "LXGW WenKai",
-    "KaiTi",
-    "STKaiti",
-    "Kaiti SC",
-    "SimSun",
-]
+families = ["LXGW WenKai", "KaiTi", "STKaiti", "Kaiti SC", "SimSun"]
 file = "builtin:fonts/LXGWWenKai-Regular.ttf"
 weight = 700
 
 [fonts.body]
-families = [
-    "LXGW WenKai",
-    "KaiTi",
-    "STKaiti",
-    "Kaiti SC",
-    "SimSun",
-]
+families = ["LXGW WenKai", "KaiTi", "STKaiti", "Kaiti SC", "SimSun"]
 file = "builtin:fonts/LXGWWenKai-Regular.ttf"
 weight = 400
 
 [fonts.name]
-families = [
-    "LXGW WenKai",
-    "KaiTi",
-    "STKaiti",
-    "Kaiti SC",
-    "SimSun",
-]
+families = ["LXGW WenKai", "KaiTi", "STKaiti", "Kaiti SC", "SimSun"]
 file = "builtin:fonts/LXGWWenKai-Regular.ttf"
 weight = 700
 
@@ -965,22 +481,10 @@ shape = "square"
 
 [history.bubble_gradient]
 angle = 180.0
-center = [
-    50.0,
-    50.0,
-]
+center = [50.0, 50.0]
 circle = false
 kind = "radial"
-stops = [
-    [
-    0.0,
-    "#faf6eef5",
-],
-    [
-    1.0,
-    "#ece4d4f0",
-],
-]
+stops = [[0.0, "#faf6eef5"], [1.0, "#ece4d4f0"]]
 
 [[history.bubble_shadows]]
 blur = 8.0
@@ -996,27 +500,16 @@ border_style = "solid"
 border_width = 0.0
 color = "#86775e"
 font = "accent"
-inset = [
-    4.0,
-    4.0,
-    4.0,
-    4.0,
-]
+inset = [4.0, 4.0, 4.0, 4.0]
 layer = "below"
 motif = "paper"
-offset = [
-    0.0,
-    0.0,
-]
+offset = [0.0, 0.0]
 opacity = 0.07999999821186066
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    16.0,
-    16.0,
-]
+size = [16.0, 16.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -1030,19 +523,13 @@ color = "#b0302a"
 contour = "seal"
 font = "body"
 layer = "above"
-offset = [
-    -18.0,
-    12.0,
-]
+offset = [-18.0, 12.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = -6.0
 shadows = []
-size = [
-    24.0,
-    24.0,
-]
+size = [24.0, 24.0]
 text = "印"
 text_color = "#f6f0e2"
 text_size = 17.0
@@ -1055,19 +542,13 @@ border_width = 0.0
 font = "accent"
 image = "bamboo.png"
 layer = "below"
-offset = [
-    -10.0,
-    -12.0,
-]
+offset = [-10.0, -12.0]
 opacity = 0.1599999964237213
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    90.0,
-    132.0,
-]
+size = [90.0, 132.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -1077,17 +558,9 @@ when = "always"
 border_color = "#b0302a"
 border_style = "solid"
 border_width = 0.0
-border_widths = [
-    0.0,
-    0.0,
-    0.0,
-    3.0,
-]
+border_widths = [0.0, 0.0, 0.0, 3.0]
 color = "#00000000"
-padding = [
-    7.0,
-    1.0,
-]
+padding = [7.0, 1.0]
 radius = 0.0
 shadows = []
 text_color = "#222222"
@@ -1097,18 +570,8 @@ border_color = "#86775e52"
 border_style = "solid"
 border_width = 0.800000011920929
 color = "#f6f0e2f8"
-margin = [
-    8.0,
-    8.0,
-    8.0,
-    8.0,
-]
-padding = [
-    14.0,
-    14.0,
-    14.0,
-    18.0,
-]
+margin = [8.0, 8.0, 8.0, 8.0]
+padding = [14.0, 14.0, 14.0, 18.0]
 radius = 1.0
 shadows = []
 
@@ -1137,10 +600,7 @@ textures = []
 [shaders.minimal_print]
 animated = false
 intensity = 1.0
-params = [
-    2.0,
-    1.0,
-]
+params = [2.0, 1.0]
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true

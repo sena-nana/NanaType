@@ -5,16 +5,8 @@ text = "#263d32"
 
 [dialogue]
 overscan = 16.0
-padding = [
-    56.0,
-    65.0,
-    181.0,
-    27.0,
-]
-region = [
-    920.0,
-    220.0,
-]
+padding = [56.0, 65.0, 181.0, 27.0]
+region = [920.0, 220.0]
 
 [dialogue.box]
 border_color = "#314c40"
@@ -28,12 +20,7 @@ image = "still.png"
 layout_inset = true
 repeat = false
 scale = 1.0
-slice = [
-    0,
-    0,
-    0,
-    0,
-]
+slice = [0, 0, 0, 0]
 
 [dialogue.continue]
 bob_px = 3.0
@@ -42,21 +29,10 @@ glyph = "· · ·"
 
 [dialogue.nameplate]
 border_color = "#88a68a"
-border_widths = [
-    0.0,
-    0.0,
-    0.800000011920929,
-    0.0,
-]
+border_widths = [0.0, 0.0, 0.800000011920929, 0.0]
 color = "#f3f1e500"
-offset = [
-    56.0,
-    17.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
+offset = [56.0, 17.0]
+padding = [0.0, 0.0]
 size = 19.0
 text_color = "#314c40"
 
@@ -64,44 +40,14 @@ text_color = "#314c40"
 decor = []
 
 [dialogue.responsive.portrait]
-padding = [
-    20.0,
-    24.0,
-    56.0,
-    164.0,
-]
+padding = [20.0, 24.0, 56.0, 164.0]
+unset = ["box.frame"]
 
 [dialogue.responsive.portrait.box]
-border_color = "#314c40"
-border_style = "solid"
-border_width = 1.0
-color = "#f3f1e5"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
-radius = 18.0
-shadows = []
-width_fraction = 1.0
 
 [dialogue.responsive.portrait.continue]
 anchor = "bottom_left"
-bob_px = 3.0
-color = "#88a68a"
-fps = 8.0
-frames = 1
-glyph = "· · ·"
-motion = "none"
-offset = [
-    12.0,
-    -8.0,
-]
-period_s = 0.8299999833106995
-size = 16.0
+offset = [12.0, -8.0]
 
 [[dialogue.responsive.portrait.decor]]
 anchor = "bottom_left"
@@ -111,23 +57,14 @@ border_width = 0.0
 font = "accent"
 image = "ornament.png"
 layer = "above"
-max_fraction = [
-    0.3199999928474426,
-    0.18000000715255737,
-]
-offset = [
-    12.0,
-    -12.0,
-]
+max_fraction = [0.3199999928474426, 0.18000000715255737]
+offset = [12.0, -12.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    112.0,
-    140.0,
-]
+size = [112.0, 140.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -141,45 +78,10 @@ phase = 0.0
 
 [dialogue.responsive.portrait.nameplate]
 anchor = "top_right"
-border_color = "#88a68a"
-border_style = "solid"
-border_width = 0.0
-border_widths = [
-    0.0,
-    0.0,
-    0.800000011920929,
-    0.0,
-]
-color = "#f3f1e500"
-offset = [
-    -8.0,
-    12.0,
-]
-padding = [
-    4.0,
-    4.0,
-]
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = 19.0
-text_color = "#314c40"
-visible = true
+offset = [-8.0, 12.0]
+padding = [4.0, 4.0]
 
 [dialogue.responsive.portrait.portrait]
-offset = [
-    0.0,
-    0.0,
-]
-radius = 12.0
-side = "left"
-size = [
-    160.0,
-    200.0,
-]
-visible = false
-
-[dialogue.responsive.portrait.portrait.variants]
 
 [[dialogue.responsive.portrait.shader_effects]]
 shader = "responsive_artwork"
@@ -191,29 +93,10 @@ max_width = 600.0
 portrait = false
 
 [dialogue.responsive.rules.layout]
-padding = [
-    16.0,
-    40.0,
-    52.0,
-    16.0,
-]
+padding = [16.0, 40.0, 52.0, 16.0]
+unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
-border_color = "#314c40"
-border_style = "solid"
-border_width = 1.0
-color = "#f3f1e5"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
-radius = 18.0
-shadows = []
-width_fraction = 1.0
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "bottom_right"
@@ -223,54 +106,21 @@ border_width = 0.0
 font = "accent"
 image = "ornament.png"
 layer = "above"
-min_window = [
-    280.0,
-    180.0,
-]
-offset = [
-    -8.0,
-    -8.0,
-]
+min_window = [280.0, 180.0]
+offset = [-8.0, -8.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    32.0,
-    40.0,
-]
+size = [32.0, 40.0]
 text = ""
 text_color = "text"
 text_size = 16.0
 when = "always"
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_color = "#88a68a"
-border_style = "solid"
-border_width = 0.0
-border_widths = [
-    0.0,
-    0.0,
-    0.800000011920929,
-    0.0,
-]
-color = "#f3f1e500"
-offset = [
-    12.0,
-    4.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = 19.0
-text_color = "#314c40"
-visible = true
+offset = [12.0, 4.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_compact"
@@ -283,56 +133,13 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    16.0,
-    40.0,
-    16.0,
-    16.0,
-]
+padding = [16.0, 40.0, 16.0, 16.0]
+unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
-border_color = "#314c40"
-border_style = "solid"
-border_width = 1.0
-color = "#f3f1e5"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
-radius = 18.0
-shadows = []
-width_fraction = 1.0
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_color = "#88a68a"
-border_style = "solid"
-border_width = 0.0
-border_widths = [
-    0.0,
-    0.0,
-    0.800000011920929,
-    0.0,
-]
-color = "#f3f1e500"
-offset = [
-    12.0,
-    4.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = 19.0
-text_color = "#314c40"
-visible = true
+offset = [12.0, 4.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_compact"
@@ -344,12 +151,7 @@ max_width = 240.0
 portrait = true
 
 [dialogue.responsive.rules.layout]
-padding = [
-    12.0,
-    16.0,
-    48.0,
-    84.0,
-]
+padding = [12.0, 16.0, 48.0, 84.0]
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "bottom_left"
@@ -359,23 +161,14 @@ border_width = 0.0
 font = "accent"
 image = "ornament.png"
 layer = "above"
-max_fraction = [
-    0.3199999928474426,
-    0.18000000715255737,
-]
-offset = [
-    12.0,
-    -12.0,
-]
+max_fraction = [0.3199999928474426, 0.18000000715255737]
+offset = [12.0, -12.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    112.0,
-    140.0,
-]
+size = [112.0, 140.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -397,12 +190,7 @@ max_width = 8192.0
 portrait = true
 
 [dialogue.responsive.rules.layout]
-padding = [
-    12.0,
-    16.0,
-    48.0,
-    92.0,
-]
+padding = [12.0, 16.0, 48.0, 92.0]
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "bottom_left"
@@ -412,27 +200,15 @@ border_width = 0.0
 font = "accent"
 image = "ornament.png"
 layer = "above"
-max_fraction = [
-    0.3199999928474426,
-    0.18000000715255737,
-]
-min_window = [
-    160.0,
-    260.0,
-]
-offset = [
-    12.0,
-    -12.0,
-]
+max_fraction = [0.3199999928474426, 0.18000000715255737]
+min_window = [160.0, 260.0]
+offset = [12.0, -12.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    56.0,
-    70.0,
-]
+size = [56.0, 70.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -451,29 +227,15 @@ portrait = true
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    12.0,
-    12.0,
-    12.0,
-    12.0,
-]
+padding = [12.0, 12.0, 12.0, 12.0]
+unset = ["nameplate.border_color", "nameplate.border_widths"]
 
 [dialogue.responsive.rules.layout.nameplate]
 anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
 color = "#0876d0"
-offset = [
-    16.0,
-    -12.0,
-]
-padding = [
-    10.0,
-    4.0,
-]
+offset = [16.0, -12.0]
+padding = [10.0, 4.0]
 radius = 10.0
-rotate = 0.0
-shadows = []
 size = 18.0
 text_color = "#ffffff"
 visible = false
@@ -488,64 +250,21 @@ max_width = 200.0
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    10.0,
-    12.0,
-    10.0,
-    12.0,
-]
+padding = [10.0, 12.0, 10.0, 12.0]
+unset = ["box.frame", "nameplate.border_color", "nameplate.border_widths"]
 
 [dialogue.responsive.rules.layout.box]
-border_color = "#314c40"
-border_style = "solid"
-border_width = 1.0
-color = "#f3f1e5"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
-radius = 18.0
-shadows = []
-width_fraction = 1.0
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
 color = "#0876d0"
-offset = [
-    16.0,
-    -12.0,
-]
-padding = [
-    10.0,
-    4.0,
-]
+offset = [16.0, -12.0]
+padding = [10.0, 4.0]
 radius = 10.0
-rotate = 0.0
-shadows = []
 size = 18.0
 text_color = "#ffffff"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
-offset = [
-    0.0,
-    0.0,
-]
-radius = 12.0
-side = "left"
-size = [
-    160.0,
-    200.0,
-]
-visible = false
-
-[dialogue.responsive.rules.layout.portrait.variants]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_compact"
@@ -583,22 +302,10 @@ size = 36.0
 
 [history.bubble_gradient]
 angle = 180.0
-center = [
-    50.0,
-    50.0,
-]
+center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [
-    [
-    0.0,
-    "#fdfbef",
-],
-    [
-    1.0,
-    "#f3f1e5",
-],
-]
+stops = [[0.0, "#fdfbef"], [1.0, "#f3f1e5"]]
 
 [[history.bubble_shadows]]
 blur = 0.0
@@ -614,27 +321,16 @@ border_style = "solid"
 border_width = 0.0
 color = "#657b64"
 font = "accent"
-inset = [
-    4.0,
-    4.0,
-    4.0,
-    4.0,
-]
+inset = [4.0, 4.0, 4.0, 4.0]
 layer = "below"
 motif = "paper"
-offset = [
-    0.0,
-    0.0,
-]
+offset = [0.0, 0.0]
 opacity = 0.10000000149011612
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    16.0,
-    16.0,
-]
+size = [16.0, 16.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -647,19 +343,13 @@ border_width = 0.0
 font = "accent"
 image = "ornament.png"
 layer = "above"
-offset = [
-    -12.0,
-    4.0,
-]
+offset = [-12.0, 4.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    38.0,
-    44.0,
-]
+size = [38.0, 44.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -672,19 +362,13 @@ border_width = 0.0
 color = "#88a68a"
 font = "accent"
 layer = "above"
-offset = [
-    7.0,
-    72.0,
-]
+offset = [7.0, 72.0]
 opacity = 1.0
 polygon = []
 radius = 2.0
 rotate = 0.0
 shadows = []
-size = [
-    4.0,
-    4.0,
-]
+size = [4.0, 4.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -697,19 +381,13 @@ border_width = 0.0
 color = "#88a68a"
 font = "accent"
 layer = "above"
-offset = [
-    7.0,
-    160.0,
-]
+offset = [7.0, 160.0]
 opacity = 1.0
 polygon = []
 radius = 2.0
 rotate = 0.0
 shadows = []
-size = [
-    4.0,
-    4.0,
-]
+size = [4.0, 4.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -722,19 +400,13 @@ border_width = 0.0
 color = "#88a68a"
 font = "accent"
 layer = "above"
-offset = [
-    7.0,
-    248.0,
-]
+offset = [7.0, 248.0]
 opacity = 1.0
 polygon = []
 radius = 2.0
 rotate = 0.0
 shadows = []
-size = [
-    4.0,
-    4.0,
-]
+size = [4.0, 4.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -747,19 +419,13 @@ border_width = 0.0
 color = "#88a68a"
 font = "accent"
 layer = "above"
-offset = [
-    7.0,
-    336.0,
-]
+offset = [7.0, 336.0]
 opacity = 1.0
 polygon = []
 radius = 2.0
 rotate = 0.0
 shadows = []
-size = [
-    4.0,
-    4.0,
-]
+size = [4.0, 4.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -772,19 +438,13 @@ border_width = 0.0
 font = "accent"
 image = "ornament.png"
 layer = "below"
-offset = [
-    -12.0,
-    -14.0,
-]
+offset = [-12.0, -14.0]
 opacity = 0.11999999731779099
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    72.0,
-    100.0,
-]
+size = [72.0, 100.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -794,17 +454,9 @@ when = "always"
 border_color = "#88a68a"
 border_style = "solid"
 border_width = 0.0
-border_widths = [
-    0.0,
-    0.0,
-    1.0,
-    0.0,
-]
+border_widths = [0.0, 0.0, 1.0, 0.0]
 color = "#00000000"
-padding = [
-    2.0,
-    1.0,
-]
+padding = [2.0, 1.0]
 radius = 0.0
 shadows = []
 text_color = "#314c40"
@@ -814,18 +466,8 @@ border_color = "#88a68a"
 border_style = "solid"
 border_width = 1.0
 color = "#f3f1e5fa"
-margin = [
-    8.0,
-    8.0,
-    8.0,
-    8.0,
-]
-padding = [
-    20.0,
-    14.0,
-    12.0,
-    18.0,
-]
+margin = [8.0, 8.0, 8.0, 8.0]
+padding = [20.0, 14.0, 12.0, 18.0]
 radius = 2.0
 
 [[history.panel.shadows]]
@@ -860,10 +502,7 @@ textures = ["ornament.png"]
 [shaders.responsive_artwork]
 animated = true
 intensity = 1.0
-params = [
-    1.0,
-    1.0,
-]
+params = [1.0, 1.0]
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true
@@ -872,11 +511,7 @@ textures = ["ornament.png"]
 [shaders.responsive_compact]
 animated = true
 intensity = 1.0
-params = [
-    1.0,
-    0.0,
-    1.0,
-]
+params = [1.0, 0.0, 1.0]
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true

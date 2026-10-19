@@ -6,16 +6,8 @@ text = "#b7f4f1"
 
 [dialogue]
 overscan = 16.0
-padding = [
-    28.0,
-    50.0,
-    28.0,
-    24.0,
-]
-region = [
-    860.0,
-    200.0,
-]
+padding = [28.0, 50.0, 28.0, 24.0]
+region = [860.0, 200.0]
 
 [dialogue.box]
 border_color = "#365264"
@@ -29,14 +21,8 @@ bob_px = 3.0
 color = "#0876d0"
 
 [dialogue.nameplate]
-offset = [
-    28.0,
-    14.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
+offset = [28.0, 14.0]
+padding = [0.0, 0.0]
 radius = 10.0
 size = 16.0
 text_color = "#64e8e0"
@@ -44,32 +30,11 @@ text_color = "#64e8e0"
 [dialogue.responsive.landscape]
 
 [dialogue.responsive.portrait]
-padding = [
-    22.0,
-    50.0,
-    52.0,
-    26.0,
-]
+padding = [22.0, 50.0, 52.0, 26.0]
 
 [dialogue.responsive.portrait.nameplate]
 anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
-color = "#00000000"
-offset = [
-    -22.0,
-    14.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
-radius = 10.0
-rotate = 0.0
-shadows = []
-size = 16.0
-text_color = "#64e8e0"
-visible = true
+offset = [-22.0, 14.0]
 
 [[dialogue.responsive.rules]]
 max_height = 8192.0
@@ -77,32 +42,10 @@ max_width = 600.0
 portrait = false
 
 [dialogue.responsive.rules.layout]
-padding = [
-    18.0,
-    46.0,
-    18.0,
-    18.0,
-]
+padding = [18.0, 46.0, 18.0, 18.0]
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
-color = "#00000000"
-offset = [
-    18.0,
-    12.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
-radius = 10.0
-rotate = 0.0
-shadows = []
-size = 16.0
-text_color = "#64e8e0"
-visible = true
+offset = [18.0, 12.0]
 
 [[dialogue.responsive.rules]]
 max_height = 8192.0
@@ -110,62 +53,25 @@ max_width = 240.0
 portrait = true
 
 [dialogue.responsive.rules.layout]
-padding = [
-    14.0,
-    46.0,
-    40.0,
-    18.0,
-]
+padding = [14.0, 46.0, 40.0, 18.0]
 
 [dialogue.responsive.rules.layout.nameplate]
 anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
-color = "#00000000"
-offset = [
-    -12.0,
-    12.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
-radius = 10.0
-rotate = 0.0
-shadows = []
+offset = [-12.0, 12.0]
 size = 14.0
-text_color = "#64e8e0"
-visible = true
 
 [[dialogue.responsive.rules]]
 max_height = 140.0
 max_width = 200.0
 
 [dialogue.responsive.rules.layout]
-padding = [
-    10.0,
-    12.0,
-    10.0,
-    12.0,
-]
+padding = [10.0, 12.0, 10.0, 12.0]
 shader_effects = []
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
 color = "#0876d0"
-offset = [
-    16.0,
-    -12.0,
-]
-padding = [
-    10.0,
-    4.0,
-]
-radius = 10.0
-rotate = 0.0
-shadows = []
+offset = [16.0, -12.0]
+padding = [10.0, 4.0]
 size = 18.0
 text_color = "#ffffff"
 visible = false
@@ -194,21 +100,11 @@ color = "#b7f4f1"
 line_height = 1.4500000476837158
 
 [fonts.body]
-families = [
-    "Segoe UI",
-    "Microsoft YaHei UI",
-    "Noto Sans CJK SC",
-    "sans-serif",
-]
+families = ["Segoe UI", "Microsoft YaHei UI", "Noto Sans CJK SC", "sans-serif"]
 weight = 400
 
 [fonts.name]
-families = [
-    "Segoe UI",
-    "Microsoft YaHei UI",
-    "Noto Sans CJK SC",
-    "sans-serif",
-]
+families = ["Segoe UI", "Microsoft YaHei UI", "Noto Sans CJK SC", "sans-serif"]
 weight = 500
 
 [history]
@@ -216,10 +112,7 @@ bubble_border = "#365264"
 bubble_border_width = 1.0
 bubble_color = "#0b101ceb"
 bubble_contour = "hud"
-bubble_padding = [
-    16.0,
-    12.0,
-]
+bubble_padding = [16.0, 12.0]
 bubble_radius = 4.0
 name_color = "#64e8e0"
 time_color = "#8193a8"

@@ -21,11 +21,7 @@ fn main() {
         .unwrap();
         let mut compact = nanatype_theme::standalone_manifest(&loaded.skin).unwrap();
         compact.remove("meta");
-        fs::write(
-            dir.join("compact.toml"),
-            toml::to_string_pretty(&compact).unwrap(),
-        )
-        .unwrap();
+        fs::write(dir.join("compact.toml"), toml::to_string(&compact).unwrap()).unwrap();
         println!("{} {} files", entry.id, loaded.files.list().len());
     }
 }

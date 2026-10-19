@@ -665,7 +665,7 @@ impl SkinRegistry {
             let mut compact = crate::load::standalone_manifest(&loaded.skin)
                 .map_err(|e| FileError::Io(e.to_string()))?;
             compact.remove("meta");
-            Some(toml::to_string_pretty(&compact).map_err(|e| FileError::Io(e.to_string()))?)
+            Some(toml::to_string(&compact).map_err(|e| FileError::Io(e.to_string()))?)
         } else {
             None
         };
@@ -760,7 +760,7 @@ impl SkinRegistry {
         .map_err(|e| err(e.to_string()))?;
         fs::write(
             dir.join(MANIFEST),
-            toml::to_string_pretty(&table).unwrap_or_default(),
+            toml::to_string(&table).unwrap_or_default(),
         )
         .map_err(|e| err(e.to_string()))?;
         self.rescan();

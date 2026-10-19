@@ -5,16 +5,8 @@ text = "#51413a"
 
 [dialogue]
 overscan = 12.0
-padding = [
-    40.0,
-    66.0,
-    126.0,
-    34.0,
-]
-region = [
-    860.0,
-    230.0,
-]
+padding = [40.0, 66.0, 126.0, 34.0]
+region = [860.0, 230.0]
 
 [dialogue.box]
 border_color = "#c29477"
@@ -28,31 +20,17 @@ image = "still.png"
 layout_inset = false
 repeat = false
 scale = 1.0
-slice = [
-    20,
-    20,
-    20,
-    20,
-]
+slice = [20, 20, 20, 20]
 
 [dialogue.continue]
 bob_px = 3.0
 color = "#b46a58"
 glyph = "···"
-offset = [
-    -38.0,
-    -24.0,
-]
+offset = [-38.0, -24.0]
 
 [dialogue.nameplate]
-offset = [
-    40.0,
-    25.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
+offset = [40.0, 25.0]
+padding = [0.0, 0.0]
 size = 20.0
 text_color = "#a65b49"
 
@@ -65,93 +43,26 @@ target = "artwork"
 
 [dialogue.responsive.portrait]
 decor = []
-padding = [
-    20.0,
-    24.0,
-    56.0,
-    140.0,
-]
+padding = [20.0, 24.0, 56.0, 140.0]
 
 [dialogue.responsive.portrait.box]
-border_color = "#c29477"
-border_style = "solid"
-border_width = 0.0
-color = "#fffbef"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
 material = "responsive_paper"
-radius = 7.0
-shadows = []
-width_fraction = 1.0
 
 [dialogue.responsive.portrait.box.frame]
 fill = false
 image = "bubble.png"
-layout_inset = false
-repeat = false
-scale = 1.0
-slice = [
-    18,
-    18,
-    18,
-    18,
-]
+slice = [18, 18, 18, 18]
 
 [dialogue.responsive.portrait.continue]
 anchor = "bottom_left"
-bob_px = 3.0
-color = "#b46a58"
-fps = 8.0
-frames = 1
-glyph = "···"
-motion = "none"
-offset = [
-    12.0,
-    -8.0,
-]
-period_s = 0.8299999833106995
-size = 16.0
+offset = [12.0, -8.0]
 
 [dialogue.responsive.portrait.nameplate]
 anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
-color = "#00000000"
-offset = [
-    -8.0,
-    12.0,
-]
-padding = [
-    4.0,
-    4.0,
-]
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = 20.0
-text_color = "#a65b49"
-visible = true
+offset = [-8.0, 12.0]
+padding = [4.0, 4.0]
 
 [dialogue.responsive.portrait.portrait]
-offset = [
-    0.0,
-    0.0,
-]
-radius = 12.0
-side = "left"
-size = [
-    160.0,
-    200.0,
-]
-visible = false
-
-[dialogue.responsive.portrait.portrait.variants]
 
 [[dialogue.responsive.portrait.shader_effects]]
 shader = "paper_static"
@@ -164,63 +75,18 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    16.0,
-    40.0,
-    16.0,
-    72.0,
-]
+padding = [16.0, 40.0, 16.0, 72.0]
 
 [dialogue.responsive.rules.layout.box]
-border_color = "#c29477"
-border_style = "solid"
-border_width = 0.0
-color = "#fffbef"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
 material = "responsive_paper"
-radius = 7.0
-shadows = []
-width_fraction = 1.0
 
 [dialogue.responsive.rules.layout.box.frame]
 fill = false
 image = "bubble.png"
-layout_inset = false
-repeat = false
-scale = 1.0
-slice = [
-    18,
-    18,
-    18,
-    18,
-]
+slice = [18, 18, 18, 18]
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
-color = "#00000000"
-offset = [
-    12.0,
-    4.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = 20.0
-text_color = "#a65b49"
-visible = true
+offset = [12.0, 4.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "paper_narrow"
@@ -233,63 +99,18 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    16.0,
-    40.0,
-    16.0,
-    16.0,
-]
+padding = [16.0, 40.0, 16.0, 16.0]
 
 [dialogue.responsive.rules.layout.box]
-border_color = "#c29477"
-border_style = "solid"
-border_width = 0.0
-color = "#fffbef"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
 material = "responsive_paper"
-radius = 7.0
-shadows = []
-width_fraction = 1.0
 
 [dialogue.responsive.rules.layout.box.frame]
 fill = false
 image = "bubble.png"
-layout_inset = false
-repeat = false
-scale = 1.0
-slice = [
-    18,
-    18,
-    18,
-    18,
-]
+slice = [18, 18, 18, 18]
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
-color = "#00000000"
-offset = [
-    12.0,
-    4.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = 20.0
-text_color = "#a65b49"
-visible = true
+offset = [12.0, 4.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "paper_compact"
@@ -302,12 +123,7 @@ portrait = true
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    12.0,
-    16.0,
-    48.0,
-    72.0,
-]
+padding = [12.0, 16.0, 48.0, 72.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "paper_narrow"
@@ -320,12 +136,7 @@ portrait = true
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    12.0,
-    16.0,
-    48.0,
-    72.0,
-]
+padding = [12.0, 16.0, 48.0, 72.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "paper_narrow"
@@ -338,29 +149,14 @@ portrait = true
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    12.0,
-    12.0,
-    12.0,
-    12.0,
-]
+padding = [12.0, 12.0, 12.0, 12.0]
 
 [dialogue.responsive.rules.layout.nameplate]
 anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
 color = "#0876d0"
-offset = [
-    16.0,
-    -12.0,
-]
-padding = [
-    10.0,
-    4.0,
-]
+offset = [16.0, -12.0]
+padding = [10.0, 4.0]
 radius = 10.0
-rotate = 0.0
-shadows = []
 size = 18.0
 text_color = "#ffffff"
 visible = false
@@ -375,78 +171,26 @@ max_width = 200.0
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    10.0,
-    12.0,
-    10.0,
-    12.0,
-]
+padding = [10.0, 12.0, 10.0, 12.0]
 
 [dialogue.responsive.rules.layout.box]
-border_color = "#c29477"
-border_style = "solid"
-border_width = 0.0
-color = "#fffbef"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
 material = "responsive_paper"
-radius = 7.0
-shadows = []
-width_fraction = 1.0
 
 [dialogue.responsive.rules.layout.box.frame]
 fill = false
 image = "bubble.png"
-layout_inset = false
-repeat = false
-scale = 1.0
-slice = [
-    18,
-    18,
-    18,
-    18,
-]
+slice = [18, 18, 18, 18]
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
 color = "#0876d0"
-offset = [
-    16.0,
-    -12.0,
-]
-padding = [
-    10.0,
-    4.0,
-]
+offset = [16.0, -12.0]
+padding = [10.0, 4.0]
 radius = 10.0
-rotate = 0.0
-shadows = []
 size = 18.0
 text_color = "#ffffff"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
-offset = [
-    0.0,
-    0.0,
-]
-radius = 12.0
-side = "left"
-size = [
-    160.0,
-    200.0,
-]
-visible = false
-
-[dialogue.responsive.rules.layout.portrait.variants]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "paper_compact"
@@ -472,30 +216,19 @@ size = 26.0
 contrast_guard = 3.0
 
 [fonts.body]
-families = [
-    "LXGW WenKai",
-    "KaiTi",
-    "Noto Sans SC",
-]
+families = ["LXGW WenKai", "KaiTi", "Noto Sans SC"]
 file = "builtin:fonts/LXGWWenKai-Regular.ttf"
 weight = 400
 
 [fonts.name]
-families = [
-    "LXGW WenKai",
-    "KaiTi",
-    "Noto Sans SC",
-]
+families = ["LXGW WenKai", "KaiTi", "Noto Sans SC"]
 file = "builtin:fonts/LXGWWenKai-Regular.ttf"
 weight = 400
 
 [history]
 bubble_color = "#fffbef"
 bubble_material = "bubble"
-bubble_padding = [
-    20.0,
-    17.0,
-]
+bubble_padding = [20.0, 17.0]
 bubble_radius = 7.0
 entrance = "slide_up"
 name_color = "#a65b49"
@@ -514,29 +247,14 @@ image = "bubble.png"
 layout_inset = true
 repeat = false
 scale = 1.0
-slice = [
-    18,
-    18,
-    18,
-    18,
-]
+slice = [18, 18, 18, 18]
 
 [history.panel]
 border_style = "solid"
 border_width = 0.0
 color = "#faf5e9f8"
-margin = [
-    8.0,
-    8.0,
-    8.0,
-    8.0,
-]
-padding = [
-    14.0,
-    14.0,
-    12.0,
-    16.0,
-]
+margin = [8.0, 8.0, 8.0, 8.0]
+padding = [14.0, 14.0, 12.0, 16.0]
 radius = 10.0
 shadows = []
 
