@@ -97,3 +97,36 @@ fn example_archives_install_and_declared_data_flows_by_value() {
     assert_eq!(texts[1], "Thank you for watching");
     assert_eq!(texts[5], "今天也辛苦了", "wraps after the last phrase");
 }
+
+/// The shipped configuration: the application binary re-runs itself as the
+/// confined worker and serves events from the counter example.
+#[test]
+fn application_binary_runs_confined_plugin_workers() {
+    let (sender, responses) = std::sync::mpsc::channel();
+    let worker = nanatype_plugins::PluginProcess::spawn(
+        std::path::Path::new(env!("CARGO_BIN_EXE_nanatype")),
+        include_str!("../../docs/examples/counter-plugin/main.lua").into(),
+        serde_json::json!({"type": "init"}),
+        Arc::new(|r| nanatype_plugins::DataReply::error(r.token, "no data")),
+        move |response| {
+            let _ = sender.send(response);
+        },
+    )
+    .unwrap();
+    let first = responses
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .unwrap();
+    assert!(
+        matches!(first, nanatype_plugins::WorkerResponse::Update { .. }),
+        "{first:?}"
+    );
+    worker
+        .event(serde_json::json!({"type": "line_start"}))
+        .unwrap();
+    assert!(matches!(
+        responses
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap(),
+        nanatype_plugins::WorkerResponse::Update { .. }
+    ));
+}
