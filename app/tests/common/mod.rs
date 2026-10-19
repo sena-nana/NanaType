@@ -137,3 +137,31 @@ pub fn frame(
         rgba
     })
 }
+
+/// Render until a frame neither waits on nor was refused a shader compile.
+/// Compiles turned away while other work held both compiler slots are retried
+/// on the next frame, as the application's warming loop does; waiting only for
+/// `pending == 0` would miss them when tests run in parallel.
+#[allow(dead_code)]
+pub fn settle_shaders(mut render: impl FnMut()) {
+    use nanatype::ui::shader_effects::cache_stats;
+    let started = std::time::Instant::now();
+    loop {
+        let refused = cache_stats().refused;
+        render();
+        while cache_stats().pending > 0 {
+            assert!(
+                started.elapsed() < Duration::from_secs(15),
+                "shader compilation stalled"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        if cache_stats().refused == refused {
+            return;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(15),
+            "shader compiles kept being refused"
+        );
+    }
+}

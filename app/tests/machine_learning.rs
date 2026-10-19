@@ -5,7 +5,7 @@ use nanatype::ui::{Ui, dialogue, sweep, text_scramble};
 use nanatype_core::{Cmd, Core};
 use nanatype_i18n::Locale;
 use nanatype_settings::Settings;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use common::frame;
 
@@ -279,19 +279,16 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
             common::session().mount_at(100_000, w, h, move || dialogue::display_window(ui));
         session.set_gpu_renderers(sweep::renderers());
         session.set_clear(Some([0.; 4]));
-        frame(
-            &mut session,
-            ui,
-            101_200,
-            1200,
-            &format!("portrait-rail-{w}"),
-            CAPTURES,
-        );
-        let started = std::time::Instant::now();
-        while nanatype::ui::shader_effects::cache_stats().pending > 0 {
-            assert!(started.elapsed() < Duration::from_secs(10));
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        common::settle_shaders(|| {
+            frame(
+                &mut session,
+                ui,
+                101_200,
+                1200,
+                &format!("portrait-rail-{w}"),
+                CAPTURES,
+            );
+        });
         let rgba = frame(
             &mut session,
             ui,

@@ -27,6 +27,9 @@ static NOTICES: LazyLock<Mutex<Vec<String>>> = LazyLock::new(Default::default);
 static DISABLED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
 static COMPILED: AtomicU64 = AtomicU64::new(0);
 static COMPILING: AtomicUsize = AtomicUsize::new(0);
+/// Compiles turned away while both compiler slots were busy; the draw retries
+/// on a later frame (see `warming`).
+static REFUSED: AtomicU64 = AtomicU64::new(0);
 struct CompileSlot;
 impl Drop for CompileSlot {
     fn drop(&mut self) {
@@ -320,6 +323,8 @@ pub struct CacheStats {
     pub uniforms: usize,
     pub scales: usize,
     pub compilations: u64,
+    /// Compiles deferred because both compiler slots were busy.
+    pub refused: u64,
     pub uniform_allocations: u64,
 }
 pub fn cache_stats() -> CacheStats {
@@ -340,6 +345,7 @@ pub fn cache_stats() -> CacheStats {
         uniforms: state.masks.values().map(|m| m.uniforms.len()).sum(),
         scales: state.scales.len(),
         compilations: COMPILED.load(Ordering::Relaxed),
+        refused: REFUSED.load(Ordering::Relaxed),
         uniform_allocations: super::effect_uniforms::allocations(),
         pending: state
             .pipelines
@@ -603,6 +609,7 @@ impl State {
                     .compare_exchange(1, 2, Ordering::Relaxed, Ordering::Relaxed)
                     .is_err()
             {
+                REFUSED.fetch_add(1, Ordering::Relaxed);
                 return None;
             }
             COMPILED.fetch_add(1, Ordering::Relaxed);

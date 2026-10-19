@@ -12,10 +12,7 @@ use nanatype::{
     ui::{Ui, dialogue::Source, shader_effects, surface::Surface, sweep},
 };
 use nanatype_theme::{ShaderSpec, ShaderTarget, ShaderTexture, Skin, validate_shader};
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::sync::Arc;
 
 #[test]
 fn gpu_proxy_samples_masks_and_disables_without_mutating_the_scene() {
@@ -70,13 +67,9 @@ fn gpu_proxy_samples_masks_and_disables_without_mutating_the_scene() {
         });
         session.set_gpu_renderers(sweep::renderers());
         session.set_clear(Some([0.; 4]));
-        let _ = session.screenshot_rgba().unwrap();
-        let started = Instant::now();
-        while shader_effects::cache_stats().pending > 0
-            && started.elapsed() < Duration::from_secs(15)
-        {
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        common::settle_shaders(|| {
+            let _ = session.screenshot_rgba().unwrap();
+        });
         assert_eq!(
             shader_effects::cache_stats().pending,
             0,
@@ -137,13 +130,9 @@ fn gpu_proxy_samples_masks_and_disables_without_mutating_the_scene() {
         });
         session.set_gpu_renderers(sweep::renderers());
         session.set_clear(Some([0.; 4]));
-        let _ = session.screenshot_rgba().unwrap();
-        let started = Instant::now();
-        while shader_effects::cache_stats().pending > 0
-            && started.elapsed() < Duration::from_secs(15)
-        {
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        common::settle_shaders(|| {
+            let _ = session.screenshot_rgba().unwrap();
+        });
         let (_, rgba) = session.screenshot_rgba().unwrap();
         assert!(rgba[3] > 240, "artwork inherited native corner clipping");
         let prepared = shader_effects::cache_stats();
@@ -204,13 +193,9 @@ fn gpu_proxy_samples_masks_and_disables_without_mutating_the_scene() {
         });
         session.set_gpu_renderers(sweep::renderers());
         session.set_clear(Some([0.; 4]));
-        let _ = session.screenshot_rgba().unwrap();
-        let started = Instant::now();
-        while shader_effects::cache_stats().pending > 0
-            && started.elapsed() < Duration::from_secs(15)
-        {
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        common::settle_shaders(|| {
+            let _ = session.screenshot_rgba().unwrap();
+        });
         let (_, rgba) = session.screenshot_rgba().unwrap();
         assert!(rgba.as_chunks::<4>().0.iter().all(|p| p[3] == 0));
         assert_eq!(shader_effects::take_notices().len(), 1);
