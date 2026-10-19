@@ -141,12 +141,10 @@ pub enum Msg {
     ),
     /// A package export finished off the UI thread.
     PackageExported(Result<(), String>),
-    /// The review behind an activation request.
-    PluginReviewReady(Result<std::sync::Arc<crate::plugins::ActivationReview>, String>),
-    /// A fresh review taken on confirmation, to compare with the one shown.
-    PluginConfirmReviewed {
-        shown: String,
-        current: Result<std::sync::Arc<crate::plugins::ActivationReview>, String>,
+    /// A fresh snapshot for the current activation review or confirmation request.
+    PluginReviewReady {
+        ticket: u64,
+        result: Result<std::sync::Arc<crate::plugins::ActivationReview>, String>,
     },
     PluginCommand {
         id: String,

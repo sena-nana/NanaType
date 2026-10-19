@@ -66,6 +66,15 @@ proptest = { version = "1", default-features = false, features = ["std"] }
 [profile.dev.package."*"]
 debug = "line-tables-only"
 
+# Result extraction crosses the Lua C API thousands of times for a full canvas.
+# Keep both sides of those Wasmtime calls optimized in dev/test too, so debug
+# overhead does not exhaust the same 200 ms response deadline as shipped builds.
+[profile.dev.package.nanatype-plugins]
+opt-level = 2
+
+[profile.dev.package.wasmtime]
+opt-level = 2
+
 [profile.release]
 debug = "line-tables-only"
 

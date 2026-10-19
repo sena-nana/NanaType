@@ -69,6 +69,7 @@ impl From<nana_ui::runtime::RichEditCommand> for EditorCommand {
 
 pub struct App {
     pub plugins: crate::plugins::Manager,
+    plugin_activation: crate::plugins::Activation,
     pub package_editor: crate::package_editor::Editor,
     pub paths: Paths,
     pub settings: Settings,
@@ -199,6 +200,7 @@ impl App {
         );
         let mut app = Self {
             plugins: Default::default(),
+            plugin_activation: Default::default(),
             package_editor: crate::package_editor::Editor::new(
                 paths.package_drafts(),
                 Arc::new(crate::package_editor::SecretKeys::new(&paths.data)),
@@ -1762,6 +1764,7 @@ impl App {
     ) {
         match result {
             Ok((outcome, registry)) => {
+                self.plugin_activation.cancel(self.ui);
                 self.registry = *registry;
                 self.skin_reload.invalidate();
                 self.refresh_skin_rows();
@@ -1824,10 +1827,9 @@ impl App {
             | Msg::PluginPackagesReviewed(_)
             | Msg::PluginsReviewed { .. }
             | Msg::PackagesListed { .. }
-            | Msg::PluginReviewReady(_)
+            | Msg::PluginReviewReady { .. }
             | Msg::PackageInstalled(_)
             | Msg::PackageExported(_)
-            | Msg::PluginConfirmReviewed { .. }
             | Msg::PluginResult { .. }
             | Msg::PluginCommand { .. }
             | Msg::PluginInput { .. }) => self.package_msg(m),

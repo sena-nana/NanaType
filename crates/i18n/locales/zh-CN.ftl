@@ -944,3 +944,6 @@ pkgedit-open-failed = 无法打开工程
 pkgedit-exported = 已导出
 pkgedit-export-failed = 导出失败
 pkgedit-debug-locate = 跳到出错位置
+
+packages-consent-reviewing = 正在审查插件内容…
+packages-consent-confirming = 正在核对内容并确认同意…

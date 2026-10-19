@@ -218,6 +218,9 @@ pub fn settings(ui: Ui) -> AnyView {
                     let toggle = functional.then(|| {
                         widget(Button::new(ui.now_t("packages-review-enable")))
                             .key(format!("package-review:{id}"))
+                            .bind(move |button: &mut Button| {
+                                button.disabled = ui.plugin_activation_busy.get()
+                            })
                             .on_cx(move |_, _: &Activate, cx| {
                                 cx.dispatch_program_all(Msg::RequestPluginActivation(
                                     enable_id.clone(),
@@ -274,7 +277,7 @@ pub fn settings(ui: Ui) -> AnyView {
                                 ui.now_t("package-licensed-to"),
                                 provided(ui, &package.licensed_to)
                             ))),
-                            widget(Text::new(integrity)),
+                            widget(readable(integrity)),
                             dependencies,
                             error,
                             widget(Stack::row(8.).wrap(true)).children((
@@ -427,9 +430,30 @@ fn reads(ui: Ui, data: &nanatype_theme::DataAccess) -> String {
 pub fn activation(ui: Ui) -> AnyView {
     let show_source = nana_ui::runtime::view::signal(false);
     dynamic(
-        move || (ui.plugin_activation.get(), show_source.get()),
-        move |(review, show)| {
+        move || {
+            (
+                ui.plugin_activation.get(),
+                show_source.get(),
+                ui.plugin_activation_busy.get(),
+                ui.plugin_activation_error.get(),
+            )
+        },
+        move |(review, show, busy, error)| {
             let Some(review) = review else {
+                if *busy || error.is_some() {
+                    return widget(Stack::column(8.).padding_xy(16., 16.))
+                        .key("plugin-activation-status")
+                        .children((
+                            widget(readable(
+                                error
+                                    .clone()
+                                    .unwrap_or_else(|| ui.now_t("packages-consent-reviewing")),
+                            ))
+                            .key("plugin-activation-message"),
+                            activation_cancel(ui),
+                        ))
+                        .into_any();
+                }
                 return widget(Stack::column(0.)).into_any();
             };
             let source = if *show {
@@ -454,10 +478,7 @@ pub fn activation(ui: Ui) -> AnyView {
                         ui.now_t("package-license"),
                         provided(ui, &review.manifest.meta.license)
                     ))),
-                    widget(Text::new(integrity_label(
-                        ui,
-                        &Ok(review.integrity.clone()),
-                    ))),
+                    widget(readable(integrity_label(ui, &Ok(review.integrity.clone())))),
                     widget(Text::new(ui.now_t("packages-consent-risk"))),
                     widget(Text::new(ui.now_t("packages-consent-data"))),
                     widget(readable(reads(ui, &review.data))).key("plugin-consent-reads"),
@@ -498,29 +519,39 @@ pub fn activation(ui: Ui) -> AnyView {
                             .height(160.),
                     )
                     .key("plugin-source-code"),
-                    widget(Text::new(ui.now_t("packages-source-preview-limit"))),
+                    widget(Stack::column(4.)).children((
+                        widget(Text::new(ui.now_t("packages-source-preview-limit"))),
+                        busy.then(|| widget(readable(ui.now_t("packages-consent-confirming")))),
+                    )),
                     widget(Checkbox::new(ui.now_t("packages-source-trusted"), false))
                         .key("plugin-source-trusted")
-                        .bind(move |s: &mut Checkbox| s.checked = ui.plugin_source_trusted.get())
+                        .bind(move |s: &mut Checkbox| {
+                            s.checked = ui.plugin_source_trusted.get();
+                            s.disabled = ui.plugin_activation_busy.get();
+                        })
                         .on(move |e: &ToggleChanged| ui.plugin_source_trusted.set(e.checked)),
                     widget(Stack::row(8.).wrap(true)).children((
                         widget(Button::new(ui.now_t("packages-consent-confirm")))
                             .key("plugin-consent-confirm")
                             .bind(move |button: &mut Button| {
                                 button.disabled = !ui.plugin_source_trusted.get()
+                                    || ui.plugin_activation_busy.get()
                             })
                             .on_cx(|_, _: &Activate, cx| {
                                 cx.dispatch_program_all(Msg::ConfirmPluginActivation)
                             }),
-                        widget(Button::new(ui.now_t("packages-consent-cancel"))).on_cx(
-                            |_, _: &Activate, cx| {
-                                cx.dispatch_program_all(Msg::CancelPluginActivation)
-                            },
-                        ),
+                        activation_cancel(ui),
                     )),
                 ))
                 .into_any()
         },
     )
     .into_any()
+}
+
+fn activation_cancel(ui: Ui) -> AnyView {
+    widget(Button::new(ui.now_t("packages-consent-cancel")))
+        .key("plugin-consent-cancel")
+        .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::CancelPluginActivation))
+        .into_any()
 }

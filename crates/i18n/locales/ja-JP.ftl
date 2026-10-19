@@ -944,3 +944,6 @@ pkgedit-open-failed = プロジェクトを開けませんでした
 pkgedit-exported = 書き出しました
 pkgedit-export-failed = 書き出しに失敗しました
 pkgedit-debug-locate = エラー箇所へ移動
+
+packages-consent-reviewing = プラグインの内容を確認しています…
+packages-consent-confirming = 内容と実行同意を照合しています…

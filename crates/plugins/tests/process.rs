@@ -235,25 +235,33 @@ fn heavy_canvases_repaint_less_often_than_light_views() {
     );
     let light = "local n=0 return {on_event=function() n=n+1 end, view=function() return {views={{slot='panel',root={kind='text',id='t',text=tostring(n)}}}} end}";
     let mut gaps = Vec::new();
-    for source in [heavy.as_str(), light] {
+    for (source, cost) in [(heavy.as_str(), draw), (light, 0)] {
         let (sender, receiver) = mpsc::channel();
         let worker = PluginProcess::spawn(
             Path::new(env!("CARGO_BIN_EXE_nanatype-plugin-worker")),
             source.into(),
             serde_json::json!({"type": "init"}),
             no_data(),
-            move |_| {
-                let _ = sender.send(std::time::Instant::now());
+            move |response| {
+                let _ = sender.send((std::time::Instant::now(), response));
             },
         )
         .unwrap();
-        receiver.recv_timeout(Duration::from_secs(20)).unwrap();
+        let (_, first) = receiver.recv_timeout(Duration::from_secs(20)).unwrap();
+        let WorkerResponse::Update { update, .. } = first else {
+            panic!("worker failed before measuring paint cost {cost}: {first:?}");
+        };
+        assert_eq!(update.paint_cost(), cost, "measure the full authored view");
         for _ in 0..30 {
             let _ = worker.event(serde_json::json!({"type": "tick"}));
             std::thread::sleep(Duration::from_millis(10));
         }
         let mut times = Vec::new();
-        while let Ok(at) = receiver.recv_timeout(Duration::from_millis(600)) {
+        while let Ok((at, response)) = receiver.recv_timeout(Duration::from_millis(600)) {
+            assert!(
+                matches!(response, WorkerResponse::Update { .. }),
+                "worker failed while measuring paint cost {cost}: {response:?}"
+            );
             times.push(at);
         }
         assert!(times.len() >= 2, "too few posts to measure");

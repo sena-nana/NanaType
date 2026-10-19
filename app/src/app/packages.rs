@@ -7,48 +7,18 @@ impl App {
     pub(super) fn package_msg(&mut self, msg: Msg) {
         match msg {
             Msg::RequestPluginActivation(id) => {
-                // Capturing and hashing a package may take a while; never block the UI.
-                let registry = self.registry.clone();
-                crate::plugins::background("plugin-review", &self.ctx, move || {
-                    Msg::PluginReviewReady(crate::plugins::review(&registry, &id).map(Arc::new))
-                });
+                let ticket = self.plugin_activation.request(id.clone(), self.ui);
+                self.review_plugin(ticket, id);
             }
-            Msg::PluginReviewReady(result) => match result {
-                Ok(review) => {
-                    self.ui.plugin_source_trusted.set(false);
-                    self.ui.plugin_activation.set(Some(review));
-                }
-                Err(error) => self.notice(error, true),
-            },
-            Msg::CancelPluginActivation => {
-                self.ui.plugin_source_trusted.set(false);
-                self.ui.plugin_activation.set(None);
-            }
+            Msg::CancelPluginActivation => self.plugin_activation.cancel(self.ui),
             Msg::ConfirmPluginActivation => {
-                if self.ui.plugin_source_trusted.get_untracked()
-                    && let Some(reviewed) = self.ui.plugin_activation.get_untracked()
-                {
-                    let registry = self.registry.clone();
-                    crate::plugins::background("plugin-review", &self.ctx, move || {
-                        Msg::PluginConfirmReviewed {
-                            shown: reviewed.digest.clone(),
-                            current: crate::plugins::review(&registry, &reviewed.id).map(Arc::new),
-                        }
-                    });
+                if let Some((ticket, reviewed)) = self.plugin_activation.confirm(self.ui) {
+                    self.review_plugin(ticket, reviewed.id.clone());
                 }
             }
-            Msg::PluginConfirmReviewed { shown, current } => {
-                // The dialog may have been cancelled or replaced meanwhile.
-                let still_shown = self.ui.plugin_source_trusted.get_untracked()
-                    && self
-                        .ui
-                        .plugin_activation
-                        .with_untracked(|r| r.as_ref().is_some_and(|r| r.digest == shown));
-                if !still_shown {
-                    return;
-                }
-                match current {
-                    Ok(current) if current.digest == shown => {
+            Msg::PluginReviewReady { ticket, result } => {
+                match self.plugin_activation.complete(ticket, result, self.ui) {
+                    Ok(Some(current)) => {
                         let unchanged = self.settings.enabled_plugins.contains(&current.id)
                             && crate::plugins::approval_matches(
                                 &current,
@@ -78,10 +48,8 @@ impl App {
                                 self.ui,
                             );
                         }
-                        self.ui.plugin_activation.set(None);
-                        self.ui.plugin_source_trusted.set(false);
                     }
-                    Ok(_) => self.notice(self.ui.now_t("packages-changed-during-review"), true),
+                    Ok(None) => {}
                     Err(error) => self.notice(error, true),
                 }
             }
@@ -102,6 +70,7 @@ impl App {
                 }
             }
             Msg::DisablePlugin(id) => {
+                self.plugin_activation.cancel_for(&id, self.ui);
                 self.plugins.stop(&id, self.ui);
                 self.edit(|s| {
                     s.enabled_plugins.retain(|v| v != &id);
@@ -109,6 +78,7 @@ impl App {
                 });
             }
             Msg::RefreshPackages => {
+                self.plugin_activation.cancel(self.ui);
                 self.registry.rescan();
                 self.refresh_skin_rows();
                 self.plugins = Default::default();
@@ -122,6 +92,7 @@ impl App {
             }
             Msg::RemovePackage(id) => match self.registry.remove(&id) {
                 Ok(()) => {
+                    self.plugin_activation.cancel(self.ui);
                     self.edit(|s| {
                         s.enabled_plugins.retain(|p| p != &id);
                         s.plugin_approvals.remove(&id);
@@ -137,17 +108,9 @@ impl App {
             Msg::PluginPackagesChanged => {
                 let registry = self.registry.clone();
                 let ids = self.plugins.running();
-                let ctx = self.ctx.clone();
-                let spawned = std::thread::Builder::new()
-                    .name("plugin-review".into())
-                    .spawn(move || {
-                        ctx.dispatch(Msg::PluginPackagesReviewed(crate::plugins::review_digests(
-                            &registry, &ids,
-                        )));
-                    });
-                if let Err(error) = spawned {
-                    crate::debug_log(&format!("plugin review unavailable: {error}"));
-                }
+                crate::plugins::background("plugin-review", &self.ctx, move || {
+                    Msg::PluginPackagesReviewed(crate::plugins::review_digests(&registry, &ids))
+                });
             }
             Msg::PluginPackagesReviewed(reviewed) => self.plugins.revalidate(&reviewed, self.ui),
             Msg::PluginResult {
@@ -171,6 +134,21 @@ impl App {
                 let _ = self.plugins.event(&id, event);
             }
             _ => unreachable!("not a package message"),
+        }
+    }
+
+    fn review_plugin(&mut self, ticket: u64, id: String) {
+        let registry = self.registry.clone();
+        if let Err(error) = crate::plugins::try_background("plugin-review", &self.ctx, move || {
+            Msg::PluginReviewReady {
+                ticket,
+                result: crate::plugins::review(&registry, &id).map(Arc::new),
+            }
+        }) {
+            self.package_msg(Msg::PluginReviewReady {
+                ticket,
+                result: Err(error.to_string()),
+            });
         }
     }
 }

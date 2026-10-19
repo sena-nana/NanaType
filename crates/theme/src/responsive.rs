@@ -279,7 +279,11 @@ mod tests {
         if std::env::var_os("NANATYPE_BLESS").is_some() {
             std::fs::write(fixture, &actual).unwrap();
         }
-        let expected = std::fs::read_to_string(fixture).unwrap_or_default();
+        // Git may check this text fixture out with CRLF on Windows; hashes
+        // still compare verbatim, independently of the checkout's line endings.
+        let expected = std::fs::read_to_string(fixture)
+            .unwrap_or_default()
+            .replace("\r\n", "\n");
         assert_eq!(
             actual, expected,
             "a built-in skin resolves differently; NANATYPE_BLESS=1 after a deliberate change"

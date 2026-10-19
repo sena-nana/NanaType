@@ -153,6 +153,8 @@ pub struct Ui {
     pub plugin_errors: Signal<Arc<HashMap<String, String>>>,
     pub plugin_activation: Signal<Option<Arc<crate::plugins::ActivationReview>>>,
     pub plugin_source_trusted: Signal<bool>,
+    pub plugin_activation_busy: Signal<bool>,
+    pub plugin_activation_error: Signal<Option<String>>,
     /// The open package editor project, if any.
     pub package_editor: Signal<Option<Arc<crate::package_editor::EditorView>>>,
     pub package_editor_tab: Signal<crate::package_editor::Tab>,
@@ -282,6 +284,8 @@ impl Ui {
             plugin_errors: signal(Arc::new(HashMap::new())),
             plugin_activation: signal(None),
             plugin_source_trusted: signal(false),
+            plugin_activation_busy: signal(false),
+            plugin_activation_error: signal(None),
             package_editor: signal(None),
             package_editor_tab: signal(Default::default()),
             package_editor_surface: signal(Default::default()),

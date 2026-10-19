@@ -11,9 +11,12 @@ use std::{
     },
 };
 static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
-/// Tickets for background syncs and listings; global so a replaced manager
-/// never accepts an older manager's late result.
+/// Global request identities, shared by syncs, listings and consent sessions;
+/// replacing an owner never reuses one of its outstanding tickets.
 static NEXT_TICKET: AtomicU64 = AtomicU64::new(1);
+
+mod activation;
+pub use activation::Activation;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PackageRow {
@@ -129,13 +132,21 @@ pub fn background(
     ctx: &RuntimeProgramContext<Msg>,
     work: impl FnOnce() -> Msg + Send + 'static,
 ) {
-    let ctx = ctx.clone();
-    if let Err(error) = std::thread::Builder::new()
-        .name(name.into())
-        .spawn(move || ctx.dispatch(work()))
-    {
+    if let Err(error) = try_background(name, ctx, work) {
         crate::debug_log(&format!("{name} unavailable: {error}"));
     }
+}
+
+pub(crate) fn try_background(
+    name: &str,
+    ctx: &RuntimeProgramContext<Msg>,
+    work: impl FnOnce() -> Msg + Send + 'static,
+) -> std::io::Result<()> {
+    let ctx = ctx.clone();
+    std::thread::Builder::new()
+        .name(name.into())
+        .spawn(move || ctx.dispatch(work()))
+        .map(|_| ())
 }
 
 /// Package rows with their signature status, for the packages page.
@@ -304,49 +315,68 @@ impl Manager {
                 continue;
             }
             let result = reviewed.and_then(|reviewed| {
-                if !approval_matches(&reviewed, approvals.get(&id)) {
-                    return Err(ui.now_t("packages-consent-required"));
-                }
-                let reads: Vec<_> = reviewed
-                    .data
-                    .disclosures()
-                    .map(|d| d.reference.clone())
-                    .collect();
-                let answer = data_answer(reviewed.data.clone());
-                let generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
+                let executable = std::env::current_exe().map_err(|e| e.to_string())?;
                 let plugin_id = id.clone();
                 let dispatch = ctx.clone();
-                PluginProcess::spawn(
-                    &std::env::current_exe().map_err(|e| e.to_string())?,
-                    reviewed.source.clone(),
-                    serde_json::json!({"type": "init", "reads": reads}),
-                    answer,
-                    move |response| {
+                self.start(
+                    &reviewed,
+                    approvals.get(&id),
+                    &executable,
+                    move |generation, response| {
                         dispatch.dispatch(Msg::PluginResult {
                             id: plugin_id.clone(),
                             generation,
                             response: Arc::new(response),
                         });
                     },
+                    ui,
                 )
-                .map(|process| Running {
-                    generation,
-                    digest: reviewed.digest.clone(),
-                    roots: reviewed.roots.clone(),
-                    process,
-                })
-                .map_err(|e| e.to_string())
             });
-            match result {
-                Ok(process) => {
-                    self.running.insert(id.clone(), process);
-                }
-                Err(message) => {
-                    self.remove(&id, Some(message), ui);
-                }
+            if let Err(message) = result {
+                self.remove(&id, Some(message), ui);
             }
         }
         self.refresh_watch(&ctx);
+    }
+    /// Start one immutable snapshot, enforcing approval at the process boundary.
+    /// The host supplies its executable and dispatch callback; tests use the
+    /// same path with the production worker executable.
+    pub fn start(
+        &mut self,
+        reviewed: &ActivationReview,
+        approval: Option<&nanatype_settings::PluginApproval>,
+        executable: &std::path::Path,
+        post: impl Fn(u64, WorkerResponse) + Send + 'static,
+        ui: Ui,
+    ) -> Result<u32, String> {
+        if !approval_matches(reviewed, approval) {
+            return Err(ui.now_t("packages-consent-required"));
+        }
+        let reads: Vec<_> = reviewed
+            .data
+            .disclosures()
+            .map(|d| d.reference.clone())
+            .collect();
+        let generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
+        let process = PluginProcess::spawn(
+            executable,
+            reviewed.source.clone(),
+            serde_json::json!({"type": "init", "reads": reads}),
+            data_answer(reviewed.data.clone()),
+            move |response| post(generation, response),
+        )
+        .map_err(|e| e.to_string())?;
+        let pid = process.id();
+        self.running.insert(
+            reviewed.id.clone(),
+            Running {
+                generation,
+                digest: reviewed.digest.clone(),
+                roots: reviewed.roots.clone(),
+                process,
+            },
+        );
+        Ok(pid)
     }
     pub fn event(&mut self, id: &str, event: serde_json::Value) -> Result<(), String> {
         self.running

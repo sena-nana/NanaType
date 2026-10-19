@@ -953,3 +953,6 @@ pkgedit-open-failed = Could not open the project
 pkgedit-exported = Exported
 pkgedit-export-failed = Export failed
 pkgedit-debug-locate = Go to
+
+packages-consent-reviewing = Reviewing plugin content…
+packages-consent-confirming = Checking content and confirming consent…

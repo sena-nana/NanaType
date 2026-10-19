@@ -35,6 +35,21 @@ cargo run -p nanatype-theme --release --example data_load_perf
 
 **情书数据**：冷加载（含 NTHZ 索引解析与管线绑定）32ms；新注册表热加载中位 9ms，解析结果按内容哈希共享；导入时完整校验全部压缩块 53ms。130 字的笔顺时间图约 45ms，现在在后台线程生成，UI 线程只做排版快照。
 
+## Windows 开发构建的满额视图（2026-10-19）
+
+同机直接 IPC 测量，2048 条圆角矩形的完整视图在修复前约需 280–302ms，超过宿主 200ms 响应期限。开发／测试构建现在仅对 `nanatype-plugins` 和 `wasmtime` 使用 `opt-level = 2`，减少逐值读取 Lua 结果时的 Rust 与 Wasmtime 调用开销；release／dist、响应期限及沙箱限额均未调整。
+
+修复后的正式 `nanatype.exe --plugin-worker` 连续 10 次响应约 37–40ms，中位 37.35ms、最大 40.01ms；每个响应仍包含 2048 条命令。这是单机 debug 参考结果，不等同于完整 release 性能验收。
+
+原先失败的 `heavy_canvases_repaint_less_often_than_light_views` 已通过，并增加完整视图与工作进程错误检查；满额视图至少 150ms、轻量视图小于 100ms 的发布间隔断言保持不变。进程 5 项及 Lua 沙箱 15 项回归通过，正式应用工作进程生命周期回归通过。复现命令：
+
+```sh
+cargo test -p nanatype-plugins -- --test-threads=1
+cargo test -p nanatype --test plugin_consent production_workers_require_approval_stop_on_changes_and_ignore_late_responses -- --exact --test-threads=1
+```
+
+本地证据为 `target/full-draw-plugin-tests.log`、`target/full-draw-app-worker.log`、`target/full-draw-profile-probe.json` 和 `target/full-draw-app-probe.json`。
+
 ## 运行预算
 
 | 项目 | 上限 |
@@ -56,7 +71,7 @@ cargo run -p nanatype-theme --release --example data_load_perf
 - **解释器**：固定的 Wasm Lua，不连接 WASI；文件、进程等导入一律拒绝，不提供 `io`、`os`、`load`、`require` 等库。宿主读取结果时不运行插件代码或元方法。
 - **独立进程**：每个插件在独立工作进程中运行，环境变量被清空。崩溃、协议错误、超时、燃料耗尽或内存耗尽只结束该插件；进程停止后立即回收，反复启停不残留进程（`process` 测试）。
 - **macOS**：工作进程在读取任何请求前应用拒绝优先的 Seatbelt 配置；宿主事先打开的管道仍可用。自执行测试实测读文件、写文件、列目录、网络连接与绑定、创建进程均被拒绝（`os_sandbox` 测试）。无法应用配置时，工作进程不运行任何插件代码。应用程序本身作为工作进程运行（`nanatype --plugin-worker`）也已验证。
-- **Windows**：宿主在发送请求前把工作进程放入作业对象：单进程、禁止桌面、剪贴板、全局原子和系统设置访问、已提交内存 256 MiB、宿主关闭时终止。目前只在本机做了 `x86_64-pc-windows-msvc` 编译与 Clippy 检查，**尚未在 Windows 实机运行验证**；AppContainer 未实现，因此不宣称 Windows 有文件或网络层面的 OS 隔离。
+- **Windows**：宿主在发送请求前把工作进程放入作业对象：单进程、禁止桌面、剪贴板、全局原子和系统设置访问、已提交内存 256 MiB、宿主关闭时终止。现已在 Windows 上验证正式应用工作进程的启动、事件处理、禁用或包／依赖变化后的终止与进程回收，作业对象创建成功；各项 OS 限制仍未逐项实测。AppContainer 未实现，因此不宣称 Windows 有文件或网络层面的 OS 隔离。
 - **其他平台**：没有 OS 级隔离，只依赖解释器边界。
 
 开放源码或可 fork 不削弱官方宿主的权限边界；签名有效不等于作者身份认证，部分只读保护不宣称不可绕过。
@@ -70,6 +85,6 @@ cargo run -p nanatype-theme --release --example data_load_perf
 
 ## 未完成
 
-- Windows 实机：作业对象的运行验证、性能测量、安装包与签名。
+- Windows 实机：作业对象各项限制、完整 release 性能测量、安装包与签名。开发构建的满额绘制失败已修复，见上文；单机 debug 测量与启停／回收验证不代替完整平台验收。
 - AppContainer 隔离；macOS 正式签名与 App Sandbox 授权。
 - NanaUI 绘制大量画布指令的开销（约 12ms／2047 条），需要在上游优化。
