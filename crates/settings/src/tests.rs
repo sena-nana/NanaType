@@ -15,7 +15,7 @@ fn old_enabled_ids_do_not_create_trust_and_revoked_approvals_are_removed() {
         PluginApproval {
             digest: "a".repeat(64),
             trusted_source: false,
-            policy: 1,
+            policy: PLUGIN_CONSENT_POLICY,
         },
     );
     settings.sanitize();
@@ -25,7 +25,20 @@ fn old_enabled_ids_do_not_create_trust_and_revoked_approvals_are_removed() {
         PluginApproval {
             digest: "a".repeat(64),
             trusted_source: true,
-            policy: 1,
+            policy: PLUGIN_CONSENT_POLICY - 1,
+        },
+    );
+    settings.sanitize();
+    assert!(
+        settings.plugin_approvals.is_empty(),
+        "consent under an older policy does not cover newer script capabilities"
+    );
+    settings.plugin_approvals.insert(
+        "example.plugin".into(),
+        PluginApproval {
+            digest: "a".repeat(64),
+            trusted_source: true,
+            policy: PLUGIN_CONSENT_POLICY,
         },
     );
     settings.sanitize();

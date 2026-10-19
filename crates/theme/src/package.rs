@@ -24,9 +24,12 @@ pub struct PackageManifest {
     pub dependencies: BTreeMap<String, String>,
     #[serde(default)]
     pub catalogue_order: u32,
-    /// Lua source entry; never a native module or bytecode.
+    /// Script entry and the declared data it may read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub entry: Option<String>,
+    pub lua: Option<LuaSpec>,
+    /// Declared data resources, shared by skins, pipelines and scripts.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub data: BTreeMap<String, crate::DataSpec>,
     /// Author-declared creation date and license recipient, independent of capability.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub created_at: String,
@@ -34,7 +37,21 @@ pub struct PackageManifest {
     pub licensed_to: String,
 }
 
+/// `[lua]`: everything a script is granted is listed here.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LuaSpec {
+    /// Lua source entry; never a native module or bytecode.
+    pub entry: String,
+    /// Data references (`id` or `pkg:<dependency>/<id>`) the script may query.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reads: Vec<String>,
+}
+
 impl PackageManifest {
+    pub fn entry(&self) -> Option<&str> {
+        self.lua.as_ref().map(|l| l.entry.as_str())
+    }
     pub fn to_toml(&self) -> Result<String, FileError> {
         self.validate()?;
         toml::to_string_pretty(self).map_err(|e| FileError::Io(e.to_string()))
@@ -80,10 +97,22 @@ impl PackageManifest {
                 "the skin capability and skin.toml must appear together",
             ));
         }
-        if let Some(entry) = &self.entry
+        if let Some(entry) = self.entry()
             && !exists(entry)
         {
             return Err(invalid("the Lua entry does not exist"));
+        }
+        for (id, spec) in &self.data {
+            if !exists(&spec.path) {
+                return Err(invalid(&format!("data.{id} file does not exist")));
+            }
+            let bytes = files.file_len(&spec.path)?;
+            if bytes > spec.format.max_raw() {
+                return Err(FileError::TooLarge {
+                    path: spec.path.clone(),
+                    bytes,
+                });
+            }
         }
         if has(PackageCapability::Resources)
             && !listed.iter().any(|path| {
@@ -95,7 +124,7 @@ impl PackageManifest {
                         crate::load::MANIFEST,
                     ]
                     .contains(&path.as_str())
-                    && self.entry.as_deref() != Some(path)
+                    && self.entry() != Some(path)
             })
         {
             return Err(invalid("the resources capability needs resource files"));
@@ -139,17 +168,42 @@ impl PackageManifest {
                 ));
             }
         }
-        if self.capabilities.contains(&PackageCapability::Lua) {
-            let entry = self
-                .entry
-                .as_deref()
-                .ok_or_else(|| invalid("Lua package needs an entry"))?;
-            clean_path(entry)?;
-            if !entry.ends_with(".lua") {
-                return Err(invalid("Lua entry must be source (.lua)"));
+        if self.data.len() > 64 {
+            return Err(invalid("at most 64 data resources"));
+        }
+        for (id, spec) in &self.data {
+            spec.validate(id).map_err(|e| invalid(&e))?;
+        }
+        match (
+            &self.lua,
+            self.capabilities.contains(&PackageCapability::Lua),
+        ) {
+            (Some(lua), true) => {
+                clean_path(&lua.entry)?;
+                if !lua.entry.ends_with(".lua") {
+                    return Err(invalid("Lua entry must be source (.lua)"));
+                }
+                if lua.reads.len() > 32 {
+                    return Err(invalid("a script may declare at most 32 reads"));
+                }
+                for (i, reference) in lua.reads.iter().enumerate() {
+                    let (package, id) =
+                        crate::data::split_reference(reference).map_err(|e| invalid(&e))?;
+                    let declared = match package {
+                        None => self.data.contains_key(id),
+                        Some(package) if package == self.meta.id => self.data.contains_key(id),
+                        Some(package) => self.dependencies.contains_key(package),
+                    };
+                    if !declared || lua.reads[..i].contains(reference) {
+                        return Err(invalid(&format!(
+                            "lua.reads `{reference}` must name declared data or a declared dependency, once"
+                        )));
+                    }
+                }
             }
-        } else if self.entry.is_some() {
-            return Err(invalid("entry requires the lua capability"));
+            (None, true) => return Err(invalid("Lua package needs [lua] entry")),
+            (Some(_), false) => return Err(invalid("[lua] requires the lua capability")),
+            (None, false) => {}
         }
         Ok(())
     }
@@ -161,7 +215,8 @@ const ROOT_KEYS: &[&str] = &[
     "capabilities",
     "dependencies",
     "catalogue_order",
-    "entry",
+    "lua",
+    "data",
     "created_at",
     "licensed_to",
     "schema",
@@ -458,7 +513,8 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
             catalogue_order: 0,
-            entry: None,
+            lua: None,
+            data: Default::default(),
             created_at: String::new(),
             licensed_to: String::new(),
         };
@@ -674,7 +730,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let archive = dir.path().join("wrapped.ntpkg");
         let mut zip = zip::ZipWriter::new(fs::File::create(&archive).unwrap());
-        let metadata = "format=1\nschema=3\nid='example.function'\nversion='1.0.0'\ncapabilities=['lua']\nentry='main.lua'\n";
+        let metadata = "format=1\nschema=3\nid='example.function'\nversion='1.0.0'\ncapabilities=['lua']\n[lua]\nentry='main.lua'\n";
         for (path, bytes) in [
             ("wrapper/package.toml", metadata),
             ("wrapper/main.lua", "while true do end"),
@@ -824,7 +880,7 @@ mod tests {
         fs::create_dir_all(dir.path().join("script")).unwrap();
         fs::write(
             dir.path().join("script").join(PACKAGE_MANIFEST),
-            "format=1\nschema=3\nid='script'\nversion='1.0.0'\ncapabilities=['lua']\nentry='main.lua'\n",
+            "format=1\nschema=3\nid='script'\nversion='1.0.0'\ncapabilities=['lua']\n[lua]\nentry='main.lua'\n",
         )
         .unwrap();
         assert!(fails("script").contains("entry"));

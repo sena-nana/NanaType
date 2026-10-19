@@ -9,6 +9,12 @@
 #![forbid(unsafe_code)]
 
 mod contour;
+mod data;
+pub use data::{
+    DataAccess, DataDisclosure, DataFormat, DataQuery, DataSpec, DataValue, JsonConstraints,
+    JsonType, LoadedData, MAX_QUERY_RESULT_BYTES, TextData, load_data, parse_data, resolve_data,
+    split_reference,
+};
 mod files;
 mod fonts;
 mod geometry;
@@ -20,7 +26,8 @@ mod material;
 mod package;
 mod project;
 pub use package::{
-    PACKAGE_FORMAT, PACKAGE_MANIFEST, PackageCapability, PackageManifest, clean_resource_path,
+    LuaSpec, PACKAGE_FORMAT, PACKAGE_MANIFEST, PackageCapability, PackageManifest,
+    clean_resource_path,
 };
 pub use project::{
     INTEGRITY_FILE, PackageProject, PackageSeal, SealIdentity, SealStatus, verify_integrity,

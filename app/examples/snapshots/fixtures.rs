@@ -20,7 +20,8 @@ pub fn fixture_package(dir: &std::path::Path) {
         capabilities: vec![PackageCapability::Skin],
         dependencies,
         catalogue_order: 0,
-        entry: None,
+        lua: None,
+        data: Default::default(),
         created_at: String::new(),
         licensed_to: String::new(),
     };

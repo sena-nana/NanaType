@@ -1,6 +1,9 @@
 //! Only the application's pinned interpreter is instantiated, never plugin Wasm.
-use crate::{MAX_MESSAGE_BYTES, MAX_SCRIPT_BYTES, PluginUpdate};
-use std::sync::OnceLock;
+use crate::{
+    DataReply, DataRequest, MAX_DATA_EVENT_BYTES, MAX_DATA_REQUESTS, MAX_DATA_RESULT_BYTES,
+    MAX_MESSAGE_BYTES, MAX_SCRIPT_BYTES, PluginUpdate,
+};
+use std::{collections::BTreeSet, sync::OnceLock};
 use wasmtime::{
     Caller, Config, Engine, Extern, ExternType, Instance, Linker, Module, Store, StoreLimits,
     StoreLimitsBuilder, Val,
@@ -8,6 +11,7 @@ use wasmtime::{
 use wasmtime::{Result, bail, format_err};
 
 const COMPILED_VM: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/lua.cwasm"));
+const PRELUDE: &str = include_str!("../runtime/prelude.lua");
 const BOOTSTRAP: &str = include_str!("../runtime/bootstrap.lua");
 const FUEL: u64 = 20_000_000;
 const MEMORY: usize = 32 * 1024 * 1024;
@@ -25,6 +29,17 @@ pub struct LuaSandbox {
     store: Store<StoreLimits>,
     instance: Instance,
     state: i32,
+    /// Data request tokens awaiting an answer from the host.
+    pending: BTreeSet<u32>,
+}
+
+/// What one dispatch produced: the view and any data requests.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Dispatch {
+    pub update: PluginUpdate,
+    #[serde(default)]
+    pub requests: Vec<DataRequest>,
 }
 
 fn engine() -> Result<&'static (Engine, Module)> {
@@ -176,6 +191,7 @@ impl LuaSandbox {
             store,
             instance,
             state,
+            pending: BTreeSet::new(),
         };
         for (name, global) in [
             ("luaopen_base", "_G"),
@@ -194,6 +210,7 @@ impl LuaSandbox {
             vm.free(pointer)?;
         }
         vm.eval("io=nil; os=nil; package=nil; debug=nil; require=nil; dofile=nil; loadfile=nil; load=nil; print=nil; warn=nil; collectgarbage=nil; string.dump=nil; return ''")?;
+        vm.eval(&format!("{PRELUDE}\nreturn ''"))?;
         let script = format!("local plugin=(function()\n{source}\nend)()\n{BOOTSTRAP}");
         vm.eval(&script)?;
         Ok(vm)
@@ -295,15 +312,48 @@ impl LuaSandbox {
         self.free(length)?;
         Ok(String::from_utf8_lossy(&detail).into_owned())
     }
+    /// Dispatch a host event and return the view; data requests are dropped.
     pub fn event(&mut self, event: &serde_json::Value) -> Result<PluginUpdate> {
+        self.dispatch(event).map(|d| d.update)
+    }
+    /// Dispatch a host event. `data` events only come from [`Self::deliver`].
+    pub fn dispatch(&mut self, event: &serde_json::Value) -> Result<Dispatch> {
+        if event.get("type").and_then(|t| t.as_str()) == Some("data") {
+            bail!("data events are delivered by the host only");
+        }
+        self.pending.clear();
+        self.run(event)
+    }
+    /// Deliver answers to outstanding requests as a `data` event.
+    pub fn deliver(&mut self, results: &[DataReply]) -> Result<Dispatch> {
+        let mut total = 0;
+        for reply in results {
+            if !self.pending.remove(&reply.token) {
+                bail!("data answer for an unknown request");
+            }
+            let len = serde_json::to_vec(reply)?.len();
+            total += len;
+            if len > MAX_DATA_RESULT_BYTES + 256 || total > MAX_DATA_EVENT_BYTES {
+                bail!("data answers exceed budget");
+            }
+        }
+        self.run(&serde_json::json!({"type": "data", "results": results}))
+    }
+    fn run(&mut self, event: &serde_json::Value) -> Result<Dispatch> {
         let source = format!("return __nana_dispatch({})", lua_value(event));
         if source.len() > MAX_MESSAGE_BYTES {
             bail!("event too large");
         }
         let result = self.eval(&source)?;
-        let update: PluginUpdate = serde_json::from_str(&result)?;
-        update.validate().map_err(|e| format_err!(e))?;
-        Ok(update)
+        let dispatch: Dispatch = serde_json::from_str(&result)?;
+        dispatch.update.validate().map_err(|e| format_err!(e))?;
+        crate::validate_requests(&dispatch.requests).map_err(|e| format_err!(e))?;
+        self.pending
+            .extend(dispatch.requests.iter().map(|r| r.token));
+        if self.pending.len() > MAX_DATA_REQUESTS {
+            bail!("too many pending data requests");
+        }
+        Ok(dispatch)
     }
 }
 

@@ -4,9 +4,23 @@
 
 格式版本为 `format = 1`、`schema = 3`；统一存储于应用数据目录的 `packages/`。旧格式不兼容，旧 `skins/` 目录不自动迁移或删除。依赖使用 `[dependencies]` 的包 ID 与精确三段版本；资源引用为本包相对路径或 `pkg:<包ID>/<路径>`。常用字体可通过 `builtin:fonts/...` 引用。依赖缺失、冲突、循环及越界资源会拒绝加载。导出默认将依赖放入 `dependencies/<包ID>/`，携带素材授权。
 
-## Lua API 1
+## Lua API 2
 
-功能包额外声明 `capabilities = ["lua"]` 和 `entry = "main.lua"`。脚本只接收值类型事件，并返回声明式视图；不接触应用内部对象或 Rust 消息枚举。
+功能包额外声明 `capabilities = ["lua"]` 和 `[lua]` 表：`entry` 为 UTF-8 源码入口，`reads` 列出脚本可读取的声明数据（默认为空）。脚本只接收值类型事件，并返回声明式视图；不接触应用内部对象或 Rust 消息枚举。
+
+```toml
+[lua]
+entry = "main.lua"
+reads = ["phrases"]          # 本包数据；依赖包数据写作 "pkg:<包ID>/<数据ID>"
+
+[data.phrases]
+path = "data/phrases.json"
+format = "json"              # text、json、nthz；按声明而非扩展名解析
+format_version = 1
+source = "作者自制"
+license = "MIT"
+constraints = { type = "object", required = ["phrases"], max_depth = 3 }
+```
 
 ```lua
 local count = 0
@@ -22,18 +36,24 @@ return {
 }
 ```
 
-- 事件包括 `init`、`command`、播放开始／结束 `line_start`／`line_end`、`speaking`、`expression`、`portrait`、`shake`、`vts` 和 `chat_message`（平台、作者、纯文本）。事件字段是宿主已生成的本地值，不包含账户凭据。
+- 事件包括 `init`（`reads` 列出可读数据）、`data`、`command`、播放开始／结束 `line_start`／`line_end`、`speaking`、`expression`、`portrait`、`shake`、`vts` 和 `chat_message`（平台、作者、纯文本）。事件字段是宿主已生成的本地值，不包含账户凭据。
 - `commands = {{id = 'reset', label = 'Reset'}}` 声明本地命令。宿主显示命令入口，激活后向原插件发回 `{type='command', id='reset'}`；命令不能调用任意应用动作。
 - 视图挂载点为 `display`、`history`、`input`、`panel`，分别对应展示、历史、输入内容区和插件面板。通用界面仍使用独立的中性主题。
 - 组件为 `column`、`row`、`text`、`button`、`canvas`，每个组件都需稳定且唯一的 `id`。Lua 函数可以组合返回这些节点以定义可复用组件。
 - 容器使用 `children`。`text` 使用字面文本，不执行富文本、链接或 HTML；`button` 通过 `command` 回传事件，支持宿主按钮已有的键盘和无障碍交互。
 - `canvas` 声明 `width`、`height` 与 `draw`。绘制支持 `rect`（`rect=[x,y,w,h]`、RGBA `color`、`radius`）和 `path`（`points`、`color`、`closed`、`width`）；宿主绘制并缓存结果，Lua 不进入每帧绘制路径。皮肤的高级动效继续通过受限 WGSL 接口表达。
 
-完整可安装示例位于 `docs/examples/counter-plugin/`，打包好的 [counter-plugin.ntpkg](examples/counter-plugin.ntpkg) 可在“插件与资源包”导入并启用。它统计已播放台词，提供画布进度条和重置按钮。修改源码后用 `python scripts/assets/package-example-plugins.py` 重新生成压缩包。
+### 声明数据
+
+`nana.data.request(id, query)` 只能请求 `reads` 中的数据，立即返回 token；宿主随后以 `{type='data', results={{token=…, value=…}或{token=…, error=…}}}` 事件送回结果，因此第一次 `view()` 尚无数据。查询为 `{kind='info'}`、`{kind='whole'}`、文本 `{kind='lines', start, count}`、JSON `{kind='pointer', pointer='/a/0'}` 与 `{kind='slice', pointer, start, count}`、笔顺数据 `{kind='glyph', char='心'}`。结果只是值：不含路径、句柄或宿主对象；JSON `null` 在 Lua 中为 `nil`。
+
+宿主按启用同意时的内容快照应答，导入时已按声明格式完整校验。每次分发最多 8 个请求，每个宿主事件最多 4 轮连锁请求，单个结果 64 KiB、每轮合计 120 KiB，`lines`／`slice` 每次最多 1024 行；超过预算返回错误而不是截断，大数据须分块查询。下一个宿主事件到来时，未应答的请求作废。数据格式、约束与预算的完整说明见[统一包整体设计](package-design.md)。
+
+完整可安装示例位于 `docs/examples/counter-plugin/`，打包好的 [counter-plugin.ntpkg](examples/counter-plugin.ntpkg) 可在“插件与资源包”导入并启用。它统计已播放台词，提供画布进度条和重置按钮。`docs/examples/phrase-plugin/`（[phrase-plugin.ntpkg](examples/phrase-plugin.ntpkg)）演示声明 JSON 数据并逐句按值查询。修改源码后用 `python scripts/assets/package-example-plugins.py` 重新生成压缩包。
 
 ## 安全与生命周期
 
-设置中的“审查来源并请求启用”会逐个展示作者、制作日期、许可证、授权对象、脚本入口、包位置、签名状态及内容指纹。用户须主动勾选已确认来源可信且了解风险，再点击“同意并启动此插件”。确认前不运行代码。旧设置中的启用 ID 不会生成新的信任记录；同意绑定完整包及依赖内容，更新后必须重新确认。禁用同时撤销同意；重新加载只能复用仍与当前内容匹配的同意。运行中插件的包或依赖目录在磁盘上发生变化时，宿主在后台重新计算内容指纹，与启动时不一致即终止该插件并要求重新确认。
+设置中的“审查来源并请求启用”会逐个展示作者、制作日期、许可证、授权对象、脚本入口、可读取数据（所属包、格式版本、大小、来源、许可及是否受签名保护）、包位置、签名状态及内容指纹。用户须主动勾选已确认来源可信且了解风险，再点击“同意并启动此插件”。确认前不运行代码。旧设置中的启用 ID 不会生成新的信任记录；同意记录带策略版本，策略 2 增加声明数据读取，此前的同意需重新审查；同意绑定完整包及依赖内容，更新后必须重新确认。禁用同时撤销同意；重新加载只能复用仍与当前内容匹配的同意。运行中插件的包或依赖目录在磁盘上发生变化时，宿主在后台重新计算内容指纹，与启动时不一致即终止该插件并要求重新确认。
 
 `package.toml` 的 `author`、`created_at`（可选 `YYYY-MM-DD`）、`licensed_to` 和 `license` 对所有能力一致适用。授权对象是作者声明的个人、组织或所有用户，不做账号绑定。缺失信息显示“未提供”，不推断作者身份或制作日期。
 
@@ -59,4 +79,4 @@ return {
 
 2026-10-19 统一包迁移的验收（Windows x86_64）：28 个内置皮肤 × 展示／历史／输入共 84 张截图与迁移前逐像素一致，`chat_parity` 默认及 300px 窄窗布局全部通过。冷启动皮肤注册表由约 341 ms 降至 219 ms，内置清单在构建时生成解析数据；渲染宿主基准各场景中位耗时均在 ±0.002 ms 以内，未观察到明显退化。release 构建中解释器初始化约 2.1 ms，预热后单次事件中位 0.17 ms、P95 0.32 ms（VM 内执行，不含进程创建与 IPC，可用 `cargo run -p nanatype-plugins --release --example plugin_perf` 复测）。macOS 构建与签名尚未验证。
 
-后续编辑器、自定义数据、声明式 Shader 管线及平台加固按[分阶段计划](package-roadmap.md)跟踪；未完成阶段不视为当前可用接口。
+后续编辑器、声明式 Shader 管线及平台加固按[分阶段计划](package-roadmap.md)跟踪；未完成阶段不视为当前可用接口。

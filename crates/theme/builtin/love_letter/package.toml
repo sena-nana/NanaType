@@ -22,3 +22,10 @@ zh-CN = "情书"
 en-US = "Rose ink on cream stationery, overlapping handwritten strokes and a shared ink dissolve"
 ja-JP = "クリーム色の便箋に薔薇色のインク。筆順に沿って綴り、文章全体が溶けてゆく"
 zh-CN = "奶油信纸与玫瑰墨迹，按笔顺错峰书写，整段温柔消融"
+
+[data.strokes]
+path = "strokes.nthz"
+format = "nthz"
+format_version = 1
+source = "Make Me a Hanzi bddc96d4 graphics.txt, GB2312 subset of 6763 characters; see SOURCES.txt"
+license = "Arphic Public License (ARPHICPL.TXT, APL-*.txt)"

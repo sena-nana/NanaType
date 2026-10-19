@@ -108,3 +108,111 @@ fn long_non_ascii_event_text_fits_the_source_budget() {
     let update = vm.event(&json!({"text":text})).unwrap();
     assert!(matches!(&update.views[0].root,Node::Text{text,..} if text=="98304"));
 }
+
+const DATA_PLUGIN: &str = r#"
+  local got = {}
+  return {
+    on_event = function(e)
+      if e.type == 'ask' then
+        for i = 1, e.count do nana.data.request('words', {kind = 'whole'}) end
+      elseif e.type == 'data' then
+        for _, r in ipairs(e.results) do got[#got + 1] = r.error or r.value end
+      end
+    end,
+    view = function()
+      return {views = {{slot = 'panel', root = {kind = 'text', id = 't', text = table.concat(got, ',')}}}}
+    end,
+  }
+"#;
+
+fn text(update: &nanatype_plugins::PluginUpdate) -> &str {
+    match &update.views[0].root {
+        Node::Text { text, .. } => text,
+        node => panic!("{node:?}"),
+    }
+}
+
+#[test]
+fn data_requests_are_values_with_tokens_and_answers_arrive_as_events() {
+    use nanatype_plugins::DataReply;
+    let mut vm = LuaSandbox::new(DATA_PLUGIN).unwrap();
+    let asked = vm.dispatch(&json!({"type":"ask","count":2})).unwrap();
+    assert_eq!(asked.requests.len(), 2);
+    assert_eq!(asked.requests[0].query, json!({"kind": "whole"}));
+    let answers = [
+        DataReply {
+            token: asked.requests[0].token,
+            value: Some(json!("hello")),
+            error: None,
+        },
+        DataReply::error(asked.requests[1].token, "denied"),
+    ];
+    let delivered = vm.deliver(&answers).unwrap();
+    assert_eq!(text(&delivered.update), "hello,denied");
+    assert!(
+        vm.deliver(&answers[..1]).is_err(),
+        "answers are accepted once, only for outstanding tokens"
+    );
+}
+
+#[test]
+fn scripts_cannot_forge_data_events_or_exceed_request_budgets() {
+    use nanatype_plugins::{DataReply, MAX_DATA_REQUESTS, MAX_DATA_RESULT_BYTES};
+    let mut vm = LuaSandbox::new(DATA_PLUGIN).unwrap();
+    assert!(
+        vm.dispatch(&json!({"type":"data","results":[{"token":1,"value":"forged"}]}))
+            .is_err()
+    );
+    let mut vm = LuaSandbox::new(DATA_PLUGIN).unwrap();
+    let error = vm
+        .dispatch(&json!({"type":"ask","count": MAX_DATA_REQUESTS + 1}))
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("pending"), "{error:#}");
+    let mut vm = LuaSandbox::new(DATA_PLUGIN).unwrap();
+    let asked = vm.dispatch(&json!({"type":"ask","count":1})).unwrap();
+    let huge = DataReply {
+        token: asked.requests[0].token,
+        value: Some(json!("x".repeat(MAX_DATA_RESULT_BYTES + 1024))),
+        error: None,
+    };
+    assert!(
+        vm.deliver(&[huge]).is_err(),
+        "the worker checks answer budgets too"
+    );
+    // Unanswered requests expire at the next host event.
+    let mut vm = LuaSandbox::new(DATA_PLUGIN).unwrap();
+    let stale = vm.dispatch(&json!({"type":"ask","count":1})).unwrap();
+    vm.dispatch(&json!({"type":"line_start"})).unwrap();
+    assert!(
+        vm.deliver(&[DataReply::error(stale.requests[0].token, "late")])
+            .is_err()
+    );
+}
+
+#[test]
+fn data_requests_cannot_name_paths_urls_or_oversized_queries() {
+    use nanatype_plugins::{DataRequest, validate_requests};
+    let request = |id: &str, query: serde_json::Value| DataRequest {
+        token: 1,
+        id: id.into(),
+        query,
+    };
+    assert!(validate_requests(&[request("words", json!({"kind":"whole"}))]).is_ok());
+    for bad in [
+        request("", json!({})),
+        request(&"x".repeat(129), json!({})),
+        request("words", json!(["not", "a", "table"])),
+        request("words", json!({"kind": "lines", "pad": "x".repeat(2048)})),
+    ] {
+        assert!(validate_requests(&[bad]).is_err());
+    }
+    assert!(validate_requests(&[request("a", json!({})), request("b", json!({}))]).is_err());
+    let mut vm = LuaSandbox::new(
+        "return {on_event=function() nana.data.request(42, {}) end, view=function() return {} end}",
+    )
+    .unwrap();
+    assert!(
+        vm.dispatch(&json!({"type":"x"})).is_err(),
+        "IDs are strings"
+    );
+}

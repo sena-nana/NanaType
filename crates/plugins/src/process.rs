@@ -1,5 +1,8 @@
 //! Asynchronous transport: the UI thread never waits for Lua or IPC.
-use crate::{WorkerRequest, WorkerResponse, read_message, write_message};
+use crate::{
+    DataReply, DataRequest, MAX_DATA_ROUNDS, WorkerRequest, WorkerResponse, bound_replies,
+    read_message, write_message,
+};
 use std::{
     path::Path,
     process::{Child, Command, Stdio},
@@ -7,14 +10,20 @@ use std::{
     time::Duration,
 };
 
+/// Answers a script's data request on the supervisor thread, never the UI thread.
+pub type DataAnswer = Arc<dyn Fn(&DataRequest) -> DataReply + Send + Sync>;
+
 pub struct PluginProcess {
     sender: mpsc::SyncSender<WorkerRequest>,
     child: Arc<Mutex<Child>>,
 }
 impl PluginProcess {
+    /// `init` is the first event; `answer` serves the plugin's declared reads.
     pub fn spawn(
         executable: &Path,
         source: String,
+        init: serde_json::Value,
+        answer: DataAnswer,
         post: impl Fn(WorkerResponse) + Send + 'static,
     ) -> std::io::Result<Self> {
         let mut command = Command::new(executable);
@@ -58,17 +67,17 @@ impl PluginProcess {
                         }
                         Err(_) => return Err(std::io::Error::other("plugin startup timed out")),
                     }
-                    write_message(
-                        &mut input,
-                        &WorkerRequest::Event {
-                            event: serde_json::json!({"type":"init"}),
-                        },
-                    )?;
+                    write_message(&mut input, &WorkerRequest::Event { event: init })?;
                     let mut last_post = std::time::Instant::now() - Duration::from_secs(1);
+                    let mut rounds = 0;
                     loop {
-                        let response = responses
+                        let mut response = responses
                             .recv_timeout(Duration::from_millis(200))
                             .map_err(|_| std::io::Error::other("plugin response timed out"))?;
+                        let requests = match &mut response {
+                            WorkerResponse::Update { requests, .. } => std::mem::take(requests),
+                            _ => Vec::new(),
+                        };
                         let failed = matches!(response, WorkerResponse::Error { .. });
                         let wait = Duration::from_millis(33).saturating_sub(last_post.elapsed());
                         if !wait.is_zero() {
@@ -79,8 +88,22 @@ impl PluginProcess {
                         if failed {
                             break;
                         }
+                        // Chained requests are answered without waiting for the UI;
+                        // beyond the round budget they are dropped until the next event.
+                        // The worker checked them too; a mismatch means it is not ours.
+                        crate::validate_requests(&requests).map_err(std::io::Error::other)?;
+                        if !requests.is_empty() && rounds < MAX_DATA_ROUNDS {
+                            rounds += 1;
+                            let results =
+                                bound_replies(requests.iter().map(|r| answer(r)).collect());
+                            write_message(&mut input, &WorkerRequest::Data { results })?;
+                            continue;
+                        }
                         match events.recv() {
-                            Ok(event) => write_message(&mut input, &event)?,
+                            Ok(event) => {
+                                rounds = 0;
+                                write_message(&mut input, &event)?
+                            }
                             Err(_) => break,
                         }
                     }
@@ -156,8 +179,19 @@ pub fn run_worker() {
             WorkerRequest::Event { event } => vm
                 .as_mut()
                 .ok_or_else(|| wasmtime::format_err!("plugin not initialized"))
-                .and_then(|vm| vm.event(&event))
-                .map(|update| WorkerResponse::Update { update }),
+                .and_then(|vm| vm.dispatch(&event))
+                .map(|d| WorkerResponse::Update {
+                    update: d.update,
+                    requests: d.requests,
+                }),
+            WorkerRequest::Data { results } => vm
+                .as_mut()
+                .ok_or_else(|| wasmtime::format_err!("plugin not initialized"))
+                .and_then(|vm| vm.deliver(&results))
+                .map(|d| WorkerResponse::Update {
+                    update: d.update,
+                    requests: d.requests,
+                }),
             _ => Err(wasmtime::format_err!("invalid worker state")),
         };
         let failed = result.is_err();

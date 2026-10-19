@@ -17,11 +17,15 @@ fn fixture(root: &std::path::Path) -> nanatype_theme::SkinRegistry {
     }
     std::fs::write(
         root.join("example.assets/package.toml"),
-        "format=1\nschema=3\nid='example.assets'\nversion='1.0.0'\ncapabilities=['resources']",
+        "format=1\nschema=3\nid='example.assets'\nversion='1.0.0'\ncapabilities=['resources']\n\
+         [data.words]\npath='words.json'\nformat='json'\nformat_version=1\nsource='Example word list'\nlicense='CC0-1.0'\n\
+         [data.private]\npath='private.txt'\nformat='text'\nformat_version=1\nsource='Example'\nlicense='CC0-1.0'\n",
     )
     .unwrap();
     std::fs::write(root.join("example.assets/note.txt"), "data").unwrap();
-    std::fs::write(root.join("example.script/package.toml"),"format=1\nschema=3\nid='example.script'\nversion='1.0.0'\ncapabilities=['lua']\nentry='main.lua'\nauthor='Example author'\ncreated_at='2026-10-19'\nlicensed_to='Example Studio'\nlicense='MIT'\n[dependencies]\n'example.assets'='1.0.0'\n").unwrap();
+    std::fs::write(root.join("example.assets/words.json"), r#"["hello"]"#).unwrap();
+    std::fs::write(root.join("example.assets/private.txt"), "not granted").unwrap();
+    std::fs::write(root.join("example.script/package.toml"),"format=1\nschema=3\nid='example.script'\nversion='1.0.0'\ncapabilities=['lua']\nauthor='Example author'\ncreated_at='2026-10-19'\nlicensed_to='Example Studio'\nlicense='MIT'\n[dependencies]\n'example.assets'='1.0.0'\n[lua]\nentry='main.lua'\nreads=['pkg:example.assets/words']\n").unwrap();
     std::fs::write(
         root.join("example.script/main.lua"),
         "return {view=function() return {views={}} end}",
@@ -64,6 +68,62 @@ fn approval_requires_explicit_trust_and_exact_script_and_dependency_content() {
         "reviewing a script must never execute it"
     );
     assert!(!approval_matches(&after, Some(&approval)));
+}
+#[test]
+fn declared_reads_are_disclosed_and_older_policy_approvals_need_review() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = fixture(dir.path());
+    let reviewed = review(&registry, "example.script").unwrap();
+    let reads: Vec<_> = reviewed.data.disclosures().collect();
+    assert_eq!(reads.len(), 1, "only the declared read is disclosed");
+    assert_eq!(
+        (
+            reads[0].reference.as_str(),
+            reads[0].source.as_str(),
+            reads[0].license.as_str()
+        ),
+        ("pkg:example.assets/words", "Example word list", "CC0-1.0")
+    );
+    let query = serde_json::json!({"kind": "whole"});
+    assert_eq!(
+        reviewed
+            .data
+            .answer("pkg:example.assets/words", &query)
+            .unwrap(),
+        serde_json::json!(["hello"])
+    );
+    assert!(
+        reviewed
+            .data
+            .answer("pkg:example.assets/private", &query)
+            .is_err(),
+        "undeclared reads get errors"
+    );
+    let stage_one = PluginApproval {
+        digest: reviewed.digest.clone(),
+        trusted_source: true,
+        policy: 1,
+    };
+    assert!(
+        !approval_matches(&reviewed, Some(&stage_one)),
+        "consent given before data reads existed does not cover them"
+    );
+    std::fs::write(
+        dir.path().join("example.script/package.toml"),
+        std::fs::read_to_string(dir.path().join("example.script/package.toml"))
+            .unwrap()
+            .replace(
+                "reads=['pkg:example.assets/words']",
+                "reads=['pkg:example.assets/words','pkg:example.assets/private']",
+            ),
+    )
+    .unwrap();
+    let widened = review(&registry, "example.script").unwrap();
+    assert_ne!(
+        widened.digest, reviewed.digest,
+        "widening reads needs new consent"
+    );
+    assert_eq!(widened.data.disclosures().count(), 2);
 }
 #[test]
 fn running_plugins_are_stopped_when_their_package_or_dependency_changes_on_disk() {
@@ -135,6 +195,14 @@ fn consent_panel_discloses_risks_and_needs_a_real_trusted_source_selection() {
                 );
             }
             assert!(nodes.iter().any(|n|n.label.as_deref()==Some(ui.now_t("packages-consent-risk").as_str())));
+            assert!(
+                nodes.iter().any(|n| n.label.as_deref().is_some_and(|l| {
+                    l.contains("words")
+                        && l.contains("example.assets")
+                        && l.contains("Example word list")
+                })),
+                "declared reads are listed with owner and source"
+            );
             assert!(nodes.iter().any(|n| n.label.as_deref().is_some_and(|l| {
                 l.contains("Example author")
                     && l.contains("Example Studio")

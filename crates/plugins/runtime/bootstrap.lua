@@ -4,7 +4,7 @@ local function quote(s)
     return string.format('\\u%04x', string.byte(c))
   end) .. '"'
 end
-local arrays = {views=true, commands=true, children=true, draw=true, points=true, rect=true, color=true}
+local arrays = {requests=true, views=true, commands=true, children=true, draw=true, points=true, rect=true, color=true}
 local function encode(v, depth, key)
   assert(depth < 40, 'response nesting limit')
   local t = type(v)
@@ -24,7 +24,23 @@ local function encode(v, depth, key)
   return '{' .. table.concat(parts, ',') .. '}'
 end
 function __nana_dispatch(event)
+  if event.type == 'data' then
+    local results = {}
+    for _, r in ipairs(event.results or {}) do
+      if __nana_data.pending[r.token] then
+        __nana_data.pending[r.token] = nil
+        results[#results + 1] = r
+      end
+    end
+    event = {type = 'data', results = results}
+  else
+    -- Requests left unanswered by the previous host event are discarded.
+    __nana_data.pending = {}
+  end
   if plugin.on_event then plugin.on_event(event) end
-  return encode(plugin.view and plugin.view() or {}, 0)
+  local update = encode(plugin.view and plugin.view() or {}, 0)
+  local requests = __nana_data.outbox
+  __nana_data.outbox = {}
+  return '{"update":' .. update .. ',"requests":' .. encode(requests, 0, 'requests') .. '}'
 end
 return ''

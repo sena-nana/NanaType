@@ -454,7 +454,8 @@ fn main() {
                 .clone(),
         )]),
         catalogue_order: 0,
-        entry: None,
+        lua: None,
+        data: Default::default(),
         created_at: String::new(),
         licensed_to: String::new(),
     };

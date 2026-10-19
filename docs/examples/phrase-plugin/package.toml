@@ -1,0 +1,23 @@
+format = 1
+schema = 3
+id = "example.phrases"
+version = "1.0.0"
+name = { zh-CN = "随行短句", en-US = "Phrase card", ja-JP = "ひとことカード" }
+description = { zh-CN = "每播放一句台词换一条短句，演示声明式数据与按值查询", en-US = "Declared data read by value, one phrase per line", ja-JP = "宣言済みデータを値として読み、台詞ごとに一言を表示" }
+author = "NanaType"
+license = "MIT"
+created_at = "2026-10-19"
+licensed_to = "所有用户 / Everyone"
+capabilities = ["resources", "lua"]
+
+[lua]
+entry = "main.lua"
+reads = ["phrases"]
+
+[data.phrases]
+path = "data/phrases.json"
+format = "json"
+format_version = 1
+source = "NanaType example, written for this package"
+license = "MIT"
+constraints = { type = "object", required = ["phrases"], max_depth = 3, max_string = 256 }

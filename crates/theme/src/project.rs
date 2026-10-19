@@ -304,7 +304,7 @@ mod tests {
     use super::*;
     fn project() -> PackageProject {
         PackageProject { files:BTreeMap::from([
-        (PACKAGE_MANIFEST.into(),b"format=1\nschema=3\nid='mixed.test'\nversion='1.0.0'\ncapabilities=['skin','resources','lua']\nentry='main.lua'\nauthor='Author'\ncreated_at='2026-10-19'\nlicensed_to='Studio'\n".to_vec()),
+        (PACKAGE_MANIFEST.into(),b"format=1\nschema=3\nid='mixed.test'\nversion='1.0.0'\ncapabilities=['skin','resources','lua']\nauthor='Author'\ncreated_at='2026-10-19'\nlicensed_to='Studio'\n[lua]\nentry='main.lua'\n".to_vec()),
         ("skin.toml".into(),b"[chrome]\naccent='#123456'\n".to_vec()),
         ("main.lua".into(),b"return {}".to_vec()),
         ("notes.txt".into(),b"editable".to_vec())]) }

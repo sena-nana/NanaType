@@ -11,7 +11,9 @@ use serde_json::Value;
 
 pub const SETTINGS_SCHEMA: u32 = 2;
 pub const DEFAULT_SKIN: &str = "nanatype.halo";
-pub const PLUGIN_CONSENT_POLICY: u32 = 1;
+/// Raised whenever scripts gain data or host interfaces: 1 granted events and
+/// views, 2 adds declared data reads. Older approvals must be reviewed again.
+pub const PLUGIN_CONSENT_POLICY: u32 = 2;
 pub const MAX_ENABLED_PLUGINS: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

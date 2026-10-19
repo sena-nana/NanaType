@@ -352,6 +352,40 @@ fn fingerprint(hash: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
+/// Every declared read with its owner, format, size, source, license and signature coverage.
+fn reads(ui: Ui, data: &nanatype_theme::DataAccess) -> String {
+    let rows: Vec<_> = data
+        .disclosures()
+        .map(|d| {
+            format!(
+                "• {} · {} · {} v{} · {} B\n  {}: {}\n  {}: {}\n  {}",
+                d.id,
+                d.owner,
+                d.format.name(),
+                d.format_version,
+                d.bytes,
+                ui.now_t("package-data-source"),
+                d.source,
+                ui.now_t("package-data-license"),
+                d.license,
+                ui.now_t(if d.protected {
+                    "package-data-protected"
+                } else {
+                    "package-data-unprotected"
+                }),
+            )
+        })
+        .collect();
+    if rows.is_empty() {
+        ui.now_t("packages-consent-reads-none")
+    } else {
+        format!(
+            "{}\n{}",
+            ui.now_t("packages-consent-reads"),
+            rows.join("\n")
+        )
+    }
+}
 pub fn activation(ui: Ui) -> AnyView {
     let show_source = nana_ui::runtime::view::signal(false);
     dynamic(
@@ -388,6 +422,7 @@ pub fn activation(ui: Ui) -> AnyView {
                     ))),
                     widget(Text::new(ui.now_t("packages-consent-risk"))),
                     widget(Text::new(ui.now_t("packages-consent-data"))),
+                    widget(readable(reads(ui, &review.data))).key("plugin-consent-reads"),
                     widget(Stack::column(4.)).children((
                         widget(readable(format!(
                             "{}: {}",
@@ -397,14 +432,13 @@ pub fn activation(ui: Ui) -> AnyView {
                         widget(readable(format!(
                             "{}: {}",
                             ui.now_t("packages-script-entry"),
-                            review.manifest.entry.as_deref().unwrap_or("")
+                            review.manifest.entry().unwrap_or("")
                         ))),
                         widget(Text::new(ui.now_t(
                             if review.integrity.as_ref().is_some_and(|seal| {
                                 review
                                     .manifest
-                                    .entry
-                                    .as_ref()
+                                    .entry()
                                     .is_some_and(|entry| seal.protected.contains(entry))
                             }) {
                                 "packages-entry-protected"

@@ -56,7 +56,8 @@ fn write_skin(dir: &Path, manifest: &str, files: &[(&str, Vec<u8>)]) {
             capabilities: vec![PackageCapability::Skin],
             dependencies,
             catalogue_order: 0,
-            entry: None,
+            lua: None,
+            data: Default::default(),
             created_at: String::new(),
             licensed_to: String::new(),
         };

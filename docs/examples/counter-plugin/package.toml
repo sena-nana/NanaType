@@ -7,4 +7,6 @@ description = { zh-CN = "统计播放台词，演示自定义组件、画布和�
 author = "NanaType"
 license = "MIT"
 capabilities = ["lua"]
+
+[lua]
 entry = "main.lua"

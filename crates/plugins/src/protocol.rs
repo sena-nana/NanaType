@@ -5,6 +5,86 @@ pub const MAX_MESSAGE_BYTES: usize = 256 * 1024;
 pub const MAX_SCRIPT_BYTES: usize = 128 * 1024;
 pub const MAX_NODES: usize = 512;
 pub const MAX_DRAW_COMMANDS: usize = 2048;
+/// Data requests one dispatch may queue.
+pub const MAX_DATA_REQUESTS: usize = 8;
+/// Chained request/answer rounds per host event; later requests are dropped.
+pub const MAX_DATA_ROUNDS: usize = 4;
+/// Serialized bytes of one answered value.
+pub const MAX_DATA_RESULT_BYTES: usize = 64 * 1024;
+/// Serialized bytes of all answers delivered together.
+pub const MAX_DATA_EVENT_BYTES: usize = 120 * 1024;
+/// Serialized bytes of one request's query.
+pub const MAX_DATA_QUERY_BYTES: usize = 1024;
+
+/// A script's request for a declared data resource. Tokens are chosen by the
+/// script; answers arrive later as a `data` event.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DataRequest {
+    pub token: u32,
+    pub id: String,
+    pub query: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DataReply {
+    pub token: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+impl DataReply {
+    pub fn error(token: u32, message: impl Into<String>) -> Self {
+        Self {
+            token,
+            value: None,
+            error: Some(message.into()),
+        }
+    }
+}
+
+pub fn validate_requests(requests: &[DataRequest]) -> Result<(), String> {
+    if requests.len() > MAX_DATA_REQUESTS {
+        return Err(format!(
+            "at most {MAX_DATA_REQUESTS} data requests per update"
+        ));
+    }
+    let mut tokens = BTreeSet::new();
+    for request in requests {
+        if !tokens.insert(request.token) {
+            return Err("duplicate data request token".into());
+        }
+        if request.id.is_empty() || request.id.len() > 128 || !request.query.is_object() {
+            return Err("data requests need a short ID and a query table".into());
+        }
+        if serde_json::to_vec(&request.query).map_or(usize::MAX, |b| b.len()) > MAX_DATA_QUERY_BYTES
+        {
+            return Err("data query exceeds budget".into());
+        }
+    }
+    Ok(())
+}
+
+/// Replace answers over the value or combined budget with errors.
+pub fn bound_replies(replies: Vec<DataReply>) -> Vec<DataReply> {
+    let mut total = 0;
+    replies
+        .into_iter()
+        .map(|reply| {
+            let len = serde_json::to_vec(&reply).map_or(usize::MAX, |b| b.len());
+            if len > MAX_DATA_RESULT_BYTES + 256 {
+                DataReply::error(reply.token, "data result exceeds budget")
+            } else if total + len > MAX_DATA_EVENT_BYTES {
+                DataReply::error(reply.token, "data results exceed the per-event budget")
+            } else {
+                total += len;
+                reply
+            }
+        })
+        .collect()
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -211,16 +291,30 @@ impl PluginUpdate {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum WorkerRequest {
-    Init { source: String },
-    Event { event: serde_json::Value },
+    Init {
+        source: String,
+    },
+    Event {
+        event: serde_json::Value,
+    },
+    /// Answers to the requests of the previous update.
+    Data {
+        results: Vec<DataReply>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum WorkerResponse {
     Ready,
-    Update { update: PluginUpdate },
-    Error { message: String },
+    Update {
+        update: PluginUpdate,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        requests: Vec<DataRequest>,
+    },
+    Error {
+        message: String,
+    },
 }
 
 pub fn read_message<T: serde::de::DeserializeOwned>(

@@ -231,7 +231,24 @@ impl SkinRegistry {
                 &self.app_version,
             )?;
         }
-        if let Some(entry) = &package.entry {
+        // Imports validate every declared resource completely; nothing executes.
+        let mut references: Vec<String> = package.data.keys().cloned().collect();
+        for dependency in package.dependencies.keys() {
+            if let Ok((manifest, _)) = crate::data::resolve_manifest(&*files, dependency) {
+                references.extend(
+                    manifest
+                        .data
+                        .keys()
+                        .map(|id| format!("pkg:{dependency}/{id}")),
+                );
+            }
+        }
+        for reference in references {
+            crate::data::resolve_data(&*files, &reference)
+                .and_then(|(spec, path)| crate::data::load_data(&*files, &spec, &path, true))
+                .map_err(|e| diagnostics(FileError::Io(format!("{reference}: {e}"))))?;
+        }
+        if let Some(entry) = package.entry() {
             let source = files.read(entry).map_err(diagnostics)?;
             if source.len() > 128 * 1024
                 || source.first() == Some(&0x1b)
@@ -747,7 +764,8 @@ impl SkinRegistry {
             capabilities: vec![PackageCapability::Skin],
             dependencies: BTreeMap::from([(base.into(), parent.meta.version)]),
             catalogue_order: 0,
-            entry: None,
+            lua: None,
+            data: Default::default(),
             created_at: String::new(),
             licensed_to: String::new(),
         };

@@ -27,6 +27,8 @@ pub struct ActivationReview {
     pub integrity: Option<nanatype_theme::SealStatus>,
     pub source: String,
     pub location: String,
+    /// Exactly the declared data the script may query, from this snapshot.
+    pub data: Arc<nanatype_theme::DataAccess>,
 }
 pub fn review(registry: &SkinRegistry, id: &str) -> Result<ActivationReview, String> {
     let files = registry.package_files(id).map_err(|e| e.to_string())?;
@@ -35,13 +37,15 @@ pub fn review(registry: &SkinRegistry, id: &str) -> Result<ActivationReview, Str
     if !manifest.capabilities.contains(&PackageCapability::Lua) {
         return Err("package does not provide Lua".into());
     }
-    let entry = manifest.entry.as_deref().ok_or("missing Lua entry")?;
+    let entry = manifest.entry().ok_or("missing Lua entry")?;
     let bytes = project.files.get(entry).ok_or("missing Lua source")?;
     if bytes.len() > nanatype_plugins::MAX_SCRIPT_BYTES {
         return Err("plugin source exceeds budget".into());
     }
     let source = String::from_utf8(bytes.clone()).map_err(|e| e.to_string())?;
+    let data = Arc::new(nanatype_theme::DataAccess::for_plugin(&project, &manifest)?);
     Ok(ActivationReview {
+        data,
         id: id.into(),
         digest: project.digest(),
         integrity: nanatype_theme::verify_integrity(&project).map_err(|e| e.to_string())?,
@@ -203,20 +207,40 @@ impl Manager {
             if self.running.contains_key(id) {
                 continue;
             }
-            let prepare = || -> Result<(String, String), String> {
+            let prepare = || -> Result<ActivationReview, String> {
                 let reviewed = review(registry, id)?;
                 if !approval_matches(&reviewed, approvals.get(id)) {
                     return Err(ui.now_t("packages-consent-required"));
                 }
-                Ok((reviewed.source, reviewed.digest))
+                Ok(reviewed)
             };
-            let result = prepare().and_then(|(source, digest)| {
+            let result = prepare().and_then(|reviewed| {
+                let reads: Vec<_> = reviewed
+                    .data
+                    .disclosures()
+                    .map(|d| d.reference.clone())
+                    .collect();
+                let data = reviewed.data.clone();
+                let answer: nanatype_plugins::DataAnswer =
+                    Arc::new(
+                        move |request| match data.answer(&request.id, &request.query) {
+                            Ok(value) => nanatype_plugins::DataReply {
+                                token: request.token,
+                                value: Some(value),
+                                error: None,
+                            },
+                            Err(error) => nanatype_plugins::DataReply::error(request.token, error),
+                        },
+                    );
+                let digest = reviewed.digest;
                 let generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
                 let plugin_id = id.clone();
                 let dispatch = ctx.clone();
                 PluginProcess::spawn(
                     &std::env::current_exe().map_err(|e| e.to_string())?,
-                    source,
+                    reviewed.source,
+                    serde_json::json!({"type": "init", "reads": reads}),
+                    answer,
                     move |response| {
                         dispatch.dispatch(Msg::PluginResult {
                             id: plugin_id.clone(),
@@ -280,7 +304,7 @@ impl Manager {
             return;
         }
         let result: Result<Option<&PluginUpdate>, String> = match response {
-            WorkerResponse::Update { update } => update.validate().map(|_| Some(update)),
+            WorkerResponse::Update { update, .. } => update.validate().map(|_| Some(update)),
             WorkerResponse::Error { message } => Err(message.clone()),
             WorkerResponse::Ready => Ok(None),
         };
