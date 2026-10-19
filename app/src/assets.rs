@@ -140,6 +140,24 @@ pub fn file_url(path: &Path) -> String {
     }
 }
 
+/// The path of a [`file_url`]; `None` for anything else.
+pub fn file_path(url: &str) -> Option<PathBuf> {
+    let raw = url.strip_prefix("file://")?;
+    // `file:///C:/x` carries a drive after the authority's slash.
+    let raw = if raw.as_bytes().get(2) == Some(&b':') && raw.starts_with('/') {
+        &raw[1..]
+    } else {
+        raw
+    };
+    // `%25` last, so an encoded `%` never re-forms another escape.
+    Some(PathBuf::from(
+        raw.replace("%20", " ")
+            .replace("%23", "#")
+            .replace("%3F", "?")
+            .replace("%25", "%"),
+    ))
+}
+
 impl AssetLibrary {
     pub fn new(blob_dir: PathBuf) -> Self {
         Self {
@@ -210,22 +228,21 @@ impl AssetLibrary {
 
     /// Store pasted RGBA pixels as a PNG named by content.
     pub fn store_rgba(&self, width: u32, height: u32, rgba: &[u8]) -> Result<AssetRef, String> {
-        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-        for b in rgba
-            .iter()
-            .chain(&width.to_le_bytes())
-            .chain(&height.to_le_bytes())
-        {
-            hash ^= u64::from(*b);
-            hash = hash.wrapping_mul(0x0100_0000_01b3);
-        }
-        let name = format!("{hash:016x}");
+        let mut hash = blake3::Hasher::new();
+        hash.update(&width.to_le_bytes());
+        hash.update(&height.to_le_bytes());
+        hash.update(rgba);
+        let name = hash.finalize().to_hex()[..16].to_owned();
         let path = self.blob_dir.join(format!("{name}.png"));
         if !path.exists() {
-            fs::create_dir_all(&self.blob_dir).map_err(|e| e.to_string())?;
             let img = image::RgbaImage::from_raw(width, height, rgba.to_vec())
                 .ok_or_else(|| "bad image size".to_string())?;
-            img.save(&path).map_err(|e| e.to_string())?;
+            let mut png = Vec::new();
+            img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                .map_err(|e| e.to_string())?;
+            // Atomic: a crash mid-write must not leave a truncated file that
+            // every later paste of the same picture would reuse.
+            nanatype_settings::write_atomic(&path, &png).map_err(|e| e.to_string())?;
         }
         Ok(AssetRef::Blob(name))
     }
@@ -269,6 +286,17 @@ mod tests {
         let url = file_url(Path::new(r"C:\My Stickers\#1.png"));
         assert_eq!(url, "file:///C:/My%20Stickers/%231.png");
         assert_eq!(file_url(Path::new("/tmp/a b.png")), "file:///tmp/a%20b.png");
+        for path in [
+            "/Users/a b/#1%3F?.png",
+            "/tmp/表情.png",
+            "C:/My Stickers/x.png",
+        ] {
+            assert_eq!(
+                file_path(&file_url(Path::new(path))).unwrap(),
+                Path::new(path)
+            );
+        }
+        assert_eq!(file_path("https://example.test/a.png"), None);
     }
 
     #[test]

@@ -20,6 +20,8 @@ const EVENT_HOT_KEY_PRESSED: u32 = 5;
 const PARAM_DIRECT_OBJECT: u32 = u32::from_be_bytes(*b"----");
 const TYPE_EVENT_HOT_KEY_ID: u32 = u32::from_be_bytes(*b"hkid");
 const SIGNATURE: u32 = u32::from_be_bytes(*b"NTYP");
+/// `eventNotHandledErr`: let the next handler see the event.
+const EVENT_NOT_HANDLED: OSStatus = -9874;
 
 const CMD: u32 = 1 << 8;
 const SHIFT: u32 = 1 << 9;
@@ -279,8 +281,10 @@ unsafe extern "C" fn on_hotkey(
             std::ptr::from_mut(&mut hot_key).cast(),
         )
     };
-    if read != 0 {
-        return 0;
+    let signature = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!(hot_key.signature)) };
+    // Hot keys registered by anything else in the process pass through.
+    if read != 0 || signature != SIGNATURE {
+        return EVENT_NOT_HANDLED;
     }
     let id = unsafe { std::ptr::read_unaligned(std::ptr::addr_of!(hot_key.id)) };
     let state = unsafe { &*user.cast::<State>() };
@@ -291,10 +295,13 @@ unsafe extern "C" fn on_hotkey(
         .iter()
         .find(|(_, registered_id, _)| *registered_id == id)
         .map(|(_, _, action)| *action);
-    if let Some(action) = action {
-        (state.hit.lock().unwrap_or_else(|e| e.into_inner()))(action);
+    match action {
+        Some(action) => {
+            (state.hit.lock().unwrap_or_else(|e| e.into_inner()))(action);
+            0
+        }
+        None => EVENT_NOT_HANDLED,
     }
-    0
 }
 
 /// macOS virtual key code for a W3C `KeyboardEvent.code`, when Carbon has one.

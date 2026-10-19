@@ -211,10 +211,7 @@ impl Host {
     }
 
     fn finish(&mut self) -> RuntimeProgramUpdate {
-        crate::ui::shader_effects::collect_garbage();
-        crate::ui::sweep::collect_garbage();
-        crate::ui::text_light::collect_garbage();
-        crate::ui::text_scramble::collect_garbage();
+        crate::ui::collect_effect_garbage();
         for message in crate::ui::shader_effects::take_notices() {
             self.app.notice(message, true);
         }
@@ -850,8 +847,7 @@ impl RuntimeProgram for Host {
         self.stickers.discard(id);
         self.docs.remove(&id);
         self.toasts.remove(&id);
-        crate::ui::shader_effects::collect_garbage();
-        crate::ui::sweep::collect_garbage();
+        crate::ui::collect_effect_garbage();
     }
 
     fn window_event(
@@ -967,6 +963,11 @@ impl RuntimeProgram for Host {
                 }
                 if let Some(kind) = WindowKind::from_id(id) {
                     self.app.windows.closed(kind);
+                }
+                // The native handle dies with the window; hotkey activation
+                // must not touch it afterwards.
+                if id == WindowKind::Input.id() {
+                    self.app.hotkeys.set_input_window(0);
                 }
                 self.docs.remove(&id);
                 self.toasts.remove(&id);
@@ -1102,8 +1103,7 @@ impl RuntimeProgram for Host {
         id: WindowId,
         _: &RuntimeProgramContext<Msg>,
     ) -> RuntimeProgramUpdate {
-        crate::ui::shader_effects::collect_garbage();
-        crate::ui::sweep::collect_garbage();
+        crate::ui::collect_effect_garbage();
         if let Some(perf) = &mut self.perf {
             perf.frame(id, false, self.docs.get(&id));
         }

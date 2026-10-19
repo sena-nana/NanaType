@@ -177,17 +177,26 @@ impl State {
         material: &Arc<Material>,
         context: &SceneGpuPassContext<'_>,
         scale: f32,
-    ) -> &mut Prepared {
+    ) -> Option<&mut Prepared> {
         let pipeline_key = (
             context.gpu.generation(),
             context.target_format,
             context.presentation,
         );
         let extent = [context.bounds.width.max(1), context.bounds.height.max(1)];
+        let max = context
+            .gpu
+            .wgpu()
+            .device()
+            .limits()
+            .max_texture_dimension_2d;
+        if extent[0] > max || extent[1] > max {
+            return None;
+        }
         // Coverage depends on size and DPI, not the destination viewport.
         let key = (pipeline_key, material.id, extent, scale.to_bits());
         if self.masks.contains_key(&key) {
-            return self.masks.get_mut(&key).unwrap();
+            return self.masks.get_mut(&key);
         }
         self.masks
             .retain(|_, value| value.material.strong_count() > 0);
@@ -296,7 +305,7 @@ impl State {
                 format: GpuTextureFormat::RGBA8_UNORM,
                 usage: nana_ui::GpuTextureUsages::SAMPLED | nana_ui::GpuTextureUsages::COPY_DST,
             })
-            .expect("validated sweep extent");
+            .ok()?;
         context
             .gpu
             .write_texture(
@@ -310,7 +319,7 @@ impl State {
                 &mask,
                 extent[0] * 4,
             )
-            .expect("coverage upload");
+            .ok()?;
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("dialogue sweep mask"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -319,7 +328,7 @@ impl State {
         });
         let layout = pipeline.layout.clone();
         let pipeline = pipeline.pipeline.clone();
-        self.masks.entry(key).or_insert_with(|| Prepared {
+        Some(self.masks.entry(key).or_insert_with(|| Prepared {
             material: Arc::downgrade(material),
             uniforms: Default::default(),
             layout,
@@ -327,7 +336,7 @@ impl State {
             sampler,
             pipeline,
             mask_bytes,
-        })
+        }))
     }
 }
 
@@ -390,7 +399,10 @@ impl SceneGpuRenderer for SweepRenderer {
         let scale = state
             .scales
             .get(context.gpu.generation(), material.id, context.dest_size);
-        let prepared = state.prepare_mask(&material, &context, scale);
+        // Too large for the device or a lost device: draw nothing this frame.
+        let Some(prepared) = state.prepare_mask(&material, &context, scale) else {
+            return true;
+        };
         let c = material.spec.color;
         let phase = if material.animated {
             (crate::clock::now_ms() as f64 / 1000.0 / f64::from(material.spec.period_s)).fract()
@@ -683,18 +695,8 @@ fn frame_coverage(surface: &Surface, size: [u32; 2], scale: f32) -> Option<Vec<u
     let nana_ui_core::BackgroundImage::Url { url, .. } = &frame.source else {
         return None;
     };
-    let raw = url.strip_prefix("file://")?;
-    let raw = if cfg!(windows) && raw.as_bytes().get(2) == Some(&b':') {
-        &raw[1..]
-    } else {
-        raw
-    };
-    let path = raw
-        .replace("%20", " ")
-        .replace("%23", "#")
-        .replace("%3F", "?")
-        .replace("%25", "%");
-    let path = std::path::Path::new(&path);
+    let path = crate::assets::file_path(url)?;
+    let path = path.as_path();
     // These are already resolved media-library URLs. Keep the decoder limits
     // identical to the product image boundary; a missing frame emits no light.
     if std::fs::metadata(path).ok()?.len() > crate::services::media::MAX_FILE_BYTES {

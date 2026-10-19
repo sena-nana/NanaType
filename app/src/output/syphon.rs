@@ -38,6 +38,9 @@ pub struct Outputs {
 
 struct Server {
     name: String,
+    /// The `MTLDevice` the server was made for (it retains it, so the
+    /// address cannot be reused while the server lives).
+    device: usize,
     server: Retained<AnyObject>,
 }
 
@@ -124,10 +127,12 @@ impl Outputs {
             .ok_or_else(|| "output texture is not Metal".to_string())?;
 
         let device_ptr = object_ptr(hal_device.raw_device());
+        // A recreated wgpu device (device loss, GPU switch) needs a new
+        // server: publishing a texture from another device is undefined.
         if self
             .servers
             .get(&kind)
-            .is_none_or(|server| server.name != name)
+            .is_none_or(|server| server.name != name || server.device != device_ptr as usize)
         {
             self.servers.remove(&kind);
             let server = make_server(name, device_ptr)?;
@@ -135,6 +140,7 @@ impl Outputs {
                 kind,
                 Server {
                     name: name.to_owned(),
+                    device: device_ptr as usize,
                     server,
                 },
             );
@@ -234,6 +240,9 @@ fn framework_binary() -> Option<String> {
         candidates.push(dir.join("Syphon.framework/Syphon"));
         candidates.push(dir.join("../Frameworks/Syphon.framework/Syphon"));
     }
+    // Development builds only: a shipped binary never loads code from the
+    // build machine's checkout path.
+    #[cfg(debug_assertions)]
     candidates.push(std::path::PathBuf::from(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../packaging/macos/Syphon.framework/Syphon"

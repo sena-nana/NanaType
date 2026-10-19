@@ -325,19 +325,30 @@ pub fn wrap(
     .into_any()
 }
 
-pub fn animating(ui: Ui, now: u64) -> bool {
-    LIVE.lock()
+/// Snapshot the registry first: reading signals (or dropping the last strong
+/// reference, whose `Drop` takes the same lock) must not happen under it.
+fn track_animating(ui: Ui, now: u64, preview: bool) -> bool {
+    let live: Vec<_> = LIVE
+        .lock()
         .unwrap_or_else(|e| e.into_inner())
         .values()
         .filter_map(Weak::upgrade)
-        .any(|l| !l.preview && l.ui.display == ui.display && l.active(now))
+        .collect();
+    live.into_iter().any(|l| {
+        l.preview == preview
+            && if preview {
+                l.ui.shader_preview == ui.shader_preview
+            } else {
+                l.ui.display == ui.display
+            }
+            && l.active(now)
+    })
+}
+pub fn animating(ui: Ui, now: u64) -> bool {
+    track_animating(ui, now, false)
 }
 pub fn preview_animating(ui: Ui, now: u64) -> bool {
-    LIVE.lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .values()
-        .filter_map(Weak::upgrade)
-        .any(|l| l.preview && l.ui.shader_preview == ui.shader_preview && l.active(now))
+    track_animating(ui, now, true)
 }
 pub fn register(registry: &mut SceneGpuRendererRegistry) {
     registry.insert(RENDERER, SHARED.clone());

@@ -507,8 +507,12 @@ impl App {
         let service = self.ctx.windows().clone();
         let ctx = self.ctx.clone();
         std::thread::spawn(move || {
-            let Ok(displays) = service.displays().wait() else {
-                return;
+            let displays = match service.displays().wait() {
+                Ok(displays) => displays,
+                Err(e) => {
+                    crate::debug_log(&format!("displays unavailable: {e:?}"));
+                    return;
+                }
             };
             let scale = displays
                 .iter()
@@ -530,6 +534,8 @@ impl App {
                             b.position.0,
                             b.position.1,
                             b.size.0,
+                            // NanaUI reports no work area; leave room for a
+                            // bottom taskbar or Dock.
                             b.size.1 - 48.0 / scale,
                         ],
                         primary: d.primary,
@@ -3055,4 +3061,15 @@ fn without_local_paths(doc: &Document) -> Document {
         }
     }
     doc
+}
+
+/// The runtime can end without `Msg::Quit` (logout, a platform close): the
+/// debounced writer still gets to put queued settings down. (Signals may be
+/// gone by now, so geometry is not re-read here.)
+impl Drop for App {
+    fn drop(&mut self) {
+        if !self.quitting {
+            self.persist.flush(Duration::from_secs(2));
+        }
+    }
 }

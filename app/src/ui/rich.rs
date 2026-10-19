@@ -888,37 +888,59 @@ pub fn effect_table(defaults: &EffectDefaults, reduced: bool) -> Arc<[GlyphEffec
 
 // ---- inline objects ------------------------------------------------------
 
+/// Ids for inlines that ride in rich text as objects. Equal inlines share an
+/// id; only the newest [`MAX_OBJECTS`] are kept, which is far more than any
+/// editor or visible list holds at once (a long stream interns every avatar,
+/// emote and mention it shows).
+#[derive(Default)]
 struct Objects {
     next: u64,
-    by_id: HashMap<u64, Inline>,
+    by_id: std::collections::BTreeMap<u64, (blake3::Hash, Inline)>,
+    by_key: HashMap<blake3::Hash, u64>,
 }
 
-static OBJECTS: LazyLock<Mutex<Objects>> = LazyLock::new(|| {
-    Mutex::new(Objects {
-        next: 1,
-        by_id: HashMap::new(),
-    })
-});
+const MAX_OBJECTS: usize = 4096;
+
+static OBJECTS: LazyLock<Mutex<Objects>> = LazyLock::new(Default::default);
+
+fn object_key(inline: &Inline) -> blake3::Hash {
+    blake3::hash(&serde_json::to_vec(inline).unwrap_or_default())
+}
+
+impl Objects {
+    fn intern(&mut self, inline: &Inline) -> u64 {
+        let key = object_key(inline);
+        if let Some(id) = self.by_key.get(&key) {
+            return *id;
+        }
+        self.next += 1;
+        let id = self.next;
+        self.by_key.insert(key, id);
+        self.by_id.insert(id, (key, inline.clone()));
+        while self.by_id.len() > MAX_OBJECTS {
+            if let Some((_, (old, _))) = self.by_id.pop_first() {
+                self.by_key.remove(&old);
+            }
+        }
+        id
+    }
+}
 
 /// An object id for an atom, mention or marker; equal inlines share one id.
 pub fn object_id(inline: &Inline) -> u64 {
-    let mut o = OBJECTS.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some((id, _)) = o.by_id.iter().find(|(_, v)| *v == inline) {
-        return *id;
-    }
-    let id = o.next;
-    o.next += 1;
-    o.by_id.insert(id, inline.clone());
-    id
+    OBJECTS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .intern(inline)
 }
 
-pub fn object_of(id: u64) -> Option<Inline> {
+fn object_of(id: u64) -> Option<Inline> {
     OBJECTS
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .by_id
         .get(&id)
-        .cloned()
+        .map(|(_, inline)| inline.clone())
 }
 
 /// Width over height of an image file, cached.
@@ -927,21 +949,16 @@ fn aspect(url: &str) -> f32 {
     if let Some(a) = CACHE.lock().unwrap_or_else(|e| e.into_inner()).get(url) {
         return *a;
     }
-    let path = url.strip_prefix("file:///").map(|p| {
-        p.replace("%20", " ")
-            .replace("%23", "#")
-            .replace("%25", "%")
-            .replace("%3F", "?")
-    });
-    let a = path
+    let a = crate::assets::file_path(url)
         .and_then(|p| imagesize::size(&p).ok())
         .map(|s| s.width as f32 / s.height.max(1) as f32)
         .filter(|a| a.is_finite() && *a > 0.0)
         .unwrap_or(1.0);
-    CACHE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(url.to_owned(), a);
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if cache.len() >= 4096 {
+        cache.clear();
+    }
+    cache.insert(url.to_owned(), a);
     a
 }
 
@@ -1276,7 +1293,10 @@ pub fn from_rich(rich: &RichText, look: &Look) -> Document {
                 RichObjectContent::Image { source } => Some(Inline::Atom(nanatype_model::Atom {
                     kind: nanatype_model::AtomKind::Image,
                     asset: nanatype_model::AssetRef::File(
-                        source.trim_start_matches("file:///").replace("%20", " "),
+                        crate::assets::file_path(source).map_or_else(
+                            || source.to_string(),
+                            |p| p.to_string_lossy().into_owned(),
+                        ),
                     ),
                     height_em: object.height_px / look.size.max(1.0),
                     alt: String::new(),
@@ -1401,6 +1421,19 @@ impl RevealPlan {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn object_ids_dedupe_and_stay_bounded() {
+        let mut objects = Objects::default();
+        let a = objects.intern(&Inline::text("a"));
+        assert_eq!(objects.intern(&Inline::text("a")), a);
+        for n in 0..MAX_OBJECTS + 8 {
+            objects.intern(&Inline::text(format!("object-{n}")));
+        }
+        assert_eq!(objects.by_id.len(), MAX_OBJECTS);
+        assert_eq!(objects.by_key.len(), MAX_OBJECTS);
+        assert!(!objects.by_id.contains_key(&a));
+    }
 
     #[test]
     fn latin_defaults_preserve_words_explicit_fonts_and_editor_roundtrip() {

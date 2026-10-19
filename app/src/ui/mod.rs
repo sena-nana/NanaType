@@ -547,3 +547,11 @@ pub fn restyle(s: &mut nana_ui::runtime::Stack, f: impl FnOnce(&mut nana_ui_core
 pub fn c(color: nanatype_model::Rgba8) -> [f32; 4] {
     crate::skin_theme::rgba(color)
 }
+
+/// Release GPU resources of every custom effect whose material is gone.
+pub fn collect_effect_garbage() {
+    shader_effects::collect_garbage();
+    sweep::collect_garbage();
+    text_light::collect_garbage();
+    text_scramble::collect_garbage();
+}
