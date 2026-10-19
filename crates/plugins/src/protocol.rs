@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 
 pub const MAX_MESSAGE_BYTES: usize = 256 * 1024;
 pub const MAX_SCRIPT_BYTES: usize = 128 * 1024;
+pub const MAX_QUEUED_EVENTS: usize = 32;
 pub const MAX_NODES: usize = 512;
 pub const MAX_DRAW_COMMANDS: usize = 2048;
 /// Data requests one dispatch may queue.

@@ -1,7 +1,7 @@
 # Build a release of NanaType and package it.
 #   pwsh scripts/package.ps1 [-Portable] [-SkipBuild] [-Profile dist|dist-small]
 # Needs: nana-packager on PATH (cargo install --path <NanaUI>/crates/nana-packager),
-# Inno Setup 6 (iscc) for the installer. Code signing is done in CI.
+# Inno Setup 6 (iscc) for the installer. This script produces unsigned artifacts.
 param(
     [switch]$Portable,
     [switch]$SkipBuild,

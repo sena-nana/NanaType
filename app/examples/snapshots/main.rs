@@ -10,6 +10,7 @@
 //! comparisons of built-in skins (self-contained manifests, no inheritance).
 //! `NANATYPE_SNAPSHOT_APPEARANCE=dark` selects neutral dark application chrome.
 //! `NANATYPE_SNAPSHOT_SCALE` captures at a physical pixel scale (default 1).
+//! `NANATYPE_SNAPSHOT_WIDTH=300` overrides the logical width of selected views.
 //! `NANATYPE_PREVIEW_SCALE_AUDIT=1` captures tall/maximum logical canvases
 //! inside the settings preview, without allocating full-size desktop windows.
 //! `NANATYPE_RESPONSIVE_AUDIT=1` reuses native windows across both writing modes,
@@ -65,6 +66,13 @@ fn shot(
         return;
     }
     let at = nanatype::clock::now_ms();
+    let w = std::env::var("NANATYPE_SNAPSHOT_WIDTH")
+        .map(|w| {
+            w.parse::<u32>()
+                .expect("snapshot width is a positive integer")
+        })
+        .unwrap_or(w);
+    assert!(w > 0, "snapshot width must be positive");
     nanatype::clock::capture_at(at.saturating_sub(1000), || {
         let id = DocumentId::new(1).unwrap();
         let mut doc = RuntimeDocument::new(id);
@@ -88,21 +96,25 @@ fn shot(
             .document_mut()
             .sync_presentation_clock(std::time::Duration::from_secs(1));
         let path = out.join(format!("{name}.png"));
-        // Pipeline creation is asynchronous in production. Warm one GPU draw
-        // before the captured frame, without advancing the deterministic clock.
+        // Retry compiles refused by the bounded compiler before capturing,
+        // without advancing the deterministic presentation clock.
         nanatype::clock::capture_at(at, || {
-            let _ = session.screenshot_rgba().expect("shader warmup");
             let start = std::time::Instant::now();
-            while nanatype::ui::shader_effects::cache_stats().pending > 0
-                && start.elapsed().as_secs() < 10
-            {
-                std::thread::sleep(std::time::Duration::from_millis(10));
+            loop {
+                let refused = nanatype::ui::shader_effects::cache_stats().refused;
+                let _ = session.screenshot_rgba().expect("shader warmup");
+                while nanatype::ui::shader_effects::cache_stats().pending > 0 {
+                    assert!(start.elapsed().as_secs() < 15, "shader warmup timed out");
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                if nanatype::ui::shader_effects::cache_stats().refused == refused {
+                    break;
+                }
+                assert!(
+                    start.elapsed().as_secs() < 15,
+                    "shader compiles kept being refused"
+                );
             }
-            assert_eq!(
-                nanatype::ui::shader_effects::cache_stats().pending,
-                0,
-                "shader warmup timed out"
-            );
         });
         nanatype::clock::capture_at(at, || match session.screenshot_png(&path) {
             Ok(stats) => println!("{name}: {stats:?}"),

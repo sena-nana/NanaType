@@ -1,6 +1,6 @@
 # 插件性能、预算与隔离
 
-对应 [#9](https://github.com/sena-nana/NanaType/issues/9)。本文给出可复现的测量方法、一次参考结果、运行预算和实测的隔离边界。参考结果来自单台机器，只用于比较量级和发现退化，不是性能保证；Windows 实机结果尚未补齐。
+对应 [#9](https://github.com/sena-nana/NanaType/issues/9)。本文给出可复现的测量方法、参考结果、运行预算和实测的隔离边界。各平台结果来自单台机器，只用于比较量级和发现退化，不是性能保证；Windows 发布验收的剩余限制见文末。
 
 ## 复现
 
@@ -14,6 +14,19 @@ cargo test -p nanatype --release --test plugin_render_perf -- --ignored --nocapt
 # 情书声明数据：冷／热加载与导入校验
 cargo run -p nanatype-theme --release --example data_load_perf
 ```
+
+Windows 上复用同一测量用例，指定正式应用作为工作进程；不指定时使用插件 crate 的独立测试工作进程：
+
+```powershell
+cargo build -p nanatype --release --locked
+$env:NANATYPE_PLUGIN_WORKER = (Resolve-Path target/release/nanatype.exe).Path
+cargo test -p nanatype-plugins --release --test perf -- --ignored --nocapture --test-threads=1
+# 重型插件的宿主 CPU 录制／提交及 GPU 时间戳，执行与结果解析不计入这段计时
+$env:NANATYPE_GPU_CASES = 'plugin_heavy'
+cargo run -p nanatype --release --example gpu_perf -- target/issue9-gpu.json
+```
+
+Windows 的工作集由 `GetProcessMemoryInfo` 读取，CPU 为 `GetProcessTimes` 给出的工作进程累计内核与用户时间，包含初始化和预热；不可当作每帧耗时或 CPU 占用率。跨平台不可用的指标输出 `null`。冷启动指新建进程，不会清除系统文件缓存；端到端测量截止于宿主回调，不包含窗口消息循环和画面呈现。
 
 `perf` 每项输出一行 JSON：样本数及 P50、P95、最大值。端到端延迟从宿主调用 `event()` 计时，到工作进程的视图回到宿主为止，包含排队、两次 IPC、Lua 执行和宿主侧校验；事件间隔 45ms，避开每 33ms 一次的发布节流。
 
@@ -71,10 +84,14 @@ cargo test -p nanatype --test plugin_consent production_workers_require_approval
 - **解释器**：固定的 Wasm Lua，不连接 WASI；文件、进程等导入一律拒绝，不提供 `io`、`os`、`load`、`require` 等库。宿主读取结果时不运行插件代码或元方法。
 - **独立进程**：每个插件在独立工作进程中运行，环境变量被清空。崩溃、协议错误、超时、燃料耗尽或内存耗尽只结束该插件；进程停止后立即回收，反复启停不残留进程（`process` 测试）。
 - **macOS**：工作进程在读取任何请求前应用拒绝优先的 Seatbelt 配置；宿主事先打开的管道仍可用。自执行测试实测读文件、写文件、列目录、网络连接与绑定、创建进程均被拒绝（`os_sandbox` 测试）。无法应用配置时，工作进程不运行任何插件代码。应用程序本身作为工作进程运行（`nanatype --plugin-worker`）也已验证。
-- **Windows**：宿主在发送请求前把工作进程放入作业对象：单进程、禁止桌面、剪贴板、全局原子和系统设置访问、已提交内存 256 MiB、宿主关闭时终止。现已在 Windows 上验证正式应用工作进程的启动、事件处理、禁用或包／依赖变化后的终止与进程回收，作业对象创建成功；各项 OS 限制仍未逐项实测。AppContainer 未实现，因此不宣称 Windows 有文件或网络层面的 OS 隔离。
+- **Windows**：宿主在发送请求前把工作进程放入作业对象：单进程、禁止桌面、剪贴板、全局原子和系统设置访问、已提交内存 256 MiB、宿主关闭时终止。正式应用工作进程的启动、事件处理、禁用或包／依赖变化后的终止与进程回收已验证。新增原生测试读取内核中的实际配置，并验证子进程创建被拒绝、超过 256 MiB 的提交申请失败，以及最后一个作业句柄关闭后等待中的进程结束；不能以退出码是否非零判断作业终止。UI 限制只核对内核配置，未执行退出登录、修改显示设置、写剪贴板等操作。AppContainer 未实现，因此不宣称 Windows 有文件或网络层面的 OS 隔离。
 - **其他平台**：没有 OS 级隔离，只依赖解释器边界。
 
 开放源码或可 fork 不削弱官方宿主的权限边界；签名有效不等于作者身份认证，部分只读保护不宣称不可绕过。
+
+AppContainer／LPAC 是进一步收窄 Windows 权限的候选方案，需要包 SID、访问控制、进程创建属性及继承句柄一起验证；不能由当前作业对象替代。此轮保持现有启动与 IPC 结构，尚未实现该隔离层。设计依据见 [Microsoft 的 AppContainer 启动说明](https://learn.microsoft.com/en-us/windows/win32/secauthz/implementing-an-appcontainer)。
+
+2026-10-20 核对 GitHub 告警：`rustls` 与 `sharp` 的历史告警已修复，仍开放的 [GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g) 涉及 `glib 0.18.5`。它经 Linux 的 `libappindicator`／GTK／托盘依赖引入，Windows 与 macOS 目标依赖树均不包含该包；Linux 依赖升级仍待处理，未将告警当作已修复。
 
 ## 诊断
 
@@ -103,8 +120,47 @@ cargo test -p nanatype --test layout_materials -- --test-threads=1 --nocapture
 
 这些是单机 debug 测试观测，未控制系统负载，也没有 GPU 时间戳；时间图就绪的观测还包含首帧读回，不能当作转换函数的独立耗时。它们不与前文 macOS release 数字直接比较，完整 release 性能验收仍在阶段 5。开启 `NANATYPE_LAYOUT_MATERIAL_CAPTURES` 时还包含 PNG 编码与写盘，该轮只用于画面检查。
 
+## Windows release 观测（2026-10-20）
+
+Windows 11 build 26300、Ryzen 7 5800X、RTX 5060、Rust 1.99.0，正式应用的 `release` 工作进程，未签名。最终便携布局位于 `dist/issue9-final/app/NanaType`。以下测量期间没有本项目的编译或其他 GPU 用例并行运行，但共享机器上仍有其他编译负载；不能把不同轮次的差异全部归因于代码，也不与 macOS 数字直接比较。
+
+| 测量 | P50 | P95 | 最大 | 样本 |
+|---|---:|---:|---:|---:|
+| 冷启动至首个视图 | 58.77 ms | 61.19 ms | 66.44 ms | 20 |
+| 启动并停止 | 62.16 ms | 64.69 ms | 70.10 ms | 20 |
+| 端到端，1 插件 | 0.311 ms | 0.430 ms | 0.722 ms | 200 |
+| 端到端，4 插件 | 0.321 ms | 1.870 ms | 10.397 ms | 800 |
+| 端到端，8 插件 | 1.000 ms | 12.060 ms | 107.348 ms | 1600 |
+| 宿主调用，1 插件 | 0.0149 ms | 0.0202 ms | 0.0454 ms | 230 |
+| 宿主调用，4 插件 | 0.0055 ms | 0.0206 ms | 1.2195 ms | 920 |
+| 宿主调用，8 插件 | 0.0054 ms | 0.0403 ms | 2.3966 ms | 1840 |
+| 解释器内事件，不含进程与 IPC | 0.054 ms | 0.102 ms | 1.548 ms | 1000 |
+
+1／4／8 插件的端到端、宿主调用、工作集、累计 CPU 和突发结果见 `target/issue9-performance-final.log`；原始轮次保留在 `issue9-performance.log`，不挑选其中最快的样本拼接。每个插件先预热 30 次，再测 200 次；工作集与累计 CPU 在循环结束时采样，不是峰值内存或持续 CPU 占用率。
+
+1／4／8 插件工作集合计分别为 17088／68396／136408 KiB，累计工作进程 CPU 为 125／437.5／968.75ms。突发每插件 200 个事件，分别接收 33／134／289、以 `Busy` 拒绝 167／666／1311 个，排空约 39.60／139.75／51.08ms；宿主单次突发调用最大 0.011／1.547／0.629ms，更新发布合计 2／9／16 次。8 插件的长尾与首轮不同，仍在 200ms 响应期限内；未通过重试过滤较慢结果。
+
+### 重型视图
+
+同一 Lua 夹具包含 2047 个圆角矩形与 60 行文字。插件画布改用直接圆角矩形操作，路径仍保留原来的填充／描边；绘制缓存键直接哈希字段，消除每次更新的 Debug 字符串构造。既有 GPU 用例检查圆角矩形、路径描边及填充的实际像素更新、静止复用与移除视图。
+
+GPU 时间戳工具使用 Vulkan、960×540、每轮预热 60 帧及测量 120 帧，共三轮，不读回像素；Lua 执行和视图解析在 CPU 计时之前。优化前后都只为该测量进程设置 AboveNormal 优先级及逻辑处理器 0、2，未修改系统或其他进程。
+
+| 指标 | 优化前（三轮） | 优化后（三轮） |
+|---|---|---|
+| CPU 录制与提交 P50 | 64.16／51.64／46.63 ms | 43.67／36.03／35.30 ms |
+| CPU 录制与提交 P95 | 95.89／70.78／60.24 ms | 56.86／42.11／40.71 ms |
+| GPU 时间戳 P50 | 0.0626／0.0622／0.0623 ms | 0.0665／0.0661／0.0663 ms |
+
+每轮均保留 2107 个场景图元、360 次绘制调用与 7200 次文字整形；GPU 时间没有同步下降，仍以宿主 CPU 开销为主。前后原始结果为 `target/issue9-gpu-controlled.json`、`issue9-gpu-after-paint.json`。这里的 CPU 数字是墙钟时间，不能由 GPU 时间推算可达帧率。
+
+原有 340×1400 离屏测量包含 GPU 读回：变化帧 P50 从 70.88ms 降为 35.40ms、P95 从 96.61ms 降为 49.91ms；静止帧 P50 从 15.43ms 降为 7.67ms。它与上述时间戳的视口及测量范围不同；用例虽名为 `within_frame_budget`，实为显式忽略的测量，没有帧率阈值，不能据运行通过宣称达到 60fps。
+
+情书独立数据测量：冷加载 68.43ms，新注册表热加载中位 42.94ms，导入完整校验 188.70ms。保留同一注册表的管线用例热加载中位 0.0001ms，稳定帧中位 0.81ms、重排帧 6.60ms，均含 GPU 读回；冷首帧 4275.93ms 包含首次 GPU 准备，时间图就绪的观测也包含它，不是转换函数的独立计时。证据为 `target/issue9-{data-performance,layout-release,render-final,vm-performance}.log`。
+
 ## 未完成
 
-- Windows 实机：作业对象各项限制、完整 release 性能测量、安装包与签名。开发构建的满额绘制失败已修复，见上文；单机 debug 测量与启停／回收验证不代替完整平台验收。
-- AppContainer 隔离；macOS 正式签名与 App Sandbox 授权。
-- NanaUI 绘制大量画布指令的开销（约 12ms／2047 条），需要在上游优化。
+- Windows `dist` 静态 CRT 发行构建、安装／卸载和原生多窗口 DPI／IME／系统文件选择器。已校验的便携包采用 `release`，仍依赖 VC++ 运行库；八项布局、文件、身份、自检与篡改检查通过，不代表安装器通过。首次重型 debug 进程测量在并发冷编译时曾超过 200ms，停止本项目编译后的原用例通过，未延长期限或降低负载。
+- 正式签名按用户要求跳过；Inno Setup 下载并静默安装被自动审批以 `blocked by policy` 拒绝，安装器没有构建。macOS 本轮没有可用实机，历史记录不等于当前发布验收。
+- AppContainer／LPAC 文件和网络隔离，macOS 正式签名与 App Sandbox 授权；Linux `glib` 告警的依赖升级。
+- 重型画布的宿主 CPU 开销仍显著，后续优化需保持相同负载和计时范围。

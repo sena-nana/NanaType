@@ -31,7 +31,7 @@ pub type DataAnswer = Arc<dyn Fn(&DataRequest) -> DataReply + Send + Sync>;
 
 pub struct PluginProcess {
     sender: mpsc::SyncSender<WorkerRequest>,
-    child: Arc<Mutex<Child>>,
+    _child: ChildGuard,
     pid: u32,
     /// Windows confinement; closing it ends the worker.
     #[cfg(windows)]
@@ -75,7 +75,9 @@ impl PluginProcess {
         let mut output = child.stdout.take().unwrap();
         let child = Arc::new(Mutex::new(child));
         let worker = child.clone();
-        let (sender, events) = mpsc::sync_channel(32);
+        // Also reap the process if either supervisor thread fails to start.
+        let child = ChildGuard(child);
+        let (sender, events) = mpsc::sync_channel(crate::MAX_QUEUED_EVENTS);
         let (response_send, responses) = mpsc::sync_channel(1);
         std::thread::Builder::new()
             .name("plugin-output".into())
@@ -89,6 +91,7 @@ impl PluginProcess {
         std::thread::Builder::new()
             .name("plugin-supervisor".into())
             .spawn(move || {
+                let _child = ChildGuard(worker);
                 let run = || -> std::io::Result<()> {
                     write_message(&mut input, &WorkerRequest::Init { source })?;
                     match responses.recv_timeout(Duration::from_secs(15)) {
@@ -168,14 +171,10 @@ impl PluginProcess {
                         message: error.to_string(),
                     });
                 }
-                if let Ok(mut child) = worker.lock() {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
             })?;
         Ok(Self {
             sender,
-            child,
+            _child: child,
             pid,
             #[cfg(windows)]
             _job: job,
@@ -219,9 +218,10 @@ impl std::fmt::Display for EventError {
         })
     }
 }
-impl Drop for PluginProcess {
+struct ChildGuard(Arc<Mutex<Child>>);
+impl Drop for ChildGuard {
     fn drop(&mut self) {
-        if let Ok(mut child) = self.child.lock() {
+        if let Ok(mut child) = self.0.lock() {
             let _ = child.kill();
             let _ = child.wait();
         }

@@ -118,7 +118,7 @@ pub enum Msg {
     /// A running plugin's package folder (or a dependency's) changed on disk.
     PluginPackagesChanged,
     /// Fresh digests for running plugins, reviewed off the UI thread.
-    PluginPackagesReviewed(Vec<(String, Result<String, String>)>),
+    PluginPackagesReviewed(Vec<(String, u64, Result<String, String>)>),
     /// Enabled plugins reviewed off the UI thread by sync `ticket`.
     PluginsReviewed {
         ticket: u64,

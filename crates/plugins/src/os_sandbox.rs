@@ -1,6 +1,7 @@
 //! Operating-system confinement for the worker process, applied before it
 //! reads any request. This is defence in depth below the Wasm interpreter:
-//! even a runtime escape would find no files, network or child processes.
+//! macOS denies new files, network and child processes. Windows job limits
+//! do not provide file or network isolation.
 //!
 //! - macOS: a deny-by-default Seatbelt profile (`sandbox_init`). Pipes the
 //!   host opened before the call keep working; new files, sockets, process
@@ -141,4 +142,135 @@ pub(crate) fn confine_child(child: &std::process::Child) -> std::io::Result<Job>
         fail(AssignProcessToJobObject(job.0, child.as_raw_handle() as _))?;
     }
     Ok(job)
+}
+
+#[cfg(all(test, windows))]
+#[allow(unsafe_code)]
+mod tests {
+    use super::*;
+    use std::{
+        io::{BufRead, Read, Write},
+        process::{Command, Stdio},
+        time::{Duration, Instant},
+    };
+    use windows_sys::Win32::System::{JobObjects::*, Memory::*};
+
+    #[test]
+    fn windows_job_limits_and_close_are_enforced() {
+        const CHILD: &str = "NANATYPE_JOB_PROBE";
+        if std::env::var_os(CHILD).is_some() {
+            // The host applies its production job before releasing this gate.
+            std::io::stdin().read_exact(&mut [0]).unwrap();
+            let spawned = Command::new(std::env::current_exe().unwrap())
+                .arg("--list")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+            assert!(
+                !spawned.is_ok_and(|s| s.success()),
+                "child process escaped the one-process limit"
+            );
+            // Commit, without touching pages, more than the worker's entire cap.
+            let memory = unsafe {
+                VirtualAlloc(
+                    std::ptr::null(),
+                    PROCESS_MEMORY + 4096,
+                    MEM_RESERVE | MEM_COMMIT,
+                    PAGE_READWRITE,
+                )
+            };
+            if !memory.is_null() {
+                unsafe { VirtualFree(memory, 0, MEM_RELEASE) };
+                panic!("worker exceeded its committed-memory limit");
+            }
+            println!("job_probe_ok");
+            std::io::stdout().flush().unwrap();
+            // Remain alive so the parent can verify KILL_ON_JOB_CLOSE.
+            std::io::stdin().read_exact(&mut [0]).unwrap();
+            return;
+        }
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "os_sandbox::tests::windows_job_limits_and_close_are_enforced",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(CHILD, "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let job = confine_child(&child).unwrap();
+        let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        let mut ui = JOBOBJECT_BASIC_UI_RESTRICTIONS::default();
+        // Read back the actual kernel configuration, not a copy of our constants.
+        unsafe {
+            assert_ne!(
+                QueryInformationJobObject(
+                    job.0,
+                    JobObjectExtendedLimitInformation,
+                    (&raw mut limits).cast(),
+                    size_of_val(&limits) as u32,
+                    std::ptr::null_mut()
+                ),
+                0
+            );
+            assert_ne!(
+                QueryInformationJobObject(
+                    job.0,
+                    JobObjectBasicUIRestrictions,
+                    (&raw mut ui).cast(),
+                    size_of_val(&ui) as u32,
+                    std::ptr::null_mut()
+                ),
+                0
+            );
+        }
+        assert_eq!(limits.BasicLimitInformation.ActiveProcessLimit, 1);
+        assert_eq!(limits.ProcessMemoryLimit, PROCESS_MEMORY);
+        assert_eq!(
+            ui.UIRestrictionsClass,
+            JOB_OBJECT_UILIMIT_DESKTOP
+                | JOB_OBJECT_UILIMIT_DISPLAYSETTINGS
+                | JOB_OBJECT_UILIMIT_EXITWINDOWS
+                | JOB_OBJECT_UILIMIT_GLOBALATOMS
+                | JOB_OBJECT_UILIMIT_HANDLES
+                | JOB_OBJECT_UILIMIT_READCLIPBOARD
+                | JOB_OBJECT_UILIMIT_WRITECLIPBOARD
+                | JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS
+        );
+        child.stdin.as_mut().unwrap().write_all(&[1]).unwrap();
+        let output = std::io::BufReader::new(child.stdout.take().unwrap());
+        let (send, ready) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            let ok = output
+                .lines()
+                .map(|line| line.unwrap())
+                .any(|line| line.contains("job_probe_ok"));
+            let _ = send.send(ok);
+        });
+        assert!(
+            ready.recv_timeout(Duration::from_secs(30)).unwrap(),
+            "confined child failed its probes"
+        );
+        reader.join().unwrap();
+        assert!(
+            child.try_wait().unwrap().is_none(),
+            "probe must still be waiting for input"
+        );
+        drop(job);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if child.try_wait().unwrap().is_some() {
+                break;
+            }
+            if Instant::now() >= deadline {
+                child.kill().unwrap();
+                child.wait().unwrap();
+                panic!("worker survived the last job handle");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
 }

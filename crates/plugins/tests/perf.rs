@@ -7,15 +7,17 @@
 //! the method and a reference run.
 use nanatype_plugins::{DataAnswer, DataReply, EventError, PluginProcess, WorkerResponse};
 use std::{
-    path::Path,
+    path::PathBuf,
     sync::{Arc, mpsc},
     time::{Duration, Instant},
 };
 
 const SOURCE: &str = include_str!("../../../docs/examples/counter-plugin/main.lua");
 
-fn worker() -> &'static Path {
-    Path::new(env!("CARGO_BIN_EXE_nanatype-plugin-worker"))
+fn worker() -> PathBuf {
+    std::env::var_os("NANATYPE_PLUGIN_WORKER")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| env!("CARGO_BIN_EXE_nanatype-plugin-worker").into())
 }
 
 fn no_data() -> DataAnswer {
@@ -25,7 +27,7 @@ fn no_data() -> DataAnswer {
 /// Spawn one worker whose posts carry its index and arrival time.
 fn spawn(index: usize, posts: mpsc::Sender<(usize, Instant, bool)>) -> PluginProcess {
     PluginProcess::spawn(
-        worker(),
+        &worker(),
         SOURCE.into(),
         serde_json::json!({"type": "init"}),
         no_data(),
@@ -59,21 +61,64 @@ fn stats(name: &str, extra: serde_json::Value, mut samples: Vec<f64>) -> serde_j
 }
 
 #[cfg(unix)]
-fn rss_kib(pid: u32) -> Option<u64> {
+fn usage(pid: u32) -> Option<(u64, Option<f64>)> {
     let out = std::process::Command::new("ps")
         .args(["-o", "rss=", "-p", &pid.to_string()])
         .output()
         .ok()?;
-    String::from_utf8_lossy(&out.stdout).trim().parse().ok()
+    Some((
+        String::from_utf8_lossy(&out.stdout).trim().parse().ok()?,
+        None,
+    ))
 }
-#[cfg(not(unix))]
-fn rss_kib(_: u32) -> Option<u64> {
+#[cfg(windows)]
+fn usage(pid: u32) -> Option<(u64, Option<f64>)> {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, FILETIME},
+        System::{
+            ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS},
+            Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ},
+        },
+    };
+    // The host reads its own worker's working set; this is not private commit.
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid);
+        if handle.is_null() {
+            return None;
+        }
+        let mut memory = PROCESS_MEMORY_COUNTERS::default();
+        let ok = K32GetProcessMemoryInfo(
+            handle,
+            &mut memory,
+            size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+        );
+        let (mut created, mut exited, mut kernel, mut user) = (
+            FILETIME::default(),
+            FILETIME::default(),
+            FILETIME::default(),
+            FILETIME::default(),
+        );
+        let times = GetProcessTimes(handle, &mut created, &mut exited, &mut kernel, &mut user);
+        CloseHandle(handle);
+        let ticks = |t: FILETIME| ((t.dwHighDateTime as u64) << 32) | t.dwLowDateTime as u64;
+        (ok != 0).then_some((
+            memory.WorkingSetSize as u64 / 1024,
+            (times != 0).then(|| (ticks(kernel) + ticks(user)) as f64 / 10_000.),
+        ))
+    }
+}
+#[cfg(not(any(unix, windows)))]
+fn usage(_: u32) -> Option<(u64, Option<f64>)> {
     None
 }
 
 #[test]
 #[ignore = "measurement; run in release with --ignored --nocapture"]
 fn real_worker_processes() {
+    println!(
+        "{}",
+        serde_json::json!({"measure":"configuration", "worker":worker(), "profile":if cfg!(debug_assertions) {"debug/test"} else {"release/test"}})
+    );
     // Cold start: process spawn, interpreter instantiation, Init and the init event.
     let mut cold = Vec::new();
     let mut cycles = Vec::new();
@@ -116,13 +161,16 @@ fn real_worker_processes() {
             }
             std::thread::sleep(Duration::from_millis(45));
         }
-        let rss: Vec<_> = workers.iter().filter_map(|w| rss_kib(w.id())).collect();
+        let usage: Vec<_> = workers.iter().filter_map(|w| usage(w.id())).collect();
+        let cpu: Option<Vec<_>> = usage.iter().map(|(_, cpu)| *cpu).collect();
         stats(
             "event_end_to_end",
             serde_json::json!({
                 "plugins": plugins,
-                "worker_rss_kib_max": rss.iter().max(),
-                "worker_rss_kib_total": rss.iter().sum::<u64>(),
+                "worker_rss_kib_max": usage.iter().map(|(rss, _)| rss).max(),
+                "worker_rss_kib_total": (!usage.is_empty()).then(|| usage.iter().map(|(rss, _)| rss).sum::<u64>()),
+                "worker_cpu_ms_total": cpu.filter(|v| !v.is_empty()).map(|v| v.iter().sum::<f64>()),
+                "worker_usage_samples": usage.len(),
             }),
             latency,
         );

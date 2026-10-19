@@ -1,7 +1,7 @@
 //! Package editor sessions: drafts, background validation, signing and an
 //! isolated Lua debugger. Views read [`EditorView`] snapshots. Nothing here
 //! changes the active skin, installed packages, consent or running plugins.
-use nanatype_plugins::{PluginProcess, PluginUpdate, WorkerResponse};
+use nanatype_plugins::{PluginUpdate, WorkerResponse};
 use nanatype_theme::editor::{
     self, DraftInfo, DraftOrigin, FileInfo, Level, Metadata, ProjectKind, SourceDiagnostic,
 };
@@ -14,8 +14,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc,
+        atomic::{AtomicU64, Ordering},
     },
 };
 
@@ -158,24 +157,12 @@ pub struct DebugView {
 
 const LOG_LINES: usize = 40;
 
-/// The background owner creates and reaps the OS process, including when
-/// the session is stopped while process creation is still pending.
-struct DebugWorker {
-    events: mpsc::SyncSender<serde_json::Value>,
-    cancelled: Arc<AtomicBool>,
-}
-impl Drop for DebugWorker {
-    fn drop(&mut self) {
-        self.cancelled.store(true, Ordering::Relaxed);
-    }
-}
-
 /// A script under test, in its own sandboxed worker process.
 struct Debugger {
     /// The project digest the user trusted; any edit revokes it.
     trusted: Option<String>,
     generation: u64,
-    process: Option<DebugWorker>,
+    process: Option<crate::plugins::Worker>,
     view: DebugView,
 }
 impl Debugger {
@@ -712,43 +699,13 @@ impl Session {
         let answer = crate::plugins::data_answer(data);
         self.debugger.stop();
         let generation = next();
-        let executable = executable.to_owned();
-        let (events, receiver) = mpsc::sync_channel(32);
-        let cancelled = Arc::new(AtomicBool::new(false));
-        let stopped = cancelled.clone();
-        std::thread::Builder::new()
-            .name("package-debugger".into())
-            .spawn(move || {
-                let post = Arc::new(post);
-                let output = post.clone();
-                let run = || -> Result<(), String> {
-                    if stopped.load(Ordering::Relaxed) {
-                        return Ok(());
-                    }
-                    let process = PluginProcess::spawn(
-                        &executable,
-                        source,
-                        serde_json::json!({"type": "init", "reads": reads}),
-                        answer,
-                        move |response| output(generation, response),
-                    )
-                    .map_err(|e| e.to_string())?;
-                    while let Ok(event) = receiver.recv() {
-                        if stopped.load(Ordering::Relaxed) {
-                            break;
-                        }
-                        process.event(event).map_err(|e| e.to_string())?;
-                    }
-                    Ok(())
-                };
-                if let Err(message) = run()
-                    && !stopped.load(Ordering::Relaxed)
-                {
-                    post(generation, WorkerResponse::Error { message });
-                }
-            })
-            .map_err(|e| e.to_string())?;
-        self.debugger.process = Some(DebugWorker { events, cancelled });
+        self.debugger.process = Some(crate::plugins::Worker::spawn(
+            executable,
+            source,
+            serde_json::json!({"type": "init", "reads": reads}),
+            answer,
+            move |response| post(generation, response),
+        )?);
         self.debugger.generation = generation;
         self.debugger.view = DebugView {
             running: true,
@@ -773,17 +730,7 @@ impl Session {
             .as_ref()
             .ok_or("the script is not running")?;
         let line = format!("→ {event}");
-        if serde_json::to_vec(&event).map_err(|e| e.to_string())?.len()
-            > nanatype_plugins::MAX_MESSAGE_BYTES / 2
-        {
-            return Err(nanatype_plugins::EventError::TooLarge.to_string());
-        }
-        process.events.try_send(event).map_err(|e| match e {
-            mpsc::TrySendError::Full(_) => nanatype_plugins::EventError::Busy.to_string(),
-            mpsc::TrySendError::Disconnected(_) => {
-                nanatype_plugins::EventError::Stopped.to_string()
-            }
-        })?;
+        process.event(event).map_err(|e| e.to_string())?;
         self.debugger.log(line);
         Ok(())
     }

@@ -5,7 +5,7 @@ use crate::{
 };
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{
-    Activate, Button, Checkbox, LayoutBox, PaintContext, PaintPath, Painter, Stack, Text,
+    Activate, BoxPaint, Button, Checkbox, LayoutBox, PaintContext, PaintPath, Painter, Stack, Text,
     ToggleChanged,
 };
 use nana_ui_core::{LengthSpec, OverflowSpec};
@@ -23,23 +23,22 @@ impl Painter for Canvas {
         cx.save();
         cx.translate(bounds.x, bounds.y);
         for command in &self.draw {
-            let mut path = PaintPath::new();
-            let (color, stroke) = match command {
+            match command {
                 DrawCommand::Rect {
                     rect,
                     color,
                     radius,
                 } => {
-                    path.rounded_rect(
+                    cx.rounded_rect(
                         LayoutBox {
                             x: rect[0],
                             y: rect[1],
                             width: rect[2],
                             height: rect[3],
                         },
-                        [*radius; 4],
+                        *radius,
+                        BoxPaint::fill(color.map(|c| f32::from(c) / 255.)),
                     );
-                    (*color, 0.)
                 }
                 DrawCommand::Path {
                     points,
@@ -47,6 +46,7 @@ impl Painter for Canvas {
                     closed,
                     width,
                 } => {
+                    let mut path = PaintPath::new();
                     if let Some(first) = points.first() {
                         path.move_to(first[0], first[1]);
                         for p in &points[1..] {
@@ -56,14 +56,13 @@ impl Painter for Canvas {
                     if *closed {
                         path.close();
                     }
-                    (*color, *width)
+                    let color = color.map(|c| f32::from(c) / 255.);
+                    if *width > 0. {
+                        cx.stroke_path(&path, *width, color);
+                    } else {
+                        cx.fill_path(&path, color);
+                    }
                 }
-            };
-            let color = color.map(|c| f32::from(c) / 255.);
-            if stroke > 0. {
-                cx.stroke_path(&path, stroke, color);
-            } else {
-                cx.fill_path(&path, color);
             }
         }
         cx.restore();
@@ -71,6 +70,39 @@ impl Painter for Canvas {
     fn paint_key(&self) -> u64 {
         self.key
     }
+}
+
+fn draw_key(draw: &[DrawCommand]) -> u64 {
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    for command in draw {
+        std::mem::discriminant(command).hash(&mut hash);
+        match command {
+            DrawCommand::Rect {
+                rect,
+                color,
+                radius,
+            } => {
+                rect.map(f32::to_bits).hash(&mut hash);
+                color.hash(&mut hash);
+                radius.to_bits().hash(&mut hash);
+            }
+            DrawCommand::Path {
+                points,
+                color,
+                closed,
+                width,
+            } => {
+                points.len().hash(&mut hash);
+                for point in points {
+                    point.map(f32::to_bits).hash(&mut hash);
+                }
+                color.hash(&mut hash);
+                closed.hash(&mut hash);
+                width.to_bits().hash(&mut hash);
+            }
+        }
+    }
+    hash.finish()
 }
 
 /// Sends a plugin command's event to wherever that plugin runs.
@@ -118,25 +150,21 @@ fn node(package: &str, n: &Node, command: &Command) -> AnyView {
             width,
             height,
             draw,
-        } => {
-            let mut hash = std::collections::hash_map::DefaultHasher::new();
-            format!("{draw:?}").hash(&mut hash);
-            widget(
-                Stack::column(0.)
-                    .width(LengthSpec::Px(*width))
-                    .height(LengthSpec::Px(*height))
-                    .painter(Canvas {
-                        draw: draw.clone(),
-                        key: hash.finish(),
-                    })
-                    .with_layout(|l| {
-                        l.overflow_x = OverflowSpec::Hidden;
-                        l.overflow_y = OverflowSpec::Hidden;
-                    }),
-            )
-            .key(format!("plugin:{package}:{id}"))
-            .into_any()
-        }
+        } => widget(
+            Stack::column(0.)
+                .width(LengthSpec::Px(*width))
+                .height(LengthSpec::Px(*height))
+                .painter(Canvas {
+                    draw: draw.clone(),
+                    key: draw_key(draw),
+                })
+                .with_layout(|l| {
+                    l.overflow_x = OverflowSpec::Hidden;
+                    l.overflow_y = OverflowSpec::Hidden;
+                }),
+        )
+        .key(format!("plugin:{package}:{id}"))
+        .into_any(),
     }
 }
 

@@ -5,7 +5,7 @@ mod common;
 use nana_ui_devtools::agent::AgentSession;
 use nanatype::ui::{self, Ui};
 use nanatype_i18n::Locale;
-use nanatype_plugins::{LuaSandbox, Mount};
+use nanatype_plugins::{DrawCommand, LuaSandbox, Mount, Node};
 use std::{collections::HashMap, sync::Arc};
 
 #[test]
@@ -39,6 +39,43 @@ fn lua_canvas_is_host_rendered_updates_on_events_and_unmounts_cleanly() {
     );
     let (_, idle) = session.screenshot_rgba().unwrap();
     assert_eq!(after, idle, "idle plugin should retain identical paint");
+    // Exercise rectangle paint, stroked paths and filled paths on the retained canvas.
+    let mut update = root.plugin_views.get_untracked()["example.counter"].clone();
+    let mut previous = idle;
+    for command in [
+        DrawCommand::Rect {
+            rect: [0., 0., 120., 20.],
+            color: [240, 100, 0, 255],
+            radius: 4.,
+        },
+        DrawCommand::Path {
+            points: vec![[160., 3.], [180., 20.], [220., 3.]],
+            color: [255, 0, 0, 255],
+            closed: false,
+            width: 2.,
+        },
+        DrawCommand::Path {
+            points: vec![[160., 3.], [195., 20.], [220., 3.]],
+            color: [0, 200, 70, 255],
+            closed: true,
+            width: 0.,
+        },
+    ] {
+        let Node::Column { children, .. } = &mut update.views[0].root else {
+            unreachable!()
+        };
+        let Node::Canvas { draw, .. } = &mut children[1] else {
+            unreachable!()
+        };
+        *draw = vec![command];
+        root.plugin_views.set(Arc::new(HashMap::from([(
+            "example.counter".into(),
+            update.clone(),
+        )])));
+        let (_, changed) = session.screenshot_rgba().unwrap();
+        assert_ne!(previous, changed, "canvas edit did not repaint");
+        previous = changed;
+    }
     root.plugin_views.set(Arc::new(HashMap::new()));
     let (_, empty) = session.screenshot_rgba().unwrap();
     assert!(

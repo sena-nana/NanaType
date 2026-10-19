@@ -6,8 +6,9 @@ use nanatype_theme::{PackageCapability, PackageManifest, SkinOrigin, SkinRegistr
 use std::{
     collections::HashMap,
     sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        mpsc,
     },
 };
 static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
@@ -91,26 +92,33 @@ pub fn data_answer(data: Arc<nanatype_theme::DataAccess>) -> nanatype_plugins::D
 /// package folders change.
 pub fn review_digests(
     registry: &SkinRegistry,
-    ids: &[String],
-) -> Vec<(String, Result<String, String>)> {
-    ids.iter()
-        .map(|id| (id.clone(), review(registry, id).map(|r| r.digest)))
+    targets: &[(String, u64)],
+) -> Vec<(String, u64, Result<String, String>)> {
+    targets
+        .iter()
+        .map(|(id, generation)| {
+            (
+                id.clone(),
+                *generation,
+                review(registry, id).map(|r| r.digest),
+            )
+        })
         .collect()
 }
 /// Plugins whose content no longer matches what they were started with.
 pub fn changed<'a>(
-    running: impl IntoIterator<Item = (&'a str, &'a str)>,
-    reviewed: &[(String, Result<String, String>)],
+    running: impl IntoIterator<Item = (&'a str, u64, &'a str)>,
+    reviewed: &[(String, u64, Result<String, String>)],
 ) -> Vec<String> {
     running
         .into_iter()
-        .filter(|(id, digest)| {
+        .filter(|(id, generation, digest)| {
             reviewed
                 .iter()
-                .find(|(r, _)| r == id)
-                .is_some_and(|(_, current)| current.as_deref() != Ok(*digest))
+                .find(|(r, g, _)| r == id && g == generation)
+                .is_some_and(|(_, _, current)| current.as_deref() != Ok(*digest))
         })
-        .map(|(id, _)| id.to_owned())
+        .map(|(id, _, _)| id.to_owned())
         .collect()
 }
 
@@ -119,7 +127,138 @@ struct Running {
     /// The reviewed content this process was started from.
     digest: String,
     roots: Vec<std::path::PathBuf>,
-    process: PluginProcess,
+    process: Worker,
+}
+
+enum WorkerState {
+    Pending(Vec<serde_json::Value>),
+    Running(PluginProcess),
+    Stopped,
+}
+
+/// Creates and reaps the OS process off the UI thread, shared by live plugins
+/// and the editor debugger. Pending events share the production queue budget.
+pub(crate) struct Worker {
+    state: Arc<Mutex<WorkerState>>,
+    cancelled: Arc<AtomicBool>,
+    wake: mpsc::SyncSender<Option<WorkerResponse>>,
+}
+impl Worker {
+    pub(crate) fn spawn(
+        executable: &std::path::Path,
+        source: String,
+        init: serde_json::Value,
+        answer: nanatype_plugins::DataAnswer,
+        post: impl Fn(WorkerResponse) + Send + 'static,
+    ) -> Result<Self, String> {
+        let executable = executable.to_owned();
+        Self::launch(
+            move |output| {
+                PluginProcess::spawn(&executable, source, init, answer, move |response| {
+                    let _ = output.send(Some(response));
+                })
+                .map_err(|e| e.to_string())
+            },
+            post,
+        )
+    }
+    fn launch(
+        create: impl FnOnce(mpsc::SyncSender<Option<WorkerResponse>>) -> Result<PluginProcess, String>
+        + Send
+        + 'static,
+        post: impl Fn(WorkerResponse) + Send + 'static,
+    ) -> Result<Self, String> {
+        let state = Arc::new(Mutex::new(WorkerState::Pending(Vec::new())));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let (wake, responses) = mpsc::sync_channel(1);
+        let (owned, stopped, output) = (state.clone(), cancelled.clone(), wake.clone());
+        std::thread::Builder::new()
+            .name("plugin-owner".into())
+            .spawn(move || {
+                let run = || -> Result<(), String> {
+                    if stopped.load(Ordering::Relaxed) {
+                        return Ok(());
+                    }
+                    let process = create(output)?;
+                    {
+                        let mut state = owned.lock().unwrap_or_else(|e| e.into_inner());
+                        if stopped.load(Ordering::Relaxed) {
+                            return Ok(());
+                        }
+                        if let WorkerState::Pending(events) = &mut *state {
+                            for event in events.drain(..) {
+                                process.event(event).map_err(|e| e.to_string())?;
+                            }
+                        }
+                        *state = WorkerState::Running(process);
+                    }
+                    while let Ok(Some(response)) = responses.recv() {
+                        if stopped.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        let failed = matches!(response, WorkerResponse::Error { .. });
+                        post(response);
+                        if failed {
+                            break;
+                        }
+                    }
+                    Ok(())
+                };
+                let result = run();
+                let process = std::mem::replace(
+                    &mut *owned.lock().unwrap_or_else(|e| e.into_inner()),
+                    WorkerState::Stopped,
+                );
+                drop(process);
+                if let Err(message) = result
+                    && !stopped.load(Ordering::Relaxed)
+                {
+                    post(WorkerResponse::Error { message });
+                }
+            })
+            .map_err(|e| e.to_string())?;
+        Ok(Self {
+            state,
+            cancelled,
+            wake,
+        })
+    }
+    fn id(&self) -> Option<u32> {
+        match &*self.state.lock().unwrap_or_else(|e| e.into_inner()) {
+            WorkerState::Running(process) => Some(process.id()),
+            _ => None,
+        }
+    }
+    pub(crate) fn event(
+        &self,
+        event: serde_json::Value,
+    ) -> Result<(), nanatype_plugins::EventError> {
+        use nanatype_plugins::EventError;
+        match &mut *self.state.lock().unwrap_or_else(|e| e.into_inner()) {
+            WorkerState::Pending(events) => {
+                if serde_json::to_vec(&event)
+                    .map_err(|_| EventError::TooLarge)?
+                    .len()
+                    > nanatype_plugins::MAX_MESSAGE_BYTES / 2
+                {
+                    return Err(EventError::TooLarge);
+                }
+                if events.len() == nanatype_plugins::MAX_QUEUED_EVENTS {
+                    return Err(EventError::Busy);
+                }
+                events.push(event);
+                Ok(())
+            }
+            WorkerState::Running(process) => process.event(event),
+            WorkerState::Stopped => Err(EventError::Stopped),
+        }
+    }
+}
+impl Drop for Worker {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+        let _ = self.wake.try_send(None);
+    }
 }
 
 /// Reviews finished off the UI thread, tagged with the sync that asked.
@@ -181,16 +320,23 @@ impl Manager {
     pub fn has_running(&self) -> bool {
         !self.running.is_empty()
     }
-    pub fn running(&self) -> Vec<String> {
-        self.running.keys().cloned().collect()
+    pub fn running(&self) -> Vec<(String, u64)> {
+        self.running
+            .iter()
+            .map(|(id, r)| (id.clone(), r.generation))
+            .collect()
+    }
+    /// Available after the first worker response, never waits for process creation.
+    pub fn process_id(&self, id: &str) -> Option<u32> {
+        self.running.get(id)?.process.id()
     }
     /// Stop plugins whose package or dependencies changed since they started;
     /// they need a fresh review and consent.
-    pub fn revalidate(&mut self, reviewed: &[(String, Result<String, String>)], ui: Ui) {
+    pub fn revalidate(&mut self, reviewed: &[(String, u64, Result<String, String>)], ui: Ui) {
         let stale = changed(
             self.running
                 .iter()
-                .map(|(id, r)| (id.as_str(), r.digest.as_str())),
+                .map(|(id, r)| (id.as_str(), r.generation, r.digest.as_str())),
             reviewed,
         );
         for id in stale {
@@ -348,7 +494,7 @@ impl Manager {
         executable: &std::path::Path,
         post: impl Fn(u64, WorkerResponse) + Send + 'static,
         ui: Ui,
-    ) -> Result<u32, String> {
+    ) -> Result<(), String> {
         if !approval_matches(reviewed, approval) {
             return Err(ui.now_t("packages-consent-required"));
         }
@@ -358,15 +504,13 @@ impl Manager {
             .map(|d| d.reference.clone())
             .collect();
         let generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
-        let process = PluginProcess::spawn(
+        let process = Worker::spawn(
             executable,
             reviewed.source.clone(),
             serde_json::json!({"type": "init", "reads": reads}),
             data_answer(reviewed.data.clone()),
             move |response| post(generation, response),
-        )
-        .map_err(|e| e.to_string())?;
-        let pid = process.id();
+        )?;
         self.running.insert(
             reviewed.id.clone(),
             Running {
@@ -376,7 +520,7 @@ impl Manager {
                 process,
             },
         );
-        Ok(pid)
+        Ok(())
     }
     pub fn event(&mut self, id: &str, event: serde_json::Value) -> Result<(), String> {
         self.running
@@ -443,5 +587,52 @@ impl Manager {
                 self.remove(id, Some(message), ui);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod worker_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn cancel_during_start_bounds_pending_events_and_discards_late_failure() {
+        let (entered, started) = mpsc::channel();
+        let (release, gate) = mpsc::channel();
+        let (posted, results) = mpsc::channel();
+        let worker = Worker::launch(
+            move |_| {
+                entered.send(()).unwrap();
+                gate.recv_timeout(Duration::from_secs(5)).unwrap();
+                Err("late process creation failure".into())
+            },
+            move |response| {
+                posted.send(response).unwrap();
+            },
+        )
+        .unwrap();
+        started.recv_timeout(Duration::from_secs(5)).unwrap();
+        for _ in 0..nanatype_plugins::MAX_QUEUED_EVENTS {
+            worker.event(serde_json::json!({"type":"tick"})).unwrap();
+        }
+        assert_eq!(
+            worker.event(serde_json::json!({})),
+            Err(nanatype_plugins::EventError::Busy)
+        );
+        assert_eq!(
+            worker.event(serde_json::json!(
+                "x".repeat(nanatype_plugins::MAX_MESSAGE_BYTES)
+            )),
+            Err(nanatype_plugins::EventError::TooLarge)
+        );
+        drop(worker);
+        release.send(()).unwrap();
+        assert!(
+            matches!(
+                results.recv_timeout(Duration::from_secs(5)),
+                Err(mpsc::RecvTimeoutError::Disconnected)
+            ),
+            "cancelled work must exit without publishing an error"
+        );
     }
 }

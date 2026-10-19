@@ -97,7 +97,9 @@ fn session(registry: &SkinRegistry, name: &'static str, track: usize) -> (Ui, Ru
             .unwrap();
         doc.context_mut()
             .mount_view_root(id, move || {
-                if name == "chat_1000" {
+                if name == "plugin_heavy" {
+                    nanatype::ui::plugins::mounted(ui, nanatype_plugins::Mount::Panel).into_any()
+                } else if name == "chat_1000" {
                     danmaku::chat_window(ui).into_any()
                 } else if track == 2 {
                     history::history_window(ui).into_any()
@@ -173,6 +175,7 @@ fn main() {
     let mut cases = Vec::new();
     for name in [
         "static",
+        "plugin_heavy",
         "pacing_only",
         "reduced",
         "reveal",
@@ -228,6 +231,10 @@ fn main() {
             continue;
         }
         let multi = name == "multi_output" || name.ends_with("_multi_output");
+        let mut plugin = (name == "plugin_heavy").then(|| {
+            nanatype_plugins::LuaSandbox::new(include_str!("../tests/fixtures/heavy-plugin.lua"))
+                .unwrap()
+        });
         let mut sessions: Vec<_> = (0..if multi { 3 } else { 1 })
             .map(|i| session(&registry, name, i))
             .collect();
@@ -264,6 +271,10 @@ fn main() {
             for frame in 0..180 {
                 let ms = ((trial * 180 + frame) * 16) as u64;
                 let mut count = 0;
+                // Worker execution is measured separately; time host projection and GPU work here.
+                let update = plugin
+                    .as_mut()
+                    .map(|vm| vm.event(&serde_json::json!({"type":"tick"})).unwrap());
                 let start = Instant::now();
                 let mut commands = gpu.begin_frame("benchmark frame");
                 if let Some(q) = &queries {
@@ -271,6 +282,13 @@ fn main() {
                 }
                 clock::capture_at(ms, || {
                     for (i, (ui, session)) in sessions.iter_mut().enumerate() {
+                        if let Some(update) = &update {
+                            ui.plugin_views
+                                .set(Arc::new(std::collections::HashMap::from([(
+                                    "example.heavy".into(),
+                                    update.clone(),
+                                )])));
+                        }
                         let track_ui = if i == 1 { ui.remote() } else { *ui };
                         let runtime_animation = dialogue::display_animating(track_ui, ms);
                         let animate = runtime_animation

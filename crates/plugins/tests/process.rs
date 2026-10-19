@@ -120,24 +120,49 @@ fn alive(pid: u32) -> bool {
         .is_ok_and(|s| s.success())
 }
 
+#[cfg(windows)]
+fn alive(pid: u32) -> bool {
+    use windows_sys::Win32::{
+        Foundation::CloseHandle,
+        System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
+    };
+    // Only inspect the fixture worker started by this test.
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return false;
+        }
+        let mut code = 0;
+        let running = GetExitCodeProcess(handle, &mut code) != 0 && code == 259;
+        CloseHandle(handle);
+        running
+    }
+}
+
 #[test]
 fn crashed_or_foreign_workers_report_errors_instead_of_hanging_the_host() {
     // A worker that exits at once (a crash) and one that echoes our own
     // requests back (a protocol violation) both end with a prompt error.
-    for executable in ["/usr/bin/true", "/bin/cat"] {
-        if !Path::new(executable).exists() {
+    let executables = if cfg!(windows) {
+        // The test harness rejects --plugin-worker and exits without Ready.
+        vec![std::env::current_exe().unwrap()]
+    } else {
+        vec!["/usr/bin/true".into(), "/bin/cat".into()]
+    };
+    for executable in executables {
+        if !executable.exists() {
             continue;
         }
         let started = std::time::Instant::now();
-        let (worker, responses) = spawn(Path::new(executable), "return {}");
+        let (worker, responses) = spawn(&executable, "return {}");
         assert!(
             matches!(
                 responses.recv_timeout(Duration::from_secs(5)),
                 Ok(WorkerResponse::Error { .. })
             ),
-            "{executable}"
+            "{executable:?}"
         );
-        assert!(started.elapsed() < Duration::from_secs(5), "{executable}");
+        assert!(started.elapsed() < Duration::from_secs(5), "{executable:?}");
         // The supervisor finishes right after posting the error.
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
         while worker.event(serde_json::json!({"type": "line_start"}))
@@ -145,14 +170,13 @@ fn crashed_or_foreign_workers_report_errors_instead_of_hanging_the_host() {
         {
             assert!(
                 std::time::Instant::now() < deadline,
-                "{executable}: a dead worker must be reported as stopped"
+                "{executable:?}: a dead worker must be reported as stopped"
             );
             std::thread::sleep(Duration::from_millis(10));
         }
     }
 }
 
-#[cfg(unix)]
 #[test]
 fn dropping_or_failing_a_worker_reaps_its_process_and_a_fresh_one_starts_cleanly() {
     let worker_path = Path::new(env!("CARGO_BIN_EXE_nanatype-plugin-worker"));
@@ -173,6 +197,13 @@ fn dropping_or_failing_a_worker_reaps_its_process_and_a_fresh_one_starts_cleanly
     }
     assert!(!alive(pid), "failed worker {pid} was not reaped");
     drop(worker);
+    assert!(
+        matches!(
+            responses.recv_timeout(Duration::from_secs(5)),
+            Err(mpsc::RecvTimeoutError::Disconnected)
+        ),
+        "failed supervisor must exit"
+    );
     // Repeated start/stop leaves nothing behind.
     for _ in 0..5 {
         let (worker, responses) = spawn(worker_path, "return {view=function() return {} end}");
@@ -180,6 +211,13 @@ fn dropping_or_failing_a_worker_reaps_its_process_and_a_fresh_one_starts_cleanly
         let pid = worker.id();
         drop(worker);
         assert!(!alive(pid), "dropped worker {pid} is still running");
+        assert!(
+            matches!(
+                responses.recv_timeout(Duration::from_secs(5)),
+                Err(mpsc::RecvTimeoutError::Disconnected)
+            ),
+            "stopped supervisor must exit"
+        );
     }
 }
 

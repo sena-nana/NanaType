@@ -393,28 +393,29 @@ fn running_plugins_are_stopped_when_their_package_or_dependency_changes_on_disk(
     let dir = tempfile::tempdir().unwrap();
     let registry = fixture(dir.path());
     let ids = vec!["example.script".to_owned()];
+    let targets = vec![(ids[0].clone(), 1)];
     let started = review(&registry, "example.script").unwrap().digest;
-    let running = [("example.script", started.as_str())];
+    let running = [("example.script", 1, started.as_str())];
     assert!(
-        changed(running, &review_digests(&registry, &ids)).is_empty(),
+        changed(running, &review_digests(&registry, &targets)).is_empty(),
         "unchanged content keeps running"
     );
     std::fs::write(dir.path().join("example.assets/note.txt"), "edited").unwrap();
     assert_eq!(
-        changed(running, &review_digests(&registry, &ids)),
+        changed(running, &review_digests(&registry, &targets)),
         ids,
         "a dependency edit invalidates the running instance"
     );
     std::fs::remove_file(dir.path().join("example.script/main.lua")).unwrap();
-    let reviewed = review_digests(&registry, &ids);
-    assert!(reviewed[0].1.is_err());
+    let reviewed = review_digests(&registry, &targets);
+    assert!(reviewed[0].2.is_err());
     assert_eq!(
         changed(running, &reviewed),
         ids,
         "unreviewable content stops"
     );
     assert!(
-        changed([("example.other", "digest")], &reviewed).is_empty(),
+        changed([("example.other", 1, "digest")], &reviewed).is_empty(),
         "plugins without a fresh review are left to the next sync"
     );
 }
@@ -508,13 +509,19 @@ fn production_workers_require_approval_stop_on_changes_and_ignore_late_responses
         settings
             .plugin_approvals
             .insert(reviewed.id.clone(), approval.clone());
-        let pid = start(&mut manager, Some(&approval)).unwrap();
+        let called = Instant::now();
+        start(&mut manager, Some(&approval)).unwrap();
+        assert!(
+            called.elapsed() < Duration::from_millis(500),
+            "process creation must not block the UI"
+        );
         let (generation, response) = rx.recv_timeout(Duration::from_secs(20)).unwrap();
         assert!(
             matches!(response, nanatype_plugins::WorkerResponse::Update { .. }),
             "{response:?}"
         );
         manager.receive(&reviewed.id, generation, &response, ui);
+        let pid = manager.process_id(&reviewed.id).unwrap();
         assert!(ui.plugin_views.get_untracked().contains_key(&reviewed.id));
         assert!(alive(pid));
         if change == "disable" {
@@ -528,10 +535,7 @@ fn production_workers_require_approval_stop_on_changes_and_ignore_late_responses
                 "return {view=function() return {views={}} end} -- changed",
             )
             .unwrap();
-            manager.revalidate(
-                &review_digests(&registry, std::slice::from_ref(&reviewed.id)),
-                ui,
-            );
+            manager.revalidate(&review_digests(&registry, &manager.running()), ui);
             let current = review(&registry, &reviewed.id).unwrap();
             assert!(!approval_matches(
                 &current,
@@ -553,7 +557,7 @@ fn production_workers_require_approval_stop_on_changes_and_ignore_late_responses
             ..approval
         };
         let (tx, new_rx) = mpsc::channel();
-        let new_pid = manager
+        manager
             .start(
                 &current,
                 Some(&approval),
@@ -565,6 +569,7 @@ fn production_workers_require_approval_stop_on_changes_and_ignore_late_responses
             )
             .unwrap();
         let (new_generation, new_response) = new_rx.recv_timeout(Duration::from_secs(20)).unwrap();
+        let new_pid = manager.process_id(&reviewed.id).unwrap();
         assert!(
             matches!(
                 new_response,
@@ -577,6 +582,19 @@ fn production_workers_require_approval_stop_on_changes_and_ignore_late_responses
         assert!(!ui.plugin_views.get_untracked().contains_key(&reviewed.id));
         manager.receive(&reviewed.id, new_generation, &new_response, ui);
         assert!(ui.plugin_views.get_untracked().contains_key(&reviewed.id));
+        manager.revalidate(
+            &[(
+                reviewed.id.clone(),
+                generation,
+                Err("late old package check".into()),
+            )],
+            ui,
+        );
+        assert_eq!(
+            manager.process_id(&reviewed.id),
+            Some(new_pid),
+            "an old check must not stop a replacement process"
+        );
         manager.stop(&reviewed.id, ui);
         let deadline = Instant::now() + Duration::from_secs(5);
         while alive(new_pid) && Instant::now() < deadline {
