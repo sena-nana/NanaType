@@ -86,10 +86,8 @@ fn data_answers_arrive_as_values_and_chained_requests_are_bounded() {
         },
     )
     .unwrap();
-    let mut last = String::new();
-    for _ in 0..=MAX_DATA_ROUNDS {
-        last = text(&receiver.recv_timeout(Duration::from_secs(20)).unwrap());
-    }
+    // Chained rounds run without waiting for the UI; only the newest view is posted.
+    let last = text(&receiver.recv_timeout(Duration::from_secs(20)).unwrap());
     assert_eq!(last, format!("string:hello#{MAX_DATA_ROUNDS}"));
     assert!(
         receiver.recv_timeout(Duration::from_millis(500)).is_err(),
@@ -97,16 +95,12 @@ fn data_answers_arrive_as_values_and_chained_requests_are_bounded() {
     );
     assert_eq!(calls.load(Ordering::SeqCst), MAX_DATA_ROUNDS);
     worker.event(serde_json::json!({"type":"command"})).unwrap();
-    for _ in 0..=MAX_DATA_ROUNDS {
-        receiver.recv_timeout(Duration::from_secs(5)).unwrap();
-    }
+    receiver.recv_timeout(Duration::from_secs(5)).unwrap();
+    std::thread::sleep(Duration::from_millis(200));
     assert_eq!(calls.load(Ordering::SeqCst), 2 * MAX_DATA_ROUNDS);
 }
 
-fn spawn(
-    executable: &Path,
-    source: &str,
-) -> (PluginProcess, mpsc::Receiver<WorkerResponse>) {
+fn spawn(executable: &Path, source: &str) -> (PluginProcess, mpsc::Receiver<WorkerResponse>) {
     let (sender, receiver) = mpsc::channel();
     let worker = PluginProcess::spawn(
         executable,
@@ -191,4 +185,44 @@ fn dropping_or_failing_a_worker_reaps_its_process_and_a_fresh_one_starts_cleanly
         drop(worker);
         assert!(!alive(pid), "dropped worker {pid} is still running");
     }
+}
+
+#[test]
+fn bursts_coalesce_into_the_newest_view_instead_of_lagging_behind() {
+    let (sender, receiver) = mpsc::channel();
+    let source = "local n=0 return {on_event=function(e) if e.type=='tick' then n=n+1 end end, view=function() return {views={{slot='panel',root={kind='text',id='t',text=tostring(n)}}}} end}";
+    let worker = PluginProcess::spawn(
+        Path::new(env!("CARGO_BIN_EXE_nanatype-plugin-worker")),
+        source.into(),
+        serde_json::json!({"type": "init"}),
+        no_data(),
+        move |response| {
+            let _ = sender.send((std::time::Instant::now(), response));
+        },
+    )
+    .unwrap();
+    receiver.recv_timeout(Duration::from_secs(20)).unwrap();
+    let started = std::time::Instant::now();
+    let mut accepted = 0;
+    while accepted < 32 && worker.event(serde_json::json!({"type": "tick"})).is_ok() {
+        accepted += 1;
+    }
+    // Every accepted event is applied; the UI sees few posts and the final count quickly.
+    let mut posts = 0;
+    loop {
+        let (at, response) = receiver.recv_timeout(Duration::from_secs(5)).unwrap();
+        posts += 1;
+        if text(&response) == accepted.to_string() {
+            assert!(
+                at - started < Duration::from_millis(500),
+                "{accepted} queued events took {:?} to reach the UI",
+                at - started
+            );
+            break;
+        }
+    }
+    assert!(
+        posts < accepted,
+        "{posts} posts for {accepted} events: not coalesced"
+    );
 }

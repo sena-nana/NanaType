@@ -10,6 +10,9 @@ use std::{
     time::Duration,
 };
 
+/// At most one view update per plugin reaches the UI in this interval (~30/s).
+const POST_INTERVAL: Duration = Duration::from_millis(33);
+
 /// Answers a script's data request on the supervisor thread, never the UI thread.
 pub type DataAnswer = Arc<dyn Fn(&DataRequest) -> DataReply + Send + Sync>;
 
@@ -70,6 +73,9 @@ impl PluginProcess {
                         Err(_) => return Err(std::io::Error::other("plugin startup timed out")),
                     }
                     write_message(&mut input, &WorkerRequest::Event { event: init })?;
+                    // Views are complete snapshots: while events are queued the
+                    // supervisor keeps the worker busy and posts only the newest
+                    // view, at most once per throttle window.
                     let mut last_post = std::time::Instant::now() - Duration::from_secs(1);
                     let mut rounds = 0;
                     loop {
@@ -80,20 +86,16 @@ impl PluginProcess {
                             WorkerResponse::Update { requests, .. } => std::mem::take(requests),
                             _ => Vec::new(),
                         };
-                        let failed = matches!(response, WorkerResponse::Error { .. });
-                        let wait = Duration::from_millis(33).saturating_sub(last_post.elapsed());
-                        if !wait.is_zero() {
-                            std::thread::sleep(wait);
-                        }
-                        post(response);
-                        last_post = std::time::Instant::now();
-                        if failed {
+                        if matches!(response, WorkerResponse::Error { .. }) {
+                            post(response);
                             break;
                         }
-                        // Chained requests are answered without waiting for the UI;
-                        // beyond the round budget they are dropped until the next event.
                         // The worker checked them too; a mismatch means it is not ours.
                         crate::validate_requests(&requests).map_err(std::io::Error::other)?;
+                        // Superseded by the next response when more work follows.
+                        let mut pending = Some(response);
+                        // Chained requests are answered without waiting for the UI;
+                        // beyond the round budget they are dropped until the next event.
                         if !requests.is_empty() && rounds < MAX_DATA_ROUNDS {
                             rounds += 1;
                             let results =
@@ -101,12 +103,32 @@ impl PluginProcess {
                             write_message(&mut input, &WorkerRequest::Data { results })?;
                             continue;
                         }
-                        match events.recv() {
-                            Ok(event) => {
+                        if last_post.elapsed() >= POST_INTERVAL
+                            && let Some(view) = pending.take()
+                        {
+                            post(view);
+                            last_post = std::time::Instant::now();
+                        }
+                        let next = match events.try_recv() {
+                            Ok(event) => Some(event),
+                            Err(mpsc::TryRecvError::Empty) => {
+                                if let Some(view) = pending.take() {
+                                    std::thread::sleep(
+                                        POST_INTERVAL.saturating_sub(last_post.elapsed()),
+                                    );
+                                    post(view);
+                                    last_post = std::time::Instant::now();
+                                }
+                                events.recv().ok()
+                            }
+                            Err(mpsc::TryRecvError::Disconnected) => None,
+                        };
+                        match next {
+                            Some(event) => {
                                 rounds = 0;
                                 write_message(&mut input, &event)?
                             }
-                            Err(_) => break,
+                            None => break,
                         }
                     }
                     Ok(())
