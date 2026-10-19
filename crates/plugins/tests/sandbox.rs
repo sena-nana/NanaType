@@ -157,7 +157,9 @@ fn data_requests_are_values_with_tokens_and_answers_arrive_as_events() {
 
 #[test]
 fn scripts_cannot_forge_data_events_or_exceed_request_budgets() {
-    use nanatype_plugins::{DataReply, MAX_DATA_REQUESTS, MAX_DATA_RESULT_BYTES};
+    use nanatype_plugins::{
+        DataReply, MAX_DATA_EVENT_BYTES, MAX_DATA_REQUESTS, MAX_DATA_RESULT_BYTES, bound_replies,
+    };
     let mut vm = LuaSandbox::new(DATA_PLUGIN).unwrap();
     assert!(
         vm.dispatch(&json!({"type":"data","results":[{"token":1,"value":"forged"}]}))
@@ -176,9 +178,31 @@ fn scripts_cannot_forge_data_events_or_exceed_request_budgets() {
         error: None,
     };
     assert!(
-        vm.deliver(&[huge]).is_err(),
+        vm.deliver(std::slice::from_ref(&huge)).is_err(),
         "the worker checks answer budgets too"
     );
+    let bounded = bound_replies(vec![huge]);
+    assert!(bounded[0].value.is_none() && bounded[0].error.is_some());
+    // Error replies also consume the shared budget, including at its exact boundary.
+    let mut replies: Vec<_> = (1..=2)
+        .map(|token| DataReply {
+            token,
+            value: Some(json!("")),
+            error: None,
+        })
+        .collect();
+    let overhead = serde_json::to_vec(&replies[0]).unwrap().len();
+    for reply in &mut replies {
+        reply.value = Some(json!("x".repeat(MAX_DATA_EVENT_BYTES / 2 - overhead)));
+    }
+    replies.push(DataReply::error(3, "denied"));
+    let bounded = bound_replies(replies);
+    let bytes: usize = bounded
+        .iter()
+        .map(|r| serde_json::to_vec(r).unwrap().len())
+        .sum();
+    assert!(bytes <= MAX_DATA_EVENT_BYTES, "host returned {bytes} bytes");
+    assert!(bounded[0].value.is_some() && bounded[1].error.is_some());
     // Unanswered requests expire at the next host event.
     let mut vm = LuaSandbox::new(DATA_PLUGIN).unwrap();
     let stale = vm.dispatch(&json!({"type":"ask","count":1})).unwrap();

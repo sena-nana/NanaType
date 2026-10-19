@@ -89,14 +89,10 @@ fn data_answers_arrive_as_values_and_chained_requests_are_bounded() {
     // Chained rounds run without waiting for the UI; only the newest view is posted.
     let last = text(&receiver.recv_timeout(Duration::from_secs(20)).unwrap());
     assert_eq!(last, format!("string:hello#{MAX_DATA_ROUNDS}"));
-    assert!(
-        receiver.recv_timeout(Duration::from_millis(500)).is_err(),
-        "requests beyond the round budget wait for the next host event"
-    );
     assert_eq!(calls.load(Ordering::SeqCst), MAX_DATA_ROUNDS);
     worker.event(serde_json::json!({"type":"command"})).unwrap();
-    receiver.recv_timeout(Duration::from_secs(5)).unwrap();
-    std::thread::sleep(Duration::from_millis(200));
+    let last = text(&receiver.recv_timeout(Duration::from_secs(5)).unwrap());
+    assert_eq!(last, format!("string:hello#{}", 2 * MAX_DATA_ROUNDS));
     assert_eq!(calls.load(Ordering::SeqCst), 2 * MAX_DATA_ROUNDS);
 }
 

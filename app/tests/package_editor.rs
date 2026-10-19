@@ -45,7 +45,14 @@ fn four_project_kinds_open_edit_export_and_reimport() {
         assert!(session.dirty(), "a new project is unsaved until saved");
         let (path, edited) = match kind {
             ProjectKind::Skin => (MANIFEST, "[chrome]\naccent = \"#204060\"\n".to_owned()),
-            ProjectKind::Resources => ("data/notes.txt", "edited\n".to_owned()),
+            ProjectKind::Resources => {
+                let mut spec = session.view(None, false).data["notes"].clone();
+                spec.path = session.import("notes.json", b"edited\n".to_vec()).unwrap();
+                session
+                    .apply_data(Some("notes"), Some(("notes", &spec)))
+                    .unwrap();
+                ("assets/notes.json", "edited\n".to_owned())
+            }
             ProjectKind::Lua | ProjectKind::Mixed => (
                 "main.lua",
                 text(&session, "main.lua").replace("waiting for a line", "edited"),
@@ -53,6 +60,7 @@ fn four_project_kinds_open_edit_export_and_reimport() {
         };
         session.select(path);
         session.edit(path, &edited).unwrap();
+        assert!(session.view(None, false).syntax.is_empty(), "{id}");
         let report = pe::validate(&registry, &session.project);
         assert_eq!(report.errors(), 0, "{id}: {:?}", report.diagnostics);
         assert_eq!(
@@ -87,19 +95,14 @@ fn export_refuses_invalid_packages_and_writes_nothing() {
     let registry = registry(dir.path());
     let mut session = pe::create(ProjectKind::Resources, "editor.broken").unwrap();
     session
-        .edit(
-            PACKAGE_MANIFEST,
-            &text(&session, PACKAGE_MANIFEST).replace("data/notes.txt", "data/missing.txt"),
-        )
+        .edit("data/notes.txt", &"x".repeat((4 << 20) + 1))
         .unwrap();
     let report = pe::validate(&registry, &session.project);
     assert!(report.errors() > 0);
-    assert!(
-        report
-            .diagnostics
-            .iter()
-            .any(|d| d.path == PACKAGE_MANIFEST)
-    );
+    assert!(report.diagnostics.iter().any(|d| d.path == PACKAGE_MANIFEST
+        && d.line > 1
+        && d.message.contains("data.notes")
+        && d.message.contains("4194305")));
     let archive = dir.path().join("broken.ntpkg");
     assert!(pe::export(&registry, &session.project, &archive).is_err());
     assert!(!archive.exists());
@@ -322,6 +325,23 @@ fn scripts_run_only_in_the_isolated_debugger_and_report_located_errors() {
     let view = session.view(None, false).debug;
     assert!(!view.trusted && !view.running);
     assert!(session.start_debug(worker(), |_, _| {}).is_err());
+
+    // OS launch failures return through the same generation-checked result path.
+    session.trust(true);
+    let directory = tempfile::tempdir().unwrap();
+    let (send, results) = mpsc::channel();
+    session
+        .start_debug(
+            &directory.path().join("missing.exe"),
+            move |generation, response| {
+                let _ = send.send((generation, response));
+            },
+        )
+        .unwrap();
+    let (generation, response) = results.recv_timeout(Duration::from_secs(20)).unwrap();
+    assert!(matches!(response, WorkerResponse::Error { .. }));
+    session.debug_result(generation, &response);
+    assert!(!session.debugging() && session.view(None, false).debug.error.is_some());
 
     // Hostile scripts end as errors without blocking the caller.
     for (source, line) in [
@@ -883,7 +903,7 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
     }
     // Typing into the data form sends one declaration; the session writes it.
     session
-        .import("words.json", b"{\"words\": [\"a\"]}".to_vec())
+        .import("words.txt", b"{\"words\": [\"a\"]}".to_vec())
         .unwrap();
     let (mut session, view) = validated(&registry, session);
     let ui = Ui::new(
@@ -899,10 +919,7 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
     click_key(&mut agent, "package-editor-data-add");
     for (key, value) in [
         ("package-editor-field:pkgedit-data-id", "words"),
-        (
-            "package-editor-field:pkgedit-data-path",
-            "assets/words.json",
-        ),
+        ("package-editor-field:pkgedit-data-path", "assets/words.txt"),
         ("package-editor-field:package-data-source", "original work"),
         ("package-editor-field:package-data-license", "CC0-1.0"),
         (
@@ -922,7 +939,7 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
     };
     let (id, mut spec) = entry.unwrap();
     assert_eq!((previous, id.as_str()), (None, "words"));
-    assert_eq!(spec.path, "assets/words.json");
+    assert_eq!(spec.path, "assets/words.txt");
     assert_eq!(
         spec.constraints.as_ref().unwrap().required,
         vec!["words".to_owned()]
@@ -933,6 +950,9 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
     spec.format = nanatype_theme::DataFormat::Json;
     session.apply_data(None, Some((&id, &spec))).unwrap();
     assert_eq!(session.view(None, false).data["words"], spec);
+    session.select("assets/words.txt");
+    session.format().unwrap();
+    assert!(text(&session, "assets/words.txt").contains("\n  \"words\""));
     // Bad constraints never leave the form.
     type_into(
         &mut agent,
@@ -970,6 +990,19 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
         spec.inputs["strokes"].data.as_deref(),
         Some("pkg:other.pack/strokes")
     );
+    // Declared JSON is formattable even with a text filename.
+    ui.package_editor
+        .set(Some(Arc::new(session.view(None, false))));
+    ui.package_editor_tab.set(Tab::Files);
+    click_key(&mut agent, "package-editor-format");
+    assert!(
+        messages(&mut agent)
+            .iter()
+            .any(|m| matches!(m, Msg::PackageEditor(Action::Format)))
+    );
+    agent
+        .screenshot_png(captures.join("declared-json-txt-900.png"))
+        .unwrap();
 }
 
 #[test]

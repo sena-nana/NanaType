@@ -669,15 +669,22 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
     let path_line = dynamic(
         move || {
             ui.package_editor.with(|v| {
-                v.as_ref()
-                    .map(|v| (v.selected.clone(), v.editable, v.text.is_some()))
+                v.as_ref().map(|v| {
+                    let ext = v
+                        .files
+                        .iter()
+                        .find(|f| Some(&f.path) == v.selected.as_ref())
+                        .map(FileInfo::source_extension)
+                        .unwrap_or_default();
+                    (v.selected.clone(), v.editable, v.text.is_some(), ext)
+                })
             })
         },
         move |state| {
-            let Some((Some(path), editable, text)) = state.clone() else {
+            let Some((Some(path), editable, text, ext)) = state.clone() else {
                 return widget(Stack::row(0.)).into_any();
             };
-            let formattable = editable && (path.ends_with(".toml") || path.ends_with(".json"));
+            let formattable = editable && matches!(ext.as_str(), "toml" | "json");
             widget(Stack::row(space::SM).wrap(true).align(AlignSpec::Center))
                 .children((
                     widget(Text::new(path.clone()).style(
@@ -767,11 +774,17 @@ fn source(ui: Ui, (query, current): Search) -> AnyView {
                 .line_numbers(true)
                 .read_only(!editable)
                 .label(path.clone());
-            area.code_editing = if path.ends_with(".lua") {
+            let ext = view
+                .files
+                .iter()
+                .find(|f| f.path == path)
+                .map(FileInfo::source_extension)
+                .unwrap_or_default();
+            area.code_editing = if ext == "lua" {
                 Some(CodeEditing::new("--", "    "))
-            } else if path.ends_with(".wgsl") {
+            } else if ext == "wgsl" {
                 Some(CodeEditing::wgsl())
-            } else if path.ends_with(".toml") {
+            } else if ext == "toml" {
                 Some(CodeEditing::new("#", "    "))
             } else {
                 None

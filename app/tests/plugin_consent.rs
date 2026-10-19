@@ -687,8 +687,11 @@ fn consent_panel_discloses_risks_and_needs_a_real_trusted_source_selection() {
                     l.contains("words")
                         && l.contains("example.assets")
                         && l.contains("Example word list")
+                        && l.contains("json v1")
+                        && l.contains("CC0-1.0")
+                        && l.contains(&ui.now_t("package-data-unprotected"))
                 })),
-                "declared reads are listed with owner and source"
+                "declared reads include owner, format, source, license and protection"
             );
             assert!(nodes.iter().any(|n| n.label.as_deref().is_some_and(|l| {
                 l.contains("Example author")

@@ -68,22 +68,27 @@ pub fn validate_requests(requests: &[DataRequest]) -> Result<(), String> {
 }
 
 /// Replace answers over the value or combined budget with errors.
-pub fn bound_replies(replies: Vec<DataReply>) -> Vec<DataReply> {
+pub fn bound_replies(mut replies: Vec<DataReply>) -> Vec<DataReply> {
+    let size = |reply: &DataReply| serde_json::to_vec(reply).map_or(usize::MAX, |b| b.len());
     let mut total = 0;
+    for reply in &mut replies {
+        let mut len = size(reply);
+        if len > MAX_DATA_RESULT_BYTES + 256 {
+            *reply = DataReply::error(reply.token, "data result exceeds budget");
+            len = size(reply);
+        }
+        total += len;
+    }
+    // Count the final errors too; replacing a later value makes room for them.
+    for reply in replies.iter_mut().rev() {
+        if total <= MAX_DATA_EVENT_BYTES {
+            break;
+        }
+        total -= size(reply);
+        *reply = DataReply::error(reply.token, "data results exceed the per-event budget");
+        total += size(reply);
+    }
     replies
-        .into_iter()
-        .map(|reply| {
-            let len = serde_json::to_vec(&reply).map_or(usize::MAX, |b| b.len());
-            if len > MAX_DATA_RESULT_BYTES + 256 {
-                DataReply::error(reply.token, "data result exceeds budget")
-            } else if total + len > MAX_DATA_EVENT_BYTES {
-                DataReply::error(reply.token, "data results exceed the per-event budget")
-            } else {
-                total += len;
-                reply
-            }
-        })
-        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

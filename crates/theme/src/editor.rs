@@ -186,6 +186,15 @@ pub struct FileInfo {
     pub data: Option<(String, DataSpec)>,
 }
 
+impl FileInfo {
+    pub fn source_extension(&self) -> String {
+        match self.kind {
+            AssetKind::Data(format) => format.name().to_owned(),
+            _ => extension(&self.path),
+        }
+    }
+}
+
 fn extension(path: &str) -> String {
     Path::new(path)
         .extension()
@@ -468,9 +477,9 @@ fn located(
 }
 
 /// Fast per-keystroke checks for one file: TOML and JSON syntax, and the
-/// strict `package.toml` schema.
-pub fn check_source(path: &str, text: &str) -> Vec<SourceDiagnostic> {
-    let ext = extension(path);
+/// strict `package.toml` schema. Declared data overrides the filename.
+pub fn check_source(path: &str, text: &str, data: Option<DataFormat>) -> Vec<SourceDiagnostic> {
+    let ext = data.map_or_else(|| extension(path), |f| f.name().to_owned());
     let mut out = Vec::new();
     if ext == "toml" {
         if let Err(e) = text.parse::<toml_edit::Document<String>>() {
@@ -529,7 +538,22 @@ pub fn locate(project: &PackageProject, diagnostic: &SkinDiagnostic) -> SourceDi
         crate::Severity::Error => Level::Error,
         crate::Severity::Warning => Level::Warning,
     };
-    let field = diagnostic.field.as_str();
+    let mut field = diagnostic.field.clone();
+    // Early package budget errors name a file; locate its data declaration.
+    if field == PACKAGE_MANIFEST
+        && let Some((id, _)) = project.manifest().ok().and_then(|m| {
+            m.data.into_iter().find(|(_, d)| {
+                Some(d.path.as_str()) == diagnostic.message.rsplit('`').nth(1)
+                    && project
+                        .files
+                        .get(&d.path)
+                        .is_some_and(|b| b.len() as u64 > d.format.max_raw())
+            })
+        })
+    {
+        field = format!("data.{id}");
+    }
+    let field = field.as_str();
     // Parse errors name the offending key last, in backticks.
     let quoted: Vec<&str> = diagnostic
         .message

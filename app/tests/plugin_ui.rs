@@ -47,8 +47,7 @@ fn lua_canvas_is_host_rendered_updates_on_events_and_unmounts_cleanly() {
     );
 }
 
-/// Example archives install strictly, and the phrase example reads its own
-/// declared data only through the reviewed snapshot.
+/// The production worker reads example data by value from the reviewed snapshot.
 #[test]
 fn example_archives_install_and_declared_data_flows_by_value() {
     let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs/examples");
@@ -63,35 +62,40 @@ fn example_archives_install_and_declared_data_flows_by_value() {
     let reads: Vec<_> = reviewed.data.disclosures().collect();
     assert_eq!(reads.len(), 1);
     assert_eq!(reads[0].format, nanatype_theme::DataFormat::Json);
-    let mut vm = LuaSandbox::new(&reviewed.source).unwrap();
-    let mut step = vm
-        .dispatch(&serde_json::json!({"type": "init", "reads": ["phrases"]}))
-        .unwrap();
+    // Change the installed file before starting: only the reviewed bytes may reach Lua.
+    std::fs::write(
+        dir.path().join("example.phrases/data/phrases.json"),
+        r#"{"phrases":["unreviewed"]}"#,
+    )
+    .unwrap();
+    let (sender, responses) = std::sync::mpsc::channel();
+    let worker = nanatype_plugins::PluginProcess::spawn(
+        std::path::Path::new(env!("CARGO_BIN_EXE_nanatype")),
+        reviewed.source,
+        serde_json::json!({"type": "init", "reads": ["phrases"]}),
+        nanatype::plugins::data_answer(reviewed.data),
+        move |response| {
+            let _ = sender.send(response);
+        },
+    )
+    .unwrap();
     let mut texts = Vec::new();
-    for _ in 0..7 {
-        // Answer chained requests exactly as the supervisor does.
-        while !step.requests.is_empty() {
-            let replies: Vec<_> = step
-                .requests
-                .iter()
-                .map(|r| match reviewed.data.answer(&r.id, &r.query) {
-                    Ok(value) => nanatype_plugins::DataReply {
-                        token: r.token,
-                        value: Some(value),
-                        error: None,
-                    },
-                    Err(e) => nanatype_plugins::DataReply::error(r.token, e),
-                })
-                .collect();
-            step = vm.deliver(&replies).unwrap();
+    for index in 0..7 {
+        if index > 0 {
+            worker
+                .event(serde_json::json!({"type": "line_start"}))
+                .unwrap();
         }
-        match &step.update.views[0].root {
+        let response = responses
+            .recv_timeout(std::time::Duration::from_secs(20))
+            .unwrap();
+        let nanatype_plugins::WorkerResponse::Update { update, .. } = response else {
+            panic!("{response:?}");
+        };
+        match &update.views[0].root {
             nanatype_plugins::Node::Text { text, .. } => texts.push(text.clone()),
             node => panic!("{node:?}"),
         }
-        step = vm
-            .dispatch(&serde_json::json!({"type": "line_start"}))
-            .unwrap();
     }
     assert_eq!(texts[0], "今天也辛苦了");
     assert_eq!(texts[1], "Thank you for watching");

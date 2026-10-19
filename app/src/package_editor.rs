@@ -14,7 +14,8 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        mpsc,
     },
 };
 
@@ -105,12 +106,19 @@ impl Report {
 /// the dependency closure, signatures, skin and data. Nothing executes.
 pub fn validate(registry: &SkinRegistry, project: &PackageProject) -> Report {
     let mut report = Report::default();
+    let manifest = project.manifest().ok();
     for (path, bytes) in &project.files {
         if path.starts_with("dependencies/") {
             continue;
         }
         if let Ok(text) = std::str::from_utf8(bytes) {
-            report.diagnostics.extend(editor::check_source(path, text));
+            let format = manifest
+                .as_ref()
+                .and_then(|m| m.data.values().find(|d| d.path == *path))
+                .map(|d| d.format);
+            report
+                .diagnostics
+                .extend(editor::check_source(path, text, format));
         }
     }
     match registry.inspect_project(project) {
@@ -150,12 +158,24 @@ pub struct DebugView {
 
 const LOG_LINES: usize = 40;
 
+/// The background owner creates and reaps the OS process, including when
+/// the session is stopped while process creation is still pending.
+struct DebugWorker {
+    events: mpsc::SyncSender<serde_json::Value>,
+    cancelled: Arc<AtomicBool>,
+}
+impl Drop for DebugWorker {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
+}
+
 /// A script under test, in its own sandboxed worker process.
 struct Debugger {
     /// The project digest the user trusted; any edit revokes it.
     trusted: Option<String>,
     generation: u64,
-    process: Option<PluginProcess>,
+    process: Option<DebugWorker>,
     view: DebugView,
 }
 impl Debugger {
@@ -371,18 +391,20 @@ impl Session {
 
     pub fn view(&self, key: Option<&SealIdentity>, key_checked: bool) -> EditorView {
         let manifest = self.project.manifest().ok();
-        let (text, editable) = match self.selected.as_ref().and_then(|p| {
+        let (text, editable, format) = match self.selected.as_ref().and_then(|p| {
             let row = self.files.iter().find(|f| &f.path == p)?;
             let bytes = self.project.files.get(p)?;
             Some((row, bytes))
         }) {
-            Some((row, bytes)) if row.kind.text() && bytes.len() <= editor::MAX_EDIT_BYTES => {
-                (std::str::from_utf8(bytes).ok().map(Arc::from), row.editable)
-            }
-            _ => (None, false),
+            Some((row, bytes)) if row.kind.text() && bytes.len() <= editor::MAX_EDIT_BYTES => (
+                std::str::from_utf8(bytes).ok().map(Arc::from),
+                row.editable,
+                row.data.as_ref().map(|(_, d)| d.format),
+            ),
+            _ => (None, false, None),
         };
         let mut syntax = match (&self.selected, &text) {
-            (Some(path), Some(text)) => editor::check_source(path, text),
+            (Some(path), Some(text)) => editor::check_source(path, text, format),
             _ => Vec::new(),
         };
         if let Some(location) = &self.debugger.view.location
@@ -474,9 +496,15 @@ impl Session {
         let path = self.selected.clone().ok_or("no file selected")?;
         let text = String::from_utf8(self.project.read(&path).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
-        let formatted = if path.ends_with(".json") {
+        let ext = self
+            .files
+            .iter()
+            .find(|f| f.path == path)
+            .map(FileInfo::source_extension)
+            .unwrap_or_default();
+        let formatted = if ext == "json" {
             editor::format_json(&text)?
-        } else if path.ends_with(".toml") {
+        } else if ext == "toml" {
             editor::format_toml(&text)?
         } else {
             return Err("only TOML and JSON can be formatted".into());
@@ -663,7 +691,7 @@ impl Session {
     pub fn start_debug(
         &mut self,
         executable: &Path,
-        post: impl Fn(u64, WorkerResponse) + Send + 'static,
+        post: impl Fn(u64, WorkerResponse) + Send + Sync + 'static,
     ) -> Result<(), String> {
         let digest = self.project.digest();
         if self.debugger.trusted.as_deref() != Some(digest.as_str()) {
@@ -684,15 +712,43 @@ impl Session {
         let answer = crate::plugins::data_answer(data);
         self.debugger.stop();
         let generation = next();
-        let process = PluginProcess::spawn(
-            executable,
-            source,
-            serde_json::json!({"type": "init", "reads": reads}),
-            answer,
-            move |response| post(generation, response),
-        )
-        .map_err(|e| e.to_string())?;
-        self.debugger.process = Some(process);
+        let executable = executable.to_owned();
+        let (events, receiver) = mpsc::sync_channel(32);
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let stopped = cancelled.clone();
+        std::thread::Builder::new()
+            .name("package-debugger".into())
+            .spawn(move || {
+                let post = Arc::new(post);
+                let output = post.clone();
+                let run = || -> Result<(), String> {
+                    if stopped.load(Ordering::Relaxed) {
+                        return Ok(());
+                    }
+                    let process = PluginProcess::spawn(
+                        &executable,
+                        source,
+                        serde_json::json!({"type": "init", "reads": reads}),
+                        answer,
+                        move |response| output(generation, response),
+                    )
+                    .map_err(|e| e.to_string())?;
+                    while let Ok(event) = receiver.recv() {
+                        if stopped.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        process.event(event).map_err(|e| e.to_string())?;
+                    }
+                    Ok(())
+                };
+                if let Err(message) = run()
+                    && !stopped.load(Ordering::Relaxed)
+                {
+                    post(generation, WorkerResponse::Error { message });
+                }
+            })
+            .map_err(|e| e.to_string())?;
+        self.debugger.process = Some(DebugWorker { events, cancelled });
         self.debugger.generation = generation;
         self.debugger.view = DebugView {
             running: true,
@@ -717,7 +773,17 @@ impl Session {
             .as_ref()
             .ok_or("the script is not running")?;
         let line = format!("→ {event}");
-        process.event(event).map_err(|e| e.to_string())?;
+        if serde_json::to_vec(&event).map_err(|e| e.to_string())?.len()
+            > nanatype_plugins::MAX_MESSAGE_BYTES / 2
+        {
+            return Err(nanatype_plugins::EventError::TooLarge.to_string());
+        }
+        process.events.try_send(event).map_err(|e| match e {
+            mpsc::TrySendError::Full(_) => nanatype_plugins::EventError::Busy.to_string(),
+            mpsc::TrySendError::Disconnected(_) => {
+                nanatype_plugins::EventError::Stopped.to_string()
+            }
+        })?;
         self.debugger.log(line);
         Ok(())
     }

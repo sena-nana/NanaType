@@ -47,7 +47,7 @@ return {
 
 `nana.data.request(id, query)` 只能请求 `reads` 中的数据，立即返回 token；宿主随后以 `{type='data', results={{token=…, value=…}或{token=…, error=…}}}` 事件送回结果，因此第一次 `view()` 尚无数据。查询为 `{kind='info'}`、`{kind='whole'}`、文本 `{kind='lines', start, count}`、JSON `{kind='pointer', pointer='/a/0'}` 与 `{kind='slice', pointer, start, count}`、笔顺数据 `{kind='glyph', char='心'}`。结果只是值：不含路径、句柄或宿主对象；JSON `null` 在 Lua 中为 `nil`。
 
-宿主按启用同意时的内容快照应答，导入时已按声明格式完整校验。每次分发最多 8 个请求，每个宿主事件最多 4 轮连锁请求，单个结果 64 KiB、每轮合计 120 KiB，`lines`／`slice` 每次最多 1024 行；超过预算返回错误而不是截断，大数据须分块查询。下一个宿主事件到来时，未应答的请求作废。数据格式、约束与预算的完整说明见[统一包整体设计](package-design.md)。
+宿主按启用同意时的内容快照应答，导入时已按声明格式完整校验。每次分发最多 8 个请求，每个宿主事件最多 4 轮连锁请求，单个结果 64 KiB、每轮合计 120 KiB（包含错误回复），`lines`／`slice` 每次最多 1024 行；超过预算返回错误而不是截断，大数据须分块查询。下一个宿主事件到来时，未应答的请求作废。数据格式、约束与预算的完整说明见[统一包整体设计](package-design.md)。
 
 完整可安装示例位于 `docs/examples/counter-plugin/`，打包好的 [counter-plugin.ntpkg](examples/counter-plugin.ntpkg) 可在“插件与资源包”导入并启用。它统计已播放台词，提供画布进度条和重置按钮。`docs/examples/phrase-plugin/`（[phrase-plugin.ntpkg](examples/phrase-plugin.ntpkg)）演示声明 JSON 数据并逐句按值查询。修改源码后用 `python scripts/assets/package-example-plugins.py` 重新生成压缩包。
 

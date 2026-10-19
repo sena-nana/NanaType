@@ -269,6 +269,17 @@ fn parsed_values_are_shared_by_content_hash_and_format_version() {
     assert!(Arc::ptr_eq(&a, &b));
     let c = parse_data(&spec("a", DataFormat::Json), b"\"same\"", true).unwrap();
     assert!(!Arc::ptr_eq(&a, &c));
+    assert!(
+        json(
+            "\"same\"",
+            JsonConstraints {
+                max_string: Some(3),
+                ..Default::default()
+            }
+        )
+        .is_err(),
+        "cached bytes must still satisfy this declaration's constraints"
+    );
 }
 
 #[test]

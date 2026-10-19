@@ -167,13 +167,19 @@ fn formatting_keeps_comments_order_and_meaning() {
 #[test]
 fn diagnostics_point_at_the_line_and_key() {
     let bad = "a = 1\nb = \n";
-    let d = check_source("skin.toml", bad);
+    let d = check_source("skin.toml", bad, None);
     assert_eq!(d.len(), 1);
     assert_eq!((d[0].line, d[0].level), (2, Level::Error));
-    let d = check_source("data/x.json", "{\n  \"a\": 1,\n}");
-    assert_eq!(d[0].line, 3);
+    for (path, format) in [
+        ("data/x.json", None),
+        ("data/x.txt", Some(DataFormat::Json)),
+    ] {
+        let d = check_source(path, "{\n  \"a\": 1,\n}", format);
+        assert_eq!((d[0].path.as_str(), d[0].line), (path, 3));
+    }
+    assert!(check_source("data/x.json", "not JSON", Some(DataFormat::Text)).is_empty());
     let manifest = "format = 1\nschema = 3\nid = \"a.b\"\nversion = \"1.0.0\"\ncapabilities = [\"skin\"]\nauthr = \"x\"\n";
-    let d = check_source(PACKAGE_MANIFEST, manifest);
+    let d = check_source(PACKAGE_MANIFEST, manifest, None);
     assert_eq!((d[0].line, d[0].column), (6, 1), "{d:?}");
     assert_eq!(line_column("一\n二三", "一\n二".len()), (2, 2));
     // Validation results, warnings included, are placed on their key.
