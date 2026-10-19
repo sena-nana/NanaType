@@ -2,7 +2,7 @@
 //! Every control reads the settings signal and writes back through
 //! [`Msg::Edit`], so the program stays the only owner of state.
 
-pub(super) mod controls;
+pub(crate) mod controls;
 mod pages;
 pub mod preview;
 mod telegram;
@@ -280,8 +280,16 @@ pub fn settings_window(ui: Ui) -> impl IntoView {
     )
     .children((
         sidebar(ui),
-        widget(Stack::fill_column(0.0)).children(
-            widget(scroll_view()).entity_ref(body_scroll).children(
+        widget(Stack::fill_column(0.0)).children(dynamic(
+            // The package editor fills the page instead of scrolling with it.
+            move || {
+                ui.page.get() == Page::Packages && ui.package_editor.with(Option::is_some)
+            },
+            move |editing| {
+                if *editing {
+                    return super::package_editor::editor(ui);
+                }
+                widget(scroll_view()).entity_ref(body_scroll).children(
                 widget(Stack::column(0.0).max_width(860.0).with_layout(|l| {
                     l.padding_top = Some(LengthSpec::Px(space::PAGE_TIGHT));
                     l.padding_right = Some(LengthSpec::Px(space::PAGE));
@@ -301,8 +309,12 @@ pub fn settings_window(ui: Ui) -> impl IntoView {
                         pages::page(ui, *page)
                     },
                 )),
-            ),
-        ),
+            )
+            .into_any()
+            },
+        )
+        // The switch's own container must fill too, or the scroll view collapses.
+        .css(nana_ui::runtime::view::css! { flex-grow: 1; flex-shrink: 1; height: 0; min-height: 0; })),
     ));
     widget(
         Stack::column(0.0)

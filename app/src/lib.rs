@@ -17,6 +17,7 @@ pub mod localtime;
 pub mod msg;
 pub mod output;
 pub mod p2p;
+pub mod package_editor;
 pub mod paths;
 mod perf;
 pub mod plugins;

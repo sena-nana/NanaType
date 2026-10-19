@@ -62,6 +62,9 @@ impl App {
                 {
                     self.bilibili.cancel_login();
                 }
+                if page == crate::ui::settings::Page::Packages {
+                    self.editor_list_drafts();
+                }
                 self.ui.page.set(page);
                 self.open_settings();
             }

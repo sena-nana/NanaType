@@ -534,6 +534,126 @@ pub fn sample(
     Some((view, [w, h]))
 }
 
+/// An isolated, scaled sample of `raw` through the real dialogue and history
+/// renderers. Fonts come from `read_font`; nothing touches production state.
+pub fn stage(
+    ui: Ui,
+    mut raw: Skin,
+    read_font: impl Fn(&str) -> Option<Vec<u8>>,
+    urls: Arc<std::collections::HashMap<String, String>>,
+    history_mode: bool,
+    width: Signal<f32>,
+) -> (AnyView, Arc<Skin>) {
+    let mut scope = nana_ui::HostFontScope::new();
+    for font in nanatype_theme::BuiltinFonts::embedded().fonts() {
+        let _ = scope.add_bytes(font.bytes);
+    }
+    let mut register = |role: &nanatype_theme::FontSpec| {
+        let bytes = role.file.as_deref().and_then(|file| {
+            if nanatype_theme::is_builtin_font(file) {
+                nanatype_theme::builtin_font(file).map(|b| b.to_vec())
+            } else {
+                read_font(file)
+            }
+        });
+        scope.add_bytes(bytes?).ok()?.families().first().cloned()
+    };
+    let families = [&raw.fonts.body, &raw.fonts.name, &raw.fonts.accent].map(&mut register);
+    if let Some(role) = &mut raw.fonts.latin
+        && let Some(family) = register(role)
+    {
+        role.families.insert(0, family);
+    }
+    let scope = Arc::new(scope);
+    let base = Arc::new(crate::skin_theme::prepare(
+        &raw,
+        &Default::default(),
+        &families,
+        ui.locale.get_untracked().tag(),
+    ));
+    let sample_id = raw.meta.id.clone();
+    let sample_base = base.clone();
+    let view = dynamic(
+        move || {
+            (
+                draft(ui, &sample_id),
+                width.get(),
+                ui.chrome_dark.get(),
+                ui.shader_preview.get(),
+                ui.settings.with(|s| s.skin.overrides.clone()),
+            )
+        },
+        move |(draft, available, dark, _, _)| {
+            let _keep_fonts = &scope;
+            let Some((view, [w, h])) = sample(
+                ui,
+                &sample_base,
+                &sample_base.meta.id,
+                draft,
+                history_mode,
+                urls.clone(),
+            ) else {
+                return hint(ui.now_t("skin-edit-invalid"));
+            };
+            // Limit tall previews as well as wide ones, without altering their layout.
+            let dark = *dark;
+            let scale = ((available - 24.0).max(1.0) / w).min(340.0 / h).min(1.0);
+            let stage = widget(
+                Stack::column(0.0)
+                    .width(LengthSpec::Px(w * scale))
+                    .height(LengthSpec::Px(h * scale))
+                    .with_layout(|l| {
+                        l.position = PositionSpec::Relative;
+                        l.overflow_x = OverflowSpec::Hidden;
+                        l.overflow_y = OverflowSpec::Hidden;
+                    }),
+            )
+            .key("skin-preview-box")
+            .children(
+                widget(
+                    Stack::column(0.0)
+                        .width(LengthSpec::Px(w))
+                        .height(LengthSpec::Px(h))
+                        .with_layout(move |l| {
+                            l.position = PositionSpec::Absolute;
+                            l.offset_left = Some(LengthSpec::Px(0.0));
+                            l.offset_top = Some(LengthSpec::Px(0.0));
+                            l.pointer_events = Some(PointerEventsSpec::None);
+                            l.transform = Some(crate::ui::surface::affine(0.0, 0.0, 0.0, scale));
+                            l.transform_origin = Some(TransformOrigin {
+                                x: LengthSpec::Px(0.0),
+                                y: LengthSpec::Px(0.0),
+                            });
+                        }),
+                )
+                .key("skin-preview-canvas")
+                .children(view),
+            );
+            widget(Stack::column(8.0))
+                .children((
+                    widget(
+                        Stack::column(0.0)
+                            .padding_xy(12.0, 12.0)
+                            .with_layout(move |l| {
+                                l.paint.background_image =
+                                    Some(BackgroundImage::url(super::pages::checker_url(dark)));
+                            }),
+                    )
+                    .children(stage),
+                    hint(format!(
+                        "{} × {} px · {:.0}%",
+                        w.round(),
+                        h.round(),
+                        scale * 100.0
+                    )),
+                ))
+                .into_any()
+        },
+    )
+    .into_any();
+    (view, base)
+}
+
 pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
     let width = signal(0.0_f32);
     dynamic(
@@ -556,113 +676,18 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
             let Some(row) = row.filter(|r| r.skin.is_some() && r.error.is_none()) else {
                 return hint(ui.now_t("skin-edit-unavailable"));
             };
-            let mut raw = (*row.skin.unwrap()).clone();
-            let mut scope = nana_ui::HostFontScope::new();
-            for font in nanatype_theme::BuiltinFonts::embedded().fonts() {
-                let _ = scope.add_bytes(font.bytes);
-            }
-            let mut register = |role: &nanatype_theme::FontSpec| {
-                let bytes = role.file.as_deref().and_then(|file| {
-                    if nanatype_theme::is_builtin_font(file) {
-                        nanatype_theme::builtin_font(file).map(|b| b.to_vec())
-                    } else {
-                        row.folder
-                            .as_ref()
-                            .and_then(|dir| std::fs::read(dir.join(file)).ok())
-                    }
-                });
-                scope.add_bytes(bytes?).ok()?.families().first().cloned()
-            };
-            let families = [&raw.fonts.body, &raw.fonts.name, &raw.fonts.accent].map(&mut register);
-            if let Some(role) = &mut raw.fonts.latin
-                && let Some(family) = register(role)
-            {
-                role.families.insert(0, family);
-            }
-            let scope = Arc::new(scope);
-            let base = Arc::new(crate::skin_theme::prepare(
-                &raw,
-                &Default::default(),
-                &families,
-                ui.locale.get_untracked().tag(),
-            ));
-            let sample_id = id.clone();
-            let sample_base = base.clone();
-            let sample = dynamic(
-                move || {
-                    (
-                        draft(ui, &sample_id),
-                        width.get(),
-                        ui.chrome_dark.get(),
-                        ui.shader_preview.get(),
-                        ui.settings.with(|s| s.skin.overrides.clone()),
-                    )
+            let folder = row.folder.clone();
+            let (sample, base) = stage(
+                ui,
+                (*row.skin.unwrap()).clone(),
+                move |file| {
+                    folder
+                        .as_ref()
+                        .and_then(|dir| std::fs::read(dir.join(file)).ok())
                 },
-                move |(draft, available, dark, _, _)| {
-                    let _keep_fonts = &scope;
-                    let Some((view, [w, h])) = sample(
-                        ui,
-                        &sample_base,
-                        &sample_base.meta.id,
-                        draft,
-                        history_mode,
-                        row.image_urls.clone(),
-                    ) else {
-                        return hint(ui.now_t("skin-edit-invalid"));
-                    };
-                    // Limit tall previews as well as wide ones, without altering their layout.
-                    let dark = *dark;
-                    let scale = ((available - 24.0).max(1.0) / w).min(340.0 / h).min(1.0);
-                    let stage = widget(
-                        Stack::column(0.0)
-                            .width(LengthSpec::Px(w * scale))
-                            .height(LengthSpec::Px(h * scale))
-                            .with_layout(|l| {
-                                l.position = PositionSpec::Relative;
-                                l.overflow_x = OverflowSpec::Hidden;
-                                l.overflow_y = OverflowSpec::Hidden;
-                            }),
-                    )
-                    .key("skin-preview-box")
-                    .children(
-                        widget(
-                            Stack::column(0.0)
-                                .width(LengthSpec::Px(w))
-                                .height(LengthSpec::Px(h))
-                                .with_layout(move |l| {
-                                    l.position = PositionSpec::Absolute;
-                                    l.offset_left = Some(LengthSpec::Px(0.0));
-                                    l.offset_top = Some(LengthSpec::Px(0.0));
-                                    l.pointer_events = Some(PointerEventsSpec::None);
-                                    l.transform =
-                                        Some(crate::ui::surface::affine(0.0, 0.0, 0.0, scale));
-                                    l.transform_origin = Some(TransformOrigin {
-                                        x: LengthSpec::Px(0.0),
-                                        y: LengthSpec::Px(0.0),
-                                    });
-                                }),
-                        )
-                        .key("skin-preview-canvas")
-                        .children(view),
-                    );
-                    widget(Stack::column(8.0))
-                        .children((
-                            widget(Stack::column(0.0).padding_xy(12.0, 12.0).with_layout(
-                                move |l| {
-                                    l.paint.background_image =
-                                        Some(BackgroundImage::url(super::pages::checker_url(dark)));
-                                },
-                            ))
-                            .children(stage),
-                            hint(format!(
-                                "{} × {} px · {:.0}%",
-                                w.round(),
-                                h.round(),
-                                scale * 100.0
-                            )),
-                        ))
-                        .into_any()
-                },
+                row.image_urls.clone(),
+                history_mode,
+                width,
             );
             let apply_id = id.clone();
             let apply_read = id.clone();

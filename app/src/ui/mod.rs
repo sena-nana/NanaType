@@ -17,6 +17,7 @@ pub mod materials;
 pub mod motion;
 pub mod overflow;
 pub mod p2p;
+pub mod package_editor;
 pub mod pipeline;
 pub mod plugins;
 pub mod quote;
@@ -152,6 +153,10 @@ pub struct Ui {
     pub plugin_errors: Signal<Arc<HashMap<String, String>>>,
     pub plugin_activation: Signal<Option<Arc<crate::plugins::ActivationReview>>>,
     pub plugin_source_trusted: Signal<bool>,
+    /// The open package editor project, if any.
+    pub package_editor: Signal<Option<Arc<crate::package_editor::EditorView>>>,
+    pub package_editor_tab: Signal<crate::package_editor::Tab>,
+    pub package_drafts: Signal<Arc<Vec<nanatype_theme::editor::DraftInfo>>>,
     pub bilibili: Signal<Arc<crate::app::bilibili::State>>,
     pub douyin: Signal<Arc<crate::app::douyin::State>>,
     /// Kept only in memory and cleared after import; never serialized with settings.
@@ -275,6 +280,9 @@ impl Ui {
             plugin_errors: signal(Arc::new(HashMap::new())),
             plugin_activation: signal(None),
             plugin_source_trusted: signal(false),
+            package_editor: signal(None),
+            package_editor_tab: signal(Default::default()),
+            package_drafts: signal(Arc::new(Vec::new())),
             bilibili: signal(Arc::new(crate::app::bilibili::State::default())),
             douyin: signal(Arc::new(crate::app::douyin::State::default())),
             douyin_cookie: signal(String::new()),

@@ -60,6 +60,7 @@ fn write_skin(dir: &Path, manifest: &str, files: &[(&str, Vec<u8>)]) {
             data: Default::default(),
             created_at: String::new(),
             licensed_to: String::new(),
+            derived_from: String::new(),
         };
         fs::write(
             dir.join(PACKAGE_MANIFEST),

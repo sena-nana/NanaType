@@ -15,6 +15,7 @@ pub use data::{
     JsonType, LoadedData, MAX_QUERY_RESULT_BYTES, TextData, load_data, parse_data, resolve_data,
     split_reference,
 };
+pub mod editor;
 mod files;
 mod fonts;
 mod geometry;

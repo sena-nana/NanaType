@@ -121,6 +121,9 @@ pub enum InstallOutcome {
     },
 }
 
+/// A validated package: its resolved files and, for a skin, the loaded skin.
+pub type Inspected = (Arc<dyn SkinFiles>, Option<LoadedSkin>);
+
 #[derive(Clone)]
 pub struct SkinRegistry {
     user_dir: Option<PathBuf>,
@@ -218,19 +221,37 @@ impl SkinRegistry {
         &self,
         archive: &Path,
     ) -> Result<Arc<dyn SkinFiles>, Vec<SkinDiagnostic>> {
-        let files = self
-            .resolve_package(Arc::new(ZipFiles::open(archive).map_err(diagnostics)?))
-            .map_err(diagnostics)?;
+        let root = Arc::new(ZipFiles::open(archive).map_err(diagnostics)?);
+        self.inspect_package(root, SkinOrigin::Archive(archive.into()))
+            .map(|(files, _)| files)
+    }
+
+    /// Validate an in-memory project exactly like an import: the dependency
+    /// closure, signatures, the skin and every declared data resource. Nothing
+    /// executes. Returns the resolved files and the loaded skin, if any.
+    pub fn inspect_project(
+        &self,
+        project: &crate::PackageProject,
+    ) -> Result<Inspected, Vec<SkinDiagnostic>> {
+        self.inspect_package(
+            Arc::new(project.clone()),
+            SkinOrigin::Archive(PathBuf::from("draft.ntpkg")),
+        )
+    }
+
+    fn inspect_package(
+        &self,
+        root: Arc<dyn SkinFiles>,
+        origin: SkinOrigin,
+    ) -> Result<Inspected, Vec<SkinDiagnostic>> {
+        let files = self.resolve_package(root).map_err(diagnostics)?;
         let package = PackageManifest::read(&*files).map_err(diagnostics)?;
-        if package.capabilities.contains(&PackageCapability::Skin) {
+        let skin = if package.capabilities.contains(&PackageCapability::Skin) {
             let resolver = ScopedResolver(files.clone());
-            load(
-                files.clone(),
-                SkinOrigin::Archive(archive.into()),
-                &resolver,
-                &self.app_version,
-            )?;
-        }
+            Some(load(files.clone(), origin, &resolver, &self.app_version)?)
+        } else {
+            None
+        };
         // Imports validate every declared resource completely; nothing executes.
         let mut references: Vec<String> = package.data.keys().cloned().collect();
         for dependency in package.dependencies.keys() {
@@ -246,7 +267,13 @@ impl SkinRegistry {
         for reference in references {
             crate::data::resolve_data(&*files, &reference)
                 .and_then(|(spec, path)| crate::data::load_data(&*files, &spec, &path, true))
-                .map_err(|e| diagnostics(FileError::Io(format!("{reference}: {e}"))))?;
+                .map_err(|e| {
+                    vec![SkinDiagnostic {
+                        severity: Severity::Error,
+                        field: format!("data.{reference}"),
+                        message: format!("{reference}: {e}"),
+                    }]
+                })?;
         }
         if let Some(entry) = package.entry() {
             let source = files.read(entry).map_err(diagnostics)?;
@@ -254,12 +281,14 @@ impl SkinRegistry {
                 || source.first() == Some(&0x1b)
                 || std::str::from_utf8(&source).is_err()
             {
-                return Err(diagnostics(FileError::Io(
-                    "plugin entry must be bounded UTF-8 Lua source".into(),
-                )));
+                return Err(vec![SkinDiagnostic {
+                    severity: Severity::Error,
+                    field: "lua.entry".into(),
+                    message: "plugin entry must be bounded UTF-8 Lua source".into(),
+                }]);
             }
         }
-        Ok(files)
+        Ok((files, skin))
     }
 
     pub fn entry(&self, id: &str) -> Option<&SkinEntry> {
@@ -760,6 +789,7 @@ impl SkinRegistry {
             data: Default::default(),
             created_at: String::new(),
             licensed_to: String::new(),
+            derived_from: String::new(),
         };
         table.remove("meta");
         let dir = user_dir.join(new_id);

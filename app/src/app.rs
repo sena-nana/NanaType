@@ -3,6 +3,7 @@ pub mod bilibili;
 mod chat;
 pub mod douyin;
 mod editor;
+mod package_editor;
 mod packages;
 mod skins;
 mod startup;
@@ -68,6 +69,7 @@ impl From<nana_ui::runtime::RichEditCommand> for EditorCommand {
 
 pub struct App {
     pub plugins: crate::plugins::Manager,
+    pub package_editor: crate::package_editor::Editor,
     pub paths: Paths,
     pub settings: Settings,
     pub readonly_settings: bool,
@@ -197,6 +199,10 @@ impl App {
         );
         let mut app = Self {
             plugins: Default::default(),
+            package_editor: crate::package_editor::Editor::new(
+                paths.package_drafts(),
+                Arc::new(crate::package_editor::SecretKeys::new(&paths.data)),
+            ),
             assets: AssetLibrary::new(paths.blobs()),
             sticker_manager: workers.sticker_manager,
             telegram: workers.telegram,
@@ -1670,6 +1676,25 @@ impl App {
             FileTarget::StickerFolder => {
                 FileDialogRequest::new(id, FileDialogKind::PickFolder).title(t("assets-add-folder"))
             }
+            FileTarget::EditPackage => FileDialogRequest::new(id, FileDialogKind::OpenFile)
+                .title(t("pkgedit-open-file"))
+                .filters([skin_filter]),
+            FileTarget::ExportProject => FileDialogRequest::new(id, FileDialogKind::SaveFile)
+                .title(t("pkgedit-export"))
+                .filters([skin_filter])
+                .file_name(format!(
+                    "{}.ntpkg",
+                    self.ui
+                        .package_editor
+                        .with_untracked(|v| v.as_ref().map(|v| v.package.clone()))
+                        .unwrap_or_default()
+                )),
+            FileTarget::ImportProjectAsset => FileDialogRequest::new(id, FileDialogKind::OpenFile)
+                .title(t("pkgedit-import"))
+                .filters([FileFilter::new(
+                    t("pkgedit-import"),
+                    nanatype_theme::editor::IMPORT_EXTENSIONS.iter().copied(),
+                )]),
         };
         let window = [WindowKind::Settings, WindowKind::Input]
             .into_iter()
@@ -1718,6 +1743,9 @@ impl App {
             FileTarget::StickerFolder => {
                 self.import_sticker_folders(vec![path]);
             }
+            FileTarget::EditPackage => self.editor_open_archive(path),
+            FileTarget::ExportProject => self.editor_export(path),
+            FileTarget::ImportProjectAsset => self.editor_import(path),
         }
     }
 
@@ -1785,6 +1813,7 @@ impl App {
 
     pub fn update(&mut self, msg: Msg) {
         match msg {
+            Msg::PackageEditor(action) => self.package_editor_msg(action),
             m @ (Msg::RequestPluginActivation(_)
             | Msg::CancelPluginActivation
             | Msg::ConfirmPluginActivation

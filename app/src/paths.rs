@@ -47,6 +47,11 @@ impl Paths {
         self.data.join("packages")
     }
 
+    /// Unfinished package editor projects.
+    pub fn package_drafts(&self) -> PathBuf {
+        self.data.join("package-drafts")
+    }
+
     pub fn blobs(&self) -> PathBuf {
         self.cache.join("images")
     }

@@ -458,6 +458,7 @@ fn main() {
         data: Default::default(),
         created_at: String::new(),
         licensed_to: String::new(),
+        derived_from: String::new(),
     };
     std::fs::write(skin_dir.join("package.toml"), package.to_toml().unwrap()).unwrap();
     std::fs::write(

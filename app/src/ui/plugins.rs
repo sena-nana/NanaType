@@ -11,6 +11,7 @@ use nana_ui::runtime::{
 use nana_ui_core::{LengthSpec, OverflowSpec};
 use nanatype_plugins::{DrawCommand, Mount, Node};
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 struct Canvas {
     draw: Vec<DrawCommand>,
@@ -72,7 +73,10 @@ impl Painter for Canvas {
     }
 }
 
-fn node(package: &str, n: &Node) -> AnyView {
+/// Sends a plugin command's event to wherever that plugin runs.
+type Command = Arc<dyn Fn(serde_json::Value) -> Msg + Send + Sync>;
+
+fn node(package: &str, n: &Node, command: &Command) -> AnyView {
     match n {
         Node::Column { id, children } | Node::Row { id, children } => {
             let stack = if matches!(n, Node::Row { .. }) {
@@ -85,7 +89,7 @@ fn node(package: &str, n: &Node) -> AnyView {
                 .children(
                     children
                         .iter()
-                        .map(|child| node(package, child))
+                        .map(|child| node(package, child, command))
                         .collect::<Vec<_>>(),
                 )
                 .into_any()
@@ -93,16 +97,19 @@ fn node(package: &str, n: &Node) -> AnyView {
         Node::Text { id, text } => widget(Text::new(text.clone()))
             .key(format!("plugin:{package}:{id}"))
             .into_any(),
-        Node::Button { id, text, command } => {
-            let package = package.to_owned();
+        Node::Button {
+            id,
+            text,
+            command: name,
+        } => {
+            let name = name.clone();
             let command = command.clone();
             widget(Button::new(text.clone()))
                 .key(format!("plugin:{package}:{id}"))
                 .on_cx(move |_, _: &Activate, cx| {
-                    cx.dispatch_program_all(Msg::PluginInput {
-                        id: package.clone(),
-                        event: serde_json::json!({"type":"command","id":command}),
-                    });
+                    cx.dispatch_program_all(command(
+                        serde_json::json!({"type":"command","id":name}),
+                    ));
                 })
                 .into_any()
         }
@@ -142,17 +149,42 @@ pub fn mounted(ui: Ui, slot: Mount) -> AnyView {
             let views = packages
                 .into_iter()
                 .flat_map(|(id, update)| {
+                    let package = id.clone();
+                    let command: Command = Arc::new(move |event| Msg::PluginInput {
+                        id: package.clone(),
+                        event,
+                    });
                     update
                         .views
                         .iter()
                         .filter(move |view| view.slot == slot)
-                        .map(move |view| node(id, &view.root))
+                        .map(move |view| node(id, &view.root, &command))
                 })
                 .collect::<Vec<_>>();
             widget(Stack::column(0.)).children(views).into_any()
         },
     )
     .into_any()
+}
+
+/// A script's views as the package editor's debugger shows them: the same
+/// host widgets, but commands go back to the debug worker only.
+pub fn debug_views(update: &nanatype_plugins::PluginUpdate) -> AnyView {
+    let command: Command =
+        Arc::new(|event| Msg::PackageEditor(crate::package_editor::Action::DebugEvent(event)));
+    let views = update
+        .views
+        .iter()
+        .map(|view| {
+            widget(Stack::column(4.))
+                .children((
+                    widget(Text::new(format!("{:?}", view.slot).to_lowercase())),
+                    node("debug", &view.root, &command),
+                ))
+                .into_any()
+        })
+        .collect::<Vec<_>>();
+    widget(Stack::column(8.)).children(views).into_any()
 }
 
 pub fn settings(ui: Ui) -> AnyView {
@@ -261,6 +293,11 @@ pub fn settings(ui: Ui) -> AnyView {
                                         cx.dispatch_program_all(Msg::ExportSkin(export_id.clone()))
                                     },
                                 ),
+                                crate::ui::package_editor::package_actions(
+                                    ui,
+                                    &id,
+                                    row.origin == nanatype_theme::SkinOrigin::Builtin,
+                                ),
                                 (row.origin != nanatype_theme::SkinOrigin::Builtin).then(|| {
                                     widget(Button::new(ui.now_t("packages-remove"))).on_cx(
                                         move |_, _: &Activate, cx| {
@@ -306,6 +343,7 @@ pub fn settings(ui: Ui) -> AnyView {
     widget(Stack::column(12.))
         .children((
             toolbar,
+            crate::ui::package_editor::launcher(ui),
             widget(Text::new(ui.now_t("packages-access"))),
             activation(ui),
             packages,

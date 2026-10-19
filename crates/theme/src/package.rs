@@ -35,6 +35,9 @@ pub struct PackageManifest {
     pub created_at: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub licensed_to: String,
+    /// `id@x.y.z` of the package an unsigned derived copy was made from.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub derived_from: String,
 }
 
 /// `[lua]`: everything a script is granted is listed here.
@@ -143,6 +146,14 @@ impl PackageManifest {
                 "author/license recipient too long or invalid YYYY-MM-DD creation date",
             ));
         }
+        if !self.derived_from.is_empty()
+            && !self
+                .derived_from
+                .split_once('@')
+                .is_some_and(|(id, version)| valid_id(id) && exact_version(version))
+        {
+            return Err(invalid("derived_from must be `package-id@x.y.z`"));
+        }
         if crate::load::version_tuple(&self.meta.min_app).is_none() {
             return Err(invalid("invalid min_app version"));
         }
@@ -219,6 +230,7 @@ const ROOT_KEYS: &[&str] = &[
     "data",
     "created_at",
     "licensed_to",
+    "derived_from",
     "schema",
     "id",
     "version",
@@ -517,6 +529,7 @@ mod tests {
             data: Default::default(),
             created_at: String::new(),
             licensed_to: String::new(),
+            derived_from: String::new(),
         };
         fs::write(
             dir.join(PACKAGE_MANIFEST),
