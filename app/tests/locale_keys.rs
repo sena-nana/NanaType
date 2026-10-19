@@ -5,6 +5,14 @@ use std::path::Path;
 /// Keys built at runtime (`format!("skins-tag-{tag}")`).
 const DYNAMIC_PREFIXES: &[&str] = &["skins-tag-"];
 
+/// Settings rows look up `{key}-hint` for their label key (`hint_key`).
+fn referenced(code: &str, key: &str) -> bool {
+    code.contains(&format!("\"{key}\""))
+        || key
+            .strip_suffix("-hint")
+            .is_some_and(|base| code.contains(&format!("\"{base}\"")))
+}
+
 fn sources(dir: &Path, out: &mut String) {
     for entry in std::fs::read_dir(dir).unwrap().flatten() {
         let path = entry.path();
@@ -29,7 +37,7 @@ fn every_source_locale_key_is_referenced() {
         .filter_map(|line| line.split_once(" = ").map(|(k, _)| k.trim()))
         .filter(|k| !k.is_empty() && !k.starts_with('#') && !k.starts_with(' '))
         .filter(|k| !DYNAMIC_PREFIXES.iter().any(|p| k.starts_with(p)))
-        .filter(|k| !code.contains(&format!("\"{k}\"")))
+        .filter(|k| !referenced(&code, k))
         .collect();
     assert!(unused.is_empty(), "unused locale keys: {unused:?}");
 }
