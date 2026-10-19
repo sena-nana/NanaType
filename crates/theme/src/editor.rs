@@ -1,11 +1,11 @@
 //! Package editor model: project templates, the file inventory, checked
-//! imports, formatting, source locations, metadata edits, derived copies and
-//! drafts. Everything is a pure function over [`PackageProject`]; the host owns
+//! imports, formatting, source locations, metadata, data and pipeline edits,
+//! derived copies and drafts. Everything is a pure function over [`PackageProject`]; the host owns
 //! windows, threads, signing keys and where drafts live. Nothing here runs Lua.
 use crate::{
     DataFormat, DataSpec, FileError, INTEGRITY_FILE, PACKAGE_MANIFEST, PackageCapability,
-    PackageManifest, PackageProject, SkinDiagnostic, SkinFiles, SkinRegistry, ZipFiles, clean_path,
-    load::MANIFEST, verify_integrity,
+    PackageManifest, PackageProject, PipelineSpec, SkinDiagnostic, SkinFiles, SkinRegistry,
+    ZipFiles, clean_path, load::MANIFEST, verify_integrity,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -955,8 +955,9 @@ pub fn discard_draft(dir: &Path, id: &str) -> Result<(), FileError> {
     Ok(())
 }
 
-/// Every declared pipeline in the skin, for the metadata overview.
-pub fn pipelines(project: &PackageProject) -> Vec<(String, String)> {
+/// Every declared pipeline in the skin, parsed one by one so a malformed
+/// declaration shows its error instead of hiding the others.
+pub fn pipelines(project: &PackageProject) -> Vec<(String, Result<PipelineSpec, String>)> {
     let Some(table) = project
         .files
         .get(MANIFEST)
@@ -971,17 +972,281 @@ pub fn pipelines(project: &PackageProject) -> Vec<(String, String)> {
         .into_iter()
         .flatten()
         .map(|(name, spec)| {
-            let processor = spec
-                .get("processor")
-                .and_then(|p| p.as_str())
-                .unwrap_or("?");
-            let version = spec
-                .get("version")
-                .and_then(|v| v.as_integer())
-                .unwrap_or(0);
-            (name.clone(), format!("{processor}@{version}"))
+            let spec = spec
+                .clone()
+                .try_into::<PipelineSpec>()
+                .map_err(|e| e.message().trim().to_owned());
+            (name.clone(), spec)
         })
         .collect()
+}
+
+/// Set `key` to `value`, keeping the comment and spacing the old value had.
+fn set_kept(table: &mut toml_edit::Table, key: &str, mut value: toml_edit::Value) {
+    if let Some(old) = table.get(key).and_then(toml_edit::Item::as_value) {
+        *value.decor_mut() = old.decor().clone();
+    }
+    table[key] = toml_edit::Item::Value(value);
+}
+
+/// The `[<parent>.<name>]` tables: `previous` is renamed to (or replaced by)
+/// `name`, keeping the comments inside it, or removed when `name` is `None`.
+/// Returns the table to fill in.
+fn entry_table<'a>(
+    doc: &'a mut toml_edit::DocumentMut,
+    parent: &str,
+    previous: Option<&str>,
+    name: Option<&str>,
+) -> Result<Option<&'a mut toml_edit::Table>, FileError> {
+    if !doc.contains_key(parent) {
+        let mut table = toml_edit::Table::new();
+        table.set_implicit(true);
+        doc[parent] = toml_edit::Item::Table(table);
+    }
+    let parent_table = doc[parent]
+        .as_table_mut()
+        .ok_or_else(|| error(format!("`{parent}` must be a table")))?;
+    let mut kept = previous.and_then(|p| parent_table.remove(p));
+    let Some(name) = name else {
+        if kept.is_none() {
+            return Err(error(format!(
+                "{parent}.{} does not exist",
+                previous.unwrap_or("")
+            )));
+        }
+        if parent_table.is_empty() {
+            doc.remove(parent);
+        }
+        return Ok(None);
+    };
+    let parent_table = doc[parent]
+        .as_table_mut()
+        .ok_or_else(|| error(format!("`{parent}` must be a table")))?;
+    if previous != Some(name) && parent_table.contains_key(name) {
+        return Err(error(format!("{parent}.{name} already exists")));
+    }
+    let item = match kept.take() {
+        Some(toml_edit::Item::Table(t)) => toml_edit::Item::Table(t),
+        // An inline declaration becomes a table of its own.
+        Some(toml_edit::Item::Value(toml_edit::Value::InlineTable(t))) => {
+            toml_edit::Item::Table(t.into_table())
+        }
+        _ => toml_edit::Item::Table(toml_edit::Table::new()),
+    };
+    parent_table.insert(name, item);
+    Ok(parent_table
+        .get_mut(name)
+        .and_then(toml_edit::Item::as_table_mut))
+}
+
+fn json_to_toml(value: &serde_json::Value) -> Option<toml_edit::Value> {
+    Some(match value {
+        serde_json::Value::Bool(b) => (*b).into(),
+        serde_json::Value::Number(n) => match n.as_i64() {
+            Some(i) => i.into(),
+            None => n.as_f64()?.into(),
+        },
+        serde_json::Value::String(s) => s.as_str().into(),
+        serde_json::Value::Array(items) => {
+            toml_edit::Value::Array(items.iter().map(json_to_toml).collect::<Option<_>>()?)
+        }
+        serde_json::Value::Object(map) => {
+            let mut table = toml_edit::InlineTable::new();
+            for (k, v) in map {
+                table.insert(k, json_to_toml(v)?);
+            }
+            toml_edit::Value::InlineTable(table)
+        }
+        serde_json::Value::Null => return None,
+    })
+}
+
+/// Add, change, rename or (with `entry` = `None`) remove a `[data.<id>]`
+/// declaration in `package.toml`, keeping comments and every other key. A
+/// rename follows into `[lua] reads`. The project is unchanged unless the
+/// result parses strictly and the declared file is part of the package.
+pub fn apply_data(
+    project: &mut PackageProject,
+    previous: Option<&str>,
+    entry: Option<(&str, &DataSpec)>,
+) -> Result<(), FileError> {
+    let mut doc = manifest_text(project)?
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(error)?;
+    if let Some((id, spec)) = entry {
+        spec.validate(id).map_err(error)?;
+        if spec.path.starts_with("dependencies/")
+            || [PACKAGE_MANIFEST, INTEGRITY_FILE].contains(&spec.path.as_str())
+            || !project.files.contains_key(&clean_path(&spec.path)?)
+        {
+            return Err(error(format!(
+                "data.{id}: {} is not a file of this package",
+                spec.path
+            )));
+        }
+    }
+    let name = entry.map(|(id, _)| id);
+    if let Some(table) = entry_table(&mut doc, "data", previous, name)? {
+        let (_, spec) = entry.expect("a table is only returned for an entry");
+        set_kept(table, "path", spec.path.as_str().into());
+        set_kept(table, "format", spec.format.name().into());
+        set_kept(
+            table,
+            "format_version",
+            i64::from(spec.format_version).into(),
+        );
+        set_kept(table, "source", spec.source.as_str().into());
+        set_kept(table, "license", spec.license.as_str().into());
+        match &spec.constraints {
+            Some(c) => {
+                let value = serde_json::to_value(c)
+                    .ok()
+                    .and_then(|v| json_to_toml(&v))
+                    .ok_or_else(|| error("invalid constraints"))?;
+                set_kept(table, "constraints", value);
+            }
+            None => {
+                table.remove("constraints");
+            }
+        }
+    }
+    if let (Some(previous), Some(name)) = (previous, name)
+        && previous != name
+        && let Some(reads) = doc
+            .get_mut("lua")
+            .and_then(|l| l.get_mut("reads"))
+            .and_then(toml_edit::Item::as_array_mut)
+    {
+        for read in reads.iter_mut() {
+            if read.as_str() == Some(previous) {
+                let decor = read.decor().clone();
+                *read = name.into();
+                *read.decor_mut() = decor;
+            }
+        }
+    }
+    let text = doc.to_string();
+    PackageManifest::parse(&text)?;
+    let mut next = project.clone();
+    next.set(PACKAGE_MANIFEST, text.into_bytes())?;
+    *project = next;
+    Ok(())
+}
+
+/// Pipeline errors of a `skin.toml` text, checked against the registered
+/// processors with the skin's own materials (inherited ones are not seen).
+fn pipeline_errors(text: &str) -> Result<BTreeSet<(String, String)>, FileError> {
+    let table: toml::Table = toml::from_str(text).map_err(|e| error(e.message().trim()))?;
+    let pipelines = match table.get("pipelines") {
+        Some(p) => p
+            .clone()
+            .try_into()
+            .map_err(|e: toml::de::Error| error(format!("pipelines: {}", e.message().trim())))?,
+        None => BTreeMap::new(),
+    };
+    let skin = crate::Skin {
+        pipelines,
+        materials: table
+            .get("materials")
+            .cloned()
+            .and_then(|m| m.try_into().ok())
+            .unwrap_or_default(),
+        ..Default::default()
+    };
+    Ok(crate::pipeline::validate(&skin, crate::PROCESSORS)
+        .into_iter()
+        .filter(|d| d.severity == crate::Severity::Error)
+        .map(|d| (d.field, d.message))
+        .collect())
+}
+
+/// Add, change, rename or (with `entry` = `None`) remove a
+/// `[pipelines.<name>]` declaration in `skin.toml`, keeping comments and
+/// every other key. The project is unchanged when the edit adds a pipeline
+/// error (unknown processor, unbound or mistyped input, cycle, a material
+/// losing its source) or names data this package does not declare.
+pub fn apply_pipeline(
+    project: &mut PackageProject,
+    previous: Option<&str>,
+    entry: Option<(&str, &PipelineSpec)>,
+) -> Result<(), FileError> {
+    let before = String::from_utf8(project.read(MANIFEST)?).map_err(error)?;
+    let mut doc = before.parse::<toml_edit::DocumentMut>().map_err(error)?;
+    if let Some((name, spec)) = entry {
+        let declared = project.manifest().map(|m| m.data).unwrap_or_default();
+        let signature = crate::processor(&spec.processor, spec.version);
+        for (input, source) in &spec.inputs {
+            let Some(reference) = &source.data else {
+                continue;
+            };
+            let (package, id) = crate::data::split_reference(reference).map_err(error)?;
+            let expected = signature
+                .and_then(|s| s.inputs.iter().find(|(n, _)| n == input))
+                .map(|(_, t)| *t);
+            match (package, declared.get(id), expected) {
+                (Some(_), _, _) => {}
+                (None, None, _) => {
+                    return Err(error(format!(
+                        "pipelines.{name}.inputs.{input}: undeclared data `{id}`"
+                    )));
+                }
+                (None, Some(data), Some(crate::PortType::Data { format, version }))
+                    if (data.format, data.format_version) != (format, version) =>
+                {
+                    return Err(error(format!(
+                        "pipelines.{name}.inputs.{input}: `{id}` is {} v{}, expected {} v{version}",
+                        data.format.name(),
+                        data.format_version,
+                        format.name()
+                    )));
+                }
+                _ => {}
+            }
+        }
+    }
+    if let Some(table) = entry_table(&mut doc, "pipelines", previous, entry.map(|(n, _)| n))? {
+        let (_, spec) = entry.expect("a table is only returned for an entry");
+        set_kept(table, "processor", spec.processor.as_str().into());
+        set_kept(table, "version", i64::from(spec.version).into());
+        let mut inputs = toml_edit::InlineTable::new();
+        for (input, source) in &spec.inputs {
+            let mut port = toml_edit::InlineTable::new();
+            for (key, value) in [
+                ("data", &source.data),
+                ("pipeline", &source.pipeline),
+                ("output", &source.output),
+            ] {
+                if let Some(value) = value {
+                    port.insert(key, value.as_str().into());
+                }
+            }
+            inputs.insert(input, toml_edit::Value::InlineTable(port));
+        }
+        let mut params = toml_edit::InlineTable::new();
+        for (param, value) in &spec.params {
+            params.insert(param, f64::from(*value).into());
+        }
+        for (key, value) in [("inputs", inputs), ("params", params)] {
+            if value.is_empty() {
+                table.remove(key);
+            } else {
+                set_kept(table, key, toml_edit::Value::InlineTable(value));
+            }
+        }
+    }
+    let text = doc.to_string();
+    let old = pipeline_errors(&before).unwrap_or_default();
+    let added: Vec<String> = pipeline_errors(&text)?
+        .difference(&old)
+        .map(|(field, message)| format!("{field}: {message}"))
+        .collect();
+    if !added.is_empty() {
+        return Err(error(added.join("; ")));
+    }
+    let mut next = project.clone();
+    next.set(MANIFEST, text.into_bytes())?;
+    *project = next;
+    Ok(())
 }
 
 /// Files that a seal could protect: every local file. `package.toml` is

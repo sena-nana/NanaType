@@ -446,18 +446,42 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
         .into_any()
 }
 
+/// Which window a sample draws the skin in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Surface {
+    #[default]
+    Display,
+    History,
+    /// The input window's skin preview: the box around a private editor.
+    Input,
+}
+impl Surface {
+    pub fn of(history: bool) -> Self {
+        if history {
+            Self::History
+        } else {
+            Self::Display
+        }
+    }
+}
+
 /// Sample data uses private signals; no production draft, history or source is written.
 pub fn sample(
     ui: Ui,
     base: &Skin,
     id: &str,
     draft: &Draft,
-    history_mode: bool,
+    surface: Surface,
     urls: Arc<std::collections::HashMap<String, String>>,
 ) -> Option<(AnyView, [f32; 2])> {
     let profile = draft.profile(base).ok()?;
+    let history_mode = surface == Surface::History;
     let mut settings = (*ui.settings.get_untracked()).clone();
     settings.skin.id = id.to_owned();
+    // The input window draws its box from the display profile, with the
+    // skin preview on and the sample speaker in the name plate.
+    settings.general.input_skin_preview = true;
+    settings.general.speaker_name = ui.now_t("skins-preview-name");
     settings
         .skin
         .personalizations
@@ -518,6 +542,22 @@ pub fn sample(
             .collect();
         preview.history.set(Arc::new(rows));
         history::history_window(preview).into_any()
+    } else if surface == Surface::Input {
+        preview
+            .draft
+            .set(Arc::new(nanatype_markup::parse(&draft.display.text).doc));
+        widget(
+            Stack::column(0.0)
+                .width(LengthSpec::Px(w))
+                .height(LengthSpec::Px(h)),
+        )
+        .key("skin-preview-input")
+        .children(dialogue::dialogue_box(
+            preview,
+            dialogue::Source::Draft,
+            Some(crate::ui::input::preview_editor(preview)),
+        ))
+        .into_any()
     } else {
         let ctx = dialogue::BoxCtx {
             skin,
@@ -541,7 +581,7 @@ pub fn stage(
     mut raw: Skin,
     read_font: impl Fn(&str) -> Option<Vec<u8>>,
     urls: Arc<std::collections::HashMap<String, String>>,
-    history_mode: bool,
+    surface: Surface,
     width: Signal<f32>,
 ) -> (AnyView, Arc<Skin>) {
     let mut scope = nana_ui::HostFontScope::new();
@@ -590,7 +630,7 @@ pub fn stage(
                 &sample_base,
                 &sample_base.meta.id,
                 draft,
-                history_mode,
+                surface,
                 urls.clone(),
             ) else {
                 return hint(ui.now_t("skin-edit-invalid"));
@@ -686,7 +726,7 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
                         .and_then(|dir| std::fs::read(dir.join(file)).ok())
                 },
                 row.image_urls.clone(),
-                history_mode,
+                Surface::of(history_mode),
                 width,
             );
             let apply_id = id.clone();
@@ -958,9 +998,16 @@ mod tests {
         let mut doc = RuntimeDocument::new(doc_id);
         doc.context_mut()
             .mount_view_root(doc_id, move || {
-                sample(ui, &base, "nanatype.night", &edited, true, Arc::default())
-                    .unwrap()
-                    .0
+                sample(
+                    ui,
+                    &base,
+                    "nanatype.night",
+                    &edited,
+                    Surface::History,
+                    Arc::default(),
+                )
+                .unwrap()
+                .0
             })
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 300, 560).unwrap();
@@ -1069,7 +1116,7 @@ mod tests {
                     &base,
                     "nanatype.celestial",
                     &edited,
-                    true,
+                    Surface::History,
                     Arc::default(),
                 )
                 .unwrap()

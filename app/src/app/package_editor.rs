@@ -128,6 +128,18 @@ impl App {
                 let registry = self.registry.clone();
                 self.editor_try(|s| s.apply_metadata(&metadata, &registry));
             }
+            Action::ApplyData { previous, entry } => self.editor_try(|s| {
+                s.apply_data(
+                    previous.as_deref(),
+                    entry.as_ref().map(|(id, d)| (id.as_str(), d)),
+                )
+            }),
+            Action::ApplyPipeline { previous, entry } => self.editor_try(|s| {
+                s.apply_pipeline(
+                    previous.as_deref(),
+                    entry.as_ref().map(|(name, p)| (name.as_str(), p)),
+                )
+            }),
             Action::LoadKey => {
                 match self.package_editor.keys.load() {
                     Ok(key) => self.package_editor.key = key,

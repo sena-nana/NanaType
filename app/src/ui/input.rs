@@ -1531,11 +1531,18 @@ pub fn editor_context_menu(
 /// The draft inside the dialogue box: the rich editor, or the markup source.
 /// Both are built once and shown by `source_mode`, so the editor keeps its
 /// selection and undo history across toggles.
+/// The input editor as a still sample for a skin preview: it takes neither
+/// focus nor input, so it can never edit or send a draft.
+pub fn preview_editor(ui: Ui) -> AnyView {
+    editor_area(ui, entity_ref(), entity_ref(), signal(false), true)
+}
+
 fn editor_area(
     ui: Ui,
     editor: EntityRef<RichTextEditor>,
     source: EntityRef<TextArea>,
     focused: Signal<bool>,
+    inert: bool,
 ) -> AnyView {
     let text_base = move || {
         // Keep the rich document's skin-relative sizes and font roles intact;
@@ -1601,7 +1608,7 @@ fn editor_area(
         }))
         .visible(move || !ui.source_mode.get())
         .children((
-            widget(RichTextEditor::new(ui.editor_value.get_untracked()))
+            widget(RichTextEditor::new(ui.editor_value.get_untracked()).disabled(inert))
                 .entity_ref(editor)
                 .on_cx(|_, e: &nana_ui::runtime::SecondaryPress, cx| {
                     cx.dispatch_program_all(Msg::EditorContext {
@@ -1684,6 +1691,7 @@ fn editor_area(
         .children(
             widget({
                 let mut area = TextArea::new("").placeholder(ui.now_t("editor-source-placeholder"));
+                area.disabled = inert;
                 let l = Arc::make_mut(&mut area.style.layout);
                 l.width = Some(LengthSpec::Fill);
                 l.height = Some(LengthSpec::Percent(100.0));
@@ -1860,7 +1868,7 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
                     dialogue_box(
                         ui,
                         Source::Draft,
-                        Some(editor_area(ui, editor, source, focused)),
+                        Some(editor_area(ui, editor, source, focused, false)),
                     ),
                     focus_ring(focused),
                 )),

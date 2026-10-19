@@ -551,7 +551,8 @@ fn skin_previews_reuse_the_real_renderer_without_touching_the_active_skin() {
         let active = ui.skin.get_untracked();
         ui.package_editor.set(Some(view.clone()));
         ui.package_editor_tab.set(Tab::Preview);
-        ui.skin_preview_history.set(history);
+        ui.package_editor_surface
+            .set(ui::settings::preview::Surface::of(history));
         let mut agent = common::session()
             .themed(false)
             .mount(width, 900, move || body(ui, 900));
@@ -575,5 +576,388 @@ fn skin_previews_reuse_the_real_renderer_without_touching_the_active_skin() {
                 if history { "history" } else { "display" }
             )))
             .unwrap();
+    }
+}
+
+fn validated(registry: &SkinRegistry, mut session: Session) -> (Session, Arc<pe::EditorView>) {
+    if let Some((ticket, project)) = session.validation_due() {
+        session.validated(ticket, Arc::new(pe::validate(registry, &project)));
+    }
+    let view = Arc::new(session.view(None));
+    (session, view)
+}
+
+fn keyed<'a>(
+    nodes: &'a [nana_ui_devtools::agent::AccessibilityDumpNode],
+    key: &str,
+) -> Option<&'a nana_ui_devtools::agent::AccessibilityDumpNode> {
+    nodes.iter().find(|n| {
+        n.agent_path
+            .as_deref()
+            .is_some_and(|p| p.rsplit('/').next() == Some(key))
+    })
+}
+
+fn click_key(agent: &mut RuntimeAgentSession, key: &str) {
+    agent.flush().unwrap();
+    let node = keyed(&agent.accessibility_dump(), key)
+        .unwrap_or_else(|| panic!("missing {key}"))
+        .clone();
+    // Text areas take focus from a pointer press, not an accessibility click.
+    if !agent.click_node(node.id).unwrap() {
+        let b = node.bounds;
+        agent
+            .click_xy(b.x + b.width / 2.0, b.y + b.height / 2.0)
+            .unwrap();
+    }
+    agent.flush().unwrap();
+}
+
+fn type_into(agent: &mut RuntimeAgentSession, key: &str, text: &str) {
+    click_key(agent, key);
+    agent
+        .key_press("a", "KeyA", nana_ui::runtime::KeyModifiers::primary())
+        .unwrap();
+    agent.type_text(text).unwrap();
+    agent.flush().unwrap();
+}
+
+#[test]
+fn data_and_pipeline_forms_write_in_place_and_refuse_invalid_edits() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = registry(dir.path());
+    let mut session = pe::copy_installed(&registry, "nanatype.love_letter", "my.letter").unwrap();
+    let manifest = text(&session, PACKAGE_MANIFEST)
+        .replace("[data.strokes]", "# stroke order data\n[data.strokes]");
+    session.edit(PACKAGE_MANIFEST, &manifest).unwrap();
+    let view = session.view(None);
+    let mut strokes = view.data["strokes"].clone();
+    strokes.license.push_str(" (checked)");
+    session
+        .apply_data(Some("strokes"), Some(("strokes", &strokes)))
+        .unwrap();
+    let manifest = text(&session, PACKAGE_MANIFEST);
+    assert!(
+        manifest.contains("# stroke order data\n[data.strokes]"),
+        "{manifest}"
+    );
+    assert_eq!(session.view(None).data["strokes"], strokes);
+    // Refused edits change nothing and are reported.
+    let before = session.project.files.clone();
+    let mut wrong = strokes.clone();
+    wrong.path = "missing.nthz".into();
+    assert!(
+        session
+            .apply_data(Some("strokes"), Some(("strokes", &wrong)))
+            .is_err()
+    );
+    let (_, stroke_map) = session.view(None).pipelines[0].clone();
+    let mut pipeline = stroke_map.unwrap();
+    assert!(
+        session.apply_pipeline(Some("stroke_map"), None).is_err(),
+        "a material still reads it"
+    );
+    pipeline.inputs.get_mut("strokes").unwrap().data = Some("absent".into());
+    assert!(
+        session
+            .apply_pipeline(Some("stroke_map"), Some(("stroke_map", &pipeline)))
+            .is_err()
+    );
+    assert_eq!(session.project.files, before);
+    // A renamed data declaration is still valid once the pipeline follows.
+    session
+        .apply_pipeline(
+            None,
+            Some(("spare", &session.view(None).pipelines[0].1.clone().unwrap())),
+        )
+        .unwrap();
+    let (session, view) = validated(&registry, session);
+    assert_eq!(view.report.errors(), 0, "{:?}", view.report.diagnostics);
+    assert!(view.pipelines.iter().any(|(n, _)| n == "spare"));
+    assert!(view.report.skin.is_some());
+    let archive = dir.path().join("letter.ntpkg");
+    pe::export(&registry, &session.project, &archive).unwrap();
+
+    // Signed manifests and skins show the forms read-only.
+    let mut signed = pe::create(ProjectKind::Mixed, "editor.signed-forms").unwrap();
+    let key = SealIdentity::generate().unwrap();
+    signed
+        .sign(&key, &BTreeSet::from([MANIFEST.to_owned()]))
+        .unwrap();
+    let notes = signed.view(None).data["notes"].clone();
+    assert!(signed.apply_data(None, Some(("more", &notes))).is_err());
+    assert!(signed.apply_data(Some("notes"), None).is_err());
+    let (_, view) = validated(&registry, signed);
+    let ui = Ui::new(
+        Arc::new(Settings::default()),
+        Arc::new(Default::default()),
+        Locale::ZhCn,
+    );
+    ui.package_editor.set(Some(view));
+    ui.package_editor_tab.set(Tab::Package);
+    let mut agent = common::session()
+        .themed(false)
+        .mount(900, 1400, move || body(ui, 1400));
+    agent.flush().unwrap();
+    let nodes = agent.accessibility_dump();
+    for key in [
+        "package-editor-data-add",
+        "package-editor-pipeline-add",
+        "package-editor-data:notes:edit",
+    ] {
+        assert!(
+            keyed(&nodes, key).is_none(),
+            "{key} is offered on a signed package"
+        );
+    }
+    for key in ["pkgedit-manifest-protected", "pkgedit-skin-protected"] {
+        assert!(
+            nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some(ui.now_t(key).as_str())),
+            "{key}"
+        );
+    }
+}
+
+#[test]
+fn the_forms_send_their_values_and_fit_every_width_and_language() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = registry(dir.path());
+    let session = pe::copy_installed(&registry, "nanatype.love_letter", "my.letter").unwrap();
+    let (mut session, view) = validated(&registry, session);
+    let captures = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("target/package-editor");
+    std::fs::create_dir_all(&captures).unwrap();
+    for locale in Locale::ALL {
+        for (width, height) in [(900, 1700), (440, 2300), (300, 2900)] {
+            let ui = Ui::new(
+                Arc::new(Settings::default()),
+                Arc::new(Default::default()),
+                locale,
+            );
+            ui.package_editor.set(Some(view.clone()));
+            ui.package_editor_tab.set(Tab::Package);
+            let mut agent = common::session()
+                .themed(false)
+                .mount(width, height, move || body(ui, height));
+            click_key(&mut agent, "package-editor-data-add");
+            click_key(&mut agent, "package-editor-pipeline:stroke_map:edit");
+            // The remove confirmation fits beside its question too.
+            click_key(&mut agent, "package-editor-data:strokes:remove");
+            let nodes = agent.accessibility_dump();
+            for key in [
+                "package-editor-data-form",
+                "package-editor-pipeline-form",
+                "package-editor-pipeline-input:strokes",
+            ] {
+                assert!(keyed(&nodes, key).is_some(), "{locale:?} {width}: {key}");
+            }
+            for node in nodes.iter().filter(|n| {
+                n.role == "button"
+                    || n.agent_path
+                        .as_deref()
+                        .is_some_and(|p| p.contains("package-editor-field:") || p.contains("-form"))
+            }) {
+                assert!(
+                    node.bounds.x >= -0.5
+                        && node.bounds.x + node.bounds.width <= width as f32 + 0.5,
+                    "{locale:?} form control off-screen at {width}px: {:?} {:?}",
+                    node.label,
+                    node.bounds
+                );
+            }
+            agent
+                .screenshot_png(
+                    captures.join(format!("{}-forms-{width}.png", locale.tag()).to_lowercase()),
+                )
+                .unwrap();
+        }
+    }
+    // Typing into the data form sends one declaration; the session writes it.
+    session
+        .import("words.json", b"{\"words\": [\"a\"]}".to_vec())
+        .unwrap();
+    let (mut session, view) = validated(&registry, session);
+    let ui = Ui::new(
+        Arc::new(Settings::default()),
+        Arc::new(Default::default()),
+        Locale::EnUs,
+    );
+    ui.package_editor.set(Some(view));
+    ui.package_editor_tab.set(Tab::Package);
+    let mut agent = common::session()
+        .themed(false)
+        .mount(900, 1700, move || body(ui, 1700));
+    click_key(&mut agent, "package-editor-data-add");
+    for (key, value) in [
+        ("package-editor-field:pkgedit-data-id", "words"),
+        (
+            "package-editor-field:pkgedit-data-path",
+            "assets/words.json",
+        ),
+        ("package-editor-field:package-data-source", "original work"),
+        ("package-editor-field:package-data-license", "CC0-1.0"),
+        (
+            "package-editor-data-constraints",
+            "{\"type\": \"object\", \"required\": [\"words\"]}",
+        ),
+    ] {
+        type_into(&mut agent, key, value);
+    }
+    // JSON constraints with the text format are refused by the session.
+    messages(&mut agent);
+    click_key(&mut agent, "package-editor-data-apply");
+    let Some(Msg::PackageEditor(Action::ApplyData { previous, entry })) =
+        messages(&mut agent).into_iter().next()
+    else {
+        panic!("the form sends its declaration");
+    };
+    let (id, mut spec) = entry.unwrap();
+    assert_eq!((previous, id.as_str()), (None, "words"));
+    assert_eq!(spec.path, "assets/words.json");
+    assert_eq!(
+        spec.constraints.as_ref().unwrap().required,
+        vec!["words".to_owned()]
+    );
+    let before = session.project.files.clone();
+    assert!(session.apply_data(None, Some((&id, &spec))).is_err());
+    assert_eq!(session.project.files, before);
+    spec.format = nanatype_theme::DataFormat::Json;
+    session.apply_data(None, Some((&id, &spec))).unwrap();
+    assert_eq!(session.view(None).data["words"], spec);
+    // Bad constraints never leave the form.
+    type_into(
+        &mut agent,
+        "package-editor-data-constraints",
+        "{\"typo\": 1}",
+    );
+    click_key(&mut agent, "package-editor-data-apply");
+    assert!(
+        messages(&mut agent)
+            .iter()
+            .all(|m| matches!(m, Msg::Notice { error: true, .. }))
+    );
+    // The pipeline form sends the edited input binding.
+    click_key(&mut agent, "package-editor-data-cancel");
+    click_key(&mut agent, "package-editor-pipeline:stroke_map:edit");
+    type_into(
+        &mut agent,
+        "package-editor-pipeline-input:strokes",
+        "pkg:other.pack/strokes",
+    );
+    messages(&mut agent);
+    click_key(&mut agent, "package-editor-pipeline-apply");
+    let Some(Msg::PackageEditor(Action::ApplyPipeline { previous, entry })) =
+        messages(&mut agent).into_iter().next()
+    else {
+        panic!("the form sends its pipeline");
+    };
+    let (name, spec) = entry.unwrap();
+    assert_eq!(
+        (previous.as_deref(), name.as_str()),
+        (Some("stroke_map"), "stroke_map")
+    );
+    assert_eq!(spec.processor, "text.stroke_time_map");
+    assert_eq!(
+        spec.inputs["strokes"].data.as_deref(),
+        Some("pkg:other.pack/strokes")
+    );
+}
+
+#[test]
+fn the_input_preview_draws_the_draft_skin_without_touching_the_input_window() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = registry(dir.path());
+    // A decorated built-in skin, copied: images and fonts come from the draft.
+    let session = pe::copy_installed(&registry, "nanatype.sakura", "my.sakura").unwrap();
+    let (_, view) = validated(&registry, session);
+    assert!(view.report.skin.is_some(), "{:?}", view.report.diagnostics);
+    let captures = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("target/package-editor");
+    std::fs::create_dir_all(&captures).unwrap();
+    for locale in Locale::ALL {
+        for width in [900, 440, 300] {
+            let ui = Ui::new(
+                Arc::new(Settings::default()),
+                Arc::new(Default::default()),
+                locale,
+            );
+            let typed = Arc::new(nanatype_model::Document::plain("live draft"));
+            ui.draft.set(typed.clone());
+            let (skin, settings, editor) = (
+                ui.skin.get_untracked(),
+                ui.settings.get_untracked(),
+                ui.editor_value.get_untracked(),
+            );
+            ui.package_editor.set(Some(view.clone()));
+            ui.package_editor_tab.set(Tab::Preview);
+            ui.package_editor_surface
+                .set(ui::settings::preview::Surface::Input);
+            let mut agent = common::session()
+                .themed(false)
+                .mount(width, 900, move || body(ui, 900));
+            agent.flush().unwrap();
+            agent.flush().unwrap();
+            let nodes = agent.accessibility_dump();
+            let stage = keyed(&nodes, "skin-preview-box").expect("the stage renders");
+            assert!(
+                stage.bounds.x >= -0.5 && stage.bounds.x + stage.bounds.width <= width as f32 + 0.5,
+                "{locale:?} {width}: {:?}",
+                stage.bounds
+            );
+            assert!(keyed(&nodes, "skin-preview-input").is_some());
+            // The sample editor shows the localized sample, takes no focus or input.
+            let sample = nodes
+                .iter()
+                .find(|n| {
+                    n.role == "text-input"
+                        && n.agent_path
+                            .as_deref()
+                            .is_some_and(|p| p.contains("skin-preview-input"))
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{locale:?}: sample editor in {:#?}",
+                        nodes
+                            .iter()
+                            .map(|n| (&n.role, &n.agent_path))
+                            .collect::<Vec<_>>()
+                    )
+                });
+            assert!(sample.disabled, "{sample:?}");
+            for _ in 0..40 {
+                agent.key_press("Tab", "Tab", Default::default()).unwrap();
+                agent.type_text("x").unwrap();
+                assert!(
+                    !agent.accessibility_dump().iter().any(|n| n.focused
+                        && n.agent_path
+                            .as_deref()
+                            .is_some_and(|p| p.contains("skin-preview-input"))),
+                    "the sample editor never takes focus"
+                );
+            }
+            assert!(
+                !messages(&mut agent).iter().any(|m| matches!(
+                    m,
+                    Msg::EditorChanged(_) | Msg::Markup(_) | Msg::EditorPaste
+                )),
+                "nothing reaches the input window"
+            );
+            assert!(Arc::ptr_eq(&typed, &ui.draft.get_untracked()));
+            assert!(Arc::ptr_eq(&skin, &ui.skin.get_untracked()));
+            assert!(Arc::ptr_eq(&settings, &ui.settings.get_untracked()));
+            assert_eq!(editor, ui.editor_value.get_untracked());
+            agent
+                .screenshot_png(
+                    captures
+                        .join(format!("{}-preview-input-{width}.png", locale.tag()).to_lowercase()),
+                )
+                .unwrap();
+        }
     }
 }

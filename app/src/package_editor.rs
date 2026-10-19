@@ -6,10 +6,11 @@ use nanatype_theme::editor::{
     self, DraftInfo, DraftOrigin, FileInfo, Level, Metadata, ProjectKind, SourceDiagnostic,
 };
 use nanatype_theme::{
-    PACKAGE_MANIFEST, PackageProject, SealIdentity, SealStatus, Skin, SkinFiles, SkinRegistry,
+    DataSpec, PACKAGE_MANIFEST, PackageProject, PipelineSpec, SealIdentity, SealStatus, Skin,
+    SkinFiles, SkinRegistry,
 };
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
@@ -210,7 +211,10 @@ pub struct EditorView {
     pub key: Option<String>,
     pub key_checked: bool,
     pub metadata: Option<Metadata>,
-    pub pipelines: Arc<Vec<(String, String)>>,
+    /// `[data.<id>]` as declared, including entries whose file is missing.
+    pub data: Arc<BTreeMap<String, DataSpec>>,
+    /// `[pipelines.<name>]`, or why a declaration does not parse.
+    pub pipelines: Arc<Vec<(String, Result<PipelineSpec, String>)>>,
     pub debug: DebugView,
     /// Close was requested with unsaved changes.
     pub confirm_close: bool,
@@ -451,6 +455,12 @@ impl Session {
             key: key.map(SealIdentity::fingerprint),
             key_checked: false,
             metadata: manifest.as_ref().map(Metadata::of),
+            data: Arc::new(
+                manifest
+                    .as_ref()
+                    .map(|m| m.data.clone())
+                    .unwrap_or_default(),
+            ),
             pipelines: Arc::new(editor::pipelines(&self.project)),
             debug: DebugView {
                 trusted: self.debugger.trusted.is_some(),
@@ -558,6 +568,36 @@ impl Session {
         // validation; the manifest edit itself still applies.
         let _ = editor::bundle_dependencies(&mut next, registry);
         self.project = next;
+        self.revision = next_revision();
+        self.refresh();
+        Ok(())
+    }
+
+    /// Add, change, rename or remove a `[data.<id>]` declaration. The
+    /// project is unchanged unless the manifest still parses strictly.
+    pub fn apply_data(
+        &mut self,
+        previous: Option<&str>,
+        entry: Option<(&str, &DataSpec)>,
+    ) -> Result<(), String> {
+        self.apply(|p| editor::apply_data(p, previous, entry))
+    }
+
+    /// Add, change, rename or remove a `[pipelines.<name>]` declaration. The
+    /// project is unchanged when the edit adds a pipeline error.
+    pub fn apply_pipeline(
+        &mut self,
+        previous: Option<&str>,
+        entry: Option<(&str, &PipelineSpec)>,
+    ) -> Result<(), String> {
+        self.apply(|p| editor::apply_pipeline(p, previous, entry))
+    }
+
+    fn apply(
+        &mut self,
+        f: impl FnOnce(&mut PackageProject) -> Result<(), nanatype_theme::FileError>,
+    ) -> Result<(), String> {
+        f(&mut self.project).map_err(|e| e.to_string())?;
         self.revision = next_revision();
         self.refresh();
         Ok(())
@@ -933,6 +973,16 @@ pub enum Action {
         report: Arc<Report>,
     },
     ApplyMetadata(Metadata),
+    /// Replace the declaration `previous` (or add one) with `entry`, or
+    /// remove it when `entry` is `None`.
+    ApplyData {
+        previous: Option<String>,
+        entry: Option<(String, DataSpec)>,
+    },
+    ApplyPipeline {
+        previous: Option<String>,
+        entry: Option<(String, PipelineSpec)>,
+    },
     LoadKey,
     CreateKey,
     Sign(BTreeSet<String>),

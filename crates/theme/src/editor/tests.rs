@@ -267,11 +267,253 @@ fn builtin_packages_open_as_projects_and_copy_into_valid_derived_packages() {
     let strokes = files.iter().find(|f| f.path == "strokes.nthz").unwrap();
     assert_eq!(strokes.kind, AssetKind::Data(DataFormat::Nthz));
     assert!(strokes.data.as_ref().unwrap().1.license.contains("Arphic"));
+    assert!(pipelines(&project).iter().any(|(name, p)| {
+        name == "stroke_map"
+            && p.as_ref()
+                .is_ok_and(|p| p.processor == "text.stroke_time_map" && p.version == 1)
+    }));
+    let copy = derive_copy(&project, "my.love-letter").unwrap();
+    registry.inspect_project(&copy).unwrap();
+}
+
+fn spec(path: &str, format: DataFormat) -> DataSpec {
+    DataSpec {
+        path: path.into(),
+        format,
+        format_version: 1,
+        source: "original work".into(),
+        license: "CC0-1.0".into(),
+        constraints: None,
+    }
+}
+
+#[test]
+fn data_forms_edit_rename_and_remove_declarations_in_place() {
+    let mut project = template(ProjectKind::Mixed, "editor.data").unwrap();
+    let text = String::from_utf8(project.files[PACKAGE_MANIFEST].clone()).unwrap();
+    let text = text
+        .replace("[data.notes]", "# the notes\n[data.notes]")
+        .replace("format = \"text\"", "format = \"text\" # never guessed");
+    project.set(PACKAGE_MANIFEST, text.into_bytes()).unwrap();
+    project
+        .set("data/words.json", b"{\"words\": [1, 2]}".to_vec())
+        .unwrap();
+    // Add a JSON declaration with constraints.
+    let mut words = spec("data/words.json", DataFormat::Json);
+    words.constraints = Some(crate::JsonConstraints {
+        root: Some(crate::JsonType::Object),
+        required: vec!["words".into()],
+        number_range: Some([0.0, 2.5]),
+        ..Default::default()
+    });
+    apply_data(&mut project, None, Some(("words", &words))).unwrap();
+    let manifest = project.manifest().unwrap();
+    assert_eq!(manifest.data["words"], words);
+    // Rename and edit the text declaration: comments stay, reads follow.
+    let mut notes = spec("data/notes.txt", DataFormat::Text);
+    notes.license = "MIT".into();
+    apply_data(&mut project, Some("notes"), Some(("lines", &notes))).unwrap();
+    let text = String::from_utf8(project.files[PACKAGE_MANIFEST].clone()).unwrap();
+    assert!(text.contains("# the notes\n[data.lines]"), "{text}");
+    assert!(text.contains("format = \"text\" # never guessed"), "{text}");
+    let manifest = project.manifest().unwrap();
+    assert_eq!(manifest.data["lines"], notes);
+    assert!(!manifest.data.contains_key("notes"));
+    assert_eq!(manifest.lua.unwrap().reads, vec!["lines".to_owned()]);
+    let dir = tempfile::tempdir().unwrap();
+    registry(dir.path()).inspect_project(&project).unwrap();
+    // Invalid edits leave the project unchanged.
+    let before = project.files.clone();
+    let rejected = [
+        (
+            None,
+            Some(("words", spec("data/words.json", DataFormat::Json))),
+        ),
+        (
+            None,
+            Some(("Bad ID", spec("data/words.json", DataFormat::Json))),
+        ),
+        (
+            None,
+            Some(("missing", spec("data/missing.txt", DataFormat::Text))),
+        ),
+        (
+            None,
+            Some(("pkg", spec(PACKAGE_MANIFEST, DataFormat::Text))),
+        ),
+        (
+            Some("lines"),
+            Some(("lines", spec("data/notes.txt", DataFormat::Text))),
+        ),
+        (
+            None,
+            Some((
+                "v2",
+                DataSpec {
+                    format_version: 2,
+                    ..notes.clone()
+                },
+            )),
+        ),
+        (
+            None,
+            Some((
+                "nosrc",
+                DataSpec {
+                    source: " ".into(),
+                    ..notes.clone()
+                },
+            )),
+        ),
+        (
+            None,
+            Some((
+                "textc",
+                DataSpec {
+                    constraints: words.constraints.clone(),
+                    ..notes.clone()
+                },
+            )),
+        ),
+        // Still read by the script.
+        (Some("lines"), None),
+        (Some("absent"), None),
+    ];
+    for (i, (previous, entry)) in rejected.iter().enumerate() {
+        let entry = entry.as_ref().map(|(id, s)| (*id, s));
+        if i == 4 {
+            // Renaming onto an existing ID is refused.
+            assert!(apply_data(&mut project, Some("words"), entry).is_err());
+            assert_eq!(project.files, before);
+            continue;
+        }
+        assert!(apply_data(&mut project, *previous, entry).is_err(), "{i}");
+        assert_eq!(project.files, before, "{i}");
+    }
+    // Removing an unread declaration works; the last one drops the table.
+    apply_data(&mut project, Some("words"), None).unwrap();
+    let manifest = project.manifest().unwrap();
+    assert_eq!(manifest.data.keys().collect::<Vec<_>>(), ["lines"]);
+    // Signed manifests are read-only.
+    let key = SealIdentity::generate().unwrap();
+    project.seal(&key, &BTreeSet::new()).unwrap();
+    let before = project.files.clone();
+    assert!(apply_data(&mut project, None, Some(("more", &notes))).is_err());
+    assert_eq!(project.files, before);
+}
+
+#[test]
+fn pipeline_forms_write_valid_declarations_and_refuse_new_errors() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = registry(dir.path());
+    let mut project =
+        PackageProject::capture(&*registry.package_files("nanatype.love_letter").unwrap()).unwrap();
+    project.files.remove(INTEGRITY_FILE);
+    let skin = String::from_utf8(project.files[MANIFEST].clone()).unwrap();
+    let skin = skin.replace(
+        "[pipelines.stroke_map]",
+        "# stroke timing\n[pipelines.stroke_map]",
+    );
+    project.set(MANIFEST, skin.into_bytes()).unwrap();
+    let (_, original) = pipelines(&project).remove(0);
+    let original = original.unwrap();
+    // A second, unused pipeline is allowed (validation warns about it).
+    apply_pipeline(&mut project, None, Some(("spare", &original))).unwrap();
+    assert_eq!(pipelines(&project).len(), 2);
+    registry.inspect_project(&project).unwrap();
+    // Editing in place keeps the comment and the material binding.
+    apply_pipeline(
+        &mut project,
+        Some("stroke_map"),
+        Some(("stroke_map", &original)),
+    )
+    .unwrap();
+    let text = String::from_utf8(project.files[MANIFEST].clone()).unwrap();
+    assert!(
+        text.contains("# stroke timing\n[pipelines.stroke_map]"),
+        "{text}"
+    );
+    assert!(
+        text.contains("inputs = { strokes = { data = \"strokes\" } }"),
+        "{text}"
+    );
+    // Refused: unknown processor, missing input, undeclared or mistyped data,
+    // a pipeline input that is not a texture-compatible port, a cycle, and
+    // removing the pipeline a material reads.
+    let before = project.files.clone();
+    let with = |f: &dyn Fn(&mut PipelineSpec)| {
+        let mut p = original.clone();
+        f(&mut p);
+        p
+    };
+    let cases = [
+        (Some("spare"), Some(("spare", with(&|p| p.version = 9)))),
+        (Some("spare"), Some(("spare", with(&|p| p.inputs.clear())))),
+        (
+            Some("spare"),
+            Some((
+                "spare",
+                with(&|p| {
+                    p.inputs.get_mut("strokes").unwrap().data = Some("nothing".into());
+                }),
+            )),
+        ),
+        (
+            Some("spare"),
+            Some((
+                "spare",
+                with(&|p| {
+                    p.inputs.insert(
+                        "strokes".into(),
+                        crate::PortSource {
+                            pipeline: Some("stroke_map".into()),
+                            output: Some("time".into()),
+                            data: None,
+                        },
+                    );
+                }),
+            )),
+        ),
+        (
+            Some("spare"),
+            Some((
+                "spare",
+                with(&|p| {
+                    p.params.insert("speed".into(), 1.0);
+                }),
+            )),
+        ),
+        (None, Some(("stroke_map", original.clone()))),
+        (None, Some(("bad name", original.clone()))),
+        (Some("stroke_map"), None),
+    ];
+    for (i, (previous, entry)) in cases.iter().enumerate() {
+        let entry = entry.as_ref().map(|(n, s)| (*n, s));
+        assert!(
+            apply_pipeline(&mut project, *previous, entry).is_err(),
+            "{i}"
+        );
+        assert_eq!(project.files, before, "{i}");
+    }
+    // Renaming and removing an unused pipeline.
+    apply_pipeline(&mut project, Some("spare"), Some(("extra", &original))).unwrap();
+    apply_pipeline(&mut project, Some("extra"), None).unwrap();
+    assert_eq!(pipelines(&project).len(), 1);
+    registry.inspect_project(&project).unwrap();
+    // A malformed declaration is reported, not hidden.
+    let skin = String::from_utf8(project.files[MANIFEST].clone()).unwrap()
+        + "\n[pipelines.broken]\nprocessor = 3\n";
+    project.set(MANIFEST, skin.into_bytes()).unwrap();
     assert!(
         pipelines(&project)
             .iter()
-            .any(|(name, p)| name == "stroke_map" && p == "text.stroke_time_map@1")
+            .any(|(n, p)| n == "broken" && p.is_err())
     );
-    let copy = derive_copy(&project, "my.love-letter").unwrap();
-    registry.inspect_project(&copy).unwrap();
+    // A signed skin is read-only.
+    let mut sealed = template(ProjectKind::Skin, "editor.sealed-pipes").unwrap();
+    let key = SealIdentity::generate().unwrap();
+    sealed
+        .seal(&key, &BTreeSet::from([MANIFEST.to_owned()]))
+        .unwrap();
+    assert!(apply_pipeline(&mut sealed, None, Some(("p", &original))).is_err());
 }

@@ -156,6 +156,8 @@ pub struct Ui {
     /// The open package editor project, if any.
     pub package_editor: Signal<Option<Arc<crate::package_editor::EditorView>>>,
     pub package_editor_tab: Signal<crate::package_editor::Tab>,
+    /// The editor preview's window; separate from the skin page's choice.
+    pub package_editor_surface: Signal<settings::preview::Surface>,
     pub package_drafts: Signal<Arc<Vec<nanatype_theme::editor::DraftInfo>>>,
     pub bilibili: Signal<Arc<crate::app::bilibili::State>>,
     pub douyin: Signal<Arc<crate::app::douyin::State>>,
@@ -282,6 +284,7 @@ impl Ui {
             plugin_source_trusted: signal(false),
             package_editor: signal(None),
             package_editor_tab: signal(Default::default()),
+            package_editor_surface: signal(Default::default()),
             package_drafts: signal(Arc::new(Vec::new())),
             bilibili: signal(Arc::new(crate::app::bilibili::State::default())),
             douyin: signal(Arc::new(crate::app::douyin::State::default())),
