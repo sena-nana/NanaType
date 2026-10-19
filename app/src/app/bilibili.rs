@@ -252,6 +252,35 @@ pub(super) fn handle_command(
     Ok(core.handle(cmd, now))
 }
 impl App {
+    /// Bilibili login, chat and sending.
+    pub(super) fn bilibili_msg(&mut self, msg: Msg) {
+        match msg {
+            Msg::Bilibili(event) => self.bilibili_event(event),
+            Msg::BilibiliLogin => self.bilibili_login(),
+            Msg::BilibiliCancelLogin => {
+                self.bilibili.cancel_login();
+                self.bilibili_disable_send();
+            }
+            Msg::BilibiliRefresh => {
+                self.bilibili.refresh();
+                self.bilibili_reconnecting();
+            }
+            Msg::BilibiliLogout => {
+                self.bilibili.logout();
+                self.bilibili_reset();
+            }
+            Msg::BilibiliOwnRoom => self.edit(|s| {
+                s.integrations.bilibili.room.clear();
+                s.integrations.bilibili.enabled = true;
+            }),
+            Msg::BilibiliSendToggle => self.bilibili_toggle(),
+            Msg::BilibiliSendConfirm(accept) => self.bilibili_confirm(accept),
+            Msg::BilibiliRetry(line) => self.bilibili.retry(line),
+            Msg::BilibiliSkipFailed(line) => self.bilibili.skip_failed(line),
+            _ => unreachable!("not a bilibili message"),
+        }
+    }
+
     pub(super) fn bili_state(&self, edit: impl FnOnce(&mut State)) {
         self.ui.bilibili.update(|state| edit(Arc::make_mut(state)));
     }

@@ -1,6 +1,14 @@
 //! Application state and the single update function.
 pub mod bilibili;
+mod chat;
 pub mod douyin;
+mod editor;
+mod packages;
+mod skins;
+mod startup;
+mod stickers;
+mod system;
+mod window;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -11,7 +19,7 @@ use std::time::Duration;
 use nana_ui::{CompiledTheme, RuntimeProgramContext, RuntimeProgramUpdate};
 use nana_ui_core::{FileDialogKind, FileDialogRequest, FileFilter};
 use nana_ui_platform::host::WindowCommand;
-use nanatype_audio::{AudioEngine, AudioHandle, AudioStatus, Bus, Scheduled};
+use nanatype_audio::{AudioHandle, Bus, Scheduled};
 use nanatype_bilibili::{BilibiliConfig, BilibiliHandle};
 use nanatype_bridge::{
     BridgeEvent, BridgeHandle, BridgeStatus, LipSync, OscConfig, Sink, VtsConfig, WsConfig,
@@ -22,7 +30,7 @@ use nanatype_markup::{parse, serialize, serialize_line};
 use nanatype_model::{AssetRef, Document, Inline};
 use nanatype_playback::CueKind;
 use nanatype_settings::{GeometryStore, InputPresence, LoadNote, SendKey, Settings};
-use nanatype_theme::{LoadedSkin, SkinRegistry, TomlTable};
+use nanatype_theme::{LoadedSkin, SkinRegistry};
 
 use crate::assets::AssetLibrary;
 use crate::chat::ChatMessage;
@@ -174,76 +182,19 @@ impl App {
             Some(nana_ui_platform::SystemAppearance::Dark)
         );
         let theme = skin_theme::compile(skin_theme::dark_mode(settings.skin.chrome, system_dark));
-        let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), locale);
-        let input_dock = geometry.input_dock.clone().unwrap_or_default().normalized();
-        ui.input_dock_regions.set(input_dock.regions);
-        ui.input_dock_selected.set(input_dock.selected);
-        ui.input_sidebar_width
-            .set(nanatype_settings::input_sidebar_width(
-                geometry.input_sidebar_width,
-            ));
-        ui.chrome_dark
-            .set(skin_theme::dark_mode(settings.skin.chrome, system_dark));
-        ui.system_reduced_motion.set(ctx.reduced_motion());
-        ui.reduced_motion
-            .set(settings.playback.reduced_motion || ctx.reduced_motion());
+        let ui = startup::ui(ctx, &settings, &skin, locale, &geometry, system_dark);
 
-        let scheduler = Scheduler::start(post.clone());
-        let audio = AudioEngine::start(settings.sound.device.clone(), {
-            let post = post.clone();
-            move |s| post(Msg::Audio(s))
-        });
-        let bridge = BridgeHandle::new({
-            let post = post.clone();
-            move |s| post(Msg::Bridge(s))
-        });
-        let chat_assets = ChatAssets::start(
-            paths.blobs(),
-            {
-                let post = post.clone();
-                move |m| post(Msg::Chat(Arc::new(m)))
-            },
-            {
-                let post = post.clone();
-                move |asset| post(Msg::ChatAssetReady(asset))
-            },
-        );
-        let bilibili = BilibiliHandle::new(paths.config.clone(), {
-            let post = post.clone();
-            move |event| post(Msg::Bilibili(event))
-        });
-        let hotkeys = Hotkeys::start(
-            {
-                let post = post.clone();
-                move |a| post(Msg::Hotkey(a))
-            },
-            {
-                let post = post.clone();
-                move |s| post(Msg::HotkeyStatus(s))
-            },
-        );
-        let douyin = nanatype_douyin::DouyinHandle::new(paths.config.clone(), {
-            let post = post.clone();
-            move |event| post(Msg::Douyin(event))
-        });
+        let workers = startup::Workers::start(&paths, &settings, post.clone());
         let mut core = Core::new(settings.clone(), skin.clone());
         core.handle(
             Cmd::SetReducedMotion(settings.playback.reduced_motion || ctx.reduced_motion()),
             clock::now_ms(),
         );
-        let sticker_manager = crate::stickers::Manager::new(&paths.data, {
-            let post = post.clone();
-            move |event| post(Msg::Stickers(event))
-        });
-        let telegram = crate::stickers::telegram::Service::new(paths.data.clone(), {
-            let post = post.clone();
-            move |event| post(Msg::TelegramEvent(event))
-        });
         let mut app = Self {
             plugins: Default::default(),
             assets: AssetLibrary::new(paths.blobs()),
-            sticker_manager,
-            telegram,
+            sticker_manager: workers.sticker_manager,
+            telegram: workers.telegram,
             paths,
             readonly_settings: matches!(loaded_settings.note, LoadNote::TooNew { .. }),
             registry,
@@ -257,16 +208,16 @@ impl App {
                 w.geometry = geometry;
                 w
             },
-            scheduler,
-            audio,
+            scheduler: workers.scheduler,
+            audio: workers.audio,
             bank: Vec::new(),
-            bridge,
-            bilibili,
-            douyin,
-            _chat_assets: chat_assets,
+            bridge: workers.bridge,
+            bilibili: workers.bilibili,
+            douyin: workers.douyin,
+            _chat_assets: workers.chat_assets,
             chat: VecDeque::new(),
             bili_echoes: Default::default(),
-            hotkeys,
+            hotkeys: workers.hotkeys,
             tray: None,
             persist,
             theme,
@@ -297,29 +248,7 @@ impl App {
             tray_error: None,
             settings,
         };
-        match loaded_settings.note {
-            LoadNote::Quarantined { moved_to, .. } => {
-                let text = app.ui.tr(
-                    "err-settings-quarantined",
-                    &[("path", moved_to.display().to_string().into())],
-                );
-                app.notice(text, true);
-            }
-            LoadNote::TooNew { .. } => {
-                let text = app.ui.now_t("err-settings-newer");
-                app.notice(text, true);
-            }
-            LoadNote::Migrated { .. } => app.save_settings(),
-            _ => {}
-        }
-        if let Some(_errors) = fallback {
-            let text = I18N.tr_in(
-                locale,
-                "skins-fallback",
-                &[("id", app.settings.skin.id.as_str().into())],
-            );
-            app.notice(text, true);
-        }
+        app.startup_notices(loaded_settings.note, fallback.is_some(), locale);
         match Tray::build(post) {
             Ok(tray) => app.tray = Some(tray),
             Err(e) => {
@@ -327,48 +256,8 @@ impl App {
                 app.notice(text, true);
             }
         }
-        app.register_fonts();
-        app.apply_skin();
-        app.refresh_skin_rows();
-        app.sticker_manager.sync(&app.settings.assets.sticker_dirs);
-        app.refresh_assets();
-        app.load_sounds();
-        app.apply_services();
-        app.audio_levels();
-        if let Some(tray) = &mut app.tray {
-            tray.relabel(&I18N, locale);
-            tray.sync(&app.settings);
-        }
-        app.sync_tray_skins();
-        app.sync_tray();
-        SEND_KEY.store(
-            matches!(app.settings.general.send_key, SendKey::CtrlEnter) as u8,
-            Ordering::Relaxed,
-        );
-        app.request_displays();
-        if !app.settings.general.onboarding_done {
-            app.open_settings();
-        }
-        if let Some(ms) = std::env::var("NANATYPE_EXIT_AFTER")
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-        {
-            let ctx = ctx.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(ms));
-                ctx.dispatch(Msg::Quit);
-            });
-        }
-        if cfg!(debug_assertions) && std::env::var_os("NANATYPE_DEMO").is_some() {
-            let ctx = ctx.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(1500));
-                ctx.dispatch(Msg::PlaySample);
-                if std::env::var("NANATYPE_DEMO").as_deref() == Ok("editor") {
-                    demo_editor(&ctx);
-                }
-            });
-        }
+        app.finish_startup(locale);
+        startup::dev_hooks(ctx);
         let ctx = ctx.clone();
         crate::listen_for_instances(move || ctx.dispatch(Msg::SecondInstance));
         app.plugins.sync(
@@ -379,6 +268,60 @@ impl App {
             app.ui,
         );
         app
+    }
+
+    /// Tells the user how settings and the saved skin loaded.
+    fn startup_notices(&mut self, note: LoadNote, skin_fell_back: bool, locale: Locale) {
+        match note {
+            LoadNote::Quarantined { moved_to, .. } => {
+                let text = self.ui.tr(
+                    "err-settings-quarantined",
+                    &[("path", moved_to.display().to_string().into())],
+                );
+                self.notice(text, true);
+            }
+            LoadNote::TooNew { .. } => {
+                let text = self.ui.now_t("err-settings-newer");
+                self.notice(text, true);
+            }
+            LoadNote::Migrated { .. } => self.save_settings(),
+            _ => {}
+        }
+        if skin_fell_back {
+            let text = I18N.tr_in(
+                locale,
+                "skins-fallback",
+                &[("id", self.settings.skin.id.as_str().into())],
+            );
+            self.notice(text, true);
+        }
+    }
+
+    /// Fonts, skin, assets, services and tray state for a newly built app.
+    fn finish_startup(&mut self, locale: Locale) {
+        self.register_fonts();
+        self.apply_skin();
+        self.refresh_skin_rows();
+        self.sticker_manager
+            .sync(&self.settings.assets.sticker_dirs);
+        self.refresh_assets();
+        self.load_sounds();
+        self.apply_services();
+        self.audio_levels();
+        if let Some(tray) = &mut self.tray {
+            tray.relabel(&I18N, locale);
+            tray.sync(&self.settings);
+        }
+        self.sync_tray_skins();
+        self.sync_tray();
+        SEND_KEY.store(
+            matches!(self.settings.general.send_key, SendKey::CtrlEnter) as u8,
+            Ordering::Relaxed,
+        );
+        self.request_displays();
+        if !self.settings.general.onboarding_done {
+            self.open_settings();
+        }
     }
 
     pub fn post(&self, msg: Msg) {
@@ -1813,643 +1756,100 @@ impl App {
 
     pub fn update(&mut self, msg: Msg) {
         match msg {
-            Msg::RequestPluginActivation(id) => match crate::plugins::review(&self.registry, &id) {
-                Ok(review) => {
-                    self.ui.plugin_source_trusted.set(false);
-                    self.ui.plugin_activation.set(Some(Arc::new(review)));
-                }
-                Err(error) => self.notice(error, true),
-            },
-            Msg::CancelPluginActivation => {
-                self.ui.plugin_source_trusted.set(false);
-                self.ui.plugin_activation.set(None);
+            m @ (Msg::RequestPluginActivation(_)
+            | Msg::CancelPluginActivation
+            | Msg::ConfirmPluginActivation
+            | Msg::DisablePlugin(_)
+            | Msg::RefreshPackages
+            | Msg::RemovePackage(_)
+            | Msg::PluginResult { .. }
+            | Msg::PluginCommand { .. }
+            | Msg::PluginInput { .. }) => self.package_msg(m),
+            m @ (Msg::StickerImportFolders(_)
+            | Msg::Telegram(_)
+            | Msg::TelegramEvent(_)
+            | Msg::AssetsChanged
+            | Msg::Stickers(_)
+            | Msg::StickerDownload(_)
+            | Msg::StickerRetry(_)
+            | Msg::StickerRepository(_)
+            | Msg::StickerRemove(_)) => self.sticker_msg(m),
+            m @ (Msg::Markup(_)
+            | Msg::Tool(_)
+            | Msg::EditorCommand(_)
+            | Msg::EditorChanged(_)
+            | Msg::EditorPaste
+            | Msg::ToggleSource
+            | Msg::EditorContext { .. }
+            | Msg::EditorAction { .. }
+            | Msg::InsertPhrase(_)
+            | Msg::PasteImage { .. }) => self.editor_msg(m),
+            m @ (Msg::OverlayAction(..)
+            | Msg::ToggleWindow(_)
+            | Msg::ShowWindow(_)
+            | Msg::HideInput
+            | Msg::ResetWindow(_)
+            | Msg::OpenSettings
+            | Msg::SettingsPage(_)
+            | Msg::SecondInstance
+            | Msg::Displays(_)) => self.window_msg(m),
+            m @ (Msg::DeleteSkin(_)
+            | Msg::ExportSkin(_)
+            | Msg::DuplicateSkin(_)
+            | Msg::SkinFilesChanged
+            | Msg::SkinScanReady { .. }
+            | Msg::PrepareSkinPreview { .. }
+            | Msg::SaveSkinPersonalization { .. }
+            | Msg::SoundsLoaded { .. }) => self.skin_msg(m),
+            m @ (Msg::Chat(_)
+            | Msg::ChatAssetReady(_)
+            | Msg::ChatMention { .. }
+            | Msg::ClearReply
+            | Msg::ClearChat) => self.chat_msg(m),
+            m @ (Msg::Bilibili(_)
+            | Msg::BilibiliLogin
+            | Msg::BilibiliCancelLogin
+            | Msg::BilibiliRefresh
+            | Msg::BilibiliLogout
+            | Msg::BilibiliOwnRoom
+            | Msg::BilibiliSendToggle
+            | Msg::BilibiliSendConfirm(_)
+            | Msg::BilibiliRetry(_)
+            | Msg::BilibiliSkipFailed(_)) => self.bilibili_msg(m),
+            m
+            @ (Msg::Douyin(_) | Msg::DouyinRefresh | Msg::DouyinLogout | Msg::DouyinImport(_)) => {
+                self.douyin_msg(m)
             }
-            Msg::ConfirmPluginActivation => {
-                if self.ui.plugin_source_trusted.get_untracked()
-                    && let Some(reviewed) = self.ui.plugin_activation.get_untracked()
-                {
-                    match crate::plugins::review(&self.registry, &reviewed.id) {
-                        Ok(current) if current.digest == reviewed.digest => {
-                            let unchanged = self.settings.enabled_plugins.contains(&current.id)
-                                && crate::plugins::approval_matches(
-                                    &current,
-                                    self.settings.plugin_approvals.get(&current.id),
-                                );
-                            self.plugins.stop(&current.id, self.ui);
-                            self.edit(|s| {
-                                if !s.enabled_plugins.contains(&current.id) {
-                                    s.enabled_plugins.push(current.id.clone());
-                                }
-                                s.plugin_approvals.insert(
-                                    current.id,
-                                    nanatype_settings::PluginApproval {
-                                        digest: current.digest,
-                                        trusted_source: true,
-                                        policy: nanatype_settings::PLUGIN_CONSENT_POLICY,
-                                    },
-                                );
-                            });
-                            // Reconfirming identical bytes must also restart a stopped or failed worker.
-                            if unchanged {
-                                self.plugins.sync(
-                                    &self.registry,
-                                    &self.settings.enabled_plugins,
-                                    &self.settings.plugin_approvals,
-                                    self.ctx.clone(),
-                                    self.ui,
-                                );
-                            }
-                            self.ui.plugin_activation.set(None);
-                            self.ui.plugin_source_trusted.set(false);
-                        }
-                        Ok(_) => self.notice(self.ui.now_t("packages-changed-during-review"), true),
-                        Err(error) => self.notice(error, true),
-                    }
-                }
-            }
-            Msg::DisablePlugin(id) => {
-                self.plugins.stop(&id, self.ui);
-                self.edit(|s| {
-                    s.enabled_plugins.retain(|v| v != &id);
-                    s.plugin_approvals.remove(&id);
-                });
-            }
-            Msg::RefreshPackages => {
-                self.registry.rescan();
-                self.refresh_skin_rows();
-                self.plugins = Default::default();
-                self.plugins.sync(
-                    &self.registry,
-                    &self.settings.enabled_plugins,
-                    &self.settings.plugin_approvals,
-                    self.ctx.clone(),
-                    self.ui,
-                );
-            }
-            Msg::RemovePackage(id) => match self.registry.remove(&id) {
-                Ok(()) => {
-                    self.edit(|s| {
-                        s.enabled_plugins.retain(|p| p != &id);
-                        s.plugin_approvals.remove(&id);
-                        if s.skin.id == id {
-                            s.skin.id = nanatype_theme::DEFAULT_SKIN.into();
-                        }
-                    });
-                    self.refresh_skin_rows();
-                    self.plugins.refresh(&self.registry, self.ui);
-                }
-                Err(error) => self.notice(error.to_string(), true),
-            },
-            Msg::PluginResult {
-                id,
-                generation,
-                response,
-            } => self.plugins.receive(&id, generation, &response, self.ui),
-            Msg::PluginCommand { id, command } => {
-                let allowed = self.ui.plugin_views.with_untracked(|views| {
-                    views
-                        .get(&id)
-                        .is_some_and(|u| u.commands.iter().any(|c| c.id == command))
-                });
-                if allowed {
-                    let _ = self
-                        .plugins
-                        .event(&id, serde_json::json!({"type":"command","id":command}));
-                }
-            }
-            Msg::PluginInput { id, event } => {
-                let _ = self.plugins.event(&id, event);
-            }
-            Msg::UiChanged => {}
-            Msg::StickerImportFolders(paths) => self.import_sticker_folders(paths),
-            Msg::Telegram(command) => {
-                if matches!(command, crate::stickers::telegram::Command::Cancel) {
-                    let _ = self.telegram.send(command);
-                } else if !self.ui.telegram.with_untracked(|s| s.busy) {
-                    let mut state = (*self.ui.telegram.get_untracked()).clone();
-                    state.busy = true;
-                    state.error = None;
-                    self.ui.telegram.set(Arc::new(state));
-                    if let Err(error) = self.telegram.send(command) {
-                        let mut state = (*self.ui.telegram.get_untracked()).clone();
-                        state.busy = false;
-                        state.error = Some(error);
-                        self.ui.telegram.set(Arc::new(state));
-                    }
-                }
-            }
-            Msg::TelegramEvent(event) => match event {
-                crate::stickers::telegram::Event::State(state) => {
-                    self.ui.telegram.set(Arc::new(state))
-                }
-                crate::stickers::telegram::Event::Downloaded(root) => {
-                    self.import_sticker_folders(vec![root])
-                }
-            },
             Msg::PeerStart { invitation, relay } => self.peer_start(invitation, relay),
             Msg::PeerLeave => self.peer_leave(),
             Msg::PeerPanel(expanded) => self.ui.peer_panel.set(expanded),
             Msg::PeerEvent(generation, event) => self.peer_event(generation, event),
             Msg::Core(cmd) => self.run(cmd),
             Msg::Edit(f) => self.edit(f),
-            Msg::Markup(edit) => self.markup(edit),
-            Msg::Tool(tool) => self.tool(tool),
-            Msg::EditorCommand(command) => self.rich_commands.push(command.into()),
-            Msg::EditorChanged(rich) => self.editor_changed(rich),
-            Msg::EditorPaste => {
-                if let Ok(mut clipboard) = arboard::Clipboard::new()
-                    && let Ok(image) = clipboard.get_image()
-                {
-                    let (w, h) = (image.width as u32, image.height as u32);
-                    self.update(Msg::PasteImage {
-                        width: w,
-                        height: h,
-                        rgba: image.bytes.into_owned(),
-                    });
-                }
-            }
-            Msg::ToggleSource => {
-                let on = !self.ui.source_mode.get_untracked();
-                self.ui.source_mode.set(on);
-                self.focus_editor = true;
-            }
-            Msg::EditorContext { .. } | Msg::EditorAction { .. } => {}
             Msg::Hotkey(action) => self.hotkey(action),
-            Msg::RecordHotkey(action) => {
-                self.ui.recording.set(action);
-                self.apply_services();
-            }
-            Msg::HotkeyCaptured(hotkey) => {
-                if let Some(action) = self.ui.recording.get_untracked() {
-                    self.ui.recording.set(None);
-                    self.edit(|s| {
-                        // A chord can belong to one action only.
-                        let taken: Vec<GlobalAction> = GlobalAction::all_in(s)
-                            .filter(|o| *o != action && o.get(s) == Some(&hotkey))
-                            .collect();
-                        for other in taken {
-                            other.set(s, None);
-                        }
-                        action.set(s, Some(hotkey));
-                    });
-                    self.apply_services();
-                }
-            }
+            Msg::RecordHotkey(action) => self.record_hotkey(action),
+            Msg::HotkeyCaptured(hotkey) => self.hotkey_captured(hotkey),
             Msg::HotkeyStatus(status) => self.ui.hotkeys.set(Arc::new(status)),
-            Msg::OverlayAction(kind, action) => {
-                // Native menus are snapshots. Recheck before applying an action
-                // if the window, connection or settings changed while tracking.
-                if crate::services::overlay_menu::Snapshot::new(kind, self.ui)
-                    .is_some_and(|menu| menu.enabled(&action))
-                {
-                    self.update(action.message(kind));
-                }
-            }
-            Msg::ToggleWindow(kind) => match kind {
-                WindowKind::Input
-                    if self.settings.general.input_presence == InputPresence::Summon =>
-                {
-                    self.summoned = !self.summoned;
-                }
-                WindowKind::Settings => self.open_settings(),
-                WindowKind::Chat if self.windows.is_open(WindowKind::Chat) => self.close_chat(),
-                WindowKind::Chat => self.open_chat(),
-                kind => self.edit(|s| {
-                    if let Some(o) = kind.overlay_mut(s) {
-                        o.visible = !o.visible;
-                    }
-                }),
-            },
-            Msg::ShowWindow(kind) => match kind {
-                WindowKind::Input => {
-                    self.focus_editor = true;
-                    self.set_input_visibility(true);
-                    self.commands
-                        .push(WindowCommand::Focus(WindowKind::Input.id()));
-                }
-                WindowKind::Settings => self.open_settings(),
-                WindowKind::Chat => self.open_chat(),
-                kind => self.edit(|s| {
-                    if let Some(o) = kind.overlay_mut(s) {
-                        o.visible = true;
-                    }
-                }),
-            },
-            Msg::HideInput => self.set_input_visibility(false),
-            Msg::ResetWindow(kind) => {
-                self.windows.forget(kind);
-                self.edit(|s| kind.clear_saved_size(s));
-            }
-            Msg::OpenSettings => self.open_settings(),
-            Msg::SettingsPage(page) => {
-                if page != crate::ui::settings::Page::Bilibili
-                    && matches!(
-                        self.ui.bilibili.get_untracked().account,
-                        nanatype_bilibili::AccountState::Qr { .. }
-                    )
-                {
-                    self.bilibili.cancel_login();
-                }
-                self.ui.page.set(page);
-                self.open_settings();
-            }
+            Msg::InputHwnd(hwnd) => self.hotkeys.set_input_window(hwnd),
             Msg::PickFile(target) => self.pick(target),
-            Msg::DeleteSkin(id) => {
-                if let Err(e) = self.registry.remove(&id) {
-                    let text = self
-                        .ui
-                        .tr("skins-delete-failed", &[("message", e.to_string().into())]);
-                    self.notice(text, true);
-                }
-                self.refresh_skin_rows();
-                self.sync_tray_skins();
-                if id == self.settings.skin.id {
-                    self.edit(|s| s.skin.id = nanatype_theme::DEFAULT_SKIN.into());
-                }
-            }
-            Msg::ExportSkin(id) => {
-                self.export_target = Some(id);
-                self.pick(FileTarget::ExportSkin);
-            }
-            Msg::DuplicateSkin(base) => self.duplicate_skin(&base),
             Msg::OpenFolder(path) => crate::services::reveal(&path),
             Msg::OpenUrl(url) => crate::services::open_url(url),
-            Msg::CopyText(text) => {
-                let ok = {
-                    use nana_ui_platform::ClipboardHost;
-                    nana_ui_platform::OsClipboard::new().write_text(&text)
-                };
-                if ok {
-                    let t = self.ui.now_t("common-copied");
-                    self.notice(t, false);
-                }
-            }
-            Msg::PlaySample => {
-                // Development aid: `NANATYPE_DEMO_MARKUP` plays that line instead.
-                let line = std::env::var("NANATYPE_DEMO_MARKUP")
-                    .ok()
-                    .filter(|_| cfg!(debug_assertions))
-                    .unwrap_or_else(|| self.ui.now_t("output-sample-line"));
-                self.run(Cmd::SendMarkup(line));
-            }
-            Msg::VtsAuthorize => {
-                if !self.settings.integrations.vts.enabled {
-                    self.edit(|s| s.integrations.vts.enabled = true);
-                }
-                self.bridge.vts_request_token();
-            }
+            Msg::CopyText(text) => self.copy_text(text),
+            Msg::PlaySample => self.play_sample(),
+            Msg::VtsAuthorize => self.vts_authorize(),
             Msg::VtsRefresh => self.bridge.vts_refresh_hotkeys(),
-            Msg::InsertPhrase(i) => {
-                if let Some(p) = self.settings.assets.phrases.get(i).cloned() {
-                    let speaker = self.ui.speaker.get_untracked().name.clone();
-                    let expanded = nanatype_markup::expand_template(&p.markup, |k| match k {
-                        "speaker" | "name" => Some(speaker.clone()),
-                        "time" => Some(crate::ui::history::local_hm(nanatype_model::unix_millis())),
-                        _ => None,
-                    });
-                    if self.ui.bilibili.get_untracked().sending
-                        && nanatype_bilibili::sending::image_count(&parse(&expanded).doc) > 0
-                    {
-                        self.notice(self.ui.now_t("bili-images-unavailable"), true);
-                    } else if p.send {
-                        self.run(Cmd::SendMarkup(expanded));
-                    } else if self.ui.source_mode.get_untracked() {
-                        self.markup(MarkupEdit::Insert(expanded));
-                    } else {
-                        let parsed = parse(&expanded);
-                        // A phrase starting an empty draft can also set its line
-                        // header, as inserting the markup source did before.
-                        if self.core.draft().is_blank() && parsed.meta != Default::default() {
-                            self.set_source(serialize_line(&Document::new(), &parsed.meta), true);
-                        }
-                        let fragment = self.editor_rich(&parsed.doc);
-                        self.rich_commands.push(EditorCommand::Insert(fragment));
-                        self.focus_editor = true;
-                    }
-                }
-            }
+            Msg::Notice { text, error } => self.notice(text, error),
             Msg::DismissNotice(id) => self.edit_status(|s| s.notices.retain(|n| n.id != id)),
-            Msg::TrayErrorExpired(id) => {
-                if self.tray_error.as_ref().is_some_and(|(e, _)| *e == id) {
-                    self.tray_error = None;
-                }
-            }
+            Msg::TrayErrorExpired(id) => self.tray_error_expired(id),
             // The host removes toasts from its documents.
             Msg::ToastDismissed(..) => {}
+            Msg::UiChanged => {}
             Msg::OutputCleanup => self.refresh_spout_status(),
             Msg::Wake { epoch, reason } => self.run(Cmd::Wake { epoch, reason }),
             Msg::Cue(kind) => self.run(Cmd::CueFired(kind)),
-            Msg::Audio(status) => {
-                let text = match &status {
-                    AudioStatus::Running { device, rate } => format!("{device} · {rate} Hz"),
-                    AudioStatus::Lost(e) | AudioStatus::Failed(e) => {
-                        let t = self.ui.tr("err-audio", &[("message", e.as_str().into())]);
-                        self.notice(t.clone(), true);
-                        t
-                    }
-                };
-                if matches!(status, AudioStatus::Running { .. }) {
-                    // A fresh stream starts with an empty mixer.
-                    sounds::install(&self.audio, &Vec::new(), &self.bank);
-                    self.audio_levels();
-                }
-                let devices = nanatype_audio::list_devices();
-                self.edit_status(|s| {
-                    s.audio = text;
-                    s.audio_devices = devices;
-                });
-            }
+            Msg::Audio(status) => self.audio_status(status),
             Msg::Bridge(status) => self.bridge_status(status),
-            Msg::Chat(message) => {
-                if self.plugins.has_running() {
-                    self.plugins.broadcast(serde_json::json!({"type":"chat_message","platform":message.platform.source(),"author":message.user.name,"text":message.doc.plain_text()}),self.ui);
-                }
-                self.chat_message(message);
-            }
-            Msg::Bilibili(event) => self.bilibili_event(event),
-            Msg::Douyin(event) => self.douyin_event(event),
-            Msg::DouyinRefresh => self.douyin_refresh(),
-            Msg::DouyinLogout => self.douyin_logout(),
-            Msg::DouyinImport(cookie) => self.douyin_import(cookie),
-            Msg::BilibiliLogin => self.bilibili_login(),
-            Msg::BilibiliCancelLogin => {
-                self.bilibili.cancel_login();
-                self.bilibili_disable_send();
-            }
-            Msg::BilibiliRefresh => {
-                self.bilibili.refresh();
-                self.bilibili_reconnecting();
-            }
-            Msg::BilibiliLogout => {
-                self.bilibili.logout();
-                self.bilibili_reset();
-            }
-            Msg::BilibiliOwnRoom => self.edit(|s| {
-                s.integrations.bilibili.room.clear();
-                s.integrations.bilibili.enabled = true;
-            }),
-            Msg::BilibiliSendToggle => self.bilibili_toggle(),
-            Msg::BilibiliSendConfirm(accept) => self.bilibili_confirm(accept),
-            Msg::BilibiliRetry(line) => self.bilibili.retry(line),
-            Msg::BilibiliSkipFailed(line) => self.bilibili.skip_failed(line),
-            Msg::ChatAssetReady(asset) => {
-                let mut urls = (*self.ui.asset_urls.get_untracked()).clone();
-                urls.remove(&asset.to_string());
-                self.ui.asset_urls.set(Arc::new(urls));
-                self.ensure_urls([asset]);
-            }
-            Msg::ChatMention { seq, reply } => self.mention(seq, reply),
-            Msg::ClearReply => {
-                self.run(Cmd::SetReply(None));
-                self.ui.chat_target.set(None);
-            }
-            Msg::ClearChat => {
-                self.chat.clear();
-                self.ui.chat_target.set(None);
-                self.publish_chat();
-            }
-            Msg::AssetsChanged => {
-                self.sticker_manager
-                    .rebuild(&self.settings.assets.sticker_dirs);
-                self.publish_sticker_packs();
-            }
-            Msg::Stickers(event) => {
-                let completed = matches!(&event, crate::stickers::Event::Done { .. });
-                if let Some(root) = self.sticker_manager.accept(event) {
-                    let path = root.display().to_string();
-                    if !self
-                        .settings
-                        .assets
-                        .sticker_dirs
-                        .iter()
-                        .any(|d| crate::stickers::folder(std::path::Path::new(d)) == root)
-                    {
-                        self.edit(|s| s.assets.sticker_dirs.push(path));
-                    }
-                }
-                if completed {
-                    self.refresh_assets();
-                } else {
-                    self.publish_sticker_packs();
-                }
-            }
-            Msg::StickerDownload(preset) => {
-                if let Some(root) = self
-                    .sticker_manager
-                    .rows
-                    .iter()
-                    .find(|r| r.preset == Some(preset))
-                    .map(|r| r.root.clone())
-                {
-                    self.sticker_manager.start(&root, Some(preset));
-                    self.publish_sticker_packs();
-                }
-            }
-            Msg::StickerRetry(root) => {
-                self.sticker_manager.start(&root, None);
-                self.publish_sticker_packs();
-            }
-            Msg::StickerRepository(root) => {
-                if let Some(url) = self
-                    .sticker_manager
-                    .rows
-                    .iter()
-                    .find(|r| r.root == root)
-                    .and_then(|r| r.repository.as_deref())
-                    .filter(|url| {
-                        url.starts_with("https://") && !url.chars().any(char::is_whitespace)
-                    })
-                {
-                    crate::services::open_url(url);
-                }
-            }
-            Msg::StickerRemove(root) => {
-                self.sticker_manager.remove(&root);
-                self.edit(|s| {
-                    s.assets
-                        .sticker_dirs
-                        .retain(|d| crate::stickers::folder(std::path::Path::new(d)) != root)
-                });
-                self.refresh_assets();
-            }
-            Msg::SkinFilesChanged => {
-                self.request_skin_reload(true);
-            }
-            Msg::SkinScanReady { ticket, result } => match self.skin_reload.finish(ticket) {
-                Err(latest) => {
-                    if let Ok(prepared) = result {
-                        crate::ui::retire_skin_urls(
-                            self.ui,
-                            prepared
-                                .image_urls
-                                .into_iter()
-                                .flat_map(|urls| urls.into_values()),
-                        );
-                    }
-                    self.scan_skins(latest);
-                }
-                Ok(()) => match result {
-                    Ok(prepared) => {
-                        self.skin_reload_scan = false;
-                        self.registry = prepared.registry;
-                        self.prepared_skin_urls = prepared.image_urls;
-                        self.apply_loaded_skin(prepared.loaded);
-                        if prepared.scanned {
-                            self.refresh_skin_rows();
-                        }
-                    }
-                    Err(error) => self.notice(error, true),
-                },
-            },
-            Msg::PrepareSkinPreview { id, play } => {
-                if let Err(errors) =
-                    crate::ui::prepare_skin_preview(self.ui, &self.registry, &id, play)
-                {
-                    self.notice(
-                        errors
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect::<Vec<_>>()
-                            .join("\n"),
-                        true,
-                    );
-                }
-            }
-            Msg::SaveSkinPersonalization { id, profile } => {
-                if profile.valid() && self.registry.entries().iter().any(|r| r.id == id) {
-                    let active = id == self.settings.skin.id;
-                    self.edit(move |s| {
-                        s.skin.personalizations.insert(id, profile);
-                    });
-                    if active {
-                        self.apply_saved_sizes();
-                    }
-                }
-            }
-            Msg::SecondInstance => {
-                self.update(Msg::ShowWindow(WindowKind::Input));
-                self.open_settings();
-            }
-            Msg::SoundsLoaded { skin, bank, errors } => {
-                if skin == self.loaded.skin.meta.id {
-                    sounds::install(&self.audio, &self.bank, &bank);
-                    self.bank = bank;
-                    if let Some(e) = errors.first() {
-                        self.notice(e.clone(), true);
-                    }
-                }
-            }
-            Msg::Displays(monitors) => {
-                self.windows.monitors = monitors;
-            }
-            Msg::Notice { text, error } => self.notice(text, error),
-            Msg::InputHwnd(hwnd) => self.hotkeys.set_input_window(hwnd),
-            Msg::PasteImage {
-                width,
-                height,
-                rgba,
-            } if self.ui.bilibili.get_untracked().sending => {
-                let _ = (width, height, rgba);
-                self.notice(self.ui.now_t("bili-images-unavailable"), true);
-            }
-            Msg::PasteImage {
-                width,
-                height,
-                rgba,
-            } => match self.assets.store_rgba(width, height, &rgba) {
-                Ok(asset) => self.insert_asset(asset),
-                Err(e) => {
-                    let text = self.ui.tr("err-image", &[("message", e.as_str().into())]);
-                    self.notice(text, true);
-                }
-            },
-            Msg::Quit => {
-                self.quitting = true;
-                self.save_geometry();
-                self.persist.flush(Duration::from_secs(2));
-            }
-        }
-    }
-
-    fn duplicate_skin(&mut self, base: &str) {
-        let mut n = 1;
-        let id = loop {
-            let candidate = format!(
-                "{base}-copy{}",
-                if n == 1 { String::new() } else { n.to_string() }
-            );
-            let candidate = candidate.replace("nanatype.", "my.");
-            if self.registry.entry(&candidate).is_none() {
-                break candidate;
-            }
-            n += 1;
-        };
-        let locale = self.ui.locale.get_untracked();
-        let base_name = self
-            .ui
-            .skins
-            .get_untracked()
-            .iter()
-            .find(|r| r.id == base)
-            .map(|r| r.name.clone())
-            .unwrap_or_else(|| base.to_owned());
-        let mut name = nanatype_theme::Localized::new();
-        name.insert(locale.tag().to_owned(), format!("{base_name} *"));
-        // Bake the current personalisation into the copy.
-        let mut over = TomlTable::new();
-        let profile = self.settings.skin.personalizations.get(base).cloned();
-        let mut legacy = self.settings.skin.overrides.clone();
-        if profile.is_some() {
-            legacy.text_size = None;
-            legacy.text_color = None;
-        }
-        let o = &legacy;
-        let mut dialogue = TomlTable::new();
-        let mut text = TomlTable::new();
-        if let Some(c) = o.text_color {
-            text.insert("color".into(), c.to_hex().into());
-        }
-        if let Some(sz) = o.text_size {
-            text.insert("size".into(), f64::from(sz).into());
-        }
-        if !text.is_empty() {
-            dialogue.insert("text".into(), text.into());
-        }
-        if let Some(c) = o.box_color {
-            let mut b = TomlTable::new();
-            b.insert("color".into(), c.to_hex().into());
-            dialogue.insert("box".into(), b.into());
-        }
-        if let Some(c) = o.name_color {
-            let mut p = TomlTable::new();
-            p.insert("color".into(), c.to_hex().into());
-            dialogue.insert("nameplate".into(), p.into());
-        }
-        if !dialogue.is_empty() {
-            over.insert("dialogue".into(), dialogue.into());
-        }
-        if let Some(c) = o.accent {
-            let mut ch = TomlTable::new();
-            ch.insert("accent".into(), c.to_hex().into());
-            over.insert("chrome".into(), ch.into());
-        }
-        match self.registry.duplicate(base, &id, &name, &over) {
-            Ok(dir) => {
-                self.refresh_skin_rows();
-                self.sync_tray_skins();
-                self.edit(|s| {
-                    if let Some(profile) = profile {
-                        s.skin.personalizations.insert(id.clone(), profile);
-                    }
-                    s.skin.id = id;
-                    s.skin.overrides = Default::default();
-                });
-                crate::services::reveal(&dir);
-            }
-            Err(errors) => {
-                let detail = errors.first().map(|d| d.to_string()).unwrap_or_default();
-                self.notice(detail, true);
-            }
+            Msg::Quit => self.quit(),
         }
     }
 

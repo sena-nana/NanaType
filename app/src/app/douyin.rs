@@ -1,4 +1,4 @@
-use crate::app::App;
+use crate::{app::App, msg::Msg};
 use nanatype_douyin::{AccountState, ConnectionState, Event, SessionEvent};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -8,6 +8,17 @@ pub struct State {
     pub warning: Option<String>,
 }
 impl App {
+    /// Douyin login and chat.
+    pub(super) fn douyin_msg(&mut self, msg: Msg) {
+        match msg {
+            Msg::Douyin(event) => self.douyin_event(event),
+            Msg::DouyinRefresh => self.douyin_refresh(),
+            Msg::DouyinLogout => self.douyin_logout(),
+            Msg::DouyinImport(cookie) => self.douyin_import(cookie),
+            _ => unreachable!("not a douyin message"),
+        }
+    }
+
     pub(super) fn douyin_event(&mut self, session: SessionEvent) {
         if session.epoch != self.douyin.epoch() {
             return;
