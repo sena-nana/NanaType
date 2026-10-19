@@ -4,6 +4,6 @@
   "description": "Development-only tools that rebuild committed skin artwork; not used by the app or its build.",
   "license": "CC0-1.0",
   "dependencies": {
-    "sharp": "0.33.5"
+    "sharp": "0.35.5"
   }
 }
