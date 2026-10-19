@@ -202,11 +202,9 @@ skins-broken = 无法加载
 skins-by = 作者 { $author }
 skins-version = 版本 { $version }
 skins-overrides = 个性化
-skins-override-text = 文字颜色
 skins-override-name = 名牌颜色
 skins-override-box = 展示框颜色
 skins-override-accent = 强调色
-skins-override-size = 文字大小
 skins-override-overflow = 长文本
 skins-override-overflow-hint = 一句话超出展示框高度时的处理方式
 skins-override-overflow-skin = 跟随皮肤
@@ -233,7 +231,6 @@ skins-import-failed = 皮肤无法导入
 skins-fallback = 皮肤「{ $id }」无法加载，已改用默认皮肤
 skins-preview = 预览
 skins-preview-name = 奈奈
-skins-preview-line = 大家好！今天也来[b]打字[/b]啦～[wave]波浪[/wave]、还有[rainbow]彩虹[/rainbow]和[shake]抖动[/shake]都可以哦。
 skins-filter-all = 全部
 skins-tag-light = 浅色
 skins-tag-dark = 深色
@@ -462,7 +459,6 @@ chat-at-short = 提及
 chat-style-compact = 紧凑
 chat-style-history = 气泡
 chat-panel-style = 操作面板样式
-chat-panel-style-hint = 紧凑列表或中性配色卡片；悬浮或键盘聚焦消息时显示回复与 @ 按钮
 chat-replying = 回复 { $name }
 chat-reply-cancel = 取消回复
 chat-clear = 清空
@@ -479,10 +475,7 @@ chat-guard-admiral = 提督
 chat-guard-captain = 舰长
 chat-min-gift = 礼物最低价值
 chat-min-gift-hint = 单位：元；免费礼物价值为 0
-chat-status-joined = 已进入房间 { $room }
 chat-status-retrying = 连接断开，正在重试：{ $message }
-chat-status-no-room = 请填写身份码或房间号
-chat-fatal = Bilibili 停止了连接：{ $message }
 history-chat = 弹幕
 history-chat-show = 在历史记录中显示弹幕
 history-chat-show-hint = Bilibili 的弹幕、醒目留言、礼物与上舰会和台词一起出现在历史记录里
@@ -490,11 +483,8 @@ history-show-quote = 显示回复引用
 history-show-quote-hint = 回复弹幕的台词上方显示被回复的弹幕
 history-role-host = 主播
 history-role-viewer = 观众
-int-bilibili-panel = 弹幕面板
-int-bilibili-panel-hint = 仅供主播操作的窗口，不会被采集
 int-bilibili-open-panel = 打开弹幕面板
 int-bilibili-quote-display = 对话框显示回复引用
-int-bilibili-quote-display-hint = 回复弹幕时，对话框文字上方显示被回复的弹幕
 
 ## wave3-input
 tb-cheatsheet = 标记速查
@@ -571,7 +561,6 @@ playback-reduced-system-off = 系统设置：关
 
 ## wave5-fonts
 skins-fallback-font = 替代字体
-skins-fallback-font-detail = 未安装 { $family }，正以替代字体显示
 ## end wave5-fonts
 
 ## wave5-fonts-licences
@@ -605,9 +594,6 @@ link-fault-unresolved = 找不到主机 { $host }
 link-fault-silent = 长时间没有收到数据
 link-fault-remote = 对方报告：{ $message }
 link-fault-remote-empty = 对方拒绝了请求
-chat-fatal-auth-code = 身份码无效，请检查后重新填写
-chat-fatal-too-many-retries = 重试次数过多，稍后再连
-chat-fatal-too-many-connections = 同时连接的客户端过多，稍后再连
 output-status-native-unavailable = 显卡不支持共享纹理输出
 output-status-failed = 无法生成输出画面
 spout-error-backend = Spout 组件无法启动
@@ -794,7 +780,6 @@ settings-packages = 插件与资源包
 settings-packages-sub = 管理皮肤、共享资源和功能插件
 packages-import = 导入包
 packages-refresh = 重新加载
-packages-enabled = 启用功能
 packages-dependencies = 依赖
 packages-remove = 移除
 packages-access = 插件无法访问网络、用户文件或外部程序。

@@ -72,7 +72,6 @@ pollster = "1"
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
-objc2-metal = "0.3"
 
 # Upstream ships prebuilt Apple Silicon archives; Intel Macs build from source.
 [target.'cfg(all(target_os = "macos", target_arch = "x86_64"))'.dependencies]
@@ -99,7 +98,6 @@ windows = { version = "0.62", features = [
 embed-resource = "3"
 
 [dev-dependencies]
-pollster = "1"
 tempfile = "3"
 nana-ui-devtools = { workspace = true, features = ["runtime-agent"] }
 

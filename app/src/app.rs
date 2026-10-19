@@ -560,7 +560,6 @@ impl App {
     }
 
     fn sync_tray_skins(&mut self) {
-        let locale = self.ui.locale.get_untracked();
         let skins: Vec<(String, String)> = self
             .ui
             .skins
@@ -569,7 +568,6 @@ impl App {
             .filter(|r| r.error.is_none())
             .map(|r| (r.id.clone(), r.name.clone()))
             .collect();
-        let _ = locale;
         if let Some(tray) = &mut self.tray {
             tray.set_skins(&skins, &self.settings.skin.id);
         }
@@ -1645,9 +1643,8 @@ impl App {
             // Built the way the editor's text builds it: a tag for a marker,
             // a picture at its own aspect.
             Tool::Insert(inline) => {
-                let doc = Document::from_inlines(vec![inline.clone()]);
-                self.ensure_urls(doc_assets(&doc));
                 let doc = Document::from_inlines(vec![inline]);
+                self.ensure_urls(doc_assets(&doc));
                 match self.editor_rich(&doc).objects().first() {
                     Some((_, object)) => RichEditCommand::InsertObject(object.clone()),
                     None => return,

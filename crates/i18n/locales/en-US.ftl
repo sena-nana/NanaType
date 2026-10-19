@@ -205,11 +205,9 @@ skins-broken = Cannot load
 skins-by = by { $author }
 skins-version = Version { $version }
 skins-overrides = Personalize
-skins-override-text = Text color
 skins-override-name = Name plate color
 skins-override-box = Box color
 skins-override-accent = Accent color
-skins-override-size = Text size
 skins-override-overflow = Long text
 skins-override-overflow-hint = What the box does when a line is taller than it
 skins-override-overflow-skin = As the skin sets
@@ -236,7 +234,6 @@ skins-import-failed = The skin could not be imported
 skins-fallback = Skin “{ $id }” could not load; using the default skin
 skins-preview = Preview
 skins-preview-name = Nana
-skins-preview-line = Hi everyone! Typing [b]live[/b] again today, with [wave]waves[/wave], [rainbow]rainbows[/rainbow] and a little [shake]shake[/shake].
 skins-filter-all = All
 skins-tag-light = Light
 skins-tag-dark = Dark
@@ -468,7 +465,6 @@ chat-at-short = Mention
 chat-style-compact = Compact
 chat-style-history = Bubbles
 chat-panel-style = Chat panel style
-chat-panel-style-hint = Compact list or neutral cards; hover or focus a message to reply or mention
 chat-replying = Replying to { $name }
 chat-reply-cancel = Cancel reply
 chat-clear = Clear
@@ -485,10 +481,7 @@ chat-guard-admiral = Admiral
 chat-guard-captain = Captain
 chat-min-gift = Minimum gift value
 chat-min-gift-hint = In yuan; free gifts are worth 0
-chat-status-joined = Joined room { $room }
 chat-status-retrying = Disconnected, retrying: { $message }
-chat-status-no-room = Enter an auth code or a room number
-chat-fatal = Bilibili stopped: { $message }
 history-chat = Live chat
 history-chat-show = Show live chat in history
 history-chat-show-hint = Comments, Super Chats, gifts and memberships from Bilibili join your lines in the history list
@@ -496,11 +489,8 @@ history-show-quote = Show reply quotes
 history-show-quote-hint = A line that answers a comment shows the comment above it
 history-role-host = Host
 history-role-viewer = Viewer
-int-bilibili-panel = Chat panel
-int-bilibili-panel-hint = A window for you only; it is never captured
 int-bilibili-open-panel = Open the chat panel
 int-bilibili-quote-display = Quote replies on the dialogue box
-int-bilibili-quote-display-hint = When a line answers a comment, show the comment above the text
 
 ## wave3-input
 tb-cheatsheet = Markup cheat sheet
@@ -577,7 +567,6 @@ playback-reduced-system-off = System setting: off
 
 ## wave5-fonts
 skins-fallback-font = Fallback font
-skins-fallback-font-detail = { $family } is not installed; text shows in a fallback font
 ## end wave5-fonts
 
 ## wave5-fonts-licences
@@ -611,9 +600,6 @@ link-fault-unresolved = Cannot find host { $host }
 link-fault-silent = No data for too long
 link-fault-remote = The other side said: { $message }
 link-fault-remote-empty = The other side refused the request
-chat-fatal-auth-code = The auth code is not valid; check it and enter it again
-chat-fatal-too-many-retries = Too many retries; try again later
-chat-fatal-too-many-connections = Too many clients connected; try again later
 output-status-native-unavailable = The graphics card cannot share the output texture
 output-status-failed = The output picture could not be produced
 spout-error-backend = Spout could not start
@@ -800,7 +786,6 @@ settings-packages = Plugins & packages
 settings-packages-sub = Manage skins, shared resources and functional plugins
 packages-import = Import package
 packages-refresh = Reload
-packages-enabled = Enable functions
 packages-dependencies = Dependencies
 packages-remove = Remove
 packages-access = Plugins cannot access the network, user files or external programs.

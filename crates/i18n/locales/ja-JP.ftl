@@ -202,11 +202,9 @@ skins-broken = 読み込めません
 skins-by = 作者 { $author }
 skins-version = バージョン { $version }
 skins-overrides = カスタマイズ
-skins-override-text = 文字色
 skins-override-name = 名前欄の色
 skins-override-box = ウィンドウの色
 skins-override-accent = アクセントカラー
-skins-override-size = 文字サイズ
 skins-override-overflow = 長いテキスト
 skins-override-overflow-hint = 一行がボックスに収まらないときの扱い
 skins-override-overflow-skin = スキンに従う
@@ -233,7 +231,6 @@ skins-import-failed = スキンを読み込めませんでした
 skins-fallback = スキン「{ $id }」を読み込めないため既定のスキンを使用しています
 skins-preview = プレビュー
 skins-preview-name = ナナ
-skins-preview-line = みなさんこんにちは！今日も[b]タイピング[/b]していくよ～[wave]なみなみ[/wave]、[rainbow]にじいろ[/rainbow]、[shake]ぶるぶる[/shake]もできるよ。
 skins-filter-all = すべて
 skins-tag-light = ライト
 skins-tag-dark = ダーク
@@ -462,7 +459,6 @@ chat-at-short = メンション
 chat-style-compact = コンパクト
 chat-style-history = 吹き出し
 chat-panel-style = 操作パネルのスタイル
-chat-panel-style-hint = コンパクトな一覧、または落ち着いた配色のカード。メッセージにカーソルを重ねるかフォーカスすると返信・メンションボタンを表示します
 chat-replying = { $name } に返信
 chat-reply-cancel = 返信をやめる
 chat-clear = クリア
@@ -479,10 +475,7 @@ chat-guard-admiral = 提督
 chat-guard-captain = 艦長
 chat-min-gift = ギフトの最低金額
 chat-min-gift-hint = 単位は元。無料ギフトは 0
-chat-status-joined = ルーム { $room } に入りました
 chat-status-retrying = 切断されました。再接続中：{ $message }
-chat-status-no-room = 認証コードかルーム番号を入力してください
-chat-fatal = Bilibili が接続を止めました：{ $message }
 history-chat = コメント
 history-chat-show = 履歴にコメントを表示
 history-chat-show-hint = Bilibili のコメント、スーパーチャット、ギフト、メンバー加入をセリフと一緒に履歴に表示します
@@ -490,11 +483,8 @@ history-show-quote = 返信の引用を表示
 history-show-quote-hint = コメントに返信したセリフの上に、そのコメントを表示します
 history-role-host = 配信者
 history-role-viewer = 視聴者
-int-bilibili-panel = コメントパネル
-int-bilibili-panel-hint = 配信者用のウィンドウで、キャプチャされません
 int-bilibili-open-panel = コメントパネルを開く
 int-bilibili-quote-display = ダイアログに返信の引用を表示
-int-bilibili-quote-display-hint = コメントに返信するとき、テキストの上にそのコメントを表示します
 
 ## wave3-input
 tb-cheatsheet = マークアップ早見表
@@ -571,7 +561,6 @@ playback-reduced-system-off = システム設定：オフ
 
 ## wave5-fonts
 skins-fallback-font = 代替フォント
-skins-fallback-font-detail = { $family } がインストールされていないため、代替フォントで表示しています
 ## end wave5-fonts
 
 ## wave5-fonts-licences
@@ -605,9 +594,6 @@ link-fault-unresolved = ホスト { $host } が見つかりません
 link-fault-silent = 長い間データが届いていません
 link-fault-remote = 相手からの応答：{ $message }
 link-fault-remote-empty = 相手がリクエストを拒否しました
-chat-fatal-auth-code = 認証コードが無効です。確認してもう一度入力してください
-chat-fatal-too-many-retries = 再試行が多すぎます。しばらくしてから接続します
-chat-fatal-too-many-connections = 接続中のクライアントが多すぎます。しばらくしてから接続します
 output-status-native-unavailable = グラフィックカードが出力テクスチャを共有できません
 output-status-failed = 出力映像を生成できません
 spout-error-backend = Spout を起動できません
@@ -794,7 +780,6 @@ settings-packages = プラグインとパッケージ
 settings-packages-sub = スキン、共有素材と機能プラグインを管理
 packages-import = パッケージを読み込む
 packages-refresh = 再読み込み
-packages-enabled = 機能を有効化
 packages-dependencies = 依存関係
 packages-remove = 削除
 packages-access = プラグインはネットワーク、ユーザーファイル、外部プログラムにアクセスできません。

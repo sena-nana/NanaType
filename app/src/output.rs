@@ -543,7 +543,7 @@ impl Spout {
     /// Hand a frame to the window's Spout sender. When sending failed,
     /// returns what to say ([`SPOUT_ERROR_KEYS`]) and the sender's own
     /// (English) words for the log.
-    #[allow(unused_variables)]
+    #[cfg_attr(not(windows), allow(unused_variables))]
     pub fn frame(
         &mut self,
         kind: WindowKind,
