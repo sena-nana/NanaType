@@ -27,7 +27,7 @@
 
 ![六套动效原速预览](skins-motion.webp)
 
-[水母游动局部原速预览](tidal-motion.webp)。预览来自同一个保留场景的真实 GPU 输出，8 fps、16 秒；另有 [GIF 兼容版](skins-motion.gif)。应用正常运行仍按原来的 30/60 fps 调度。
+[水母游动局部原速预览](tidal-motion.webp)。预览来自同一个保留场景的真实 GPU 输出，8 fps、16 秒。应用正常运行仍按原来的 30/60 fps 调度。
 
 植物与灯笼的新版纹理及弯曲方式可在[植物局部动效](forest-motion.webp)、[灯笼局部动效](lantern-motion.webp)中查看；[静态源图细节](skin-ornament-details.png)同时更新。
 
@@ -40,10 +40,24 @@ foreach ($id in @('gothic','celestial','forest','tidal','lantern','citrus')) {
     & target/debug/examples/snapshots.exe "target/skin-motion/nanatype.$id" "nanatype.$id" zh-CN
 }
 Remove-Item Env:NANATYPE_SNAPSHOT_MOTION_FRAMES
-python scripts/render-skin-motion.py
 ```
 
-循环测试固定 UI 状态，只推进渲染时钟。每个采样帧断言正文与回复引用区域逐像素不变、外轮廓透明度不变；完整周期首尾完全一致，程序、尺寸遮罩和缓存占用不增长。另触发开句与说话人切换，在 0、125、250、500、1000、2000 毫秒检查阅读区域仍然稳定。结果见 [skin-motion-checks.json](skin-motion-checks.json)。
+循环测试固定 UI 状态，只推进渲染时钟。每个采样帧断言正文与回复引用区域逐像素不变、外轮廓透明度不变；完整周期首尾完全一致，程序、尺寸遮罩和缓存占用不增长。另触发开句与说话人切换，在 0、125、250、500、1000、2000 毫秒检查阅读区域仍然稳定。每套主题的结果写入各自输出目录的 `motion-check.json`。
+
+## GPU 成本
+
+2026-10-17，RTX 5060、Vulkan、开发构建、960×540；每轮预热 60 帧、测量 120 帧，共三轮，取三轮 GPU P95 的最大值。静态基线包含真实回退图片，不含 OBS 或 Spout 接收同步。
+
+| 主题 | 静态 GPU P95（ms） | 动态 GPU P95（ms） |
+|---|---:|---:|
+| 蔷薇哥特 | 0.0985 | 0.1183 |
+| 星月魔法 | 0.0980 | 0.1262 |
+| 森林精灵 | 0.0979 | 0.1262 |
+| 潮汐水族馆 | 0.1032 | 0.1226 |
+| 朱砂华灯 | 0.1322 | 0.1599 |
+| 柠檬汽水 | 0.1006 | 0.1545 |
+
+动态主题在测量帧中没有文字塑形或布局重算，一个效果实例每帧上传 176 字节参数，不重传纹理。三个场景各画两个目标（BGRA8 sRGB 与 RGBA16Float）时 GPU P95 最大 1.0510 ms；顺序切换六套后的代理缓存约 10.55 MiB，混合输出后约 17.19 MiB，均低于 64 MiB 限制。用 `NANATYPE_GPU_CASES` 选择 `shader_<主题>`、`shader_<主题>_static` 与 `shader_tidal_multi_output` 后运行 `cargo run -p nanatype --example gpu_perf -- <输出.json>` 复测。
 
 ## 静态画面是设计基准
 
@@ -77,4 +91,4 @@ textures = ["celestial/ornament.png"]
 
 `artwork` 目标覆盖展示框的矩形画布，自行返回轮廓透明度；原有 `background` 和 `border` 仍按宿主框体遮罩叠加。它沿用同一验证、资源预算和失败恢复流程，没有新增执行权限。
 
-可直接导入[星图版画示例包](examples/lunar-atlas.ntpkg)。包内只有清单、一个 WGSL、一张装饰纹理和静态回退图，无父皮肤依赖。更新源文件后，运行 `python scripts/package-artwork-sample.py` 重建示例包。
+可直接导入[星图版画示例包](examples/lunar-atlas.ntpkg)。包内只有清单、一个 WGSL、一张装饰纹理和静态回退图，无父皮肤依赖。更新源文件后，运行 `python scripts/assets/package-artwork-sample.py` 重建示例包。

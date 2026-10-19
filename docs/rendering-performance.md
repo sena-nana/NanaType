@@ -42,17 +42,11 @@ GPU 的 `—` 表示该组没有绘制目标，没有把空帧时间冒充 GPU �
 
 CPU flush 单测中，装饰从 0.0135 ms 降至 0.0019 ms。其余亚微秒项目受 0.0001 ms 计时量化影响，例如 1000 行历史 0.0014 → 0.0015 ms，不在这些单次 flush 数值上计算百分比；帧耗时门限使用上表包含实际 GPU 录制／提交的工作负载。
 
-三次原生窗口复测，每次运行约 8 秒并丢弃前 2 秒：基线展示／历史窗口各持续呈现约 720 帧；修改后两者均为 0 帧，末两秒也均为 0。原生 GPU 计数不可用，仍保留 `null`。隐藏窗口独立验证中，桌面呈现均为 0，Spout 发送端仍输出 Display 180 帧、History 180 帧；日志确认两路 `native: true`。详见 [隐藏输出数据](performance/2026-10-15/native-hidden.json)。
+三次原生窗口复测，每次运行约 8 秒并丢弃前 2 秒：基线展示／历史窗口各持续呈现约 720 帧；修改后两者均为 0 帧，末两秒也均为 0。原生 GPU 计数不可用，仍保留 `null`。隐藏窗口独立验证中，桌面呈现均为 0，Spout 发送端仍输出 Display 180 帧、History 180 帧；日志确认两路 `native: true`。
 
 装饰稳态每组 120 帧的绘制调用为 480 次，上传量由 8,071,680 字节变为 8,057,600 字节；迁移减少的是应用层更新。复杂轮廓的几何上传仍存在。扫描密集关键帧改为 GPU 二分查找，与 CPU `partition_point` 一致；另修复 0ms 挂载已有台词时入场停留在半透明状态的问题，避免额外透明合成。
 
-原始数据：[GPU 基线](performance/2026-10-15/gpu-before.json)、[GPU 修改后](performance/2026-10-15/gpu-after.json)、[CPU 基线](performance/2026-10-15/cpu-before.json)、[CPU 修改后](performance/2026-10-15/cpu-after.json)、[原生基线](performance/2026-10-15/native-before.json)、[原生修改后](performance/2026-10-15/native-after.json)。每组塑形、布局、上传、绘制调用与 P95 均在 JSON 中。
-
-240 组截图覆盖 18 个内置皮肤、2 个图片／字体夹具、4 个窗口及 1×／1.5×／2× DPI。编辑窗口和皮肤库预览的 120 组像素一致；展示窗口 52/60 组一致，其余差异限于周期动画的采样；历史窗口差异位于真实墙钟时间标签。完整差异坐标见 [截图比较数据](performance/2026-10-15/snapshot-diff.json)。
-
-![基线、修改后和放大 8 倍的绝对差异](performance/2026-10-15/comparison.png)
-
-![扫光与波浪、彩虹、脉动、闪烁、注音及贴纸示例](performance/2026-10-15/sweep-and-effects.png)
+240 组截图覆盖当时的 18 个内置皮肤（现为 28 套）、2 个图片／字体夹具、4 个窗口及 1×／1.5×／2× DPI。编辑窗口和皮肤库预览的 120 组像素一致；展示窗口 52/60 组一致，其余差异限于周期动画的采样；历史窗口差异位于真实墙钟时间标签。原始 JSON 与对比截图未纳入仓库，可按下文命令在本机重新生成。
 
 ## 回归与复现
 
@@ -87,6 +81,18 @@ cargo run --release -p nanatype --example snapshots -- target/snapshots all zh-C
 `NANATYPE_SNAPSHOT_VIEWS=display,input` 可重录指定视图；`NANATYPE_SNAPSHOT_SWEEP=1` 临时开启扫光；`NANATYPE_SNAPSHOT_TIME_MS=102000` 固定扫光相位；`NANATYPE_SNAPSHOT_MARKUP` 替换末条台词。全部截图与工作日志位于 `target/render-perf`。
 
 应用最终 `cargo test --workspace --all-targets --locked` 共 281 项测试通过；已删除仅验证旧装饰刷新辅助函数的两项测试，实际合成器行为由集成测试覆盖。框架验证包括 glyph CPU 求值、Scene 动画截止时间、24 项合成器用例、RichTextView API、实际 GPU 的 CPU／Shader 位置一致性、引擎／包边界检查，以及加密打包夹具启动和篡改测试。应用用例覆盖有限揭示停止、减少动态效果、装饰轨道、组合效果、变高虚拟列表、伙伴内容隔离、三档 DPI 的轮廓与预乘 Alpha。
+
+## 皮肤切换、热重载与多输出
+
+2026-10-17，RTX 5060。`app/examples/skin_lifecycle.rs` 用真实 Runtime、Scene 和 GPU painter 保留三个文档，每个文档画入三个目标（两份不同原点与尺寸的 BGRA sRGB 及一份 RGBA16Float），共九个目标；覆盖当时 24 套皮肤四轮共 96 次切换、两个设备代次交替 240 帧、单目标连续改尺寸 80 次和 32 次后台热重载（含 5 次非法循环）。
+
+| 九目标合计 | 修复前 Vulkan | 修复后 Vulkan | 修复后 DX12 |
+| --- | ---: | ---: | ---: |
+| 切换首帧 CPU P95 | 221.97 ms | 14.48 ms | 16.31 ms |
+| 稳定帧 CPU P95 | 3.39 ms | 2.92 ms | 3.71 ms |
+| 热重载期间绘制 CPU P95 | 12.95 ms | 13.22 ms | 13.89 ms |
+
+修复后皮肤准备在后台任务执行，WGSL 与纹理解码结果按内容复用；同一材质的多个输出各自保存参数绑定。预热后无额外 WGSL 编译，设备交替不新增参数缓冲；关闭全部输出后实例遮罩、参数绑定、缩放记录与待编译任务归零，只保留约 10 MiB 的有界预热程序。该组为离屏测试，不含 OBS 接收端，真实接收见 [OBS / Spout 输出](obs-spout.md)。
 
 ## 验证范围
 

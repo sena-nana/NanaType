@@ -2,7 +2,7 @@
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
-root = Path(__file__).resolve().parents[1]
+root = Path(__file__).resolve().parents[2]
 sources = root / "crates/theme/builtin"
 package = sources / "celestial"
 metadata = (package / "package.toml").read_text(encoding="utf-8")

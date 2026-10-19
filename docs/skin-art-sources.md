@@ -1,6 +1,6 @@
 # 装饰图的参考与源文件
 
-原有皮肤本轮另新增两幅原创矢量：`parchment/ornament.svg` 为由细双线生长、长边渐疏的古籍卷叶压印包角，`sakura/ornament.svg` 为连续樱花枝、五瓣缺口花冠、花蕊和叶脉。两者由 `scripts/refine-classic-skins.py` 生成，CC0-1.0，无外链、下载素材或字体依赖；两倍 PNG 分别为 720×280 和 768×264。其余经典款使用程序几何；水墨原有馆藏素材及其授权记录保留。具体构图见[十八套细化记录](classic-skin-refinement.md)。
+原有皮肤本轮另新增两幅原创矢量：`parchment/ornament.svg` 为由细双线生长、长边渐疏的古籍卷叶压印包角，`sakura/ornament.svg` 为连续樱花枝、五瓣缺口花冠、花蕊和叶脉。两者最初由一次性脚本 `scripts/refine-classic-skins.py` 生成（已移出工作树，见 Git 历史），提交的 SVG 即源文件，CC0-1.0，无外链、下载素材或字体依赖；两倍 PNG 分别为 720×280 和 768×264。其余经典款使用程序几何；水墨原有馆藏素材及其授权记录保留。具体构图见[十八套细化记录](classic-skin-refinement.md)。
 
 本轮沿用现有框体、正文区域与名牌布局，只细化图形。下列馆藏图用于观察结构、比例和线条；仓库中的装饰是重新绘制的 SVG，没有把馆藏照片裁贴进皮肤，也不是逐像素描摹。
 
@@ -30,12 +30,14 @@
 ## 重建
 
 ```powershell
-python scripts/build-skin-ornaments.py
-# 需要可解析的 sharp Node.js 包；可通过 NODE_PATH 指向已有依赖目录。
-node scripts/render-skin-ornaments.cjs
+python scripts/assets/build-skin-ornaments.py
+npm install --prefix scripts/assets   # 安装 package.json 固定版本的 sharp
+node scripts/assets/render-skin-ornaments.cjs
 cargo run -p nanatype --example skin_artwork -- crates/theme/builtin
-python scripts/package-artwork-sample.py
+python scripts/assets/package-artwork-sample.py
 ```
+
+素材脚本的依赖见 `scripts/assets/package.json`（Node.js）与 `scripts/assets/requirements.txt`（Python 只需标准库）。
 
 重新编译应用后，烘焙图与纹理一起进入内置资源。源图无字体依赖，果肉细节使用固定种子，重复生成不依赖当前时间。
 

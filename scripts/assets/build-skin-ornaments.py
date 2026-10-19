@@ -7,7 +7,7 @@ from math import sin, cos, pi
 from pathlib import Path
 import random
 
-ROOT = Path(__file__).resolve().parents[1] / "crates/theme/builtin"
+ROOT = Path(__file__).resolve().parents[2] / "crates/theme/builtin"
 
 
 class Drawing:

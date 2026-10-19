@@ -43,7 +43,7 @@ base = "nanatype.halo"           # 可选，只继承配置
 | `nanatype.crayon` | 蜡笔画 | cute, elegant | 米白画纸、柔彩蜡笔与小花涂鸦，深色彩铅文字；静态 GPU 材质 |
 | `nanatype.halo` | 光环 | classic, minimal | 默认。精简蓝白圆润卡片、轻阴影、天蓝胶囊名牌，无右上角动效 |
 | `nanatype.sonnet` | 十四行诗 | elegant, minimal | 透明诗句字幕，中文文楷与英文花体；逐字金光、星火光丝，整段同步化为光尘 |
-| `nanatype.love_letter` | 情书 | cute, elegant | 奶油信纸、淡粉边饰与玫瑰墨迹；文楷按笔顺错峰书写，整段同步消融 |
+| `nanatype.love_letter` | 情书 | cute, elegant | 奶油信纸、淡粉边饰与玫瑰墨迹；文楷按笔顺错峰书写，整段同步消融，见[情书说明](love-letter.md) |
 | `nanatype.night` | 夜色 | classic | 深蓝玻璃、切角仪表框、霓虹描边与呼吸光带 |
 | `nanatype.parchment` | 羊皮纸 | classic, elegant | 双线压印框、暖色纸纤维、卷草包角、宋体 |
 | `nanatype.adv` | ADV 经典 | game | 1280×180 宽幅剧情框、端部缺口、金色姓名基线 |
@@ -84,7 +84,6 @@ $env:NANATYPE_THEME_SNAPSHOTS_ONLY='1'
 $env:NANATYPE_SNAPSHOT_VIEWS='display,history'
 $env:NANATYPE_SNAPSHOT_TRANSPARENT='1'
 & target/debug/examples/snapshots.exe target/history-style-fixed all zh-CN
-python scripts/render-history-style-preview.py target/history-style-fixed
 & target/debug/examples/chat_parity.exe target/history-style-layout all zh-CN audit history
 ```
 
@@ -403,7 +402,13 @@ fn effect(i: EffectInput) -> vec4<f32> {
 
 schema 2 皮肤可以使用 NanaUI 的通用片元材质，在框体或字形内部绘制纹理。蜡笔画皮肤使用静态纸纹、蜡笔边框和彩铅排线；正文、姓名、引用和注音采用对应区域的文字材质，编辑器不启用文字材质。
 
-实际截图、GPU 与全部皮肤的回归结果见[蜡笔画材质验收](crayon-validation.md)。
+2026-10-18 的 Windows 离屏 GPU 验收：材质参数变化不重新塑形、不重新栅格化、不上传字形；无材质及恒等材质的输出与原生路径逐像素一致。连续静态帧相同且不请求动画，关闭再开启高级效果恢复原像素；加入蜡笔画后原有 24 套展示框与基线逐像素一致。复查蜡笔画的展示框、历史、长姓名、引用、300px 窄窗与 2× 截图：
+
+```powershell
+$env:NANATYPE_MATERIAL_AUDIT = '1'
+$env:NANATYPE_THEME_AUDIT = '1'
+cargo run -p nanatype --example snapshots -- target/crayon-audit nanatype.crayon zh-CN
+```
 
 ```toml
 [materials.paper]
@@ -514,7 +519,18 @@ NanaUI 一次只用一个字体名，NanaType 会从 `families` 里挑第一个�
 
 包含 WGSL 的导出包仍会展开继承、携带资源，但独立清单省略与上下文默认值相同的字段。原始继承清单保持原样，`decor = []` 等显式清空操作不会被裁减。作者工具可用 `standalone_manifest` 将已解析的皮肤生成同样的独立清单，不应拿它裁剪尚未合并的子皮肤。
 
-完整 Artwork 自己提供透明轮廓，因此其覆盖遮罩复用单个白色像素，不随尺寸或 DPI 重建。背景、边框和装饰仍使用对应的真实遮罩。预览只加载静态绘制需要的图片；活动皮肤仍可通过 `skin:` 使用包内其他图片。全主题测量与复现方法见 [配置链路与性能验证](skin-pipeline-validation.md)。
+完整 Artwork 自己提供透明轮廓，因此其覆盖遮罩复用单个白色像素，不随尺寸或 DPI 重建。背景、边框和装饰仍使用对应的真实遮罩。预览只加载静态绘制需要的图片；活动皮肤仍可通过 `skin:` 使用包内其他图片。
+
+内置扫描改为只生成静态目录、WGSL 按需准备并复用后，同机开发构建的测量（当时 24 套，5 次采样中位数）：
+
+| 操作 | 优化前 ms | 优化后 ms |
+| --- | ---: | ---: |
+| 冷目录扫描 | 1151.23 | 24.53 |
+| 全部皮肤重复加载 | 1301.739 | 0.004 |
+| 已物化选择器刷新 | 1121.494 | 0.063 |
+| 重新扫描内置目录 | 1157.951 | 0.029 |
+
+稳定帧没有文字整形或布局更新；相对静态基线，单输出 WGSL 每帧只增加 176 字节参数上传。独立清单省略默认值后，24 套总量由 113,900 字节降至 62,439 字节，逐套往返得到相同的 Skin。用 `cargo run -p nanatype --example skin_load_perf -- <输出.json>` 与 `gpu_perf` 复测。
 
 ## 文字组合动效与对话框扫光
 
@@ -555,7 +571,7 @@ exit_ms = 400           # 随后在剩余 320ms 内全文随机消失
 三个非零时长支持 1–2000ms，`exit_hold_ms` 必须短于 `exit_ms`；启用乱码时以 `scramble.exit_ms` 为退场总时长。空白保留原位，emoji 按完整字符簇处理，图片与行内头像在退场时保持原图淡出。动态预览播放一次后停止，静态缩略图显示收敛后的原文。
 遮罩复用内容无关的 NanaUI `PresentationMask`，WGSL `material` 返回的 alpha 是覆盖率，RGB 不参与遮罩。`MaterialInput.progress` 为 0–1，`position`/`uv`/`size` 根据 scope 对应单字或正文视口；`target_position`、`target_size` 始终对应正文可见视口。`glyph_uv` 是文字适配层提供的字形局部坐标。
 蜡笔画逐字斜擦入 180ms，正文整体擦除 320ms；两者的分割线均沿左下—右上倾斜 45°，从左上向右下推进。姓名、引用与框体保持稳定，输入编辑器不播放遮罩。关闭高级效果使用原生回退；减少动态效果保留逐字节奏但不播放擦动或等待退场。继续键可立即完成退场，再开始下一段；连续替换遵循队列策略。已有的历史记录不随正文退场擦除。
-实际关键帧、复现步骤和验证结果见[文字过渡验收](text-transition-validation.md)。
+[实际 GPU 动画](crayon-typewriter.webp) · [300px 窄窗](crayon-typewriter-narrow.webp)。验收覆盖中英文、ruby、描边、彩色 emoji 与行内图片：中性遮罩与原始输出相同，擦除后无残留；遮罩更新不重新塑形、不栅格化字形、不上传图集，有限截止时间结束后停止连续帧。用 `NANATYPE_TRANSITION_AUDIT=1` 运行 `snapshots` 捕获展示框与历史的关键帧（`NANATYPE_TRANSITION_WIDTH=300`、`NANATYPE_SNAPSHOT_SCALE=2` 检查窄窗与高 DPI）；`NANATYPE_SNAPSHOT_STATIC=1` 检查减少动态效果，`NANATYPE_SNAPSHOT_MATERIALS_OFF=1` 检查关闭高级效果。
 
 
 ## 展示框响应式布局与竖排

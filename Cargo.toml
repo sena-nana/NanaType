@@ -73,7 +73,6 @@ inherits = "release"
 opt-level = "s"
 lto = "thin"
 codegen-units = 1
-debug = "line-tables-only"
 split-debuginfo = "packed"
 
 # Optional all-z build; runtime tradeoffs: docs/release-profile-performance.md.

@@ -41,13 +41,16 @@
 
 ## 重建与核对
 
+各主题清单与 `parchment`、`sakura` 的 `ornament.svg` 已提交，是后续编辑的源文件（最初由一次性脚本生成，见 Git 历史中的 `scripts/refine-classic-skins.py`）。修改 SVG 或 WGSL 后：
+
 ```powershell
-python scripts/refine-classic-skins.py
-node scripts/render-skin-ornaments.cjs parchment sakura
+node scripts/assets/render-skin-ornaments.cjs parchment sakura
 cargo build -p nanatype --example skin_artwork
 & target/debug/examples/skin_artwork.exe crates/theme/builtin halo night parchment adv rpg vanilla bubble livechat comic terminal pixel sakura ink echo_vanilla echo_bubble
 # 将烘焙图重新嵌入渲染样例和应用。
 cargo build -p nanatype --example snapshots --example gpu_perf --bin nanatype
 ```
 
-[七套原速动效](skins-classic-motion.webp)与[局部放大预览](skins-classic-motion-details.webp)来自真实 GPU 输出。运动按实际打字／等待状态采样，检查正文及回复引用区、固定透明轮廓、完整周期首尾和程序缓存。静态款另检查无效果程序和无自定义动画调度。缩放和长正文继续检查框角、标题栏与尾巴。结果见[验证记录](classic-skin-validation.md)。
+[七套原速动效](skins-classic-motion.webp)与[局部放大预览](skins-classic-motion-details.webp)来自真实 GPU 输出。运动按实际打字／等待状态采样，检查正文及回复引用区、固定透明轮廓、完整周期首尾和程序缓存。静态款另检查无效果程序和无自定义动画调度。缩放和长正文继续检查框角、标题栏与尾巴。
+
+2026-10-17 的验证（RTX 5060、Vulkan、960×540，每例三轮各 60 帧预热、120 帧测量，取三轮 GPU P95 最大值）：七套动态款静态 GPU P95 为 0.10–0.13 ms，开启动效后为 0.12–0.13 ms，每帧多一次绘制和 176 字节固定 uniform，不重传纹理；顺序切换七套的程序、遮罩与效果纹理缓存峰值 2.49 MiB。七套均逐像素检查 16 秒完整周期各 64 帧，正文与引用区、透明度和周期首尾保持不变；十一套静态款不携带运行时 WGSL，也不请求自定义效果帧。该测量不含 OBS 接收端。

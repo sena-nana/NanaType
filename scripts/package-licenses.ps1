@@ -31,6 +31,21 @@ foreach ($name in @("WASMOON-LICENSE", "LUA-LICENSE")) {
 foreach ($file in (Get-ChildItem (Join-Path $repoRoot "crates\theme\fonts\*.LICENSE.txt") -File | Sort-Object Name)) {
     Add-LicenseSource $file.Name $file.FullName "fonts"
 }
+# Built-in skins are compiled into the binary, so their third-party asset
+# licences (and Love Letter's modification notice) ship with it too.
+$builtin = Join-Path $repoRoot "crates\theme\builtin"
+$skinLicences = @(
+    "love_letter\ARPHICPL.TXT", "love_letter\APL-*.txt", "love_letter\COPYING",
+    "love_letter\SOURCES.txt", "ink\ART-LICENSE.txt"
+)
+foreach ($pattern in $skinLicences) {
+    $files = @(Get-ChildItem (Join-Path $builtin $pattern) -File | Sort-Object Name)
+    if (-not $files) { throw "Missing built-in skin licence: $pattern" }
+    foreach ($file in $files) {
+        $name = "skins/" + [IO.Path]::GetRelativePath($builtin, $file.FullName).Replace('\', '/')
+        Add-LicenseSource $name $file.FullName "skins"
+    }
+}
 foreach ($folder in @((Join-Path $repoRoot "packaging\licenses"), $Staged)) {
     foreach ($file in (Get-ChildItem -LiteralPath $folder -File -Recurse | Sort-Object FullName)) {
         $name = [IO.Path]::GetRelativePath($folder, $file.FullName).Replace('\', '/')

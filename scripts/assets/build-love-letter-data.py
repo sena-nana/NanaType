@@ -12,7 +12,7 @@ import zlib
 from pathlib import Path
 from urllib.request import urlopen
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 REPO = "https://raw.githubusercontent.com/skishore/makemeahanzi"
 MAGIC = b"NTHZ\x00\x00\x00\x01"
 BLOCK_SIZE = 64
