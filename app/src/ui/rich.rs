@@ -180,6 +180,7 @@ pub struct MentionLook {
     pub text: [f32; 4],
     pub scale: f32,
     pub avatar: bool,
+    pub weight: u16,
     pub markers: MarkerLook,
 }
 
@@ -356,6 +357,7 @@ impl MentionLook {
             text: crate::skin_theme::rgba(text),
             scale: 0.82,
             avatar: true,
+            weight: 700,
             markers: MarkerLook { fill, text },
         }
     }
@@ -372,6 +374,16 @@ impl MentionLook {
                 0.82
             },
             avatar: m.avatar,
+            // A bundled body font is a single face. Asked for bold, it is
+            // emboldened by swash, which takes a glyph's winding from all of
+            // its contours at once and pulls some outlines in instead (WenKai
+            // た, Fusion Pixel ほ): one glyph of the label came out thin.
+            // 500 is the heaviest weight that is never synthesized.
+            weight: if skin.fonts.body.file.is_some() && skin.fonts.body.weight < 600 {
+                500
+            } else {
+                700
+            },
             markers: MarkerLook::from_skin(skin),
         }
     }
@@ -396,7 +408,7 @@ impl MentionLook {
                 fill: self.fill,
                 text: self.text,
                 scale: self.scale,
-                weight: Some(700),
+                weight: Some(self.weight),
                 icon,
                 ..RichLabelStyle::default()
             },
@@ -1690,6 +1702,21 @@ mod tests {
         );
         let style = object.label_style().expect("a styled label");
         assert_eq!(style.icon.as_deref(), Some("file:///f/42.png"));
+    }
+
+    #[test]
+    fn a_mention_label_is_bold_unless_the_skin_bundles_a_single_face() {
+        let reg = nanatype_theme::SkinRegistry::new(None, "test");
+        for e in reg.entries() {
+            let skin = reg.load(&e.id).expect("skin loads").skin;
+            let bundled = skin.fonts.body.file.is_some();
+            assert_eq!(
+                MentionLook::from_skin(&skin).weight,
+                if bundled { 500 } else { 700 },
+                "{}",
+                e.id
+            );
+        }
     }
 
     #[test]
