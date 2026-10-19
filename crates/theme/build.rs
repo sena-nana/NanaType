@@ -89,9 +89,15 @@ fn main() {
 
 fn embed_packages(root: &Path) {
     println!("cargo:rerun-if-changed=builtin");
+    // Dotfiles (`.gitattributes`) and SVG design masters stay in the repository:
+    // skins only load their rendered PNGs, so neither is embedded or exported.
     fn walk(root: &Path, dir: &Path, files: &mut Vec<String>) {
         for entry in fs::read_dir(dir).expect("read package directory") {
             let entry = entry.expect("package entry");
+            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+            if name.starts_with('.') || name.ends_with(".svg") {
+                continue;
+            }
             let ty = entry.file_type().unwrap();
             assert!(!ty.is_symlink(), "package resources cannot be symlinks");
             if ty.is_dir() {

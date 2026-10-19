@@ -1,5 +1,7 @@
 //! Actual consent controls and content-bound execution approval.
-use nana_ui::runtime::{DocumentId, RuntimeDocument};
+
+mod common;
+
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nanatype::{
     msg::Msg,
@@ -90,15 +92,9 @@ fn consent_panel_discloses_risks_and_needs_a_real_trusted_source_selection() {
                 locale,
             );
             ui.plugin_activation.set(Some(review.clone()));
-            let id = DocumentId::new(1).unwrap();
-            let mut doc = RuntimeDocument::new(id);
-            doc.context_mut()
-                .set_theme_tokens(nanatype::skin_theme::compile(false))
-                .unwrap();
-            doc.context_mut()
-                .mount_view_root(id, move || ui::plugins::activation(ui))
-                .unwrap();
-            let mut session = RuntimeAgentSession::new(doc, width, 1800).unwrap();
+            let mut session = common::session()
+                .themed(false)
+                .mount(width, 1800, move || ui::plugins::activation(ui));
             session.flush().unwrap();
             let nodes = session.accessibility_dump();
             for node in nodes.iter().filter(|n| n.role == "button") {
@@ -174,15 +170,9 @@ fn complete_source_can_be_reviewed_without_granting_execution_consent() {
         Locale::EnUs,
     );
     ui.plugin_activation.set(Some(review));
-    let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
-    doc.context_mut()
-        .set_theme_tokens(nanatype::skin_theme::compile(false))
-        .unwrap();
-    doc.context_mut()
-        .mount_view_root(id, move || ui::plugins::activation(ui))
-        .unwrap();
-    let mut session = RuntimeAgentSession::new(doc, 900, 1800).unwrap();
+    let mut session = common::session()
+        .themed(false)
+        .mount(900, 1800, move || ui::plugins::activation(ui));
     session.flush().unwrap();
     let nodes = session.accessibility_dump();
     assert!(!nodes.iter().any(|n| {

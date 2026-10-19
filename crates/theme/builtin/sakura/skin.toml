@@ -3,28 +3,15 @@ accent = "#f06a9c"
 text = "#5e2a42"
 
 [dialogue]
-padding = [
-    30.0,
-    28.0,
-    28.0,
-    16.0,
-]
-region = [
-    760.0,
-    210.0,
-]
+padding = [30.0, 28.0, 28.0, 16.0]
+region = [760.0, 210.0]
 
 [dialogue.box]
 border_color = "#f7a8c4"
 border_width = 2.0
 color = "#ffeef5f2"
 contour = "rounded"
-margin = [
-    0.0,
-    0.0,
-    18.0,
-    0.0,
-]
+margin = [0.0, 0.0, 18.0, 0.0]
 radius = 24.0
 
 [dialogue.box.frame]
@@ -33,31 +20,14 @@ image = "still.png"
 layout_inset = false
 repeat = false
 scale = 1.0
-slice = [
-    44,
-    142,
-    30,
-    30,
-]
+slice = [44, 142, 30, 30]
 
 [dialogue.box.gradient]
 angle = 135.0
-center = [
-    50.0,
-    50.0,
-]
+center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [
-    [
-    0.0,
-    "#fff0f5f5",
-],
-    [
-    1.0,
-    "#ffe1ecf2",
-],
-]
+stops = [[0.0, "#fff0f5f5"], [1.0, "#ffe1ecf2"]]
 
 [[dialogue.box.shadows]]
 blur = 18.0
@@ -72,45 +42,24 @@ bob_px = 3.0
 color = "#f06a9c"
 glyph = "♥"
 motion = "pulse"
-offset = [
-    -24.0,
-    -10.0,
-]
+offset = [-24.0, -10.0]
 period_s = 1.0
 
 [dialogue.nameplate]
 border_color = "#f5b3ca"
 border_width = 0.800000011920929
 color = "#fad7e5"
-offset = [
-    24.0,
-    -14.0,
-]
-padding = [
-    14.0,
-    3.0,
-]
+offset = [24.0, -14.0]
+padding = [14.0, 3.0]
 radius = 12.0
 text_color = "#7a3050"
 
 [dialogue.nameplate.gradient]
 angle = 180.0
-center = [
-    50.0,
-    50.0,
-]
+center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [
-    [
-    0.0,
-    "#ffeaf2",
-],
-    [
-    1.0,
-    "#facbde",
-],
-]
+stops = [[0.0, "#ffeaf2"], [1.0, "#facbde"]]
 
 [[dialogue.nameplate.shadows]]
 blur = 8.0
@@ -125,133 +74,21 @@ decor = []
 
 [dialogue.responsive.portrait]
 decor = []
-padding = [
-    20.0,
-    24.0,
-    56.0,
-    72.0,
-]
+padding = [20.0, 24.0, 56.0, 72.0]
+unset = ["box.frame"]
 
 [dialogue.responsive.portrait.box]
-border_color = "#f7a8c4"
-border_style = "solid"
-border_width = 2.0
-color = "#ffeef5f2"
-contour = "rounded"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    18.0,
-    0.0,
-]
-radius = 24.0
-width_fraction = 1.0
-
-[dialogue.responsive.portrait.box.gradient]
-angle = 135.0
-center = [
-    50.0,
-    50.0,
-]
-circle = false
-kind = "linear"
-stops = [
-    [
-    0.0,
-    "#fff0f5f5",
-],
-    [
-    1.0,
-    "#ffe1ecf2",
-],
-]
-
-[[dialogue.responsive.portrait.box.shadows]]
-blur = 18.0
-color = "#f7a8c466"
-dx = 0.0
-dy = 6.0
-inset = false
-spread = 0.0
 
 [dialogue.responsive.portrait.continue]
 anchor = "bottom_left"
-bob_px = 3.0
-color = "#f06a9c"
-fps = 8.0
-frames = 1
-glyph = "♥"
-motion = "pulse"
-offset = [
-    12.0,
-    -8.0,
-]
-period_s = 1.0
-size = 16.0
+offset = [12.0, -8.0]
 
 [dialogue.responsive.portrait.nameplate]
 anchor = "top_right"
-border_color = "#f5b3ca"
-border_style = "solid"
-border_width = 0.800000011920929
-color = "#fad7e5"
-offset = [
-    -8.0,
-    12.0,
-]
-padding = [
-    4.0,
-    4.0,
-]
-radius = 12.0
-rotate = 0.0
-size = 18.0
-text_color = "#7a3050"
-visible = true
-
-[dialogue.responsive.portrait.nameplate.gradient]
-angle = 180.0
-center = [
-    50.0,
-    50.0,
-]
-circle = false
-kind = "linear"
-stops = [
-    [
-    0.0,
-    "#ffeaf2",
-],
-    [
-    1.0,
-    "#facbde",
-],
-]
-
-[[dialogue.responsive.portrait.nameplate.shadows]]
-blur = 8.0
-color = "#ff8fb855"
-dx = 0.0
-dy = 3.0
-inset = false
-spread = 0.0
+offset = [-8.0, 12.0]
+padding = [4.0, 4.0]
 
 [dialogue.responsive.portrait.portrait]
-offset = [
-    0.0,
-    0.0,
-]
-radius = 12.0
-side = "left"
-size = [
-    160.0,
-    200.0,
-]
-visible = false
-
-[dialogue.responsive.portrait.portrait.variants]
 
 [[dialogue.responsive.portrait.shader_effects]]
 shader = "responsive_print"
@@ -264,103 +101,13 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    16.0,
-    40.0,
-    16.0,
-    16.0,
-]
+padding = [16.0, 40.0, 16.0, 16.0]
+unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
-border_color = "#f7a8c4"
-border_style = "solid"
-border_width = 2.0
-color = "#ffeef5f2"
-contour = "rounded"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    18.0,
-    0.0,
-]
-radius = 24.0
-width_fraction = 1.0
-
-[dialogue.responsive.rules.layout.box.gradient]
-angle = 135.0
-center = [
-    50.0,
-    50.0,
-]
-circle = false
-kind = "linear"
-stops = [
-    [
-    0.0,
-    "#fff0f5f5",
-],
-    [
-    1.0,
-    "#ffe1ecf2",
-],
-]
-
-[[dialogue.responsive.rules.layout.box.shadows]]
-blur = 18.0
-color = "#f7a8c466"
-dx = 0.0
-dy = 6.0
-inset = false
-spread = 0.0
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_color = "#f5b3ca"
-border_style = "solid"
-border_width = 0.800000011920929
-color = "#fad7e5"
-offset = [
-    12.0,
-    4.0,
-]
-padding = [
-    14.0,
-    3.0,
-]
-radius = 12.0
-rotate = 0.0
-size = 18.0
-text_color = "#7a3050"
-visible = true
-
-[dialogue.responsive.rules.layout.nameplate.gradient]
-angle = 180.0
-center = [
-    50.0,
-    50.0,
-]
-circle = false
-kind = "linear"
-stops = [
-    [
-    0.0,
-    "#ffeaf2",
-],
-    [
-    1.0,
-    "#facbde",
-],
-]
-
-[[dialogue.responsive.rules.layout.nameplate.shadows]]
-blur = 8.0
-color = "#ff8fb855"
-dx = 0.0
-dy = 3.0
-inset = false
-spread = 0.0
+offset = [12.0, 4.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "compact_print"
@@ -373,103 +120,14 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    16.0,
-    40.0,
-    16.0,
-    16.0,
-]
+padding = [16.0, 40.0, 16.0, 16.0]
+unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
-border_color = "#f7a8c4"
-border_style = "solid"
-border_width = 2.0
-color = "#ffeef5f2"
-contour = "rounded"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
-radius = 24.0
-width_fraction = 1.0
-
-[dialogue.responsive.rules.layout.box.gradient]
-angle = 135.0
-center = [
-    50.0,
-    50.0,
-]
-circle = false
-kind = "linear"
-stops = [
-    [
-    0.0,
-    "#fff0f5f5",
-],
-    [
-    1.0,
-    "#ffe1ecf2",
-],
-]
-
-[[dialogue.responsive.rules.layout.box.shadows]]
-blur = 18.0
-color = "#f7a8c466"
-dx = 0.0
-dy = 6.0
-inset = false
-spread = 0.0
+margin = [0.0, 0.0, 0.0, 0.0]
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_color = "#f5b3ca"
-border_style = "solid"
-border_width = 0.800000011920929
-color = "#fad7e5"
-offset = [
-    12.0,
-    4.0,
-]
-padding = [
-    14.0,
-    3.0,
-]
-radius = 12.0
-rotate = 0.0
-size = 18.0
-text_color = "#7a3050"
-visible = true
-
-[dialogue.responsive.rules.layout.nameplate.gradient]
-angle = 180.0
-center = [
-    50.0,
-    50.0,
-]
-circle = false
-kind = "linear"
-stops = [
-    [
-    0.0,
-    "#ffeaf2",
-],
-    [
-    1.0,
-    "#facbde",
-],
-]
-
-[[dialogue.responsive.rules.layout.nameplate.shadows]]
-blur = 8.0
-color = "#ff8fb855"
-dx = 0.0
-dy = 3.0
-inset = false
-spread = 0.0
+offset = [12.0, 4.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "compact_print"
@@ -482,12 +140,7 @@ portrait = true
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    12.0,
-    16.0,
-    48.0,
-    48.0,
-]
+padding = [12.0, 16.0, 48.0, 48.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_print"
@@ -500,12 +153,7 @@ portrait = true
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    12.0,
-    16.0,
-    48.0,
-    24.0,
-]
+padding = [12.0, 16.0, 48.0, 24.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_print"
@@ -517,91 +165,23 @@ max_width = 200.0
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    10.0,
-    12.0,
-    10.0,
-    12.0,
-]
+padding = [10.0, 12.0, 10.0, 12.0]
+unset = ["box.frame", "nameplate.border_color", "nameplate.gradient"]
 
 [dialogue.responsive.rules.layout.box]
-border_color = "#f7a8c4"
-border_style = "solid"
-border_width = 2.0
-color = "#ffeef5f2"
-contour = "rounded"
-glow_blur = 12.0
-inner_border_width = 0.0
-margin = [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-]
-radius = 24.0
-width_fraction = 1.0
-
-[dialogue.responsive.rules.layout.box.gradient]
-angle = 135.0
-center = [
-    50.0,
-    50.0,
-]
-circle = false
-kind = "linear"
-stops = [
-    [
-    0.0,
-    "#fff0f5f5",
-],
-    [
-    1.0,
-    "#ffe1ecf2",
-],
-]
-
-[[dialogue.responsive.rules.layout.box.shadows]]
-blur = 18.0
-color = "#f7a8c466"
-dx = 0.0
-dy = 6.0
-inset = false
-spread = 0.0
+margin = [0.0, 0.0, 0.0, 0.0]
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_style = "solid"
 border_width = 0.0
 color = "#0876d0"
-offset = [
-    16.0,
-    -12.0,
-]
-padding = [
-    10.0,
-    4.0,
-]
+offset = [16.0, -12.0]
+padding = [10.0, 4.0]
 radius = 10.0
-rotate = 0.0
 shadows = []
-size = 18.0
 text_color = "#ffffff"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
-offset = [
-    0.0,
-    0.0,
-]
-radius = 12.0
-side = "left"
-size = [
-    160.0,
-    200.0,
-]
-visible = false
-
-[dialogue.responsive.rules.layout.portrait.variants]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "minimal_print"
@@ -631,11 +211,7 @@ color = "#7a3050"
 contrast_guard = 3.0
 
 [fonts.accent]
-families = [
-    "Segoe UI Symbol",
-    "Microsoft YaHei UI",
-    "PingFang SC",
-]
+families = ["Segoe UI Symbol", "Microsoft YaHei UI", "PingFang SC"]
 weight = 400
 
 [history]
@@ -654,22 +230,10 @@ ring_width = 2.0
 
 [history.bubble_gradient]
 angle = 135.0
-center = [
-    50.0,
-    50.0,
-]
+center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [
-    [
-    0.0,
-    "#fff0f5f5",
-],
-    [
-    1.0,
-    "#ffe1ecf2",
-],
-]
+stops = [[0.0, "#fff0f5f5"], [1.0, "#ffe1ecf2"]]
 
 [[history.bubble_shadows]]
 blur = 10.0
@@ -684,32 +248,17 @@ border_color = "#f5b3ca"
 border_style = "solid"
 border_width = 0.800000011920929
 color = "#fad7e5"
-padding = [
-    8.0,
-    1.0,
-]
+padding = [8.0, 1.0]
 radius = 12.0
 shadows = []
 text_color = "#7a3050"
 
 [history.name_plate.gradient]
 angle = 180.0
-center = [
-    50.0,
-    50.0,
-]
+center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [
-    [
-    0.0,
-    "#ffeaf2",
-],
-    [
-    1.0,
-    "#facbde",
-],
-]
+stops = [[0.0, "#ffeaf2"], [1.0, "#facbde"]]
 
 [history.text]
 color = "#7a3050"
@@ -735,10 +284,7 @@ textures = ["ornament.png"]
 [shaders.minimal_print]
 animated = false
 intensity = 1.0
-params = [
-    2.0,
-    1.0,
-]
+params = [2.0, 1.0]
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true

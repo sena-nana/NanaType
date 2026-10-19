@@ -5,16 +5,8 @@ text = "#784b56"
 
 [dialogue]
 overscan = 16.0
-padding = [
-    42.0,
-    58.0,
-    38.0,
-    30.0,
-]
-region = [
-    900.0,
-    240.0,
-]
+padding = [42.0, 58.0, 38.0, 30.0]
+region = [900.0, 240.0]
 
 [dialogue.box]
 border_color = "#ddb7bb"
@@ -33,10 +25,7 @@ dy = 3.0
 bob_px = 3.0
 color = "#ba7385"
 glyph = "♡"
-offset = [
-    -18.0,
-    -12.0,
-]
+offset = [-18.0, -12.0]
 size = 17.0
 
 [[dialogue.decor]]
@@ -45,19 +34,13 @@ border_style = "solid"
 border_width = 0.0
 font = "accent"
 layer = "above"
-offset = [
-    -18.0,
-    16.0,
-]
+offset = [-18.0, 16.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    24.0,
-    24.0,
-]
+size = [24.0, 24.0]
 text = "♡"
 text_color = "#ca95a2"
 text_size = 24.0
@@ -70,33 +53,21 @@ border_width = 0.0
 color = "#ddb7bb70"
 font = "accent"
 layer = "above"
-offset = [
-    26.0,
-    45.0,
-]
+offset = [26.0, 45.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    "92%",
-    1.0,
-]
+size = ["92%", 1.0]
 text = ""
 text_color = "text"
 text_size = 16.0
 when = "always"
 
 [dialogue.nameplate]
-offset = [
-    42.0,
-    18.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
+offset = [42.0, 18.0]
+padding = [0.0, 0.0]
 radius = 10.0
 size = 19.0
 text_color = "#ae6f80"
@@ -104,12 +75,7 @@ text_color = "#ae6f80"
 [dialogue.responsive.landscape]
 
 [dialogue.responsive.portrait]
-padding = [
-    24.0,
-    58.0,
-    24.0,
-    30.0,
-]
+padding = [24.0, 58.0, 24.0, 30.0]
 
 [[dialogue.responsive.portrait.decor]]
 anchor = "bottom_left"
@@ -117,19 +83,13 @@ border_style = "solid"
 border_width = 0.0
 font = "accent"
 layer = "above"
-offset = [
-    16.0,
-    -16.0,
-]
+offset = [16.0, -16.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    24.0,
-    24.0,
-]
+size = [24.0, 24.0]
 text = "♡"
 text_color = "#ca95a2"
 text_size = 24.0
@@ -137,23 +97,7 @@ when = "always"
 
 [dialogue.responsive.portrait.nameplate]
 anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
-color = "#00000000"
-offset = [
-    -24.0,
-    16.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
-radius = 10.0
-rotate = 0.0
-shadows = []
-size = 19.0
-text_color = "#ae6f80"
-visible = true
+offset = [-24.0, 16.0]
 
 [[dialogue.responsive.rules]]
 max_height = 8192.0
@@ -161,12 +105,7 @@ max_width = 600.0
 portrait = false
 
 [dialogue.responsive.rules.layout]
-padding = [
-    22.0,
-    52.0,
-    22.0,
-    24.0,
-]
+padding = [22.0, 52.0, 22.0, 24.0]
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "top_right"
@@ -174,43 +113,21 @@ border_style = "solid"
 border_width = 0.0
 font = "accent"
 layer = "above"
-offset = [
-    -16.0,
-    12.0,
-]
+offset = [-16.0, 12.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    22.0,
-    22.0,
-]
+size = [22.0, 22.0]
 text = "♡"
 text_color = "#ca95a2"
 text_size = 22.0
 when = "always"
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
-color = "#00000000"
-offset = [
-    22.0,
-    15.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
-radius = 10.0
-rotate = 0.0
-shadows = []
+offset = [22.0, 15.0]
 size = 18.0
-text_color = "#ae6f80"
-visible = true
 
 [[dialogue.responsive.rules]]
 max_height = 140.0
@@ -218,29 +135,12 @@ max_width = 200.0
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    12.0,
-    14.0,
-    12.0,
-    14.0,
-]
+padding = [12.0, 14.0, 12.0, 14.0]
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
 color = "#0876d0"
-offset = [
-    16.0,
-    -12.0,
-]
-padding = [
-    10.0,
-    4.0,
-]
-radius = 10.0
-rotate = 0.0
-shadows = []
+offset = [16.0, -12.0]
+padding = [10.0, 4.0]
 size = 18.0
 text_color = "#ffffff"
 visible = false
@@ -264,20 +164,12 @@ line_height = 1.600000023841858
 size = 32.0
 
 [fonts.body]
-families = [
-    "LXGW WenKai",
-    "KaiTi",
-    "Noto Sans SC",
-]
+families = ["LXGW WenKai", "KaiTi", "Noto Sans SC"]
 file = "builtin:fonts/LXGWWenKai-Regular.ttf"
 weight = 400
 
 [fonts.name]
-families = [
-    "LXGW WenKai",
-    "KaiTi",
-    "Noto Sans SC",
-]
+families = ["LXGW WenKai", "KaiTi", "Noto Sans SC"]
 file = "builtin:fonts/LXGWWenKai-Regular.ttf"
 weight = 400
 
@@ -286,10 +178,7 @@ bubble_border = "#ddb7bb"
 bubble_border_width = 1.0
 bubble_color = "#fff9ef"
 bubble_material = "paper"
-bubble_padding = [
-    20.0,
-    14.0,
-]
+bubble_padding = [20.0, 14.0]
 bubble_radius = 7.0
 entrance = "slide_up"
 name_color = "#ae6f80"
@@ -304,19 +193,9 @@ border_color = "#ddb7bb"
 border_style = "solid"
 border_width = 1.0
 color = "#fff9ef"
-margin = [
-    8.0,
-    8.0,
-    8.0,
-    8.0,
-]
+margin = [8.0, 8.0, 8.0, 8.0]
 material = "paper"
-padding = [
-    16.0,
-    14.0,
-    16.0,
-    14.0,
-]
+padding = [16.0, 14.0, 16.0, 14.0]
 radius = 7.0
 shadows = []
 

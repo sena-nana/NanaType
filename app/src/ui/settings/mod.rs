@@ -5,10 +5,9 @@
 pub(super) mod controls;
 mod pages;
 pub mod preview;
-mod skin_grid;
 mod telegram;
 
-pub use controls::links_pulsing;
+pub use controls::{base64, links_pulsing};
 pub use pages::font_licence_panel;
 
 use std::sync::Arc;

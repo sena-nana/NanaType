@@ -1,5 +1,8 @@
 //! Retained scenes: repeated skin switches, simultaneous targets, device
 //! alternation, resize churn and closing all consumers. No desktop windows.
+mod common;
+
+use common::distribution;
 use nana_ui::runtime::view::IntoView;
 use nana_ui::runtime::{DocumentId, RuntimeDocument};
 use nana_ui::{
@@ -151,11 +154,6 @@ fn outputs(g: &GpuContext, count: usize) -> (Vec<SceneWgpuPainter>, Vec<GpuTextu
         })
         .collect();
     (painters, textures)
-}
-
-fn distribution(mut samples: Vec<f64>) -> serde_json::Value {
-    samples.sort_by(f64::total_cmp);
-    serde_json::json!({"samples":samples.len(),"median_ms":samples[samples.len()/2],"p95_ms":samples[samples.len()*95/100],"max_ms":samples.last()})
 }
 
 fn pixel(g: &GpuContext, texture: &GpuTexture, x: u32, y: u32) -> [u8; 4] {

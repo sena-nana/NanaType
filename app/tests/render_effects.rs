@@ -1,17 +1,15 @@
+mod common;
+
+use nana_ui::runtime::Stack;
 use nana_ui::runtime::view::{signal, widget};
-use nana_ui::runtime::{DocumentId, RuntimeDocument, Stack};
 use nana_ui_core::LengthSpec;
-use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
+use nana_ui_devtools::agent::AgentSession;
 use nanatype::ui::{surface::Surface, sweep};
 use nanatype_model::Rgba8;
 use nanatype_theme::{ContourPreset, SweepSpec};
 use std::{sync::Arc, time::Duration};
 
-fn pixel(data: &[u8], width: u32, x: u32, y: u32) -> [u8; 4] {
-    data[((y * width + x) * 4) as usize..((y * width + x) * 4 + 4) as usize]
-        .try_into()
-        .unwrap()
-}
+use common::pixel;
 
 #[test]
 fn combined_effects_keep_ruby_objects_and_partner_animation_without_layout() {
@@ -27,10 +25,7 @@ fn combined_effects_keep_ruby_objects_and_partner_animation_without_layout() {
         parsed.doc
     );
     for remote in [false, true] {
-        let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-            .load("nanatype.vanilla")
-            .unwrap()
-            .skin;
+        let skin = common::skin("nanatype.vanilla");
         let settings = Settings::default();
         let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
         let mut core = Core::new(settings, skin);
@@ -40,16 +35,9 @@ fn combined_effects_keep_ruby_objects_and_partner_animation_without_layout() {
         ui.peer_display.set(ui.display.get_untracked());
         ui.now.set(100_000);
         ui.peer_now.set(100_000);
-        let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
-        nanatype::clock::capture_at(100_000, || {
-            doc.context_mut()
-                .mount_view_root(id, move || {
-                    dialogue::display_window(if remote { ui.remote() } else { ui })
-                })
-                .unwrap()
+        let mut session = common::session().mount_at(100_000, 796, 236, move || {
+            dialogue::display_window(if remote { ui.remote() } else { ui })
         });
-        let mut session = RuntimeAgentSession::new(doc, 796, 236).unwrap();
         let (_, first) = session.screenshot_rgba().unwrap();
         let layout = session.document().context().world().layout_generation();
         session
@@ -83,10 +71,7 @@ fn finite_reveals_and_history_presence_stop_requesting_frames() {
         ("[pause]等待 Paused reveal", false),
     ] {
         for history_window in [false, true] {
-            let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-                .load("nanatype.vanilla")
-                .unwrap()
-                .skin;
+            let skin = common::skin("nanatype.vanilla");
             let settings = Settings::default();
             let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
             ui.reduced_motion.set(reduced);
@@ -95,21 +80,14 @@ fn finite_reveals_and_history_presence_stop_requesting_frames() {
             ui.display.set(Arc::new(core.display().clone()));
             ui.history
                 .set(Arc::new(core.history().iter().cloned().collect()));
-            let id = DocumentId::new(1).unwrap();
-            let mut doc = RuntimeDocument::new(id);
-            nanatype::clock::capture_at(0, || {
-                doc.context_mut()
-                    .mount_view_root(id, move || {
-                        use nana_ui::runtime::view::IntoView;
-                        if history_window {
-                            history::history_window(ui).into_any()
-                        } else {
-                            dialogue::display_window(ui).into_any()
-                        }
-                    })
-                    .unwrap()
+            let mut session = common::session().mount_at(0, 796, 540, move || {
+                use nana_ui::runtime::view::IntoView;
+                if history_window {
+                    history::history_window(ui).into_any()
+                } else {
+                    dialogue::display_window(ui).into_any()
+                }
             });
-            let mut session = RuntimeAgentSession::new(doc, 796, 540).unwrap();
             session.flush().unwrap();
             // Include presence completion, layer-demotion hold and reveal fade.
             for ms in (16..=4000).step_by(16) {
@@ -136,7 +114,7 @@ fn ornaments_animate_without_runtime_work_and_stop_when_reduced_or_cleared() {
     use nanatype_core::{Cmd, Core, DisplayView};
     use nanatype_i18n::Locale;
     use nanatype_settings::Settings;
-    let registry = nanatype_theme::SkinRegistry::new(None, "1.0.0");
+    let registry = common::registry();
     let skin = registry.load("nanatype.sakura").unwrap().skin;
     let settings = Settings::default();
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
@@ -144,14 +122,7 @@ fn ornaments_animate_without_runtime_work_and_stop_when_reduced_or_cleared() {
     core.handle(Cmd::SendMarkup("静止台词，装饰仍在动".into()), 0);
     core.handle(Cmd::Skip, 1);
     ui.display.set(Arc::new(core.display().clone()));
-    let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
-    nanatype::clock::capture_at(0, || {
-        doc.context_mut()
-            .mount_view_root(id, move || dialogue::display_window(ui))
-            .unwrap()
-    });
-    let mut session = RuntimeAgentSession::new(doc, 796, 236).unwrap();
+    let mut session = common::session().mount_at(0, 796, 236, move || dialogue::display_window(ui));
     session.flush().unwrap();
     ui.now.set(1000);
     session
@@ -203,10 +174,7 @@ fn chat_materializes_the_viewport_and_keeps_scrolling_available() {
     use nanatype_core::{Cmd, Core};
     use nanatype_i18n::Locale;
     use nanatype_settings::Settings;
-    let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-        .load("nanatype.halo")
-        .unwrap()
-        .skin;
+    let skin = common::skin("nanatype.halo");
     let mut settings = Settings::default();
     settings.history.max_items = 1000;
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
@@ -220,12 +188,7 @@ fn chat_materializes_the_viewport_and_keeps_scrolling_available() {
     }
     ui.history
         .set(Arc::new(core.history().iter().cloned().collect()));
-    let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
-    doc.context_mut()
-        .mount_view_root(id, move || danmaku::chat_window(ui))
-        .unwrap();
-    let mut session = RuntimeAgentSession::new(doc, 400, 600).unwrap();
+    let mut session = common::session().mount(400, 600, move || danmaku::chat_window(ui));
     session.flush().unwrap();
     let mounted = session.document().context().world().len();
     assert!(
@@ -265,31 +228,26 @@ fn sweep_is_clipped_premultiplied_and_retained_across_dpi_and_opacity() {
             radii: [12.0; 4],
             ..Surface::default()
         };
-        let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
-        doc.context_mut()
-            .mount_view_root(id, move || {
-                widget(
-                    Stack::column(0.0)
-                        .width(LengthSpec::Px(320.0))
-                        .height(LengthSpec::Px(120.0)),
-                )
-                .bind(move |node: &mut Stack| {
-                    nanatype::ui::restyle(node, |l| l.opacity = Some(opacity.get()))
-                })
-                .children(sweep::view(
-                    surface,
-                    SweepSpec {
-                        enabled: true,
-                        color: Rgba8::WHITE,
-                        intensity: 0.6,
-                        period_s: 4.0,
-                    },
-                    true,
-                ))
+        let mut session = common::session().scale(scale).mount(320, 120, move || {
+            widget(
+                Stack::column(0.0)
+                    .width(LengthSpec::Px(320.0))
+                    .height(LengthSpec::Px(120.0)),
+            )
+            .bind(move |node: &mut Stack| {
+                nanatype::ui::restyle(node, |l| l.opacity = Some(opacity.get()))
             })
-            .unwrap();
-        let mut session = RuntimeAgentSession::new_scaled(doc, 320, 120, scale).unwrap();
+            .children(sweep::view(
+                surface,
+                SweepSpec {
+                    enabled: true,
+                    color: Rgba8::WHITE,
+                    intensity: 0.6,
+                    period_s: 4.0,
+                },
+                true,
+            ))
+        });
         session.set_clear(Some([0.0; 4]));
         session.set_gpu_renderers(sweep::renderers());
         let (size, first) =
@@ -359,36 +317,31 @@ fn sweep_nine_slice_alpha_and_failed_reload_keep_the_surface_route() {
             ..Default::default()
         };
         let current = signal(Arc::new(surface.clone()));
-        let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
-        doc.context_mut()
-            .mount_view_root(id, move || {
-                widget(
-                    Stack::column(0.0)
-                        .width(LengthSpec::Px(80.0))
-                        .height(LengthSpec::Px(40.0)),
+        let mut session = common::session().scale(scale).mount(80, 40, move || {
+            widget(
+                Stack::column(0.0)
+                    .width(LengthSpec::Px(80.0))
+                    .height(LengthSpec::Px(40.0)),
+            )
+            .children(
+                dynamic(
+                    move || current.get(),
+                    move |surface| {
+                        sweep::view(
+                            (**surface).clone(),
+                            SweepSpec {
+                                enabled: true,
+                                intensity: 0.6,
+                                ..Default::default()
+                            },
+                            false,
+                        )
+                        .into_any()
+                    },
                 )
-                .children(
-                    dynamic(
-                        move || current.get(),
-                        move |surface| {
-                            sweep::view(
-                                (**surface).clone(),
-                                SweepSpec {
-                                    enabled: true,
-                                    intensity: 0.6,
-                                    ..Default::default()
-                                },
-                                false,
-                            )
-                            .into_any()
-                        },
-                    )
-                    .css(nana_ui::runtime::view::css! { position: absolute; inset: 0; }),
-                )
-            })
-            .unwrap();
-        let mut session = RuntimeAgentSession::new_scaled(doc, 80, 40, scale).unwrap();
+                .css(nana_ui::runtime::view::css! { position: absolute; inset: 0; }),
+            )
+        });
         session.set_clear(Some([0.0; 4]));
         session.set_gpu_renderers(sweep::renderers());
         let (size, first) = session.screenshot_rgba().unwrap();

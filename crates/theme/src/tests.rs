@@ -2124,10 +2124,25 @@ fn responsive_inheritance_keeps_configuration_and_exports_all_variant_assets() {
         );
         assert!(!loaded.files.read(path).unwrap().is_empty());
     }
-    let manifest = standalone_manifest(&loaded.skin).unwrap();
-    let roundtrip: Skin = toml::Value::Table(manifest).try_into().unwrap();
+    let manifest = toml::to_string(&standalone_manifest(&loaded.skin).unwrap()).unwrap();
+    let standalone = tempfile::tempdir().unwrap();
+    let paths: Vec<_> = loaded
+        .files
+        .list()
+        .into_iter()
+        .filter(|p| p != MANIFEST)
+        .collect();
+    let assets: Vec<_> = paths
+        .iter()
+        .map(|p| (p.as_str(), loaded.files.read(p).unwrap()))
+        .collect();
+    write_skin(standalone.path(), &manifest, &assets);
     assert_eq!(
-        roundtrip.dialogue.responsive,
+        load_dir(standalone.path())
+            .unwrap()
+            .skin
+            .dialogue
+            .responsive,
         loaded.skin.dialogue.responsive
     );
     write_skin(
@@ -2160,4 +2175,62 @@ fn archive_entries_cannot_inflate_past_their_declared_size() {
     let files = ZipFiles::open(&archive).unwrap();
     assert_eq!(files.file_len("a.txt").unwrap(), 1);
     assert!(files.read("a.txt").is_err());
+}
+
+#[test]
+fn responsive_layouts_merge_onto_the_base_dialogue() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = "[meta]\nid='user.partial'\n[dialogue.box]\nradius=6\ncolor='#102030'\n\
+                glow='#ff0000'\nshadows=[{color='#000',dx=1},{color='#000',dx=2}]\n\
+                [dialogue.box.shadow]\ncolor='#000'\ndx=3\nblur=4\n\
+                [dialogue.nameplate]\nborder_color='#ffffff'\n";
+    write_skin(
+        dir.path(),
+        &format!(
+            "{base}[dialogue.responsive.portrait]\nunset=['nameplate.border_color']\n\
+             nameplate={{}}\nbox={{radius=2, shadow={{dx=5}}, shadows=[{{color='#000',dx=9}}]}}\n\
+             [[dialogue.responsive.rules]]\nmax_width=200\nlayout={{box={{}}}}\n"
+        ),
+        &[],
+    );
+    let loaded = load_dir(dir.path()).unwrap();
+    assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+    let skin = &loaded.skin;
+    let portrait = responsive_dialogue(skin, [300., 1200.]).dialogue;
+    assert_eq!(portrait.box_.radius, 2.);
+    assert_eq!(portrait.box_.color, skin.dialogue.box_.color);
+    assert_eq!(portrait.box_.glow, skin.dialogue.box_.glow);
+    let shadow = portrait.box_.shadow.as_ref().unwrap();
+    assert_eq!(
+        (shadow.dx, shadow.blur),
+        (5., 4.),
+        "tables merge field by field"
+    );
+    assert_eq!(portrait.box_.shape.shadows.len(), 1, "arrays replace");
+    assert!(portrait.nameplate.border_color.is_none());
+    // Naming a spec, even empty, resets it to the base over the portrait variant.
+    let narrow = responsive_dialogue(skin, [200., 1200.]).dialogue;
+    assert_eq!(narrow.box_, skin.dialogue.box_);
+    assert!(narrow.nameplate.border_color.is_none());
+
+    let manifest = toml::to_string(&standalone_manifest(skin).unwrap()).unwrap();
+    assert!(
+        manifest.contains("unset = [\"nameplate.border_color\"]"),
+        "{manifest}"
+    );
+    write_skin(dir.path(), &manifest, &[]);
+    assert_eq!(load_dir(dir.path()).unwrap().skin, loaded.skin);
+
+    write_skin(
+        dir.path(),
+        &format!("{base}[dialogue.responsive.portrait]\nunset=['box.nope']\n"),
+        &[],
+    );
+    assert!(
+        load_dir(dir.path())
+            .unwrap()
+            .warnings
+            .iter()
+            .any(|w| w.field == "dialogue.responsive.unset")
+    );
 }

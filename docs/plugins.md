@@ -29,7 +29,7 @@ return {
 - 容器使用 `children`。`text` 使用字面文本，不执行富文本、链接或 HTML；`button` 通过 `command` 回传事件，支持宿主按钮已有的键盘和无障碍交互。
 - `canvas` 声明 `width`、`height` 与 `draw`。绘制支持 `rect`（`rect=[x,y,w,h]`、RGBA `color`、`radius`）和 `path`（`points`、`color`、`closed`、`width`）；宿主绘制并缓存结果，Lua 不进入每帧绘制路径。皮肤的高级动效继续通过受限 WGSL 接口表达。
 
-完整可安装示例位于 `docs/examples/counter-plugin/`。把该目录内容压缩为 `.ntpkg`，在“插件与资源包”导入并启用即可。它统计已播放台词，提供画布进度条和重置按钮。
+完整可安装示例位于 `docs/examples/counter-plugin/`，打包好的 [counter-plugin.ntpkg](examples/counter-plugin.ntpkg) 可在“插件与资源包”导入并启用。它统计已播放台词，提供画布进度条和重置按钮。修改源码后用 `python scripts/assets/package-example-plugins.py` 重新生成压缩包。
 
 ## 安全与生命周期
 
@@ -57,6 +57,6 @@ return {
 
 解释器来源、校验值和许可证见 `crates/plugins/runtime/README.md`。插件运行时不需要用户安装 Lua、Node.js 或 Wasmtime。
 
-本次迁移的视觉、功能、安全及性能实测见[统一包架构验收记录](package-architecture-validation.md)。
+2026-10-19 统一包迁移的验收（Windows x86_64）：28 个内置皮肤 × 展示／历史／输入共 84 张截图与迁移前逐像素一致，`chat_parity` 默认及 300px 窄窗布局全部通过。冷启动皮肤注册表由约 341 ms 降至 219 ms，内置清单在构建时生成解析数据；渲染宿主基准各场景中位耗时均在 ±0.002 ms 以内，未观察到明显退化。release 构建中解释器初始化约 2.1 ms，预热后单次事件中位 0.17 ms、P95 0.32 ms（VM 内执行，不含进程创建与 IPC，可用 `cargo run -p nanatype-plugins --release --example plugin_perf` 复测）。macOS 构建与签名尚未验证。
 
 后续编辑器、自定义数据、声明式 Shader 管线及平台加固按[分阶段计划](package-roadmap.md)跟踪；未完成阶段不视为当前可用接口。

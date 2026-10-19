@@ -1,9 +1,12 @@
 //! Exercise the real GPU proxy, including asynchronous compilation, masking,
 //! texture decoding, dynamic settings and unchanged static fallback.
+
+mod common;
+
+use nana_ui::runtime::Stack;
 use nana_ui::runtime::view::widget;
-use nana_ui::runtime::{DocumentId, RuntimeDocument, Stack};
 use nana_ui_core::{LengthSpec, PositionSpec};
-use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
+use nana_ui_devtools::agent::AgentSession;
 use nanatype::{
     clock,
     ui::{Ui, dialogue::Source, shader_effects, surface::Surface, sweep},
@@ -54,22 +57,17 @@ fn gpu_proxy_samples_masks_and_disables_without_mutating_the_scene() {
             ShaderTarget::Background,
         )
         .unwrap();
-        let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
-        doc.context_mut()
-            .mount_view_root(id, move || {
-                widget(Stack::column(0.).padding(10.)).children(
-                    widget(
-                        Stack::row(0.)
-                            .width(LengthSpec::Px(160.))
-                            .height(LengthSpec::Px(80.))
-                            .with_layout(|l| l.position = PositionSpec::Relative),
-                    )
-                    .children(effect),
+        let mut session = common::session().mount(180, 100, move || {
+            widget(Stack::column(0.).padding(10.)).children(
+                widget(
+                    Stack::row(0.)
+                        .width(LengthSpec::Px(160.))
+                        .height(LengthSpec::Px(80.))
+                        .with_layout(|l| l.position = PositionSpec::Relative),
                 )
-            })
-            .unwrap();
-        let mut session = RuntimeAgentSession::new(doc, 180, 100).unwrap();
+                .children(effect),
+            )
+        });
         session.set_gpu_renderers(sweep::renderers());
         session.set_clear(Some([0.; 4]));
         let _ = session.screenshot_rgba().unwrap();
@@ -128,19 +126,15 @@ fn gpu_proxy_samples_masks_and_disables_without_mutating_the_scene() {
             ShaderTarget::Artwork,
         )
         .unwrap();
-        let mut doc = RuntimeDocument::new(id);
-        doc.context_mut()
-            .mount_view_root(id, move || {
-                widget(
-                    Stack::column(0.)
-                        .width(LengthSpec::Px(180.))
-                        .height(LengthSpec::Px(100.))
-                        .with_layout(|l| l.position = PositionSpec::Relative),
-                )
-                .children(artwork)
-            })
-            .unwrap();
-        let mut session = RuntimeAgentSession::new(doc, 180, 100).unwrap();
+        let mut session = common::session().mount(180, 100, move || {
+            widget(
+                Stack::column(0.)
+                    .width(LengthSpec::Px(180.))
+                    .height(LengthSpec::Px(100.))
+                    .with_layout(|l| l.position = PositionSpec::Relative),
+            )
+            .children(artwork)
+        });
         session.set_gpu_renderers(sweep::renderers());
         session.set_clear(Some([0.; 4]));
         let _ = session.screenshot_rgba().unwrap();
@@ -205,11 +199,9 @@ fn gpu_proxy_samples_masks_and_disables_without_mutating_the_scene() {
             ShaderTarget::Background,
         )
         .unwrap();
-        let mut doc = RuntimeDocument::new(id);
-        doc.context_mut()
-            .mount_view_root(id, move || widget(Stack::fill_column(0.)).children(effect))
-            .unwrap();
-        let mut session = RuntimeAgentSession::new_scaled(doc, 180, 100, 1.5).unwrap();
+        let mut session = common::session().scale(1.5).mount(180, 100, move || {
+            widget(Stack::fill_column(0.)).children(effect)
+        });
         session.set_gpu_renderers(sweep::renderers());
         session.set_clear(Some([0.; 4]));
         let _ = session.screenshot_rgba().unwrap();

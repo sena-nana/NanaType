@@ -1,23 +1,29 @@
 //! Real GPU coverage for transparent vector frames, tails and retained caches.
+
+mod common;
+
+use nana_ui::runtime::Stack;
 use nana_ui::runtime::view::{signal, widget};
-use nana_ui::runtime::{DocumentId, RuntimeDocument, Stack};
 use nana_ui_core::LengthSpec;
-use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
+use nana_ui_devtools::agent::AgentSession;
 use nanatype::ui::surface::{Surface, gradient};
 use nanatype_model::Rgba8;
-use nanatype_theme::{ContourPreset, GradientSpec, SkinRegistry};
+use nanatype_theme::{ContourPreset, GradientSpec};
 use std::sync::Arc;
 
+/// The pixel at logical `(x, y)` of a capture taken at `scale`.
 fn pixel(pixels: &[u8], width: u32, x: f32, y: f32, scale: f32) -> [u8; 4] {
-    let x = (x * scale).floor() as usize;
-    let y = (y * scale).floor() as usize;
-    pixels[(y * width as usize + x) * 4..(y * width as usize + x) * 4 + 4]
-        .try_into()
-        .unwrap()
+    common::pixel(
+        pixels,
+        width,
+        (x * scale).floor() as u32,
+        (y * scale).floor() as u32,
+    )
 }
+
 #[test]
 fn vector_alpha_tail_and_same_node_palette_updates_survive_dpi_changes() {
-    let registry = SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+    let registry = common::registry();
     let skin = registry.load("nanatype.bubble").unwrap().skin;
     for scale in [1.0, 1.5, 2.0] {
         let mut frame = Surface::dialogue_box(&skin, None);
@@ -25,13 +31,10 @@ fn vector_alpha_tail_and_same_node_palette_updates_survive_dpi_changes() {
         frame.contour = Some(ContourPreset::Cloud);
         assert!(frame.integrates_tail());
         let current = signal(Arc::new(frame.clone()));
-        let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
-        doc.context_mut()
-            .set_theme_tokens(nanatype::skin_theme::compile(false))
-            .unwrap();
-        doc.context_mut()
-            .mount_view_root(id, move || {
+        let mut session = common::session()
+            .themed(false)
+            .scale(scale)
+            .mount(368, 200, move || {
                 widget(Stack::column(0.0).padding(24.0)).children(
                     widget(
                         Stack::row(0.0)
@@ -44,9 +47,7 @@ fn vector_alpha_tail_and_same_node_palette_updates_survive_dpi_changes() {
                         *node = surface.stack(previous);
                     }),
                 )
-            })
-            .unwrap();
-        let mut session = RuntimeAgentSession::new_scaled(doc, 368, 200, scale).unwrap();
+            });
         session.set_clear(Some([0.0; 4]));
         let (size, first) = session.screenshot_rgba().unwrap();
         assert_eq!(size.width, (368.0 * scale) as u32);

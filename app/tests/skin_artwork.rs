@@ -1,8 +1,11 @@
 //! Embedded and inherited image decorations must render through the allowed base.
+
+mod common;
+
+use nana_ui::runtime::Stack;
 use nana_ui::runtime::view::widget;
-use nana_ui::runtime::{DocumentId, RuntimeDocument, Stack};
 use nana_ui_core::LengthSpec;
-use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
+use nana_ui_devtools::agent::AgentSession;
 use nanatype::ui::surface::Surface;
 use nanatype_theme::{Localized, SkinRegistry, TomlTable};
 
@@ -60,20 +63,15 @@ fn scanned_ink_loads_from_embedded_and_inherited_skin_files() {
             .cloned(),
     );
     assert!(!surface.is_vector());
-    let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
-    doc.context_mut()
-        .mount_view_root(id, move || {
-            widget(Stack::row(0.0).padding(10.0)).children(widget(
-                surface.stack(
-                    Stack::row(0.0)
-                        .width(LengthSpec::Px(180.0))
-                        .height(LengthSpec::Px(160.0)),
-                ),
-            ))
-        })
-        .unwrap();
-    let mut session = RuntimeAgentSession::new(doc, 200, 180).unwrap();
+    let mut session = common::session().mount(200, 180, move || {
+        widget(Stack::row(0.0).padding(10.0)).children(widget(
+            surface.stack(
+                Stack::row(0.0)
+                    .width(LengthSpec::Px(180.0))
+                    .height(LengthSpec::Px(160.0)),
+            ),
+        ))
+    });
     session.set_clear(Some([0.0; 4]));
     let (_, rgba) = session.screenshot_rgba().unwrap();
     let pixels = rgba.as_chunks::<4>().0;

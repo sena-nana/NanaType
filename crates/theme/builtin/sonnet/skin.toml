@@ -6,16 +6,8 @@ text = "#fff8ea"
 
 [dialogue]
 overscan = 16.0
-padding = [
-    36.0,
-    48.0,
-    36.0,
-    28.0,
-]
-region = [
-    960.0,
-    190.0,
-]
+padding = [36.0, 48.0, 36.0, 28.0]
+region = [960.0, 190.0]
 
 [dialogue.box]
 border_color = "#cbe0ef"
@@ -31,52 +23,13 @@ border_width = 0.0
 color = "#e5bf83cc"
 font = "accent"
 layer = "above"
-offset = [
-    17.0,
-    16.0,
-]
+offset = [17.0, 16.0]
 opacity = 1.0
-polygon = [
-    [
-    50.0,
-    0.0,
-],
-    [
-    60.0,
-    40.0,
-],
-    [
-    100.0,
-    50.0,
-],
-    [
-    60.0,
-    60.0,
-],
-    [
-    50.0,
-    100.0,
-],
-    [
-    40.0,
-    60.0,
-],
-    [
-    0.0,
-    50.0,
-],
-    [
-    40.0,
-    40.0,
-],
-]
+polygon = [[50.0, 0.0], [60.0, 40.0], [100.0, 50.0], [60.0, 60.0], [50.0, 100.0], [40.0, 60.0], [0.0, 50.0], [40.0, 40.0]]
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    9.0,
-    9.0,
-]
+size = [9.0, 9.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -89,33 +42,21 @@ border_width = 0.0
 color = "#e5bf8366"
 font = "accent"
 layer = "above"
-offset = [
-    -32.0,
-    25.0,
-]
+offset = [-32.0, 25.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    100.0,
-    1.0,
-]
+size = [100.0, 1.0]
 text = ""
 text_color = "text"
 text_size = 16.0
 when = "always"
 
 [dialogue.nameplate]
-offset = [
-    36.0,
-    12.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
+offset = [36.0, 12.0]
+padding = [0.0, 0.0]
 radius = 10.0
 text_color = "#e5bf83"
 
@@ -126,12 +67,7 @@ width = 0.6000000238418579
 [dialogue.responsive.landscape]
 
 [dialogue.responsive.portrait]
-padding = [
-    24.0,
-    50.0,
-    24.0,
-    36.0,
-]
+padding = [24.0, 50.0, 24.0, 36.0]
 
 [[dialogue.responsive.portrait.decor]]
 anchor = "bottom_left"
@@ -141,52 +77,13 @@ border_width = 0.0
 color = "#e5bf83cc"
 font = "accent"
 layer = "above"
-offset = [
-    17.0,
-    -20.0,
-]
+offset = [17.0, -20.0]
 opacity = 1.0
-polygon = [
-    [
-    50.0,
-    0.0,
-],
-    [
-    60.0,
-    40.0,
-],
-    [
-    100.0,
-    50.0,
-],
-    [
-    60.0,
-    60.0,
-],
-    [
-    50.0,
-    100.0,
-],
-    [
-    40.0,
-    60.0,
-],
-    [
-    0.0,
-    50.0,
-],
-    [
-    40.0,
-    40.0,
-],
-]
+polygon = [[50.0, 0.0], [60.0, 40.0], [100.0, 50.0], [60.0, 60.0], [50.0, 100.0], [40.0, 60.0], [0.0, 50.0], [40.0, 40.0]]
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    9.0,
-    9.0,
-]
+size = [9.0, 9.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -199,19 +96,13 @@ border_width = 0.0
 color = "#e5bf8366"
 font = "accent"
 layer = "above"
-offset = [
-    -32.0,
-    -25.0,
-]
+offset = [-32.0, -25.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    100.0,
-    1.0,
-]
+size = [100.0, 1.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -219,27 +110,7 @@ when = "always"
 
 [dialogue.responsive.portrait.nameplate]
 anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
-color = "#00000000"
-offset = [
-    -18.0,
-    14.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
-radius = 10.0
-rotate = 0.0
-shadows = []
-size = 18.0
-text_color = "#e5bf83"
-visible = true
-
-[dialogue.responsive.portrait.nameplate.stroke]
-color = "#211b2580"
-width = 0.6000000238418579
+offset = [-18.0, 14.0]
 
 [[dialogue.responsive.rules]]
 max_height = 8192.0
@@ -247,12 +118,7 @@ max_width = 600.0
 portrait = false
 
 [dialogue.responsive.rules.layout]
-padding = [
-    18.0,
-    42.0,
-    18.0,
-    22.0,
-]
+padding = [18.0, 42.0, 18.0, 22.0]
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "top_left"
@@ -261,56 +127,14 @@ border_width = 0.0
 color = "#e5bf83cc"
 font = "accent"
 layer = "above"
-min_window = [
-    200.0,
-    140.0,
-]
-offset = [
-    17.0,
-    16.0,
-]
+min_window = [200.0, 140.0]
+offset = [17.0, 16.0]
 opacity = 1.0
-polygon = [
-    [
-    50.0,
-    0.0,
-],
-    [
-    60.0,
-    40.0,
-],
-    [
-    100.0,
-    50.0,
-],
-    [
-    60.0,
-    60.0,
-],
-    [
-    50.0,
-    100.0,
-],
-    [
-    40.0,
-    60.0,
-],
-    [
-    0.0,
-    50.0,
-],
-    [
-    40.0,
-    40.0,
-],
-]
+polygon = [[50.0, 0.0], [60.0, 40.0], [100.0, 50.0], [60.0, 60.0], [50.0, 100.0], [40.0, 60.0], [0.0, 50.0], [40.0, 40.0]]
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    9.0,
-    9.0,
-]
+size = [9.0, 9.0]
 text = ""
 text_color = "text"
 text_size = 16.0
@@ -323,55 +147,23 @@ border_width = 0.0
 color = "#e5bf8366"
 font = "accent"
 layer = "above"
-max_fraction = [
-    0.30000001192092896,
-    1.0,
-]
-min_window = [
-    240.0,
-    140.0,
-]
-offset = [
-    -32.0,
-    25.0,
-]
+max_fraction = [0.30000001192092896, 1.0]
+min_window = [240.0, 140.0]
+offset = [-32.0, 25.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
 rotate = 0.0
 shadows = []
-size = [
-    100.0,
-    1.0,
-]
+size = [100.0, 1.0]
 text = ""
 text_color = "text"
 text_size = 16.0
 when = "always"
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
-color = "#00000000"
-offset = [
-    36.0,
-    10.0,
-]
-padding = [
-    0.0,
-    0.0,
-]
-radius = 10.0
-rotate = 0.0
-shadows = []
+offset = [36.0, 10.0]
 size = 17.0
-text_color = "#e5bf83"
-visible = true
-
-[dialogue.responsive.rules.layout.nameplate.stroke]
-color = "#211b2580"
-width = 0.6000000238418579
 
 [[dialogue.responsive.rules]]
 max_height = 140.0
@@ -379,30 +171,13 @@ max_width = 200.0
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [
-    12.0,
-    14.0,
-    12.0,
-    14.0,
-]
+padding = [12.0, 14.0, 12.0, 14.0]
+unset = ["nameplate.stroke"]
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
 color = "#0876d0"
-offset = [
-    16.0,
-    -12.0,
-]
-padding = [
-    10.0,
-    4.0,
-]
-radius = 10.0
-rotate = 0.0
-shadows = []
-size = 18.0
+offset = [16.0, -12.0]
+padding = [10.0, 4.0]
 text_color = "#ffffff"
 visible = false
 
@@ -437,37 +212,22 @@ color = "#29222b99"
 width = 0.800000011920929
 
 [fonts.body]
-families = [
-    "LXGW WenKai",
-    "KaiTi",
-    "Noto Sans SC",
-]
+families = ["LXGW WenKai", "KaiTi", "Noto Sans SC"]
 file = "builtin:fonts/LXGWWenKai-Regular.ttf"
 weight = 400
 
 [fonts.latin]
-families = [
-    "Tangerine",
-    "Segoe Script",
-    "Noto Sans SC",
-]
+families = ["Tangerine", "Segoe Script", "Noto Sans SC"]
 file = "builtin:fonts/Tangerine-Bold.ttf"
 weight = 700
 
 [fonts.name]
-families = [
-    "LXGW WenKai",
-    "KaiTi",
-    "Noto Sans SC",
-]
+families = ["LXGW WenKai", "KaiTi", "Noto Sans SC"]
 file = "builtin:fonts/LXGWWenKai-Regular.ttf"
 weight = 400
 
 [history]
-bubble_padding = [
-    12.0,
-    10.0,
-]
+bubble_padding = [12.0, 10.0]
 entrance = "slide_up"
 name_color = "#e5bf83"
 name_weight = 400

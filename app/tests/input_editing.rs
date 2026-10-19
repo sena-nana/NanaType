@@ -1,5 +1,6 @@
-use nana_ui::runtime::{DocumentId, RuntimeDocument};
-use nana_ui_devtools::agent::RuntimeAgentSession;
+mod common;
+
+use nana_ui::runtime::DocumentId;
 use nana_ui_platform::InputModifiers;
 use nanatype::ui::{Ui, input};
 use nanatype_i18n::Locale;
@@ -9,7 +10,7 @@ use std::sync::Arc;
 
 #[test]
 fn both_editors_keep_a_bounded_scrollable_viewport_across_skin_scale_and_mode_changes() {
-    let registry = nanatype_theme::SkinRegistry::new(None, "1.0.0");
+    let registry = common::registry();
     let mut cases = 0;
     for entry in registry.entries() {
         let skin_id = &entry.id;
@@ -36,17 +37,10 @@ fn both_editors_keep_a_bounded_scrollable_viewport_across_skin_scale_and_mode_ch
                 revision: 0,
             });
             let id = DocumentId::new(1).unwrap();
-            let mut document = RuntimeDocument::new(id);
-            document
-                .context_mut()
-                .set_theme_tokens(nanatype::skin_theme::compile(dark))
-                .unwrap();
-            let (_, (editor, source, _)) = document
-                .context_mut()
-                .mount_view_root(id, move || input::input_window(ui))
-                .unwrap();
-            let mut session =
-                RuntimeAgentSession::new_scaled(document, client_width, height, scale).unwrap();
+            let (mut session, (_, (editor, source, _))) = common::session()
+                .themed(dark)
+                .scale(scale)
+                .mount_output(client_width, height, move || input::input_window(ui));
             for source_mode in [false, true, false] {
                 ui.source_mode.set(source_mode);
                 session.flush().unwrap();
@@ -157,22 +151,12 @@ fn both_editors_keep_a_bounded_scrollable_viewport_across_skin_scale_and_mode_ch
 fn editor_menu_localizes_commands_clamps_to_the_window_and_accepts_keyboard_selection() {
     use nana_ui::runtime::{ContextMenuEvent, LayoutBox};
     for locale in [Locale::ZhCn, Locale::EnUs, Locale::JaJp] {
-        let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-            .load("nanatype.halo")
-            .unwrap()
-            .skin;
+        let skin = common::skin("nanatype.halo");
         let ui = Ui::new(Arc::new(Settings::default()), skin, locale);
         let id = DocumentId::new(1).unwrap();
-        let mut document = RuntimeDocument::new(id);
-        document
-            .context_mut()
-            .set_theme_tokens(nanatype::skin_theme::compile(false))
-            .unwrap();
-        document
-            .context_mut()
-            .mount_view_root(id, move || input::input_window(ui))
-            .unwrap();
-        let mut session = RuntimeAgentSession::new(document, 796, 380).unwrap();
+        let mut session = common::session()
+            .themed(false)
+            .mount(796, 380, move || input::input_window(ui));
         let mut menu =
             input::editor_context_menu(ui, 780.0, 370.0, [false, false, true, true, true, true]);
         menu.highlighted = Some(2);

@@ -168,9 +168,114 @@ pub fn deep_merge(base: &mut Table, over: &Table) {
     }
 }
 
-/// A self-contained manifest with contextual defaults omitted. Only use this
-/// on a resolved skin: removing defaults from a partial child would change
-/// inheritance (in particular explicit empty arrays).
+/// The specs a responsive layout overrides field by field.
+const LAYOUT_SPECS: [&str; 4] = ["box", "nameplate", "portrait", "continue"];
+
+/// Every layout table under `dialogue.responsive`.
+fn responsive_layouts(dialogue: &mut Table) -> Vec<&mut Table> {
+    let Some(Value::Table(responsive)) = dialogue.get_mut("responsive") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (key, value) in responsive.iter_mut() {
+        match (key.as_str(), value) {
+            ("landscape" | "portrait", Value::Table(layout)) => out.push(layout),
+            ("rules", Value::Array(rules)) => out.extend(rules.iter_mut().filter_map(|rule| {
+                match rule.as_table_mut()?.get_mut("layout")? {
+                    Value::Table(layout) => Some(layout),
+                    _ => None,
+                }
+            })),
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Responsive layouts are partial: each spec a layout names becomes the base
+/// dialogue's spec with the layout's fields deep-merged in (arrays replace),
+/// then the dotted `unset` paths are removed. Afterwards every layout holds
+/// complete specs, as if written out in full, and `unset` is gone.
+fn expand_responsive(merged: &mut Table, out: &mut Vec<SkinDiagnostic>) {
+    let Some(Value::Table(dialogue)) = merged.get_mut("dialogue") else {
+        return;
+    };
+    let base = dialogue.clone();
+    for layout in responsive_layouts(dialogue) {
+        let unset: Vec<String> = match layout.remove("unset").map(Value::try_into).transpose() {
+            Ok(unset) => unset.unwrap_or_default(),
+            Err(_) => {
+                out.push(SkinDiagnostic::error(
+                    "dialogue.responsive.unset",
+                    "must be a list of dotted field paths",
+                ));
+                continue;
+            }
+        };
+        for key in LAYOUT_SPECS {
+            if let (Some(Value::Table(over)), Some(Value::Table(spec))) =
+                (layout.get(key), base.get(key))
+            {
+                let mut spec = spec.clone();
+                deep_merge(&mut spec, over);
+                layout.insert(key.into(), Value::Table(spec));
+            }
+        }
+        for path in unset {
+            let (parents, last) = path.rsplit_once('.').unwrap_or(("", &path));
+            let table = parents
+                .split('.')
+                .filter(|p| !p.is_empty())
+                .try_fold(&mut *layout, |t, p| t.get_mut(p)?.as_table_mut());
+            if table.and_then(|t| t.remove(last)).is_none() {
+                out.push(SkinDiagnostic::warning(
+                    "dialogue.responsive.unset",
+                    format!("`{path}` names no field of this layout"),
+                ));
+            }
+        }
+    }
+}
+
+/// Inverse of [`expand_responsive`]: reduce each layout's specs to the fields
+/// that differ from the base dialogue, listing dropped ones under `unset`.
+/// Spec keys stay even when empty: naming a spec resets it to the base over
+/// whatever an earlier matching layout set.
+fn prune_responsive(dialogue: &mut Table) {
+    fn diff(over: &mut Table, base: &Table, path: &str, unset: &mut Vec<Value>) {
+        for key in base.keys().filter(|k| !over.contains_key(*k)) {
+            unset.push(Value::String(format!("{path}.{key}")));
+        }
+        over.retain(|key, value| match (value, base.get(key)) {
+            (value, Some(b)) if value == b => false,
+            (Value::Table(t), Some(Value::Table(b))) => {
+                diff(t, b, &format!("{path}.{key}"), unset);
+                !t.is_empty()
+            }
+            _ => true,
+        });
+    }
+    let base = dialogue.clone();
+    for layout in responsive_layouts(dialogue) {
+        let mut unset = Vec::new();
+        for key in LAYOUT_SPECS {
+            if let (Some(Value::Table(over)), Some(Value::Table(spec))) =
+                (layout.get_mut(key), base.get(key))
+            {
+                diff(over, spec, key, &mut unset);
+            }
+        }
+        if !unset.is_empty() {
+            layout.insert("unset".into(), Value::Array(unset));
+        }
+    }
+}
+
+/// A self-contained manifest with contextual defaults omitted and responsive
+/// layouts reduced to their differences; `toml::to_string` writes it with
+/// short arrays on one line. Only use this on a resolved skin:
+/// removing defaults from a partial child would change inheritance (in
+/// particular explicit empty arrays).
 pub fn standalone_manifest(skin: &Skin) -> Result<Table, toml::ser::Error> {
     fn prune(table: &mut Table, defaults: &Table) {
         table.retain(|key, value| {
@@ -192,6 +297,9 @@ pub fn standalone_manifest(skin: &Skin) -> Result<Table, toml::ser::Error> {
     let Value::Table(mut table) = Value::try_from(resolved)? else {
         unreachable!()
     };
+    if let Some(Value::Table(dialogue)) = table.get_mut("dialogue") {
+        prune_responsive(dialogue);
+    }
     prune(&mut table, &DEFAULT_TABLE);
     Ok(table)
 }
@@ -328,6 +436,7 @@ fn load_impl(
         }
     }
 
+    expand_responsive(&mut merged, &mut diagnostics);
     let mut skin: Skin = match Value::Table(merged).try_into() {
         Ok(skin) => skin,
         Err(e) => {
@@ -338,6 +447,12 @@ fn load_impl(
         }
     };
     if let Ok(Value::Table(known)) = Value::try_from(&skin) {
+        let mut raw = raw.clone();
+        if let Some(Value::Table(dialogue)) = raw.get_mut("dialogue") {
+            for layout in responsive_layouts(dialogue) {
+                layout.remove("unset");
+            }
+        }
         unknown_keys(&raw, &known, "", &mut diagnostics);
     }
 

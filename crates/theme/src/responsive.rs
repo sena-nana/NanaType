@@ -228,6 +228,64 @@ mod tests {
         }
     }
 
+    /// The sizes that exercise every rule of `skin`: common shapes plus each
+    /// rule's boundary and the first size past it on either axis.
+    fn probe_sizes(skin: &Skin) -> Vec<[f32; 2]> {
+        let mut sizes = vec![
+            [1920., 1080.],
+            [920., 220.],
+            [600., 600.],
+            [400., 400.],
+            [400., 401.],
+            [240., 700.],
+            [300., 1200.],
+            [800., 2400.],
+            [160., 96.],
+            [1200., 120.],
+            [8192., 8192.],
+        ];
+        for rule in skin.dialogue.responsive.iter().flat_map(|r| &r.rules) {
+            let [w, h] = [rule.max_width, rule.max_height];
+            for size in [[w, h], [w + 1., h], [w, h + 1.], [w, w + 1.], [h + 1., h]] {
+                let size = size.map(|v| v.clamp(1., 8192.));
+                if !sizes.contains(&size) {
+                    sizes.push(size);
+                }
+            }
+        }
+        sizes
+    }
+
+    /// Guards the manifest format, not the designs: regenerating or reformatting
+    /// the built-in skins must not change what any of them resolves to. After an
+    /// intentional design change run with `NANATYPE_BLESS=1` to rewrite it.
+    #[test]
+    fn builtin_responsive_layouts_resolve_to_the_recorded_dialogues() {
+        let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/src/responsive_baseline.txt");
+        let registry = SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let mut actual = String::new();
+        for entry in registry.entries() {
+            let skin = registry.load(&entry.id).unwrap().skin;
+            let mut hasher = blake3::Hasher::new();
+            for size in probe_sizes(&skin) {
+                let mut dialogue = responsive_dialogue(&skin, size).dialogue;
+                dialogue.responsive = None;
+                hasher.update(format!("{size:?}\n").as_bytes());
+                hasher.update(toml::to_string(&dialogue).unwrap().as_bytes());
+            }
+            let hash = hasher.finalize().to_hex();
+            actual.push_str(&format!("{} {}\n", entry.id, &hash[..16]));
+        }
+        if std::env::var_os("NANATYPE_BLESS").is_some() {
+            std::fs::write(fixture, &actual).unwrap();
+        }
+        let expected = std::fs::read_to_string(fixture).unwrap_or_default();
+        assert_eq!(
+            actual, expected,
+            "a built-in skin resolves differently; NANATYPE_BLESS=1 after a deliberate change"
+        );
+    }
+
     #[test]
     fn legacy_skins_are_unchanged_and_layout_rules_are_ordered() {
         let mut skin = Skin::default();

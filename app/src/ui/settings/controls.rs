@@ -25,6 +25,7 @@ use crate::ui::{I18N, LinkState, Status, Ui};
 pub static ICON_PNG_B64: LazyLock<String> =
     LazyLock::new(|| base64(include_bytes!("../../../assets/tray-64.png")));
 
+/// Standard, padded base64 (for `data:` URLs).
 pub fn base64(bytes: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);

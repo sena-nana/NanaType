@@ -1,6 +1,6 @@
 # 情书
 
-[导入皮肤包](examples/love-letter.ntpkg) · [实际书写与消融动效](love-letter-motion.webp) · [窄窗、竖版及历史记录对照](love-letter-layouts.png)
+[皮肤源目录](../crates/theme/builtin/love_letter) · [实际书写与消融动效](love-letter-motion.webp) · [窄窗、竖版及历史记录对照](love-letter-layouts.png)
 
 ![情书实际渲染](love-letter-preview.png)
 
@@ -11,7 +11,7 @@
 数据来自 [Make Me a Hanzi](https://github.com/skishore/makemeahanzi)，固定提交 `bddc96d41bef78427ed0e034e9f7e31d71fd1b92`，取 `graphics.txt` 与 GB2312 汉字范围的交集，共 6,763 字。保留上游笔画顺序、轮廓与中心线，采用字符索引、坐标差分变长编码和每 64 字独立 zlib 压缩，不分发字典数据。用标准库 Python 重建：
 
 ```powershell
-python scripts/build-love-letter-data.py
+python scripts/assets/build-love-letter-data.py
 ```
 
 精简数据、来源哈希、修改声明、原始 COPYING 与完整文鼎 APL 随皮肤分发；字体及其对应 OFL 亦在皮肤包内。导出的 `.ntpkg` 不需要原目录、另装字体或运行时网络访问。设计授权只覆盖原创设计，各项资源继续使用各自授权。
@@ -52,7 +52,8 @@ cargo test -p nanatype-theme handwriting
 cargo test -p nanatype --test love_letter -- --test-threads=1
 $env:NANATYPE_LOVE_LETTER_CAPTURES='target/love-letter/captures'
 cargo test -p nanatype --test love_letter -- --test-threads=1
-python scripts/render-love-letter-preview.py target/love-letter/captures target/love-letter
 ```
+
+第二次运行会把实际 GPU 捕获帧写入 `NANATYPE_LOVE_LETTER_CAPTURES` 指定的目录，供人工检查。
 
 导出测试可通过 `NANATYPE_LOVE_LETTER_EXPORT` 指定保留 `.ntpkg` 的路径。全皮肤回归沿用 `snapshots` 与 `chat_parity` 的默认宽度、300px 窄窗及历史记录检查。

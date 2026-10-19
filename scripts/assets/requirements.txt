@@ -1,0 +1,4 @@
+# The Python asset scripts in this folder use only the standard library
+# (Python 3.9+); there are no third-party packages to install.
+# build-love-letter-data.py downloads its source data over HTTPS at a pinned
+# upstream commit; the others work offline.

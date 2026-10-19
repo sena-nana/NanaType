@@ -1,6 +1,8 @@
+mod common;
+
 use std::sync::Arc;
 
-use nana_ui::runtime::{DocumentId, RuntimeDocument, StableNodeId};
+use nana_ui::runtime::StableNodeId;
 use nana_ui_core::PointerEventsSpec;
 use nana_ui_devtools::agent::{AccessibilityDumpNode, RuntimeAgentSession};
 use nanatype::{
@@ -42,10 +44,7 @@ fn panel(
     width: u32,
     count: u64,
 ) -> (Ui, RuntimeAgentSession) {
-    let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-        .load(skin_id)
-        .unwrap()
-        .skin;
+    let skin = common::skin(skin_id);
     let mut settings = Settings::default();
     settings.integrations.bilibili.panel_style = style;
     // History output policies must not hide the operator's feed.
@@ -58,15 +57,9 @@ fn panel(
     status.bilibili = "Bilibili · 21452505".into();
     ui.status.set(Arc::new(status));
     ui.chat.set(Arc::new((1..=count).map(message).collect()));
-    let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
-    doc.context_mut()
-        .set_theme_tokens(nanatype::skin_theme::compile(false))
-        .unwrap();
-    doc.context_mut()
-        .mount_view_root(id, move || danmaku::chat_window(ui))
-        .unwrap();
-    let mut session = RuntimeAgentSession::new(doc, width, 450).unwrap();
+    let mut session = common::session()
+        .themed(false)
+        .mount(width, 450, move || danmaku::chat_window(ui));
     session.flush().unwrap();
     (ui, session)
 }
@@ -402,21 +395,12 @@ fn general_settings_keep_their_style_when_the_skin_changes() {
     config.general.onboarding_done = true;
     let ui = Ui::new(
         Arc::new(config),
-        nanatype_theme::SkinRegistry::new(None, "1.0.0")
-            .load("nanatype.halo")
-            .unwrap()
-            .skin,
+        common::skin("nanatype.halo"),
         Locale::ZhCn,
     );
-    let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
-    doc.context_mut()
-        .set_theme_tokens(nanatype::skin_theme::compile(false))
-        .unwrap();
-    doc.context_mut()
-        .mount_view_root(id, move || settings::settings_window(ui))
-        .unwrap();
-    let mut session = RuntimeAgentSession::new(doc, 920, 660).unwrap();
+    let mut session = common::session()
+        .themed(false)
+        .mount(920, 660, move || settings::settings_window(ui));
     session.flush().unwrap();
     assert!(has_label(&session, &ui.now_t("general-appearance")));
     for dark in [false, true] {
@@ -435,7 +419,7 @@ fn general_settings_keep_their_style_when_the_skin_changes() {
 }
 
 fn assert_skin_independent(ui: Ui, session: &mut RuntimeAgentSession) {
-    let registry = nanatype_theme::SkinRegistry::new(None, "1.0.0");
+    let registry = common::registry();
     let before = styles(session);
     for skin in [
         "nanatype.night",

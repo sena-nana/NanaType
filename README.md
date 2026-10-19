@@ -74,6 +74,8 @@
 - **窗口捕获**：*Window Capture*，捕获方式选 *Windows 10 (1903 and up)*。
 - **Syphon**（macOS）：设置 › 输出 / OBS 打开 Syphon 输出。OBS 中添加 *Syphon Client*，选择发送端名称（默认 `NanaType Display` / `NanaType Partner` / `NanaType History`），合成模式选 *Premultiplied Alpha*。也可以用 *macOS Screen Capture* 捕获展示框窗口。Spout2 仅 Windows。
 
+关闭输出 5 秒内重开会复用原发送端，OBS 画面恢复中位约 15–30 ms；发送端生命周期与真实 OBS 实测见 [OBS / Spout 输出](docs/obs-spout.md)。
+
 ## 台词标记
 
 台词以 BBCode 风格的标记保存：源码模式、快捷短语和模板都用它。完整说明见 [docs/markup.md](docs/markup.md)。
@@ -122,7 +124,7 @@ cargo run -p nanatype
 
 发布默认使用 `dist`：`opt-level = "s"`、thin LTO、单 codegen unit，并单独生成 PDB。`dist-small` 使用 `z`，保留相同功能；[性能对比](docs/release-profile-performance.md)显示其便携包再缩小约 2 MiB，但关键场景 CPU 耗时增加约 16%～27%，因此保持可选。
 
-[混合优化实验](docs/release-profile-hybrid.md)仅再缩小约 178 KiB（0.49%），部分 P95 增加，实窗／Spout 尚待验证；配置作为实验资料保存，默认仍用纯 `s`。
+[S/Z 混合实验](docs/release-profile-performance.md#sz-混合实验)仅再缩小约 178 KiB（0.49%），部分 P95 增加，因此默认仍用纯 `s`。
 
 日常检查可用 `cargo check -p nanatype` 避免链接，`cargo build -p nanatype --timings` 查看编译耗时。
 

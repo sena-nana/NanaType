@@ -1,39 +1,19 @@
-use nana_ui::runtime::{DocumentId, RuntimeDocument};
-use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
-use nanatype::{
-    clock,
-    ui::{Ui, dialogue, handwriting, sweep},
-};
+mod common;
+
+use nana_ui_devtools::agent::AgentSession;
+use nanatype::ui::{Ui, dialogue, handwriting, sweep};
 use nanatype_core::{Cmd, Core};
 use nanatype_i18n::Locale;
 use nanatype_settings::Settings;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
-fn frame(session: &mut RuntimeAgentSession, ui: Ui, now: u64, elapsed: u64, name: &str) -> Vec<u8> {
-    ui.now.set(now);
-    session
-        .document_mut()
-        .sync_presentation_clock(Duration::from_millis(elapsed));
-    clock::capture_at(now, || {
-        let (size, rgba) = session.screenshot_rgba().unwrap();
-        if let Ok(dir) = std::env::var("NANATYPE_LOVE_LETTER_CAPTURES") {
-            std::fs::create_dir_all(&dir).unwrap();
-            image::save_buffer(
-                std::path::Path::new(&dir).join(format!("{name}.png")),
-                &rgba,
-                size.width,
-                size.height,
-                image::ColorType::Rgba8,
-            )
-            .unwrap();
-        }
-        rgba
-    })
-}
+use common::frame;
+
+const CAPTURES: &str = "NANATYPE_LOVE_LETTER_CAPTURES";
 
 #[test]
 fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_together() {
-    let registry = nanatype_theme::SkinRegistry::new(None, "1.0.0");
+    let registry = common::registry();
     let loaded = registry.load("nanatype.love_letter").unwrap();
     let mut fonts = nana_ui::HostFontScope::new();
     let family = fonts
@@ -77,14 +57,8 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
         let base = 100_000;
         core.handle(Cmd::SendMarkup("[speed=90ms]情书写给你，喜欢你的心，永远温柔。\n[b]想念[/b] Love ♡ [color=#A96077]喜欢[/color] 龘🙂[/speed]".into()),base);
         ui.display.set(Arc::new(core.display().clone()));
-        let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
-        clock::capture_at(base, || {
-            doc.context_mut()
-                .mount_view_root(id, move || dialogue::display_window(ui))
-                .unwrap();
-        });
-        let mut session = RuntimeAgentSession::new(doc, width, height).unwrap();
+        let mut session =
+            common::session().mount_at(base, width, height, move || dialogue::display_window(ui));
         session.set_gpu_renderers(sweep::renderers());
         session.set_clear(Some([0.; 4]));
         let times: Vec<_> =
@@ -101,6 +75,7 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
                 base + t,
                 t,
                 &format!("{case}-enter-{t:04}"),
+                CAPTURES,
             );
             if t == 120 {
                 early = pixels;
@@ -112,6 +87,7 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
             base + 4400,
             4400,
             &format!("{case}-stable"),
+            CAPTURES,
         );
         if typing {
             assert_ne!(early, stable, "{case}: no reveal progression");
@@ -144,7 +120,8 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
                 ui,
                 base + 4500,
                 4500,
-                &format!("{case}-stable-later")
+                &format!("{case}-stable-later"),
+                CAPTURES
             )
         );
         assert_eq!(
@@ -171,6 +148,7 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
                 base + 4600 + t,
                 4600 + t,
                 &format!("{case}-exit-{t:03}"),
+                CAPTURES,
             );
             if t == 0 {
                 exit_start = pixels;
@@ -195,6 +173,7 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
             base + 5600,
             5600,
             &format!("{case}-cleared"),
+            CAPTURES,
         );
         assert!(
             !session.document().compositor_needs_tick(),
@@ -210,11 +189,32 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
                 base + 6000,
             );
             ui.display.set(Arc::new(core.display().clone()));
-            frame(&mut session, ui, base + 6000, 6000, "interrupted-start");
-            let before = frame(&mut session, ui, base + 6240, 6240, "interrupted-writing");
+            frame(
+                &mut session,
+                ui,
+                base + 6000,
+                6000,
+                "interrupted-start",
+                CAPTURES,
+            );
+            let before = frame(
+                &mut session,
+                ui,
+                base + 6240,
+                6240,
+                "interrupted-writing",
+                CAPTURES,
+            );
             core.handle(Cmd::ClearDisplay, base + 6240);
             ui.display.set(Arc::new(core.display().clone()));
-            let frozen = frame(&mut session, ui, base + 6240, 6240, "interrupted-frozen");
+            let frozen = frame(
+                &mut session,
+                ui,
+                base + 6240,
+                6240,
+                "interrupted-frozen",
+                CAPTURES,
+            );
             assert_eq!(
                 before, frozen,
                 "clearing unfinished strokes revealed hidden ink"
@@ -222,7 +222,14 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
             let maps = handwriting::map_builds();
             let layout = session.document().context().world().layout_generation();
             ui.text_scroll.set(60.);
-            frame(&mut session, ui, base + 6400, 6400, "interrupted-scrolled");
+            frame(
+                &mut session,
+                ui,
+                base + 6400,
+                6400,
+                "interrupted-scrolled",
+                CAPTURES,
+            );
             assert_eq!(
                 handwriting::map_builds(),
                 maps,
@@ -234,7 +241,14 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
             );
             core.handle(Cmd::Skip, base + 6500);
             ui.display.set(Arc::new(core.display().clone()));
-            frame(&mut session, ui, base + 7200, 7200, "interrupted-cleared");
+            frame(
+                &mut session,
+                ui,
+                base + 7200,
+                7200,
+                "interrupted-cleared",
+                CAPTURES,
+            );
             assert!(!session.document().compositor_needs_tick());
         }
         println!("love_letter {case}: stroke map, stable layout and finite retirement verified");
@@ -243,9 +257,7 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
 
 #[test]
 fn love_letter_preview_and_interrupted_writing_have_finite_clocks() {
-    let loaded = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-        .load("nanatype.love_letter")
-        .unwrap();
+    let loaded = common::registry().load("nanatype.love_letter").unwrap();
     let skin = loaded.skin;
     let mut settings = Settings::default();
     settings.skin.id = skin.meta.id.clone();
@@ -253,29 +265,28 @@ fn love_letter_preview_and_interrupted_writing_have_finite_clocks() {
     ui.shader_preview.set(true);
     ui.page.set(nanatype::ui::settings::Page::Skins);
     let doc = nanatype_markup::parse("情书 喜欢 心 永远 Love").doc;
-    let id = DocumentId::new(1).unwrap();
-    let mut runtime = RuntimeDocument::new(id);
-    clock::capture_at(100_000, || {
-        runtime
-            .context_mut()
-            .mount_view_root(id, move || {
-                dialogue::preview_box(
-                    ui,
-                    dialogue::BoxCtx {
-                        skin: skin.clone(),
-                        urls: Arc::new(Default::default()),
-                        source: dialogue::Source::Preview,
-                        preview_name: "致你".into(),
-                    },
-                    &doc,
-                )
-            })
-            .unwrap();
+    let mut session = common::session().mount_at(100_000, 932, 272, move || {
+        dialogue::preview_box(
+            ui,
+            dialogue::BoxCtx {
+                skin: skin.clone(),
+                urls: Arc::new(Default::default()),
+                source: dialogue::Source::Preview,
+                preview_name: "致你".into(),
+            },
+            &doc,
+        )
     });
-    let mut session = RuntimeAgentSession::new(runtime, 932, 272).unwrap();
     session.set_gpu_renderers(sweep::renderers());
-    frame(&mut session, ui, 100_000, 0, "preview-start");
-    frame(&mut session, ui, 100_200, 200, "preview-writing");
-    frame(&mut session, ui, 106_000, 6000, "preview-finished");
+    frame(&mut session, ui, 100_000, 0, "preview-start", CAPTURES);
+    frame(&mut session, ui, 100_200, 200, "preview-writing", CAPTURES);
+    frame(
+        &mut session,
+        ui,
+        106_000,
+        6000,
+        "preview-finished",
+        CAPTURES,
+    );
     assert!(!session.document().compositor_needs_tick());
 }

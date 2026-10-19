@@ -1,6 +1,7 @@
 //! The two native scenes exported to OBS must never contain the other track.
-use nana_ui::runtime::{DocumentId, RuntimeDocument};
-use nana_ui_devtools::agent::RuntimeAgentSession;
+
+mod common;
+
 use nanatype::{
     p2p::SessionUi,
     ui::{Ui, dialogue},
@@ -15,21 +16,16 @@ fn render(ui: Ui, remote: bool, path: &Path) -> image::RgbaImage {
 }
 
 fn render_at(ui: Ui, remote: bool, path: &Path) -> image::RgbaImage {
-    let id = DocumentId::new(if remote { 6 } else { 2 }).unwrap();
-    let mut doc = RuntimeDocument::new(id);
-    doc.context_mut()
-        .set_theme_tokens(nanatype::skin_theme::compile(false))
-        .unwrap();
-    doc.context_mut()
-        .mount_view_root(id, move || {
+    let mut session = common::session()
+        .id(if remote { 6 } else { 2 })
+        .themed(false)
+        .mount(796, 236, move || {
             if remote {
                 nana_ui::runtime::view::IntoView::into_any(dialogue::peer_window(ui))
             } else {
                 nana_ui::runtime::view::IntoView::into_any(dialogue::display_window(ui))
             }
-        })
-        .unwrap();
-    let mut session = RuntimeAgentSession::new(doc, 796, 236).unwrap();
+        });
     session.screenshot_png(path).unwrap();
     image::open(path).unwrap().into_rgba8()
 }
@@ -42,10 +38,7 @@ fn pixels(img: &image::RgbaImage, color: [u8; 3]) -> usize {
 
 #[test]
 fn separate_scenes_keep_self_and_partner_content_when_roles_change() {
-    let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
-        .load("nanatype.halo")
-        .unwrap()
-        .skin;
+    let skin = common::skin("nanatype.halo");
     let settings = Settings::default();
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
     let mut own = Core::new(settings.clone(), skin.clone());

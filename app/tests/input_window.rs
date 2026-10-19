@@ -1,7 +1,10 @@
 //! Ordinary input chrome around a fixed canvas fitted beside a resizable sidebar.
+
+mod common;
+
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
-use nana_ui::runtime::{DocumentId, RuntimeDocument, StableNodeId};
+use nana_ui::runtime::StableNodeId;
 use nana_ui_devtools::agent::{AccessibilityDumpNode, AgentSession, RuntimeAgentSession};
 use nanatype::ui::{Ui, input, settings};
 use nanatype_i18n::Locale;
@@ -16,7 +19,7 @@ fn preview_settings() -> Settings {
 
 #[test]
 fn plain_text_fills_the_editor_column_across_skin_sidebar_size_and_source_changes() {
-    let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+    let registry = common::registry();
     for (skin_id, dark, scale) in [("nanatype.halo", false, 1.0), ("nanatype.night", true, 2.0)] {
         let mut skin = (*registry.load(skin_id).unwrap().skin).clone();
         skin.dialogue.box_.margin = [100.0; 4];
@@ -26,17 +29,10 @@ fn plain_text_fills_the_editor_column_across_skin_sidebar_size_and_source_change
         let text = "不受皮肤限制 👩‍💻\n".repeat(50);
         ui.draft.set(Arc::new(Document::plain(&text)));
         ui.source.update(|s| s.text = text.clone());
-        let id = DocumentId::new(1).unwrap();
-        let mut document = RuntimeDocument::new(id);
-        document
-            .context_mut()
-            .set_theme_tokens(nanatype::skin_theme::compile(dark))
-            .unwrap();
-        let (_, (editor, source, _)) = document
-            .context_mut()
-            .mount_view_root(id, move || input::input_window(ui))
-            .unwrap();
-        let mut session = RuntimeAgentSession::new_scaled(document, 1200, 640, scale).unwrap();
+        let (mut session, (_, (editor, source, _))) = common::session()
+            .themed(dark)
+            .scale(scale)
+            .mount_output(1200, 640, move || input::input_window(ui));
         for (w, h, sidebar) in [(720, 360, 300.0), (1200, 640, 480.0)] {
             session.set_viewport(w, h, scale).unwrap();
             settle(&mut session);
@@ -233,22 +229,12 @@ fn settle(session: &mut RuntimeAgentSession) {
 #[test]
 fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
     for locale in Locale::ALL {
-        let skin = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"))
-            .load("nanatype.halo")
-            .unwrap()
-            .skin;
+        let skin = common::skin("nanatype.halo");
         let ui = Ui::new(Arc::new(preview_settings()), skin, locale);
-        let id = DocumentId::new(1).unwrap();
-        let mut document = RuntimeDocument::new(id);
-        document
-            .context_mut()
-            .set_theme_tokens(nanatype::skin_theme::compile(false))
-            .unwrap();
-        let (_, (editor, _, _)) = document
-            .context_mut()
-            .mount_view_root(id, move || input::input_window(ui))
-            .unwrap();
-        let mut session = RuntimeAgentSession::new(document, 1200, 640).unwrap();
+        let (mut session, (_, (editor, _, _))) =
+            common::session()
+                .themed(false)
+                .mount_output(1200, 640, move || input::input_window(ui));
         session.flush().unwrap();
         let before = session
             .document()
@@ -383,10 +369,7 @@ fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
 #[test]
 fn dock_inserts_real_stickers_and_disables_them_during_sync_sending() {
     for width in [720, 1200] {
-        let skin = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"))
-            .load("nanatype.halo")
-            .unwrap()
-            .skin;
+        let skin = common::skin("nanatype.halo");
         let ui = Ui::new(Arc::new(preview_settings()), skin, Locale::ZhCn);
         ui.stickers.set(Arc::new(vec![nanatype::ui::StickerRow {
             asset: "lib:test/hello".into(),
@@ -396,17 +379,9 @@ fn dock_inserts_real_stickers_and_disables_them_during_sync_sending() {
             height_em: 1.6,
             pack_title: "test".into(),
         }]));
-        let id = DocumentId::new(1).unwrap();
-        let mut document = RuntimeDocument::new(id);
-        document
-            .context_mut()
-            .set_theme_tokens(nanatype::skin_theme::compile(false))
-            .unwrap();
-        document
-            .context_mut()
-            .mount_view_root(id, move || input::input_window(ui))
-            .unwrap();
-        let mut session = RuntimeAgentSession::new(document, width, 640).unwrap();
+        let mut session = common::session()
+            .themed(false)
+            .mount(width, 640, move || input::input_window(ui));
         click_keyed(&mut session, "input-dock-stickers");
         click_label(&mut session, "Hello sticker", "button");
         assert!(
@@ -469,7 +444,7 @@ fn dock_tabs_allocate_sidebar_space_retain_content_and_keep_the_canvas_size() {
         "file:///{}",
         fixture.display().to_string().replace('\\', "/")
     );
-    let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+    let registry = common::registry();
     for skin_id in ["nanatype.halo", "nanatype.night", "nanatype.subtitle"] {
         for locale in Locale::ALL {
             for dark in [false, true] {
@@ -492,18 +467,10 @@ fn dock_tabs_allocate_sidebar_space_retain_content_and_keep_the_canvas_size() {
                             })
                             .collect(),
                     ));
-                    let id = DocumentId::new(1).unwrap();
-                    let mut document = RuntimeDocument::new(id);
-                    document
-                        .context_mut()
-                        .set_theme_tokens(nanatype::skin_theme::compile(dark))
-                        .unwrap();
-                    let (_, (editor, _, _)) = document
-                        .context_mut()
-                        .mount_view_root(id, move || input::input_window(ui))
-                        .unwrap();
-                    let mut session =
-                        RuntimeAgentSession::new_scaled(document, 1200, 640, scale).unwrap();
+                    let (mut session, (_, (editor, _, _))) = common::session()
+                        .themed(dark)
+                        .scale(scale)
+                        .mount_output(1200, 640, move || input::input_window(ui));
                     for (w, h) in [(720, 360), (920, 480), (1200, 640)] {
                         session.set_viewport(w, h, scale).unwrap();
                         for _ in 0..3 {
@@ -624,20 +591,11 @@ fn dock_tabs_allocate_sidebar_space_retain_content_and_keep_the_canvas_size() {
 
 #[test]
 fn fitted_preview_keeps_tall_canvases_scrollable_and_restores_full_size_when_space_returns() {
-    let skin = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"))
-        .load("nanatype.halo")
-        .unwrap()
-        .skin;
+    let skin = common::skin("nanatype.halo");
     let mut settings = preview_settings();
     settings.skin.overrides.region = Some([1200.0, 1800.0]);
     let ui = Ui::new(Arc::new(settings), skin, Locale::ZhCn);
-    let id = DocumentId::new(1).unwrap();
-    let mut document = RuntimeDocument::new(id);
-    document
-        .context_mut()
-        .mount_view_root(id, move || input::input_window(ui))
-        .unwrap();
-    let mut session = RuntimeAgentSession::new(document, 720, 360).unwrap();
+    let mut session = common::session().mount(720, 360, move || input::input_window(ui));
     for _ in 0..4 {
         session.flush().unwrap();
     }
@@ -722,22 +680,11 @@ fn fitted_preview_keeps_tall_canvases_scrollable_and_restores_full_size_when_spa
 
 #[test]
 fn toolbar_popovers_remain_clickable_over_the_scrolling_preview() {
-    let skin = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"))
-        .load("nanatype.halo")
-        .unwrap()
-        .skin;
+    let skin = common::skin("nanatype.halo");
     let ui = Ui::new(Arc::new(preview_settings()), skin, Locale::ZhCn);
-    let id = DocumentId::new(1).unwrap();
-    let mut document = RuntimeDocument::new(id);
-    document
-        .context_mut()
-        .set_theme_tokens(nanatype::skin_theme::compile(false))
-        .unwrap();
-    document
-        .context_mut()
-        .mount_view_root(id, move || input::input_window(ui))
-        .unwrap();
-    let mut session = RuntimeAgentSession::new(document, 720, 360).unwrap();
+    let mut session = common::session()
+        .themed(false)
+        .mount(720, 360, move || input::input_window(ui));
     session.flush().unwrap();
     click_label(&mut session, &ui.now_t("tb-more"), "menu");
     click_label(&mut session, &ui.now_t("tb-color"), "menu-item");
@@ -787,7 +734,7 @@ fn toolbar_popovers_remain_clickable_over_the_scrolling_preview() {
 
 #[test]
 fn fixed_canvas_and_controls_survive_resize_theme_scale_and_peer_panel_changes() {
-    let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+    let registry = common::registry();
     let captures = std::env::var_os("NANATYPE_INPUT_WINDOW_CAPTURE_DIR").map(PathBuf::from);
     if let Some(out) = &captures {
         std::fs::create_dir_all(out).unwrap();
@@ -803,18 +750,10 @@ fn fixed_canvas_and_controls_survive_resize_theme_scale_and_peer_panel_changes()
                 );
                 let ui = Ui::new(Arc::new(preview_settings()), skin, Locale::ZhCn);
                 ui.chrome_dark.set(dark);
-                let id = DocumentId::new(1).unwrap();
-                let mut document = RuntimeDocument::new(id);
-                document
-                    .context_mut()
-                    .set_theme_tokens(nanatype::skin_theme::compile(dark))
-                    .unwrap();
-                let (_, (editor, _, _)) = document
-                    .context_mut()
-                    .mount_view_root(id, move || input::input_window(ui))
-                    .unwrap();
-                let mut session =
-                    RuntimeAgentSession::new_scaled(document, 920, 480, scale).unwrap();
+                let (mut session, (_, (editor, _, _))) = common::session()
+                    .themed(dark)
+                    .scale(scale)
+                    .mount_output(920, 480, move || input::input_window(ui));
                 session.set_gpu_renderers(nanatype::ui::sweep::renderers());
                 for state in ["empty", "long", "peer"] {
                     let text = if state == "empty" {
@@ -959,17 +898,9 @@ fn fixed_canvas_and_controls_survive_resize_theme_scale_and_peer_panel_changes()
             config.general.onboarding_done = true;
             let ui = Ui::new(Arc::new(config), skin, Locale::ZhCn);
             ui.chrome_dark.set(dark);
-            let id = DocumentId::new(1).unwrap();
-            let mut document = RuntimeDocument::new(id);
-            document
-                .context_mut()
-                .set_theme_tokens(nanatype::skin_theme::compile(dark))
-                .unwrap();
-            document
-                .context_mut()
-                .mount_view_root(id, move || settings::settings_window(ui))
-                .unwrap();
-            let mut session = RuntimeAgentSession::new(document, 920, 660).unwrap();
+            let mut session = common::session()
+                .themed(dark)
+                .mount(920, 660, move || settings::settings_window(ui));
             session
                 .screenshot_png(out.join(format!("settings-dark{dark}.png")))
                 .unwrap();
@@ -986,10 +917,7 @@ fn sticker_series_stay_at_bottom_filter_search_and_accept_folder_drops() {
     std::fs::create_dir_all(out.join("import-me")).unwrap();
     let folder = out.join("import-me").canonicalize().unwrap();
     for (width, dark) in [(720, false), (1200, true)] {
-        let skin = nanatype_theme::SkinRegistry::new(None, "test")
-            .load("nanatype.halo")
-            .unwrap()
-            .skin;
+        let skin = common::skin("nanatype.halo");
         let ui = Ui::new(Arc::new(preview_settings()), skin, Locale::ZhCn);
         let mut rows: Vec<_> = (0..70)
             .map(|i| nanatype::ui::StickerRow {
@@ -1010,17 +938,9 @@ fn sticker_series_stay_at_bottom_filter_search_and_accept_folder_drops() {
             pack_title: "狗狗".into(),
         });
         ui.stickers.set(Arc::new(rows));
-        let id = DocumentId::new(1).unwrap();
-        let mut document = RuntimeDocument::new(id);
-        document
-            .context_mut()
-            .set_theme_tokens(nanatype::skin_theme::compile(dark))
-            .unwrap();
-        document
-            .context_mut()
-            .mount_view_root(id, move || input::input_window(ui))
-            .unwrap();
-        let mut session = RuntimeAgentSession::new(document, width, 640).unwrap();
+        let mut session = common::session()
+            .themed(dark)
+            .mount(width, 640, move || input::input_window(ui));
         click_keyed(&mut session, "input-dock-stickers");
         let select = |session: &mut RuntimeAgentSession, value: &str| {
             let tabs = Entity::<Tabs>::from_stable_id(

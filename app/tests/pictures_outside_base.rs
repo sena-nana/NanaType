@@ -7,14 +7,16 @@
 //! app does, renders the pictures offscreen through the app's own
 //! path → URL code and counts their pixels.
 
+mod common;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use nana_ui::runtime::Stack;
 use nana_ui::runtime::view::widget;
-use nana_ui::runtime::{DocumentId, RuntimeDocument, Stack};
 use nana_ui_core::LengthSpec;
-use nana_ui_devtools::agent::RuntimeAgentSession;
 use nanatype::assets::AssetLibrary;
+use nanatype::ui::settings::base64;
 use nanatype_model::AssetRef;
 
 const AVATAR: [u8; 3] = [255, 0, 255];
@@ -36,30 +38,25 @@ fn render(out: &Path, name: &str, urls: Vec<String>) -> image::RgbaImage {
         Arc::new(Default::default()),
         nanatype_i18n::Locale::ZhCn,
     );
-    let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
-    doc.context_mut()
-        .mount_view_root(id, move || {
-            widget(Stack::row(8.0).padding(8.0)).children(
-                urls.into_iter()
-                    .map(|url| {
-                        widget(
-                            Stack::row(0.0)
-                                .width(LengthSpec::Px(48.0))
-                                .height(LengthSpec::Px(48.0))
-                                .with_layout(|l| l.position = nana_ui_core::PositionSpec::Relative),
-                        )
-                        .children(nanatype::ui::danmaku::reactive_picture(
-                            ui,
-                            Some(url),
-                            4.0,
-                        ))
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .unwrap();
-    let mut session = RuntimeAgentSession::new(doc, 200, 64).expect("session");
+    let mut session = common::session().mount(200, 64, move || {
+        widget(Stack::row(8.0).padding(8.0)).children(
+            urls.into_iter()
+                .map(|url| {
+                    widget(
+                        Stack::row(0.0)
+                            .width(LengthSpec::Px(48.0))
+                            .height(LengthSpec::Px(48.0))
+                            .with_layout(|l| l.position = nana_ui_core::PositionSpec::Relative),
+                    )
+                    .children(nanatype::ui::danmaku::reactive_picture(
+                        ui,
+                        Some(url),
+                        4.0,
+                    ))
+                })
+                .collect::<Vec<_>>(),
+        )
+    });
     let path = out.join(format!("{name}.png"));
     session.screenshot_png(&path).expect("screenshot");
     image::open(&path).unwrap().into_rgba8()
@@ -181,25 +178,4 @@ fn avatar_sticker_and_skin_frame_are_drawn() {
     assert!(a > 1500, "avatar outside the base was not drawn ({a} px)");
     assert!(s > 1500, "sticker outside the base was not drawn ({s} px)");
     let _ = std::fs::remove_dir_all(&root);
-}
-
-fn base64(bytes: &[u8]) -> String {
-    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::new();
-    for chunk in bytes.chunks(3) {
-        let b = [
-            chunk[0],
-            *chunk.get(1).unwrap_or(&0),
-            *chunk.get(2).unwrap_or(&0),
-        ];
-        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
-        for i in 0..4 {
-            if i <= chunk.len() {
-                out.push(T[(n >> (18 - 6 * i) & 63) as usize] as char);
-            } else {
-                out.push('=');
-            }
-        }
-    }
-    out
 }

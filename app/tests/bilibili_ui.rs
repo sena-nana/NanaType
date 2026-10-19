@@ -1,4 +1,5 @@
-use nana_ui::runtime::{DocumentId, RuntimeDocument};
+mod common;
+
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nanatype::{
     app::bilibili::State,
@@ -10,10 +11,7 @@ use nanatype_i18n::Locale;
 use std::sync::Arc;
 
 fn ui(locale: Locale) -> Ui {
-    let skin = nanatype_theme::SkinRegistry::new(None, "test")
-        .load("nanatype.halo")
-        .unwrap()
-        .skin;
+    let skin = common::skin("nanatype.halo");
     let ui = Ui::new(
         Arc::new(nanatype_settings::Settings::default()),
         skin,
@@ -23,15 +21,9 @@ fn ui(locale: Locale) -> Ui {
     ui
 }
 fn session(ui: Ui, dark: bool) -> RuntimeAgentSession {
-    let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
-    doc.context_mut()
-        .set_theme_tokens(nanatype::skin_theme::compile(dark))
-        .unwrap();
-    doc.context_mut()
-        .mount_view_root(id, move || settings::settings_window(ui))
-        .unwrap();
-    let mut session = RuntimeAgentSession::new(doc, 1120, 900).unwrap();
+    let mut session = common::session()
+        .themed(dark)
+        .mount(1120, 900, move || settings::settings_window(ui));
     session.flush().unwrap();
     session
 }
@@ -131,15 +123,11 @@ fn narrow_editor_keeps_account_send_and_sync_controls_visible() {
         ui.settings.set(Arc::new(settings));
         ui.bilibili.set(Arc::new(ready()));
         let height = nanatype::windows::INPUT_SIZE.1;
-        let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
-        doc.context_mut()
-            .set_theme_tokens(nanatype::skin_theme::compile(false))
-            .unwrap();
-        doc.context_mut()
-            .mount_view_root(id, move || nanatype::ui::input::input_window(ui))
-            .unwrap();
-        let mut session = RuntimeAgentSession::new(doc, 420, height as u32).unwrap();
+        let mut session = common::session()
+            .themed(false)
+            .mount(420, height as u32, move || {
+                nanatype::ui::input::input_window(ui)
+            });
         // Client measurement updates the responsive footer on the following frame.
         for _ in 0..3 {
             session.flush().unwrap();

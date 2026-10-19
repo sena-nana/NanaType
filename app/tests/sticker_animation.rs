@@ -1,11 +1,13 @@
 //! Exercise the same cached-frame GPU path used by windows and shared outputs.
+
+mod common;
+
 use std::collections::HashMap;
 use std::sync::{Arc, atomic::AtomicBool};
 
 use nana_ui::runtime::view::widget;
-use nana_ui::runtime::{DocumentId, RichTextView, RuntimeDocument, Stack};
+use nana_ui::runtime::{RichTextView, Stack};
 use nana_ui_core::{LengthSpec, RichObjectContent};
-use nana_ui_devtools::agent::RuntimeAgentSession;
 use nana_ui_devtools::offscreen::{OffscreenSnapshots, Size, write_painter_png};
 use nanatype::stickers::{cache, playback::Playback};
 use nanatype::ui::{dialogue::Base, rich};
@@ -21,10 +23,7 @@ fn settings_show_presets_and_local_folders_in_one_list() {
     std::fs::create_dir_all(&out).unwrap();
     let manager = Manager::new(&out, |_| {});
     for dark in [false, true] {
-        let skin = nanatype_theme::SkinRegistry::new(None, "test")
-            .load("nanatype.vanilla")
-            .unwrap()
-            .skin;
+        let skin = common::skin("nanatype.vanilla");
         let ui = Ui::new(Arc::new(Default::default()), skin, Locale::ZhCn);
         ui.page.set(settings::Page::Assets);
         let mut rows = manager.rows.clone();
@@ -40,17 +39,9 @@ fn settings_show_presets_and_local_folders_in_one_list() {
             phase: Phase::Ready,
         });
         ui.sticker_packs.set(Arc::new(rows));
-        let id = DocumentId::new(1).unwrap();
-        let mut document = RuntimeDocument::new(id);
-        document
-            .context_mut()
-            .set_theme_tokens(nanatype::skin_theme::compile(dark))
-            .unwrap();
-        document
-            .context_mut()
-            .mount_view_root(id, move || settings::settings_window(ui))
-            .unwrap();
-        let mut session = RuntimeAgentSession::new(document, 1040, 800).unwrap();
+        let mut session = common::session()
+            .themed(dark)
+            .mount(1040, 800, move || settings::settings_window(ui));
         session
             .screenshot_png(out.join(format!(
                 "settings-{}.png",
@@ -104,10 +95,7 @@ fn cached_animation_changes_pixels_without_relayout_and_respects_motion_and_visi
     let cached = cache::prepare(&source, &out.join("cache"), &AtomicBool::new(false)).unwrap();
     assert_eq!(cached.cycles, Some(2));
     cache::publish([cached.clone()].into_iter());
-    let skin = nanatype_theme::SkinRegistry::new(None, "test")
-        .load("nanatype.vanilla")
-        .unwrap()
-        .skin;
+    let skin = common::skin("nanatype.vanilla");
     let base = Base::editor(&skin);
     let look = base.look();
     let doc = nanatype_markup::parse("[sticker=sprel/laugh h=4]").doc;
@@ -127,16 +115,10 @@ fn cached_animation_changes_pixels_without_relayout_and_respects_motion_and_visi
     ));
     assert_eq!(rich::from_rich(&value, &look), doc);
 
-    let id = DocumentId::new(1).unwrap();
-    let mut document = RuntimeDocument::new(id);
-    document
-        .context_mut()
-        .mount_view_root(id, move || {
-            widget(Stack::column(0.0).width(LengthSpec::Fill))
-                .children(widget(RichTextView::new(value).style(base.node_style())))
-        })
-        .unwrap();
-    let session = RuntimeAgentSession::new(document, 220, 180).unwrap();
+    let session = common::session().mount(220, 180, move || {
+        widget(Stack::column(0.0).width(LengthSpec::Fill))
+            .children(widget(RichTextView::new(value).style(base.node_style())))
+    });
     let scene = session.document().scene().clone();
     let layout = session.document().context().world().layout_generation();
     let mut painter = OffscreenSnapshots::new().unwrap();
@@ -198,12 +180,7 @@ fn cached_animation_changes_pixels_without_relayout_and_respects_motion_and_visi
         .unwrap();
     assert_eq!(playback.next_at(window, 1160, false), None);
 
-    let mut empty = RuntimeDocument::new(id);
-    empty
-        .context_mut()
-        .mount_view_root(id, || widget(Stack::column(0.0)))
-        .unwrap();
-    let empty = RuntimeAgentSession::new(empty, 220, 180).unwrap();
+    let empty = common::session().mount(220, 180, || widget(Stack::column(0.0)));
     painter
         .paint(
             empty.document().scene(),
