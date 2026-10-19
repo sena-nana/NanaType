@@ -283,6 +283,7 @@ impl SkinRegistry {
             all: &mut BTreeMap<String, Arc<dyn SkinFiles>>,
         ) -> Result<Arc<dyn SkinFiles>, FileError> {
             let package = PackageManifest::read(&*files)?;
+            package.validate_content(&*files)?;
             if let (Some(required), Some(current)) = (
                 crate::load::version_tuple(&package.meta.min_app),
                 crate::load::version_tuple(&registry.app_version),

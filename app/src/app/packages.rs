@@ -93,6 +93,22 @@ impl App {
                 }
                 Err(error) => self.notice(error.to_string(), true),
             },
+            Msg::PluginPackagesChanged => {
+                let registry = self.registry.clone();
+                let ids = self.plugins.running();
+                let ctx = self.ctx.clone();
+                let spawned = std::thread::Builder::new()
+                    .name("plugin-review".into())
+                    .spawn(move || {
+                        ctx.dispatch(Msg::PluginPackagesReviewed(crate::plugins::review_digests(
+                            &registry, &ids,
+                        )));
+                    });
+                if let Err(error) = spawned {
+                    crate::debug_log(&format!("plugin review unavailable: {error}"));
+                }
+            }
+            Msg::PluginPackagesReviewed(reviewed) => self.plugins.revalidate(&reviewed, self.ui),
             Msg::PluginResult {
                 id,
                 generation,

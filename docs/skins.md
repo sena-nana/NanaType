@@ -23,7 +23,7 @@ base = "nanatype.halo"           # 可选，只继承配置
 "my.shared" = "1.0.0"
 ```
 
-`skin.toml` 仅保存样式。包内文件使用相对路径；跨包引用使用 `pkg:my.shared/images/paper.png`。常用字体继续使用 `builtin:fonts/LXGWWenKai-Regular.ttf`。只有声明的依赖闭包可见；缺失、版本不符、冲突、循环和路径越界均会拒绝加载。继承来的相对资源保留父包所属命名空间，避免被子包同名文件覆盖。
+`package.toml` 严格解析，未知键会拒绝加载；声明的能力须与内容一致：`skin` 对应 `skin.toml`，`lua` 的入口文件必须存在，`resources` 须携带资源文件。`skin.toml` 仅保存样式。包内文件使用相对路径；跨包引用使用 `pkg:my.shared/images/paper.png`。常用字体继续使用 `builtin:fonts/LXGWWenKai-Regular.ttf`。只有声明的依赖闭包可见；缺失、版本不符、冲突、循环和路径越界均会拒绝加载。继承来的相对资源保留父包所属命名空间，避免被子包同名文件覆盖。
 
 导出会携带完整依赖和授权文件，依赖保存在 `dependencies/<包ID>/` 下；同一依赖闭包内每个 ID 固定一个精确版本。引用其他包的资源不会执行该包的脚本。详情见[功能插件接口](plugins.md)。
 

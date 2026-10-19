@@ -107,6 +107,10 @@ pub enum Msg {
     DisablePlugin(String),
     RefreshPackages,
     RemovePackage(String),
+    /// A running plugin's package folder (or a dependency's) changed on disk.
+    PluginPackagesChanged,
+    /// Fresh digests for running plugins, reviewed off the UI thread.
+    PluginPackagesReviewed(Vec<(String, Result<String, String>)>),
     PluginCommand {
         id: String,
         command: String,

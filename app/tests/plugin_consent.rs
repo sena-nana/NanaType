@@ -5,11 +5,11 @@ mod common;
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nanatype::{
     msg::Msg,
-    plugins::{approval_matches, review},
+    plugins::{approval_matches, changed, review, review_digests},
     ui::{self, Ui},
 };
 use nanatype_i18n::Locale;
-use nanatype_settings::{PluginApproval, Settings};
+use nanatype_settings::{PLUGIN_CONSENT_POLICY, PluginApproval, Settings};
 use std::sync::Arc;
 fn fixture(root: &std::path::Path) -> nanatype_theme::SkinRegistry {
     for id in ["example.script", "example.assets"] {
@@ -38,14 +38,14 @@ fn approval_requires_explicit_trust_and_exact_script_and_dependency_content() {
     let mut approval = PluginApproval {
         digest: first.digest.clone(),
         trusted_source: false,
-        policy: 1,
+        policy: PLUGIN_CONSENT_POLICY,
     };
     assert!(!approval_matches(&first, Some(&approval)));
     approval.trusted_source = true;
     assert!(approval_matches(&first, Some(&approval)));
-    approval.policy = 0;
+    approval.policy = PLUGIN_CONSENT_POLICY - 1;
     assert!(!approval_matches(&first, Some(&approval)));
-    approval.policy = 1;
+    approval.policy = PLUGIN_CONSENT_POLICY;
     std::fs::write(
         dir.path().join("example.assets/note.txt"),
         "updated resource",
@@ -64,6 +64,36 @@ fn approval_requires_explicit_trust_and_exact_script_and_dependency_content() {
         "reviewing a script must never execute it"
     );
     assert!(!approval_matches(&after, Some(&approval)));
+}
+#[test]
+fn running_plugins_are_stopped_when_their_package_or_dependency_changes_on_disk() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = fixture(dir.path());
+    let ids = vec!["example.script".to_owned()];
+    let started = review(&registry, "example.script").unwrap().digest;
+    let running = [("example.script", started.as_str())];
+    assert!(
+        changed(running, &review_digests(&registry, &ids)).is_empty(),
+        "unchanged content keeps running"
+    );
+    std::fs::write(dir.path().join("example.assets/note.txt"), "edited").unwrap();
+    assert_eq!(
+        changed(running, &review_digests(&registry, &ids)),
+        ids,
+        "a dependency edit invalidates the running instance"
+    );
+    std::fs::remove_file(dir.path().join("example.script/main.lua")).unwrap();
+    let reviewed = review_digests(&registry, &ids);
+    assert!(reviewed[0].1.is_err());
+    assert_eq!(
+        changed(running, &reviewed),
+        ids,
+        "unreviewable content stops"
+    );
+    assert!(
+        changed([("example.other", "digest")], &reviewed).is_empty(),
+        "plugins without a fresh review are left to the next sync"
+    );
 }
 fn messages(session: &mut RuntimeAgentSession) -> Vec<Msg> {
     session

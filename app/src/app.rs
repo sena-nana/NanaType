@@ -1762,6 +1762,8 @@ impl App {
             | Msg::DisablePlugin(_)
             | Msg::RefreshPackages
             | Msg::RemovePackage(_)
+            | Msg::PluginPackagesChanged
+            | Msg::PluginPackagesReviewed(_)
             | Msg::PluginResult { .. }
             | Msg::PluginCommand { .. }
             | Msg::PluginInput { .. }) => self.package_msg(m),

@@ -52,9 +52,55 @@ impl PackageManifest {
             });
         }
         let text = std::str::from_utf8(&bytes).map_err(|e| FileError::Io(e.to_string()))?;
-        let package: Self = toml::from_str(text).map_err(|e| FileError::Io(e.to_string()))?;
+        Self::parse(text)
+    }
+
+    /// Parse strictly: identity and permissions never silently drop a misspelt key.
+    pub fn parse(text: &str) -> Result<Self, FileError> {
+        let table: toml::Table = toml::from_str(text).map_err(|e| FileError::Io(e.to_string()))?;
+        if let Some(key) = table.keys().find(|k| !ROOT_KEYS.contains(&k.as_str())) {
+            return Err(FileError::Io(format!("package.toml: unknown key `{key}`")));
+        }
+        let package: Self = table
+            .try_into()
+            .map_err(|e: toml::de::Error| FileError::Io(e.to_string()))?;
         package.validate()?;
         Ok(package)
+    }
+
+    /// Declared capabilities must describe what the package actually ships.
+    pub(crate) fn validate_content(&self, files: &dyn SkinFiles) -> Result<(), FileError> {
+        let invalid = |message: &str| FileError::Io(format!("package.toml: {message}"));
+        let has = |c| self.capabilities.contains(&c);
+        // Listing, not reading: payloads stay unread until budgets are checked.
+        let listed = files.list();
+        let exists = |path: &str| listed.iter().any(|p| p == path);
+        if has(PackageCapability::Skin) != exists(crate::load::MANIFEST) {
+            return Err(invalid(
+                "the skin capability and skin.toml must appear together",
+            ));
+        }
+        if let Some(entry) = &self.entry
+            && !exists(entry)
+        {
+            return Err(invalid("the Lua entry does not exist"));
+        }
+        if has(PackageCapability::Resources)
+            && !listed.iter().any(|path| {
+                !path.starts_with("pkg:")
+                    && !path.starts_with("dependencies/")
+                    && ![
+                        PACKAGE_MANIFEST,
+                        crate::INTEGRITY_FILE,
+                        crate::load::MANIFEST,
+                    ]
+                    .contains(&path.as_str())
+                    && self.entry.as_deref() != Some(path)
+            })
+        {
+            return Err(invalid("the resources capability needs resource files"));
+        }
+        Ok(())
     }
 
     pub fn validate(&self) -> Result<(), FileError> {
@@ -108,6 +154,28 @@ impl PackageManifest {
         Ok(())
     }
 }
+
+/// Every accepted top-level key of `package.toml`, including flattened `Meta`.
+const ROOT_KEYS: &[&str] = &[
+    "format",
+    "capabilities",
+    "dependencies",
+    "catalogue_order",
+    "entry",
+    "created_at",
+    "licensed_to",
+    "schema",
+    "id",
+    "version",
+    "min_app",
+    "base",
+    "name",
+    "description",
+    "author",
+    "license",
+    "preview",
+    "tags",
+];
 
 fn valid_date(date: &str) -> bool {
     if date.is_empty() {
@@ -315,21 +383,25 @@ impl SkinFiles for PackageFiles {
 
 /// Qualify inherited file references with their original package owner.
 pub(crate) fn qualify_resources(table: &mut toml::Table, owner: &str) {
-    fn visit(value: &mut toml::Value, key: &str, owner: &str) {
+    /// Keys whose string (or string array) value is a file reference.
+    const FILE_KEYS: &[&str] = &[
+        "file",
+        "latin_file",
+        "source",
+        "image",
+        "background",
+        "preview",
+        "data",
+        "textures",
+        "files",
+        "open",
+        "advance",
+    ];
+    /// Tables whose every string value is a file reference.
+    const FILE_MAPS: &[&str] = &["variants", "se"];
+    fn visit(value: &mut toml::Value, key: &str, in_map: bool, owner: &str) {
         match value {
-            toml::Value::String(s)
-                if matches!(
-                    key,
-                    "file"
-                        | "latin_file"
-                        | "source"
-                        | "image"
-                        | "background"
-                        | "preview"
-                        | "data"
-                        | "textures"
-                ) =>
-            {
+            toml::Value::String(s) if in_map || FILE_KEYS.contains(&key) => {
                 if !s.is_empty()
                     && !s.starts_with('#')
                     && !s.starts_with("builtin:")
@@ -339,20 +411,21 @@ pub(crate) fn qualify_resources(table: &mut toml::Table, owner: &str) {
                 }
             }
             toml::Value::Table(t) => {
+                let map = FILE_MAPS.contains(&key);
                 for (k, v) in t {
-                    visit(v, k, owner);
+                    visit(v, k, map, owner);
                 }
             }
             toml::Value::Array(a) => {
                 for v in a {
-                    visit(v, key, owner);
+                    visit(v, key, in_map, owner);
                 }
             }
             _ => {}
         }
     }
     for (key, value) in table {
-        visit(value, key, owner);
+        visit(value, key, false, owner);
     }
 }
 
@@ -466,8 +539,12 @@ mod tests {
             None,
             None,
         );
+        for id in ["a", "b"] {
+            fs::write(dir.path().join(id).join("note.txt"), id).unwrap();
+        }
         let registry = SkinRegistry::new(Some(dir.path().into()), "1.0.0");
-        assert!(registry.package_files("a").is_err());
+        let error = registry.package_files("a").unwrap_err().to_string();
+        assert!(error.contains("cyclic"), "{error}");
         put(
             dir.path(),
             "a",
@@ -677,6 +754,113 @@ mod tests {
             SkinRegistry::new(None, "1.0.0")
                 .resolve_package(Arc::new(Oversized))
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn unknown_manifest_keys_are_rejected() {
+        let valid = "format=1\nschema=3\nid='x'\nversion='1.0.0'\ncapabilities=['resources']\n";
+        assert!(PackageManifest::parse(valid).is_ok());
+        for typo in [
+            "licenced_to='Someone'",
+            "capability=['lua']",
+            "[dependency]\n'y'='1.0.0'",
+        ] {
+            let error = PackageManifest::parse(&format!("{valid}{typo}\n"))
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("unknown key"), "{typo}: {error}");
+        }
+    }
+    #[test]
+    fn builtin_manifests_parse_strictly() {
+        // Built-ins ship pre-parsed manifests, so check the authored bytes directly.
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("builtin");
+        let mut count = 0;
+        for dir in fs::read_dir(root).unwrap() {
+            let path = dir.unwrap().path().join(PACKAGE_MANIFEST);
+            if path.exists() {
+                let text = fs::read_to_string(&path).unwrap();
+                PackageManifest::parse(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                count += 1;
+            }
+        }
+        assert_eq!(count, SkinRegistry::new(None, "1.0.0").entries().len());
+    }
+    #[test]
+    fn capabilities_must_match_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = SkinRegistry::new(Some(dir.path().into()), "1.0.0");
+        let fails = |id: &str| registry.package_files(id).unwrap_err().to_string();
+        put(
+            dir.path(),
+            "styleless",
+            vec![PackageCapability::Skin],
+            &[],
+            None,
+            None,
+        );
+        assert!(fails("styleless").contains("skin.toml"));
+        put(
+            dir.path(),
+            "undeclared",
+            vec![PackageCapability::Resources],
+            &[],
+            None,
+            Some(""),
+        );
+        assert!(fails("undeclared").contains("skin.toml"));
+        put(
+            dir.path(),
+            "empty",
+            vec![PackageCapability::Resources],
+            &[],
+            None,
+            None,
+        );
+        assert!(fails("empty").contains("resource files"));
+        fs::write(dir.path().join("empty/note.txt"), "now shipped").unwrap();
+        assert!(registry.package_files("empty").is_ok());
+        fs::create_dir_all(dir.path().join("script")).unwrap();
+        fs::write(
+            dir.path().join("script").join(PACKAGE_MANIFEST),
+            "format=1\nschema=3\nid='script'\nversion='1.0.0'\ncapabilities=['lua']\nentry='main.lua'\n",
+        )
+        .unwrap();
+        assert!(fails("script").contains("entry"));
+        fs::write(dir.path().join("script/main.lua"), "return {}").unwrap();
+        assert!(registry.package_files("script").is_ok());
+    }
+    #[test]
+    fn inherited_sounds_and_portrait_variants_keep_their_owner() {
+        let dir = tempfile::tempdir().unwrap();
+        put(
+            dir.path(),
+            "base",
+            vec![PackageCapability::Skin],
+            &[],
+            None,
+            Some(
+                "[sounds]\nopen='open.wav'\nadvance='next.wav'\nse={ding='ding.wav'}\n\
+                 [sounds.typing]\nfiles=['key.wav']\n\
+                 [dialogue.portrait]\nvariants={smile='smile.png'}\n",
+            ),
+        );
+        let mut table: toml::Table =
+            toml::from_str(&fs::read_to_string(dir.path().join("base/skin.toml")).unwrap())
+                .unwrap();
+        qualify_resources(&mut table, "base");
+        let sounds = &table["sounds"];
+        assert_eq!(sounds["open"].as_str(), Some("pkg:base/open.wav"));
+        assert_eq!(sounds["advance"].as_str(), Some("pkg:base/next.wav"));
+        assert_eq!(sounds["se"]["ding"].as_str(), Some("pkg:base/ding.wav"));
+        assert_eq!(
+            sounds["typing"]["files"][0].as_str(),
+            Some("pkg:base/key.wav")
+        );
+        assert_eq!(
+            table["dialogue"]["portrait"]["variants"]["smile"].as_str(),
+            Some("pkg:base/smile.png")
         );
     }
 }
