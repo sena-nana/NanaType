@@ -425,9 +425,14 @@ fn message_view(ui: Ui, key: u64, follows: bool) -> AnyView {
     let name = show_name.then(|| {
         let plate = name_plate.clone();
         let max_name = if inline { inline_name_w } else { col_w - 64.0 }.max(32.0);
-        Arc::make_mut(&mut name_style.layout).max_width = Some(LengthSpec::Px(
+        let l = Arc::make_mut(&mut name_style.layout);
+        l.max_width = Some(LengthSpec::Px(
             (max_name - plate_pad[0] * 2.0 - plate_border).max(12.0),
         ));
+        // A longer role or time shrinks the plate further: the name
+        // shrinks with it, so its ellipsis stays inside rather than clipped.
+        l.min_width = Some(LengthSpec::Px(0.0));
+        l.flex_shrink = Some(1.0);
         widget(
             Surface::optional_stack(
                 plate.as_ref(),
@@ -1094,6 +1099,51 @@ mod tests {
             at: at_s * 1000,
             uid: None,
             reply: None,
+        }
+    }
+
+    #[test]
+    fn a_long_name_ends_before_its_role_in_every_locale() {
+        use nana_ui::runtime::{DocumentId, RuntimeDocument};
+        use nana_ui_devtools::agent::RuntimeAgentSession;
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let name = "这是一位名字特别长的观众 A very long viewer name";
+        for locale in nanatype_i18n::Locale::ALL {
+            for skin_id in ["nanatype.terminal", "nanatype.vanilla"] {
+                let skin = registry.load(skin_id).unwrap().skin;
+                let (w, h) = (skin.history.width as u32, skin.history.height as u32);
+                let mut settings = nanatype_settings::Settings::default();
+                settings.history.show_time = true;
+                let ui = super::super::Ui::new(Arc::new(settings), skin, locale);
+                ui.history.set(Arc::new(vec![HistoryRow {
+                    key: 1,
+                    item: item(name, SourceKind::Chat, 100),
+                    doc: Arc::new(Document::plain("求个自我介绍～")),
+                    reveal: None,
+                }]));
+                let id = DocumentId::new(1).unwrap();
+                let mut doc = RuntimeDocument::new(id);
+                doc.context_mut()
+                    .mount_view_root(id, move || history_window(ui))
+                    .unwrap();
+                let mut session = RuntimeAgentSession::new(doc, w, h).unwrap();
+                session.flush().unwrap();
+                let nodes = session.accessibility_dump();
+                let find = |label: &str| {
+                    nodes
+                        .iter()
+                        .find(|n| n.label.as_deref() == Some(label))
+                        .unwrap_or_else(|| panic!("{locale:?} {skin_id}: no {label}"))
+                        .bounds
+                        .clone()
+                };
+                let shown = find(name);
+                let role = find(&ui.now_t("history-role-viewer"));
+                assert!(
+                    shown.x + shown.width <= role.x,
+                    "{locale:?} {skin_id}: the name {shown:?} runs under its role {role:?}"
+                );
+            }
         }
     }
 
