@@ -437,6 +437,18 @@ fn load_impl(
     }
 
     expand_responsive(&mut merged, &mut diagnostics);
+    if merged
+        .get("dialogue")
+        .and_then(|d| d.get("reveal"))
+        .and_then(|r| r.get("handwriting"))
+        .is_some()
+    {
+        return Err(vec![SkinDiagnostic::error(
+            "dialogue.reveal.handwriting",
+            "removed: declare the stroke file as [data.<id>] (format = \"nthz\") in package.toml \
+             and feed the entrance material from a `text.stroke_time_map` pipeline",
+        )]);
+    }
     let mut skin: Skin = match Value::Table(merged).try_into() {
         Ok(skin) => skin,
         Err(e) => {
@@ -462,8 +474,9 @@ fn load_impl(
         Arc::new(LayeredFiles { layers })
     };
     validate(&skin, &*files, app_version, &mut diagnostics);
+    diagnostics.extend(crate::pipeline::validate(&skin, crate::PROCESSORS));
     if prepare_shaders {
-        crate::handwriting::load_handwriting(&mut skin, &*files, &mut diagnostics, true);
+        crate::pipeline::bind(&mut skin, &*files, true, &mut diagnostics);
         crate::shader::load_shaders(&mut skin, &*files, &mut diagnostics);
         crate::material::load_materials(&mut skin, &*files, &mut diagnostics);
     }
@@ -692,8 +705,7 @@ fn validate(skin: &Skin, files: &dyn SkinFiles, app_version: &str, out: &mut Vec
             }
         };
         match kind {
-            FileKind::StrokeData => {} // Parsed after path and size validation.
-            FileKind::Shader => {}     // Parsed and checked by load_shaders.
+            FileKind::Shader => {} // Parsed and checked by load_shaders.
             FileKind::Image | FileKind::NineSlice(_) => match imagesize::blob_size(&bytes) {
                 Ok(size) => {
                     if size.width > MAX_IMAGE_SIDE || size.height > MAX_IMAGE_SIDE {

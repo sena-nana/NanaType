@@ -340,6 +340,10 @@ pub fn parse_data(spec: &DataSpec, bytes: &[u8], full: bool) -> Result<Arc<Loade
         value,
     });
     let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    // A concurrent parse of the same bytes may have finished first; share it.
+    if let Some(existing) = cache.get(&key).and_then(Weak::upgrade) {
+        return Ok(existing);
+    }
     cache.retain(|_, v| v.strong_count() > 0);
     cache.insert(key, Arc::downgrade(&data));
     Ok(data)

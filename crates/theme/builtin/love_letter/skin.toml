@@ -155,9 +155,6 @@ material = "dissolve"
 ms = 700
 scope = "text"
 
-[dialogue.reveal.handwriting]
-data = "strokes.nthz"
-
 [dialogue.text]
 color = "#784b56"
 line_height = 1.600000023841858
@@ -217,4 +214,10 @@ textures = []
 [materials.write]
 params = []
 source = "write.wgsl"
-textures = []
+textures = [{ pipeline = "stroke_map", output = "time" }]
+uniforms = [{ pipeline = "stroke_map", output = "extent" }]
+
+[pipelines.stroke_map]
+processor = "text.stroke_time_map"
+version = 1
+inputs = { strokes = { data = "strokes" } }

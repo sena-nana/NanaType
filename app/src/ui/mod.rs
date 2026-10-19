@@ -8,7 +8,7 @@ pub mod douyin;
 mod effect_uniforms;
 mod effects;
 pub mod feedback;
-pub mod handwriting;
+mod handwriting;
 pub mod history;
 pub mod input;
 pub mod keycap;
@@ -17,6 +17,7 @@ pub mod materials;
 pub mod motion;
 pub mod overflow;
 pub mod p2p;
+pub mod pipeline;
 pub mod plugins;
 pub mod quote;
 pub mod rich;
@@ -488,7 +489,7 @@ pub fn prepare_skin_preview(
                 .get(&e.shader)
                 .is_some_and(|s| s.animated)
         }) || loaded.skin.dialogue.reveal.light.is_some()
-            || loaded.skin.dialogue.reveal.handwriting.is_some()
+            || loaded.skin.entrance_needs_text_layout()
             || loaded.skin.dialogue.reveal.scramble.is_some()
             || loaded
                 .skin

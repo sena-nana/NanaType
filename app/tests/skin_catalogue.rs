@@ -41,10 +41,14 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
         for texture in skin
             .shaders
             .values()
-            .flat_map(|s| &s.textures)
-            .chain(skin.materials.values().flat_map(|s| &s.textures))
+            .flat_map(|s| s.textures.iter().map(String::as_str))
+            .chain(
+                skin.materials
+                    .values()
+                    .flat_map(|s| s.textures.iter().filter_map(|t| t.image())),
+            )
         {
-            if !static_paths.contains(texture.as_str()) {
+            if !static_paths.contains(texture) {
                 assert!(
                     !row.image_urls.contains_key(&format!("skin:{texture}")),
                     "{}: GPU-only texture {texture}",

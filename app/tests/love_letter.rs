@@ -1,7 +1,7 @@
 mod common;
 
 use nana_ui_devtools::agent::AgentSession;
-use nanatype::ui::{Ui, dialogue, handwriting, sweep};
+use nanatype::ui::{Ui, dialogue, pipeline, sweep};
 use nanatype_core::{Cmd, Core};
 use nanatype_i18n::Locale;
 use nanatype_settings::Settings;
@@ -101,17 +101,18 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
                 .glyph_presentation(node)
                 .unwrap();
             assert!(
-                !p.transitions
+                p.transitions
                     .entrance
                     .as_ref()
                     .unwrap()
                     .material
                     .textures()
-                    .is_empty(),
+                    .first()
+                    .is_some_and(|t| t.size != [1, 1]),
                 "{case}: no stroke map"
             );
         }
-        let builds = handwriting::map_builds();
+        let builds = pipeline::builds();
         let generation = session.document().context().world().layout_generation();
         assert_eq!(
             stable,
@@ -125,7 +126,7 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
             )
         );
         assert_eq!(
-            handwriting::map_builds(),
+            pipeline::builds(),
             builds,
             "{case}: stable frame rebuilt map"
         );
@@ -219,7 +220,7 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
                 before, frozen,
                 "clearing unfinished strokes revealed hidden ink"
             );
-            let maps = handwriting::map_builds();
+            let maps = pipeline::builds();
             let layout = session.document().context().world().layout_generation();
             ui.text_scroll.set(60.);
             frame(
@@ -230,11 +231,7 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
                 "interrupted-scrolled",
                 CAPTURES,
             );
-            assert_eq!(
-                handwriting::map_builds(),
-                maps,
-                "scroll rebuilt stroke maps"
-            );
+            assert_eq!(pipeline::builds(), maps, "scroll rebuilt stroke maps");
             assert_eq!(
                 session.document().context().world().layout_generation(),
                 layout

@@ -1,171 +1,31 @@
-//! Retained stroke-time maps for the normal rich-text renderer. Font geometry,
-//! shaping, ink colours and retirement stay owned by NanaUI.
-use nana_ui::runtime::view::{AnyView, IntoView, NodeRef, signal, widget};
-use nana_ui::runtime::{
-    ComponentView, MutationQueue, NodeKind, RichTextView, SizeChanged, StableNodeId, TextShaper,
-    UiWorld,
-};
-use nana_ui_core::{MaterialRef, MaterialTexture};
+//! The `text.stroke_time_map` processor: stroke-order data laid over the
+//! shaped text. Font geometry, shaping, ink colours and retirement stay owned
+//! by NanaUI; caching of whole maps lives in the pipeline view.
+use nana_ui::runtime::{StableNodeId, TextShaper, UiWorld};
+use nana_ui_core::MaterialTexture;
 use nanatype_theme::{StrokeCommand, StrokeData, StrokeGlyph};
 use std::{
     collections::HashMap,
-    hash::{Hash, Hasher},
-    sync::{
-        Arc, LazyLock, Mutex, Weak,
-        atomic::{AtomicUsize, Ordering},
-    },
+    sync::{Arc, LazyLock, Mutex},
 };
 
 const CELL: usize = 96;
 const MAX_SIDE: f32 = 2048.;
-static BUILDS: AtomicUsize = AtomicUsize::new(0);
-static MAPS: LazyLock<Mutex<HashMap<u64, Weak<nana_ui_core::MaterialInstance>>>> =
-    LazyLock::new(Default::default);
 type CellKey = ([u8; 32], char);
 static CELLS: LazyLock<Mutex<HashMap<CellKey, Arc<[u8]>>>> = LazyLock::new(Default::default);
 
-#[derive(Clone)]
-struct WritingView {
-    base: RichTextView,
-    data: Arc<StrokeData>,
-    size: [u32; 2],
-}
-impl PartialEq for WritingView {
-    fn eq(&self, other: &Self) -> bool {
-        self.base == other.base && Arc::ptr_eq(&self.data, &other.data) && self.size == other.size
-    }
-}
-impl ComponentView for WritingView {
-    fn share_layouts(&mut self, share: &mut dyn FnMut(&mut Arc<nana_ui_core::LayoutStyle>)) {
-        self.base.share_layouts(share);
-    }
-    fn node_kind(&self) -> NodeKind {
-        self.base.node_kind()
-    }
-    fn project(&self, id: StableNodeId, world: &UiWorld, mutations: &mut MutationQueue) {
-        let mut base = self.base.clone();
-        let current = world.glyph_presentation(id);
-        let mut replacement = None;
-        if let Some(p) = &mut base.presentation
-            && let Some(mask) = &mut p.transitions.entrance
-            && let Some(material) = atlas(world, id, &base.value, &self.data, &mask.material)
-        {
-            mask.material = material.clone();
-            if let Some((_, layout)) = world.text_layout(id) {
-                let (w, h) = layout.physical_size();
-                // Anchor the immutable map to content coordinates. Ancestor
-                // clipping still clips paint; scrolling never rebuilds maps.
-                p.transitions.viewport =
-                    Some(nana_ui_core::LogicalRect::new(0., 0., w.max(1.), h.max(1.)));
-            }
-            // A size/font change replaces only the immutable map. Keep the
-            // running presentation clock, including a frozen retirement.
-            if let Some(old) = current
-                && old.effects == p.effects
-                && old.effect_chains == p.effect_chains
-                && old
-                    .reveal
-                    .as_ref()
-                    .zip(p.reveal.as_ref())
-                    .is_some_and(|(a, b)| {
-                        a.at_s == b.at_s && a.limit == b.limit && a.intro == b.intro
-                    })
-            {
-                let mut normalized = old.transitions.clone();
-                normalized.viewport = p.transitions.viewport;
-                if let (Some(a), Some(b)) = (&mut normalized.entrance, &p.transitions.entrance) {
-                    a.start = b.start;
-                    a.material = b.material.clone();
-                }
-                if let (Some(a), Some(b)) = (&mut normalized.exit, &p.transitions.exit) {
-                    a.start = b.start;
-                }
-                if normalized.freeze_reveal.is_some() && p.transitions.freeze_reveal.is_some() {
-                    normalized.freeze_reveal = p.transitions.freeze_reveal;
-                }
-                if normalized == p.transitions {
-                    let mut keep = old.clone();
-                    keep.transitions.viewport = p.transitions.viewport;
-                    if let Some(m) = &mut keep.transitions.entrance {
-                        m.material = material;
-                    }
-                    replacement = Some(keep);
-                }
-            }
-        }
-        base.project(id, world, mutations);
-        if let Some(p) = replacement.filter(|p| current != Some(p)) {
-            mutations.set_glyph_presentation(id, Some(p));
-        }
-    }
-}
-
-pub fn view(
-    base: RichTextView,
-    data: Arc<StrokeData>,
-    update: impl Fn(&mut RichTextView) + Send + 'static,
-    node: Option<NodeRef>,
-) -> AnyView {
-    let size = signal([0; 2]);
-    let v = widget(WritingView {
-        base,
-        data,
-        size: [0; 2],
-    })
-    .on(move |e: &SizeChanged| {
-        size.set_if_changed([e.width.to_bits(), e.height.to_bits()]);
-    })
-    .bind(move |v: &mut WritingView| {
-        update(&mut v.base);
-        v.size = size.get();
-    });
-    match node {
-        Some(node) => v.node_ref(node).into_any(),
-        None => v.into_any(),
-    }
-}
-
-/// Number of immutable layout maps built, exposed to rendering regression tests.
-pub fn map_builds() -> usize {
-    BUILDS.load(Ordering::Relaxed)
-}
-
-fn atlas(
+/// `text.stroke_time_map` v1: per-texel writing time for the shaped text.
+/// Alpha is the threshold, B marks stroke-covered cells; the extent maps
+/// target coordinates onto the texture.
+pub(super) fn stroke_time_map(
     world: &UiWorld,
     id: StableNodeId,
     text: &nana_ui_core::RichText,
-    data: &Arc<StrokeData>,
-    template: &MaterialRef,
-) -> Option<MaterialRef> {
+    data: &StrokeData,
+) -> Option<(MaterialTexture, [f32; 4])> {
     let (_, layout) = world.text_layout(id)?;
     let physical = layout.physical_size();
     let size = [physical.0.max(1.), physical.1.max(1.)];
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    data.hash.hash(&mut hasher);
-    template.key().hash(&mut hasher);
-    text.text().hash(&mut hasher);
-    size.map(f32::to_bits).hash(&mut hasher);
-    layout.is_vertical().hash(&mut hasher);
-    for line in &layout.lines {
-        line.metrics.baseline_y_px.to_bits().hash(&mut hasher);
-        for run in layout.line_runs(line) {
-            format!("{:?}", run.font).hash(&mut hasher);
-            run.font_size_px.to_bits().hash(&mut hasher);
-            run.origin_x_px.to_bits().hash(&mut hasher);
-            for g in &run.glyphs {
-                g.glyph_id.hash(&mut hasher);
-                g.cluster.hash(&mut hasher);
-                [g.offset_x_px, g.offset_y_px, g.advance_px]
-                    .map(f32::to_bits)
-                    .hash(&mut hasher);
-            }
-        }
-    }
-    let key = hasher.finish();
-    let mut cache = MAPS.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(material) = cache.get(&key).and_then(MaterialRef::upgrade) {
-        return Some(material);
-    }
     let scale = (MAX_SIDE / size[0].max(size[1])).min(1.5);
     let width = (size[0] * scale).ceil() as u32;
     let height = (size[1] * scale).ceil() as u32;
@@ -224,22 +84,13 @@ fn atlas(
         }
     }
     // Ruby and inline objects have no Hanzi mask and use the normal fade.
-    let material = template
-        .clone()
-        .with_parameters(Arc::from([[
-            width as f32 / scale,
-            height as f32 / scale,
-            0.,
-            0.,
-        ]]))
-        .with_textures(Arc::from([MaterialTexture {
+    Some((
+        MaterialTexture {
             size: [width, height],
             rgba: rgba.into(),
-        }]));
-    cache.retain(|_, v| v.strong_count() > 0);
-    cache.insert(key, material.downgrade());
-    BUILDS.fetch_add(1, Ordering::Relaxed);
-    Some(material)
+        },
+        [width as f32 / scale, height as f32 / scale, 0., 0.],
+    ))
 }
 
 fn stamp(

@@ -18,16 +18,36 @@ python scripts/assets/build-love-letter-data.py
 
 ## 皮肤接口
 
-在 schema 2 的皮肤中增加可选笔顺配置：
+情书不依赖专用字段或皮肤 ID：笔顺数据是 `package.toml` 中的声明式数据，经通用处理器 `text.stroke_time_map` 生成入场材质的时间纹理。
 
 ```toml
+# package.toml
+[data.strokes]
+path = "strokes.nthz"
+format = "nthz"
+format_version = 1
+source = "Make Me a Hanzi bddc96d4 graphics.txt, GB2312 subset of 6763 characters; see SOURCES.txt"
+license = "Arphic Public License (ARPHICPL.TXT, APL-*.txt)"
+
+# skin.toml
 [dialogue.reveal]
-handwriting = { data = "love_letter/strokes.nthz" }
 entrance = { kind = "fade", ms = 500, material = "write", scope = "glyph" }
 exit = { ms = 700, material = "dissolve", scope = "text" }
+
+[pipelines.stroke_map]
+processor = "text.stroke_time_map"
+version = 1
+inputs = { strokes = { data = "strokes" } }
+
+[materials.write]
+source = "write.wgsl"
+textures = [{ pipeline = "stroke_map", output = "time" }]
+uniforms = [{ pipeline = "stroke_map", output = "extent" }]
 ```
 
-笔顺数据统一使用 `.nthz` 二进制资源，实际大小 4.91 MB。含字体和授权的完整皮肤包为 6.20 MB，相比压缩前减少约 35%。内置加载只解析索引，遇到字符再解码对应块，最多缓存 8 块；缺字不触发解压。外部资源导入时完整验证所有块，校验不填充运行时缓存。导出的资源保持独立，可离线使用。
+旧的 `dialogue.reveal.handwriting` 已删除，出现时加载失败并提示迁移。继承情书的子皮肤沿用父包数据，引用自动限定为 `pkg:nanatype.love_letter/strokes`。
+
+笔顺数据统一使用 `.nthz` 二进制资源，实际大小 4.91 MB。含字体和授权的完整皮肤包为 6.20 MB，相比压缩前减少约 35%。内置加载只解析索引，遇到字符再解码对应块，最多缓存 8 块；缺字不触发解压。外部资源导入时完整验证所有块，校验不填充运行时缓存。解析结果按内容哈希与格式版本在皮肤之间共享。导出的资源保持独立，可离线使用。
 
 资源加载沿用皮肤路径隔离和包大小限制，并限制字符、笔画、路径、点列以及解压后大小。继承的笔顺数据与材质在导出时随独立清单一起保存。
 
@@ -48,7 +68,7 @@ exit = { ms = 700, material = "dissolve", scope = "text" }
 ## 验证
 
 ```powershell
-cargo test -p nanatype-theme handwriting
+cargo test -p nanatype-theme pipeline
 cargo test -p nanatype --test love_letter -- --test-threads=1
 $env:NANATYPE_LOVE_LETTER_CAPTURES='target/love-letter/captures'
 cargo test -p nanatype --test love_letter -- --test-threads=1

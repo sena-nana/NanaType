@@ -57,7 +57,8 @@ pub struct Base {
     pub masks: nana_ui_core::TextTransitions,
     pub light: Option<nanatype_theme::TextLightSpec>,
     pub scramble: Option<nanatype_theme::ScrambleSpec>,
-    pub handwriting: Option<Arc<nanatype_theme::StrokeData>>,
+    /// The entrance material, when its inputs depend on the text layout.
+    pub layout_material: Option<super::pipeline::LayoutMaterial>,
     pub light_exit: Option<(u64, u16)>,
     pub light_preview: bool,
     pub align: TextAlign,
@@ -96,7 +97,7 @@ impl Base {
             responsive_text: false,
             light: skin.dialogue.reveal.light.clone(),
             scramble: skin.dialogue.reveal.scramble.clone(),
-            handwriting: None,
+            layout_material: None,
             light_exit: None,
             light_preview: false,
             masks: nana_ui_core::TextTransitions {
@@ -153,7 +154,7 @@ impl Base {
             reduced,
         );
         base.responsive_text = skin.dialogue.responsive.is_some();
-        base.handwriting = skin.stroke_data.clone();
+        base.layout_material = super::pipeline::LayoutMaterial::entrance(skin);
         base
     }
 
@@ -170,7 +171,7 @@ impl Base {
             masks: Default::default(),
             light: None,
             scramble: None,
-            handwriting: None,
+            layout_material: None,
             ..Self::dialogue(skin, entrance, false)
         }
     }
@@ -187,7 +188,7 @@ impl Base {
         base.scramble = None;
         if skin.dialogue.reveal.light.is_some()
             || skin.dialogue.reveal.scramble.is_some()
-            || skin.dialogue.reveal.handwriting.is_some()
+            || skin.entrance_needs_text_layout()
         {
             base.masks = Default::default();
         }
@@ -348,8 +349,8 @@ fn document_on(
                 .as_ref()
                 .map(|p| (p.at_ms.clone(), rich.text().to_owned())),
         );
-    let handwriting = base
-        .handwriting
+    let layout_material = base
+        .layout_material
         .clone()
         .filter(|_| reveal.is_some() && entrance.kind != EntranceKind::None && entrance.ms > 0)
         .filter(|_| !base.reduced_motion && super::materials::enabled(ui))
@@ -472,8 +473,8 @@ fn document_on(
             l.offset_top = vertical.then_some(LengthSpec::Px(0.));
         }
     };
-    if let Some(data) = handwriting {
-        return super::handwriting::view(view, data, update_view, follow.map(|_| ui.text_node));
+    if let Some(material) = layout_material {
+        return super::pipeline::view(view, material, update_view, follow.map(|_| ui.text_node));
     }
     if let Some((spec, (times, text))) = scramble_plan {
         let update = Arc::new(update_view);
@@ -783,7 +784,7 @@ pub fn preview_box(ui: Ui, mut ctx: BoxCtx, doc: &Document) -> AnyView {
     ctx.skin = super::materials::render_skin(ui, ctx.skin);
     if (ctx.skin.dialogue.reveal.light.is_some()
         || ctx.skin.dialogue.reveal.scramble.is_some()
-        || ctx.skin.dialogue.reveal.handwriting.is_some())
+        || ctx.skin.entrance_needs_text_layout())
         && ui.shader_preview.get_untracked()
         && !ui.reduced_motion.get_untracked()
         && super::materials::enabled(ui)

@@ -512,21 +512,13 @@ impl SkinRegistry {
                     let files = entry.files.clone().expect("valid catalogue has files");
                     let skin = entry.skin.clone().expect("valid catalogue has a skin");
                     let mut warnings = entry.warnings.clone();
-                    let skin = if skin.shaders.is_empty()
-                        && skin.materials.is_empty()
-                        && skin.dialogue.reveal.handwriting.is_none()
-                    {
+                    let skin = if skin.shaders.is_empty() && skin.materials.is_empty() {
                         skin
                     } else {
                         // The immutable manifest/resources already passed the
                         // catalogue validator; prepare only its GPU payload now.
                         let mut resolved = (*skin).clone();
-                        crate::handwriting::load_handwriting(
-                            &mut resolved,
-                            &*files,
-                            &mut warnings,
-                            false,
-                        );
+                        crate::pipeline::bind(&mut resolved, &*files, false, &mut warnings);
                         crate::shader::load_shaders(&mut resolved, &*files, &mut warnings);
                         crate::material::load_materials(&mut resolved, &*files, &mut warnings);
                         if warnings.iter().any(|d| d.severity == Severity::Error) {

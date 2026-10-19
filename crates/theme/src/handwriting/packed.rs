@@ -376,25 +376,15 @@ mod tests {
         assert!(StrokeData::parse(&trailing).is_err());
         // The import path must request full validation, including for a resource
         // with a structurally valid index but corrupted compressed bytes.
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("bad.nthz"), corrupt).unwrap();
-        std::fs::write(
-            dir.path().join("skin.toml"),
-            "[meta]\nid='test.bad-strokes'\n[dialogue.reveal.handwriting]\ndata='bad.nthz'\n",
-        )
-        .unwrap();
-        let errors = crate::load(
-            Arc::new(crate::DirFiles::new(dir.path())),
-            crate::SkinOrigin::Directory(dir.path().into()),
-            &(),
-            "1.0.0",
-        )
-        .unwrap_err();
-        assert!(
-            errors
-                .iter()
-                .any(|e| e.field == "dialogue.reveal.handwriting.data")
-        );
+        let spec = crate::DataSpec {
+            path: "bad.nthz".into(),
+            format: crate::DataFormat::Nthz,
+            format_version: 1,
+            source: "test".into(),
+            license: "test".into(),
+            constraints: None,
+        };
+        assert!(crate::parse_data(&spec, &corrupt, true).is_err());
     }
 
     #[test]

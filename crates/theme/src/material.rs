@@ -11,7 +11,11 @@ use std::{
 pub struct MaterialSpec {
     pub source: String,
     pub params: Vec<f32>,
-    pub textures: Vec<String>,
+    /// Image files or pipeline texture outputs, one per slot.
+    pub textures: Vec<crate::TextureSource>,
+    /// Pipeline `vec4` outputs, placed after the static params.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub uniforms: Vec<crate::PipelineOutput>,
 }
 static VALIDATED: LazyLock<Mutex<BTreeMap<String, Weak<ShaderProgram>>>> =
     LazyLock::new(Default::default);
@@ -70,12 +74,19 @@ pub(crate) fn load_materials(
             }
             let path = crate::clean_resource_path(&spec.source).map_err(|e| e.to_string())?;
             let source = files.read(&path).map_err(|e| e.to_string())?;
-            let encoded: Vec<_> = spec
+            // Pipeline slots hold an empty placeholder until the host fills them.
+            let encoded: Vec<Option<Vec<u8>>> = spec
                 .textures
                 .iter()
-                .map(|path| {
-                    let path = crate::clean_resource_path(path).map_err(|e| e.to_string())?;
-                    files.read(&path).map_err(|e| e.to_string())
+                .map(|texture| {
+                    texture
+                        .image()
+                        .map(|path| {
+                            let path =
+                                crate::clean_resource_path(path).map_err(|e| e.to_string())?;
+                            files.read(&path).map_err(|e| e.to_string())
+                        })
+                        .transpose()
                 })
                 .collect::<Result<_, _>>()?;
             let mut hash = blake3::Hasher::new();
@@ -83,8 +94,15 @@ pub(crate) fn load_materials(
             hash.update(&(source.len() as u64).to_le_bytes());
             hash.update(&source);
             for texture in &encoded {
-                hash.update(&(texture.len() as u64).to_le_bytes());
-                hash.update(texture);
+                match texture {
+                    Some(texture) => {
+                        hash.update(&(texture.len() as u64).to_le_bytes());
+                        hash.update(texture);
+                    }
+                    None => {
+                        hash.update(b"pipeline");
+                    }
+                }
             }
             let key = hash.finalize().to_hex().to_string();
             if let Some(program) = VALIDATED
@@ -107,6 +125,13 @@ pub(crate) fn load_materials(
                 validate_material(std::str::from_utf8(&source).map_err(|e| e.to_string())?)
                     .map_err(|e| format!("{path}: {e}"))?;
             for bytes in encoded {
+                let Some(bytes) = bytes else {
+                    program.textures.push(ShaderTexture {
+                        size: [1, 1],
+                        bytes: Arc::from([0u8; 4]),
+                    });
+                    continue;
+                };
                 let size = imagesize::blob_size(&bytes).map_err(|e| e.to_string())?;
                 if size.width == 0 || size.height == 0 || size.width > 2048 || size.height > 2048 {
                     return Err("material textures must fit 2048x2048".into());

@@ -19,10 +19,16 @@ mod files;
 mod fonts;
 mod geometry;
 mod handwriting;
-pub use handwriting::{HandwritingSpec, StrokeCommand, StrokeData, StrokeGlyph};
+pub use handwriting::{StrokeCommand, StrokeData, StrokeGlyph};
 mod load;
 mod manifest;
 mod material;
+mod pipeline;
+pub use pipeline::{
+    BoundInput, BoundNode, MAX_PIPELINE_TEXTURE_SIDE, MaterialBinding, PROCESSORS, ParamSig,
+    PipelineOutput, PipelineSpec, PortSource, PortType, ProcessorSignature, TextureSource,
+    processor,
+};
 mod package;
 mod project;
 pub use package::{

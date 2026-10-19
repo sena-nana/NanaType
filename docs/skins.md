@@ -238,7 +238,6 @@ bob_px = 3
 # glyph = "" 且没有 image 时不显示
 
 [dialogue.reveal]                 # 打字节奏
-# handwriting = { data = "love_letter/strokes.nthz" }  # 可选：包内压缩笔顺数据
 base_ms = 50                      # 每个拉丁字符
 cjk_factor = 2.0                  # 中日韩字符等于几个拍子
 space_ms = 50                     # 每个空格
@@ -414,7 +413,8 @@ cargo run -p nanatype --example snapshots -- target/crayon-audit nanatype.crayon
 [materials.paper]
 source = "materials/paper.wgsl"
 params = [0]                    # 最多八个有限浮点数；补零为两组 vec4
-textures = []                   # 最多两张图片，每张不超过 2048×2048
+textures = []                   # 最多两个槽：图片路径或管线纹理输出，图片不超过 2048×2048
+# uniforms = [{ pipeline = "…", output = "…" }]  # 管线 vec4 输出，排在 params 之后
 
 [materials.pencil]
 source = "materials/pencil.wgsl"
@@ -434,6 +434,24 @@ material = "pencil"
 ```
 
 形状的公共字段 `material`、`border_material` 也可用于名牌、面板及普通几何装饰。当前材质适配普通矩形、圆角矩形和 polygon 裁剪；使用 contour/motif 的自定义路径绘制保持原样。表格按名称合并，文件引用随复制和导出完整打包。总共最多十六个材质定义，材质纹理解码总量上限 32 MiB；源码、文件路径与计算复杂度沿用皮肤 shader 的受限校验。
+
+### 声明式处理管线
+
+仅供 Shader 使用的数据由宿主的已注册处理器转换，不运行 Lua。数据在 `package.toml` 以 `[data.<id>]` 声明（见[统一包整体设计](package-design.md)）；`skin.toml` 的 `[pipelines.<名称>]` 选择处理器 `processor` 及版本 `version`，在 `inputs` 中把每个输入绑定到数据引用 `{ data = "<id>" }`（依赖包写作 `pkg:<包ID>/<id>`）或另一条管线的输出 `{ pipeline = "…", output = "…" }`，`params` 只接受处理器声明的有限数值。材质的 `textures` 槽可写为 `{ pipeline = "…", output = "…" }`，`uniforms` 绑定 `vec4` 输出，依次排在静态 `params` 之后。
+
+```toml
+[pipelines.stroke_map]
+processor = "text.stroke_time_map"   # 输入 nthz 笔顺数据与当前文字排版
+version = 1
+inputs = { strokes = { data = "strokes" } }
+
+[materials.write]
+source = "write.wgsl"
+textures = [{ pipeline = "stroke_map", output = "time" }]   # 时间纹理
+uniforms = [{ pipeline = "stroke_map", output = "extent" }] # material_param(0u)
+```
+
+目前注册的处理器为 `text.stroke_time_map` v1（输出 `time` 纹理与 `extent`）。管线最多 8 条、链深不超过 4，必须无环；未注册处理器或版本、缺少或多余输入、端口类型不符、参数越界、纹理槽超过 2 个、`params` 与 `uniforms` 合计超过 4 组 vec4 均拒绝加载，未被材质使用的管线给出警告。依赖文字排版的材质只能用于 `dialogue.reveal.entrance.material`；在历史记录、编辑框等没有该上下文的位置，管线纹理槽为透明占位，着色器按普通淡入回退。处理结果按数据内容哈希、材质与排版缓存，文字、字体、排版、尺寸或书写方向变化才重建，播放进度由 GPU 计算。
 
 WGSL 只实现 `fn material(i: MaterialInput) -> vec4<f32>`，可添加纯辅助函数。`i.position` 是局部逻辑像素，`i.uv` 是归一化坐标，`i.size` 是局部尺寸；文字的局部区域为当前字形单元，`i.glyph_uv` 为其归一化坐标，形状的该值为零。`i.color.rgb` 是已解析的线性文字或形状颜色，alpha 为 1；返回非预乘线性 RGBA，alpha 作为额外覆盖。框架统一乘入原始透明度、字形/形状遮罩与裁剪，材质不能扩大绘制范围。纹理通过 `material_sample0(uv)` / `material_sample1(uv)` 采样；`material_param(0u)`、`material_param(1u)` 读取参数。
 
