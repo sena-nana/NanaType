@@ -209,6 +209,8 @@ pub struct Ui {
     /// Motion is reduced: the setting, or the system preference.
     pub reduced_motion: Signal<bool>,
     pub shader_preview: Signal<bool>,
+    /// Advances when background layout materials finish (stroke-time maps).
+    pub layout_epoch: Signal<u64>,
     /// The system's own reduce-motion preference, as last reported.
     pub system_reduced_motion: Signal<bool>,
     /// Whether the input window is shown by the application's presence policy.
@@ -322,6 +324,7 @@ impl Ui {
             portraits: signal(Arc::new(HashMap::new())),
             reduced_motion: signal(false),
             shader_preview: signal(false),
+            layout_epoch: signal(0),
             system_reduced_motion: signal(false),
             input_shown: signal(true),
             onboard_step: signal(0),

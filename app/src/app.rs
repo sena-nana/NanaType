@@ -160,6 +160,11 @@ impl App {
             let ctx = ctx.clone();
             move |m: Msg| ctx.dispatch(m)
         };
+        // Layout-dependent materials (stroke-time maps) build off the UI thread.
+        crate::ui::pipeline::set_waker({
+            let post = post.clone();
+            move || post(Msg::LayoutMaterialsReady)
+        });
         let persist = Persist::start({
             let post = post.clone();
             move |e| {
@@ -1691,59 +1696,83 @@ impl App {
             FileTarget::InsertImage => {
                 self.insert_asset(AssetRef::File(path.display().to_string()))
             }
-            FileTarget::ImportSkin => match self.registry.install(&path) {
-                Ok(outcome) => {
-                    self.refresh_skin_rows();
-                    self.sync_tray_skins();
-                    let (id, text) = match outcome {
-                        nanatype_theme::InstallOutcome::Installed { id } => {
-                            let t = self
-                                .ui
-                                .tr("skins-installed", &[("name", id.as_str().into())]);
-                            (id, t)
-                        }
-                        nanatype_theme::InstallOutcome::Replaced { id, previous } => {
-                            let t = self.ui.tr(
-                                "skins-replaced",
-                                &[("name", id.as_str().into()), ("previous", previous.into())],
-                            );
-                            (id, t)
-                        }
-                    };
-                    self.notice(text, false);
-                    // An updated dependency may change another plugin's reviewed closure.
-                    self.plugins = Default::default();
-                    self.plugins.sync(
-                        &self.registry,
-                        &self.settings.enabled_plugins,
-                        &self.settings.plugin_approvals,
-                        self.ctx.clone(),
-                        self.ui,
-                    );
-                    if id == self.settings.skin.id {
-                        self.reload_skin(true);
-                    } else if self.registry.entry(&id).is_some() {
-                        self.edit(|s| s.skin.id = id);
-                    }
-                }
-                Err(errors) => {
-                    let detail = errors.first().map(|d| d.to_string()).unwrap_or_default();
-                    let text = format!("{}: {detail}", self.ui.now_t("skins-import-failed"));
-                    self.notice(text, true);
-                }
-            },
+            FileTarget::ImportSkin => {
+                // Inspection validates every resource and signature: keep it off the UI thread.
+                let mut registry = self.registry.clone();
+                crate::plugins::background("package-install", &self.ctx, move || {
+                    Msg::PackageInstalled(
+                        registry
+                            .install(&path)
+                            .map(|outcome| (outcome, Box::new(registry))),
+                    )
+                });
+            }
             FileTarget::ExportSkin => {
-                if let Some(id) = self.export_target.take()
-                    && let Err(e) = self.registry.export(&id, &path)
-                {
-                    let text = self
-                        .ui
-                        .tr("skins-export-failed", &[("message", e.to_string().into())]);
-                    self.notice(text, true);
+                if let Some(id) = self.export_target.take() {
+                    let registry = self.registry.clone();
+                    crate::plugins::background("package-export", &self.ctx, move || {
+                        Msg::PackageExported(registry.export(&id, &path).map_err(|e| e.to_string()))
+                    });
                 }
             }
             FileTarget::StickerFolder => {
                 self.import_sticker_folders(vec![path]);
+            }
+        }
+    }
+
+    /// Finish an import whose inspection and staging ran in the background.
+    pub(crate) fn package_installed(
+        &mut self,
+        result: Result<
+            (
+                nanatype_theme::InstallOutcome,
+                Box<nanatype_theme::SkinRegistry>,
+            ),
+            Vec<nanatype_theme::SkinDiagnostic>,
+        >,
+    ) {
+        match result {
+            Ok((outcome, registry)) => {
+                self.registry = *registry;
+                self.skin_reload.invalidate();
+                self.refresh_skin_rows();
+                self.sync_tray_skins();
+                let (id, text) = match outcome {
+                    nanatype_theme::InstallOutcome::Installed { id } => {
+                        let t = self
+                            .ui
+                            .tr("skins-installed", &[("name", id.as_str().into())]);
+                        (id, t)
+                    }
+                    nanatype_theme::InstallOutcome::Replaced { id, previous } => {
+                        let t = self.ui.tr(
+                            "skins-replaced",
+                            &[("name", id.as_str().into()), ("previous", previous.into())],
+                        );
+                        (id, t)
+                    }
+                };
+                self.notice(text, false);
+                // An updated dependency may change another plugin's reviewed closure.
+                self.plugins = Default::default();
+                self.plugins.sync(
+                    &self.registry,
+                    &self.settings.enabled_plugins,
+                    &self.settings.plugin_approvals,
+                    self.ctx.clone(),
+                    self.ui,
+                );
+                if id == self.settings.skin.id {
+                    self.reload_skin(true);
+                } else if self.registry.entry(&id).is_some() {
+                    self.edit(|s| s.skin.id = id);
+                }
+            }
+            Err(errors) => {
+                let detail = errors.first().map(|d| d.to_string()).unwrap_or_default();
+                let text = format!("{}: {detail}", self.ui.now_t("skins-import-failed"));
+                self.notice(text, true);
             }
         }
     }
@@ -1764,6 +1793,12 @@ impl App {
             | Msg::RemovePackage(_)
             | Msg::PluginPackagesChanged
             | Msg::PluginPackagesReviewed(_)
+            | Msg::PluginsReviewed { .. }
+            | Msg::PackagesListed { .. }
+            | Msg::PluginReviewReady(_)
+            | Msg::PackageInstalled(_)
+            | Msg::PackageExported(_)
+            | Msg::PluginConfirmReviewed { .. }
             | Msg::PluginResult { .. }
             | Msg::PluginCommand { .. }
             | Msg::PluginInput { .. }) => self.package_msg(m),
@@ -1799,6 +1834,7 @@ impl App {
             | Msg::ExportSkin(_)
             | Msg::DuplicateSkin(_)
             | Msg::SkinFilesChanged
+            | Msg::LayoutMaterialsReady
             | Msg::SkinScanReady { .. }
             | Msg::PrepareSkinPreview { .. }
             | Msg::SaveSkinPersonalization { .. }

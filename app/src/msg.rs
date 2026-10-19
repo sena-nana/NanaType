@@ -111,6 +111,35 @@ pub enum Msg {
     PluginPackagesChanged,
     /// Fresh digests for running plugins, reviewed off the UI thread.
     PluginPackagesReviewed(Vec<(String, Result<String, String>)>),
+    /// Enabled plugins reviewed off the UI thread by sync `ticket`.
+    PluginsReviewed {
+        ticket: u64,
+        reviews: crate::plugins::Reviews,
+    },
+    /// Package rows with verified signatures, from listing `ticket`.
+    PackagesListed {
+        ticket: u64,
+        rows: Vec<crate::plugins::PackageRow>,
+    },
+    /// A package archive was inspected and installed off the UI thread.
+    PackageInstalled(
+        Result<
+            (
+                nanatype_theme::InstallOutcome,
+                Box<nanatype_theme::SkinRegistry>,
+            ),
+            Vec<nanatype_theme::SkinDiagnostic>,
+        >,
+    ),
+    /// A package export finished off the UI thread.
+    PackageExported(Result<(), String>),
+    /// The review behind an activation request.
+    PluginReviewReady(Result<std::sync::Arc<crate::plugins::ActivationReview>, String>),
+    /// A fresh review taken on confirmation, to compare with the one shown.
+    PluginConfirmReviewed {
+        shown: String,
+        current: Result<std::sync::Arc<crate::plugins::ActivationReview>, String>,
+    },
     PluginCommand {
         id: String,
         command: String,
@@ -212,6 +241,8 @@ pub enum Msg {
     TelegramEvent(crate::stickers::telegram::Event),
     /// A file of the active (folder) skin changed and hot reload is on.
     SkinFilesChanged,
+    /// Background layout materials finished; re-project the views using them.
+    LayoutMaterialsReady,
     SkinScanReady {
         ticket: u64,
         result: Result<Box<crate::services::watch::PreparedSkins>, String>,

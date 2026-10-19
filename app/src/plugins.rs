@@ -11,6 +11,9 @@ use std::{
     },
 };
 static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
+/// Tickets for background syncs and listings; global so a replaced manager
+/// never accepts an older manager's late result.
+static NEXT_TICKET: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PackageRow {
@@ -27,6 +30,8 @@ pub struct ActivationReview {
     pub integrity: Option<nanatype_theme::SealStatus>,
     pub source: String,
     pub location: String,
+    /// Folders of the package and its dependencies, watched while it runs.
+    pub roots: Vec<std::path::PathBuf>,
     /// Exactly the declared data the script may query, from this snapshot.
     pub data: Arc<nanatype_theme::DataAccess>,
 }
@@ -46,6 +51,7 @@ pub fn review(registry: &SkinRegistry, id: &str) -> Result<ActivationReview, Str
     let data = Arc::new(nanatype_theme::DataAccess::for_plugin(&project, &manifest)?);
     Ok(ActivationReview {
         data,
+        roots: files.watch_roots(),
         id: id.into(),
         digest: project.digest(),
         integrity: nanatype_theme::verify_integrity(&project).map_err(|e| e.to_string())?,
@@ -95,13 +101,56 @@ struct Running {
     generation: u64,
     /// The reviewed content this process was started from.
     digest: String,
+    roots: Vec<std::path::PathBuf>,
     process: PluginProcess,
+}
+
+/// Reviews finished off the UI thread, tagged with the sync that asked.
+pub type Reviews = Vec<(String, Result<Arc<ActivationReview>, String>)>;
+
+/// Run `work` on a short-lived background thread and post its message. Package
+/// capture, hashing and signature checks never run on the UI thread.
+pub fn background(
+    name: &str,
+    ctx: &RuntimeProgramContext<Msg>,
+    work: impl FnOnce() -> Msg + Send + 'static,
+) {
+    let ctx = ctx.clone();
+    if let Err(error) = std::thread::Builder::new()
+        .name(name.into())
+        .spawn(move || ctx.dispatch(work()))
+    {
+        crate::debug_log(&format!("{name} unavailable: {error}"));
+    }
+}
+
+/// Package rows with their signature status, for the packages page.
+pub fn package_rows(registry: &SkinRegistry) -> Vec<PackageRow> {
+    registry
+        .packages()
+        .into_iter()
+        .map(|(manifest, origin)| {
+            let integrity = registry
+                .package_files(&manifest.meta.id)
+                .and_then(|files| nanatype_theme::verify_integrity(&*files))
+                .map_err(|e| e.to_string());
+            PackageRow {
+                manifest,
+                origin,
+                integrity,
+            }
+        })
+        .collect()
 }
 
 #[derive(Default)]
 pub struct Manager {
     running: HashMap<String, Running>,
     watch: Option<crate::services::watch::Watch>,
+    /// The newest sync; reviews from an older one are ignored.
+    ticket: u64,
+    /// The newest package listing request.
+    listing: u64,
 }
 impl Manager {
     pub fn has_running(&self) -> bool {
@@ -124,12 +173,11 @@ impl Manager {
         }
     }
     /// Watch the folders of every running plugin and its dependencies.
-    fn refresh_watch(&mut self, registry: &SkinRegistry, ctx: &RuntimeProgramContext<Msg>) {
+    fn refresh_watch(&mut self, ctx: &RuntimeProgramContext<Msg>) {
         let mut roots: Vec<_> = self
             .running
-            .keys()
-            .filter_map(|id| registry.package_files(id).ok())
-            .flat_map(|files| files.watch_roots())
+            .values()
+            .flat_map(|r| r.roots.iter().cloned())
             .collect();
         roots.sort();
         roots.dedup();
@@ -167,24 +215,22 @@ impl Manager {
             }
         });
     }
-    pub fn refresh(&self, registry: &SkinRegistry, ui: Ui) {
-        let rows = registry
-            .packages()
-            .into_iter()
-            .map(|(manifest, origin)| {
-                let integrity = registry
-                    .package_files(&manifest.meta.id)
-                    .and_then(|files| nanatype_theme::verify_integrity(&*files))
-                    .map_err(|e| e.to_string());
-                PackageRow {
-                    manifest,
-                    origin,
-                    integrity,
-                }
-            })
-            .collect();
-        ui.packages.set(Arc::new(rows));
+    /// List packages and verify their signatures in the background.
+    pub fn refresh(&mut self, registry: &SkinRegistry, ctx: &RuntimeProgramContext<Msg>) {
+        self.listing = NEXT_TICKET.fetch_add(1, Ordering::Relaxed);
+        let (registry, ticket) = (registry.clone(), self.listing);
+        background("package-list", ctx, move || Msg::PackagesListed {
+            ticket,
+            rows: package_rows(&registry),
+        });
     }
+    pub fn listed(&self, ticket: u64, rows: Vec<PackageRow>, ui: Ui) {
+        if ticket == self.listing {
+            ui.packages.set(Arc::new(rows));
+        }
+    }
+    /// Stop what is no longer approved now; review the rest in the background
+    /// and start it from [`Self::start_reviewed`].
     pub fn sync(
         &mut self,
         registry: &SkinRegistry,
@@ -193,7 +239,7 @@ impl Manager {
         ctx: RuntimeProgramContext<Msg>,
         ui: Ui,
     ) {
-        self.refresh(registry, ui);
+        self.refresh(registry, &ctx);
         self.running.retain(|id, running| {
             enabled.contains(id)
                 && approvals
@@ -203,18 +249,50 @@ impl Manager {
         let mut views = (*ui.plugin_views.get_untracked()).clone();
         views.retain(|id, _| self.running.contains_key(id));
         ui.plugin_views.set(Arc::new(views));
-        for id in enabled.iter().take(nanatype_settings::MAX_ENABLED_PLUGINS) {
-            if self.running.contains_key(id) {
+        self.refresh_watch(&ctx);
+        self.ticket = NEXT_TICKET.fetch_add(1, Ordering::Relaxed);
+        let pending: Vec<String> = enabled
+            .iter()
+            .take(nanatype_settings::MAX_ENABLED_PLUGINS)
+            .filter(|id| !self.running.contains_key(*id))
+            .cloned()
+            .collect();
+        if pending.is_empty() {
+            return;
+        }
+        let (registry, ticket) = (registry.clone(), self.ticket);
+        background("plugin-review", &ctx, move || Msg::PluginsReviewed {
+            ticket,
+            reviews: pending
+                .into_iter()
+                .map(|id| {
+                    let reviewed = review(&registry, &id).map(Arc::new);
+                    (id, reviewed)
+                })
+                .collect(),
+        });
+    }
+    /// Start reviewed plugins whose approval still matches their content.
+    pub fn start_reviewed(
+        &mut self,
+        ticket: u64,
+        reviews: Reviews,
+        enabled: &[String],
+        approvals: &std::collections::BTreeMap<String, nanatype_settings::PluginApproval>,
+        ctx: RuntimeProgramContext<Msg>,
+        ui: Ui,
+    ) {
+        if ticket != self.ticket {
+            return; // A newer sync is reviewing the current state.
+        }
+        for (id, reviewed) in reviews {
+            if !enabled.contains(&id) || self.running.contains_key(&id) {
                 continue;
             }
-            let prepare = || -> Result<ActivationReview, String> {
-                let reviewed = review(registry, id)?;
-                if !approval_matches(&reviewed, approvals.get(id)) {
+            let result = reviewed.and_then(|reviewed| {
+                if !approval_matches(&reviewed, approvals.get(&id)) {
                     return Err(ui.now_t("packages-consent-required"));
                 }
-                Ok(reviewed)
-            };
-            let result = prepare().and_then(|reviewed| {
                 let reads: Vec<_> = reviewed
                     .data
                     .disclosures()
@@ -232,13 +310,12 @@ impl Manager {
                             Err(error) => nanatype_plugins::DataReply::error(request.token, error),
                         },
                     );
-                let digest = reviewed.digest;
                 let generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
                 let plugin_id = id.clone();
                 let dispatch = ctx.clone();
                 PluginProcess::spawn(
                     &std::env::current_exe().map_err(|e| e.to_string())?,
-                    reviewed.source,
+                    reviewed.source.clone(),
                     serde_json::json!({"type": "init", "reads": reads}),
                     answer,
                     move |response| {
@@ -251,7 +328,8 @@ impl Manager {
                 )
                 .map(|process| Running {
                     generation,
-                    digest,
+                    digest: reviewed.digest.clone(),
+                    roots: reviewed.roots.clone(),
                     process,
                 })
                 .map_err(|e| e.to_string())
@@ -261,11 +339,11 @@ impl Manager {
                     self.running.insert(id.clone(), process);
                 }
                 Err(message) => {
-                    self.remove(id, Some(message), ui);
+                    self.remove(&id, Some(message), ui);
                 }
             }
         }
-        self.refresh_watch(registry, &ctx);
+        self.refresh_watch(&ctx);
     }
     pub fn event(&mut self, id: &str, event: serde_json::Value) -> Result<(), String> {
         self.running

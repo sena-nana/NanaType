@@ -28,6 +28,7 @@ impl App {
             Msg::SkinFilesChanged => {
                 self.request_skin_reload(true);
             }
+            Msg::LayoutMaterialsReady => self.ui.layout_epoch.update(|e| *e += 1),
             Msg::SkinScanReady { ticket, result } => match self.skin_reload.finish(ticket) {
                 Err(latest) => {
                     if let Ok(prepared) = result {

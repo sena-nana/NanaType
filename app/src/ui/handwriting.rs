@@ -14,22 +14,28 @@ const MAX_SIDE: f32 = 2048.;
 type CellKey = ([u8; 32], char);
 static CELLS: LazyLock<Mutex<HashMap<CellKey, Arc<[u8]>>>> = LazyLock::new(Default::default);
 
-/// `text.stroke_time_map` v1: per-texel writing time for the shaped text.
-/// Alpha is the threshold, B marks stroke-covered cells; the extent maps
-/// target coordinates onto the texture.
-pub(super) fn stroke_time_map(
+/// Layout snapshot for `text.stroke_time_map` v1, taken on the UI thread.
+/// Owned and `Send`: rasterising strokes and stamping cells run elsewhere.
+pub(super) struct StrokeJob {
+    data: Arc<StrokeData>,
+    width: u32,
+    height: u32,
+    scale: f32,
+    glyphs: Vec<(char, ttf_parser::Rect, tiny_skia::Transform)>,
+}
+
+/// Walk the shaped text once; only font boxes are read here.
+pub(super) fn stroke_time_job(
     world: &UiWorld,
     id: StableNodeId,
     text: &nana_ui_core::RichText,
-    data: &StrokeData,
-) -> Option<(MaterialTexture, [f32; 4])> {
+    data: &Arc<StrokeData>,
+) -> Option<StrokeJob> {
     let (_, layout) = world.text_layout(id)?;
     let physical = layout.physical_size();
     let size = [physical.0.max(1.), physical.1.max(1.)];
     let scale = (MAX_SIDE / size[0].max(size[1])).min(1.5);
-    let width = (size[0] * scale).ceil() as u32;
-    let height = (size[1] * scale).ceil() as u32;
-    let mut rgba = vec![0; width as usize * height as usize * 4];
+    let mut glyphs = Vec::new();
     let engine = nana_ui::NanaTextShaper::default().text_engine()?;
     let engine = engine.lock().unwrap_or_else(|e| e.into_inner());
     let vertical = layout.is_vertical();
@@ -52,21 +58,10 @@ pub(super) fn stroke_time_map(
                     .text()
                     .get(glyph.cluster as usize..)
                     .and_then(|s| s.chars().next());
-                if let Some((character, strokes)) =
-                    character.and_then(|c| data.glyph(c).map(|s| (c, s)))
+                if let Some(character) = character
                     && let Some(bbox) =
                         face.glyph_bounding_box(ttf_parser::GlyphId(glyph.glyph_id as u16))
                 {
-                    let cell = {
-                        let mut cells = CELLS.lock().unwrap_or_else(|e| e.into_inner());
-                        if cells.len() >= 1024 {
-                            cells.clear();
-                        }
-                        cells
-                            .entry((data.hash, character))
-                            .or_insert_with(|| stroke_cell(&strokes).into())
-                            .clone()
-                    };
                     let (x, y) = if vertical {
                         (centre + glyph.offset_x_px, pen - glyph.offset_y_px)
                     } else {
@@ -77,20 +72,64 @@ pub(super) fn stroke_time_map(
                     };
                     let transform =
                         tiny_skia::Transform::from_row(unit_scale, 0., 0., -unit_scale, x, y);
-                    stamp(&mut rgba, width, height, scale, &cell, bbox, transform);
+                    glyphs.push((character, bbox, transform));
                 }
                 pen += glyph.advance_px;
             }
         }
     }
-    // Ruby and inline objects have no Hanzi mask and use the normal fade.
-    Some((
-        MaterialTexture {
-            size: [width, height],
-            rgba: rgba.into(),
-        },
-        [width as f32 / scale, height as f32 / scale, 0., 0.],
-    ))
+    Some(StrokeJob {
+        data: data.clone(),
+        width: (size[0] * scale).ceil() as u32,
+        height: (size[1] * scale).ceil() as u32,
+        scale,
+        glyphs,
+    })
+}
+
+impl StrokeJob {
+    /// Per-texel writing time: alpha is the threshold, B marks stroke-covered
+    /// cells; the extent maps target coordinates onto the texture.
+    pub(super) fn run(self) -> (MaterialTexture, [f32; 4]) {
+        let Self {
+            data,
+            width,
+            height,
+            scale,
+            glyphs,
+        } = self;
+        let mut rgba = vec![0; width as usize * height as usize * 4];
+        for (character, bbox, transform) in glyphs {
+            // Ruby, Latin and inline objects have no Hanzi mask and use the normal fade.
+            let Some(strokes) = data.glyph(character) else {
+                continue;
+            };
+            let cell = {
+                let mut cells = CELLS.lock().unwrap_or_else(|e| e.into_inner());
+                if cells.len() >= 1024 {
+                    cells.clear();
+                }
+                cells.get(&(data.hash, character)).cloned()
+            };
+            // Rasterise outside the lock so concurrent jobs do not serialise.
+            let cell = cell.unwrap_or_else(|| {
+                let cell: Arc<[u8]> = stroke_cell(&strokes).into();
+                CELLS
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert((data.hash, character), cell.clone());
+                cell
+            });
+            stamp(&mut rgba, width, height, scale, &cell, bbox, transform);
+        }
+        (
+            MaterialTexture {
+                size: [width, height],
+                rgba: rgba.into(),
+            },
+            [width as f32 / scale, height as f32 / scale, 0., 0.],
+        )
+    }
 }
 
 fn stamp(

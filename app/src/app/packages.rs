@@ -6,10 +6,17 @@ impl App {
     /// Plugin consent, package removal and plugin traffic.
     pub(super) fn package_msg(&mut self, msg: Msg) {
         match msg {
-            Msg::RequestPluginActivation(id) => match crate::plugins::review(&self.registry, &id) {
+            Msg::RequestPluginActivation(id) => {
+                // Capturing and hashing a package may take a while; never block the UI.
+                let registry = self.registry.clone();
+                crate::plugins::background("plugin-review", &self.ctx, move || {
+                    Msg::PluginReviewReady(crate::plugins::review(&registry, &id).map(Arc::new))
+                });
+            }
+            Msg::PluginReviewReady(result) => match result {
                 Ok(review) => {
                     self.ui.plugin_source_trusted.set(false);
-                    self.ui.plugin_activation.set(Some(Arc::new(review)));
+                    self.ui.plugin_activation.set(Some(review));
                 }
                 Err(error) => self.notice(error, true),
             },
@@ -21,43 +28,77 @@ impl App {
                 if self.ui.plugin_source_trusted.get_untracked()
                     && let Some(reviewed) = self.ui.plugin_activation.get_untracked()
                 {
-                    match crate::plugins::review(&self.registry, &reviewed.id) {
-                        Ok(current) if current.digest == reviewed.digest => {
-                            let unchanged = self.settings.enabled_plugins.contains(&current.id)
-                                && crate::plugins::approval_matches(
-                                    &current,
-                                    self.settings.plugin_approvals.get(&current.id),
-                                );
-                            self.plugins.stop(&current.id, self.ui);
-                            self.edit(|s| {
-                                if !s.enabled_plugins.contains(&current.id) {
-                                    s.enabled_plugins.push(current.id.clone());
-                                }
-                                s.plugin_approvals.insert(
-                                    current.id,
-                                    nanatype_settings::PluginApproval {
-                                        digest: current.digest,
-                                        trusted_source: true,
-                                        policy: nanatype_settings::PLUGIN_CONSENT_POLICY,
-                                    },
-                                );
-                            });
-                            // Reconfirming identical bytes must also restart a stopped or failed worker.
-                            if unchanged {
-                                self.plugins.sync(
-                                    &self.registry,
-                                    &self.settings.enabled_plugins,
-                                    &self.settings.plugin_approvals,
-                                    self.ctx.clone(),
-                                    self.ui,
-                                );
-                            }
-                            self.ui.plugin_activation.set(None);
-                            self.ui.plugin_source_trusted.set(false);
+                    let registry = self.registry.clone();
+                    crate::plugins::background("plugin-review", &self.ctx, move || {
+                        Msg::PluginConfirmReviewed {
+                            shown: reviewed.digest.clone(),
+                            current: crate::plugins::review(&registry, &reviewed.id).map(Arc::new),
                         }
-                        Ok(_) => self.notice(self.ui.now_t("packages-changed-during-review"), true),
-                        Err(error) => self.notice(error, true),
+                    });
+                }
+            }
+            Msg::PluginConfirmReviewed { shown, current } => {
+                // The dialog may have been cancelled or replaced meanwhile.
+                let still_shown = self.ui.plugin_source_trusted.get_untracked()
+                    && self
+                        .ui
+                        .plugin_activation
+                        .with_untracked(|r| r.as_ref().is_some_and(|r| r.digest == shown));
+                if !still_shown {
+                    return;
+                }
+                match current {
+                    Ok(current) if current.digest == shown => {
+                        let unchanged = self.settings.enabled_plugins.contains(&current.id)
+                            && crate::plugins::approval_matches(
+                                &current,
+                                self.settings.plugin_approvals.get(&current.id),
+                            );
+                        self.plugins.stop(&current.id, self.ui);
+                        self.edit(|s| {
+                            if !s.enabled_plugins.contains(&current.id) {
+                                s.enabled_plugins.push(current.id.clone());
+                            }
+                            s.plugin_approvals.insert(
+                                current.id.clone(),
+                                nanatype_settings::PluginApproval {
+                                    digest: current.digest.clone(),
+                                    trusted_source: true,
+                                    policy: nanatype_settings::PLUGIN_CONSENT_POLICY,
+                                },
+                            );
+                        });
+                        // Reconfirming identical bytes must also restart a stopped or failed worker.
+                        if unchanged {
+                            self.plugins.sync(
+                                &self.registry,
+                                &self.settings.enabled_plugins,
+                                &self.settings.plugin_approvals,
+                                self.ctx.clone(),
+                                self.ui,
+                            );
+                        }
+                        self.ui.plugin_activation.set(None);
+                        self.ui.plugin_source_trusted.set(false);
                     }
+                    Ok(_) => self.notice(self.ui.now_t("packages-changed-during-review"), true),
+                    Err(error) => self.notice(error, true),
+                }
+            }
+            Msg::PluginsReviewed { ticket, reviews } => self.plugins.start_reviewed(
+                ticket,
+                reviews,
+                &self.settings.enabled_plugins,
+                &self.settings.plugin_approvals,
+                self.ctx.clone(),
+                self.ui,
+            ),
+            Msg::PackagesListed { ticket, rows } => self.plugins.listed(ticket, rows, self.ui),
+            Msg::PackageInstalled(result) => self.package_installed(result),
+            Msg::PackageExported(result) => {
+                if let Err(e) = result {
+                    let text = self.ui.tr("skins-export-failed", &[("message", e.into())]);
+                    self.notice(text, true);
                 }
             }
             Msg::DisablePlugin(id) => {
@@ -89,7 +130,7 @@ impl App {
                         }
                     });
                     self.refresh_skin_rows();
-                    self.plugins.refresh(&self.registry, self.ui);
+                    self.plugins.refresh(&self.registry, &self.ctx);
                 }
                 Err(error) => self.notice(error.to_string(), true),
             },

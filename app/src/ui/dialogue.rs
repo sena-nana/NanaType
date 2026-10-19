@@ -474,7 +474,13 @@ fn document_on(
         }
     };
     if let Some(material) = layout_material {
-        return super::pipeline::view(view, material, update_view, follow.map(|_| ui.text_node));
+        return super::pipeline::view(
+            view,
+            material,
+            ui.layout_epoch,
+            update_view,
+            follow.map(|_| ui.text_node),
+        );
     }
     if let Some((spec, (times, text))) = scramble_plan {
         let update = Arc::new(update_view);
