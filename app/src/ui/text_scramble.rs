@@ -18,10 +18,7 @@ use nana_ui_core::{
 use nanatype_theme::ScrambleSpec;
 use std::{
     collections::HashMap,
-    sync::{
-        Arc, LazyLock, Mutex, Weak,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, LazyLock, Mutex, Weak},
     time::Duration,
 };
 use unicode_segmentation::UnicodeSegmentation;
@@ -29,8 +26,7 @@ use unicode_segmentation::UnicodeSegmentation;
 const RENDERER: &str = "nanatype.text-scramble";
 const ATLAS_CELL: [u32; 2] = [40, 64];
 const ATLAS_COLUMNS: u32 = 16;
-static NEXT: AtomicU64 = AtomicU64::new(1);
-static LIVE: LazyLock<Mutex<HashMap<u64, Weak<Scramble>>>> = LazyLock::new(Default::default);
+static LIVE: LazyLock<super::effects::Registry<Scramble>> = LazyLock::new(Default::default);
 
 pub fn transitions(
     spec: &ScrambleSpec,
@@ -114,8 +110,10 @@ fn exit_mask((at, ms): (u64, u16), preview: bool, objects: bool) -> Presentation
 #[derive(Debug, Default)]
 struct Geometry {
     revision: u64,
+    /// Hash of the cells and atlas the revision was built from.
+    key: Option<blake3::Hash>,
     cells: Vec<[f32; 8]>,
-    atlas: Vec<u8>,
+    atlas: Arc<Vec<u8>>,
     atlas_size: [u32; 2],
     origin: [f32; 2],
     size: [f32; 2],
@@ -140,9 +138,7 @@ impl std::fmt::Debug for Scramble {
 }
 impl Drop for Scramble {
     fn drop(&mut self) {
-        LIVE.lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&self.id);
+        LIVE.remove(self.id);
     }
 }
 impl Scramble {
@@ -183,10 +179,7 @@ impl Scramble {
             return;
         };
         let mut engine = engine.lock().unwrap_or_else(|e| e.into_inner());
-        let mut geometry = self.geometry.lock().unwrap_or_else(|e| e.into_inner());
-        geometry.origin = [tb.x - lb.x, tb.y - lb.y];
-        geometry.size = [lb.width, lb.height];
-        geometry.cells.clear();
+        let mut cells = Vec::new();
 
         // Resolve the platform's real monospace face through NanaText, including
         // its bundled fallback, rather than depending on a Windows font path.
@@ -199,12 +192,11 @@ impl Scramble {
         let Some(data) = data else {
             return;
         };
-        let Ok(face) = ttf_parser::Face::parse(data.bytes(), data.index()) else {
+        let Some((atlas, atlas_size)) =
+            cached_atlas(data.bytes(), data.index(), &self.spec.alphabet)
+        else {
             return;
         };
-        let (atlas, atlas_size) = atlas(&face, &self.spec.alphabet);
-        geometry.atlas = atlas;
-        geometry.atlas_size = atlas_size;
 
         // Each grapheme owns one slot, even if shaping produces multiple glyphs
         // (combining marks, variation selectors, ZWJ emoji).
@@ -272,7 +264,7 @@ impl Scramble {
                 at.saturating_sub(self.born) as f32
             };
             let fitted = fit_cell(rect);
-            geometry.cells.push([
+            cells.push([
                 fitted[0],
                 fitted[1],
                 fitted[2],
@@ -283,8 +275,48 @@ impl Scramble {
                 index as f32,
             ]);
         }
+        // An identical re-projection keeps the revision and the GPU upload.
+        let origin = [tb.x - lb.x, tb.y - lb.y];
+        let size = [lb.width, lb.height];
+        let mut hash = blake3::Hasher::new();
+        for v in origin.iter().chain(&size).chain(cells.iter().flatten()) {
+            hash.update(&v.to_bits().to_le_bytes());
+        }
+        hash.update(&(Arc::as_ptr(&atlas) as usize).to_le_bytes());
+        let key = hash.finalize();
+        let mut geometry = self.geometry.lock().unwrap_or_else(|e| e.into_inner());
+        if geometry.key == Some(key) {
+            return;
+        }
+        geometry.key = Some(key);
+        geometry.origin = origin;
+        geometry.size = size;
+        geometry.cells = cells;
+        geometry.atlas = atlas;
+        geometry.atlas_size = atlas_size;
         geometry.revision += 1;
     }
+}
+
+type Atlas = (Arc<Vec<u8>>, [u32; 2]);
+
+/// The atlas depends only on the face and alphabet; rasterize it once.
+fn cached_atlas(bytes: &[u8], index: u32, alphabet: &str) -> Option<Atlas> {
+    type Cache = Mutex<HashMap<(usize, u32, String), Atlas>>;
+    static CACHE: LazyLock<Cache> = LazyLock::new(Default::default);
+    let key = (bytes.as_ptr() as usize, index, alphabet.to_owned());
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(atlas) = cache.get(&key) {
+        return Some(atlas.clone());
+    }
+    let face = ttf_parser::Face::parse(bytes, index).ok()?;
+    let (pixels, size) = atlas(&face, alphabet);
+    if cache.len() >= 8 {
+        cache.clear();
+    }
+    let entry = (Arc::new(pixels), size);
+    cache.insert(key, entry.clone());
+    Some(entry)
 }
 
 // Fit the complete atlas cell uniformly into the retained grapheme advance.
@@ -322,24 +354,6 @@ fn permutation(n: usize, mut seed: u32) -> Vec<usize> {
     ranks
 }
 
-struct Outline(tiny_skia::PathBuilder);
-impl ttf_parser::OutlineBuilder for Outline {
-    fn move_to(&mut self, x: f32, y: f32) {
-        self.0.move_to(x, y);
-    }
-    fn line_to(&mut self, x: f32, y: f32) {
-        self.0.line_to(x, y);
-    }
-    fn quad_to(&mut self, x: f32, y: f32, u: f32, v: f32) {
-        self.0.quad_to(x, y, u, v);
-    }
-    fn curve_to(&mut self, a: f32, b: f32, c: f32, d: f32, e: f32, f: f32) {
-        self.0.cubic_to(a, b, c, d, e, f);
-    }
-    fn close(&mut self) {
-        self.0.close();
-    }
-}
 fn atlas(face: &ttf_parser::Face<'_>, alphabet: &str) -> (Vec<u8>, [u32; 2]) {
     let rows = (alphabet.len() as u32).div_ceil(ATLAS_COLUMNS).max(1);
     let size = [ATLAS_CELL[0] * ATLAS_COLUMNS, ATLAS_CELL[1] * rows];
@@ -351,7 +365,7 @@ fn atlas(face: &ttf_parser::Face<'_>, alphabet: &str) -> (Vec<u8>, [u32; 2]) {
         let Some(id) = face.glyph_index(ch) else {
             continue;
         };
-        let mut outline = Outline(tiny_skia::PathBuilder::new());
+        let mut outline = super::effects::Outline(tiny_skia::PathBuilder::new());
         let Some(bounds) = face.outline_glyph(id, &mut outline) else {
             continue;
         };
@@ -463,7 +477,7 @@ pub fn wrap(
     } else {
         text
     };
-    let id = NEXT.fetch_add(1, Ordering::Relaxed);
+    let id = LIVE.next_id();
     let mut hasher = blake3::Hasher::new();
     hasher.update(value.as_bytes());
     if !preview {
@@ -501,9 +515,7 @@ pub fn wrap(
         preview,
         geometry: Mutex::new(Geometry::default()),
     });
-    LIVE.lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(id, Arc::downgrade(&scramble));
+    LIVE.insert(id, &scramble);
     let size = signal([0u32; 2]);
     let mut base = GpuView::new(id);
     let l = Arc::make_mut(&mut base.style.layout);
@@ -544,13 +556,7 @@ pub fn preview_animating(ui: Ui, now: u64) -> bool {
     track_animating(ui, now, true)
 }
 fn track_animating(ui: Ui, now: u64, preview: bool) -> bool {
-    let live: Vec<_> = LIVE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .values()
-        .filter_map(Weak::upgrade)
-        .collect();
-    live.into_iter().any(|s| {
+    LIVE.snapshot().into_iter().any(|s| {
         s.preview == preview
             && if preview {
                 s.ui.shader_preview == ui.shader_preview
@@ -566,11 +572,8 @@ pub fn register(registry: &mut SceneGpuRendererRegistry) {
 pub fn collect_garbage() {
     let mut state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
     state.prepared.retain(|_, p| p.scramble.strong_count() > 0);
-    let live = LIVE.lock().unwrap_or_else(|e| e.into_inner());
-    state.scales.retain(|(_, id, _)| live.contains_key(id));
-    state
-        .placements
-        .retain(|(_, id, _), _| live.contains_key(id));
+    state.scales.retain(|(_, id, _)| LIVE.contains(*id));
+    state.placements.retain(|(_, id, _), _| LIVE.contains(*id));
 }
 pub fn cache_counts() -> (usize, usize) {
     let state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -776,17 +779,13 @@ impl State {
     }
 }
 fn material(node: &SceneGpuNode) -> Option<Arc<Scramble>> {
-    LIVE.lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(
-            &node
-                .custom
-                .resource
-                .strip_prefix("nanatype.text-scramble:")?
-                .parse()
-                .ok()?,
-        )?
-        .upgrade()
+    LIVE.get(
+        node.custom
+            .resource
+            .strip_prefix("nanatype.text-scramble:")?
+            .parse()
+            .ok()?,
+    )
 }
 impl SceneGpuRenderer for Renderer {
     fn preparation_version(&self, node: &CustomRenderNode) -> Option<u64> {
@@ -866,14 +865,6 @@ impl SceneGpuRenderer for Renderer {
             .exit
             .filter(|(at, _)| now >= *at)
             .map_or(-1., |(at, _)| now.saturating_sub(at) as f32);
-        let linear = |v: u8| {
-            let v = f32::from(v) / 255.;
-            if v <= 0.04045 {
-                v / 12.92
-            } else {
-                ((v + 0.055) / 1.055).powf(2.4)
-            }
-        };
         let values = [
             c.dest_size[0] as f32,
             c.dest_size[1] as f32,
@@ -883,9 +874,9 @@ impl SceneGpuRenderer for Renderer {
             c.bounds.height as f32,
             scale,
             node.opacity,
-            linear(s.color.r),
-            linear(s.color.g),
-            linear(s.color.b),
+            super::effects::linear(s.color.r),
+            super::effects::linear(s.color.g),
+            super::effects::linear(s.color.b),
             f32::from(s.color.a) / 255.,
             now.saturating_sub(s.born) as f32,
             f32::from(s.spec.entrance_ms),
@@ -908,7 +899,7 @@ impl SceneGpuRenderer for Renderer {
             &p.layout,
             std::slice::from_ref(&p.atlas),
             &p.sampler,
-            super::effect_uniforms::output_key(&c, scale, node.opacity),
+            super::effect_uniforms::output_key(&c, scale),
             upload.len(),
         );
         interop.queue().write_buffer(&binding.buffer, 0, &upload);

@@ -2,7 +2,6 @@
 //! The host owns the device, submission and output targets. Only 48 uniform
 //! bytes change on an animated frame; the retained node and mask stay put.
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, Weak};
 
 use nana_ui::runtime::view::{AnyView, IntoView, widget};
@@ -30,8 +29,7 @@ pub fn animating(ui: super::Ui) -> bool {
 }
 
 const RENDERER: &str = "nanatype.dialogue-sweep";
-static NEXT: AtomicU64 = AtomicU64::new(1);
-static MATERIALS: LazyLock<Mutex<HashMap<u64, Weak<Material>>>> = LazyLock::new(Default::default);
+static MATERIALS: LazyLock<super::effects::Registry<Material>> = LazyLock::new(Default::default);
 
 #[derive(Debug, PartialEq)]
 struct Material {
@@ -42,10 +40,7 @@ struct Material {
 }
 impl Drop for Material {
     fn drop(&mut self) {
-        MATERIALS
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&self.id);
+        MATERIALS.remove(self.id);
     }
 }
 
@@ -78,17 +73,14 @@ pub fn view(surface: Surface, spec: SweepSpec, animated: bool) -> AnyView {
     if !effective(&spec) {
         return widget(nana_ui::runtime::Stack::row(0.0)).into_any();
     }
-    let id = NEXT.fetch_add(1, Ordering::Relaxed);
+    let id = MATERIALS.next_id();
     let material = Arc::new(Material {
         id,
         surface,
         spec,
         animated,
     });
-    MATERIALS
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(id, Arc::downgrade(&material));
+    MATERIALS.insert(id, &material);
     let mut base = GpuView::new(id);
     let l = Arc::make_mut(&mut base.style.layout);
     l.position = PositionSpec::Absolute;
@@ -145,9 +137,8 @@ static SHARED: LazyLock<Arc<SweepRenderer>> = LazyLock::new(|| Arc::new(SweepRen
 
 pub fn collect_garbage() {
     let mut state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
-    let materials = MATERIALS.lock().unwrap_or_else(|e| e.into_inner());
     state.masks.retain(|_, m| m.material.strong_count() > 0);
-    state.scales.retain(|(_, id, _)| materials.contains_key(id));
+    state.scales.retain(|(_, id, _)| MATERIALS.contains(*id));
 }
 
 pub fn cache_counts() -> (usize, usize, usize) {
@@ -162,14 +153,7 @@ fn bytes(values: &[f32; 12]) -> [u8; 48] {
     }
     bytes
 }
-fn linear(v: u8) -> f32 {
-    let v = f32::from(v) / 255.0;
-    if v <= 0.04045 {
-        v / 12.92
-    } else {
-        ((v + 0.055) / 1.055).powf(2.4)
-    }
-}
+use super::effects::linear;
 
 impl State {
     fn prepare_mask(
@@ -217,10 +201,8 @@ impl State {
                 self.masks.retain(|((g, _, _), _, _, _), _| *g != retired);
             }
         }
-        let materials = MATERIALS.lock().unwrap_or_else(|e| e.into_inner());
         self.scales
-            .retain(|(g, id, _)| self.generations.contains(g) && materials.contains_key(id));
-        drop(materials);
+            .retain(|(g, id, _)| self.generations.contains(g) && MATERIALS.contains(*id));
         let device = context.gpu.wgpu().device();
         let pipeline = self.pipelines.entry(pipeline_key).or_insert_with(|| {
             let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -341,12 +323,7 @@ impl State {
 }
 
 fn material(node: &SceneGpuNode) -> Option<Arc<Material>> {
-    let id = node.custom.resource.parse().ok()?;
-    MATERIALS
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(&id)?
-        .upgrade()
+    MATERIALS.get(node.custom.resource.parse().ok()?)
 }
 
 impl SceneGpuRenderer for SweepRenderer {
@@ -432,7 +409,7 @@ impl SceneGpuRenderer for SweepRenderer {
             &prepared.layout,
             std::slice::from_ref(&prepared.mask),
             &prepared.sampler,
-            super::effect_uniforms::output_key(&context, scale, node.opacity),
+            super::effect_uniforms::output_key(&context, scale),
             upload.len(),
         );
         interop.queue().write_buffer(&binding.buffer, 0, &upload);

@@ -19,6 +19,7 @@ enum Job {
     OutputCleanup,
     Wake(Wake),
     Cue { epoch: u64, kind: CueKind },
+    Post(Box<Msg>),
 }
 
 enum Command {
@@ -81,6 +82,14 @@ impl Scheduler {
         ));
     }
 
+    /// Deliver `msg` after `delay`, on this timer instead of a sleeping thread.
+    pub fn post_after(&self, delay: std::time::Duration, msg: Msg) {
+        let _ = self.tx.send(Command::Add(
+            Instant::now() + delay,
+            Job::Post(Box::new(msg)),
+        ));
+    }
+
     /// Drop pending cues of `epoch` (wakes carry their own staleness check).
     pub fn cancel(&self, epoch: u64) {
         let _ = self.tx.send(Command::Cancel(epoch));
@@ -125,6 +134,7 @@ fn run(rx: Receiver<Command>, post: impl Fn(Msg)) {
                     reason: w.reason,
                 }),
                 Job::Cue { kind, .. } => post(Msg::Cue(kind)),
+                Job::Post(msg) => post(*msg),
             }
         }
     }

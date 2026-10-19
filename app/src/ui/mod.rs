@@ -6,6 +6,7 @@ pub mod danmaku;
 pub mod dialogue;
 pub mod douyin;
 mod effect_uniforms;
+mod effects;
 pub mod feedback;
 pub mod handwriting;
 pub mod history;

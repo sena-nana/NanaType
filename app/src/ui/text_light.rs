@@ -14,19 +14,18 @@ use nana_ui::{
 use nana_ui_core::{LengthSpec, PointerEventsSpec, PositionSpec};
 use nanatype_theme::TextLightSpec;
 use std::collections::HashMap;
-use std::sync::{
-    Arc, LazyLock, Mutex, Weak,
-    atomic::{AtomicU64, Ordering},
-};
+use std::sync::{Arc, LazyLock, Mutex, Weak};
 
 const RENDERER: &str = "nanatype.text-light";
 const HIDDEN: u32 = 0xff_ffff;
-static NEXT: AtomicU64 = AtomicU64::new(1);
-static LIVE: LazyLock<Mutex<HashMap<u64, Weak<Light>>>> = LazyLock::new(Default::default);
+static LIVE: LazyLock<super::effects::Registry<Light>> = LazyLock::new(Default::default);
 
 #[derive(Debug, Default)]
 struct Geometry {
     revision: u64,
+    /// Hash of what the paths were built from; an identical re-projection
+    /// keeps the revision, and with it the rasterized masks.
+    key: Option<blake3::Hash>,
     paths: Vec<(tiny_skia::Path, u32)>,
     origin: [f32; 2],
     size: [f32; 2],
@@ -50,9 +49,7 @@ impl std::fmt::Debug for Light {
 }
 impl Drop for Light {
     fn drop(&mut self) {
-        LIVE.lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&self.id);
+        LIVE.remove(self.id);
     }
 }
 impl Light {
@@ -98,10 +95,11 @@ impl Light {
             return;
         };
         let engine = engine.lock().unwrap_or_else(|e| e.into_inner());
-        let mut geometry = self.geometry.lock().unwrap_or_else(|e| e.into_inner());
-        geometry.origin = [tb.x - lb.x, tb.y - lb.y];
-        geometry.size = [lb.width, lb.height];
-        geometry.paths.clear();
+        // Place every glyph first (cheap), then outline only when the
+        // placement changed: re-projections at the same layout are common
+        // and each new revision re-rasterizes the light's masks.
+        let mut faces = Vec::new();
+        let mut placed: Vec<Placed> = Vec::new();
         let vertical = layout.is_vertical();
         for line in &layout.lines {
             for run in layout.line_runs(line) {
@@ -115,48 +113,48 @@ impl Light {
                     continue;
                 };
                 let scale = run.font_size_px / f32::from(face.units_per_em());
+                faces.push(data.clone());
+                let font = faces.len() - 1;
                 let centre = layout
                     .physical_x_of_block(line.metrics.baseline_y_px, layout.physical_size().0);
                 let sideways = vertical && run.orientation == nana_text::RunOrientation::Sideways;
                 let mut pen = run.origin_x_px;
                 for glyph in &run.glyphs {
-                    let mut outline = Outline(tiny_skia::PathBuilder::new());
-                    face.outline_glyph(ttf_parser::GlyphId(glyph.glyph_id as u16), &mut outline);
-                    let at = self.time(glyph.cluster as usize);
-                    if let Some(path) = outline.0.finish() {
-                        let transform = if sideways {
-                            tiny_skia::Transform::from_row(
-                                0.,
-                                scale,
-                                scale,
-                                0.,
-                                centre - (run.metrics.ascent_px - run.metrics.descent_px) * 0.5
-                                    + glyph.offset_y_px,
-                                pen + glyph.offset_x_px,
-                            )
-                        } else if vertical {
-                            tiny_skia::Transform::from_row(
-                                scale,
-                                0.,
-                                0.,
-                                -scale,
-                                centre + glyph.offset_x_px,
-                                pen - glyph.offset_y_px,
-                            )
-                        } else {
-                            tiny_skia::Transform::from_row(
-                                scale,
-                                0.,
-                                0.,
-                                -scale,
-                                pen + glyph.offset_x_px,
-                                line.metrics.baseline_y_px - glyph.offset_y_px,
-                            )
-                        };
-                        if let Some(path) = path.transform(transform) {
-                            geometry.paths.push((path, at));
-                        }
-                    }
+                    let transform = if sideways {
+                        tiny_skia::Transform::from_row(
+                            0.,
+                            scale,
+                            scale,
+                            0.,
+                            centre - (run.metrics.ascent_px - run.metrics.descent_px) * 0.5
+                                + glyph.offset_y_px,
+                            pen + glyph.offset_x_px,
+                        )
+                    } else if vertical {
+                        tiny_skia::Transform::from_row(
+                            scale,
+                            0.,
+                            0.,
+                            -scale,
+                            centre + glyph.offset_x_px,
+                            pen - glyph.offset_y_px,
+                        )
+                    } else {
+                        tiny_skia::Transform::from_row(
+                            scale,
+                            0.,
+                            0.,
+                            -scale,
+                            pen + glyph.offset_x_px,
+                            line.metrics.baseline_y_px - glyph.offset_y_px,
+                        )
+                    };
+                    placed.push(Placed {
+                        font,
+                        glyph: glyph.glyph_id as u16,
+                        transform,
+                        at: self.time(glyph.cluster as usize),
+                    });
                     pen += glyph.advance_px;
                 }
             }
@@ -171,44 +169,100 @@ impl Light {
                     continue;
                 };
                 let scale = run.font_size_px / f32::from(face.units_per_em());
+                faces.push(data.clone());
+                let font = faces.len() - 1;
                 for (pen, glyph) in run.glyph_cells() {
-                    let mut outline = Outline(tiny_skia::PathBuilder::new());
-                    face.outline_glyph(ttf_parser::GlyphId(glyph.glyph_id as u16), &mut outline);
-                    if let Some(path) = outline.0.finish().and_then(|p| {
-                        p.transform(tiny_skia::Transform::from_row(
+                    placed.push(Placed {
+                        font,
+                        glyph: glyph.glyph_id as u16,
+                        transform: tiny_skia::Transform::from_row(
                             scale,
                             0.,
                             0.,
                             -scale,
                             pen + glyph.offset_x_px,
                             ruby.baseline_y_px - glyph.offset_y_px,
-                        ))
-                    }) {
-                        geometry.paths.push((path, self.time(ruby.range.start)));
-                    }
+                        ),
+                        at: self.time(ruby.range.start),
+                    });
                 }
             }
         }
+        let origin = [tb.x - lb.x, tb.y - lb.y];
+        let size = [lb.width, lb.height];
+        let faces: Vec<_> = faces.iter().map(|d| (d.bytes(), d.index())).collect();
+        let key = placement_key(origin, size, &faces, &placed);
+        let mut geometry = self.geometry.lock().unwrap_or_else(|e| e.into_inner());
+        if geometry.key == Some(key) {
+            return;
+        }
+        geometry.key = Some(key);
+        geometry.origin = origin;
+        geometry.size = size;
+        geometry.paths = outline_all(&faces, &placed);
         geometry.revision += 1;
     }
 }
-struct Outline(tiny_skia::PathBuilder);
-impl ttf_parser::OutlineBuilder for Outline {
-    fn move_to(&mut self, x: f32, y: f32) {
-        self.0.move_to(x, y);
+
+/// One glyph to outline: its face (an index into the captured fonts),
+/// glyph id, transform and reveal time.
+struct Placed {
+    font: usize,
+    glyph: u16,
+    transform: tiny_skia::Transform,
+    at: u32,
+}
+
+type Faces<'a> = [(&'a [u8], u32)];
+
+fn placement_key(
+    origin: [f32; 2],
+    size: [f32; 2],
+    faces: &Faces<'_>,
+    placed: &[Placed],
+) -> blake3::Hash {
+    let mut hash = blake3::Hasher::new();
+    for v in origin.into_iter().chain(size) {
+        hash.update(&v.to_bits().to_le_bytes());
     }
-    fn line_to(&mut self, x: f32, y: f32) {
-        self.0.line_to(x, y);
+    for p in placed {
+        let t = p.transform;
+        let (bytes, index) = faces[p.font];
+        hash.update(&(bytes.as_ptr() as usize).to_le_bytes());
+        hash.update(&index.to_le_bytes());
+        hash.update(&p.glyph.to_le_bytes());
+        for v in [t.sx, t.kx, t.ky, t.sy, t.tx, t.ty] {
+            hash.update(&v.to_bits().to_le_bytes());
+        }
+        hash.update(&p.at.to_le_bytes());
     }
-    fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
-        self.0.quad_to(x1, y1, x, y);
+    hash.finalize()
+}
+
+fn outline_all(faces: &Faces<'_>, placed: &[Placed]) -> Vec<(tiny_skia::Path, u32)> {
+    let mut paths = Vec::with_capacity(placed.len());
+    let mut face: Option<(usize, ttf_parser::Face<'_>)> = None;
+    for p in placed {
+        if face.as_ref().is_none_or(|(at, _)| *at != p.font) {
+            let (bytes, index) = faces[p.font];
+            face = ttf_parser::Face::parse(bytes, index)
+                .ok()
+                .map(|f| (p.font, f));
+        }
+        let Some((_, face)) = &face else {
+            continue;
+        };
+        let mut outline = super::effects::Outline(tiny_skia::PathBuilder::new());
+        face.outline_glyph(ttf_parser::GlyphId(p.glyph), &mut outline);
+        if let Some(path) = outline
+            .0
+            .finish()
+            .and_then(|path| path.transform(p.transform))
+        {
+            paths.push((path, p.at));
+        }
     }
-    fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
-        self.0.cubic_to(x1, y1, x2, y2, x, y);
-    }
-    fn close(&mut self) {
-        self.0.close();
-    }
+    paths
 }
 
 #[derive(Clone)]
@@ -265,7 +319,7 @@ pub fn wrap(
         exit,
         preview,
     } = schedule;
-    let id = NEXT.fetch_add(1, Ordering::Relaxed);
+    let id = LIVE.next_id();
     let light = Arc::new(Light {
         id,
         ui,
@@ -288,9 +342,7 @@ pub fn wrap(
         preview,
         geometry: Mutex::new(Geometry::default()),
     });
-    LIVE.lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(id, Arc::downgrade(&light));
+    LIVE.insert(id, &light);
     let size = signal([0u32; 2]);
     let mut base = GpuView::new(id);
     let l = Arc::make_mut(&mut base.style.layout);
@@ -328,13 +380,7 @@ pub fn wrap(
 /// Snapshot the registry first: reading signals (or dropping the last strong
 /// reference, whose `Drop` takes the same lock) must not happen under it.
 fn track_animating(ui: Ui, now: u64, preview: bool) -> bool {
-    let live: Vec<_> = LIVE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .values()
-        .filter_map(Weak::upgrade)
-        .collect();
-    live.into_iter().any(|l| {
+    LIVE.snapshot().into_iter().any(|l| {
         l.preview == preview
             && if preview {
                 l.ui.shader_preview == ui.shader_preview
@@ -356,10 +402,7 @@ pub fn register(registry: &mut SceneGpuRendererRegistry) {
 pub fn collect_garbage() {
     let mut state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
     state.masks.retain(|_, m| m.light.strong_count() > 0);
-    let live = LIVE.lock().unwrap_or_else(|e| e.into_inner());
-    state
-        .placements
-        .retain(|(_, id, _), _| live.contains_key(id));
+    state.placements.retain(|(_, id, _), _| LIVE.contains(*id));
 }
 pub fn cache_counts() -> (usize, usize) {
     let s = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -705,17 +748,13 @@ impl State {
     }
 }
 fn material(node: &SceneGpuNode) -> Option<Arc<Light>> {
-    LIVE.lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(
-            &node
-                .custom
-                .resource
-                .strip_prefix("nanatype.text-light:")?
-                .parse()
-                .ok()?,
-        )?
-        .upgrade()
+    LIVE.get(
+        node.custom
+            .resource
+            .strip_prefix("nanatype.text-light:")?
+            .parse()
+            .ok()?,
+    )
 }
 impl SceneGpuRenderer for Renderer {
     fn preparation_version(&self, node: &CustomRenderNode) -> Option<u64> {
@@ -803,14 +842,6 @@ impl SceneGpuRenderer for Renderer {
                 now.saturating_sub(at) as f32 / f32::from(ms.max(1))
             });
         let color = light.spec.color;
-        let linear = |v: u8| {
-            let v = f32::from(v) / 255.;
-            if v <= 0.04045 {
-                v / 12.92
-            } else {
-                ((v + 0.055) / 1.055).powf(2.4)
-            }
-        };
         let values = [
             c.dest_size[0] as f32,
             c.dest_size[1] as f32,
@@ -820,9 +851,9 @@ impl SceneGpuRenderer for Renderer {
             c.bounds.height as f32,
             scale,
             node.opacity * light.spec.intensity,
-            linear(color.r),
-            linear(color.g),
-            linear(color.b),
+            super::effects::linear(color.r),
+            super::effects::linear(color.g),
+            super::effects::linear(color.b),
             f32::from(color.a) / 255.,
             now.saturating_sub(light.born) as f32,
             f32::from(light.entrance_ms.max(1)),
@@ -842,7 +873,7 @@ impl SceneGpuRenderer for Renderer {
             &p.layout,
             &[p.mask.clone(), p.glow.clone()],
             &p.sampler,
-            super::effect_uniforms::output_key(&c, scale, node.opacity),
+            super::effect_uniforms::output_key(&c, scale),
             upload.len(),
         );
         interop.queue().write_buffer(&binding.buffer, 0, upload);

@@ -132,8 +132,10 @@ fn warming(ui: Ui, source: Source) -> bool {
         m.source == source
             && m.spec.static_fallback
             && m.warming.load(Ordering::Relaxed)
+            // Only this UI's materials: another UI's signals are not ours to
+            // read (in tests they live on another thread).
             && if source == Source::Preview {
-                m.ui.page.get_untracked() == super::settings::Page::Skins
+                m.ui.page == ui.page && ui.page.get_untracked() == super::settings::Page::Skins
             } else {
                 m.ui.display == ui.display && !ui.display.with_untracked(|d| d.empty)
             }
@@ -174,14 +176,7 @@ impl ComponentView for EffectView {
         );
     }
 }
-fn linear(v: u8) -> f32 {
-    let v = v as f32 / 255.;
-    if v <= 0.04045 {
-        v / 12.92
-    } else {
-        ((v + 0.055) / 1.055).powf(2.4)
-    }
-}
+use super::effects::linear;
 fn color(c: nanatype_model::Rgba8) -> [f32; 4] {
     [linear(c.r), linear(c.g), linear(c.b), c.a as f32 / 255.]
 }
@@ -936,7 +931,7 @@ impl SceneGpuRenderer for Renderer {
             &pipeline.layout,
             &prepared.textures,
             &pipeline.sampler,
-            super::effect_uniforms::output_key(&c, scale, node.opacity),
+            super::effect_uniforms::output_key(&c, scale),
             bytes.len(),
         );
         gpu.queue().write_buffer(&binding.buffer, 0, &bytes);

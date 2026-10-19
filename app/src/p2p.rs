@@ -2,7 +2,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use nanatype_core::{Cmd, DisplayView, Event as CoreEvent};
+use nanatype_core::{Cmd, DisplayView, Event as CoreEvent, HistoryRow};
 use nanatype_model::{AssetRef, LineId, SourceId};
 use nanatype_p2p::{Config, Event, PeerHandle, Resources, Room, Status, TrackSnapshot};
 
@@ -296,22 +296,28 @@ impl App {
             // Re-render resource completion or resync even at the same sender revision.
             remote_view.revision = self.ui.peer_display.get_untracked().revision + 1;
         }
+        // Index every owner's rows once instead of scanning per entry.
+        let mut by_line: std::collections::HashMap<(&str, LineId), &HistoryRow> = self
+            .core
+            .history()
+            .iter()
+            .filter_map(|row| Some(((self.peer.local.as_str(), row.item.line?), row)))
+            .collect();
+        for (owner, track) in &room.tracks {
+            if owner != &self.peer.local {
+                by_line.extend(
+                    track
+                        .rows
+                        .iter()
+                        .filter_map(|row| Some(((owner.as_str(), row.item.line?), row))),
+                );
+            }
+        }
         for entry in &room.entries {
             let owner = &entry.id.participant;
             let track = room.tracks.get(owner);
             // Visibility and reveal follow the owner's history policy.
-            let source_row = if owner == &self.peer.local {
-                self.core
-                    .history()
-                    .iter()
-                    .find(|row| row.item.line == Some(entry.line.id))
-            } else {
-                track.and_then(|t| {
-                    t.rows
-                        .iter()
-                        .find(|row| row.item.line == Some(entry.line.id))
-                })
-            };
+            let source_row = by_line.get(&(owner.as_str(), entry.line.id)).copied();
             if let Some(row) = source_row {
                 let mut row = row.clone();
                 row.key = entry.order;
@@ -346,7 +352,11 @@ impl App {
                 .filter(|id| self.peer.lines.contains(id))
                 .map(|id| room.render_id(&self.peer.local, id)),
         );
-        self.ui.history.set(Arc::new(rows));
+        // Room events arrive for every peer edit; unchanged rows must not
+        // re-render the history window.
+        if self.ui.history.with_untracked(|history| **history != rows) {
+            self.ui.history.set(Arc::new(rows));
+        }
         if self.ui.peer.get_untracked().name != remote_name {
             let mut state = (*self.ui.peer.get_untracked()).clone();
             state.name = remote_name;

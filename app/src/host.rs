@@ -48,6 +48,9 @@ pub struct Host {
     /// The toast stack of each control window (settings, input, chat).
     toasts: HashMap<WindowId, Entity<ToastStack>>,
     stickers: crate::stickers::playback::Playback,
+    /// Language and forced reduced motion each document was last given;
+    /// re-sent only when they change (or to a new window), not per message.
+    doc_env: HashMap<WindowId, (&'static str, bool)>,
 }
 
 /// Application-clock work is separate from rendering-only work (GPU sweep,
@@ -170,9 +173,11 @@ impl Host {
         if let Some(menu) = self.editor_menu.take() {
             let _ = doc.context_mut().remove_view(menu);
         }
-        let paste_available = arboard::Clipboard::new().is_ok_and(|mut clipboard| {
-            clipboard.get_text().is_ok_and(|text| !text.is_empty()) || clipboard.get_image().is_ok()
-        });
+        // Text is cheap to probe; an image is not (arboard decodes the whole
+        // picture), so a non-text clipboard keeps Paste enabled and the paste
+        // itself finds out.
+        let paste_available = arboard::Clipboard::new()
+            .is_ok_and(|mut clipboard| clipboard.get_text().map_or(true, |t| !t.is_empty()));
         self.editor_menu =
             mount_editor_menu(doc, ui, target, source, (x, y, keyboard), paste_available).ok();
     }
@@ -220,7 +225,12 @@ impl Host {
         // The app's reduce-motion setting wins over the system's in every
         // window's runtime, so view transitions and toasts land at once too.
         let forced = self.app.settings.playback.reduced_motion;
-        for doc in self.docs.values_mut() {
+        self.doc_env.retain(|id, _| self.docs.contains_key(id));
+        for (id, doc) in &mut self.docs {
+            if self.doc_env.get(id) == Some(&(language, forced)) {
+                continue;
+            }
+            self.doc_env.insert(*id, (language, forced));
             let cx = doc.context_mut();
             cx.set_default_language(default_language(language));
             if forced {
@@ -399,6 +409,7 @@ impl Host {
         }
         doc.context_mut()
             .set_default_language(default_language(self.app.ui.locale.get_untracked().tag()));
+        self.doc_env.remove(&id);
         self.docs.insert(id, doc);
         Ok(())
     }
@@ -741,6 +752,7 @@ impl RuntimeProgram for Host {
             pager: overflow::Pager::default(),
             toasts: HashMap::new(),
             stickers: Default::default(),
+            doc_env: HashMap::new(),
         };
         // The primary window exists before `initialize_window` is ever
         // called, so its document is built here.
@@ -920,7 +932,8 @@ impl RuntimeProgram for Host {
                         )
                         .profile(&self.app.skin)
                         .ok();
-                        self.app.edit(|s| kind.remember_size(s, [w, h], profile));
+                        self.app
+                            .edit_geometry(|s| kind.remember_size(s, [w, h], profile));
                     }
                 }
             }
@@ -1035,7 +1048,7 @@ impl RuntimeProgram for Host {
                 // Record immediately so consecutive wheel events accumulate
                 // before the native resize notification arrives.
                 self.app.windows.moved(kind, Some(position), size);
-                self.app.edit(|s| {
+                self.app.edit_geometry(|s| {
                     kind.overlay_mut(s).expect("overlay").size = Some([size.0, size.1]);
                 });
             }

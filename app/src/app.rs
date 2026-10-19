@@ -412,18 +412,16 @@ impl App {
         // The tray says the latest error, so it is seen with every window
         // hidden (summon mode) too.
         self.tray_error = error.then_some((id, text));
-        let ctx = self.ctx.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(feedback::NOTICE_MS));
-            ctx.dispatch(Msg::DismissNotice(id));
-            if error {
-                std::thread::sleep(
-                    Duration::from_secs(TRAY_ERROR_SECS)
-                        .saturating_sub(Duration::from_millis(feedback::NOTICE_MS)),
-                );
-                ctx.dispatch(Msg::TrayErrorExpired(id));
-            }
-        });
+        self.scheduler.post_after(
+            Duration::from_millis(feedback::NOTICE_MS),
+            Msg::DismissNotice(id),
+        );
+        if error {
+            self.scheduler.post_after(
+                Duration::from_secs(TRAY_ERROR_SECS),
+                Msg::TrayErrorExpired(id),
+            );
+        }
     }
 
     /// The input window is on screen (or about to be).
@@ -1200,6 +1198,45 @@ impl App {
         f(&mut next);
         next.sanitize();
         self.apply_settings(next);
+    }
+
+    /// Remember an overlay's size. Drags and wheel zoom arrive at event rate,
+    /// and a size is geometry, not configuration: no service, playback core,
+    /// tray or skin depends on it, so only the settings signal and the
+    /// (debounced) file are updated.
+    pub fn edit_geometry(&mut self, f: impl FnOnce(&mut Settings)) {
+        let mut next = self.settings.clone();
+        f(&mut next);
+        next.sanitize();
+        if next == self.settings {
+            return;
+        }
+        // Remembering a size can first materialize a skin personalization;
+        // anything beyond sizes takes the full path.
+        let without_sizes = |s: &Settings| {
+            let mut s = s.clone();
+            for p in s.skin.personalizations.values_mut() {
+                p.display.size = None;
+                p.history.size = None;
+            }
+            for kind in [
+                WindowKind::Display,
+                WindowKind::PeerDisplay,
+                WindowKind::History,
+            ] {
+                if let Some(o) = kind.overlay_mut(&mut s) {
+                    o.size = None;
+                }
+            }
+            s
+        };
+        if without_sizes(&next) != without_sizes(&self.settings) {
+            self.apply_settings(next);
+            return;
+        }
+        self.settings = next;
+        self.ui.settings.set(Arc::new(self.settings.clone()));
+        self.save_settings();
     }
 
     // ---- the session ------------------------------------------------------

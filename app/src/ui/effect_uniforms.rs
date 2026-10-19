@@ -1,5 +1,5 @@
 //! A mask can be shared by outputs; mutable draw parameters cannot. Keep a
-//! small LRU of bindings per destination geometry, including inherited opacity.
+//! small LRU of bindings per output (see [`output_key`]).
 use nana_ui::DeviceGeneration;
 use nana_ui::{GpuContext, SceneGpuPassContext, wgpu};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -56,17 +56,19 @@ impl Scales {
     }
 }
 
-pub(super) type OutputKey = [u32; 8];
-pub(super) fn output_key(c: &SceneGpuPassContext<'_>, scale: f32, opacity: f32) -> OutputKey {
+/// Which output a binding belongs to. Position and opacity are uniform
+/// *values*: they are rewritten every draw, so keying on them allocated a new
+/// buffer and bind group every frame while a box moved or faded. Outputs that
+/// share a key also share those values within a submission (one layout drawn
+/// to the window and to its same-size export).
+pub(super) type OutputKey = [u32; 5];
+pub(super) fn output_key(c: &SceneGpuPassContext<'_>, scale: f32) -> OutputKey {
     [
         c.dest_size[0],
         c.dest_size[1],
-        c.bounds.x,
-        c.bounds.y,
         c.bounds.width,
         c.bounds.height,
         scale.to_bits(),
-        opacity.to_bits(),
     ]
 }
 
