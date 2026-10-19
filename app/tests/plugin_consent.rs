@@ -178,8 +178,10 @@ fn rollback_signature_removal_and_revocation_all_require_new_consent() {
         ..approve(&unsigned.digest)
     };
     assert!(!approval_matches(&unsigned, Some(&revoked)));
-    let mut settings = Settings::default();
-    settings.enabled_plugins = vec!["example.script".into()];
+    let mut settings = Settings {
+        enabled_plugins: vec!["example.script".into()],
+        ..Default::default()
+    };
     settings
         .plugin_approvals
         .insert("example.script".into(), revoked);
