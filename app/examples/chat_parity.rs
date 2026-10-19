@@ -1,6 +1,7 @@
 //! Real NanaUI interaction capture, driven through its buttons and editor.
 //! cargo run -p nanatype --example chat_parity -- <out> [skin|all] [locale] [profile] [compact|history]
 //! Profiles: capture (150 frames), capture-panel, stills, audit, verify, source, compose, queue, reduced.
+//! capture / capture-panel also write `<surface>/capture.json` (NanaPVMaker capture contract).
 use nana_ui::runtime::view::{entity_ref, with_refs};
 use nana_ui::runtime::{
     DocumentId, Entity, RichEditCommand, RichTextEditor, RuntimeDocument, TextArea, Toast,
@@ -33,6 +34,8 @@ struct Rig {
     toast: Entity<ToastStack>,
     stills_only: bool,
     panel_only: bool,
+    /// NanaPVMaker capture events: (frame, kind, label) where the script acts.
+    events: Vec<(u64, &'static str, &'static str)>,
 }
 fn document(id: u64, theme: Arc<nana_ui::CompiledTheme>, locale: Locale) -> RuntimeDocument {
     let mut doc = RuntimeDocument::new(DocumentId::new(id).unwrap());
@@ -135,6 +138,7 @@ impl Rig {
             toast,
             stills_only: matches!(profile, "stills" | "audit"),
             panel_only: profile == "capture-panel",
+            events: Vec::new(),
         };
         rig.display.set_clear(Some([0.0; 4]));
         rig.history.set_clear(Some([0.0; 4]));
@@ -381,6 +385,7 @@ impl Rig {
             } else {
                 2
             };
+            self.events.push((f, "show", ["c1", "c2", "c3"][n]));
             let m = Arc::new(sample(n));
             let mut rows = (*self.ui.chat.get_untracked()).clone();
             rows.push(m.clone());
@@ -415,6 +420,7 @@ impl Rig {
             let draft = self.ui.draft.get_untracked();
             let source = self.ui.source.get_untracked();
             let label = self.ui.now_t("chat-reply");
+            self.events.push((f, "click", "reply"));
             self.click(true, &label, 1, now);
             assert_eq!(self.ui.draft.get_untracked(), draft);
             assert_eq!(self.ui.source.get_untracked().text, source.text);
@@ -424,10 +430,14 @@ impl Rig {
             && f.is_multiple_of(2)
             && let Some(ch) = "今天打新游戏哦～".chars().nth(((f - 64) / 2) as usize)
         {
+            if f == 64 {
+                self.events.push((f, "type", "replyText"));
+            }
             self.input.type_text(&ch.to_string()).unwrap();
             self.pump(now);
         }
         if f == 96 {
+            self.events.push((f, "show", "images"));
             // Images arrive while the draft is focused. Message keys and selection
             // must survive the update in all four views.
             let before: Vec<_> = self
@@ -512,6 +522,7 @@ impl Rig {
                 "reply attaches a quote without inserting an author label or space"
             );
             let label = self.ui.now_t("tb-send");
+            self.events.push((f, "click", "send1"));
             self.click(false, &label, 0, now);
             assert!(
                 self.core.history().iter().any(|r| r
@@ -523,11 +534,15 @@ impl Rig {
         }
         if f == 122 {
             let label = self.ui.now_t("chat-at-action");
+            self.events.push((f, "click", "mention"));
             self.click(true, &label, 2, now);
         }
         if (124..=140).contains(&f)
             && let Some(ch) = "自我介绍马上来～".chars().nth((f - 124) as usize)
         {
+            if f == 124 {
+                self.events.push((f, "type", "mentionText"));
+            }
             self.input.type_text(&ch.to_string()).unwrap();
             self.pump(now);
         }
@@ -546,6 +561,7 @@ impl Rig {
         }
         if f == 145 {
             let label = self.ui.now_t("tb-send");
+            self.events.push((f, "click", "send2"));
             self.click(false, &label, 0, now);
         }
         self.pump(now);
@@ -840,6 +856,82 @@ fn sample(n: usize) -> ChatMessage {
         at: 1_760_000_000_000 + n as u64,
     }
 }
+/// NanaPVMaker capture contract (schema 1, its docs/capture-contract.md): one
+/// `capture.json` per surface folder, so `pv capture` reads frames and events
+/// directly instead of a hand-copied schedule.
+fn write_capture_manifests(out: &Path, events: &[(u64, &str, &str)], panel_only: bool) {
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+    };
+    let rev = git(&["rev-parse", "--short=9", "HEAD"]).unwrap_or_else(|| "unknown".into());
+    let dirty =
+        git(&["status", "--porcelain", "--untracked-files=no"]).is_some_and(|s| !s.is_empty());
+    let events: Vec<_> = events
+        .iter()
+        .map(|&(f, kind, label)| {
+            serde_json::json!({"t_ms": (f as f64 * 1000.0 / 30.0).round() as u64, "kind": kind, "label": label})
+        })
+        .collect();
+    for name in ["panel", "display", "history"] {
+        if panel_only && name != "panel" {
+            continue;
+        }
+        let dir = out.join(name);
+        let (w, h) = image::image_dimensions(dir.join("0000.png")).unwrap();
+        let manifest = serde_json::json!({
+            "schema": 1,
+            "name": name,
+            "source": {"repo": "NanaType", "rev": rev, "dirty": dirty},
+            "fps": 30,
+            "size": [w, h],
+            "scale": 2,
+            "theme": "light",
+            "count": 150,
+            "alpha": "straight",
+            "dir": ".",
+            "pattern": "%04d.png",
+            "events": events,
+            "capturedAt": utc_now(),
+        });
+        std::fs::write(
+            dir.join("capture.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+    }
+}
+
+/// ISO-8601 UTC wall time (metadata only; frames use the capture clock).
+fn utc_now() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
+    // Civil date from days since 1970-01-01 (Howard Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60
+    )
+}
+
 fn main() {
     std::thread::Builder::new()
         .name("parity-capture".into())
@@ -935,6 +1027,9 @@ fn run() {
                 nanatype::clock::capture_at(f * 1000 / 30, || {
                     rig.step(f, &dir, matches!(profile, "capture" | "capture-panel"))
                 });
+            }
+            if matches!(profile, "capture" | "capture-panel") {
+                write_capture_manifests(&dir, &rig.events, rig.panel_only);
             }
             for stream in [&rig.history, &rig.display] {
                 assert!(
