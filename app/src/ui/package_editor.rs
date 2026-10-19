@@ -1472,10 +1472,24 @@ fn pipeline_section(ui: Ui, view: &EditorView) -> AnyView {
                             }
                         })
                     });
-                    let summary = format!(
+                    let mut summary = format!(
                         "{name} · {}\n{inputs}",
                         processor_key(&spec.processor, spec.version)
                     );
+                    if let Some(signature) =
+                        nanatype_theme::processor(&spec.processor, spec.version)
+                    {
+                        let outputs = signature
+                            .outputs
+                            .iter()
+                            .map(|(name, kind)| format!("{name}: {kind:?}"))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        summary.push_str(&format!(
+                            "\n{}: {outputs}",
+                            ui.now_t("pkgedit-pipeline-outputs")
+                        ));
+                    }
                     entry_row(&key, summary, buttons)
                 }
                 Err(e) => entry_row(

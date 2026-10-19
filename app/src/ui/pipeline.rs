@@ -19,7 +19,7 @@ use std::{
     hash::{Hash, Hasher},
     sync::{
         Arc, LazyLock, Mutex, OnceLock, Weak,
-        atomic::{AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
         mpsc,
     },
 };
@@ -27,21 +27,52 @@ use std::{
 static BUILDS: AtomicUsize = AtomicUsize::new(0);
 static MAPS: LazyLock<Mutex<HashMap<u64, Weak<nana_ui_core::MaterialInstance>>>> =
     LazyLock::new(Default::default);
-static NEXT_SLOT: AtomicU64 = AtomicU64::new(1);
 /// Finished background results awaiting pickup, newest last; bounded.
 static DONE: LazyLock<Mutex<Vec<(u64, Outputs)>>> = LazyLock::new(Default::default);
 const MAX_DONE: usize = 8;
-/// The newest key each view asked for; older queued jobs are skipped.
-static WANTED: LazyLock<Mutex<HashMap<u64, u64>>> = LazyLock::new(Default::default);
+const MAX_DONE_BYTES: usize = 128 * 1024 * 1024;
 static WAKER: OnceLock<Box<dyn Fn() + Send + Sync>> = OnceLock::new();
-static WORKER: OnceLock<Mutex<mpsc::Sender<Job>>> = OnceLock::new();
+static WORKER: OnceLock<mpsc::SyncSender<Job>> = OnceLock::new();
 
 type Outputs = Vec<BTreeMap<&'static str, PortValue>>;
 type Prepared = Box<dyn FnOnce() -> Option<BTreeMap<&'static str, PortValue>> + Send>;
+/// Owned by the view; dropping it also invalidates queued and running work.
+type Slot = Arc<Mutex<Option<u64>>>;
 struct Job {
-    slot: u64,
+    slot: Option<Weak<Mutex<Option<u64>>>>,
     key: u64,
     nodes: Vec<Prepared>,
+}
+impl Job {
+    fn current(&self) -> bool {
+        self.slot.as_ref().is_none_or(|slot| {
+            slot.upgrade().is_some_and(|slot| {
+                *slot.lock().unwrap_or_else(|e| e.into_inner()) == Some(self.key)
+            })
+        })
+    }
+}
+
+fn output_bytes(outputs: &Outputs) -> usize {
+    outputs
+        .iter()
+        .flat_map(BTreeMap::values)
+        .map(|v| match v {
+            PortValue::Texture(t) => t.rgba.len(),
+            PortValue::Vec4(_) => 16,
+        })
+        .sum()
+}
+
+fn remember(key: u64, outputs: Outputs) {
+    let mut done = DONE.lock().unwrap_or_else(|e| e.into_inner());
+    done.retain(|(old, _)| *old != key);
+    done.push((key, outputs));
+    while done.len() > MAX_DONE
+        || done.iter().map(|(_, o)| output_bytes(o)).sum::<usize>() > MAX_DONE_BYTES
+    {
+        done.remove(0);
+    }
 }
 
 /// Run processors in the background and call `wake` (from any thread) when a
@@ -53,54 +84,44 @@ pub fn set_waker(wake: impl Fn() + Send + Sync + 'static) {
 /// Wait until queued jobs are finished; for tests and shutdown audits.
 pub fn settle() {
     let (done, wait) = mpsc::channel();
-    if submit(Job {
-        slot: 0,
-        key: 0,
-        nodes: vec![Box::new(move || {
-            let _ = done.send(());
-            None
-        })],
-    })
-    .is_ok()
+    if worker()
+        .send(Job {
+            slot: None,
+            key: 0,
+            nodes: vec![Box::new(move || {
+                let _ = done.send(());
+                None
+            })],
+        })
+        .is_ok()
     {
         let _ = wait.recv_timeout(std::time::Duration::from_secs(30));
     }
 }
 
-fn submit(job: Job) -> Result<(), Job> {
-    let sender = WORKER.get_or_init(|| {
-        let (send, receive) = mpsc::channel::<Job>();
+fn worker() -> &'static mpsc::SyncSender<Job> {
+    WORKER.get_or_init(|| {
+        let (send, receive) = mpsc::sync_channel::<Job>(MAX_DONE);
         let spawned = std::thread::Builder::new()
             .name("layout-material".into())
             .spawn(move || {
                 while let Ok(job) = receive.recv() {
-                    let stale = job.slot != 0
-                        && WANTED
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .get(&job.slot)
-                            .is_some_and(|wanted| *wanted != job.key);
-                    if stale {
-                        continue;
-                    }
-                    let outputs: Option<Outputs> = job.nodes.into_iter().map(|run| run()).collect();
-                    if let Some(outputs) = outputs
-                        && job.slot != 0
-                    {
-                        let mut done = DONE.lock().unwrap_or_else(|e| e.into_inner());
-                        done.retain(|(key, _)| *key != job.key);
-                        done.push((job.key, outputs));
-                        if done.len() > MAX_DONE {
-                            done.remove(0);
+                    if job.current() {
+                        let outputs: Option<Outputs> =
+                            job.nodes.into_iter().map(|run| run()).collect();
+                        if let Some(slot) = job.slot.as_ref().and_then(Weak::upgrade) {
+                            let mut wanted = slot.lock().unwrap_or_else(|e| e.into_inner());
+                            // A layout change or unmount during conversion cannot publish.
+                            if *wanted == Some(job.key) {
+                                if let Some(outputs) = outputs {
+                                    remember(job.key, outputs);
+                                }
+                                *wanted = None;
+                            }
                         }
-                        drop(done);
                     }
-                    // Finished: a later projection picks the result up from `DONE`.
-                    WANTED
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .retain(|slot, key| !(*slot == job.slot && *key == job.key));
-                    if job.slot != 0
+                    // Also retry views refused by a full queue when stale jobs drain.
+                    if job.slot.is_some()
                         && let Some(wake) = WAKER.get()
                     {
                         wake();
@@ -108,15 +129,10 @@ fn submit(job: Job) -> Result<(), Job> {
                 }
             });
         if let Err(error) = spawned {
-            crate::debug_log(&format!("layout materials run inline: {error}"));
+            crate::debug_log(&format!("layout material worker unavailable: {error}"));
         }
-        Mutex::new(send)
-    });
-    sender
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .send(job)
-        .map_err(|e| e.0)
+        send
+    })
 }
 
 /// A material whose inputs come from layout-dependent pipelines.
@@ -150,7 +166,7 @@ struct LayoutMaterialView {
     material: LayoutMaterial,
     size: [u32; 2],
     /// Identifies this view's newest request to the background worker.
-    slot: u64,
+    slot: Slot,
     /// Advances when background results arrive, so finished maps project.
     epoch: u64,
 }
@@ -181,7 +197,7 @@ impl ComponentView for LayoutMaterialView {
                 &base.value,
                 &self.material,
                 &mask.material,
-                self.slot,
+                &self.slot,
             )
         {
             mask.material = material.clone();
@@ -246,7 +262,7 @@ pub fn view(
         base,
         material,
         size: [0; 2],
-        slot: NEXT_SLOT.fetch_add(1, Ordering::Relaxed),
+        slot: Arc::new(Mutex::new(None)),
         epoch: 0,
     })
     .on(move |e: &SizeChanged| {
@@ -268,6 +284,7 @@ pub fn builds() -> usize {
     BUILDS.load(Ordering::Relaxed)
 }
 
+#[derive(Clone)]
 enum PortValue {
     Texture(MaterialTexture),
     Vec4([f32; 4]),
@@ -316,7 +333,7 @@ fn build(
     text: &nana_ui_core::RichText,
     material: &LayoutMaterial,
     template: &MaterialRef,
-    slot: u64,
+    slot: &Slot,
 ) -> Option<MaterialRef> {
     let (_, layout) = world.text_layout(id)?;
     let physical = layout.physical_size();
@@ -349,6 +366,7 @@ fn build(
         .get(&key)
         .and_then(MaterialRef::upgrade)
     {
+        *slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
         return Some(material);
     }
     let finished = {
@@ -357,38 +375,43 @@ fn build(
             .position(|(k, _)| *k == key)
             .map(|at| done.remove(at).1)
     };
-    let mut computed = match finished {
-        Some(outputs) => outputs,
+    let computed = match finished {
+        Some(outputs) => {
+            *slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            outputs
+        }
         None => {
             let background = WAKER.get().is_some();
-            if background
-                && WANTED
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .insert(slot, key)
-                    == Some(key)
-            {
+            let mut wanted = slot.lock().unwrap_or_else(|e| e.into_inner());
+            if background && *wanted == Some(key) {
                 return None; // Already queued; its result wakes this view.
             }
-            let nodes: Vec<Prepared> = material
+            *wanted = None;
+            let nodes = material
                 .binding
                 .nodes
                 .iter()
                 .map(|node| prepare(node, world, id, text))
-                .collect::<Option<_>>()?;
-            let nodes = if background {
-                match submit(Job { slot, key, nodes }) {
-                    Ok(()) => return None,
-                    // The worker is unavailable: build inline instead.
-                    Err(job) => job.nodes,
+                .collect::<Option<Vec<Prepared>>>()?;
+            if background {
+                *wanted = Some(key);
+                if worker()
+                    .try_send(Job {
+                        slot: Some(Arc::downgrade(slot)),
+                        key,
+                        nodes,
+                    })
+                    .is_err()
+                {
+                    *wanted = None;
                 }
-            } else {
-                nodes
-            };
+                return None; // Backpressure keeps the placeholder; never block the UI.
+            }
+            drop(wanted);
             nodes.into_iter().map(|run| run()).collect::<Option<_>>()?
         }
     };
-    let mut output = |(node, port): (usize, &'static str)| computed[node].remove(port);
+    let output = |(node, port): (usize, &'static str)| computed.get(node)?.get(port).cloned();
     // Static params first, then pipeline uniforms; image slots keep their texture.
     let mut parameters: Vec<[f32; 4]> = template
         .parameters()
@@ -427,10 +450,87 @@ fn build(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn every_registered_processor_has_a_host_implementation() {
         for p in nanatype_theme::PROCESSORS {
             assert!(super::implemented(p.name, p.version), "{}", p.name);
         }
+    }
+
+    #[test]
+    fn background_queue_discards_obsolete_work_and_bounds_results() {
+        use std::{sync::atomic::AtomicUsize, time::Duration};
+        let slot = Arc::new(Mutex::new(Some(1)));
+        let removed = Arc::new(Mutex::new(Some(2)));
+        let (entered, started) = mpsc::channel();
+        let (release, gate) = mpsc::channel();
+        worker()
+            .try_send(Job {
+                slot: Some(Arc::downgrade(&slot)),
+                key: 1,
+                nodes: vec![Box::new(move || {
+                    entered.send(()).unwrap();
+                    gate.recv_timeout(Duration::from_secs(30)).unwrap();
+                    Some(BTreeMap::new())
+                })],
+            })
+            .unwrap_or_else(|_| panic!("worker available"));
+        started.recv_timeout(Duration::from_secs(30)).unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        for i in 0..=MAX_DONE {
+            let calls = calls.clone();
+            let pending = if i % 2 == 0 { &slot } else { &removed };
+            let result = worker().try_send(Job {
+                slot: Some(Arc::downgrade(pending)),
+                key: if i % 2 == 0 { 1 } else { 2 },
+                nodes: vec![Box::new(move || {
+                    calls.fetch_add(1, Ordering::Relaxed);
+                    Some(BTreeMap::new())
+                })],
+            });
+            assert_eq!(result.is_ok(), i < MAX_DONE, "bounded queue");
+        }
+        // The running job becomes obsolete; queued jobs change layout or unmount.
+        *slot.lock().unwrap() = Some(3);
+        drop(removed);
+        release.send(()).unwrap();
+        settle();
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        assert_eq!(*slot.lock().unwrap(), Some(3));
+        assert!(
+            !DONE
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(key, _)| *key == 1 || *key == 2)
+        );
+        worker()
+            .try_send(Job {
+                slot: Some(Arc::downgrade(&slot)),
+                key: 3,
+                nodes: vec![Box::new(|| Some(BTreeMap::new()))],
+            })
+            .unwrap_or_else(|_| panic!("queue drained"));
+        settle();
+        assert_eq!(*slot.lock().unwrap(), None);
+        assert!(DONE.lock().unwrap().iter().any(|(key, _)| *key == 3));
+        // Shared payloads keep this check small while accounting every output.
+        let texture = MaterialTexture {
+            size: [2048; 2],
+            rgba: vec![0; 2048 * 2048 * 4].into(),
+        };
+        for key in 4..16 {
+            remember(
+                key,
+                vec![BTreeMap::from([("time", PortValue::Texture(texture.clone()))]); 3],
+            );
+        }
+        let mut done = DONE.lock().unwrap();
+        assert!(done.len() <= MAX_DONE);
+        assert!(done.iter().map(|(_, o)| output_bytes(o)).sum::<usize>() <= MAX_DONE_BYTES);
+        assert_eq!(done.last().unwrap().0, 15);
+        done.clear();
     }
 }

@@ -903,6 +903,7 @@ pkgedit-pipeline-name = パイプライン名
 pkgedit-pipeline-processor = プロセッサー
 pkgedit-pipeline-inputs = 入力：データ ID（依存パッケージのデータは pkg:パッケージID/データID）、または別のパイプラインにつなぐ場合は パイプライン名.出力 を入力します。
 pkgedit-pipeline-params = パラメーター（1 行に 名前 = 数値）
+pkgedit-pipeline-outputs = 出力
 pkgedit-pipeline-unknown = このプロセッサーは登録されていません。ソースで編集してください。
 pkgedit-pipeline-broken = この宣言は解析できません。skin.toml で編集してください。
 pkgedit-pipelines-no-skin = 処理パイプラインは skin.toml に書きます。スキン機能を有効にすると宣言できます。

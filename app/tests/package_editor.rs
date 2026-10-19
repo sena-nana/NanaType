@@ -796,12 +796,26 @@ fn data_and_pipeline_forms_write_in_place_and_refuse_invalid_edits() {
             )),
         )
         .unwrap();
-    let (session, view) = validated(&registry, session);
+    let (mut session, view) = validated(&registry, session);
     assert_eq!(view.report.errors(), 0, "{:?}", view.report.diagnostics);
     assert!(view.pipelines.iter().any(|(n, _)| n == "spare"));
     assert!(view.report.skin.is_some());
     let archive = dir.path().join("letter.ntpkg");
     pe::export(&registry, &session.project, &archive).unwrap();
+    session
+        .edit(
+            MANIFEST,
+            &text(&session, MANIFEST).replace("text.stroke_time_map", "unknown.processor"),
+        )
+        .unwrap();
+    assert!(
+        pe::validate(&registry, &session.project)
+            .diagnostics
+            .iter()
+            .any(|d| d.path == MANIFEST
+                && d.line > 1
+                && d.message.contains("pipelines.stroke_map.processor"))
+    );
 
     // Signed manifests and skins show the forms read-only.
     let mut signed = pe::create(ProjectKind::Mixed, "editor.signed-forms").unwrap();
@@ -873,6 +887,15 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
             // The remove confirmation fits beside its question too.
             click_key(&mut agent, "package-editor-data:strokes:remove");
             let nodes = agent.accessibility_dump();
+            assert!(
+                nodes
+                    .iter()
+                    .any(|node| node.label.as_deref().is_some_and(|label| label
+                        .contains(&ui.now_t("pkgedit-pipeline-outputs"))
+                        && label.contains("time: Texture")
+                        && label.contains("extent: Vec4"))),
+                "{locale:?} {width}: typed pipeline outputs"
+            );
             for key in [
                 "package-editor-data-form",
                 "package-editor-pipeline-form",

@@ -912,6 +912,7 @@ pkgedit-pipeline-name = Pipeline name
 pkgedit-pipeline-processor = Processor
 pkgedit-pipeline-inputs = Inputs: a data ID (pkg:package-id/data-id for a dependency), or pipeline.output to feed from another pipeline.
 pkgedit-pipeline-params = Parameters, one name = number per line
+pkgedit-pipeline-outputs = Outputs
 pkgedit-pipeline-unknown = This processor is not registered; edit it in the source.
 pkgedit-pipeline-broken = This declaration does not parse; edit it in skin.toml.
 pkgedit-pipelines-no-skin = Pipelines live in skin.toml; enable the skin capability to declare them.

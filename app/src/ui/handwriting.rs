@@ -10,7 +10,7 @@ use std::{
 };
 
 const CELL: usize = 96;
-const MAX_SIDE: f32 = 2048.;
+const MAX_SIDE: f32 = nanatype_theme::MAX_PIPELINE_TEXTURE_SIDE as f32;
 type CellKey = ([u8; 32], char);
 static CELLS: LazyLock<Mutex<HashMap<CellKey, Arc<[u8]>>>> = LazyLock::new(Default::default);
 
@@ -80,8 +80,8 @@ pub(super) fn stroke_time_job(
     }
     Some(StrokeJob {
         data: data.clone(),
-        width: (size[0] * scale).ceil() as u32,
-        height: (size[1] * scale).ceil() as u32,
+        width: (size[0] * scale).ceil().clamp(1., MAX_SIDE) as u32,
+        height: (size[1] * scale).ceil().clamp(1., MAX_SIDE) as u32,
         scale,
         glyphs,
     })

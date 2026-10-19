@@ -83,6 +83,26 @@ cargo test -p nanatype --test plugin_consent production_workers_require_approval
 - `pipeline::builds()` 统计排版相关材质的构建次数，稳定帧不应增长。
 - 插件错误显示在“插件与资源包”中对应包的条目下，内容不足 1024 字符时完整保留。
 
+## Windows 声明式管线观测（2026-10-19）
+
+复用 `layout_materials` 的真实 GPU 用例，在 Windows 11（26300）、debug/test 构建中记录冷／热加载、重排和稳定帧。热加载保留同一注册表及已加载皮肤，测的是已验证结果的复用；稳定帧只推进播放进度，时间图构建计数不增长。用例另验证字体、窗口宽度及 1.5 倍 DPI 变化后替换时间图，保持替换前的当前揭示时钟。
+
+```powershell
+cargo test -p nanatype --test layout_materials -- --test-threads=1 --nocapture
+```
+
+未设置截图目录的最终精简复跑，结果记录在 `target/issue8-final-layout.log`：
+
+| 项目 | 观测值 |
+|---|---:|
+| 情书首次加载 | 982.11 ms |
+| 同一注册表热加载中位数，5 次 | 0.0003 ms |
+| 首次 GPU 帧，包含首次绘制准备与读回 | 6979.02 ms |
+| 稳定帧中位数，5 次，包含 GPU 读回 | 29.40 ms |
+| 字体与排版变化后的帧，包含 GPU 读回 | 46.54 ms |
+
+这些是单机 debug 测试观测，未控制系统负载，也没有 GPU 时间戳；时间图就绪的观测还包含首帧读回，不能当作转换函数的独立耗时。它们不与前文 macOS release 数字直接比较，完整 release 性能验收仍在阶段 5。开启 `NANATYPE_LAYOUT_MATERIAL_CAPTURES` 时还包含 PNG 编码与写盘，该轮只用于画面检查。
+
 ## 未完成
 
 - Windows 实机：作业对象各项限制、完整 release 性能测量、安装包与签名。开发构建的满额绘制失败已修复，见上文；单机 debug 测量与启停／回收验证不代替完整平台验收。

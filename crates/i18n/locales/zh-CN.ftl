@@ -903,6 +903,7 @@ pkgedit-pipeline-name = 管线名称
 pkgedit-pipeline-processor = 处理器
 pkgedit-pipeline-inputs = 输入：填写数据 ID（依赖包的数据写 pkg:包ID/数据ID），或写 管线名.输出 接入另一条管线。
 pkgedit-pipeline-params = 参数，每行一个 名称 = 数值
+pkgedit-pipeline-outputs = 输出
 pkgedit-pipeline-unknown = 此处理器未注册，只能在源码中修改。
 pkgedit-pipeline-broken = 这条声明无法解析，请在 skin.toml 中修改。
 pkgedit-pipelines-no-skin = 处理管线写在 skin.toml 中，启用皮肤能力后才能声明。
