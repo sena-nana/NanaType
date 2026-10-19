@@ -125,6 +125,67 @@ fn declared_reads_are_disclosed_and_older_policy_approvals_need_review() {
     );
     assert_eq!(widened.data.disclosures().count(), 2);
 }
+/// Each lifecycle change must invalidate consent given for other content.
+#[test]
+fn rollback_signature_removal_and_revocation_all_require_new_consent() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = fixture(dir.path());
+    let script = dir.path().join("example.script");
+    let approve = |digest: &str| PluginApproval {
+        digest: digest.into(),
+        trusted_source: true,
+        policy: PLUGIN_CONSENT_POLICY,
+    };
+    let v1 = review(&registry, "example.script").unwrap();
+    let v1_manifest = std::fs::read_to_string(script.join("package.toml")).unwrap();
+    // Update to 1.1.0 and approve it.
+    std::fs::write(
+        script.join("package.toml"),
+        v1_manifest.replace("version='1.0.0'", "version='1.1.0'"),
+    )
+    .unwrap();
+    let v2 = review(&registry, "example.script").unwrap();
+    let approval = approve(&v2.digest);
+    assert!(approval_matches(&v2, Some(&approval)));
+    // Rolling back to 1.0.0 is different content: the 1.1.0 consent does not cover it.
+    std::fs::write(script.join("package.toml"), &v1_manifest).unwrap();
+    let rolled_back = review(&registry, "example.script").unwrap();
+    assert_eq!(rolled_back.digest, v1.digest);
+    assert!(!approval_matches(&rolled_back, Some(&approval)));
+    // Sign the package and approve the signed content.
+    let files = registry.package_files("example.script").unwrap();
+    let mut project = nanatype_theme::PackageProject::capture(&*files).unwrap();
+    let identity = nanatype_theme::SealIdentity::generate().unwrap();
+    let protected = ["package.toml", "main.lua"].map(String::from).into();
+    project.seal(&identity, &protected).unwrap();
+    std::fs::write(
+        script.join(nanatype_theme::INTEGRITY_FILE),
+        &project.files[nanatype_theme::INTEGRITY_FILE],
+    )
+    .unwrap();
+    let signed = review(&registry, "example.script").unwrap();
+    assert!(signed.integrity.is_some(), "the seal verifies");
+    let approval = approve(&signed.digest);
+    assert!(approval_matches(&signed, Some(&approval)));
+    // Removing the signature changes the reviewed content.
+    std::fs::remove_file(script.join(nanatype_theme::INTEGRITY_FILE)).unwrap();
+    let unsigned = review(&registry, "example.script").unwrap();
+    assert!(unsigned.integrity.is_none());
+    assert!(!approval_matches(&unsigned, Some(&approval)));
+    // Revoking trust (or disabling, which drops the record) removes consent.
+    let revoked = PluginApproval {
+        trusted_source: false,
+        ..approve(&unsigned.digest)
+    };
+    assert!(!approval_matches(&unsigned, Some(&revoked)));
+    let mut settings = Settings::default();
+    settings.enabled_plugins = vec!["example.script".into()];
+    settings
+        .plugin_approvals
+        .insert("example.script".into(), revoked);
+    settings.sanitize();
+    assert!(settings.plugin_approvals.is_empty());
+}
 #[test]
 fn running_plugins_are_stopped_when_their_package_or_dependency_changes_on_disk() {
     let dir = tempfile::tempdir().unwrap();

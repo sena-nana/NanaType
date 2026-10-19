@@ -102,3 +102,93 @@ fn data_answers_arrive_as_values_and_chained_requests_are_bounded() {
     }
     assert_eq!(calls.load(Ordering::SeqCst), 2 * MAX_DATA_ROUNDS);
 }
+
+fn spawn(
+    executable: &Path,
+    source: &str,
+) -> (PluginProcess, mpsc::Receiver<WorkerResponse>) {
+    let (sender, receiver) = mpsc::channel();
+    let worker = PluginProcess::spawn(
+        executable,
+        source.into(),
+        serde_json::json!({"type": "init"}),
+        no_data(),
+        move |response| {
+            let _ = sender.send(response);
+        },
+    )
+    .unwrap();
+    (worker, receiver)
+}
+
+#[cfg(unix)]
+fn alive(pid: u32) -> bool {
+    std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+#[test]
+fn crashed_or_foreign_workers_report_errors_instead_of_hanging_the_host() {
+    // A worker that exits at once (a crash) and one that echoes our own
+    // requests back (a protocol violation) both end with a prompt error.
+    for executable in ["/usr/bin/true", "/bin/cat"] {
+        if !Path::new(executable).exists() {
+            continue;
+        }
+        let started = std::time::Instant::now();
+        let (worker, responses) = spawn(Path::new(executable), "return {}");
+        assert!(
+            matches!(
+                responses.recv_timeout(Duration::from_secs(5)),
+                Ok(WorkerResponse::Error { .. })
+            ),
+            "{executable}"
+        );
+        assert!(started.elapsed() < Duration::from_secs(5), "{executable}");
+        // The supervisor finishes right after posting the error.
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while worker.event(serde_json::json!({"type": "line_start"}))
+            != Err(nanatype_plugins::EventError::Stopped)
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "{executable}: a dead worker must be reported as stopped"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn dropping_or_failing_a_worker_reaps_its_process_and_a_fresh_one_starts_cleanly() {
+    let worker_path = Path::new(env!("CARGO_BIN_EXE_nanatype-plugin-worker"));
+    let looping = "return {on_event=function(e) if e.type=='spin' then while true do end end end, view=function() return {} end}";
+    let (worker, responses) = spawn(worker_path, looping);
+    responses.recv_timeout(Duration::from_secs(20)).unwrap();
+    let pid = worker.id();
+    assert!(alive(pid));
+    worker.event(serde_json::json!({"type": "spin"})).unwrap();
+    assert!(matches!(
+        responses.recv_timeout(Duration::from_secs(5)).unwrap(),
+        WorkerResponse::Error { .. }
+    ));
+    // The supervisor kills and waits for a failed worker by itself.
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while alive(pid) && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!alive(pid), "failed worker {pid} was not reaped");
+    drop(worker);
+    // Repeated start/stop leaves nothing behind.
+    for _ in 0..5 {
+        let (worker, responses) = spawn(worker_path, "return {view=function() return {} end}");
+        responses.recv_timeout(Duration::from_secs(20)).unwrap();
+        let pid = worker.id();
+        drop(worker);
+        assert!(!alive(pid), "dropped worker {pid} is still running");
+    }
+}

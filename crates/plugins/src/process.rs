@@ -16,6 +16,7 @@ pub type DataAnswer = Arc<dyn Fn(&DataRequest) -> DataReply + Send + Sync>;
 pub struct PluginProcess {
     sender: mpsc::SyncSender<WorkerRequest>,
     child: Arc<Mutex<Child>>,
+    pid: u32,
 }
 impl PluginProcess {
     /// `init` is the first event; `answer` serves the plugin's declared reads.
@@ -39,6 +40,7 @@ impl PluginProcess {
             command.creation_flags(0x0800_0000);
         }
         let mut child = command.spawn()?;
+        let pid = child.id();
         let mut input = child.stdin.take().unwrap();
         let mut output = child.stdout.take().unwrap();
         let child = Arc::new(Mutex::new(child));
@@ -119,7 +121,11 @@ impl PluginProcess {
                     let _ = child.wait();
                 }
             })?;
-        Ok(Self { sender, child })
+        Ok(Self { sender, child, pid })
+    }
+    /// The worker's process ID, for diagnostics; dropping the handle reaps it.
+    pub fn id(&self) -> u32 {
+        self.pid
     }
     pub fn event(&self, event: serde_json::Value) -> Result<(), EventError> {
         if serde_json::to_vec(&event)
