@@ -142,5 +142,5 @@ uniforms = [{ pipeline = "stroke_map", output = "extent" }]
 ## 延期与非目标
 
 - 包编辑器、简单 IDE、隔离调试、签发与保护选择界面：#6。签名私钥保存在宿主专用位置（`crates/secrets`），不进入包、资源接口、日志或插件进程。
-- 时间纹理等转换移到后台线程、1／4／8 插件压测、OS 级 AppContainer／App Sandbox 加固、Windows／macOS 实机验收：#9。转换处理器已写成纯函数，便于后续迁移。
+- 平台验收：#9。时间纹理已在后台生成；1／4／8 插件测量、macOS Seatbelt 隔离与 Windows 作业对象见[插件性能、预算与隔离](plugin-performance.md)；Windows 实机验证与 AppContainer 仍未完成。
 - 不提供：脚本访问任意路径或 URL、本机模块、网络、持久化存储；按扩展名猜测格式；把签名视为作者身份认证。
