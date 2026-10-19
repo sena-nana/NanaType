@@ -20,6 +20,9 @@ pub struct PluginProcess {
     sender: mpsc::SyncSender<WorkerRequest>,
     child: Arc<Mutex<Child>>,
     pid: u32,
+    /// Windows confinement; closing it ends the worker.
+    #[cfg(windows)]
+    _job: crate::os_sandbox::Job,
 }
 impl PluginProcess {
     /// `init` is the first event; `answer` serves the plugin's declared reads.
@@ -44,6 +47,17 @@ impl PluginProcess {
         }
         let mut child = command.spawn()?;
         let pid = child.id();
+        // The worker blocks on its first request, which is only written after
+        // the job applies; a worker that cannot be confined is not used.
+        #[cfg(windows)]
+        let job = match crate::os_sandbox::confine_child(&child) {
+            Ok(job) => job,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error);
+            }
+        };
         let mut input = child.stdin.take().unwrap();
         let mut output = child.stdout.take().unwrap();
         let child = Arc::new(Mutex::new(child));
@@ -143,7 +157,13 @@ impl PluginProcess {
                     let _ = child.wait();
                 }
             })?;
-        Ok(Self { sender, child, pid })
+        Ok(Self {
+            sender,
+            child,
+            pid,
+            #[cfg(windows)]
+            _job: job,
+        })
     }
     /// The worker's process ID, for diagnostics; dropping the handle reaps it.
     pub fn id(&self) -> u32 {
@@ -195,6 +215,11 @@ impl Drop for PluginProcess {
 pub fn run_worker() {
     let mut input = std::io::stdin().lock();
     let mut output = std::io::stdout().lock();
+    // Fail closed: a worker that cannot be confined runs no plugin code.
+    if let Err(message) = crate::os_sandbox::confine_worker() {
+        let _ = write_message(&mut output, &WorkerResponse::Error { message });
+        return;
+    }
     let mut vm = None;
     while let Ok(request) = read_message::<WorkerRequest>(&mut input) {
         let result = match request {
