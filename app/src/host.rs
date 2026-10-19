@@ -24,7 +24,7 @@ use nanatype_settings::{Hotkey, InputPresence};
 use crate::app::{App, SEND_KEY};
 use crate::clock;
 use crate::msg::{Msg, Tool};
-use crate::ui::overflow::{self, LineSpan, Measure, PageKey};
+use crate::ui::overflow::{self, Measure, PageKey};
 use crate::ui::{danmaku, dialogue, history, input, settings};
 use crate::windows::WindowKind;
 
@@ -477,16 +477,8 @@ impl Host {
             }
             Some(Measure {
                 vertical,
-                lines: layout
-                    .lines
-                    .iter()
-                    // TextLayout stores line-relative axes even for vertical writing.
-                    .map(|l| LineSpan {
-                        bytes: l.source.clone(),
-                        top: l.bounds.y,
-                        bottom: l.bounds.y + l.bounds.height,
-                    })
-                    .collect(),
+                // TextLayout stores line-relative axes even for vertical writing.
+                lines: overflow::line_spans(layout),
                 viewport: {
                     let port = world.layout_box(ui.text_port.get_untracked()?)?;
                     if nanatype_theme::dialogue_is_vertical(
@@ -1441,12 +1433,12 @@ mod redraw_tests {
         let measure = Measure {
             vertical: false,
             lines: vec![
-                LineSpan {
+                overflow::LineSpan {
                     bytes: 0..1,
                     top: 0.0,
                     bottom: 40.0,
                 },
-                LineSpan {
+                overflow::LineSpan {
                     bytes: 1..2,
                     top: 40.0,
                     bottom: 80.0,

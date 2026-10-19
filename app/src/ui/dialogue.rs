@@ -2147,6 +2147,61 @@ mod decor_tests {
     }
 
     #[test]
+    fn following_the_typing_scrolls_a_mention_label_fully_out_of_view() {
+        use nana_ui::runtime::{DocumentId, RuntimeDocument};
+        use nana_ui_devtools::agent::RuntimeAgentSession;
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let ui = Ui::new(
+            Arc::new(nanatype_settings::Settings::default()),
+            registry.load("nanatype.bubble").unwrap().skin,
+            nanatype_i18n::Locale::ZhCn,
+        );
+        let text = nanatype_markup::parse("[at=1001 name=星野ほたる] 晚上好！今天也谢谢你来～").doc;
+        ui.display.update(|v| {
+            let v = Arc::make_mut(v);
+            v.empty = false;
+            v.reveal = Reveal::full(text.unit_count() as u32);
+            v.doc = Arc::new(text);
+            v.reply = Some(nanatype_model::ChatRef::new(
+                nanatype_model::ChatUser {
+                    name: "星野ほたる".into(),
+                    ..Default::default()
+                },
+                "主播晚上好！今天打什么字呀",
+                nanatype_model::SourceKind::Chat,
+            ));
+        });
+        let id = DocumentId::new(1).unwrap();
+        let mut doc = RuntimeDocument::new(id);
+        doc.context_mut()
+            .mount_view_root(id, move || display_window(ui))
+            .unwrap();
+        // The 300×240 window: the label's line and two of text overflow it.
+        let mut session = RuntimeAgentSession::new(doc, 300, 240).unwrap();
+        session.flush().unwrap();
+        let world = session.document().context().world();
+        let (_, layout) = world
+            .text_layout(ui.text_node.get_untracked().unwrap())
+            .unwrap();
+        let port = world
+            .layout_box(ui.text_port.get_untracked().unwrap())
+            .unwrap();
+        let label = layout.objects.first().expect("the mention is laid out");
+        let lines = overflow::line_spans(layout);
+        let last = lines.len() - 1;
+        let scroll = overflow::scroll_target(&lines, last, port.height);
+        assert!(
+            scroll > 0.0,
+            "the line overflows the box: {lines:?}, {port:?}"
+        );
+        assert!(
+            label.rect.y + label.rect.height <= scroll,
+            "the label's bottom edge is still in view: {label:?}, scrolled to {scroll}"
+        );
+        assert!(lines[last].bottom - scroll <= port.height + 0.5);
+    }
+
+    #[test]
     fn a_populated_initial_mount_is_opaque_even_at_clock_zero() {
         let mut stage = Stage::new();
         let mut view = DisplayView::empty(Entrance {

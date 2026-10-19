@@ -37,6 +37,8 @@ pub fn audit(
     let mut session = RuntimeAgentSession::new(doc, default[0], default[1]).unwrap();
     session.set_gpu_renderers(nanatype::ui::sweep::renderers());
     session.set_clear(Some([0.; 4]));
+    // Paging rewrites the reveal; every size starts from the whole line.
+    let page = ui.display.get_untracked();
     for (state, enabled, reduced) in [
         ("static", false, false),
         ("effects", true, false),
@@ -62,6 +64,10 @@ pub fn audit(
                 continue;
             }
             let scale = (1080. / w.max(h) as f32).min(1.);
+            if !Arc::ptr_eq(&ui.display.get_untracked(), &page) {
+                ui.display.set(page.clone());
+            }
+            ui.text_scroll.set(0.);
             session.set_viewport(w, h, scale).unwrap();
             session.flush().unwrap();
             if std::env::var_os("NANATYPE_RESPONSIVE_LONG_TEXT").is_some()
@@ -97,6 +103,8 @@ pub fn audit(
                     }
                 }
             }
+            follow_typing(ui, skin, &session);
+            session.flush().unwrap();
             // Static authored backgrounds also prepare their GPU pipeline lazily.
             let _ = session.screenshot_rgba().unwrap();
             let started = std::time::Instant::now();
@@ -211,4 +219,55 @@ pub fn audit(
         "responsive: {} passed {windows} window and {previews} settings captures",
         skin.meta.id
     );
+}
+
+/// What the host does once a page taller than the box is laid out: scroll
+/// the last typed line into view, or stop at the first full box and wait to
+/// turn the page. Without it a capture shows the start of the text cut off
+/// at the bottom edge, which the app never draws.
+fn follow_typing(ui: Ui, skin: &nanatype_theme::Skin, session: &RuntimeAgentSession) {
+    use nanatype::ui::overflow::{self, Follow, Measure, PageKey};
+    let view = ui.display.get_untracked();
+    let key = PageKey::of(&view);
+    let Some(page) = overflow::published_on(ui.track_slot).filter(|p| p.key == key) else {
+        return;
+    };
+    let world = session.document().context().world();
+    let (Some(node), Some(port)) = (ui.text_node.get_untracked(), ui.text_port.get_untracked())
+    else {
+        return;
+    };
+    let (Some((_, layout)), Some(port)) = (world.text_layout(node), world.layout_box(port)) else {
+        return;
+    };
+    let vertical = layout.is_vertical();
+    let measure = Measure {
+        vertical,
+        lines: overflow::line_spans(layout),
+        viewport: if vertical { port.width } else { port.height },
+        glyphs: &page.glyphs,
+    };
+    match skin.dialogue.overflow {
+        nanatype_model::Overflow::Clip => {}
+        nanatype_model::Overflow::Scroll => {
+            ui.text_scroll
+                .set(Follow::default().frame(Some(key), Some(&measure), u64::MAX, true));
+        }
+        nanatype_model::Overflow::Page => {
+            let Some(&first) =
+                overflow::page_breaks(&measure.lines, measure.glyphs, measure.viewport).first()
+            else {
+                return;
+            };
+            // The core holds the first page until it is continued.
+            let end = view.reveal.visible_from + first;
+            ui.display.update(|view| {
+                let view = Arc::make_mut(view);
+                view.reveal.hidden_from = view.reveal.hidden_from.min(end);
+                view.reveal.shown = view.reveal.shown.min(end);
+                view.continue_indicator = true;
+                view.revision += 1;
+            });
+        }
+    }
 }

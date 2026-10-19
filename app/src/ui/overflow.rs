@@ -97,6 +97,38 @@ pub struct LineSpan {
     pub bottom: f32,
 }
 
+/// The lines of a layout as the typewriter scrolls them. A line reaches over
+/// the ruby on it, and starts below any inline object of the lines before:
+/// an `@` label can stand a pixel or two out of its line box, and a scroll to
+/// the next line's top would leave that edge showing above it.
+pub fn line_spans(layout: &nana_text::TextLayout) -> Vec<LineSpan> {
+    let mut objects_end = f32::NEG_INFINITY;
+    layout
+        .lines
+        .iter()
+        .map(|l| {
+            let on_line = |line: u32| line == l.index;
+            let ruby_top = layout
+                .rubies
+                .iter()
+                .filter(|r| on_line(r.line))
+                .map(|r| r.rect.y)
+                .fold(l.bounds.y, f32::min);
+            let top = ruby_top.max(objects_end);
+            let mut bottom = l.bounds.y + l.bounds.height;
+            for o in layout.objects.iter().filter(|o| on_line(o.line)) {
+                objects_end = objects_end.max(o.rect.y + o.rect.height);
+                bottom = bottom.max(o.rect.y + o.rect.height);
+            }
+            LineSpan {
+                bytes: l.source.clone(),
+                top,
+                bottom,
+            }
+        })
+        .collect()
+}
+
 /// `top..bottom` fits a box `viewport` tall (with rounding slack).
 fn fits(top: f32, bottom: f32, viewport: f32) -> bool {
     bottom - top <= viewport + 0.5
