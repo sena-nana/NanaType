@@ -91,8 +91,6 @@ pub struct Report {
     pub skin: Option<Arc<Skin>>,
     pub files: Option<Arc<dyn SkinFiles>>,
     pub urls: Arc<HashMap<String, String>>,
-    /// The project digest this report describes.
-    pub digest: String,
 }
 impl Report {
     pub fn errors(&self) -> usize {
@@ -106,10 +104,7 @@ impl Report {
 /// Validate exactly like an import: syntax of every local text file, then
 /// the dependency closure, signatures, skin and data. Nothing executes.
 pub fn validate(registry: &SkinRegistry, project: &PackageProject) -> Report {
-    let mut report = Report {
-        digest: project.digest(),
-        ..Default::default()
-    };
+    let mut report = Report::default();
     for (path, bytes) in &project.files {
         if path.starts_with("dependencies/") {
             continue;
@@ -187,7 +182,6 @@ impl Debugger {
 /// Everything the editor views render.
 #[derive(Clone)]
 pub struct EditorView {
-    pub draft: String,
     pub package: String,
     pub kind: ProjectKind,
     pub origin: DraftOrigin,
@@ -254,38 +248,14 @@ fn draft_id(package: &str) -> String {
 pub fn open_installed(registry: &SkinRegistry, id: &str) -> Result<Session, String> {
     let files = registry.package_files(id).map_err(|e| e.to_string())?;
     let project = PackageProject::capture(&*files).map_err(|e| e.to_string())?;
-    Ok(Session::new(
-        DraftInfo {
-            id: draft_id(id),
-            package: id.into(),
-            origin: DraftOrigin::Installed { id: id.into() },
-            saved_at: 0,
-        },
-        project,
-        false,
-    ))
+    let origin = DraftOrigin::Installed { id: id.into() };
+    Ok(Session::new(id, origin, project, false))
 }
 
 /// An unsigned derived copy of an installed or built-in package.
 pub fn copy_installed(registry: &SkinRegistry, id: &str, new_id: &str) -> Result<Session, String> {
-    let files = registry.package_files(id).map_err(|e| e.to_string())?;
-    let project = PackageProject::capture(&*files).map_err(|e| e.to_string())?;
-    let version = project.manifest().map_err(|e| e.to_string())?.meta.version;
-    let copy = editor::derive_copy(&project, new_id).map_err(|e| e.to_string())?;
-    let mut session = Session::new(
-        DraftInfo {
-            id: draft_id(new_id),
-            package: new_id.into(),
-            origin: DraftOrigin::Copy {
-                from: format!("{id}@{version}"),
-            },
-            saved_at: 0,
-        },
-        copy,
-        false,
-    );
-    // A copy exists only in memory until it is saved.
-    session.saved = PackageProject::default();
+    let mut session = open_installed(registry, id)?;
+    session.derive(new_id)?;
     Ok(session)
 }
 
@@ -293,40 +263,22 @@ pub fn open_archive(path: &Path) -> Result<Session, String> {
     let project = editor::read_archive(path).map_err(|e| e.to_string())?;
     let package = project
         .manifest()
-        .map(|m| m.meta.id)
-        .unwrap_or_else(|_| "package".into());
-    Ok(Session::new(
-        DraftInfo {
-            id: draft_id(&package),
-            package,
-            origin: DraftOrigin::Archive { path: path.into() },
-            saved_at: 0,
-        },
-        project,
-        false,
-    ))
+        .map_or_else(|_| "package".into(), |m| m.meta.id);
+    let origin = DraftOrigin::Archive { path: path.into() };
+    Ok(Session::new(&package, origin, project, false))
 }
 
 pub fn create(kind: ProjectKind, id: &str) -> Result<Session, String> {
     let project = editor::template(kind, id).map_err(|e| e.to_string())?;
-    let mut session = Session::new(
-        DraftInfo {
-            id: draft_id(id),
-            package: id.into(),
-            origin: DraftOrigin::New,
-            saved_at: 0,
-        },
-        project,
-        false,
-    );
-    // A new project exists only in memory until it is saved.
-    session.saved = PackageProject::default();
-    Ok(session)
+    Ok(Session::new(id, DraftOrigin::New, project, true))
 }
 
 pub fn open_draft(dir: &Path, id: &str) -> Result<Session, String> {
     let (info, project) = editor::load_draft(dir, id).map_err(|e| e.to_string())?;
-    Ok(Session::new(info, project, true))
+    let mut session = Session::new(&info.package, info.origin.clone(), project, false);
+    session.info = info;
+    session.stored = true;
+    Ok(session)
 }
 
 /// A free `<id>-copy[-n]` package ID.
@@ -347,16 +299,27 @@ pub fn copy_id(registry: &SkinRegistry, id: &str) -> String {
 }
 
 impl Session {
-    fn new(info: DraftInfo, project: PackageProject, stored: bool) -> Self {
+    /// `unsaved`: the content exists only in memory (a new project or copy),
+    /// so closing it asks first.
+    fn new(package: &str, origin: DraftOrigin, project: PackageProject, unsaved: bool) -> Self {
         let selected = project
             .files
             .contains_key(PACKAGE_MANIFEST)
             .then(|| PACKAGE_MANIFEST.to_owned());
         let mut session = Self {
-            info,
-            saved: project.clone(),
+            info: DraftInfo {
+                id: draft_id(package),
+                package: package.into(),
+                origin,
+                saved_at: 0,
+            },
+            saved: if unsaved {
+                PackageProject::default()
+            } else {
+                project.clone()
+            },
             project,
-            stored,
+            stored: false,
             selected,
             revision: next(),
             jump: None,
@@ -406,7 +369,7 @@ impl Session {
         self.project.files != self.saved.files
     }
 
-    pub fn view(&self, key: Option<&SealIdentity>) -> EditorView {
+    pub fn view(&self, key: Option<&SealIdentity>, key_checked: bool) -> EditorView {
         let manifest = self.project.manifest().ok();
         let (text, editable) = match self.selected.as_ref().and_then(|p| {
             let row = self.files.iter().find(|f| &f.path == p)?;
@@ -428,7 +391,6 @@ impl Session {
             syntax.push(location.clone());
         }
         EditorView {
-            draft: self.info.id.clone(),
             package: manifest
                 .as_ref()
                 .map_or_else(|| self.info.package.clone(), |m| m.meta.id.clone()),
@@ -453,7 +415,7 @@ impl Session {
             validating: self.validating || self.stale,
             seal: self.seal.clone(),
             key: key.map(SealIdentity::fingerprint),
-            key_checked: false,
+            key_checked,
             metadata: manifest.as_ref().map(Metadata::of),
             data: Arc::new(
                 manifest
@@ -562,15 +524,13 @@ impl Session {
         metadata: &Metadata,
         registry: &SkinRegistry,
     ) -> Result<(), String> {
-        let mut next = self.project.clone();
-        editor::apply_metadata(&mut next, metadata).map_err(|e| e.to_string())?;
-        // A dependency that is neither bundled nor installed is reported by
-        // validation; the manifest edit itself still applies.
-        let _ = editor::bundle_dependencies(&mut next, registry);
-        self.project = next;
-        self.revision = next_revision();
-        self.refresh();
-        Ok(())
+        self.apply(|p| {
+            editor::apply_metadata(p, metadata)?;
+            // A dependency that is neither bundled nor installed is reported
+            // by validation; the manifest edit itself still applies.
+            let _ = editor::bundle_dependencies(p, registry);
+            Ok(())
+        })
     }
 
     /// Add, change, rename or remove a `[data.<id>]` declaration. The
@@ -598,18 +558,13 @@ impl Session {
         f: impl FnOnce(&mut PackageProject) -> Result<(), nanatype_theme::FileError>,
     ) -> Result<(), String> {
         f(&mut self.project).map_err(|e| e.to_string())?;
-        self.revision = next_revision();
+        self.revision = next();
         self.refresh();
         Ok(())
     }
 
     pub fn sign(&mut self, key: &SealIdentity, protected: &BTreeSet<String>) -> Result<(), String> {
-        let mut next = self.project.clone();
-        next.seal(key, protected).map_err(|e| e.to_string())?;
-        self.project = next;
-        self.revision = next_revision();
-        self.refresh();
-        Ok(())
+        self.apply(|p| p.seal(key, protected).map(|_| ()))
     }
 
     /// Drop a seal made with the host's own key so it can be edited and
@@ -619,10 +574,10 @@ impl Session {
         if !owner {
             return Err("only the signer's own key can remove this signature".into());
         }
-        editor::unseal(&mut self.project);
-        self.revision = next_revision();
-        self.refresh();
-        Ok(())
+        self.apply(|p| {
+            p.files.remove(nanatype_theme::INTEGRITY_FILE);
+            Ok(())
+        })
     }
 
     /// Replace this session with an unsigned derived copy under `id`.
@@ -633,17 +588,7 @@ impl Session {
             .map(|m| format!("{}@{}", m.meta.id, m.meta.version))
             .map_err(|e| e.to_string())?;
         let copy = editor::derive_copy(&self.project, id).map_err(|e| e.to_string())?;
-        *self = Session::new(
-            DraftInfo {
-                id: draft_id(id),
-                package: id.into(),
-                origin: DraftOrigin::Copy { from },
-                saved_at: 0,
-            },
-            copy,
-            false,
-        );
-        self.saved = PackageProject::default();
+        *self = Session::new(id, DraftOrigin::Copy { from }, copy, true);
         Ok(())
     }
 
@@ -661,9 +606,11 @@ impl Session {
 
     /// Return to the last saved content.
     pub fn revert(&mut self) {
-        self.project = self.saved.clone();
-        self.revision = next_revision();
-        self.refresh();
+        let saved = self.saved.clone();
+        let _ = self.apply(|p| {
+            *p = saved;
+            Ok(())
+        });
     }
 
     pub fn request_close(&mut self) -> bool {
@@ -698,12 +645,6 @@ impl Session {
         if !self.stale {
             self.report = report;
         }
-    }
-    pub fn validation(&self) -> &Report {
-        &self.report
-    }
-    pub fn validation_current(&self) -> bool {
-        !self.stale && !self.validating
     }
 
     // ---- isolated Lua debugging ---------------------------------------------
@@ -740,17 +681,7 @@ impl Session {
                 .map_err(|e| e.to_string())?,
         );
         let reads: Vec<_> = data.disclosures().map(|d| d.reference.clone()).collect();
-        let answer: nanatype_plugins::DataAnswer =
-            Arc::new(
-                move |request| match data.answer(&request.id, &request.query) {
-                    Ok(value) => nanatype_plugins::DataReply {
-                        token: request.token,
-                        value: Some(value),
-                        error: None,
-                    },
-                    Err(error) => nanatype_plugins::DataReply::error(request.token, error),
-                },
-            );
+        let answer = crate::plugins::data_answer(data);
         self.debugger.stop();
         let generation = next();
         let process = PluginProcess::spawn(
@@ -863,10 +794,6 @@ impl Session {
     pub fn debugging(&self) -> bool {
         self.debugger.process.is_some()
     }
-}
-
-fn next_revision() -> u64 {
-    next()
 }
 
 /// Validate the whole package and its dependency closure exactly like an

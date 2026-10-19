@@ -326,8 +326,10 @@ impl App {
                 })
             });
         }
-        let mut view = session.view(self.package_editor.key.as_ref());
-        view.key_checked = self.package_editor.key_checked;
+        let view = session.view(
+            self.package_editor.key.as_ref(),
+            self.package_editor.key_checked,
+        );
         self.ui.package_editor.set(Some(Arc::new(view)));
     }
 }

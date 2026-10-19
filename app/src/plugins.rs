@@ -70,6 +70,20 @@ pub fn approval_matches(
     approval.is_some_and(|a| a.matches(&review.digest))
 }
 
+/// Answer a worker's data requests from one reviewed snapshot, by value.
+pub fn data_answer(data: Arc<nanatype_theme::DataAccess>) -> nanatype_plugins::DataAnswer {
+    Arc::new(
+        move |request| match data.answer(&request.id, &request.query) {
+            Ok(value) => nanatype_plugins::DataReply {
+                token: request.token,
+                value: Some(value),
+                error: None,
+            },
+            Err(error) => nanatype_plugins::DataReply::error(request.token, error),
+        },
+    )
+}
+
 /// Fresh digests for running plugins, computed off the UI thread after their
 /// package folders change.
 pub fn review_digests(
@@ -298,18 +312,7 @@ impl Manager {
                     .disclosures()
                     .map(|d| d.reference.clone())
                     .collect();
-                let data = reviewed.data.clone();
-                let answer: nanatype_plugins::DataAnswer =
-                    Arc::new(
-                        move |request| match data.answer(&request.id, &request.query) {
-                            Ok(value) => nanatype_plugins::DataReply {
-                                token: request.token,
-                                value: Some(value),
-                                error: None,
-                            },
-                            Err(error) => nanatype_plugins::DataReply::error(request.token, error),
-                        },
-                    );
+                let answer = data_answer(reviewed.data.clone());
                 let generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
                 let plugin_id = id.clone();
                 let dispatch = ctx.clone();

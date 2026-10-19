@@ -136,7 +136,7 @@ fn signed_projects_keep_protected_files_read_only_and_report_truthfully() {
     copy.set("main.lua", b"return {}".to_vec()).unwrap();
     assert!(derive_copy(&project, "editor.signed").is_err());
     // The owner may unseal and sign again.
-    unseal(&mut project);
+    project.files.remove(INTEGRITY_FILE);
     project.set("main.lua", b"return {}".to_vec()).unwrap();
     project.seal(&key, &BTreeSet::new()).unwrap();
 }

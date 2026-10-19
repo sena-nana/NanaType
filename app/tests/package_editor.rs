@@ -115,7 +115,7 @@ fn protected_files_stay_read_only_and_the_signature_status_is_truthful() {
     session
         .sign(&key, &BTreeSet::from(["main.lua".to_owned()]))
         .unwrap();
-    let view = session.view(Some(&key));
+    let view = session.view(Some(&key), false);
     let seal = view.seal.clone().unwrap().unwrap();
     assert_eq!(seal.fingerprint, key.fingerprint());
     assert!(seal.protected.contains("main.lua") && seal.protected.contains(PACKAGE_MANIFEST));
@@ -133,7 +133,7 @@ fn protected_files_stay_read_only_and_the_signature_status_is_truthful() {
     session
         .edit(MANIFEST, "[chrome]\naccent = \"#000000\"\n")
         .unwrap();
-    assert!(matches!(session.view(Some(&key)).seal, Ok(Some(_))));
+    assert!(matches!(session.view(Some(&key), false).seal, Ok(Some(_))));
     // The private key never enters the project.
     let secret = key.secret_bytes();
     let hex: String = secret.iter().map(|b| format!("{b:02x}")).collect();
@@ -149,7 +149,7 @@ fn protected_files_stay_read_only_and_the_signature_status_is_truthful() {
     copy.sign(&other, &BTreeSet::from(["main.lua".to_owned()]))
         .unwrap();
     copy.derive("editor.signed-copy").unwrap();
-    let view = copy.view(Some(&key));
+    let view = copy.view(Some(&key), false);
     assert!(matches!(view.seal, Ok(None)));
     assert_eq!(view.derived_from, "editor.signed@1.0.0");
     assert!(!copy.project.files.contains_key(INTEGRITY_FILE));
@@ -202,7 +202,7 @@ fn debug(source: &str, events: &[serde_json::Value]) -> (Duration, pe::DebugView
             break;
         }
     }
-    let view = session.view(None).debug;
+    let view = session.view(None, false).debug;
     (blocked, view, session)
 }
 
@@ -218,7 +218,7 @@ fn scripts_run_only_in_the_isolated_debugger_and_report_located_errors() {
     assert!(format!("{update:?}").contains("n=1"), "{update:?}");
     // Editing revokes trust and stops the old instance.
     session.edit("main.lua", "return {}").unwrap();
-    let view = session.view(None).debug;
+    let view = session.view(None, false).debug;
     assert!(!view.trusted && !view.running);
     assert!(session.start_debug(worker(), |_, _| {}).is_err());
 
@@ -249,7 +249,7 @@ fn scripts_run_only_in_the_isolated_debugger_and_report_located_errors() {
         if let Some(line) = line {
             let at = view.location.clone().unwrap_or_else(|| panic!("{error}"));
             assert_eq!((at.path.as_str(), at.line), ("main.lua", line), "{error}");
-            session.view(None);
+            session.view(None, false);
         }
     }
 }
@@ -291,7 +291,7 @@ fn the_editor_fits_narrow_widths_in_every_language_and_works_from_the_keyboard()
     };
     session.validated(ticket, Arc::new(pe::validate(&registry, &project)));
     session.select(MANIFEST);
-    let view = Arc::new(session.view(None));
+    let view = Arc::new(session.view(None, false));
     assert!(view.report.errors() > 0);
     for locale in Locale::ALL {
         for (width, height) in [(900, 660), (440, 900), (300, 1100)] {
@@ -484,7 +484,7 @@ fn protected_sources_show_read_only_and_drafts_never_touch_installed_packages() 
         .sign(&key, &BTreeSet::from(["main.lua".to_owned()]))
         .unwrap();
     session.select("main.lua");
-    let view = Arc::new(session.view(None));
+    let view = Arc::new(session.view(None, false));
     assert!(!view.editable);
     let ui = Ui::new(
         Arc::new(Settings::default()),
@@ -535,7 +535,7 @@ fn skin_previews_reuse_the_real_renderer_without_touching_the_active_skin() {
         .unwrap();
     let (ticket, project) = session.validation_due().unwrap();
     session.validated(ticket, Arc::new(pe::validate(&registry, &project)));
-    let view = Arc::new(session.view(None));
+    let view = Arc::new(session.view(None, false));
     assert!(view.report.skin.is_some(), "{:?}", view.report.diagnostics);
     let captures = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -583,7 +583,7 @@ fn validated(registry: &SkinRegistry, mut session: Session) -> (Session, Arc<pe:
     if let Some((ticket, project)) = session.validation_due() {
         session.validated(ticket, Arc::new(pe::validate(registry, &project)));
     }
-    let view = Arc::new(session.view(None));
+    let view = Arc::new(session.view(None, false));
     (session, view)
 }
 
@@ -630,7 +630,7 @@ fn data_and_pipeline_forms_write_in_place_and_refuse_invalid_edits() {
     let manifest = text(&session, PACKAGE_MANIFEST)
         .replace("[data.strokes]", "# stroke order data\n[data.strokes]");
     session.edit(PACKAGE_MANIFEST, &manifest).unwrap();
-    let view = session.view(None);
+    let view = session.view(None, false);
     let mut strokes = view.data["strokes"].clone();
     strokes.license.push_str(" (checked)");
     session
@@ -641,7 +641,7 @@ fn data_and_pipeline_forms_write_in_place_and_refuse_invalid_edits() {
         manifest.contains("# stroke order data\n[data.strokes]"),
         "{manifest}"
     );
-    assert_eq!(session.view(None).data["strokes"], strokes);
+    assert_eq!(session.view(None, false).data["strokes"], strokes);
     // Refused edits change nothing and are reported.
     let before = session.project.files.clone();
     let mut wrong = strokes.clone();
@@ -651,7 +651,7 @@ fn data_and_pipeline_forms_write_in_place_and_refuse_invalid_edits() {
             .apply_data(Some("strokes"), Some(("strokes", &wrong)))
             .is_err()
     );
-    let (_, stroke_map) = session.view(None).pipelines[0].clone();
+    let (_, stroke_map) = session.view(None, false).pipelines[0].clone();
     let mut pipeline = stroke_map.unwrap();
     assert!(
         session.apply_pipeline(Some("stroke_map"), None).is_err(),
@@ -668,7 +668,10 @@ fn data_and_pipeline_forms_write_in_place_and_refuse_invalid_edits() {
     session
         .apply_pipeline(
             None,
-            Some(("spare", &session.view(None).pipelines[0].1.clone().unwrap())),
+            Some((
+                "spare",
+                &session.view(None, false).pipelines[0].1.clone().unwrap(),
+            )),
         )
         .unwrap();
     let (session, view) = validated(&registry, session);
@@ -684,7 +687,7 @@ fn data_and_pipeline_forms_write_in_place_and_refuse_invalid_edits() {
     signed
         .sign(&key, &BTreeSet::from([MANIFEST.to_owned()]))
         .unwrap();
-    let notes = signed.view(None).data["notes"].clone();
+    let notes = signed.view(None, false).data["notes"].clone();
     assert!(signed.apply_data(None, Some(("more", &notes))).is_err());
     assert!(signed.apply_data(Some("notes"), None).is_err());
     let (_, view) = validated(&registry, signed);
@@ -827,7 +830,7 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
     assert_eq!(session.project.files, before);
     spec.format = nanatype_theme::DataFormat::Json;
     session.apply_data(None, Some((&id, &spec))).unwrap();
-    assert_eq!(session.view(None).data["words"], spec);
+    assert_eq!(session.view(None, false).data["words"], spec);
     // Bad constraints never leave the form.
     type_into(
         &mut agent,

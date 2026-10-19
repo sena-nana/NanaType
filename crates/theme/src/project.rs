@@ -159,6 +159,13 @@ impl SkinFiles for PackageProject {
 }
 impl PackageProject {
     pub fn capture(files: &dyn SkinFiles) -> Result<Self, FileError> {
+        let project = Self::read_all(files)?;
+        verify_integrity(&project)?;
+        Ok(project)
+    }
+    /// Every file within budget, without requiring a valid seal: the editor
+    /// opens broken packages to repair them.
+    pub fn read_all(files: &dyn SkinFiles) -> Result<Self, FileError> {
         let mut project = Self::default();
         let paths = files.list();
         if paths.len() > 4096 {
@@ -180,7 +187,6 @@ impl PackageProject {
                 return Err(error("duplicate project file"));
             }
         }
-        verify_integrity(&project)?;
         Ok(project)
     }
     pub fn digest(&self) -> String {
@@ -283,6 +289,10 @@ impl PackageProject {
         self.check_budget()?;
         self.manifest()?;
         verify_integrity(self)?;
+        self.write_zip(dest)
+    }
+    /// The files as a zip, unchecked (drafts may be unfinished).
+    pub fn write_zip(&self, dest: &Path) -> Result<(), FileError> {
         let file = std::fs::File::create(dest).map_err(error)?;
         let mut zip = zip::ZipWriter::new(file);
         for (path, bytes) in &self.files {

@@ -99,16 +99,6 @@ fn kind_key(kind: ProjectKind) -> &'static str {
     }
 }
 
-fn scroll() -> ScrollView {
-    ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
-        l.flex_grow = Some(1.0);
-        l.flex_shrink = Some(1.0);
-        l.height = Some(LengthSpec::Px(0.0));
-        l.min_height = Some(LengthSpec::Px(0.0));
-        l.width = Some(LengthSpec::Fill);
-    })
-}
-
 /// A `dynamic` whose container fills the remaining height of its column.
 macro_rules! filling {
     ($dynamic:expr) => {
@@ -118,8 +108,16 @@ macro_rules! filling {
     };
 }
 
+/// A tab body that scrolls within the remaining height.
 fn scrolled(content: AnyView) -> AnyView {
-    widget(scroll())
+    let scroll = ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
+        l.flex_grow = Some(1.0);
+        l.flex_shrink = Some(1.0);
+        l.height = Some(LengthSpec::Px(0.0));
+        l.min_height = Some(LengthSpec::Px(0.0));
+        l.width = Some(LengthSpec::Fill);
+    });
+    widget(scroll)
         .children(widget(Stack::column(0.).padding_xy(0., space::XS)).children(content))
         .into_any()
 }
@@ -1023,14 +1021,22 @@ fn package(ui: Ui) -> AnyView {
     .into_any()
 }
 
-fn field(ui: Ui, key: &str, value: Signal<String>, placeholder: &str) -> AnyView {
+/// A control under its caption, up to `width` wide, never wider than the line.
+fn labelled(caption: String, width: f32, control: impl IntoView) -> AnyView {
     widget(
         Stack::column(space::XXS)
-            .width(LengthSpec::Px(260.))
-            .shrink(1.),
+            .width(LengthSpec::Px(width))
+            .shrink(1.)
+            .with_layout(|l| l.max_width = Some(LengthSpec::Percent(100.))),
     )
-    .children((
-        hint(ui.now_t(key)),
+    .children((hint(caption), control))
+    .into_any()
+}
+
+fn field(ui: Ui, key: &str, value: Signal<String>, placeholder: &str) -> AnyView {
+    labelled(
+        ui.now_t(key),
+        260.,
         widget(
             TextInput::new(value.get_untracked())
                 .placeholder(placeholder.to_owned())
@@ -1038,8 +1044,7 @@ fn field(ui: Ui, key: &str, value: Signal<String>, placeholder: &str) -> AnyView
         )
         .key(format!("package-editor-field:{key}"))
         .on(move |e: &TextChanged| value.set(e.value.to_string())),
-    ))
-    .into_any()
+    )
 }
 
 fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
@@ -1362,13 +1367,9 @@ fn data_form(
             widget(Stack::row(space::MD).wrap(true)).children((
                 field(ui, "pkgedit-data-id", id, "notes"),
                 field(ui, "pkgedit-data-path", path, "data/notes.txt"),
-                widget(
-                    Stack::column(space::XXS)
-                        .width(LengthSpec::Px(120.))
-                        .shrink(1.),
-                )
-                .children((
-                    hint(ui.now_t("pkgedit-data-format")),
+                labelled(
+                    ui.now_t("pkgedit-data-format"),
+                    120.,
                     widget(
                         Select::new(Some(format.get_untracked().name()))
                             .options(formats)
@@ -1380,7 +1381,7 @@ fn data_form(
                             format.set(f);
                         }
                     }),
-                )),
+                ),
                 field(ui, "pkgedit-data-version", version, "1"),
                 field(ui, "package-data-source", source, ""),
                 field(ui, "package-data-license", license, "CC0-1.0"),
@@ -1572,13 +1573,9 @@ fn pipeline_form(
                     let input = (*input).to_owned();
                     let value =
                         inputs.with_untracked(|m| m.get(&input).cloned().unwrap_or_default());
-                    widget(
-                        Stack::column(space::XXS)
-                            .width(LengthSpec::Px(260.))
-                            .shrink(1.),
-                    )
-                    .children((
-                        hint(input.clone()),
+                    labelled(
+                        input.clone(),
+                        260.,
                         widget(
                             TextInput::new(value)
                                 .placeholder("strokes")
@@ -1590,8 +1587,7 @@ fn pipeline_form(
                                 m.insert(input.clone(), e.value.to_string());
                             })
                         }),
-                    ))
-                    .into_any()
+                    )
                 })
                 .collect::<Vec<_>>();
             widget(Stack::row(space::MD).wrap(true))
@@ -1644,13 +1640,9 @@ fn pipeline_form(
         (
             widget(Stack::row(space::MD).wrap(true)).children((
                 field(ui, "pkgedit-pipeline-name", name, "stroke_map"),
-                widget(
-                    Stack::column(space::XXS)
-                        .width(LengthSpec::Px(260.))
-                        .shrink(1.),
-                )
-                .children((
-                    hint(ui.now_t("pkgedit-pipeline-processor")),
+                labelled(
+                    ui.now_t("pkgedit-pipeline-processor"),
+                    260.,
                     widget(
                         Select::new(Some(selected))
                             .options(processors)
@@ -1664,7 +1656,7 @@ fn pipeline_form(
                             processor.set((n.to_owned(), v));
                         }
                     }),
-                )),
+                ),
             )),
             hint(ui.now_t("pkgedit-pipeline-inputs")),
             ports,

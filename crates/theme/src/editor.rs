@@ -10,7 +10,6 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -510,7 +509,7 @@ pub fn check_source(path: &str, text: &str) -> Vec<SourceDiagnostic> {
 }
 
 /// Byte span of the deepest existing key along `keys` in a TOML document.
-pub fn key_span(text: &str, keys: &[&str]) -> Option<std::ops::Range<usize>> {
+fn key_span(text: &str, keys: &[&str]) -> Option<std::ops::Range<usize>> {
     let doc = text.parse::<toml_edit::Document<String>>().ok()?;
     let mut item = doc.as_item();
     let mut span = None;
@@ -709,17 +708,28 @@ impl Metadata {
     }
 }
 
-fn manifest_text(project: &PackageProject) -> Result<String, FileError> {
-    String::from_utf8(project.read(PACKAGE_MANIFEST)?).map_err(error)
+fn manifest_doc(project: &PackageProject) -> Result<toml_edit::DocumentMut, FileError> {
+    String::from_utf8(project.read(PACKAGE_MANIFEST)?)
+        .map_err(error)?
+        .parse()
+        .map_err(error)
+}
+
+/// Write an edited `package.toml` only if it parses strictly.
+fn write_manifest(
+    project: &mut PackageProject,
+    doc: &toml_edit::DocumentMut,
+) -> Result<(), FileError> {
+    let text = doc.to_string();
+    PackageManifest::parse(&text)?;
+    project.set(PACKAGE_MANIFEST, text.into_bytes())
 }
 
 /// Write `metadata` into `package.toml`, keeping comments and every other
 /// key, and add starter content for a newly enabled skin or Lua capability.
 /// The project is unchanged unless the result parses strictly.
 pub fn apply_metadata(project: &mut PackageProject, metadata: &Metadata) -> Result<(), FileError> {
-    let mut doc = manifest_text(project)?
-        .parse::<toml_edit::DocumentMut>()
-        .map_err(error)?;
+    let mut doc = manifest_doc(project)?;
     let string = |doc: &mut toml_edit::DocumentMut, key: &str, value: &str| {
         if value.is_empty() && matches!(key, "created_at" | "licensed_to") {
             doc.remove(key);
@@ -772,9 +782,7 @@ pub fn apply_metadata(project: &mut PackageProject, metadata: &Metadata) -> Resu
     {
         next.set(MANIFEST, SKIN_TEMPLATE.into())?;
     }
-    let text = doc.to_string();
-    PackageManifest::parse(&text)?;
-    next.set(PACKAGE_MANIFEST, text.into_bytes())?;
+    write_manifest(&mut next, &doc)?;
     *project = next;
     Ok(())
 }
@@ -806,66 +814,24 @@ pub fn derive_copy(project: &PackageProject, id: &str) -> Result<PackageProject,
     if !crate::package::valid_id(id) || id == manifest.meta.id {
         return Err(error("a derived copy needs a new package ID"));
     }
-    let mut copy = project.clone();
-    copy.files.remove(INTEGRITY_FILE);
-    let mut doc = manifest_text(project)?
-        .parse::<toml_edit::DocumentMut>()
-        .map_err(error)?;
+    let mut doc = manifest_doc(project)?;
     doc["id"] = toml_edit::value(id);
     doc["derived_from"] =
         toml_edit::value(format!("{}@{}", manifest.meta.id, manifest.meta.version));
-    let text = doc.to_string();
-    PackageManifest::parse(&text)?;
-    copy.files
-        .insert(PACKAGE_MANIFEST.into(), text.into_bytes());
-    copy.check_budget()?;
+    let mut copy = project.clone();
+    // Unsigned now, so every local file is editable.
+    copy.files.remove(INTEGRITY_FILE);
+    write_manifest(&mut copy, &doc)?;
     Ok(copy)
 }
 
-/// Drop the seal so its owner can edit and sign again. Only offered when the
-/// host holds the signing key the seal was made with.
-pub fn unseal(project: &mut PackageProject) {
-    project.files.remove(INTEGRITY_FILE);
-}
-
-/// Read a `.ntpkg` into a project without requiring it to be valid, so a
-/// broken package can be opened and repaired. Budgets still apply, and a
-/// failing seal leaves every local file read-only.
+/// Read a `.ntpkg` without requiring it to be valid, so a broken package can
+/// be opened and repaired. Budgets still apply; a failing seal leaves every
+/// local file read-only.
 pub fn read_archive(path: &Path) -> Result<PackageProject, FileError> {
-    let zip = ZipFiles::open(path)?;
-    let mut project = PackageProject::default();
-    let paths = zip.list();
-    if paths.len() > 4096 {
-        return Err(error("too many project files"));
-    }
-    let mut total = 0;
-    for path in paths {
-        let size = zip.file_len(&path)?;
-        total += size;
-        if size > crate::MAX_FILE_BYTES || total > crate::MAX_PACKAGE_BYTES {
-            return Err(error("project resource budget exceeded"));
-        }
-        project.files.insert(clean_path(&path)?, zip.read(&path)?);
-    }
+    let project = PackageProject::read_all(&ZipFiles::open(path)?)?;
     project.check_budget()?;
     Ok(project)
-}
-
-/// Write a project as a zip without validating it (drafts may be unfinished).
-fn write_zip(project: &PackageProject, dest: &Path) -> Result<(), FileError> {
-    let file = std::fs::File::create(dest).map_err(error)?;
-    let mut zip = zip::ZipWriter::new(file);
-    for (path, bytes) in &project.files {
-        zip.start_file(
-            path,
-            zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Deflated),
-        )
-        .map_err(error)?;
-        zip.write_all(bytes).map_err(error)?;
-    }
-    zip.finish().map_err(error)?;
-    Ok(())
 }
 
 /// Where a draft started, shown so a copy is never mistaken for its source.
@@ -905,7 +871,7 @@ pub fn save_draft(dir: &Path, info: &DraftInfo, project: &PackageProject) -> Res
     std::fs::create_dir_all(dir).map_err(error)?;
     let archive = dir.join(format!("{}.ntdraft", info.id));
     let staging = dir.join(format!(".{}.ntdraft.tmp", info.id));
-    write_zip(project, &staging)?;
+    project.write_zip(&staging)?;
     std::fs::rename(&staging, &archive).map_err(error)?;
     let meta = dir.join(format!("{}.json", info.id));
     let staging = dir.join(format!(".{}.json.tmp", info.id));
@@ -1070,9 +1036,7 @@ pub fn apply_data(
     previous: Option<&str>,
     entry: Option<(&str, &DataSpec)>,
 ) -> Result<(), FileError> {
-    let mut doc = manifest_text(project)?
-        .parse::<toml_edit::DocumentMut>()
-        .map_err(error)?;
+    let mut doc = manifest_doc(project)?;
     if let Some((id, spec)) = entry {
         spec.validate(id).map_err(error)?;
         if spec.path.starts_with("dependencies/")
@@ -1125,12 +1089,7 @@ pub fn apply_data(
             }
         }
     }
-    let text = doc.to_string();
-    PackageManifest::parse(&text)?;
-    let mut next = project.clone();
-    next.set(PACKAGE_MANIFEST, text.into_bytes())?;
-    *project = next;
-    Ok(())
+    write_manifest(project, &doc)
 }
 
 /// Pipeline errors of a `skin.toml` text, checked against the registered
@@ -1247,17 +1206,6 @@ pub fn apply_pipeline(
     next.set(MANIFEST, text.into_bytes())?;
     *project = next;
     Ok(())
-}
-
-/// Files that a seal could protect: every local file. `package.toml` is
-/// always protected.
-pub fn sealable(project: &PackageProject) -> BTreeSet<String> {
-    project
-        .files
-        .keys()
-        .filter(|p| !p.starts_with("dependencies/") && *p != INTEGRITY_FILE)
-        .cloned()
-        .collect()
 }
 
 #[cfg(test)]

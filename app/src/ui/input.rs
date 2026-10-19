@@ -1528,15 +1528,15 @@ pub fn editor_context_menu(
     )
 }
 
-/// The draft inside the dialogue box: the rich editor, or the markup source.
-/// Both are built once and shown by `source_mode`, so the editor keeps its
-/// selection and undo history across toggles.
 /// The input editor as a still sample for a skin preview: it takes neither
 /// focus nor input, so it can never edit or send a draft.
 pub fn preview_editor(ui: Ui) -> AnyView {
     editor_area(ui, entity_ref(), entity_ref(), signal(false), true)
 }
 
+/// The draft inside the dialogue box: the rich editor, or the markup source.
+/// Both are built once and shown by `source_mode`, so the editor keeps its
+/// selection and undo history across toggles. `inert` makes both read-only.
 fn editor_area(
     ui: Ui,
     editor: EntityRef<RichTextEditor>,
