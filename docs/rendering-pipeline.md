@@ -48,7 +48,7 @@ Windows 移动／缩放窗口时，`DefWindowProc` 运行嵌套消息循环，�
 回调直至拖动结束。NanaUI 将这类移动／缩放请求投递到消息队列，使输入回调
 先返回，再开始原生操作，避免渲染事件只能被缓冲。
 
-修复位于 [NanaUI 上游提交 8ad85c8fd](https://github.com/sena-nana/NanaUI/commit/8ad85c8fd4b4029b327cfb252be1c4431cf95978)，已包含在当前固定依赖的 `e06201ecd` 中。NanaType 直接使用上游 Winit，不保留
+修复位于 [NanaUI 上游提交 8ad85c8fd](https://github.com/sena-nana/NanaUI/commit/8ad85c8fd4b4029b327cfb252be1c4431cf95978)，已包含在当前固定依赖的 `db81e9a0c` 中。NanaType 直接使用上游 Winit，不保留
 vendor 或 Cargo patch。`host_managed_drag` 保持默认关闭，系统标题栏、原生
 拖动、Aero Snap 与缩放仍由 Windows 处理。
 
