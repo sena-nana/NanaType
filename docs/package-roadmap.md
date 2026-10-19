@@ -1,6 +1,6 @@
 # 统一混装包分阶段计划
 
-总任务：[NanaType #4](https://github.com/sena-nana/NanaType/issues/4)。按阶段独立交付和验收，不以本地原型代表已发布功能。
+总任务：[NanaType #4](https://github.com/sena-nana/NanaType/issues/4)。按阶段独立交付和验收，不以本地原型代表已发布功能。目标格式、接口与边界见[统一包整体设计](package-design.md)。
 
 | 阶段 | Issue | 范围 | 前置 |
 |---|---|---|---|
