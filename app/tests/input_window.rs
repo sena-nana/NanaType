@@ -227,6 +227,33 @@ fn settle(session: &mut RuntimeAgentSession) {
 }
 
 #[test]
+fn a_narrow_sidebar_shows_its_regions_as_icons_inside_the_tab_strip() {
+    let registry = common::registry();
+    for locale in Locale::ALL {
+        let ui = Ui::new(
+            Arc::new(Settings::default()),
+            registry.load("nanatype.halo").unwrap().skin,
+            locale,
+        );
+        let (mut session, _) =
+            common::session().mount_output(720, 480, move || input::input_window(ui));
+        settle(&mut session);
+        // 160 px: no locale's captions fit beside the add button.
+        drag_sidebar(&mut session, 140.0);
+        let strip = keyed(&session, "input-dock-tab-area").bounds;
+        for key in ["input-dock-icon-commands", "input-dock-icon-stickers"] {
+            let icon = keyed(&session, key).bounds;
+            assert!(
+                icon.width > 0.0
+                    && icon.x >= strip.x - 0.5
+                    && icon.x + icon.width <= strip.x + strip.width + 0.5,
+                "{locale:?}: {key} {icon:?} lies outside the tab strip {strip:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
     for locale in Locale::ALL {
         let skin = common::skin("nanatype.halo");
