@@ -89,7 +89,7 @@ pub fn callout(tone: Tone, text: impl Into<String>) -> AnyView {
         Tone::Success => ti::CIRCLE_CHECK,
         _ => ti::INFO_CIRCLE,
     };
-    nana_ui::runtime::view::callout(glyph, tone.status(), text)
+    nana_ui::runtime::view::callout(glyph, tone.status(), text.into()).into_any()
 }
 
 /// An icon on a tinted square: a list entry's lead mark.
