@@ -71,7 +71,7 @@ impl ResponsiveDialogue {
     }
 }
 
-pub fn dialogue_is_vertical(skin: &Skin, [w, h]: [f32; 2]) -> bool {
+pub fn dialogue_is_portrait(skin: &Skin, [w, h]: [f32; 2]) -> bool {
     skin.dialogue.responsive.is_some() && w > 0.0 && h > w
 }
 
@@ -81,9 +81,9 @@ pub fn responsive_dialogue(skin: &Skin, [w, h]: [f32; 2]) -> Skin {
     let Some(spec) = &skin.dialogue.responsive else {
         return result;
     };
-    let vertical = dialogue_is_vertical(skin, [w, h]);
+    let portrait = dialogue_is_portrait(skin, [w, h]);
     let d = &mut result.dialogue;
-    if vertical {
+    if portrait {
         spec.portrait.apply_to(d);
     } else {
         spec.landscape.apply_to(d);
@@ -91,7 +91,7 @@ pub fn responsive_dialogue(skin: &Skin, [w, h]: [f32; 2]) -> Skin {
     for rule in &spec.rules {
         if w <= rule.max_width
             && h <= rule.max_height
-            && rule.portrait.is_none_or(|v| v == vertical)
+            && rule.portrait.is_none_or(|v| v == portrait)
         {
             rule.layout.apply_to(d);
         }
@@ -193,8 +193,8 @@ mod tests {
                     }
                 }
             }
-            assert!(!dialogue_is_vertical(skin, [400., 400.]));
-            assert!(dialogue_is_vertical(skin, [400., 401.]));
+            assert!(!dialogue_is_portrait(skin, [400., 400.]));
+            assert!(dialogue_is_portrait(skin, [400., 401.]));
         }
     }
     #[test]
@@ -294,7 +294,7 @@ mod tests {
     fn legacy_skins_are_unchanged_and_layout_rules_are_ordered() {
         let mut skin = Skin::default();
         assert_eq!(responsive_dialogue(&skin, [160., 1200.]), skin);
-        assert!(!dialogue_is_vertical(&skin, [160., 1200.]));
+        assert!(!dialogue_is_portrait(&skin, [160., 1200.]));
         skin.dialogue.responsive = Some(ResponsiveDialogue {
             portrait: DialogueLayout {
                 padding: Some([24.; 4]),

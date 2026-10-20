@@ -112,12 +112,7 @@ fn quote_view_on(
     backdrop: Option<Rgba8>,
     responsive: bool,
 ) -> AnyView {
-    let vertical = move || {
-        responsive
-            && ui
-                .skin
-                .with(|s| nanatype_theme::dialogue_is_vertical(s, ui.display_size.get()))
-    };
+    let vertical = move || responsive && super::dialogue::vertical_text(ui);
     let size = quote_size(spec, text);
     let name_height = (reply.user.name.chars().count() + 1) as f32 * size;
     let (name_color, color) = colors(skin, spec, text.color, backdrop);
@@ -406,16 +401,19 @@ mod tests {
                 StableNodeId::new(node.id).unwrap()
             })
             .collect();
-        for local_vertical in [true, false, true, false] {
-            ui.display_size.set(if local_vertical {
-                [300., 1200.]
-            } else {
-                [1200., 300.]
-            });
-            ui.remote().display_size.set(if local_vertical {
-                [1200., 300.]
-            } else {
-                [300., 1200.]
+        // Each window's switch decides; its shape only picks the skin layout.
+        for (local_vertical, size) in [
+            (true, [1200., 300.]),
+            (false, [300., 1200.]),
+            (true, [300., 1200.]),
+            (false, [1200., 300.]),
+        ] {
+            ui.display_size.set(size);
+            ui.remote().display_size.set(size);
+            ui.settings.update(|s| {
+                let o = &mut Arc::make_mut(s).overlays;
+                o.display.vertical_text = local_vertical;
+                o.peer_display.vertical_text = !local_vertical;
             });
             session.flush().unwrap();
             let world = session.document().context().world();

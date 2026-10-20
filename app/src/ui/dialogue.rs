@@ -416,8 +416,7 @@ fn document_on(
     let responsive = base.responsive_text;
     let update = move |v: &mut RichTextView| {
         if responsive {
-            let [w, h] = ui.display_size.get();
-            let vertical = h > w && w > 0.0;
+            let vertical = vertical_text(ui);
             let l = Arc::make_mut(&mut v.style.layout);
             l.writing_mode = Some(if vertical {
                 nana_ui_core::WritingModeSpec::VerticalRl
@@ -439,11 +438,9 @@ fn document_on(
                 locale: ui.locale.get(),
             },
         );
-        if responsive {
-            let [w, h] = ui.display_size.get();
-            if h > w && w > 0. {
-                super::rich::vertical_objects(&mut rich, &look, h * 0.5);
-            }
+        if responsive && vertical_text(ui) {
+            let h = ui.display_size.get()[1];
+            super::rich::vertical_objects(&mut rich, &look, h * 0.5);
         }
         if v.value != rich {
             v.value = rich;
@@ -452,8 +449,7 @@ fn document_on(
     let update_view = move |v: &mut RichTextView| {
         update(v);
         if responsive {
-            let [w, h] = ui.display_size.get();
-            let vertical = w > 0. && h > w;
+            let vertical = vertical_text(ui);
             let width = vertical.then(|| {
                 super::rich::vertical_extent(
                     &v.value,
@@ -633,6 +629,15 @@ impl BoxCtx {
         let frame = self.skin.dialogue.box_.frame.as_ref();
         Surface::dialogue_box(&self.skin, frame.and_then(|f| self.url(&f.image)))
     }
+}
+
+/// Whether this display window writes its dialogue top to bottom; the
+/// skin's portrait layout follows the window's shape on its own.
+pub(super) fn vertical_text(ui: Ui) -> bool {
+    ui.skin.with(|skin| {
+        ui.settings
+            .with(|s| ui.display_kind().vertical_text(s, skin))
+    })
 }
 
 pub(super) fn canvas_size(ui: Ui, skin: &Skin) -> [f32; 2] {
@@ -1045,10 +1050,9 @@ fn box_view(ui: Ui, ctx: BoxCtx, content: AnyView) -> impl IntoView {
         widget(Stack::fill_column(0.))
             .bind(move |s: &mut Stack| {
                 let padding = text_ctx.resolved(ui).skin.dialogue.padding;
-                let vertical = nanatype_theme::dialogue_is_vertical(
-                    &text_ctx.skin,
-                    canvas_size(ui, &text_ctx.skin),
-                );
+                let vertical = ui
+                    .settings
+                    .with(|s| ui.display_kind().vertical_text(s, &text_ctx.skin));
                 restyle(s, |l| {
                     l.direction = Some(if vertical {
                         nana_ui_core::FlexDirection::Row
@@ -1206,7 +1210,15 @@ fn responsive_shaders(ui: Ui, ctx: &BoxCtx, layer: DecorLayer) -> AnyView {
 fn input_skin_layer(ui: Ui, ctx: &BoxCtx, build: fn(Ui, &BoxCtx) -> AnyView) -> AnyView {
     if ctx.source != Source::Draft {
         let ctx = ctx.clone();
-        return dynamic(move || ui.display_size.get(), move |_| build(ui, &ctx.resolved(ui)))
+        let skin = ctx.skin.clone();
+        // The name plate turns with the writing direction.
+        let key = move || {
+            let vertical = ui
+                .settings
+                .with(|s| ui.display_kind().vertical_text(s, &skin));
+            (ui.display_size.get(), vertical)
+        };
+        return dynamic(key, move |_| build(ui, &ctx.resolved(ui)))
             .css(nana_ui::runtime::view::css! { position: absolute; inset: 0; pointer-events: none; overflow: visible; }).into_any();
     }
     dynamic(
@@ -1302,7 +1314,9 @@ fn reply_quote(ui: Ui) -> AnyView {
                 && ui
                     .settings
                     .with(|s| s.integrations.bilibili.quote_on_display);
-            let vertical = nanatype_theme::dialogue_is_vertical(&skin, ui.display_size.get());
+            let vertical = ui
+                .settings
+                .with(|s| ui.display_kind().vertical_text(s, &skin));
             restyle(s, |l| {
                 l.display = Some(if shown {
                     nana_ui_core::DisplaySpec::Flex
@@ -1355,9 +1369,7 @@ fn text_port(ui: Ui, source: Source, content: AnyView) -> AnyView {
     }))
     .bind(move |s: &mut Stack| {
         let y = ui.text_scroll.get();
-        let vertical = ui
-            .skin
-            .with(|s| nanatype_theme::dialogue_is_vertical(s, ui.display_size.get()));
+        let vertical = vertical_text(ui);
         restyle(s, |l| {
             l.height = vertical.then_some(LengthSpec::Percent(100.0));
             l.transform = (y != 0.0).then(|| {
@@ -1496,7 +1508,9 @@ fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
     let named = has_speaker(ui, ctx);
     let [ox, oy] = p.offset;
     let vertical = ctx.source != Source::Draft
-        && nanatype_theme::dialogue_is_vertical(&skin, ui.display_size.get_untracked());
+        && ui
+            .settings
+            .with_untracked(|s| ui.display_kind().vertical_text(s, &skin));
     if vertical {
         let l = Arc::make_mut(&mut st.layout);
         l.writing_mode = Some(nana_ui_core::WritingModeSpec::VerticalRl);
@@ -1508,6 +1522,7 @@ fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
         l.text_overflow_ellipsis = true;
     }
     let rotate = p.rotate;
+    let anchor = p.anchor;
     widget(anchor_layer(p.anchor, 3))
         .visible(move || visible && named())
         .children(
@@ -1517,8 +1532,14 @@ fn nameplate(ui: Ui, ctx: &BoxCtx) -> impl IntoView + use<> {
                     .with_layout(move |l| {
                         l.transform = Some(affine(ox, oy, rotate, 1.0));
                         if right_clearance > 0.0 || source != Source::Draft {
+                            // The offset toward the far edge comes out of the room.
+                            let inward = if anchor_frac(anchor)[0] >= 1.0 {
+                                -ox
+                            } else {
+                                ox
+                            };
                             l.min_width = Some(LengthSpec::Px(0.0));
-                            l.max_width = Some(calc(100.0, -ox.max(0.0) - right_clearance));
+                            l.max_width = Some(calc(100.0, -inward.max(0.0) - right_clearance));
                         }
                     }),
             )
@@ -2054,14 +2075,18 @@ mod decor_tests {
             .world()
             .glyph_presentation(node)
             .cloned();
-        for (w, h) in [
-            (300, 600),
-            (400, 400),
-            (400, 401),
-            (1200, 120),
-            (300, 1200),
-            (760, 220),
+        // The switch picks the writing mode; the window's shape never does.
+        for (w, h, vertical) in [
+            (300, 600, true),
+            (400, 400, false),
+            (400, 401, true),
+            (1200, 120, false),
+            (300, 1200, false),
+            (760, 220, true),
+            (760, 220, false),
         ] {
+            ui.settings
+                .update(|s| Arc::make_mut(s).overlays.display.vertical_text = vertical);
             session.set_viewport(w, h, 1.0).unwrap();
             session.flush().unwrap();
             assert_eq!(ui.text_node.get_untracked(), Some(node));
@@ -2071,10 +2096,10 @@ mod decor_tests {
                 let (_, quote_layout) = world.text_layout(quote_node).unwrap();
                 assert_eq!(
                     quote_layout.is_vertical(),
-                    h > w,
+                    vertical,
                     "reply quote follows its display's writing mode"
                 );
-                if h > w {
+                if vertical {
                     let q = world.layout_box(quote_node).unwrap();
                     let port = world
                         .layout_box(ui.text_port.get_untracked().unwrap())
@@ -2093,7 +2118,7 @@ mod decor_tests {
             let style = &world.node_style(node).unwrap().layout;
             assert_eq!(
                 style.writing_mode,
-                Some(if h > w {
+                Some(if vertical {
                     nana_ui_core::WritingModeSpec::VerticalRl
                 } else {
                     nana_ui_core::WritingModeSpec::HorizontalTb
@@ -2101,7 +2126,7 @@ mod decor_tests {
             );
             let (_, layout) = world.text_layout(node).unwrap();
             assert!(layout.lines.len() > 1);
-            if h > w {
+            if vertical {
                 assert!(
                     world.layout_box(node).unwrap().width + 0.5 >= layout.physical_size().0,
                     "the full column stack must own the inline-object coordinate space: body={:?}, physical={:?}, viewport={w}x{h}",

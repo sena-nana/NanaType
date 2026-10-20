@@ -221,6 +221,19 @@ pub(super) fn windows(ui: Ui) -> AnyView {
         OVERLAYS
             .map(|kind| overlay_switch(ui, kind, |o| o.always_on_top, |o, v| o.always_on_top = v)),
     );
+    let vertical_text = matrix_row(
+        matrix_label(
+            ui,
+            "windows-vertical-text",
+            Some("windows-vertical-text-tip"),
+        ),
+        OVERLAYS.map(|kind| {
+            if !matches!(kind, WindowKind::Display | WindowKind::PeerDisplay) {
+                return not_applicable();
+            }
+            overlay_switch(ui, kind, |o| o.vertical_text, |o, v| o.vertical_text = v)
+        }),
+    );
     // The size the window was dragged to ("Follow skin" until it is), and
     // the reset that puts it back where and as big as the skin says.
     let size = matrix_row(
@@ -264,7 +277,11 @@ pub(super) fn windows(ui: Ui) -> AnyView {
     );
     widget(Stack::column(SECTION_GAP))
         .children((
-            section(ui, "", vec![header, show, lock, background, on_top, size]),
+            section(
+                ui,
+                "",
+                vec![header, show, lock, background, on_top, vertical_text, size],
+            ),
             widget(Stack::column(0.0).padding_xy(INSET, space::MD)).children((
                 hint(ui.now_t("windows-layout-hint")),
                 hint(ui.now_t("windows-input-na")),

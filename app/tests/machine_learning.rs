@@ -261,8 +261,12 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
             "{size:?}: nameplate lost its cyan text"
         );
     }
-    for (w, h) in [(280, 600), (300, 1200), (160, 600), (400, 401)] {
+    for (w, h, vertical) in [(280, 600), (300, 1200), (160, 600), (400, 401)]
+        .into_iter()
+        .flat_map(|(w, h)| [(w, h, true), (w, h, false)])
+    {
         let mut settings = Settings::default();
+        settings.overlays.display.vertical_text = vertical;
         settings.skin.id = "nanatype.machine_learning".into();
         settings.skin.advanced_effects = true;
         let name = "奈奈 / Machine Learning · 一个很长的姓名";
@@ -285,7 +289,10 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
                 ui,
                 101_200,
                 1200,
-                &format!("portrait-rail-{w}"),
+                &format!(
+                    "portrait-rail-{w}{}",
+                    if vertical { "" } else { "-horizontal" }
+                ),
                 CAPTURES,
             );
         });
@@ -294,7 +301,10 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
             ui,
             101_200,
             1200,
-            &format!("portrait-rail-{w}"),
+            &format!(
+                "portrait-rail-{w}{}",
+                if vertical { "" } else { "-horizontal" }
+            ),
             CAPTURES,
         );
         let label = session
@@ -309,6 +319,15 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
             .layout_box(ui.text_port.get_untracked().unwrap())
             .unwrap();
         assert!(label.bounds.width > 0. && label.bounds.height > 0.);
+        if !vertical {
+            // The portrait layout still applies; the name just reads across.
+            assert!(
+                label.bounds.x >= 0. && label.bounds.x + label.bounds.width <= w as f32 + 0.5,
+                "{w}x{h}: horizontal name leaves the window: {:?}",
+                label.bounds
+            );
+            continue;
+        }
         assert!(
             port.x + port.width + 8. <= label.bounds.x,
             "{w}x{h}: long name overlaps the body: port={port:?}, name={:?}",

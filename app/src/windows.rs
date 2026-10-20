@@ -107,6 +107,11 @@ impl WindowKind {
         }
     }
 
+    /// Vertical writing is the window's own switch; the skin only has to support it.
+    pub fn vertical_text(self, s: &Settings, skin: &Skin) -> bool {
+        skin.dialogue.responsive.is_some() && self.overlay(s).is_some_and(|o| o.vertical_text)
+    }
+
     pub fn overlay_mut(self, s: &mut Settings) -> Option<&mut OverlaySettings> {
         match self {
             Self::Input => Some(&mut s.overlays.input),

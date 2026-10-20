@@ -463,10 +463,9 @@ impl Host {
         let measure = page.as_ref().and_then(|page| {
             let world = self.docs.get(&ui.display_kind().id())?.context().world();
             let (_, layout) = world.text_layout(ui.text_node.get_untracked()?)?;
-            let vertical = nanatype_theme::dialogue_is_vertical(
-                &self.app.skin,
-                ui.display_size.get_untracked(),
-            );
+            let vertical = ui
+                .display_kind()
+                .vertical_text(&self.app.settings, &self.app.skin);
             if layout.is_vertical() != vertical {
                 return None;
             }
@@ -481,14 +480,7 @@ impl Host {
                 lines: overflow::line_spans(layout),
                 viewport: {
                     let port = world.layout_box(ui.text_port.get_untracked()?)?;
-                    if nanatype_theme::dialogue_is_vertical(
-                        &self.app.skin,
-                        ui.display_size.get_untracked(),
-                    ) {
-                        port.width
-                    } else {
-                        port.height
-                    }
+                    if vertical { port.width } else { port.height }
                 },
                 glyphs: &page.glyphs,
             })

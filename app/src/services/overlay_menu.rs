@@ -23,6 +23,7 @@ const WINDOWS: [WindowKind; 3] = [
 pub enum Action {
     Skin(String),
     AdjustSkin,
+    VerticalText,
     OnTop,
     Lock,
     Reset,
@@ -37,8 +38,9 @@ pub enum Action {
 }
 
 impl Action {
-    const FIXED: [Self; 12] = [
+    const FIXED: [Self; 13] = [
         Self::AdjustSkin,
+        Self::VerticalText,
         Self::OnTop,
         Self::Lock,
         Self::Reset,
@@ -56,6 +58,7 @@ impl Action {
         match self {
             Self::Skin(id) => id,
             Self::AdjustSkin => "adjust-skin",
+            Self::VerticalText => "vertical-text",
             Self::OnTop => "on-top",
             Self::Lock => "lock",
             Self::Reset => "reset",
@@ -83,6 +86,10 @@ impl Action {
         match self {
             Self::Skin(id) => Msg::Edit(Box::new(move |s| s.skin.id = id)),
             Self::AdjustSkin => Msg::SettingsPage(crate::ui::settings::Page::Skins),
+            Self::VerticalText => Msg::Edit(Box::new(move |s| {
+                let o = kind.overlay_mut(s).expect("broadcast overlay");
+                o.vertical_text = !o.vertical_text;
+            })),
             Self::OnTop => Msg::Edit(Box::new(move |s| {
                 let o = kind.overlay_mut(s).expect("broadcast overlay");
                 o.always_on_top = !o.always_on_top;
@@ -163,6 +170,9 @@ impl Snapshot {
                     && self.settings.general.input_mode == InputMode::Compose
             }
             Action::ClearDisplay => self.kind == WindowKind::Display && self.connected,
+            Action::VerticalText => {
+                matches!(self.kind, WindowKind::Display | WindowKind::PeerDisplay)
+            }
             Action::Avatar | Action::Name | Action::Time => self.kind == WindowKind::History,
             Action::ClearHistory => {
                 self.kind == WindowKind::History && !self.peer_active && !self.history_empty
@@ -242,6 +252,18 @@ impl Snapshot {
         }
         menu.append(&skins)?;
         self.item(&menu, Action::AdjustSkin, "overlay-menu-adjust-skin", None)?;
+        if let Some(o) = self
+            .kind
+            .overlay(&self.settings)
+            .filter(|_| self.enabled(&Action::VerticalText))
+        {
+            self.item(
+                &menu,
+                Action::VerticalText,
+                "windows-vertical-text",
+                Some(o.vertical_text),
+            )?;
+        }
         menu.append(&PredefinedMenuItem::separator())?;
         self.item(
             &menu,
@@ -388,7 +410,12 @@ mod tests {
                 );
             }
             let mut settings = Settings::default();
-            for action in [Action::OnTop, Action::Lock, Action::Close] {
+            for action in [
+                Action::OnTop,
+                Action::Lock,
+                Action::Close,
+                Action::VerticalText,
+            ] {
                 let Msg::Edit(edit) = action.message(kind) else {
                     panic!("settings edit")
                 };
@@ -399,6 +426,7 @@ mod tests {
                 assert_eq!(o.visible, kind != other);
                 assert_eq!(o.always_on_top, kind != other);
                 assert_eq!(o.lock == Lock::Locked, kind == other);
+                assert_eq!(o.vertical_text, kind == other);
             }
         }
         for id in [
@@ -433,6 +461,7 @@ mod tests {
                 assert!(leaves.iter().any(|i| matches!(i, MenuItemKind::Check(i) if i.id().0.ends_with("skin:broken:skin") && !i.is_enabled() && i.text() == "Broken && skin")));
                 assert_eq!(leaves.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if i.id().0 == Action::ClearHistory.id(kind) && i.text() == ui.now_t("overlay-menu-confirm-clear"))), kind == WindowKind::History);
                 assert!(!items.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if i.id().0 == Action::ClearHistory.id(kind))));
+                assert_eq!(items.iter().any(|i| matches!(i, MenuItemKind::Check(i) if i.id().0 == Action::VerticalText.id(kind) && !i.is_checked())), matches!(kind, WindowKind::Display | WindowKind::PeerDisplay));
             }
         }
     }

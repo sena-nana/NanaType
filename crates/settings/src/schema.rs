@@ -388,6 +388,9 @@ pub struct OverlaySettings {
     pub background: CaptureBackground,
     /// Logical size override; `None` uses the skin's size.
     pub size: Option<[f32; 2]>,
+    /// Write the dialogue top to bottom. The skin's portrait layout still
+    /// follows the window's shape.
+    pub vertical_text: bool,
 }
 
 impl Default for OverlaySettings {
@@ -398,6 +401,7 @@ impl Default for OverlaySettings {
             always_on_top: true,
             background: CaptureBackground::Transparent,
             size: None,
+            vertical_text: false,
         }
     }
 }

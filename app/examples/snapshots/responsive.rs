@@ -58,11 +58,16 @@ pub fn audit(
             ("max-width", [8192, 96]),
             ("square", [400, 400]),
             ("portrait-boundary", [400, 401]),
+            ("default-vertical", default),
+            ("portrait-vertical", [300, 1200]),
         ] {
             let name = format!("responsive-{state}-{case}");
             if !requested(&name) {
                 continue;
             }
+            ui.settings.update(|s| {
+                Arc::make_mut(s).overlays.display.vertical_text = case.ends_with("-vertical")
+            });
             let scale = (1080. / w.max(h) as f32).min(1.);
             if !Arc::ptr_eq(&ui.display.get_untracked(), &page) {
                 ui.display.set(page.clone());
