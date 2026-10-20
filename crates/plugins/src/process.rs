@@ -48,7 +48,8 @@ struct Launched {
     job: crate::os_sandbox::Job,
 }
 
-/// Start `executable` as a worker with an empty environment, confined
+/// Start `executable` as a worker with an empty environment (an AppContainer
+/// worker also gets its container's LOCALAPPDATA, TEMP and TMP), confined
 /// before it reads its first request.
 fn launch(executable: &Path) -> std::io::Result<Launched> {
     #[cfg(windows)]

@@ -4,9 +4,10 @@
 //! The worker starts suspended in a per-user AppContainer with no
 //! capabilities: no network, and only what is readable by every app package
 //! (system files) plus the worker executable, which is granted read and
-//! execute here. It inherits exactly its two pipe ends, gets an empty
-//! environment and the system directory as its working directory, and joins
-//! the same job object as an unconfined worker before its first instruction.
+//! execute here. It inherits exactly its two pipe ends, gets no environment
+//! but the container's own LOCALAPPDATA, TEMP and TMP, has the system
+//! directory as its working directory, and joins the same job object as an
+//! unconfined worker before its first instruction.
 #![allow(unsafe_code)]
 
 use std::ffi::OsStr;
@@ -16,6 +17,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{FromRawHandle, OwnedHandle};
 use std::path::Path;
 use std::ptr::{null, null_mut};
+use std::sync::{Mutex, PoisonError};
 
 use windows_sys::Win32::Foundation::{
     CloseHandle, ERROR_ALREADY_EXISTS, ERROR_SUCCESS, HANDLE, HANDLE_FLAG_INHERIT, LocalFree,
@@ -93,6 +95,10 @@ impl Drop for Sid {
 
 /// The profile's SID, creating the profile on first use.
 fn container_sid() -> io::Result<Sid> {
+    // Two threads creating the profile at once can see ERROR_BAD_ENVIRONMENT
+    // from the one that loses, so creation is one at a time.
+    static CREATING: Mutex<()> = Mutex::new(());
+    let _creating = CREATING.lock().unwrap_or_else(PoisonError::into_inner);
     let name = wide(PROFILE);
     let display = wide("NanaType plugin worker");
     let mut sid: PSID = null_mut();
@@ -336,12 +342,29 @@ pub(crate) fn spawn(
             .all(|arg| !arg.is_empty() && !arg.contains([' ', '\t', '"']))
     );
     let mut line = wide(format!("\"{}\" {}", executable.display(), args.join(" ")));
-    // `KEY=value` strings, each NUL-terminated, then an empty one.
-    let mut block: Vec<u16> = env
-        .iter()
-        .flat_map(|(key, value)| wide(format!("{key}={value}")))
-        .collect();
-    block.extend([0, 0]);
+    // CreateProcessW fails with ERROR_ENVVAR_NOT_FOUND when an AppContainer
+    // process's environment has no LOCALAPPDATA (and with ERROR_FILE_NOT_FOUND
+    // when it is empty), so the host's is passed on. Windows replaces it with
+    // the container's own folder and adds TEMP and TMP beneath it, so the
+    // worker never sees the host's path.
+    let local = std::env::var_os("LOCALAPPDATA")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "LOCALAPPDATA is not set"))?;
+    let mut vars = vec![(OsStr::new("LOCALAPPDATA"), local.as_os_str())];
+    vars.extend(
+        env.iter()
+            .map(|(key, value)| (OsStr::new(key), OsStr::new(value))),
+    );
+    vars.sort_by_key(|(key, _)| key.to_ascii_uppercase());
+    // `KEY=value` strings, sorted by name and each NUL-terminated, then an
+    // empty one.
+    let mut block = Vec::new();
+    for (key, value) in vars {
+        block.extend(key.encode_wide());
+        block.push(u16::from(b'='));
+        block.extend(value.encode_wide());
+        block.push(0);
+    }
+    block.push(0);
     let mut system = vec![0u16; 260];
     // SAFETY: the buffer's length is passed; the result is its used length.
     let used = unsafe { GetSystemDirectoryW(system.as_mut_ptr(), system.len() as u32) } as usize;
