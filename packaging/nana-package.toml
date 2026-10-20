@@ -25,3 +25,10 @@ root_exceptions = [
 [platform.macos]
 minimum_system_version = "13.0"
 info_plist_extra = "Info.extra.plist"
+
+[runtime]
+# Syphon output loads the framework from Contents/Frameworks (app/src/output/syphon.rs).
+bin = [{ source = "macos/Syphon.framework", platforms = ["macos"] }]
+# Windows ships the same file beside the executable (root_exceptions above);
+# scripts/package-macos.sh stages it.
+resources = [{ source = "../target/licenses/THIRD_PARTY_LICENSES.txt", platforms = ["macos"] }]

@@ -166,6 +166,14 @@ pwsh scripts/package.ps1
 
 更小的便携包可用 `pwsh scripts/package.ps1 -Portable -Profile dist-small`。打包脚本固定关闭发布构建的增量编译并使用锁文件；编译、许可证或发布自检失败时停止。便携包排除自检产生的 `data/` 用户数据，首次运行时由应用创建；内置字体、解码器、GPU 后备渲染和异常恢复均保留。
 
+macOS 上打成 `NanaType.app` 及其 zip（需要 `nana-packager`，产物未签名）：
+
+```bash
+scripts/package-macos.sh
+```
+
+Syphon.framework 放在 `Contents/Frameworks`，完整许可文本在 `Contents/Resources/THIRD_PARTY_LICENSES.txt`（由 `scripts/macos-licenses.py` 按 macOS 目标的依赖生成）。
+
 开发辅助环境变量（仅调试构建或显式设置时生效）：
 
 | 变量 | 作用 |
