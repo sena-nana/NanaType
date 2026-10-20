@@ -80,7 +80,7 @@ objc2-foundation = "0.3"
 shiguredo_libvpx = { version = "=2026.2.0-canary.3", features = ["source-build"] }
 
 [target.'cfg(windows)'.dependencies]
-nanalive-spout = { git = "https://github.com/sena-nana/nanalive-spout", rev = "72352c0da9bec2e11c2f4f6b28ddfd020525fbb7", default-features = false, features = ["gpu-dx11-shared"] }
+nanalive-spout = { git = "https://github.com/sena-nana/nanalive-spout", rev = "e20da1d718165ec19de5b174ec06e2954d697119", default-features = false, features = ["gpu-dx11-shared"] }
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
