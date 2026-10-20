@@ -113,7 +113,6 @@ pub struct App {
     next_dialog: u64,
     /// Pending window commands for the next update result.
     pub commands: Vec<WindowCommand>,
-    pub theme_changed: bool,
     pub quitting: bool,
     export_target: Option<String>,
     pub spout: crate::output::Spout,
@@ -253,7 +252,6 @@ impl App {
             dialogs: HashMap::new(),
             next_dialog: 1,
             commands: Vec::new(),
-            theme_changed: false,
             quitting: false,
             export_target: None,
             spout: crate::output::Spout::default(),
@@ -876,7 +874,6 @@ impl App {
         let dark = skin_theme::dark_mode(self.settings.skin.chrome, self.system_dark);
         self.theme = crate::ui::kit::theme::compile(dark);
         self.ui.chrome_dark.set(dark);
-        self.theme_changed = true;
         self.tint_captions();
     }
 

@@ -326,45 +326,46 @@ pub fn settings_window(ui: Ui) -> impl IntoView {
     )
     .children((
         sidebar(ui),
-        widget(Stack::fill_column(0.0)).children(dynamic(
-            // The package editor fills the page, with its own header, instead
-            // of scrolling under the page's. A newly opened page starts at its
-            // top, regardless of how far the previous page was scrolled.
-            move || {
-                let page = ui.page.get();
-                let editing =
-                    page == Page::Packages && ui.package_editor.with(Option::is_some);
-                (page, editing, ui.locale.get())
-            },
-            move |(page, editing, _)| {
-                if *editing {
-                    return super::package_editor::editor(ui);
-                }
-                widget(Stack::fill_column(0.0))
-                    .children((
-                        page_header(ui, *page),
-                        widget(scroll_view()).children(
-                            widget(
-                                Stack::column(0.0)
-                                    .width(LengthSpec::Fill)
-                                    .align(nana_ui_core::AlignSpec::Center)
-                                    .padding_xy(inset::PAGE, inset::PAGE),
-                            )
-                            .children(
+        widget(Stack::fill_column(0.0)).children(
+            dynamic(
+                // The package editor fills the page, with its own header, instead
+                // of scrolling under the page's. A newly opened page starts at its
+                // top, regardless of how far the previous page was scrolled.
+                move || {
+                    let page = ui.page.get();
+                    let editing = page == Page::Packages && ui.package_editor.with(Option::is_some);
+                    (page, editing, ui.locale.get())
+                },
+                move |(page, editing, _)| {
+                    if *editing {
+                        return super::package_editor::editor(ui);
+                    }
+                    widget(Stack::fill_column(0.0))
+                        .children((
+                            page_header(ui, *page),
+                            widget(scroll_view()).children(
                                 widget(
                                     Stack::column(0.0)
-                                        .max_width(PAGE_MAX_W)
-                                        .width(LengthSpec::Fill),
+                                        .width(LengthSpec::Fill)
+                                        .align(nana_ui_core::AlignSpec::Center)
+                                        .padding_xy(inset::PAGE, inset::PAGE),
                                 )
-                                .children(pages::page(ui, *page)),
+                                .children(
+                                    widget(
+                                        Stack::column(0.0)
+                                            .max_width(PAGE_MAX_W)
+                                            .width(LengthSpec::Fill),
+                                    )
+                                    .children(pages::page(ui, *page)),
+                                ),
                             ),
-                        ),
-                    ))
-                    .into_any()
-            },
-        )
-        // The switch's own container must fill too, or the scroll view collapses.
-        .css(nana_ui::runtime::view::css! { flex-grow: 1; flex-shrink: 1; height: 0; min-height: 0; })),
+                        ))
+                        .into_any()
+                },
+            )
+            // The switch's own container must fill too, or the scroll view collapses.
+            .grow(),
+        ),
     ));
     widget(
         Stack::column(0.0)

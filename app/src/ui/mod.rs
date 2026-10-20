@@ -565,8 +565,7 @@ pub fn retire_skin_urls(ui: Ui, previous: impl IntoIterator<Item = String>) {
 
 /// Rewrite a bound stack's layout in place.
 pub fn restyle(s: &mut nana_ui::runtime::Stack, f: impl FnOnce(&mut nana_ui_core::LayoutStyle)) {
-    let taken = std::mem::replace(s, nana_ui::runtime::Stack::row(0.0));
-    *s = taken.with_layout(f);
+    f(s.layout_mut());
 }
 
 /// `[r, g, b, a]` in 0..=1 from a skin colour.

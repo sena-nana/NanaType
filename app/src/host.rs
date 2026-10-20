@@ -261,13 +261,6 @@ impl Host {
             }
         }
         self.show_toasts();
-        if self.app.theme_changed {
-            self.app.theme_changed = false;
-            let theme = self.app.theme.clone();
-            for doc in self.docs.values_mut() {
-                let _ = doc.context_mut().set_theme_tokens(theme.clone());
-            }
-        }
         let mut result = self.app.update_result();
         result.redraw = pending_redraw(&self.docs);
         result

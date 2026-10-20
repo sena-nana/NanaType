@@ -100,15 +100,6 @@ fn kind_key(kind: ProjectKind) -> &'static str {
     }
 }
 
-/// A `dynamic` whose container fills the remaining height of its column.
-macro_rules! filling {
-    ($dynamic:expr) => {
-        $dynamic.css(nana_ui::runtime::view::css! {
-            flex-grow: 1; flex-shrink: 1; height: 0; min-height: 0;
-        })
-    };
-}
-
 /// A tab body that scrolls within the remaining height.
 fn scrolled(content: AnyView) -> AnyView {
     let scroll = ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
@@ -455,7 +446,7 @@ fn tabs(ui: Ui) -> AnyView {
 }
 
 fn body(ui: Ui) -> AnyView {
-    filling!(dynamic(
+    dynamic(
         move || ui.package_editor_tab.get(),
         move |tab| match tab {
             Tab::Files => files(ui),
@@ -464,7 +455,8 @@ fn body(ui: Ui) -> AnyView {
             Tab::Preview => scrolled(preview(ui)),
             Tab::Debug => scrolled(debug(ui)),
         },
-    ))
+    )
+    .grow()
     .into_any()
 }
 
@@ -543,63 +535,66 @@ fn files(ui: Ui) -> AnyView {
                 narrow.set(n);
             }
         })
-        .children(filling!(dynamic(
-            move || narrow.get(),
-            move |narrow| {
-                let narrow = *narrow;
-                let side = widget(Stack::column(space::SM).shrink(0.).with_layout(move |l| {
-                    if narrow {
-                        l.width = Some(LengthSpec::Fill);
-                    } else {
-                        l.width = Some(LengthSpec::Px(220.));
-                        l.height = Some(LengthSpec::Fill);
-                    }
-                }))
-                .children((
-                    widget(Stack::row(space::SM).wrap(true)).children((
-                        widget(button(ui, "pkgedit-import"))
-                            .key("package-editor-import")
-                            .on_cx(|_, _: &Activate, cx| {
-                                cx.dispatch_program_all(Msg::PickFile(
-                                    FileTarget::ImportProjectAsset,
-                                ))
-                            }),
-                        remove_button(ui),
-                    )),
-                    widget(ScrollView::new(ScrollAxes::Vertical).with_layout(move |l| {
+        .children(
+            dynamic(
+                move || narrow.get(),
+                move |narrow| {
+                    let narrow = *narrow;
+                    let side = widget(Stack::column(space::SM).shrink(0.).with_layout(move |l| {
                         if narrow {
-                            l.max_height = Some(LengthSpec::Px(180.));
+                            l.width = Some(LengthSpec::Fill);
                         } else {
-                            l.height = Some(LengthSpec::Px(0.));
-                            l.flex_grow = Some(1.);
+                            l.width = Some(LengthSpec::Px(220.));
+                            l.height = Some(LengthSpec::Fill);
                         }
                     }))
-                    .children(file_tree(ui)),
-                ));
-                let main = widget(Stack::fill_column(space::SM).with_layout(move |l| {
-                    if !narrow {
-                        // Share the row with the tree instead of taking all of it.
-                        l.width = Some(LengthSpec::Px(0.));
-                    }
-                }))
-                .children((
-                    toolbar(ui, search),
-                    source(ui, search),
-                    problems(ui),
-                ));
-                let layout = if narrow {
-                    Stack::fill_column(space::MD)
-                } else {
-                    Stack::row(space::LG)
-                        .align(AlignSpec::Stretch)
-                        .grow(1.)
-                        .shrink(1.)
-                        .width(LengthSpec::Fill)
-                        .height(LengthSpec::Fill)
-                };
-                widget(layout).children((side, main)).into_any()
-            },
-        )))
+                    .children((
+                        widget(Stack::row(space::SM).wrap(true)).children((
+                            widget(button(ui, "pkgedit-import"))
+                                .key("package-editor-import")
+                                .on_cx(|_, _: &Activate, cx| {
+                                    cx.dispatch_program_all(Msg::PickFile(
+                                        FileTarget::ImportProjectAsset,
+                                    ))
+                                }),
+                            remove_button(ui),
+                        )),
+                        widget(ScrollView::new(ScrollAxes::Vertical).with_layout(move |l| {
+                            if narrow {
+                                l.max_height = Some(LengthSpec::Px(180.));
+                            } else {
+                                l.height = Some(LengthSpec::Px(0.));
+                                l.flex_grow = Some(1.);
+                            }
+                        }))
+                        .children(file_tree(ui)),
+                    ));
+                    let main = widget(Stack::fill_column(space::SM).with_layout(move |l| {
+                        if !narrow {
+                            // Share the row with the tree instead of taking all of it.
+                            l.width = Some(LengthSpec::Px(0.));
+                        }
+                    }))
+                    .children((
+                        toolbar(ui, search),
+                        source(ui, search),
+                        problems(ui),
+                    ));
+                    let layout = if narrow {
+                        Stack::fill_column(space::MD)
+                    } else {
+                        Stack::row(space::LG)
+                            .align(AlignSpec::Stretch)
+                            .grow(1.)
+                            .shrink(1.)
+                            .width(LengthSpec::Fill)
+                            .height(LengthSpec::Fill)
+                    };
+                    widget(layout).children((side, main)).into_any()
+                },
+            )
+            .grow(),
+        )
         .into_any()
 }
 
@@ -779,7 +774,7 @@ fn severity(level: Level) -> TextDiagnosticSeverity {
 }
 
 fn source(ui: Ui, (query, current): Search) -> AnyView {
-    filling!(dynamic(
+    dynamic(
         move || {
             ui.package_editor.with(|v| {
                 v.as_ref()
@@ -891,7 +886,8 @@ fn source(ui: Ui, (query, current): Search) -> AnyView {
                 })
                 .into_any()
         },
-    ))
+    )
+    .grow()
     .into_any()
 }
 
