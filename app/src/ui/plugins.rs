@@ -424,15 +424,38 @@ pub fn settings(ui: Ui) -> AnyView {
                 .into_any()
         },
     );
+    // Sections with nothing in them take no room, so the page keeps one
+    // rhythm whichever are showing.
+    let reviewing = move || {
+        ui.plugin_activation.with(Option::is_some)
+            || ui.plugin_activation_busy.get()
+            || ui.plugin_activation_error.with(Option::is_some)
+    };
+    let has_commands = move || {
+        ui.plugin_views
+            .with(|v| v.values().any(|u| !u.commands.is_empty()))
+    };
+    let has_panels = move || {
+        ui.plugin_views.with(|v| {
+            v.values()
+                .any(|u| u.views.iter().any(|w| w.slot == Mount::Panel))
+        })
+    };
     kit::sections((
-        activation(ui),
+        widget(Stack::column(0.0))
+            .visible(reviewing)
+            .children(activation(ui)),
         widget(Stack::column(gap::CONTROL)).children((
             overline(ui.now_t("packages-installed")),
             packages,
             kit::callout(Tone::Neutral, ui.now_t("packages-access")),
         )),
-        commands,
-        mounted(ui, Mount::Panel),
+        widget(Stack::column(0.0))
+            .visible(has_commands)
+            .children(commands),
+        widget(Stack::column(0.0))
+            .visible(has_panels)
+            .children(mounted(ui, Mount::Panel)),
         crate::ui::package_editor::launcher(ui),
     ))
 }

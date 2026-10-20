@@ -97,6 +97,7 @@ pub fn callout(tone: Tone, text: impl Into<String>) -> AnyView {
     };
     widget(
         Stack::row(gap::CONTROL)
+            .width(LengthSpec::Fill)
             .padding_xy(inset::PANEL, inset::BAR_Y)
             .align(AlignSpec::Start)
             .radius(RadiusTier::Sm)
@@ -109,7 +110,7 @@ pub fn callout(tone: Tone, text: impl Into<String>) -> AnyView {
                 .role(tone.role())
                 .decorative(),
         ),
-        widget(Type::Body.text(text).width(LengthSpec::Fill)),
+        widget(super::grow_column(0.0)).children(widget(Type::Body.text(text))),
     ))
     .into_any()
 }
@@ -141,16 +142,21 @@ pub fn empty_state(
     text: String,
     action: Option<(String, Box<dyn Fn() -> Msg + Send + 'static>)>,
 ) -> AnyView {
-    // On the card inset, so it sits in a card row as well as on a page.
+    // On the card inset, so it sits in a card row as well as on a page. Its
+    // vertical padding stays the component's: that is where it reserves the
+    // room its glyph and title are measured into.
     let mut style = NodeStyle::default();
     {
         let l = Arc::make_mut(&mut style.layout);
         l.padding_left = Some(LengthSpec::Px(inset::CARD));
         l.padding_right = Some(LengthSpec::Px(inset::CARD));
-        l.padding_top = Some(LengthSpec::Px(inset::ROW_Y));
-        l.padding_bottom = Some(LengthSpec::Px(inset::ROW_Y));
     }
-    let empty = widget(EmptyState::new(text).icon(ti::SPARKLES).style(style));
+    let empty = widget(
+        EmptyState::new(text)
+            .icon(ti::SPARKLES)
+            .compact(true)
+            .style(style),
+    );
     match action {
         Some((label, msg)) => empty
             .action(
