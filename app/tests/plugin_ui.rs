@@ -2,10 +2,10 @@
 
 mod common;
 
-use nana_ui_devtools::agent::AgentSession;
+use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
 use nanatype::ui::{self, Ui};
 use nanatype_i18n::Locale;
-use nanatype_plugins::{DrawCommand, LuaSandbox, Mount, Node};
+use nanatype_plugins::{DrawCommand, LuaSandbox, Mount, Node, PluginUpdate, PluginView};
 use std::{collections::HashMap, sync::Arc};
 
 #[test]
@@ -81,6 +81,127 @@ fn lua_canvas_is_host_rendered_updates_on_events_and_unmounts_cleanly() {
     assert!(
         empty.as_chunks::<4>().0.iter().all(|pixel| pixel[3] == 0),
         "disabled plugin left rendered content behind"
+    );
+}
+
+/// A hand-built panel: a caption, a bar `filled` px wide, a button, and
+/// optionally one more line.
+fn panel(caption: &str, filled: f32, extra: Option<&str>) -> PluginUpdate {
+    let mut children = vec![
+        Node::Text {
+            id: "caption".into(),
+            text: caption.into(),
+        },
+        Node::Canvas {
+            id: "bar".into(),
+            width: 200.,
+            height: 20.,
+            draw: vec![DrawCommand::Rect {
+                rect: [0., 0., filled, 20.],
+                color: [60, 150, 210, 255],
+                radius: 4.,
+            }],
+        },
+        Node::Button {
+            id: "go".into(),
+            text: format!("Go {caption}"),
+            command: "go".into(),
+        },
+    ];
+    if let Some(text) = extra {
+        children.push(Node::Text {
+            id: "extra".into(),
+            text: text.into(),
+        });
+    }
+    PluginUpdate {
+        views: vec![PluginView {
+            slot: Mount::Panel,
+            root: Node::Column {
+                id: "root".into(),
+                children,
+            },
+        }],
+        commands: Vec::new(),
+    }
+}
+
+fn show(root: Ui, update: PluginUpdate) -> RuntimeAgentSession {
+    root.plugin_views
+        .set(Arc::new(HashMap::from([("example.panel".into(), update)])));
+    let mut session = common::session()
+        .themed(false)
+        .mount(320, 180, move || ui::plugins::mounted(root, Mount::Panel));
+    session.set_clear(Some([0.; 4]));
+    session
+}
+
+/// What `update` looks like mounted on its own.
+fn fresh(update: PluginUpdate) -> Vec<u8> {
+    let root = Ui::new(
+        Arc::new(Default::default()),
+        Arc::new(Default::default()),
+        Locale::ZhCn,
+    );
+    show(root, update).screenshot_rgba().unwrap().1
+}
+
+fn node_id(session: &mut RuntimeAgentSession, label: &str) -> Option<u64> {
+    session
+        .accessibility_dump()
+        .iter()
+        .find(|n| n.label.as_deref() == Some(label))
+        .map(|n| n.id)
+}
+
+#[test]
+fn same_shape_updates_keep_the_widgets_and_new_shapes_rebuild() {
+    let root = Ui::new(
+        Arc::new(Default::default()),
+        Arc::new(Default::default()),
+        Locale::ZhCn,
+    );
+    let mut session = show(root, panel("one", 40., None));
+    let (_, before) = session.screenshot_rgba().unwrap();
+    let caption = node_id(&mut session, "one").expect("caption");
+    let button = node_id(&mut session, "Go one").expect("button");
+    for (step, filled) in [("two", 160.), ("three", 100.)] {
+        let update = panel(step, filled, None);
+        root.plugin_views.set(Arc::new(HashMap::from([(
+            "example.panel".into(),
+            update.clone(),
+        )])));
+        let (_, after) = session.screenshot_rgba().unwrap();
+        assert_ne!(before, after, "the update did not repaint");
+        assert_eq!(after, fresh(update), "{step}: drawn unlike a fresh mount");
+        assert_eq!(
+            node_id(&mut session, step),
+            Some(caption),
+            "caption rebuilt"
+        );
+        assert_eq!(
+            node_id(&mut session, &format!("Go {step}")),
+            Some(button),
+            "button rebuilt"
+        );
+    }
+    // A child more or less is another shape: built anew, as a mount would.
+    for update in [panel("four", 80., Some("more")), panel("five", 120., None)] {
+        root.plugin_views.set(Arc::new(HashMap::from([(
+            "example.panel".into(),
+            update.clone(),
+        )])));
+        let (_, shown) = session.screenshot_rgba().unwrap();
+        assert_eq!(
+            shown,
+            fresh(update),
+            "a reshaped view is drawn unlike a mount"
+        );
+    }
+    assert!(node_id(&mut session, "five").is_some());
+    assert!(
+        node_id(&mut session, "more").is_none(),
+        "removed child stayed"
     );
 }
 

@@ -5,10 +5,10 @@ use crate::{
     ui::Ui,
 };
 use nana_ui::icons_tabler as ti;
-use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
+use nana_ui::runtime::view::{AnyView, El, IntoView, dynamic, widget};
 use nana_ui::runtime::{
-    Activate, BoxPaint, Button, Checkbox, LayoutBox, PaintContext, PaintPath, Painter, Stack, Text,
-    ToggleChanged,
+    Activate, BoxPaint, Button, Checkbox, ComponentView, LayoutBox, PaintContext, PaintPath,
+    Painter, Stack, Text, ToggleChanged,
 };
 use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{AlignSpec, LengthSpec, OverflowSpec, RadiusTier, SemanticColorRole};
@@ -116,7 +116,62 @@ fn draw_key(draw: &[DrawCommand]) -> u64 {
 /// Sends a plugin command's event to wherever that plugin runs.
 type Command = Arc<dyn Fn(serde_json::Value) -> Msg + Send + Sync>;
 
-fn node(package: &str, n: &Node, command: &Command) -> AnyView {
+/// Where a mounted widget's node sits in the latest updates: its package,
+/// the mount, which of the package's views there, and the child indices
+/// down from that view's root.
+#[derive(Clone)]
+struct Place {
+    ui: Ui,
+    package: String,
+    slot: Mount,
+    view: usize,
+    path: Vec<usize>,
+}
+
+impl Place {
+    fn child(&self, index: usize) -> Self {
+        let mut child = self.clone();
+        child.path.push(index);
+        child
+    }
+
+    /// The node here now, tracked; `None` once it is gone.
+    fn with<R>(&self, read: impl FnOnce(&Node) -> R) -> Option<R> {
+        self.ui.plugin_views.with(|updates| {
+            let view = updates
+                .get(&self.package)?
+                .views
+                .iter()
+                .filter(|view| view.slot == self.slot)
+                .nth(self.view)?;
+            let mut node = &view.root;
+            for &index in &self.path {
+                let (Node::Column { children, .. } | Node::Row { children, .. }) = node else {
+                    return None;
+                };
+                node = children.get(index)?;
+            }
+            Some(read(node))
+        })
+    }
+}
+
+/// Keeps a mounted widget showing its node as updates of the same shape
+/// arrive; one built once, for the debugger, stays as it is.
+fn follow<C: ComponentView>(
+    el: El<C>,
+    place: Option<&Place>,
+    mut write: impl FnMut(&mut C, &Node) + Send + 'static,
+) -> El<C> {
+    match place.cloned() {
+        Some(place) => el.bind(move |c: &mut C| {
+            place.with(|n| write(c, n));
+        }),
+        None => el,
+    }
+}
+
+fn node(package: &str, n: &Node, command: &Command, place: Option<&Place>) -> AnyView {
     match n {
         Node::Column { id, children } | Node::Row { id, children } => {
             let stack = if matches!(n, Node::Row { .. }) {
@@ -129,14 +184,24 @@ fn node(package: &str, n: &Node, command: &Command) -> AnyView {
                 .children(
                     children
                         .iter()
-                        .map(|child| node(package, child, command))
+                        .enumerate()
+                        .map(|(i, child)| {
+                            node(package, child, command, place.map(|p| p.child(i)).as_ref())
+                        })
                         .collect::<Vec<_>>(),
                 )
                 .into_any()
         }
-        Node::Text { id, text } => widget(Text::new(text.clone()))
-            .key(format!("plugin:{package}:{id}"))
-            .into_any(),
+        Node::Text { id, text } => follow(
+            widget(Text::new(text.clone())).key(format!("plugin:{package}:{id}")),
+            place,
+            |t: &mut Text, n| {
+                if let Node::Text { text, .. } = n {
+                    t.value.clone_from(text);
+                }
+            },
+        )
+        .into_any(),
         Node::Button {
             id,
             text,
@@ -144,46 +209,126 @@ fn node(package: &str, n: &Node, command: &Command) -> AnyView {
         } => {
             let name = name.clone();
             let command = command.clone();
-            widget(Button::new(text.clone()))
-                .key(format!("plugin:{package}:{id}"))
-                .on_cx(move |_, _: &Activate, cx| {
-                    cx.dispatch_program_all(command(
-                        serde_json::json!({"type":"command","id":name}),
-                    ));
-                })
-                .into_any()
+            follow(
+                widget(Button::new(text.clone()))
+                    .key(format!("plugin:{package}:{id}"))
+                    .on_cx(move |_, _: &Activate, cx| {
+                        cx.dispatch_program_all(command(
+                            serde_json::json!({"type":"command","id":name}),
+                        ));
+                    }),
+                place,
+                |button: &mut Button, n| {
+                    if let Node::Button { text, .. } = n {
+                        button.label.clone_from(text);
+                    }
+                },
+            )
+            .into_any()
         }
         Node::Canvas {
             id,
             width,
             height,
             draw,
-        } => widget(
-            Stack::column(0.)
-                .width(LengthSpec::Px(*width))
-                .height(LengthSpec::Px(*height))
-                .painter(Canvas {
-                    draw: draw.clone(),
-                    key: draw_key(draw),
-                })
-                .with_layout(|l| {
-                    l.overflow_x = OverflowSpec::Hidden;
-                    l.overflow_y = OverflowSpec::Hidden;
-                }),
-        )
-        .key(format!("plugin:{package}:{id}"))
-        .into_any(),
+        } => {
+            // The painter is swapped only for other commands: one with the
+            // same key would be kept anyway, so the copy is skipped too.
+            let mut shown = draw_key(draw);
+            follow(
+                widget(
+                    Stack::column(0.)
+                        .width(LengthSpec::Px(*width))
+                        .height(LengthSpec::Px(*height))
+                        .painter(Canvas {
+                            draw: draw.clone(),
+                            key: shown,
+                        })
+                        .with_layout(|l| {
+                            l.overflow_x = OverflowSpec::Hidden;
+                            l.overflow_y = OverflowSpec::Hidden;
+                        }),
+                )
+                .key(format!("plugin:{package}:{id}")),
+                place,
+                move |stack: &mut Stack, n| {
+                    if let Node::Canvas { draw, .. } = n {
+                        let key = draw_key(draw);
+                        if key != shown {
+                            shown = key;
+                            *stack = stack.clone().painter(Canvas {
+                                draw: draw.clone(),
+                                key,
+                            });
+                        }
+                    }
+                },
+            )
+            .into_any()
+        }
+    }
+}
+
+/// What a mount's views are built from, leaving out what they show: while
+/// it holds, updates are written into the widgets already there.
+#[derive(Clone, PartialEq)]
+enum Shape {
+    Column(String, Vec<Shape>),
+    Row(String, Vec<Shape>),
+    Text(String),
+    Button { id: String, command: String },
+    Canvas { id: String, width: f32, height: f32 },
+}
+
+impl Shape {
+    fn of(n: &Node) -> Self {
+        let children = |children: &[Node]| children.iter().map(Self::of).collect();
+        match n {
+            Node::Column { id, children: c } => Self::Column(id.clone(), children(c)),
+            Node::Row { id, children: c } => Self::Row(id.clone(), children(c)),
+            Node::Text { id, .. } => Self::Text(id.clone()),
+            Node::Button { id, command, .. } => Self::Button {
+                id: id.clone(),
+                command: command.clone(),
+            },
+            Node::Canvas {
+                id, width, height, ..
+            } => Self::Canvas {
+                id: id.clone(),
+                width: *width,
+                height: *height,
+            },
+        }
     }
 }
 
 pub fn mounted(ui: Ui, slot: Mount) -> AnyView {
-    dynamic(
-        move || ui.plugin_views.get(),
-        move |updates| {
-            let mut packages: Vec<_> = updates.iter().collect();
-            packages.sort_by_key(|(id, _)| *id);
-            let views = packages
-                .into_iter()
+    // Rebuilt only when this mount's shape changes: not on every update,
+    // nor when another mount or another package changes.
+    let shape = move || {
+        ui.plugin_views.with(|updates| {
+            let mut packages: Vec<(String, Vec<Shape>)> = updates
+                .iter()
+                .map(|(id, update)| {
+                    let views: Vec<_> = update
+                        .views
+                        .iter()
+                        .filter(|view| view.slot == slot)
+                        .map(|view| Shape::of(&view.root))
+                        .collect();
+                    (id.clone(), views)
+                })
+                .filter(|(_, views)| !views.is_empty())
+                .collect();
+            packages.sort_by(|a, b| a.0.cmp(&b.0));
+            packages
+        })
+    };
+    dynamic(shape, move |packages| {
+        let views = ui.plugin_views.with_untracked(|updates| {
+            packages
+                .iter()
+                .filter_map(|(id, _)| updates.get_key_value(id))
                 .flat_map(|(id, update)| {
                     let package = id.clone();
                     let command: Command = Arc::new(move |event| Msg::PluginInput {
@@ -193,13 +338,24 @@ pub fn mounted(ui: Ui, slot: Mount) -> AnyView {
                     update
                         .views
                         .iter()
-                        .filter(move |view| view.slot == slot)
-                        .map(move |view| node(id, &view.root, &command))
+                        .filter(|view| view.slot == slot)
+                        .enumerate()
+                        .map(|(index, view)| {
+                            let place = Place {
+                                ui,
+                                package: id.clone(),
+                                slot,
+                                view: index,
+                                path: Vec::new(),
+                            };
+                            node(id, &view.root, &command, Some(&place))
+                        })
+                        .collect::<Vec<_>>()
                 })
-                .collect::<Vec<_>>();
-            widget(Stack::column(0.)).children(views).into_any()
-        },
-    )
+                .collect::<Vec<_>>()
+        });
+        widget(Stack::column(0.)).children(views).into_any()
+    })
     .into_any()
 }
 
@@ -215,7 +371,7 @@ pub fn debug_views(update: &nanatype_plugins::PluginUpdate) -> AnyView {
             widget(Stack::column(0.0).gap_step(gap::step::TIGHT))
                 .children((
                     widget(Text::new(format!("{:?}", view.slot).to_lowercase())),
-                    node("debug", &view.root, &command),
+                    node("debug", &view.root, &command, None),
                 ))
                 .into_any()
         })
