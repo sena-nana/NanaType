@@ -413,6 +413,7 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
                 let mut labels = vec![ui.now_t(match m.platform {
                     crate::chat::Platform::Bilibili => "settings-bilibili",
                     crate::chat::Platform::Douyin => "settings-douyin",
+                    crate::chat::Platform::Blivechat => "settings-blivechat",
                 })];
                 if m.owner {
                     labels.push(ui.now_t("chat-room-owner"));
@@ -598,6 +599,15 @@ fn filter_toggle(
     .into_any()
 }
 
+/// One dot for every source: green while any is connected, then amber while
+/// any connects, red when one failed, grey when all are off.
+pub fn combined_link(links: [Link; 3]) -> Link {
+    [Link::Connected, Link::Connecting, Link::Error]
+        .into_iter()
+        .find(|want| links.contains(want))
+        .unwrap_or(Link::Off)
+}
+
 fn header(ui: Ui) -> AnyView {
     dynamic(
         move || ui.chat_width.get() < 560.0,
@@ -612,16 +622,17 @@ fn header_layout(ui: Ui, narrow: bool) -> AnyView {
             .height(LengthSpec::Px(8.0)),
     )
     .bind(move |s: &mut Stack| {
-        let link = match ui.douyin.get().connection {
+        let douyin = match ui.douyin.get().connection {
             nanatype_douyin::ConnectionState::Connected { .. } => Link::Connected,
             nanatype_douyin::ConnectionState::Connecting => Link::Connecting,
-            nanatype_douyin::ConnectionState::Error(_)
-                if ui.status.with(|x| x.bilibili_link) != Link::Connected =>
-            {
-                Link::Error
-            }
-            _ => ui.status.with(|x| x.bilibili_link),
+            nanatype_douyin::ConnectionState::Error(_) => Link::Error,
+            _ => Link::Off,
         };
+        let link = combined_link([
+            ui.status.with(|x| x.bilibili_link),
+            douyin,
+            ui.status.with(|x| x.blivechat_link),
+        ]);
         let color = match link {
             Link::Connected => [0.20, 0.72, 0.42, 1.0],
             Link::Connecting => [0.95, 0.70, 0.20, 1.0],
@@ -650,6 +661,12 @@ fn header_layout(ui: Ui, narrow: bool) -> AnyView {
                 ui.now_t("settings-douyin"),
                 super::douyin::connection(ui)
             );
+        }
+        if ui.settings.with(|s| s.integrations.blivechat.enabled) {
+            let label = ui.now_t("settings-blivechat");
+            v = ui
+                .status
+                .with(|s| format!("{v} · {label}: {}", s.blivechat));
         }
         if t.value != v {
             t.value = v;
@@ -772,6 +789,7 @@ fn empty(ui: Ui) -> AnyView {
                 let b = &s.integrations.bilibili;
                 (b.enabled && !b.room.is_empty())
                     || (s.integrations.douyin.enabled && !s.integrations.douyin.room.is_empty())
+                    || s.integrations.blivechat.enabled
             });
             let key = if configured {
                 "chat-empty"

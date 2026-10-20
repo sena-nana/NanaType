@@ -190,7 +190,7 @@ pub enum ChatEvent {
 }
 
 /// A string or a number as text (uids and ids come as either).
-fn string(v: &Value) -> String {
+pub fn string(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
         Value::Number(n) => n.to_string(),
@@ -198,7 +198,8 @@ fn string(v: &Value) -> String {
     }
 }
 
-fn int(v: &Value) -> i64 {
+/// A number, a numeric string or a bool as an integer; 0 otherwise.
+pub fn int(v: &Value) -> i64 {
     match v {
         Value::Number(n) => n
             .as_i64()
@@ -211,7 +212,7 @@ fn int(v: &Value) -> i64 {
 }
 
 /// Seconds or milliseconds (sources differ) as milliseconds.
-fn millis(v: &Value) -> u64 {
+pub fn millis(v: &Value) -> u64 {
     let t = match v {
         Value::Number(n) => n.as_f64().unwrap_or(0.0),
         Value::String(s) => s.trim().parse().unwrap_or(0.0),
@@ -227,7 +228,7 @@ fn millis(v: &Value) -> u64 {
 }
 
 /// Avatars and emoticons come scheme-relative (`//i0.hdslb.com/...`).
-fn url(v: &Value) -> String {
+pub fn url(v: &Value) -> String {
     let s = string(v);
     let s = s.trim();
     if let Some(rest) = s.strip_prefix("//") {

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NanaType 弹幕转发</title>
+<!--
+  彗星号创意工坊「自定插件」：把直播间事件转换成 blivechat 协议帧，
+  推送给本机 NanaType 的中转（设置 → 第三方弹幕 → 彗星号）。
+  直播时页面完全透明；配置时显示连接状态。
+  协议见 https://gitee.com/t_tgl/hxh-dev-docs
+-->
+<style>
+  html, body { margin: 0; background: transparent; }
+  #status {
+    display: none;
+    box-sizing: border-box;
+    margin: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font: 14px/1.4 system-ui, "Microsoft YaHei", sans-serif;
+    color: #fff;
+    background: rgba(32, 32, 40, .82);
+  }
+  body.setup #status { display: inline-block; }
+  #status i { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: #9aa0a6; }
+  #status[data-state="open"] i { background: #34c759; }
+  #status[data-state="error"] i { background: #ff453a; }
+  #status[data-state="connecting"] i { background: #ffcc00; }
+</style>
+</head>
+<body>
+<div id="status" data-state="idle"><i></i><span>未填写 NanaType 连接地址</span></div>
+
+<script id="convert">
+/**
+ * 彗星号事件消息 → blivechat 帧（{cmd, data}，blivechat v1.10 格式）。
+ * 不认识的消息返回 null。纯函数：没有副作用，供测试直接调用。
+ */
+function toBlivechat(msg) {
+  if (!msg || typeof msg !== 'object') return null
+  const platform = String(msg.platform || 'bili')
+  const rawUid = msg.uid == null ? '' : String(msg.uid)
+  // B 站 uid 保持原样；其他平台加前缀，避免和 B 站 uid 撞号。
+  const uid = rawUid && platform !== 'bili' ? platform + ':' + rawUid : rawUid
+  const timestamp = Number(msg.timestamp) || Math.floor(Date.now() / 1000)
+  const id = msg.id != null && msg.id !== ''
+    ? String(msg.id)
+    : [msg.type, uid, timestamp, msg.message || msg.giftName || ''].join('-')
+  const wearing = msg.fansMedalWearingStatus !== false && Number(msg.fansMedalLevel) > 0
+  const medalLevel = wearing ? Number(msg.fansMedalLevel) || 0 : 0
+  const medalName = wearing ? String(msg.fansMedalName || '') : ''
+  const guard = clampGuard(msg.guardLevel)
+  const author = {
+    avatarUrl: String(msg.face || ''),
+    timestamp,
+    authorName: String(msg.uname || ''),
+    uid,
+    privilegeType: guard,
+    medalLevel,
+    medalName,
+  }
+  const coins = rmb => Math.max(0, Math.round((Number(rmb) || 0) * 1000))
+  switch (msg.type) {
+    case 'message': {
+      const authorType = msg.isAnchor ? 3 : msg.isModerator ? 2 : guard > 0 ? 1 : 0
+      const emote = Number(msg.dmType) === 1 && msg.emojiImgUrl
+      return {
+        cmd: 2,
+        data: [
+          author.avatarUrl, timestamp, author.authorName, authorType,
+          String(msg.message || ''), guard, 0, 0, 0, 1, medalLevel, id, '',
+          emote ? 1 : 0, emote ? [String(msg.emojiImgUrl)] : [], [], uid, medalName, false,
+        ],
+      }
+    }
+    case 'gift': {
+      const blind = msg.blindGift && msg.blindGift.giftName ? msg.blindGift : null
+      const num = Math.max(1, Math.round(Number(msg.giftNum) || 1))
+      const price = blind ? blind.price : msg.price
+      const value = coins(price) * num
+      const paid = msg.paid !== false && value > 0
+      return {
+        cmd: 3,
+        data: Object.assign({}, author, {
+          id,
+          giftName: String((blind || msg).giftName || ''),
+          giftId: String((blind || msg).giftId || ''),
+          num,
+          totalCoin: paid ? value : 0,
+          totalFreeCoin: paid ? 0 : value,
+        }),
+      }
+    }
+    case 'superChat':
+      return {
+        cmd: 5,
+        data: Object.assign({}, author, {
+          id,
+          price: Math.max(0, Math.round(Number(msg.rmb) || 0)),
+          content: String(msg.message || ''),
+          translation: '',
+        }),
+      }
+    case 'guard':
+      return {
+        cmd: 4,
+        data: Object.assign({}, author, {
+          id,
+          privilegeType: guard || 3,
+          num: Math.max(1, Math.round(Number(msg.guardNum) || 1)),
+          unit: String(msg.guardUnit || ''),
+          total_coin: coins(msg.price),
+        }),
+      }
+    default:
+      return null
+  }
+}
+
+function clampGuard(level) {
+  const n = Math.round(Number(level) || 0)
+  return n >= 1 && n <= 3 ? n : 0
+}
+</script>
+
+<script>
+(function () {
+  'use strict'
+  const EVENTS = [
+    'LIVE_OPEN_PLATFORM_DM',
+    'LIVE_OPEN_PLATFORM_SEND_GIFT',
+    'LIVE_OPEN_PLATFORM_SUPER_CHAT',
+    'LIVE_OPEN_PLATFORM_GUARD',
+  ]
+  const HEARTBEAT_MS = 10000
+  const SILENCE_MS = 30000
+  const QUEUE_LIMIT = 200
+
+  const query = new URLSearchParams(location.search)
+  // 配置状态（env=1）只连接、显示状态，不转发，以免把模拟数据发进 NanaType。
+  const isSetup = query.get('env') === '1'
+  if (isSetup) document.body.classList.add('setup')
+  const statusBox = document.getElementById('status')
+  const statusText = statusBox.querySelector('span')
+
+  function show(state, text) {
+    statusBox.dataset.state = state
+    statusText.textContent = text
+  }
+
+  let address = (query.get('address') || '').trim()
+  let socket = null
+  let queue = []
+  let retry = 0
+  let retryTimer = 0
+  let beatTimer = 0
+  let lastHeard = 0
+
+  function valid(url) {
+    return /^wss?:\/\/[^/]+\/comet\?token=[0-9a-zA-Z]+$/.test(url)
+  }
+
+  function connect() {
+    clearTimeout(retryTimer)
+    clearInterval(beatTimer)
+    if (socket) {
+      socket.onclose = null
+      socket.close()
+      socket = null
+    }
+    if (!address) return show('idle', '未填写 NanaType 连接地址')
+    if (!valid(address)) return show('error', '连接地址格式不对：请从 NanaType 复制')
+    show('connecting', '正在连接 NanaType…')
+    let ws
+    try {
+      ws = new WebSocket(address)
+    } catch (e) {
+      return show('error', '无法连接：' + e.message)
+    }
+    socket = ws
+    ws.onopen = function () {
+      retry = 0
+      lastHeard = Date.now()
+      show('open', isSetup ? '已连接 NanaType（配置中，不转发）' : '已连接 NanaType')
+      const pending = queue
+      queue = []
+      pending.forEach(send)
+      beatTimer = setInterval(function () {
+        if (Date.now() - lastHeard > SILENCE_MS) return ws.close()
+        send({ cmd: 0, data: {} })
+      }, HEARTBEAT_MS)
+    }
+    ws.onmessage = function () { lastHeard = Date.now() }
+    ws.onclose = function () {
+      clearInterval(beatTimer)
+      socket = null
+      const wait = Math.min(10000, 1000 * Math.pow(2, retry++))
+      show('error', '未连接：确认 NanaType 已开启彗星号接入、地址无误（' + Math.round(wait / 1000) + ' 秒后重试）')
+      retryTimer = setTimeout(connect, wait)
+    }
+  }
+
+  function send(frame) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(frame))
+    } else if (frame.cmd !== 0) {
+      queue.push(frame)
+      if (queue.length > QUEUE_LIMIT) queue.shift()
+    }
+  }
+
+  window.addEventListener('message', function (e) {
+    if (e.source !== parent) return
+    const data = e.data || {}
+    if (data.category === 'update' && data.type === 'option') {
+      const option = (data.args && data.args[0]) || {}
+      const next = String((option._ && option._.address) || query.get('address') || '').trim()
+      if (next !== address) {
+        address = next
+        retry = 0
+        connect()
+      }
+      return
+    }
+    if (data.category === 'event' && EVENTS.indexOf(data.type) >= 0 && !isSetup) {
+      const frame = toBlivechat(data.args && data.args[0])
+      if (frame) send(frame)
+    }
+  })
+
+  parent.postMessage({ fun: 'subscribe', args: EVENTS }, '*')
+  connect()
+})()
+</script>
+</body>
+</html>

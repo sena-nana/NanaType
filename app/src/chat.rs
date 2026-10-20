@@ -18,12 +18,23 @@ pub const SOURCE: &str = "bilibili";
 pub enum Platform {
     Bilibili,
     Douyin,
+    /// A blivechat server or the 彗星号 relay.
+    Blivechat,
 }
 impl Platform {
     pub fn source(self) -> &'static str {
         match self {
             Self::Bilibili => SOURCE,
             Self::Douyin => "douyin",
+            Self::Blivechat => "blivechat",
+        }
+    }
+    /// Downloaded pictures are cached per platform under this prefix.
+    pub fn cache_prefix(self) -> &'static str {
+        match self {
+            Self::Bilibili => "bili",
+            Self::Douyin => "douyin",
+            Self::Blivechat => "blive",
         }
     }
 }

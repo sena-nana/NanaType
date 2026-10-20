@@ -1,5 +1,6 @@
 //! Application state and the single update function.
 pub mod bilibili;
+pub mod blivechat;
 mod chat;
 pub mod douyin;
 mod editor;
@@ -91,6 +92,10 @@ pub struct App {
     /// The Bilibili connection and the thread saving its pictures.
     pub bilibili: BilibiliHandle,
     pub douyin: nanatype_douyin::DouyinHandle,
+    /// Third-party chat: the blivechat client and the 彗星号 relay it can join.
+    pub blivechat: nanatype_blive::BliveHandle,
+    pub comet_relay: nanatype_blive::RelayHandle,
+    blivechat_auth: blivechat::AuthCode,
     _chat_assets: ChatAssets,
     /// Live chat, oldest first, capped at the panel's size.
     chat: VecDeque<Arc<ChatMessage>>,
@@ -198,6 +203,7 @@ impl App {
             Cmd::SetReducedMotion(settings.playback.reduced_motion || ctx.reduced_motion()),
             clock::now_ms(),
         );
+        let blivechat_auth = blivechat::AuthCode::new(&paths.config);
         let mut app = Self {
             plugins: Default::default(),
             plugin_activation: Default::default(),
@@ -227,6 +233,9 @@ impl App {
             bridge: workers.bridge,
             bilibili: workers.bilibili,
             douyin: workers.douyin,
+            blivechat: workers.blivechat,
+            comet_relay: workers.comet_relay,
+            blivechat_auth,
             _chat_assets: workers.chat_assets,
             chat: VecDeque::new(),
             bili_echoes: Default::default(),
@@ -913,6 +922,7 @@ impl App {
         }
         self.sync_bilibili_speaker();
         self.douyin_configure();
+        self.blivechat_configure();
         self.edit_status(|s| {
             if !i.vts.enabled {
                 s.vts = LinkState::Off;
@@ -1889,6 +1899,10 @@ impl App {
             @ (Msg::Douyin(_) | Msg::DouyinRefresh | Msg::DouyinLogout | Msg::DouyinImport(_)) => {
                 self.douyin_msg(m)
             }
+            m @ (Msg::Blivechat(_)
+            | Msg::CometRelay(_)
+            | Msg::BlivechatAuthCode(_)
+            | Msg::CometResetToken) => self.blivechat_msg(m),
             Msg::PeerStart { invitation, relay } => self.peer_start(invitation, relay),
             Msg::PeerLeave => self.peer_leave(),
             Msg::PeerPanel(expanded) => self.ui.peer_panel.set(expanded),
@@ -1952,10 +1966,10 @@ impl App {
 
     fn chat_message(&mut self, message: Arc<ChatMessage>) {
         let bilibili = message.platform == crate::chat::Platform::Bilibili;
-        let epoch = if bilibili {
-            self.bilibili.epoch()
-        } else {
-            self.douyin.epoch()
+        let epoch = match message.platform {
+            crate::chat::Platform::Bilibili => self.bilibili.epoch(),
+            crate::chat::Platform::Douyin => self.douyin.epoch(),
+            crate::chat::Platform::Blivechat => self.blivechat.epoch(),
         };
         if message.epoch != 0 && message.epoch != epoch {
             return;

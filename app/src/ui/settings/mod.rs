@@ -60,12 +60,13 @@ pub enum Page {
     Integrations,
     Bilibili,
     Douyin,
+    Blivechat,
     Assets,
     About,
 }
 
 impl Page {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::General,
         Self::Playback,
         Self::Skins,
@@ -77,6 +78,7 @@ impl Page {
         Self::Integrations,
         Self::Bilibili,
         Self::Douyin,
+        Self::Blivechat,
         Self::Assets,
         Self::About,
     ];
@@ -85,6 +87,7 @@ impl Page {
         match self {
             Self::Bilibili => "settings-bilibili",
             Self::Douyin => "settings-douyin",
+            Self::Blivechat => "settings-blivechat",
             Self::General => "settings-general",
             Self::Playback => "settings-playback",
             Self::Skins => "settings-skins",
@@ -104,6 +107,7 @@ impl Page {
         match self {
             Self::Bilibili => "settings-bilibili-sub",
             Self::Douyin => "settings-douyin-sub",
+            Self::Blivechat => "settings-blivechat-sub",
             Self::General => "settings-general-sub",
             Self::Playback => "settings-playback-sub",
             Self::Skins => "settings-skins-sub",
@@ -122,6 +126,7 @@ impl Page {
         match self {
             Self::Bilibili => ti::BRAND_BILIBILI,
             Self::Douyin => ti::MESSAGE_CIRCLE,
+            Self::Blivechat => ti::COMET,
             Self::General => ti::ADJUSTMENTS,
             Self::Playback => ti::PLAYER_PLAY,
             Self::Skins => ti::PALETTE,
@@ -215,6 +220,7 @@ fn sidebar(ui: Ui) -> AnyView {
         if i == 2 {
             items.push(nav_row(ui, Page::Bilibili));
             items.push(nav_row(ui, Page::Douyin));
+            items.push(nav_row(ui, Page::Blivechat));
         }
     }
     let mut title = NodeStyle::default();

@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
-use crate::chat::ChatMessage;
+use crate::chat::{ChatMessage, Platform};
 use crossbeam_channel::{Sender, bounded, unbounded};
 use nanatype_bilibili::ChatEvent;
 use nanatype_model::AssetRef;
@@ -21,7 +21,7 @@ const WORKERS: usize = 4;
 /// Downloaded viewer and peer pictures unused this long are deleted at start.
 /// Pasted images share the folder but are history content and never pruned.
 const CACHE_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 3600);
-const CACHE_PREFIXES: &[&str] = &["bili-", "douyin-", "p2p-"];
+const CACHE_PREFIXES: &[&str] = &["bili-", "blive-", "douyin-", "p2p-"];
 
 /// Remove stale downloaded pictures; a later message downloads them again.
 fn prune_cache(dir: &Path) {
@@ -63,7 +63,8 @@ pub struct ChatAssets {
     tx: Sender<(u64, String, Incoming)>,
 }
 enum Incoming {
-    Bilibili(ChatEvent),
+    /// Bilibili's events, read directly or through blivechat.
+    Bilibili(Platform, ChatEvent),
     Douyin(nanatype_douyin::ChatEvent),
 }
 
@@ -188,20 +189,23 @@ impl ChatAssets {
                                 _ => None,
                             },
                         ),
-                        Incoming::Bilibili(event) => match event {
-                            ChatEvent::Text {
-                                author, emoticon, ..
-                            } => (
-                                Job::avatar("bili", &author.uid, &author.avatar_url),
-                                emoticon.as_deref().map(|url| Job::emote("bili", url)),
-                            ),
-                            ChatEvent::Gift { author, .. }
-                            | ChatEvent::Member { author, .. }
-                            | ChatEvent::SuperChat { author, .. } => {
-                                (Job::avatar("bili", &author.uid, &author.avatar_url), None)
+                        Incoming::Bilibili(platform, event) => {
+                            let prefix = platform.cache_prefix();
+                            match event {
+                                ChatEvent::Text {
+                                    author, emoticon, ..
+                                } => (
+                                    Job::avatar(prefix, &author.uid, &author.avatar_url),
+                                    emoticon.as_deref().map(|url| Job::emote(prefix, url)),
+                                ),
+                                ChatEvent::Gift { author, .. }
+                                | ChatEvent::Member { author, .. }
+                                | ChatEvent::SuperChat { author, .. } => {
+                                    (Job::avatar(prefix, &author.uid, &author.avatar_url), None)
+                                }
+                                _ => continue,
                             }
-                            _ => continue,
-                        },
+                        }
                     };
                     let message = match event {
                         Incoming::Douyin(event) => Some(ChatMessage::from_douyin(
@@ -210,12 +214,13 @@ impl ChatAssets {
                             emote.as_ref().map(Job::asset),
                             next,
                         )),
-                        Incoming::Bilibili(event) => ChatMessage::from_event(
+                        Incoming::Bilibili(platform, event) => ChatMessage::from_event(
                             event,
                             avatar.as_ref().map(Job::asset),
                             emote.as_ref().map(Job::asset),
                             next,
-                        ),
+                        )
+                        .map(|m| ChatMessage { platform, ..m }),
                     };
                     if let Some(mut message) = message {
                         message.epoch = epoch;
@@ -236,9 +241,19 @@ impl ChatAssets {
         Self { tx }
     }
     pub fn bilibili(&self, epoch: u64, room: u64, event: ChatEvent) {
-        let _ = self
-            .tx
-            .send((epoch, room.to_string(), Incoming::Bilibili(event)));
+        let _ = self.tx.send((
+            epoch,
+            room.to_string(),
+            Incoming::Bilibili(Platform::Bilibili, event),
+        ));
+    }
+    /// Third-party chat has no room of its own: a 彗星号 feed can mix rooms.
+    pub fn blivechat(&self, epoch: u64, event: ChatEvent) {
+        let _ = self.tx.send((
+            epoch,
+            String::new(),
+            Incoming::Bilibili(Platform::Blivechat, event),
+        ));
     }
     pub fn douyin(&self, epoch: u64, room: String, event: nanatype_douyin::ChatEvent) {
         let _ = self.tx.send((epoch, room, Incoming::Douyin(event)));

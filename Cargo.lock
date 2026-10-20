@@ -4728,6 +4728,7 @@ dependencies = [
  "embed-resource",
  "flate2",
  "futures-util",
+ "getrandom 0.4.3",
  "gif",
  "grammers-client",
  "grammers-session",
@@ -4741,6 +4742,7 @@ dependencies = [
  "nanalive-spout",
  "nanatype-audio",
  "nanatype-bilibili",
+ "nanatype-blive",
  "nanatype-bridge",
  "nanatype-core",
  "nanatype-douyin",
@@ -4800,6 +4802,17 @@ dependencies = [
  "tungstenite",
  "unicode-segmentation",
  "ureq",
+]
+
+[[package]]
+name = "nanatype-blive"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-channel",
+ "nanatype-bilibili",
+ "nanatype-model",
+ "serde_json",
+ "tungstenite",
 ]
 
 [[package]]

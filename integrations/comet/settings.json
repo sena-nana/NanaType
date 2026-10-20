@@ -1,0 +1,11 @@
+{
+  "settings": [
+    {
+      "key": "address",
+      "name": "NanaType 连接地址",
+      "type": "text",
+      "value": "",
+      "placeholder": "在 NanaType「第三方弹幕」页复制，形如 ws://127.0.0.1:12451/comet?token=…"
+    }
+  ]
+}

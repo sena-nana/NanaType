@@ -8,9 +8,11 @@
 
 use nana_ui::WindowOutputStatus;
 use nanatype_bilibili::ConnectionState;
+use nanatype_blive::{BliveStatus, FatalKind, RelayStatus};
 use nanatype_bridge::{BridgeStatus, Sink};
 use nanatype_i18n::Locale;
 use nanatype_model::LinkFault;
+use nanatype_settings::{BliveRoomKind, BlivechatSettings, BlivechatSource};
 
 use super::danmaku::Link;
 use super::{I18N, LinkState};
@@ -101,6 +103,86 @@ pub fn bilibili(locale: Locale, status: &ConnectionState, _room: &str) -> (Strin
     }
 }
 
+/// blivechat's status line and the chat panel's dot for `status` in `room`.
+fn blive(locale: Locale, status: &BliveStatus, room: &str) -> (String, Link) {
+    match status {
+        BliveStatus::Off => (I18N.t_in(locale, "int-status-off"), Link::Off),
+        BliveStatus::Connecting => (I18N.t_in(locale, "int-status-connecting"), Link::Connecting),
+        BliveStatus::Connected => (
+            I18N.tr_in(locale, "chat-status-joined", &[("room", room.into())]),
+            Link::Connected,
+        ),
+        BliveStatus::Error(f) => (
+            I18N.tr_in(
+                locale,
+                "chat-status-retrying",
+                &[("message", fault(locale, f).into())],
+            ),
+            Link::Error,
+        ),
+        BliveStatus::Fatal(kind, message) => {
+            let why = match kind {
+                FatalKind::AuthCode => I18N.t_in(locale, "chat-fatal-auth-code"),
+                FatalKind::TooManyRetries => I18N.t_in(locale, "chat-fatal-too-many-retries"),
+                FatalKind::TooManyConnections => {
+                    I18N.t_in(locale, "chat-fatal-too-many-connections")
+                }
+                // blivechat's own words.
+                FatalKind::Other => message.clone(),
+            };
+            (
+                I18N.tr_in(locale, "chat-fatal", &[("message", why.into())]),
+                Link::Error,
+            )
+        }
+    }
+}
+
+/// Third-party chat's status line and dot: a blivechat server's join, or
+/// for 彗星号 the relay and how many plugin pages push to it.
+pub fn blivechat(
+    locale: Locale,
+    settings: &BlivechatSettings,
+    state: &crate::app::blivechat::State,
+) -> (String, Link) {
+    if !settings.enabled {
+        return (I18N.t_in(locale, "int-status-off"), Link::Off);
+    }
+    match settings.source {
+        BlivechatSource::Server => {
+            if state.status == BliveStatus::Off {
+                return (I18N.t_in(locale, "chat-status-no-room"), Link::Off);
+            }
+            // Never show the auth code itself.
+            let room = match settings.room_kind {
+                BliveRoomKind::RoomId => settings.room_id.clone(),
+                BliveRoomKind::AuthCode => I18N.t_in(locale, "int-blive-auth-code"),
+            };
+            blive(locale, &state.status, &room)
+        }
+        BlivechatSource::Comet => match &state.relay {
+            RelayStatus::Error(f) => (
+                I18N.tr_in(
+                    locale,
+                    "int-comet-relay-error",
+                    &[("message", fault(locale, f).into())],
+                ),
+                Link::Error,
+            ),
+            RelayStatus::Off => (I18N.t_in(locale, "int-status-connecting"), Link::Connecting),
+            RelayStatus::Listening { publishers, .. } => match &state.status {
+                BliveStatus::Connected if *publishers == 0 => {
+                    (I18N.t_in(locale, "int-comet-waiting"), Link::Connecting)
+                }
+                BliveStatus::Connected => {
+                    (I18N.t_in(locale, "int-comet-connected"), Link::Connected)
+                }
+                other => blive(locale, other, ""),
+            },
+        },
+    }
+}
+
 /// A Spout2 output's state after NanaUI reports `status`; `None` leaves it
 /// as it was. NanaUI's reasons are English diagnostics: the host logs them
 /// (`NANATYPE_DEBUG`), the page says what they mean.
@@ -185,6 +267,48 @@ mod tests {
                 ConnectionState::Error(String::new()),
             ] {
                 texts.push(bilibili(locale, &state, "").0);
+            }
+            let fatals = [
+                FatalKind::AuthCode,
+                FatalKind::TooManyRetries,
+                FatalKind::TooManyConnections,
+            ];
+            for status in [
+                BliveStatus::Off,
+                BliveStatus::Connecting,
+                BliveStatus::Connected,
+            ]
+            .into_iter()
+            .chain(faults.iter().cloned().map(BliveStatus::Error))
+            .chain(fatals.map(|k| BliveStatus::Fatal(k, String::new())))
+            {
+                texts.push(blive(locale, &status, "1").0);
+            }
+            use BlivechatSource::{Comet, Server};
+            let listening = |publishers| RelayStatus::Listening { publishers };
+            for (source, relay, status) in [
+                (Server, RelayStatus::Off, BliveStatus::Off),
+                (Server, RelayStatus::Off, BliveStatus::Connected),
+                (Comet, RelayStatus::Off, BliveStatus::Off),
+                (
+                    Comet,
+                    RelayStatus::Error(LinkFault::PortInUse(1)),
+                    BliveStatus::Off,
+                ),
+                (Comet, listening(0), BliveStatus::Connected),
+                (Comet, listening(2), BliveStatus::Connected),
+            ] {
+                let settings = BlivechatSettings {
+                    enabled: true,
+                    source,
+                    ..Default::default()
+                };
+                let state = crate::app::blivechat::State {
+                    status,
+                    relay,
+                    auth_saved: false,
+                };
+                texts.push(blivechat(locale, &settings, &state).0);
             }
             for status in [
                 WindowOutputStatus::Active {

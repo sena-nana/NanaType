@@ -711,6 +711,64 @@ pub struct DouyinSettings {
     pub room: String,
 }
 
+/// Where third-party chat comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BlivechatSource {
+    /// A blivechat server at `host:port`.
+    #[default]
+    Server,
+    /// The 彗星号 workshop plugin, through NanaType's own relay.
+    Comet,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BliveRoomKind {
+    /// The streamer's 身份码, kept in the system's secret store.
+    #[default]
+    AuthCode,
+    RoomId,
+}
+
+/// Third-party chat over the blivechat protocol. The key is free again: the
+/// v1 blivechat settings moved to `bilibili` in the step to v2.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BlivechatSettings {
+    pub enabled: bool,
+    pub source: BlivechatSource,
+    pub host: String,
+    pub port: u16,
+    pub room_kind: BliveRoomKind,
+    /// The room number when `room_kind` is `RoomId`. An auth code is never
+    /// written here.
+    pub room_id: String,
+    /// The local relay the 彗星号 page connects to.
+    pub comet_port: u16,
+    /// What the 彗星号 page must present; it keeps other local pages from
+    /// pushing chat. Made when 彗星号 is first chosen.
+    pub comet_token: String,
+}
+
+pub const BLIVECHAT_PORT: u16 = 12450;
+pub const COMET_RELAY_PORT: u16 = 12451;
+
+impl Default for BlivechatSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            source: BlivechatSource::default(),
+            host: "127.0.0.1".into(),
+            port: BLIVECHAT_PORT,
+            room_kind: BliveRoomKind::default(),
+            room_id: String::new(),
+            comet_port: COMET_RELAY_PORT,
+            comet_token: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Integrations {
@@ -719,6 +777,7 @@ pub struct Integrations {
     pub websocket: WsSettings,
     pub bilibili: BilibiliSettings,
     pub douyin: DouyinSettings,
+    pub blivechat: BlivechatSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -878,6 +937,20 @@ impl Settings {
         d.room = d.room.trim().chars().take(2048).collect();
         let b = &mut self.integrations.bilibili;
         b.room = b.room.trim().to_owned();
+        let l = &mut self.integrations.blivechat;
+        l.host = l.host.trim().chars().take(253).collect();
+        if l.host.is_empty() {
+            l.host = "127.0.0.1".into();
+        }
+        if l.port == 0 {
+            l.port = BLIVECHAT_PORT;
+        }
+        if l.comet_port == 0 {
+            l.comet_port = COMET_RELAY_PORT;
+        }
+        l.room_id = l.room_id.trim().chars().take(20).collect();
+        l.comet_token.retain(|c| c.is_ascii_alphanumeric());
+        l.comet_token.truncate(64);
         *self != before
     }
 }

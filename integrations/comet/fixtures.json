@@ -1,0 +1,87 @@
+[
+  {
+    "name": "B 站舰长弹幕，佩戴勋章",
+    "comet": {
+      "id": "dm-1", "type": "message", "uid": "42", "uname": "观众", "face": "https://i0.hdslb.com/bfs/face/a.jpg",
+      "timestamp": 1700000000, "fansMedalWearingStatus": true, "fansMedalName": "奈奈团", "fansMedalLevel": 12,
+      "guardLevel": 3, "isModerator": false, "isAnchor": false, "platform": "bili",
+      "dmType": 0, "message": "晚上好", "emojiImgUrl": "", "emoticon": [], "replyUid": "", "replyUname": "", "gloryLevel": 0
+    },
+    "blivechat": {"cmd": 2, "data": ["https://i0.hdslb.com/bfs/face/a.jpg", 1700000000, "观众", 1, "晚上好", 3, 0, 0, 0, 1, 12, "dm-1", "", 0, [], [], "42", "奈奈团", false]},
+    "expect": {"kind": "text", "id": "dm-1", "uid": "42", "name": "观众", "content": "晚上好", "guard": 3, "medal_level": 12}
+  },
+  {
+    "name": "房管的表情弹幕，未佩戴勋章",
+    "comet": {
+      "id": "dm-2", "type": "message", "uid": "7", "uname": "房管", "face": "https://x/f.png",
+      "timestamp": 1700000001, "fansMedalWearingStatus": false, "fansMedalName": "奈奈团", "fansMedalLevel": 5,
+      "guardLevel": 0, "isModerator": true, "isAnchor": false, "platform": "bili",
+      "dmType": 1, "message": "[dog]", "emojiImgUrl": "https://i0.hdslb.com/emote.png", "emoticon": []
+    },
+    "blivechat": {"cmd": 2, "data": ["https://x/f.png", 1700000001, "房管", 2, "[dog]", 0, 0, 0, 0, 1, 0, "dm-2", "", 1, ["https://i0.hdslb.com/emote.png"], [], "7", "", false]},
+    "expect": {"kind": "text", "id": "dm-2", "uid": "7", "admin": true, "emoticon": "https://i0.hdslb.com/emote.png", "medal_level": 0}
+  },
+  {
+    "name": "抖音主播弹幕：uid 加平台前缀",
+    "comet": {
+      "id": "dy-1", "type": "message", "uid": "MS4wLjAB", "uname": "主播", "face": "https://p3.douyinpic.com/a.jpeg",
+      "timestamp": 1700000002, "guardLevel": 0, "isModerator": false, "isAnchor": true, "platform": "dou_yin",
+      "dmType": 0, "message": "欢迎"
+    },
+    "blivechat": {"cmd": 2, "data": ["https://p3.douyinpic.com/a.jpeg", 1700000002, "主播", 3, "欢迎", 0, 0, 0, 0, 1, 0, "dy-1", "", 0, [], [], "dou_yin:MS4wLjAB", "", false]},
+    "expect": {"kind": "text", "id": "dy-1", "uid": "dou_yin:MS4wLjAB", "owner": true}
+  },
+  {
+    "name": "付费礼物",
+    "comet": {
+      "id": "g-1", "type": "gift", "uid": "9", "uname": "老板", "face": "https://x/b.jpg", "timestamp": 1700000003,
+      "fansMedalWearingStatus": true, "fansMedalName": "m", "fansMedalLevel": 3, "guardLevel": 1, "platform": "bili",
+      "giftId": "31036", "giftName": "小花花", "giftNum": 5, "price": 0.1, "paid": true, "giftIcon": "",
+      "comboGift": false, "comboInfo": {"combo_base_num": 1, "combo_count": 1, "combo_id": "", "combo_timeout": 0}
+    },
+    "blivechat": {"cmd": 3, "data": {"avatarUrl": "https://x/b.jpg", "timestamp": 1700000003, "authorName": "老板", "uid": "9", "privilegeType": 1, "medalLevel": 3, "medalName": "m", "id": "g-1", "giftName": "小花花", "giftId": "31036", "num": 5, "totalCoin": 500, "totalFreeCoin": 0}},
+    "expect": {"kind": "gift", "id": "g-1", "uid": "9", "gift_name": "小花花", "num": 5, "total_coin": 500, "guard": 1}
+  },
+  {
+    "name": "免费礼物",
+    "comet": {
+      "id": "g-2", "type": "gift", "uid": "10", "uname": "路人", "face": "", "timestamp": 1700000004, "guardLevel": 0, "platform": "bili",
+      "giftId": "1", "giftName": "辣条", "giftNum": 3, "price": 0, "paid": false
+    },
+    "blivechat": {"cmd": 3, "data": {"avatarUrl": "", "timestamp": 1700000004, "authorName": "路人", "uid": "10", "privilegeType": 0, "medalLevel": 0, "medalName": "", "id": "g-2", "giftName": "辣条", "giftId": "1", "num": 3, "totalCoin": 0, "totalFreeCoin": 0}},
+    "expect": {"kind": "gift", "id": "g-2", "gift_name": "辣条", "num": 3, "total_coin": 0}
+  },
+  {
+    "name": "盲盒礼物按爆出的礼物计",
+    "comet": {
+      "id": "g-3", "type": "gift", "uid": "11", "uname": "抽盒", "face": "", "timestamp": 1700000005, "guardLevel": 0, "platform": "bili",
+      "giftId": "32251", "giftName": "心动盲盒", "giftNum": 1, "price": 15, "paid": true,
+      "blindGift": {"giftId": "32128", "giftName": "浪漫城堡", "giftIcon": "", "price": 22.33}
+    },
+    "blivechat": {"cmd": 3, "data": {"avatarUrl": "", "timestamp": 1700000005, "authorName": "抽盒", "uid": "11", "privilegeType": 0, "medalLevel": 0, "medalName": "", "id": "g-3", "giftName": "浪漫城堡", "giftId": "32128", "num": 1, "totalCoin": 22330, "totalFreeCoin": 0}},
+    "expect": {"kind": "gift", "id": "g-3", "gift_name": "浪漫城堡", "num": 1, "total_coin": 22330}
+  },
+  {
+    "name": "醒目留言",
+    "comet": {
+      "id": "sc-1", "type": "superChat", "uid": "12", "uname": "SC", "face": "https://x/c.jpg", "timestamp": 1700000006, "guardLevel": 2, "platform": "bili",
+      "message": "加油", "rmb": 30, "startTime": 1700000006, "endTime": 1700000066
+    },
+    "blivechat": {"cmd": 5, "data": {"avatarUrl": "https://x/c.jpg", "timestamp": 1700000006, "authorName": "SC", "uid": "12", "privilegeType": 2, "medalLevel": 0, "medalName": "", "id": "sc-1", "price": 30, "content": "加油", "translation": ""}},
+    "expect": {"kind": "super_chat", "id": "sc-1", "price": 30, "content": "加油", "guard": 2}
+  },
+  {
+    "name": "开通舰长",
+    "comet": {
+      "id": "gd-1", "type": "guard", "uid": "13", "uname": "新舰长", "face": "", "timestamp": 1700000007, "platform": "bili",
+      "price": 198, "guardLevel": 3, "guardNum": 1, "guardUnit": "月", "guardName": "舰长", "action": "开通"
+    },
+    "blivechat": {"cmd": 4, "data": {"avatarUrl": "", "timestamp": 1700000007, "authorName": "新舰长", "uid": "13", "privilegeType": 3, "medalLevel": 0, "medalName": "", "id": "gd-1", "num": 1, "unit": "月", "total_coin": 198000}},
+    "expect": {"kind": "member", "id": "gd-1", "num": 1, "unit": "月", "total_coin": 198000, "guard": 3}
+  },
+  {
+    "name": "进房事件没有对应的 blivechat 命令",
+    "comet": {"id": "e-1", "type": "enter", "uid": "14", "uname": "路过", "timestamp": 1700000008, "platform": "bili"},
+    "blivechat": null
+  }
+]

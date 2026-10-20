@@ -300,6 +300,14 @@ pub enum Msg {
     BilibiliSendConfirm(bool),
     BilibiliRetry(nanatype_model::LineId),
     BilibiliSkipFailed(nanatype_model::LineId),
+    /// The third-party (blivechat protocol) connection reported.
+    Blivechat(nanatype_blive::BliveEvent),
+    /// The 彗星号 relay reported.
+    CometRelay(nanatype_blive::RelayStatus),
+    /// Keep this blivechat 身份码 in the system's secret store; empty forgets it.
+    BlivechatAuthCode(String),
+    /// Make a new 彗星号 address; pages using the old one are refused.
+    CometResetToken,
     /// Quote the message when `reply` is true; otherwise insert its author
     /// label at the caret.
     ChatMention {

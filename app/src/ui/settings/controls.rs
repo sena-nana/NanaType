@@ -204,7 +204,7 @@ pub fn links_pulsing(ui: Ui) -> bool {
     !ui.reduced_motion.get_untracked()
         && matches!(
             ui.page.get_untracked(),
-            super::Page::Integrations | super::Page::Output
+            super::Page::Integrations | super::Page::Output | super::Page::Blivechat
         )
         && ui.status.with_untracked(|s| {
             [
@@ -218,6 +218,7 @@ pub fn links_pulsing(ui: Ui) -> bool {
             .into_iter()
             .any(|l| *l == LinkState::Connecting)
                 || s.bilibili_link == crate::ui::danmaku::Link::Connecting
+                || s.blivechat_link == crate::ui::danmaku::Link::Connecting
         })
 }
 
@@ -249,16 +250,26 @@ pub fn link_badge(ui: Ui, get: fn(&Status) -> &LinkState) -> AnyView {
 /// Bilibili's badge: its own status line and the chat panel's dot state,
 /// drawn like the other links.
 pub fn bilibili_badge(ui: Ui) -> AnyView {
+    chat_badge(ui, |s| (&s.bilibili, s.bilibili_link))
+}
+
+/// Third-party chat's badge (blivechat or 彗星号).
+pub fn blivechat_badge(ui: Ui) -> AnyView {
+    chat_badge(ui, |s| (&s.blivechat, s.blivechat_link))
+}
+
+fn chat_badge(ui: Ui, get: fn(&Status) -> (&String, crate::ui::danmaku::Link)) -> AnyView {
     use crate::ui::danmaku::Link;
     let describe = move || {
         let locale = ui.locale.get();
         ui.status.with(|s| {
-            let text = if s.bilibili.is_empty() {
+            let (line, link) = get(s);
+            let text = if line.is_empty() {
                 I18N.t_in(locale, "int-status-off")
             } else {
-                s.bilibili.clone()
+                line.clone()
             };
-            let tone = match s.bilibili_link {
+            let tone = match link {
                 Link::Off => StatusTone::Neutral,
                 Link::Connecting => StatusTone::Warning,
                 Link::Connected => StatusTone::Success,
@@ -268,7 +279,7 @@ pub fn bilibili_badge(ui: Ui) -> AnyView {
         })
     };
     breathing_badge(ui, describe, move || {
-        ui.status.with(|st| st.bilibili_link == Link::Connecting)
+        ui.status.with(|st| get(st).1 == Link::Connecting)
     })
 }
 
@@ -348,6 +359,24 @@ fn inset_row(row: AnyView) -> AnyView {
     widget(Stack::column(0.0).padding_xy(INSET, 0.0))
         .children(row)
         .into_any()
+}
+
+/// A small button that sends `msg`.
+pub fn button(ui: Ui, key: &str, msg: impl Fn() -> Msg + Send + 'static) -> AnyView {
+    widget(Button::new(ui.now_t(key)).size(ControlSize::Small))
+        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
+        .into_any()
+}
+
+/// [`button`] in the primary style.
+pub fn primary(ui: Ui, key: &str, msg: impl Fn() -> Msg + Send + 'static) -> AnyView {
+    widget(
+        Button::new(ui.now_t(key))
+            .kind(ButtonKind::Primary)
+            .size(ControlSize::Small),
+    )
+    .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
+    .into_any()
 }
 
 pub fn edit(f: impl FnOnce(&mut Settings) + Send + 'static) -> Msg {

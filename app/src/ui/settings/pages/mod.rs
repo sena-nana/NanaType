@@ -77,6 +77,7 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
     let body = match page {
         Page::Bilibili => crate::ui::bilibili::settings_page(ui),
         Page::Douyin => crate::ui::douyin::settings_page(ui),
+        Page::Blivechat => crate::ui::blivechat::settings_page(ui),
         Page::General => general(ui),
         Page::Playback => playback(ui),
         Page::Skins => skins(ui),
@@ -102,22 +103,6 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
             body,
         ))
         .into_any()
-}
-
-fn button(ui: Ui, key: &str, msg: impl Fn() -> Msg + Send + 'static) -> AnyView {
-    widget(Button::new(ui.now_t(key)).size(ControlSize::Small))
-        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
-        .into_any()
-}
-
-fn primary(ui: Ui, key: &str, msg: impl Fn() -> Msg + Send + 'static) -> AnyView {
-    widget(
-        Button::new(ui.now_t(key))
-            .kind(ButtonKind::Primary)
-            .size(ControlSize::Small),
-    )
-    .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
-    .into_any()
 }
 
 /// "Follow system" and every language by its own name.

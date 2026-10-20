@@ -10,6 +10,7 @@ members = [
     "crates/audio",
     "crates/bridge",
     "crates/bilibili",
+    "crates/blive",
     "crates/douyin",
     "crates/core",
     "crates/p2p",
@@ -36,6 +37,7 @@ nanatype-settings = { path = "crates/settings" }
 nanatype-audio = { path = "crates/audio" }
 nanatype-bridge = { path = "crates/bridge" }
 nanatype-bilibili = { path = "crates/bilibili" }
+nanatype-blive = { path = "crates/blive" }
 nanatype-douyin = { path = "crates/douyin" }
 nanatype-core = { path = "crates/core" }
 nanatype-p2p = { path = "crates/p2p" }

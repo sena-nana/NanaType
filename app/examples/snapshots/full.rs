@@ -5,6 +5,7 @@ use super::*;
 /// Every window, page and state, in the order the review reads them.
 pub fn capture(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
     douyin(scene, out);
+    blivechat(scene, out);
     p2p(scene, out, iw, ih);
     if std::env::var_os("NANATYPE_P2P_SNAPSHOTS_ONLY").is_some() {
         return;
@@ -80,6 +81,57 @@ fn douyin(scene: &Scene, out: &std::path::Path) {
     ui.settings.set(before_dy_settings);
     ui.douyin.set(before_dy_state);
     ui.page.set(before_dy_page);
+}
+
+/// The third-party chat page in both sources: a blivechat server joined by
+/// room number, and 彗星号 with two plugin pages pushing to the relay.
+fn blivechat(scene: &Scene, out: &std::path::Path) {
+    use nanatype_blive::{BliveStatus, RelayStatus};
+    use nanatype_settings::{BliveRoomKind, BlivechatSource};
+    let ui = scene.ui;
+    let theme = &scene.theme;
+    let before_settings = ui.settings.get_untracked();
+    let before_state = ui.blivechat.get_untracked();
+    let before_status = ui.status.get_untracked();
+    let before_page = ui.page.get_untracked();
+    ui.page.set(settings::Page::Blivechat);
+    for (name, source, relay) in [
+        ("blive-settings", BlivechatSource::Server, RelayStatus::Off),
+        (
+            "comet-settings",
+            BlivechatSource::Comet,
+            RelayStatus::Listening { publishers: 1 },
+        ),
+    ] {
+        let mut s = (*before_settings).clone();
+        let b = &mut s.integrations.blivechat;
+        b.enabled = true;
+        b.source = source;
+        b.room_kind = BliveRoomKind::RoomId;
+        b.room_id = "21452505".into();
+        b.comet_token = "3f9c0a7d5e214b6c8a0f1e2d3c4b5a69".into();
+        let state = nanatype::app::blivechat::State {
+            status: BliveStatus::Connected,
+            relay,
+            auth_saved: false,
+        };
+        let mut status = (*before_status).clone();
+        (status.blivechat, status.blivechat_link) =
+            link_text::blivechat(ui.locale.get_untracked(), &s.integrations.blivechat, &state);
+        assert_consistent(&s, &status);
+        ui.settings.set(Arc::new(s));
+        ui.blivechat.set(Arc::new(state));
+        ui.status.set(Arc::new(status));
+        shot(name, out, 920, 1100, theme.clone(), |doc, id| {
+            doc.context_mut()
+                .mount_view_root(id, move || settings::settings_window(ui))
+                .unwrap();
+        });
+    }
+    ui.settings.set(before_settings);
+    ui.blivechat.set(before_state);
+    ui.status.set(before_status);
+    ui.page.set(before_page);
 }
 
 /// The partner session: its input panel, both displays and the settings it adds.

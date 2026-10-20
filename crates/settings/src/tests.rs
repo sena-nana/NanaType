@@ -718,3 +718,52 @@ fn personalization_rejects_invalid_inputs_and_sanitizes_hand_edited_files() {
     assert_eq!(p.line_height, Some(3.0));
     assert_eq!(p.font_family, None);
 }
+
+#[test]
+fn third_party_chat_defaults_off_and_round_trips_at_schema_2() {
+    let old: Settings = serde_json::from_str(r#"{"schema":2}"#).unwrap();
+    let b = &old.integrations.blivechat;
+    assert!(!b.enabled);
+    assert_eq!(b.source, BlivechatSource::Server);
+    assert_eq!((b.host.as_str(), b.port), ("127.0.0.1", BLIVECHAT_PORT));
+    assert_eq!(b.comet_port, COMET_RELAY_PORT);
+    assert!(b.comet_token.is_empty());
+
+    let mut value = serde_json::json!({"schema":2,"integrations":{"blivechat":{"enabled":true,"source":"comet","room_kind":"room_id","room_id":"21452505","comet_token":"abc123"}}});
+    assert_eq!(migrate(&mut value).unwrap(), 2);
+    assert_eq!(
+        value["integrations"]["blivechat"]["source"], "comet",
+        "a v2 file keeps its blivechat settings"
+    );
+    let settings: Settings = serde_json::from_value(value).unwrap();
+    let b = &settings.integrations.blivechat;
+    assert!(b.enabled);
+    assert_eq!(b.source, BlivechatSource::Comet);
+    assert_eq!(b.room_kind, BliveRoomKind::RoomId);
+    assert_eq!(b.room_id, "21452505");
+    assert_eq!(b.comet_token, "abc123");
+    assert!(value_has_no_auth_code(&settings));
+}
+
+fn value_has_no_auth_code(settings: &Settings) -> bool {
+    serde_json::to_value(settings).unwrap()["integrations"]["blivechat"]
+        .get("auth_code")
+        .is_none()
+}
+
+#[test]
+fn third_party_chat_values_are_repaired() {
+    let mut s = Settings::default();
+    let b = &mut s.integrations.blivechat;
+    b.host = "  ".into();
+    b.port = 0;
+    b.comet_port = 0;
+    b.room_id = " 42 ".into();
+    b.comet_token = "ab\"<cd>".into();
+    assert!(s.sanitize());
+    let b = &s.integrations.blivechat;
+    assert_eq!(b.host, "127.0.0.1");
+    assert_eq!((b.port, b.comet_port), (BLIVECHAT_PORT, COMET_RELAY_PORT));
+    assert_eq!(b.room_id, "42");
+    assert_eq!(b.comet_token, "abcd");
+}

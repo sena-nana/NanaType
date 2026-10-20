@@ -2,6 +2,7 @@
 //! the typewriter and the history list always agree on how a line looks.
 
 pub mod bilibili;
+pub mod blivechat;
 pub mod danmaku;
 pub mod dialogue;
 pub mod douyin;
@@ -92,6 +93,9 @@ pub struct Status {
     /// Bilibili: what the panel and the settings say, and the dot's state.
     pub bilibili: String,
     pub bilibili_link: danmaku::Link,
+    /// Third-party chat (blivechat or 彗星号), likewise.
+    pub blivechat: String,
+    pub blivechat_link: danmaku::Link,
     pub spout_display: LinkState,
     pub spout_peer_display: LinkState,
     pub spout_history: LinkState,
@@ -163,6 +167,7 @@ pub struct Ui {
     pub package_drafts: Signal<Arc<Vec<nanatype_theme::editor::DraftInfo>>>,
     pub bilibili: Signal<Arc<crate::app::bilibili::State>>,
     pub douyin: Signal<Arc<crate::app::douyin::State>>,
+    pub blivechat: Signal<Arc<crate::app::blivechat::State>>,
     /// Kept only in memory and cleared after import; never serialized with settings.
     pub douyin_cookie: Signal<String>,
     pub speaker: Signal<nanatype_model::Speaker>,
@@ -292,6 +297,7 @@ impl Ui {
             package_drafts: signal(Arc::new(Vec::new())),
             bilibili: signal(Arc::new(crate::app::bilibili::State::default())),
             douyin: signal(Arc::new(crate::app::douyin::State::default())),
+            blivechat: signal(Arc::new(crate::app::blivechat::State::default())),
             douyin_cookie: signal(String::new()),
             speaker: signal(speaker),
             chrome_dark: signal(crate::skin_theme::dark_mode(settings.skin.chrome, false)),

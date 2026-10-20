@@ -9,6 +9,7 @@
 - **联动**：VTube Studio（表情、热键、参数和口型同步，`[expr]` / `[vts]` 标记按打字位置触发）、OSC、本地 WebSocket 广播。
 - **双人联机**：通过 iroh 连接另一位主播，自己与伙伴的台词或实时输入镜像分别进入独立展示窗口和 OBS 输出源，共享本次会话的主播历史记录。
 - **B 站弹幕直连**：扫码登录 B 站后直接接收直播间消息，无需额外服务。弹幕面板里可 @ 或回复观众：@ 插入头像昵称标签，回复附带原消息引用；弹幕、醒目留言、礼物、上舰也可以混入历史记录。
+- **第三方弹幕**：通过 blivechat 协议接收弹幕——连接本机或局域网运行的 [blivechat](https://github.com/xfgryujk/blivechat)，或经创意工坊插件接入 [彗星号](https://huixinghao.cn/)（彗星号支持的 B 站、抖音、快手等平台都能转发）。
 - **皮肤**：内置 28 套（情书、机器学习、十四行诗、蜡笔画、光环、夜色、羊皮纸、ADV 经典、RPG 窗口、香草、气泡、字幕、直播弹幕、漫画、终端、掌机像素、樱花、水墨、Echo-Live 原版、Echo-Live 玻璃、Echo-Live 气泡、Echo-Live 虚空、蔷薇哥特、星月魔法、森林精灵、潮汐水族馆、朱砂华灯、柠檬汽水；四套 Echo-Live 样式还原原作），可导入 / 导出 `.ntpkg` 皮肤包，支持热重载及受限 WGSL 高级动效。全部皮肤采用统一包格式，框架无皮肤专用分支；支持显式跨包资源依赖，以及禁止网络和文件访问的 Lua/Wasm 功能插件，见 [插件与包接口](docs/plugins.md)。
 - **多语言**：简体中文、English、日本語。
 
@@ -54,6 +55,25 @@
 4. 打开弹幕面板查看文字、表情和礼物，可与 B 站弹幕同时显示；来源标记、头像、@ 和引用独立。抖音礼物按原始抖币数量显示，不套用 B 站换算；当前不支持向抖音发送弹幕。
 
 原生 Rust 已在 Windows 公开直播间通过匿名弹幕接收与数据通道断网恢复验收。账号登录及 macOS 仍需独立验证。协议、许可核查和独立联网验收方式见 [抖音接入说明](docs/douyin.md)。
+
+### 第三方弹幕：blivechat 与彗星号
+
+打开 **设置 › 第三方弹幕**，开启后选择来源：
+
+- **blivechat**：运行 blivechat（默认 `127.0.0.1:12450`），填写开放平台身份码并点 **保存并连接**，或改用房间号。身份码保存在系统保护的存储中（Windows DPAPI / macOS 钥匙串），不写入设置文件。
+- **彗星号**：在彗星号画布中加入 NanaType 插件，把设置页显示的连接地址粘贴进插件设置即可。插件页面在 `integrations/comet/`，上传方式与工作原理见 [彗星号接入说明](docs/comet.md)。
+
+第三方弹幕与 B 站、抖音的消息一起出现在弹幕面板，@、回复和混入历史的用法相同。没有直播间时可以用模拟服务器试用 blivechat 模式：
+
+```bash
+cargo run -p nanatype-blive --example mock_blivechat
+```
+
+彗星号模式可以用脚本代替插件页面，把样例消息推给中转（需要 Node 22+）：
+
+```bash
+node scripts/comet_publish.mjs "ws://127.0.0.1:12451/comet?token=…"
+```
 
 ### 双人联机
 
@@ -173,6 +193,8 @@ pwsh scripts/package.ps1
 | `crates/bridge` | VTube Studio、OSC、WebSocket |
 | `crates/bilibili` | B 站登录、受保护会话、弹幕直连与台词发送 |
 | `crates/douyin` | 抖音原生签名、会话、连接和消息解码 |
+| `crates/blive` | blivechat 客户端（协议解析、连接与重连）和彗星号中转 |
+| `integrations/comet` | 彗星号创意工坊插件页面：把彗星号事件转换成 blivechat 消息 |
 | `crates/core` | 会话逻辑：草稿、发送、继续、队列、历史、回溯 |
 | `crates/p2p` | iroh 双人联机、会话排序、重连恢复与图片传输 |
 | `app` | NanaUI 宿主、窗口、视图、热键、托盘、Spout |

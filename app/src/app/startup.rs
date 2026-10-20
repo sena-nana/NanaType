@@ -24,6 +24,8 @@ pub(super) struct Workers {
     pub bilibili: BilibiliHandle,
     pub hotkeys: Hotkeys,
     pub douyin: nanatype_douyin::DouyinHandle,
+    pub blivechat: nanatype_blive::BliveHandle,
+    pub comet_relay: nanatype_blive::RelayHandle,
     pub sticker_manager: crate::stickers::Manager,
     pub telegram: crate::stickers::telegram::Service,
 }
@@ -52,6 +54,8 @@ impl Workers {
                 paths.config.clone(),
                 forward(&post, Msg::Douyin),
             ),
+            blivechat: nanatype_blive::BliveHandle::new(forward(&post, Msg::Blivechat)),
+            comet_relay: nanatype_blive::RelayHandle::new(forward(&post, Msg::CometRelay)),
             sticker_manager: crate::stickers::Manager::new(
                 &paths.data,
                 forward(&post, Msg::Stickers),
