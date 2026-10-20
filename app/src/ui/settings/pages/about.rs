@@ -24,7 +24,7 @@ pub(super) fn about(ui: Ui) -> AnyView {
         widget(crate::ui::kit::grow_column(gap::TIGHT)).children((
             widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
                 .children((Type::PageTitle.view("NanaType"), version_chip)),
-            hint_13(ui.now_t("app-tagline")),
+            Type::Lead.view(ui.now_t("app-tagline")),
             hint(build),
         )),
     ));

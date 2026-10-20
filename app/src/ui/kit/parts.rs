@@ -68,8 +68,8 @@ pub fn pill(text: impl Into<String>, tone: Tone, dot: bool) -> AnyView {
         .into_any()
 }
 
-/// A pill's frame in `tone`, for a pill whose content is bound in place.
-pub fn pill_frame(tone: Tone) -> Stack {
+/// A pill's frame in `tone`.
+fn pill_frame(tone: Tone) -> Stack {
     let frame = round(
         Stack::row(gap::TIGHT)
             .height(LengthSpec::Px(PILL_H))
@@ -206,28 +206,6 @@ pub fn cta_button(label: String, msg: impl Fn() -> Msg + Send + 'static) -> AnyV
     widget(cta(Button::new(label).size(ControlSize::Small)))
         .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
         .into_any()
-}
-
-/// A small destructive button that sends `msg`.
-pub fn danger_button(label: String, msg: impl Fn() -> Msg + Send + 'static) -> AnyView {
-    widget(
-        Button::new(label)
-            .kind(ButtonKind::Danger)
-            .size(ControlSize::Small),
-    )
-    .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
-    .into_any()
-}
-
-/// A quiet text button (a link-like action inside a row).
-pub fn text_button(label: String, msg: impl Fn() -> Msg + Send + 'static) -> AnyView {
-    widget(
-        Button::new(label)
-            .kind(ButtonKind::Text)
-            .size(ControlSize::Small),
-    )
-    .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
-    .into_any()
 }
 
 /// A row of items `gap::CONTROL` apart, centred.

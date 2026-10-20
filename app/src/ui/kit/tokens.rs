@@ -5,7 +5,6 @@
 
 use std::sync::Arc;
 
-use nana_ui::StatusTone;
 use nana_ui::runtime::view::{AnyView, IntoView, widget};
 use nana_ui::runtime::{NodeStyle, Text};
 use nana_ui::theme::{space, type_scale};
@@ -20,8 +19,6 @@ pub enum Type {
     PageTitle,
     /// A panel's or a dialog's title, a hero line: 16/600.
     Title,
-    /// A card's title: 14/600.
-    Heading,
     /// A strong item name inside a card: 13/600.
     Strong,
     /// A row's label: 13/500.
@@ -47,7 +44,7 @@ impl Type {
         match self {
             Self::Brand | Self::Title => type_scale::HEADING,
             Self::PageTitle => type_scale::TITLE,
-            Self::Heading | Self::Chat => type_scale::SECTION,
+            Self::Chat => type_scale::SECTION,
             Self::Strong | Self::Label | Self::Body | Self::Lead => type_scale::BODY,
             Self::Overline | Self::Small | Self::Caption => type_scale::META,
             Self::Micro => type_scale::HINT,
@@ -57,9 +54,7 @@ impl Type {
     pub const fn weight(self) -> u16 {
         match self {
             Self::Brand => type_scale::BOLD,
-            Self::PageTitle | Self::Title | Self::Heading | Self::Strong | Self::Overline => {
-                type_scale::SEMIBOLD
-            }
+            Self::PageTitle | Self::Title | Self::Strong | Self::Overline => type_scale::SEMIBOLD,
             Self::Label | Self::Small | Self::Micro => type_scale::MEDIUM,
             Self::Body | Self::Lead | Self::Caption | Self::Chat => type_scale::REGULAR,
         }
@@ -164,8 +159,6 @@ pub mod field {
     pub const SM: f32 = 160.0;
     /// A select, a slider, a name.
     pub const MD: f32 = 240.0;
-    /// A token, a long value.
-    pub const LG: f32 = 320.0;
 }
 
 /// Icon sizes.
@@ -223,29 +216,6 @@ impl Tone {
             Self::Accent => SemanticColorRole::AccentOnSoft,
             Self::Off => SemanticColorRole::Muted,
             other => other.role(),
-        }
-    }
-
-    /// The matching NanaUI status tone, for its badges.
-    pub const fn status(self) -> StatusTone {
-        match self {
-            Self::Neutral | Self::Off => StatusTone::Neutral,
-            Self::Accent => StatusTone::Info,
-            Self::Success => StatusTone::Success,
-            Self::Warning => StatusTone::Warning,
-            Self::Danger => StatusTone::Danger,
-        }
-    }
-}
-
-impl From<StatusTone> for Tone {
-    fn from(t: StatusTone) -> Self {
-        match t {
-            StatusTone::Neutral => Self::Neutral,
-            StatusTone::Info => Self::Accent,
-            StatusTone::Success => Self::Success,
-            StatusTone::Warning => Self::Warning,
-            StatusTone::Danger => Self::Danger,
         }
     }
 }

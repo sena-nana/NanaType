@@ -78,5 +78,3 @@ pub fn with_toasts_limit(
     .children((view, toast_stack(stack, space::XXXL, max_visible)))
     .into_any()
 }
-
-pub use super::kit::empty_state;

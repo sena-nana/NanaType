@@ -171,11 +171,6 @@ fn speaker_field(ui: Ui) -> AnyView {
     .into_any()
 }
 
-/// Body-size muted text.
-fn hint_13(text: String) -> AnyView {
-    Type::Lead.view(text)
-}
-
 fn mirror(ui: Ui) -> bool {
     ui.settings
         .with(|s| matches!(s.general.input_mode, InputMode::Mirror))

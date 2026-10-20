@@ -49,7 +49,9 @@ pub fn base64(bytes: &[u8]) -> String {
     out
 }
 
-pub use crate::ui::kit::{Shown, Type, block, divided, divider, field, gap, icon, inset, shown_if};
+pub use crate::ui::kit::{
+    Shown, Type, block, divided, divider, field, gap, icon, inset, row_text, shown_if,
+};
 
 /// A page's title.
 pub fn heading(ui: Ui, key: &str) -> AnyView {
@@ -225,10 +227,6 @@ fn breathing_badge(
 /// Label (and hint) on the left, control on the right; stacks when narrow.
 pub fn row(ui: Ui, label_key: &str, hint_key: Option<&str>, control: AnyView) -> AnyView {
     row_text(ui.now_t(label_key), hint_key.map(|k| ui.now_t(k)), control)
-}
-
-pub fn row_text(label_text: String, hint_text: Option<String>, control: AnyView) -> AnyView {
-    crate::ui::kit::row_text(label_text, hint_text, control)
 }
 
 /// [`row`] whose hint follows the settings (it is re-read on every change).

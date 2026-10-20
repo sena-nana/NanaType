@@ -36,13 +36,9 @@ pub fn panel() -> Stack {
         .painter(CardPainter(RadiusTier::Lg))
 }
 
-/// A settings card holding `rows`, each separated by an inset hairline.
-pub fn card(rows: Vec<AnyView>) -> AnyView {
-    card_with(rows.into_iter().map(|r| (r, None)).collect())
-}
-
-/// [`card`] whose rows may hide; a hidden row takes its divider with it.
-pub fn card_with(rows: Vec<(AnyView, Shown)>) -> AnyView {
+/// A settings card holding `rows`, each separated by an inset hairline; a
+/// hidden row takes its divider with it.
+fn card_with(rows: Vec<(AnyView, Shown)>) -> AnyView {
     let rows: Vec<AnyView> = rows
         .into_iter()
         .enumerate()
@@ -194,17 +190,6 @@ fn inset_row(row: AnyView) -> AnyView {
     widget(Stack::column(0.0).padding_xy(inset::CARD, 0.0))
         .children(row)
         .into_any()
-}
-
-/// A bar (a toolbar, a header, a footer): a row at `height`, padded on the
-/// bar insets, items centred.
-pub fn bar(height: f32) -> Stack {
-    Stack::row(gap::CONTROL)
-        .height(LengthSpec::Px(height))
-        .width(LengthSpec::Fill)
-        .padding_xy(inset::BAR_X, 0.0)
-        .align(AlignSpec::Center)
-        .with_layout(|l| l.flex_shrink = Some(0.0))
 }
 
 /// A column that takes the room a row leaves it (and gives it back when the

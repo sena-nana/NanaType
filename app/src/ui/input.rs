@@ -1280,12 +1280,6 @@ fn toolbar(ui: Ui) -> AnyView {
     .into_any()
 }
 
-/// A live or attention state as the app's accent pill, with a leading dot
-/// when `dot`.
-fn highlight_chip(text: String, dot: bool) -> AnyView {
-    crate::ui::kit::pill(text, Tone::Accent, dot)
-}
-
 /// Period of a breathing status pulse (ms).
 pub const PULSE_MS: u64 = 1200;
 
@@ -1334,11 +1328,11 @@ fn status_content(ui: Ui) -> AnyView {
             )
             .into_any(),
             // Live and attention states take the highlight, not the accent.
-            Line::Queued(text) => highlight_chip(text, false),
+            Line::Queued(text) => crate::ui::kit::pill(text, Tone::Accent, false),
             Line::Mirror(text) => {
                 let mut chip_view =
                     widget(Stack::row(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
-                        .children(highlight_chip(text, true));
+                        .children(crate::ui::kit::pill(text, Tone::Accent, true));
                 if !reduced {
                     // Opacity breathes once per PULSE_MS.
                     chip_view = chip_view.bind(move |s: &mut Stack| {

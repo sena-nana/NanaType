@@ -148,7 +148,7 @@ pub(super) fn step_indicator(ui: Ui) -> AnyView {
 pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
     let lead = |key: &str| {
         widget(Stack::column(0.0).padding_xy(inset::CARD, 0.0))
-            .children(hint_13(ui.now_t(key)))
+            .children(Type::Lead.view(ui.now_t(key)))
             .into_any()
     };
     let body: Vec<AnyView> = match n {
@@ -378,7 +378,7 @@ pub(super) fn hotkeys_sentence(ui: Ui) -> AnyView {
     while let Some(at) = rest.find(['\u{1}', '\u{2}']) {
         let (before, after) = rest.split_at(at);
         if !before.trim().is_empty() {
-            parts.push(hint_13(before.trim().to_owned()));
+            parts.push(Type::Lead.view(before.trim().to_owned()));
         }
         parts.push(if after.starts_with('\u{1}') {
             chord(s.hotkeys.summon.as_ref())
@@ -388,7 +388,7 @@ pub(super) fn hotkeys_sentence(ui: Ui) -> AnyView {
         rest = &after[1..];
     }
     if !rest.trim().is_empty() {
-        parts.push(hint_13(rest.trim().to_owned()));
+        parts.push(Type::Lead.view(rest.trim().to_owned()));
     }
     widget(Stack::row(space::SM).align(AlignSpec::Center).wrap(true))
         .children(parts)

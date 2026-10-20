@@ -3,11 +3,6 @@ use super::*;
 /// Width of the hotkey column of the VTS mapping table.
 pub(super) const VTS_SELECT_W: f32 = field::MD;
 
-/// A marker as typed in a line: monospace on a quiet tag.
-pub(super) fn marker_chip(text: String) -> AnyView {
-    crate::ui::kit::mono_tag(text)
-}
-
 /// One marker's row: its chip, then the VTS hotkey it presses ("Auto" lets
 /// the bridge match the hotkey of the same name).
 pub(super) fn vts_map_row(ui: Ui, key: String, options: Vec<SelectOption>) -> AnyView {
@@ -34,7 +29,7 @@ pub(super) fn vts_map_row(ui: Ui, key: String, options: Vec<SelectOption>) -> An
                 .shrink(1.0),
         )
         .children((
-            marker_chip(format!("[expr={key}]")),
+            crate::ui::kit::mono_tag(format!("[expr={key}]")),
             widget(IconGlyph::new(ti::ARROW_RIGHT).size(icon::SM).decorative()),
         )),
         widget(Stack::row(0.0).width(LengthSpec::Px(VTS_SELECT_W))).children(
@@ -136,12 +131,12 @@ pub(super) fn vts_mapping(ui: Ui) -> AnyView {
             }
             if markers.is_empty() {
                 return if *connected {
-                    crate::ui::feedback::empty_state(
+                    crate::ui::kit::empty_state(
                         ui.now_t("empty-vts-hotkeys"),
                         Some((ui.now_t("int-vts-refresh"), Box::new(|| Msg::VtsRefresh))),
                     )
                 } else {
-                    crate::ui::feedback::empty_state(
+                    crate::ui::kit::empty_state(
                         ui.now_t("int-vts-map-empty"),
                         Some((
                             ui.now_t("int-vts-authorize"),

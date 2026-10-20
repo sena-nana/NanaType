@@ -129,7 +129,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
         move || ui.settings.with(|s| s.assets.phrases.len()),
         move |n| {
             if *n == 0 {
-                return crate::ui::feedback::empty_state(ui.now_t("empty-phrases"), None);
+                return crate::ui::kit::empty_state(ui.now_t("empty-phrases"), None);
             }
             let rows: Vec<AnyView> = (0..*n)
                 .map(|i| {
