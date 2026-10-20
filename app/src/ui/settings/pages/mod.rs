@@ -89,7 +89,7 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
         Page::Assets => assets(ui),
         Page::About => about(ui),
     };
-    widget(Stack::column(gap::SECTION))
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children(body)
         .into_any()
 }

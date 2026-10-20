@@ -14,7 +14,7 @@ use nana_ui_core::{
 };
 
 use super::paint::CtaPainter;
-use super::tokens::{DOT, Tone, Type, gap, icon, inset};
+use super::tokens::{DOT, Tone, Type, gap, inset};
 use crate::msg::Msg;
 
 /// A quiet tag: a subtle chip with a soft hairline at the control radius,
@@ -38,15 +38,9 @@ fn tag_styled(text: Text) -> AnyView {
     widget(tag_frame()).children(widget(text)).into_any()
 }
 
-/// A tag's frame, for a tag whose content is bound in place.
+/// A tag's frame (NanaUI's), for a tag whose content is bound in place.
 pub fn tag_frame() -> Stack {
-    Stack::row(gap::TIGHT)
-        .padding_xy(inset::CHIP_X, inset::CHIP_Y)
-        .align(AlignSpec::Center)
-        .surface(SemanticColorRole::Subtle)
-        .outline(SemanticColorRole::BorderSoft, 1.0)
-        .radius(RadiusTier::Sm)
-        .with_layout(|l| l.flex_shrink = Some(0.0))
+    nana_ui::runtime::view::tag_frame()
 }
 
 /// `stack` with a corner `radius` px that comes from content, not chrome (a
@@ -95,24 +89,7 @@ pub fn callout(tone: Tone, text: impl Into<String>) -> AnyView {
         Tone::Success => ti::CIRCLE_CHECK,
         _ => ti::INFO_CIRCLE,
     };
-    widget(
-        Stack::row(gap::CONTROL)
-            .width(LengthSpec::Fill)
-            .padding_xy(inset::PANEL, inset::BAR_Y)
-            .align(AlignSpec::Start)
-            .radius(RadiusTier::Sm)
-            .surface_mix(SemanticColorMix::alpha(tone.role(), 0.10)),
-    )
-    .children((
-        widget(
-            IconGlyph::new(glyph)
-                .size(icon::MD)
-                .role(tone.role())
-                .decorative(),
-        ),
-        widget(super::grow_column(0.0)).children(widget(Type::Body.text(text))),
-    ))
-    .into_any()
+    nana_ui::runtime::view::callout(glyph, tone.status(), text)
 }
 
 /// An icon on a tinted square: a list entry's lead mark.
@@ -202,9 +179,13 @@ pub fn cta_button(label: String, msg: impl Fn() -> Msg + Send + 'static) -> AnyV
 
 /// A row of items `gap::CONTROL` apart, centred.
 pub fn hstack(children: impl IntoView) -> AnyView {
-    widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
-        .children(children)
-        .into_any()
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .align(AlignSpec::Center),
+    )
+    .children(children)
+    .into_any()
 }
 
 /// A 10px transparency checkerboard tile as a data URL, in the chrome's

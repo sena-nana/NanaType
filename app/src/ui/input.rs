@@ -35,8 +35,17 @@ use super::dialogue::{Base, Source, dialogue_box};
 use super::rich::{ChipKind, MarkerLook};
 use super::{I18N, Ui, c};
 use crate::msg::{FileTarget, MarkupEdit, Msg, Tool};
-use crate::ui::kit::{Tone, Type, gap, icon, inset};
+use crate::ui::kit::{Tone, Type, field, gap, icon, inset};
 use crate::windows::{INPUT_MODE_H, TOOLBAR_H};
+
+/// A colour swatch in the colour and outline panels.
+const SWATCH: f32 = 26.0;
+/// A picture swatch (a sticker, an image) in its panel.
+const PICTURE_SWATCH: f32 = 52.0;
+/// The kind's stripe on a marker chip in the cheat sheet.
+const CHIP_STRIPE: f32 = 3.0;
+/// How far inside the draft's box its focus ring sits.
+const FOCUS_INSET: f32 = 2.0;
 
 mod stickers;
 mod workspace;
@@ -174,7 +183,8 @@ fn source_toggle(ui: Ui) -> AnyView {
 
 fn layout_switch(ui: Ui) -> AnyView {
     widget(
-        Stack::row(space::SM)
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Sm)
             .height(LengthSpec::Px(INPUT_MODE_H))
             .padding_xy(space::MD, 0.0)
             .align(AlignSpec::Center)
@@ -196,7 +206,7 @@ fn layout_switch(ui: Ui) -> AnyView {
                 let l = Arc::make_mut(&mut st.layout);
                 // Switch paints its label internally, so auto width has no
                 // text to measure. Reserve room for the longest locale.
-                l.width = Some(LengthSpec::Px(160.0));
+                l.width = Some(LengthSpec::Px(field::SM));
                 l.flex_shrink = Some(0.0);
                 l.padding_left = Some(LengthSpec::Px(0.0));
                 l.padding_right = Some(LengthSpec::Px(0.0));
@@ -233,9 +243,13 @@ fn trigger_face(icon: nana_ui::runtime::Icon, label: Option<String>) -> AnyView 
                 .decorative()
                 .style(st)
                 .color(SemanticColorRole::Muted);
-            widget(Stack::row(space::XS).align(AlignSpec::Center))
-                .children((widget(glyph), widget(text)))
-                .into_any()
+            widget(
+                Stack::row(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Xs)
+                    .align(AlignSpec::Center),
+            )
+            .children((widget(glyph), widget(text)))
+            .into_any()
         }
         None => {
             let inner = TARGET - 2.0 * space::LG;
@@ -315,9 +329,9 @@ fn swatch_button(label: String, color: [f32; 4]) -> Button {
     let mut st = NodeStyle::default();
     {
         let l = Arc::make_mut(&mut st.layout);
-        l.width = Some(LengthSpec::Px(26.0));
-        l.height = Some(LengthSpec::Px(26.0));
-        l.min_width = Some(LengthSpec::Px(26.0));
+        l.width = Some(LengthSpec::Px(SWATCH));
+        l.height = Some(LengthSpec::Px(SWATCH));
+        l.min_width = Some(LengthSpec::Px(SWATCH));
         l.background = Some(color);
         l.border_width = Some(1.0);
         l.border_style = Some(nana_ui_core::BorderStyle::Solid);
@@ -340,8 +354,8 @@ fn image_button(label: String, url: String) -> Button {
     let mut st = NodeStyle::default();
     {
         let l = Arc::make_mut(&mut st.layout);
-        l.width = Some(LengthSpec::Px(52.0));
-        l.height = Some(LengthSpec::Px(52.0));
+        l.width = Some(LengthSpec::Px(PICTURE_SWATCH));
+        l.height = Some(LengthSpec::Px(PICTURE_SWATCH));
         l.paint.background_image = Some(nana_ui_core::BackgroundImage::url_with_fit(
             url,
             nana_ui_core::BackgroundImageFit::Contain,
@@ -376,27 +390,33 @@ fn color_panel(ui: Ui, open: Signal<bool>) -> AnyView {
                         .into_any()
                 })
                 .collect();
-            widget(Stack::row(gap::TIGHT)).children(buttons).into_any()
+            widget(Stack::row(0.0).gap_step(gap::step::TIGHT))
+                .children(buttons)
+                .into_any()
         })
         .collect();
     let picked = signal([0.9_f32, 0.3, 0.4, 1.0]);
-    widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
-        .children((
-            rows,
-            widget(ColorField::new([0.9, 0.3, 0.4, 1.0]).label(ui.now_t("tb-color"))) // design-tokens: data
-                .on(move |e: &ColorChanged| picked.set(e.value)),
-            widget(Stack::row(gap::TIGHT)).children((widget(crate::ui::kit::cta(
-                Button::new(ui.now_t("common-apply")).size(ControlSize::Small),
-            ))
-            .on_cx(move |_, _: &Activate, cx| {
-                let [r, g, b, a] = picked.get_untracked();
-                let to = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-                let rgba = Rgba8::rgba(to(r), to(g), to(b), to(a)); // design-tokens: data
-                open.set(false);
-                cx.dispatch_program_all(act(Tool::Color(rgba)));
-            }),)),
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::CONTROL)
+            .padding_step(gap::step::TIGHT, gap::step::TIGHT),
+    )
+    .children((
+        rows,
+        widget(ColorField::new([0.9, 0.3, 0.4, 1.0]).label(ui.now_t("tb-color"))) // design-tokens: data
+            .on(move |e: &ColorChanged| picked.set(e.value)),
+        widget(Stack::row(0.0).gap_step(gap::step::TIGHT)).children((widget(crate::ui::kit::cta(
+            Button::new(ui.now_t("common-apply")).size(ControlSize::Small),
         ))
-        .into_any()
+        .on_cx(move |_, _: &Activate, cx| {
+            let [r, g, b, a] = picked.get_untracked();
+            let to = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let rgba = Rgba8::rgba(to(r), to(g), to(b), to(a)); // design-tokens: data
+            open.set(false);
+            cx.dispatch_program_all(act(Tool::Color(rgba)));
+        }),)),
+    ))
+    .into_any()
 }
 
 fn typography_current(ui: Ui, value: &str) -> String {
@@ -459,37 +479,41 @@ fn size_panel(ui: Ui, open: Signal<bool>) -> AnyView {
                     })
                 })
                 .collect::<Vec<_>>();
-            widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
-                .children((
-                    widget(Text::new(typography_current(ui, &current))).key("size-current"),
-                    widget(Stack::row(gap::TIGHT)).children(presets),
-                    widget(Text::new(format!("{} (×)", ui.now_t("tb-size-relative")))),
-                    widget(
-                        NumberInput::continuous(relative.get_untracked())
-                            .range(0.5, 3.0)
-                            .step(0.05)
-                            .label(ui.now_t("tb-size-relative")),
-                    )
-                    .key("size-relative")
-                    .on(move |e: &NumberChanged| relative.set(e.value)),
-                    panel_action(ui.now_t("tb-apply-relative"), open, move || {
-                        Some(Tool::Size(Some(Size::Em(relative.get_untracked() as f32))))
-                    }),
-                    widget(Text::new(format!("{} (px)", ui.now_t("tb-size-pixels")))),
-                    widget(
-                        NumberInput::continuous(pixels.get_untracked())
-                            .range(4.0, 400.0)
-                            .step(1.0)
-                            .label(ui.now_t("tb-size-pixels")),
-                    )
-                    .key("size-pixels")
-                    .on(move |e: &NumberChanged| pixels.set(e.value)),
-                    panel_action(ui.now_t("tb-apply-pixels"), open, move || {
-                        Some(Tool::Size(Some(Size::Px(pixels.get_untracked() as f32))))
-                    }),
-                    panel_action(ui.now_t("tb-inherit"), open, || Some(Tool::Size(None))),
-                ))
-                .into_any()
+            widget(
+                Stack::column(0.0)
+                    .gap_step(gap::step::CONTROL)
+                    .padding_step(gap::step::TIGHT, gap::step::TIGHT),
+            )
+            .children((
+                widget(Text::new(typography_current(ui, &current))).key("size-current"),
+                widget(Stack::row(0.0).gap_step(gap::step::TIGHT)).children(presets),
+                widget(Text::new(format!("{} (×)", ui.now_t("tb-size-relative")))),
+                widget(
+                    NumberInput::continuous(relative.get_untracked())
+                        .range(0.5, 3.0)
+                        .step(0.05)
+                        .label(ui.now_t("tb-size-relative")),
+                )
+                .key("size-relative")
+                .on(move |e: &NumberChanged| relative.set(e.value)),
+                panel_action(ui.now_t("tb-apply-relative"), open, move || {
+                    Some(Tool::Size(Some(Size::Em(relative.get_untracked() as f32))))
+                }),
+                widget(Text::new(format!("{} (px)", ui.now_t("tb-size-pixels")))),
+                widget(
+                    NumberInput::continuous(pixels.get_untracked())
+                        .range(4.0, 400.0)
+                        .step(1.0)
+                        .label(ui.now_t("tb-size-pixels")),
+                )
+                .key("size-pixels")
+                .on(move |e: &NumberChanged| pixels.set(e.value)),
+                panel_action(ui.now_t("tb-apply-pixels"), open, move || {
+                    Some(Tool::Size(Some(Size::Px(pixels.get_untracked() as f32))))
+                }),
+                panel_action(ui.now_t("tb-inherit"), open, || Some(Tool::Size(None))),
+            ))
+            .into_any()
         },
     )
     .into_any()
@@ -535,22 +559,26 @@ fn font_panel(ui: Ui, open: Signal<bool>) -> AnyView {
                 panel_action(ui.now_t(key), open, move || Some(Tool::Font(font.clone())))
             })
             .collect::<Vec<_>>();
-            widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
-                .children((
-                    widget(Text::new(typography_current(ui, &current))).key("font-current"),
-                    choices,
-                    widget(TextInput::new(initial).placeholder(ui.now_t("tb-font-family")))
-                        .key("font-family")
-                        .on(move |e: &TextChanged| family.set(e.value.to_string()))
-                        .on_cx(move |_, _: &TextSubmitted, cx| {
-                            if let Some(tool) = selected() {
-                                open.set(false);
-                                cx.dispatch_program_all(act(tool));
-                            }
-                        }),
-                    panel_action(ui.now_t("common-apply"), open, selected),
-                ))
-                .into_any()
+            widget(
+                Stack::column(0.0)
+                    .gap_step(gap::step::CONTROL)
+                    .padding_step(gap::step::TIGHT, gap::step::TIGHT),
+            )
+            .children((
+                widget(Text::new(typography_current(ui, &current))).key("font-current"),
+                choices,
+                widget(TextInput::new(initial).placeholder(ui.now_t("tb-font-family")))
+                    .key("font-family")
+                    .on(move |e: &TextChanged| family.set(e.value.to_string()))
+                    .on_cx(move |_, _: &TextSubmitted, cx| {
+                        if let Some(tool) = selected() {
+                            open.set(false);
+                            cx.dispatch_program_all(act(tool));
+                        }
+                    }),
+                panel_action(ui.now_t("common-apply"), open, selected),
+            ))
+            .into_any()
         },
     )
     .into_any()
@@ -567,65 +595,73 @@ fn alignment_panel(ui: Ui, open: Signal<bool>) -> AnyView {
     .into_iter()
     .map(|(key, align)| panel_action(ui.now_t(key), open, move || Some(Tool::Align(align))))
     .collect::<Vec<_>>();
-    widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
-        .children((
-            widget(Text::new(""))
-                .key("alignment-current")
-                .bind(move |t: &mut Text| {
-                    let attrs = ui.sel_attrs.get();
-                    let key = if attrs.paragraph_alignment_mixed {
-                        "tb-mixed"
-                    } else {
-                        match attrs
-                            .paragraph_alignment
-                            .and_then(super::rich::align_from_rich)
-                        {
-                            None => "tb-inherit",
-                            Some(ParagraphAlign::Start) => "tb-align-start",
-                            Some(ParagraphAlign::Center) => "tb-align-center",
-                            Some(ParagraphAlign::End) => "tb-align-end",
-                        }
-                    };
-                    t.value = typography_current(ui, &ui.now_t(key));
-                }),
-            choices,
-        ))
-        .into_any()
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::CONTROL)
+            .padding_step(gap::step::TIGHT, gap::step::TIGHT),
+    )
+    .children((
+        widget(Text::new(""))
+            .key("alignment-current")
+            .bind(move |t: &mut Text| {
+                let attrs = ui.sel_attrs.get();
+                let key = if attrs.paragraph_alignment_mixed {
+                    "tb-mixed"
+                } else {
+                    match attrs
+                        .paragraph_alignment
+                        .and_then(super::rich::align_from_rich)
+                    {
+                        None => "tb-inherit",
+                        Some(ParagraphAlign::Start) => "tb-align-start",
+                        Some(ParagraphAlign::Center) => "tb-align-center",
+                        Some(ParagraphAlign::End) => "tb-align-end",
+                    }
+                };
+                t.value = typography_current(ui, &ui.now_t(key));
+            }),
+        choices,
+    ))
+    .into_any()
 }
 
 fn ruby_panel(ui: Ui, open: Signal<bool>) -> AnyView {
     let reading = signal(String::new());
-    widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
-        .children((
-            widget(TextInput::new("").placeholder(ui.now_t("tb-ruby-placeholder")))
-                .on(move |e: &TextChanged| reading.set(e.value.to_string()))
-                .on_cx(move |_, _: &TextSubmitted, cx| {
-                    let r = reading.get_untracked();
-                    if !r.trim().is_empty() {
-                        open.set(false);
-                        cx.dispatch_program_all(act(Tool::Ruby(r)));
-                    }
-                }),
-            widget(Stack::row(gap::TIGHT)).children((
-                widget(crate::ui::kit::cta(
-                    Button::new(ui.now_t("tb-ruby-apply")).size(ControlSize::Small),
-                ))
-                .on_cx(move |_, _: &Activate, cx| {
-                    let r = reading.get_untracked();
-                    if !r.trim().is_empty() {
-                        open.set(false);
-                        cx.dispatch_program_all(act(Tool::Ruby(r)));
-                    }
-                }),
-                widget(Button::new(ui.now_t("tb-ruby-remove")).size(ControlSize::Small)).on_cx(
-                    move |_, _: &Activate, cx| {
-                        open.set(false);
-                        cx.dispatch_program_all(act(Tool::Ruby(String::new())));
-                    },
-                ),
-            )),
-        ))
-        .into_any()
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::CONTROL)
+            .padding_step(gap::step::TIGHT, gap::step::TIGHT),
+    )
+    .children((
+        widget(TextInput::new("").placeholder(ui.now_t("tb-ruby-placeholder")))
+            .on(move |e: &TextChanged| reading.set(e.value.to_string()))
+            .on_cx(move |_, _: &TextSubmitted, cx| {
+                let r = reading.get_untracked();
+                if !r.trim().is_empty() {
+                    open.set(false);
+                    cx.dispatch_program_all(act(Tool::Ruby(r)));
+                }
+            }),
+        widget(Stack::row(0.0).gap_step(gap::step::TIGHT)).children((
+            widget(crate::ui::kit::cta(
+                Button::new(ui.now_t("tb-ruby-apply")).size(ControlSize::Small),
+            ))
+            .on_cx(move |_, _: &Activate, cx| {
+                let r = reading.get_untracked();
+                if !r.trim().is_empty() {
+                    open.set(false);
+                    cx.dispatch_program_all(act(Tool::Ruby(r)));
+                }
+            }),
+            widget(Button::new(ui.now_t("tb-ruby-remove")).size(ControlSize::Small)).on_cx(
+                move |_, _: &Activate, cx| {
+                    open.set(false);
+                    cx.dispatch_program_all(act(Tool::Ruby(String::new())));
+                },
+            ),
+        )),
+    ))
+    .into_any()
 }
 
 fn expression_panel(ui: Ui, open: Signal<bool>) -> AnyView {
@@ -650,23 +686,27 @@ fn expression_panel(ui: Ui, open: Signal<bool>) -> AnyView {
                 .into_any()
         })
         .collect();
-    widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
-        .children((
-            widget(Stack::row(gap::TIGHT).wrap(true)).children(variants),
-            widget(TextInput::new("").placeholder(ui.now_t("tb-expression-placeholder")))
-                .on(move |e: &TextChanged| name.set(e.value.to_string()))
-                .on_cx(move |_, _: &TextSubmitted, cx| {
-                    let n = name.get_untracked();
-                    if !n.trim().is_empty() {
-                        open.set(false);
-                        cx.dispatch_program_all(marker(Marker::Expression {
-                            name: n.trim().to_owned(),
-                            intensity: None,
-                        }));
-                    }
-                }),
-        ))
-        .into_any()
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::CONTROL)
+            .padding_step(gap::step::TIGHT, gap::step::TIGHT),
+    )
+    .children((
+        widget(Stack::row(0.0).gap_step(gap::step::TIGHT).wrap(true)).children(variants),
+        widget(TextInput::new("").placeholder(ui.now_t("tb-expression-placeholder")))
+            .on(move |e: &TextChanged| name.set(e.value.to_string()))
+            .on_cx(move |_, _: &TextSubmitted, cx| {
+                let n = name.get_untracked();
+                if !n.trim().is_empty() {
+                    open.set(false);
+                    cx.dispatch_program_all(marker(Marker::Expression {
+                        name: n.trim().to_owned(),
+                        intensity: None,
+                    }));
+                }
+            }),
+    ))
+    .into_any()
 }
 
 /// The toolbar's sticker picker; `open` is its popover's state.
@@ -724,22 +764,35 @@ fn stroke_panel(ui: Ui, open: Signal<bool>) -> AnyView {
         dy: 0.0,
         blur: 8.0,
     };
-    widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::CONTROL)
+            .padding_step(gap::step::TIGHT, gap::step::TIGHT),
+    )
+    .children((
+        caption(ui.now_t("tb-stroke")),
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::TIGHT)
+                .align(AlignSpec::Center),
+        )
+        .children((swatches, press(small("tb-stroke-none"), Tool::Stroke(None)))),
+        caption(ui.now_t("tb-shadow")),
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::TIGHT)
+                .align(AlignSpec::Center),
+        )
         .children((
-            caption(ui.now_t("tb-stroke")),
-            widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
-                .children((swatches, press(small("tb-stroke-none"), Tool::Stroke(None)))),
-            caption(ui.now_t("tb-shadow")),
-            widget(Stack::row(gap::TIGHT).align(AlignSpec::Center)).children((
-                press(small("tb-shadow-drop"), Tool::Shadow(Some(drop))),
-                press(
-                    small("tb-shadow-glow").icon(ti::SPARKLES),
-                    Tool::Shadow(Some(glow)),
-                ),
-                press(small("tb-shadow-none"), Tool::Shadow(None)),
-            )),
-        ))
-        .into_any()
+            press(small("tb-shadow-drop"), Tool::Shadow(Some(drop))),
+            press(
+                small("tb-shadow-glow").icon(ti::SPARKLES),
+                Tool::Shadow(Some(glow)),
+            ),
+            press(small("tb-shadow-none"), Tool::Shadow(None)),
+        )),
+    ))
+    .into_any()
 }
 
 /// A marker as the editor shows it, for the cheat sheet: the kind's stripe
@@ -763,7 +816,8 @@ fn marker_chip(
     let fill = c(look.fill);
     let hue = c(kind.hue());
     widget(
-        Stack::row(gap::TIGHT)
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
             .align(AlignSpec::Center)
             .radius(nana_ui_core::RadiusTier::Xs)
             .with_layout(move |l| {
@@ -777,7 +831,7 @@ fn marker_chip(
     )
     .children((
         widget(Stack::row(0.0).with_layout(move |l| {
-            l.width = Some(LengthSpec::Px(3.0));
+            l.width = Some(LengthSpec::Px(CHIP_STRIPE));
             l.height = Some(LengthSpec::Px(crate::ui::kit::keycap::H));
             l.flex_shrink = Some(0.0);
             l.background = Some(hue);
@@ -794,10 +848,11 @@ fn sheet_row(lead: AnyView, lead_w: f32, meaning: String) -> AnyView {
     let mut st = Type::Caption.style();
     Arc::make_mut(&mut st.layout).white_space_nowrap = true;
     widget(
-        Stack::row(gap::CONTROL)
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
             .align(AlignSpec::Center)
             .with_layout(|l| {
-                l.height = Some(LengthSpec::Px(24.0));
+                l.height = Some(LengthSpec::Px(crate::ui::kit::keycap::H));
             }),
     )
     .children((
@@ -854,18 +909,22 @@ pub fn cheat_sheet(ui: Ui) -> AnyView {
         SendKey::Enter => ("Enter", "Shift+Enter"),
         SendKey::CtrlEnter => ("Ctrl+Enter", "Enter"),
     };
-    let recall = widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
-        .children((
-            super::kit::keycap::chord("Ctrl+↑"),
-            widget(
-                Text::new("/")
-                    .decorative()
-                    .style(Type::Small.style())
-                    .color(SemanticColorRole::Muted),
-            ),
-            super::kit::keycap::keycap("↓"),
-        ))
-        .into_any();
+    let recall = widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        super::kit::keycap::chord("Ctrl+↑"),
+        widget(
+            Text::new("/")
+                .decorative()
+                .style(Type::Small.style())
+                .color(SemanticColorRole::Muted),
+        ),
+        super::kit::keycap::keycap("↓"),
+    ))
+    .into_any();
     let keys: Vec<AnyView> = vec![
         sheet_row(super::kit::keycap::chord(send), 136.0, t("tb-send")),
         sheet_row(
@@ -884,16 +943,24 @@ pub fn cheat_sheet(ui: Ui) -> AnyView {
         sheet_row(super::kit::keycap::chord("Esc"), 136.0, t("cheat-hide")),
     ];
     let column = |title: String, rows: Vec<AnyView>| {
-        widget(Stack::column(gap::TIGHT).width(LengthSpec::Shrink))
-            .children((caption(title), rows))
-            .into_any()
-    };
-    widget(Stack::row(gap::SECTION).padding(gap::TIGHT))
-        .children((
-            column(t("cheat-markers"), markers),
-            column(t("cheat-shortcuts"), keys),
-        ))
+        widget(
+            Stack::column(0.0)
+                .gap_step(gap::step::TIGHT)
+                .width(LengthSpec::Shrink),
+        )
+        .children((caption(title), rows))
         .into_any()
+    };
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::SECTION)
+            .padding_step(gap::step::TIGHT, gap::step::TIGHT),
+    )
+    .children((
+        column(t("cheat-markers"), markers),
+        column(t("cheat-shortcuts"), keys),
+    ))
+    .into_any()
 }
 
 /// A hairline between two groups of toolbar tools, 16px tall.
@@ -1262,9 +1329,10 @@ fn toolbar(ui: Ui) -> AnyView {
         ));
         bar.push(source_toggle(ui));
         widget(
-            Stack::bar(gap::HAIR)
+            Stack::bar(0.0)
+                .gap_step(gap::step::HAIR)
                 .height(LengthSpec::Px(TOOLBAR_H))
-                .padding_xy(inset::BAR_Y, space::SM)
+                .padding_step(inset::step::BAR_Y, nana_ui_core::SpacingStep::Sm)
                 .align(AlignSpec::Center)
                 .with_layout(|l| l.flex_shrink = Some(0.0)),
         )
@@ -1391,7 +1459,8 @@ fn reply_bar(ui: Ui) -> AnyView {
             let mut body = Type::Caption.style();
             body.foreground = Some(SemanticColorRole::Muted);
             widget(
-                Stack::row(gap::TIGHT)
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
                     .align(AlignSpec::Center)
                     .width(LengthSpec::Fill),
             )
@@ -1679,10 +1748,10 @@ fn focus_ring(focused: Signal<bool>) -> AnyView {
             .radius(nana_ui_core::RadiusTier::Sm)
             .with_layout(|l| {
                 l.position = PositionSpec::Absolute;
-                l.offset_left = Some(LengthSpec::Px(2.0));
-                l.offset_top = Some(LengthSpec::Px(2.0));
-                l.offset_right = Some(LengthSpec::Px(2.0));
-                l.offset_bottom = Some(LengthSpec::Px(2.0));
+                l.offset_left = Some(LengthSpec::Px(FOCUS_INSET));
+                l.offset_top = Some(LengthSpec::Px(FOCUS_INSET));
+                l.offset_right = Some(LengthSpec::Px(FOCUS_INSET));
+                l.offset_bottom = Some(LengthSpec::Px(FOCUS_INSET));
                 l.opacity = Some(0.4);
                 l.pointer_events = Some(PointerEventsSpec::None);
             }),

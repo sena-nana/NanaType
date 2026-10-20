@@ -34,11 +34,12 @@ pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> AnyView {
         Stack::row(MATRIX_GAP)
             .align(AlignSpec::Center)
             .width(LengthSpec::Fill)
-            .padding_xy(inset::CARD, inset::ROW_Y),
+            .padding_step(inset::step::CARD, inset::step::ROW_Y),
     )
     .children((
         widget(
-            Stack::row(gap::TIGHT)
+            Stack::row(0.0)
+                .gap_step(gap::step::TIGHT)
                 .align(AlignSpec::Center)
                 .width(LengthSpec::Px(MATRIX_LABEL_W))
                 .with_layout(|l| l.flex_shrink = Some(0.0)),
@@ -51,19 +52,23 @@ pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> AnyView {
 
 /// A row label, with an info mark whose tooltip says what the options do.
 pub(super) fn matrix_label(ui: Ui, key: &str, tip: Option<&str>) -> AnyView {
-    widget(Stack::row(gap::HAIR).align(AlignSpec::Center))
-        .children((
-            widget(Text::new(ui.now_t(key)).style(Type::Label.style())),
-            tip.map(|tip| {
-                widget(
-                    IconButton::new(ti::INFO_CIRCLE, ui.now_t(tip))
-                        .size(ControlSize::Small)
-                        .kind(ButtonKind::Ghost)
-                        .with_tooltip(ui.now_t(tip)),
-                )
-            }),
-        ))
-        .into_any()
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::HAIR)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        widget(Text::new(ui.now_t(key)).style(Type::Label.style())),
+        tip.map(|tip| {
+            widget(
+                IconButton::new(ti::INFO_CIRCLE, ui.now_t(tip))
+                    .size(ControlSize::Small)
+                    .kind(ButtonKind::Ghost)
+                    .with_tooltip(ui.now_t(tip)),
+            )
+        }),
+    ))
+    .into_any()
 }
 
 /// "—": the setting does not apply to this window.
@@ -247,7 +252,8 @@ pub(super) fn windows(ui: Ui) -> AnyView {
                 }
             };
             widget(
-                Stack::row(gap::TIGHT)
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
                     .align(AlignSpec::Center)
                     .width(LengthSpec::Fill),
             )
@@ -275,14 +281,17 @@ pub(super) fn windows(ui: Ui) -> AnyView {
             .into_any()
         }),
     );
-    widget(Stack::column(gap::SECTION))
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
             section(
                 ui,
                 "",
                 vec![header, show, lock, background, on_top, vertical_text, size],
             ),
-            widget(Stack::column(0.0).padding_xy(inset::CARD, space::MD)).children((
+            widget(
+                Stack::column(0.0).padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Md),
+            )
+            .children((
                 hint(ui.now_t("windows-layout-hint")),
                 hint(ui.now_t("windows-input-na")),
             )),

@@ -3,6 +3,9 @@ use super::*;
 use crate::ui::kit::{Type, gap};
 use nana_ui::runtime::{FileDropEvent, TabOption, Tabs, TabsEvent};
 
+/// The strip of pack tabs under the sticker grid.
+const PACK_STRIP_H: f32 = 36.0;
+
 pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Option<u64>) -> AnyView {
     let query = signal(String::new());
     let selected = signal(String::new());
@@ -30,28 +33,32 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
                 let l = Arc::make_mut(&mut style.layout);
                 l.width = Some(LengthSpec::Fill);
                 l.min_width = Some(LengthSpec::Px(0.0));
-                return widget(Stack::column(gap::CONTROL).width(LengthSpec::Fill))
-                    .children((
-                        widget(
-                            Text::new(ui.now_t("empty-stickers"))
-                                .style(style)
-                                .color(SemanticColorRole::Muted),
-                        ),
-                        widget(
-                            Button::new(ui.now_t("window-settings"))
-                                .kind(ButtonKind::Text)
-                                .size(ControlSize::Small),
-                        )
-                        .on_cx(move |_, _: &Activate, cx| {
-                            if let Some(open) = close_on_insert {
-                                open.set(false);
-                            }
-                            cx.dispatch_program_all(Msg::SettingsPage(
-                                crate::ui::settings::Page::Assets,
-                            ))
-                        }),
-                    ))
-                    .into_any();
+                return widget(
+                    Stack::column(0.0)
+                        .gap_step(gap::step::CONTROL)
+                        .width(LengthSpec::Fill),
+                )
+                .children((
+                    widget(
+                        Text::new(ui.now_t("empty-stickers"))
+                            .style(style)
+                            .color(SemanticColorRole::Muted),
+                    ),
+                    widget(
+                        Button::new(ui.now_t("window-settings"))
+                            .kind(ButtonKind::Text)
+                            .size(ControlSize::Small),
+                    )
+                    .on_cx(move |_, _: &Activate, cx| {
+                        if let Some(open) = close_on_insert {
+                            open.set(false);
+                        }
+                        cx.dispatch_program_all(Msg::SettingsPage(
+                            crate::ui::settings::Page::Assets,
+                        ))
+                    }),
+                ))
+                .into_any();
             }
             let q = q.to_lowercase();
             let series = effective_series(series, &stickers);
@@ -103,9 +110,14 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
                     .into_any()
                 })
                 .collect();
-            widget(Stack::row(gap::TIGHT).wrap(true).width(LengthSpec::Fill))
-                .children(cells)
-                .into_any()
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .wrap(true)
+                    .width(LengthSpec::Fill),
+            )
+            .children(cells)
+            .into_any()
         },
     );
     let grid = if let Some(id) = region {
@@ -132,7 +144,8 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
     };
     let footer = region.map(|id| {
         widget(
-            Stack::column(gap::CONTROL)
+            Stack::column(0.0)
+                .gap_step(gap::step::CONTROL)
                 .width(LengthSpec::Fill)
                 .with_layout(|l| l.flex_shrink = Some(0.0)),
         )
@@ -153,7 +166,7 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
             widget(Divider::horizontal()),
             widget(ScrollView::new(ScrollAxes::Horizontal).with_layout(|l| {
                 l.width = Some(LengthSpec::Fill);
-                l.height = Some(LengthSpec::Px(36.0));
+                l.height = Some(LengthSpec::Px(PACK_STRIP_H));
                 l.min_width = Some(LengthSpec::Px(0.0));
             }))
             .children(
@@ -195,8 +208,9 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
     layout.width = Some(LengthSpec::Fill);
     layout.min_width = Some(LengthSpec::Px(0.0));
     widget(
-        Stack::column(gap::CONTROL)
-            .padding(gap::TIGHT)
+        Stack::column(0.0)
+            .gap_step(gap::step::CONTROL)
+            .padding_step(gap::step::TIGHT, gap::step::TIGHT)
             .with_layout(move |l| {
                 l.width = Some(LengthSpec::Fill);
                 l.min_width = Some(LengthSpec::Px(0.0));

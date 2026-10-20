@@ -22,6 +22,13 @@ use crate::msg::Msg;
 use crate::ui::kit::{gap, inset};
 use crate::ui::{Ui, dialogue, history};
 
+/// The sample text field.
+const SAMPLE_H: f32 = 100.0;
+/// The stage and the fields side by side: each column's basis and the
+/// least it narrows to before they stack.
+const COLUMN_W: f32 = 300.0;
+const COLUMN_MIN_W: f32 = 280.0;
+
 /// Both skin catalogue layouts prepare the same isolated preview on selection.
 pub(super) fn select(
     ui: Ui,
@@ -244,7 +251,8 @@ fn field(ui: Ui, id: &str, history: bool, field: Field, placeholder: String) -> 
     let write_id = id.to_owned();
     let read = move || field.value(draft(ui, &read_id).pane_mut(history)).clone();
     widget(
-        Stack::column(gap::TIGHT)
+        Stack::column(0.0)
+            .gap_step(gap::step::TIGHT)
             .width(LengthSpec::Percent(48.0))
             .with_layout(|l| {
                 l.min_width = Some(LengthSpec::Px(0.0));
@@ -320,7 +328,12 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
             .map(|f| SelectOption::new(f.clone(), f)),
     );
     let font_id = id.to_owned();
-    let font_choices = widget(Stack::column(gap::TIGHT).width(LengthSpec::Fill)).children((
+    let font_choices = widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::TIGHT)
+            .width(LengthSpec::Fill),
+    )
+    .children((
         hint(ui.now_t("skin-edit-font-presets")),
         widget(
             Select::new(Some(String::new()))
@@ -335,19 +348,20 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
     ));
     let sample_id = id.to_owned();
     let write_sample_id = id.to_owned();
-    let sample = widget(TextArea::new(draft(ui, id).pane(is_history).text.clone()).height(100.0))
-        .key("skin-edit-sample-text")
-        .bind(move |area: &mut TextArea| {
-            let text = draft(ui, &sample_id).pane(is_history).text.clone();
-            if area.state.value.as_str() != text {
-                area.state = TextInputState::new(text);
-            }
-        })
-        .on(move |e: &TextChanged| {
-            change(ui, &write_sample_id, |d| {
-                d.pane_mut(is_history).text = e.value.to_string()
+    let sample =
+        widget(TextArea::new(draft(ui, id).pane(is_history).text.clone()).height(SAMPLE_H))
+            .key("skin-edit-sample-text")
+            .bind(move |area: &mut TextArea| {
+                let text = draft(ui, &sample_id).pane(is_history).text.clone();
+                if area.state.value.as_str() != text {
+                    area.state = TextInputState::new(text);
+                }
+            })
+            .on(move |e: &TextChanged| {
+                change(ui, &write_sample_id, |d| {
+                    d.pane_mut(is_history).text = e.value.to_string()
+                });
             });
-        });
     let sample_reset_id = id.to_owned();
     let reset_id = id.to_owned();
     let discard_id = id.to_owned();
@@ -388,61 +402,71 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
         },
     );
     // Keep controls mounted while the sample rerenders, preserving IME/selection.
-    widget(Stack::column(gap::CONTROL).width(LengthSpec::Fill))
-        .children((
-            widget(Stack::row(gap::CONTROL).wrap(true).width(LengthSpec::Fill)).children(fields),
-            font_choices,
-            label(ui.now_t("skin-edit-test-text")),
-            sample,
-            widget(Button::new(ui.now_t("skin-edit-sample-reset")).size(ControlSize::Small)).on(
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::CONTROL)
+            .width(LengthSpec::Fill),
+    )
+    .children((
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
+                .wrap(true)
+                .width(LengthSpec::Fill),
+        )
+        .children(fields),
+        font_choices,
+        label(ui.now_t("skin-edit-test-text")),
+        sample,
+        widget(Button::new(ui.now_t("skin-edit-sample-reset")).size(ControlSize::Small)).on(
+            move |_: &Activate| {
+                change(ui, &sample_reset_id, |d| {
+                    d.pane_mut(is_history).text = ui.now_t(if is_history {
+                        "skin-edit-history-sample"
+                    } else {
+                        "skin-edit-sample"
+                    });
+                })
+            },
+        ),
+        status,
+        widget(Stack::row(0.0).gap_step(gap::step::CONTROL).wrap(true)).children((
+            widget(Button::new(ui.now_t("skin-edit-reset")).size(ControlSize::Small)).on(
                 move |_: &Activate| {
-                    change(ui, &sample_reset_id, |d| {
-                        d.pane_mut(is_history).text = ui.now_t(if is_history {
-                            "skin-edit-history-sample"
-                        } else {
-                            "skin-edit-sample"
-                        });
+                    change(ui, &reset_id, |d| {
+                        let text = d.pane(is_history).text.clone();
+                        *d.pane_mut(is_history) = Pane {
+                            text,
+                            ..Default::default()
+                        };
                     })
                 },
             ),
-            status,
-            widget(Stack::row(gap::CONTROL).wrap(true)).children((
-                widget(Button::new(ui.now_t("skin-edit-reset")).size(ControlSize::Small)).on(
-                    move |_: &Activate| {
-                        change(ui, &reset_id, |d| {
-                            let text = d.pane(is_history).text.clone();
-                            *d.pane_mut(is_history) = Pane {
-                                text,
-                                ..Default::default()
-                            };
-                        })
-                    },
-                ),
-                widget(Button::new(ui.now_t("skin-edit-discard")).size(ControlSize::Small)).on(
-                    move |_: &Activate| {
-                        ui.skin_drafts.update(|m| {
-                            m.remove(&discard_id);
-                        });
-                    },
-                ),
-                widget(crate::ui::kit::cta(
-                    Button::new(ui.now_t("skin-edit-save")).size(ControlSize::Small),
-                ))
-                .key("skin-edit-save")
-                .bind(move |b: &mut Button| {
-                    b.disabled = draft(ui, &valid_id).profile(&valid_base).is_err()
-                })
-                .on_cx(move |_, _: &Activate, cx| {
-                    if let Ok(profile) = draft(ui, &save_id).profile(&save_base) {
-                        cx.dispatch_program_all(Msg::SaveSkinPersonalization {
-                            id: save_id.clone(),
-                            profile,
-                        });
-                    }
-                }),
-            )),
-        ))
-        .into_any()
+            widget(Button::new(ui.now_t("skin-edit-discard")).size(ControlSize::Small)).on(
+                move |_: &Activate| {
+                    ui.skin_drafts.update(|m| {
+                        m.remove(&discard_id);
+                    });
+                },
+            ),
+            widget(crate::ui::kit::cta(
+                Button::new(ui.now_t("skin-edit-save")).size(ControlSize::Small),
+            ))
+            .key("skin-edit-save")
+            .bind(move |b: &mut Button| {
+                b.disabled = draft(ui, &valid_id).profile(&valid_base).is_err()
+            })
+            .on_cx(move |_, _: &Activate, cx| {
+                if let Ok(profile) = draft(ui, &save_id).profile(&save_base) {
+                    cx.dispatch_program_all(Msg::SaveSkinPersonalization {
+                        id: save_id.clone(),
+                        profile,
+                    });
+                }
+            }),
+        )),
+    ))
+    .into_any()
 }
 
 /// Which window a sample draws the skin in.
@@ -668,11 +692,11 @@ pub fn stage(
                 .key("skin-preview-canvas")
                 .children(view),
             );
-            widget(Stack::column(gap::CONTROL))
+            widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
                 .children((
                     widget(
                         Stack::column(0.0)
-                            .padding_xy(inset::PANEL, inset::PANEL)
+                            .padding_step(inset::step::PANEL, inset::step::PANEL)
                             .with_layout(move |l| {
                                 l.paint.background_image =
                                     Some(BackgroundImage::url(crate::ui::kit::checker_url(dark)));
@@ -731,106 +755,109 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
             let apply_id = id.clone();
             let apply_read = id.clone();
             let play_id = id.clone();
-            widget(Stack::column(gap::GROUP).width(LengthSpec::Fill))
-                .key("skin-preview")
+            widget(
+                Stack::column(0.0)
+                    .gap_step(gap::step::GROUP)
+                    .width(LengthSpec::Fill),
+            )
+            .key("skin-preview")
+            .children((
+                widget(
+                    Stack::row(0.0)
+                        .gap_step(gap::step::CONTROL)
+                        .wrap(true)
+                        .align(AlignSpec::Center),
+                )
                 .children((
-                    widget(Stack::row(gap::CONTROL).wrap(true).align(AlignSpec::Center)).children(
-                        (
-                            label(row.name),
-                            widget(SegmentedControl::new().size(ControlSize::Small)).children((
-                                segmented_option(ui.now_t("windows-display"))
-                                    .selected(move || !ui.skin_preview_history.get())
-                                    .on(move |_: &SegmentedOptionChosen| {
-                                        ui.skin_preview_history.set(false)
-                                    }),
-                                segmented_option(ui.now_t("windows-history"))
-                                    .selected(move || ui.skin_preview_history.get())
-                                    .on(move |_: &SegmentedOptionChosen| {
-                                        ui.skin_preview_history.set(true)
-                                    }),
-                            )),
-                            dynamic(
-                                move || ui.settings.with(|s| s.skin.id == apply_read),
-                                move |active| {
-                                    let id = apply_id.clone();
-                                    (!*active).then(|| {
-                                        widget(
-                                            Button::new(ui.now_t("common-apply"))
-                                                .size(ControlSize::Small),
-                                        )
-                                        .key("apply-preview")
-                                        .on_cx(
-                                            move |_, _: &Activate, cx| {
-                                                let id = id.clone();
-                                                cx.dispatch_program_all(super::controls::edit(
-                                                    move |s| s.skin.id = id,
-                                                ));
-                                            },
-                                        )
-                                    })
-                                },
-                            ),
-                            widget(
-                                Button::new(ui.now_t("skins-play-effects"))
-                                    .size(ControlSize::Small),
-                            )
-                            .bind(move |b: &mut Button| {
-                                b.label = ui.now_t(if ui.shader_preview.get() {
-                                    "skins-stop-effects"
-                                } else {
-                                    "skins-play-effects"
-                                });
-                            })
-                            .on_cx(move |_, _: &Activate, cx| {
-                                if ui.shader_preview.get_untracked() {
-                                    ui.shader_preview.set(false);
-                                } else {
-                                    cx.dispatch_program_all(Msg::PrepareSkinPreview {
-                                        id: play_id.clone(),
-                                        play: true,
-                                    });
-                                }
+                    label(row.name),
+                    widget(SegmentedControl::new().size(ControlSize::Small)).children((
+                        segmented_option(ui.now_t("windows-display"))
+                            .selected(move || !ui.skin_preview_history.get())
+                            .on(move |_: &SegmentedOptionChosen| {
+                                ui.skin_preview_history.set(false)
                             }),
-                        ),
-                    ),
-                    hint(row.description),
-                    widget(
-                        Stack::row(gap::GROUP)
-                            .wrap(true)
-                            .align(AlignSpec::Start)
-                            .width(LengthSpec::Fill),
-                    )
-                    .children((
-                        widget(
-                            Stack::column(0.0)
-                                .width(LengthSpec::Px(300.0))
-                                .grow(1.0)
-                                .shrink(1.0)
-                                .with_layout(|l| l.min_width = Some(LengthSpec::Px(280.0))),
-                        )
-                        .key("skin-preview-stage-column")
-                        .on(move |e: &SizeChanged| {
-                            width.set_if_changed(e.width);
-                        })
-                        .children(sample),
-                        widget(
-                            Stack::column(0.0)
-                                .width(LengthSpec::Px(300.0))
-                                .grow(1.0)
-                                .shrink(1.0)
-                                .with_layout(|l| l.min_width = Some(LengthSpec::Px(280.0))),
-                        )
-                        .key("skin-preview-controls-column")
-                        .children(controls(
-                            ui,
-                            &id,
-                            base,
-                            history_mode,
-                            row.fallback_font,
-                        )),
+                        segmented_option(ui.now_t("windows-history"))
+                            .selected(move || ui.skin_preview_history.get())
+                            .on(move |_: &SegmentedOptionChosen| ui.skin_preview_history.set(true)),
                     )),
-                ))
-                .into_any()
+                    dynamic(
+                        move || ui.settings.with(|s| s.skin.id == apply_read),
+                        move |active| {
+                            let id = apply_id.clone();
+                            (!*active).then(|| {
+                                widget(
+                                    Button::new(ui.now_t("common-apply")).size(ControlSize::Small),
+                                )
+                                .key("apply-preview")
+                                .on_cx(
+                                    move |_, _: &Activate, cx| {
+                                        let id = id.clone();
+                                        cx.dispatch_program_all(super::controls::edit(move |s| {
+                                            s.skin.id = id
+                                        }));
+                                    },
+                                )
+                            })
+                        },
+                    ),
+                    widget(Button::new(ui.now_t("skins-play-effects")).size(ControlSize::Small))
+                        .bind(move |b: &mut Button| {
+                            b.label = ui.now_t(if ui.shader_preview.get() {
+                                "skins-stop-effects"
+                            } else {
+                                "skins-play-effects"
+                            });
+                        })
+                        .on_cx(move |_, _: &Activate, cx| {
+                            if ui.shader_preview.get_untracked() {
+                                ui.shader_preview.set(false);
+                            } else {
+                                cx.dispatch_program_all(Msg::PrepareSkinPreview {
+                                    id: play_id.clone(),
+                                    play: true,
+                                });
+                            }
+                        }),
+                )),
+                hint(row.description),
+                widget(
+                    Stack::row(0.0)
+                        .gap_step(gap::step::GROUP)
+                        .wrap(true)
+                        .align(AlignSpec::Start)
+                        .width(LengthSpec::Fill),
+                )
+                .children((
+                    widget(
+                        Stack::column(0.0)
+                            .width(LengthSpec::Px(COLUMN_W))
+                            .grow(1.0)
+                            .shrink(1.0)
+                            .with_layout(|l| l.min_width = Some(LengthSpec::Px(COLUMN_MIN_W))),
+                    )
+                    .key("skin-preview-stage-column")
+                    .on(move |e: &SizeChanged| {
+                        width.set_if_changed(e.width);
+                    })
+                    .children(sample),
+                    widget(
+                        Stack::column(0.0)
+                            .width(LengthSpec::Px(COLUMN_W))
+                            .grow(1.0)
+                            .shrink(1.0)
+                            .with_layout(|l| l.min_width = Some(LengthSpec::Px(COLUMN_MIN_W))),
+                    )
+                    .key("skin-preview-controls-column")
+                    .children(controls(
+                        ui,
+                        &id,
+                        base,
+                        history_mode,
+                        row.fallback_font,
+                    )),
+                )),
+            ))
+            .into_any()
         },
     )
     .into_any()

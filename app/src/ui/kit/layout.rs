@@ -8,8 +8,8 @@ use nana_ui::runtime::view::{AnyView, IntoView, settings_row, widget};
 use nana_ui::runtime::{Divider, Stack};
 use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec, RadiusTier, SemanticColorRole};
 
-use super::paint::CardPainter;
-use super::tokens::{Type, gap, inset};
+use super::tokens::{gap, inset};
+use nana_ui::runtime::view::RaisedSurfacePainter;
 
 /// Whether a section row is shown; `None` always shows it.
 pub type Shown = Option<Box<dyn Fn() -> bool + Send + 'static>>;
@@ -26,50 +26,33 @@ pub fn shown_if(view: AnyView, cond: impl Fn() -> bool + Send + 'static) -> (Any
 pub fn card_frame(radius: RadiusTier) -> Stack {
     Stack::column(0.0)
         .radius(radius)
-        .painter(CardPainter(radius))
+        .painter(RaisedSurfacePainter(radius))
 }
 
 /// A card holding free-form content: padded on the card inset, its
 /// children `gap::CONTROL` apart.
 pub fn panel() -> Stack {
-    Stack::column(gap::CONTROL)
-        .padding_xy(inset::CARD, inset::CARD)
+    Stack::column(0.0)
+        .gap_step(gap::step::CONTROL)
+        .padding_step(inset::step::CARD, inset::step::CARD)
         .radius(RadiusTier::Lg)
-        .painter(CardPainter(RadiusTier::Lg))
+        .painter(RaisedSurfacePainter(RadiusTier::Lg))
 }
 
-/// A settings card holding `rows`, each separated by an inset hairline; a
-/// hidden row takes its divider with it.
-fn card_with(rows: Vec<(AnyView, Shown)>) -> AnyView {
-    let rows: Vec<AnyView> = rows
+/// A titled group of rows (NanaUI's settings group): the title above, the
+/// card below, an inset hairline between rows; a hidden row takes its
+/// divider with it. `None` leaves the title out (the page heading already
+/// names it).
+pub fn section_titled(title: Option<String>, rows: Vec<(AnyView, Shown)>) -> AnyView {
+    use nana_ui::runtime::view::group_row;
+    let rows = rows
         .into_iter()
-        .enumerate()
-        .map(|(i, (r, shown))| {
-            let item = widget(Stack::column(0.0)).children(((i > 0).then(divider), r));
-            match shown {
-                Some(cond) => item.visible(cond).into_any(),
-                None => item.into_any(),
-            }
+        .map(|(view, shown)| match shown {
+            Some(cond) => group_row(view).visible(cond),
+            None => group_row(view),
         })
         .collect();
-    widget(card_frame(RadiusTier::Lg)).children(rows).into_any()
-}
-
-/// A titled group of rows: the title above, the card below. `None` leaves
-/// the title out (the page heading already names it).
-pub fn section_titled(title: Option<String>, rows: Vec<(AnyView, Shown)>) -> AnyView {
-    widget(Stack::column(if title.is_some() {
-        gap::CONTROL
-    } else {
-        0.0
-    }))
-    .children((
-        title.map(|t| {
-            widget(Stack::row(0.0).padding_xy(gap::TIGHT, 0.0)).children(Type::Overline.view(t))
-        }),
-        card_with(rows),
-    ))
-    .into_any()
+    nana_ui::runtime::view::settings_group(title, rows)
 }
 
 /// The inset hairline between two rows of a card.
@@ -109,24 +92,30 @@ pub fn divided(rows: Vec<AnyView>) -> Vec<AnyView> {
 
 /// A full-width block inside a card, inset like the rows.
 pub fn block(view: impl IntoView) -> AnyView {
-    widget(Stack::column(gap::CONTROL).padding_xy(inset::CARD, inset::ROW_Y))
-        .children(view)
-        .into_any()
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::CONTROL)
+            .padding_step(inset::step::CARD, inset::step::ROW_Y),
+    )
+    .children(view)
+    .into_any()
 }
 
 /// A row inside a card: `left` takes the room, `right` keeps its width.
 /// For rows that are not a label and a control (a list entry, a header).
 pub fn line(left: impl IntoView, right: impl IntoView) -> AnyView {
     widget(
-        Stack::row(gap::GROUP)
-            .padding_xy(inset::CARD, inset::ROW_Y)
+        Stack::row(0.0)
+            .gap_step(gap::step::GROUP)
+            .padding_step(inset::step::CARD, inset::step::ROW_Y)
             .align(AlignSpec::Center)
             .width(LengthSpec::Fill),
     )
     .children((
         widget(crate::ui::kit::grow_column(gap::HAIR)).children(left),
         widget(
-            Stack::row(gap::CONTROL)
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
                 .align(AlignSpec::Center)
                 .justify(JustifySpec::End)
                 .with_layout(|l| l.flex_shrink = Some(0.0)),
@@ -162,9 +151,13 @@ pub fn row_hint_fn(
 }
 
 fn control_slot(control: AnyView) -> AnyView {
-    widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
-        .children(control)
-        .into_any()
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .align(AlignSpec::Center),
+    )
+    .children(control)
+    .into_any()
 }
 
 fn inset_row(row: AnyView) -> AnyView {
@@ -189,7 +182,7 @@ pub fn spacer() -> AnyView {
 
 /// A column of page sections, `gap::SECTION` apart.
 pub fn sections(children: impl IntoView) -> AnyView {
-    widget(Stack::column(gap::SECTION))
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children(children)
         .into_any()
 }

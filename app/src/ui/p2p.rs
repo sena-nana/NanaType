@@ -8,6 +8,14 @@ use super::Ui;
 use crate::msg::Msg;
 use crate::ui::kit::{Tone, Type, gap};
 
+/// A form row's button beside its field.
+const ACTION_W: f32 = 100.0;
+/// The card's header line, and the card folded to it.
+const HEADER_H: f32 = 32.0;
+const COLLAPSED_H: f32 = 36.0;
+/// The unfolded card, so its form does not jump as the status changes.
+const EXPANDED_MIN_H: f32 = 150.0;
+
 fn field(stacked: bool) -> Stack {
     Stack::column(0.0)
         .width(LengthSpec::Fill)
@@ -28,7 +36,7 @@ fn action(stacked: bool) -> Stack {
         .width(if stacked {
             LengthSpec::Fill
         } else {
-            LengthSpec::Px(100.0)
+            LengthSpec::Px(ACTION_W)
         })
         .with_layout(|layout| {
             layout.flex_shrink = Some(0.0);
@@ -53,9 +61,13 @@ pub(crate) fn card_with_fields(
             let expanded = *expanded;
             let form_row = || {
                 if stacked {
-                    Stack::column(gap::CONTROL).width(LengthSpec::Fill)
+                    Stack::column(0.0)
+                        .gap_step(gap::step::CONTROL)
+                        .width(LengthSpec::Fill)
                 } else {
-                    Stack::row(gap::TIGHT).width(LengthSpec::Fill)
+                    Stack::row(0.0)
+                        .gap_step(gap::step::TIGHT)
+                        .width(LengthSpec::Fill)
                 }
             };
             let status = match &state.status {
@@ -82,10 +94,11 @@ pub(crate) fn card_with_fields(
                 Status::Ended => Tone::Off,
             };
             let header = widget(
-                Stack::row(gap::CONTROL)
+                Stack::row(0.0)
+                    .gap_step(gap::step::CONTROL)
                     .width(LengthSpec::Fill)
                     .align(AlignSpec::Center)
-                    .height(LengthSpec::Px(32.0)),
+                    .height(LengthSpec::Px(HEADER_H)),
             )
             .children((
                 state.active.then(|| crate::ui::kit::status_dot(tone)),
@@ -115,19 +128,20 @@ pub(crate) fn card_with_fields(
             if !expanded {
                 return widget(
                     Stack::column(0.0)
-                        .padding(gap::HAIR)
-                        .height(LengthSpec::Px(36.0)),
+                        .padding_step(gap::step::HAIR, gap::step::HAIR)
+                        .height(LengthSpec::Px(COLLAPSED_H)),
                 )
                 .children(header)
                 .into_any();
             }
             let body = if state.active {
                 let code = state.invitation.clone();
-                widget(Stack::column(gap::CONTROL))
+                widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
                     .children((
                         Type::Caption.view(ui.now_t("peer-own-controls")),
                         widget(
-                            Stack::row(gap::CONTROL)
+                            Stack::row(0.0)
+                                .gap_step(gap::step::CONTROL)
                                 .with_layout(|l| l.flex_wrap = nana_ui_core::FlexWrap::Wrap),
                         )
                         .children((
@@ -154,7 +168,7 @@ pub(crate) fn card_with_fields(
                     ))
                     .into_any()
             } else {
-                widget(Stack::column(gap::CONTROL))
+                widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
                     .children((
                         widget(form_row()).children((
                             widget(field(stacked)).children(
@@ -216,10 +230,11 @@ pub(crate) fn card_with_fields(
                     .into_any()
             };
             widget(
-                Stack::column(gap::CONTROL)
+                Stack::column(0.0)
+                    .gap_step(gap::step::CONTROL)
                     .padding(nana_ui::theme::space::SM)
                     .with_layout(|l| {
-                        l.min_height = Some(LengthSpec::Px(150.0));
+                        l.min_height = Some(LengthSpec::Px(EXPANDED_MIN_H));
                         l.flex_shrink = Some(0.0);
                     }),
             )

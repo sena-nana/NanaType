@@ -46,6 +46,14 @@ const TOKEN_ARGS: &[&str] = &[
     "padding_xy(",
     ".padding(",
     "IconGlyph::new(",
+    // Sizes: a box's width or height, a glyph's size. A view-specific size
+    // is a named constant, so the number is one decision with a name.
+    "LengthSpec::Px(",
+    ".size(",
+    ".width(",
+    ".height(",
+    ".icon_size(",
+    ".icon_gap(",
 ];
 
 /// Spellings that bypass the kit outright.
@@ -85,6 +93,37 @@ fn rgba_literal(line: &str) -> bool {
     })
 }
 
+/// Whether `line` bypasses the design system.
+fn bypasses(line: &str) -> bool {
+    for call in TOKEN_ARGS {
+        for (i, _) in line.match_indices(call) {
+            let args = &line[i + call.len()..];
+            // `IconGlyph::new(x).size(16.0)` names the size after the icon.
+            let args = if *call == "IconGlyph::new(" {
+                match args.find(".size(") {
+                    Some(j) => &args[j + ".size(".len()..],
+                    None => continue,
+                }
+            } else {
+                args
+            };
+            let bad = if *call == "padding_xy(" {
+                args.split(')')
+                    .next()
+                    .unwrap_or("")
+                    .split(',')
+                    .any(nonzero_literal)
+            } else {
+                nonzero_literal(args)
+            };
+            if bad {
+                return true;
+            }
+        }
+    }
+    FORBIDDEN.iter().any(|word| line.contains(word)) || rgba_literal(line)
+}
+
 fn violations(code: &str) -> Vec<String> {
     let mut out = Vec::new();
     for (n, line) in code.lines().enumerate() {
@@ -98,38 +137,7 @@ fn violations(code: &str) -> Vec<String> {
         if trimmed.starts_with("//") || line.contains("// design-tokens: data") {
             continue;
         }
-        for call in TOKEN_ARGS {
-            for (i, _) in line.match_indices(call) {
-                let args = &line[i + call.len()..];
-                // `IconGlyph::new(x).size(16.0)` names the size after the icon.
-                let args = if *call == "IconGlyph::new(" {
-                    match args.find(".size(") {
-                        Some(j) => &args[j + ".size(".len()..],
-                        None => continue,
-                    }
-                } else {
-                    args
-                };
-                let bad = if *call == "padding_xy(" {
-                    args.split(')')
-                        .next()
-                        .unwrap_or("")
-                        .split(',')
-                        .any(nonzero_literal)
-                } else {
-                    nonzero_literal(args)
-                };
-                if bad {
-                    out.push(format!("{}: {}", n + 1, trimmed));
-                }
-            }
-        }
-        for word in FORBIDDEN {
-            if line.contains(word) {
-                out.push(format!("{}: {}", n + 1, trimmed));
-            }
-        }
-        if rgba_literal(line) {
+        if bypasses(line) {
             out.push(format!("{}: {}", n + 1, trimmed));
         }
     }
@@ -185,6 +193,8 @@ fn the_scan_catches_what_it_should() {
         "x.padding_xy(space::MD, 12.0)",
         ".radius_px(6.0)",
         "IconGlyph::new(ti::X).size(16.0)",
+        "l.width = Some(LengthSpec::Px(220.0));",
+        "Popover::new().width(320.0)",
         "color: [0.5, 0.55, 0.62, 0.28],",
         "Button::new(x).kind(ButtonKind::Primary)",
     ] {
@@ -195,6 +205,8 @@ fn the_scan_catches_what_it_should() {
         "Stack::column(gap::CONTROL)",
         "x.padding_xy(inset::CARD, 0.0)",
         "IconGlyph::new(ti::X).size(icon::MD)",
+        "l.width = Some(LengthSpec::Px(field::MD));",
+        "l.height = Some(LengthSpec::Px(0.0));",
         "Type::Label.style()",
     ] {
         assert!(violations(good).is_empty(), "{good}");

@@ -82,7 +82,7 @@ pub fn settings_page(ui: Ui) -> AnyView {
         ui.douyin_cookie
             .set(event.value.chars().take(65536).collect())
     });
-    widget(Stack::column(gap::SECTION))
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
             section(
                 ui,
@@ -115,12 +115,14 @@ pub fn settings_page(ui: Ui) -> AnyView {
                     ),
                     block(status),
                     block(warning),
-                    block(widget(Stack::row(gap::CONTROL)).children((
-                        action(ui, "dy-connect", || Msg::DouyinRefresh),
-                        action(ui, "dy-open-panel", || {
-                            Msg::ShowWindow(crate::windows::WindowKind::Chat)
-                        }),
-                    ))),
+                    block(
+                        widget(Stack::row(0.0).gap_step(gap::step::CONTROL)).children((
+                            action(ui, "dy-connect", || Msg::DouyinRefresh),
+                            action(ui, "dy-open-panel", || {
+                                Msg::ShowWindow(crate::windows::WindowKind::Chat)
+                            }),
+                        )),
+                    ),
                 ],
             ),
             section(

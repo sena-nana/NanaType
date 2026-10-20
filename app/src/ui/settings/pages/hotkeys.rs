@@ -96,28 +96,32 @@ pub(super) fn keycap(
     danger: impl Fn() -> bool + Send + Copy + 'static,
 ) -> AnyView {
     let shown = move || parts().len() > i;
-    widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
-        .visible(shown)
-        .children((
-            (i > 0).then(|| widget(crate::ui::kit::keycap::plus())),
-            widget(crate::ui::kit::keycap::face())
-                .border(move || {
-                    Some(if danger() {
-                        SemanticColorRole::Danger
-                    } else {
-                        SemanticColorRole::BorderSoft
-                    })
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center),
+    )
+    .visible(shown)
+    .children((
+        (i > 0).then(|| widget(crate::ui::kit::keycap::plus())),
+        widget(crate::ui::kit::keycap::face())
+            .border(move || {
+                Some(if danger() {
+                    SemanticColorRole::Danger
+                } else {
+                    SemanticColorRole::BorderSoft
                 })
-                .children(widget(crate::ui::kit::keycap::label(String::new())).bind(
-                    move |t: &mut Text| {
-                        let text = parts().get(i).cloned().unwrap_or_default();
-                        if t.value != text {
-                            t.value = text;
-                        }
-                    },
-                )),
-        ))
-        .into_any()
+            })
+            .children(widget(crate::ui::kit::keycap::label(String::new())).bind(
+                move |t: &mut Text| {
+                    let text = parts().get(i).cloned().unwrap_or_default();
+                    if t.value != text {
+                        t.value = text;
+                    }
+                },
+            )),
+    ))
+    .into_any()
 }
 
 pub(super) fn hotkey_control(ui: Ui, action: GlobalAction) -> AnyView {
@@ -151,7 +155,7 @@ pub(super) fn hotkey_control(ui: Ui, action: GlobalAction) -> AnyView {
     let caps: Vec<AnyView> = (0..CHORD_KEYS).map(|i| keycap(i, parts, danger)).collect();
     let slot = widget(
         Stack::row(0.0)
-            .height(LengthSpec::Px(24.0))
+            .height(LengthSpec::Px(crate::ui::kit::keycap::H))
             .padding_xy(space::LG, 0.0)
             .align(AlignSpec::Center)
             .outline(SemanticColorRole::Border, 1.0)
@@ -166,8 +170,8 @@ pub(super) fn hotkey_control(ui: Ui, action: GlobalAction) -> AnyView {
     // Recording is a live state: the highlight outline, not the accent.
     let listening = widget(
         Stack::row(0.0)
-            .min_width(LengthSpec::Px(160.0))
-            .height(LengthSpec::Px(24.0))
+            .min_width(LengthSpec::Px(field::SM))
+            .height(LengthSpec::Px(crate::ui::kit::keycap::H))
             .justify(JustifySpec::Center)
             .align(AlignSpec::Center)
             .outline(SemanticColorRole::Highlight, 1.0)
@@ -178,54 +182,62 @@ pub(super) fn hotkey_control(ui: Ui, action: GlobalAction) -> AnyView {
             .style(Type::Small.style())
             .color(SemanticColorRole::Text),
     ));
-    widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
-        .children((
-            widget(StatusBadge::new("", StatusTone::Neutral).compact(true))
-                .visible(move || badge().is_some())
-                .bind(move |b: &mut StatusBadge| {
-                    if let Some((text, tone)) = badge() {
-                        let text: Arc<str> = text.into();
-                        if b.label != text {
-                            b.label = text;
-                        }
-                        b.tone = tone;
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        widget(StatusBadge::new("", StatusTone::Neutral).compact(true))
+            .visible(move || badge().is_some())
+            .bind(move |b: &mut StatusBadge| {
+                if let Some((text, tone)) = badge() {
+                    let text: Arc<str> = text.into();
+                    if b.label != text {
+                        b.label = text;
                     }
-                }),
-            widget(
-                Button::new("")
-                    .kind(ButtonKind::Ghost)
-                    .size(ControlSize::Small)
-                    .accessible_name(ui.now_t("hotkeys-record")),
-            )
-            .bind(move |b: &mut Button| {
-                b.kind = if recording() {
-                    ButtonKind::Selected
-                } else {
-                    ButtonKind::Ghost
-                };
-            })
-            .on_cx(move |_, _: &Activate, cx| {
-                let recording = ui.recording.get_untracked() == Some(action);
-                cx.dispatch_program_all(Msg::RecordHotkey((!recording).then_some(action)))
-            })
-            .children((
-                widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
-                    .visible(move || bound() && !recording())
-                    .children(caps),
-                slot.visible(move || !bound() && !recording()),
-                listening.visible(recording),
-            )),
-            widget(
-                IconButton::new(ti::X, ui.now_t("hotkeys-clear-binding"))
-                    .size(ControlSize::Small)
-                    .with_tooltip(ui.now_t("hotkeys-clear-binding")),
-            )
-            .visible(bound)
-            .on_cx(move |_, _: &Activate, cx| {
-                cx.dispatch_program_all(edit(move |s| action.set(s, None)))
+                    b.tone = tone;
+                }
             }),
-        ))
-        .into_any()
+        widget(
+            Button::new("")
+                .kind(ButtonKind::Ghost)
+                .size(ControlSize::Small)
+                .accessible_name(ui.now_t("hotkeys-record")),
+        )
+        .bind(move |b: &mut Button| {
+            b.kind = if recording() {
+                ButtonKind::Selected
+            } else {
+                ButtonKind::Ghost
+            };
+        })
+        .on_cx(move |_, _: &Activate, cx| {
+            let recording = ui.recording.get_untracked() == Some(action);
+            cx.dispatch_program_all(Msg::RecordHotkey((!recording).then_some(action)))
+        })
+        .children((
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .align(AlignSpec::Center),
+            )
+            .visible(move || bound() && !recording())
+            .children(caps),
+            slot.visible(move || !bound() && !recording()),
+            listening.visible(recording),
+        )),
+        widget(
+            IconButton::new(ti::X, ui.now_t("hotkeys-clear-binding"))
+                .size(ControlSize::Small)
+                .with_tooltip(ui.now_t("hotkeys-clear-binding")),
+        )
+        .visible(bound)
+        .on_cx(move |_, _: &Activate, cx| {
+            cx.dispatch_program_all(edit(move |s| action.set(s, None)))
+        }),
+    ))
+    .into_any()
 }
 
 /// The wrapping line under a hotkey row that says what is wrong.
@@ -261,18 +273,22 @@ fn local_keys(ui: Ui) -> Vec<AnyView> {
         SendKey::Enter => ("Enter", "Shift+Enter"),
         SendKey::CtrlEnter => ("Ctrl+Enter", "Enter"),
     };
-    let recall = widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
-        .children((
-            chord("Ctrl+↑"),
-            widget(
-                Type::Small
-                    .text("/")
-                    .color(SemanticColorRole::Muted)
-                    .decorative(),
-            ),
-            keycap("↓"),
-        ))
-        .into_any();
+    let recall = widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        chord("Ctrl+↑"),
+        widget(
+            Type::Small
+                .text("/")
+                .color(SemanticColorRole::Muted)
+                .decorative(),
+        ),
+        keycap("↓"),
+    ))
+    .into_any();
     vec![
         row(ui, "tb-send", None, chord(send)),
         row(ui, "cheat-newline", None, chord(newline)),
@@ -288,7 +304,7 @@ pub(super) fn hotkeys(ui: Ui) -> AnyView {
     let rows: Vec<AnyView> = GlobalAction::ALL
         .into_iter()
         .map(|action| {
-            widget(Stack::column(space::XS))
+            widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs))
                 .children((
                     row(ui, action.label_key(), None, hotkey_control(ui, action)),
                     hotkey_issue_line(ui, action),
@@ -296,7 +312,7 @@ pub(super) fn hotkeys(ui: Ui) -> AnyView {
                 .into_any()
         })
         .collect();
-    widget(Stack::column(gap::SECTION))
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
             section(ui, "", rows),
             section(ui, "hotkeys-local", local_keys(ui)),

@@ -116,9 +116,13 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                     row_text(
                         title,
                         Some(details),
-                        widget(Stack::row(space::SM).wrap(true))
-                            .children(actions)
-                            .into_any(),
+                        widget(
+                            Stack::row(0.0)
+                                .gap_step(nana_ui_core::SpacingStep::Sm)
+                                .wrap(true),
+                        )
+                        .children(actions)
+                        .into_any(),
                     )
                 })
                 .collect();
@@ -138,12 +142,13 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                     // Two lines: name, hotkey, send and remove; then the
                     // content across the full width.
                     let first = widget(
-                        Stack::row(gap::CONTROL)
+                        Stack::row(0.0)
+                            .gap_step(gap::step::CONTROL)
                             .align(AlignSpec::Center)
                             .width(LengthSpec::Fill),
                     )
                     .children((
-                        widget(Stack::row(0.0).width(LengthSpec::Px(200.0))).children(
+                        widget(Stack::row(0.0).width(LengthSpec::Px(field::MD))).children(
                             widget(
                                 TextInput::new(p.label.clone())
                                     .size(ControlSize::Small)
@@ -214,10 +219,14 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                             }))
                         }),
                     );
-                    widget(Stack::column(space::XS))
+                    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs))
                         .children((
-                            widget(Stack::column(space::MD).padding_xy(inset::CARD, space::XL))
-                                .children((first, content)),
+                            widget(
+                                Stack::column(0.0)
+                                    .gap_step(nana_ui_core::SpacingStep::Md)
+                                    .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Xl),
+                            )
+                            .children((first, content)),
                             hotkey_issue_line(ui, action),
                         ))
                         .into_any()
@@ -228,21 +237,27 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                 .into_any()
         },
     );
-    widget(Stack::column(gap::SECTION))
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
             section(
                 ui,
                 "assets-stickers",
                 vec![
-                    widget(Stack::column(0.0).padding_xy(inset::CARD, space::LG))
-                        .children(hint(ui.now_t("assets-stickers-hint")))
-                        .into_any(),
+                    widget(
+                        Stack::column(0.0)
+                            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
+                    )
+                    .children(hint(ui.now_t("assets-stickers-hint")))
+                    .into_any(),
                     dirs.into_any(),
-                    widget(Stack::row(0.0).padding_xy(inset::CARD, space::LG))
-                        .children(button(ui, "assets-add-folder", || {
-                            Msg::PickFile(FileTarget::StickerFolder)
-                        }))
-                        .into_any(),
+                    widget(
+                        Stack::row(0.0)
+                            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
+                    )
+                    .children(button(ui, "assets-add-folder", || {
+                        Msg::PickFile(FileTarget::StickerFolder)
+                    }))
+                    .into_any(),
                 ],
             ),
             crate::ui::settings::telegram::panel(ui),
@@ -251,18 +266,21 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                 "assets-phrases",
                 vec![
                     phrases.into_any(),
-                    widget(Stack::row(0.0).padding_xy(inset::CARD, space::LG))
-                        .children(button(ui, "assets-phrase-add", || {
-                            edit(|s| {
-                                s.assets.phrases.push(QuickPhrase {
-                                    label: String::new(),
-                                    markup: String::new(),
-                                    send: false,
-                                    hotkey: None,
-                                })
+                    widget(
+                        Stack::row(0.0)
+                            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
+                    )
+                    .children(button(ui, "assets-phrase-add", || {
+                        edit(|s| {
+                            s.assets.phrases.push(QuickPhrase {
+                                label: String::new(),
+                                markup: String::new(),
+                                send: false,
+                                hotkey: None,
                             })
-                        }))
-                        .into_any(),
+                        })
+                    }))
+                    .into_any(),
                 ],
             ),
         ))

@@ -1,5 +1,8 @@
 use super::*;
 
+/// The diagram's text caret and the dialogue box's live edge (width, height).
+const CARET: (f32, f32) = (2.0, 12.0);
+
 /// How many steps the first-run guide has.
 pub(super) const ONBOARD_STEPS: u8 = 4;
 
@@ -14,7 +17,8 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
         edit(|s| s.general.onboarding_done = true)
     };
     let header = widget(
-        Stack::row(space::MD)
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Md)
             .align(AlignSpec::Center)
             .width(LengthSpec::Fill)
             .padding_xy(inset::CARD, 0.0),
@@ -22,7 +26,7 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
     .children((
         widget(
             IconGlyph::new(ti::SPARKLES)
-                .size(16.0)
+                .size(icon::MD)
                 .role(SemanticColorRole::Accent),
         ),
         widget(Text::new(ui.now_t("onboard-welcome")).style(Type::Title.style())),
@@ -39,7 +43,8 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
     let body = dynamic(move || step.get(), move |n| onboard_step(ui, *n))
         .transition(crate::ui::motion::enter());
     let footer = widget(
-        Stack::row(space::MD)
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Md)
             .align(AlignSpec::Center)
             .width(LengthSpec::Fill)
             .padding_xy(inset::CARD, 0.0),
@@ -79,12 +84,12 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
     widget(crate::ui::kit::card_frame(nana_ui_core::RadiusTier::Lg))
         .visible(move || !ui.settings.with(|s| s.general.onboarding_done))
         .children(
-            widget(Stack::column(gap::CONTROL).padding_xy(0.0, inset::ROW_Y)).children((
-                header,
-                body,
-                divider(),
-                footer,
-            )),
+            widget(
+                Stack::column(0.0)
+                    .gap_step(gap::step::CONTROL)
+                    .padding_xy(0.0, inset::ROW_Y),
+            )
+            .children((header, body, divider(), footer)),
         )
         .into_any()
 }
@@ -125,22 +130,31 @@ pub(super) fn step_indicator(ui: Ui) -> AnyView {
             .into_any()
         })
         .collect();
-    widget(Stack::row(space::MD).align(AlignSpec::Center))
-        .children((
-            widget(
-                Text::new(label())
-                    .style(Type::Caption.style())
-                    .color(SemanticColorRole::Muted),
-            )
-            .bind(move |t: &mut Text| {
-                let text = label();
-                if t.value != text {
-                    t.value = text;
-                }
-            }),
-            widget(Stack::row(space::XS).align(AlignSpec::Center)).children(dots),
-        ))
-        .into_any()
+    widget(
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Md)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        widget(
+            Text::new(label())
+                .style(Type::Caption.style())
+                .color(SemanticColorRole::Muted),
+        )
+        .bind(move |t: &mut Text| {
+            let text = label();
+            if t.value != text {
+                t.value = text;
+            }
+        }),
+        widget(
+            Stack::row(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Xs)
+                .align(AlignSpec::Center),
+        )
+        .children(dots),
+    ))
+    .into_any()
 }
 
 /// One step's body, under the guide's header. Its rows carry no dividers of
@@ -172,7 +186,8 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
         2 => vec![
             lead("onboard-mode-body"),
             widget(
-                Stack::row(space::XL)
+                Stack::row(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Xl)
                     .align(AlignSpec::Stretch)
                     .width(LengthSpec::Fill)
                     .padding_xy(inset::CARD, 0.0),
@@ -184,9 +199,13 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
             .into_any(),
         ],
         _ => vec![
-            widget(Stack::column(space::LG).padding_xy(inset::CARD, 0.0))
-                .children((subheading(ui, "onboard-hotkeys"), hotkeys_sentence(ui)))
-                .into_any(),
+            widget(
+                Stack::column(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Lg)
+                    .padding_xy(inset::CARD, 0.0),
+            )
+            .children((subheading(ui, "onboard-hotkeys"), hotkeys_sentence(ui)))
+            .into_any(),
             row(
                 ui,
                 "onboard-obs",
@@ -235,8 +254,8 @@ pub(super) fn mode_diagram(mode: InputMode) -> AnyView {
     let caret = || {
         widget(
             Stack::row(0.0)
-                .width(LengthSpec::Px(2.0))
-                .height(LengthSpec::Px(12.0))
+                .width(LengthSpec::Px(CARET.0))
+                .height(LengthSpec::Px(CARET.1))
                 .surface(SemanticColorRole::Accent),
         )
         .into_any()
@@ -248,17 +267,22 @@ pub(super) fn mode_diagram(mode: InputMode) -> AnyView {
             .into_iter()
             .enumerate()
             .map(|(i, lw)| {
-                widget(Stack::row(space::XXS).align(AlignSpec::Center))
-                    .children((
-                        bar(lw, SemanticColorRole::BorderStrong),
-                        (typing && i == last).then(caret),
-                    ))
-                    .into_any()
+                widget(
+                    Stack::row(0.0)
+                        .gap_step(nana_ui_core::SpacingStep::Xxs)
+                        .align(AlignSpec::Center),
+                )
+                .children((
+                    bar(lw, SemanticColorRole::BorderStrong),
+                    (typing && i == last).then(caret),
+                ))
+                .into_any()
             })
             .collect();
-        let frame = Stack::column(space::SM)
+        let frame = Stack::column(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Sm)
             .width(LengthSpec::Px(w))
-            .padding_xy(space::MD, space::MD)
+            .padding_step(nana_ui_core::SpacingStep::Md, nana_ui_core::SpacingStep::Md)
             .surface(SemanticColorRole::Surface)
             .outline(SemanticColorRole::BorderSoft, 1.0)
             .radius(nana_ui_core::RadiusTier::Sm)
@@ -272,7 +296,7 @@ pub(super) fn mode_diagram(mode: InputMode) -> AnyView {
                 accent_edge.then(|| {
                     widget(
                         Stack::column(0.0)
-                            .width(LengthSpec::Px(2.0))
+                            .width(LengthSpec::Px(CARET.0))
                             .surface(SemanticColorRole::Accent)
                             .with_layout(accent_bar_layout),
                     )
@@ -288,7 +312,8 @@ pub(super) fn mode_diagram(mode: InputMode) -> AnyView {
         InputMode::Mirror => (ti::ARROW_NARROW_RIGHT, vec![40.0, 14.0], true),
     };
     widget(
-        Stack::row(space::MD)
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Md)
             .align(AlignSpec::Center)
             .justify(JustifySpec::Center)
             .width(LengthSpec::Fill)
@@ -334,7 +359,12 @@ pub(super) fn mode_card(ui: Ui, mode: InputMode) -> AnyView {
         cx.dispatch_program_all(edit(move |s| s.general.input_mode = mode));
     })
     .content(
-        widget(Stack::column(space::MD).width(LengthSpec::Fill)).children((
+        widget(
+            Stack::column(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Md)
+                .width(LengthSpec::Fill),
+        )
+        .children((
             mode_diagram(mode),
             widget(Text::new(ui.now_t(name)).style(Type::Strong.style())),
             hint(ui.now_t(about)),
@@ -389,9 +419,14 @@ pub(super) fn hotkeys_sentence(ui: Ui) -> AnyView {
     if !rest.trim().is_empty() {
         parts.push(Type::Lead.view(rest.trim().to_owned()));
     }
-    widget(Stack::row(space::SM).align(AlignSpec::Center).wrap(true))
-        .children(parts)
-        .into_any()
+    widget(
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Sm)
+            .align(AlignSpec::Center)
+            .wrap(true),
+    )
+    .children(parts)
+    .into_any()
 }
 
 /// A 3px bar pinned down the left edge of a relatively positioned parent.

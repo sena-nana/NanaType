@@ -1,9 +1,8 @@
-//! Painters for the few looks a style cannot express: the card's hairline
-//! and soft lift, the call to action's lit fill, the keycap's bottom edge.
-//! Each reads the installed theme while painting, so a light/dark switch
-//! restyles them without rebuilding a view.
+//! The call to action's lit fill: NanaType's one look a style cannot express
+//! (cards and keycaps are NanaUI's own painters). It reads the installed
+//! theme while painting, so a light/dark switch restyles it in place.
 
-use nana_ui::runtime::{BoxPaint, Gradient, PaintContext, PaintPath, PaintShadow, Painter};
+use nana_ui::runtime::{Gradient, PaintContext, PaintPath, PaintShadow, Painter};
 use nana_ui_core::{RadiusTier, SemanticColorRole, ThemeAppearance};
 use nanatype_model::Rgba8;
 
@@ -12,40 +11,6 @@ use crate::skin_theme::{contrast, mix, on, rgba};
 /// `rgba` with its alpha replaced.
 fn alpha(rgba: [f32; 4], a: f32) -> [f32; 4] {
     [rgba[0], rgba[1], rgba[2], a]
-}
-
-/// A card: the surface at the card radius with a 1px soft hairline, lifted
-/// off a light page by a short soft shadow (a shadow barely reads on dark,
-/// so a dark card is the hairline alone).
-pub struct CardPainter(pub RadiusTier);
-
-impl Painter for CardPainter {
-    fn paint(&self, cx: &mut PaintContext<'_>) {
-        let rect = cx.bounds();
-        let r = cx.radius(self.0);
-        if cx.theme_appearance() == ThemeAppearance::Light {
-            let mut path = PaintPath::new();
-            path.rounded_rect(rect, [r; 4]);
-            let text = cx.color(SemanticColorRole::Text);
-            cx.shadow(
-                &path,
-                PaintShadow::Custom {
-                    color: alpha(text, 0.06).into(),
-                    offset: [0.0, 1.0],
-                    blur: 3.0,
-                    spread: 0.0,
-                    inset: false,
-                },
-            );
-        }
-        let card =
-            BoxPaint::fill(SemanticColorRole::Surface).border(SemanticColorRole::BorderSoft, 1.0);
-        cx.rounded_rect(rect, r, card);
-    }
-
-    fn paint_key(&self) -> u64 {
-        self.0 as u64
-    }
 }
 
 /// The right end of a call to action's fill (accent → accent.light): up to
@@ -106,38 +71,5 @@ impl Painter for CtaPainter {
 
     fn paint_key(&self) -> u64 {
         1
-    }
-}
-
-/// A keycap: the surface with a soft border and a 2px inner bottom edge in
-/// the strong border colour, so the cap reads as raised in either mode.
-pub struct KeycapPainter;
-
-impl Painter for KeycapPainter {
-    fn paint(&self, cx: &mut PaintContext<'_>) {
-        let rect = cx.bounds();
-        let r = cx.radius(RadiusTier::Xs);
-        let mut path = PaintPath::new();
-        path.rounded_rect(rect, [r; 4]);
-        cx.rounded_rect(
-            rect,
-            r,
-            BoxPaint::fill(SemanticColorRole::Surface).border(SemanticColorRole::Border, 1.0),
-        );
-        let edge = cx.color(SemanticColorRole::BorderStrong);
-        cx.shadow(
-            &path,
-            PaintShadow::Custom {
-                color: alpha(edge, 0.9).into(),
-                offset: [0.0, -2.0],
-                blur: 0.0,
-                spread: 0.0,
-                inset: true,
-            },
-        );
-    }
-
-    fn paint_key(&self) -> u64 {
-        2
     }
 }

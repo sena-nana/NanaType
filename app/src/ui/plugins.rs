@@ -16,6 +16,9 @@ use nanatype_plugins::{DrawCommand, Mount, Node};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+/// The script source shown for review before it is trusted.
+const SOURCE_PREVIEW_H: f32 = 160.0;
+
 struct Canvas {
     draw: Vec<DrawCommand>,
     key: u64,
@@ -115,9 +118,9 @@ fn node(package: &str, n: &Node, command: &Command) -> AnyView {
     match n {
         Node::Column { id, children } | Node::Row { id, children } => {
             let stack = if matches!(n, Node::Row { .. }) {
-                Stack::row(gap::TIGHT)
+                Stack::row(0.0).gap_step(gap::step::TIGHT)
             } else {
-                Stack::column(gap::CONTROL)
+                Stack::column(0.0).gap_step(gap::step::CONTROL)
             };
             widget(stack)
                 .key(format!("plugin:{package}:{id}"))
@@ -207,7 +210,7 @@ pub fn debug_views(update: &nanatype_plugins::PluginUpdate) -> AnyView {
         .views
         .iter()
         .map(|view| {
-            widget(Stack::column(gap::TIGHT))
+            widget(Stack::column(0.0).gap_step(gap::step::TIGHT))
                 .children((
                     widget(Text::new(format!("{:?}", view.slot).to_lowercase())),
                     node("debug", &view.root, &command),
@@ -215,7 +218,7 @@ pub fn debug_views(update: &nanatype_plugins::PluginUpdate) -> AnyView {
                 .into_any()
         })
         .collect::<Vec<_>>();
-    widget(Stack::column(gap::CONTROL))
+    widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
         .children(views)
         .into_any()
 }
@@ -302,7 +305,12 @@ fn package_card(
         .key(id.clone())
         .children((
             kit::line(
-                widget(Stack::row(gap::GROUP).align(AlignSpec::Center)).children((
+                widget(
+                    Stack::row(0.0)
+                        .gap_step(gap::step::GROUP)
+                        .align(AlignSpec::Center),
+                )
+                .children((
                     kit::icon_tile(
                         glyph,
                         36.0,
@@ -320,12 +328,13 @@ fn package_card(
                 kit::badge(integrity_label(ui, &row.integrity), integrity_tone),
             ),
             widget(
-                Stack::column(gap::TIGHT)
+                Stack::column(0.0)
+                    .gap_step(gap::step::TIGHT)
                     .padding_xy(inset::CARD, 0.0)
                     .with_layout(|l| l.padding_bottom = Some(LengthSpec::Px(inset::ROW_Y))),
             )
             .children((
-                widget(Stack::row(gap::TIGHT).wrap(true)).children(tags),
+                widget(Stack::row(0.0).gap_step(gap::step::TIGHT).wrap(true)).children(tags),
                 widget(caption(format!(
                     "{}: {} · {}: {}",
                     ui.now_t("package-author"),
@@ -345,9 +354,10 @@ fn package_card(
             )),
             kit::rule(),
             widget(
-                Stack::row(gap::CONTROL)
+                Stack::row(0.0)
+                    .gap_step(gap::step::CONTROL)
                     .wrap(true)
-                    .padding_xy(inset::CARD, inset::BAR_Y)
+                    .padding_step(inset::step::CARD, inset::step::BAR_Y)
                     .align(AlignSpec::Center)
                     .justify(nana_ui_core::JustifySpec::End),
             )
@@ -394,7 +404,9 @@ pub fn settings(ui: Ui) -> AnyView {
             if cards.is_empty() {
                 return kit::empty_state(ui.now_t("packages-none"), None);
             }
-            widget(Stack::column(gap::GROUP)).children(cards).into_any()
+            widget(Stack::column(0.0).gap_step(gap::step::GROUP))
+                .children(cards)
+                .into_any()
         },
     );
     let commands = dynamic(
@@ -419,7 +431,7 @@ pub fn settings(ui: Ui) -> AnyView {
                     );
                 }
             }
-            widget(Stack::row(gap::CONTROL).wrap(true))
+            widget(Stack::row(0.0).gap_step(gap::step::CONTROL).wrap(true))
                 .children(buttons)
                 .into_any()
         },
@@ -445,7 +457,7 @@ pub fn settings(ui: Ui) -> AnyView {
         widget(Stack::column(0.0))
             .visible(reviewing)
             .children(activation(ui)),
-        widget(Stack::column(gap::CONTROL)).children((
+        widget(Stack::column(0.0).gap_step(gap::step::CONTROL)).children((
             overline(ui.now_t("packages-installed")),
             packages,
             kit::callout(Tone::Neutral, ui.now_t("packages-access")),
@@ -606,7 +618,7 @@ pub fn activation(ui: Ui) -> AnyView {
                     kit::callout(Tone::Warning, ui.now_t("packages-consent-risk")),
                     widget(Text::new(ui.now_t("packages-consent-data"))),
                     widget(readable(reads(ui, &review.data))).key("plugin-consent-reads"),
-                    widget(Stack::column(gap::TIGHT)).children((
+                    widget(Stack::column(0.0).gap_step(gap::step::TIGHT)).children((
                         widget(readable(format!(
                             "{}: {}",
                             ui.now_t("packages-location"),
@@ -640,10 +652,10 @@ pub fn activation(ui: Ui) -> AnyView {
                     widget(
                         nana_ui::runtime::TextArea::new(source)
                             .read_only(true)
-                            .height(160.),
+                            .height(SOURCE_PREVIEW_H),
                     )
                     .key("plugin-source-code"),
-                    widget(Stack::column(gap::TIGHT)).children((
+                    widget(Stack::column(0.0).gap_step(gap::step::TIGHT)).children((
                         widget(Text::new(ui.now_t("packages-source-preview-limit"))),
                         busy.then(|| widget(readable(ui.now_t("packages-consent-confirming")))),
                     )),
@@ -654,7 +666,7 @@ pub fn activation(ui: Ui) -> AnyView {
                             s.disabled = ui.plugin_activation_busy.get();
                         })
                         .on(move |e: &ToggleChanged| ui.plugin_source_trusted.set(e.checked)),
-                    widget(Stack::row(gap::CONTROL).wrap(true)).children((
+                    widget(Stack::row(0.0).gap_step(gap::step::CONTROL).wrap(true)).children((
                         widget(kit::cta(Button::new(ui.now_t("packages-consent-confirm"))))
                             .key("plugin-consent-confirm")
                             .bind(move |button: &mut Button| {

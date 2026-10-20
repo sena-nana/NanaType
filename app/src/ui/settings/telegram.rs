@@ -1,5 +1,5 @@
 use super::controls::{block, hint, row, row_text, section, text};
-use crate::ui::kit::{Type, gap};
+use crate::ui::kit::{Type, field, gap};
 use crate::{
     msg::Msg,
     stickers::telegram::{Command, Phase},
@@ -40,7 +40,7 @@ fn field(ui: Ui, key: &str, value: Signal<String>, secure: bool) -> AnyView {
         ui,
         key,
         None,
-        widget(Stack::row(0.0).width(LengthSpec::Px(280.0)))
+        widget(Stack::row(0.0).width(LengthSpec::Px(field::LG)))
             .children(input)
             .into_any(),
     )
@@ -160,14 +160,16 @@ pub(super) fn panel(ui: Ui) -> AnyView {
                 .visible(move || ui.telegram.get().phase == Phase::Ready)
                 .children((
                     field(ui, "telegram-query", query, false),
-                    block(widget(Stack::row(gap::CONTROL).wrap(true)).children((
-                        action(ui, "telegram-search", move || {
-                            Command::Search(query.get_untracked())
-                        }),
-                        action(ui, "telegram-download", move || {
-                            Command::Download(query.get_untracked())
-                        }),
-                    ))),
+                    block(
+                        widget(Stack::row(0.0).gap_step(gap::step::CONTROL).wrap(true)).children((
+                            action(ui, "telegram-search", move || {
+                                Command::Search(query.get_untracked())
+                            }),
+                            action(ui, "telegram-download", move || {
+                                Command::Download(query.get_untracked())
+                            }),
+                        )),
+                    ),
                     dynamic(
                         move || ui.telegram.get().results.clone(),
                         move |packs| {

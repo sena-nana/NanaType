@@ -1,6 +1,10 @@
 use super::*;
 use nana_ui::runtime::view::El;
 
+/// The current skin's accent bar: its width, and how far it stays off a
+/// card's top and bottom.
+const ACCENT_BAR: (f32, f32) = (3.0, 14.0);
+
 /// A skin's colour swatch in the list.
 const SWATCH: f32 = 14.0;
 
@@ -50,7 +54,7 @@ pub(super) fn skins(ui: Ui) -> AnyView {
         },
     );
     let fallback = ui.skin.get_untracked();
-    widget(Stack::column(gap::SECTION))
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
             section(
                 ui,
@@ -61,9 +65,12 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                 ui,
                 "skins-library",
                 vec![
-                    widget(Stack::column(0.0).padding_xy(inset::CARD, space::LG))
-                        .children(skin_filters(ui, filter, grid))
-                        .into_any(),
+                    widget(
+                        Stack::column(0.0)
+                            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
+                    )
+                    .children(skin_filters(ui, filter, grid))
+                    .into_any(),
                     list.into_any(),
                 ],
             ),
@@ -316,7 +323,12 @@ pub(super) fn skin_list_row(
     let detail = detail_line(ui, skin, locale);
     let usable = skin.error.is_none();
     let previewed = previewed(ui, previewing, skin.id.clone());
-    let trailing = widget(Stack::row(gap::CONTROL).align(AlignSpec::Center)).children((
+    let trailing = widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .align(AlignSpec::Center),
+    )
+    .children((
         selected.then(|| current_badge(ui)),
         (!selected && usable).then(|| apply_button(ui, skin.id.clone(), previewed.clone())),
         skin_actions(ui, skin, locale),
@@ -349,14 +361,17 @@ pub(super) fn skin_list_row(
             skin,
             previewed,
         )
-        .leading(widget(Stack::row(gap::TIGHT)).children((
-            swatch(skin.box_color),
-            swatch(skin.text_color),
-            swatch(skin.accent),
-        )))
+        .leading(
+            widget(Stack::row(0.0).gap_step(gap::step::TIGHT)).children((
+                swatch(skin.box_color),
+                swatch(skin.text_color),
+                swatch(skin.accent),
+            )),
+        )
         .content(
             widget(
-                Stack::column(gap::HAIR)
+                Stack::column(0.0)
+                    .gap_step(gap::step::HAIR)
                     .grow(1.0)
                     .shrink(1.0)
                     .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
@@ -364,7 +379,8 @@ pub(super) fn skin_list_row(
             .children((
                 // A long name is cut before the tags and the badge are.
                 widget(
-                    Stack::row(gap::TIGHT)
+                    Stack::row(0.0)
+                        .gap_step(gap::step::TIGHT)
                         .align(AlignSpec::Center)
                         .width(LengthSpec::Fill)
                         .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
@@ -387,7 +403,7 @@ pub(super) fn skin_list_row(
         .trailing(trailing),
         widget({
             let bar = Stack::column(0.0)
-                .width(LengthSpec::Px(3.0))
+                .width(LengthSpec::Px(ACCENT_BAR.0))
                 .with_layout(accent_bar_layout);
             if selected {
                 bar.surface(SemanticColorRole::Accent)
@@ -556,7 +572,8 @@ pub(super) fn skin_card(
         font_note,
     ));
     let name_row = widget(
-        Stack::row(gap::TIGHT)
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
             .align(AlignSpec::Center)
             .width(LengthSpec::Fill),
     )
@@ -594,15 +611,20 @@ pub(super) fn skin_card(
     )
     .content(
         widget(
-            Stack::column(gap::CONTROL)
+            Stack::column(0.0)
+                .gap_step(gap::step::CONTROL)
                 .grow(1.0)
                 .shrink(1.0)
                 .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
         )
         .children((
             well,
-            widget(Stack::column(space::XXS).padding_xy(space::XXS, 0.0))
-                .children((name_row, tags_row)),
+            widget(
+                Stack::column(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Xxs)
+                    .padding_xy(space::XXS, 0.0),
+            )
+            .children((name_row, tags_row)),
         )),
     );
     widget(Stack::column(0.0).with_layout(|l| {
@@ -618,14 +640,14 @@ pub(super) fn skin_card(
         current.then(|| {
             widget(
                 Stack::column(0.0)
-                    .width(LengthSpec::Px(3.0))
+                    .width(LengthSpec::Px(ACCENT_BAR.0))
                     .surface(SemanticColorRole::Accent)
                     .radius(nana_ui_core::RadiusTier::Xs)
                     .with_layout(|l| {
                         l.position = PositionSpec::Absolute;
                         l.offset_left = Some(LengthSpec::Px(0.0));
-                        l.offset_top = Some(LengthSpec::Px(14.0));
-                        l.offset_bottom = Some(LengthSpec::Px(14.0));
+                        l.offset_top = Some(LengthSpec::Px(ACCENT_BAR.1));
+                        l.offset_bottom = Some(LengthSpec::Px(ACCENT_BAR.1));
                     }),
             )
         }),
@@ -647,9 +669,13 @@ pub(super) fn view_switch(ui: Ui, grid: Signal<bool>) -> AnyView {
         .into_any()
     };
     widget(
-        Stack::row(space::XXS)
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Xxs)
             .align(AlignSpec::Center)
-            .padding_xy(space::XXS, space::XXS)
+            .padding_step(
+                nana_ui_core::SpacingStep::Xxs,
+                nana_ui_core::SpacingStep::Xxs,
+            )
             .outline(SemanticColorRole::BorderSoft, 1.0)
             .radius(nana_ui_core::RadiusTier::Md)
             .with_layout(|l| {
@@ -730,20 +756,22 @@ pub(super) fn skin_filters(ui: Ui, filter: Signal<Option<String>>, grid: Signal<
             // the top right of the row, beside the first line, in every
             // language.
             widget(
-                Stack::row(gap::GROUP)
+                Stack::row(0.0)
+                    .gap_step(gap::step::GROUP)
                     .align(AlignSpec::Start)
                     .width(LengthSpec::Fill),
             )
             .children((
                 widget(
-                    Stack::row(gap::TIGHT)
+                    Stack::row(0.0)
+                        .gap_step(gap::step::TIGHT)
                         .wrap(true)
                         .align(AlignSpec::Center)
                         .grow(1.0)
                         .shrink(1.0)
                         .with_layout(|l| {
                             l.min_width = Some(LengthSpec::Px(0.0));
-                            l.row_gap = Some(LengthSpec::Px(6.0));
+                            l.row_gap = Some(LengthSpec::Px(nana_ui::theme::space::SM));
                         }),
                 )
                 .children(chips),

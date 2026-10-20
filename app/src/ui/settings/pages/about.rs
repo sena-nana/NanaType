@@ -1,5 +1,8 @@
 use super::*;
 
+/// A licence or notice text's scroll height.
+const LICENCE_H: f32 = 300.0;
+
 /// The logo's size in the About header.
 const ABOUT_ICON: f32 = 56.0;
 
@@ -15,15 +18,20 @@ pub(super) fn about(ui: Ui) -> AnyView {
     let icon = super::super::logo(ABOUT_ICON);
     let version_chip = crate::ui::kit::mono_tag(format!("v{}", env!("CARGO_PKG_VERSION")));
     let header = widget(
-        Stack::row(gap::SECTION)
-            .padding_xy(inset::CARD, inset::CARD)
+        Stack::row(0.0)
+            .gap_step(gap::step::SECTION)
+            .padding_step(inset::step::CARD, inset::step::CARD)
             .align(AlignSpec::Center),
     )
     .children((
         icon,
         widget(crate::ui::kit::grow_column(gap::TIGHT)).children((
-            widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
-                .children((Type::PageTitle.view("NanaType"), version_chip)),
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::CONTROL)
+                    .align(AlignSpec::Center),
+            )
+            .children((Type::PageTitle.view("NanaType"), version_chip)),
             Type::Lead.view(ui.now_t("app-tagline")),
             hint(build),
         )),
@@ -39,8 +47,9 @@ pub(super) fn about(ui: Ui) -> AnyView {
             .into_any()
     };
     let links = widget(
-        Stack::row(space::SM)
-            .padding_xy(inset::CARD, space::LG)
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Sm)
+            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg)
             .wrap(true),
     )
     .children(vec![
@@ -79,7 +88,7 @@ pub(super) fn about(ui: Ui) -> AnyView {
     rows.extend(interface_licences(ui));
     rows.extend(design_sources(ui));
     rows.extend(font_licences(ui));
-    widget(Stack::column(gap::SECTION))
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children(section_with(ui, "", rows))
         .into_any()
 }
@@ -95,23 +104,32 @@ pub(super) fn design_sources(ui: Ui) -> Vec<(AnyView, Shown)> {
         .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::OpenUrl(url)))
     };
     vec![(
-        widget(Stack::column(space::SM).padding_xy(inset::CARD, space::LG))
+        widget(
+            Stack::column(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Sm)
+                .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
+        )
+        .children((
+            widget(Text::new(ui.now_t("about-design")).style(Type::Strong.style())),
+            widget(Text::new("Echo-Live · Sheep-realms").style(Type::Strong.style())),
+            hint(ui.now_t("about-design-echo")),
+            widget(
+                Stack::row(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Sm)
+                    .wrap(true),
+            )
             .children((
-                widget(Text::new(ui.now_t("about-design")).style(Type::Strong.style())),
-                widget(Text::new("Echo-Live · Sheep-realms").style(Type::Strong.style())),
-                hint(ui.now_t("about-design-echo")),
-                widget(Stack::row(space::SM).wrap(true)).children((
-                    link(
-                        "about-source-repository",
-                        "https://github.com/sheep-realms/Echo-Live",
-                    ),
-                    link(
-                        "about-design-upstream-license",
-                        "https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md",
-                    ),
-                )),
-            ))
-            .into_any(),
+                link(
+                    "about-source-repository",
+                    "https://github.com/sheep-realms/Echo-Live",
+                ),
+                link(
+                    "about-design-upstream-license",
+                    "https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md",
+                ),
+            )),
+        ))
+        .into_any(),
         None,
     )]
 }
@@ -119,12 +137,16 @@ pub(super) fn design_sources(ui: Ui) -> Vec<(AnyView, Shown)> {
 /// Sources stay visible; each licence is embedded for offline reading.
 pub(super) fn interface_licences(ui: Ui) -> Vec<(AnyView, Shown)> {
     let mut rows = vec![(
-        widget(Stack::column(space::SM).padding_xy(inset::CARD, space::LG))
-            .children((
-                widget(Text::new(ui.now_t("about-interfaces")).style(Type::Strong.style())),
-                hint(ui.now_t("about-interfaces-hint")),
-            ))
-            .into_any(),
+        widget(
+            Stack::column(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Sm)
+                .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
+        )
+        .children((
+            widget(Text::new(ui.now_t("about-interfaces")).style(Type::Strong.style())),
+            hint(ui.now_t("about-interfaces-hint")),
+        ))
+        .into_any(),
         None,
     )];
     let entries = [
@@ -183,24 +205,35 @@ pub(super) fn interface_licences(ui: Ui) -> Vec<(AnyView, Shown)> {
                 .into_any(),
         );
         rows.push((
-            widget(Stack::column(space::SM).padding_xy(inset::CARD, space::LG))
-                .children((
-                    widget(Text::new(name).style(Type::Strong.style())),
-                    hint(ui.now_t(description)),
-                    widget(Stack::row(space::SM).wrap(true)).children(buttons),
-                ))
-                .into_any(),
+            widget(
+                Stack::column(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Sm)
+                    .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
+            )
+            .children((
+                widget(Text::new(name).style(Type::Strong.style())),
+                hint(ui.now_t(description)),
+                widget(
+                    Stack::row(0.0)
+                        .gap_step(nana_ui_core::SpacingStep::Sm)
+                        .wrap(true),
+                )
+                .children(buttons),
+            ))
+            .into_any(),
             None,
         ));
         rows.push(shown_if(
-            widget(Stack::column(0.0).padding_xy(inset::CARD, space::LG))
-                .children(
-                    widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
-                        l.height = Some(LengthSpec::Px(260.0));
-                    }))
-                    .children(widget(Stack::column(0.0)).children(licence_lines(licence))),
-                )
-                .into_any(),
+            widget(
+                Stack::column(0.0).padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
+            )
+            .children(
+                widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
+                    l.height = Some(LengthSpec::Px(LICENCE_H));
+                }))
+                .children(widget(Stack::column(0.0)).children(licence_lines(licence))),
+            )
+            .into_any(),
             move || open.get(),
         ));
     }
@@ -265,7 +298,7 @@ pub fn font_licence_panel(ui: Ui) -> AnyView {
                 Some(l) => l.to_owned(),
                 None => I18N.t_in(locale, "about-fonts-license-other"),
             });
-            widget(Stack::column(gap::TIGHT))
+            widget(Stack::column(0.0).gap_step(gap::step::TIGHT))
                 .children((
                     widget(Text::new(name).style(Type::Strong.style())),
                     hint(facts.join(" · ")),
@@ -277,15 +310,19 @@ pub fn font_licence_panel(ui: Ui) -> AnyView {
                 .into_any()
         })
         .collect();
-    widget(Stack::column(0.0).padding_xy(inset::CARD, space::LG))
+    widget(Stack::column(0.0).padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg))
         .children(
             widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
-                l.height = Some(LengthSpec::Px(320.0));
+                l.height = Some(LengthSpec::Px(LICENCE_H));
             }))
             .children(
-                widget(Stack::column(space::XXXL).with_layout(|l| {
-                    l.padding_right = Some(LengthSpec::Px(space::XL));
-                }))
+                widget(
+                    Stack::column(0.0)
+                        .gap_step(nana_ui_core::SpacingStep::Xxxl)
+                        .with_layout(|l| {
+                            l.padding_right = Some(LengthSpec::Px(space::XL));
+                        }),
+                )
                 .children(entries),
             ),
         )
@@ -299,7 +336,7 @@ pub(super) fn licence_lines(text: &str) -> Vec<AnyView> {
         .lines()
         .map(|line| {
             if line.trim().is_empty() {
-                widget(Stack::column(0.0).height(LengthSpec::Px(8.0))).into_any()
+                widget(Stack::column(0.0).height(LengthSpec::Px(gap::CONTROL))).into_any()
             } else {
                 widget(
                     Text::new(line.to_owned())

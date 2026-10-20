@@ -17,13 +17,15 @@ pub(super) fn vts_map_row(ui: Ui, key: String, options: Vec<SelectOption>) -> An
     let start = current();
     let set_key = key.clone();
     widget(
-        Stack::bar(space::XL)
-            .padding_xy(inset::CARD, inset::ROW_Y)
+        Stack::bar(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Xl)
+            .padding_step(inset::step::CARD, inset::step::ROW_Y)
             .align(AlignSpec::Center),
     )
     .children((
         widget(
-            Stack::row(space::SM)
+            Stack::row(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Sm)
                 .align(AlignSpec::Center)
                 .grow(1.0)
                 .shrink(1.0),
@@ -69,18 +71,30 @@ pub(super) fn vts_mapping(ui: Ui) -> AnyView {
             && ui.status.with(|s| s.vts != LinkState::NeedsAuth)
     };
     let header = widget(
-        Stack::bar(space::XL)
-            .padding_xy(inset::CARD, space::XL)
+        Stack::bar(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Xl)
+            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Xl)
             .align(AlignSpec::Center),
     )
     .children((
-        widget(Stack::column(gap::HAIR).grow(1.0).shrink(1.0)).children((
+        widget(
+            Stack::column(0.0)
+                .gap_step(gap::step::HAIR)
+                .grow(1.0)
+                .shrink(1.0),
+        )
+        .children((
             subheading(ui, "int-vts-map"),
             widget(Stack::column(0.0))
                 .visible(move || !authorized())
                 .children(hint(ui.now_t("int-vts-authorize-hint"))),
         )),
-        widget(Stack::row(gap::TIGHT).align(AlignSpec::Center)).children((
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::TIGHT)
+                .align(AlignSpec::Center),
+        )
+        .children((
             widget(
                 StatusBadge::new(ui.now_t("int-vts-authorized"), StatusTone::Success).compact(true),
             )
@@ -164,7 +178,8 @@ pub(super) fn vts_mapping(ui: Ui) -> AnyView {
                 )
             };
             let head = widget(
-                Stack::bar(space::XL)
+                Stack::bar(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Xl)
                     .padding_xy(inset::CARD, 0.0)
                     .align(AlignSpec::Center)
                     .with_layout(|l| l.padding_bottom = Some(LengthSpec::Px(space::XS))),
@@ -191,7 +206,7 @@ pub(super) fn vts_mapping(ui: Ui) -> AnyView {
 }
 
 pub(super) fn integrations(ui: Ui) -> AnyView {
-    widget(Stack::column(gap::SECTION))
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
             section(
                 ui,
@@ -201,16 +216,20 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                         ui,
                         "int-vts",
                         Some("int-vts-hint"),
-                        widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
-                            .children((
-                                link_badge(ui, |s| &s.vts),
-                                switch(
-                                    ui,
-                                    |s| s.integrations.vts.enabled,
-                                    |s, v| s.integrations.vts.enabled = v,
-                                ),
-                            ))
-                            .into_any(),
+                        widget(
+                            Stack::row(0.0)
+                                .gap_step(gap::step::CONTROL)
+                                .align(AlignSpec::Center),
+                        )
+                        .children((
+                            link_badge(ui, |s| &s.vts),
+                            switch(
+                                ui,
+                                |s| s.integrations.vts.enabled,
+                                |s, v| s.integrations.vts.enabled = v,
+                            ),
+                        ))
+                        .into_any(),
                     ),
                     when_on(
                         ui,
@@ -286,16 +305,20 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                         ui,
                         "int-osc",
                         Some("int-osc-hint"),
-                        widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
-                            .children((
-                                link_badge(ui, |s| &s.osc),
-                                switch(
-                                    ui,
-                                    |s| s.integrations.osc.enabled,
-                                    |s, v| s.integrations.osc.enabled = v,
-                                ),
-                            ))
-                            .into_any(),
+                        widget(
+                            Stack::row(0.0)
+                                .gap_step(gap::step::CONTROL)
+                                .align(AlignSpec::Center),
+                        )
+                        .children((
+                            link_badge(ui, |s| &s.osc),
+                            switch(
+                                ui,
+                                |s| s.integrations.osc.enabled,
+                                |s, v| s.integrations.osc.enabled = v,
+                            ),
+                        ))
+                        .into_any(),
                     ),
                     when_on(
                         ui,
@@ -348,16 +371,20 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                         ui,
                         "int-ws",
                         Some("int-ws-hint"),
-                        widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
-                            .children((
-                                link_badge(ui, |s| &s.ws),
-                                switch(
-                                    ui,
-                                    |s| s.integrations.websocket.enabled,
-                                    |s, v| s.integrations.websocket.enabled = v,
-                                ),
-                            ))
-                            .into_any(),
+                        widget(
+                            Stack::row(0.0)
+                                .gap_step(gap::step::CONTROL)
+                                .align(AlignSpec::Center),
+                        )
+                        .children((
+                            link_badge(ui, |s| &s.ws),
+                            switch(
+                                ui,
+                                |s| s.integrations.websocket.enabled,
+                                |s, v| s.integrations.websocket.enabled = v,
+                            ),
+                        ))
+                        .into_any(),
                     ),
                     when_on(
                         ui,

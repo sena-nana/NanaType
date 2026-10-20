@@ -18,6 +18,15 @@ use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{AlignSpec, LengthSpec, RadiusTier, SemanticColorRole};
 use nanatype_bilibili::{AccountState, ConnectionState, DeliveryState, QrStatus};
 
+/// The account button's face in the input footer: the toolbar's hit target.
+const ACCOUNT_FACE: f32 = 28.0;
+/// The send-switch popover: wide enough for its label in every locale.
+const SEND_POPOVER_W: f32 = 230.0;
+/// The send mark's box (width, height) beside the status line.
+const SEND_MARK: (f32, f32) = (8.0, 14.0);
+/// The room form: its field and its buttons on one line.
+const ROOM_FORM_W: f32 = 360.0;
+
 fn button(ui: Ui, key: &str, message: impl Fn() -> Msg + Send + 'static) -> AnyView {
     widget(Button::new(ui.now_t(key)).size(ControlSize::Small))
         .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(message()))
@@ -73,8 +82,8 @@ fn avatar(ui: Ui, size: f32) -> AnyView {
 pub fn account_button(ui: Ui) -> AnyView {
     let face = widget(
         Stack::row(0.0)
-            .width(LengthSpec::Px(28.0))
-            .height(LengthSpec::Px(28.0))
+            .width(LengthSpec::Px(ACCOUNT_FACE))
+            .height(LengthSpec::Px(ACCOUNT_FACE))
             .align(AlignSpec::Center)
             .with_layout(|l| l.position = nana_ui_core::PositionSpec::Relative),
     )
@@ -100,12 +109,17 @@ pub fn account_button(ui: Ui) -> AnyView {
     widget(
         Popover::new()
             .trigger(ui.now_t("bili-account"))
-            .width(320.0)
+            .width(crate::ui::kit::POPOVER_W)
             .bare_trigger(true),
     )
     .trigger(face)
     .children(
-        widget(Stack::column(gap::GROUP).padding(inset::CARD)).children((
+        widget(
+            Stack::column(0.0)
+                .gap_step(gap::step::GROUP)
+                .padding_step(inset::step::CARD, inset::step::CARD),
+        )
+        .children((
             dynamic(
                 move || ui.bilibili.get().account.clone(),
                 move |a| {
@@ -160,7 +174,8 @@ fn send_toggle(ui: Ui, labelled: bool) -> AnyView {
 }
 pub fn send_status(ui: Ui) -> AnyView {
     widget(
-        Stack::row(gap::TIGHT)
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
             .align(AlignSpec::Center)
             .with_layout(|l| l.flex_shrink = Some(0.0)),
     )
@@ -198,47 +213,52 @@ pub(super) fn input_send_status(ui: Ui) -> AnyView {
             widget(Stack::row(0.0))
                 .visible(move || ui.input_width.get() >= 1000.0)
                 .children(send_status(ui)),
-            widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
-                .visible(move || ui.input_width.get() < 1000.0)
-                .children((
-                    widget(super::input::footer_icon(
-                        ti::HISTORY,
-                        ui.now_t("bili-results"),
-                    ))
-                    .on_cx(|_, _: &Activate, cx| {
-                        cx.dispatch_program_all(Msg::SettingsPage(Page::Bilibili))
-                    }),
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .align(AlignSpec::Center),
+            )
+            .visible(move || ui.input_width.get() < 1000.0)
+            .children((
+                widget(super::input::footer_icon(
+                    ti::HISTORY,
+                    ui.now_t("bili-results"),
+                ))
+                .on_cx(|_, _: &Activate, cx| {
+                    cx.dispatch_program_all(Msg::SettingsPage(Page::Bilibili))
+                }),
+                widget(
+                    Popover::new()
+                        .trigger(ui.now_t("bili-send-switch"))
+                        .placement(nana_ui::PopoverPlacement::Top)
+                        .width(SEND_POPOVER_W)
+                        .bare_trigger(true),
+                )
+                .trigger(
                     widget(
-                        Popover::new()
-                            .trigger(ui.now_t("bili-send-switch"))
-                            .placement(nana_ui::PopoverPlacement::Top)
-                            .width(230.0)
-                            .bare_trigger(true),
-                    )
-                    .trigger(
-                        widget(
-                            Stack::row(0.0)
-                                .width(LengthSpec::Px(8.0))
-                                .height(LengthSpec::Px(14.0))
-                                .align(AlignSpec::Center)
-                                .justify(nana_ui_core::JustifySpec::Center),
-                        )
-                        .children(
-                            widget(IconGlyph::new(ti::SEND).size(icon::SM).decorative()).bind(
-                                move |glyph: &mut IconGlyph| {
-                                    glyph.style.foreground = Some(if ui.bilibili.get().sending {
-                                        SemanticColorRole::Accent
-                                    } else {
-                                        SemanticColorRole::Muted
-                                    });
-                                },
-                            ),
-                        ),
+                        Stack::row(0.0)
+                            .width(LengthSpec::Px(SEND_MARK.0))
+                            .height(LengthSpec::Px(SEND_MARK.1))
+                            .align(AlignSpec::Center)
+                            .justify(nana_ui_core::JustifySpec::Center),
                     )
                     .children(
-                        widget(Stack::column(0.0).padding(inset::PANEL)).children(send_switch(ui)),
+                        widget(IconGlyph::new(ti::SEND).size(icon::SM).decorative()).bind(
+                            move |glyph: &mut IconGlyph| {
+                                glyph.style.foreground = Some(if ui.bilibili.get().sending {
+                                    SemanticColorRole::Accent
+                                } else {
+                                    SemanticColorRole::Muted
+                                });
+                            },
+                        ),
                     ),
-                )),
+                )
+                .children(
+                    widget(Stack::column(0.0).padding_step(inset::step::PANEL, inset::step::PANEL))
+                        .children(send_switch(ui)),
+                ),
+            )),
         ))
         .into_any()
 }
@@ -276,7 +296,7 @@ pub fn confirm_dialog(ui: Ui) -> AnyView {
 }
 
 pub fn identity_hint(ui: Ui) -> AnyView {
-    widget(Stack::column(gap::CONTROL))
+    widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
         .visible(move || {
             ui.settings.with(|s| s.integrations.bilibili.sync_profile)
                 && matches!(ui.bilibili.get().account, AccountState::Ready(_))
@@ -292,18 +312,22 @@ fn account_card(ui: Ui) -> AnyView {
         move || (ui.bilibili.get().account.clone(), ui.locale.get()),
         move |(account, _)| {
             let mut body = vec![
-                widget(Stack::row(gap::GROUP).align(AlignSpec::Center))
-                    .children((
-                        avatar(ui, 48.0),
-                        widget(Text::new(account_label(ui, account)).style(Type::Title.style())),
-                    ))
-                    .into_any(),
+                widget(
+                    Stack::row(0.0)
+                        .gap_step(gap::step::GROUP)
+                        .align(AlignSpec::Center),
+                )
+                .children((
+                    avatar(ui, 48.0),
+                    widget(Text::new(account_label(ui, account)).style(Type::Title.style())),
+                ))
+                .into_any(),
             ];
             match account {
                 AccountState::Ready(p) => {
                     body.push(hint(format!("UID {}", p.uid)));
                     body.push(
-                        widget(Stack::row(gap::CONTROL))
+                        widget(Stack::row(0.0).gap_step(gap::step::CONTROL))
                             .children((
                                 button(ui, "bili-refresh", || Msg::BilibiliRefresh),
                                 button(ui, "bili-logout", || Msg::BilibiliLogout),
@@ -318,7 +342,7 @@ fn account_card(ui: Ui) -> AnyView {
                         body.push(widget(code.label(ui.now_t("bili-login"))).into_any());
                     }
                     body.push(
-                        widget(Stack::row(gap::CONTROL))
+                        widget(Stack::row(0.0).gap_step(gap::step::CONTROL))
                             .children((
                                 button(ui, "bili-qr-refresh", || Msg::BilibiliLogin),
                                 button(ui, "common-cancel", || Msg::BilibiliCancelLogin),
@@ -335,9 +359,13 @@ fn account_card(ui: Ui) -> AnyView {
                 }
                 _ => body.push(button(ui, "bili-login", || Msg::BilibiliLogin)),
             }
-            widget(Stack::column(gap::GROUP).padding(inset::CARD))
-                .children(body)
-                .into_any()
+            widget(
+                Stack::column(0.0)
+                    .gap_step(gap::step::GROUP)
+                    .padding_step(inset::step::CARD, inset::step::CARD),
+            )
+            .children(body)
+            .into_any()
         },
     )
     .into_any()
@@ -366,13 +394,14 @@ fn room_control(ui: Ui) -> AnyView {
     );
     let applied = signal(pending.get_untracked());
     widget(
-        Stack::row(gap::CONTROL)
-            .width(LengthSpec::Px(360.0))
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .width(LengthSpec::Px(ROOM_FORM_W))
             .align(AlignSpec::Center)
             .wrap(true),
     )
     .children((
-        widget(Stack::row(0.0).width(LengthSpec::Px(180.0))).children(
+        widget(Stack::row(0.0).width(LengthSpec::Px(crate::ui::kit::field::SM))).children(
             widget(
                 TextInput::new(pending.get_untracked())
                     .placeholder(ui.now_t("bili-room-placeholder"))
@@ -443,8 +472,9 @@ fn deliveries(ui: Ui) -> AnyView {
                         }
                     }
                     widget(
-                        Stack::column(gap::CONTROL)
-                            .padding(inset::PANEL)
+                        Stack::column(0.0)
+                            .gap_step(gap::step::CONTROL)
+                            .padding_step(inset::step::PANEL, inset::step::PANEL)
                             .surface(SemanticColorRole::Subtle)
                             .radius(nana_ui_core::RadiusTier::Sm),
                     )
@@ -452,7 +482,7 @@ fn deliveries(ui: Ui) -> AnyView {
                     .into_any()
                 })
                 .collect();
-            widget(Stack::column(gap::CONTROL))
+            widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
                 .children(rows)
                 .into_any()
         },
@@ -460,7 +490,7 @@ fn deliveries(ui: Ui) -> AnyView {
     .into_any()
 }
 pub fn settings_page(ui: Ui) -> AnyView {
-    widget(Stack::column(gap::SECTION))
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
             section(
                 ui,

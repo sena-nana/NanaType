@@ -49,9 +49,9 @@ pub fn toast_stack(stack: EntityRef<ToastStack>, bottom: f32, max_visible: usize
         l.position = PositionSpec::Absolute;
         l.offset_right = Some(LengthSpec::Px(space::XL));
         l.offset_bottom = Some(LengthSpec::Px(bottom));
-        l.width = Some(LengthSpec::Px(300.0));
+        l.width = Some(LengthSpec::Px(crate::ui::kit::TOAST_W));
         l.max_width = Some(LengthSpec::Percent(90.0));
-        l.max_height = Some(LengthSpec::Px(240.0));
+        l.max_height = Some(LengthSpec::Px(crate::ui::kit::TOAST_MAX_H));
         l.align_items = AlignSpec::End;
         l.z_index = Some(100);
     }

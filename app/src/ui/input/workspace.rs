@@ -3,6 +3,11 @@ use super::*;
 use crate::ui::kit::{gap, inset};
 use nanatype_settings::{InputDockRegion as Region, InputDockRegionKind as RegionKind};
 
+/// The dock's tab strip, inside the toolbar-high bar.
+const TAB_AREA_H: f32 = 32.0;
+/// The partner card's scroll height in its footer popover.
+const MANAGEMENT_H: f32 = 260.0;
+
 const EDITOR_MIN: f32 = 320.0;
 const HANDLE_W: f32 = 8.0;
 
@@ -91,9 +96,10 @@ fn commands(ui: Ui, width: Signal<f32>) -> AnyView {
         move |_| {
             let skin = ui.skin.get_untracked();
             widget(
-                Stack::column(gap::CONTROL)
+                Stack::column(0.0)
+                    .gap_step(gap::step::CONTROL)
                     .width(LengthSpec::Fill)
-                    .padding(gap::TIGHT),
+                    .padding_step(gap::step::TIGHT, gap::step::TIGHT),
             )
             .children((
                 command_row(width).children((
@@ -112,7 +118,7 @@ fn commands(ui: Ui, width: Signal<f32>) -> AnyView {
                         width,
                     ),
                 )),
-                widget(Stack::column(gap::CONTROL))
+                widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
                     .visible(move || ui.settings.with(|s| !s.assets.phrases.is_empty()))
                     .children((
                         widget(Divider::horizontal()),
@@ -127,7 +133,12 @@ fn commands(ui: Ui, width: Signal<f32>) -> AnyView {
 }
 
 fn command_row(width: Signal<f32>) -> nana_ui::runtime::view::El<Stack> {
-    widget(Stack::row(gap::CONTROL).width(LengthSpec::Fill)).bind(move |s: &mut Stack| {
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .width(LengthSpec::Fill),
+    )
+    .bind(move |s: &mut Stack| {
         s.layout_mut().direction = Some(if width.get() < 260.0 {
             nana_ui_core::FlexDirection::Column
         } else {
@@ -203,9 +214,10 @@ fn phrases(ui: Ui) -> AnyView {
                 })
                 .collect();
             widget(
-                Stack::column(gap::CONTROL)
+                Stack::column(0.0)
+                    .gap_step(gap::step::CONTROL)
                     .width(LengthSpec::Fill)
-                    .padding(gap::TIGHT),
+                    .padding_step(gap::step::TIGHT, gap::step::TIGHT),
             )
             .children((
                 buttons,
@@ -236,7 +248,7 @@ fn dock_panel(ui: Ui, region: Region, selected: Signal<u64>, width: Signal<f32>)
     };
     widget(
         Stack::fill_column(0.0)
-            .padding(inset::PANEL)
+            .padding_step(inset::step::PANEL, inset::step::PANEL)
             .with_layout(|l| {
                 l.height = Some(LengthSpec::Px(0.0));
                 l.flex_grow = Some(1.0);
@@ -323,7 +335,8 @@ fn compact_tab_bar(
     use nana_ui::runtime::view::each;
     let open = signal(false);
     widget(
-        Stack::row(gap::TIGHT)
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
             .width(LengthSpec::Fill)
             .with_layout(|l| {
                 l.min_width = Some(LengthSpec::Px(0.0));
@@ -369,7 +382,7 @@ fn compact_tab_bar(
                 .on(move |_: &Activate| selected.set(region.id))
             },
         )
-        .container(widget(Stack::row(gap::TIGHT))),
+        .container(widget(Stack::row(0.0).gap_step(gap::step::TIGHT))),
         dynamic(
             move || {
                 let all = regions.get();
@@ -474,7 +487,8 @@ fn dock(ui: Ui) -> AnyView {
             widget(Stack::fill_column(0.0).with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))))
                 .children((
                     widget(
-                        Stack::bar(gap::TIGHT)
+                        Stack::bar(0.0)
+                            .gap_step(gap::step::TIGHT)
                             .height(LengthSpec::Px(TOOLBAR_H))
                             .padding_xy(inset::BAR_Y, 0.0)
                             .with_layout(|l| l.flex_shrink = Some(0.0)),
@@ -483,7 +497,7 @@ fn dock(ui: Ui) -> AnyView {
                         widget(Stack::row(0.0).with_layout(|l| {
                             l.width = Some(LengthSpec::Px(0.0));
                             l.min_width = Some(LengthSpec::Px(0.0));
-                            l.height = Some(LengthSpec::Px(32.0));
+                            l.height = Some(LengthSpec::Px(TAB_AREA_H));
                             l.flex_grow = Some(1.0);
                             l.flex_shrink = Some(1.0);
                             l.overflow_x = OverflowSpec::Hidden;
@@ -666,10 +680,11 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) 
                 modes(ui, mode)
             };
             widget(
-                Stack::bar(gap::CONTROL)
+                Stack::bar(0.0)
+                    .gap_step(gap::step::CONTROL)
                     .width(LengthSpec::Fill)
                     .height(LengthSpec::Px(crate::windows::INPUT_ACTIONS_H))
-                    .padding_xy(inset::BAR_X, inset::BAR_Y)
+                    .padding_step(inset::step::BAR_X, inset::step::BAR_Y)
                     .surface(SemanticColorRole::Subtle)
                     .align(AlignSpec::Center)
                     .with_layout(|l| l.flex_shrink = Some(0.0)),
@@ -685,7 +700,7 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) 
                     320.0,
                     signal(false),
                     widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
-                        l.height = Some(LengthSpec::Px(260.0));
+                        l.height = Some(LengthSpec::Px(MANAGEMENT_H));
                         l.min_height = Some(LengthSpec::Px(0.0));
                     }))
                     .children(super::super::p2p::card_with_fields(

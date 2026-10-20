@@ -385,7 +385,8 @@ pub fn slider_with(
         readout(locale, v).unwrap_or_else(|| unit_text(locale, v, step, unit))
     };
     widget(
-        Stack::row(gap::CONTROL)
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
             .width(LengthSpec::Px(field::MD))
             .align(AlignSpec::Center),
     )
@@ -469,29 +470,38 @@ pub fn confirm(
     msg: impl Fn() -> Msg + Send + 'static,
 ) -> AnyView {
     let armed = signal(false);
-    widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        widget(Stack::row(0.0).align(AlignSpec::Center))
+            .visible(move || !armed.get())
+            .children(trigger(armed)),
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
+                .align(AlignSpec::Center)
+                .wrap(true),
+        )
+        .visible(move || armed.get())
         .children((
-            widget(Stack::row(0.0).align(AlignSpec::Center))
-                .visible(move || !armed.get())
-                .children(trigger(armed)),
-            widget(Stack::row(gap::CONTROL).align(AlignSpec::Center).wrap(true))
-                .visible(move || armed.get())
-                .children((
-                    widget(Type::Small.text(question).color(SemanticColorRole::Warning)),
-                    widget(Button::new(ui.now_t("common-cancel")).size(ControlSize::Small))
-                        .on(move |_: &Activate| armed.set(false)),
-                    widget(
-                        Button::new(ok_label)
-                            .kind(ButtonKind::Danger)
-                            .size(ControlSize::Small),
-                    )
-                    .on_cx(move |_, _: &Activate, cx| {
-                        armed.set(false);
-                        cx.dispatch_program_all(msg());
-                    }),
-                )),
-        ))
-        .into_any()
+            widget(Type::Small.text(question).color(SemanticColorRole::Warning)),
+            widget(Button::new(ui.now_t("common-cancel")).size(ControlSize::Small))
+                .on(move |_: &Activate| armed.set(false)),
+            widget(
+                Button::new(ok_label)
+                    .kind(ButtonKind::Danger)
+                    .size(ControlSize::Small),
+            )
+            .on_cx(move |_, _: &Activate, cx| {
+                armed.set(false);
+                cx.dispatch_program_all(msg());
+            }),
+        )),
+    ))
+    .into_any()
 }
 
 pub fn number(

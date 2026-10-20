@@ -3,7 +3,7 @@
 use crate::msg::{FileTarget, Msg};
 use crate::package_editor::{Action, EditorView, Tab};
 use crate::ui::Ui;
-use crate::ui::kit::{Tone, Type, gap, inset};
+use crate::ui::kit::{Tone, Type, field, gap, inset};
 use crate::ui::settings::controls::{confirm, hint, label};
 use nana_ui::runtime::view::{
     AnyView, IntoView, Signal, dynamic, segmented_option, signal, widget,
@@ -23,6 +23,19 @@ use nanatype_theme::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+
+/// The files pane's tree beside the source.
+const FILE_TREE_W: f32 = field::MD;
+/// The tree when it stacks above the source in a narrow editor.
+const STACKED_TREE_H: f32 = 180.0;
+/// The least room the source editor keeps.
+const SOURCE_MIN_H: f32 = 160.0;
+/// Lists and problems under a form, before they scroll.
+const LIST_MAX_H: f32 = 180.0;
+const PROBLEMS_MAX_H: f32 = 150.0;
+/// A form's multi-line value, and a short note.
+const FORM_TEXT_H: f32 = 72.0;
+const NOTE_H: f32 = 56.0;
 
 type Search = (Signal<String>, Signal<usize>);
 
@@ -139,32 +152,39 @@ pub fn launcher(ui: Ui) -> AnyView {
                 .map(|draft| {
                     let open = draft.id.clone();
                     let discard = draft.id.clone();
-                    widget(Stack::row(space::MD).wrap(true).align(AlignSpec::Center))
-                        .key(format!("package-draft:{}", draft.id))
-                        .children((
-                            widget(readable(format!(
-                                "{} · {}",
-                                draft.package,
-                                stamp(draft.saved_at)
-                            ))),
-                            widget(button(ui, "pkgedit-open"))
-                                .on_cx(send(move || Action::OpenDraft(open.clone()))),
-                            confirm(
-                                ui,
-                                ui.now_t("pkgedit-discard-question"),
-                                ui.now_t("pkgedit-discard"),
-                                move |armed| {
-                                    widget(button(ui, "pkgedit-discard"))
-                                        .on(move |_: &Activate| armed.set(true))
-                                        .into_any()
-                                },
-                                move || Msg::PackageEditor(Action::DiscardDraft(discard.clone())),
-                            ),
-                        ))
-                        .into_any()
+                    widget(
+                        Stack::row(0.0)
+                            .gap_step(nana_ui_core::SpacingStep::Md)
+                            .wrap(true)
+                            .align(AlignSpec::Center),
+                    )
+                    .key(format!("package-draft:{}", draft.id))
+                    .children((
+                        widget(readable(format!(
+                            "{} · {}",
+                            draft.package,
+                            stamp(draft.saved_at)
+                        ))),
+                        widget(button(ui, "pkgedit-open"))
+                            .on_cx(send(move || Action::OpenDraft(open.clone()))),
+                        confirm(
+                            ui,
+                            ui.now_t("pkgedit-discard-question"),
+                            ui.now_t("pkgedit-discard"),
+                            move |armed| {
+                                widget(button(ui, "pkgedit-discard"))
+                                    .on(move |_: &Activate| armed.set(true))
+                                    .into_any()
+                            },
+                            move || Msg::PackageEditor(Action::DiscardDraft(discard.clone())),
+                        ),
+                    ))
+                    .into_any()
                 })
                 .collect::<Vec<_>>();
-            widget(Stack::column(space::SM)).children(rows).into_any()
+            widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm))
+                .children(rows)
+                .into_any()
         },
     );
     widget(crate::ui::kit::panel())
@@ -172,8 +192,14 @@ pub fn launcher(ui: Ui) -> AnyView {
         .children((
             label(ui.now_t("pkgedit-title")),
             widget(readable(ui.now_t("pkgedit-intro"))),
-            widget(Stack::row(space::MD).wrap(true).align(AlignSpec::Center)).children((
-                widget(Stack::row(0.).width(LengthSpec::Px(150.))).children(
+            widget(
+                Stack::row(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Md)
+                    .wrap(true)
+                    .align(AlignSpec::Center),
+            )
+            .children((
+                widget(Stack::row(0.).width(LengthSpec::Px(field::SM))).children(
                     widget(
                         Select::new(Some(ProjectKind::Mixed.key()))
                             .options(kinds)
@@ -220,7 +246,7 @@ pub fn launcher(ui: Ui) -> AnyView {
 pub fn package_actions(ui: Ui, id: &str, builtin: bool) -> AnyView {
     let edit = id.to_owned();
     let copy = id.to_owned();
-    widget(Stack::row(gap::CONTROL).wrap(true))
+    widget(Stack::row(0.0).gap_step(gap::step::CONTROL).wrap(true))
         .children((
             (!builtin).then(|| {
                 widget(button(ui, "pkgedit-edit"))
@@ -242,8 +268,9 @@ pub fn editor(ui: Ui) -> AnyView {
         .children((
             header(ui),
             widget(
-                Stack::fill_column(gap::CONTROL)
-                    .padding_xy(inset::PAGE, inset::ROW_Y)
+                Stack::fill_column(0.0)
+                    .gap_step(gap::step::CONTROL)
+                    .padding_step(inset::step::PAGE, inset::step::ROW_Y)
                     .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
             )
             .children((close_prompt(ui), tabs(ui), body(ui))),
@@ -316,45 +343,57 @@ fn header(ui: Ui) -> AnyView {
                 .key("package-editor-header")
                 .children((
                     widget(
-                        Stack::row(gap::GROUP)
+                        Stack::row(0.0)
+                            .gap_step(gap::step::GROUP)
                             .wrap(true)
-                            .padding_xy(inset::PAGE, inset::CARD)
+                            .padding_step(inset::step::PAGE, inset::step::CARD)
                             .align(AlignSpec::Center)
                             .width(LengthSpec::Fill),
                     )
                     .children((
                         widget(crate::ui::kit::grow_column(gap::HAIR)).children((
-                            widget(Stack::row(gap::CONTROL).wrap(true).align(AlignSpec::Center))
-                                .children((
-                                    widget(readable(package).style(Type::PageTitle.style())),
-                                    crate::ui::kit::tag(ui.now_t(kind_key(kind))),
-                                )),
+                            widget(
+                                Stack::row(0.0)
+                                    .gap_step(gap::step::CONTROL)
+                                    .wrap(true)
+                                    .align(AlignSpec::Center),
+                            )
+                            .children((
+                                widget(readable(package).style(Type::PageTitle.style())),
+                                crate::ui::kit::tag(ui.now_t(kind_key(kind))),
+                            )),
                             widget(readable(origin).color(SemanticColorRole::Muted)),
                         )),
-                        widget(Stack::row(gap::CONTROL).wrap(true).align(AlignSpec::Center))
-                            .children((
-                                dirty.then(|| {
-                                    widget(button(ui, "pkgedit-revert"))
-                                        .key("package-editor-revert")
-                                        .on_cx(send(|| Action::Revert))
-                                }),
-                                widget(button(ui, "pkgedit-export"))
-                                    .key("package-editor-export")
-                                    .on_cx(send(|| Action::Export)),
-                                widget(button(ui, "pkgedit-close"))
-                                    .key("package-editor-close")
-                                    .on_cx(send(|| Action::Close)),
-                                widget(if dirty {
-                                    crate::ui::kit::cta(button(ui, "pkgedit-save"))
-                                } else {
-                                    button(ui, "pkgedit-save")
-                                })
-                                .key("package-editor-save")
-                                .on_cx(send(|| Action::Save)),
-                            )),
+                        widget(
+                            Stack::row(0.0)
+                                .gap_step(gap::step::CONTROL)
+                                .wrap(true)
+                                .align(AlignSpec::Center),
+                        )
+                        .children((
+                            dirty.then(|| {
+                                widget(button(ui, "pkgedit-revert"))
+                                    .key("package-editor-revert")
+                                    .on_cx(send(|| Action::Revert))
+                            }),
+                            widget(button(ui, "pkgedit-export"))
+                                .key("package-editor-export")
+                                .on_cx(send(|| Action::Export)),
+                            widget(button(ui, "pkgedit-close"))
+                                .key("package-editor-close")
+                                .on_cx(send(|| Action::Close)),
+                            widget(if dirty {
+                                crate::ui::kit::cta(button(ui, "pkgedit-save"))
+                            } else {
+                                button(ui, "pkgedit-save")
+                            })
+                            .key("package-editor-save")
+                            .on_cx(send(|| Action::Save)),
+                        )),
                     )),
                     widget(
-                        Stack::row(gap::CONTROL)
+                        Stack::row(0.0)
+                            .gap_step(gap::step::CONTROL)
                             .wrap(true)
                             .padding_xy(inset::PAGE, 0.0)
                             .align(AlignSpec::Center)
@@ -383,10 +422,11 @@ fn close_prompt(ui: Ui) -> AnyView {
                 return widget(Stack::column(0.)).into_any();
             }
             widget(
-                Stack::row(gap::CONTROL)
+                Stack::row(0.0)
+                    .gap_step(gap::step::CONTROL)
                     .wrap(true)
                     .align(AlignSpec::Center)
-                    .padding_xy(inset::PANEL, inset::BAR_Y)
+                    .padding_step(inset::step::PANEL, inset::step::BAR_Y)
                     .radius(RadiusTier::Sm)
                     .surface_mix(nana_ui_core::SemanticColorMix::alpha(
                         SemanticColorRole::Warning,
@@ -441,10 +481,14 @@ fn tabs(ui: Ui) -> AnyView {
                 .into_any()
         })
         .collect::<Vec<_>>();
-    widget(Stack::row(space::XS).wrap(true))
-        .key("package-editor-tabs")
-        .children(buttons)
-        .into_any()
+    widget(
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Xs)
+            .wrap(true),
+    )
+    .key("package-editor-tabs")
+    .children(buttons)
+    .into_any()
 }
 
 fn body(ui: Ui) -> AnyView {
@@ -542,16 +586,26 @@ fn files(ui: Ui) -> AnyView {
                 move || narrow.get(),
                 move |narrow| {
                     let narrow = *narrow;
-                    let side = widget(Stack::column(space::SM).shrink(0.).with_layout(move |l| {
-                        if narrow {
-                            l.width = Some(LengthSpec::Fill);
-                        } else {
-                            l.width = Some(LengthSpec::Px(220.));
-                            l.height = Some(LengthSpec::Fill);
-                        }
-                    }))
+                    let side = widget(
+                        Stack::column(0.0)
+                            .gap_step(nana_ui_core::SpacingStep::Sm)
+                            .shrink(0.)
+                            .with_layout(move |l| {
+                                if narrow {
+                                    l.width = Some(LengthSpec::Fill);
+                                } else {
+                                    l.width = Some(LengthSpec::Px(FILE_TREE_W));
+                                    l.height = Some(LengthSpec::Fill);
+                                }
+                            }),
+                    )
                     .children((
-                        widget(Stack::row(space::SM).wrap(true)).children((
+                        widget(
+                            Stack::row(0.0)
+                                .gap_step(nana_ui_core::SpacingStep::Sm)
+                                .wrap(true),
+                        )
+                        .children((
                             widget(button(ui, "pkgedit-import"))
                                 .key("package-editor-import")
                                 .on_cx(|_, _: &Activate, cx| {
@@ -563,7 +617,7 @@ fn files(ui: Ui) -> AnyView {
                         )),
                         widget(ScrollView::new(ScrollAxes::Vertical).with_layout(move |l| {
                             if narrow {
-                                l.max_height = Some(LengthSpec::Px(180.));
+                                l.max_height = Some(LengthSpec::Px(STACKED_TREE_H));
                             } else {
                                 l.height = Some(LengthSpec::Px(0.));
                                 l.flex_grow = Some(1.);
@@ -571,21 +625,26 @@ fn files(ui: Ui) -> AnyView {
                         }))
                         .children(file_tree(ui)),
                     ));
-                    let main = widget(Stack::fill_column(space::SM).with_layout(move |l| {
-                        if !narrow {
-                            // Share the row with the tree instead of taking all of it.
-                            l.width = Some(LengthSpec::Px(0.));
-                        }
-                    }))
+                    let main = widget(
+                        Stack::fill_column(0.0)
+                            .gap_step(nana_ui_core::SpacingStep::Sm)
+                            .with_layout(move |l| {
+                                if !narrow {
+                                    // Share the row with the tree instead of taking all of it.
+                                    l.width = Some(LengthSpec::Px(0.));
+                                }
+                            }),
+                    )
                     .children((
                         toolbar(ui, search),
                         source(ui, search),
                         problems(ui),
                     ));
                     let layout = if narrow {
-                        Stack::fill_column(space::MD)
+                        Stack::fill_column(0.0).gap_step(nana_ui_core::SpacingStep::Md)
                     } else {
-                        Stack::row(space::LG)
+                        Stack::row(0.0)
+                            .gap_step(nana_ui_core::SpacingStep::Lg)
                             .align(AlignSpec::Stretch)
                             .grow(1.)
                             .shrink(1.)
@@ -711,21 +770,32 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
                 return widget(Stack::row(0.)).into_any();
             };
             let formattable = editable && matches!(ext.as_str(), "toml" | "json");
-            widget(Stack::row(space::SM).wrap(true).align(AlignSpec::Center))
-                .children((
-                    widget(Text::new(path.clone()).style(Type::Small.mono()))
-                        .key("package-editor-path"),
-                    (!editable && text).then(|| hint(ui.now_t("pkgedit-read-only"))),
-                    formattable.then(|| {
-                        widget(button(ui, "pkgedit-format"))
-                            .key("package-editor-format")
-                            .on_cx(send(|| Action::Format))
-                    }),
-                ))
-                .into_any()
+            widget(
+                Stack::row(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Sm)
+                    .wrap(true)
+                    .align(AlignSpec::Center),
+            )
+            .children((
+                widget(Text::new(path.clone()).style(Type::Small.mono()))
+                    .key("package-editor-path"),
+                (!editable && text).then(|| hint(ui.now_t("pkgedit-read-only"))),
+                formattable.then(|| {
+                    widget(button(ui, "pkgedit-format"))
+                        .key("package-editor-format")
+                        .on_cx(send(|| Action::Format))
+                }),
+            ))
+            .into_any()
         },
     );
-    let search = widget(Stack::row(space::SM).wrap(true).align(AlignSpec::Center)).children((
+    let search = widget(
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Sm)
+            .wrap(true)
+            .align(AlignSpec::Center),
+    )
+    .children((
         input_box(
             200.,
             widget(
@@ -763,7 +833,7 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
             .key("package-editor-search-next")
             .on(move |_: &Activate| current.update(|c| *c += 1)),
     ));
-    widget(Stack::column(space::XS))
+    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs))
         .children((path_line, search))
         .into_any()
 }
@@ -815,7 +885,7 @@ fn source(ui: Ui, (query, current): Search) -> AnyView {
                 l.width = Some(LengthSpec::Fill);
                 l.height = Some(LengthSpec::Px(0.));
                 l.flex_grow = Some(1.);
-                l.min_height = Some(LengthSpec::Px(160.));
+                l.min_height = Some(LengthSpec::Px(SOURCE_MIN_H));
                 crate::ui::mono(l);
             }
             if let Some((_, start, end)) = view.jump {
@@ -932,8 +1002,9 @@ fn file_info(ui: Ui, view: &EditorView) -> AnyView {
         ));
     }
     widget(
-        Stack::column(space::SM)
-            .padding_xy(space::MD, space::MD)
+        Stack::column(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Sm)
+            .padding_step(nana_ui_core::SpacingStep::Md, nana_ui_core::SpacingStep::Md)
             .surface(SemanticColorRole::Subtle)
             .radius(RadiusTier::Sm),
     )
@@ -980,7 +1051,8 @@ fn problems(ui: Ui) -> AnyView {
                     };
                     // A short location button; the message wraps beside it.
                     widget(
-                        Stack::row(space::SM)
+                        Stack::row(0.0)
+                            .gap_step(nana_ui_core::SpacingStep::Sm)
                             .align(AlignSpec::Start)
                             .width(LengthSpec::Fill),
                     )
@@ -1010,15 +1082,19 @@ fn problems(ui: Ui) -> AnyView {
             } else {
                 ui.now_t("pkgedit-problems")
             };
-            widget(Stack::column(space::XS).with_layout(|l| {
-                l.max_height = Some(LengthSpec::Px(180.));
-                l.flex_shrink = Some(0.);
-            }))
+            widget(
+                Stack::column(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Xs)
+                    .with_layout(|l| {
+                        l.max_height = Some(LengthSpec::Px(LIST_MAX_H));
+                        l.flex_shrink = Some(0.);
+                    }),
+            )
             .key("package-editor-problems")
             .children((
                 hint(title),
                 widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
-                    l.max_height = Some(LengthSpec::Px(150.));
+                    l.max_height = Some(LengthSpec::Px(PROBLEMS_MAX_H));
                 }))
                 .children(widget(Stack::column(0.)).children(rows)),
             ))
@@ -1059,7 +1135,8 @@ fn package(ui: Ui) -> AnyView {
 /// A control under its caption, up to `width` wide, never wider than the line.
 fn labelled(caption: String, width: f32, control: impl IntoView) -> AnyView {
     widget(
-        Stack::column(space::XXS)
+        Stack::column(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Xxs)
             .width(LengthSpec::Px(width))
             .shrink(1.)
             .with_layout(|l| l.max_width = Some(LengthSpec::Percent(100.))),
@@ -1136,38 +1213,52 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
                 dependencies: deps,
             })));
         });
-    widget(Stack::column(space::LG).padding_xy(0., space::SM))
-        .key("package-editor-metadata")
+    widget(
+        Stack::column(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Lg)
+            .padding_xy(0., space::SM),
+    )
+    .key("package-editor-metadata")
+    .children((
+        (!editable).then(|| hint(ui.now_t("pkgedit-manifest-protected"))),
+        widget(
+            Stack::row(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Md)
+                .wrap(true),
+        )
         .children((
-            (!editable).then(|| hint(ui.now_t("pkgedit-manifest-protected"))),
-            widget(Stack::row(space::MD).wrap(true)).children((
-                field(ui, "pkgedit-version", version, "1.0.0"),
-                field(ui, "package-author", author, ""),
-                field(ui, "package-created-at", created, "YYYY-MM-DD"),
-                field(ui, "package-licensed-to", licensed_to, ""),
-                field(ui, "package-license", license, "MIT"),
-            )),
-            hint(ui.now_t("pkgedit-capabilities")),
-            widget(Stack::row(space::LG).wrap(true)).children((
-                capability_box(PackageCapability::Skin, "packages-kind-skin"),
-                capability_box(PackageCapability::Resources, "packages-kind-resources"),
-                capability_box(PackageCapability::Lua, "packages-kind-function"),
-            )),
-            hint(ui.now_t("pkgedit-dependencies-hint")),
-            widget(
-                TextArea::new(dependencies.get_untracked())
-                    .placeholder("nanatype.halo@1.0.0")
-                    .height(72.),
-            )
-            .key("package-editor-dependencies")
-            .on(move |e: &TextChanged| dependencies.set(e.value.to_string())),
-            natural(apply),
-            label(ui.now_t("pkgedit-data")),
-            data_section(ui, view, editable),
-            label(ui.now_t("pkgedit-pipelines")),
-            pipeline_section(ui, view),
-        ))
-        .into_any()
+            field(ui, "pkgedit-version", version, "1.0.0"),
+            field(ui, "package-author", author, ""),
+            field(ui, "package-created-at", created, "YYYY-MM-DD"),
+            field(ui, "package-licensed-to", licensed_to, ""),
+            field(ui, "package-license", license, "MIT"),
+        )),
+        hint(ui.now_t("pkgedit-capabilities")),
+        widget(
+            Stack::row(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Lg)
+                .wrap(true),
+        )
+        .children((
+            capability_box(PackageCapability::Skin, "packages-kind-skin"),
+            capability_box(PackageCapability::Resources, "packages-kind-resources"),
+            capability_box(PackageCapability::Lua, "packages-kind-function"),
+        )),
+        hint(ui.now_t("pkgedit-dependencies-hint")),
+        widget(
+            TextArea::new(dependencies.get_untracked())
+                .placeholder("nanatype.halo@1.0.0")
+                .height(FORM_TEXT_H),
+        )
+        .key("package-editor-dependencies")
+        .on(move |e: &TextChanged| dependencies.set(e.value.to_string())),
+        natural(apply),
+        label(ui.now_t("pkgedit-data")),
+        data_section(ui, view, editable),
+        label(ui.now_t("pkgedit-pipelines")),
+        pipeline_section(ui, view),
+    ))
+    .into_any()
 }
 
 /// `None`: no form; `Some(None)`: a new entry; `Some(Some(name))`: editing it.
@@ -1176,8 +1267,9 @@ type Editing = Signal<Option<Option<String>>>;
 /// One declaration, with `buttons` when it can be edited here.
 fn entry_row(key: &str, summary: String, buttons: Option<AnyView>) -> AnyView {
     widget(
-        Stack::column(space::XS)
-            .padding_xy(space::MD, space::SM)
+        Stack::column(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Xs)
+            .padding_step(nana_ui_core::SpacingStep::Md, nana_ui_core::SpacingStep::Sm)
             .surface(SemanticColorRole::Subtle)
             .radius(RadiusTier::Sm),
     )
@@ -1195,25 +1287,30 @@ fn entry_buttons(
     remove: impl Fn() -> Action + Send + 'static,
 ) -> AnyView {
     let remove_key = format!("{key}:remove");
-    widget(Stack::row(space::SM).wrap(true).align(AlignSpec::Center))
-        .children((
-            widget(button(ui, "pkgedit-entry-edit"))
-                .key(format!("{key}:edit"))
-                .on(move |_: &Activate| editing.set(Some(Some(name.clone())))),
-            confirm(
-                ui,
-                ui.now_t("pkgedit-entry-remove-question"),
-                ui.now_t("pkgedit-entry-remove"),
-                move |armed| {
-                    widget(button(ui, "pkgedit-entry-remove"))
-                        .key(remove_key)
-                        .on(move |_: &Activate| armed.set(true))
-                        .into_any()
-                },
-                move || Msg::PackageEditor(remove()),
-            ),
-        ))
-        .into_any()
+    widget(
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Sm)
+            .wrap(true)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        widget(button(ui, "pkgedit-entry-edit"))
+            .key(format!("{key}:edit"))
+            .on(move |_: &Activate| editing.set(Some(Some(name.clone())))),
+        confirm(
+            ui,
+            ui.now_t("pkgedit-entry-remove-question"),
+            ui.now_t("pkgedit-entry-remove"),
+            move |armed| {
+                widget(button(ui, "pkgedit-entry-remove"))
+                    .key(remove_key)
+                    .on(move |_: &Activate| armed.set(true))
+                    .into_any()
+            },
+            move || Msg::PackageEditor(remove()),
+        ),
+    ))
+    .into_any()
 }
 
 fn form_buttons(
@@ -1222,22 +1319,27 @@ fn form_buttons(
     editing: Editing,
     apply: impl FnMut(&mut Button, &Activate, &mut ViewContext<'_, Button>) + Send + 'static,
 ) -> AnyView {
-    widget(Stack::row(space::SM).wrap(true))
-        .children((
-            widget(crate::ui::kit::cta(button(ui, "pkgedit-apply")))
-                .key(format!("{key}-apply"))
-                .on_cx(apply),
-            widget(button(ui, "common-cancel"))
-                .key(format!("{key}-cancel"))
-                .on(move |_: &Activate| editing.set(None)),
-        ))
-        .into_any()
+    widget(
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Sm)
+            .wrap(true),
+    )
+    .children((
+        widget(crate::ui::kit::cta(button(ui, "pkgedit-apply")))
+            .key(format!("{key}-apply"))
+            .on_cx(apply),
+        widget(button(ui, "common-cancel"))
+            .key(format!("{key}-cancel"))
+            .on(move |_: &Activate| editing.set(None)),
+    ))
+    .into_any()
 }
 
 fn form(key: &str, children: impl IntoView) -> AnyView {
     widget(
-        Stack::column(space::MD)
-            .padding_xy(space::MD, space::MD)
+        Stack::column(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Md)
+            .padding_step(nana_ui_core::SpacingStep::Md, nana_ui_core::SpacingStep::Md)
             .outline(SemanticColorRole::Border, 1.)
             .radius(RadiusTier::Sm),
     )
@@ -1313,11 +1415,11 @@ fn data_section(ui: Ui, view: &EditorView, editable: bool) -> AnyView {
             None => widget(Stack::column(0.)).into_any(),
         },
     );
-    widget(Stack::column(space::SM))
+    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm))
         .key("package-editor-data")
         .children((
             rows.is_empty().then(|| hint(ui.now_t("pkgedit-data-none"))),
-            widget(Stack::column(space::SM)).children(rows),
+            widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm)).children(rows),
             form,
             editable.then(|| {
                 natural(
@@ -1399,7 +1501,12 @@ fn data_form(
     form(
         "package-editor-data-form",
         (
-            widget(Stack::row(space::MD).wrap(true)).children((
+            widget(
+                Stack::row(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Md)
+                    .wrap(true),
+            )
+            .children((
                 field(ui, "pkgedit-data-id", id, "notes"),
                 field(ui, "pkgedit-data-path", path, "data/notes.txt"),
                 labelled(
@@ -1426,7 +1533,7 @@ fn data_form(
                 TextArea::new(constraints.get_untracked())
                     .placeholder("{\"type\": \"object\", \"required\": [\"items\"]}")
                     .label(ui.now_t("pkgedit-data-constraints"))
-                    .height(56.),
+                    .height(NOTE_H),
             )
             .key("package-editor-data-constraints")
             .on(move |e: &TextChanged| constraints.set(e.value.to_string())),
@@ -1539,12 +1646,12 @@ fn pipeline_section(ui: Ui, view: &EditorView) -> AnyView {
         Some(_) if !editable => Some("pkgedit-skin-protected"),
         Some(_) => None,
     };
-    widget(Stack::column(space::SM))
+    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm))
         .key("package-editor-pipelines")
         .children((
             note.map(|key| hint(ui.now_t(key))),
             (rows.is_empty() && skin.is_some()).then(|| hint(ui.now_t("pkgedit-pipelines-none"))),
-            widget(Stack::column(space::SM)).children(rows),
+            widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm)).children(rows),
             form,
             editable.then(|| {
                 natural(
@@ -1639,9 +1746,13 @@ fn pipeline_form(
                     )
                 })
                 .collect::<Vec<_>>();
-            widget(Stack::row(space::MD).wrap(true))
-                .children(fields)
-                .into_any()
+            widget(
+                Stack::row(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Md)
+                    .wrap(true),
+            )
+            .children(fields)
+            .into_any()
         },
     );
     let apply = move |_: &mut Button, _: &Activate, cx: &mut ViewContext<'_, Button>| {
@@ -1687,7 +1798,12 @@ fn pipeline_form(
     form(
         "package-editor-pipeline-form",
         (
-            widget(Stack::row(space::MD).wrap(true)).children((
+            widget(
+                Stack::row(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Md)
+                    .wrap(true),
+            )
+            .children((
                 field(ui, "pkgedit-pipeline-name", name, "stroke_map"),
                 labelled(
                     ui.now_t("pkgedit-pipeline-processor"),
@@ -1714,7 +1830,7 @@ fn pipeline_form(
                 TextArea::new(params.get_untracked())
                     .placeholder("name = 1.0")
                     .label(ui.now_t("pkgedit-pipeline-params"))
-                    .height(56.),
+                    .height(NOTE_H),
             )
             .key("package-editor-pipeline-params")
             .on(move |e: &TextChanged| params.set(e.value.to_string())),
@@ -1757,7 +1873,7 @@ fn signing(ui: Ui) -> AnyView {
                         .key("package-editor-key-load")
                         .on_cx(send(|| Action::LoadKey)),
                 ),
-                (None, true) => widget(Stack::row(space::MD).wrap(true).align(AlignSpec::Center))
+                (None, true) => widget(Stack::row(0.0).gap_step(nana_ui_core::SpacingStep::Md).wrap(true).align(AlignSpec::Center))
                     .children((
                         hint(ui.now_t("pkgedit-key-none")),
                         widget(button(ui, "pkgedit-key-create"))
@@ -1769,7 +1885,7 @@ fn signing(ui: Ui) -> AnyView {
             let signed = matches!(view.seal, Ok(Some(_)));
             let own = matches!((&view.seal, &view.key), (Ok(Some(seal)), Some(key)) if &seal.fingerprint == key);
             let derive_id = signal(format!("{}-copy", view.package.chars().take(56).collect::<String>()));
-            let derive = widget(Stack::row(space::MD).wrap(true).align(AlignSpec::Center)).children((
+            let derive = widget(Stack::row(0.0).gap_step(nana_ui_core::SpacingStep::Md).wrap(true).align(AlignSpec::Center)).children((
                 input_box(
                     220.,
                     widget(TextInput::new(derive_id.get_untracked()).size(ControlSize::Small))
@@ -1781,7 +1897,7 @@ fn signing(ui: Ui) -> AnyView {
                     .on_cx(send(move || Action::Derive(derive_id.get_untracked()))),
             ));
             let body: AnyView = if signed {
-                widget(Stack::column(space::MD))
+                widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Md))
                     .children((
                         hint(ui.now_t(if own { "pkgedit-signed-own" } else { "pkgedit-signed-other" })),
                         own.then(|| {
@@ -1818,10 +1934,10 @@ fn signing(ui: Ui) -> AnyView {
                     })
                     .collect::<Vec<_>>();
                 let can_sign = view.key.is_some();
-                widget(Stack::column(space::SM))
+                widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm))
                     .children((
                         hint(ui.now_t("pkgedit-protect")),
-                        widget(Stack::column(space::XS)).children(rows),
+                        widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs)).children(rows),
                         natural(
                             widget(crate::ui::kit::cta(button(ui, "pkgedit-sign")))
                                 .key("package-editor-sign")
@@ -1833,7 +1949,7 @@ fn signing(ui: Ui) -> AnyView {
                     ))
                     .into_any()
             };
-            widget(Stack::column(space::LG).padding_xy(0., space::SM))
+            widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Lg).padding_xy(0., space::SM))
                 .key("package-editor-signing")
                 .children((
                     widget(readable(status)).key("package-editor-seal"),
@@ -1887,25 +2003,29 @@ fn preview(ui: Ui) -> AnyView {
                 *surface,
                 width,
             );
-            widget(Stack::column(space::MD).width(LengthSpec::Fill))
-                .key("package-editor-preview")
-                .on(move |e: &nana_ui::runtime::SizeChanged| width.set(e.width))
-                .children((
-                    widget(SegmentedControl::new().size(ControlSize::Small))
-                        .key("package-editor-preview-surface")
-                        .children((
-                            choice(Surface::Display, "windows-display"),
-                            choice(Surface::History, "windows-history"),
-                            choice(Surface::Input, "windows-input"),
-                        )),
-                    hint(ui.now_t(if *surface == Surface::Input {
-                        "pkgedit-preview-input-note"
-                    } else {
-                        "pkgedit-preview-note"
-                    })),
-                    stage,
-                ))
-                .into_any()
+            widget(
+                Stack::column(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Md)
+                    .width(LengthSpec::Fill),
+            )
+            .key("package-editor-preview")
+            .on(move |e: &nana_ui::runtime::SizeChanged| width.set(e.width))
+            .children((
+                widget(SegmentedControl::new().size(ControlSize::Small))
+                    .key("package-editor-preview-surface")
+                    .children((
+                        choice(Surface::Display, "windows-display"),
+                        choice(Surface::History, "windows-history"),
+                        choice(Surface::Input, "windows-input"),
+                    )),
+                hint(ui.now_t(if *surface == Surface::Input {
+                    "pkgedit-preview-input-note"
+                } else {
+                    "pkgedit-preview-note"
+                })),
+                stage,
+            ))
+            .into_any()
         },
     )
     .into_any()
@@ -1959,101 +2079,117 @@ fn debug(ui: Ui) -> AnyView {
                 (None, true) => hint(ui.now_t("pkgedit-debug-waiting")),
                 (None, false) => hint(ui.now_t("pkgedit-debug-idle")),
             };
-            widget(Stack::column(space::LG).padding_xy(0., space::SM))
-                .key("package-editor-debug")
-                .children((
-                    widget(
-                        readable(ui.now_t("pkgedit-debug-risk")).color(SemanticColorRole::Warning),
-                    ),
-                    widget(Checkbox::new(
-                        ui.now_t("pkgedit-debug-trust"),
-                        debug.trusted,
-                    ))
-                    .key("package-editor-debug-trust")
-                    .on_cx(|_, e: &ToggleChanged, cx| {
-                        cx.dispatch_program_all(Msg::PackageEditor(Action::Trust(e.checked)))
-                    }),
-                    widget(Stack::row(space::SM).wrap(true)).children((
-                        widget(crate::ui::kit::cta(button(ui, "pkgedit-debug-start")))
-                            .key("package-editor-debug-start")
-                            .bind(move |b: &mut Button| b.disabled = !debug.trusted)
-                            .on_cx(send(|| Action::DebugStart)),
-                        widget(button(ui, "pkgedit-debug-stop"))
-                            .key("package-editor-debug-stop")
-                            .bind(move |b: &mut Button| b.disabled = !debug.running)
-                            .on_cx(send(|| Action::DebugStop)),
-                        widget(button(ui, "pkgedit-debug-clear"))
-                            .key("package-editor-debug-clear")
-                            .on_cx(send(|| Action::DebugClear)),
-                    )),
-                    hint(ui.now_t("pkgedit-debug-events")),
-                    widget(Stack::row(space::SM).wrap(true)).children(events),
-                    widget(Stack::row(space::SM).wrap(true).align(AlignSpec::Center)).children((
-                        input_box(
-                            320.,
-                            widget(TextInput::new(custom.get_untracked()).size(ControlSize::Small))
-                                .key("package-editor-debug-custom")
-                                .on(move |e: &TextChanged| custom.set(e.value.to_string())),
-                        ),
-                        widget(button(ui, "pkgedit-debug-send"))
-                            .key("package-editor-debug-send")
-                            .on_cx(move |_, _: &Activate, cx| {
-                                let msg = match serde_json::from_str::<serde_json::Value>(
-                                    &custom.get_untracked(),
-                                ) {
-                                    Ok(event)
-                                        if event.get("type").is_some_and(|t| t.is_string()) =>
-                                    {
-                                        Msg::PackageEditor(Action::DebugEvent(event))
-                                    }
-                                    _ => Msg::Notice {
-                                        text: ui.now_t("pkgedit-debug-invalid-json"),
-                                        error: true,
-                                    },
-                                };
-                                cx.dispatch_program_all(msg);
-                            }),
-                    )),
-                    debug.error.as_ref().map(|e| {
-                        let location = debug.location.clone();
-                        widget(Stack::column(space::XS))
-                            .key("package-editor-debug-error")
-                            .children((
-                                widget(
-                                    readable(format!("{}: {e}", ui.now_t("pkgedit-debug-error")))
-                                        .color(SemanticColorRole::Danger),
-                                ),
-                                location.map(|at| {
-                                    let label = format!(
-                                        "{} {}:{}",
-                                        ui.now_t("pkgedit-debug-locate"),
-                                        at.path,
-                                        at.line
-                                    );
-                                    widget(Button::new(label).size(ControlSize::Small))
-                                        .key("package-editor-debug-locate")
-                                        .on_cx(move |_, _: &Activate, cx| {
-                                            cx.dispatch_program_all(Msg::PackageEditor(
-                                                Action::Reveal(at.clone()),
-                                            ));
-                                            ui.package_editor_tab.set(Tab::Files);
-                                        })
-                                }),
-                            ))
-                    }),
-                    label(ui.now_t("pkgedit-debug-output")),
-                    widget(
-                        Stack::column(0.)
-                            .padding_xy(space::MD, space::MD)
-                            .surface(SemanticColorRole::Subtle)
-                            .radius(RadiusTier::Sm),
-                    )
-                    .key("package-editor-debug-output")
-                    .children(output),
-                    label(ui.now_t("pkgedit-debug-log")),
-                    widget(readable(debug.log.join("\n"))).key("package-editor-debug-log"),
+            widget(
+                Stack::column(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Lg)
+                    .padding_xy(0., space::SM),
+            )
+            .key("package-editor-debug")
+            .children((
+                widget(readable(ui.now_t("pkgedit-debug-risk")).color(SemanticColorRole::Warning)),
+                widget(Checkbox::new(
+                    ui.now_t("pkgedit-debug-trust"),
+                    debug.trusted,
                 ))
-                .into_any()
+                .key("package-editor-debug-trust")
+                .on_cx(|_, e: &ToggleChanged, cx| {
+                    cx.dispatch_program_all(Msg::PackageEditor(Action::Trust(e.checked)))
+                }),
+                widget(
+                    Stack::row(0.0)
+                        .gap_step(nana_ui_core::SpacingStep::Sm)
+                        .wrap(true),
+                )
+                .children((
+                    widget(crate::ui::kit::cta(button(ui, "pkgedit-debug-start")))
+                        .key("package-editor-debug-start")
+                        .bind(move |b: &mut Button| b.disabled = !debug.trusted)
+                        .on_cx(send(|| Action::DebugStart)),
+                    widget(button(ui, "pkgedit-debug-stop"))
+                        .key("package-editor-debug-stop")
+                        .bind(move |b: &mut Button| b.disabled = !debug.running)
+                        .on_cx(send(|| Action::DebugStop)),
+                    widget(button(ui, "pkgedit-debug-clear"))
+                        .key("package-editor-debug-clear")
+                        .on_cx(send(|| Action::DebugClear)),
+                )),
+                hint(ui.now_t("pkgedit-debug-events")),
+                widget(
+                    Stack::row(0.0)
+                        .gap_step(nana_ui_core::SpacingStep::Sm)
+                        .wrap(true),
+                )
+                .children(events),
+                widget(
+                    Stack::row(0.0)
+                        .gap_step(nana_ui_core::SpacingStep::Sm)
+                        .wrap(true)
+                        .align(AlignSpec::Center),
+                )
+                .children((
+                    input_box(
+                        320.,
+                        widget(TextInput::new(custom.get_untracked()).size(ControlSize::Small))
+                            .key("package-editor-debug-custom")
+                            .on(move |e: &TextChanged| custom.set(e.value.to_string())),
+                    ),
+                    widget(button(ui, "pkgedit-debug-send"))
+                        .key("package-editor-debug-send")
+                        .on_cx(move |_, _: &Activate, cx| {
+                            let msg = match serde_json::from_str::<serde_json::Value>(
+                                &custom.get_untracked(),
+                            ) {
+                                Ok(event) if event.get("type").is_some_and(|t| t.is_string()) => {
+                                    Msg::PackageEditor(Action::DebugEvent(event))
+                                }
+                                _ => Msg::Notice {
+                                    text: ui.now_t("pkgedit-debug-invalid-json"),
+                                    error: true,
+                                },
+                            };
+                            cx.dispatch_program_all(msg);
+                        }),
+                )),
+                debug.error.as_ref().map(|e| {
+                    let location = debug.location.clone();
+                    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs))
+                        .key("package-editor-debug-error")
+                        .children((
+                            widget(
+                                readable(format!("{}: {e}", ui.now_t("pkgedit-debug-error")))
+                                    .color(SemanticColorRole::Danger),
+                            ),
+                            location.map(|at| {
+                                let label = format!(
+                                    "{} {}:{}",
+                                    ui.now_t("pkgedit-debug-locate"),
+                                    at.path,
+                                    at.line
+                                );
+                                widget(Button::new(label).size(ControlSize::Small))
+                                    .key("package-editor-debug-locate")
+                                    .on_cx(move |_, _: &Activate, cx| {
+                                        cx.dispatch_program_all(Msg::PackageEditor(
+                                            Action::Reveal(at.clone()),
+                                        ));
+                                        ui.package_editor_tab.set(Tab::Files);
+                                    })
+                            }),
+                        ))
+                }),
+                label(ui.now_t("pkgedit-debug-output")),
+                widget(
+                    Stack::column(0.)
+                        .padding_step(nana_ui_core::SpacingStep::Md, nana_ui_core::SpacingStep::Md)
+                        .surface(SemanticColorRole::Subtle)
+                        .radius(RadiusTier::Sm),
+                )
+                .key("package-editor-debug-output")
+                .children(output),
+                label(ui.now_t("pkgedit-debug-log")),
+                widget(readable(debug.log.join("\n"))).key("package-editor-debug-log"),
+            ))
+            .into_any()
         },
     )
     .into_any()

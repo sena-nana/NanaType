@@ -5,33 +5,38 @@ const STEP_DOT: f32 = 22.0;
 
 /// A numbered step: a numbered accent circle, then what to do.
 pub(super) fn step(n: u8, body: impl IntoView) -> AnyView {
-    widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
-        .children((
-            widget(
-                Stack::row(0.0)
-                    .width(LengthSpec::Px(STEP_DOT))
-                    .height(LengthSpec::Px(STEP_DOT))
-                    .align(AlignSpec::Center)
-                    .justify(JustifySpec::Center)
-                    .radius(RadiusTier::Full)
-                    .surface_mix(SemanticColorMix::alpha(SemanticColorRole::Accent, 0.12))
-                    .with_layout(|l| l.flex_shrink = Some(0.0)),
-            )
-            .children(widget(
-                Text::new(n.to_string())
-                    .style(Type::Overline.style())
-                    .color(SemanticColorRole::AccentOnSoft),
-            )),
-            widget(
-                Stack::row(gap::CONTROL)
-                    .align(AlignSpec::Center)
-                    .wrap(true)
-                    .grow(1.0)
-                    .shrink(1.0),
-            )
-            .children(body),
-        ))
-        .into_any()
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        widget(
+            Stack::row(0.0)
+                .width(LengthSpec::Px(STEP_DOT))
+                .height(LengthSpec::Px(STEP_DOT))
+                .align(AlignSpec::Center)
+                .justify(JustifySpec::Center)
+                .radius(RadiusTier::Full)
+                .surface_mix(SemanticColorMix::alpha(SemanticColorRole::Accent, 0.12))
+                .with_layout(|l| l.flex_shrink = Some(0.0)),
+        )
+        .children(widget(
+            Text::new(n.to_string())
+                .style(Type::Overline.style())
+                .color(SemanticColorRole::AccentOnSoft),
+        )),
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
+                .align(AlignSpec::Center)
+                .wrap(true)
+                .grow(1.0)
+                .shrink(1.0),
+        )
+        .children(body),
+    ))
+    .into_any()
 }
 
 /// Getting the display into OBS: enable output before selecting its live sender
@@ -107,7 +112,12 @@ pub(super) fn obs_guide(ui: Ui) -> AnyView {
         vec![hint(ui.now_t("output-spout-unsupported"))]
     };
     let other_open = signal(!(cfg!(windows) || cfg!(target_os = "macos")));
-    let other = widget(Stack::column(gap::CONTROL).align(AlignSpec::Start)).children((
+    let other = widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::CONTROL)
+            .align(AlignSpec::Start),
+    )
+    .children((
         widget(
             Button::new(ui.now_t("output-obs-other"))
                 .kind(ButtonKind::Text)
@@ -135,13 +145,17 @@ pub(super) fn obs_guide(ui: Ui) -> AnyView {
             "output-obs-window"
         }))),
     ));
-    widget(Stack::column(space::LG).padding_xy(inset::CARD, inset::ROW_Y))
-        .children((
-            steps,
-            other,
-            widget(Stack::row(0.0)).children(primary(ui, "output-sample", || Msg::PlaySample)),
-        ))
-        .into_any()
+    widget(
+        Stack::column(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Lg)
+            .padding_step(inset::step::CARD, inset::step::ROW_Y),
+    )
+    .children((
+        steps,
+        other,
+        widget(Stack::row(0.0)).children(primary(ui, "output-sample", || Msg::PlaySample)),
+    ))
+    .into_any()
 }
 
 pub(super) fn output(ui: Ui) -> AnyView {
@@ -173,16 +187,20 @@ pub(super) fn output(ui: Ui) -> AnyView {
                         "output-spout"
                     },
                     (kind == WindowKind::PeerDisplay).then_some("output-peer-hint"),
-                    widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
-                        .children((
-                            link_badge(ui, link),
-                            switch(
-                                ui,
-                                move |s| read(s).enabled,
-                                move |s, v| write(s).enabled = v,
-                            ),
-                        ))
-                        .into_any(),
+                    widget(
+                        Stack::row(0.0)
+                            .gap_step(gap::step::CONTROL)
+                            .align(AlignSpec::Center),
+                    )
+                    .children((
+                        link_badge(ui, link),
+                        switch(
+                            ui,
+                            move |s| read(s).enabled,
+                            move |s, v| write(s).enabled = v,
+                        ),
+                    ))
+                    .into_any(),
                 ),
                 when_on(
                     ui,
@@ -192,7 +210,7 @@ pub(super) fn output(ui: Ui) -> AnyView {
                             ui,
                             "output-spout-name",
                             None,
-                            widget(Stack::row(gap::TIGHT))
+                            widget(Stack::row(0.0).gap_step(gap::step::TIGHT))
                                 .children((
                                     text(
                                         ui,
@@ -261,7 +279,7 @@ pub(super) fn output(ui: Ui) -> AnyView {
             ],
         )
     };
-    widget(Stack::column(gap::SECTION))
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
             section(ui, "output-obs-title", vec![obs_guide(ui)]),
             spout(WindowKind::Display, "output-display"),

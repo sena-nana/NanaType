@@ -9,7 +9,7 @@ use nana_ui::StatusTone;
 use nana_ui::runtime::view::{AnyView, IntoView, widget};
 use nana_ui::runtime::{NodeStyle, Text};
 use nana_ui::theme::{space, type_scale};
-use nana_ui_core::{LengthSpec, SemanticColorRole};
+use nana_ui_core::{LengthSpec, SemanticColorRole, TextWeight, TypeRole};
 
 /// A text role: size, weight and (for the quiet roles) colour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,6 +61,24 @@ impl Type {
         }
     }
 
+    /// The theme's type and weight steps this role names, so a theme that
+    /// moves its type scale moves every text in this role.
+    pub const fn steps(self) -> (TypeRole, TextWeight) {
+        match self {
+            Self::Brand => (TypeRole::Heading, TextWeight::Bold),
+            Self::PageTitle => (TypeRole::Title, TextWeight::Semibold),
+            Self::Title => (TypeRole::Heading, TextWeight::Semibold),
+            Self::Strong => (TypeRole::Body, TextWeight::Semibold),
+            Self::Label => (TypeRole::Body, TextWeight::Medium),
+            Self::Body | Self::Lead => (TypeRole::Body, TextWeight::Regular),
+            Self::Overline => (TypeRole::Meta, TextWeight::Semibold),
+            Self::Small => (TypeRole::Meta, TextWeight::Medium),
+            Self::Caption => (TypeRole::Meta, TextWeight::Regular),
+            Self::Micro => (TypeRole::Hint, TextWeight::Medium),
+            Self::Chat => (TypeRole::Section, TextWeight::Regular),
+        }
+    }
+
     /// The colour the role is drawn in, when it is not the text colour.
     pub const fn role(self) -> Option<SemanticColorRole> {
         match self {
@@ -69,9 +87,12 @@ impl Type {
         }
     }
 
-    /// The role's size and weight (not its colour).
+    /// The role's size and weight (not its colour), named as theme steps:
+    /// the installed theme resolves them (the default scale's values are
+    /// written too, for whatever reads the style before a theme does).
     pub fn style(self) -> NodeStyle {
-        let mut st = NodeStyle::default();
+        let (role, weight) = self.steps();
+        let mut st = NodeStyle::default().type_role(role).type_weight(weight);
         let l = Arc::make_mut(&mut st.layout);
         l.font_size = Some(self.size());
         l.font_weight = Some(self.weight());
@@ -129,6 +150,18 @@ pub mod gap {
     pub const SECTION: f32 = space::XXXL;
     /// Between a page's major regions.
     pub const PAGE: f32 = space::PAGE;
+
+    /// The same gaps as theme steps, for `Stack::gap_step`: they follow the
+    /// installed theme's spacing scale.
+    pub mod step {
+        use nana_ui_core::SpacingStep;
+        pub const HAIR: SpacingStep = SpacingStep::Xxs;
+        pub const TIGHT: SpacingStep = SpacingStep::Xs;
+        pub const CONTROL: SpacingStep = SpacingStep::Md;
+        pub const GROUP: SpacingStep = SpacingStep::Xl;
+        pub const SECTION: SpacingStep = SpacingStep::Xxxl;
+        pub const PAGE: SpacingStep = SpacingStep::Page;
+    }
 }
 
 /// Insets (padding) of the app's containers.
@@ -150,6 +183,19 @@ pub mod inset {
     pub const CHIP_X: f32 = space::MD;
     /// A chip's vertical padding.
     pub const CHIP_Y: f32 = space::XXS;
+
+    /// The same insets as theme steps, for `Stack::padding_step`.
+    pub mod step {
+        use nana_ui_core::SpacingStep;
+        pub const CARD: SpacingStep = SpacingStep::Xxxl;
+        pub const ROW_Y: SpacingStep = SpacingStep::Xl;
+        pub const BAR_X: SpacingStep = SpacingStep::Xl;
+        pub const BAR_Y: SpacingStep = SpacingStep::Md;
+        pub const PANEL: SpacingStep = SpacingStep::Xl;
+        pub const PAGE: SpacingStep = SpacingStep::Page;
+        pub const CHIP_X: SpacingStep = SpacingStep::Md;
+        pub const CHIP_Y: SpacingStep = SpacingStep::Xxs;
+    }
 }
 
 /// Widths of fields and other fixed-width controls.
@@ -160,6 +206,8 @@ pub mod field {
     pub const SM: f32 = 160.0;
     /// A select, a slider, a name.
     pub const MD: f32 = 240.0;
+    /// A token, a long value.
+    pub const LG: f32 = 320.0;
 }
 
 /// Icon sizes.
@@ -180,6 +228,16 @@ pub const PAGE_MAX_W: f32 = 720.0;
 pub const PAGE_HEADER_H: f32 = 64.0;
 /// A small status dot.
 pub const DOT: f32 = 8.0;
+/// A 1px rule between regions (under a bar, beside a sidebar).
+pub const HAIRLINE: f32 = 1.0;
+/// A popover's width (an account card, a form under a footer button).
+pub const POPOVER_W: f32 = 320.0;
+/// A toast's width and the most its stack grows to.
+pub const TOAST_W: f32 = 320.0;
+pub const TOAST_MAX_H: f32 = 240.0;
+/// The chat window's header: one row, or two when the window is narrow.
+pub const CHAT_HEADER_H: f32 = 44.0;
+pub const CHAT_HEADER_NARROW_H: f32 = 80.0;
 
 /// What a mark says about its subject: drawn as a colour role everywhere
 /// (dots, badges, tags, callouts), so "connected" is the same green in the

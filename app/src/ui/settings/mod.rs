@@ -250,20 +250,23 @@ fn sidebar(ui: Ui) -> AnyView {
     )
     .children((
         widget(
-            Stack::fill_column(gap::TIGHT)
-                .padding_xy(inset::BAR_X, inset::BAR_Y)
+            Stack::fill_column(0.0)
+                .gap_step(gap::step::TIGHT)
+                .padding_step(inset::step::BAR_X, inset::step::BAR_Y)
                 .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
         )
         .children((
             widget(
-                Stack::row(gap::CONTROL)
+                Stack::row(0.0)
+                    .gap_step(gap::step::CONTROL)
                     .height(LengthSpec::Px(PAGE_HEADER_H - inset::BAR_Y))
                     .padding_xy(inset::CHIP_X, 0.0)
                     .align(nana_ui_core::AlignSpec::Center)
                     .with_layout(|l| l.flex_shrink = Some(0.0)),
             )
             .children((logo(icon::LG + gap::TIGHT), Type::Brand.view("NanaType"))),
-            widget(scroll_view()).children(widget(Stack::column(gap::HAIR)).children(items)),
+            widget(scroll_view())
+                .children(widget(Stack::column(0.0).gap_step(gap::step::HAIR)).children(items)),
             // Keep About reachable while the navigation above scrolls on short screens.
             widget(Stack::column(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
                 .children(nav_row(ui, Page::About)),
@@ -271,7 +274,7 @@ fn sidebar(ui: Ui) -> AnyView {
         // The hairline between the sidebar and the page.
         widget(
             Stack::column(0.0)
-                .width(LengthSpec::Px(1.0))
+                .width(LengthSpec::Px(crate::ui::kit::HAIRLINE))
                 .surface(SemanticColorRole::BorderSoft)
                 .with_layout(|l| {
                     l.height = Some(LengthSpec::Fill);
@@ -288,9 +291,10 @@ fn page_header(ui: Ui, page: Page) -> AnyView {
     widget(Stack::column(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
         .children((
             widget(
-                Stack::row(gap::GROUP)
+                Stack::row(0.0)
+                    .gap_step(gap::step::GROUP)
                     .width(LengthSpec::Fill)
-                    .padding_xy(inset::PAGE, inset::CARD)
+                    .padding_step(inset::step::PAGE, inset::step::CARD)
                     .align(nana_ui_core::AlignSpec::Center)
                     .with_layout(|l| l.min_height = Some(LengthSpec::Px(PAGE_HEADER_H))),
             )
@@ -348,7 +352,7 @@ pub fn settings_window(ui: Ui) -> impl IntoView {
                                     Stack::column(0.0)
                                         .width(LengthSpec::Fill)
                                         .align(nana_ui_core::AlignSpec::Center)
-                                        .padding_xy(inset::PAGE, inset::PAGE),
+                                        .padding_step(inset::step::PAGE, inset::step::PAGE),
                                 )
                                 .children(
                                     widget(

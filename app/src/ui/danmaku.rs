@@ -34,6 +34,9 @@ use crate::skin_theme::rgba8;
 use crate::ui::kit::theme::palette;
 use crate::ui::kit::{Tone, Type, gap, inset};
 
+/// A message's meta line (name, badges, time): one small control high.
+const META_LINE_H: f32 = 22.0;
+
 /// Disjoint identities keep live chat and local lines from colliding in this feed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(super) enum RowSource {
@@ -228,7 +231,7 @@ fn row_view(ui: Ui, source: RowSource, width: f32) -> AnyView {
         Stack::column(0.0)
             .hittable()
             .width(LengthSpec::Fill)
-            .padding_xy(space::SM, gap::TIGHT)
+            .padding_step(nana_ui_core::SpacingStep::Sm, gap::step::TIGHT)
             .radius(nana_ui_core::RadiusTier::Sm)
             .with_layout(|l| {
                 l.border_width = Some(1.0);
@@ -303,16 +306,16 @@ fn row_actions(
                 "chat-at-action"
             }))
             .icon(if reply { ti::ARROW_BACK_UP } else { ti::AT })
-            .icon_size(12.0)
-            .icon_gap(3.0);
+            .icon_size(crate::ui::kit::icon::SM)
+            .icon_gap(gap::HAIR);
         let layout = Arc::make_mut(&mut b.style.layout);
         layout.width = Some(LengthSpec::Px(action_widths(ui)[usize::from(!reply)]));
         layout.height = Some(LengthSpec::Px(height));
         layout.min_height = Some(LengthSpec::Px(height));
         layout.font_size = Some(Type::Micro.size());
         layout.line_height = Some(nana_ui_core::LineHeightSpec::Absolute(14.0));
-        layout.padding_left = Some(LengthSpec::Px(6.0));
-        layout.padding_right = Some(LengthSpec::Px(6.0));
+        layout.padding_left = Some(LengthSpec::Px(nana_ui::theme::space::SM));
+        layout.padding_right = Some(LengthSpec::Px(nana_ui::theme::space::SM));
         layout.flex_shrink = Some(0.0);
         let layout = b.style.layout.clone();
         b = b.layout(layout);
@@ -356,7 +359,8 @@ fn row_actions(
             })
     };
     widget(
-        Stack::row(gap::TIGHT)
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
             .width(LengthSpec::Px(width))
             .height(LengthSpec::Px(height))
             .with_layout(|l| l.flex_shrink = Some(0.0)),
@@ -393,10 +397,11 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
     });
     Arc::make_mut(&mut name_style.layout).max_width = Some(LengthSpec::Px(name_w));
     let header = widget(
-        Stack::row(gap::TIGHT)
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
             .align(AlignSpec::Center)
             .width(LengthSpec::Fill)
-            .with_layout(|l| l.min_height = Some(LengthSpec::Px(22.0))),
+            .with_layout(|l| l.min_height = Some(LengthSpec::Px(META_LINE_H))),
     )
     .children((
         widget(
@@ -525,7 +530,8 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
         }
     });
     widget(
-        Stack::row(space::MD)
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Md)
             .align(AlignSpec::Start)
             .width(LengthSpec::Fill),
     )
@@ -538,7 +544,8 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
             colors.accent.as_rgba_array(),
         ),
         widget(
-            Stack::column(gap::HAIR)
+            Stack::column(0.0)
+                .gap_step(gap::step::HAIR)
                 .width(LengthSpec::Px(col_w))
                 .with_layout(|l| l.flex_shrink = Some(0.0)),
         )
@@ -679,7 +686,8 @@ fn header_layout(ui: Ui, narrow: bool) -> AnyView {
         }
     });
     let status = widget(
-        Stack::row(gap::TIGHT)
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
             .align(AlignSpec::Center)
             .with_layout(|l| {
                 l.flex_grow = Some(1.0);
@@ -733,31 +741,38 @@ fn header_layout(ui: Ui, narrow: bool) -> AnyView {
     ];
     let bar = if narrow {
         let utilities = controls.split_off(4);
-        widget(Stack::column(gap::TIGHT).width(LengthSpec::Fill))
+        widget(
+            Stack::column(0.0)
+                .gap_step(gap::step::TIGHT)
+                .width(LengthSpec::Fill),
+        )
+        .children((
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .align(AlignSpec::Center)
+                    .width(LengthSpec::Fill),
+            )
+            .children((status.into_any(), utilities))
+            .into_any(),
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .align(AlignSpec::Center)
+                    .width(LengthSpec::Fill),
+            )
             .children((
-                widget(
-                    Stack::row(gap::TIGHT)
-                        .align(AlignSpec::Center)
-                        .width(LengthSpec::Fill),
-                )
-                .children((status.into_any(), utilities))
-                .into_any(),
-                widget(
-                    Stack::row(gap::TIGHT)
-                        .align(AlignSpec::Center)
-                        .width(LengthSpec::Fill),
-                )
-                .children((
-                    super::settings::chat_panel_style(ui),
-                    widget(Stack::spacer()),
-                    widget(Stack::row(0.0)).children(controls),
-                ))
-                .into_any(),
+                super::settings::chat_panel_style(ui),
+                widget(Stack::spacer()),
+                widget(Stack::row(0.0)).children(controls),
             ))
-            .into_any()
+            .into_any(),
+        ))
+        .into_any()
     } else {
         widget(
-            Stack::row(gap::TIGHT)
+            Stack::row(0.0)
+                .gap_step(gap::step::TIGHT)
                 .align(AlignSpec::Center)
                 .width(LengthSpec::Fill),
         )
@@ -770,8 +785,12 @@ fn header_layout(ui: Ui, narrow: bool) -> AnyView {
     };
     widget(
         Stack::column(0.0)
-            .height(LengthSpec::Px(if narrow { 76.0 } else { 42.0 }))
-            .padding_xy(inset::BAR_X, gap::TIGHT)
+            .height(LengthSpec::Px(if narrow {
+                crate::ui::kit::CHAT_HEADER_NARROW_H
+            } else {
+                crate::ui::kit::CHAT_HEADER_H
+            }))
+            .padding_step(inset::step::BAR_X, gap::step::TIGHT)
             .with_layout(|l| l.flex_shrink = Some(0.0)),
     )
     .children(bar)
@@ -782,7 +801,7 @@ fn header_layout(ui: Ui, narrow: bool) -> AnyView {
 fn empty(ui: Ui) -> AnyView {
     widget(
         Stack::column(0.0)
-            .padding(inset::PAGE)
+            .padding_step(inset::step::PAGE, inset::step::PAGE)
             .align(AlignSpec::Center)
             .justify(JustifySpec::Center)
             .width(LengthSpec::Fill)
@@ -858,8 +877,9 @@ pub fn chat_window(ui: Ui) -> impl IntoView {
         move |(width, _, _, _)| {
             let width = *width as f32;
             widget(
-                Stack::column(gap::HAIR)
-                    .padding_xy(space::SM, gap::TIGHT)
+                Stack::column(0.0)
+                    .gap_step(gap::step::HAIR)
+                    .padding_step(nana_ui_core::SpacingStep::Sm, gap::step::TIGHT)
                     .width(LengthSpec::Fill),
             )
             .children(
