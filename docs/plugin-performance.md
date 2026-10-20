@@ -91,7 +91,7 @@ cargo test -p nanatype --test plugin_consent production_workers_require_approval
 
 AppContainer／LPAC 是进一步收窄 Windows 权限的候选方案，需要包 SID、访问控制、进程创建属性及继承句柄一起验证；不能由当前作业对象替代。此轮保持现有启动与 IPC 结构，尚未实现该隔离层。设计依据见 [Microsoft 的 AppContainer 启动说明](https://learn.microsoft.com/en-us/windows/win32/secauthz/implementing-an-appcontainer)。
 
-2026-10-20 核对 GitHub 告警：`rustls` 与 `sharp` 的历史告警已修复，仍开放的 [GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g) 涉及 `glib 0.18.5`。它经 Linux 的 `libappindicator`／GTK／托盘依赖引入，Windows 与 macOS 目标依赖树均不包含该包；Linux 依赖升级仍待处理，未将告警当作已修复。
+2026-10-20 核对 GitHub 告警：`rustls` 与 `sharp` 的历史告警已修复。[GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g)（`glib` < 0.20）只经 Linux 托盘的 `libappindicator`／GTK 3 依赖引入。托盘升级到 `tray-icon` 0.26 并改用纯 Rust 的 `ksni`（D-Bus StatusNotifierItem）后端，`Cargo.lock` 不再包含 `glib`、`gtk` 及其系统库绑定；应用的托盘代码不用修改；新版本在 Windows 与 macOS 上的托盘行为尚未实机复查。按 `tray-icon` 的说明，旧后端要求应用初始化 GTK 并运行其事件循环，而应用从未这样做。Linux 没有交叉 C 工具链，只用独立工程按应用同样的托盘调用对 `x86_64-unknown-linux-gnu` 做了编译检查，未在 Linux 实机运行。
 
 ## 诊断
 
@@ -199,5 +199,5 @@ NANATYPE_GPU_CASES=plugin_heavy cargo run -p nanatype --release --example gpu_pe
 
 - Windows `dist` 静态 CRT 发行构建、安装／卸载和原生多窗口 DPI／IME／系统文件选择器。已校验的便携包采用 `release`，仍依赖 VC++ 运行库；八项布局、文件、身份、自检与篡改检查通过，不代表安装器通过。首次重型 debug 进程测量在并发冷编译时曾超过 200ms，停止本项目编译后的原用例通过，未延长期限或降低负载。
 - 正式签名按用户要求跳过；Inno Setup 下载并静默安装被自动审批以 `blocked by policy` 拒绝，安装器没有构建。macOS 本轮没有可用实机，历史记录不等于当前发布验收。
-- AppContainer／LPAC 文件和网络隔离，macOS 正式签名与 App Sandbox 授权；Linux `glib` 告警的依赖升级。
+- AppContainer／LPAC 文件和网络隔离，macOS 正式签名与 App Sandbox 授权；Linux 托盘的实机运行。
 - 重型画布的宿主 CPU 开销：macOS 上变化帧录制与提交已从约 13ms 降到约 1.2–1.6ms（见上节），Windows 尚未用同一负载复测。

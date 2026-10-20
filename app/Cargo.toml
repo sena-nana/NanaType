@@ -53,7 +53,7 @@ tiny-skia = "0.12"
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
 crossbeam-channel = "0.5"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
-tray-icon = "0.21"
+tray-icon = { version = "0.26", default-features = false, features = ["ksni"] }
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
 blake3 = "1"
 gif = "0.14"
