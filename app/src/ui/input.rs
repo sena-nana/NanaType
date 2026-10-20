@@ -46,6 +46,11 @@ const PICTURE_SWATCH: f32 = 52.0;
 const CHIP_STRIPE: f32 = 3.0;
 /// How far inside the draft's box its focus ring sits.
 const FOCUS_INSET: f32 = 2.0;
+/// The cheat sheet's lead column: a marker chip, or a chord of keycaps.
+const SHEET_MARKERS_W: f32 = 116.0;
+const SHEET_KEYS_W: f32 = 136.0;
+/// The quoted viewer's avatar on the reply bar.
+const REPLY_AVATAR: f32 = 18.0;
 
 mod stickers;
 mod workspace;
@@ -902,7 +907,11 @@ pub fn cheat_sheet(ui: Ui) -> AnyView {
     ]
     .into_iter()
     .map(|(kind, icon, markup, key)| {
-        sheet_row(marker_chip(&look, kind, icon, markup), 116.0, t(key))
+        sheet_row(
+            marker_chip(&look, kind, icon, markup),
+            SHEET_MARKERS_W,
+            t(key),
+        )
     })
     .collect();
     let (send, newline) = match ui.settings.with_untracked(|s| s.general.send_key) {
@@ -926,21 +935,33 @@ pub fn cheat_sheet(ui: Ui) -> AnyView {
     ))
     .into_any();
     let keys: Vec<AnyView> = vec![
-        sheet_row(super::kit::keycap::chord(send), 136.0, t("tb-send")),
+        sheet_row(super::kit::keycap::chord(send), SHEET_KEYS_W, t("tb-send")),
         sheet_row(
             super::kit::keycap::chord(newline),
-            136.0,
+            SHEET_KEYS_W,
             t("cheat-newline"),
         ),
-        sheet_row(super::kit::keycap::chord("Ctrl+B"), 136.0, t("tb-bold")),
-        sheet_row(super::kit::keycap::chord("Ctrl+I"), 136.0, t("tb-italic")),
+        sheet_row(
+            super::kit::keycap::chord("Ctrl+B"),
+            SHEET_KEYS_W,
+            t("tb-bold"),
+        ),
+        sheet_row(
+            super::kit::keycap::chord("Ctrl+I"),
+            SHEET_KEYS_W,
+            t("tb-italic"),
+        ),
         sheet_row(
             super::kit::keycap::chord("Ctrl+U"),
-            136.0,
+            SHEET_KEYS_W,
             t("tb-underline"),
         ),
-        sheet_row(recall, 136.0, t("cheat-recall")),
-        sheet_row(super::kit::keycap::chord("Esc"), 136.0, t("cheat-hide")),
+        sheet_row(recall, SHEET_KEYS_W, t("cheat-recall")),
+        sheet_row(
+            super::kit::keycap::chord("Esc"),
+            SHEET_KEYS_W,
+            t("cheat-hide"),
+        ),
     ];
     let column = |title: String, rows: Vec<AnyView>| {
         widget(
@@ -1167,28 +1188,28 @@ fn toolbar(ui: Ui) -> AnyView {
             popover(
                 ti::PALETTE,
                 t("tb-color"),
-                220.0,
+                crate::ui::kit::popover::MD,
                 color_open,
                 color_panel(ui, color_open),
             ),
             popover(
                 ti::TEXT_SIZE,
                 t("tb-size"),
-                240.0,
+                crate::ui::kit::popover::MD,
                 size_open,
                 size_panel(ui, size_open),
             ),
             popover(
                 ti::TYPOGRAPHY,
                 t("tb-font"),
-                260.0,
+                crate::ui::kit::popover::LG,
                 font_open,
                 font_panel(ui, font_open),
             ),
             popover(
                 ti::ALIGN_CENTER,
                 t("tb-align"),
-                200.0,
+                crate::ui::kit::popover::SM,
                 align_open,
                 alignment_panel(ui, align_open),
             ),
@@ -1196,35 +1217,35 @@ fn toolbar(ui: Ui) -> AnyView {
         let stroke = popover(
             ti::BORDER_OUTER,
             t("tb-stroke"),
-            250.0,
+            crate::ui::kit::popover::MD,
             stroke_open,
             stroke_panel(ui, stroke_open),
         );
         let ruby = popover(
             ti::LANGUAGE_HIRAGANA,
             t("tb-ruby"),
-            240.0,
+            crate::ui::kit::popover::MD,
             ruby_open,
             ruby_panel(ui, ruby_open),
         );
         let sticker = popover(
             ti::STICKER,
             t("tb-sticker"),
-            360.0,
+            crate::ui::kit::popover::XL,
             sticker_open,
             sticker_panel(ui, sticker_open),
         );
         let expression = popover(
             ti::MOOD_SMILE,
             t("tb-expression"),
-            260.0,
+            crate::ui::kit::popover::LG,
             expr_open,
             expression_panel(ui, expr_open),
         );
         let help = popover(
             ti::HELP,
             t("tb-cheatsheet"),
-            620.0,
+            crate::ui::kit::popover::SHEET,
             help_open,
             cheat_sheet(ui),
         );
@@ -1478,7 +1499,7 @@ fn reply_bar(ui: Ui) -> AnyView {
                     ui,
                     reply.user.avatar.as_ref().map(ToString::to_string),
                     &reply.user.name,
-                    18.0,
+                    REPLY_AVATAR,
                     crate::ui::kit::theme::palette(ui.chrome_dark.get())
                         .accent
                         .as_rgba_array(),

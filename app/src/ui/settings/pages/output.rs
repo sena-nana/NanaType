@@ -215,7 +215,7 @@ pub(super) fn output(ui: Ui) -> AnyView {
                                     text(
                                         ui,
                                         String::new(),
-                                        220.0,
+                                        field::MD,
                                         move |s| read(s).name.clone(),
                                         move |s, v| write(s).name = v,
                                     ),

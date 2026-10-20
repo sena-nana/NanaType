@@ -36,6 +36,13 @@ use crate::ui::kit::{Tone, Type, gap, inset};
 
 /// A message's meta line (name, badges, time): one small control high.
 const META_LINE_H: f32 = 22.0;
+/// A row's reply and mention buttons, by panel style.
+const COMPACT_ACTION_H: f32 = 22.0;
+const HISTORY_ACTION_H: f32 = 26.0;
+/// A message's avatar.
+const AVATAR: f32 = 24.0;
+/// What the virtual list assumes a row measures before it does.
+const ROW_ESTIMATE_H: f32 = 56.0;
 
 /// Disjoint identities keep live chat and local lines from colliding in this feed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -250,9 +257,9 @@ fn row_view(ui: Ui, source: RowSource, width: f32) -> AnyView {
         let mut accent = palette(ui.chrome_dark.get()).accent.as_rgba_array();
         let border = if active { accent } else { [0.0; 4] };
         accent[3] = if selected {
-            0.12
+            crate::ui::kit::wash::SELECTED
         } else if active {
-            0.06
+            crate::ui::kit::wash::HOVER
         } else {
             0.0
         };
@@ -293,9 +300,9 @@ fn row_actions(
     focused: Signal<bool>,
 ) -> AnyView {
     let height = if style == ChatPanelStyle::Compact {
-        22.0
+        COMPACT_ACTION_H
     } else {
-        26.0
+        HISTORY_ACTION_H
     };
     let width = actions_width(ui);
     let button = move |reply: bool| {
@@ -540,7 +547,7 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
             ui,
             row.item.avatar.clone(),
             &row.item.author,
-            24.0,
+            AVATAR,
             colors.accent.as_rgba_array(),
         ),
         widget(
@@ -886,7 +893,7 @@ pub fn chat_window(ui: Ui) -> impl IntoView {
                 each_virtual(
                     items,
                     |k: &RowSource| *k,
-                    56.0,
+                    ROW_ESTIMATE_H,
                     move |k| row_view(ui, k, width),
                 )
                 .measured()

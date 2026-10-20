@@ -214,7 +214,7 @@ pub fn launcher(ui: Ui) -> AnyView {
                     }),
                 ),
                 input_box(
-                    220.,
+                    field::MD,
                     widget(
                         TextInput::new("")
                             .placeholder(ui.now_t("pkgedit-id-placeholder"))
@@ -430,7 +430,7 @@ fn close_prompt(ui: Ui) -> AnyView {
                     .radius(RadiusTier::Sm)
                     .surface_mix(nana_ui_core::SemanticColorMix::alpha(
                         SemanticColorRole::Warning,
-                        0.10,
+                        crate::ui::kit::wash::TINT,
                     )),
             )
             .key("package-editor-close-prompt")
@@ -797,7 +797,7 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
     )
     .children((
         input_box(
-            200.,
+            field::MD,
             widget(
                 TextInput::new("")
                     .placeholder(ui.now_t("pkgedit-search"))
@@ -1148,7 +1148,7 @@ fn labelled(caption: String, width: f32, control: impl IntoView) -> AnyView {
 fn field(ui: Ui, key: &str, value: Signal<String>, placeholder: &str) -> AnyView {
     labelled(
         ui.now_t(key),
-        260.,
+        field::MD,
         widget(
             TextInput::new(value.get_untracked())
                 .placeholder(placeholder.to_owned())
@@ -1511,7 +1511,7 @@ fn data_form(
                 field(ui, "pkgedit-data-path", path, "data/notes.txt"),
                 labelled(
                     ui.now_t("pkgedit-data-format"),
-                    120.,
+                    field::SM,
                     widget(
                         Select::new(Some(format.get_untracked().name()))
                             .options(formats)
@@ -1731,7 +1731,7 @@ fn pipeline_form(
                         inputs.with_untracked(|m| m.get(&input).cloned().unwrap_or_default());
                     labelled(
                         input.clone(),
-                        260.,
+                        field::MD,
                         widget(
                             TextInput::new(value)
                                 .placeholder("strokes")
@@ -1807,7 +1807,7 @@ fn pipeline_form(
                 field(ui, "pkgedit-pipeline-name", name, "stroke_map"),
                 labelled(
                     ui.now_t("pkgedit-pipeline-processor"),
-                    260.,
+                    field::MD,
                     widget(
                         Select::new(Some(selected))
                             .options(processors)
@@ -1887,7 +1887,7 @@ fn signing(ui: Ui) -> AnyView {
             let derive_id = signal(format!("{}-copy", view.package.chars().take(56).collect::<String>()));
             let derive = widget(Stack::row(0.0).gap_step(nana_ui_core::SpacingStep::Md).wrap(true).align(AlignSpec::Center)).children((
                 input_box(
-                    220.,
+                    field::MD,
                     widget(TextInput::new(derive_id.get_untracked()).size(ControlSize::Small))
                         .key("package-editor-derive-id")
                         .on(move |e: &TextChanged| derive_id.set(e.value.to_string())),
@@ -2128,7 +2128,7 @@ fn debug(ui: Ui) -> AnyView {
                 )
                 .children((
                     input_box(
-                        320.,
+                        field::LG,
                         widget(TextInput::new(custom.get_untracked()).size(ControlSize::Small))
                             .key("package-editor-debug-custom")
                             .on(move |e: &TextChanged| custom.set(e.value.to_string())),

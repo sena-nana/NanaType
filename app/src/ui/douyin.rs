@@ -95,7 +95,7 @@ pub fn settings_page(ui: Ui) -> AnyView {
                         text(
                             ui,
                             String::new(),
-                            240.0,
+                            crate::ui::kit::field::MD,
                             |s| s.integrations.douyin.room.clone(),
                             |s, v| {
                                 s.integrations.douyin.enabled = false;

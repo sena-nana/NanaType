@@ -254,7 +254,7 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                                 text(
                                     ui,
                                     "MouthOpen".into(),
-                                    180.0,
+                                    field::SM,
                                     |s| s.integrations.vts.mouth_param.clone(),
                                     |s, v| s.integrations.vts.mouth_param = v,
                                 ),
@@ -331,7 +331,7 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                                 code_text(
                                     ui,
                                     "127.0.0.1".into(),
-                                    180.0,
+                                    field::SM,
                                     |s| s.integrations.osc.host.clone(),
                                     |s, v| s.integrations.osc.host = v,
                                 ),
@@ -353,7 +353,7 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                                 code_text(
                                     ui,
                                     "/nanatype".into(),
-                                    180.0,
+                                    field::SM,
                                     |s| s.integrations.osc.prefix.clone(),
                                     |s, v| s.integrations.osc.prefix = v,
                                 ),

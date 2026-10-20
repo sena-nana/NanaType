@@ -146,7 +146,7 @@ fn server_section(ui: Ui) -> AnyView {
                 code_text(
                     ui,
                     "127.0.0.1".into(),
-                    180.0,
+                    crate::ui::kit::field::SM,
                     |s| s.integrations.blivechat.host.clone(),
                     |s, v| s.integrations.blivechat.host = v,
                 ),

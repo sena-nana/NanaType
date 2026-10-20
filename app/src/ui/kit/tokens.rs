@@ -228,10 +228,27 @@ pub const PAGE_MAX_W: f32 = 720.0;
 pub const PAGE_HEADER_H: f32 = 64.0;
 /// A small status dot.
 pub const DOT: f32 = 8.0;
+/// How strongly a tone or the accent washes a surface: a hovered row, a
+/// tinted note, a selected row.
+pub mod wash {
+    pub const HOVER: f32 = 0.06;
+    pub const TINT: f32 = 0.10;
+    pub const SELECTED: f32 = 0.12;
+}
 /// A 1px rule between regions (under a bar, beside a sidebar).
 pub const HAIRLINE: f32 = 1.0;
 /// A popover's width (an account card, a form under a footer button).
-pub const POPOVER_W: f32 = 320.0;
+pub const POPOVER_W: f32 = popover::LG;
+
+/// Popover widths: a few choices, a small panel, a form, a picker, a sheet.
+pub mod popover {
+    pub const SM: f32 = 200.0;
+    pub const MD: f32 = 240.0;
+    pub const LG: f32 = 320.0;
+    pub const XL: f32 = 360.0;
+    /// The cheat sheet: two columns of chips and keys side by side.
+    pub const SHEET: f32 = 620.0;
+}
 /// A toast's width and the most its stack grows to.
 pub const TOAST_W: f32 = 320.0;
 pub const TOAST_MAX_H: f32 = 240.0;

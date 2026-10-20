@@ -672,7 +672,7 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) 
                 popover(
                     ti::ADJUSTMENTS,
                     ui.now_t("tray-mode"),
-                    200.0,
+                    crate::ui::kit::popover::SM,
                     signal(false),
                     modes(ui, mode),
                 )
@@ -697,7 +697,7 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) 
                 popover(
                     ti::USERS,
                     ui.now_t("input-management"),
-                    320.0,
+                    crate::ui::kit::popover::LG,
                     signal(false),
                     widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
                         l.height = Some(LengthSpec::Px(MANAGEMENT_H));

@@ -18,6 +18,8 @@ use std::sync::Arc;
 
 /// The script source shown for review before it is trusted.
 const SOURCE_PREVIEW_H: f32 = 160.0;
+/// A package's lead mark on its card.
+const PACKAGE_TILE: f32 = 36.0;
 
 struct Canvas {
     draw: Vec<DrawCommand>,
@@ -313,7 +315,7 @@ fn package_card(
                 .children((
                     kit::icon_tile(
                         glyph,
-                        36.0,
+                        PACKAGE_TILE,
                         if enabled { Tone::Accent } else { Tone::Neutral },
                     ),
                     widget(crate::ui::kit::grow_column(gap::HAIR)).children((

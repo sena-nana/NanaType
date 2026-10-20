@@ -121,7 +121,18 @@ fn bypasses(line: &str) -> bool {
             }
         }
     }
-    FORBIDDEN.iter().any(|word| line.contains(word)) || rgba_literal(line)
+    FORBIDDEN.iter().any(|word| line.contains(word)) || rgba_literal(line) || lone_number(line)
+}
+
+/// A non-zero number standing alone as an argument (`    320.0,`): a size
+/// handed to a helper, which a named token should say instead.
+fn lone_number(line: &str) -> bool {
+    let arg = line.trim().trim_end_matches(',');
+    // `1.0` is "whole" (opaque, unscaled), not a size.
+    !matches!(arg, "1.0" | "1.")
+        && arg.contains('.')
+        && arg.chars().all(|c| c.is_ascii_digit() || c == '.')
+        && nonzero_literal(arg)
 }
 
 fn violations(code: &str) -> Vec<String> {
@@ -195,6 +206,7 @@ fn the_scan_catches_what_it_should() {
         "IconGlyph::new(ti::X).size(16.0)",
         "l.width = Some(LengthSpec::Px(220.0));",
         "Popover::new().width(320.0)",
+        "            320.0,",
         "color: [0.5, 0.55, 0.62, 0.28],",
         "Button::new(x).kind(ButtonKind::Primary)",
     ] {

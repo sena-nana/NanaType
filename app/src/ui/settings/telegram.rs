@@ -64,7 +64,7 @@ pub(super) fn panel(ui: Ui) -> AnyView {
                 text(
                     ui,
                     String::new(),
-                    280.0,
+                    field::LG,
                     |s| {
                         if s.assets.telegram.api_id > 0 {
                             s.assets.telegram.api_id.to_string()
@@ -82,7 +82,7 @@ pub(super) fn panel(ui: Ui) -> AnyView {
                 text(
                     ui,
                     "socks5://127.0.0.1:7890".into(),
-                    280.0,
+                    field::LG,
                     |s| s.assets.telegram.proxy.clone(),
                     |s, value| s.assets.telegram.proxy = value,
                 ),
