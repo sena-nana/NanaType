@@ -67,6 +67,12 @@ fn check(ok: i32) -> io::Result<()> {
     }
 }
 
+/// Prefix an error with the step that failed, so a bare OS code says where
+/// it came from.
+fn at(step: &'static str) -> impl FnOnce(io::Error) -> io::Error {
+    move |error| io::Error::new(error.kind(), format!("{step}: {error}"))
+}
+
 fn win32(error: u32) -> io::Result<()> {
     if error == ERROR_SUCCESS {
         Ok(())
@@ -283,11 +289,11 @@ pub(crate) fn spawn(
     args: &[&str],
     env: &[(&str, &str)],
 ) -> io::Result<(Contained, File, File, crate::os_sandbox::Job)> {
-    let sid = container_sid()?;
+    let sid = container_sid().map_err(at("AppContainer profile"))?;
     // Under Program Files the user cannot write the DACL and need not.
     let _ = grant_read_execute(executable, &sid);
-    let (stdin, worker_stdin) = pipe(false)?;
-    let (stdout, worker_stdout) = pipe(true)?;
+    let (stdin, worker_stdin) = pipe(false).map_err(at("stdin pipe"))?;
+    let (stdout, worker_stdout) = pipe(true).map_err(at("stdout pipe"))?;
     let inherited = [raw(&worker_stdin), raw(&worker_stdout)];
     let capabilities = SECURITY_CAPABILITIES {
         AppContainerSid: sid.0,
@@ -295,19 +301,23 @@ pub(crate) fn spawn(
         CapabilityCount: 0,
         Reserved: 0,
     };
-    let mut attributes = Attributes::new(2)?;
+    let mut attributes = Attributes::new(2).map_err(at("InitializeProcThreadAttributeList"))?;
     // SAFETY: both values outlive CreateProcessW below.
     unsafe {
-        attributes.set(
-            PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES as usize,
-            &capabilities,
-            size_of::<SECURITY_CAPABILITIES>(),
-        )?;
-        attributes.set(
-            PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
-            inherited.as_ptr(),
-            size_of_val(&inherited),
-        )?;
+        attributes
+            .set(
+                PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES as usize,
+                &capabilities,
+                size_of::<SECURITY_CAPABILITIES>(),
+            )
+            .map_err(at("security capabilities attribute"))?;
+        attributes
+            .set(
+                PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+                inherited.as_ptr(),
+                size_of_val(&inherited),
+            )
+            .map_err(at("handle list attribute"))?;
     }
     let startup = STARTUPINFOEXW {
         StartupInfo: STARTUPINFOW {
@@ -336,7 +346,7 @@ pub(crate) fn spawn(
     // SAFETY: the buffer's length is passed; the result is its used length.
     let used = unsafe { GetSystemDirectoryW(system.as_mut_ptr(), system.len() as u32) } as usize;
     if used == 0 || used >= system.len() {
-        return Err(io::Error::last_os_error());
+        return Err(at("GetSystemDirectoryW")(io::Error::last_os_error()));
     }
     system.truncate(used);
     system.push(0);
@@ -360,7 +370,8 @@ pub(crate) fn spawn(
             &startup.StartupInfo,
             &mut info,
         )
-    })?;
+    })
+    .map_err(at("CreateProcessW"))?;
     // SAFETY: CreateProcessW returned these handles to us.
     let thread = unsafe { OwnedHandle::from_raw_handle(info.hThread) };
     let mut process = Contained {
@@ -369,14 +380,16 @@ pub(crate) fn spawn(
     };
     // The worker owns its ends now.
     drop((worker_stdin, worker_stdout, attributes));
-    let started = crate::os_sandbox::confine_process(process.process).and_then(|job| {
-        // SAFETY: the primary thread of the process we just created.
-        if unsafe { ResumeThread(raw(&thread)) } == u32::MAX {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(job)
-        }
-    });
+    let started = crate::os_sandbox::confine_process(process.process)
+        .map_err(at("worker job"))
+        .and_then(|job| {
+            // SAFETY: the primary thread of the process we just created.
+            if unsafe { ResumeThread(raw(&thread)) } == u32::MAX {
+                Err(at("ResumeThread")(io::Error::last_os_error()))
+            } else {
+                Ok(job)
+            }
+        });
     match started {
         Ok(job) => Ok((process, stdin, stdout, job)),
         Err(error) => {
