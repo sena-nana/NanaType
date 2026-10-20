@@ -31,6 +31,53 @@ fn capture(source: &str, progress: f32, scale: f32) -> Vec<u8> {
     session.screenshot_rgba().unwrap().1
 }
 
+/// Every pixel of a 160×80 logical capture has `alpha`; otherwise report where not.
+fn assert_alpha(image: &[u8], scale: f32, alpha: u8, case: &str) {
+    let width = (160. * scale) as usize;
+    let wrong: Vec<_> = image
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p[3] != alpha)
+        .map(|(i, p)| (i % width, i / width, p[3]))
+        .collect();
+    if wrong.is_empty() {
+        return;
+    }
+    let span = |pick: fn(&(usize, usize, u8)) -> usize| {
+        let values = wrong.iter().map(pick);
+        (values.clone().min().unwrap(), values.max().unwrap())
+    };
+    panic!(
+        "{case}: {} of {} pixels are not alpha {alpha} (alpha {:?}..={:?}, x {:?}, y {:?})",
+        wrong.len(),
+        image.len() / 4,
+        wrong.iter().map(|p| p.2).min().unwrap(),
+        wrong.iter().map(|p| p.2).max().unwrap(),
+        span(|p| p.0),
+        span(|p| p.1),
+    );
+}
+
+#[test]
+fn materials_replace_the_native_fill_on_this_adapter() {
+    // A rejected material is drawn as the plain opaque background. Telling
+    // that apart from a brush mask that is merely wrong keeps the test below
+    // from reporting an adapter problem as a shader one.
+    const CLEAR: &str =
+        "fn material(i:MaterialInput)->vec4<f32>{return vec4<f32>(i.color.rgb,0.);}";
+    for scale in [1., 2.] {
+        let image = capture(CLEAR, 0., scale);
+        assert_alpha(
+            &image,
+            scale,
+            0,
+            &format!("transparent material at scale {scale}"),
+        );
+    }
+}
+
 #[test]
 fn brush_edge_slants_bottom_left_to_top_right_and_moves_down_right() {
     for (source, entering) in [
@@ -46,12 +93,12 @@ fn brush_edge_slants_bottom_left_to_top_right_and_moves_down_right() {
         for scale in [1., 2.] {
             for (progress, visible) in [(0., !entering), (1., entering)] {
                 let image = capture(source, progress, scale);
-                assert!(
-                    image
-                        .as_chunks::<4>()
-                        .0
-                        .iter()
-                        .all(|p| p[3] == if visible { 255 } else { 0 })
+                let name = if entering { "write" } else { "erase" };
+                assert_alpha(
+                    &image,
+                    scale,
+                    if visible { 255 } else { 0 },
+                    &format!("{name} at progress {progress}, scale {scale}"),
                 );
             }
             let image = capture(source, 0.5, scale);
