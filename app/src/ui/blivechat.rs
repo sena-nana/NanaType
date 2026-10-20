@@ -2,11 +2,12 @@
 use super::{
     Ui,
     settings::controls::{
-        blivechat_badge, block, button, code_text, confirm, edit, mono_style, port, primary, row,
-        section, segmented, select_keys, switch, text_style, when_on,
+        blivechat_badge, block, button, code_text, confirm, edit, port, primary, row, section,
+        segmented, select_keys, switch, when_on,
     },
 };
 use crate::msg::Msg;
+use crate::ui::kit::{Type, gap};
 use crate::windows::WindowKind;
 use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
@@ -24,7 +25,7 @@ fn source_is(ui: Ui, source: BlivechatSource) -> impl Fn() -> bool + Send + 'sta
 }
 
 pub fn settings_page(ui: Ui) -> AnyView {
-    widget(Stack::column(24.0))
+    widget(Stack::column(gap::SECTION))
         .children((
             section(
                 ui,
@@ -34,7 +35,7 @@ pub fn settings_page(ui: Ui) -> AnyView {
                         ui,
                         "int-blive",
                         Some("int-blive-hint"),
-                        widget(Stack::row(10.0).align(AlignSpec::Center))
+                        widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
                             .children((
                                 blivechat_badge(ui),
                                 switch(
@@ -171,7 +172,7 @@ fn room_field(ui: Ui) -> AnyView {
         let room = draft.get_untracked().trim().to_owned();
         edit(move |s| s.integrations.blivechat.room_id = room)
     };
-    widget(Stack::row(6.0).align(AlignSpec::Center))
+    widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
         .children((
             widget(Stack::row(0.0).width(LengthSpec::Px(180.0))).children(
                 widget(
@@ -196,7 +197,7 @@ fn auth_field(ui: Ui) -> AnyView {
         draft.set(String::new());
         Msg::BlivechatAuthCode(code)
     };
-    widget(Stack::row(6.0).align(AlignSpec::Center).wrap(true))
+    widget(Stack::row(gap::TIGHT).align(AlignSpec::Center).wrap(true))
         .children((
             widget(Stack::row(0.0).width(LengthSpec::Px(180.0))).children(
                 widget(
@@ -215,12 +216,12 @@ fn auth_field(ui: Ui) -> AnyView {
                 .on_cx(move |_, _: &TextSubmitted, cx| cx.dispatch_program_all(save())),
             ),
             primary(ui, "int-blive-auth-save", save),
-            widget(Stack::row(6.0).align(AlignSpec::Center))
+            widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
                 .visible(move || ui.blivechat.get().auth_saved)
                 .children((
                     widget(
                         Text::new(ui.now_t("int-blive-auth-saved"))
-                            .style(text_style(12.0, 500))
+                            .style(Type::Small.style())
                             .color(SemanticColorRole::Muted),
                     ),
                     button(ui, "int-blive-auth-clear", || {
@@ -234,7 +235,7 @@ fn auth_field(ui: Ui) -> AnyView {
 fn comet_section(ui: Ui) -> AnyView {
     let address = widget(
         Text::new("")
-            .style(mono_style(12.0, 400))
+            .style(Type::Caption.mono())
             .color(SemanticColorRole::Text),
     )
     .bind(move |t: &mut Text| {
@@ -264,7 +265,7 @@ fn comet_section(ui: Ui) -> AnyView {
                 ui,
                 "int-comet-address",
                 Some("int-comet-address-hint"),
-                widget(Stack::row(6.0).align(AlignSpec::Center))
+                widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
                     .children((
                         button(ui, "int-comet-copy", move || {
                             Msg::CopyText(ui.settings.with_untracked(|s| {

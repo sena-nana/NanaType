@@ -312,7 +312,6 @@ hotkeys-badge-unsafe = Unsafe
 hotkeys-click-to-set = Click to set
 hotkeys-press-keys = Press keys · Esc to cancel
 hotkeys-local = Input window shortcuts
-hotkeys-local-hint = Ctrl+B/I/U for style, Ctrl+↑/↓ to recall sent lines, Esc hides the input
 
 ## Output
 output-display = Display
@@ -518,6 +517,7 @@ cheat-hide = Hide the input window
 settings-group-input = Input
 settings-group-look = Look
 settings-group-stream = Stream
+settings-group-platforms = Platforms
 settings-general-sub = Language, your name and how the input window behaves
 settings-playback-sub = How lines type out, move on and sound
 settings-skins-sub = Pick a look for the dialogue box and make it yours
@@ -788,6 +788,8 @@ settings-packages = Plugins & packages
 settings-packages-sub = Manage skins, shared resources and functional plugins
 packages-import = Import package
 packages-refresh = Reload
+packages-installed = Installed
+packages-none = No packages yet. Import one to add skins, resources or features.
 packages-dependencies = Dependencies
 packages-remove = Remove
 packages-access = Plugins cannot access the network, user files or external programs.

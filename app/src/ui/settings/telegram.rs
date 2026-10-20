@@ -1,4 +1,5 @@
 use super::controls::{block, hint, row, row_text, section, text};
+use crate::ui::kit::{Type, gap};
 use crate::{
     msg::Msg,
     stickers::telegram::{Command, Phase},
@@ -128,40 +129,38 @@ pub(super) fn panel(ui: Ui) -> AnyView {
                     })),
                 ))
                 .into_any(),
-            block(
-                widget(Text::new(""))
-                    .key("telegram-status")
-                    .bind(move |t: &mut Text| {
-                        let state = ui.telegram.get();
-                        t.value = if let Some(error) = &state.error {
-                            ui.tr("stickers-failed", &[("message", error.clone().into())])
-                        } else if let Some((done, total)) = state.progress {
-                            ui.tr(
-                                "stickers-downloading",
-                                &[
-                                    ("done", (done as u64).into()),
-                                    ("total", (total as u64).into()),
-                                ],
-                            )
+            block(widget(Type::Caption.text("")).key("telegram-status").bind(
+                move |t: &mut Text| {
+                    let state = ui.telegram.get();
+                    t.value = if let Some(error) = &state.error {
+                        ui.tr("stickers-failed", &[("message", error.clone().into())])
+                    } else if let Some((done, total)) = state.progress {
+                        ui.tr(
+                            "stickers-downloading",
+                            &[
+                                ("done", (done as u64).into()),
+                                ("total", (total as u64).into()),
+                            ],
+                        )
+                    } else {
+                        ui.now_t(if state.busy {
+                            "telegram-working"
                         } else {
-                            ui.now_t(if state.busy {
-                                "telegram-working"
-                            } else {
-                                match state.phase {
-                                    Phase::Offline => "telegram-offline",
-                                    Phase::Code => "telegram-code-sent",
-                                    Phase::Password => "telegram-password-required",
-                                    Phase::Ready => "telegram-ready",
-                                }
-                            })
-                        };
-                    }),
-            ),
+                            match state.phase {
+                                Phase::Offline => "telegram-offline",
+                                Phase::Code => "telegram-code-sent",
+                                Phase::Password => "telegram-password-required",
+                                Phase::Ready => "telegram-ready",
+                            }
+                        })
+                    };
+                },
+            )),
             widget(Stack::column(0.0))
                 .visible(move || ui.telegram.get().phase == Phase::Ready)
                 .children((
                     field(ui, "telegram-query", query, false),
-                    block(widget(Stack::row(8.0).wrap(true)).children((
+                    block(widget(Stack::row(gap::CONTROL).wrap(true)).children((
                         action(ui, "telegram-search", move || {
                             Command::Search(query.get_untracked())
                         }),
@@ -195,13 +194,15 @@ pub(super) fn panel(ui: Ui) -> AnyView {
                             widget(Stack::column(0.0)).children(rows).into_any()
                         },
                     ),
-                    widget(Text::new(ui.now_t("telegram-no-results"))).visible(move || {
-                        let state = ui.telegram.get();
-                        state.searched
-                            && state.results.is_empty()
-                            && !state.busy
-                            && state.error.is_none()
-                    }),
+                    widget(Type::Caption.text(ui.now_t("telegram-no-results"))).visible(
+                        move || {
+                            let state = ui.telegram.get();
+                            state.searched
+                                && state.results.is_empty()
+                                && !state.busy
+                                && state.error.is_none()
+                        },
+                    ),
                 ))
                 .into_any(),
             block(
@@ -270,7 +271,7 @@ mod tests {
             let mut document = RuntimeDocument::new(id);
             document
                 .context_mut()
-                .set_theme_tokens(crate::skin_theme::compile(index % 2 == 1))
+                .set_theme_tokens(crate::ui::kit::theme::compile(index % 2 == 1))
                 .unwrap();
             document
                 .context_mut()

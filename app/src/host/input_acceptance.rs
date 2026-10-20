@@ -60,7 +60,7 @@ impl Fixture {
         let id = DocumentId::new(1).unwrap();
         let mut doc = RuntimeDocument::new(id);
         doc.context_mut()
-            .set_theme_tokens(crate::skin_theme::compile(false))
+            .set_theme_tokens(crate::ui::kit::theme::compile(false))
             .unwrap();
         let (_, (editor, source, _)) = doc
             .context_mut()
@@ -968,7 +968,7 @@ fn host_handoff_preserves_selection_scroll_and_undo_through_tools_and_refresh() 
     f.session
         .document_mut()
         .context_mut()
-        .set_theme_tokens(crate::skin_theme::compile(true))
+        .set_theme_tokens(crate::ui::kit::theme::compile(true))
         .unwrap();
     f.session.flush().unwrap();
     assert_eq!(f.selection(), selection);

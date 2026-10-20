@@ -1,25 +1,11 @@
 use super::*;
 
 /// Width of the hotkey column of the VTS mapping table.
-pub(super) const VTS_SELECT_W: f32 = 240.0;
+pub(super) const VTS_SELECT_W: f32 = field::MD;
 
-/// A marker as typed in a line: monospace on a quiet chip.
+/// A marker as typed in a line: monospace on a quiet tag.
 pub(super) fn marker_chip(text: String) -> AnyView {
-    widget(
-        Stack::row(0.0)
-            .padding_xy(space::MD, space::XXS)
-            .align(AlignSpec::Center)
-            .surface(SemanticColorRole::Subtle)
-            .outline(SemanticColorRole::BorderSoft, 1.0)
-            .radius_px(6.0)
-            .with_layout(|l| l.flex_shrink = Some(1.0)),
-    )
-    .children(widget(
-        Text::new(text)
-            .style(mono_style(12.0, 500))
-            .color(SemanticColorRole::Text),
-    ))
-    .into_any()
+    crate::ui::kit::mono_tag(text)
 }
 
 /// One marker's row: its chip, then the VTS hotkey it presses ("Auto" lets
@@ -37,7 +23,7 @@ pub(super) fn vts_map_row(ui: Ui, key: String, options: Vec<SelectOption>) -> An
     let set_key = key.clone();
     widget(
         Stack::bar(space::XL)
-            .padding_xy(INSET, ROW_PAD_Y)
+            .padding_xy(inset::CARD, inset::ROW_Y)
             .align(AlignSpec::Center),
     )
     .children((
@@ -49,7 +35,7 @@ pub(super) fn vts_map_row(ui: Ui, key: String, options: Vec<SelectOption>) -> An
         )
         .children((
             marker_chip(format!("[expr={key}]")),
-            widget(IconGlyph::new(ti::ARROW_RIGHT).size(14.0).decorative()),
+            widget(IconGlyph::new(ti::ARROW_RIGHT).size(icon::SM).decorative()),
         )),
         widget(Stack::row(0.0).width(LengthSpec::Px(VTS_SELECT_W))).children(
             widget(
@@ -89,17 +75,17 @@ pub(super) fn vts_mapping(ui: Ui) -> AnyView {
     };
     let header = widget(
         Stack::bar(space::XL)
-            .padding_xy(INSET, space::XL)
+            .padding_xy(inset::CARD, space::XL)
             .align(AlignSpec::Center),
     )
     .children((
-        widget(Stack::column(2.0).grow(1.0).shrink(1.0)).children((
+        widget(Stack::column(gap::HAIR).grow(1.0).shrink(1.0)).children((
             subheading(ui, "int-vts-map"),
             widget(Stack::column(0.0))
                 .visible(move || !authorized())
                 .children(hint(ui.now_t("int-vts-authorize-hint"))),
         )),
-        widget(Stack::row(6.0).align(AlignSpec::Center)).children((
+        widget(Stack::row(gap::TIGHT).align(AlignSpec::Center)).children((
             widget(
                 StatusBadge::new(ui.now_t("int-vts-authorized"), StatusTone::Success).compact(true),
             )
@@ -178,13 +164,13 @@ pub(super) fn vts_mapping(ui: Ui) -> AnyView {
             let caption = |key: &str| {
                 widget(
                     Text::new(ui.now_t(key))
-                        .style(text_style(12.0, 600))
+                        .style(Type::Overline.style())
                         .color(SemanticColorRole::Muted),
                 )
             };
             let head = widget(
                 Stack::bar(space::XL)
-                    .padding_xy(INSET, 0.0)
+                    .padding_xy(inset::CARD, 0.0)
                     .align(AlignSpec::Center)
                     .with_layout(|l| l.padding_bottom = Some(LengthSpec::Px(space::XS))),
             )
@@ -210,7 +196,7 @@ pub(super) fn vts_mapping(ui: Ui) -> AnyView {
 }
 
 pub(super) fn integrations(ui: Ui) -> AnyView {
-    widget(Stack::column(SECTION_GAP))
+    widget(Stack::column(gap::SECTION))
         .children((
             section(
                 ui,
@@ -220,7 +206,7 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                         ui,
                         "int-vts",
                         Some("int-vts-hint"),
-                        widget(Stack::row(10.0).align(AlignSpec::Center))
+                        widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
                             .children((
                                 link_badge(ui, |s| &s.vts),
                                 switch(
@@ -305,7 +291,7 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                         ui,
                         "int-osc",
                         Some("int-osc-hint"),
-                        widget(Stack::row(10.0).align(AlignSpec::Center))
+                        widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
                             .children((
                                 link_badge(ui, |s| &s.osc),
                                 switch(
@@ -367,7 +353,7 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                         ui,
                         "int-ws",
                         Some("int-ws-hint"),
-                        widget(Stack::row(10.0).align(AlignSpec::Center))
+                        widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
                             .children((
                                 link_badge(ui, |s| &s.ws),
                                 switch(

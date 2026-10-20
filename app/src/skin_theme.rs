@@ -1,16 +1,11 @@
-//! Skin preparation and the independent, neutral application theme.
-//! Only content boxes use skin colours; operator controls use NanaUI tokens.
+//! Skin preparation and the colour maths skins and chrome share. The
+//! application theme itself lives in [`crate::ui::kit::theme`]: only content
+//! boxes use skin colours; operator controls use the app's tokens.
 
 use std::collections::HashMap;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex};
 
-use nana_ui::CompiledTheme;
-use nana_ui::runtime::{BoxPaint, Gradient, PaintContext, PaintPath, PaintShadow, Painter};
-use nana_ui::theme::{SemanticColor, SemanticPalette, ThemeDefinition, ThemeId};
-use nana_ui_core::{
-    EffectTokens, ElevationRole, RadiusTier, SemanticColorRole, ShadowToken, ThemeAppearance,
-    ThemeMetrics,
-};
+use nana_ui::theme::SemanticColor;
 use nanatype_model::Rgba8;
 use nanatype_settings::{ChromeMode, SkinOverrides};
 use nanatype_theme::{FontSpec, Skin};
@@ -226,7 +221,7 @@ pub fn rgba(c: Rgba8) -> [f32; 4] {
     ]
 }
 
-fn mix(a: Rgba8, b: Rgba8, t: f32) -> Rgba8 {
+pub(crate) fn mix(a: Rgba8, b: Rgba8, t: f32) -> Rgba8 {
     let m = |x: u8, y: u8| (f32::from(x) * (1.0 - t) + f32::from(y) * t).round() as u8;
     Rgba8::rgba(m(a.r, b.r), m(a.g, b.g), m(a.b, b.b), m(a.a, b.a))
 }
@@ -305,190 +300,6 @@ pub fn chroma(c: Rgba8) -> f32 {
     let hi = c.r.max(c.g).max(c.b);
     let lo = c.r.min(c.g).min(c.b);
     f32::from(hi - lo) / 255.0
-}
-
-/// Standard NanaUI colours, shared by controls and rich operator text.
-pub fn palette(dark: bool) -> SemanticPalette {
-    if dark {
-        SemanticPalette::dark()
-    } else {
-        SemanticPalette::light()
-    }
-}
-
-/// Radius steps 4 / 8 / 12 / 16 / 20 (and 24): swatches and tags, controls,
-/// popovers, cards, floating rails, large surfaces. Chips are pills.
-fn metrics() -> ThemeMetrics {
-    ThemeMetrics {
-        radius_xs: 4.0,
-        radius_sm: 8.0,
-        radius_md: 12.0,
-        radius_lg: 16.0,
-        radius_xl: 20.0,
-        radius_xxl: 24.0,
-        ..nana_ui_core::UI_METRICS
-    }
-}
-
-/// The lifted-surface shadow cards and menus share: a soft blue-tinted
-/// `0 8px 24px text@16%` on a light chrome, `0 10px 30px -12px #00000080`
-/// on a dark one.
-fn effects(dark: bool) -> EffectTokens {
-    let (base, surface) = if dark {
-        let shadow = ShadowToken {
-            color: SemanticColor::rgba8(0, 0, 0, 0.5),
-            offset_x: 0.0,
-            offset_y: 10.0,
-            blur_radius: 30.0,
-            spread_radius: -12.0,
-            inset: false,
-        };
-        (EffectTokens::DARK, shadow)
-    } else {
-        let shadow = ShadowToken {
-            color: SemanticColor {
-                a: 0.16,
-                ..palette(dark).text
-            },
-            offset_x: 0.0,
-            offset_y: 8.0,
-            blur_radius: 24.0,
-            spread_radius: 0.0,
-            inset: false,
-        };
-        (EffectTokens::LIGHT, shadow)
-    };
-    EffectTokens { surface, ..base }
-}
-
-/// Compile application chrome without consulting the selected skin.
-pub fn compile(dark: bool) -> Arc<CompiledTheme> {
-    let base = if dark {
-        ThemeDefinition::NANA_DARK
-    } else {
-        ThemeDefinition::NANA_LIGHT
-    };
-    // Toasts arrive and leave on the app's motion tokens.
-    let toast = nana_ui_core::ToastRecipe {
-        motion: crate::ui::motion::toast(),
-        ..base
-            .components
-            .toast
-            .unwrap_or(nana_ui_core::ToastRecipe::DEFAULT)
-    };
-    let mut def = base
-        .with_metrics(metrics())
-        .with_effects(effects(dark))
-        .with_toast(toast)
-        .with_id(ThemeId::new(if dark {
-            "nanatype.ui.dark"
-        } else {
-            "nanatype.ui.light"
-        }))
-        .with_display_name("NanaType");
-    def.motion.hover_color_ms = crate::ui::motion::HOVER_MS as u16;
-    Arc::new(def.compile().expect("built-in application theme is valid"))
-}
-
-/// `rgba` with its alpha replaced.
-fn alpha(rgba: [f32; 4], a: f32) -> [f32; 4] {
-    [rgba[0], rgba[1], rgba[2], a]
-}
-
-/// A settings card: the surface at the card radius on the theme's lifted
-/// shadow. Light chromes drop the outline for the soft blue-tinted shadow;
-/// dark chromes keep a 1px soft border, since a shadow barely reads on dark.
-pub struct CardPainter;
-
-impl Painter for CardPainter {
-    fn paint(&self, cx: &mut PaintContext<'_>) {
-        let rect = cx.bounds();
-        let r = cx.radius(RadiusTier::Lg);
-        let mut card = BoxPaint::fill(SemanticColorRole::Surface).shadow(ElevationRole::Surface);
-        if cx.theme_appearance() == ThemeAppearance::Dark {
-            card = card.border(SemanticColorRole::BorderSoft, 1.0);
-        }
-        cx.rounded_rect(rect, r, card);
-    }
-
-    fn paint_key(&self) -> u64 {
-        0
-    }
-}
-
-/// The right end of a call to action's fill (accent → accent.light): up to
-/// 22% toward white, as far as the label keeps 4.5:1 on it.
-fn accent_light(accent: [f32; 4]) -> [f32; 4] {
-    let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-    let base = Rgba8::rgb(q(accent[0]), q(accent[1]), q(accent[2]));
-    let label = on(base);
-    let end = (0..=11)
-        .rev()
-        .map(|i| mix(base, Rgba8::WHITE, i as f32 * 0.02))
-        .find(|c| contrast(label, *c) >= 4.5)
-        .unwrap_or(base);
-    alpha(rgba(end), accent[3])
-}
-
-/// The view's one primary action: a solid accent fill lightening to the
-/// right (accent → accent.light at 90°) on an accent-tinted
-/// `0 3px 8px accent@33%` shadow, its label in the on-accent colour.
-pub struct CtaPainter;
-
-impl Painter for CtaPainter {
-    fn paint(&self, cx: &mut PaintContext<'_>) {
-        let state = cx.state();
-        if state.disabled {
-            cx.draw_default();
-            return;
-        }
-        let rect = cx.bounds();
-        let r = cx.radius(RadiusTier::Sm);
-        let mut path = PaintPath::new();
-        path.rounded_rect(rect, [r; 4]);
-        let role = if state.hovered || state.pressed {
-            SemanticColorRole::AccentStrong
-        } else {
-            SemanticColorRole::Accent
-        };
-        let accent = cx.color(role);
-        let dark = cx.theme_appearance() == ThemeAppearance::Dark;
-        cx.shadow(
-            &path,
-            PaintShadow::Custom {
-                color: alpha(accent, if dark { 0.25 } else { 0.33 }).into(),
-                offset: [0.0, 3.0],
-                blur: if dark { 10.0 } else { 8.0 },
-                spread: 0.0,
-                inset: false,
-            },
-        );
-        let fill = Gradient::linear([rect.x, rect.y], [rect.x + rect.width, rect.y])
-            .stop(0.0, accent)
-            .stop(1.0, accent_light(accent));
-        cx.fill_path(&path, fill);
-        // The framework's own look over it: the label and the focus ring
-        // (the node itself has no fill of its own).
-        cx.draw_default();
-    }
-
-    fn paint_key(&self) -> u64 {
-        1
-    }
-}
-
-/// `button` as the view's call to action: [`CtaPainter`] over a solid accent
-/// fill, its label in the on-accent colour.
-pub fn cta(button: nana_ui::runtime::Button) -> nana_ui::runtime::Button {
-    let mut st = button.style.clone();
-    // The painter draws the fill, so the node has none of its own (a
-    // disabled button shows the plain primary tint instead).
-    st.foreground = Some(SemanticColorRole::AccentText);
-    st.background = None;
-    st.border = None;
-    st.interaction.disabled.background = Some(SemanticColorRole::AccentSoft);
-    st.painter = Some(CtaPainter.into());
-    button.style(st)
 }
 
 #[cfg(test)]
@@ -646,29 +457,6 @@ mod tests {
                     );
                 }
             }
-        }
-    }
-
-    #[test]
-    fn appearance_is_independent_of_skins() {
-        for system_dark in [false, true] {
-            assert_eq!(dark_mode(ChromeMode::System, system_dark), system_dark);
-            assert!(!dark_mode(ChromeMode::Light, system_dark));
-            assert!(dark_mode(ChromeMode::Dark, system_dark));
-        }
-        for dark in [false, true] {
-            let p = palette(dark);
-            assert!(contrast(rgba8(p.text), rgba8(p.surface)) >= 4.5);
-            assert!(contrast(rgba8(p.text), rgba8(p.background)) >= 4.5);
-            let compiled = compile(dark);
-            assert_eq!(
-                compiled.appearance(),
-                if dark {
-                    ThemeAppearance::Dark
-                } else {
-                    ThemeAppearance::Light
-                }
-            );
         }
     }
 }

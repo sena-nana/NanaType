@@ -34,11 +34,11 @@ pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> AnyView {
         Stack::row(MATRIX_GAP)
             .align(AlignSpec::Center)
             .width(LengthSpec::Fill)
-            .padding_xy(INSET, ROW_PAD_Y),
+            .padding_xy(inset::CARD, inset::ROW_Y),
     )
     .children((
         widget(
-            Stack::row(4.0)
+            Stack::row(gap::TIGHT)
                 .align(AlignSpec::Center)
                 .width(LengthSpec::Px(MATRIX_LABEL_W))
                 .with_layout(|l| l.flex_shrink = Some(0.0)),
@@ -51,9 +51,9 @@ pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> AnyView {
 
 /// A row label, with an info mark whose tooltip says what the options do.
 pub(super) fn matrix_label(ui: Ui, key: &str, tip: Option<&str>) -> AnyView {
-    widget(Stack::row(2.0).align(AlignSpec::Center))
+    widget(Stack::row(gap::HAIR).align(AlignSpec::Center))
         .children((
-            widget(Text::new(ui.now_t(key)).style(text_style(13.0, 500))),
+            widget(Text::new(ui.now_t(key)).style(Type::Label.style())),
             tip.map(|tip| {
                 widget(
                     IconButton::new(ti::INFO_CIRCLE, ui.now_t(tip))
@@ -70,7 +70,7 @@ pub(super) fn matrix_label(ui: Ui, key: &str, tip: Option<&str>) -> AnyView {
 pub(super) fn not_applicable() -> AnyView {
     widget(
         Text::new("—")
-            .style(text_style(13.0, 400))
+            .style(Type::Body.style())
             .color(SemanticColorRole::Faint),
     )
     .into_any()
@@ -150,7 +150,7 @@ pub(super) fn windows(ui: Ui) -> AnyView {
             };
             widget(
                 Text::new(ui.now_t(key))
-                    .style(one_line(12.0, 600))
+                    .style(Type::Overline.one_line())
                     .color(SemanticColorRole::Muted),
             )
             .into_any()
@@ -207,7 +207,7 @@ pub(super) fn windows(ui: Ui) -> AnyView {
                 |o, v| {
                     o.background = if v == "chroma" {
                         CaptureBackground::Chroma {
-                            color: nanatype_model::Rgba8::rgb(0, 255, 0),
+                            color: nanatype_model::Rgba8::rgb(0, 255, 0), // design-tokens: data
                         }
                     } else {
                         CaptureBackground::Transparent
@@ -247,14 +247,14 @@ pub(super) fn windows(ui: Ui) -> AnyView {
                 }
             };
             widget(
-                Stack::row(4.0)
+                Stack::row(gap::TIGHT)
                     .align(AlignSpec::Center)
                     .width(LengthSpec::Fill),
             )
             .children((
                 widget(
                     Text::new(text())
-                        .style(one_line(12.0, 500))
+                        .style(Type::Small.one_line())
                         .color(SemanticColorRole::Muted),
                 )
                 .bind(move |t: &mut Text| {
@@ -275,14 +275,14 @@ pub(super) fn windows(ui: Ui) -> AnyView {
             .into_any()
         }),
     );
-    widget(Stack::column(SECTION_GAP))
+    widget(Stack::column(gap::SECTION))
         .children((
             section(
                 ui,
                 "",
                 vec![header, show, lock, background, on_top, vertical_text, size],
             ),
-            widget(Stack::column(0.0).padding_xy(INSET, space::MD)).children((
+            widget(Stack::column(0.0).padding_xy(inset::CARD, space::MD)).children((
                 hint(ui.now_t("windows-layout-hint")),
                 hint(ui.now_t("windows-input-na")),
             )),

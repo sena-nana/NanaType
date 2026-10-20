@@ -1,5 +1,6 @@
 //! Sticker grid, bottom series tabs, and the shared folder-drop target.
 use super::*;
+use crate::ui::kit::{Type, gap};
 use nana_ui::runtime::{FileDropEvent, TabOption, Tabs, TabsEvent};
 
 pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Option<u64>) -> AnyView {
@@ -25,11 +26,11 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
         move |(q, series, _)| {
             let stickers = ui.stickers.get_untracked();
             if stickers.is_empty() {
-                let mut style = text_style(13.0, 400);
+                let mut style = Type::Body.style();
                 let l = Arc::make_mut(&mut style.layout);
                 l.width = Some(LengthSpec::Fill);
                 l.min_width = Some(LengthSpec::Px(0.0));
-                return widget(Stack::column(8.0).width(LengthSpec::Fill))
+                return widget(Stack::column(gap::CONTROL).width(LengthSpec::Fill))
                     .children((
                         widget(
                             Text::new(ui.now_t("empty-stickers"))
@@ -102,7 +103,7 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
                     .into_any()
                 })
                 .collect();
-            widget(Stack::row(6.0).wrap(true).width(LengthSpec::Fill))
+            widget(Stack::row(gap::TIGHT).wrap(true).width(LengthSpec::Fill))
                 .children(cells)
                 .into_any()
         },
@@ -131,7 +132,7 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
     };
     let footer = region.map(|id| {
         widget(
-            Stack::column(6.0)
+            Stack::column(gap::CONTROL)
                 .width(LengthSpec::Fill)
                 .with_layout(|l| l.flex_shrink = Some(0.0)),
         )
@@ -143,7 +144,7 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
         .children((
             widget(
                 Text::new("")
-                    .style(text_style(11.0, 400))
+                    .style(Type::Micro.style())
                     .color(SemanticColorRole::Muted),
             )
             .bind(move |text: &mut Text| {
@@ -193,15 +194,19 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
     let layout = Arc::make_mut(&mut search.style.layout);
     layout.width = Some(LengthSpec::Fill);
     layout.min_width = Some(LengthSpec::Px(0.0));
-    widget(Stack::column(8.0).padding(4.0).with_layout(move |l| {
-        l.width = Some(LengthSpec::Fill);
-        l.min_width = Some(LengthSpec::Px(0.0));
-        if region.is_some() {
-            l.height = Some(LengthSpec::Px(0.0));
-            l.min_height = Some(LengthSpec::Px(0.0));
-            l.flex_grow = Some(1.0);
-        }
-    }))
+    widget(
+        Stack::column(gap::CONTROL)
+            .padding(gap::TIGHT)
+            .with_layout(move |l| {
+                l.width = Some(LengthSpec::Fill);
+                l.min_width = Some(LengthSpec::Px(0.0));
+                if region.is_some() {
+                    l.height = Some(LengthSpec::Px(0.0));
+                    l.min_height = Some(LengthSpec::Px(0.0));
+                    l.flex_grow = Some(1.0);
+                }
+            }),
+    )
     .entity_ref(target)
     .on_cx(move |_, e: &FileDropEvent, cx| match e {
         FileDropEvent::Hovered { .. } => hovered.set(true),

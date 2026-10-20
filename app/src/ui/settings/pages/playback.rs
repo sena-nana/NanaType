@@ -50,7 +50,7 @@ pub(super) fn playback(ui: Ui) -> AnyView {
         ui.settings
             .with(|s| matches!(s.playback.after, AfterLine::Hold))
     };
-    widget(Stack::column(SECTION_GAP))
+    widget(Stack::column(gap::SECTION))
         .children((
             section(
                 ui,

@@ -1,5 +1,8 @@
 use super::*;
 
+/// The logo's size in the About header.
+const ABOUT_ICON: f32 = 56.0;
+
 pub(super) fn about(ui: Ui) -> AnyView {
     let locale = ui.locale.get_untracked();
     let build = I18N.tr_in(
@@ -9,44 +12,18 @@ pub(super) fn about(ui: Ui) -> AnyView {
     );
     let paths = crate::paths::Paths::resolve();
     let (logs, data) = (paths.logs.clone(), paths.data.clone());
-    let icon = widget(
-        Stack::row(0.0)
-            .width(LengthSpec::Px(48.0))
-            .height(LengthSpec::Px(48.0))
-            .with_layout(|l| {
-                l.flex_shrink = Some(0.0);
-                l.paint.background_image = Some(BackgroundImage::url_with_fit(
-                    format!("data:image/png;base64,{}", ICON_PNG_B64.as_str()),
-                    nana_ui_core::BackgroundImageFit::Contain,
-                ));
-            }),
-    );
-    let version_chip = widget(
-        Stack::row(0.0)
-            .padding_xy(space::MD, space::XXS)
-            .surface(SemanticColorRole::Subtle)
-            .outline(SemanticColorRole::BorderSoft, 1.0)
-            .radius_px(999.0),
-    )
-    .children(widget(
-        Text::new(format!("v{}", env!("CARGO_PKG_VERSION")))
-            .style(mono_style(type_scale::META, type_scale::MEDIUM))
-            .color(SemanticColorRole::Muted),
-    ));
+    let icon = super::super::logo(ABOUT_ICON);
+    let version_chip = crate::ui::kit::mono_tag(format!("v{}", env!("CARGO_PKG_VERSION")));
     let header = widget(
-        Stack::row(space::XXL)
-            .padding_xy(INSET, INSET)
+        Stack::row(gap::SECTION)
+            .padding_xy(inset::CARD, inset::CARD)
             .align(AlignSpec::Center),
     )
     .children((
         icon,
-        widget(Stack::column(space::XS).grow(1.0).shrink(1.0)).children((
-            widget(Stack::row(space::MD).align(AlignSpec::Center)).children((
-                widget(
-                    Text::new("NanaType").style(text_style(type_scale::TITLE, type_scale::BOLD)),
-                ),
-                version_chip,
-            )),
+        widget(crate::ui::kit::grow_column(gap::TIGHT)).children((
+            widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
+                .children((Type::PageTitle.view("NanaType"), version_chip)),
             hint_13(ui.now_t("app-tagline")),
             hint(build),
         )),
@@ -63,7 +40,7 @@ pub(super) fn about(ui: Ui) -> AnyView {
     };
     let links = widget(
         Stack::row(space::SM)
-            .padding_xy(INSET, space::LG)
+            .padding_xy(inset::CARD, space::LG)
             .wrap(true),
     )
     .children(vec![
@@ -102,7 +79,7 @@ pub(super) fn about(ui: Ui) -> AnyView {
     rows.extend(interface_licences(ui));
     rows.extend(design_sources(ui));
     rows.extend(font_licences(ui));
-    widget(Stack::column(SECTION_GAP))
+    widget(Stack::column(gap::SECTION))
         .children(section_with(ui, "", rows))
         .into_any()
 }
@@ -118,10 +95,10 @@ pub(super) fn design_sources(ui: Ui) -> Vec<(AnyView, Shown)> {
         .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::OpenUrl(url)))
     };
     vec![(
-        widget(Stack::column(space::SM).padding_xy(INSET, space::LG))
+        widget(Stack::column(space::SM).padding_xy(inset::CARD, space::LG))
             .children((
-                widget(Text::new(ui.now_t("about-design")).style(text_style(13.0, 600))),
-                widget(Text::new("Echo-Live · Sheep-realms").style(text_style(13.0, 600))),
+                widget(Text::new(ui.now_t("about-design")).style(Type::Strong.style())),
+                widget(Text::new("Echo-Live · Sheep-realms").style(Type::Strong.style())),
                 hint(ui.now_t("about-design-echo")),
                 widget(Stack::row(space::SM).wrap(true)).children((
                     link(
@@ -142,9 +119,9 @@ pub(super) fn design_sources(ui: Ui) -> Vec<(AnyView, Shown)> {
 /// Sources stay visible; each licence is embedded for offline reading.
 pub(super) fn interface_licences(ui: Ui) -> Vec<(AnyView, Shown)> {
     let mut rows = vec![(
-        widget(Stack::column(space::SM).padding_xy(INSET, space::LG))
+        widget(Stack::column(space::SM).padding_xy(inset::CARD, space::LG))
             .children((
-                widget(Text::new(ui.now_t("about-interfaces")).style(text_style(13.0, 600))),
+                widget(Text::new(ui.now_t("about-interfaces")).style(Type::Strong.style())),
                 hint(ui.now_t("about-interfaces-hint")),
             ))
             .into_any(),
@@ -206,9 +183,9 @@ pub(super) fn interface_licences(ui: Ui) -> Vec<(AnyView, Shown)> {
                 .into_any(),
         );
         rows.push((
-            widget(Stack::column(space::SM).padding_xy(INSET, space::LG))
+            widget(Stack::column(space::SM).padding_xy(inset::CARD, space::LG))
                 .children((
-                    widget(Text::new(name).style(text_style(13.0, 600))),
+                    widget(Text::new(name).style(Type::Strong.style())),
                     hint(ui.now_t(description)),
                     widget(Stack::row(space::SM).wrap(true)).children(buttons),
                 ))
@@ -216,7 +193,7 @@ pub(super) fn interface_licences(ui: Ui) -> Vec<(AnyView, Shown)> {
             None,
         ));
         rows.push(shown_if(
-            widget(Stack::column(0.0).padding_xy(INSET, space::LG))
+            widget(Stack::column(0.0).padding_xy(inset::CARD, space::LG))
                 .children(
                     widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
                         l.height = Some(LengthSpec::Px(260.0));
@@ -288,9 +265,9 @@ pub fn font_licence_panel(ui: Ui) -> AnyView {
                 Some(l) => l.to_owned(),
                 None => I18N.t_in(locale, "about-fonts-license-other"),
             });
-            widget(Stack::column(4.0))
+            widget(Stack::column(gap::TIGHT))
                 .children((
-                    widget(Text::new(name).style(text_style(13.0, 600))),
+                    widget(Text::new(name).style(Type::Strong.style())),
                     hint(facts.join(" · ")),
                     widget(Stack::column(0.0).with_layout(|l| {
                         l.padding_top = Some(LengthSpec::Px(space::SM));
@@ -300,7 +277,7 @@ pub fn font_licence_panel(ui: Ui) -> AnyView {
                 .into_any()
         })
         .collect();
-    widget(Stack::column(0.0).padding_xy(INSET, space::LG))
+    widget(Stack::column(0.0).padding_xy(inset::CARD, space::LG))
         .children(
             widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
                 l.height = Some(LengthSpec::Px(320.0));
@@ -326,7 +303,7 @@ pub(super) fn licence_lines(text: &str) -> Vec<AnyView> {
             } else {
                 widget(
                     Text::new(line.to_owned())
-                        .style(mono_style(11.0, 400))
+                        .style(Type::Micro.mono())
                         .color(SemanticColorRole::Muted),
                 )
                 .into_any()

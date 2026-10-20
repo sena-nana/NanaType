@@ -4,14 +4,10 @@
 
 use std::sync::Arc;
 
-use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, EntityRef, IntoView, widget};
-use nana_ui::runtime::{Activate, Button, IconGlyph, Stack, Text, ToastStack, ToastTone};
+use nana_ui::runtime::{Stack, ToastStack, ToastTone};
 use nana_ui::theme::space;
-use nana_ui::{ButtonKind, ControlSize};
-use nana_ui_core::{AlignSpec, LengthSpec, PositionSpec, SemanticColorRole};
-
-use crate::msg::Msg;
+use nana_ui_core::{AlignSpec, LengthSpec, PositionSpec};
 
 /// A toast the host is asked to show.
 #[derive(Debug, Clone, PartialEq)]
@@ -83,38 +79,4 @@ pub fn with_toasts_limit(
     .into_any()
 }
 
-/// An empty list: a ✦ in the accent colour, one muted line and, when
-/// there is somewhere to go, a quiet text button.
-pub fn empty_state(
-    text: String,
-    action: Option<(String, Box<dyn Fn() -> Msg + Send + 'static>)>,
-) -> AnyView {
-    let mut line = nana_ui::runtime::NodeStyle::default();
-    Arc::make_mut(&mut line.layout).font_size = Some(13.0);
-    line.foreground = Some(SemanticColorRole::Muted);
-    let action = action.map(|(label, msg)| {
-        widget(
-            Button::new(label)
-                .kind(ButtonKind::Text)
-                .size(ControlSize::Small),
-        )
-        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
-        .into_any()
-    });
-    widget(
-        Stack::row(space::MD)
-            .padding_xy(space::XXXL, space::XL)
-            .align(AlignSpec::Center)
-            .wrap(true),
-    )
-    .children((
-        widget(
-            IconGlyph::new(ti::SPARKLES)
-                .size(16.0)
-                .role(SemanticColorRole::Accent),
-        ),
-        widget(Text::new(text).style(line)),
-        action,
-    ))
-    .into_any()
-}
+pub use super::kit::empty_state;

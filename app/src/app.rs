@@ -194,7 +194,10 @@ impl App {
             ctx.system_appearance(),
             Some(nana_ui_platform::SystemAppearance::Dark)
         );
-        let theme = skin_theme::compile(skin_theme::dark_mode(settings.skin.chrome, system_dark));
+        let theme = crate::ui::kit::theme::compile(skin_theme::dark_mode(
+            settings.skin.chrome,
+            system_dark,
+        ));
         let ui = startup::ui(ctx, &settings, &skin, locale, &geometry, system_dark);
 
         let workers = startup::Workers::start(&paths, &settings, post.clone());
@@ -871,7 +874,7 @@ impl App {
     /// Refresh operator chrome without reloading assets or changing content boxes.
     pub fn refresh_theme(&mut self) {
         let dark = skin_theme::dark_mode(self.settings.skin.chrome, self.system_dark);
-        self.theme = skin_theme::compile(dark);
+        self.theme = crate::ui::kit::theme::compile(dark);
         self.ui.chrome_dark.set(dark);
         self.theme_changed = true;
         self.tint_captions();

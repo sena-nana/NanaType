@@ -1,26 +1,32 @@
 use super::*;
 
-/// A numbered step: a 20px numbered circle, then what to do.
+/// A step number's circle.
+const STEP_DOT: f32 = 22.0;
+
+/// A numbered step: a numbered accent circle, then what to do.
 pub(super) fn step(n: u8, body: impl IntoView) -> AnyView {
-    widget(Stack::row(10.0).align(AlignSpec::Center))
+    widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
         .children((
-            widget(
-                Stack::row(0.0)
-                    .width(LengthSpec::Px(20.0))
-                    .height(LengthSpec::Px(20.0))
-                    .align(AlignSpec::Center)
-                    .justify(JustifySpec::Center)
-                    .surface(SemanticColorRole::Selected)
-                    .radius_px(10.0)
-                    .with_layout(|l| l.flex_shrink = Some(0.0)),
-            )
+            widget(crate::ui::kit::wash(
+                crate::ui::kit::round(
+                    Stack::row(0.0)
+                        .width(LengthSpec::Px(STEP_DOT))
+                        .height(LengthSpec::Px(STEP_DOT))
+                        .align(AlignSpec::Center)
+                        .justify(JustifySpec::Center)
+                        .with_layout(|l| l.flex_shrink = Some(0.0)),
+                    STEP_DOT,
+                ),
+                SemanticColorRole::Accent,
+                0.12,
+            ))
             .children(widget(
                 Text::new(n.to_string())
-                    .style(text_style(12.0, 700))
-                    .color(SemanticColorRole::Text),
+                    .style(Type::Overline.style())
+                    .color(SemanticColorRole::AccentOnSoft),
             )),
             widget(
-                Stack::row(8.0)
+                Stack::row(gap::CONTROL)
                     .align(AlignSpec::Center)
                     .wrap(true)
                     .grow(1.0)
@@ -37,21 +43,13 @@ pub(super) fn obs_guide(ui: Ui) -> AnyView {
     let body = |key: &str| {
         widget(
             Text::new(ui.now_t(key))
-                .style(text_style(13.0, 400))
+                .style(Type::Body.style())
                 .color(SemanticColorRole::Text),
         )
         .into_any()
     };
-    let sender = widget(
-        Stack::row(4.0)
-            .align(AlignSpec::Center)
-            .padding_xy(space::MD, space::XXS)
-            .surface(SemanticColorRole::Subtle)
-            .outline(SemanticColorRole::BorderSoft, 1.0)
-            .radius_px(6.0),
-    )
-    .children((
-        widget(Text::new(String::new()).style(mono_style(12.0, 500))).bind(move |t: &mut Text| {
+    let sender = widget(crate::ui::kit::tag_frame()).children((
+        widget(Text::new(String::new()).style(Type::Small.mono())).bind(move |t: &mut Text| {
             let name = ui.settings.with(|s| s.output.display.name.clone());
             if t.value != name {
                 t.value = name;
@@ -74,10 +72,8 @@ pub(super) fn obs_guide(ui: Ui) -> AnyView {
             1,
             (
                 body("output-obs-step-enable"),
-                widget(crate::skin_theme::cta(
-                    Button::new(ui.now_t("output-obs-enable"))
-                        .kind(ButtonKind::Primary)
-                        .size(ControlSize::Small),
+                widget(crate::ui::kit::cta(
+                    Button::new(ui.now_t("output-obs-enable")).size(ControlSize::Small),
                 ))
                 .bind(move |b: &mut Button| {
                     let enabled = ui.settings.with(|s| s.output.display.enabled);
@@ -114,7 +110,7 @@ pub(super) fn obs_guide(ui: Ui) -> AnyView {
         vec![hint(ui.now_t("output-spout-unsupported"))]
     };
     let other_open = signal(!(cfg!(windows) || cfg!(target_os = "macos")));
-    let other = widget(Stack::column(6.0).align(AlignSpec::Start)).children((
+    let other = widget(Stack::column(gap::CONTROL).align(AlignSpec::Start)).children((
         widget(
             Button::new(ui.now_t("output-obs-other"))
                 .kind(ButtonKind::Text)
@@ -142,7 +138,7 @@ pub(super) fn obs_guide(ui: Ui) -> AnyView {
             "output-obs-window"
         }))),
     ));
-    widget(Stack::column(space::LG).padding_xy(INSET, BLOCK_PAD_Y))
+    widget(Stack::column(space::LG).padding_xy(inset::CARD, inset::ROW_Y))
         .children((
             steps,
             other,
@@ -180,7 +176,7 @@ pub(super) fn output(ui: Ui) -> AnyView {
                         "output-spout"
                     },
                     (kind == WindowKind::PeerDisplay).then_some("output-peer-hint"),
-                    widget(Stack::row(10.0).align(AlignSpec::Center))
+                    widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
                         .children((
                             link_badge(ui, link),
                             switch(
@@ -199,7 +195,7 @@ pub(super) fn output(ui: Ui) -> AnyView {
                             ui,
                             "output-spout-name",
                             None,
-                            widget(Stack::row(6.0))
+                            widget(Stack::row(gap::TIGHT))
                                 .children((
                                     text(
                                         ui,
@@ -268,7 +264,7 @@ pub(super) fn output(ui: Ui) -> AnyView {
             ],
         )
     };
-    widget(Stack::column(SECTION_GAP))
+    widget(Stack::column(gap::SECTION))
         .children((
             section(ui, "output-obs-title", vec![obs_guide(ui)]),
             spout(WindowKind::Display, "output-display"),

@@ -93,7 +93,7 @@ fn session(registry: &SkinRegistry, name: &'static str, track: usize) -> (Ui, Ru
         let id = DocumentId::new((track + 1) as u64).unwrap();
         let mut doc = RuntimeDocument::new(id);
         doc.context_mut()
-            .set_theme_tokens(nanatype::skin_theme::compile(false))
+            .set_theme_tokens(nanatype::ui::kit::theme::compile(false))
             .unwrap();
         doc.context_mut()
             .mount_view_root(id, move || {

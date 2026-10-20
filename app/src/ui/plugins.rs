@@ -1,14 +1,17 @@
 //! Host-owned widgets and paths generated from a validated, retained value tree.
+use crate::ui::kit::{self, Tone, Type, gap, inset};
 use crate::{
     msg::{FileTarget, Msg},
     ui::Ui,
 };
+use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{
     Activate, BoxPaint, Button, Checkbox, LayoutBox, PaintContext, PaintPath, Painter, Stack, Text,
     ToggleChanged,
 };
-use nana_ui_core::{LengthSpec, OverflowSpec};
+use nana_ui::{ButtonKind, ControlSize};
+use nana_ui_core::{AlignSpec, LengthSpec, OverflowSpec, RadiusTier, SemanticColorRole};
 use nanatype_plugins::{DrawCommand, Mount, Node};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -112,9 +115,9 @@ fn node(package: &str, n: &Node, command: &Command) -> AnyView {
     match n {
         Node::Column { id, children } | Node::Row { id, children } => {
             let stack = if matches!(n, Node::Row { .. }) {
-                Stack::row(6.)
+                Stack::row(gap::TIGHT)
             } else {
-                Stack::column(6.)
+                Stack::column(gap::CONTROL)
             };
             widget(stack)
                 .key(format!("plugin:{package}:{id}"))
@@ -204,7 +207,7 @@ pub fn debug_views(update: &nanatype_plugins::PluginUpdate) -> AnyView {
         .views
         .iter()
         .map(|view| {
-            widget(Stack::column(4.))
+            widget(Stack::column(gap::TIGHT))
                 .children((
                     widget(Text::new(format!("{:?}", view.slot).to_lowercase())),
                     node("debug", &view.root, &command),
@@ -212,138 +215,186 @@ pub fn debug_views(update: &nanatype_plugins::PluginUpdate) -> AnyView {
                 .into_any()
         })
         .collect::<Vec<_>>();
-    widget(Stack::column(8.)).children(views).into_any()
+    widget(Stack::column(gap::CONTROL))
+        .children(views)
+        .into_any()
+}
+
+/// The Packages page's header actions: import a package, reload them all.
+pub fn actions(ui: Ui) -> AnyView {
+    kit::hstack((
+        kit::button(ui.now_t("packages-refresh"), || Msg::RefreshPackages),
+        kit::cta_button(ui.now_t("packages-import"), || {
+            Msg::PickFile(FileTarget::ImportSkin)
+        }),
+    ))
+}
+
+/// One installed package as a card: what it is and where it comes from on
+/// top, its credits in the middle, what can be done with it at the foot.
+fn package_card(
+    ui: Ui,
+    row: &crate::plugins::PackageRow,
+    enabled: bool,
+    error: Option<&String>,
+) -> AnyView {
+    use nanatype_theme::PackageCapability as Cap;
+    let package = &row.manifest;
+    let id = package.meta.id.clone();
+    let name = nanatype_theme::localized(&package.meta.name, ui.locale.get_untracked().tag(), &id);
+    let functional = package.capabilities.contains(&Cap::Lua);
+    let builtin = row.origin == nanatype_theme::SkinOrigin::Builtin;
+    let glyph = if functional {
+        ti::CODE
+    } else if package.capabilities.contains(&Cap::Skin) {
+        ti::PALETTE
+    } else {
+        ti::PACKAGE
+    };
+    let integrity_tone = match &row.integrity {
+        Ok(Some(_)) => Tone::Success,
+        Ok(None) => Tone::Neutral,
+        Err(_) => Tone::Danger,
+    };
+    let tags: Vec<AnyView> = package
+        .capabilities
+        .iter()
+        .map(|cap| {
+            kit::tag(ui.now_t(match cap {
+                Cap::Skin => "packages-kind-skin",
+                Cap::Resources => "packages-kind-resources",
+                Cap::Lua => "packages-kind-function",
+            }))
+        })
+        .collect();
+    let dependencies = (!package.dependencies.is_empty()).then(|| {
+        widget(caption(format!(
+            "{}: {}",
+            ui.now_t("packages-dependencies"),
+            package
+                .dependencies
+                .iter()
+                .map(|(id, version)| format!("{id}@{version}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )))
+    });
+    let (enable_id, disable_id, export_id, remove_id) =
+        (id.clone(), id.clone(), id.clone(), id.clone());
+    let toggle = functional.then(|| {
+        if enabled {
+            widget(Button::new(ui.now_t("packages-disable")).size(ControlSize::Small))
+                .on_cx(move |_, _: &Activate, cx| {
+                    cx.dispatch_program_all(Msg::DisablePlugin(disable_id.clone()))
+                })
+                .into_any()
+        } else {
+            widget(Button::new(ui.now_t("packages-review-enable")).size(ControlSize::Small))
+                .key(format!("package-review:{id}"))
+                .bind(move |button: &mut Button| button.disabled = ui.plugin_activation_busy.get())
+                .on_cx(move |_, _: &Activate, cx| {
+                    cx.dispatch_program_all(Msg::RequestPluginActivation(enable_id.clone()));
+                })
+                .into_any()
+        }
+    });
+    widget(kit::card_frame(RadiusTier::Md))
+        .key(id.clone())
+        .children((
+            kit::line(
+                widget(Stack::row(gap::GROUP).align(AlignSpec::Center)).children((
+                    kit::icon_tile(
+                        glyph,
+                        36.0,
+                        if enabled { Tone::Accent } else { Tone::Neutral },
+                    ),
+                    widget(crate::ui::kit::grow_column(gap::HAIR)).children((
+                        widget(readable(name).style(Type::Strong.style())),
+                        widget(
+                            Text::new(format!("{id} · {}", package.meta.version))
+                                .style(Type::Caption.mono())
+                                .color(SemanticColorRole::Muted),
+                        ),
+                    )),
+                )),
+                kit::pill(integrity_label(ui, &row.integrity), integrity_tone, true),
+            ),
+            widget(
+                Stack::column(gap::TIGHT)
+                    .padding_xy(inset::CARD, 0.0)
+                    .with_layout(|l| l.padding_bottom = Some(LengthSpec::Px(inset::ROW_Y))),
+            )
+            .children((
+                widget(Stack::row(gap::TIGHT).wrap(true)).children(tags),
+                widget(caption(format!(
+                    "{}: {} · {}: {}",
+                    ui.now_t("package-author"),
+                    provided(ui, &package.meta.author),
+                    ui.now_t("package-created-at"),
+                    provided(ui, &package.created_at)
+                ))),
+                widget(caption(format!(
+                    "{}: {} · {}: {}",
+                    ui.now_t("package-license"),
+                    provided(ui, &package.meta.license),
+                    ui.now_t("package-licensed-to"),
+                    provided(ui, &package.licensed_to)
+                ))),
+                dependencies,
+                error.map(|e| kit::callout(Tone::Danger, e.clone())),
+            )),
+            kit::rule(),
+            widget(
+                Stack::row(gap::CONTROL)
+                    .wrap(true)
+                    .padding_xy(inset::CARD, inset::BAR_Y)
+                    .align(AlignSpec::Center)
+                    .justify(nana_ui_core::JustifySpec::End),
+            )
+            .children((
+                (!builtin).then(|| {
+                    widget(
+                        Button::new(ui.now_t("packages-remove"))
+                            .kind(ButtonKind::Text)
+                            .size(ControlSize::Small),
+                    )
+                    .on_cx(move |_, _: &Activate, cx| {
+                        cx.dispatch_program_all(Msg::RemovePackage(remove_id.clone()))
+                    })
+                }),
+                kit::spacer(),
+                widget(Button::new(ui.now_t("skins-export")).size(ControlSize::Small)).on_cx(
+                    move |_, _: &Activate, cx| {
+                        cx.dispatch_program_all(Msg::ExportSkin(export_id.clone()))
+                    },
+                ),
+                crate::ui::package_editor::package_actions(ui, &id, builtin),
+                toggle,
+            )),
+        ))
+        .into_any()
 }
 
 pub fn settings(ui: Ui) -> AnyView {
-    let toolbar = widget(Stack::row(8.).wrap(true)).children((
-        widget(Button::new(ui.now_t("packages-import"))).on_cx(|_, _: &Activate, cx| {
-            cx.dispatch_program_all(Msg::PickFile(FileTarget::ImportSkin))
-        }),
-        widget(Button::new(ui.now_t("packages-refresh")))
-            .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::RefreshPackages)),
-    ));
     let packages = dynamic(
         move || (ui.packages.get(), ui.settings.get(), ui.plugin_errors.get()),
         move |(rows, settings, errors)| {
-            let rows = rows
+            let cards = rows
                 .iter()
                 .map(|row| {
-                    let package = &row.manifest;
-                    let id = package.meta.id.clone();
-                    let name = nanatype_theme::localized(
-                        &package.meta.name,
-                        ui.locale.get_untracked().tag(),
-                        &id,
-                    );
-                    let enable_id = id.clone();
-                    let export_id = id.clone();
-                    let remove_id = id.clone();
-                    let functional = package
-                        .capabilities
-                        .contains(&nanatype_theme::PackageCapability::Lua);
-                    let enabled = settings.enabled_plugins.contains(&id);
-                    let toggle = functional.then(|| {
-                        widget(Button::new(ui.now_t("packages-review-enable")))
-                            .key(format!("package-review:{id}"))
-                            .bind(move |button: &mut Button| {
-                                button.disabled = ui.plugin_activation_busy.get()
-                            })
-                            .on_cx(move |_, _: &Activate, cx| {
-                                cx.dispatch_program_all(Msg::RequestPluginActivation(
-                                    enable_id.clone(),
-                                ));
-                            })
-                            .into_any()
-                    });
-                    let disable_id = id.clone();
-                    let integrity = integrity_label(ui, &row.integrity);
-                    let dependencies = (!package.dependencies.is_empty()).then(|| {
-                        widget(readable(format!(
-                            "{}: {}",
-                            ui.now_t("packages-dependencies"),
-                            package
-                                .dependencies
-                                .iter()
-                                .map(|(id, version)| format!("{id}@{version}"))
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )))
-                    });
-                    let error = errors.get(&id).map(|e| widget(Text::new(e.clone())));
-                    let capabilities = package
-                        .capabilities
-                        .iter()
-                        .map(|cap| {
-                            ui.now_t(match cap {
-                                nanatype_theme::PackageCapability::Skin => "packages-kind-skin",
-                                nanatype_theme::PackageCapability::Resources => {
-                                    "packages-kind-resources"
-                                }
-                                nanatype_theme::PackageCapability::Lua => "packages-kind-function",
-                            })
-                        })
-                        .collect::<Vec<_>>()
-                        .join(" · ");
-                    widget(Stack::column(6.).padding_xy(12., 12.))
-                        .key(id.clone())
-                        .children((
-                            widget(readable(format!("{} · {}", name, package.meta.version))),
-                            widget(Text::new(id.clone())),
-                            widget(Text::new(capabilities)),
-                            widget(readable(format!(
-                                "{}: {} · {}: {}",
-                                ui.now_t("package-author"),
-                                provided(ui, &package.meta.author),
-                                ui.now_t("package-created-at"),
-                                provided(ui, &package.created_at)
-                            ))),
-                            widget(readable(format!(
-                                "{}: {} · {}: {}",
-                                ui.now_t("package-license"),
-                                provided(ui, &package.meta.license),
-                                ui.now_t("package-licensed-to"),
-                                provided(ui, &package.licensed_to)
-                            ))),
-                            widget(readable(integrity)),
-                            dependencies,
-                            error,
-                            widget(Stack::row(8.).wrap(true)).children((
-                                toggle,
-                                (functional && enabled).then(|| {
-                                    widget(Button::new(ui.now_t("packages-disable"))).on_cx(
-                                        move |_, _: &Activate, cx| {
-                                            cx.dispatch_program_all(Msg::DisablePlugin(
-                                                disable_id.clone(),
-                                            ))
-                                        },
-                                    )
-                                }),
-                                widget(Button::new(ui.now_t("skins-export"))).on_cx(
-                                    move |_, _: &Activate, cx| {
-                                        cx.dispatch_program_all(Msg::ExportSkin(export_id.clone()))
-                                    },
-                                ),
-                                crate::ui::package_editor::package_actions(
-                                    ui,
-                                    &id,
-                                    row.origin == nanatype_theme::SkinOrigin::Builtin,
-                                ),
-                                (row.origin != nanatype_theme::SkinOrigin::Builtin).then(|| {
-                                    widget(Button::new(ui.now_t("packages-remove"))).on_cx(
-                                        move |_, _: &Activate, cx| {
-                                            cx.dispatch_program_all(Msg::RemovePackage(
-                                                remove_id.clone(),
-                                            ))
-                                        },
-                                    )
-                                }),
-                            )),
-                        ))
-                        .into_any()
+                    let id = &row.manifest.meta.id;
+                    package_card(
+                        ui,
+                        row,
+                        settings.enabled_plugins.contains(id),
+                        errors.get(id),
+                    )
                 })
                 .collect::<Vec<_>>();
-            widget(Stack::column(6.)).children(rows).into_any()
+            if cards.is_empty() {
+                return kit::empty_state(ui.now_t("packages-none"), None);
+            }
+            widget(Stack::column(gap::GROUP)).children(cards).into_any()
         },
     );
     let commands = dynamic(
@@ -357,7 +408,7 @@ pub fn settings(ui: Ui) -> AnyView {
                     let id = id.clone();
                     let command_id = command.id.clone();
                     buttons.push(
-                        widget(Button::new(command.label.clone()))
+                        widget(Button::new(command.label.clone()).size(ControlSize::Small))
                             .on_cx(move |_, _: &Activate, cx| {
                                 cx.dispatch_program_all(Msg::PluginCommand {
                                     id: id.clone(),
@@ -368,20 +419,42 @@ pub fn settings(ui: Ui) -> AnyView {
                     );
                 }
             }
-            widget(Stack::column(6.)).children(buttons).into_any()
+            widget(Stack::row(gap::CONTROL).wrap(true))
+                .children(buttons)
+                .into_any()
         },
     );
-    widget(Stack::column(12.))
-        .children((
-            toolbar,
-            crate::ui::package_editor::launcher(ui),
-            widget(Text::new(ui.now_t("packages-access"))),
-            activation(ui),
+    kit::sections((
+        activation(ui),
+        widget(Stack::column(gap::CONTROL)).children((
+            overline(ui.now_t("packages-installed")),
             packages,
-            commands,
-            mounted(ui, Mount::Panel),
-        ))
+            kit::callout(Tone::Neutral, ui.now_t("packages-access")),
+        )),
+        commands,
+        mounted(ui, Mount::Panel),
+        crate::ui::package_editor::launcher(ui),
+    ))
+}
+
+/// A section's title, inset like the cards' contents.
+fn overline(text: String) -> AnyView {
+    widget(Stack::row(0.0).padding_xy(gap::TIGHT, 0.0))
+        .children(Type::Overline.view(text))
         .into_any()
+}
+
+/// [`readable`] in the caption role.
+fn caption(value: impl Into<String>) -> Text {
+    readable(value)
+        .style({
+            let mut st = Type::Caption.style();
+            let layout = std::sync::Arc::make_mut(&mut st.layout);
+            layout.overflow_wrap = Some(nana_ui_core::OverflowWrapSpec::Anywhere);
+            layout.white_space = nana_ui_core::WhiteSpaceSpec::PreWrap;
+            st
+        })
+        .color(SemanticColorRole::Muted)
 }
 
 fn provided(ui: Ui, text: &str) -> String {
@@ -469,7 +542,7 @@ pub fn activation(ui: Ui) -> AnyView {
         move |(review, show, busy, error)| {
             let Some(review) = review else {
                 if *busy || error.is_some() {
-                    return widget(Stack::column(8.).padding_xy(16., 16.))
+                    return widget(kit::panel())
                         .key("plugin-activation-status")
                         .children((
                             widget(readable(
@@ -489,10 +562,10 @@ pub fn activation(ui: Ui) -> AnyView {
             } else {
                 review.source.chars().take(16000).collect::<String>()
             };
-            widget(Stack::column(8.).padding_xy(16., 16.))
+            widget(kit::panel())
                 .key("plugin-activation-review")
                 .children((
-                    widget(Text::new(ui.now_t("packages-consent-title"))),
+                    Type::Title.view(ui.now_t("packages-consent-title")),
                     widget(readable(format!(
                         "{} · {}\n{}: {}\n{}: {}\n{}: {}\n{}: {}",
                         review.id,
@@ -507,10 +580,10 @@ pub fn activation(ui: Ui) -> AnyView {
                         provided(ui, &review.manifest.meta.license)
                     ))),
                     widget(readable(integrity_label(ui, &Ok(review.integrity.clone())))),
-                    widget(Text::new(ui.now_t("packages-consent-risk"))),
+                    kit::callout(Tone::Warning, ui.now_t("packages-consent-risk")),
                     widget(Text::new(ui.now_t("packages-consent-data"))),
                     widget(readable(reads(ui, &review.data))).key("plugin-consent-reads"),
-                    widget(Stack::column(4.)).children((
+                    widget(Stack::column(gap::TIGHT)).children((
                         widget(readable(format!(
                             "{}: {}",
                             ui.now_t("packages-location"),
@@ -547,7 +620,7 @@ pub fn activation(ui: Ui) -> AnyView {
                             .height(160.),
                     )
                     .key("plugin-source-code"),
-                    widget(Stack::column(4.)).children((
+                    widget(Stack::column(gap::TIGHT)).children((
                         widget(Text::new(ui.now_t("packages-source-preview-limit"))),
                         busy.then(|| widget(readable(ui.now_t("packages-consent-confirming")))),
                     )),
@@ -558,8 +631,8 @@ pub fn activation(ui: Ui) -> AnyView {
                             s.disabled = ui.plugin_activation_busy.get();
                         })
                         .on(move |e: &ToggleChanged| ui.plugin_source_trusted.set(e.checked)),
-                    widget(Stack::row(8.).wrap(true)).children((
-                        widget(Button::new(ui.now_t("packages-consent-confirm")))
+                    widget(Stack::row(gap::CONTROL).wrap(true)).children((
+                        widget(kit::cta(Button::new(ui.now_t("packages-consent-confirm"))))
                             .key("plugin-consent-confirm")
                             .bind(move |button: &mut Button| {
                                 button.disabled = !ui.plugin_source_trusted.get()

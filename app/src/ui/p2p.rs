@@ -1,11 +1,12 @@
+use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
 use nana_ui::runtime::{Activate, Button, Stack, Text, TextChanged, TextInput};
-use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{AlignSpec, LengthSpec};
 use nanatype_p2p::Status;
 
 use super::Ui;
 use crate::msg::Msg;
+use crate::ui::kit::{Tone, Type, gap};
 
 fn field(stacked: bool) -> Stack {
     Stack::column(0.0)
@@ -52,9 +53,9 @@ pub(crate) fn card_with_fields(
             let expanded = *expanded;
             let form_row = || {
                 if stacked {
-                    Stack::column(6.0).width(LengthSpec::Fill)
+                    Stack::column(gap::CONTROL).width(LengthSpec::Fill)
                 } else {
-                    Stack::row(6.0).width(LengthSpec::Fill)
+                    Stack::row(gap::TIGHT).width(LengthSpec::Fill)
                 }
             };
             let status = match &state.status {
@@ -74,16 +75,23 @@ pub(crate) fn card_with_fields(
                 Status::Ended => ui.now_t("peer-off"),
                 Status::Error(error) => format!("{}: {error}", ui.now_t("peer-error")),
             };
+            let tone = match &state.status {
+                Status::Connected { .. } => Tone::Success,
+                Status::Starting | Status::Waiting | Status::Reconnecting => Tone::Warning,
+                Status::Error(_) => Tone::Danger,
+                Status::Ended => Tone::Off,
+            };
             let header = widget(
-                Stack::row(8.0)
+                Stack::row(gap::CONTROL)
                     .width(LengthSpec::Fill)
                     .align(AlignSpec::Center)
                     .height(LengthSpec::Px(32.0)),
             )
             .children((
+                state.active.then(|| crate::ui::kit::status_dot(tone)),
                 widget(field(false)).children(widget(
                     Text::new(format!("{} · {status}", ui.now_t("peer-title"))).style({
-                        let mut style = nana_ui::runtime::NodeStyle::default();
+                        let mut style = Type::Label.style();
                         let layout = std::sync::Arc::make_mut(&mut style.layout);
                         layout.white_space_nowrap = true;
                         layout.text_overflow_ellipsis = true;
@@ -105,17 +113,21 @@ pub(crate) fn card_with_fields(
             ))
             .into_any();
             if !expanded {
-                return widget(Stack::column(0.0).padding(2.0).height(LengthSpec::Px(36.0)))
-                    .children(header)
-                    .into_any();
+                return widget(
+                    Stack::column(0.0)
+                        .padding(gap::HAIR)
+                        .height(LengthSpec::Px(36.0)),
+                )
+                .children(header)
+                .into_any();
             }
             let body = if state.active {
                 let code = state.invitation.clone();
-                widget(Stack::column(8.0))
+                widget(Stack::column(gap::CONTROL))
                     .children((
-                        widget(Text::new(ui.now_t("peer-own-controls"))),
+                        Type::Caption.view(ui.now_t("peer-own-controls")),
                         widget(
-                            Stack::row(8.0)
+                            Stack::row(gap::CONTROL)
                                 .with_layout(|l| l.flex_wrap = nana_ui_core::FlexWrap::Wrap),
                         )
                         .children((
@@ -142,7 +154,7 @@ pub(crate) fn card_with_fields(
                     ))
                     .into_any()
             } else {
-                widget(Stack::column(6.0))
+                widget(Stack::column(gap::CONTROL))
                     .children((
                         widget(form_row()).children((
                             widget(field(stacked)).children(
@@ -187,11 +199,9 @@ pub(crate) fn card_with_fields(
                                 .on(move |e: &TextChanged| relay.set(e.value.to_string())),
                             ),
                             widget(action(stacked)).children(
-                                widget(
-                                    Button::new(ui.now_t("peer-create"))
-                                        .kind(ButtonKind::Primary)
-                                        .size(ControlSize::Small),
-                                )
+                                widget(crate::ui::kit::cta(
+                                    Button::new(ui.now_t("peer-create")).size(ControlSize::Small),
+                                ))
                                 .on_cx(
                                     move |_, _: &Activate, cx| {
                                         cx.dispatch_program_all(Msg::PeerStart {
@@ -205,10 +215,14 @@ pub(crate) fn card_with_fields(
                     ))
                     .into_any()
             };
-            widget(Stack::column(6.0).padding(6.0).with_layout(|l| {
-                l.min_height = Some(LengthSpec::Px(150.0));
-                l.flex_shrink = Some(0.0);
-            }))
+            widget(
+                Stack::column(gap::CONTROL)
+                    .padding(nana_ui::theme::space::SM)
+                    .with_layout(|l| {
+                        l.min_height = Some(LengthSpec::Px(150.0));
+                        l.flex_shrink = Some(0.0);
+                    }),
+            )
             .children((header, body))
             .into_any()
         },

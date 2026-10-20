@@ -78,7 +78,7 @@ impl Rig {
         status.bilibili = "Bilibili · 21452505".into();
         status.bilibili_link = danmaku::Link::Connected;
         ui.status.set(Arc::new(status));
-        let theme = nanatype::skin_theme::compile(nanatype::skin_theme::dark_mode(
+        let theme = nanatype::ui::kit::theme::compile(nanatype::skin_theme::dark_mode(
             settings.skin.chrome,
             false,
         ));

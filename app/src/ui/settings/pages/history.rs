@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn history(ui: Ui) -> AnyView {
-    widget(Stack::column(SECTION_GAP))
+    widget(Stack::column(gap::SECTION))
         .children((
             section(
                 ui,
@@ -155,7 +155,7 @@ pub(super) fn history(ui: Ui) -> AnyView {
                     ui,
                     "history-window-link",
                     Some("history-window-link-hint"),
-                    widget(Stack::row(4.0).align(AlignSpec::Center))
+                    widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
                         .children((page_link(ui, Page::Windows), page_link(ui, Page::Output)))
                         .into_any(),
                 )],

@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn general(ui: Ui) -> AnyView {
     let avatar_row = {
         let has = ui.settings.get_untracked().general.avatar.is_some();
-        widget(Stack::row(8.0))
+        widget(Stack::row(gap::CONTROL))
             .visible(move || {
                 !(ui.settings.with(|s| s.integrations.bilibili.sync_profile)
                     && matches!(
@@ -24,7 +24,7 @@ pub(super) fn general(ui: Ui) -> AnyView {
             .into_any()
     };
     let guide = (!ui.settings.get_untracked().general.onboarding_done).then(|| onboarding(ui));
-    widget(Stack::column(SECTION_GAP))
+    widget(Stack::column(gap::SECTION))
         .children((
             guide,
             section(

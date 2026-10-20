@@ -28,7 +28,6 @@ mod skins;
 mod windows;
 
 pub use self::about::font_licence_panel;
-pub(super) use self::skins::checker_url;
 
 use self::about::*;
 use self::assets::*;
@@ -52,7 +51,7 @@ use nana_ui::runtime::{
     PopoverClosed, PopoverToggled, ScrollAxes, ScrollView, Select, SelectChanged, SelectOption,
     Stack, StatusBadge, Switch, Text, TextChanged, TextInput, ToggleChanged,
 };
-use nana_ui::theme::{space, type_scale};
+use nana_ui::theme::space;
 use nana_ui::{ButtonKind, ControlSize, StatusTone};
 use nana_ui_core::{
     AlignSpec, BackgroundImage, JustifySpec, LengthSpec, OverflowSpec, PositionSpec,
@@ -90,19 +89,20 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
         Page::Assets => assets(ui),
         Page::About => about(ui),
     };
-    widget(Stack::column(SECTION_GAP))
-        .children((
-            widget(Stack::column(space::XS)).children((
-                heading(ui, page.label_key()),
-                widget(
-                    Text::new(ui.now_t(page.subtitle_key()))
-                        .style(text_style(type_scale::BODY, type_scale::REGULAR))
-                        .color(SemanticColorRole::Muted),
-                ),
-            )),
-            body,
-        ))
+    widget(Stack::column(gap::SECTION))
+        .children(body)
         .into_any()
+}
+
+/// The open page's page-wide actions, shown in its header.
+pub fn actions(ui: Ui, page: Page) -> Option<AnyView> {
+    match page {
+        Page::Skins => Some(primary(ui, "skins-import", || {
+            Msg::PickFile(FileTarget::ImportSkin)
+        })),
+        Page::Packages => Some(crate::ui::plugins::actions(ui)),
+        _ => None,
+    }
 }
 
 /// "Follow system" and every language by its own name.
@@ -130,7 +130,7 @@ fn language_select(ui: Ui) -> AnyView {
 fn speaker_field(ui: Ui) -> AnyView {
     widget(
         Stack::row(0.0)
-            .width(LengthSpec::Px(220.0))
+            .width(LengthSpec::Px(field::MD))
             .with_layout(|l| {
                 l.flex_shrink = Some(0.0);
             }),
@@ -150,7 +150,7 @@ fn speaker_field(ui: Ui) -> AnyView {
                     move |name| {
                         widget(
                             Text::new(name.clone())
-                                .style(text_style(type_scale::BODY, type_scale::REGULAR))
+                                .style(Type::Body.style())
                                 .truncating(),
                         )
                         .into_any()
@@ -161,7 +161,7 @@ fn speaker_field(ui: Ui) -> AnyView {
                 text(
                     ui,
                     String::new(),
-                    220.0,
+                    field::MD,
                     |s| s.general.speaker_name.clone(),
                     |s, v| s.general.speaker_name = v,
                 )
@@ -173,29 +173,12 @@ fn speaker_field(ui: Ui) -> AnyView {
 
 /// Body-size muted text.
 fn hint_13(text: String) -> AnyView {
-    widget(
-        Text::new(text)
-            .style(text_style(type_scale::BODY, type_scale::REGULAR))
-            .color(SemanticColorRole::Muted),
-    )
-    .into_any()
+    Type::Lead.view(text)
 }
 
 fn mirror(ui: Ui) -> bool {
     ui.settings
         .with(|s| matches!(s.general.input_mode, InputMode::Mirror))
-}
-
-/// Text on one line, cut with an ellipsis where it does not fit.
-fn one_line(size: f32, weight: u16) -> nana_ui::runtime::NodeStyle {
-    let mut st = text_style(size, weight);
-    let l = Arc::make_mut(&mut st.layout);
-    l.white_space_nowrap = true;
-    l.text_overflow_ellipsis = true;
-    l.min_width = Some(LengthSpec::Px(0.0));
-    l.flex_grow = Some(1.0);
-    l.flex_shrink = Some(1.0);
-    st
 }
 
 /// `{key}-hint`, when that message exists.

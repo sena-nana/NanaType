@@ -138,7 +138,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                     // Two lines: name, hotkey, send and remove; then the
                     // content across the full width.
                     let first = widget(
-                        Stack::row(10.0)
+                        Stack::row(gap::CONTROL)
                             .align(AlignSpec::Center)
                             .width(LengthSpec::Fill),
                     )
@@ -162,7 +162,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                         widget(Stack::row(0.0).grow(1.0)),
                         widget(
                             Text::new(ui.now_t("assets-phrase-send"))
-                                .style(text_style(12.0, 500))
+                                .style(Type::Small.style())
                                 .color(SemanticColorRole::Muted),
                         ),
                         widget(Switch::new("", p.send))
@@ -216,7 +216,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                     );
                     widget(Stack::column(space::XS))
                         .children((
-                            widget(Stack::column(space::MD).padding_xy(INSET, space::XL))
+                            widget(Stack::column(space::MD).padding_xy(inset::CARD, space::XL))
                                 .children((first, content)),
                             hotkey_issue_line(ui, action),
                         ))
@@ -228,17 +228,17 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                 .into_any()
         },
     );
-    widget(Stack::column(SECTION_GAP))
+    widget(Stack::column(gap::SECTION))
         .children((
             section(
                 ui,
                 "assets-stickers",
                 vec![
-                    widget(Stack::column(0.0).padding_xy(INSET, space::LG))
+                    widget(Stack::column(0.0).padding_xy(inset::CARD, space::LG))
                         .children(hint(ui.now_t("assets-stickers-hint")))
                         .into_any(),
                     dirs.into_any(),
-                    widget(Stack::row(0.0).padding_xy(INSET, space::LG))
+                    widget(Stack::row(0.0).padding_xy(inset::CARD, space::LG))
                         .children(button(ui, "assets-add-folder", || {
                             Msg::PickFile(FileTarget::StickerFolder)
                         }))
@@ -251,7 +251,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                 "assets-phrases",
                 vec![
                     phrases.into_any(),
-                    widget(Stack::row(0.0).padding_xy(INSET, space::LG))
+                    widget(Stack::row(0.0).padding_xy(inset::CARD, space::LG))
                         .children(button(ui, "assets-phrase-add", || {
                             edit(|s| {
                                 s.assets.phrases.push(QuickPhrase {

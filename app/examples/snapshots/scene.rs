@@ -100,7 +100,7 @@ impl Scene {
         if std::env::var_os("NANATYPE_SNAPSHOT_MATERIALS_OFF").is_some() {
             settings.skin.advanced_effects = false;
         }
-        let theme = nanatype::skin_theme::compile(dark);
+        let theme = nanatype::ui::kit::theme::compile(dark);
         let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), locale);
         if std::env::var_os("NANATYPE_SNAPSHOT_STATIC").is_some() {
             ui.reduced_motion.set(true);

@@ -1,5 +1,6 @@
 //! A tab-controlled, in-flow sidebar beside the fixed-size stream preview.
 use super::*;
+use crate::ui::kit::{gap, inset};
 use nanatype_settings::{InputDockRegion as Region, InputDockRegionKind as RegionKind};
 
 const EDITOR_MIN: f32 = 320.0;
@@ -90,40 +91,44 @@ fn commands(ui: Ui, width: Signal<f32>) -> AnyView {
         move || ui.skin.with(|s| Arc::as_ptr(s) as usize),
         move |_| {
             let skin = ui.skin.get_untracked();
-            widget(Stack::column(8.0).width(LengthSpec::Fill).padding(4.0))
-                .children((
-                    command_row(width).children((
-                        command(ui, "dock-wait", Marker::Wait { ms: 500 }, width),
-                        command(ui, "tb-pause", Marker::Pause { auto_ms: None }, width),
+            widget(
+                Stack::column(gap::CONTROL)
+                    .width(LengthSpec::Fill)
+                    .padding(gap::TIGHT),
+            )
+            .children((
+                command_row(width).children((
+                    command(ui, "dock-wait", Marker::Wait { ms: 500 }, width),
+                    command(ui, "tb-pause", Marker::Pause { auto_ms: None }, width),
+                )),
+                command_row(width).children((
+                    command(ui, "tb-page", Marker::Page, width),
+                    command(
+                        ui,
+                        "tb-screenshake",
+                        Marker::ScreenShake {
+                            amp: skin.effects.screen_shake_px,
+                            ms: 300,
+                        },
+                        width,
+                    ),
+                )),
+                widget(Stack::column(gap::CONTROL))
+                    .visible(move || ui.settings.with(|s| !s.assets.phrases.is_empty()))
+                    .children((
+                        widget(Divider::horizontal()),
+                        caption(ui.now_t("tb-phrases")),
+                        phrases(ui),
                     )),
-                    command_row(width).children((
-                        command(ui, "tb-page", Marker::Page, width),
-                        command(
-                            ui,
-                            "tb-screenshake",
-                            Marker::ScreenShake {
-                                amp: skin.effects.screen_shake_px,
-                                ms: 300,
-                            },
-                            width,
-                        ),
-                    )),
-                    widget(Stack::column(8.0))
-                        .visible(move || ui.settings.with(|s| !s.assets.phrases.is_empty()))
-                        .children((
-                            widget(Divider::horizontal()),
-                            caption(ui.now_t("tb-phrases")),
-                            phrases(ui),
-                        )),
-                ))
-                .into_any()
+            ))
+            .into_any()
         },
     )
     .into_any()
 }
 
 fn command_row(width: Signal<f32>) -> nana_ui::runtime::view::El<Stack> {
-    widget(Stack::row(8.0).width(LengthSpec::Fill)).bind(move |s: &mut Stack| {
+    widget(Stack::row(gap::CONTROL).width(LengthSpec::Fill)).bind(move |s: &mut Stack| {
         restyle(s, |l| {
             l.direction = Some(if width.get() < 260.0 {
                 nana_ui_core::FlexDirection::Column
@@ -200,23 +205,27 @@ fn phrases(ui: Ui) -> AnyView {
                         .into_any()
                 })
                 .collect();
-            widget(Stack::column(6.0).width(LengthSpec::Fill).padding(4.0))
-                .children((
-                    buttons,
-                    phrases.is_empty().then(|| {
-                        widget(
-                            Button::new(ui.now_t("empty-phrases"))
-                                .kind(ButtonKind::Text)
-                                .size(ControlSize::Small),
-                        )
-                        .on_cx(|_, _: &Activate, cx| {
-                            cx.dispatch_program_all(Msg::SettingsPage(
-                                super::super::settings::Page::Assets,
-                            ))
-                        })
-                    }),
-                ))
-                .into_any()
+            widget(
+                Stack::column(gap::CONTROL)
+                    .width(LengthSpec::Fill)
+                    .padding(gap::TIGHT),
+            )
+            .children((
+                buttons,
+                phrases.is_empty().then(|| {
+                    widget(
+                        Button::new(ui.now_t("empty-phrases"))
+                            .kind(ButtonKind::Text)
+                            .size(ControlSize::Small),
+                    )
+                    .on_cx(|_, _: &Activate, cx| {
+                        cx.dispatch_program_all(Msg::SettingsPage(
+                            super::super::settings::Page::Assets,
+                        ))
+                    })
+                }),
+            ))
+            .into_any()
         },
     )
     .into_any()
@@ -228,12 +237,16 @@ fn dock_panel(ui: Ui, region: Region, selected: Signal<u64>, width: Signal<f32>)
         RegionKind::Commands | RegionKind::Unknown => commands(ui, width),
         RegionKind::Phrases => phrases(ui),
     };
-    widget(Stack::fill_column(0.0).padding(12.0).with_layout(|l| {
-        l.height = Some(LengthSpec::Px(0.0));
-        l.flex_grow = Some(1.0);
-        l.min_height = Some(LengthSpec::Px(0.0));
-        l.min_width = Some(LengthSpec::Px(0.0));
-    }))
+    widget(
+        Stack::fill_column(0.0)
+            .padding(inset::PANEL)
+            .with_layout(|l| {
+                l.height = Some(LengthSpec::Px(0.0));
+                l.flex_grow = Some(1.0);
+                l.min_height = Some(LengthSpec::Px(0.0));
+                l.min_width = Some(LengthSpec::Px(0.0));
+            }),
+    )
     .key(match region.id {
         0 => "input-dock-commands-panel".into(),
         1 => "input-dock-stickers-panel".into(),
@@ -312,10 +325,14 @@ fn compact_tab_bar(
 ) -> AnyView {
     use nana_ui::runtime::view::each;
     let open = signal(false);
-    widget(Stack::row(4.0).width(LengthSpec::Fill).with_layout(|l| {
-        l.min_width = Some(LengthSpec::Px(0.0));
-        l.flex_shrink = Some(1.0);
-    }))
+    widget(
+        Stack::row(gap::TIGHT)
+            .width(LengthSpec::Fill)
+            .with_layout(|l| {
+                l.min_width = Some(LengthSpec::Px(0.0));
+                l.flex_shrink = Some(1.0);
+            }),
+    )
     .key("input-dock-icon-tabs")
     .roving_focus(nana_ui::runtime::RovingFocusGroup::horizontal())
     .visible(move || compact_tabs(ui, &regions.get(), width.get()))
@@ -355,7 +372,7 @@ fn compact_tab_bar(
                 .on(move |_: &Activate| selected.set(region.id))
             },
         )
-        .container(widget(Stack::row(4.0))),
+        .container(widget(Stack::row(gap::TIGHT))),
         dynamic(
             move || {
                 let all = regions.get();
@@ -398,7 +415,7 @@ fn dock(ui: Ui) -> AnyView {
     let width = signal(nanatype_settings::INPUT_SIDEBAR_DEFAULT);
     widget(
         Stack::fill_column(0.0)
-            .surface(SemanticColorRole::Background)
+            .surface(SemanticColorRole::Subtle)
             .with_layout(|l| {
                 l.min_width = Some(LengthSpec::Px(0.0));
             }),
@@ -460,9 +477,9 @@ fn dock(ui: Ui) -> AnyView {
             widget(Stack::fill_column(0.0).with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))))
                 .children((
                     widget(
-                        Stack::bar(4.0)
+                        Stack::bar(gap::TIGHT)
                             .height(LengthSpec::Px(TOOLBAR_H))
-                            .padding_xy(8.0, 0.0)
+                            .padding_xy(inset::BAR_Y, 0.0)
                             .with_layout(|l| l.flex_shrink = Some(0.0)),
                     )
                     .children((
@@ -652,10 +669,11 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) 
                 modes(ui, mode)
             };
             widget(
-                Stack::bar(8.0)
+                Stack::bar(gap::CONTROL)
                     .width(LengthSpec::Fill)
                     .height(LengthSpec::Px(crate::windows::INPUT_ACTIONS_H))
-                    .padding_xy(12.0, 8.0)
+                    .padding_xy(inset::BAR_X, inset::BAR_Y)
+                    .surface(SemanticColorRole::Subtle)
                     .align(AlignSpec::Center)
                     .with_layout(|l| l.flex_shrink = Some(0.0)),
             )
@@ -681,11 +699,9 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) 
                 super::super::bilibili::account_button(ui),
                 widget(Stack::row(0.0))
                     .visible(move || mode == InputMode::Compose && ui.input_width.get() >= 1000.0)
-                    .children(super::super::keycap::chord(key)),
-                widget(crate::skin_theme::cta(
-                    Button::new(ui.now_t("tb-send"))
-                        .icon(ti::SEND)
-                        .kind(ButtonKind::Primary),
+                    .children(crate::ui::kit::keycap::chord(key)),
+                widget(crate::ui::kit::cta(
+                    Button::new(ui.now_t("tb-send")).icon(ti::SEND),
                 ))
                 .on_cx(move |_, _: &Activate, cx| {
                     super::super::motion::press(cx, ui.reduced_motion.get_untracked());

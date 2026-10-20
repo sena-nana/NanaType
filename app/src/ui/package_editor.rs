@@ -3,7 +3,8 @@
 use crate::msg::{FileTarget, Msg};
 use crate::package_editor::{Action, EditorView, Tab};
 use crate::ui::Ui;
-use crate::ui::settings::controls::{confirm, hint, label, text_style};
+use crate::ui::kit::{Tone, Type, gap, inset};
+use crate::ui::settings::controls::{confirm, hint, label};
 use nana_ui::runtime::view::{
     AnyView, IntoView, Signal, dynamic, segmented_option, signal, widget,
 };
@@ -13,9 +14,9 @@ use nana_ui::runtime::{
     TextChanged, TextDiagnosticSeverity, TextDiagnosticSpan, TextInput, TextMatchSpan,
     TextSelection, ToggleChanged, TreeSelectionChanged, TreeView, ViewContext,
 };
-use nana_ui::theme::{space, type_scale};
+use nana_ui::theme::space;
 use nana_ui::{ButtonKind, ControlSize, icons_tabler as ti};
-use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole, TreeNode};
+use nana_ui_core::{AlignSpec, LengthSpec, RadiusTier, SemanticColorRole, TreeNode};
 use nanatype_theme::editor::{AssetKind, DraftOrigin, FileInfo, Level, Metadata, ProjectKind};
 use nanatype_theme::{
     DataFormat, DataSpec, MANIFEST, PACKAGE_MANIFEST, PackageCapability, PipelineSpec, PortSource,
@@ -83,7 +84,7 @@ fn button(ui: Ui, key: &str) -> Button {
 
 /// Wrapping, selectable-looking text that never widens its column.
 fn readable(value: impl Into<String>) -> Text {
-    let mut text = Text::new(value).style(text_style(type_scale::META, type_scale::REGULAR));
+    let mut text = Text::new(value).style(Type::Caption.style());
     let layout = Arc::make_mut(&mut text.style.layout);
     layout.overflow_wrap = Some(nana_ui_core::OverflowWrapSpec::Anywhere);
     layout.white_space = nana_ui_core::WhiteSpaceSpec::PreWrap;
@@ -175,7 +176,7 @@ pub fn launcher(ui: Ui) -> AnyView {
             widget(Stack::column(space::SM)).children(rows).into_any()
         },
     );
-    widget(Stack::column(space::MD).padding_xy(12., 12.))
+    widget(crate::ui::kit::panel())
         .key("package-editor-launcher")
         .children((
             label(ui.now_t("pkgedit-title")),
@@ -205,7 +206,7 @@ pub fn launcher(ui: Ui) -> AnyView {
                     .key("package-editor-id")
                     .on(move |e: &TextChanged| id.set(e.value.to_string())),
                 ),
-                widget(button(ui, "pkgedit-new").kind(ButtonKind::Primary))
+                widget(crate::ui::kit::cta(button(ui, "pkgedit-new")))
                     .key("package-editor-new")
                     .bind(move |b: &mut Button| {
                         b.disabled = id.with(|i| i.trim().is_empty());
@@ -228,7 +229,7 @@ pub fn launcher(ui: Ui) -> AnyView {
 pub fn package_actions(ui: Ui, id: &str, builtin: bool) -> AnyView {
     let edit = id.to_owned();
     let copy = id.to_owned();
-    widget(Stack::row(8.).wrap(true))
+    widget(Stack::row(gap::CONTROL).wrap(true))
         .children((
             (!builtin).then(|| {
                 widget(button(ui, "pkgedit-edit"))
@@ -245,14 +246,18 @@ pub fn package_actions(ui: Ui, id: &str, builtin: bool) -> AnyView {
 // ---- the editor --------------------------------------------------------------
 
 pub fn editor(ui: Ui) -> AnyView {
-    widget(
-        Stack::fill_column(space::MD)
-            .padding_xy(space::XL, space::LG)
-            .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
-    )
-    .key("package-editor")
-    .children((header(ui), close_prompt(ui), tabs(ui), body(ui)))
-    .into_any()
+    widget(Stack::fill_column(0.0).with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))))
+        .key("package-editor")
+        .children((
+            header(ui),
+            widget(
+                Stack::fill_column(gap::CONTROL)
+                    .padding_xy(inset::PAGE, inset::ROW_Y)
+                    .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
+            )
+            .children((close_prompt(ui), tabs(ui), body(ui))),
+        ))
+        .into_any()
 }
 
 fn origin_text(ui: Ui, view: &EditorView) -> String {
@@ -315,37 +320,60 @@ fn header(ui: Ui) -> AnyView {
             let Some((package, kind, origin, status, dirty)) = state.clone() else {
                 return widget(Stack::column(0.)).into_any();
             };
-            widget(Stack::column(space::XS))
+            let state = if dirty { Tone::Warning } else { Tone::Success };
+            widget(Stack::column(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
                 .key("package-editor-header")
                 .children((
-                    widget(Stack::row(space::MD).wrap(true).align(AlignSpec::Center)).children((
-                        widget(
-                            Text::new(format!("{package} · {}", ui.now_t(kind_key(kind))))
-                                .style(text_style(type_scale::TITLE, type_scale::SEMIBOLD)),
-                        ),
-                        widget(Stack::row(space::SM).wrap(true)).children((
-                            widget(button(ui, "pkgedit-save").kind(if dirty {
-                                ButtonKind::Primary
-                            } else {
-                                ButtonKind::Subtle
-                            }))
-                            .key("package-editor-save")
-                            .on_cx(send(|| Action::Save)),
-                            dirty.then(|| {
-                                widget(button(ui, "pkgedit-revert"))
-                                    .key("package-editor-revert")
-                                    .on_cx(send(|| Action::Revert))
-                            }),
-                            widget(button(ui, "pkgedit-export"))
-                                .key("package-editor-export")
-                                .on_cx(send(|| Action::Export)),
-                            widget(button(ui, "pkgedit-close"))
-                                .key("package-editor-close")
-                                .on_cx(send(|| Action::Close)),
+                    widget(
+                        Stack::row(gap::GROUP)
+                            .wrap(true)
+                            .padding_xy(inset::PAGE, inset::CARD)
+                            .align(AlignSpec::Center)
+                            .width(LengthSpec::Fill),
+                    )
+                    .children((
+                        widget(crate::ui::kit::grow_column(gap::HAIR)).children((
+                            widget(Stack::row(gap::CONTROL).wrap(true).align(AlignSpec::Center))
+                                .children((
+                                    widget(readable(package).style(Type::PageTitle.style())),
+                                    crate::ui::kit::tag(ui.now_t(kind_key(kind))),
+                                )),
+                            widget(readable(origin).color(SemanticColorRole::Muted)),
                         )),
+                        widget(Stack::row(gap::CONTROL).wrap(true).align(AlignSpec::Center))
+                            .children((
+                                dirty.then(|| {
+                                    widget(button(ui, "pkgedit-revert"))
+                                        .key("package-editor-revert")
+                                        .on_cx(send(|| Action::Revert))
+                                }),
+                                widget(button(ui, "pkgedit-export"))
+                                    .key("package-editor-export")
+                                    .on_cx(send(|| Action::Export)),
+                                widget(button(ui, "pkgedit-close"))
+                                    .key("package-editor-close")
+                                    .on_cx(send(|| Action::Close)),
+                                widget(if dirty {
+                                    crate::ui::kit::cta(button(ui, "pkgedit-save"))
+                                } else {
+                                    button(ui, "pkgedit-save")
+                                })
+                                .key("package-editor-save")
+                                .on_cx(send(|| Action::Save)),
+                            )),
                     )),
-                    widget(readable(origin).color(SemanticColorRole::Muted)),
-                    widget(readable(status)).key("package-editor-status"),
+                    widget(
+                        Stack::row(gap::CONTROL)
+                            .wrap(true)
+                            .padding_xy(inset::PAGE, 0.0)
+                            .align(AlignSpec::Center)
+                            .with_layout(|l| l.padding_bottom = Some(LengthSpec::Px(inset::BAR_Y))),
+                    )
+                    .children((
+                        crate::ui::kit::status_dot(state),
+                        widget(readable(status)).key("package-editor-status"),
+                    )),
+                    crate::ui::kit::rule(),
                 ))
                 .into_any()
         },
@@ -363,20 +391,21 @@ fn close_prompt(ui: Ui) -> AnyView {
             if !*open {
                 return widget(Stack::column(0.)).into_any();
             }
-            widget(
-                Stack::row(space::MD)
+            widget(crate::ui::kit::wash(
+                Stack::row(gap::CONTROL)
                     .wrap(true)
                     .align(AlignSpec::Center)
-                    .padding_xy(space::MD, space::SM)
-                    .surface(SemanticColorRole::Subtle)
-                    .radius_px(6.),
-            )
+                    .padding_xy(inset::PANEL, inset::BAR_Y)
+                    .radius(RadiusTier::Sm),
+                SemanticColorRole::Warning,
+                0.10,
+            ))
             .key("package-editor-close-prompt")
             .children((
                 widget(
                     readable(ui.now_t("pkgedit-close-unsaved")).color(SemanticColorRole::Warning),
                 ),
-                widget(button(ui, "pkgedit-close-save").kind(ButtonKind::Primary))
+                widget(crate::ui::kit::cta(button(ui, "pkgedit-close-save")))
                     .key("package-editor-close-save")
                     .on_cx(send(|| Action::ConfirmClose { save: true })),
                 widget(button(ui, "pkgedit-close-discard").kind(ButtonKind::Danger))
@@ -687,13 +716,8 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
             let formattable = editable && matches!(ext.as_str(), "toml" | "json");
             widget(Stack::row(space::SM).wrap(true).align(AlignSpec::Center))
                 .children((
-                    widget(Text::new(path.clone()).style(
-                        crate::ui::settings::controls::mono_style(
-                            type_scale::META,
-                            type_scale::MEDIUM,
-                        ),
-                    ))
-                    .key("package-editor-path"),
+                    widget(Text::new(path.clone()).style(Type::Small.mono()))
+                        .key("package-editor-path"),
                     (!editable && text).then(|| hint(ui.now_t("pkgedit-read-only"))),
                     formattable.then(|| {
                         widget(button(ui, "pkgedit-format"))
@@ -913,7 +937,7 @@ fn file_info(ui: Ui, view: &EditorView) -> AnyView {
         Stack::column(space::SM)
             .padding_xy(space::MD, space::MD)
             .surface(SemanticColorRole::Subtle)
-            .radius_px(6.),
+            .radius(RadiusTier::Sm),
     )
     .key("package-editor-file-info")
     .children((
@@ -973,7 +997,7 @@ fn problems(ui: Ui) -> AnyView {
                             &format!("{}:{}:{i}", d.path, d.offset),
                         ))
                         .on_cx(send(move || Action::Reveal(target.clone()))),
-                        widget(Stack::column(0.).shrink(1.).padding_xy(0., 4.))
+                        widget(Stack::column(0.).shrink(1.).padding_xy(0., gap::TIGHT))
                             .children(widget(readable(d.message.clone()))),
                     ))
                     .into_any()
@@ -1094,7 +1118,7 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
             })
         })
     };
-    let apply = widget(button(ui, "pkgedit-apply").kind(ButtonKind::Primary))
+    let apply = widget(crate::ui::kit::cta(button(ui, "pkgedit-apply")))
         .key("package-editor-apply")
         .bind(move |b: &mut Button| b.disabled = !editable)
         .on_cx(move |_, _: &Activate, cx| {
@@ -1157,7 +1181,7 @@ fn entry_row(key: &str, summary: String, buttons: Option<AnyView>) -> AnyView {
         Stack::column(space::XS)
             .padding_xy(space::MD, space::SM)
             .surface(SemanticColorRole::Subtle)
-            .radius_px(6.),
+            .radius(RadiusTier::Sm),
     )
     .key(key.to_owned())
     .children((widget(readable(summary)), buttons))
@@ -1202,7 +1226,7 @@ fn form_buttons(
 ) -> AnyView {
     widget(Stack::row(space::SM).wrap(true))
         .children((
-            widget(button(ui, "pkgedit-apply").kind(ButtonKind::Primary))
+            widget(crate::ui::kit::cta(button(ui, "pkgedit-apply")))
                 .key(format!("{key}-apply"))
                 .on_cx(apply),
             widget(button(ui, "common-cancel"))
@@ -1217,7 +1241,7 @@ fn form(key: &str, children: impl IntoView) -> AnyView {
         Stack::column(space::MD)
             .padding_xy(space::MD, space::MD)
             .outline(SemanticColorRole::Border, 1.)
-            .radius_px(6.),
+            .radius(RadiusTier::Sm),
     )
     .key(key.to_owned())
     .children(children)
@@ -1801,7 +1825,7 @@ fn signing(ui: Ui) -> AnyView {
                         hint(ui.now_t("pkgedit-protect")),
                         widget(Stack::column(space::XS)).children(rows),
                         natural(
-                            widget(button(ui, "pkgedit-sign").kind(ButtonKind::Primary))
+                            widget(crate::ui::kit::cta(button(ui, "pkgedit-sign")))
                                 .key("package-editor-sign")
                                 .bind(move |b: &mut Button| b.disabled = !can_sign)
                                 .on_cx(send(move || Action::Sign(protected.get_untracked()))),
@@ -1952,7 +1976,7 @@ fn debug(ui: Ui) -> AnyView {
                         cx.dispatch_program_all(Msg::PackageEditor(Action::Trust(e.checked)))
                     }),
                     widget(Stack::row(space::SM).wrap(true)).children((
-                        widget(button(ui, "pkgedit-debug-start").kind(ButtonKind::Primary))
+                        widget(crate::ui::kit::cta(button(ui, "pkgedit-debug-start")))
                             .key("package-editor-debug-start")
                             .bind(move |b: &mut Button| b.disabled = !debug.trusted)
                             .on_cx(send(|| Action::DebugStart)),
@@ -2024,7 +2048,7 @@ fn debug(ui: Ui) -> AnyView {
                         Stack::column(0.)
                             .padding_xy(space::MD, space::MD)
                             .surface(SemanticColorRole::Subtle)
-                            .radius_px(6.),
+                            .radius(RadiusTier::Sm),
                     )
                     .key("package-editor-debug-output")
                     .children(output),

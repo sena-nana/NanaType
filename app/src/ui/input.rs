@@ -35,6 +35,7 @@ use super::dialogue::{Base, Source, dialogue_box};
 use super::rich::{ChipKind, MarkerLook};
 use super::{I18N, Ui, c, restyle};
 use crate::msg::{FileTarget, MarkupEdit, Msg, Tool};
+use crate::ui::kit::{Tone, Type, gap, icon, inset};
 use crate::windows::{INPUT_MODE_H, TOOLBAR_H};
 
 mod stickers;
@@ -181,7 +182,7 @@ fn layout_switch(ui: Ui) -> AnyView {
     )
     .key("input-mode-bar")
     .children((
-        widget(Text::new(ui.now_t("input-plain-text")).style(text_style(12.0, 400)))
+        widget(Text::new(ui.now_t("input-plain-text")).style(Type::Caption.style()))
             .bind(move |t: &mut Text| t.value = ui.t("input-plain-text")()),
         widget(
             Switch::new(
@@ -191,7 +192,7 @@ fn layout_switch(ui: Ui) -> AnyView {
             .control_position(nana_ui_core::SwitchControlPosition::Start)
             .size(ControlSize::Small)
             .style({
-                let mut st = text_style(12.0, 400);
+                let mut st = Type::Caption.style();
                 let l = Arc::make_mut(&mut st.layout);
                 // Switch paints its label internally, so auto width has no
                 // text to measure. Reserve room for the longest locale.
@@ -223,7 +224,7 @@ fn trigger_face(icon: nana_ui::runtime::Icon, label: Option<String>) -> AnyView 
     let glyph = IconGlyph::new(icon).size(GLYPH).decorative();
     match label {
         Some(label) => {
-            let mut st = text_style(12.0, 500);
+            let mut st = Type::Small.style();
             {
                 let l = Arc::make_mut(&mut st.layout);
                 l.white_space_nowrap = true;
@@ -255,14 +256,6 @@ fn trigger_face(icon: nana_ui::runtime::Icon, label: Option<String>) -> AnyView 
             .into_any()
         }
     }
-}
-
-fn text_style(size: f32, weight: u16) -> NodeStyle {
-    let mut st = NodeStyle::default();
-    let l = Arc::make_mut(&mut st.layout);
-    l.font_size = Some(size);
-    l.font_weight = Some(weight);
-    st
 }
 
 /// A popover whose open state the app keeps, so items can close it.
@@ -383,24 +376,22 @@ fn color_panel(ui: Ui, open: Signal<bool>) -> AnyView {
                         .into_any()
                 })
                 .collect();
-            widget(Stack::row(6.0)).children(buttons).into_any()
+            widget(Stack::row(gap::TIGHT)).children(buttons).into_any()
         })
         .collect();
     let picked = signal([0.9_f32, 0.3, 0.4, 1.0]);
-    widget(Stack::column(8.0).padding(4.0))
+    widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
         .children((
             rows,
-            widget(ColorField::new([0.9, 0.3, 0.4, 1.0]).label(ui.now_t("tb-color")))
+            widget(ColorField::new([0.9, 0.3, 0.4, 1.0]).label(ui.now_t("tb-color"))) // design-tokens: data
                 .on(move |e: &ColorChanged| picked.set(e.value)),
-            widget(Stack::row(6.0)).children((widget(
-                Button::new(ui.now_t("common-apply"))
-                    .kind(ButtonKind::Primary)
-                    .size(ControlSize::Small),
-            )
+            widget(Stack::row(gap::TIGHT)).children((widget(crate::ui::kit::cta(
+                Button::new(ui.now_t("common-apply")).size(ControlSize::Small),
+            ))
             .on_cx(move |_, _: &Activate, cx| {
                 let [r, g, b, a] = picked.get_untracked();
                 let to = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-                let rgba = Rgba8::rgba(to(r), to(g), to(b), to(a));
+                let rgba = Rgba8::rgba(to(r), to(g), to(b), to(a)); // design-tokens: data
                 open.set(false);
                 cx.dispatch_program_all(act(Tool::Color(rgba)));
             }),)),
@@ -468,10 +459,10 @@ fn size_panel(ui: Ui, open: Signal<bool>) -> AnyView {
                     })
                 })
                 .collect::<Vec<_>>();
-            widget(Stack::column(8.0).padding(4.0))
+            widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
                 .children((
                     widget(Text::new(typography_current(ui, &current))).key("size-current"),
-                    widget(Stack::row(6.0)).children(presets),
+                    widget(Stack::row(gap::TIGHT)).children(presets),
                     widget(Text::new(format!("{} (×)", ui.now_t("tb-size-relative")))),
                     widget(
                         NumberInput::continuous(relative.get_untracked())
@@ -544,7 +535,7 @@ fn font_panel(ui: Ui, open: Signal<bool>) -> AnyView {
                 panel_action(ui.now_t(key), open, move || Some(Tool::Font(font.clone())))
             })
             .collect::<Vec<_>>();
-            widget(Stack::column(8.0).padding(4.0))
+            widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
                 .children((
                     widget(Text::new(typography_current(ui, &current))).key("font-current"),
                     choices,
@@ -576,7 +567,7 @@ fn alignment_panel(ui: Ui, open: Signal<bool>) -> AnyView {
     .into_iter()
     .map(|(key, align)| panel_action(ui.now_t(key), open, move || Some(Tool::Align(align))))
     .collect::<Vec<_>>();
-    widget(Stack::column(8.0).padding(4.0))
+    widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
         .children((
             widget(Text::new(""))
                 .key("alignment-current")
@@ -604,7 +595,7 @@ fn alignment_panel(ui: Ui, open: Signal<bool>) -> AnyView {
 
 fn ruby_panel(ui: Ui, open: Signal<bool>) -> AnyView {
     let reading = signal(String::new());
-    widget(Stack::column(8.0).padding(4.0))
+    widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
         .children((
             widget(TextInput::new("").placeholder(ui.now_t("tb-ruby-placeholder")))
                 .on(move |e: &TextChanged| reading.set(e.value.to_string()))
@@ -615,12 +606,10 @@ fn ruby_panel(ui: Ui, open: Signal<bool>) -> AnyView {
                         cx.dispatch_program_all(act(Tool::Ruby(r)));
                     }
                 }),
-            widget(Stack::row(6.0)).children((
-                widget(
-                    Button::new(ui.now_t("tb-ruby-apply"))
-                        .kind(ButtonKind::Primary)
-                        .size(ControlSize::Small),
-                )
+            widget(Stack::row(gap::TIGHT)).children((
+                widget(crate::ui::kit::cta(
+                    Button::new(ui.now_t("tb-ruby-apply")).size(ControlSize::Small),
+                ))
                 .on_cx(move |_, _: &Activate, cx| {
                     let r = reading.get_untracked();
                     if !r.trim().is_empty() {
@@ -661,9 +650,9 @@ fn expression_panel(ui: Ui, open: Signal<bool>) -> AnyView {
                 .into_any()
         })
         .collect();
-    widget(Stack::column(8.0).padding(4.0))
+    widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
         .children((
-            widget(Stack::row(6.0).wrap(true)).children(variants),
+            widget(Stack::row(gap::TIGHT).wrap(true)).children(variants),
             widget(TextInput::new("").placeholder(ui.now_t("tb-expression-placeholder")))
                 .on(move |e: &TextChanged| name.set(e.value.to_string()))
                 .on_cx(move |_, _: &TextSubmitted, cx| {
@@ -689,7 +678,7 @@ pub fn sticker_panel(ui: Ui, open: Signal<bool>) -> AnyView {
 fn caption(text: String) -> AnyView {
     widget(
         Text::new(text)
-            .style(text_style(11.0, 600))
+            .style(Type::Micro.style())
             .color(SemanticColorRole::Muted),
     )
     .into_any()
@@ -715,8 +704,8 @@ fn stroke_panel(ui: Ui, open: Signal<bool>) -> AnyView {
             .into_any()
     };
     let swatches: Vec<AnyView> = [
-        ("tb-stroke-white", Rgba8::rgba(255, 255, 255, 255)),
-        ("tb-stroke-black", Rgba8::rgba(0, 0, 0, 255)),
+        ("tb-stroke-white", Rgba8::rgba(255, 255, 255, 255)), // design-tokens: data
+        ("tb-stroke-black", Rgba8::rgba(0, 0, 0, 255)),       // design-tokens: data
         ("tb-stroke-accent", accent),
     ]
     .into_iter()
@@ -724,7 +713,7 @@ fn stroke_panel(ui: Ui, open: Signal<bool>) -> AnyView {
     .collect();
     let small = |key: &str| Button::new(ui.now_t(key)).size(ControlSize::Small);
     let drop = Shadow {
-        color: Rgba8::rgba(0, 0, 0, 0x99),
+        color: Rgba8::rgba(0, 0, 0, 0x99), // design-tokens: data
         dx: 2.0,
         dy: 2.0,
         blur: 3.0,
@@ -735,13 +724,13 @@ fn stroke_panel(ui: Ui, open: Signal<bool>) -> AnyView {
         dy: 0.0,
         blur: 8.0,
     };
-    widget(Stack::column(8.0).padding(4.0))
+    widget(Stack::column(gap::CONTROL).padding(gap::TIGHT))
         .children((
             caption(ui.now_t("tb-stroke")),
-            widget(Stack::row(6.0).align(AlignSpec::Center))
+            widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
                 .children((swatches, press(small("tb-stroke-none"), Tool::Stroke(None)))),
             caption(ui.now_t("tb-shadow")),
-            widget(Stack::row(6.0).align(AlignSpec::Center)).children((
+            widget(Stack::row(gap::TIGHT).align(AlignSpec::Center)).children((
                 press(small("tb-shadow-drop"), Tool::Shadow(Some(drop))),
                 press(
                     small("tb-shadow-glow").icon(ti::SPARKLES),
@@ -762,10 +751,10 @@ fn marker_chip(
     markup: &str,
 ) -> AnyView {
     let ink = c(look.text);
-    let mut glyph = IconGlyph::new(icon).size(13.0).decorative();
+    let mut glyph = IconGlyph::new(icon).size(icon::SM).decorative();
     glyph.style.foreground = None;
     Arc::make_mut(&mut glyph.style.layout).color = Some(ink);
-    let mut st = text_style(12.0, 600);
+    let mut st = Type::Overline.style();
     {
         let l = Arc::make_mut(&mut st.layout);
         l.color = Some(ink);
@@ -774,14 +763,14 @@ fn marker_chip(
     let fill = c(look.fill);
     let hue = c(kind.hue());
     widget(
-        Stack::row(5.0)
+        Stack::row(gap::TIGHT)
             .align(AlignSpec::Center)
+            .radius(nana_ui_core::RadiusTier::Xs)
             .with_layout(move |l| {
-                l.height = Some(LengthSpec::Px(24.0));
+                l.height = Some(LengthSpec::Px(crate::ui::kit::keycap::H));
                 l.flex_shrink = Some(0.0);
                 l.background = Some(fill);
-                l.border_radius = Some(4.0);
-                l.padding_right = Some(LengthSpec::Px(8.0));
+                l.padding_right = Some(LengthSpec::Px(inset::CHIP_X));
                 l.overflow_x = nana_ui_core::OverflowSpec::Hidden;
                 l.overflow_y = nana_ui_core::OverflowSpec::Hidden;
             }),
@@ -789,7 +778,7 @@ fn marker_chip(
     .children((
         widget(Stack::row(0.0).with_layout(move |l| {
             l.width = Some(LengthSpec::Px(3.0));
-            l.height = Some(LengthSpec::Px(24.0));
+            l.height = Some(LengthSpec::Px(crate::ui::kit::keycap::H));
             l.flex_shrink = Some(0.0);
             l.background = Some(hue);
         })),
@@ -802,11 +791,15 @@ fn marker_chip(
 /// One line of the cheat sheet: a fixed-width lead (a chip or keycaps) and
 /// what it does.
 fn sheet_row(lead: AnyView, lead_w: f32, meaning: String) -> AnyView {
-    let mut st = text_style(12.0, 400);
+    let mut st = Type::Caption.style();
     Arc::make_mut(&mut st.layout).white_space_nowrap = true;
-    widget(Stack::row(10.0).align(AlignSpec::Center).with_layout(|l| {
-        l.height = Some(LengthSpec::Px(24.0));
-    }))
+    widget(
+        Stack::row(gap::CONTROL)
+            .align(AlignSpec::Center)
+            .with_layout(|l| {
+                l.height = Some(LengthSpec::Px(24.0));
+            }),
+    )
     .children((
         widget(
             Stack::row(0.0)
@@ -861,33 +854,41 @@ pub fn cheat_sheet(ui: Ui) -> AnyView {
         SendKey::Enter => ("Enter", "Shift+Enter"),
         SendKey::CtrlEnter => ("Ctrl+Enter", "Enter"),
     };
-    let recall = widget(Stack::row(4.0).align(AlignSpec::Center))
+    let recall = widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
         .children((
-            super::keycap::chord("Ctrl+↑"),
+            super::kit::keycap::chord("Ctrl+↑"),
             widget(
                 Text::new("/")
                     .decorative()
-                    .style(text_style(12.0, 500))
+                    .style(Type::Small.style())
                     .color(SemanticColorRole::Muted),
             ),
-            super::keycap::keycap("↓"),
+            super::kit::keycap::keycap("↓"),
         ))
         .into_any();
     let keys: Vec<AnyView> = vec![
-        sheet_row(super::keycap::chord(send), 136.0, t("tb-send")),
-        sheet_row(super::keycap::chord(newline), 136.0, t("cheat-newline")),
-        sheet_row(super::keycap::chord("Ctrl+B"), 136.0, t("tb-bold")),
-        sheet_row(super::keycap::chord("Ctrl+I"), 136.0, t("tb-italic")),
-        sheet_row(super::keycap::chord("Ctrl+U"), 136.0, t("tb-underline")),
+        sheet_row(super::kit::keycap::chord(send), 136.0, t("tb-send")),
+        sheet_row(
+            super::kit::keycap::chord(newline),
+            136.0,
+            t("cheat-newline"),
+        ),
+        sheet_row(super::kit::keycap::chord("Ctrl+B"), 136.0, t("tb-bold")),
+        sheet_row(super::kit::keycap::chord("Ctrl+I"), 136.0, t("tb-italic")),
+        sheet_row(
+            super::kit::keycap::chord("Ctrl+U"),
+            136.0,
+            t("tb-underline"),
+        ),
         sheet_row(recall, 136.0, t("cheat-recall")),
-        sheet_row(super::keycap::chord("Esc"), 136.0, t("cheat-hide")),
+        sheet_row(super::kit::keycap::chord("Esc"), 136.0, t("cheat-hide")),
     ];
     let column = |title: String, rows: Vec<AnyView>| {
-        widget(Stack::column(4.0).width(LengthSpec::Shrink))
+        widget(Stack::column(gap::TIGHT).width(LengthSpec::Shrink))
             .children((caption(title), rows))
             .into_any()
     };
-    widget(Stack::row(16.0).padding(4.0))
+    widget(Stack::row(gap::SECTION).padding(gap::TIGHT))
         .children((
             column(t("cheat-markers"), markers),
             column(t("cheat-shortcuts"), keys),
@@ -896,22 +897,6 @@ pub fn cheat_sheet(ui: Ui) -> AnyView {
 }
 
 /// A hairline between two groups of toolbar tools, 16px tall.
-fn group_divider() -> AnyView {
-    widget(
-        Stack::row(0.0)
-            .surface(SemanticColorRole::Border)
-            .with_layout(|l| {
-                l.width = Some(LengthSpec::Px(1.0));
-                l.min_width = Some(LengthSpec::Px(1.0));
-                l.height = Some(LengthSpec::Px(16.0));
-                l.flex_shrink = Some(0.0);
-                l.margin_left = Some(LengthSpec::Px(5.0));
-                l.margin_right = Some(LengthSpec::Px(5.0));
-            }),
-    )
-    .into_any()
-}
-
 /// Input windows narrower than this fold their low-frequency tools into "…".
 const COMPACT_BELOW: f32 = 820.0;
 
@@ -1075,7 +1060,7 @@ fn toolbar(ui: Ui) -> AnyView {
                 })
                 .into_any()
         };
-        let divider = group_divider;
+        let divider = crate::ui::kit::vrule;
         // Text styling, then colour and size, then the outline and ruby,
         // then what plays (effects, pacing) and what goes in.
         let mut bar: Vec<AnyView> = vec![
@@ -1277,9 +1262,9 @@ fn toolbar(ui: Ui) -> AnyView {
         ));
         bar.push(source_toggle(ui));
         widget(
-            Stack::bar(2.0)
+            Stack::bar(gap::HAIR)
                 .height(LengthSpec::Px(TOOLBAR_H))
-                .padding_xy(space::MD, space::SM)
+                .padding_xy(inset::BAR_Y, space::SM)
                 .align(AlignSpec::Center)
                 .with_layout(|l| l.flex_shrink = Some(0.0)),
         )
@@ -1295,42 +1280,10 @@ fn toolbar(ui: Ui) -> AnyView {
     .into_any()
 }
 
-/// A live or attention state as a pill: a highlight wash and outline, the
-/// label in body text (pink text would not reach 4.5:1 on the wash), and a
-/// leading highlight dot when `dot`.
+/// A live or attention state as the app's accent pill, with a leading dot
+/// when `dot`.
 fn highlight_chip(text: String, dot: bool) -> AnyView {
-    let mut st = NodeStyle::default();
-    {
-        let l = Arc::make_mut(&mut st.layout);
-        l.font_size = Some(12.0);
-        l.white_space_nowrap = true;
-        // "Queued · 2" counts in place.
-        super::tnum(l);
-    }
-    let mut mark = st.clone();
-    mark.foreground = Some(SemanticColorRole::Highlight);
-    st.foreground = Some(SemanticColorRole::Text);
-    let pill = Stack::row(4.0).align(AlignSpec::Center).with_layout(|l| {
-        l.flex_shrink = Some(0.0);
-        l.padding_left = Some(LengthSpec::Px(8.0));
-        l.padding_right = Some(LengthSpec::Px(8.0));
-        l.padding_top = Some(LengthSpec::Px(1.0));
-        l.padding_bottom = Some(LengthSpec::Px(1.0));
-        l.border_radius = Some(999.0);
-        l.border_width = Some(1.0);
-        l.border_style = Some(nana_ui_core::BorderStyle::Solid);
-    });
-    let wash = |a: f32| nana_ui_core::SemanticColorMix::alpha(SemanticColorRole::Highlight, a);
-    let pill_style = pill
-        .node_style()
-        .surface_mix(wash(0.16))
-        .outline_mix(wash(0.45), 1.0);
-    widget(pill.style(pill_style))
-        .children((
-            dot.then(|| widget(Text::new("●").decorative().style(mark))),
-            widget(Text::new(text).decorative().style(st)),
-        ))
-        .into_any()
+    crate::ui::kit::pill(text, Tone::Accent, dot)
 }
 
 /// Period of a breathing status pulse (ms).
@@ -1373,17 +1326,13 @@ fn status_content(ui: Ui) -> AnyView {
             Line::Empty
         };
         match line {
-            Line::Error(text) => {
-                let mut st = NodeStyle::default();
-                Arc::make_mut(&mut st.layout).font_size = Some(12.0);
-                widget(
-                    Text::new(text)
-                        .style(st)
-                        .truncating()
-                        .color(SemanticColorRole::Danger),
-                )
-                .into_any()
-            }
+            Line::Error(text) => widget(
+                Text::new(text)
+                    .style(Type::Small.style())
+                    .truncating()
+                    .color(SemanticColorRole::Danger),
+            )
+            .into_any(),
             // Live and attention states take the highlight, not the accent.
             Line::Queued(text) => highlight_chip(text, false),
             Line::Mirror(text) => {
@@ -1435,11 +1384,9 @@ fn reply_bar(ui: Ui) -> AnyView {
             let Some(reply) = reply else {
                 return widget(Stack::row(0.0)).into_any();
             };
-            let mut label = NodeStyle::default();
+            let mut label = Type::Overline.style();
             {
                 let l = Arc::make_mut(&mut label.layout);
-                l.font_size = Some(12.0);
-                l.font_weight = Some(700);
                 l.white_space_nowrap = true;
                 l.flex_shrink = Some(1.0);
                 l.min_width = Some(LengthSpec::Px(0.0));
@@ -1447,11 +1394,10 @@ fn reply_bar(ui: Ui) -> AnyView {
             }
             // The accent, darkened where it would not read as text.
             label.foreground = Some(SemanticColorRole::AccentOnSoft);
-            let mut body = NodeStyle::default();
-            Arc::make_mut(&mut body.layout).font_size = Some(12.0);
+            let mut body = Type::Caption.style();
             body.foreground = Some(SemanticColorRole::Muted);
             widget(
-                Stack::row(6.0)
+                Stack::row(gap::TIGHT)
                     .align(AlignSpec::Center)
                     .width(LengthSpec::Fill),
             )
@@ -1470,7 +1416,7 @@ fn reply_bar(ui: Ui) -> AnyView {
                     reply.user.avatar.as_ref().map(ToString::to_string),
                     &reply.user.name,
                     18.0,
-                    crate::skin_theme::palette(ui.chrome_dark.get())
+                    crate::ui::kit::theme::palette(ui.chrome_dark.get())
                         .accent
                         .as_rgba_array(),
                 ),
@@ -1736,7 +1682,7 @@ fn focus_ring(focused: Signal<bool>) -> AnyView {
     widget(
         Stack::column(0.0)
             .outline(SemanticColorRole::FocusBorder, 2.0)
-            .radius_px(6.0)
+            .radius(nana_ui_core::RadiusTier::Sm)
             .with_layout(|l| {
                 l.position = PositionSpec::Absolute;
                 l.offset_left = Some(LengthSpec::Px(2.0));
@@ -1901,6 +1847,7 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
             .children((
                 layout_switch(ui),
                 toolbar(ui),
+                crate::ui::kit::rule(),
                 preview,
                 super::plugins::mounted(ui, nanatype_plugins::Mount::Input),
             )),
@@ -1964,7 +1911,7 @@ mod tests {
                         let mut document = RuntimeDocument::new(id);
                         document
                             .context_mut()
-                            .set_theme_tokens(crate::skin_theme::compile(false))
+                            .set_theme_tokens(crate::ui::kit::theme::compile(false))
                             .unwrap();
                         document
                             .context_mut()

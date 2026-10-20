@@ -13,13 +13,13 @@ pub use pages::font_licence_panel;
 use std::sync::Arc;
 
 use nana_ui::icons_tabler as ti;
-use nana_ui::runtime::view::{AnyView, IntoView, dynamic, entity_ref, on_mount, widget};
-use nana_ui::runtime::{Activate, ListItem, NodeStyle, ScrollAxes, ScrollView, Stack, Text};
-use nana_ui::theme::{space, type_scale};
+use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
+use nana_ui::runtime::{Activate, ListItem, ScrollAxes, ScrollView, Stack, Text};
 use nana_ui_core::{LengthSpec, SemanticColorRole};
 
 use super::Ui;
 use crate::msg::Msg;
+use crate::ui::kit::{PAGE_HEADER_H, PAGE_MAX_W, SIDEBAR_W, Type, gap, icon, inset};
 
 /// The panel and settings page use the same persisted style control.
 pub(super) fn chat_panel_style(ui: Ui) -> AnyView {
@@ -144,23 +144,29 @@ impl Page {
 
 /// The sidebar's groups: a caption key and its pages. About sits apart, at
 /// the foot.
-const GROUPS: [(&str, [Page; 3]); 3] = [
+const GROUPS: &[(&str, &[Page])] = &[
     (
         "settings-group-input",
-        [Page::General, Page::Playback, Page::Hotkeys],
+        &[Page::General, Page::Playback, Page::Hotkeys],
     ),
     (
         "settings-group-look",
-        [Page::Skins, Page::Windows, Page::History],
+        &[Page::Skins, Page::Packages, Page::Windows, Page::History],
     ),
+    ("settings-group-stream", &[Page::Output, Page::Assets]),
     (
-        "settings-group-stream",
-        [Page::Output, Page::Integrations, Page::Assets],
+        "settings-group-platforms",
+        &[
+            Page::Integrations,
+            Page::Bilibili,
+            Page::Douyin,
+            Page::Blivechat,
+        ],
     ),
 ];
 
-/// One page's row: a 16px icon (muted, text-coloured when selected) and
-/// its name.
+/// One page's row: an icon (muted, accent when selected) and its name, on
+/// the selected fill when it is the open page.
 fn nav_row(ui: Ui, page: Page) -> AnyView {
     let selected = move || ui.page.get() == page;
     widget(ListItem::new("").size(nana_ui::ControlSize::Small))
@@ -172,10 +178,10 @@ fn nav_row(ui: Ui, page: Page) -> AnyView {
             item.selected = selected();
         })
         .leading(
-            widget(nana_ui::runtime::IconGlyph::new(page.icon()).size(16.0)).bind(
+            widget(nana_ui::runtime::IconGlyph::new(page.icon()).size(icon::MD)).bind(
                 move |g: &mut nana_ui::runtime::IconGlyph| {
                     g.style.foreground = Some(if selected() {
-                        SemanticColorRole::Text
+                        SemanticColorRole::Accent
                     } else {
                         SemanticColorRole::Muted
                     });
@@ -188,12 +194,12 @@ fn nav_row(ui: Ui, page: Page) -> AnyView {
 
 /// A group's caption.
 fn nav_caption(ui: Ui, key: &'static str, first: bool) -> AnyView {
-    let mut st = controls::text_style(type_scale::HINT, type_scale::SEMIBOLD);
+    let mut st = Type::Overline.style();
     {
         let l = Arc::make_mut(&mut st.layout);
-        l.margin_top = Some(LengthSpec::Px(if first { space::SM } else { space::XXL }));
-        l.margin_bottom = Some(LengthSpec::Px(space::XS));
-        l.padding_left = Some(LengthSpec::Px(space::LG));
+        l.margin_top = Some(LengthSpec::Px(if first { 0.0 } else { gap::SECTION }));
+        l.margin_bottom = Some(LengthSpec::Px(gap::TIGHT));
+        l.padding_left = Some(LengthSpec::Px(inset::CHIP_X));
     }
     widget(
         Text::new(super::I18N.t_in(ui.locale.get_untracked(), key))
@@ -209,60 +215,95 @@ fn nav_caption(ui: Ui, key: &'static str, first: bool) -> AnyView {
     .into_any()
 }
 
+/// The app's logo at `size` px.
+pub(crate) fn logo(size: f32) -> AnyView {
+    widget(
+        Stack::row(0.0)
+            .width(LengthSpec::Px(size))
+            .height(LengthSpec::Px(size))
+            .with_layout(|l| {
+                l.flex_shrink = Some(0.0);
+                l.paint.background_image = Some(nana_ui_core::BackgroundImage::url_with_fit(
+                    format!("data:image/png;base64,{}", controls::ICON_PNG_B64.as_str()),
+                    nana_ui_core::BackgroundImageFit::Contain,
+                ));
+            }),
+    )
+    .into_any()
+}
+
 fn sidebar(ui: Ui) -> AnyView {
     let mut items: Vec<AnyView> = Vec::new();
-    for (i, (caption, pages)) in GROUPS.into_iter().enumerate() {
+    for (i, (caption, pages)) in GROUPS.iter().enumerate() {
         items.push(nav_caption(ui, caption, i == 0));
-        items.extend(pages.into_iter().map(|page| nav_row(ui, page)));
-        if i == 1 {
-            items.push(nav_row(ui, Page::Packages));
-        }
-        if i == 2 {
-            items.push(nav_row(ui, Page::Bilibili));
-            items.push(nav_row(ui, Page::Douyin));
-            items.push(nav_row(ui, Page::Blivechat));
-        }
-    }
-    let mut title = NodeStyle::default();
-    {
-        let l = Arc::make_mut(&mut title.layout);
-        l.font_size = Some(type_scale::TITLE);
-        l.font_weight = Some(type_scale::BOLD);
+        items.extend(pages.iter().map(|page| nav_row(ui, *page)));
     }
     widget(
-        Stack::column(space::XXS)
-            .width(LengthSpec::Px(196.0))
-            .padding_xy(space::LG, space::XXL)
+        Stack::row(0.0)
+            .width(LengthSpec::Px(SIDEBAR_W))
             .surface(SemanticColorRole::Subtle)
+            .align(nana_ui_core::AlignSpec::Stretch)
             .with_layout(|l| {
                 l.height = Some(LengthSpec::Fill);
+                l.flex_shrink = Some(0.0);
             }),
     )
     .children((
-        widget(Stack::row(space::MD).padding_xy(space::MD, space::SM)).children((
+        widget(
+            Stack::fill_column(gap::TIGHT)
+                .padding_xy(inset::BAR_X, inset::BAR_Y)
+                .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
+        )
+        .children((
             widget(
-                Stack::row(0.0)
-                    .width(LengthSpec::Px(28.0))
-                    .height(LengthSpec::Px(28.0))
-                    .with_layout(|l| {
-                        l.paint.background_image =
-                            Some(nana_ui_core::BackgroundImage::url_with_fit(
-                                format!(
-                                    "data:image/png;base64,{}",
-                                    crate::ui::settings::controls::ICON_PNG_B64.as_str()
-                                ),
-                                nana_ui_core::BackgroundImageFit::Contain,
-                            ));
-                    }),
-            ),
-            widget(Text::new("NanaType").style(title)),
+                Stack::row(gap::CONTROL)
+                    .height(LengthSpec::Px(PAGE_HEADER_H - inset::BAR_Y))
+                    .padding_xy(inset::CHIP_X, 0.0)
+                    .align(nana_ui_core::AlignSpec::Center)
+                    .with_layout(|l| l.flex_shrink = Some(0.0)),
+            )
+            .children((logo(icon::LG + gap::TIGHT), Type::Brand.view("NanaType"))),
+            widget(scroll_view()).children(widget(Stack::column(gap::HAIR)).children(items)),
+            // Keep About reachable while the navigation above scrolls on short screens.
+            widget(Stack::column(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
+                .children(nav_row(ui, Page::About)),
         )),
-        widget(scroll_view()).children(widget(Stack::column(space::XXS)).children(items)),
-        // Keep About reachable while the navigation above scrolls on short screens.
-        widget(Stack::column(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
-            .children(nav_row(ui, Page::About)),
+        // The hairline between the sidebar and the page.
+        widget(
+            Stack::column(0.0)
+                .width(LengthSpec::Px(1.0))
+                .surface(SemanticColorRole::BorderSoft)
+                .with_layout(|l| {
+                    l.height = Some(LengthSpec::Fill);
+                    l.flex_shrink = Some(0.0);
+                }),
+        ),
     ))
     .into_any()
+}
+
+/// A page's fixed header: its title and one-line description, its
+/// page-wide actions on the right, a hairline under it.
+fn page_header(ui: Ui, page: Page) -> AnyView {
+    widget(Stack::column(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
+        .children((
+            widget(
+                Stack::row(gap::GROUP)
+                    .width(LengthSpec::Fill)
+                    .padding_xy(inset::PAGE, inset::CARD)
+                    .align(nana_ui_core::AlignSpec::Center)
+                    .with_layout(|l| l.min_height = Some(LengthSpec::Px(PAGE_HEADER_H))),
+            )
+            .children((
+                widget(crate::ui::kit::grow_column(gap::HAIR)).children((
+                    controls::heading(ui, page.label_key()),
+                    widget(Type::Caption.text(ui.now_t(page.subtitle_key()))),
+                )),
+                pages::actions(ui, page),
+            )),
+            crate::ui::kit::rule(),
+        ))
+        .into_any()
 }
 
 fn scroll_view() -> ScrollView {
@@ -276,7 +317,6 @@ fn scroll_view() -> ScrollView {
 }
 
 pub fn settings_window(ui: Ui) -> impl IntoView {
-    let body_scroll = entity_ref::<ScrollView>();
     let body = widget(
         Stack::row(0.0)
             .width(LengthSpec::Fill)
@@ -287,36 +327,40 @@ pub fn settings_window(ui: Ui) -> impl IntoView {
     .children((
         sidebar(ui),
         widget(Stack::fill_column(0.0)).children(dynamic(
-            // The package editor fills the page instead of scrolling with it.
+            // The package editor fills the page, with its own header, instead
+            // of scrolling under the page's. A newly opened page starts at its
+            // top, regardless of how far the previous page was scrolled.
             move || {
-                ui.page.get() == Page::Packages && ui.package_editor.with(Option::is_some)
+                let page = ui.page.get();
+                let editing =
+                    page == Page::Packages && ui.package_editor.with(Option::is_some);
+                (page, editing, ui.locale.get())
             },
-            move |editing| {
+            move |(page, editing, _)| {
                 if *editing {
                     return super::package_editor::editor(ui);
                 }
-                widget(scroll_view()).entity_ref(body_scroll).children(
-                widget(Stack::column(0.0).max_width(860.0).with_layout(|l| {
-                    l.padding_top = Some(LengthSpec::Px(space::PAGE_TIGHT));
-                    l.padding_right = Some(LengthSpec::Px(space::PAGE));
-                    l.padding_bottom = Some(LengthSpec::Px(space::PAGE));
-                    l.padding_left = Some(LengthSpec::Px(space::PAGE));
-                }))
-                .children(dynamic(
-                    move || (ui.page.get(), ui.locale.get()),
-                    move |(page, _)| {
-                        // A newly opened page starts at its heading, regardless
-                        // of how far the previous page was scrolled.
-                        on_mount(move |cx| {
-                            if let Some(scroll) = body_scroll.get() {
-                                let _ = cx.scroll_to(scroll, Default::default());
-                            }
-                        });
-                        pages::page(ui, *page)
-                    },
-                )),
-            )
-            .into_any()
+                widget(Stack::fill_column(0.0))
+                    .children((
+                        page_header(ui, *page),
+                        widget(scroll_view()).children(
+                            widget(
+                                Stack::column(0.0)
+                                    .width(LengthSpec::Fill)
+                                    .align(nana_ui_core::AlignSpec::Center)
+                                    .padding_xy(inset::PAGE, inset::PAGE),
+                            )
+                            .children(
+                                widget(
+                                    Stack::column(0.0)
+                                        .max_width(PAGE_MAX_W)
+                                        .width(LengthSpec::Fill),
+                                )
+                                .children(pages::page(ui, *page)),
+                            ),
+                        ),
+                    ))
+                    .into_any()
             },
         )
         // The switch's own container must fill too, or the scroll view collapses.

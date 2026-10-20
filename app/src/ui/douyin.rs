@@ -1,6 +1,7 @@
 use super::Ui;
 use super::settings::controls::{block, hint, row, section, switch, text};
 use crate::msg::Msg;
+use crate::ui::kit::gap;
 use nana_ui::{
     ControlSize,
     runtime::view::{AnyView, IntoView, widget},
@@ -81,7 +82,7 @@ pub fn settings_page(ui: Ui) -> AnyView {
         ui.douyin_cookie
             .set(event.value.chars().take(65536).collect())
     });
-    widget(Stack::column(24.0))
+    widget(Stack::column(gap::SECTION))
         .children((
             section(
                 ui,
@@ -114,7 +115,7 @@ pub fn settings_page(ui: Ui) -> AnyView {
                     ),
                     block(status),
                     block(warning),
-                    block(widget(Stack::row(8.0)).children((
+                    block(widget(Stack::row(gap::CONTROL)).children((
                         action(ui, "dy-connect", || Msg::DouyinRefresh),
                         action(ui, "dy-open-panel", || {
                             Msg::ShowWindow(crate::windows::WindowKind::Chat)

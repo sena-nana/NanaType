@@ -309,7 +309,6 @@ hotkeys-badge-unsafe = 安全でない
 hotkeys-click-to-set = クリックして設定
 hotkeys-press-keys = キーを押す · Esc で取消
 hotkeys-local = 入力ウィンドウ内のショートカット
-hotkeys-local-hint = Ctrl+B/I/U で書式、Ctrl+↑/↓ で送信済みのセリフを呼び出し、Esc で入力を隠します
 
 ## 出力
 output-display = 表示ウィンドウ
@@ -512,6 +511,7 @@ cheat-hide = 入力ウィンドウを隠す
 settings-group-input = 入力
 settings-group-look = 見た目
 settings-group-stream = 配信
+settings-group-platforms = プラットフォーム
 settings-general-sub = 言語、名前、入力ウィンドウの動作
 settings-playback-sub = セリフの表示、送り、効果音
 settings-skins-sub = ダイアログの見た目を選んで自分好みに
@@ -782,6 +782,8 @@ settings-packages = プラグインとパッケージ
 settings-packages-sub = スキン、共有素材と機能プラグインを管理
 packages-import = パッケージを読み込む
 packages-refresh = 再読み込み
+packages-installed = インストール済み
+packages-none = パッケージはまだありません。インポートしてスキン・リソース・機能を追加できます。
 packages-dependencies = 依存関係
 packages-remove = 削除
 packages-access = プラグインはネットワーク、ユーザーファイル、外部プログラムにアクセスできません。

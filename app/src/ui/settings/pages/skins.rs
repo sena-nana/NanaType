@@ -1,6 +1,9 @@
 use super::*;
 use nana_ui::runtime::view::El;
 
+/// A skin's colour swatch in the list.
+const SWATCH: f32 = 14.0;
+
 pub(super) fn skins(ui: Ui) -> AnyView {
     let filter: Signal<Option<String>> = signal(None);
     let previewing: Signal<Option<String>> = signal(None);
@@ -30,10 +33,10 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                 widget(
                     Stack::row(GRID_GAP)
                         .wrap(true)
-                        .padding_xy(INSET, 0.0)
+                        .padding_xy(inset::CARD, 0.0)
                         .with_layout(|l| {
                             l.row_gap = Some(LengthSpec::Px(GRID_GAP));
-                            l.padding_bottom = Some(LengthSpec::Px(INSET));
+                            l.padding_bottom = Some(LengthSpec::Px(inset::CARD));
                         }),
                 )
                 .children(cards)
@@ -47,17 +50,18 @@ pub(super) fn skins(ui: Ui) -> AnyView {
         },
     );
     let fallback = ui.skin.get_untracked();
-    widget(Stack::column(SECTION_GAP))
+    widget(Stack::column(gap::SECTION))
         .children((
-            widget(Stack::row(space::MD)).children(primary(ui, "skins-import", || {
-                Msg::PickFile(FileTarget::ImportSkin)
-            })),
-            section(ui, "skins-preview", vec![skin_preview(ui, previewing)]),
+            section(
+                ui,
+                "skins-preview",
+                vec![block(skin_preview(ui, previewing))],
+            ),
             section(
                 ui,
                 "skins-library",
                 vec![
-                    widget(Stack::column(0.0).padding_xy(INSET, space::LG))
+                    widget(Stack::column(0.0).padding_xy(inset::CARD, space::LG))
                         .children(skin_filters(ui, filter, grid))
                         .into_any(),
                     list.into_any(),
@@ -200,10 +204,8 @@ pub(super) fn apply_button(
     id: String,
     shown: impl Fn() -> bool + Send + 'static,
 ) -> AnyView {
-    widget(crate::skin_theme::cta(
-        Button::new(ui.now_t("common-apply"))
-            .kind(ButtonKind::Primary)
-            .size(ControlSize::Small),
+    widget(crate::ui::kit::cta(
+        Button::new(ui.now_t("common-apply")).size(ControlSize::Small),
     ))
     .visible(shown)
     .on_cx(move |_, _: &Activate, cx| {
@@ -291,15 +293,14 @@ pub(super) fn skin_list_row(
 ) -> AnyView {
     let swatch = |color: [f32; 4]| {
         widget(
-            Stack::row(0.0)
-                .width(LengthSpec::Px(14.0))
-                .height(LengthSpec::Px(14.0))
-                .outline(SemanticColorRole::BorderStrong, 1.0)
-                .with_layout(move |l| {
-                    l.background = Some(color);
-                    // A dot: the pill radius.
-                    l.border_radius = Some(7.0);
-                }),
+            crate::ui::kit::round(
+                Stack::row(0.0)
+                    .width(LengthSpec::Px(SWATCH))
+                    .height(LengthSpec::Px(SWATCH)),
+                SWATCH,
+            )
+            .outline(SemanticColorRole::BorderStrong, 1.0)
+            .with_layout(move |l| l.background = Some(color)),
         )
         .into_any()
     };
@@ -317,7 +318,7 @@ pub(super) fn skin_list_row(
     let detail = detail_line(ui, skin, locale);
     let usable = skin.error.is_none();
     let previewed = previewed(ui, previewing, skin.id.clone());
-    let trailing = widget(Stack::row(8.0).align(AlignSpec::Center)).children((
+    let trailing = widget(Stack::row(gap::CONTROL).align(AlignSpec::Center)).children((
         selected.then(|| current_badge(ui)),
         (!selected && usable).then(|| apply_button(ui, skin.id.clone(), previewed.clone())),
         skin_actions(ui, skin, locale),
@@ -350,14 +351,14 @@ pub(super) fn skin_list_row(
             skin,
             previewed,
         )
-        .leading(widget(Stack::row(4.0)).children((
+        .leading(widget(Stack::row(gap::TIGHT)).children((
             swatch(skin.box_color),
             swatch(skin.text_color),
             swatch(skin.accent),
         )))
         .content(
             widget(
-                Stack::column(2.0)
+                Stack::column(gap::HAIR)
                     .grow(1.0)
                     .shrink(1.0)
                     .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
@@ -365,14 +366,14 @@ pub(super) fn skin_list_row(
             .children((
                 // A long name is cut before the tags and the badge are.
                 widget(
-                    Stack::row(6.0)
+                    Stack::row(gap::TIGHT)
                         .align(AlignSpec::Center)
                         .width(LengthSpec::Fill)
                         .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
                 )
                 .children((
                     widget(Text::new(skin.name.clone()).style({
-                        let mut st = one_line(13.0, 500);
+                        let mut st = Type::Label.one_line();
                         Arc::make_mut(&mut st.layout).flex_grow = Some(0.0);
                         st
                     })),
@@ -504,7 +505,7 @@ pub(super) fn skin_card(
     let usable = skin.error.is_none();
     let previewed = previewed(ui, previewing, skin.id.clone());
     let dark = ui.chrome_dark.get_untracked();
-    let backdrop = BackgroundImage::url(checker_url(dark));
+    let backdrop = BackgroundImage::url(crate::ui::kit::checker_url(dark));
     let well = widget(
         Stack::row(0.0)
             .width(LengthSpec::Fill)
@@ -527,7 +528,7 @@ pub(super) fn skin_card(
     // "· Fallback font" never shrinks: when the line is too long for the
     // card (English, Japanese), the tags are cut, not the hint.
     let font_note = uses_fallback_font(skin).then(|| {
-        let mut st = text_style(12.0, 400);
+        let mut st = Type::Caption.style();
         let l = Arc::make_mut(&mut st.layout);
         l.white_space_nowrap = true;
         l.flex_shrink = Some(0.0);
@@ -548,7 +549,7 @@ pub(super) fn skin_card(
                 .style({
                     // Shrinks with an ellipsis but does not grow, so the
                     // hint follows the tags rather than the card's edge.
-                    let mut st = one_line(12.0, 400);
+                    let mut st = Type::Caption.one_line();
                     Arc::make_mut(&mut st.layout).flex_grow = Some(0.0);
                     st
                 })
@@ -557,12 +558,12 @@ pub(super) fn skin_card(
         font_note,
     ));
     let name_row = widget(
-        Stack::row(6.0)
+        Stack::row(gap::TIGHT)
             .align(AlignSpec::Center)
             .width(LengthSpec::Fill),
     )
     .children((
-        widget(Text::new(skin.name.clone()).style(one_line(13.0, 500))),
+        widget(Text::new(skin.name.clone()).style(Type::Label.one_line())),
         // The current skin's badge takes the Apply button's place, off the
         // thumbnail, so no box is covered.
         current.then(|| unshrinking(current_badge(ui))),
@@ -595,7 +596,7 @@ pub(super) fn skin_card(
     )
     .content(
         widget(
-            Stack::column(8.0)
+            Stack::column(gap::CONTROL)
                 .grow(1.0)
                 .shrink(1.0)
                 .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
@@ -621,7 +622,7 @@ pub(super) fn skin_card(
                 Stack::column(0.0)
                     .width(LengthSpec::Px(3.0))
                     .surface(SemanticColorRole::Accent)
-                    .radius_px(2.0)
+                    .radius(nana_ui_core::RadiusTier::Xs)
                     .with_layout(|l| {
                         l.position = PositionSpec::Absolute;
                         l.offset_left = Some(LengthSpec::Px(0.0));
@@ -662,25 +663,6 @@ pub(super) fn view_switch(ui: Ui, grid: Signal<bool>) -> AnyView {
         item(ti::LIST, "skins-view-list", false),
     ))
     .into_any()
-}
-
-/// Checkerboard showing around the previewed box.
-/// A 10px transparency checkerboard tile as a data URL, in light or dark
-/// chrome tones.
-pub(in crate::ui::settings) fn checker_url(dark: bool) -> String {
-    fn tile(a: [u8; 3], b: [u8; 3]) -> String {
-        let img = image::RgbImage::from_fn(20, 20, |x, y| {
-            image::Rgb(if (x / 10 + y / 10) % 2 == 0 { a } else { b })
-        });
-        let mut png = Vec::new();
-        let _ = img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png);
-        format!("data:image/png;base64,{}", base64(&png))
-    }
-    static LIGHT: std::sync::LazyLock<String> =
-        std::sync::LazyLock::new(|| tile([0xe9, 0xec, 0xf1], [0xf6, 0xf7, 0xf9]));
-    static DARK: std::sync::LazyLock<String> =
-        std::sync::LazyLock::new(|| tile([0x2a, 0x2f, 0x3a], [0x32, 0x38, 0x46]));
-    if dark { DARK.clone() } else { LIGHT.clone() }
 }
 
 /// `light`, `dark` or a tag from [`nanatype_theme::SKIN_TAGS`], localized.
@@ -750,13 +732,13 @@ pub(super) fn skin_filters(ui: Ui, filter: Signal<Option<String>>, grid: Signal<
             // the top right of the row, beside the first line, in every
             // language.
             widget(
-                Stack::row(12.0)
+                Stack::row(gap::GROUP)
                     .align(AlignSpec::Start)
                     .width(LengthSpec::Fill),
             )
             .children((
                 widget(
-                    Stack::row(6.0)
+                    Stack::row(gap::TIGHT)
                         .wrap(true)
                         .align(AlignSpec::Center)
                         .grow(1.0)

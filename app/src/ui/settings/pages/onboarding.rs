@@ -17,7 +17,7 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
         Stack::row(space::MD)
             .align(AlignSpec::Center)
             .width(LengthSpec::Fill)
-            .padding_xy(INSET, 0.0),
+            .padding_xy(inset::CARD, 0.0),
     )
     .children((
         widget(
@@ -25,10 +25,7 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
                 .size(16.0)
                 .role(SemanticColorRole::Accent),
         ),
-        widget(
-            Text::new(ui.now_t("onboard-welcome"))
-                .style(text_style(type_scale::HEADING, type_scale::SEMIBOLD)),
-        ),
+        widget(Text::new(ui.now_t("onboard-welcome")).style(Type::Title.style())),
         widget(Stack::row(0.0).grow(1.0)),
         step_indicator(ui),
         widget(
@@ -45,7 +42,7 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
         Stack::row(space::MD)
             .align(AlignSpec::Center)
             .width(LengthSpec::Fill)
-            .padding_xy(INSET, 0.0),
+            .padding_xy(inset::CARD, 0.0),
     )
     .children((
         widget(
@@ -57,10 +54,8 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
         .on(move |_: &Activate| step.set(step.get_untracked().saturating_sub(1))),
         widget(Stack::row(0.0).grow(1.0)),
         // Next, and on the last step "Get started".
-        widget(crate::skin_theme::cta(
-            Button::new(ui.now_t("onboard-next"))
-                .kind(ButtonKind::Primary)
-                .size(ControlSize::Small),
+        widget(crate::ui::kit::cta(
+            Button::new(ui.now_t("onboard-next")).size(ControlSize::Small),
         ))
         .bind(move |b: &mut Button| {
             let last = step.get() + 1 >= ONBOARD_STEPS;
@@ -79,35 +74,19 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
             }
         }),
     ));
-    widget(
-        Stack::row(0.0)
-            .align(AlignSpec::Stretch)
-            .surface(SemanticColorRole::Surface)
-            .radius(nana_ui_core::RadiusTier::Lg)
-            .outline(SemanticColorRole::BorderSoft, 1.0)
-            .with_layout(|l| {
-                l.position = PositionSpec::Relative;
-                l.overflow_x = OverflowSpec::Hidden;
-                l.overflow_y = OverflowSpec::Hidden;
-            }),
-    )
-    .visible(move || !ui.settings.with(|s| s.general.onboarding_done))
-    .children((
-        widget(
-            Stack::column(0.0)
-                .width(LengthSpec::Px(3.0))
-                .surface(SemanticColorRole::Accent)
-                .with_layout(accent_bar_layout),
-        ),
-        widget(
-            Stack::column(space::MD)
-                .grow(1.0)
-                .shrink(1.0)
-                .padding_xy(0.0, BLOCK_PAD_Y),
+    // The same card as every section, its welcome told by the sparkle and
+    // the accent step dots rather than a frame of its own.
+    widget(crate::ui::kit::card_frame(nana_ui_core::RadiusTier::Lg))
+        .visible(move || !ui.settings.with(|s| s.general.onboarding_done))
+        .children(
+            widget(Stack::column(gap::CONTROL).padding_xy(0.0, inset::ROW_Y)).children((
+                header,
+                body,
+                divider(),
+                footer,
+            )),
         )
-        .children((header, body, divider(), footer)),
-    ))
-    .into_any()
+        .into_any()
 }
 
 /// "Step 2 of 4" and a dot per step: the current one a wide accent pill,
@@ -126,11 +105,10 @@ pub(super) fn step_indicator(ui: Ui) -> AnyView {
     };
     let dots: Vec<AnyView> = (0..ONBOARD_STEPS)
         .map(|i| {
-            widget(
-                Stack::row(0.0)
-                    .height(LengthSpec::Px(space::SM))
-                    .radius_px(3.0),
-            )
+            widget(crate::ui::kit::round(
+                Stack::row(0.0).height(LengthSpec::Px(space::SM)),
+                space::SM,
+            ))
             .bind(move |s: &mut Stack| {
                 let n = step.get();
                 let role = if i <= n {
@@ -150,7 +128,7 @@ pub(super) fn step_indicator(ui: Ui) -> AnyView {
         .children((
             widget(
                 Text::new(label())
-                    .style(text_style(type_scale::META, type_scale::REGULAR))
+                    .style(Type::Caption.style())
                     .color(SemanticColorRole::Muted),
             )
             .bind(move |t: &mut Text| {
@@ -169,7 +147,7 @@ pub(super) fn step_indicator(ui: Ui) -> AnyView {
 /// it.
 pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
     let lead = |key: &str| {
-        widget(Stack::column(0.0).padding_xy(INSET, 0.0))
+        widget(Stack::column(0.0).padding_xy(inset::CARD, 0.0))
             .children(hint_13(ui.now_t(key)))
             .into_any()
     };
@@ -196,7 +174,7 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
                 Stack::row(space::XL)
                     .align(AlignSpec::Stretch)
                     .width(LengthSpec::Fill)
-                    .padding_xy(INSET, 0.0),
+                    .padding_xy(inset::CARD, 0.0),
             )
             .children((
                 mode_card(ui, InputMode::Compose),
@@ -205,7 +183,7 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
             .into_any(),
         ],
         _ => vec![
-            widget(Stack::column(space::LG).padding_xy(INSET, 0.0))
+            widget(Stack::column(space::LG).padding_xy(inset::CARD, 0.0))
                 .children((subheading(ui, "onboard-hotkeys"), hotkeys_sentence(ui)))
                 .into_any(),
             row(
@@ -214,7 +192,7 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
                 Some("onboard-obs-hint"),
                 button(ui, "onboard-obs", || Msg::SettingsPage(Page::Output)),
             ),
-            widget(Stack::column(0.0).padding_xy(INSET, 0.0))
+            widget(Stack::column(0.0).padding_xy(inset::CARD, 0.0))
                 .children(hint(ui.now_t("onboard-reopen")))
                 .into_any(),
         ],
@@ -245,11 +223,13 @@ pub(super) fn skin_select(ui: Ui) -> AnyView {
 pub(super) fn mode_diagram(mode: InputMode) -> AnyView {
     let bar = |w: f32, role: SemanticColorRole| {
         widget(
-            Stack::row(0.0)
-                .width(LengthSpec::Px(w))
-                .height(LengthSpec::Px(4.0))
-                .radius_px(2.0)
-                .surface(role),
+            crate::ui::kit::round(
+                Stack::row(0.0)
+                    .width(LengthSpec::Px(w))
+                    .height(LengthSpec::Px(gap::TIGHT)),
+                gap::TIGHT,
+            )
+            .surface(role),
         )
         .into_any()
     };
@@ -318,7 +298,7 @@ pub(super) fn mode_diagram(mode: InputMode) -> AnyView {
     )
     .children((
         window(60.0, vec![40.0, 14.0], true, false),
-        widget(IconGlyph::new(link).size(16.0).role(match mode {
+        widget(IconGlyph::new(link).size(icon::MD).role(match mode {
             InputMode::Compose => SemanticColorRole::Accent,
             InputMode::Mirror => SemanticColorRole::Highlight,
         })),
@@ -357,9 +337,7 @@ pub(super) fn mode_card(ui: Ui, mode: InputMode) -> AnyView {
     .content(
         widget(Stack::column(space::MD).width(LengthSpec::Fill)).children((
             mode_diagram(mode),
-            widget(
-                Text::new(ui.now_t(name)).style(text_style(type_scale::BODY, type_scale::SEMIBOLD)),
-            ),
+            widget(Text::new(ui.now_t(name)).style(Type::Strong.style())),
             hint(ui.now_t(about)),
         )),
     );
@@ -387,8 +365,8 @@ pub(super) fn mode_card(ui: Ui, mode: InputMode) -> AnyView {
 pub(super) fn hotkeys_sentence(ui: Ui) -> AnyView {
     let s = ui.settings.get_untracked();
     let chord = |h: Option<&nanatype_settings::Hotkey>| match h {
-        Some(h) => crate::ui::keycap::chord(&h.label(META_LABEL)),
-        None => crate::ui::keycap::keycap("—"),
+        Some(h) => crate::ui::kit::keycap::chord(&h.label(META_LABEL)),
+        None => crate::ui::kit::keycap::keycap("—"),
     };
     let text = I18N.tr_in(
         ui.locale.get_untracked(),

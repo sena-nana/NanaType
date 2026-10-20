@@ -309,7 +309,6 @@ hotkeys-badge-unsafe = 不安全
 hotkeys-click-to-set = 点击设置
 hotkeys-press-keys = 请按下按键 · Esc 取消
 hotkeys-local = 输入框内快捷键
-hotkeys-local-hint = Ctrl+B/I/U 设置样式，Ctrl+↑/↓ 调出已发送的台词，Esc 隐藏输入框
 
 ## 输出
 output-display = 展示框
@@ -512,6 +511,7 @@ cheat-hide = 隐藏输入窗
 settings-group-input = 输入
 settings-group-look = 外观
 settings-group-stream = 直播
+settings-group-platforms = 平台
 settings-general-sub = 语言、你的名字，以及输入框的行为
 settings-playback-sub = 台词如何逐字出现、推进与发声
 settings-skins-sub = 为对话框挑选外观，并按你的喜好调整
@@ -782,6 +782,8 @@ settings-packages = 插件与资源包
 settings-packages-sub = 管理皮肤、共享资源和功能插件
 packages-import = 导入包
 packages-refresh = 重新加载
+packages-installed = 已安装
+packages-none = 还没有包。导入一个包来添加皮肤、资源或功能。
 packages-dependencies = 依赖
 packages-remove = 移除
 packages-access = 插件无法访问网络、用户文件或外部程序。

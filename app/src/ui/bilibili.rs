@@ -3,10 +3,11 @@ use super::{
     Ui,
     settings::{
         Page,
-        controls::{hint, row, section, switch, text_style},
+        controls::{hint, row, section, switch},
     },
 };
 use crate::msg::Msg;
+use crate::ui::kit::{Tone, Type, gap, icon, inset};
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
 use nana_ui::runtime::{
@@ -42,16 +43,18 @@ fn avatar(ui: Ui, size: f32) -> AnyView {
         move || ui.bilibili.get().avatar.clone(),
         move |asset| {
             widget(
-                Stack::row(0.0)
-                    .width(LengthSpec::Px(size))
-                    .height(LengthSpec::Px(size))
-                    .with_layout(move |l| {
-                        l.flex_shrink = Some(0.0);
-                        l.position = nana_ui_core::PositionSpec::Relative;
-                        l.border_radius = Some(size / 2.0);
-                        l.overflow_x = nana_ui_core::OverflowSpec::Hidden;
-                        l.overflow_y = nana_ui_core::OverflowSpec::Hidden;
-                    }),
+                crate::ui::kit::round(
+                    Stack::row(0.0)
+                        .width(LengthSpec::Px(size))
+                        .height(LengthSpec::Px(size)),
+                    size,
+                )
+                .with_layout(move |l| {
+                    l.flex_shrink = Some(0.0);
+                    l.position = nana_ui_core::PositionSpec::Relative;
+                    l.overflow_x = nana_ui_core::OverflowSpec::Hidden;
+                    l.overflow_y = nana_ui_core::OverflowSpec::Hidden;
+                }),
             )
             .children((
                 widget(IconGlyph::new(ti::USER_CIRCLE).size(size)),
@@ -70,11 +73,6 @@ fn avatar(ui: Ui, size: f32) -> AnyView {
     .into_any()
 }
 pub fn account_button(ui: Ui) -> AnyView {
-    let mut dot = text_style(14.0, 400);
-    let layout = std::sync::Arc::make_mut(&mut dot.layout);
-    layout.position = nana_ui_core::PositionSpec::Absolute;
-    layout.offset_right = Some(LengthSpec::Px(-1.0));
-    layout.offset_top = Some(LengthSpec::Px(-4.0));
     let face = widget(
         Stack::row(0.0)
             .width(LengthSpec::Px(28.0))
@@ -84,7 +82,17 @@ pub fn account_button(ui: Ui) -> AnyView {
     )
     .children((
         avatar(ui, 24.0),
-        widget(Text::new("•").style(dot).color(SemanticColorRole::Warning)).visible(move || {
+        // Needs attention: a warning dot on the avatar's corner.
+        widget(
+            crate::ui::kit::dot_frame()
+                .surface(Tone::Warning.role())
+                .with_layout(|l| {
+                    l.position = nana_ui_core::PositionSpec::Absolute;
+                    l.offset_right = Some(LengthSpec::Px(0.0));
+                    l.offset_top = Some(LengthSpec::Px(0.0));
+                }),
+        )
+        .visible(move || {
             matches!(
                 ui.bilibili.get().account,
                 AccountState::Expired | AccountState::Failed(_)
@@ -99,11 +107,11 @@ pub fn account_button(ui: Ui) -> AnyView {
     )
     .trigger(face)
     .children(
-        widget(Stack::column(12.0).padding(16.0)).children((
+        widget(Stack::column(gap::GROUP).padding(inset::CARD)).children((
             dynamic(
                 move || ui.bilibili.get().account.clone(),
                 move |a| {
-                    widget(Text::new(account_label(ui, a)).style(text_style(16.0, 600))).into_any()
+                    widget(Text::new(account_label(ui, a)).style(Type::Title.style())).into_any()
                 },
             ),
             dynamic(
@@ -154,7 +162,7 @@ fn send_toggle(ui: Ui, labelled: bool) -> AnyView {
 }
 pub fn send_status(ui: Ui) -> AnyView {
     widget(
-        Stack::row(6.0)
+        Stack::row(gap::TIGHT)
             .align(AlignSpec::Center)
             .with_layout(|l| l.flex_shrink = Some(0.0)),
     )
@@ -192,7 +200,7 @@ pub(super) fn input_send_status(ui: Ui) -> AnyView {
             widget(Stack::row(0.0))
                 .visible(move || ui.input_width.get() >= 1000.0)
                 .children(send_status(ui)),
-            widget(Stack::row(6.0).align(AlignSpec::Center))
+            widget(Stack::row(gap::TIGHT).align(AlignSpec::Center))
                 .visible(move || ui.input_width.get() < 1000.0)
                 .children((
                     widget(super::input::footer_icon(
@@ -218,7 +226,7 @@ pub(super) fn input_send_status(ui: Ui) -> AnyView {
                                 .justify(nana_ui_core::JustifySpec::Center),
                         )
                         .children(
-                            widget(IconGlyph::new(ti::SEND).size(14.0).decorative()).bind(
+                            widget(IconGlyph::new(ti::SEND).size(icon::SM).decorative()).bind(
                                 move |glyph: &mut IconGlyph| {
                                     glyph.style.foreground = Some(if ui.bilibili.get().sending {
                                         SemanticColorRole::Accent
@@ -229,7 +237,9 @@ pub(super) fn input_send_status(ui: Ui) -> AnyView {
                             ),
                         ),
                     )
-                    .children(widget(Stack::column(0.0).padding(12.0)).children(send_switch(ui))),
+                    .children(
+                        widget(Stack::column(0.0).padding(inset::PANEL)).children(send_switch(ui)),
+                    ),
                 )),
         ))
         .into_any()
@@ -268,7 +278,7 @@ pub fn confirm_dialog(ui: Ui) -> AnyView {
 }
 
 pub fn identity_hint(ui: Ui) -> AnyView {
-    widget(Stack::column(8.0))
+    widget(Stack::column(gap::CONTROL))
         .visible(move || {
             ui.settings.with(|s| s.integrations.bilibili.sync_profile)
                 && matches!(ui.bilibili.get().account, AccountState::Ready(_))
@@ -284,10 +294,10 @@ fn account_card(ui: Ui) -> AnyView {
         move || (ui.bilibili.get().account.clone(), ui.locale.get()),
         move |(account, _)| {
             let mut body = vec![
-                widget(Stack::row(12.0).align(AlignSpec::Center))
+                widget(Stack::row(gap::GROUP).align(AlignSpec::Center))
                     .children((
                         avatar(ui, 48.0),
-                        widget(Text::new(account_label(ui, account)).style(text_style(16.0, 600))),
+                        widget(Text::new(account_label(ui, account)).style(Type::Title.style())),
                     ))
                     .into_any(),
             ];
@@ -295,7 +305,7 @@ fn account_card(ui: Ui) -> AnyView {
                 AccountState::Ready(p) => {
                     body.push(hint(format!("UID {}", p.uid)));
                     body.push(
-                        widget(Stack::row(8.0))
+                        widget(Stack::row(gap::CONTROL))
                             .children((
                                 button(ui, "bili-refresh", || Msg::BilibiliRefresh),
                                 button(ui, "bili-logout", || Msg::BilibiliLogout),
@@ -310,7 +320,7 @@ fn account_card(ui: Ui) -> AnyView {
                         body.push(widget(code.label(ui.now_t("bili-login"))).into_any());
                     }
                     body.push(
-                        widget(Stack::row(8.0))
+                        widget(Stack::row(gap::CONTROL))
                             .children((
                                 button(ui, "bili-qr-refresh", || Msg::BilibiliLogin),
                                 button(ui, "common-cancel", || Msg::BilibiliCancelLogin),
@@ -327,7 +337,7 @@ fn account_card(ui: Ui) -> AnyView {
                 }
                 _ => body.push(button(ui, "bili-login", || Msg::BilibiliLogin)),
             }
-            widget(Stack::column(12.0).padding(16.0))
+            widget(Stack::column(gap::GROUP).padding(inset::CARD))
                 .children(body)
                 .into_any()
         },
@@ -358,7 +368,7 @@ fn room_control(ui: Ui) -> AnyView {
     );
     let applied = signal(pending.get_untracked());
     widget(
-        Stack::row(8.0)
+        Stack::row(gap::CONTROL)
             .width(LengthSpec::Px(360.0))
             .align(AlignSpec::Center)
             .wrap(true),
@@ -412,8 +422,7 @@ fn deliveries(ui: Ui) -> AnyView {
                         DeliveryState::Cancelled => "bili-cancelled",
                     });
                     let mut row = vec![
-                        widget(Text::new(d.chunks.concat()).style(text_style(14.0, 400)))
-                            .into_any(),
+                        widget(Text::new(d.chunks.concat()).style(Type::Chat.style())).into_any(),
                         hint(format!("{label} · {}/{}", d.completed, d.chunks.len())),
                     ];
                     if !d.detail.is_empty() {
@@ -436,21 +445,24 @@ fn deliveries(ui: Ui) -> AnyView {
                         }
                     }
                     widget(
-                        Stack::column(6.0)
-                            .padding(12.0)
-                            .surface(SemanticColorRole::Subtle),
+                        Stack::column(gap::CONTROL)
+                            .padding(inset::PANEL)
+                            .surface(SemanticColorRole::Subtle)
+                            .radius(nana_ui_core::RadiusTier::Sm),
                     )
                     .children(row)
                     .into_any()
                 })
                 .collect();
-            widget(Stack::column(8.0)).children(rows).into_any()
+            widget(Stack::column(gap::CONTROL))
+                .children(rows)
+                .into_any()
         },
     )
     .into_any()
 }
 pub fn settings_page(ui: Ui) -> AnyView {
-    widget(Stack::column(24.0))
+    widget(Stack::column(gap::SECTION))
         .children((
             section(
                 ui,

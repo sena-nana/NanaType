@@ -276,14 +276,9 @@ fn changing_style_retains_reading_anchor_reply_and_draft() {
         .accessibility_dump()
         .into_iter()
         .find(|n| {
-            let st = session
-                .document()
-                .context()
-                .world()
-                .node_style(StableNodeId::new(n.id).unwrap())
-                .unwrap();
-            st.layout.border_radius == Some(6.0)
-                && st.layout.border_width == Some(1.0)
+            n.agent_path
+                .as_deref()
+                .is_some_and(|p| p.contains("chat-row:"))
                 && n.bounds.y + n.bounds.height > 76.0
                 && n.bounds.y < 400.0
         })
@@ -349,7 +344,7 @@ fn switching_skins_does_not_restyle_either_operator_layout() {
             session
                 .document_mut()
                 .context_mut()
-                .set_theme_tokens(nanatype::skin_theme::compile(dark))
+                .set_theme_tokens(nanatype::ui::kit::theme::compile(dark))
                 .unwrap();
             session.flush().unwrap();
             let world = session.document().context().world();
@@ -408,7 +403,7 @@ fn general_settings_keep_their_style_when_the_skin_changes() {
         session
             .document_mut()
             .context_mut()
-            .set_theme_tokens(nanatype::skin_theme::compile(dark))
+            .set_theme_tokens(nanatype::ui::kit::theme::compile(dark))
             .unwrap();
         session.flush().unwrap();
         assert_skin_independent(ui, &mut session);

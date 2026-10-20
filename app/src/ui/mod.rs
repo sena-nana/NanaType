@@ -12,7 +12,7 @@ pub mod feedback;
 mod handwriting;
 pub mod history;
 pub mod input;
-pub mod keycap;
+pub mod kit;
 pub mod link_text;
 pub mod materials;
 pub mod motion;

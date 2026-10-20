@@ -95,7 +95,7 @@ impl SessionBuilder {
         let mut doc = RuntimeDocument::new(id);
         if let Some(dark) = self.dark {
             doc.context_mut()
-                .set_theme_tokens(nanatype::skin_theme::compile(dark))
+                .set_theme_tokens(nanatype::ui::kit::theme::compile(dark))
                 .unwrap();
         }
         let output = doc.context_mut().mount_view_root(id, view).unwrap();

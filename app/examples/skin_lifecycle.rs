@@ -49,7 +49,7 @@ fn doc(ui: Ui, track: usize) -> RuntimeAgentSession {
     let id = DocumentId::new(track as u64 + 1).unwrap();
     let mut doc = RuntimeDocument::new(id);
     doc.context_mut()
-        .set_theme_tokens(nanatype::skin_theme::compile(false))
+        .set_theme_tokens(nanatype::ui::kit::theme::compile(false))
         .unwrap();
     doc.context_mut()
         .mount_view_root(id, move || match track {
