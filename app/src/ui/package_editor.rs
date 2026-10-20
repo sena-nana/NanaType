@@ -382,15 +382,17 @@ fn close_prompt(ui: Ui) -> AnyView {
             if !*open {
                 return widget(Stack::column(0.)).into_any();
             }
-            widget(crate::ui::kit::wash(
+            widget(
                 Stack::row(gap::CONTROL)
                     .wrap(true)
                     .align(AlignSpec::Center)
                     .padding_xy(inset::PANEL, inset::BAR_Y)
-                    .radius(RadiusTier::Sm),
-                SemanticColorRole::Warning,
-                0.10,
-            ))
+                    .radius(RadiusTier::Sm)
+                    .surface_mix(nana_ui_core::SemanticColorMix::alpha(
+                        SemanticColorRole::Warning,
+                        0.10,
+                    )),
+            )
             .key("package-editor-close-prompt")
             .children((
                 widget(
