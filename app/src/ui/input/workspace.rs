@@ -65,16 +65,15 @@ pub(super) fn split(ui: Ui, editor: impl IntoView) -> AnyView {
 fn command(ui: Ui, key: &str, value: Marker, width: Signal<f32>) -> AnyView {
     widget(Stack::row(0.0))
         .bind(move |s: &mut Stack| {
-            restyle(s, |l| {
-                let narrow = width.get() < 260.0;
-                l.width = Some(if narrow {
-                    LengthSpec::Fill
-                } else {
-                    LengthSpec::Px(0.0)
-                });
-                l.min_width = Some(LengthSpec::Px(0.0));
-                l.flex_grow = Some(if narrow { 0.0 } else { 1.0 });
-            })
+            let narrow = width.get() < 260.0;
+            let l = s.layout_mut();
+            l.width = Some(if narrow {
+                LengthSpec::Fill
+            } else {
+                LengthSpec::Px(0.0)
+            });
+            l.min_width = Some(LengthSpec::Px(0.0));
+            l.flex_grow = Some(if narrow { 0.0 } else { 1.0 });
         })
         .children(
             widget(Button::new(ui.now_t(key)).size(ControlSize::Small)).on_cx(
@@ -129,12 +128,10 @@ fn commands(ui: Ui, width: Signal<f32>) -> AnyView {
 
 fn command_row(width: Signal<f32>) -> nana_ui::runtime::view::El<Stack> {
     widget(Stack::row(gap::CONTROL).width(LengthSpec::Fill)).bind(move |s: &mut Stack| {
-        restyle(s, |l| {
-            l.direction = Some(if width.get() < 260.0 {
-                nana_ui_core::FlexDirection::Column
-            } else {
-                nana_ui_core::FlexDirection::Row
-            })
+        s.layout_mut().direction = Some(if width.get() < 260.0 {
+            nana_ui_core::FlexDirection::Column
+        } else {
+            nana_ui_core::FlexDirection::Row
         });
     })
 }

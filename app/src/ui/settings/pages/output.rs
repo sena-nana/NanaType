@@ -7,19 +7,16 @@ const STEP_DOT: f32 = 22.0;
 pub(super) fn step(n: u8, body: impl IntoView) -> AnyView {
     widget(Stack::row(gap::CONTROL).align(AlignSpec::Center))
         .children((
-            widget(crate::ui::kit::wash(
-                crate::ui::kit::round(
-                    Stack::row(0.0)
-                        .width(LengthSpec::Px(STEP_DOT))
-                        .height(LengthSpec::Px(STEP_DOT))
-                        .align(AlignSpec::Center)
-                        .justify(JustifySpec::Center)
-                        .with_layout(|l| l.flex_shrink = Some(0.0)),
-                    STEP_DOT,
-                ),
-                SemanticColorRole::Accent,
-                0.12,
-            ))
+            widget(
+                Stack::row(0.0)
+                    .width(LengthSpec::Px(STEP_DOT))
+                    .height(LengthSpec::Px(STEP_DOT))
+                    .align(AlignSpec::Center)
+                    .justify(JustifySpec::Center)
+                    .radius(RadiusTier::Full)
+                    .surface_mix(SemanticColorMix::alpha(SemanticColorRole::Accent, 0.12))
+                    .with_layout(|l| l.flex_shrink = Some(0.0)),
+            )
             .children(widget(
                 Text::new(n.to_string())
                     .style(Type::Overline.style())

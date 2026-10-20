@@ -105,10 +105,11 @@ pub(super) fn step_indicator(ui: Ui) -> AnyView {
     };
     let dots: Vec<AnyView> = (0..ONBOARD_STEPS)
         .map(|i| {
-            widget(crate::ui::kit::round(
-                Stack::row(0.0).height(LengthSpec::Px(space::SM)),
-                space::SM,
-            ))
+            widget(
+                Stack::row(0.0)
+                    .height(LengthSpec::Px(space::SM))
+                    .radius(RadiusTier::Full),
+            )
             .bind(move |s: &mut Stack| {
                 let n = step.get();
                 let role = if i <= n {
@@ -223,13 +224,11 @@ pub(super) fn skin_select(ui: Ui) -> AnyView {
 pub(super) fn mode_diagram(mode: InputMode) -> AnyView {
     let bar = |w: f32, role: SemanticColorRole| {
         widget(
-            crate::ui::kit::round(
-                Stack::row(0.0)
-                    .width(LengthSpec::Px(w))
-                    .height(LengthSpec::Px(gap::TIGHT)),
-                gap::TIGHT,
-            )
-            .surface(role),
+            Stack::row(0.0)
+                .width(LengthSpec::Px(w))
+                .height(LengthSpec::Px(gap::TIGHT))
+                .radius(RadiusTier::Full)
+                .surface(role),
         )
         .into_any()
     };

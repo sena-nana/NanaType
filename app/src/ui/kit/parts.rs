@@ -1,20 +1,26 @@
-//! Small parts every window shares: tags, pills, status dots, callouts,
+//! Small parts every window shares: tags, badges, status dots, callouts,
 //! empty states, the call-to-action button and the transparency checker.
+
+use std::sync::Arc;
 
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, widget};
-use nana_ui::runtime::{Activate, Button, Icon, IconGlyph, Stack, Text};
+use nana_ui::runtime::{
+    Activate, Button, EmptyState, Icon, IconGlyph, NodeStyle, Stack, StatusBadge, Text,
+};
 use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{
     AlignSpec, JustifySpec, LengthSpec, RadiusTier, SemanticColorMix, SemanticColorRole,
 };
 
 use super::paint::CtaPainter;
-use super::tokens::{DOT, PILL_H, Tone, Type, gap, icon, inset};
+use super::tokens::{DOT, Tone, Type, gap, icon, inset};
 use crate::msg::Msg;
 
 /// A quiet tag: a subtle chip with a soft hairline at the control radius,
-/// its text small. For a marker, a capability, a sender name.
+/// its text small. For a marker, a capability, a sender name. (NanaUI's
+/// `Chip` is a focusable button with a hover state, a full-round pill and
+/// body-colour text, so a label that does nothing stays this frame.)
 pub fn tag(text: impl Into<String>) -> AnyView {
     tag_styled(Type::Small.text(text).color(SemanticColorRole::Muted))
 }
@@ -43,42 +49,28 @@ pub fn tag_frame() -> Stack {
         .with_layout(|l| l.flex_shrink = Some(0.0))
 }
 
-/// `stack` filled with `role` at `alpha` over what is behind it: a tint
-/// that follows the theme.
-pub fn wash(stack: Stack, role: SemanticColorRole, alpha: f32) -> Stack {
-    let st = stack
-        .node_style()
-        .surface_mix(SemanticColorMix::alpha(role, alpha));
-    stack.style(st)
+/// `stack` with a corner `radius` px that comes from content, not chrome (a
+/// skin's history avatar). Chrome names a [`RadiusTier`]; a round frame is
+/// [`RadiusTier::Full`].
+pub fn corner(stack: Stack, radius: f32) -> Stack {
+    stack.radius_px(radius)
 }
 
-/// A round frame (a pill, a dot, an avatar) `height` px tall.
-pub fn round(stack: Stack, height: f32) -> Stack {
-    stack.radius_px(height / 2.0)
-}
-
-/// A tinted pill in `tone`'s colour with an optional leading dot: the
-/// app's status mark (connected, sealed, queued).
-pub fn pill(text: impl Into<String>, tone: Tone, dot: bool) -> AnyView {
-    widget(pill_frame(tone))
-        .children((
-            dot.then(|| status_dot(tone)),
-            widget(Type::Micro.text(text).color(tone.ink())),
-        ))
-        .into_any()
-}
-
-/// A pill's frame in `tone`.
-fn pill_frame(tone: Tone) -> Stack {
-    let frame = round(
-        Stack::row(gap::TIGHT)
-            .height(LengthSpec::Px(PILL_H))
-            .padding_xy(inset::CHIP_X, 0.0)
+/// The app's status mark (connected, sealed, queued): NanaUI's status
+/// badge, a dot and a label on a 12% wash of `tone`. Settings rows bind a
+/// [`StatusBadge`] in place for a live status; this is the fixed one.
+pub fn badge(text: impl Into<String>, tone: Tone) -> AnyView {
+    // In a row of its own, so a column (a switching block's branch) does
+    // not stretch it across its width.
+    widget(
+        Stack::row(0.0)
             .align(AlignSpec::Center)
             .with_layout(|l| l.flex_shrink = Some(0.0)),
-        PILL_H,
-    );
-    wash(frame, tone.role(), 0.12)
+    )
+    .children(widget(
+        StatusBadge::new(text.into(), tone.status()).compact(true),
+    ))
+    .into_any()
 }
 
 /// A status dot in `tone`'s colour.
@@ -88,13 +80,11 @@ pub fn status_dot(tone: Tone) -> AnyView {
 
 /// A dot's frame, for a dot whose colour is bound in place.
 pub fn dot_frame() -> Stack {
-    round(
-        Stack::row(0.0)
-            .width(LengthSpec::Px(DOT))
-            .height(LengthSpec::Px(DOT))
-            .with_layout(|l| l.flex_shrink = Some(0.0)),
-        DOT,
-    )
+    Stack::row(0.0)
+        .width(LengthSpec::Px(DOT))
+        .height(LengthSpec::Px(DOT))
+        .radius(RadiusTier::Full)
+        .with_layout(|l| l.flex_shrink = Some(0.0))
 }
 
 /// A one-line note in a tinted box: what went wrong, what to know.
@@ -105,14 +95,13 @@ pub fn callout(tone: Tone, text: impl Into<String>) -> AnyView {
         Tone::Success => ti::CIRCLE_CHECK,
         _ => ti::INFO_CIRCLE,
     };
-    widget(wash(
+    widget(
         Stack::row(gap::CONTROL)
             .padding_xy(inset::PANEL, inset::BAR_Y)
             .align(AlignSpec::Start)
-            .radius(RadiusTier::Sm),
-        tone.role(),
-        0.10,
-    ))
+            .radius(RadiusTier::Sm)
+            .surface_mix(SemanticColorMix::alpha(tone.role(), 0.10)),
+    )
     .children((
         widget(
             IconGlyph::new(glyph)
@@ -127,17 +116,16 @@ pub fn callout(tone: Tone, text: impl Into<String>) -> AnyView {
 
 /// An icon on a tinted square: a list entry's lead mark.
 pub fn icon_tile(glyph: Icon, size: f32, tone: Tone) -> AnyView {
-    widget(wash(
+    widget(
         Stack::row(0.0)
             .width(LengthSpec::Px(size))
             .height(LengthSpec::Px(size))
             .align(AlignSpec::Center)
             .justify(JustifySpec::Center)
             .radius(RadiusTier::Sm)
+            .surface_mix(SemanticColorMix::alpha(tone.role(), 0.12))
             .with_layout(|l| l.flex_shrink = Some(0.0)),
-        tone.role(),
-        0.12,
-    ))
+    )
     .children(widget(
         IconGlyph::new(glyph)
             .size(size / 2.0)
@@ -147,37 +135,35 @@ pub fn icon_tile(glyph: Icon, size: f32, tone: Tone) -> AnyView {
     .into_any()
 }
 
-/// An empty list: a ✦ in the accent colour, one muted line and, when
-/// there is somewhere to go, a quiet text button.
+/// An empty list: NanaUI's empty state (a ✦, one line) and, when there
+/// is somewhere to go, a quiet text button under it.
 pub fn empty_state(
     text: String,
     action: Option<(String, Box<dyn Fn() -> Msg + Send + 'static>)>,
 ) -> AnyView {
-    let action = action.map(|(label, msg)| {
-        widget(
-            Button::new(label)
-                .kind(ButtonKind::Text)
-                .size(ControlSize::Small),
-        )
-        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
-        .into_any()
-    });
-    widget(
-        Stack::row(gap::CONTROL)
-            .padding_xy(inset::CARD, inset::ROW_Y)
-            .align(AlignSpec::Center)
-            .wrap(true),
-    )
-    .children((
-        widget(
-            IconGlyph::new(ti::SPARKLES)
-                .size(icon::MD)
-                .role(SemanticColorRole::Accent),
-        ),
-        widget(Type::Lead.text(text)),
-        action,
-    ))
-    .into_any()
+    // On the card inset, so it sits in a card row as well as on a page.
+    let mut style = NodeStyle::default();
+    {
+        let l = Arc::make_mut(&mut style.layout);
+        l.padding_left = Some(LengthSpec::Px(inset::CARD));
+        l.padding_right = Some(LengthSpec::Px(inset::CARD));
+        l.padding_top = Some(LengthSpec::Px(inset::ROW_Y));
+        l.padding_bottom = Some(LengthSpec::Px(inset::ROW_Y));
+    }
+    let empty = widget(EmptyState::new(text).icon(ti::SPARKLES).style(style));
+    match action {
+        Some((label, msg)) => empty
+            .action(
+                widget(
+                    Button::new(label)
+                        .kind(ButtonKind::Text)
+                        .size(ControlSize::Small),
+                )
+                .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg())),
+            )
+            .into_any(),
+        None => empty.into_any(),
+    }
 }
 
 /// `button` as the view's call to action: [`CtaPainter`] over a solid accent

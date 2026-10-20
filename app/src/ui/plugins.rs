@@ -317,7 +317,7 @@ fn package_card(
                         ),
                     )),
                 )),
-                kit::pill(integrity_label(ui, &row.integrity), integrity_tone, true),
+                kit::badge(integrity_label(ui, &row.integrity), integrity_tone),
             ),
             widget(
                 Stack::column(gap::TIGHT)

@@ -15,7 +15,7 @@ use nana_ui::runtime::{
     QrCode, Stack, Switch, Text, TextChanged, TextInput, TextSubmitted, ToggleChanged,
 };
 use nana_ui::{ButtonKind, ControlSize};
-use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
+use nana_ui_core::{AlignSpec, LengthSpec, RadiusTier, SemanticColorRole};
 use nanatype_bilibili::{AccountState, ConnectionState, DeliveryState, QrStatus};
 
 fn button(ui: Ui, key: &str, message: impl Fn() -> Msg + Send + 'static) -> AnyView {
@@ -43,18 +43,16 @@ fn avatar(ui: Ui, size: f32) -> AnyView {
         move || ui.bilibili.get().avatar.clone(),
         move |asset| {
             widget(
-                crate::ui::kit::round(
-                    Stack::row(0.0)
-                        .width(LengthSpec::Px(size))
-                        .height(LengthSpec::Px(size)),
-                    size,
-                )
-                .with_layout(move |l| {
-                    l.flex_shrink = Some(0.0);
-                    l.position = nana_ui_core::PositionSpec::Relative;
-                    l.overflow_x = nana_ui_core::OverflowSpec::Hidden;
-                    l.overflow_y = nana_ui_core::OverflowSpec::Hidden;
-                }),
+                Stack::row(0.0)
+                    .width(LengthSpec::Px(size))
+                    .height(LengthSpec::Px(size))
+                    .radius(RadiusTier::Full)
+                    .with_layout(move |l| {
+                        l.flex_shrink = Some(0.0);
+                        l.position = nana_ui_core::PositionSpec::Relative;
+                        l.overflow_x = nana_ui_core::OverflowSpec::Hidden;
+                        l.overflow_y = nana_ui_core::OverflowSpec::Hidden;
+                    }),
             )
             .children((
                 widget(IconGlyph::new(ti::USER_CIRCLE).size(size)),

@@ -21,7 +21,7 @@ use nana_ui::runtime::{
 use nana_ui::theme::space;
 use nana_ui_core::{
     AlignSpec, BackgroundImage, BackgroundImageFit, JustifySpec, LengthSpec, OverflowSpec,
-    PointerEventsSpec, SemanticColorRole,
+    PointerEventsSpec, RadiusTier, SemanticColorRole,
 };
 use nanatype_settings::{ChatFilter, ChatPanelStyle, Settings};
 
@@ -101,7 +101,8 @@ const HISTORY_PAD_X: f32 = space::LG;
 /// A round avatar: the name's first letter on the accent colour, with the
 /// picture (when there is one) laid over it, so a picture that is still
 /// loading, or cannot be read, leaves the initial rather than an empty
-/// circle.
+/// circle. (NanaUI's `Avatar` samples a host texture and leaves an empty
+/// slot a plain grey circle, without initials, so it cannot stand in.)
 pub fn asset_avatar(
     ui: Ui,
     asset: Option<String>,
@@ -118,19 +119,17 @@ pub fn asset_avatar(
     }
     let initial = name.chars().next().map(String::from).unwrap_or_default();
     widget(
-        crate::ui::kit::round(
-            Stack::row(0.0)
-                .width(LengthSpec::Px(size))
-                .height(LengthSpec::Px(size))
-                .align(AlignSpec::Center)
-                .justify(JustifySpec::Center),
-            size,
-        )
-        .with_layout(move |l| {
-            l.position = nana_ui_core::PositionSpec::Relative;
-            l.flex_shrink = Some(0.0);
-            l.background = Some(accent);
-        }),
+        Stack::row(0.0)
+            .width(LengthSpec::Px(size))
+            .height(LengthSpec::Px(size))
+            .align(AlignSpec::Center)
+            .justify(JustifySpec::Center)
+            .radius(RadiusTier::Full)
+            .with_layout(move |l| {
+                l.position = nana_ui_core::PositionSpec::Relative;
+                l.flex_shrink = Some(0.0);
+                l.background = Some(accent);
+            }),
     )
     .children((
         widget(Text::new(initial).decorative().style(st)),
@@ -142,7 +141,7 @@ pub fn asset_avatar(
 /// Updates only the image node; late downloads never remount a message.
 pub fn reactive_picture(ui: Ui, asset: Option<String>, radius: f32) -> AnyView {
     widget(
-        crate::ui::kit::round(Stack::row(0.0), radius * 2.0).with_layout(move |l| {
+        crate::ui::kit::corner(Stack::row(0.0), radius).with_layout(move |l| {
             l.position = nana_ui_core::PositionSpec::Absolute;
             l.offset_left = Some(LengthSpec::Px(0.0));
             l.offset_top = Some(LengthSpec::Px(0.0));
@@ -164,9 +163,7 @@ pub fn reactive_picture(ui: Ui, asset: Option<String>, radius: f32) -> AnyView {
             })
         });
         let image = url.map(|u| BackgroundImage::url_with_fit(u, BackgroundImageFit::Cover));
-        let mut next = std::mem::replace(s, Stack::row(0.0));
-        next = next.with_layout(|l| l.paint.background_image = image);
-        *s = next;
+        s.layout_mut().paint.background_image = image;
     })
     .into_any()
 }
@@ -256,17 +253,16 @@ fn row_view(ui: Ui, source: RowSource, width: f32) -> AnyView {
         } else {
             0.0
         };
-        super::restyle(s, |l| {
-            l.background = Some(if !active {
-                paid.map_or(accent, |mut p| {
-                    p[3] = 0.18;
-                    p
-                })
-            } else {
-                accent
-            });
-            l.border_color = Some(border);
+        let l = s.layout_mut();
+        l.background = Some(if !active {
+            paid.map_or(accent, |mut p| {
+                p[3] = 0.18;
+                p
+            })
+        } else {
+            accent
         });
+        l.border_color = Some(border);
     })
     .children(content)
     .into_any()

@@ -1,7 +1,7 @@
 //! NanaType's design system: the one theme every window installs
 //! ([`theme`]), its typed tokens ([`Type`], [`gap`], [`inset`], [`field`],
 //! [`Tone`]) and the parts application chrome is built from — cards, rows,
-//! bars, tags, pills, dots, keycaps and the call to action.
+//! bars, tags, badges, dots, keycaps and the call to action.
 //!
 //! Chrome views name these roles instead of numbers (a test holds them to
 //! it), so changing how the app looks is a change here. Skin-drawn content

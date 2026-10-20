@@ -457,6 +457,27 @@ fn empty_input(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
             .mount_view_root(id, move || input::input_window(ui))
             .unwrap();
     });
+    // The footer's status badges: a line waiting its turn, then mirror mode.
+    let before_status = ui.status.get_untracked();
+    let before_settings = ui.settings.get_untracked();
+    let mut queued = (*before_status).clone();
+    queued.queued = 2;
+    ui.status.set(Arc::new(queued));
+    shot("input-queued", out, iw, ih, theme.clone(), |doc, id| {
+        doc.context_mut()
+            .mount_view_root(id, move || input::input_window(ui))
+            .unwrap();
+    });
+    ui.status.set(before_status);
+    let mut mirror = (*before_settings).clone();
+    mirror.general.input_mode = nanatype_settings::InputMode::Mirror;
+    ui.settings.set(Arc::new(mirror));
+    shot("input-mirror", out, iw, ih, theme.clone(), |doc, id| {
+        doc.context_mut()
+            .mount_view_root(id, move || input::input_window(ui))
+            .unwrap();
+    });
+    ui.settings.set(before_settings);
 }
 
 /// The link pages with every link on, as the clients report it.

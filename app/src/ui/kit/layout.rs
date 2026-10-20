@@ -4,8 +4,8 @@
 
 use std::sync::Arc;
 
-use nana_ui::runtime::Stack;
 use nana_ui::runtime::view::{AnyView, IntoView, settings_row, widget};
+use nana_ui::runtime::{Divider, Stack};
 use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec, RadiusTier, SemanticColorRole};
 
 use super::paint::CardPainter;
@@ -20,7 +20,9 @@ pub fn shown_if(view: AnyView, cond: impl Fn() -> bool + Send + 'static) -> (Any
 }
 
 /// A card's frame: the surface, a soft hairline and (on a light chrome) a
-/// short lift, at `radius`. Children are laid out in a column.
+/// short lift, at `radius`. Children are laid out in a column. (No NanaUI
+/// `CardKind` draws this: `Raised` has no hairline and lifts on the theme's
+/// popover shadow in both modes, `Outlined` has no fill.)
 pub fn card_frame(radius: RadiusTier) -> Stack {
     Stack::column(0.0)
         .radius(radius)
@@ -72,46 +74,25 @@ pub fn section_titled(title: Option<String>, rows: Vec<(AnyView, Shown)>) -> Any
 
 /// The inset hairline between two rows of a card.
 pub fn divider() -> AnyView {
-    widget(
-        Stack::row(0.0)
-            .height(LengthSpec::Px(1.0))
-            .width(LengthSpec::Fill)
-            .surface(SemanticColorRole::BorderSoft)
-            .with_layout(|l| {
-                l.margin_left = Some(LengthSpec::Px(inset::CARD));
-                l.margin_right = Some(LengthSpec::Px(inset::CARD));
-                l.flex_shrink = Some(0.0);
-            }),
-    )
-    .into_any()
+    widget(Divider::horizontal().inset(inset::CARD)).into_any()
 }
 
 /// A full-width hairline (under a bar, between panes).
 pub fn rule() -> AnyView {
-    widget(
-        Stack::row(0.0)
-            .height(LengthSpec::Px(1.0))
-            .width(LengthSpec::Fill)
-            .surface(SemanticColorRole::BorderSoft)
-            .with_layout(|l| l.flex_shrink = Some(0.0)),
-    )
-    .into_any()
+    widget(Divider::horizontal()).into_any()
 }
 
-/// A short vertical hairline between groups of a toolbar.
+/// A short vertical hairline between groups of a toolbar: an icon tall, in
+/// the stronger border colour, centred in the row.
 pub fn vrule() -> AnyView {
-    widget(
-        Stack::row(0.0)
-            .width(LengthSpec::Px(1.0))
-            .height(LengthSpec::Px(super::tokens::icon::LG))
-            .surface(SemanticColorRole::Border)
-            .with_layout(|l| {
-                l.flex_shrink = Some(0.0);
-                l.margin_left = Some(LengthSpec::Px(gap::TIGHT));
-                l.margin_right = Some(LengthSpec::Px(gap::TIGHT));
-            }),
-    )
-    .into_any()
+    let mut rule = Divider::vertical();
+    rule.style.background = Some(SemanticColorRole::Border);
+    let l = Arc::make_mut(&mut rule.style.layout);
+    l.height = Some(LengthSpec::Px(super::tokens::icon::LG));
+    l.align_self = Some(AlignSpec::Center);
+    l.margin_left = Some(LengthSpec::Px(gap::TIGHT));
+    l.margin_right = Some(LengthSpec::Px(gap::TIGHT));
+    widget(rule).into_any()
 }
 
 /// Rows with a divider between each, for a group nested in one card row.

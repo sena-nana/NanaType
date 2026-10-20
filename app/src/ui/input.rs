@@ -33,7 +33,7 @@ use nanatype_settings::{InputMode, SendKey, Settings};
 
 use super::dialogue::{Base, Source, dialogue_box};
 use super::rich::{ChipKind, MarkerLook};
-use super::{I18N, Ui, c, restyle};
+use super::{I18N, Ui, c};
 use crate::msg::{FileTarget, MarkupEdit, Msg, Tool};
 use crate::ui::kit::{Tone, Type, gap, icon, inset};
 use crate::windows::{INPUT_MODE_H, TOOLBAR_H};
@@ -1328,17 +1328,17 @@ fn status_content(ui: Ui) -> AnyView {
             )
             .into_any(),
             // Live and attention states take the highlight, not the accent.
-            Line::Queued(text) => crate::ui::kit::pill(text, Tone::Accent, false),
+            Line::Queued(text) => crate::ui::kit::badge(text, Tone::Accent),
             Line::Mirror(text) => {
                 let mut chip_view =
                     widget(Stack::row(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
-                        .children(crate::ui::kit::pill(text, Tone::Accent, true));
+                        .children(crate::ui::kit::badge(text, Tone::Accent));
                 if !reduced {
                     // Opacity breathes once per PULSE_MS.
                     chip_view = chip_view.bind(move |s: &mut Stack| {
                         let phase = (ui.pulse_ms.get() % PULSE_MS) as f32 / PULSE_MS as f32;
                         let wave = 0.5 - 0.5 * (phase * std::f32::consts::TAU).cos();
-                        restyle(s, |l| l.opacity = Some(0.55 + 0.45 * wave));
+                        s.layout_mut().opacity = Some(0.55 + 0.45 * wave);
                     });
                 }
                 chip_view.into_any()
@@ -1755,11 +1755,10 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
             } else {
                 SemanticColorRole::Background
             });
-            restyle(s, |l| {
-                l.width = Some(LengthSpec::Px(vw.max(w * scale + pad)));
-                l.height = Some(LengthSpec::Px(vh.max(h * scale + pad)));
-                l.flex_shrink = Some(0.0);
-            });
+            let l = s.layout_mut();
+            l.width = Some(LengthSpec::Px(vw.max(w * scale + pad)));
+            l.height = Some(LengthSpec::Px(vh.max(h * scale + pad)));
+            l.flex_shrink = Some(0.0);
         })
         .children(
             widget(Stack::column(0.0).with_layout(|l| {
@@ -1773,10 +1772,9 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
             .bind(move |s: &mut Stack| {
                 let (w, h) = canvas_size();
                 let scale = preview_scale();
-                restyle(s, |l| {
-                    l.width = Some(LengthSpec::Px(w * scale));
-                    l.height = Some(LengthSpec::Px(h * scale));
-                });
+                let l = s.layout_mut();
+                l.width = Some(LengthSpec::Px(w * scale));
+                l.height = Some(LengthSpec::Px(h * scale));
             })
             .children(
                 widget(Stack::column(0.0).with_layout(|l| {
@@ -1788,15 +1786,14 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
                 .key("input-preview-canvas")
                 .bind(move |s: &mut Stack| {
                     let (w, h) = canvas_size();
-                    restyle(s, |l| {
-                        l.width = Some(LengthSpec::Px(w));
-                        l.height = Some(LengthSpec::Px(h));
-                        l.transform = is_preview()
-                            .then(|| super::surface::affine(0.0, 0.0, 0.0, preview_scale()));
-                        l.transform_origin = Some(nana_ui_core::TransformOrigin {
-                            x: LengthSpec::Px(0.0),
-                            y: LengthSpec::Px(0.0),
-                        });
+                    let l = s.layout_mut();
+                    l.width = Some(LengthSpec::Px(w));
+                    l.height = Some(LengthSpec::Px(h));
+                    l.transform = is_preview()
+                        .then(|| super::surface::affine(0.0, 0.0, 0.0, preview_scale()));
+                    l.transform_origin = Some(nana_ui_core::TransformOrigin {
+                        x: LengthSpec::Px(0.0),
+                        y: LengthSpec::Px(0.0),
                     });
                 })
                 .on(move |e: &FocusWithinChanged| {

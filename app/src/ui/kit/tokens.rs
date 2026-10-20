@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use nana_ui::StatusTone;
 use nana_ui::runtime::view::{AnyView, IntoView, widget};
 use nana_ui::runtime::{NodeStyle, Text};
 use nana_ui::theme::{space, type_scale};
@@ -179,11 +180,9 @@ pub const PAGE_MAX_W: f32 = 720.0;
 pub const PAGE_HEADER_H: f32 = 64.0;
 /// A small status dot.
 pub const DOT: f32 = 8.0;
-/// The height of a pill (a status badge with a dot, a filter chip).
-pub const PILL_H: f32 = 22.0;
 
 /// What a mark says about its subject: drawn as a colour role everywhere
-/// (dots, pills, tags, callouts), so "connected" is the same green in the
+/// (dots, badges, tags, callouts), so "connected" is the same green in the
 /// chat header, a settings badge and the package list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tone {
@@ -209,13 +208,14 @@ impl Tone {
         }
     }
 
-    /// The tone's text on its own 12% wash (a pill's label): the accent
-    /// darkened where it would not read as text.
-    pub const fn ink(self) -> SemanticColorRole {
+    /// The tone as a NanaUI status tone, for a [`super::badge`].
+    pub const fn status(self) -> StatusTone {
         match self {
-            Self::Accent => SemanticColorRole::AccentOnSoft,
-            Self::Off => SemanticColorRole::Muted,
-            other => other.role(),
+            Self::Neutral | Self::Off => StatusTone::Neutral,
+            Self::Accent => StatusTone::Info,
+            Self::Success => StatusTone::Success,
+            Self::Warning => StatusTone::Warning,
+            Self::Danger => StatusTone::Danger,
         }
     }
 }

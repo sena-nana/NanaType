@@ -293,14 +293,12 @@ pub(super) fn skin_list_row(
 ) -> AnyView {
     let swatch = |color: [f32; 4]| {
         widget(
-            crate::ui::kit::round(
-                Stack::row(0.0)
-                    .width(LengthSpec::Px(SWATCH))
-                    .height(LengthSpec::Px(SWATCH)),
-                SWATCH,
-            )
-            .outline(SemanticColorRole::BorderStrong, 1.0)
-            .with_layout(move |l| l.background = Some(color)),
+            Stack::row(0.0)
+                .width(LengthSpec::Px(SWATCH))
+                .height(LengthSpec::Px(SWATCH))
+                .radius(RadiusTier::Full)
+                .outline(SemanticColorRole::BorderStrong, 1.0)
+                .with_layout(move |l| l.background = Some(color)),
         )
         .into_any()
     };
