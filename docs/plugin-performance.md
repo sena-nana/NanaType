@@ -84,12 +84,25 @@ cargo test -p nanatype --test plugin_consent production_workers_require_approval
 - **解释器**：固定的 Wasm Lua，不连接 WASI；文件、进程等导入一律拒绝，不提供 `io`、`os`、`load`、`require` 等库。宿主读取结果时不运行插件代码或元方法。
 - **独立进程**：每个插件在独立工作进程中运行，环境变量被清空。崩溃、协议错误、超时、燃料耗尽或内存耗尽只结束该插件；进程停止后立即回收，反复启停不残留进程（`process` 测试）。
 - **macOS**：工作进程在读取任何请求前应用拒绝优先的 Seatbelt 配置；宿主事先打开的管道仍可用。自执行测试实测读文件、写文件、列目录、网络连接与绑定、创建进程均被拒绝（`os_sandbox` 测试）。无法应用配置时，工作进程不运行任何插件代码。应用程序本身作为工作进程运行（`nanatype --plugin-worker`）也已验证。
-- **Windows**：宿主在发送请求前把工作进程放入作业对象：单进程、禁止桌面、剪贴板、全局原子和系统设置访问、已提交内存 256 MiB、宿主关闭时终止。正式应用工作进程的启动、事件处理、禁用或包／依赖变化后的终止与进程回收已验证。新增原生测试读取内核中的实际配置，并验证子进程创建被拒绝、超过 256 MiB 的提交申请失败，以及最后一个作业句柄关闭后等待中的进程结束；不能以退出码是否非零判断作业终止。UI 限制只核对内核配置，未执行退出登录、修改显示设置、写剪贴板等操作。AppContainer 未实现，因此不宣称 Windows 有文件或网络层面的 OS 隔离。
+- **Windows**：宿主在发送请求前把工作进程放入作业对象：单进程、禁止桌面、剪贴板、全局原子和系统设置访问、已提交内存 256 MiB、宿主关闭时终止。正式应用工作进程的启动、事件处理、禁用或包／依赖变化后的终止与进程回收已验证。新增原生测试读取内核中的实际配置，并验证子进程创建被拒绝、超过 256 MiB 的提交申请失败，以及最后一个作业句柄关闭后等待中的进程结束；不能以退出码是否非零判断作业终止。UI 限制只核对内核配置，未执行退出登录、修改显示设置、写剪贴板等操作。AppContainer 启动路径已实现但默认关闭（见下文），尚未在 Windows 运行，因此不宣称 Windows 有文件或网络层面的 OS 隔离。
 - **其他平台**：没有 OS 级隔离，只依赖解释器边界。
 
 开放源码或可 fork 不削弱官方宿主的权限边界；签名有效不等于作者身份认证，部分只读保护不宣称不可绕过。
 
-AppContainer／LPAC 是进一步收窄 Windows 权限的候选方案，需要包 SID、访问控制、进程创建属性及继承句柄一起验证；不能由当前作业对象替代。此轮保持现有启动与 IPC 结构，尚未实现该隔离层。设计依据见 [Microsoft 的 AppContainer 启动说明](https://learn.microsoft.com/en-us/windows/win32/secauthz/implementing-an-appcontainer)。
+**Windows AppContainer（实现，未在 Windows 运行）**：设置 `NANATYPE_PLUGIN_APPCONTAINER=1` 后，宿主为当前用户创建（或沿用）`NanaType.PluginWorker` AppContainer 配置，给工作进程可执行文件授予该容器的读取与执行权限（Program Files 下用户无权改 ACL，也无需授予），然后用 `CreateProcessW` 以挂起状态启动工作进程：`SECURITY_CAPABILITIES` 不含任何能力（因此没有网络），显式句柄列表只含它的两个管道端，环境为空，工作目录为系统目录；放入与原来相同的作业对象后才恢复执行。工作进程从自己的令牌判断并报告 `AppContainer`。设计依据见 [Microsoft 的 AppContainer 启动说明](https://learn.microsoft.com/en-us/windows/win32/secauthz/implementing-an-appcontainer)。
+
+这条路径在本机只完成了 `x86_64-pc-windows-msvc` 的严格 Clippy 和测试二进制链接，没有运行，所以默认关闭，旧路径不变。Windows 上的验收命令：
+
+```powershell
+cargo test -p nanatype-plugins app_container -- --nocapture --test-threads=1
+$env:NANATYPE_PLUGIN_APPCONTAINER = '1'
+cargo test -p nanatype-plugins -- --test-threads=1
+cargo test -p nanatype --test plugin_consent -- --test-threads=1
+```
+
+第一条以 AppContainer 启动测试自身作为探针：读取宿主准备的文件、写文件、列目录、连接宿主监听的回环端口、创建子进程都必须被拒绝，令牌必须是 AppContainer。全部通过并确认正式应用的插件照常运行后，才可改为默认开启并据此宣称 Windows 的文件与网络隔离。LPAC 未实现。
+
+**macOS App Sandbox（评估，未采用）**：插件代码只在工作进程中运行，工作进程已有比 App Sandbox 更严格的拒绝优先 Seatbelt 配置（上文实测），App Sandbox 不会再收窄插件的权限。给整个宿主开启 App Sandbox 是另一项工作：需要带授权的代码签名（本轮按要求跳过签名），开机自启目前写 `~/Library/LaunchAgents` 并调用 `launchctl`，沙箱内不可用，要改用 `SMAppService`；聊天来源需要网络客户端授权，导入导出需要用户选择文件的授权，皮肤与资源目录会移入容器；沙箱进程内再调用 `sandbox_init` 能否成功也未验证（失败时工作进程按设计拒绝运行插件）。因此本轮不开启 App Sandbox，也不据此宣称宿主受沙箱保护。
 
 2026-10-20 核对 GitHub 告警：`rustls` 与 `sharp` 的历史告警已修复。[GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g)（`glib` < 0.20）只经 Linux 托盘的 `libappindicator`／GTK 3 依赖引入。托盘升级到 `tray-icon` 0.26 并改用纯 Rust 的 `ksni`（D-Bus StatusNotifierItem）后端，`Cargo.lock` 不再包含 `glib`、`gtk` 及其系统库绑定；应用的托盘代码不用修改；新版本在 Windows 与 macOS 上的托盘行为尚未实机复查。按 `tray-icon` 的说明，旧后端要求应用初始化 GTK 并运行其事件循环，而应用从未这样做。Linux 没有交叉 C 工具链，只用独立工程按应用同样的托盘调用对 `x86_64-unknown-linux-gnu` 做了编译检查，未在 Linux 实机运行。
 
@@ -195,9 +208,30 @@ NANATYPE_GPU_CASES=plugin_heavy cargo run -p nanatype --release --example gpu_pe
 
 原始结果为 `target/issue9-mac-render-ab.log`、`target/issue9-mac-gpu-ab.log` 与 `target/issue9-mac-gpu-*.json`，采样为 `target/issue9-mac-sample-*.txt`。Windows 上尚未复测；改动在平台无关的场景层，预期同样受益，但不以 macOS 数字代替 Windows 结果。
 
+## macOS 发布验收（2026-10-20）
+
+Apple M4、macOS 27.0.1、`dist` 构建，未签名。`scripts/package-macos.sh` 构建、收集许可文本、用 `nana-packager`（NanaUI 9272a29 起）打包、`validate --run`，再生成 zip 与 dmg：
+
+- **包结构**：`NanaType.app` 90 MB，zip 37 MB，dmg 41 MB（含指向“应用程序”的链接；`hdiutil verify` 通过，挂载后包内文件与符号链接完整，`validate` 通过）。Syphon.framework 以原样的符号链接放在 `Contents/Frameworks`（应用按 `../Frameworks/Syphon.framework/Syphon` 加载，`dlopen` 实测可加载）；22 节完整许可文本在 `Contents/Resources/THIRD_PARTY_LICENSES.txt`，其中 Rust crate 按 macOS 目标的依赖生成，另含 Syphon 的许可。
+- **validate**：布局、清单逐文件哈希、二进制身份、Info.plist（`plutil -lint`）、依赖可发现、无更新器、异目录启动自检均通过；未签名两项警告；原生启动画面、首帧交接、安装器往返与 StaticAppPlan 不执行。
+- **Info.plist**：此前打包器把 `Info.extra.plist` 的完整 plist 文档原样插进生成的字典，产出 macOS 无法解析的 Info.plist，`LSUIElement`（菜单栏应用、无 Dock 图标）因此从未生效，`validate` 也没有发现。打包器现在取完整文档的顶层字典，`validate` 在 macOS 上检查 Info.plist。
+- **运行**：以临时 `HOME`（全新配置，不碰本机用户数据）启动打包后的应用：进程常驻，打开叠加窗口与主窗口，菜单栏截图中出现 NanaType 托盘图标（`tray-icon` 0.26），收到 SIGTERM 后正常退出。
+- **工作进程**：用包内可执行文件作为插件工作进程（`NANATYPE_PLUGIN_WORKER`）运行既有测量，Seatbelt 配置正常应用（不能应用时工作进程拒绝运行插件）。同时重跑 `os_sandbox` 探针，读写文件、列目录、网络与创建进程仍全部被拒绝。
+
+| 测量（包内工作进程，负载均值约 7） | P50 | P95 | 最大 |
+|---|---:|---:|---:|
+| 冷启动至首个视图 | 22.34 ms | 27.94 ms | 29.61 ms |
+| 端到端，1／4／8 插件 | 0.22／0.22／1.58 ms | 2.17／5.48／9.06 ms | 24.83／11.87／11.49 ms |
+| 宿主调用，1／4／8 插件 | 0.010／0.003／0.002 ms | 0.012／0.010／0.009 ms | 0.017／0.020／0.186 ms |
+
+每个工作进程常驻内存约 17.5 MB。冷启动比上文用独立测试工作进程测得的 6.4ms 慢，因为这里启动的是完整应用的可执行文件。突发时每插件接收 33 个事件、其余以 `Busy` 丢弃，约 41–49ms 排空。原始结果为 `target/issue9-macos-bundle-perf.log`。
+
+- **皮肤截图**：28 个内置皮肤和 2 个夹具在默认宽度的展示／历史／输入、300px 的展示／历史，连同缓存图片共 632 张，与本轮改动前（`12ac26f`）逐字节一致：画布合批和插件视图原地更新没有改变任何皮肤画面。原始图在 `target/issue9-snap-{before,after}/`。
+- **编辑器与同意界面**：今天界面重做后重跑矩阵，编辑器 59 张、同意 81 张（中英日 × 900／440／300px），所有按钮都在宽度内（测试断言）。抽查日文 300px 确认中与英文 300px 表单：文字换行正常、无溢出；单行输入框中的长许可证名显示末尾，开头被截去，属输入框的正常滚动。
+
 ## 未完成
 
 - Windows `dist` 静态 CRT 发行构建、安装／卸载和原生多窗口 DPI／IME／系统文件选择器。已校验的便携包采用 `release`，仍依赖 VC++ 运行库；八项布局、文件、身份、自检与篡改检查通过，不代表安装器通过。首次重型 debug 进程测量在并发冷编译时曾超过 200ms，停止本项目编译后的原用例通过，未延长期限或降低负载。
-- 正式签名按用户要求跳过；Inno Setup 下载并静默安装被自动审批以 `blocked by policy` 拒绝，安装器没有构建。macOS 本轮没有可用实机，历史记录不等于当前发布验收。
-- AppContainer／LPAC 文件和网络隔离，macOS 正式签名与 App Sandbox 授权；Linux 托盘的实机运行。
+- 正式签名按用户要求跳过；Inno Setup 下载并静默安装被自动审批以 `blocked by policy` 拒绝，安装器没有构建。macOS 包未签名、未公证，从网络下载后会被 Gatekeeper 拦截。
+- Windows 上运行 AppContainer 探针并决定是否默认开启；LPAC。macOS 正式签名、公证与宿主 App Sandbox（见上文评估）；Linux 托盘的实机运行。
 - 重型画布的宿主 CPU 开销：macOS 上变化帧录制与提交已从约 13ms 降到约 1.2–1.6ms（见上节），Windows 尚未用同一负载复测。

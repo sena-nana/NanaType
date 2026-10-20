@@ -2,7 +2,7 @@
 # Build a macOS release of NanaType and package it as NanaType.app.
 #   scripts/package-macos.sh [--skip-build] [--profile dist|dist-small]
 # Needs: nana-packager on PATH (cargo install --path <NanaUI>/crates/nana-packager).
-# Produces an unsigned bundle and a zip of it; see docs/plugin-performance.md
+# Produces an unsigned bundle, a zip and a disk image of it; see docs/plugin-performance.md
 # for what is and is not verified.
 set -eu
 
@@ -45,5 +45,13 @@ app="$out/app/NanaType.app"
 nana-packager validate "$app" --run
 
 # ditto keeps the framework's symlinks.
-ditto -c -k --keepParent "$app" "$out/NanaType-$version-macos-$(uname -m).zip"
+name="NanaType-$version-macos-$(uname -m)"
+ditto -c -k --keepParent "$app" "$out/$name.zip"
+# A disk image to drag the app into Applications from.
+stage="$out/dmg"
+mkdir -p "$stage"
+ditto "$app" "$stage/NanaType.app"
+ln -s /Applications "$stage/Applications"
+hdiutil create -quiet -volname NanaType -srcfolder "$stage" -format UDZO -ov "$out/$name.dmg"
+rm -rf "$stage"
 echo "Packaged NanaType $version into $out"

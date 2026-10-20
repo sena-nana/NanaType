@@ -166,7 +166,7 @@ pwsh scripts/package.ps1
 
 更小的便携包可用 `pwsh scripts/package.ps1 -Portable -Profile dist-small`。打包脚本固定关闭发布构建的增量编译并使用锁文件；编译、许可证或发布自检失败时停止。便携包排除自检产生的 `data/` 用户数据，首次运行时由应用创建；内置字体、解码器、GPU 后备渲染和异常恢复均保留。
 
-macOS 上打成 `NanaType.app` 及其 zip（需要 `nana-packager`，产物未签名）：
+macOS 上打成 `NanaType.app`、zip 与 dmg（需要 `nana-packager`，产物未签名）：
 
 ```bash
 scripts/package-macos.sh
