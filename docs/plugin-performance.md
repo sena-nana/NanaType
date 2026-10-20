@@ -84,14 +84,27 @@ cargo test -p nanatype --test plugin_consent production_workers_require_approval
 - **解释器**：固定的 Wasm Lua，不连接 WASI；文件、进程等导入一律拒绝，不提供 `io`、`os`、`load`、`require` 等库。宿主读取结果时不运行插件代码或元方法。
 - **独立进程**：每个插件在独立工作进程中运行，环境变量被清空。崩溃、协议错误、超时、燃料耗尽或内存耗尽只结束该插件；进程停止后立即回收，反复启停不残留进程（`process` 测试）。
 - **macOS**：工作进程在读取任何请求前应用拒绝优先的 Seatbelt 配置；宿主事先打开的管道仍可用。自执行测试实测读文件、写文件、列目录、网络连接与绑定、创建进程均被拒绝（`os_sandbox` 测试）。无法应用配置时，工作进程不运行任何插件代码。应用程序本身作为工作进程运行（`nanatype --plugin-worker`）也已验证。
-- **Windows**：宿主在发送请求前把工作进程放入作业对象：单进程、禁止桌面、剪贴板、全局原子和系统设置访问、已提交内存 256 MiB、宿主关闭时终止。正式应用工作进程的启动、事件处理、禁用或包／依赖变化后的终止与进程回收已验证。新增原生测试读取内核中的实际配置，并验证子进程创建被拒绝、超过 256 MiB 的提交申请失败，以及最后一个作业句柄关闭后等待中的进程结束；不能以退出码是否非零判断作业终止。UI 限制只核对内核配置，未执行退出登录、修改显示设置、写剪贴板等操作。AppContainer 未实现，因此不宣称 Windows 有文件或网络层面的 OS 隔离。
+- **Windows**：宿主在发送请求前把工作进程放入作业对象：单进程、禁止桌面、剪贴板、全局原子和系统设置访问、已提交内存 256 MiB、宿主关闭时终止。正式应用工作进程的启动、事件处理、禁用或包／依赖变化后的终止与进程回收已验证。新增原生测试读取内核中的实际配置，并验证子进程创建被拒绝、超过 256 MiB 的提交申请失败，以及最后一个作业句柄关闭后等待中的进程结束；不能以退出码是否非零判断作业终止。UI 限制只核对内核配置，未执行退出登录、修改显示设置、写剪贴板等操作。AppContainer 启动路径已实现但默认关闭（见下文），尚未在 Windows 运行，因此不宣称 Windows 有文件或网络层面的 OS 隔离。
 - **其他平台**：没有 OS 级隔离，只依赖解释器边界。
 
 开放源码或可 fork 不削弱官方宿主的权限边界；签名有效不等于作者身份认证，部分只读保护不宣称不可绕过。
 
-AppContainer／LPAC 是进一步收窄 Windows 权限的候选方案，需要包 SID、访问控制、进程创建属性及继承句柄一起验证；不能由当前作业对象替代。此轮保持现有启动与 IPC 结构，尚未实现该隔离层。设计依据见 [Microsoft 的 AppContainer 启动说明](https://learn.microsoft.com/en-us/windows/win32/secauthz/implementing-an-appcontainer)。
+**Windows AppContainer（实现，未在 Windows 运行）**：设置 `NANATYPE_PLUGIN_APPCONTAINER=1` 后，宿主为当前用户创建（或沿用）`NanaType.PluginWorker` AppContainer 配置，给工作进程可执行文件授予该容器的读取与执行权限（Program Files 下用户无权改 ACL，也无需授予），然后用 `CreateProcessW` 以挂起状态启动工作进程：`SECURITY_CAPABILITIES` 不含任何能力（因此没有网络），显式句柄列表只含它的两个管道端，环境为空，工作目录为系统目录；放入与原来相同的作业对象后才恢复执行。工作进程从自己的令牌判断并报告 `AppContainer`。设计依据见 [Microsoft 的 AppContainer 启动说明](https://learn.microsoft.com/en-us/windows/win32/secauthz/implementing-an-appcontainer)。
 
-2026-10-20 核对 GitHub 告警：`rustls` 与 `sharp` 的历史告警已修复，仍开放的 [GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g) 涉及 `glib 0.18.5`。它经 Linux 的 `libappindicator`／GTK／托盘依赖引入，Windows 与 macOS 目标依赖树均不包含该包；Linux 依赖升级仍待处理，未将告警当作已修复。
+这条路径在本机只完成了 `x86_64-pc-windows-msvc` 的严格 Clippy 和测试二进制链接，没有运行，所以默认关闭，旧路径不变。Windows 上的验收命令：
+
+```powershell
+cargo test -p nanatype-plugins app_container -- --nocapture --test-threads=1
+$env:NANATYPE_PLUGIN_APPCONTAINER = '1'
+cargo test -p nanatype-plugins -- --test-threads=1
+cargo test -p nanatype --test plugin_consent -- --test-threads=1
+```
+
+第一条以 AppContainer 启动测试自身作为探针：读取宿主准备的文件、写文件、列目录、连接宿主监听的回环端口、创建子进程都必须被拒绝，令牌必须是 AppContainer。全部通过并确认正式应用的插件照常运行后，才可改为默认开启并据此宣称 Windows 的文件与网络隔离。LPAC 未实现。
+
+**macOS App Sandbox（评估，未采用）**：插件代码只在工作进程中运行，工作进程已有比 App Sandbox 更严格的拒绝优先 Seatbelt 配置（上文实测），App Sandbox 不会再收窄插件的权限。给整个宿主开启 App Sandbox 是另一项工作：需要带授权的代码签名（本轮按要求跳过签名），开机自启目前写 `~/Library/LaunchAgents` 并调用 `launchctl`，沙箱内不可用，要改用 `SMAppService`；聊天来源需要网络客户端授权，导入导出需要用户选择文件的授权，皮肤与资源目录会移入容器；沙箱进程内再调用 `sandbox_init` 能否成功也未验证（失败时工作进程按设计拒绝运行插件）。因此本轮不开启 App Sandbox，也不据此宣称宿主受沙箱保护。
+
+2026-10-20 核对 GitHub 告警：`rustls` 与 `sharp` 的历史告警已修复。[GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g)（`glib` < 0.20）只经 Linux 托盘的 `libappindicator`／GTK 3 依赖引入。托盘升级到 `tray-icon` 0.26 并改用纯 Rust 的 `ksni`（D-Bus StatusNotifierItem）后端，`Cargo.lock` 不再包含 `glib`、`gtk` 及其系统库绑定；应用的托盘代码不用修改；新版本在 Windows 与 macOS 上的托盘行为尚未实机复查。按 `tray-icon` 的说明，旧后端要求应用初始化 GTK 并运行其事件循环，而应用从未这样做。Linux 没有交叉 C 工具链，只用独立工程按应用同样的托盘调用对 `x86_64-unknown-linux-gnu` 做了编译检查，未在 Linux 实机运行。
 
 ## 诊断
 
@@ -158,9 +171,71 @@ GPU 时间戳工具使用 Vulkan、960×540、每轮预热 60 帧及测量 120 �
 
 情书独立数据测量：冷加载 68.43ms，新注册表热加载中位 42.94ms，导入完整校验 188.70ms。保留同一注册表的管线用例热加载中位 0.0001ms，稳定帧中位 0.81ms、重排帧 6.60ms，均含 GPU 读回；冷首帧 4275.93ms 包含首次 GPU 准备，时间图就绪的观测也包含它，不是转换函数的独立计时。证据为 `target/issue9-{data-performance,layout-release,render-final,vm-performance}.log`。
 
+## macOS 画布 CPU 优化（2026-10-20）
+
+Apple M4、macOS 27.0.1、Rust 1.99.0、release，同一重型夹具（2047 个圆角矩形加 60 行文字，每个事件全部变化）。采样（`/usr/bin/sample`）显示，变化帧的宿主时间主要不在绘制，而在场景排序：每个自绘图元排序时都要查询 `draw_default()` 录在哪个阶段，查询逐个比较整份录制，2047 个方块每帧约 800 万次比较，插入和排序各做一遍，约占主线程样本的 43%。NanaUI 修复两处（[b427b84](https://github.com/sena-nana/NanaUI/commit/b427b84cd7ede8809f3d0b0a33697b4ba9990bb2)）：
+
+- 只为节点的内建图元查询该阶段，查找改为按变体匹配；
+- 相邻且圆角与变换相同、只有实心 sRGB 填充的方块合成一个 `QuadColorBatch` 图元。中间有路径、文字、图层或裁剪时断开，绘制顺序不变；带边框、阴影或作者色彩空间的方块仍单独绘制。新增的 GPU 测试逐像素比较合并与分开绘制的半透明重叠方块（最大差 1／255），并按混合公式核对重叠处颜色。
+
+同一基线（NanaUI `main`，不含这两处改动）、只修排序、两处都修的三个二进制交替运行，避免机器负载差异偏向某一组：
+
+| 测量 | 修复前 | 只修排序 | 两处都修 |
+|---|---:|---:|---:|
+| 离屏变化帧 P50（340×1400，含读回，三轮） | 15.53–15.66 ms | 6.46–6.68 ms | 3.83–3.93 ms |
+| 离屏变化帧 P95 | 15.94–16.14 ms | 6.86–7.55 ms | 4.38–4.69 ms |
+| 离屏静止帧 P50 | 3.68–3.75 ms | 3.43–3.61 ms | 2.21–2.31 ms |
+| CPU 录制与提交 P50（960×540，两轮各三次） | 12.31–13.59 ms | 4.32–5.82 ms | 2.05–2.27 ms |
+| CPU 录制与提交 P95 | 12.47–19.10 ms | 4.64–14.11 ms | 2.24–4.39 ms |
+| 场景图元 | 2107 | 2107 | 61 |
+
+每帧绘制调用仍为 3 次（120 帧共 360 次），文字整形仍为每帧 60 次。修复后剩余的约 2ms 中，60 行变化文字的整形约占三分之一，其余为布局、系统工作和画家编码；插件 Lua 执行在 `gpu_perf` 的计时之外。
+
+在此基础上，宿主不再在每次插件更新时重建整棵视图：挂载位按结构签名（节点种类、ID、子节点、按钮命令、画布尺寸）决定是否重建，结构不变时文字、按钮标签和画布绘制原地写入已有组件，其他插件或其他挂载位的更新也不再触发重建。新测试确认同结构连续更新后组件 ID 不变、画面与重新挂载逐像素一致，增删子节点后照常重建。同样交替运行：
+
+| 测量 | 仅 NanaUI 修复 | 再加原地更新 |
+|---|---:|---:|
+| 离屏变化帧 P50（三轮） | 4.14–4.20 ms | 3.31–3.51 ms |
+| 离屏静止帧 P50 | 2.36–2.42 ms | 2.18–2.32 ms |
+| CPU 录制与提交 P50（未受干扰的三轮，各三次） | 1.74–2.21 ms | 1.15–1.56 ms |
+
+`gpu_perf` 两组各有一轮明显受机器负载干扰（仅 NanaUI 2.59–5.52ms，原地更新 2.63–3.55ms），原样保留在 `target/issue9-mac-gpu-inplace-ab.log`，未计入上表。
+
+**文字整形计划**：此后剩下的时间里，60 行变化文字的整形占 `flush` 采样的约 70%，其中约一半是 HarfRust 每次整形都重新编译的整形计划。NanaUI（[0aac2d5](https://github.com/sena-nana/NanaUI/commit/0aac2d55e401fdcec6f48ae5ec5a7b1b8e5f5e1c)）现在为每个字体保留最近用过的 8 份计划，按方向、脚本、语言、可变字体实例和特性匹配。同一 NanaUI 版本有无缓存对比采样：计划编译从采样中消失，HarfRust 整形在 `flush` 中的占比从约 18% 降到约 7%，整形整体占比从约 71% 降到约 59%。这一轮机器负载均值约 17，帧耗时的前后差异落在噪声内，没有据此给出毫秒数。layout 对照金样和新单元测试确认缓存计划的输出与新编译的计划一致。剩下的整形开销分散在字体回退、双向文本、簇信息以及整形与排版缓存的插入淘汰上，都随变化文字的数量增长。测量时机器上有其他编译负载（负载均值约 7–10），P95 受其影响较大，中位数在三组之间稳定。
+
+```sh
+cargo test -p nanatype --release --test plugin_render_perf -- --ignored --nocapture
+NANATYPE_GPU_CASES=plugin_heavy cargo run -p nanatype --release --example gpu_perf -- target/issue9-mac-gpu.json
+```
+
+原始结果为 `target/issue9-mac-render-ab.log`、`target/issue9-mac-gpu-ab.log` 与 `target/issue9-mac-gpu-*.json`，采样为 `target/issue9-mac-sample-*.txt`。Windows 上尚未复测；改动在平台无关的场景层，预期同样受益，但不以 macOS 数字代替 Windows 结果。
+
+## macOS 发布验收（2026-10-20）
+
+Apple M4、macOS 27.0.1、`dist` 构建，未签名。`scripts/package-macos.sh` 构建、收集许可文本、用 `nana-packager`（NanaUI 9272a29 起）打包、`validate --run`，再生成 zip 与 dmg：
+
+- **包结构**：`NanaType.app` 90 MB，zip 37 MB，dmg 41 MB（含指向“应用程序”的链接；`hdiutil verify` 通过，挂载后包内文件与符号链接完整，`validate` 通过）。Syphon.framework 以原样的符号链接放在 `Contents/Frameworks`（应用按 `../Frameworks/Syphon.framework/Syphon` 加载，`dlopen` 实测可加载）；22 节完整许可文本在 `Contents/Resources/THIRD_PARTY_LICENSES.txt`，其中 Rust crate 按 macOS 目标的依赖生成，另含 Syphon 的许可。
+- **validate**：布局、清单逐文件哈希、二进制身份、Info.plist（`plutil -lint`）、依赖可发现、无更新器、异目录启动自检均通过；未签名两项警告；原生启动画面、首帧交接、安装器往返与 StaticAppPlan 不执行。
+- **Info.plist**：此前打包器把 `Info.extra.plist` 的完整 plist 文档原样插进生成的字典，产出 macOS 无法解析的 Info.plist，`LSUIElement`（菜单栏应用、无 Dock 图标）因此从未生效，`validate` 也没有发现。打包器现在取完整文档的顶层字典，`validate` 在 macOS 上检查 Info.plist。
+- **运行**：以临时 `HOME`（全新配置，不碰本机用户数据）启动打包后的应用：进程常驻，打开叠加窗口与主窗口，菜单栏截图中出现 NanaType 托盘图标（`tray-icon` 0.26），收到 SIGTERM 后正常退出。
+- **工作进程**：用包内可执行文件作为插件工作进程（`NANATYPE_PLUGIN_WORKER`）运行既有测量，Seatbelt 配置正常应用（不能应用时工作进程拒绝运行插件）。同时重跑 `os_sandbox` 探针，读写文件、列目录、网络与创建进程仍全部被拒绝。
+
+| 测量（包内工作进程，负载均值约 7） | P50 | P95 | 最大 |
+|---|---:|---:|---:|
+| 冷启动至首个视图 | 22.34 ms | 27.94 ms | 29.61 ms |
+| 端到端，1／4／8 插件 | 0.22／0.22／1.58 ms | 2.17／5.48／9.06 ms | 24.83／11.87／11.49 ms |
+| 宿主调用，1／4／8 插件 | 0.010／0.003／0.002 ms | 0.012／0.010／0.009 ms | 0.017／0.020／0.186 ms |
+
+每个工作进程常驻内存约 17.5 MB。冷启动比上文用独立测试工作进程测得的 6.4ms 慢，因为这里启动的是完整应用的可执行文件。突发时每插件接收 33 个事件、其余以 `Busy` 丢弃，约 41–49ms 排空。原始结果为 `target/issue9-macos-bundle-perf.log`。
+
+- **皮肤截图**：28 个内置皮肤和 2 个夹具在默认宽度的展示／历史／输入、300px 的展示／历史，连同缓存图片共 632 张，与本轮改动前（`12ac26f`）逐字节一致：画布合批和插件视图原地更新没有改变任何皮肤画面。原始图在 `target/issue9-snap-{before,after}/`。
+- **编辑器与同意界面**：今天界面重做后重跑矩阵，编辑器 59 张、同意 81 张（中英日 × 900／440／300px），所有按钮都在宽度内（测试断言）。抽查日文 300px 确认中与英文 300px 表单：文字换行正常、无溢出；单行输入框中的长许可证名显示末尾，开头被截去，属输入框的正常滚动。
+
 ## 未完成
 
+Issue 9 于 2026-10-20 关闭。以下各项没有在对应平台验证，作为已知限制保留，不据此宣称相应能力：
+
 - Windows `dist` 静态 CRT 发行构建、安装／卸载和原生多窗口 DPI／IME／系统文件选择器。已校验的便携包采用 `release`，仍依赖 VC++ 运行库；八项布局、文件、身份、自检与篡改检查通过，不代表安装器通过。首次重型 debug 进程测量在并发冷编译时曾超过 200ms，停止本项目编译后的原用例通过，未延长期限或降低负载。
-- 正式签名按用户要求跳过；Inno Setup 下载并静默安装被自动审批以 `blocked by policy` 拒绝，安装器没有构建。macOS 本轮没有可用实机，历史记录不等于当前发布验收。
-- AppContainer／LPAC 文件和网络隔离，macOS 正式签名与 App Sandbox 授权；Linux `glib` 告警的依赖升级。
-- 重型画布的宿主 CPU 开销仍显著，后续优化需保持相同负载和计时范围。
+- 正式签名按用户要求跳过；Inno Setup 下载并静默安装被自动审批以 `blocked by policy` 拒绝，安装器没有构建。macOS 包未签名、未公证，从网络下载后会被 Gatekeeper 拦截。
+- Windows 上运行 AppContainer 探针并决定是否默认开启；LPAC。macOS 正式签名、公证与宿主 App Sandbox（见上文评估）；Linux 托盘的实机运行。
+- 重型画布的宿主 CPU 开销：macOS 上变化帧录制与提交已从约 13ms 降到约 1.2–1.6ms（见上节），Windows 尚未用同一负载复测。

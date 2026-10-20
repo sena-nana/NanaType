@@ -148,7 +148,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 611 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 606 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -225,7 +225,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - hyper-rustls 0.27.10 — <https://github.com/rustls/hyper-rustls>
 - rustls 0.23.45 — <https://github.com/rustls/rustls>
 
-### Apache-2.0 OR MIT (373)
+### Apache-2.0 OR MIT (369)
 
 - accesskit 0.25.1 — <https://github.com/AccessKit/accesskit>
 - accesskit_consumer 0.39.1 — <https://github.com/AccessKit/accesskit>
@@ -377,7 +377,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - iroh-relay 1.3.0 — <https://github.com/n0-computer/iroh>
 - itertools 0.14.0 — <https://github.com/rust-itertools/itertools>
 - itoa 1.0.18 — <https://github.com/dtolnay/itoa>
-- keyboard-types 0.7.0 — <https://github.com/pyfisch/keyboard-types>
 - keyboard-types 0.8.3 — <https://github.com/rust-windowing/keyboard-types>
 - khronos-egl 6.0.0 — <https://github.com/timothee-haudebourg/khronos-egl>
 - kurbo 0.13.1 — <https://github.com/linebender/kurbo>
@@ -396,7 +395,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - memmap2 0.9.11 — <https://github.com/RazrFalcon/memmap2-rs>
 - mime 0.3.17 — <https://github.com/hyperium/mime>
 - minimal-lexical 0.2.1 — <https://github.com/Alexhuszagh/minimal-lexical>
-- muda 0.17.2 — <https://github.com/tauri-apps/muda>
+- muda 0.21.2 — <https://github.com/tauri-apps/muda>
 - multiversion_no_op 1.0.0 — <https://github.com/hsivonen/multiversion_no_op>
 - n0-dns-resolver 0.1.0 — <https://github.com/n0-computer/iroh>
 - n0-error 1.0.1 — <https://github.com/n0-computer/n0-error>
@@ -457,7 +456,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - powerfmt 0.2.1 — <https://github.com/jhpratt/powerfmt>
 - prefix-trie 0.8.4 — <https://github.com/tiborschneider/prefix-trie>
 - presser 0.3.1 — <https://github.com/EmbarkStudios/presser>
-- proc-macro-crate 1.3.1 — <https://github.com/bkchr/proc-macro-crate>
 - proc-macro-crate 3.5.0 — <https://github.com/bkchr/proc-macro-crate>
 - proc-macro2 1.0.107 — <https://github.com/dtolnay/proc-macro2>
 - profiling 1.0.18 — <https://github.com/aclysma/profiling>
@@ -529,13 +527,11 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - time-macros 0.2.32 — <https://github.com/time-rs/time>
 - tokio-rustls 0.26.6 — <https://github.com/rustls/tokio-rustls>
 - toml 1.1.7+spec-1.1.0 — <https://github.com/toml-rs/toml>
-- toml_datetime 0.6.3 — <https://github.com/toml-rs/toml>
 - toml_datetime 1.1.2+spec-1.1.0 — <https://github.com/toml-rs/toml>
-- toml_edit 0.19.15 — <https://github.com/toml-rs/toml>
 - toml_edit 0.25.15+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_parser 1.1.4+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_writer 1.1.3+spec-1.1.0 — <https://github.com/toml-rs/toml>
-- tray-icon 0.21.3 — <https://github.com/tauri-apps/tray-icon>
+- tray-icon 0.26.1 — <https://github.com/tauri-apps/tray-icon>
 - ttf-parser 0.25.1 — <https://github.com/harfbuzz/ttf-parser>
 - tungstenite 0.30.0 — <https://github.com/snapview/tungstenite-rs>
 - type-map 0.5.1 — <https://github.com/kardeiz/type-map>
@@ -700,7 +696,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - rustls-webpki 0.103.15 — <https://github.com/rustls/webpki>
 - untrusted 0.9.0 — <https://github.com/briansmith/untrusted>
 
-### MIT (85)
+### MIT (84)
 
 - bytes 1.12.1 — <https://github.com/tokio-rs/bytes>
 - color_quant 1.1.0 — <https://github.com/image-rs/color_quant>
@@ -782,7 +778,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - webview2-com 0.39.1 — <https://github.com/wravery/webview2-rs>
 - webview2-com-macros 0.8.1 — <https://github.com/wravery/webview2-rs>
 - webview2-com-sys 0.39.1 — <https://github.com/wravery/webview2-rs>
-- winnow 0.5.40 — <https://github.com/winnow-rs/winnow>
 - winnow 1.0.4 — <https://github.com/winnow-rs/winnow>
 - xmlwriter 0.1.0 — <https://github.com/RazrFalcon/xmlwriter>
 - zip 8.6.0 — <https://github.com/zip-rs/zip2>
