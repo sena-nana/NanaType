@@ -7,9 +7,11 @@
 //!   host opened before the call keep working; new files, sockets, process
 //!   creation and service lookups are refused.
 //! - Windows: the host places the worker in a job object (see
-//!   `confine_child`) that forbids child processes and desktop, clipboard and
-//!   system-setting access, and kills the worker with the host. AppContainer
-//!   isolation is not implemented.
+//!   `confine_process`) that forbids child processes and desktop, clipboard and
+//!   system-setting access, and kills the worker with the host. With
+//!   `NANATYPE_PLUGIN_APPCONTAINER=1` the worker also starts in an
+//!   AppContainer (see `app_container`); that path is not yet verified on
+//!   Windows, so it is off by default.
 //! - Elsewhere: no OS confinement; only the interpreter boundary applies.
 
 /// The confinement applied in this worker, for diagnostics.
@@ -17,6 +19,8 @@
 pub enum Confinement {
     Seatbelt,
     JobObject,
+    /// A job object, inside an AppContainer.
+    AppContainer,
     None,
 }
 
@@ -55,9 +59,36 @@ pub fn confine_worker() -> Result<Confinement, String> {
 }
 
 #[cfg(windows)]
+#[allow(unsafe_code)]
 pub fn confine_worker() -> Result<Confinement, String> {
-    // The host assigns the job object before the worker reads anything.
-    Ok(Confinement::JobObject)
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::Security::{GetTokenInformation, TOKEN_QUERY, TokenIsAppContainer};
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+    // The host assigns the job object before the worker reads anything; the
+    // token says whether it also started the worker in an AppContainer.
+    let mut token: HANDLE = std::ptr::null_mut();
+    let mut contained = 0u32;
+    let mut size = 0u32;
+    // SAFETY: the pseudo-handle needs no closing; `token` is closed below;
+    // TokenIsAppContainer writes one DWORD.
+    let known = unsafe {
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) != 0 && {
+            let ok = GetTokenInformation(
+                token,
+                TokenIsAppContainer,
+                (&raw mut contained).cast(),
+                size_of::<u32>() as u32,
+                &mut size,
+            ) != 0;
+            CloseHandle(token);
+            ok
+        }
+    };
+    Ok(if known && contained != 0 {
+        Confinement::AppContainer
+    } else {
+        Confinement::JobObject
+    })
 }
 
 #[cfg(not(any(target_os = "macos", windows)))]
@@ -86,13 +117,21 @@ impl Drop for Job {
     }
 }
 
-/// Place a freshly spawned worker in a job before it is sent any request:
-/// one process only, no desktop, clipboard or system-setting access, a
-/// committed-memory cap, and termination with the host.
+/// Place a freshly spawned worker in a job before it is sent any request.
 #[cfg(windows)]
-#[allow(unsafe_code)]
 pub(crate) fn confine_child(child: &std::process::Child) -> std::io::Result<Job> {
     use std::os::windows::io::AsRawHandle;
+    confine_process(child.as_raw_handle() as _)
+}
+
+/// Place a worker process in a new job: one process only, no desktop,
+/// clipboard or system-setting access, a committed-memory cap, and
+/// termination with the host.
+#[cfg(windows)]
+#[allow(unsafe_code)]
+pub(crate) fn confine_process(
+    process: windows_sys::Win32::Foundation::HANDLE,
+) -> std::io::Result<Job> {
     use windows_sys::Win32::System::JobObjects::*;
     let fail = |ok: i32| {
         if ok == 0 {
@@ -125,7 +164,7 @@ pub(crate) fn confine_child(child: &std::process::Child) -> std::io::Result<Job>
             | JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS,
     };
     // SAFETY: each structure is fully initialised and its size is passed; the
-    // process handle stays valid while `child` is borrowed.
+    // caller keeps the process handle open for the call.
     unsafe {
         fail(SetInformationJobObject(
             job.0,
@@ -139,7 +178,7 @@ pub(crate) fn confine_child(child: &std::process::Child) -> std::io::Result<Job>
             (&raw const ui).cast(),
             size_of::<JOBOBJECT_BASIC_UI_RESTRICTIONS>() as u32,
         ))?;
-        fail(AssignProcessToJobObject(job.0, child.as_raw_handle() as _))?;
+        fail(AssignProcessToJobObject(job.0, process))?;
     }
     Ok(job)
 }

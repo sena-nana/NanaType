@@ -4,6 +4,7 @@ use crate::{
     read_message, write_message,
 };
 use std::{
+    io::{Read, Write},
     path::Path,
     process::{Child, Command, Stdio},
     sync::{Arc, Mutex, mpsc},
@@ -37,6 +38,65 @@ pub struct PluginProcess {
     #[cfg(windows)]
     _job: crate::os_sandbox::Job,
 }
+/// A started worker: the process to reap, its pipes, and (Windows) its job.
+struct Launched {
+    child: Box<dyn Reap>,
+    pid: u32,
+    input: Box<dyn Write + Send>,
+    output: Box<dyn Read + Send>,
+    #[cfg(windows)]
+    job: crate::os_sandbox::Job,
+}
+
+/// Start `executable` as a worker with an empty environment, confined
+/// before it reads its first request.
+fn launch(executable: &Path) -> std::io::Result<Launched> {
+    #[cfg(windows)]
+    if crate::app_container::enabled() {
+        let (child, input, output, job) =
+            crate::app_container::spawn(executable, &["--plugin-worker"], &[])?;
+        return Ok(Launched {
+            pid: child.id(),
+            child: Box::new(child),
+            input: Box::new(input),
+            output: Box::new(output),
+            job,
+        });
+    }
+    let mut command = Command::new(executable);
+    command
+        .arg("--plugin-worker")
+        .env_clear()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let mut child = command.spawn()?;
+    // The worker blocks on its first request, which is only written after
+    // the job applies; a worker that cannot be confined is not used.
+    #[cfg(windows)]
+    let job = match crate::os_sandbox::confine_child(&child) {
+        Ok(job) => job,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+    };
+    Ok(Launched {
+        pid: child.id(),
+        input: Box::new(child.stdin.take().unwrap()),
+        output: Box::new(child.stdout.take().unwrap()),
+        child: Box::new(child),
+        #[cfg(windows)]
+        job,
+    })
+}
+
 impl PluginProcess {
     /// `init` is the first event; `answer` serves the plugin's declared reads.
     pub fn spawn(
@@ -46,33 +106,14 @@ impl PluginProcess {
         answer: DataAnswer,
         post: impl Fn(WorkerResponse) + Send + 'static,
     ) -> std::io::Result<Self> {
-        let mut command = Command::new(executable);
-        command
-            .arg("--plugin-worker")
-            .env_clear()
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x0800_0000);
-        }
-        let mut child = command.spawn()?;
-        let pid = child.id();
-        // The worker blocks on its first request, which is only written after
-        // the job applies; a worker that cannot be confined is not used.
-        #[cfg(windows)]
-        let job = match crate::os_sandbox::confine_child(&child) {
-            Ok(job) => job,
-            Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(error);
-            }
-        };
-        let mut input = child.stdin.take().unwrap();
-        let mut output = child.stdout.take().unwrap();
+        let Launched {
+            child,
+            pid,
+            mut input,
+            mut output,
+            #[cfg(windows)]
+            job,
+        } = launch(executable)?;
         let child = Arc::new(Mutex::new(child));
         let worker = child.clone();
         // Also reap the process if either supervisor thread fails to start.
@@ -218,12 +259,35 @@ impl std::fmt::Display for EventError {
         })
     }
 }
-struct ChildGuard(Arc<Mutex<Child>>);
+/// A worker process, killed and waited for by whichever owner lets go last.
+trait Reap: Send {
+    fn kill(&mut self);
+    fn wait(&mut self);
+}
+impl Reap for Child {
+    fn kill(&mut self) {
+        let _ = Child::kill(self);
+    }
+    fn wait(&mut self) {
+        let _ = Child::wait(self);
+    }
+}
+#[cfg(windows)]
+impl Reap for crate::app_container::Contained {
+    fn kill(&mut self) {
+        self.terminate();
+    }
+    fn wait(&mut self) {
+        self.wait_exit();
+    }
+}
+
+struct ChildGuard(Arc<Mutex<Box<dyn Reap>>>);
 impl Drop for ChildGuard {
     fn drop(&mut self) {
         if let Ok(mut child) = self.0.lock() {
-            let _ = child.kill();
-            let _ = child.wait();
+            child.kill();
+            child.wait();
         }
     }
 }

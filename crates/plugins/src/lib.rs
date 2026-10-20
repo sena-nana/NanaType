@@ -1,5 +1,7 @@
 //! Plugins have no ambient authority. Only bounded value messages cross the boundary.
 #![deny(unsafe_code)]
+#[cfg(windows)]
+mod app_container;
 mod os_sandbox;
 mod process;
 mod protocol;
