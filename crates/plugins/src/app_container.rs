@@ -67,6 +67,14 @@ fn check(ok: i32) -> io::Result<()> {
     }
 }
 
+fn win32(error: u32) -> io::Result<()> {
+    if error == ERROR_SUCCESS {
+        Ok(())
+    } else {
+        Err(io::Error::from_raw_os_error(error as i32))
+    }
+}
+
 /// An AppContainer SID, freed with `FreeSid` as both creating calls require.
 struct Sid(PSID);
 impl Drop for Sid {
@@ -118,7 +126,7 @@ fn grant_read_execute(path: &Path, sid: &Sid) -> io::Result<()> {
     let mut descriptor: PSECURITY_DESCRIPTOR = null_mut();
     // SAFETY: `name` is NUL-terminated; the descriptor the call allocates
     // (which `dacl` points into) is released with LocalFree below.
-    let error = unsafe {
+    win32(unsafe {
         GetNamedSecurityInfoW(
             name.as_ptr(),
             SE_FILE_OBJECT,
@@ -129,10 +137,7 @@ fn grant_read_execute(path: &Path, sid: &Sid) -> io::Result<()> {
             null_mut(),
             &mut descriptor,
         )
-    };
-    if error != ERROR_SUCCESS {
-        return Err(io::Error::from_raw_os_error(error as i32));
-    }
+    })?;
     let entry = EXPLICIT_ACCESS_W {
         grfAccessPermissions: FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
         grfAccessMode: GRANT_ACCESS,
@@ -148,10 +153,9 @@ fn grant_read_execute(path: &Path, sid: &Sid) -> io::Result<()> {
     let mut merged: *mut ACL = null_mut();
     // SAFETY: one fully initialised entry; `dacl` is valid while
     // `descriptor` lives; `merged` is a LocalAlloc'd ACL we free.
-    let error = unsafe { SetEntriesInAclW(1, &entry, dacl, &mut merged) };
-    let result = if error == ERROR_SUCCESS {
+    let result = win32(unsafe { SetEntriesInAclW(1, &entry, dacl, &mut merged) }).and_then(|()| {
         // SAFETY: `merged` is a valid ACL; only the DACL is written.
-        let error = unsafe {
+        let written = win32(unsafe {
             SetNamedSecurityInfoW(
                 name.as_ptr(),
                 SE_FILE_OBJECT,
@@ -161,45 +165,14 @@ fn grant_read_execute(path: &Path, sid: &Sid) -> io::Result<()> {
                 merged,
                 null(),
             )
-        };
+        });
         // SAFETY: allocated by SetEntriesInAclW.
         unsafe { LocalFree(merged.cast()) };
-        if error == ERROR_SUCCESS {
-            Ok(())
-        } else {
-            Err(io::Error::from_raw_os_error(error as i32))
-        }
-    } else {
-        Err(io::Error::from_raw_os_error(error as i32))
-    };
+        written
+    });
     // SAFETY: allocated by GetNamedSecurityInfoW.
     unsafe { LocalFree(descriptor) };
     result
-}
-
-/// One command-line argument as `CommandLineToArgvW` reads it back.
-fn quote(arg: &str, line: &mut String) {
-    if !arg.is_empty() && !arg.contains([' ', '\t', '"']) {
-        line.push_str(arg);
-        return;
-    }
-    line.push('"');
-    let mut backslashes = 0;
-    for c in arg.chars() {
-        match c {
-            '\\' => backslashes += 1,
-            // The backslashes already written, doubled, and one for the quote.
-            '"' => {
-                line.extend(std::iter::repeat_n('\\', backslashes + 1));
-                backslashes = 0;
-            }
-            _ => backslashes = 0,
-        }
-        line.push(c);
-    }
-    // Before the closing quote, doubled.
-    line.extend(std::iter::repeat_n('\\', backslashes));
-    line.push('"');
 }
 
 /// A worker in the AppContainer. Dropping it closes the handle; reaping is
@@ -211,9 +184,6 @@ pub(crate) struct Contained {
 // SAFETY: a process handle is a kernel handle usable from any thread.
 unsafe impl Send for Contained {}
 impl Contained {
-    pub(crate) fn handle(&self) -> HANDLE {
-        self.process
-    }
     pub(crate) fn id(&self) -> u32 {
         self.pid
     }
@@ -350,21 +320,16 @@ pub(crate) fn spawn(
         },
         lpAttributeList: attributes.list(),
     };
-    let mut line = String::new();
-    quote(&executable.to_string_lossy(), &mut line);
-    for arg in args {
-        line.push(' ');
-        quote(arg, &mut line);
-    }
-    let mut line = wide(line);
+    // A Windows path cannot hold `"`, and the arguments are our own flags.
+    debug_assert!(
+        args.iter()
+            .all(|arg| !arg.is_empty() && !arg.contains([' ', '\t', '"']))
+    );
+    let mut line = wide(format!("\"{}\" {}", executable.display(), args.join(" ")));
+    // `KEY=value` strings, each NUL-terminated, then an empty one.
     let mut block: Vec<u16> = env
         .iter()
-        .flat_map(|(key, value)| {
-            OsStr::new(&format!("{key}={value}"))
-                .encode_wide()
-                .chain([0])
-                .collect::<Vec<_>>()
-        })
+        .flat_map(|(key, value)| wide(format!("{key}={value}")))
         .collect();
     block.extend([0, 0]);
     let mut system = vec![0u16; 260];
@@ -404,27 +369,27 @@ pub(crate) fn spawn(
     };
     // The worker owns its ends now.
     drop((worker_stdin, worker_stdout, attributes));
-    let job = match crate::os_sandbox::confine_process(process.handle()) {
-        Ok(job) => job,
+    let started = crate::os_sandbox::confine_process(process.process).and_then(|job| {
+        // SAFETY: the primary thread of the process we just created.
+        if unsafe { ResumeThread(raw(&thread)) } == u32::MAX {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(job)
+        }
+    });
+    match started {
+        Ok(job) => Ok((process, stdin, stdout, job)),
         Err(error) => {
             process.terminate();
             process.wait_exit();
-            return Err(error);
+            Err(error)
         }
-    };
-    // SAFETY: the primary thread of the process we just created.
-    if unsafe { ResumeThread(raw(&thread)) } == u32::MAX {
-        let error = io::Error::last_os_error();
-        process.terminate();
-        process.wait_exit();
-        return Err(error);
     }
-    Ok((process, stdin, stdout, job))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{quote, spawn};
+    use super::spawn;
     use crate::{Confinement, confine_worker};
     use std::io::Read;
     use std::process::Command;
@@ -507,22 +472,5 @@ mod tests {
             );
         }
         assert!(!dir.path().join("written.txt").exists());
-    }
-
-    #[test]
-    fn arguments_survive_the_command_line() {
-        let line = |arg: &str| {
-            let mut out = String::new();
-            quote(arg, &mut out);
-            out
-        };
-        assert_eq!(line("--plugin-worker"), "--plugin-worker");
-        assert_eq!(
-            line(r"C:\Program Files\NanaType\NanaType.exe"),
-            r#""C:\Program Files\NanaType\NanaType.exe""#
-        );
-        assert_eq!(line(""), r#""""#);
-        assert_eq!(line(r#"say "hi""#), r#""say \"hi\"""#);
-        assert_eq!(line(r"dir with space\"), r#""dir with space\\""#);
     }
 }

@@ -24,14 +24,6 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8").replace("\r\n", "\n")
 
 
-def normalize(expr: str) -> str:
-    """One spelling per plain choice, as third-party-notices.ps1 writes it."""
-    expr = re.sub(r"\s+", " ", expr).strip()
-    if re.search(r"[()]| AND | WITH ", expr):
-        return expr
-    return " OR ".join(sorted(term.strip() for term in expr.split(" OR ")))
-
-
 def rust_crates(target: str) -> str:
     """Each linked crate's own licence files, identical texts written once."""
     meta = json.loads(subprocess.check_output([
@@ -57,10 +49,7 @@ def rust_crates(target: str) -> str:
         p = packages[at]
         if not p.get("license"):
             sys.exit(f"No licence expression in Cargo metadata for {p['name']} {p['version']}")
-        crates[(p["name"], p["version"])] = (
-            normalize(p["license"].replace("/", " OR ")),
-            Path(p["manifest_path"]).parent,
-        )
+        crates[(p["name"], p["version"])] = (p["license"], Path(p["manifest_path"]).parent)
     by_text: dict[str, list[str]] = {}
     for (name, version), (licence, folder) in sorted(crates.items()):
         files = sorted(
