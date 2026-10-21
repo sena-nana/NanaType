@@ -12,6 +12,7 @@ mod chars;
 mod color;
 mod document;
 mod envelope;
+mod events;
 mod line;
 mod link;
 pub mod outgoing;
@@ -28,6 +29,7 @@ pub use document::{
     ParagraphAlign, RubyGroup, TextRun, Unit, UnitKind, VtsAction, VtsReset,
 };
 pub use envelope::{DOCUMENT_FORMAT, DOCUMENT_VERSION, DocumentEnvelope, EnvelopeError};
+pub use events::BridgeEvent;
 pub use line::{AfterLine, Line, LineId, LineMeta, Speaker, unix_millis};
 pub use link::LinkFault;
 pub use source::{

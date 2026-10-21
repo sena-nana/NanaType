@@ -19,14 +19,14 @@ default = ["builtin-fonts"]
 # Embed crates/theme/fonts/ for the built-in skins (docs/fonts.md). Build
 # with `--no-default-features` to leave them out: those skins then fall
 # back to installed fonts.
-builtin-fonts = ["nanatype-theme/builtin-fonts"]
+builtin-fonts = ["nanatype-frame/builtin-fonts"]
 
 [dependencies]
 nanatype-model.workspace = true
 nanatype-markup.workspace = true
 nanatype-playback.workspace = true
 nanatype-theme.workspace = true
-nanatype-i18n.workspace = true
+nanatype-i18n = { workspace = true, features = ["app"] }
 nanatype-settings.workspace = true
 nanatype-audio.workspace = true
 nanatype-bridge.workspace = true
@@ -40,8 +40,10 @@ nanatype-p2p.workspace = true
 nanatype-plugins.workspace = true
 nanatype-secrets.workspace = true
 nanatype-update.workspace = true
+nanatype-frame.workspace = true
 getrandom = "0.4"
-nana-ui.workspace = true
+# Spout and Syphon output of the broadcast windows.
+nana-ui = { workspace = true, features = ["native-export"] }
 nana-text.workspace = true
 ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
 nana-ui-platform.workspace = true

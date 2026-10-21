@@ -106,7 +106,7 @@ pub(super) fn history(ui: Ui) -> AnyView {
                         "history-session",
                         None,
                         confirm(
-                            ui,
+                            *ui,
                             ui.now_t("history-clear-confirm"),
                             ui.now_t("history-clear"),
                             |armed| {

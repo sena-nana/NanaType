@@ -96,7 +96,7 @@ impl Rig {
         let mut d = document(2, theme.clone(), locale);
         d.context_mut()
             .mount_view_root(DocumentId::new(2).unwrap(), move || {
-                dialogue::dialogue_box(ui, dialogue::Source::Display, None)
+                dialogue::dialogue_box(*ui, dialogue::Source::Display, None)
             })
             .unwrap();
         let mut h = document(3, theme.clone(), locale);

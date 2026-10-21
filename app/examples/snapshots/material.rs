@@ -31,7 +31,7 @@ pub fn audit(ui: Ui, out: &std::path::Path, w: u32, h: u32, theme: Arc<nana_ui::
     let steady = capture(&mut session);
     assert_eq!(first, steady, "static material changed without an event");
     assert!(
-        !nanatype::ui::shader_effects::animating(ui),
+        !nanatype::ui::shader_effects::animating(*ui),
         "static material requested animation"
     );
     ui.reduced_motion.set(true);

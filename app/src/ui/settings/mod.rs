@@ -344,18 +344,10 @@ pub fn settings_window(ui: Ui) -> impl IntoView {
         sidebar(ui),
         widget(Stack::fill_column(0.0)).children(
             dynamic(
-                // The package editor fills the page, with its own header, instead
-                // of scrolling under the page's. A newly opened page starts at its
-                // top, regardless of how far the previous page was scrolled.
-                move || {
-                    let page = ui.page.get();
-                    let editing = page == Page::Packages && ui.package_editor.with(Option::is_some);
-                    (page, editing, ui.locale.get())
-                },
-                move |(page, editing, _)| {
-                    if *editing {
-                        return super::package_editor::editor(ui);
-                    }
+                // A newly opened page starts at its top, regardless of how far
+                // the previous page was scrolled.
+                move || (ui.page.get(), ui.locale.get()),
+                move |(page, _)| {
                     widget(Stack::fill_column(0.0))
                         .children((
                             page_header(ui, *page),

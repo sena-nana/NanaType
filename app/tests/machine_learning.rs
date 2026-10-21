@@ -90,9 +90,9 @@ fn scramble_renders_locks_and_retires_without_relayout() {
         );
         if enabled && !reduced {
             assert_ne!(a, b, "{case}: substitution/reveal did not change");
-            assert!(text_scramble::animating(ui, 100_060));
+            assert!(text_scramble::animating(*ui, 100_060));
         } else {
-            assert!(!text_scramble::animating(ui, 100_060));
+            assert!(!text_scramble::animating(*ui, 100_060));
         }
         assert_eq!(
             session.document().context().world().layout_generation(),
@@ -121,7 +121,7 @@ fn scramble_renders_locks_and_retires_without_relayout() {
             .iter()
             .position(|p| p[0] > 245 && p[1].abs_diff(48) < 5 && p[2].abs_diff(24) < 5)
             .expect("inline picture must render its actual pixels");
-        assert!(!text_scramble::animating(ui, 101_200));
+        assert!(!text_scramble::animating(*ui, 101_200));
         assert_eq!(core.display().doc, original);
         if enabled && !reduced {
             assert!(
@@ -164,7 +164,7 @@ fn scramble_renders_locks_and_retires_without_relayout() {
                 early[0] > late[0] && late[0] > 60,
                 "{case}: the image did not stay in place and fade: {early:?} → {late:?}"
             );
-            assert!(!text_scramble::animating(ui, 102_400));
+            assert!(!text_scramble::animating(*ui, 102_400));
             core.handle(
                 Cmd::Wake {
                     epoch: wake.epoch,
@@ -183,7 +183,7 @@ fn scramble_renders_locks_and_retires_without_relayout() {
             &format!("{case}-cleared"),
             CAPTURES,
         );
-        assert!(!text_scramble::animating(ui, 103_000));
+        assert!(!text_scramble::animating(*ui, 103_000));
         assert!(
             !session.document().compositor_needs_tick(),
             "{case}: animation did not settle"
@@ -201,7 +201,7 @@ fn preview_is_finite_and_static_surfaces_do_not_scramble() {
     let text = nanatype_markup::parse("机器学习 ML").doc;
     let mut session = common::session().mount_at(100_000, 892, 232, move || {
         dialogue::preview_box(
-            ui,
+            *ui,
             dialogue::BoxCtx {
                 skin: skin.clone(),
                 urls: Arc::new(Default::default()),
@@ -213,7 +213,7 @@ fn preview_is_finite_and_static_surfaces_do_not_scramble() {
     });
     session.set_gpu_renderers(sweep::renderers());
     frame(&mut session, ui, 100_060, 60, "preview-enter", CAPTURES);
-    assert!(text_scramble::preview_animating(ui, 100_060));
+    assert!(text_scramble::preview_animating(*ui, 100_060));
     frame(
         &mut session,
         ui,
@@ -222,7 +222,7 @@ fn preview_is_finite_and_static_surfaces_do_not_scramble() {
         "preview-finished",
         CAPTURES,
     );
-    assert!(!text_scramble::preview_animating(ui, 106_000));
+    assert!(!text_scramble::preview_animating(*ui, 106_000));
     assert!(!session.document().compositor_needs_tick());
     let skin = ui.skin.get_untracked();
     assert!(dialogue::Base::editor(&skin).scramble.is_none());

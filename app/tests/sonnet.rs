@@ -98,7 +98,7 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
         );
         assert_ne!(entry, full, "{case}: reveal did not progress");
         assert!(
-            !text_light::animating(ui, base + 2800),
+            !text_light::animating(*ui, base + 2800),
             "{case}: light never settled"
         );
         if enabled && !reduced {
@@ -144,7 +144,7 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
                 retirement[0], retirement[5],
                 "{case}: retirement did not animate"
             );
-            assert!(!text_light::animating(ui, base + 3720));
+            assert!(!text_light::animating(*ui, base + 3720));
         }
         if let Some(wake) = wake {
             core.handle(
@@ -165,7 +165,7 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
             &format!("{case}-cleared"),
             CAPTURES,
         );
-        assert!(!text_light::animating(ui, base + 4200));
+        assert!(!text_light::animating(*ui, base + 4200));
         assert!(
             !session.document().compositor_needs_tick(),
             "{case}: finite presentation still requests frames"
@@ -183,7 +183,7 @@ fn sonnet_preview_plays_once_and_stops_its_clock() {
     let doc = nanatype_markup::parse("十四行诗 Sonnet").doc;
     let mut session = common::session().mount_at(100_000, 992, 222, move || {
         dialogue::preview_box(
-            ui,
+            *ui,
             dialogue::BoxCtx {
                 skin: skin.clone(),
                 urls: Arc::new(Default::default()),
@@ -195,7 +195,7 @@ fn sonnet_preview_plays_once_and_stops_its_clock() {
     });
     session.set_gpu_renderers(sweep::renderers());
     frame(&mut session, ui, 100_120, 120, "preview-enter", CAPTURES);
-    assert!(text_light::preview_animating(ui, 100_120));
+    assert!(text_light::preview_animating(*ui, 100_120));
     frame(
         &mut session,
         ui,
@@ -204,10 +204,10 @@ fn sonnet_preview_plays_once_and_stops_its_clock() {
         "preview-finished",
         CAPTURES,
     );
-    assert!(!text_light::preview_animating(ui, 106_000));
+    assert!(!text_light::preview_animating(*ui, 106_000));
     assert!(!session.document().compositor_needs_tick());
     ui.shader_preview.set(false);
-    assert!(!text_light::preview_animating(ui, 100_120));
+    assert!(!text_light::preview_animating(*ui, 100_120));
 }
 
 #[test]
@@ -227,7 +227,7 @@ fn sonnet_scrolling_reuses_glyph_masks_and_layout_during_retirement() {
     session.set_gpu_renderers(sweep::renderers());
     frame(&mut session, ui, 101_000, 999, "scroll-skipped", CAPTURES);
     assert!(
-        !text_light::animating(ui, 101_000),
+        !text_light::animating(*ui, 101_000),
         "skip must not replay every glyph's flash"
     );
     core.handle(Cmd::ClearDisplay, 101_100);

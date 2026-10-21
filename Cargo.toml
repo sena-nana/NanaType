@@ -19,9 +19,11 @@ members = [
     "crates/plugins",
     "crates/secrets",
     "crates/update",
+    "crates/frame",
     "app",
+    "editor",
 ]
-default-members = ["app"]
+default-members = ["app", "editor"]
 
 [workspace.package]
 version = "0.1.0"
@@ -49,6 +51,7 @@ nanatype-p2p = { path = "crates/p2p" }
 nanatype-plugins = { path = "crates/plugins" }
 nanatype-secrets = { path = "crates/secrets" }
 nanatype-update = { path = "crates/update" }
+nanatype-frame = { path = "crates/frame" }
 nana-ui-platform = { git = "https://github.com/sena-nana/NanaUI", rev = "0aac2d55e401fdcec6f48ae5ec5a7b1b8e5f5e1c", default-features = false }
 nana-ui-core = { git = "https://github.com/sena-nana/NanaUI", rev = "0aac2d55e401fdcec6f48ae5ec5a7b1b8e5f5e1c", default-features = false }
 nana-text = { git = "https://github.com/sena-nana/NanaUI", rev = "0aac2d55e401fdcec6f48ae5ec5a7b1b8e5f5e1c" }
@@ -61,7 +64,6 @@ nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "0aac2d55e401fdce
     "icons-tabler",
     # Also provides css!, used by the application even without view! templates.
     "view-macro",
-    "native-export",
     "packaged-resources",
 ] }
 serde = { version = "1", features = ["derive", "rc"] }

@@ -2,8 +2,11 @@
 # inventories and signs the application. No files are appended after sealing.
 param(
     [string]$Staged = (Join-Path (Split-Path -Parent $PSScriptRoot) "target\licenses"),
-    [string]$Destination
+    [string]$Destination,
+    [ValidateSet("app", "editor")][string]$Product = "app"
 )
+# packaging\licenses files only NanaType ships.
+$appOnly = @("LiliaBilibili-MIT.txt", "libvpx-BSD.txt")
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $Destination) { $Destination = Join-Path $Staged "THIRD_PARTY_LICENSES.txt" }
@@ -49,12 +52,14 @@ foreach ($pattern in $skinLicences) {
 foreach ($folder in @((Join-Path $repoRoot "packaging\licenses"), $Staged)) {
     foreach ($file in (Get-ChildItem -LiteralPath $folder -File -Recurse | Sort-Object FullName)) {
         $name = [IO.Path]::GetRelativePath($folder, $file.FullName).Replace('\', '/')
+        if ($Product -eq "editor" -and $appOnly -contains $name) { continue }
         Add-LicenseSource $name $file.FullName "packaging"
     }
 }
 
 $text = [Text.StringBuilder]::new()
-[void]$text.AppendLine("NanaType redistribution licences and notices")
+$title = if ($Product -eq "editor") { "NanaType Editor" } else { "NanaType" }
+[void]$text.AppendLine("$title redistribution licences and notices")
 [void]$text.AppendLine("Every named section below retains the complete source text.")
 [void]$text.AppendLine()
 foreach ($entry in $licenseSources.GetEnumerator()) {

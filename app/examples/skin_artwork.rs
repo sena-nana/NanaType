@@ -76,7 +76,7 @@ fn main() {
                 ]
             };
             let artwork = shader_effects::view(
-                ui,
+                *ui,
                 Source::Display,
                 &skin,
                 "artwork",

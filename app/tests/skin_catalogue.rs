@@ -110,7 +110,7 @@ fn picker_reuses_embedded_urls_and_resolves_only_static_preview_images() {
             .len(),
         6
     );
-    assert!(!ui::shader_effects::preview_animating(ui));
+    assert!(!ui::shader_effects::preview_animating(*ui));
     assert!(
         !ui.shader_preview.get_untracked(),
         "static materials enabled the animation switch"

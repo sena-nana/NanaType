@@ -277,7 +277,7 @@ pub(super) fn skin_actions(ui: Ui, skin: &SkinRow, locale: Locale) -> AnyView {
         menu(None)
     } else {
         confirm(
-            ui,
+            *ui,
             I18N.tr_in(
                 locale,
                 "skins-delete-confirm",

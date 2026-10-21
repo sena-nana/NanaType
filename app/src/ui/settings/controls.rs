@@ -3,13 +3,13 @@
 
 use std::sync::{Arc, LazyLock};
 
-use nana_ui::runtime::view::{AnyView, IntoView, Signal, segmented_option, signal, widget};
+use nana_ui::runtime::view::{AnyView, IntoView, segmented_option, widget};
 use nana_ui::runtime::{
-    Activate, Button, ColorChanged, ColorField, NumberChanged, NumberInput, RangeChanged,
-    RangeField, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption,
-    Stack, StatusBadge, Switch, Text, TextChanged, TextInput, ToggleChanged,
+    ColorChanged, ColorField, NumberChanged, NumberInput, RangeChanged, RangeField,
+    SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption, Stack,
+    StatusBadge, Switch, Text, TextChanged, TextInput, ToggleChanged,
 };
-use nana_ui::{ButtonKind, ControlSize, StatusTone};
+use nana_ui::{ControlSize, StatusTone};
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_i18n::Locale;
 use nanatype_model::Rgba8;
@@ -22,32 +22,7 @@ use crate::ui::{I18N, LinkState, Status, Ui};
 pub static ICON_PNG_B64: LazyLock<String> =
     LazyLock::new(|| base64(include_bytes!("../../../assets/tray-64.png")));
 
-/// Standard, padded base64 (for `data:` URLs).
-pub fn base64(bytes: &[u8]) -> String {
-    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let b = [
-            chunk[0],
-            *chunk.get(1).unwrap_or(&0),
-            *chunk.get(2).unwrap_or(&0),
-        ];
-        let n = u32::from(b[0]) << 16 | u32::from(b[1]) << 8 | u32::from(b[2]);
-        out.push(T[(n >> 18) as usize & 63] as char);
-        out.push(T[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 {
-            T[(n >> 6) as usize & 63] as char
-        } else {
-            '='
-        });
-        out.push(if chunk.len() > 2 {
-            T[n as usize & 63] as char
-        } else {
-            '='
-        });
-    }
-    out
-}
+pub use nanatype_frame::ui::controls::{base64, confirm, hint, label};
 
 pub use crate::ui::kit::{
     Shown, Type, block, divided, divider, field, gap, icon, inset, row_text, shown_if,
@@ -61,14 +36,6 @@ pub fn heading(ui: Ui, key: &str) -> AnyView {
 /// A heading inside a card, below the page title.
 pub fn subheading(ui: Ui, key: &str) -> AnyView {
     Type::Strong.view(ui.now_t(key))
-}
-
-pub fn label(text: String) -> AnyView {
-    Type::Label.view(text)
-}
-
-pub fn hint(text: String) -> AnyView {
-    Type::Caption.view(text)
 }
 
 /// A titled group of rows. An empty `title_key` leaves the title out (the
@@ -458,50 +425,6 @@ pub fn segmented(
     widget(SegmentedControl::new().size(ControlSize::Small))
         .children(opts)
         .into_any()
-}
-
-/// A destructive action asked twice: `trigger` arms it, then the question
-/// shows with Cancel and a danger button that sends `msg`.
-pub fn confirm(
-    ui: Ui,
-    question: String,
-    ok_label: String,
-    trigger: impl FnOnce(Signal<bool>) -> AnyView,
-    msg: impl Fn() -> Msg + Send + 'static,
-) -> AnyView {
-    let armed = signal(false);
-    widget(
-        Stack::row(0.0)
-            .gap_step(gap::step::CONTROL)
-            .align(AlignSpec::Center),
-    )
-    .children((
-        widget(Stack::row(0.0).align(AlignSpec::Center))
-            .visible(move || !armed.get())
-            .children(trigger(armed)),
-        widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::CONTROL)
-                .align(AlignSpec::Center)
-                .wrap(true),
-        )
-        .visible(move || armed.get())
-        .children((
-            widget(Type::Small.text(question).color(SemanticColorRole::Warning)),
-            widget(Button::new(ui.now_t("common-cancel")).size(ControlSize::Small))
-                .on(move |_: &Activate| armed.set(false)),
-            widget(
-                Button::new(ok_label)
-                    .kind(ButtonKind::Danger)
-                    .size(ControlSize::Small),
-            )
-            .on_cx(move |_, _: &Activate, cx| {
-                armed.set(false);
-                cx.dispatch_program_all(msg());
-            }),
-        )),
-    ))
-    .into_any()
 }
 
 pub fn number(

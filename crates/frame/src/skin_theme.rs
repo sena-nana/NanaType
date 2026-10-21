@@ -1,0 +1,462 @@
+//! Skin preparation and the colour maths skins and chrome share. The
+//! application theme itself lives in [`crate::ui::kit::theme`]: only content
+//! boxes use skin colours; operator controls use the app's tokens.
+
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
+
+use nana_ui::theme::SemanticColor;
+use nanatype_model::Rgba8;
+use nanatype_settings::{ChromeMode, SkinOverrides};
+use nanatype_theme::{FontSpec, Skin};
+
+/// The skin with the user's personalisation applied.
+pub fn with_overrides(skin: &Skin, o: &SkinOverrides) -> Skin {
+    let mut s = skin.clone();
+    if let Some(c) = o.text_color {
+        s.dialogue.text.color = c;
+        s.history.text.color = c;
+    }
+    if let Some(c) = o.name_color {
+        s.dialogue.nameplate.color = c;
+        s.dialogue.nameplate.shape.gradient = None;
+        s.history.name_color = c;
+    }
+    if let Some(c) = o.box_color {
+        // A gradient would paint over the chosen colour.
+        s.dialogue.box_.color = c;
+        s.dialogue.box_.shape.gradient = None;
+        s.dialogue.box_.shape.material = None;
+        if s.has_dialogue_artwork() {
+            // Full authored plates have fixed print colours, including their
+            // baked fallback. An explicit personal box colour takes priority
+            // and uses the skin's native contour, tail and external shadow.
+            s.dialogue.box_.frame = None;
+            s.dialogue
+                .shader_effects
+                .retain(|e| e.target != nanatype_theme::ShaderTarget::Artwork);
+        }
+    }
+    if let Some(c) = o.accent {
+        s.chrome.accent = c;
+        s.dialogue.continue_.color = c;
+    }
+    if let Some(size) = o.text_size {
+        s.dialogue.text.size = size;
+    }
+    if let Some(region) = o.region {
+        s.dialogue.region = region;
+    }
+    if let Some(overflow) = o.overflow {
+        s.dialogue.overflow = overflow;
+    }
+    if o.overflow_auto_ms.is_some() {
+        s.dialogue.overflow_auto_ms = o.overflow_auto_ms;
+    }
+    if let Some(responsive) = &mut s.dialogue.responsive {
+        for layout in responsive.layouts_mut() {
+            if let Some(c) = o.name_color
+                && let Some(plate) = &mut layout.nameplate
+            {
+                plate.color = c;
+                plate.shape.gradient = None;
+            }
+            if let Some(c) = o.accent
+                && let Some(mark) = &mut layout.continue_
+            {
+                mark.color = c;
+            }
+            if let Some(c) = o.box_color {
+                if let Some(b) = &mut layout.box_ {
+                    b.color = c;
+                    b.shape.gradient = None;
+                    b.shape.material = None;
+                    b.frame = None;
+                }
+                if let Some(effects) = &mut layout.shader_effects {
+                    effects.retain(|e| e.target != nanatype_theme::ShaderTarget::Artwork);
+                }
+            }
+        }
+    }
+    s
+}
+
+/// Resolve one skin's saved body settings without changing its source manifest.
+pub fn personalized(base: &Skin, settings: &nanatype_settings::Settings, id: &str) -> Skin {
+    let mut overrides = settings.skin.overrides.clone();
+    let profile = settings.skin.personalizations.get(id);
+    if profile.is_some() {
+        overrides.text_color = None;
+        overrides.text_size = None;
+        overrides.region = None;
+    }
+    let mut skin = with_overrides(base, &overrides);
+    if let Some(profile) = profile {
+        for (text, p) in [
+            (&mut skin.dialogue.text, &profile.display),
+            (&mut skin.history.text, &profile.history),
+        ] {
+            text.font_family = p.font_family.clone();
+            if let Some(v) = p.text_size {
+                text.size = v;
+            }
+            if let Some(v) = p.line_height {
+                text.line_height = v;
+            }
+            if let Some(v) = p.text_color {
+                text.color = v;
+            }
+        }
+    }
+    skin
+}
+
+/// The skin as drawn: the user's personalisation applied, and each font
+/// role's family resolved. `bundled` are the families registered from the
+/// skin's own font files (body, name, accent), which always come first.
+/// `language` is the UI locale tag: roles the skin leaves at the default
+/// stack take that language's system stack, and roles with their own stack
+/// keep it first and fall back to the language's faces after it.
+pub fn prepare(
+    base: &Skin,
+    overrides: &SkinOverrides,
+    bundled: &[Option<String>; 3],
+    language: &str,
+) -> Skin {
+    let mut skin = with_overrides(base, overrides);
+    if let Some(latin) = &mut skin.fonts.latin {
+        if let Some(family) = latin
+            .file
+            .as_deref()
+            .and_then(nanatype_theme::builtin_font)
+            .and_then(nanatype_theme::font_family)
+        {
+            if latin.families.first() != Some(&family) {
+                latin.families.insert(0, family);
+            }
+        } else if latin
+            .file
+            .as_deref()
+            .is_none_or(nanatype_theme::is_builtin_font)
+            && let Some(i) = latin.families.iter().position(|f| installed(f))
+        {
+            let family = latin.families.remove(i);
+            latin.families.insert(0, family);
+        }
+    }
+    let locale_stack = FontSpec::locale_families(language);
+    for (spec, family) in skin.fonts.roles_mut().into_iter().zip(bundled) {
+        if spec.is_default_stack() {
+            spec.families = locale_stack.clone();
+        } else {
+            for f in &locale_stack {
+                if !spec.families.iter().any(|g| g.eq_ignore_ascii_case(f)) {
+                    spec.families.push(f.clone());
+                }
+            }
+        }
+        if let Some(family) = family {
+            // Registered just now, so the installed cache may not know it
+            // yet; it always comes first.
+            spec.families.insert(0, family.clone());
+            continue;
+        }
+        // NanaUI takes a single family name, so the fallback list is resolved
+        // here: the first installed family goes first.
+        if let Some(i) = spec.families.iter().position(|f| installed(f))
+            && i > 0
+        {
+            let family = spec.families.remove(i);
+            spec.families.insert(0, family);
+        }
+    }
+    skin
+}
+
+/// Whether the skin's dialogue text will be drawn in a stand-in font: it
+/// names its own body families, none of them is available ([`available`]),
+/// and it brings no font file this build can use (its own, or an embedded
+/// `builtin:` one). Skins on the default system stack never are.
+pub fn uses_fallback_font(skin: &Skin) -> bool {
+    let body = &skin.fonts.body;
+    if body.is_default_stack() || body.has_usable_file() {
+        return false;
+    }
+    !body.families.iter().any(|f| available(f))
+}
+
+/// The families NanaUI embeds itself (its UI face), always there to shape
+/// with whatever is installed.
+pub const NANA_UI_FAMILIES: &[&str] = &[nana_ui_core::fonts::UI_FONT_FAMILY];
+
+/// Whether text asked for in `family` is drawn in that family: one NanaUI
+/// embeds ([`NANA_UI_FAMILIES`]), or one installed on this system.
+pub fn available(family: &str) -> bool {
+    NANA_UI_FAMILIES
+        .iter()
+        .any(|f| f.eq_ignore_ascii_case(family))
+        || installed(family)
+}
+
+/// Whether the text engine shapes with `family` itself rather than a
+/// fallback. Cached: the answer only changes when fonts are installed.
+fn installed(family: &str) -> bool {
+    static CACHE: LazyLock<Mutex<HashMap<String, bool>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    *cache.entry(family.to_owned()).or_insert_with(|| {
+        nana_ui::shaped_face_families(family, "Aa字")
+            .iter()
+            .any(|f| f.eq_ignore_ascii_case(family))
+    })
+}
+
+pub fn rgba(c: Rgba8) -> [f32; 4] {
+    [
+        f32::from(c.r) / 255.0,
+        f32::from(c.g) / 255.0,
+        f32::from(c.b) / 255.0,
+        f32::from(c.a) / 255.0,
+    ]
+}
+
+pub fn mix(a: Rgba8, b: Rgba8, t: f32) -> Rgba8 {
+    let m = |x: u8, y: u8| (f32::from(x) * (1.0 - t) + f32::from(y) * t).round() as u8;
+    Rgba8::rgba(m(a.r, b.r), m(a.g, b.g), m(a.b, b.b), m(a.a, b.a))
+}
+
+fn luminance(c: Rgba8) -> f32 {
+    let lin = |v: u8| {
+        let v = f32::from(v) / 255.0;
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+}
+
+/// WCAG contrast ratio between two opaque colours.
+pub fn contrast(a: Rgba8, b: Rgba8) -> f32 {
+    let (la, lb) = (luminance(a), luminance(b));
+    (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+}
+
+/// The foreground that reads best on `bg`: the dark ink or white, whichever
+/// has the higher contrast ratio. Mid-tone backgrounds where the soft ink
+/// cannot reach 4.5:1 fall back to pure black, which always can.
+pub fn on(bg: Rgba8) -> Rgba8 {
+    let ink = Rgba8::rgb(16, 22, 32);
+    let (dark, light) = (contrast(ink, bg), contrast(Rgba8::WHITE, bg));
+    if dark < light {
+        Rgba8::WHITE
+    } else if dark >= 4.5 {
+        ink
+    } else {
+        Rgba8::BLACK
+    }
+}
+
+/// The accent as a foreground on `surface` (focus rings, soft-fill text,
+/// slider and switch marks): the accent itself when it already reaches
+/// `min`:1, otherwise mixed toward `text` just far enough that it does.
+pub fn accent_fg(accent: Rgba8, surface: Rgba8, text: Rgba8, min: f32) -> Rgba8 {
+    if contrast(accent, surface) >= min {
+        return accent;
+    }
+    (1..=20)
+        .map(|i| mix(accent, text, i as f32 / 20.0))
+        .find(|c| contrast(*c, surface) >= min)
+        .unwrap_or(text)
+}
+
+pub fn rgba8(c: SemanticColor) -> Rgba8 {
+    let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    Rgba8::rgb(b(c.r), b(c.g), b(c.b))
+}
+
+pub fn dark_mode(mode: ChromeMode, system_dark: bool) -> bool {
+    match mode {
+        ChromeMode::System => system_dark,
+        ChromeMode::Light => false,
+        ChromeMode::Dark => true,
+    }
+}
+
+/// CIE L* (0–100) of an opaque colour: the lightness step a reader sees.
+pub fn lightness(c: Rgba8) -> f32 {
+    let y = luminance(c);
+    if y > 216.0 / 24389.0 {
+        116.0 * y.cbrt() - 16.0
+    } else {
+        y * 24389.0 / 27.0
+    }
+}
+
+/// How far a colour is from grey, 0–1 (sRGB channel spread).
+pub fn chroma(c: Rgba8) -> f32 {
+    let hi = c.r.max(c.g).max(c.b);
+    let lo = c.r.min(c.g).min(c.b);
+    f32::from(hi - lo) / 255.0
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn saved_body_settings_are_independent_and_defaults_replace_legacy_overrides() {
+        let skin = nanatype_theme::Skin::default();
+        let mut settings = nanatype_settings::Settings::default();
+        settings.skin.overrides.text_size = Some(50.0);
+        settings.skin.overrides.text_color = Some(nanatype_model::Rgba8::rgb(255, 0, 0));
+        let legacy = super::personalized(&skin, &settings, "test");
+        assert_eq!(legacy.dialogue.text.size, 50.0);
+        let mut p = nanatype_settings::SkinPersonalization::default();
+        p.history.text_size = Some(72.0);
+        p.history.line_height = Some(2.0);
+        p.history.font_family = Some("Consolas".into());
+        settings.skin.personalizations.insert("test".into(), p);
+        let custom = super::personalized(&skin, &settings, "test");
+        assert_eq!(custom.dialogue.text, skin.dialogue.text);
+        assert_eq!(custom.history.text.size, 72.0);
+        assert_eq!(custom.history.text.line_height, 2.0);
+        assert_eq!(custom.history.text.font_family.as_deref(), Some("Consolas"));
+        assert_eq!(custom.dialogue.nameplate, skin.dialogue.nameplate);
+        assert_eq!(custom.history.name_size, skin.history.name_size);
+        assert_eq!(super::personalized(&skin, &settings, "other"), legacy);
+    }
+
+    use super::*;
+    use nanatype_theme::{SkinOrigin, SkinRegistry};
+
+    #[test]
+    fn a_skin_is_flagged_only_when_none_of_its_body_fonts_is_available() {
+        let mut skin = Skin::default();
+        // The default system stack is never flagged.
+        assert!(!uses_fallback_font(&skin));
+        skin.fonts.body.families = vec!["No Such Font 7f3a".into(), "Nor This 7f3b".into()];
+        assert!(uses_fallback_font(&skin));
+        // A built-in font this build does not embed still falls back.
+        skin.fonts.body.file = Some("builtin:fonts/NotInThisBuild.ttf".into());
+        assert!(uses_fallback_font(&skin));
+        // The skin's own file is always used.
+        skin.fonts.body.file = Some("fonts/own.ttf".into());
+        assert!(!uses_fallback_font(&skin));
+        // Installed: NanaUI registers Noto Sans SC itself.
+        skin.fonts.body.file = None;
+        skin.fonts.body.families = vec!["Noto Sans SC".into()];
+        assert!(!uses_fallback_font(&skin));
+        // A later family that is available is enough: it is what the text
+        // is drawn in, not a stand-in.
+        skin.fonts.body.families = vec!["No Such Font 7f3a".into(), "noto sans sc".into()];
+        assert!(!uses_fallback_font(&skin));
+    }
+
+    #[test]
+    fn nana_ui_embedded_families_are_always_available() {
+        for f in NANA_UI_FAMILIES {
+            assert!(available(f), "{f}");
+        }
+        assert!(!available("No Such Font 7f3a"));
+    }
+
+    #[test]
+    fn echo_skins_are_not_flagged() {
+        // Their stacks end in NanaUI's own Noto Sans SC, so their text never
+        // shows in a stand-in, whatever is installed.
+        let reg = SkinRegistry::new(None, "test");
+        for id in [
+            "nanatype.echo_vanilla",
+            "nanatype.echo_glass",
+            "nanatype.echo_bubble",
+            "nanatype.echo_void",
+        ] {
+            let skin = reg.load(id).expect("builtin skin loads").skin;
+            assert!(
+                skin.fonts
+                    .body
+                    .families
+                    .iter()
+                    .any(|f| NANA_UI_FAMILIES.iter().any(|n| n.eq_ignore_ascii_case(f))),
+                "{id} lists a NanaUI family"
+            );
+            assert!(!uses_fallback_font(&skin), "{id}");
+        }
+    }
+
+    #[test]
+    fn a_registered_bundled_family_stays_first() {
+        let mut skin = Skin::default();
+        skin.fonts.body.families = vec!["Noto Sans SC".into(), "SimSun".into()];
+        let bundled = [Some("Bundled Face 7f3a".to_owned()), None, None];
+        let prepared = prepare(&skin, &SkinOverrides::default(), &bundled, "zh-CN");
+        // Not moved behind the installed Noto Sans SC.
+        assert_eq!(
+            prepared.fonts.body.families[..2],
+            ["Bundled Face 7f3a", "Noto Sans SC"]
+        );
+    }
+
+    #[test]
+    fn on_accent_text_reaches_4_5_for_every_builtin_skin() {
+        let reg = SkinRegistry::new(None, "test");
+        let mut n = 0;
+        for e in reg
+            .entries()
+            .iter()
+            .filter(|e| matches!(e.origin, SkinOrigin::Builtin))
+        {
+            let skin = reg.load(&e.id).expect("builtin skin loads").skin;
+            let accent = skin.chrome.accent;
+            let r = contrast(on(accent), accent);
+            assert!(r >= 4.5, "{}: on(accent) is {r:.2}:1", e.id);
+            n += 1;
+        }
+        assert!(n >= 25);
+    }
+
+    #[test]
+    fn builtin_content_colors_are_readable() {
+        let reg = SkinRegistry::new(None, "test");
+        for e in reg.entries() {
+            let skin = reg.load(&e.id).expect("skin loads").skin;
+            let c = &skin.chrome;
+            let r = contrast(c.text, c.surface);
+            assert!(r >= 4.5, "{}: content text on surface is {r:.2}:1", e.id);
+            for min in [3.0, 4.5] {
+                let fg = accent_fg(c.accent, c.surface, c.text, min);
+                let r = contrast(fg, c.surface);
+                assert!(r >= min, "{}: accent_fg {r:.2}:1 < {min}", e.id);
+            }
+        }
+    }
+
+    #[test]
+    fn new_streaming_nameplates_have_readable_foregrounds() {
+        let reg = SkinRegistry::new(None, "test");
+        for name in [
+            "gothic",
+            "celestial",
+            "forest",
+            "tidal",
+            "lantern",
+            "citrus",
+        ] {
+            let skin = reg.load(&format!("nanatype.{name}")).unwrap().skin;
+            let p = &skin.dialogue.nameplate;
+            assert!(
+                contrast(p.text_color, p.color) >= 4.5,
+                "{name}: nameplate contrast"
+            );
+            if let Some(gradient) = &p.shape.gradient {
+                for (position, color) in &gradient.stops {
+                    assert!(
+                        contrast(p.text_color, skin.color(*color)) >= 4.5,
+                        "{name}: nameplate gradient contrast at {position}"
+                    );
+                }
+            }
+        }
+    }
+}

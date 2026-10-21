@@ -204,7 +204,7 @@ fn render_at(registry: &SkinRegistry, out: &std::path::Path, skin_id: &str, loca
     shot("display", out, w, h, theme.clone(), |doc, id| {
         doc.context_mut()
             .mount_view_root(id, move || {
-                dialogue::dialogue_box(ui, dialogue::Source::Display, None)
+                dialogue::dialogue_box(*ui, dialogue::Source::Display, None)
             })
             .unwrap();
     });

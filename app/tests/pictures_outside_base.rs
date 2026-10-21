@@ -49,7 +49,7 @@ fn render(out: &Path, name: &str, urls: Vec<String>) -> image::RgbaImage {
                             .with_layout(|l| l.position = nana_ui_core::PositionSpec::Relative),
                     )
                     .children(nanatype::ui::danmaku::reactive_picture(
-                        ui,
+                        *ui,
                         Some(url),
                         4.0,
                     ))

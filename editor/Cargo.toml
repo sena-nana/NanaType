@@ -1,0 +1,43 @@
+[package]
+name = "nanatype-editor"
+version.workspace = true
+edition.workspace = true
+license = "MIT"
+rust-version.workspace = true
+description = "NanaType Editor — create, sign and debug NanaType packages"
+
+[lib]
+name = "nanatype_editor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nanatype-editor"
+path = "src/main.rs"
+
+[features]
+default = ["builtin-fonts"]
+# Embed crates/theme/fonts/ so built-in skins preview in their own fonts.
+builtin-fonts = ["nanatype-frame/builtin-fonts"]
+
+[dependencies]
+nanatype-frame.workspace = true
+nanatype-model.workspace = true
+nanatype-markup.workspace = true
+nanatype-theme = { workspace = true, features = ["editor"] }
+nanatype-i18n = { workspace = true, features = ["editor"] }
+nanatype-settings.workspace = true
+nanatype-plugins.workspace = true
+nanatype-secrets.workspace = true
+nana-ui.workspace = true
+nana-ui-core.workspace = true
+nana-ui-platform.workspace = true
+serde_json.workspace = true
+image = { version = "0.25", default-features = false, features = ["png"] }
+blake3 = "1"
+
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3"
+
+[dev-dependencies]
+tempfile = "3"
+nana-ui-devtools = { workspace = true, features = ["runtime-agent"] }

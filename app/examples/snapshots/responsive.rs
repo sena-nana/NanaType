@@ -171,7 +171,7 @@ pub fn audit(
                     );
                 }
                 assert!(
-                    !nanatype::ui::shader_effects::animating(ui),
+                    !nanatype::ui::shader_effects::animating(*ui),
                     "{name}: static artwork requests continuous frames"
                 );
             }
@@ -197,7 +197,7 @@ pub fn audit(
         ("maximum", [8192, 8192]),
     ] {
         let skin_id = ui.settings.with_untracked(|s| s.skin.id.clone());
-        let mut draft = settings::preview::Draft::load(&ui.settings.get_untracked(), &skin_id, ui);
+        let mut draft = settings::preview::load_draft(&ui.settings.get_untracked(), &skin_id, ui);
         draft.display.width = w.to_string();
         draft.display.height = h.to_string();
         if case == "maximum" {

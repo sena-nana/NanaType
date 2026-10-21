@@ -1,0 +1,41 @@
+[package]
+name = "nanatype-frame"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The framework NanaType and NanaType Editor share: skin rendering, the UI kit, previews and the plugin host"
+
+[features]
+default = []
+# Embed crates/theme/fonts/ for the built-in skins (docs/fonts.md).
+builtin-fonts = ["nanatype-theme/builtin-fonts"]
+
+[dependencies]
+nanatype-model.workspace = true
+nanatype-markup.workspace = true
+nanatype-theme.workspace = true
+nanatype-i18n.workspace = true
+nanatype-settings.workspace = true
+nanatype-core.workspace = true
+nanatype-plugins.workspace = true
+nana-ui.workspace = true
+nana-ui-core.workspace = true
+nana-ui-platform.workspace = true
+nana-text.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+unicode-segmentation.workspace = true
+ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
+imagesize = "0.15"
+tiny-skia = "0.12"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
+blake3 = "1"
+pollster = "1"
+
+[target.'cfg(windows)'.dependencies]
+raw-window-handle = "0.6"
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Time"] }
+
+[dev-dependencies]
+nana-ui-devtools = { workspace = true, features = ["runtime-agent"] }

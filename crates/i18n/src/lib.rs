@@ -1,10 +1,13 @@
 //! UI strings.
 //!
 //! Strings live in Fluent files under `locales/`, one per language, compiled
-//! into the binary. zh-CN is the source of truth: tests require every other
-//! locale to define exactly its keys with the same variables. Lookups fall
-//! back from the active locale to en-US to the key itself, so a missing string
-//! is visible rather than blank.
+//! into the binary: `locales/<locale>.ftl` holds what both products show,
+//! `locales/app/` only NanaType's (feature `app`) and `locales/editor/` only
+//! NanaType Editor's (feature `editor`), so neither ships the other's strings.
+//! zh-CN is the source of truth: tests require every other locale to define
+//! exactly its keys with the same variables. Lookups fall back from the active
+//! locale to en-US to the key itself, so a missing string is visible rather
+//! than blank.
 
 #![forbid(unsafe_code)]
 
@@ -50,12 +53,27 @@ impl Locale {
             .find(|l| l.tag().eq_ignore_ascii_case(tag))
     }
 
-    fn source(self) -> &'static str {
-        match self {
+    /// The Fluent sources this build carries for the locale: the shared
+    /// strings, then each enabled product's.
+    fn sources(self) -> Vec<&'static str> {
+        let mut sources = vec![match self {
             Self::ZhCn => include_str!("../locales/zh-CN.ftl"),
             Self::EnUs => include_str!("../locales/en-US.ftl"),
             Self::JaJp => include_str!("../locales/ja-JP.ftl"),
-        }
+        }];
+        #[cfg(feature = "app")]
+        sources.push(match self {
+            Self::ZhCn => include_str!("../locales/app/zh-CN.ftl"),
+            Self::EnUs => include_str!("../locales/app/en-US.ftl"),
+            Self::JaJp => include_str!("../locales/app/ja-JP.ftl"),
+        });
+        #[cfg(feature = "editor")]
+        sources.push(match self {
+            Self::ZhCn => include_str!("../locales/editor/zh-CN.ftl"),
+            Self::EnUs => include_str!("../locales/editor/en-US.ftl"),
+            Self::JaJp => include_str!("../locales/editor/ja-JP.ftl"),
+        });
+        sources
     }
 
     /// Pick the best supported locale for a BCP-47 tag such as `zh-Hans-SG`.
@@ -130,11 +148,13 @@ fn bundle(locale: Locale) -> FluentBundle<FluentResource> {
     let id: LanguageIdentifier = locale.tag().parse().expect("static locale tags parse");
     let mut bundle = FluentBundle::new_concurrent(vec![id]);
     bundle.set_use_isolating(false);
-    let resource = FluentResource::try_new(locale.source().to_owned())
-        .unwrap_or_else(|(_, errors)| panic!("{locale}.ftl does not parse: {errors:?}"));
-    bundle
-        .add_resource(resource)
-        .unwrap_or_else(|errors| panic!("{locale}.ftl has duplicate keys: {errors:?}"));
+    for source in locale.sources() {
+        let resource = FluentResource::try_new(source.to_owned())
+            .unwrap_or_else(|(_, errors)| panic!("{locale}.ftl does not parse: {errors:?}"));
+        bundle
+            .add_resource(resource)
+            .unwrap_or_else(|errors| panic!("{locale}.ftl has duplicate keys: {errors:?}"));
+    }
     bundle
 }
 
@@ -237,9 +257,12 @@ pub fn catalog(locale: Locale) -> Vec<(String, Vec<String>)> {
         }
     }
 
-    let resource = parse(locale.source()).expect("locale parses");
+    let sources = locale.sources();
+    let resources = sources
+        .iter()
+        .map(|source| parse(*source).expect("locale parses"));
     let mut out = Vec::new();
-    for entry in resource.body {
+    for entry in resources.flat_map(|resource| resource.body) {
         if let Entry::Message(message) = entry {
             let mut v = Vec::new();
             if let Some(value) = &message.value {
@@ -293,12 +316,34 @@ mod tests {
     #[test]
     fn lookups_format_and_fall_back() {
         let mut i18n = I18n::new(Locale::EnUs);
-        assert_eq!(i18n.t("app-name"), "NanaType");
+        assert_eq!(i18n.t("common-cancel"), "Cancel");
+        assert_eq!(
+            i18n.tr("marker-wait", &[("ms", 500.into())]),
+            MARKER_WAIT_EN
+        );
+        i18n.set_locale(Locale::ZhCn);
+        assert_eq!(i18n.tr("marker-wait", &[("ms", 500.into())]), "停 500ms");
+        assert_eq!(i18n.t("no-such-key"), "no-such-key");
+    }
+
+    const MARKER_WAIT_EN: &str = "wait 500ms";
+
+    /// Each product's strings are in its own build only.
+    #[test]
+    fn product_strings_follow_features() {
+        let i18n = I18n::new(Locale::EnUs);
+        assert_eq!(i18n.has("app-name"), cfg!(feature = "app"));
+        assert_eq!(i18n.has("pkgedit-title"), cfg!(feature = "editor"));
+    }
+
+    #[cfg(feature = "app")]
+    #[test]
+    fn plurals_format() {
+        let mut i18n = I18n::new(Locale::EnUs);
         assert_eq!(i18n.tr("history-count", &[("count", 1.into())]), "1 line");
         assert_eq!(i18n.tr("history-count", &[("count", 3.into())]), "3 lines");
         i18n.set_locale(Locale::ZhCn);
         assert_eq!(i18n.tr("history-count", &[("count", 3.into())]), "3 条");
-        assert_eq!(i18n.t("no-such-key"), "no-such-key");
     }
 
     #[test]

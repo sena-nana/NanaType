@@ -9,18 +9,40 @@ use nana_ui::runtime::{
     Activate, Button, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption,
     SizeChanged, Stack, TextArea, TextChanged, TextInput, TextInputState,
 };
-use nana_ui_core::{
-    AlignSpec, BackgroundImage, LengthSpec, OverflowSpec, PointerEventsSpec, PositionSpec,
-    TransformOrigin,
-};
-use nanatype_model::{HistoryItem, Rgba8, SourceId, SourceKind};
-use nanatype_settings::{Settings, SkinPersonalization, SurfacePersonalization};
+use nana_ui_core::{AlignSpec, LengthSpec};
+use nanatype_settings::Settings;
 use nanatype_theme::Skin;
 
 use super::controls::{hint, label};
 use crate::msg::Msg;
-use crate::ui::kit::{gap, inset};
-use crate::ui::{Ui, dialogue, history};
+use crate::ui::Ui;
+use crate::ui::kit::gap;
+pub use nanatype_frame::ui::preview::{
+    Draft, InvalidProfile, Pane, Surface, default_size, sample, stage,
+};
+
+/// The overscan of skin `id` as the catalogue loaded it.
+fn overscan(ui: Ui, id: &str) -> Option<f32> {
+    ui.skins.with_untracked(|rows| {
+        rows.iter()
+            .find(|r| r.id == id)
+            .and_then(|r| r.skin.as_ref())
+            .map(|s| s.dialogue.overscan)
+    })
+}
+
+/// [`Draft::load`] with the overscan of the catalogue's skin `id`.
+pub fn load_draft(settings: &Settings, id: &str, ui: Ui) -> Draft {
+    Draft::load(settings, id, *ui, overscan(ui, id))
+}
+
+fn draft(ui: Ui, id: &str) -> Draft {
+    nanatype_frame::ui::preview::draft(*ui, id, overscan(ui, id))
+}
+
+fn change(ui: Ui, id: &str, f: impl FnOnce(&mut Draft)) {
+    nanatype_frame::ui::preview::change(*ui, id, overscan(ui, id), f)
+}
 
 /// The sample text field.
 const SAMPLE_H: f32 = 100.0;
@@ -48,170 +70,6 @@ pub(super) fn select(
         id: row.id.clone(),
         play,
     })
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Pane {
-    pub font: String,
-    pub size: String,
-    pub line_height: String,
-    pub color: String,
-    pub width: String,
-    pub height: String,
-    pub text: String,
-}
-
-impl Pane {
-    fn from_saved(p: &SurfacePersonalization, text: String) -> Self {
-        Self {
-            font: p.font_family.clone().unwrap_or_default(),
-            size: p.text_size.map(|v| v.to_string()).unwrap_or_default(),
-            line_height: p.line_height.map(|v| v.to_string()).unwrap_or_default(),
-            color: p.text_color.map(|v| v.to_hex()).unwrap_or_default(),
-            width: p.size.map(|v| v[0].to_string()).unwrap_or_default(),
-            height: p.size.map(|v| v[1].to_string()).unwrap_or_default(),
-            text,
-        }
-    }
-
-    fn parse(&self, default_size: [f32; 2]) -> Result<SurfacePersonalization, ()> {
-        let number = |s: &str| -> Result<Option<f32>, ()> {
-            if s.trim().is_empty() {
-                Ok(None)
-            } else {
-                s.trim().parse().map(Some).map_err(|_| ())
-            }
-        };
-        let width = number(&self.width)?;
-        let height = number(&self.height)?;
-        let p = SurfacePersonalization {
-            font_family: (!self.font.trim().is_empty()).then(|| self.font.trim().to_owned()),
-            text_size: number(&self.size)?,
-            line_height: number(&self.line_height)?,
-            text_color: if self.color.trim().is_empty() {
-                None
-            } else {
-                Some(self.color.trim().parse::<Rgba8>().map_err(|_| ())?)
-            },
-            size: if width.is_none() && height.is_none() {
-                None
-            } else {
-                Some([
-                    width.unwrap_or(default_size[0]),
-                    height.unwrap_or(default_size[1]),
-                ])
-            },
-        };
-        p.valid().then_some(p).ok_or(())
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Draft {
-    pub display: Pane,
-    pub history: Pane,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct InvalidProfile;
-impl std::fmt::Display for InvalidProfile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("invalid preview font, dimensions or color")
-    }
-}
-impl std::error::Error for InvalidProfile {}
-
-impl Draft {
-    pub fn load(settings: &Settings, id: &str, ui: Ui) -> Self {
-        let p = settings
-            .skin
-            .personalizations
-            .get(id)
-            .cloned()
-            .unwrap_or_else(|| SkinPersonalization {
-                display: SurfacePersonalization {
-                    text_size: settings.skin.overrides.text_size,
-                    text_color: settings.skin.overrides.text_color,
-                    size: settings.overlays.display.size.or_else(|| {
-                        settings.skin.overrides.region.map(|[w, h]| {
-                            let pad = ui
-                                .skins
-                                .with_untracked(|rows| {
-                                    rows.iter()
-                                        .find(|r| r.id == id)
-                                        .and_then(|r| r.skin.as_ref())
-                                        .map(|s| s.dialogue.overscan)
-                                })
-                                .unwrap_or_else(|| ui.skin.with_untracked(|s| s.dialogue.overscan))
-                                * 2.0;
-                            [w + pad, h + pad]
-                        })
-                    }),
-                    ..Default::default()
-                },
-                history: SurfacePersonalization {
-                    text_color: settings.skin.overrides.text_color,
-                    size: settings.overlays.history.size,
-                    ..Default::default()
-                },
-            });
-        Self {
-            display: Pane::from_saved(&p.display, ui.now_t("skin-edit-sample")),
-            history: Pane::from_saved(&p.history, ui.now_t("skin-edit-history-sample")),
-        }
-    }
-
-    fn pane(&self, history: bool) -> &Pane {
-        if history {
-            &self.history
-        } else {
-            &self.display
-        }
-    }
-    fn pane_mut(&mut self, history: bool) -> &mut Pane {
-        if history {
-            &mut self.history
-        } else {
-            &mut self.display
-        }
-    }
-
-    pub fn profile(&self, base: &Skin) -> Result<SkinPersonalization, InvalidProfile> {
-        Ok(SkinPersonalization {
-            display: self
-                .display
-                .parse(default_size(base, false))
-                .map_err(|()| InvalidProfile)?,
-            history: self
-                .history
-                .parse(default_size(base, true))
-                .map_err(|()| InvalidProfile)?,
-        })
-    }
-}
-
-fn default_size(skin: &Skin, history: bool) -> [f32; 2] {
-    if history {
-        [skin.history.width, skin.history.height]
-    } else {
-        skin.dialogue
-            .region
-            .map(|v| v + skin.dialogue.overscan * 2.0)
-    }
-}
-
-fn draft(ui: Ui, id: &str) -> Draft {
-    ui.skin_drafts
-        .with(|map| map.get(id).cloned())
-        .unwrap_or_else(|| ui.settings.with_untracked(|s| Draft::load(s, id, ui)))
-}
-
-fn change(ui: Ui, id: &str, f: impl FnOnce(&mut Draft)) {
-    let mut value = draft(ui, id);
-    f(&mut value);
-    ui.skin_drafts.update(|map| {
-        map.insert(id.to_owned(), value);
-    });
 }
 
 #[derive(Clone, Copy)]
@@ -469,254 +327,6 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
     .into_any()
 }
 
-/// Which window a sample draws the skin in.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Surface {
-    #[default]
-    Display,
-    History,
-    /// The input window's skin preview: the box around a private editor.
-    Input,
-}
-impl Surface {
-    pub fn of(history: bool) -> Self {
-        if history {
-            Self::History
-        } else {
-            Self::Display
-        }
-    }
-}
-
-/// Sample data uses private signals; no production draft, history or source is written.
-pub fn sample(
-    ui: Ui,
-    base: &Skin,
-    id: &str,
-    draft: &Draft,
-    surface: Surface,
-    urls: Arc<std::collections::HashMap<String, String>>,
-) -> Option<(AnyView, [f32; 2])> {
-    let profile = draft.profile(base).ok()?;
-    let history_mode = surface == Surface::History;
-    let mut settings = (*ui.settings.get_untracked()).clone();
-    settings.skin.id = id.to_owned();
-    // The input window draws its box from the display profile, with the
-    // skin preview on and the sample speaker in the name plate.
-    settings.general.input_skin_preview = true;
-    settings.general.speaker_name = ui.now_t("skins-preview-name");
-    settings
-        .skin
-        .personalizations
-        .insert(id.to_owned(), profile);
-    settings.overlays.history.lock = nanatype_settings::Lock::Locked;
-    settings.history.hide_latest = nanatype_settings::HideLatest::Never;
-    settings.history.fade_after_s = None;
-    settings.history.chat.enabled = true;
-    settings.history.show_time = true;
-    let skin = Arc::new(crate::skin_theme::prepare(
-        &crate::skin_theme::personalized(base, &settings, id),
-        &Default::default(),
-        &Default::default(),
-        ui.locale.get_untracked().tag(),
-    ));
-    let kind = if history_mode {
-        crate::windows::WindowKind::History
-    } else {
-        crate::windows::WindowKind::Display
-    };
-    let (w, h) = crate::windows::size_of(kind, &skin, &settings);
-    let mut preview = Ui::new(Arc::new(settings), skin.clone(), ui.locale.get_untracked());
-    preview.asset_urls.set(urls.clone());
-    preview.reduced_motion = ui.reduced_motion;
-    preview.now = ui.now;
-    preview.shader_preview = ui.shader_preview;
-    preview.page = ui.page;
-    let view = if history_mode {
-        let rows = draft
-            .history
-            .text
-            .lines()
-            .enumerate()
-            .map(|(i, text)| {
-                let doc = nanatype_markup::parse(text).doc;
-                let item = HistoryItem {
-                    source: SourceId::local(),
-                    kind: SourceKind::Typewriter,
-                    line: None,
-                    author: if i % 2 == 0 {
-                        ui.now_t("skins-preview-name")
-                    } else {
-                        ui.now_t("skin-edit-long-name")
-                    },
-                    avatar: None,
-                    doc: doc.clone(),
-                    at: 1_700_000_000_000 + i as u64 * 180_000,
-                    uid: None,
-                    reply: None,
-                };
-                nanatype_core::HistoryRow {
-                    key: i as u64,
-                    item,
-                    doc: Arc::new(doc),
-                    reveal: None,
-                }
-            })
-            .collect();
-        preview.history.set(Arc::new(rows));
-        history::history_window(preview).into_any()
-    } else if surface == Surface::Input {
-        preview
-            .draft
-            .set(Arc::new(nanatype_markup::parse(&draft.display.text).doc));
-        widget(
-            Stack::column(0.0)
-                .width(LengthSpec::Px(w))
-                .height(LengthSpec::Px(h)),
-        )
-        .key("skin-preview-input")
-        .children(dialogue::dialogue_box(
-            preview,
-            dialogue::Source::Draft,
-            Some(crate::ui::input::preview_editor(preview)),
-        ))
-        .into_any()
-    } else {
-        let ctx = dialogue::BoxCtx {
-            skin,
-            urls,
-            source: dialogue::Source::Preview,
-            preview_name: ui.now_t("skins-preview-name"),
-        };
-        dialogue::preview_box(
-            preview,
-            ctx,
-            &nanatype_markup::parse(&draft.display.text).doc,
-        )
-    };
-    Some((view, [w, h]))
-}
-
-/// An isolated, scaled sample of `raw` through the real dialogue and history
-/// renderers. Fonts come from `read_font`; nothing touches production state.
-pub fn stage(
-    ui: Ui,
-    mut raw: Skin,
-    read_font: impl Fn(&str) -> Option<Vec<u8>>,
-    urls: Arc<std::collections::HashMap<String, String>>,
-    surface: Surface,
-    width: Signal<f32>,
-) -> (AnyView, Arc<Skin>) {
-    let mut scope = nana_ui::HostFontScope::new();
-    for font in nanatype_theme::BuiltinFonts::embedded().fonts() {
-        let _ = scope.add_bytes(font.bytes);
-    }
-    let mut register = |role: &nanatype_theme::FontSpec| {
-        let bytes = role.file.as_deref().and_then(|file| {
-            if nanatype_theme::is_builtin_font(file) {
-                nanatype_theme::builtin_font(file).map(|b| b.to_vec())
-            } else {
-                read_font(file)
-            }
-        });
-        scope.add_bytes(bytes?).ok()?.families().first().cloned()
-    };
-    let families = [&raw.fonts.body, &raw.fonts.name, &raw.fonts.accent].map(&mut register);
-    if let Some(role) = &mut raw.fonts.latin
-        && let Some(family) = register(role)
-    {
-        role.families.insert(0, family);
-    }
-    let scope = Arc::new(scope);
-    let base = Arc::new(crate::skin_theme::prepare(
-        &raw,
-        &Default::default(),
-        &families,
-        ui.locale.get_untracked().tag(),
-    ));
-    let sample_id = raw.meta.id.clone();
-    let sample_base = base.clone();
-    let view = dynamic(
-        move || {
-            (
-                draft(ui, &sample_id),
-                width.get(),
-                ui.chrome_dark.get(),
-                ui.shader_preview.get(),
-                ui.settings.with(|s| s.skin.overrides.clone()),
-            )
-        },
-        move |(draft, available, dark, _, _)| {
-            let _keep_fonts = &scope;
-            let Some((view, [w, h])) = sample(
-                ui,
-                &sample_base,
-                &sample_base.meta.id,
-                draft,
-                surface,
-                urls.clone(),
-            ) else {
-                return hint(ui.now_t("skin-edit-invalid"));
-            };
-            // Limit tall previews as well as wide ones, without altering their layout.
-            let dark = *dark;
-            let scale = ((available - 24.0).max(1.0) / w).min(340.0 / h).min(1.0);
-            let stage = widget(
-                Stack::column(0.0)
-                    .width(LengthSpec::Px(w * scale))
-                    .height(LengthSpec::Px(h * scale))
-                    .with_layout(|l| {
-                        l.position = PositionSpec::Relative;
-                        l.overflow_x = OverflowSpec::Hidden;
-                        l.overflow_y = OverflowSpec::Hidden;
-                    }),
-            )
-            .key("skin-preview-box")
-            .children(
-                widget(
-                    Stack::column(0.0)
-                        .width(LengthSpec::Px(w))
-                        .height(LengthSpec::Px(h))
-                        .with_layout(move |l| {
-                            l.position = PositionSpec::Absolute;
-                            l.offset_left = Some(LengthSpec::Px(0.0));
-                            l.offset_top = Some(LengthSpec::Px(0.0));
-                            l.pointer_events = Some(PointerEventsSpec::None);
-                            l.transform = Some(crate::ui::surface::affine(0.0, 0.0, 0.0, scale));
-                            l.transform_origin = Some(TransformOrigin {
-                                x: LengthSpec::Px(0.0),
-                                y: LengthSpec::Px(0.0),
-                            });
-                        }),
-                )
-                .key("skin-preview-canvas")
-                .children(view),
-            );
-            widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
-                .children((
-                    widget(
-                        Stack::column(0.0)
-                            .padding_step(inset::step::PANEL, inset::step::PANEL)
-                            .with_layout(move |l| {
-                                l.paint.background_image =
-                                    Some(BackgroundImage::url(crate::ui::kit::checker_url(dark)));
-                            }),
-                    )
-                    .children(stage),
-                    hint(format!(
-                        "{} × {} px · {:.0}%",
-                        w.round(),
-                        h.round(),
-                        scale * 100.0
-                    )),
-                ))
-                .into_any()
-        },
-    )
-    .into_any();
-    (view, base)
-}
-
 pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
     let width = signal(0.0_f32);
     dynamic(
@@ -741,7 +351,7 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
             };
             let folder = row.folder.clone();
             let (sample, base) = stage(
-                ui,
+                *ui,
                 (*row.skin.unwrap()).clone(),
                 move |file| {
                     folder
@@ -868,6 +478,7 @@ mod tests {
     use super::*;
     use nana_ui::runtime::{DocumentId, RuntimeDocument};
     use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
+    use nanatype_settings::SurfacePersonalization;
 
     fn fixture() -> (Ui, Arc<Skin>) {
         let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
@@ -1021,14 +632,14 @@ mod tests {
         let history = ui.history.get_untracked();
         let source = ui.source.get_untracked();
         let draft = ui.draft.get_untracked();
-        let mut edited = Draft::load(&settings, &settings.skin.id, ui);
+        let mut edited = load_draft(&settings, &settings.skin.id, ui);
         edited.history.size = "56".into();
         let doc_id = DocumentId::new(2).unwrap();
         let mut doc = RuntimeDocument::new(doc_id);
         doc.context_mut()
             .mount_view_root(doc_id, move || {
                 sample(
-                    ui,
+                    *ui,
                     &base,
                     "nanatype.night",
                     &edited,
@@ -1135,13 +746,13 @@ mod tests {
         let (ui, _) = fixture();
         let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
         let base = registry.load("nanatype.celestial").unwrap().skin;
-        let edited = Draft::load(&ui.settings.get_untracked(), "nanatype.celestial", ui);
+        let edited = load_draft(&ui.settings.get_untracked(), "nanatype.celestial", ui);
         let doc_id = DocumentId::new(3).unwrap();
         let mut doc = RuntimeDocument::new(doc_id);
         doc.context_mut()
             .mount_view_root(doc_id, move || {
                 sample(
-                    ui,
+                    *ui,
                     &base,
                     "nanatype.celestial",
                     &edited,
@@ -1180,14 +791,14 @@ mod tests {
         let mut settings = (*ui.settings.get_untracked()).clone();
         settings.overlays.display.size = Some([900.0, 240.0]);
         settings.overlays.history.size = Some([300.0, 560.0]);
-        let p = Draft::load(&settings, "other.skin", ui)
+        let p = load_draft(&settings, "other.skin", ui)
             .profile(&base)
             .unwrap();
         assert_eq!(p.display.size, settings.overlays.display.size);
         assert_eq!(p.history.size, settings.overlays.history.size);
         settings.overlays.display.size = None;
         settings.skin.overrides.region = Some([420.0, 180.0]);
-        let p = Draft::load(&settings, "other.skin", ui)
+        let p = load_draft(&settings, "other.skin", ui)
             .profile(&base)
             .unwrap();
         assert_eq!(

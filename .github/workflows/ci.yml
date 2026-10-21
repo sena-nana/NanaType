@@ -29,6 +29,15 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets --no-deps -- -D warnings
+      # Each product alone, as its release builds it: a workspace build
+      # unifies features and could hide one a product forgot to enable.
+      - name: Clippy (each product)
+        run: |
+          cargo clippy -p nanatype --all-targets --no-deps -- -D warnings
+          cargo clippy -p nanatype-editor --all-targets --no-deps -- -D warnings
+      - name: Product split
+        shell: bash
+        run: sh scripts/check-product-split.sh
       - name: Test
         run: cargo test --workspace
       # After the build, so every crate is in the local cache (the script
@@ -37,4 +46,6 @@ jobs:
       - name: Third-party notices
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/third-party-notices.ps1 -Check
+        run: |
+          ./scripts/third-party-notices.ps1 -Check
+          ./scripts/third-party-notices.ps1 -Check -Package nanatype-editor -Texts target/licenses-editor

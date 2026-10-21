@@ -130,7 +130,7 @@ fn ornaments_animate_without_runtime_work_and_stop_when_reduced_or_cleared() {
         .sync_presentation_clock(Duration::from_millis(1000));
     session.flush().unwrap();
     assert!(
-        shader_effects::animating(ui),
+        shader_effects::animating(*ui),
         "visible WGSL ornaments request render-only frames"
     );
     assert!(
@@ -152,18 +152,18 @@ fn ornaments_animate_without_runtime_work_and_stop_when_reduced_or_cleared() {
     ui.reduced_motion.set(true);
     session.flush().unwrap();
     assert!(
-        !shader_effects::animating(ui),
+        !shader_effects::animating(*ui),
         "reduced motion removes ornament loops"
     );
     ui.reduced_motion.set(false);
     session.flush().unwrap();
-    assert!(shader_effects::animating(ui));
+    assert!(shader_effects::animating(*ui));
     ui.display
         .set(Arc::new(DisplayView::empty(core.display().entrance)));
     ui.now.set(10_000);
     nanatype::clock::capture_at(10_000, || session.flush().unwrap());
     assert!(
-        !shader_effects::animating(ui),
+        !shader_effects::animating(*ui),
         "an empty display never retains ornament loops"
     );
 }

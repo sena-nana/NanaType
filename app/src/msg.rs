@@ -98,17 +98,9 @@ pub enum FileTarget {
     ImportSkin,
     ExportSkin,
     StickerFolder,
-    /// A `.ntpkg` to open in the package editor.
-    EditPackage,
-    /// Where the package editor writes its export.
-    ExportProject,
-    /// A file to copy into the open editor project.
-    ImportProjectAsset,
 }
 
 pub enum Msg {
-    /// The package editor (`crate::package_editor`).
-    PackageEditor(crate::package_editor::Action),
     RequestPluginActivation(String),
     ConfirmPluginActivation,
     CancelPluginActivation,

@@ -7,6 +7,6 @@ mod process;
 mod protocol;
 mod runtime;
 pub use os_sandbox::{Confinement, confine_worker};
-pub use process::{DataAnswer, EventError, PluginProcess, run_worker};
+pub use process::{DataAnswer, EventError, PluginProcess, WORKER_ARG, run_worker};
 pub use protocol::*;
 pub use runtime::{Dispatch, LuaSandbox};

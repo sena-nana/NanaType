@@ -112,7 +112,7 @@ fn main() {
                 let ms = 1000 + (trial * 180 + frame) * 16;
                 nanatype::clock::capture_at(ms, || {
                     let start = Instant::now();
-                    if dialogue::display_animating(ui, ms) {
+                    if dialogue::display_animating(*ui, ms) {
                         ui.now.set(ms);
                     }
                     session

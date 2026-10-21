@@ -236,7 +236,7 @@ fn output_isolation(g: &GpuContext) {
             )
         } else {
             shader_effects::view(
-                ui,
+                *ui,
                 dialogue::Source::Display,
                 &skin,
                 "probe",

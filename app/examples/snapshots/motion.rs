@@ -47,7 +47,7 @@ pub fn capture(
         doc.context_mut().set_theme_tokens(theme).unwrap();
         doc.context_mut()
             .mount_view_root(id, move || {
-                dialogue::dialogue_box(ui, dialogue::Source::Display, None)
+                dialogue::dialogue_box(*ui, dialogue::Source::Display, None)
             })
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, w, h).unwrap();

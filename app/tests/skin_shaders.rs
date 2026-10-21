@@ -46,7 +46,7 @@ fn gpu_proxy_samples_masks_and_disables_without_mutating_the_scene() {
             ..Default::default()
         };
         let effect = shader_effects::view(
-            ui,
+            *ui,
             Source::Display,
             &skin,
             "test",
@@ -108,7 +108,7 @@ fn gpu_proxy_samples_masks_and_disables_without_mutating_the_scene() {
         ui.settings
             .update(|s| Arc::make_mut(s).skin.advanced_effects = true);
         let artwork = shader_effects::view(
-            ui,
+            *ui,
             Source::Display,
             &skin,
             "test",
@@ -177,7 +177,7 @@ fn gpu_proxy_samples_masks_and_disables_without_mutating_the_scene() {
         );
         bad_ui.display.update(|v| Arc::make_mut(v).empty = false);
         let effect = shader_effects::view(
-            bad_ui,
+            *bad_ui,
             Source::Display,
             &bad,
             "test",
@@ -199,7 +199,7 @@ fn gpu_proxy_samples_masks_and_disables_without_mutating_the_scene() {
         let (_, rgba) = session.screenshot_rgba().unwrap();
         assert!(rgba.as_chunks::<4>().0.iter().all(|p| p[3] == 0));
         assert_eq!(shader_effects::take_notices().len(), 1);
-        assert!(!shader_effects::animating(bad_ui));
+        assert!(!shader_effects::animating(*bad_ui));
         let _ = session.screenshot_rgba().unwrap();
         assert!(shader_effects::take_notices().is_empty());
     });

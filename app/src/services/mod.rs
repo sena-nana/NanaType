@@ -1,7 +1,5 @@
 pub mod chat_assets;
 pub mod hotkeys;
-pub mod instance;
-pub mod media;
 pub mod overlay_menu;
 pub mod persist;
 pub mod sounds;
@@ -9,26 +7,8 @@ pub mod tray;
 pub mod updater;
 pub mod watch;
 
-/// Open a folder (or file) in the system file manager.
-pub fn reveal(path: &std::path::Path) {
-    let _ = std::fs::create_dir_all(path);
-    #[cfg(windows)]
-    let _ = std::process::Command::new("explorer").arg(path).spawn();
-    #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open").arg(path).spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let _ = std::process::Command::new("xdg-open").arg(path).spawn();
-}
-
-/// Open a web page in the default browser.
-pub fn open_url(url: &str) {
-    #[cfg(windows)]
-    let _ = std::process::Command::new("explorer").arg(url).spawn();
-    #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open").arg(url).spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
-}
+pub use nanatype_frame::shell::{open_url, reveal};
+pub use nanatype_frame::{instance, media};
 
 /// Register or remove the "launch at login" entry.
 pub fn set_autostart(enabled: bool) -> Result<(), String> {

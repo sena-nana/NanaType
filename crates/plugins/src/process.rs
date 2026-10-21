@@ -55,7 +55,7 @@ fn launch(executable: &Path) -> std::io::Result<Launched> {
     #[cfg(windows)]
     if crate::app_container::enabled() {
         let (child, input, output, job) =
-            crate::app_container::spawn(executable, &["--plugin-worker"], &[])?;
+            crate::app_container::spawn(executable, &[WORKER_ARG], &[])?;
         return Ok(Launched {
             pid: child.id(),
             child: Box::new(child),
@@ -66,7 +66,7 @@ fn launch(executable: &Path) -> std::io::Result<Launched> {
     }
     let mut command = Command::new(executable);
     command
-        .arg("--plugin-worker")
+        .arg(WORKER_ARG)
         .env_clear()
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -292,6 +292,9 @@ impl Drop for ChildGuard {
         }
     }
 }
+
+/// The argument a host starts its worker executable with.
+pub const WORKER_ARG: &str = "--plugin-worker";
 
 pub fn run_worker() {
     let mut input = std::io::stdin().lock();

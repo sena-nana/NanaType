@@ -1,13 +1,30 @@
 # 包编辑器
 
-对应 [#6](https://github.com/sena-nana/NanaType/issues/6)，格式与边界见[统一包整体设计](package-design.md#包编辑器)。编辑器在“设置 → 插件与资源包”中，只修改草稿：当前皮肤、已安装的包、插件同意和运行中的插件都不会因为编辑而变化。导出 `.ntpkg` 再导入后，修改才会生效。
+对应 [#6](https://github.com/sena-nana/NanaType/issues/6)，格式与边界见[统一包整体设计](package-design.md#包编辑器)。编辑器是独立程序 **NanaType Editor**（`editor/`，单独构建、单独安装），与 NanaType 共用 `crates/frame` 中的皮肤渲染器、界面组件和插件宿主，但互不包含对方的代码、文案和资源：NanaType 中没有编辑入口，编辑器中也没有弹幕、联机、贴纸、输出和热键。
+
+编辑器只修改草稿：当前皮肤、已安装的包、插件同意和运行中的插件都不会因为编辑而变化。导出 `.ntpkg` 再在 NanaType 的“设置 → 插件与资源包”中导入后，修改才会生效。
+
+## 数据目录
+
+编辑器读写 NanaType 的数据目录（Windows `%APPDATA%\dev.sena-nana.nanatype`，macOS `~/Library/Application Support/dev.sena-nana.nanatype`），启动页显示当前路径：
+
+- `packages/`：NanaType 已安装的包，只读，用于编辑副本、复制和打包依赖；
+- `package-drafts/`：草稿；
+- 签名密钥（DPAPI 文件或钥匙串 `dev.sena-nana.nanatype.package-signing`），以前在 NanaType 中创建的密钥可以继续使用；
+- `config/settings.json`：只读，预览沿用 NanaType 中的皮肤个性化。
+
+便携版 NanaType 的数据在其程序旁的 `data/` 中，用 `nanatype-editor --data <该目录>` 指定。便携版编辑器自身也使用程序旁的 `data/`。命令行 `nanatype-editor <文件.ntpkg>` 直接打开一个包；再次启动会唤起已打开的窗口，NanaType 与编辑器可以同时运行。
 
 ## 打开工程
+
+启动页列出新建、打开、草稿和 NanaType 已安装的包：
 
 - **新建**：选择纯皮肤、纯资源、纯 Lua 或混装，填写包 ID。模板可以直接通过校验。
 - **打开 .ntpkg**：损坏的包也能打开以便修复。签名校验失败时，本地文件全部只读。
 - **编辑**（已安装的用户包）：从安装目录读取一份副本，安装目录本身不被改写。
 - **复制为新包**（任意包，包括内置包）：生成使用新 ID 的衍生副本，去除原签名，并写入 `derived_from`。
+
+在 NanaType 中安装新包后，点“重新加载”刷新列表。
 
 ## 文件
 
@@ -59,16 +76,16 @@
 皮肤通过校验后，用实际的渲染器绘制草稿，可以在三种视图之间切换：
 
 - **展示**、**历史**：与设置中的皮肤预览相同。
-- **输入**：输入窗口开启皮肤预览时的输入框（`dialogue` 的 `Source::Draft`），里面是一份私有的示例草稿。示例编辑器不能获得焦点，也不接受输入。当前输入窗口的草稿、编辑器内容和皮肤都不会改变。
+- **输入**：输入窗口开启皮肤预览时的输入框（`dialogue` 的 `Source::Draft`），里面是一份私有的示例草稿。示例编辑器不能获得焦点，也不接受输入，不发送任何消息。
 
-所选视图只属于编辑器，不影响设置中皮肤页的选择。
+预览与 NanaType 的皮肤页使用同一个 `nanatype_frame::ui::preview::stage`，每个样例都在私有的 `Stage` 上绘制。
 
 ## Lua 调试
 
 调试按以下规则运行：
 
 - 先阅读风险说明，再勾选“信任当前源码”，才能启动。
-- 脚本运行在与正式插件相同的独立 Wasm 工作进程中，受同样的沙箱和限额约束。
+- 脚本运行在与正式插件相同的独立 Wasm 工作进程中，受同样的沙箱和限额约束；工作进程由编辑器以 `--plugin-worker` 重新启动自身得到。
 - 系统进程的启动与回收在后台进行；启动失败会显示错误，停止或修改后忽略旧结果。
 - 调试器只发送你选择的测试事件（`line_start`、`line_end`、`speaking`、`chat_message` 或自定义 JSON）。
 - 返回的视图与命令只显示在调试面板中。
@@ -89,10 +106,11 @@
 ## 验证
 
 ```sh
-cargo test -p nanatype-theme editor
-cargo test -p nanatype --test package_editor -- --test-threads=1
+cargo test -p nanatype-theme --features editor editor
+cargo test -p nanatype-editor --test package_editor -- --test-threads=1
+cargo run -p nanatype-editor
 ```
 
-GPU 界面测试串行执行，在 `target/package-editor/` 下生成中英日 × 900／440／300px 的文件、包信息（含数据／管线表单）、签名、调试与预览截图；九种组合均检查 Tab／Enter 保存。
+GPU 界面测试串行执行，在 `target/package-editor/` 下生成中英日 × 900／440／300px 的文件、包信息（含数据／管线表单）、签名、调试与预览截图，以及编辑器窗口截图；九种组合均检查 Tab／Enter 保存。
 Windows 签名测试使用临时目录中的真实 DPAPI 密钥，覆盖重新加载、导出／安装及损坏存储拒绝读取；草稿失败恢复与过期校验各有独立回归，迟到的调试响应并入原有隔离调试测试。
 28 个内置皮肤的 168 张预览截图作为一次性 Windows 验收证据保存在 `target/package-editor/builtins/`，日常测试保留展示／历史及樱花输入预览。原生窗口 DPI、IME、系统文件选择器和安装包仍属于阶段 5 的平台验收。

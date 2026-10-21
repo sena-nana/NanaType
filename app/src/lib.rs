@@ -11,49 +11,38 @@
 pub mod app;
 pub mod assets;
 pub mod chat;
-pub mod clock;
 pub mod host;
-pub mod localtime;
 pub mod msg;
 pub mod output;
 pub mod p2p;
-pub mod package_editor;
-pub mod paths;
 mod perf;
 pub mod plugins;
 pub mod scheduler;
 pub mod services;
-pub mod skin_fonts;
-pub mod skin_theme;
 pub mod stickers;
 pub mod ui;
 pub mod windows;
+
+pub use nanatype_frame::{clock, debug_log, localtime, paths, skin_fonts, skin_theme};
 
 use std::process::ExitCode;
 
 use nana_ui::{DiagnosticsConfig, NanaApplication};
 
-use crate::services::instance::{Instance, acquire, listen};
+use crate::services::instance::{self, Product};
 use crate::windows::WindowKind;
-
-static INSTANCE: std::sync::OnceLock<std::net::TcpListener> = std::sync::OnceLock::new();
 
 /// Run the application; returns when the user quits.
 pub fn run() -> ExitCode {
-    if std::env::args().nth(1).as_deref() == Some("--plugin-worker") {
-        nanatype_plugins::run_worker();
+    if nanatype_frame::worker_entry() {
         return ExitCode::SUCCESS;
     }
     debug_log("main start");
-    let listener = match acquire() {
-        Instance::Primary(listener) => listener,
-        Instance::Secondary => {
-            debug_log("secondary instance; exiting");
-            return ExitCode::SUCCESS;
-        }
-    };
+    if !instance::claim(Product::APP) {
+        debug_log("secondary instance; exiting");
+        return ExitCode::SUCCESS;
+    }
     clock::now_ms();
-    INSTANCE.set(listener).ok();
 
     // The macro embeds the identity marker the packager validates against.
     let identity = nana_ui_platform::application_identity!(
@@ -81,25 +70,5 @@ pub fn run() -> ExitCode {
             eprintln!("NanaType: {error}");
             ExitCode::FAILURE
         }
-    }
-}
-
-/// Start answering second launches; called once the program can dispatch.
-pub fn listen_for_instances(show: impl Fn() + Send + 'static) {
-    if let Some(listener) = INSTANCE.get().and_then(|l| l.try_clone().ok()) {
-        listen(listener, show);
-    }
-}
-
-/// Append a line to the file named by `NANATYPE_DEBUG` (development aid).
-pub fn debug_log(line: &str) {
-    use std::io::Write;
-    if let Some(path) = std::env::var_os("NANATYPE_DEBUG")
-        && let Ok(mut f) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-    {
-        let _ = writeln!(f, "{:>7} {line}", clock::now_ms());
     }
 }

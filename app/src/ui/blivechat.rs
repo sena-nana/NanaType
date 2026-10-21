@@ -264,7 +264,7 @@ fn comet_section(ui: Ui) -> AnyView {
         }
     });
     let reset = confirm(
-        ui,
+        *ui,
         ui.now_t("int-comet-reset-question"),
         ui.now_t("int-comet-reset"),
         |armed| {

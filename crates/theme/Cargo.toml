@@ -12,6 +12,9 @@ description = "NanaType skin packages: manifest, inheritance, validation, instal
 # With no font files in `fonts/` it adds nothing either way.
 default = ["builtin-fonts"]
 builtin-fonts = []
+# Package authoring for NanaType Editor: drafts, in-place manifest edits,
+# formatting and signing. NanaType itself installs and verifies without it.
+editor = ["dep:toml_edit"]
 
 [dependencies]
 nana-ui-core.workspace = true
@@ -22,7 +25,7 @@ serde_json.workspace = true
 flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
 toml = { version = "1.1", default-features = false, features = ["parse", "serde", "display"] }
 # The package editor edits manifests in place, keeping comments and key order.
-toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }
+toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"], optional = true }
 # Skin export uses standard Deflate levels, without the optional Zopfli encoder.
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 imagesize = "0.15"

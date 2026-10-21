@@ -157,6 +157,12 @@ WebM 解码使用固定版本的 libvpx：Windows 和 Apple Silicon 首次构建
 cargo run -p nanatype
 ```
 
+包编辑器是独立程序 NanaType Editor（[说明](docs/package-editor.md)），与 NanaType 共用 `crates/frame`，各自构建和打包，互不包含对方的代码与文案：
+
+```bash
+cargo run -p nanatype-editor
+```
+
 开发构建保留工作区代码的完整调试信息，第三方依赖仅保留源码行号，以减少编译和链接时的调试数据；不影响应用功能，但调试第三方依赖时不包含变量和类型信息。
 
 发布默认使用 `dist`：`opt-level = "s"`、thin LTO、单 codegen unit，并单独生成 PDB。`dist-small` 使用 `z`，保留相同功能；[性能对比](docs/release-profile-performance.md)显示其便携包再缩小约 2 MiB，但关键场景 CPU 耗时增加约 16%～27%，因此保持可选。
@@ -179,14 +185,16 @@ cargo run -p nanatype --example snapshots -- target/snapshots nanatype.night ja-
 
 ```bash
 pwsh scripts/package.ps1
+pwsh scripts/package.ps1 -Product editor
 ```
 
-更小的便携包可用 `pwsh scripts/package.ps1 -Portable -Profile dist-small`。打包脚本固定关闭发布构建的增量编译并使用锁文件；编译、许可证或发布自检失败时停止。便携包排除自检产生的 `data/` 用户数据，首次运行时由应用创建；内置字体、解码器、GPU 后备渲染和异常恢复均保留。
+`-Product editor` 打包 NanaType Editor（`NanaTypeEditor-<版本>-setup.exe`／`-portable.zip`），只构建 `nanatype-editor`。`sh scripts/check-product-split.sh` 检查两个程序的依赖与特性没有越界（CI 中运行）。更小的便携包可用 `pwsh scripts/package.ps1 -Portable -Profile dist-small`。打包脚本固定关闭发布构建的增量编译并使用锁文件；编译、许可证或发布自检失败时停止。便携包排除自检产生的 `data/` 用户数据，首次运行时由应用创建；内置字体、解码器、GPU 后备渲染和异常恢复均保留。
 
 macOS 上打成 `NanaType.app`、zip 与 dmg（需要 `nana-packager`，产物未签名）：
 
 ```bash
 scripts/package-macos.sh
+scripts/package-macos.sh --product editor
 ```
 
 Syphon.framework 放在 `Contents/Frameworks`，完整许可文本在 `Contents/Resources/THIRD_PARTY_LICENSES.txt`（由 `scripts/macos-licenses.py` 按 macOS 目标的依赖生成）。
@@ -227,7 +235,9 @@ Syphon.framework 放在 `Contents/Frameworks`，完整许可文本在 `Contents/
 | `crates/core` | 会话逻辑：草稿、发送、继续、队列、历史、回溯 |
 | `crates/p2p` | iroh 双人联机、会话排序、重连恢复与图片传输 |
 | `crates/update` | 检查更新：签名的 Release 清单、文件代理、校验下载 |
-| `app` | NanaUI 宿主、窗口、视图、热键、托盘、Spout |
+| `crates/frame` | 两个程序共用的框架：皮肤渲染（展示框、历史、输入框）、界面组件、皮肤预览、插件宿主、媒体服务与路径 |
+| `app` | NanaType：NanaUI 宿主、窗口、视图、热键、托盘、Spout |
+| `editor` | NanaType Editor：包编辑器、签名与隔离调试 |
 
 纯逻辑 crate 不依赖界面框架，可单独测试。
 

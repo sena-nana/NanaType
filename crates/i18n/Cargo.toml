@@ -6,6 +6,11 @@ license.workspace = true
 rust-version.workspace = true
 description = "NanaType UI strings: Fluent bundles for zh-CN, en-US and ja-JP"
 
+[features]
+# Each product compiles in its own strings beside the shared ones.
+app = []
+editor = []
+
 [dependencies]
 fluent-bundle = "0.16"
 fluent-syntax = "0.12"

@@ -290,10 +290,10 @@ fn main() {
                                 )])));
                         }
                         let track_ui = if i == 1 { ui.remote() } else { *ui };
-                        let runtime_animation = dialogue::display_animating(track_ui, ms);
+                        let runtime_animation = dialogue::display_animating(*track_ui, ms);
                         let animate = runtime_animation
-                            || nanatype::ui::sweep::animating(track_ui)
-                            || nanatype::ui::shader_effects::animating(track_ui);
+                            || nanatype::ui::sweep::animating(*track_ui)
+                            || nanatype::ui::shader_effects::animating(*track_ui);
                         if runtime_animation {
                             track_ui.now.set(ms);
                         }

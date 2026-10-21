@@ -65,7 +65,7 @@ fn avatar(ui: Ui, size: f32) -> AnyView {
             )
             .children((
                 widget(IconGlyph::new(ti::USER_CIRCLE).size(size)),
-                super::danmaku::reactive_picture(ui, asset.clone(), size / 2.0),
+                super::danmaku::reactive_picture(*ui, asset.clone(), size / 2.0),
             ))
             .into_any()
         },

@@ -5,7 +5,6 @@ mod chat;
 pub mod douyin;
 mod editor;
 mod live;
-mod package_editor;
 mod packages;
 mod skins;
 mod startup;
@@ -75,7 +74,6 @@ impl From<nana_ui::runtime::RichEditCommand> for EditorCommand {
 pub struct App {
     pub plugins: crate::plugins::Manager,
     plugin_activation: crate::plugins::Activation,
-    pub package_editor: crate::package_editor::Editor,
     pub paths: Paths,
     pub settings: Settings,
     pub readonly_settings: bool,
@@ -150,13 +148,7 @@ pub struct App {
 /// How long an error stays in the tray tooltip.
 const TRAY_ERROR_SECS: u64 = 30;
 
-fn locale_of(s: &Settings) -> Locale {
-    s.general
-        .locale
-        .as_deref()
-        .and_then(Locale::from_tag)
-        .unwrap_or_else(Locale::system)
-}
+use nanatype_frame::locale_of;
 
 impl App {
     pub fn new(ctx: &RuntimeProgramContext<Msg>) -> Self {
@@ -218,10 +210,6 @@ impl App {
         let mut app = Self {
             plugins: Default::default(),
             plugin_activation: Default::default(),
-            package_editor: crate::package_editor::Editor::new(
-                paths.package_drafts(),
-                Arc::new(crate::package_editor::SecretKeys::new(&paths.data)),
-            ),
             assets: AssetLibrary::new(paths.blobs()),
             sticker_manager: workers.sticker_manager,
             telegram: workers.telegram,
@@ -296,7 +284,9 @@ impl App {
         app.finish_startup(locale);
         startup::dev_hooks(ctx);
         let ctx = ctx.clone();
-        crate::listen_for_instances(move || ctx.dispatch(Msg::SecondInstance));
+        crate::services::instance::serve(crate::services::instance::Product::APP, move || {
+            ctx.dispatch(Msg::SecondInstance)
+        });
         app.plugins.sync(
             &app.registry,
             &app.settings.enabled_plugins,
@@ -384,17 +374,7 @@ impl App {
             status.notices.remove(0);
         }
         self.ui.status.set(Arc::new(status));
-        let tone = if error {
-            nana_ui::ToastTone::Danger
-        } else {
-            nana_ui::ToastTone::Info
-        };
-        self.toasts.push(ToastRequest::new(
-            text.clone(),
-            tone,
-            feedback::NOTICE_MS,
-            true,
-        ));
+        self.toasts.push(ToastRequest::notice(text.clone(), error));
         // The tray says the latest error, so it is seen with every window
         // hidden (summon mode) too.
         self.tray_error = error.then_some((id, text));
@@ -1706,25 +1686,6 @@ impl App {
             FileTarget::StickerFolder => {
                 FileDialogRequest::new(id, FileDialogKind::PickFolder).title(t("assets-add-folder"))
             }
-            FileTarget::EditPackage => FileDialogRequest::new(id, FileDialogKind::OpenFile)
-                .title(t("pkgedit-open-file"))
-                .filters([skin_filter]),
-            FileTarget::ExportProject => FileDialogRequest::new(id, FileDialogKind::SaveFile)
-                .title(t("pkgedit-export"))
-                .filters([skin_filter])
-                .file_name(format!(
-                    "{}.ntpkg",
-                    self.ui
-                        .package_editor
-                        .with_untracked(|v| v.as_ref().map(|v| v.package.clone()))
-                        .unwrap_or_default()
-                )),
-            FileTarget::ImportProjectAsset => FileDialogRequest::new(id, FileDialogKind::OpenFile)
-                .title(t("pkgedit-import"))
-                .filters([FileFilter::new(
-                    t("pkgedit-import"),
-                    nanatype_theme::editor::IMPORT_EXTENSIONS.iter().copied(),
-                )]),
         };
         let window = [WindowKind::Settings, WindowKind::Input]
             .into_iter()
@@ -1773,9 +1734,6 @@ impl App {
             FileTarget::StickerFolder => {
                 self.import_sticker_folders(vec![path]);
             }
-            FileTarget::EditPackage => self.editor_open_archive(path),
-            FileTarget::ExportProject => self.editor_export(path),
-            FileTarget::ImportProjectAsset => self.editor_import(path),
         }
     }
 
@@ -1844,7 +1802,6 @@ impl App {
 
     pub fn update(&mut self, msg: Msg) {
         match msg {
-            Msg::PackageEditor(action) => self.package_editor_msg(action),
             m @ (Msg::RequestPluginActivation(_)
             | Msg::CancelPluginActivation
             | Msg::ConfirmPluginActivation

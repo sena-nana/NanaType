@@ -105,7 +105,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                             }));
                         } else {
                             actions.push(confirm(
-                                ui,
+                                *ui,
                                 ui.now_t("assets-remove-folder-confirm"),
                                 ui.now_t("assets-remove"),
                                 |armed| remove_button(ui, armed),
@@ -133,7 +133,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
         move || ui.settings.with(|s| s.assets.phrases.len()),
         move |n| {
             if *n == 0 {
-                return crate::ui::kit::empty_state(ui.now_t("empty-phrases"), None);
+                return crate::ui::kit::empty_state::<Msg>(ui.now_t("empty-phrases"), None);
             }
             let rows: Vec<AnyView> = (0..*n)
                 .map(|i| {
@@ -185,7 +185,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                                 }))
                             }),
                         confirm(
-                            ui,
+                            *ui,
                             ui.now_t("assets-phrase-remove-confirm"),
                             ui.now_t("assets-remove"),
                             |armed| remove_button(ui, armed),

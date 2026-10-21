@@ -12,7 +12,7 @@ pub fn audit(ui: Ui, out: &std::path::Path, theme: Arc<nana_ui::CompiledTheme>) 
         ("maximum-square", [8192, 8192], 200),
         ("maximum-width", [8192, 96], 48),
     ] {
-        let mut draft = settings::preview::Draft::load(&ui.settings.get_untracked(), &id, ui);
+        let mut draft = settings::preview::load_draft(&ui.settings.get_untracked(), &id, ui);
         for pane in [&mut draft.display, &mut draft.history] {
             pane.width = w.to_string();
             pane.height = h.to_string();

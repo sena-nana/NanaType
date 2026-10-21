@@ -4399,6 +4399,7 @@ dependencies = [
  "nanatype-bridge",
  "nanatype-core",
  "nanatype-douyin",
+ "nanatype-frame",
  "nanatype-i18n",
  "nanatype-markup",
  "nanatype-model",
@@ -4512,6 +4513,58 @@ dependencies = [
  "tungstenite",
  "ureq",
  "url",
+]
+
+[[package]]
+name = "nanatype-editor"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "embed-resource",
+ "image",
+ "nana-ui",
+ "nana-ui-core",
+ "nana-ui-devtools",
+ "nana-ui-platform",
+ "nanatype-frame",
+ "nanatype-i18n",
+ "nanatype-markup",
+ "nanatype-model",
+ "nanatype-plugins",
+ "nanatype-secrets",
+ "nanatype-settings",
+ "nanatype-theme",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "nanatype-frame"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "image",
+ "imagesize",
+ "nana-text",
+ "nana-ui",
+ "nana-ui-core",
+ "nana-ui-devtools",
+ "nana-ui-platform",
+ "nanatype-core",
+ "nanatype-i18n",
+ "nanatype-markup",
+ "nanatype-model",
+ "nanatype-plugins",
+ "nanatype-settings",
+ "nanatype-theme",
+ "pollster",
+ "raw-window-handle",
+ "serde",
+ "serde_json",
+ "tiny-skia",
+ "ttf-parser",
+ "unicode-segmentation",
+ "windows 0.62.2",
 ]
 
 [[package]]

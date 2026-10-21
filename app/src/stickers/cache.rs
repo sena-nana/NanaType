@@ -105,6 +105,21 @@ pub fn lookup(url: &str) -> Option<Arc<CachedImage>> {
 pub fn publish(images: impl Iterator<Item = Arc<CachedImage>>) {
     let mut catalog = IMAGES.write().unwrap_or_else(|e| e.into_inner());
     *catalog = images.map(|c| (c.url(), c)).collect();
+    // Rich text draws the animated ones from their texture slots.
+    nanatype_frame::ui::rich::publish_animated(
+        catalog
+            .iter()
+            .filter(|(_, c)| c.animated())
+            .map(|(url, c)| {
+                let picture = nanatype_frame::ui::rich::AnimatedPicture {
+                    slot: c.slot(),
+                    width: c.width,
+                    height: c.height,
+                };
+                (url.clone(), picture)
+            })
+            .collect(),
+    );
 }
 pub fn animations() -> Vec<Arc<CachedImage>> {
     IMAGES

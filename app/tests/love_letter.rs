@@ -264,7 +264,7 @@ fn love_letter_preview_and_interrupted_writing_have_finite_clocks() {
     let doc = nanatype_markup::parse("情书 喜欢 心 永远 Love").doc;
     let mut session = common::session().mount_at(100_000, 932, 272, move || {
         dialogue::preview_box(
-            ui,
+            *ui,
             dialogue::BoxCtx {
                 skin: skin.clone(),
                 urls: Arc::new(Default::default()),

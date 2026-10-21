@@ -8,8 +8,7 @@ use std::sync::atomic::Ordering;
 
 use nana_ui::runtime::view::{entity_ref, with_refs};
 use nana_ui::runtime::{
-    DocumentId, Entity, FrameworkError, RichTextEditor, RuntimeDocument, Toast, ToastDismissed,
-    ToastStack,
+    DocumentId, Entity, FrameworkError, RichTextEditor, RuntimeDocument, Toast, ToastStack,
 };
 use nana_ui::{
     CompiledTheme, DocumentAccessError, FrameDemand, GpuBackendPolicy, MaterialEffect, RoutedInput,
@@ -88,31 +87,29 @@ fn frame_policy(
             }
             let track = if remote { ui.remote() } else { ui };
             let follow = if remote { peer_follow } else { follow };
-            let typing = dialogue::display_animating(track, now);
-            let movement = crate::ui::sweep::animating(track)
-                || crate::ui::text_light::animating(track, now)
-                || crate::ui::text_scramble::animating(track, now)
+            let typing = dialogue::display_animating(*track, now);
+            let movement = crate::ui::sweep::animating(*track)
+                || crate::ui::text_light::animating(*track, now)
+                || crate::ui::text_scramble::animating(*track, now)
                 || follow.wants_frame()
                 || (!remote && pager.wants_frame());
             (
                 track.now,
                 typing,
-                movement || crate::ui::shader_effects::animating(track),
+                movement || crate::ui::shader_effects::animating(*track),
                 follow.next_line_at(),
                 if typing || movement { 60 } else { 30 },
             )
         }
         Some(WindowKind::History) => {
-            let fade = history::fade_schedule(ui, now);
+            let fade = history::fade_schedule(*ui, now);
             (ui.history_now, fade.animating, false, fade.next_at, 60)
         }
         Some(WindowKind::Input) => (ui.pulse_ms, input::mirror_chip_pulsing(ui), false, None, 30),
         Some(WindowKind::Settings) => (
             ui.settings_pulse_ms,
             settings::links_pulsing(ui),
-            crate::ui::shader_effects::preview_animating(ui)
-                || crate::ui::text_light::preview_animating(ui, now)
-                || crate::ui::text_scramble::preview_animating(ui, now),
+            crate::ui::preview::animating(*ui, now),
             None,
             30,
         ),
@@ -326,23 +323,11 @@ impl Host {
                 ) else {
                     continue;
                 };
-                let toast = Toast::new(request.title.as_str(), request.tone)
-                    .timeout(std::time::Duration::from_millis(request.ms))
-                    .dismissible(true);
-                let cx = doc.context_mut();
-                let pushed = cx.push_toast(stack, toast).and_then(|toast| {
-                    cx.on(toast, move |_, _: &ToastDismissed, vcx| {
-                        vcx.dispatch_program_all(Msg::ToastDismissed(kind, toast));
-                    })
-                });
-                match pushed {
-                    Ok(()) => shown = true,
-                    Err(e) => crate::debug_log(&format!("toast: {e}")),
-                }
+                shown |= request.push(doc, stack, move |toast| Msg::ToastDismissed(kind, toast));
             }
             // No window to show it in yet (a notice at start-up): keep it
             // for one that opens while it is still fresh.
-            if !shown && request.at.elapsed() < std::time::Duration::from_millis(request.ms) {
+            if !shown && request.fresh() {
                 self.app.toasts.push(request);
             }
         }
@@ -457,7 +442,7 @@ impl Host {
             let world = self.docs.get(&ui.display_kind().id())?.context().world();
             let (_, layout) = world.text_layout(ui.text_node.get_untracked()?)?;
             let vertical = ui
-                .display_kind()
+                .canvas()
                 .vertical_text(&self.app.settings, &self.app.skin);
             if layout.is_vertical() != vertical {
                 return None;
@@ -919,7 +904,7 @@ impl RuntimeProgram for Host {
                         )
                         && ((current.0 - w).abs() > 1.0 || (current.1 - h).abs() > 1.0)
                     {
-                        let profile = crate::ui::settings::preview::Draft::load(
+                        let profile = crate::ui::settings::preview::load_draft(
                             &self.app.settings,
                             &self.app.settings.skin.id,
                             self.app.ui,

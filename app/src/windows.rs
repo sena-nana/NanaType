@@ -9,6 +9,8 @@ use std::collections::HashMap;
 use nana_ui::{MaterialEffect, WindowDescriptor, WindowHandle};
 use nana_ui_platform::host::WindowCommand;
 use nana_ui_platform::{WindowId, WindowRole};
+use nanatype_frame::canvas::{self, Canvas};
+pub use nanatype_frame::shell::tint_caption;
 use nanatype_settings::{
     GeometryStore, InputPresence, Lock, MonitorInfo, OverlaySettings, Placement, Settings,
 };
@@ -97,19 +99,22 @@ impl WindowKind {
         }
     }
 
-    pub fn overlay(self, s: &Settings) -> Option<&OverlaySettings> {
+    /// The canvas this window shows, for the broadcast windows the skin draws.
+    pub fn canvas(self) -> Option<Canvas> {
         match self {
-            Self::Input => Some(&s.overlays.input),
-            Self::Display => Some(&s.overlays.display),
-            Self::PeerDisplay => Some(&s.overlays.peer_display),
-            Self::History => Some(&s.overlays.history),
-            Self::Settings | Self::Chat => None,
+            Self::Display => Some(Canvas::Display),
+            Self::PeerDisplay => Some(Canvas::PeerDisplay),
+            Self::History => Some(Canvas::History),
+            Self::Input | Self::Settings | Self::Chat => None,
         }
     }
 
-    /// Vertical writing is the window's own switch; the skin only has to support it.
-    pub fn vertical_text(self, s: &Settings, skin: &Skin) -> bool {
-        skin.dialogue.responsive.is_some() && self.overlay(s).is_some_and(|o| o.vertical_text)
+    pub fn overlay(self, s: &Settings) -> Option<&OverlaySettings> {
+        match self {
+            Self::Input => Some(&s.overlays.input),
+            Self::Settings | Self::Chat => None,
+            _ => self.canvas().map(|c| c.overlay(s)),
+        }
     }
 
     pub fn overlay_mut(self, s: &mut Settings) -> Option<&mut OverlaySettings> {
@@ -189,35 +194,11 @@ pub fn debug_opaque() -> bool {
 
 /// Logical size of a window for the current skin and settings.
 pub fn size_of(kind: WindowKind, skin: &Skin, s: &Settings) -> (f32, f32) {
-    let d = &skin.dialogue;
-    let profile = s.skin.personalizations.get(&s.skin.id);
-    let region = if profile.is_some() {
-        d.region
-    } else {
-        s.skin.overrides.region.unwrap_or(d.region)
-    };
-    let pad = d.overscan * 2.0;
     match kind {
-        WindowKind::Display => profile
-            .map_or(s.overlays.display.size, |p| p.display.size)
-            .map(|[w, h]| (w, h))
-            .unwrap_or((region[0] + pad, region[1] + pad)),
-        WindowKind::PeerDisplay => s
-            .overlays
-            .peer_display
-            .size
-            .map(|[w, h]| (w, h))
-            .unwrap_or_else(|| {
-                let region = s.skin.overrides.region.unwrap_or(d.region);
-                (region[0] + pad, region[1] + pad)
-            }),
         WindowKind::Input => INPUT_SIZE,
-        WindowKind::History => profile
-            .map_or(s.overlays.history.size, |p| p.history.size)
-            .map(|[w, h]| (w, h))
-            .unwrap_or((skin.history.width, skin.history.height)),
         WindowKind::Settings => (920.0, 660.0),
         WindowKind::Chat => (400.0, 640.0),
+        _ => canvas::size_of(kind.canvas().expect("broadcast window"), skin, s),
     }
 }
 
@@ -234,66 +215,6 @@ pub fn icon() -> Option<nana_ui_platform::WindowIcon> {
         })
         .clone()?;
     nana_ui_platform::WindowIcon::from_rgba(rgba, w, h).ok()
-}
-
-/// Paint a window's system title bar with `theme`'s background and text,
-/// in dark mode when the background is dark (Windows 11; Windows 10 takes
-/// only the dark mode). Other systems keep their own title bar.
-pub fn tint_caption(handle: &WindowHandle, theme: &nana_ui::CompiledTheme) {
-    let p = theme.palette();
-    let rgb = |c: nana_ui_core::SemanticColor| {
-        let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-        [b(c.r), b(c.g), b(c.b)]
-    };
-    let (bg, text) = (rgb(p.background), rgb(p.text));
-    let luma = 0.2126 * f32::from(bg[0]) + 0.7152 * f32::from(bg[1]) + 0.0722 * f32::from(bg[2]);
-    let dark = luma < 128.0;
-    drop(handle.with_native_handle(move |h| {
-        #[cfg(windows)]
-        if let raw_window_handle::RawWindowHandle::Win32(w) = h.as_raw() {
-            caption_colors(w.hwnd.get(), bg, text, dark);
-        }
-        #[cfg(not(windows))]
-        let _ = (h, bg, text, dark);
-    }));
-}
-
-#[cfg(windows)]
-fn caption_colors(hwnd: isize, bg: [u8; 3], text: [u8; 3], dark: bool) {
-    use windows::Win32::Foundation::{COLORREF, HWND};
-    use windows::Win32::Graphics::Dwm::{
-        DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute,
-    };
-    let hwnd = HWND(hwnd as *mut core::ffi::c_void);
-    let colorref =
-        |[r, g, b]: [u8; 3]| COLORREF(u32::from(r) | u32::from(g) << 8 | u32::from(b) << 16);
-    // A Win32 `BOOL`.
-    let dark = i32::from(dark);
-    let caption = colorref(bg);
-    let text = colorref(text);
-    // SAFETY: `hwnd` is the live window the platform handed us on its own
-    // thread; each attribute is read from a local of the documented size.
-    // Failures (older Windows) leave the default title bar.
-    unsafe {
-        let _ = DwmSetWindowAttribute(
-            hwnd,
-            DWMWA_USE_IMMERSIVE_DARK_MODE,
-            std::ptr::from_ref(&dark).cast(),
-            std::mem::size_of_val(&dark) as u32,
-        );
-        let _ = DwmSetWindowAttribute(
-            hwnd,
-            DWMWA_CAPTION_COLOR,
-            std::ptr::from_ref(&caption).cast(),
-            std::mem::size_of_val(&caption) as u32,
-        );
-        let _ = DwmSetWindowAttribute(
-            hwnd,
-            DWMWA_TEXT_COLOR,
-            std::ptr::from_ref(&text).cast(),
-            std::mem::size_of_val(&text) as u32,
-        );
-    }
 }
 
 pub fn descriptor(kind: WindowKind, title: &str, skin: &Skin, s: &Settings) -> WindowDescriptor {
