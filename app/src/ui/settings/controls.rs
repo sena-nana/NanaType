@@ -5,18 +5,17 @@ use std::sync::{Arc, LazyLock};
 
 use nana_ui::runtime::view::{AnyView, IntoView, segmented_option, widget};
 use nana_ui::runtime::{
-    ColorChanged, ColorField, NumberChanged, NumberInput, RangeChanged, RangeField,
+    ColorChanged, ColorField, IconButton, NumberChanged, NumberInput, RangeChanged, RangeField,
     SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption, Stack,
     StatusBadge, Switch, Text, TextChanged, TextInput, ToggleChanged,
 };
-use nana_ui::{ControlSize, StatusTone};
+use nana_ui::{ButtonKind, ControlSize, StatusTone};
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_i18n::Locale;
 use nanatype_model::Rgba8;
 use nanatype_settings::Settings;
 
 use crate::msg::Msg;
-use crate::ui::input::PULSE_MS;
 use crate::ui::{I18N, LinkState, Status, Ui};
 
 pub static ICON_PNG_B64: LazyLock<String> =
@@ -50,26 +49,40 @@ pub fn section_with(ui: Ui, title_key: &str, rows: Vec<(AnyView, Shown)>) -> Any
     crate::ui::kit::section_titled(title, rows)
 }
 
-/// The rows that only mean something while a master toggle is on. They fold
-/// away with it, leaving a one-line hint, so a switched-off feature does not
-/// show a page of dead settings.
+/// The rows that only mean something while a master toggle is on, for
+/// [`section_with`]. They fold away with it, divider and all, so a
+/// switched-off feature does not show a page of dead settings.
 pub fn when_on(
     ui: Ui,
     enabled: impl Fn(&Settings) -> bool + Send + Sync + Copy + 'static,
     rows: Vec<AnyView>,
-    off_hint_key: &'static str,
-) -> AnyView {
-    widget(Stack::column(0.0))
-        .children((
-            widget(Stack::column(0.0))
-                .visible(move || ui.settings.with(|s| enabled(s)))
-                .children(divided(rows)),
-            widget(Stack::column(0.0))
-                .visible(move || !ui.settings.with(|s| enabled(s)))
-                .children(block(hint(ui.now_t(off_hint_key)))),
-        ))
-        .into_any()
+) -> (AnyView, Shown) {
+    shown_if(
+        widget(Stack::column(0.0))
+            .children(divided(rows))
+            .into_any(),
+        move || ui.settings.with(|s| enabled(s)),
+    )
 }
+
+/// A feature's card: its master row leads, and the rows that only mean
+/// something while `enabled` holds fold away with it.
+pub fn toggled_section(
+    ui: Ui,
+    title_key: &str,
+    master: AnyView,
+    enabled: impl Fn(&Settings) -> bool + Send + Sync + Copy + 'static,
+    rows: Vec<AnyView>,
+) -> AnyView {
+    section_with(
+        ui,
+        title_key,
+        vec![(master, None), when_on(ui, enabled, rows)],
+    )
+}
+
+/// Period of a connecting badge's breath (ms).
+const PULSE_MS: u64 = 1200;
 
 /// Whether any link badge on the visible page is breathing, so the settings
 /// window needs frames for it.
@@ -77,7 +90,7 @@ pub fn links_pulsing(ui: Ui) -> bool {
     !ui.reduced_motion.get_untracked()
         && matches!(
             ui.page.get_untracked(),
-            super::Page::Integrations | super::Page::Output | super::Page::Blivechat
+            super::Page::Integrations | super::Page::Output | super::Page::Platforms
         )
         && ui.status.with_untracked(|s| {
             [
@@ -194,6 +207,34 @@ fn breathing_badge(
 /// Label (and hint) on the left, control on the right; stacks when narrow.
 pub fn row(ui: Ui, label_key: &str, hint_key: Option<&str>, control: AnyView) -> AnyView {
     row_text(ui.now_t(label_key), hint_key.map(|k| ui.now_t(k)), control)
+}
+
+/// An info mark whose tooltip carries the detail a label leaves out.
+pub fn info_tip(ui: Ui, key: &str) -> AnyView {
+    widget(
+        IconButton::new(nana_ui::icons_tabler::INFO_CIRCLE, ui.now_t(key))
+            .size(ControlSize::Small)
+            .kind(ButtonKind::Ghost)
+            .with_tooltip(ui.now_t(key)),
+    )
+    .into_any()
+}
+
+/// [`row`] with an info mark before its control, for detail worth a look
+/// but not a line of its own.
+pub fn row_tip(ui: Ui, label_key: &str, tip_key: &str, control: AnyView) -> AnyView {
+    row(
+        ui,
+        label_key,
+        None,
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::HAIR)
+                .align(AlignSpec::Center),
+        )
+        .children((info_tip(ui, tip_key), control))
+        .into_any(),
+    )
 }
 
 /// [`row`] whose hint follows the settings (it is re-read on every change).

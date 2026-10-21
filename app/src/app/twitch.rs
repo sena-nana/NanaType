@@ -1,4 +1,4 @@
-use crate::{app::App, chat::Platform, msg::Msg, ui::settings::Page};
+use crate::{app::App, chat::Platform, msg::Msg};
 use nanatype_core::Event as CoreEvent;
 use nanatype_model::{Document, outgoing};
 use nanatype_twitch::{
@@ -101,8 +101,7 @@ impl App {
     }
     fn twitch_login(&mut self) {
         self.twitch_disable_send();
-        self.ui.page.set(Page::Twitch);
-        self.open_settings();
+        self.update(Msg::SettingsPlatform(Platform::Twitch));
         self.twitch.login();
     }
     fn twitch_toggle(&mut self) {
@@ -114,8 +113,7 @@ impl App {
         if state.can_send() {
             self.twitch_state(|s| s.confirm = true);
         }
-        self.ui.page.set(Page::Twitch);
-        self.open_settings();
+        self.update(Msg::SettingsPlatform(Platform::Twitch));
     }
     fn twitch_confirm(&mut self, accept: bool) {
         let state = self.ui.twitch.get_untracked();

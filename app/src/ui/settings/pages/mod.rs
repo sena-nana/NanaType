@@ -22,6 +22,7 @@ mod hotkeys;
 mod integrations;
 mod onboarding;
 mod output;
+mod platforms;
 mod playback;
 mod skin_grid;
 mod skins;
@@ -37,6 +38,7 @@ use self::hotkeys::*;
 use self::integrations::*;
 use self::onboarding::*;
 use self::output::*;
+use self::platforms::*;
 use self::playback::*;
 use self::skins::*;
 use self::windows::*;
@@ -74,11 +76,6 @@ use crate::windows::WindowKind;
 
 pub fn page(ui: Ui, page: Page) -> AnyView {
     let body = match page {
-        Page::Bilibili => crate::ui::bilibili::settings_page(ui),
-        Page::Douyin => crate::ui::douyin::settings_page(ui),
-        Page::Youtube => crate::ui::youtube::settings_page(ui),
-        Page::Twitch => crate::ui::twitch::settings_page(ui),
-        Page::Blivechat => crate::ui::blivechat::settings_page(ui),
         Page::General => general(ui),
         Page::Playback => playback(ui),
         Page::Skins => skins(ui),
@@ -87,6 +84,7 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
         Page::History => history(ui),
         Page::Hotkeys => hotkeys(ui),
         Page::Output => output(ui),
+        Page::Platforms => platforms(ui),
         Page::Integrations => integrations(ui),
         Page::Assets => assets(ui),
         Page::About => about(ui),
@@ -103,6 +101,9 @@ pub fn actions(ui: Ui, page: Page) -> Option<AnyView> {
             Msg::PickFile(FileTarget::ImportSkin)
         })),
         Page::Packages => Some(crate::ui::plugins::actions(ui)),
+        Page::Platforms => Some(button(ui, "chat-open-panel", || {
+            Msg::ShowWindow(WindowKind::Chat)
+        })),
         _ => None,
     }
 }

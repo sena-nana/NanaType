@@ -105,7 +105,6 @@ fn frame_policy(
             let fade = history::fade_schedule(*ui, now);
             (ui.history_now, fade.animating, false, fade.next_at, 60)
         }
-        Some(WindowKind::Input) => (ui.pulse_ms, input::mirror_chip_pulsing(ui), false, None, 30),
         Some(WindowKind::Settings) => (
             ui.settings_pulse_ms,
             settings::links_pulsing(ui),

@@ -3,12 +3,11 @@ use super::{
     Ui,
     settings::controls::{
         blivechat_badge, block, button, code_text, confirm, edit, port, primary, row, section,
-        segmented, select_keys, switch, when_on,
+        segmented, select_keys, switch, toggled_section,
     },
 };
 use crate::msg::Msg;
 use crate::ui::kit::{Type, gap};
-use crate::windows::WindowKind;
 use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
 use nana_ui::runtime::{Activate, Button, Stack, Text, TextChanged, TextInput, TextSubmitted};
@@ -27,46 +26,24 @@ fn source_is(ui: Ui, source: BlivechatSource) -> impl Fn() -> bool + Send + 'sta
 pub fn settings_page(ui: Ui) -> AnyView {
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
-            section(
+            toggled_section(
                 ui,
                 "",
-                vec![
-                    row(
-                        ui,
-                        "int-blive",
-                        Some("int-blive-hint"),
-                        widget(
-                            Stack::row(0.0)
-                                .gap_step(gap::step::CONTROL)
-                                .align(AlignSpec::Center),
-                        )
-                        .children((
-                            blivechat_badge(ui),
-                            switch(
-                                ui,
-                                |s| s.integrations.blivechat.enabled,
-                                |s, v| s.integrations.blivechat.enabled = v,
-                            ),
-                        ))
-                        .into_any(),
-                    ),
-                    when_on(
-                        ui,
-                        |s| s.integrations.blivechat.enabled,
-                        vec![
-                            row(ui, "int-blive-source", None, source_choice(ui)),
-                            row(
-                                ui,
-                                "int-blive-panel",
-                                Some("int-blive-panel-hint"),
-                                button(ui, "int-blive-open-panel", || {
-                                    Msg::ShowWindow(WindowKind::Chat)
-                                }),
-                            ),
-                        ],
-                        "int-off-hint",
-                    ),
-                ],
+                row(
+                    ui,
+                    "int-blive",
+                    None,
+                    crate::ui::kit::hstack((
+                        blivechat_badge(ui),
+                        switch(
+                            ui,
+                            |s| s.integrations.blivechat.enabled,
+                            |s, v| s.integrations.blivechat.enabled = v,
+                        ),
+                    )),
+                ),
+                |s| s.integrations.blivechat.enabled,
+                vec![row(ui, "int-blive-source", None, source_choice(ui))],
             ),
             widget(Stack::column(0.0))
                 .visible(source_is(ui, BlivechatSource::Server))
@@ -109,7 +86,7 @@ fn server_section(ui: Ui) -> AnyView {
             row(
                 ui,
                 "int-blive-room-kind",
-                Some("int-blive-room-kind-hint"),
+                None,
                 segmented(
                     ui,
                     select_keys(

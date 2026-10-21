@@ -1,25 +1,21 @@
 use super::Ui;
-use super::settings::controls::{block, hint, row, section, switch, text};
+use super::settings::controls::{
+    block, button, info_tip, row, row_live_hint, section, section_with, shown_if, switch, text,
+};
 use crate::msg::Msg;
-use crate::ui::kit::gap;
+use crate::ui::kit::{gap, hstack, line};
 use nana_ui::{
     ControlSize,
     runtime::view::{AnyView, IntoView, widget},
-    runtime::{Activate, Button, Stack, Text, TextChanged, TextInput},
+    runtime::{Stack, Text, TextChanged, TextInput},
 };
 use nanatype_douyin::{AccountState, ConnectionState};
 pub fn connection(ui: Ui) -> String {
     let state = ui.douyin.get();
     match &state.connection {
         ConnectionState::Off => ui.now_t("dy-off"),
-        ConnectionState::Connecting => {
-            format!("{} · {}", ui.now_t("dy-native"), ui.now_t("dy-connecting"))
-        }
-        ConnectionState::Connected { room } => format!(
-            "{} · {} · {room}",
-            ui.now_t("dy-native"),
-            ui.now_t("dy-connected")
-        ),
+        ConnectionState::Connecting => ui.now_t("dy-connecting"),
+        ConnectionState::Connected { room } => format!("{} · {room}", ui.now_t("dy-connected")),
         ConnectionState::Disconnected => ui.now_t("dy-disconnected"),
         ConnectionState::Error(code) => {
             format!("{} · {}", ui.now_t("dy-error"), diagnostic(ui, code))
@@ -38,13 +34,7 @@ fn diagnostic(ui: Ui, code: &str) -> String {
         _ => "dy-native-error",
     })
 }
-fn action(ui: Ui, key: &str, message: impl Fn() -> Msg + Send + 'static) -> AnyView {
-    widget(Button::new(ui.now_t(key)).size(ControlSize::Small))
-        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(message()))
-        .into_any()
-}
 pub fn settings_page(ui: Ui) -> AnyView {
-    let status = widget(Text::new("")).bind(move |t: &mut Text| t.value = connection(ui));
     let account = widget(Text::new("")).bind(move |t: &mut Text| {
         t.value = match &ui.douyin.get().account {
             AccountState::Ready { name, .. } => {
@@ -55,17 +45,15 @@ pub fn settings_page(ui: Ui) -> AnyView {
             AccountState::Expired => ui.now_t("dy-account-expired"),
         }
     });
-    let warning = widget(Text::new(""))
-        .visible(move || ui.douyin.get().warning.is_some())
-        .bind(move |t: &mut Text| {
-            t.value = ui
-                .douyin
-                .get()
-                .warning
-                .as_deref()
-                .map(|s| diagnostic(ui, s))
-                .unwrap_or_default();
-        });
+    let warning = widget(Text::new("")).bind(move |t: &mut Text| {
+        t.value = ui
+            .douyin
+            .get()
+            .warning
+            .as_deref()
+            .map(|s| diagnostic(ui, s))
+            .unwrap_or_default();
+    });
     let cookie = widget(
         TextInput::new("")
             .secure(true)
@@ -84,58 +72,64 @@ pub fn settings_page(ui: Ui) -> AnyView {
     });
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
-            section(
+            section_with(
                 ui,
-                "dy-room",
+                "",
                 vec![
-                    row(
-                        ui,
-                        "dy-room",
-                        Some("dy-room-hint"),
-                        text(
+                    (
+                        row(
                             ui,
-                            String::new(),
-                            crate::ui::kit::field::MD,
-                            |s| s.integrations.douyin.room.clone(),
-                            |s, v| {
-                                s.integrations.douyin.enabled = false;
-                                s.integrations.douyin.room = v;
-                            },
+                            "dy-room",
+                            None,
+                            text(
+                                ui,
+                                ui.now_t("dy-room-placeholder"),
+                                crate::ui::kit::field::MD,
+                                |s| s.integrations.douyin.room.clone(),
+                                |s, v| {
+                                    s.integrations.douyin.enabled = false;
+                                    s.integrations.douyin.room = v;
+                                },
+                            ),
                         ),
-                    ),
-                    row(
-                        ui,
-                        "dy-enabled",
                         None,
-                        switch(
+                    ),
+                    (
+                        row_live_hint(
                             ui,
-                            |s| s.integrations.douyin.enabled,
-                            |s, v| s.integrations.douyin.enabled = v,
+                            "dy-enabled",
+                            move || Some(connection(ui)),
+                            hstack((
+                                button(ui, "dy-connect", || Msg::DouyinRefresh),
+                                switch(
+                                    ui,
+                                    |s| s.integrations.douyin.enabled,
+                                    |s, v| s.integrations.douyin.enabled = v,
+                                ),
+                            )),
                         ),
+                        None,
                     ),
-                    block(status),
-                    block(warning),
-                    block(
-                        widget(Stack::row(0.0).gap_step(gap::step::CONTROL)).children((
-                            action(ui, "dy-connect", || Msg::DouyinRefresh),
-                            action(ui, "dy-open-panel", || {
-                                Msg::ShowWindow(crate::windows::WindowKind::Chat)
-                            }),
-                        )),
-                    ),
+                    shown_if(block(warning), move || ui.douyin.get().warning.is_some()),
                 ],
             ),
             section(
                 ui,
                 "dy-account",
                 vec![
-                    block(account),
-                    block(hint(ui.now_t("dy-account-hint"))),
-                    block(action(ui, "dy-logout", || Msg::DouyinLogout)),
-                    block(cookie),
-                    block(action(ui, "dy-import", move || {
-                        Msg::DouyinImport(ui.douyin_cookie.get_untracked())
-                    })),
+                    line(
+                        account,
+                        (
+                            info_tip(ui, "dy-account-hint"),
+                            button(ui, "dy-logout", || Msg::DouyinLogout),
+                        ),
+                    ),
+                    line(
+                        cookie,
+                        button(ui, "dy-import", move || {
+                            Msg::DouyinImport(ui.douyin_cookie.get_untracked())
+                        }),
+                    ),
                 ],
             ),
         ))

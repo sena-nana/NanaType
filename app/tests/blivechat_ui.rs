@@ -11,7 +11,8 @@ use std::sync::Arc;
 
 fn ui(locale: Locale, settings: Settings) -> Ui {
     let ui = Ui::new(Arc::new(settings), common::skin("nanatype.halo"), locale);
-    ui.page.set(settings::Page::Blivechat);
+    ui.platform_tab.set(nanatype::chat::Platform::Blivechat);
+    ui.page.set(settings::Page::Platforms);
     ui
 }
 

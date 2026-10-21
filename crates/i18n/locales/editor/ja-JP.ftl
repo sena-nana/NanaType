@@ -8,7 +8,7 @@ editor-data-dir-open = 開く
 
 # Package provenance and explicit script consent
 pkgedit-title = パッケージエディター
-pkgedit-intro = スキン・リソース・Lua の混在パッケージを新規作成、開く、複製できます。変更は下書きにのみ保存され、現在のスキン、インストール済みパッケージ、実行中のプラグインは .ntpkg を書き出して読み込むまで変わりません。
+pkgedit-intro = 変更は .ntpkg を書き出して読み込むまで下書きに留まります。
 pkgedit-kind-skin = スキンのみ
 pkgedit-kind-resources = リソースのみ
 pkgedit-kind-lua = Lua のみ
@@ -71,7 +71,6 @@ pkgedit-dependencies-hint = 依存パッケージ。1 行に 1 つ「パッケ�
 pkgedit-apply = 適用
 pkgedit-data = 宣言済みデータ
 pkgedit-data-none = データは宣言されていません。
-pkgedit-data-hint = フォームの変更は厳密に解析してから package.toml に書き戻し、コメントと他のキーは保持します。通らない変更は書き込みません。完全な検証結果は問題一覧に表示されます。
 pkgedit-pipelines = 処理パイプライン
 pkgedit-pipelines-none = 処理パイプラインは宣言されていません。
 pkgedit-data-missing = ファイルがありません
@@ -110,8 +109,6 @@ pkgedit-unseal = 署名を外して編集
 pkgedit-derive = 派生コピーを作成
 pkgedit-derive-hint = 派生コピーは新しいパッケージ ID を使い、派生元を記録して署名を外します。
 pkgedit-preview-none = このプロジェクトにはスキンがないか、まだ検証を通過していません。
-pkgedit-preview-note = プレビューは実際の表示・履歴レンダラーを使い、この下書きにだけ作用します。
-pkgedit-preview-input-note = 入力ウィンドウのプレビューは実際の入力ボックスのレンダラーと非公開のサンプル下書きを使います。入力ウィンドウとエディターの内容は変わりません。
 pkgedit-debug-no-lua = このプロジェクトは Lua 機能を宣言していません。
 pkgedit-debug-risk = デバッグでは下書きのスクリプトを独立したサンドボックスのワーカープロセスで実行します。受け取るのは送信したテストイベントだけで、結果はここにだけ表示されます。それでもスクリプトは誤解を招く内容を表示したりリソースを消費したりする可能性があります。確認済みのソースだけを実行してください。ファイルを編集するとスクリプトは停止し、再確認が必要です。
 pkgedit-debug-trust = 現在のソースを確認し、デバッグプロセスでの実行を信頼します

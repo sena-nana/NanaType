@@ -13,8 +13,8 @@ use nana_ui::runtime::{
     ActionMenu, ActionMenuItem, Activate, Button, ColorChanged, ColorField, Divider,
     FocusWithinChanged, IconButton, IconGlyph, NodeStyle, NumberChanged, NumberInput, Popover,
     PopoverClosed, PopoverToggled, RichAttrMask, RichSelectionAttrs, RichTextEditor, ScrollAxes,
-    ScrollView, ScrollViewportChanged, SegmentedControl, SizeChanged, Stack, Switch, Text,
-    TextArea, TextChanged, TextInput, TextSubmitted, ToggleChanged,
+    ScrollView, ScrollViewportChanged, SegmentedControl, SizeChanged, Stack, Text, TextArea,
+    TextChanged, TextInput, TextSubmitted,
 };
 use nana_ui::theme::space;
 use nana_ui::{ButtonKind, ControlSize, PopoverPlacement};
@@ -33,8 +33,8 @@ use super::dialogue::{Source, dialogue_box};
 use super::rich::{ChipKind, MarkerLook};
 use super::{I18N, Ui, c};
 use crate::msg::{FileTarget, MarkupEdit, Msg, Tool};
-use crate::ui::kit::{Tone, Type, field, gap, icon, inset};
-use crate::windows::{INPUT_MODE_H, TOOLBAR_H};
+use crate::ui::kit::{Tone, Type, gap, icon, inset};
+use crate::windows::TOOLBAR_H;
 
 /// A colour swatch in the colour and outline panels.
 const SWATCH: f32 = 26.0;
@@ -147,112 +147,64 @@ fn is_strike(a: &RichSelectionAttrs) -> bool {
         && a.style.paint.decoration.is_some_and(|d| d.line_through)
 }
 
+/// A toolbar button shown pressed while `on` holds, sending `msg()`.
+fn pressed_tool(
+    icon: nana_ui::runtime::Icon,
+    label: String,
+    on: impl Fn() -> bool + Send + 'static,
+    msg: impl Fn() -> Msg + Send + 'static,
+) -> nana_ui::runtime::view::El<IconButton> {
+    widget(tool_button(icon, label.clone(), label))
+        .bind(move |b: &mut IconButton| {
+            let on = on();
+            if b.selected != on {
+                b.selected = on;
+            }
+        })
+        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
+}
+
 /// Swaps the editor for the draft's markup source.
 fn source_toggle(ui: Ui) -> AnyView {
-    widget(tool_button(
+    pressed_tool(
         ti::CODE,
         ui.now_t("tb-source"),
-        ui.now_t("tb-source"),
-    ))
-    .bind(move |b: &mut IconButton| {
-        let on = ui.source_mode.get();
-        if b.selected != on {
-            b.selected = on;
-        }
-    })
-    .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::ToggleSource))
+        move || ui.source_mode.get(),
+        || Msg::ToggleSource,
+    )
     .into_any()
 }
 
-fn layout_switch(ui: Ui) -> AnyView {
+/// Shows the draft as the skin draws it, or as plain text.
+fn skin_preview_toggle(ui: Ui) -> AnyView {
+    let on = move || ui.settings.with(|s| s.general.input_skin_preview);
+    pressed_tool(ti::EYE, ui.now_t("input-skin-preview"), on, move || {
+        let on = !ui.settings.with_untracked(|s| s.general.input_skin_preview);
+        super::settings::controls::edit(move |s| s.general.input_skin_preview = on)
+    })
+    .key("input-skin-preview-toggle")
+    .into_any()
+}
+
+/// A menu trigger's face: the bare glyph, centred in the box left after the
+/// trigger's own `space::LG` padding, so the hit target stays [`TARGET`].
+fn trigger_face(icon: nana_ui::runtime::Icon) -> AnyView {
+    let inner = TARGET - 2.0 * space::LG;
     widget(
         Stack::row(0.0)
-            .gap_step(nana_ui_core::SpacingStep::Sm)
-            .height(LengthSpec::Px(INPUT_MODE_H))
-            .padding_xy(space::MD, 0.0)
             .align(AlignSpec::Center)
-            .with_layout(|l| l.flex_shrink = Some(0.0)),
-    )
-    .key("input-mode-bar")
-    .children((
-        widget(Text::new(ui.now_t("input-plain-text")).style(Type::Caption.style()))
-            .bind(move |t: &mut Text| t.value = ui.t("input-plain-text")()),
-        widget(
-            Switch::new(
-                ui.now_t("input-skin-preview"),
-                ui.settings.with_untracked(|s| s.general.input_skin_preview),
-            )
-            .control_position(nana_ui_core::SwitchControlPosition::Start)
-            .size(ControlSize::Small)
-            .style({
-                let mut st = Type::Caption.style();
-                let l = Arc::make_mut(&mut st.layout);
-                // Switch paints its label internally, so auto width has no
-                // text to measure. Reserve room for the longest locale.
-                l.width = Some(LengthSpec::Px(field::SM));
+            .justify(JustifySpec::Center)
+            .with_layout(|l| {
+                l.width = Some(LengthSpec::Px(inner));
+                l.min_width = Some(LengthSpec::Px(inner));
+                l.height = Some(LengthSpec::Px(GLYPH));
                 l.flex_shrink = Some(0.0);
-                l.padding_left = Some(LengthSpec::Px(0.0));
-                l.padding_right = Some(LengthSpec::Px(0.0));
-                st
+                l.overflow_x = OverflowSpec::Visible;
+                l.overflow_y = OverflowSpec::Visible;
             }),
-        )
-        .key("input-skin-preview-switch")
-        .bind(move |s: &mut Switch| {
-            s.checked = ui.settings.with(|s| s.general.input_skin_preview);
-            s.label = ui.t("input-skin-preview")();
-        })
-        .on_cx(move |_, e: &ToggleChanged, cx| {
-            let checked = e.checked;
-            cx.dispatch_program_all(super::settings::controls::edit(move |s| {
-                s.general.input_skin_preview = checked;
-            }));
-        }),
-    ))
+    )
+    .children(widget(IconGlyph::new(icon).size(GLYPH).decorative()))
     .into_any()
-}
-
-/// A menu trigger's face. A bare glyph is centred in the box left after the
-/// trigger's own `space::LG` padding, so the hit target stays [`TARGET`].
-fn trigger_face(icon: nana_ui::runtime::Icon, label: Option<String>) -> AnyView {
-    let glyph = IconGlyph::new(icon).size(GLYPH).decorative();
-    match label {
-        Some(label) => {
-            let mut st = Type::Small.style();
-            {
-                let l = Arc::make_mut(&mut st.layout);
-                l.white_space_nowrap = true;
-            }
-            let text = Text::new(label)
-                .decorative()
-                .style(st)
-                .color(SemanticColorRole::Muted);
-            widget(
-                Stack::row(0.0)
-                    .gap_step(nana_ui_core::SpacingStep::Xs)
-                    .align(AlignSpec::Center),
-            )
-            .children((widget(glyph), widget(text)))
-            .into_any()
-        }
-        None => {
-            let inner = TARGET - 2.0 * space::LG;
-            widget(
-                Stack::row(0.0)
-                    .align(AlignSpec::Center)
-                    .justify(JustifySpec::Center)
-                    .with_layout(|l| {
-                        l.width = Some(LengthSpec::Px(inner));
-                        l.min_width = Some(LengthSpec::Px(inner));
-                        l.height = Some(LengthSpec::Px(GLYPH));
-                        l.flex_shrink = Some(0.0);
-                        l.overflow_x = OverflowSpec::Visible;
-                        l.overflow_y = OverflowSpec::Visible;
-                    }),
-            )
-            .children(widget(glyph))
-            .into_any()
-        }
-    }
 }
 
 /// A popover whose open state the app keeps, so items can close it.
@@ -270,7 +222,7 @@ fn popover(
             .width(width)
             .bare_trigger(true),
     )
-    .trigger(trigger_face(icon, None))
+    .trigger(trigger_face(icon))
     .bind(move |p: &mut Popover| p.open = open.get())
     .on(move |e: &PopoverToggled| open.set(e.open))
     .on(move |_: &PopoverClosed| open.set(false))
@@ -288,18 +240,15 @@ fn item(label: String, open: Signal<bool>, msg: impl Fn() -> Msg + Send + 'stati
         .into_any()
 }
 
-/// An action menu behind a toolbar glyph, labelled beside the glyph when
-/// `labelled` (the menus whose glyph alone does not say what they hold).
+/// An action menu behind a toolbar glyph.
 fn menu(
     icon: nana_ui::runtime::Icon,
     label: String,
-    labelled: bool,
     open: Signal<bool>,
     items: Vec<AnyView>,
 ) -> AnyView {
-    let face = trigger_face(icon, labelled.then(|| label.clone()));
     widget(ActionMenu::new().trigger(label).bare_trigger(true))
-        .trigger(face)
+        .trigger(trigger_face(icon))
         .bind(move |m: &mut ActionMenu| m.popover.open = open.get())
         .on(move |e: &PopoverToggled| open.set(e.open))
         .on(move |_: &PopoverClosed| open.set(false))
@@ -1227,9 +1176,8 @@ fn toolbar(ui: Ui) -> AnyView {
             help_open,
             cheat_sheet(ui),
         );
-        let labelled = input_width >= 800.0;
-        let effects_menu = menu(ti::SPARKLES, t("tb-effects"), labelled, fx_open, effects);
-        let pacing_menu = menu(ti::HOURGLASS, t("tb-pacing"), labelled, pace_open, pacing);
+        let effects_menu = menu(ti::SPARKLES, t("tb-effects"), fx_open, effects);
+        let pacing_menu = menu(ti::HOURGLASS, t("tb-pacing"), pace_open, pacing);
         // The popovers of folded tools stay mounted, invisible and out of the
         // flow, so the "…" menu can open them in place.
         let mut hidden: Vec<AnyView> = Vec::new();
@@ -1237,8 +1185,8 @@ fn toolbar(ui: Ui) -> AnyView {
             hidden.extend(bar.drain(1..));
         }
         if compact {
-            // Clearing formats folds too, so the labelled menus fit beside
-            // Send in every language.
+            // Clearing formats folds too, so the menus fit beside Send in
+            // every language.
             if narrow {
                 hidden.extend([effects_menu, pacing_menu]);
             } else {
@@ -1283,7 +1231,7 @@ fn toolbar(ui: Ui) -> AnyView {
                 ]);
             }
             items.extend(inserts);
-            bar.push(menu(ti::DOTS, t("tb-more"), false, more_open, items));
+            bar.push(menu(ti::DOTS, t("tb-more"), more_open, items));
             if narrow {
                 hidden.push(help);
             } else {
@@ -1293,13 +1241,7 @@ fn toolbar(ui: Ui) -> AnyView {
         } else {
             bar.extend([stroke, ruby, divider()]);
             bar.extend([effects_menu, pacing_menu, sticker, expression]);
-            bar.push(menu(
-                ti::TEXT_PLUS,
-                t("tb-insert"),
-                false,
-                insert_open,
-                inserts,
-            ));
+            bar.push(menu(ti::TEXT_PLUS, t("tb-insert"), insert_open, inserts));
             bar.push(tool(ui, ti::CLEAR_FORMATTING, "tb-clear-format", || {
                 act(Tool::ClearFormat)
             }));
@@ -1319,13 +1261,8 @@ fn toolbar(ui: Ui) -> AnyView {
                 .into_any(),
             );
         }
-        bar.push(menu(
-            ti::MESSAGE,
-            t("tb-phrases"),
-            false,
-            phrase_open,
-            phrases,
-        ));
+        bar.push(menu(ti::MESSAGE, t("tb-phrases"), phrase_open, phrases));
+        bar.push(skin_preview_toggle(ui));
         bar.push(source_toggle(ui));
         widget(
             Stack::bar(0.0)
@@ -1347,21 +1284,9 @@ fn toolbar(ui: Ui) -> AnyView {
     .into_any()
 }
 
-/// Period of a breathing status pulse (ms).
-pub const PULSE_MS: u64 = 1200;
-
-/// Whether the input window needs frames for the mirroring chip's pulse.
-pub fn mirror_chip_pulsing(ui: Ui) -> bool {
-    !ui.reduced_motion.get_untracked()
-        && ui
-            .settings
-            .with_untracked(|s| s.general.input_mode == InputMode::Mirror)
-}
-
 fn status_content(ui: Ui) -> AnyView {
     enum Line {
         Error(String),
-        Mirror(String),
         Queued(String),
         Empty,
     }
@@ -1369,20 +1294,14 @@ fn status_content(ui: Ui) -> AnyView {
     let key = move || {
         let status = ui.status.get();
         let diag = ui.diagnostics.with(|d| d.first().cloned());
-        let (mode, reduced) = (
-            ui.settings.with(|s| s.general.input_mode),
-            ui.reduced_motion.get(),
-        );
-        (diag, status.queued, mode, reduced, ui.locale.get())
+        (diag, status.queued, ui.locale.get())
     };
     let line = dynamic(key, move |k| {
-        let (diag, queued, mode, reduced, locale) = k.clone();
+        let (diag, queued, locale) = k.clone();
         let line = if let Some(d) = diag {
             Line::Error(d)
         } else if queued > 0 {
             Line::Queued(I18N.tr_in(locale, "status-queued-chip", &[("position", queued.into())]))
-        } else if mode == InputMode::Mirror {
-            Line::Mirror(I18N.t_in(locale, "status-mirror"))
         } else {
             Line::Empty
         };
@@ -1396,20 +1315,6 @@ fn status_content(ui: Ui) -> AnyView {
             .into_any(),
             // Live and attention states take the highlight, not the accent.
             Line::Queued(text) => crate::ui::kit::badge(text, Tone::Accent),
-            Line::Mirror(text) => {
-                let mut chip_view =
-                    widget(Stack::row(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
-                        .children(crate::ui::kit::badge(text, Tone::Accent));
-                if !reduced {
-                    // Opacity breathes once per PULSE_MS.
-                    chip_view = chip_view.bind(move |s: &mut Stack| {
-                        let phase = (ui.pulse_ms.get() % PULSE_MS) as f32 / PULSE_MS as f32;
-                        let wave = 0.5 - 0.5 * (phase * std::f32::consts::TAU).cos();
-                        s.layout_mut().opacity = Some(0.55 + 0.45 * wave);
-                    });
-                }
-                chip_view.into_any()
-            }
             Line::Empty => widget(Stack::row(0.0)).into_any(),
         }
     })
@@ -1733,7 +1638,6 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
                 l.min_width = Some(LengthSpec::Px(0.0));
             }))
             .children((
-                layout_switch(ui),
                 toolbar(ui),
                 crate::ui::kit::rule(),
                 preview,

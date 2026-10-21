@@ -1,6 +1,22 @@
 use super::*;
 
+/// While the first-run guide is open it asks for the language and name
+/// itself; the settings wait until it is done.
 pub(super) fn general(ui: Ui) -> AnyView {
+    dynamic(
+        move || ui.settings.with(|s| s.general.onboarding_done),
+        move |done| {
+            if *done {
+                settings_body(ui)
+            } else {
+                onboarding(ui)
+            }
+        },
+    )
+    .into_any()
+}
+
+fn settings_body(ui: Ui) -> AnyView {
     let avatar_row = {
         let has = ui.settings.get_untracked().general.avatar.is_some();
         widget(Stack::row(0.0).gap_step(gap::step::CONTROL))
@@ -23,10 +39,8 @@ pub(super) fn general(ui: Ui) -> AnyView {
             ))
             .into_any()
     };
-    let guide = (!ui.settings.get_untracked().general.onboarding_done).then(|| onboarding(ui));
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
-            guide,
             section(
                 ui,
                 "",
@@ -78,7 +92,7 @@ pub(super) fn general(ui: Ui) -> AnyView {
                         row(
                             ui,
                             "general-presence",
-                            Some("general-presence-hint"),
+                            None,
                             segmented(
                                 ui,
                                 select_keys(
@@ -104,19 +118,10 @@ pub(super) fn general(ui: Ui) -> AnyView {
                         None,
                     ),
                     (
-                        row_live_hint(
+                        row(
                             ui,
                             "general-mode",
-                            move || {
-                                Some(I18N.t_in(
-                                    ui.locale.get(),
-                                    if mirror(ui) {
-                                        "mode-mirror-hint"
-                                    } else {
-                                        "mode-compose-hint"
-                                    },
-                                ))
-                            },
+                            None,
                             segmented(
                                 ui,
                                 select_keys(
@@ -157,7 +162,7 @@ pub(super) fn general(ui: Ui) -> AnyView {
                         row(
                             ui,
                             "general-send-key",
-                            Some("general-send-key-hint"),
+                            None,
                             select(
                                 ui,
                                 select_keys(
@@ -201,10 +206,10 @@ fn updates(ui: Ui) -> Vec<(AnyView, Shown)> {
             None,
         ),
         (
-            row(
+            row_tip(
                 ui,
                 "general-update-proxy",
-                Some("general-update-proxy-hint"),
+                "general-update-proxy-hint",
                 code_text(
                     ui,
                     "https://example.com/".into(),

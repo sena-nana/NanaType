@@ -118,13 +118,6 @@ fn commands(ui: Ui, width: Signal<f32>) -> AnyView {
                         width,
                     ),
                 )),
-                widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
-                    .visible(move || ui.settings.with(|s| !s.assets.phrases.is_empty()))
-                    .children((
-                        widget(Divider::horizontal()),
-                        caption(ui.now_t("tb-phrases")),
-                        phrases(ui),
-                    )),
             ))
             .into_any()
         },
@@ -410,7 +403,7 @@ fn compact_tab_bar(
                         .into_any()
                     })
                     .collect();
-                menu(ti::DOTS, ui.now_t("dock-more-regions"), false, open, items)
+                menu(ti::DOTS, ui.now_t("dock-more-regions"), open, items)
             },
         ),
     ))
@@ -593,7 +586,6 @@ fn dock(ui: Ui) -> AnyView {
                         .children(menu(
                             ti::PLUS,
                             ui.now_t("dock-add-region"),
-                            false,
                             open,
                             add_items,
                         )),
@@ -658,16 +650,11 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) 
             (
                 ui.locale.get(),
                 ui.input_width.get() < 600.0,
-                ui.settings
-                    .with(|s| (s.general.input_mode, s.general.send_key)),
+                ui.settings.with(|s| s.general.input_mode),
             )
         },
-        move |(_, compact, (mode, send_key))| {
+        move |(_, compact, mode)| {
             let mode = *mode;
-            let key = match send_key {
-                SendKey::Enter => "Enter",
-                SendKey::CtrlEnter => "Ctrl+Enter",
-            };
             let mode_control = if *compact {
                 popover(
                     ti::ADJUSTMENTS,
@@ -709,9 +696,6 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) 
                 ),
                 tool(ui, ti::SETTINGS, "window-settings", || Msg::OpenSettings),
                 super::super::bilibili::account_button(ui),
-                widget(Stack::row(0.0))
-                    .visible(move || mode == InputMode::Compose && ui.input_width.get() >= 1000.0)
-                    .children(crate::ui::kit::keycap::chord(key)),
                 widget(crate::ui::kit::cta(
                     Button::new(ui.now_t("tb-send")).icon(ti::SEND),
                 ))

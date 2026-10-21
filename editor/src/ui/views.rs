@@ -1429,7 +1429,6 @@ fn data_section(ui: Ui, view: &EditorView, editable: bool) -> AnyView {
                         .on(move |_: &Activate| editing.set(Some(None))),
                 )
             }),
-            hint(ui.now_t("pkgedit-data-hint")),
         ))
         .into_any()
 }
@@ -2018,11 +2017,6 @@ fn preview(ui: Ui) -> AnyView {
                         choice(Surface::History, "windows-history"),
                         choice(Surface::Input, "windows-input"),
                     )),
-                hint(ui.now_t(if *surface == Surface::Input {
-                    "pkgedit-preview-input-note"
-                } else {
-                    "pkgedit-preview-note"
-                })),
                 stage,
             ))
             .into_any()

@@ -1,10 +1,7 @@
 //! Account management stays in settings; the editor has two compact entry points.
 use super::{
     Ui,
-    settings::{
-        Page,
-        controls::{hint, row, section, switch},
-    },
+    settings::controls::{hint, row, section, switch},
 };
 use crate::msg::Msg;
 use crate::ui::kit::{Tone, Type, gap, icon, inset};
@@ -130,7 +127,9 @@ pub fn account_button(ui: Ui) -> AnyView {
                 move || ui.bilibili.get().connection.clone(),
                 move |c| hint(super::link_text::bilibili(ui.locale.get_untracked(), c, "").0),
             ),
-            button(ui, "bili-manage", || Msg::SettingsPage(Page::Bilibili)),
+            button(ui, "bili-manage", || {
+                Msg::SettingsPlatform(crate::chat::Platform::Bilibili)
+            }),
             widget(Stack::column(0.0))
                 .visible(move || !matches!(ui.bilibili.get().account, AccountState::Ready(_)))
                 .children(button(ui, "bili-login", || Msg::BilibiliLogin)),
@@ -200,7 +199,9 @@ pub fn send_status(ui: Ui) -> AnyView {
                 ui.now_t("bili-results")
             };
         })
-        .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::SettingsPage(Page::Bilibili))),
+        .on_cx(|_, _: &Activate, cx| {
+            cx.dispatch_program_all(Msg::SettingsPlatform(crate::chat::Platform::Bilibili))
+        }),
         send_switch(ui),
     ))
     .into_any()
@@ -225,7 +226,7 @@ pub(super) fn input_send_status(ui: Ui) -> AnyView {
                     ui.now_t("bili-results"),
                 ))
                 .on_cx(|_, _: &Activate, cx| {
-                    cx.dispatch_program_all(Msg::SettingsPage(Page::Bilibili))
+                    cx.dispatch_program_all(Msg::SettingsPlatform(crate::chat::Platform::Bilibili))
                 }),
                 widget(
                     Popover::new()
@@ -303,7 +304,9 @@ pub fn identity_hint(ui: Ui) -> AnyView {
         })
         .children((
             hint(ui.now_t("bili-identity-hint")),
-            button(ui, "bili-manage", || Msg::SettingsPage(Page::Bilibili)),
+            button(ui, "bili-manage", || {
+                Msg::SettingsPlatform(crate::chat::Platform::Bilibili)
+            }),
         ))
         .into_any()
 }
@@ -500,7 +503,7 @@ pub fn settings_page(ui: Ui) -> AnyView {
                     row(
                         ui,
                         "bili-sync-profile",
-                        Some("bili-sync-profile-hint"),
+                        None,
                         switch(
                             ui,
                             |s| s.integrations.bilibili.sync_profile,
@@ -511,9 +514,9 @@ pub fn settings_page(ui: Ui) -> AnyView {
             ),
             section(
                 ui,
-                "bili-room",
+                "",
                 vec![
-                    row(ui, "bili-room", Some("bili-room-hint"), room_control(ui)),
+                    row(ui, "bili-room", None, room_control(ui)),
                     row(
                         ui,
                         "bili-receive",
@@ -531,78 +534,8 @@ pub fn settings_page(ui: Ui) -> AnyView {
                 ui,
                 "bili-send-section",
                 vec![
-                    row(
-                        ui,
-                        "bili-send-switch",
-                        Some("bili-send-hint"),
-                        send_toggle(ui, false),
-                    ),
+                    row(ui, "bili-send-switch", None, send_toggle(ui, false)),
                     deliveries(ui),
-                ],
-            ),
-            section(
-                ui,
-                "bili-panel",
-                vec![
-                    row(
-                        ui,
-                        "chat-panel-style",
-                        None,
-                        super::settings::chat_panel_style(ui),
-                    ),
-                    button(ui, "int-bilibili-open-panel", || {
-                        Msg::ShowWindow(crate::windows::WindowKind::Chat)
-                    }),
-                    row(
-                        ui,
-                        "chat-filter-text",
-                        None,
-                        switch(
-                            ui,
-                            |s| s.integrations.bilibili.panel.text,
-                            |s, v| s.integrations.bilibili.panel.text = v,
-                        ),
-                    ),
-                    row(
-                        ui,
-                        "chat-filter-super-chat",
-                        None,
-                        switch(
-                            ui,
-                            |s| s.integrations.bilibili.panel.super_chat,
-                            |s, v| s.integrations.bilibili.panel.super_chat = v,
-                        ),
-                    ),
-                    row(
-                        ui,
-                        "chat-filter-gift",
-                        None,
-                        switch(
-                            ui,
-                            |s| s.integrations.bilibili.panel.gift,
-                            |s, v| s.integrations.bilibili.panel.gift = v,
-                        ),
-                    ),
-                    row(
-                        ui,
-                        "chat-filter-member",
-                        None,
-                        switch(
-                            ui,
-                            |s| s.integrations.bilibili.panel.member,
-                            |s, v| s.integrations.bilibili.panel.member = v,
-                        ),
-                    ),
-                    row(
-                        ui,
-                        "int-bilibili-quote-display",
-                        None,
-                        switch(
-                            ui,
-                            |s| s.integrations.bilibili.quote_on_display,
-                            |s, v| s.integrations.bilibili.quote_on_display = v,
-                        ),
-                    ),
                 ],
             ),
         ))

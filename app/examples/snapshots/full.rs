@@ -35,7 +35,8 @@ fn douyin(scene: &Scene, out: &std::path::Path) {
         },
         warning: None,
     }));
-    ui.page.set(settings::Page::Douyin);
+    ui.platform_tab.set(nanatype::chat::Platform::Douyin);
+    ui.page.set(settings::Page::Platforms);
     shot("dy-settings", out, 920, 1050, theme.clone(), |doc, id| {
         doc.context_mut()
             .mount_view_root(id, move || settings::settings_window(ui))
@@ -94,7 +95,8 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
     let before_state = ui.blivechat.get_untracked();
     let before_status = ui.status.get_untracked();
     let before_page = ui.page.get_untracked();
-    ui.page.set(settings::Page::Blivechat);
+    ui.platform_tab.set(nanatype::chat::Platform::Blivechat);
+    ui.page.set(settings::Page::Platforms);
     for (name, source, relay) in [
         ("blive-settings", BlivechatSource::Server, RelayStatus::Off),
         (

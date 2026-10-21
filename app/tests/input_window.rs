@@ -284,15 +284,15 @@ fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
         );
         ui.locale.set(locale);
         session.flush().unwrap();
-        let switch = keyed(&session, "input-skin-preview-switch");
+        let preview = keyed(&session, "input-skin-preview-toggle");
         assert_eq!(
-            switch.label.as_deref(),
+            preview.label.as_deref(),
             Some(ui.now_t("input-skin-preview").as_str())
         );
-        assert!(switch.bounds.width >= 32.0);
+        assert!(preview.bounds.width >= 28.0);
         assert!(
-            switch.bounds.y >= 0.0
-                && switch.bounds.y + switch.bounds.height <= nanatype::windows::INPUT_MODE_H
+            preview.bounds.y >= 0.0
+                && preview.bounds.y + preview.bounds.height <= nanatype::windows::TOOLBAR_H
         );
         click_label(&mut session, &ui.now_t("input-management"), "menu");
         let invitation = keyed(&session, "peer-invitation-input");
@@ -828,7 +828,7 @@ fn fixed_canvas_and_controls_survive_resize_theme_scale_and_peer_panel_changes()
                         assert!((toolbar.height - 48.0).abs() <= 1.0 / scale);
                         assert!((footer.height - 56.0).abs() <= 1.0 / scale);
                         assert!((footer.y + footer.height - h as f32).abs() <= 1.0 / scale);
-                        assert!((toolbar.y - nanatype::windows::INPUT_MODE_H).abs() <= 1.0 / scale);
+                        assert!(toolbar.y.abs() <= 1.0 / scale);
                         assert!(
                             (port.bounds.y + port.bounds.height - footer.y).abs() <= 1.0 / scale,
                             "one footer row"

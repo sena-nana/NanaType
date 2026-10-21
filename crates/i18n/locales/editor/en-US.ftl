@@ -8,7 +8,7 @@ editor-data-dir-open = Open
 
 # Package provenance and explicit script consent
 pkgedit-title = Package editor
-pkgedit-intro = Create, open or copy skin, resource and Lua packages. Changes stay in a draft: the current skin, installed packages and running plugins do not change until you export a .ntpkg and import it.
+pkgedit-intro = Changes stay in a draft until you export a .ntpkg and import it.
 pkgedit-kind-skin = Skin only
 pkgedit-kind-resources = Resources only
 pkgedit-kind-lua = Lua only
@@ -74,7 +74,6 @@ pkgedit-dependencies-hint = Dependencies, one "package-id@exact-version" per lin
 pkgedit-apply = Apply
 pkgedit-data = Declared data
 pkgedit-data-none = No data declared.
-pkgedit-data-hint = Form edits are parsed strictly before they are written to package.toml, keeping comments and other keys; an edit that fails is not written. Full checks appear in the problem list.
 pkgedit-pipelines = Pipelines
 pkgedit-pipelines-none = No pipelines declared.
 pkgedit-data-missing = file missing
@@ -113,8 +112,6 @@ pkgedit-unseal = Remove signature to edit
 pkgedit-derive = Create derived copy
 pkgedit-derive-hint = A derived copy gets a new package ID, records its source and drops the signature.
 pkgedit-preview-none = This project has no skin, or the skin has not passed its checks yet.
-pkgedit-preview-note = The preview uses the real display and history renderers and only affects this draft.
-pkgedit-preview-input-note = The input preview uses the real input box renderer with a private sample draft; the input window and its editor are not changed.
 pkgedit-debug-no-lua = This project does not declare the Lua capability.
 pkgedit-debug-risk = Debugging runs the draft's script in a separate sandboxed worker process. It only receives the test events you send, and its results only appear here, but a script can still show misleading content or use resources. Only run source you have reviewed. Editing any file stops the script and needs a new confirmation.
 pkgedit-debug-trust = I reviewed the current source and trust it to run in the debug process

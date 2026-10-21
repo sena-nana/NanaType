@@ -17,7 +17,8 @@ fn ui(locale: Locale) -> Ui {
         skin,
         locale,
     );
-    ui.page.set(settings::Page::Bilibili);
+    ui.platform_tab.set(nanatype::chat::Platform::Bilibili);
+    ui.page.set(settings::Page::Platforms);
     ui
 }
 fn session(ui: Ui, dark: bool) -> RuntimeAgentSession {

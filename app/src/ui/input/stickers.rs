@@ -155,15 +155,21 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
             format!("input-dock-region-{id}-sticker-footer")
         })
         .children((
-            widget(
-                Text::new("")
-                    .style(Type::Micro.style())
-                    .color(SemanticColorRole::Muted),
-            )
-            .bind(move |text: &mut Text| {
-                text.value = status(ui, hovered.get());
-            }),
-            widget(Divider::horizontal()),
+            // Only while it has something to say: a drop under way, an
+            // import, a failure, or how to add the first pack.
+            widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
+                .visible(move || status(ui, hovered.get()).is_some())
+                .children((
+                    widget(
+                        Text::new("")
+                            .style(Type::Micro.style())
+                            .color(SemanticColorRole::Muted),
+                    )
+                    .bind(move |text: &mut Text| {
+                        text.value = status(ui, hovered.get()).unwrap_or_default();
+                    }),
+                    widget(Divider::horizontal()),
+                )),
             widget(ScrollView::new(ScrollAxes::Horizontal).with_layout(|l| {
                 l.width = Some(LengthSpec::Fill);
                 l.height = Some(LengthSpec::Px(PACK_STRIP_H));
@@ -285,17 +291,17 @@ fn series(rows: &[super::super::StickerRow]) -> Vec<(String, String)> {
         .collect()
 }
 
-fn status(ui: Ui, hovered: bool) -> String {
+fn status(ui: Ui, hovered: bool) -> Option<String> {
     let packs = ui.sticker_packs.get();
     if hovered {
-        return ui.now_t("tb-sticker-drop-now");
+        return Some(ui.now_t("tb-sticker-drop-now"));
     }
     if let Some(pack) = packs.iter().find(|p| p.phase.busy()) {
         let title = pack
             .preset
             .map(|p| ui.now_t(p.title_key()))
             .unwrap_or_else(|| pack.title.clone());
-        return ui.tr("tb-sticker-importing", &[("name", title.into())]);
+        return Some(ui.tr("tb-sticker-importing", &[("name", title.into())]));
     }
     if let Some(error) = packs.iter().find_map(|p| {
         if let crate::stickers::Phase::Failed(e) = &p.phase {
@@ -304,7 +310,9 @@ fn status(ui: Ui, hovered: bool) -> String {
             None
         }
     }) {
-        return ui.tr("stickers-failed", &[("message", error.clone().into())]);
+        return Some(ui.tr("stickers-failed", &[("message", error.clone().into())]));
     }
-    ui.now_t("tb-sticker-drop-hint")
+    ui.stickers
+        .with(|rows| rows.is_empty())
+        .then(|| ui.now_t("tb-sticker-drop-hint"))
 }

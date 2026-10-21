@@ -1844,6 +1844,7 @@ impl App {
             | Msg::ResetWindow(_)
             | Msg::OpenSettings
             | Msg::SettingsPage(_)
+            | Msg::SettingsPlatform(_)
             | Msg::SecondInstance
             | Msg::Displays(_)) => self.window_msg(m),
             m @ (Msg::DeleteSkin(_)

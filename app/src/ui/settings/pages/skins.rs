@@ -114,7 +114,7 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                     row(
                         ui,
                         "skins-override-overflow",
-                        Some("skins-override-overflow-hint"),
+                        None,
                         select(
                             ui,
                             select_keys(
@@ -130,10 +130,10 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                             |s, v| s.skin.overrides.overflow = Overflow::from_key(v),
                         ),
                     ),
-                    row(
+                    row_tip(
                         ui,
                         "skins-override-page-auto",
-                        Some("skins-override-page-auto-hint"),
+                        "skins-override-page-auto-hint",
                         slider_with(
                             ui,
                             (0.0, 10.0, 0.5),

@@ -243,12 +243,6 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                 ui,
                 "assets-stickers",
                 vec![
-                    widget(
-                        Stack::column(0.0)
-                            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
-                    )
-                    .children(hint(ui.now_t("assets-stickers-hint")))
-                    .into_any(),
                     dirs.into_any(),
                     widget(
                         Stack::row(0.0)

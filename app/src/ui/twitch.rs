@@ -1,14 +1,14 @@
 //! Twitch: the channel to read, the device-code sign-in and sending.
 use super::Ui;
 use super::danmaku::Link;
-use super::settings::controls::{block, button, hint, row, section, switch, text};
+use super::settings::controls::{button, hint, row, row_live_hint, section, switch, text};
 use crate::msg::Msg;
 use crate::ui::kit::{Type, gap, inset};
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{
     ConfirmDialog, ConfirmIntent, DialogCloseRequested, Stack, Switch, Text, ToggleChanged,
 };
-use nana_ui_core::{AlignSpec, SemanticColorRole};
+use nana_ui_core::SemanticColorRole;
 use nanatype_twitch::{AccountState, ConnectionState, DeliveryState};
 
 pub fn link(state: &ConnectionState) -> Link {
@@ -201,17 +201,16 @@ pub fn confirm_dialog(ui: Ui) -> AnyView {
     .into_any()
 }
 pub fn settings_page(ui: Ui) -> AnyView {
-    let status = widget(Text::new("")).bind(move |t: &mut Text| t.value = connection(ui));
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
             section(
                 ui,
-                "tw-channel",
+                "",
                 vec![
                     row(
                         ui,
                         "tw-channel",
-                        Some("tw-channel-hint"),
+                        None,
                         text(
                             ui,
                             ui.now_t("tw-channel-placeholder"),
@@ -223,26 +222,15 @@ pub fn settings_page(ui: Ui) -> AnyView {
                             },
                         ),
                     ),
-                    row(
+                    row_live_hint(
                         ui,
                         "tw-enabled",
-                        None,
+                        move || Some(connection(ui)),
                         switch(
                             ui,
                             |s| s.integrations.twitch.enabled,
                             |s, v| s.integrations.twitch.enabled = v,
                         ),
-                    ),
-                    block(status),
-                    block(
-                        widget(
-                            Stack::row(0.0)
-                                .gap_step(gap::step::CONTROL)
-                                .align(AlignSpec::Center),
-                        )
-                        .children(button(ui, "tw-open-panel", || {
-                            Msg::ShowWindow(crate::windows::WindowKind::Chat)
-                        })),
                     ),
                 ],
             ),
@@ -251,7 +239,7 @@ pub fn settings_page(ui: Ui) -> AnyView {
                 ui,
                 "tw-send-section",
                 vec![
-                    row(ui, "tw-send-switch", Some("tw-send-hint"), send_toggle(ui)),
+                    row(ui, "tw-send-switch", None, send_toggle(ui)),
                     deliveries(ui),
                 ],
             ),

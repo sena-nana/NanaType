@@ -1,11 +1,9 @@
 //! YouTube live chat: the stream to follow and its connection.
 use super::Ui;
 use super::danmaku::Link;
-use super::settings::controls::{block, button, hint, row, section, switch, text};
+use super::settings::controls::{button, row, row_live_hint, section, switch, text};
 use crate::msg::Msg;
-use crate::ui::kit::gap;
-use nana_ui::runtime::view::{AnyView, IntoView, widget};
-use nana_ui::runtime::{Stack, Text};
+use nana_ui::runtime::view::AnyView;
 use nanatype_youtube::ConnectionState;
 
 pub fn link(state: &ConnectionState) -> Link {
@@ -39,54 +37,38 @@ fn diagnostic(ui: Ui, code: &str) -> String {
     })
 }
 pub fn settings_page(ui: Ui) -> AnyView {
-    let status = widget(Text::new("")).bind(move |t: &mut Text| t.value = connection(ui));
-    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
-        .children((
-            section(
+    section(
+        ui,
+        "",
+        vec![
+            row(
                 ui,
-                "yt-stream",
-                vec![
-                    row(
-                        ui,
-                        "yt-target",
-                        Some("yt-target-hint"),
-                        text(
-                            ui,
-                            ui.now_t("yt-target-placeholder"),
-                            crate::ui::kit::field::MD,
-                            |s| s.integrations.youtube.target.clone(),
-                            |s, v| {
-                                s.integrations.youtube.enabled = false;
-                                s.integrations.youtube.target = v;
-                            },
-                        ),
-                    ),
-                    row(
-                        ui,
-                        "yt-enabled",
-                        None,
-                        switch(
-                            ui,
-                            |s| s.integrations.youtube.enabled,
-                            |s, v| s.integrations.youtube.enabled = v,
-                        ),
-                    ),
-                    block(status),
-                    block(
-                        widget(Stack::row(0.0).gap_step(gap::step::CONTROL)).children((
-                            button(ui, "yt-connect", || Msg::YoutubeRefresh),
-                            button(ui, "yt-open-panel", || {
-                                Msg::ShowWindow(crate::windows::WindowKind::Chat)
-                            }),
-                        )),
-                    ),
-                ],
+                "yt-target",
+                None,
+                text(
+                    ui,
+                    ui.now_t("yt-target-placeholder"),
+                    crate::ui::kit::field::MD,
+                    |s| s.integrations.youtube.target.clone(),
+                    |s, v| {
+                        s.integrations.youtube.enabled = false;
+                        s.integrations.youtube.target = v;
+                    },
+                ),
             ),
-            section(
+            row_live_hint(
                 ui,
-                "yt-send-section",
-                vec![block(hint(ui.now_t("yt-send-unavailable")))],
+                "yt-enabled",
+                move || Some(connection(ui)),
+                crate::ui::kit::hstack((
+                    button(ui, "yt-connect", || Msg::YoutubeRefresh),
+                    switch(
+                        ui,
+                        |s| s.integrations.youtube.enabled,
+                        |s, v| s.integrations.youtube.enabled = v,
+                    ),
+                )),
             ),
-        ))
-        .into_any()
+        ],
+    )
 }

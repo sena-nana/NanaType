@@ -57,18 +57,14 @@ pub enum Page {
     History,
     Hotkeys,
     Output,
+    Platforms,
     Integrations,
-    Bilibili,
-    Douyin,
-    Youtube,
-    Twitch,
-    Blivechat,
     Assets,
     About,
 }
 
 impl Page {
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 12] = [
         Self::General,
         Self::Playback,
         Self::Skins,
@@ -77,23 +73,14 @@ impl Page {
         Self::History,
         Self::Hotkeys,
         Self::Output,
+        Self::Platforms,
         Self::Integrations,
-        Self::Bilibili,
-        Self::Douyin,
-        Self::Youtube,
-        Self::Twitch,
-        Self::Blivechat,
         Self::Assets,
         Self::About,
     ];
 
     pub fn label_key(self) -> &'static str {
         match self {
-            Self::Bilibili => "settings-bilibili",
-            Self::Douyin => "settings-douyin",
-            Self::Youtube => "settings-youtube",
-            Self::Twitch => "settings-twitch",
-            Self::Blivechat => "settings-blivechat",
             Self::General => "settings-general",
             Self::Playback => "settings-playback",
             Self::Skins => "settings-skins",
@@ -102,41 +89,15 @@ impl Page {
             Self::History => "settings-history",
             Self::Hotkeys => "settings-hotkeys",
             Self::Output => "settings-output",
+            Self::Platforms => "settings-platforms",
             Self::Integrations => "settings-integrations",
             Self::Assets => "settings-assets",
             Self::About => "settings-about",
         }
     }
 
-    /// The one-line description under the page title.
-    pub fn subtitle_key(self) -> &'static str {
-        match self {
-            Self::Bilibili => "settings-bilibili-sub",
-            Self::Douyin => "settings-douyin-sub",
-            Self::Youtube => "settings-youtube-sub",
-            Self::Twitch => "settings-twitch-sub",
-            Self::Blivechat => "settings-blivechat-sub",
-            Self::General => "settings-general-sub",
-            Self::Playback => "settings-playback-sub",
-            Self::Skins => "settings-skins-sub",
-            Self::Packages => "settings-packages-sub",
-            Self::Windows => "settings-windows-sub",
-            Self::History => "settings-history-sub",
-            Self::Hotkeys => "settings-hotkeys-sub",
-            Self::Output => "settings-output-sub",
-            Self::Integrations => "settings-integrations-sub",
-            Self::Assets => "settings-assets-sub",
-            Self::About => "settings-about-sub",
-        }
-    }
-
     fn icon(self) -> nana_ui::runtime::Icon {
         match self {
-            Self::Bilibili => ti::BRAND_BILIBILI,
-            Self::Douyin => ti::MESSAGE_CIRCLE,
-            Self::Youtube => ti::BRAND_YOUTUBE,
-            Self::Twitch => ti::BRAND_TWITCH,
-            Self::Blivechat => ti::COMET,
             Self::General => ti::ADJUSTMENTS,
             Self::Playback => ti::PLAYER_PLAY,
             Self::Skins => ti::PALETTE,
@@ -145,7 +106,8 @@ impl Page {
             Self::History => ti::MESSAGES,
             Self::Hotkeys => ti::KEYBOARD,
             Self::Output => ti::BROADCAST,
-            Self::Integrations => ti::PLUG_CONNECTED,
+            Self::Platforms => ti::LIVE_VIEW,
+            Self::Integrations => ti::LINK,
             Self::Assets => ti::STICKER,
             Self::About => ti::INFO_CIRCLE,
         }
@@ -163,16 +125,13 @@ const GROUPS: &[(&str, &[Page])] = &[
         "settings-group-look",
         &[Page::Skins, Page::Packages, Page::Windows, Page::History],
     ),
-    ("settings-group-stream", &[Page::Output, Page::Assets]),
     (
-        "settings-group-platforms",
+        "settings-group-stream",
         &[
+            Page::Platforms,
+            Page::Output,
             Page::Integrations,
-            Page::Bilibili,
-            Page::Douyin,
-            Page::Youtube,
-            Page::Twitch,
-            Page::Blivechat,
+            Page::Assets,
         ],
     ),
 ];
@@ -297,8 +256,8 @@ fn sidebar(ui: Ui) -> AnyView {
     .into_any()
 }
 
-/// A page's fixed header: its title and one-line description, its
-/// page-wide actions on the right, a hairline under it.
+/// A page's fixed header: its title, its page-wide actions on the right, a
+/// hairline under it.
 fn page_header(ui: Ui, page: Page) -> AnyView {
     widget(Stack::column(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
         .children((
@@ -311,10 +270,8 @@ fn page_header(ui: Ui, page: Page) -> AnyView {
                     .with_layout(|l| l.min_height = Some(LengthSpec::Px(PAGE_HEADER_H))),
             )
             .children((
-                widget(crate::ui::kit::grow_column(gap::HAIR)).children((
-                    controls::heading(ui, page.label_key()),
-                    widget(Type::Caption.text(ui.now_t(page.subtitle_key()))),
-                )),
+                widget(crate::ui::kit::grow_column(gap::HAIR))
+                    .children(controls::heading(ui, page.label_key())),
                 pages::actions(ui, page),
             )),
             crate::ui::kit::rule(),

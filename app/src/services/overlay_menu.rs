@@ -224,12 +224,10 @@ impl Snapshot {
             ] {
                 self.item(&menu, action, key, Some(checked))?;
             }
-            let key = if self.peer_active {
-                "overlay-menu-clear-history-peer"
-            } else {
-                "history-clear"
-            };
-            let clear = Submenu::new(self.text(key), self.enabled(&Action::ClearHistory));
+            let clear = Submenu::new(
+                self.text("history-clear"),
+                self.enabled(&Action::ClearHistory),
+            );
             self.item(
                 &clear,
                 Action::ClearHistory,

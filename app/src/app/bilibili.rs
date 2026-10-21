@@ -1,4 +1,4 @@
-use crate::{app::App, msg::Msg, ui::settings::Page};
+use crate::{app::App, msg::Msg};
 use nanatype_bilibili::{
     AccountState, ConnectionState, Delivery, DeliveryState, Event, SessionEvent, sending,
 };
@@ -322,8 +322,7 @@ impl App {
     }
     pub(super) fn bilibili_login(&mut self) {
         self.bilibili_reset();
-        self.ui.page.set(Page::Bilibili);
-        self.open_settings();
+        self.update(Msg::SettingsPlatform(crate::chat::Platform::Bilibili));
         self.bilibili.login();
     }
     pub(super) fn bilibili_toggle(&mut self) {
@@ -335,8 +334,7 @@ impl App {
         if state.can_send() {
             self.bili_state(|s| s.confirm = true);
         }
-        self.ui.page.set(Page::Bilibili);
-        self.open_settings();
+        self.update(Msg::SettingsPlatform(crate::chat::Platform::Bilibili));
     }
     pub(super) fn bilibili_confirm(&mut self, accept: bool) {
         let state = self.ui.bilibili.get_untracked();

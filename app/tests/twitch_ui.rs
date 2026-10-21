@@ -20,7 +20,8 @@ fn twitch_page_walks_through_the_device_code_sign_in_in_all_locales() {
     let skin = registry.load(nanatype_theme::DEFAULT_SKIN).unwrap().skin;
     for locale in Locale::ALL {
         let ui = Ui::new(Arc::new(Settings::default()), skin.clone(), locale);
-        ui.page.set(settings::Page::Twitch);
+        ui.platform_tab.set(nanatype::chat::Platform::Twitch);
+        ui.page.set(settings::Page::Platforms);
         ui.twitch
             .update(|s| Arc::make_mut(s).account = AccountState::SignedOut);
         let mut session = common::session()

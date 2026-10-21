@@ -82,7 +82,6 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
     // The same card as every section, its welcome told by the sparkle and
     // the accent step dots rather than a frame of its own.
     widget(crate::ui::kit::card_frame(nana_ui_core::RadiusTier::Lg))
-        .visible(move || !ui.settings.with(|s| s.general.onboarding_done))
         .children(
             widget(
                 Stack::column(0.0)
@@ -94,20 +93,10 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
         .into_any()
 }
 
-/// "Step 2 of 4" and a dot per step: the current one a wide accent pill,
-/// the ones done accent dots, the ones ahead hairline dots.
+/// A dot per step: the current one a wide accent pill, the ones done accent
+/// dots, the ones ahead hairline dots.
 pub(super) fn step_indicator(ui: Ui) -> AnyView {
     let step = ui.onboard_step;
-    let label = move || {
-        I18N.tr_in(
-            ui.locale.get_untracked(),
-            "onboard-step",
-            &[
-                ("step", u32::from(step.get() + 1).into()),
-                ("total", u32::from(ONBOARD_STEPS).into()),
-            ],
-        )
-    };
     let dots: Vec<AnyView> = (0..ONBOARD_STEPS)
         .map(|i| {
             widget(
@@ -132,28 +121,10 @@ pub(super) fn step_indicator(ui: Ui) -> AnyView {
         .collect();
     widget(
         Stack::row(0.0)
-            .gap_step(nana_ui_core::SpacingStep::Md)
+            .gap_step(nana_ui_core::SpacingStep::Xs)
             .align(AlignSpec::Center),
     )
-    .children((
-        widget(
-            Text::new(label())
-                .style(Type::Caption.style())
-                .color(SemanticColorRole::Muted),
-        )
-        .bind(move |t: &mut Text| {
-            let text = label();
-            if t.value != text {
-                t.value = text;
-            }
-        }),
-        widget(
-            Stack::row(0.0)
-                .gap_step(nana_ui_core::SpacingStep::Xs)
-                .align(AlignSpec::Center),
-        )
-        .children(dots),
-    ))
+    .children(dots)
     .into_any()
 }
 
@@ -161,14 +132,8 @@ pub(super) fn step_indicator(ui: Ui) -> AnyView {
 /// their own: the footer's line is the step's only one, so none stacks on
 /// it.
 pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
-    let lead = |key: &str| {
-        widget(Stack::column(0.0).padding_xy(inset::CARD, 0.0))
-            .children(Type::Lead.view(ui.now_t(key)))
-            .into_any()
-    };
     let body: Vec<AnyView> = match n {
         0 => vec![
-            lead("onboard-welcome-body"),
             row(ui, "onboard-language", None, language_select(ui)),
             row(
                 ui,
@@ -178,13 +143,11 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
             ),
         ],
         1 => vec![
-            lead("onboard-skin-hint"),
             row(ui, "onboard-skin", None, skin_select(ui)),
             // The live preview of the skin just chosen.
             skin_preview(ui, signal(None)),
         ],
         2 => vec![
-            lead("onboard-mode-body"),
             widget(
                 Stack::row(0.0)
                     .gap_step(nana_ui_core::SpacingStep::Xl)
@@ -204,17 +167,15 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
                     .gap_step(nana_ui_core::SpacingStep::Lg)
                     .padding_xy(inset::CARD, 0.0),
             )
-            .children((subheading(ui, "onboard-hotkeys"), hotkeys_sentence(ui)))
+            .children((
+                subheading(ui, "onboard-hotkeys"),
+                hotkeys_sentence(ui),
+                // The button names itself; a row label beside it would repeat it.
+                widget(Stack::row(0.0)).children(button(ui, "onboard-obs", || {
+                    Msg::SettingsPage(Page::Output)
+                })),
+            ))
             .into_any(),
-            row(
-                ui,
-                "onboard-obs",
-                Some("onboard-obs-hint"),
-                button(ui, "onboard-obs", || Msg::SettingsPage(Page::Output)),
-            ),
-            widget(Stack::column(0.0).padding_xy(inset::CARD, 0.0))
-                .children(hint(ui.now_t("onboard-reopen")))
-                .into_any(),
         ],
     };
     widget(Stack::column(0.0)).children(body).into_any()

@@ -136,37 +136,29 @@ pub(crate) fn card_with_fields(
             }
             let body = if state.active {
                 let code = state.invitation.clone();
-                widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
-                    .children((
-                        Type::Caption.view(ui.now_t("peer-own-controls")),
-                        widget(
-                            Stack::row(0.0)
-                                .gap_step(gap::step::CONTROL)
-                                .with_layout(|l| l.flex_wrap = nana_ui_core::FlexWrap::Wrap),
+                widget(
+                    Stack::row(0.0)
+                        .gap_step(gap::step::CONTROL)
+                        .with_layout(|l| l.flex_wrap = nana_ui_core::FlexWrap::Wrap),
+                )
+                .children((
+                    (!code.is_empty()).then(|| {
+                        widget(Button::new(ui.now_t("peer-copy")).size(ControlSize::Small)).on_cx(
+                            move |_, _: &Activate, cx| {
+                                cx.dispatch_program_all(Msg::CopyText(code.clone()))
+                            },
                         )
-                        .children((
-                            (!code.is_empty()).then(|| {
-                                widget(Button::new(ui.now_t("peer-copy")).size(ControlSize::Small))
-                                    .on_cx(move |_, _: &Activate, cx| {
-                                        cx.dispatch_program_all(Msg::CopyText(code.clone()))
-                                    })
-                            }),
-                            widget(
-                                Button::new(ui.now_t("peer-window-toggle"))
-                                    .size(ControlSize::Small),
-                            )
-                            .on_cx(move |_, _: &Activate, cx| {
-                                cx.dispatch_program_all(Msg::ToggleWindow(
-                                    crate::windows::WindowKind::PeerDisplay,
-                                ))
-                            }),
-                            widget(Button::new(ui.now_t("peer-leave")).size(ControlSize::Small))
-                                .on_cx(move |_, _: &Activate, cx| {
-                                    cx.dispatch_program_all(Msg::PeerLeave)
-                                }),
-                        )),
-                    ))
-                    .into_any()
+                    }),
+                    widget(Button::new(ui.now_t("peer-window-toggle")).size(ControlSize::Small))
+                        .on_cx(move |_, _: &Activate, cx| {
+                            cx.dispatch_program_all(Msg::ToggleWindow(
+                                crate::windows::WindowKind::PeerDisplay,
+                            ))
+                        }),
+                    widget(Button::new(ui.now_t("peer-leave")).size(ControlSize::Small))
+                        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::PeerLeave)),
+                ))
+                .into_any()
             } else {
                 widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
                     .children((

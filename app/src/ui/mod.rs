@@ -133,6 +133,8 @@ pub struct Ui {
     /// Kept only in memory and cleared after import; never serialized with settings.
     pub douyin_cookie: Signal<String>,
     pub skin_preview_history: Signal<bool>,
+    /// The platform the live-platforms settings page shows.
+    pub platform_tab: Signal<crate::chat::Platform>,
     /// Actual input client width, published by its layout (also in headless views).
     pub input_width: Signal<f32>,
     pub(crate) input_sidebar_width: Signal<f32>,
@@ -158,9 +160,6 @@ pub struct Ui {
     /// The first-run guide's step, 0-based; kept while the user visits other
     /// pages (its "Connect OBS" goes to Output).
     pub onboard_step: Signal<u8>,
-    /// Clock (ms) of the input window's mirroring chip pulse; only advanced
-    /// while that chip is showing.
-    pub pulse_ms: Signal<u64>,
     pub settings_pulse_ms: Signal<u64>,
     /// Live chat, oldest first (capped).
     pub chat: Signal<Arc<Vec<Arc<crate::chat::ChatMessage>>>>,
@@ -212,6 +211,7 @@ impl Ui {
             input_dock_selected: signal(input_dock.selected),
             input_split: node_ref(),
             peer,
+            platform_tab: signal(crate::chat::Platform::Bilibili),
             peer_panel: signal(true),
             diagnostics: signal(Arc::new(Vec::new())),
             page,
@@ -225,7 +225,6 @@ impl Ui {
             system_reduced_motion: signal(false),
             input_shown: signal(true),
             onboard_step: signal(0),
-            pulse_ms: signal(0),
             settings_pulse_ms: signal(0),
             chat: signal(Arc::new(Vec::new())),
             reply: signal(None),

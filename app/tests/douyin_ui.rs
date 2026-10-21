@@ -11,7 +11,8 @@ fn douyin_page_exposes_native_cookie_actions_without_browser_controls_in_all_loc
     let skin = registry.load(nanatype_theme::DEFAULT_SKIN).unwrap().skin;
     for locale in Locale::ALL {
         let ui = Ui::new(Arc::new(Settings::default()), skin.clone(), locale);
-        ui.page.set(settings::Page::Douyin);
+        ui.platform_tab.set(nanatype::chat::Platform::Douyin);
+        ui.page.set(settings::Page::Platforms);
         let mut session = common::session()
             .themed(false)
             .mount(920, 1050, move || settings::settings_window(ui));

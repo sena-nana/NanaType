@@ -59,14 +59,7 @@ pub(super) fn matrix_label(ui: Ui, key: &str, tip: Option<&str>) -> AnyView {
     )
     .children((
         widget(Text::new(ui.now_t(key)).style(Type::Label.style())),
-        tip.map(|tip| {
-            widget(
-                IconButton::new(ti::INFO_CIRCLE, ui.now_t(tip))
-                    .size(ControlSize::Small)
-                    .kind(ButtonKind::Ghost)
-                    .with_tooltip(ui.now_t(tip)),
-            )
-        }),
+        tip.map(|tip| info_tip(ui, tip)),
     ))
     .into_any()
 }
@@ -242,7 +235,7 @@ pub(super) fn windows(ui: Ui) -> AnyView {
     // The size the window was dragged to ("Follow skin" until it is), and
     // the reset that puts it back where and as big as the skin says.
     let size = matrix_row(
-        matrix_label(ui, "windows-size", Some("windows-reset-tip")),
+        matrix_label(ui, "windows-size", None),
         OVERLAYS.map(|kind| {
             let text = move || {
                 let size = ui.settings.with(|s| kind.saved_size(s));
@@ -281,20 +274,9 @@ pub(super) fn windows(ui: Ui) -> AnyView {
             .into_any()
         }),
     );
-    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
-        .children((
-            section(
-                ui,
-                "",
-                vec![header, show, lock, background, on_top, vertical_text, size],
-            ),
-            widget(
-                Stack::column(0.0).padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Md),
-            )
-            .children((
-                hint(ui.now_t("windows-layout-hint")),
-                hint(ui.now_t("windows-input-na")),
-            )),
-        ))
-        .into_any()
+    section(
+        ui,
+        "",
+        vec![header, show, lock, background, on_top, vertical_text, size],
+    )
 }

@@ -42,7 +42,8 @@ fn app_code() -> String {
     let mut dirs = vec!["app/src".to_owned()];
     for entry in std::fs::read_dir(root().join("crates")).unwrap().flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if !matches!(name.as_str(), "frame" | "i18n") {
+        // Only crate folders: Finder leaves `.DS_Store` files beside them.
+        if entry.path().is_dir() && !matches!(name.as_str(), "frame" | "i18n") {
             dirs.push(format!("crates/{name}"));
         }
     }

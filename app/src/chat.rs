@@ -24,6 +24,13 @@ pub enum Platform {
     Twitch,
 }
 impl Platform {
+    pub const ALL: [Self; 5] = [
+        Self::Bilibili,
+        Self::Douyin,
+        Self::Youtube,
+        Self::Twitch,
+        Self::Blivechat,
+    ];
     pub fn source(self) -> &'static str {
         match self {
             Self::Bilibili => SOURCE,

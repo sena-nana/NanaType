@@ -1688,11 +1688,11 @@ fn layout_switch_preserves_both_editors_selection_rich_content_and_undo() {
                 .accessibility_dump()
                 .into_iter()
                 .find(|n| {
-                    n.role == "switch"
+                    n.role == "button"
                         && n.label.as_deref() == Some(f.ui.now_t("input-skin-preview").as_str())
                 })
                 .unwrap();
-            assert!(switch.bounds.width >= 32.0);
+            assert!(switch.bounds.width >= 28.0);
             if preview {
                 f.click(
                     switch.bounds.x + switch.bounds.width / 2.0,

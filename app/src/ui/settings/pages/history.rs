@@ -35,10 +35,10 @@ pub(super) fn history(ui: Ui) -> AnyView {
                             },
                         ),
                     ),
-                    row(
+                    row_tip(
                         ui,
                         "history-hide-latest",
-                        Some("history-hide-latest-hint"),
+                        "history-hide-latest-hint",
                         select(
                             ui,
                             select_keys(
@@ -121,32 +121,49 @@ pub(super) fn history(ui: Ui) -> AnyView {
                     ),
                 ],
             ),
-            section(ui, "history-chat", {
-                let mut rows = vec![
-                    toggle_row!(ui, "history-chat-show", history.chat.enabled),
-                    toggle_row!(ui, "history-show-quote", history.show_quote),
-                ];
-                rows.extend([
-                    toggle_row!(ui, "chat-filter-text", history.chat.filter.text),
-                    toggle_row!(ui, "chat-filter-super-chat", history.chat.filter.super_chat),
-                    toggle_row!(ui, "chat-filter-gift", history.chat.filter.gift),
-                    toggle_row!(ui, "chat-filter-member", history.chat.filter.member),
-                    row(
-                        ui,
-                        "chat-min-gift",
-                        Some("chat-min-gift-hint"),
-                        number(
-                            ui,
-                            (0.0, 10000.0),
-                            |s| f64::from(s.history.chat.filter.min_gift_coin) / 1000.0,
-                            |s, v| {
-                                s.history.chat.filter.min_gift_coin = (v * 1000.0).round() as u32
-                            },
-                        ),
+            // The filters only mean something while chat joins the history.
+            section_with(
+                ui,
+                "history-chat",
+                vec![
+                    (
+                        toggle_row!(ui, "history-chat-show", history.chat.enabled),
+                        None,
                     ),
-                ]);
-                rows
-            }),
+                    when_on(
+                        ui,
+                        |s| s.history.chat.enabled,
+                        vec![
+                            toggle_row!(ui, "chat-filter-text", history.chat.filter.text),
+                            toggle_row!(
+                                ui,
+                                "chat-filter-super-chat",
+                                history.chat.filter.super_chat
+                            ),
+                            toggle_row!(ui, "chat-filter-gift", history.chat.filter.gift),
+                            toggle_row!(ui, "chat-filter-member", history.chat.filter.member),
+                            row(
+                                ui,
+                                "chat-min-gift",
+                                None,
+                                number(
+                                    ui,
+                                    (0.0, 10000.0),
+                                    |s| f64::from(s.history.chat.filter.min_gift_coin) / 1000.0,
+                                    |s, v| {
+                                        s.history.chat.filter.min_gift_coin =
+                                            (v * 1000.0).round() as u32
+                                    },
+                                ),
+                            ),
+                        ],
+                    ),
+                    (
+                        toggle_row!(ui, "history-show-quote", history.show_quote),
+                        None,
+                    ),
+                ],
+            ),
             // Where the window itself and its capture are set.
             section(
                 ui,
@@ -154,7 +171,7 @@ pub(super) fn history(ui: Ui) -> AnyView {
                 vec![row(
                     ui,
                     "history-window-link",
-                    Some("history-window-link-hint"),
+                    None,
                     widget(
                         Stack::row(0.0)
                             .gap_step(gap::step::TIGHT)

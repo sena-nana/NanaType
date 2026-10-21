@@ -196,6 +196,8 @@ pub enum Msg {
     ResetWindow(WindowKind),
     OpenSettings,
     SettingsPage(crate::ui::settings::Page),
+    /// The live-platforms page, open at this platform.
+    SettingsPlatform(crate::chat::Platform),
     PickFile(FileTarget),
     DeleteSkin(String),
     ExportSkin(String),

@@ -180,18 +180,10 @@ pub(super) fn playback(ui: Ui) -> AnyView {
                         None,
                     ),
                     (
-                        // Short option names; the hint spells out the chosen one.
-                        row_live_hint(
+                        row(
                             ui,
                             "playback-queue",
-                            move || {
-                                let key = ui.settings.with(|s| match s.playback.queue {
-                                    QueuePolicy::Replace => "playback-queue-replace",
-                                    QueuePolicy::FinishThenNext => "playback-queue-finish",
-                                    QueuePolicy::Queue => "playback-queue-queue",
-                                });
-                                Some(I18N.t_in(ui.locale.get(), key))
-                            },
+                            None,
                             segmented(
                                 ui,
                                 select_keys(
@@ -219,23 +211,15 @@ pub(super) fn playback(ui: Ui) -> AnyView {
                         None,
                     ),
                     (
-                        // The hint says what the system asks for too: either
-                        // one reduces motion.
+                        // When the system already asks for less motion, say so:
+                        // either one reduces it.
                         row_live_hint(
                             ui,
                             "playback-reduced",
                             move || {
-                                let locale = ui.locale.get();
-                                let system = if ui.system_reduced_motion.get() {
-                                    "playback-reduced-system-on"
-                                } else {
-                                    "playback-reduced-system-off"
-                                };
-                                Some(format!(
-                                    "{} · {}",
-                                    I18N.t_in(locale, "playback-reduced-hint"),
-                                    I18N.t_in(locale, system)
-                                ))
+                                ui.system_reduced_motion.get().then(|| {
+                                    I18N.t_in(ui.locale.get(), "playback-reduced-system-on")
+                                })
                             },
                             switch(
                                 ui,

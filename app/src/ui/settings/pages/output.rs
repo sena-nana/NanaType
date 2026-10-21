@@ -175,106 +175,91 @@ pub(super) fn output(ui: Ui) -> AnyView {
             WindowKind::PeerDisplay => |s| &mut s.output.peer_display,
             _ => |s| &mut s.output.history,
         };
-        section(
+        toggled_section(
             ui,
             title,
+            row(
+                ui,
+                if cfg!(target_os = "macos") {
+                    "output-syphon"
+                } else {
+                    "output-spout"
+                },
+                None,
+                crate::ui::kit::hstack((
+                    link_badge(ui, link),
+                    switch(
+                        ui,
+                        move |s| read(s).enabled,
+                        move |s, v| write(s).enabled = v,
+                    ),
+                )),
+            ),
+            move |s| read(s).enabled,
             vec![
                 row(
                     ui,
-                    if cfg!(target_os = "macos") {
-                        "output-syphon"
-                    } else {
-                        "output-spout"
-                    },
-                    (kind == WindowKind::PeerDisplay).then_some("output-peer-hint"),
-                    widget(
-                        Stack::row(0.0)
-                            .gap_step(gap::step::CONTROL)
-                            .align(AlignSpec::Center),
-                    )
-                    .children((
-                        link_badge(ui, link),
-                        switch(
-                            ui,
-                            move |s| read(s).enabled,
-                            move |s, v| write(s).enabled = v,
-                        ),
-                    ))
-                    .into_any(),
+                    "output-spout-name",
+                    None,
+                    widget(Stack::row(0.0).gap_step(gap::step::TIGHT))
+                        .children((
+                            text(
+                                ui,
+                                String::new(),
+                                field::MD,
+                                move |s| read(s).name.clone(),
+                                move |s, v| write(s).name = v,
+                            ),
+                            widget(
+                                IconButton::new(ti::COPY, ui.now_t("output-spout-copy"))
+                                    .size(ControlSize::Small)
+                                    .with_tooltip(ui.now_t("output-spout-copy")),
+                            )
+                            .on_cx(move |_, _: &Activate, cx| {
+                                // Read when clicked: the name may have been edited since the
+                                // page was built.
+                                let current = read(&ui.settings.get_untracked()).name.clone();
+                                cx.dispatch_program_all(Msg::CopyText(current))
+                            }),
+                        ))
+                        .into_any(),
                 ),
-                when_on(
+                row(
                     ui,
-                    move |s| read(s).enabled,
-                    vec![
-                        row(
-                            ui,
-                            "output-spout-name",
-                            None,
-                            widget(Stack::row(0.0).gap_step(gap::step::TIGHT))
-                                .children((
-                                    text(
-                                        ui,
-                                        String::new(),
-                                        field::MD,
-                                        move |s| read(s).name.clone(),
-                                        move |s, v| write(s).name = v,
-                                    ),
-                                    widget(
-                                        IconButton::new(ti::COPY, ui.now_t("output-spout-copy"))
-                                            .size(ControlSize::Small)
-                                            .with_tooltip(ui.now_t("output-spout-copy")),
-                                    )
-                                    .on_cx(
-                                        move |_, _: &Activate, cx| {
-                                            // Read when clicked: the name may have been edited since the
-                                            // page was built.
-                                            let current =
-                                                read(&ui.settings.get_untracked()).name.clone();
-                                            cx.dispatch_program_all(Msg::CopyText(current))
-                                        },
-                                    ),
-                                ))
-                                .into_any(),
-                        ),
-                        row(
-                            ui,
-                            "output-spout-size",
-                            None,
-                            select(
-                                ui,
-                                vec![
-                                    ("window".into(), ui.now_t("output-spout-size-window")),
-                                    ("1280x720".into(), "1280 × 720".into()),
-                                    ("1920x1080".into(), "1920 × 1080".into()),
-                                    ("2560x1440".into(), "2560 × 1440".into()),
-                                    ("3840x2160".into(), "3840 × 2160".into()),
-                                ],
-                                move |s| {
-                                    read(s)
-                                        .size
-                                        .map(|[w, h]| format!("{w}x{h}"))
-                                        .unwrap_or_else(|| "window".into())
-                                },
-                                move |s, v| {
-                                    let size = v.split_once('x').and_then(|(w, h)| {
-                                        Some([w.parse().ok()?, h.parse().ok()?])
-                                    });
-                                    write(s).size = size;
-                                },
-                            ),
-                        ),
-                        row(
-                            ui,
-                            "output-spout-straight",
-                            Some("output-spout-straight-hint"),
-                            switch(
-                                ui,
-                                move |s| read(s).straight_alpha,
-                                move |s, v| write(s).straight_alpha = v,
-                            ),
-                        ),
-                    ],
-                    "output-off-hint",
+                    "output-spout-size",
+                    None,
+                    select(
+                        ui,
+                        vec![
+                            ("window".into(), ui.now_t("output-spout-size-window")),
+                            ("1280x720".into(), "1280 × 720".into()),
+                            ("1920x1080".into(), "1920 × 1080".into()),
+                            ("2560x1440".into(), "2560 × 1440".into()),
+                            ("3840x2160".into(), "3840 × 2160".into()),
+                        ],
+                        move |s| {
+                            read(s)
+                                .size
+                                .map(|[w, h]| format!("{w}x{h}"))
+                                .unwrap_or_else(|| "window".into())
+                        },
+                        move |s, v| {
+                            let size = v
+                                .split_once('x')
+                                .and_then(|(w, h)| Some([w.parse().ok()?, h.parse().ok()?]));
+                            write(s).size = size;
+                        },
+                    ),
+                ),
+                row_tip(
+                    ui,
+                    "output-spout-straight",
+                    "output-spout-straight-hint",
+                    switch(
+                        ui,
+                        move |s| read(s).straight_alpha,
+                        move |s, v| write(s).straight_alpha = v,
+                    ),
                 ),
             ],
         )

@@ -30,8 +30,6 @@ pub enum WindowKind {
 
 /// Height of the input window's toolbar.
 pub const TOOLBAR_H: f32 = 48.0;
-/// Height of the input window's plain-text / skin-preview switch row.
-pub const INPUT_MODE_H: f32 = 36.0;
 pub const INPUT_SIZE: (f32, f32) = (1200.0, 640.0);
 pub const INPUT_ACTIONS_H: f32 = 56.0;
 pub const INPUT_MIN: (f64, f64) = (720.0, 360.0);

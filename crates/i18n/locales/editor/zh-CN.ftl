@@ -8,7 +8,7 @@ editor-data-dir-open = 打开
 
 # Package provenance and explicit script consent
 pkgedit-title = 包编辑器
-pkgedit-intro = 新建、打开或复制皮肤／资源／Lua 混装包。修改只保存在草稿里，不会改变当前皮肤、已安装的包或正在运行的插件；导出 .ntpkg 后再导入才会生效。
+pkgedit-intro = 修改只保存在草稿里，导出 .ntpkg 并导入后才会生效。
 pkgedit-kind-skin = 纯皮肤
 pkgedit-kind-resources = 纯资源
 pkgedit-kind-lua = 纯 Lua
@@ -71,7 +71,6 @@ pkgedit-dependencies-hint = 依赖，每行一个“包ID@精确版本”；应�
 pkgedit-apply = 应用
 pkgedit-data = 声明的数据
 pkgedit-data-none = 没有声明数据。
-pkgedit-data-hint = 表单修改先经严格解析再写回 package.toml，保留注释和其他键；不通过时不写入。完整校验结果出现在问题列表里。
 pkgedit-pipelines = 处理管线
 pkgedit-pipelines-none = 没有声明处理管线。
 pkgedit-data-missing = 文件不存在
@@ -110,8 +109,6 @@ pkgedit-unseal = 移除签名以便修改
 pkgedit-derive = 创建衍生副本
 pkgedit-derive-hint = 衍生副本使用新的包 ID，记录来源并去除签名。
 pkgedit-preview-none = 此工程没有皮肤，或皮肤还没通过校验。
-pkgedit-preview-note = 预览使用实际的展示与历史渲染器，只作用于这份草稿。
-pkgedit-preview-input-note = 输入窗口预览使用实际的输入框渲染器和一份私有的示例草稿，不会改动当前输入窗口或编辑器内容。
 pkgedit-debug-no-lua = 此工程没有声明 Lua 能力。
 pkgedit-debug-risk = 调试会在独立的沙箱工作进程中运行当前草稿的脚本。它只能收到你发送的测试事件，结果只显示在这里；但脚本仍可能显示误导内容或占用资源。只运行你已经审查过的源码。修改任何文件都会停止脚本并需要重新确认。
 pkgedit-debug-trust = 我已审查当前源码，信任它在调试进程中运行

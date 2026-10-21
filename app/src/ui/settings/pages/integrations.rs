@@ -83,12 +83,7 @@ pub(super) fn vts_mapping(ui: Ui) -> AnyView {
                 .grow(1.0)
                 .shrink(1.0),
         )
-        .children((
-            subheading(ui, "int-vts-map"),
-            widget(Stack::column(0.0))
-                .visible(move || !authorized())
-                .children(hint(ui.now_t("int-vts-authorize-hint"))),
-        )),
+        .children(subheading(ui, "int-vts-map")),
         widget(
             Stack::row(0.0)
                 .gap_step(gap::step::TIGHT)
@@ -208,205 +203,169 @@ pub(super) fn vts_mapping(ui: Ui) -> AnyView {
 pub(super) fn integrations(ui: Ui) -> AnyView {
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
-            section(
+            toggled_section(
                 ui,
-                "int-vts",
-                vec![
-                    row(
-                        ui,
-                        "int-vts",
-                        Some("int-vts-hint"),
-                        widget(
-                            Stack::row(0.0)
-                                .gap_step(gap::step::CONTROL)
-                                .align(AlignSpec::Center),
-                        )
-                        .children((
-                            link_badge(ui, |s| &s.vts),
-                            switch(
-                                ui,
-                                |s| s.integrations.vts.enabled,
-                                |s, v| s.integrations.vts.enabled = v,
-                            ),
-                        ))
-                        .into_any(),
-                    ),
-                    when_on(
-                        ui,
-                        |s| s.integrations.vts.enabled,
-                        vec![
-                            row(
-                                ui,
-                                "int-vts-port",
-                                None,
-                                port(
-                                    ui,
-                                    |s| s.integrations.vts.port,
-                                    |s, v| s.integrations.vts.port = v,
-                                ),
-                            ),
-                            vts_mapping(ui),
-                            toggle_row!(ui, "int-vts-lipsync", integrations.vts.lip_sync),
-                            row(
-                                ui,
-                                "int-vts-mouth-param",
-                                Some("int-vts-mouth-param-hint"),
-                                text(
-                                    ui,
-                                    "MouthOpen".into(),
-                                    field::SM,
-                                    |s| s.integrations.vts.mouth_param.clone(),
-                                    |s, v| s.integrations.vts.mouth_param = v,
-                                ),
-                            ),
-                            row(
-                                ui,
-                                "int-vts-mouth-amp",
-                                None,
-                                slider(
-                                    ui,
-                                    (0.1, 1.0, 0.05),
-                                    "",
-                                    |s| f64::from(s.integrations.vts.mouth_amp),
-                                    |s, v| s.integrations.vts.mouth_amp = v as f32,
-                                ),
-                            ),
-                            row(
-                                ui,
-                                "int-vts-reset",
-                                Some("int-vts-reset-hint"),
-                                select(
-                                    ui,
-                                    select_keys(
-                                        ui,
-                                        &[
-                                            ("line_end", "int-vts-reset-line-end"),
-                                            ("next_line", "int-vts-reset-next-line"),
-                                            ("off", "int-vts-reset-off"),
-                                        ],
-                                    ),
-                                    |s| s.integrations.vts.reset_expressions.key().into(),
-                                    |s, v| {
-                                        s.integrations.vts.reset_expressions =
-                                            VtsReset::from_key(v).unwrap_or_default()
-                                    },
-                                ),
-                            ),
-                        ],
-                        "int-off-hint",
-                    ),
-                ],
-            ),
-            section(
-                ui,
-                "int-osc",
-                vec![
-                    row(
-                        ui,
-                        "int-osc",
-                        Some("int-osc-hint"),
-                        widget(
-                            Stack::row(0.0)
-                                .gap_step(gap::step::CONTROL)
-                                .align(AlignSpec::Center),
-                        )
-                        .children((
-                            link_badge(ui, |s| &s.osc),
-                            switch(
-                                ui,
-                                |s| s.integrations.osc.enabled,
-                                |s, v| s.integrations.osc.enabled = v,
-                            ),
-                        ))
-                        .into_any(),
-                    ),
-                    when_on(
-                        ui,
-                        |s| s.integrations.osc.enabled,
-                        vec![
-                            row(
-                                ui,
-                                "int-osc-host",
-                                None,
-                                code_text(
-                                    ui,
-                                    "127.0.0.1".into(),
-                                    field::SM,
-                                    |s| s.integrations.osc.host.clone(),
-                                    |s, v| s.integrations.osc.host = v,
-                                ),
-                            ),
-                            row(
-                                ui,
-                                "int-osc-port",
-                                None,
-                                port(
-                                    ui,
-                                    |s| s.integrations.osc.port,
-                                    |s, v| s.integrations.osc.port = v,
-                                ),
-                            ),
-                            row(
-                                ui,
-                                "int-osc-prefix",
-                                None,
-                                code_text(
-                                    ui,
-                                    "/nanatype".into(),
-                                    field::SM,
-                                    |s| s.integrations.osc.prefix.clone(),
-                                    |s, v| s.integrations.osc.prefix = v,
-                                ),
-                            ),
-                        ],
-                        "int-off-hint",
-                    ),
-                ],
-            ),
-            section(
-                ui,
-                "int-ws",
-                vec![
-                    row(
-                        ui,
-                        "int-ws",
-                        Some("int-ws-hint"),
-                        widget(
-                            Stack::row(0.0)
-                                .gap_step(gap::step::CONTROL)
-                                .align(AlignSpec::Center),
-                        )
-                        .children((
-                            link_badge(ui, |s| &s.ws),
-                            switch(
-                                ui,
-                                |s| s.integrations.websocket.enabled,
-                                |s, v| s.integrations.websocket.enabled = v,
-                            ),
-                        ))
-                        .into_any(),
-                    ),
-                    when_on(
-                        ui,
-                        |s| s.integrations.websocket.enabled,
-                        vec![row(
+                "",
+                row(
+                    ui,
+                    "int-vts",
+                    Some("int-vts-hint"),
+                    crate::ui::kit::hstack((
+                        link_badge(ui, |s| &s.vts),
+                        switch(
                             ui,
-                            "int-ws-port",
-                            None,
-                            port(
+                            |s| s.integrations.vts.enabled,
+                            |s, v| s.integrations.vts.enabled = v,
+                        ),
+                    )),
+                ),
+                |s| s.integrations.vts.enabled,
+                vec![
+                    row(
+                        ui,
+                        "int-vts-port",
+                        None,
+                        port(
+                            ui,
+                            |s| s.integrations.vts.port,
+                            |s, v| s.integrations.vts.port = v,
+                        ),
+                    ),
+                    vts_mapping(ui),
+                    toggle_row!(ui, "int-vts-lipsync", integrations.vts.lip_sync),
+                    row(
+                        ui,
+                        "int-vts-mouth-param",
+                        None,
+                        text(
+                            ui,
+                            "MouthOpen".into(),
+                            field::SM,
+                            |s| s.integrations.vts.mouth_param.clone(),
+                            |s, v| s.integrations.vts.mouth_param = v,
+                        ),
+                    ),
+                    row(
+                        ui,
+                        "int-vts-mouth-amp",
+                        None,
+                        slider(
+                            ui,
+                            (0.1, 1.0, 0.05),
+                            "",
+                            |s| f64::from(s.integrations.vts.mouth_amp),
+                            |s, v| s.integrations.vts.mouth_amp = v as f32,
+                        ),
+                    ),
+                    row(
+                        ui,
+                        "int-vts-reset",
+                        None,
+                        select(
+                            ui,
+                            select_keys(
                                 ui,
-                                |s| s.integrations.websocket.port,
-                                |s, v| {
-                                    // Below 1024 needs admin rights; keep the last good port.
-                                    if v >= 1024 {
-                                        s.integrations.websocket.port = v;
-                                    }
-                                },
+                                &[
+                                    ("line_end", "int-vts-reset-line-end"),
+                                    ("next_line", "int-vts-reset-next-line"),
+                                    ("off", "int-vts-reset-off"),
+                                ],
                             ),
-                        )],
-                        "int-off-hint",
+                            |s| s.integrations.vts.reset_expressions.key().into(),
+                            |s, v| {
+                                s.integrations.vts.reset_expressions =
+                                    VtsReset::from_key(v).unwrap_or_default()
+                            },
+                        ),
                     ),
                 ],
+            ),
+            toggled_section(
+                ui,
+                "",
+                row(
+                    ui,
+                    "int-osc",
+                    Some("int-osc-hint"),
+                    crate::ui::kit::hstack((
+                        link_badge(ui, |s| &s.osc),
+                        switch(
+                            ui,
+                            |s| s.integrations.osc.enabled,
+                            |s, v| s.integrations.osc.enabled = v,
+                        ),
+                    )),
+                ),
+                |s| s.integrations.osc.enabled,
+                vec![
+                    row(
+                        ui,
+                        "int-osc-host",
+                        None,
+                        code_text(
+                            ui,
+                            "127.0.0.1".into(),
+                            field::SM,
+                            |s| s.integrations.osc.host.clone(),
+                            |s, v| s.integrations.osc.host = v,
+                        ),
+                    ),
+                    row(
+                        ui,
+                        "int-osc-port",
+                        None,
+                        port(
+                            ui,
+                            |s| s.integrations.osc.port,
+                            |s, v| s.integrations.osc.port = v,
+                        ),
+                    ),
+                    row(
+                        ui,
+                        "int-osc-prefix",
+                        None,
+                        code_text(
+                            ui,
+                            "/nanatype".into(),
+                            field::SM,
+                            |s| s.integrations.osc.prefix.clone(),
+                            |s, v| s.integrations.osc.prefix = v,
+                        ),
+                    ),
+                ],
+            ),
+            toggled_section(
+                ui,
+                "",
+                row(
+                    ui,
+                    "int-ws",
+                    Some("int-ws-hint"),
+                    crate::ui::kit::hstack((
+                        link_badge(ui, |s| &s.ws),
+                        switch(
+                            ui,
+                            |s| s.integrations.websocket.enabled,
+                            |s, v| s.integrations.websocket.enabled = v,
+                        ),
+                    )),
+                ),
+                |s| s.integrations.websocket.enabled,
+                vec![row(
+                    ui,
+                    "int-ws-port",
+                    None,
+                    port(
+                        ui,
+                        |s| s.integrations.websocket.port,
+                        |s, v| {
+                            // Below 1024 needs admin rights; keep the last good port.
+                            if v >= 1024 {
+                                s.integrations.websocket.port = v;
+                            }
+                        },
+                    ),
+                )],
             ),
         ))
         .into_any()

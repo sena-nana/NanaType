@@ -672,7 +672,7 @@ fn header_layout(ui: Ui, narrow: bool) -> AnyView {
         ),
         action(ui, ti::TRASH, "chat-clear", || Msg::ClearChat),
         action(ui, ti::SETTINGS, "window-settings", || {
-            Msg::SettingsPage(super::settings::Page::Integrations)
+            Msg::SettingsPage(super::settings::Page::Platforms)
         }),
     ];
     let bar = if narrow {

@@ -98,11 +98,7 @@ fn update_status(ui: Ui, state: &crate::app::update::State) -> AnyView {
     let tr = |key: &str, args: &[(&str, nanatype_i18n::Arg<'_>)]| I18N.tr_in(locale, key, args);
     let check = || button(ui, "update-check", || Msg::CheckUpdate);
     let (title, detail, buttons) = match state {
-        State::Idle => (
-            ui.now_t("about-update"),
-            Some(ui.now_t("about-update-hint")),
-            vec![check()],
-        ),
+        State::Idle => (ui.now_t("about-update"), None, vec![check()]),
         State::Checking => (ui.now_t("update-checking"), None, Vec::new()),
         State::UpToDate => (
             ui.now_t("update-up-to-date"),
@@ -128,7 +124,7 @@ fn update_status(ui: Ui, state: &crate::app::update::State) -> AnyView {
             version,
             done,
             total,
-            source,
+            ..
         } => (
             tr(
                 "update-downloading",
@@ -136,10 +132,7 @@ fn update_status(ui: Ui, state: &crate::app::update::State) -> AnyView {
             ),
             Some(tr(
                 "update-downloading-hint",
-                &[
-                    ("percent", (done * 100 / (*total).max(1)).to_string().into()),
-                    ("source", source.as_str().into()),
-                ],
+                &[("percent", (done * 100 / (*total).max(1)).to_string().into())],
             )),
             vec![button(ui, "update-cancel", || Msg::CancelUpdate)],
         ),

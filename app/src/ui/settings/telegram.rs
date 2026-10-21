@@ -1,4 +1,4 @@
-use super::controls::{block, hint, row, row_text, section, text};
+use super::controls::{block, row, row_text, row_tip, section, text};
 use crate::ui::kit::{Type, field, gap};
 use crate::{
     msg::Msg,
@@ -56,11 +56,10 @@ pub(super) fn panel(ui: Ui) -> AnyView {
         ui,
         "telegram-stickers",
         vec![
-            block(hint(ui.now_t("telegram-hint"))),
-            row(
+            row_tip(
                 ui,
                 "telegram-api-id",
-                None,
+                "telegram-hint",
                 text(
                     ui,
                     String::new(),
@@ -75,10 +74,17 @@ pub(super) fn panel(ui: Ui) -> AnyView {
                     |s, value| s.assets.telegram.api_id = value.parse().unwrap_or(0),
                 ),
             ),
-            row(
+            widget(Stack::column(0.0))
+                .visible(move || ui.telegram.get().phase == Phase::Offline)
+                .children((
+                    field(ui, "telegram-api-hash", api_hash, true),
+                    field(ui, "telegram-phone", phone, true),
+                ))
+                .into_any(),
+            row_tip(
                 ui,
                 "telegram-proxy",
-                Some("telegram-proxy-hint"),
+                "telegram-proxy-hint",
                 text(
                     ui,
                     "socks5://127.0.0.1:7890".into(),
@@ -87,13 +93,6 @@ pub(super) fn panel(ui: Ui) -> AnyView {
                     |s, value| s.assets.telegram.proxy = value,
                 ),
             ),
-            widget(Stack::column(0.0))
-                .visible(move || ui.telegram.get().phase == Phase::Offline)
-                .children((
-                    field(ui, "telegram-api-hash", api_hash, true),
-                    field(ui, "telegram-phone", phone, true),
-                ))
-                .into_any(),
             block(action(ui, "telegram-connect", move || {
                 let settings = ui.settings.get_untracked();
                 let hash = api_hash.get_untracked();
