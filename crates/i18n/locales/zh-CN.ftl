@@ -419,9 +419,22 @@ assets-phrase-hotkey = 快捷键
 
 ## 关于
 about-build = 构建 { $build }
-about-logs = 打开日志文件夹
-about-data = 打开数据文件夹
-about-homepage = 项目主页
+about-logs = 日志文件夹
+about-data = 数据文件夹
+about-repository = 官方仓库
+about-bilibili = 官方 B 站
+about-disclaimer = 第三方声明
+about-disclaimer-body = NanaType 是独立开发的第三方工具，与哔哩哔哩、抖音等平台及其运营方没有任何关联，也未获得其认可或授权。相关名称与商标归各自权利人所有。
+about-custom-skins = 定制皮肤
+about-custom-skins-body = 如果你需要定制皮肤支持，可以联系相关创作者或联系开发者，开发者提供基础的定制服务。
+about-contact = 联系开发者
+about-open = 打开
+about-open-link = 打开链接
+about-expand = 展开
+about-collapse = 收起
+about-disclaimer-unofficial = 非官方声明
+about-disclaimer-unofficial-hint = 与哔哩哔哩、抖音等平台没有关联
+about-licenses = 开源许可证
 
 ## 首次启动
 onboard-welcome = 欢迎使用 NanaType
@@ -556,7 +569,7 @@ onboard-skin-hint = 为对话框挑一个外观，下方实时预览。更多调
 onboard-mode-body = 选择台词怎样进入展示框，之后随时可在输入框里切换。
 onboard-obs-hint = 通过 Spout2 把展示框送进直播画面
 onboard-reopen = 之后可以在「关于」页重新打开这份引导。
-about-setup-guide = 打开新手引导
+about-setup-guide = 新手引导
 playback-reduced-system-on = 系统设置：开
 playback-reduced-system-off = 系统设置：关
 ## end wave4-onboarding
@@ -568,14 +581,9 @@ skins-fallback-font = 替代字体
 ## wave5-fonts-licences
 about-fonts = 开源字体
 about-fonts-hint = 内置皮肤随附的字体，以及它们的许可全文
-about-fonts-show = 查看许可
-about-fonts-hide = 收起
 about-fonts-author = 作者：{ $author }
 about-fonts-version = 版本：{ $version }
 about-fonts-license-other = 许可见下文
-about-interfaces = 接口来源与许可
-about-interfaces-hint = 弹幕接口依据与签名实现来自以下社区项目，NanaType 仅负责接入、移植和适配。
-about-design = 设计来源
 about-design-echo = Echo-Live 原版、玻璃、气泡、虚空四套皮肤的设计参考自 sheep-realms/Echo-Live，原作者为 Sheep-realms 及项目贡献者。NanaType 使用本地皮肤格式实现和适配这些样式。
 about-design-upstream-license = 原项目授权说明
 about-license-project = 原创代码采用 MIT；继承资料保留原许可。B 站组件及完整应用同时包含 CC BY-NC 4.0 材料，须遵守其署名及非商业条件。

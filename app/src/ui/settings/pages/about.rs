@@ -1,21 +1,35 @@
 use super::*;
 
+use nana_ui::runtime::Icon;
+
 /// A licence or notice text's scroll height.
 const LICENCE_H: f32 = 300.0;
 
 /// The logo's size in the About header.
 const ABOUT_ICON: f32 = 56.0;
 
+/// Who made NanaType and where to find them; the local folders; then the
+/// notices and licences, each folded until asked for.
 pub(super) fn about(ui: Ui) -> AnyView {
+    let sections = vec![
+        section_with(ui, "", identity(ui)),
+        section(ui, "", local(ui)),
+        section_with(ui, "about-disclaimer", notices(ui)),
+        section_with(ui, "about-licenses", licences(ui)),
+    ];
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
+        .children(sections)
+        .into_any()
+}
+
+/// The logo, name and version, the official links and custom skins.
+fn identity(ui: Ui) -> Vec<(AnyView, Shown)> {
     let locale = ui.locale.get_untracked();
     let build = I18N.tr_in(
         locale,
         "about-build",
         &[("build", env!("NANATYPE_BUILD_ID").into())],
     );
-    let paths = crate::paths::Paths::resolve();
-    let (logs, data) = (paths.logs.clone(), paths.data.clone());
-    let icon = super::super::logo(ABOUT_ICON);
     let version_chip = crate::ui::kit::mono_tag(format!("v{}", env!("CARGO_PKG_VERSION")));
     let header = widget(
         Stack::row(0.0)
@@ -24,7 +38,7 @@ pub(super) fn about(ui: Ui) -> AnyView {
             .align(AlignSpec::Center),
     )
     .children((
-        icon,
+        super::super::logo(ABOUT_ICON),
         widget(crate::ui::kit::grow_column(gap::TIGHT)).children((
             widget(
                 Stack::row(0.0)
@@ -36,119 +50,121 @@ pub(super) fn about(ui: Ui) -> AnyView {
             hint(build),
         )),
     ));
-    let link = |key: &str, icon: nana_ui::runtime::Icon, msg: Box<dyn Fn() -> Msg + Send>| {
-        let mut button = Button::new(ui.now_t(key))
-            .kind(ButtonKind::Ghost)
-            .size(ControlSize::Small)
-            .icon(icon);
-        button.style.control_padding_x = None;
-        widget(button)
-            .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
-            .into_any()
-    };
-    let links = widget(
-        Stack::row(0.0)
-            .gap_step(nana_ui_core::SpacingStep::Sm)
-            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg)
-            .wrap(true),
-    )
-    .children(vec![
-        link(
+    vec![
+        (header.into_any(), None),
+        (
+            row_text(
+                ui.now_t("about-repository"),
+                Some(HOMEPAGE.trim_start_matches("https://").to_owned()),
+                link_icon(ui, "about-open-link", ti::EXTERNAL_LINK, HOMEPAGE),
+            ),
+            None,
+        ),
+        (
+            row_text(
+                ui.now_t("about-bilibili"),
+                Some("UID 82717585".to_owned()),
+                link_icon(ui, "about-open-link", ti::EXTERNAL_LINK, BILIBILI),
+            ),
+            None,
+        ),
+        (
+            row(
+                ui,
+                "about-custom-skins",
+                Some("about-custom-skins-body"),
+                link_icon(ui, "about-contact", ti::BRAND_BILIBILI, BILIBILI),
+            ),
+            None,
+        ),
+    ]
+}
+
+/// The log and data folders, and the first-run guide again.
+fn local(ui: Ui) -> Vec<AnyView> {
+    let paths = crate::paths::Paths::resolve();
+    let (logs, data) = (paths.logs.clone(), paths.data.clone());
+    vec![
+        row(
+            ui,
             "about-logs",
-            ti::FILE_TEXT,
-            Box::new(move || Msg::OpenFolder(logs.clone())),
+            None,
+            icon_action(ui, "about-open", ti::FOLDER_OPEN, move || {
+                Msg::OpenFolder(logs.clone())
+            }),
         ),
-        link(
+        row(
+            ui,
             "about-data",
-            ti::FOLDER_OPEN,
-            Box::new(move || Msg::OpenFolder(data.clone())),
-        ),
-        link(
-            "about-homepage",
-            ti::EXTERNAL_LINK,
-            Box::new(|| Msg::OpenUrl(HOMEPAGE)),
+            None,
+            icon_action(ui, "about-open", ti::FOLDER_OPEN, move || {
+                Msg::OpenFolder(data.clone())
+            }),
         ),
         // The first-run guide again, from its first step, on General.
-        {
-            let mut guide = Button::new(ui.now_t("about-setup-guide"))
-                .kind(ButtonKind::Ghost)
-                .size(ControlSize::Small)
-                .icon(ti::SPARKLES);
-            guide.style.control_padding_x = None;
-            widget(guide)
-        }
-        .on_cx(move |_, _: &Activate, cx| {
-            ui.onboard_step.set(0);
-            cx.dispatch_program_all(edit(|s| s.general.onboarding_done = false));
-            cx.dispatch_program_all(Msg::SettingsPage(Page::General));
-        })
-        .into_any(),
-    ]);
-    let mut rows = vec![(header.into_any(), None), (links.into_any(), None)];
-    rows.extend(interface_licences(ui));
-    rows.extend(design_sources(ui));
-    rows.extend(font_licences(ui));
-    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
-        .children(section_with(ui, "", rows))
-        .into_any()
-}
-
-pub(super) fn design_sources(ui: Ui) -> Vec<(AnyView, Shown)> {
-    let link = |key: &str, url: &'static str| {
-        widget(
-            Button::new(ui.now_t(key))
-                .kind(ButtonKind::Ghost)
-                .size(ControlSize::Small)
-                .icon(ti::EXTERNAL_LINK),
-        )
-        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::OpenUrl(url)))
-    };
-    vec![(
-        widget(
-            Stack::column(0.0)
-                .gap_step(nana_ui_core::SpacingStep::Sm)
-                .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
-        )
-        .children((
-            widget(Text::new(ui.now_t("about-design")).style(Type::Strong.style())),
-            widget(Text::new("Echo-Live · Sheep-realms").style(Type::Strong.style())),
-            hint(ui.now_t("about-design-echo")),
+        row(
+            ui,
+            "about-setup-guide",
+            None,
             widget(
-                Stack::row(0.0)
-                    .gap_step(nana_ui_core::SpacingStep::Sm)
-                    .wrap(true),
+                IconButton::new(ti::ARROW_RIGHT, ui.now_t("about-open"))
+                    .size(ControlSize::Small)
+                    .with_tooltip(ui.now_t("about-open")),
             )
-            .children((
-                link(
-                    "about-source-repository",
-                    "https://github.com/sheep-realms/Echo-Live",
-                ),
-                link(
-                    "about-design-upstream-license",
-                    "https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md",
-                ),
-            )),
-        ))
-        .into_any(),
-        None,
-    )]
+            .on_cx(move |_, _: &Activate, cx| {
+                ui.onboard_step.set(0);
+                cx.dispatch_program_all(edit(|s| s.general.onboarding_done = false));
+                cx.dispatch_program_all(Msg::SettingsPage(Page::General));
+            })
+            .into_any(),
+        ),
+    ]
 }
 
-/// Sources stay visible; each licence is embedded for offline reading.
-pub(super) fn interface_licences(ui: Ui) -> Vec<(AnyView, Shown)> {
-    let mut rows = vec![(
-        widget(
-            Stack::column(0.0)
-                .gap_step(nana_ui_core::SpacingStep::Sm)
-                .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
-        )
-        .children((
-            widget(Text::new(ui.now_t("about-interfaces")).style(Type::Strong.style())),
-            hint(ui.now_t("about-interfaces-hint")),
-        ))
-        .into_any(),
-        None,
-    )];
+/// That NanaType is unaffiliated, and where the built-in Echo-Live skins'
+/// designs come from.
+fn notices(ui: Ui) -> Vec<(AnyView, Shown)> {
+    let open = signal(false);
+    vec![
+        (
+            row(
+                ui,
+                "about-disclaimer-unofficial",
+                Some("about-disclaimer-unofficial-hint"),
+                fold_toggle(ui, open),
+            ),
+            None,
+        ),
+        shown_if(block(hint(ui.now_t("about-disclaimer-body"))), move || {
+            open.get()
+        }),
+        (
+            row_text(
+                "Echo-Live · Sheep-realms".to_owned(),
+                Some(ui.now_t("about-design-echo")),
+                controls(vec![
+                    link_icon(
+                        ui,
+                        "about-source-repository",
+                        ti::EXTERNAL_LINK,
+                        "https://github.com/sheep-realms/Echo-Live",
+                    ),
+                    link_icon(
+                        ui,
+                        "about-design-upstream-license",
+                        ti::LICENSE,
+                        "https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md",
+                    ),
+                ]),
+            ),
+            None,
+        ),
+    ]
+}
+
+/// Each licence's source stays a click away; its text is embedded for
+/// offline reading and unfolds under its row. The fonts close the list.
+fn licences(ui: Ui) -> Vec<(AnyView, Shown)> {
     let entries = [
         (
             "NanaType · MIT AND CC-BY-NC-4.0",
@@ -176,101 +192,103 @@ pub(super) fn interface_licences(ui: Ui) -> Vec<(AnyView, Shown)> {
             include_str!("../../../../../crates/douyin/LICENSE-DOUYINLIVE"),
         ),
     ];
+    let mut rows = Vec::new();
     for (name, description, url, mirror, licence) in entries {
         let open = signal(false);
-        let source_link = |key: &str, url: &'static str| {
-            widget(
-                Button::new(ui.now_t(key))
-                    .kind(ButtonKind::Ghost)
-                    .size(ControlSize::Small)
-                    .icon(ti::EXTERNAL_LINK),
-            )
-            .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::OpenUrl(url)))
-            .into_any()
-        };
-        let mut buttons = vec![source_link("about-source-repository", url)];
+        let mut buttons = vec![link_icon(
+            ui,
+            "about-source-repository",
+            ti::EXTERNAL_LINK,
+            url,
+        )];
         if let Some(mirror) = mirror {
-            buttons.push(source_link("about-source-mirror", mirror));
+            buttons.push(link_icon(ui, "about-source-mirror", ti::BOOK, mirror));
         }
-        buttons.push(
-            widget(Button::new(ui.now_t("about-fonts-show")).size(ControlSize::Small))
-                .visible(move || !open.get())
-                .on(move |_: &Activate| open.set(true))
-                .into_any(),
-        );
-        buttons.push(
-            widget(Button::new(ui.now_t("about-fonts-hide")).size(ControlSize::Small))
-                .visible(move || open.get())
-                .on(move |_: &Activate| open.set(false))
-                .into_any(),
-        );
+        buttons.push(fold_toggle(ui, open));
         rows.push((
-            widget(
-                Stack::column(0.0)
-                    .gap_step(nana_ui_core::SpacingStep::Sm)
-                    .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
-            )
-            .children((
-                widget(Text::new(name).style(Type::Strong.style())),
-                hint(ui.now_t(description)),
-                widget(
-                    Stack::row(0.0)
-                        .gap_step(nana_ui_core::SpacingStep::Sm)
-                        .wrap(true),
-                )
-                .children(buttons),
-            ))
-            .into_any(),
+            row_text(
+                name.to_owned(),
+                Some(ui.now_t(description)),
+                controls(buttons),
+            ),
             None,
         ));
-        rows.push(shown_if(
-            widget(
-                Stack::column(0.0).padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
-            )
-            .children(
-                widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
-                    l.height = Some(LengthSpec::Px(LICENCE_H));
-                }))
-                .children(widget(Stack::column(0.0)).children(licence_lines(licence))),
-            )
-            .into_any(),
-            move || open.get(),
+        rows.push(shown_if(licence_panel(licence_lines(licence)), move || {
+            open.get()
+        }));
+    }
+    if !nanatype_theme::BuiltinFonts::embedded().fonts().is_empty() {
+        let open = signal(false);
+        rows.push((
+            row(
+                ui,
+                "about-fonts",
+                Some("about-fonts-hint"),
+                fold_toggle(ui, open),
+            ),
+            None,
         ));
+        rows.push(shown_if(font_licence_panel(ui), move || open.get()));
     }
     rows
 }
 
-/// The "Open-source fonts" row and, below it while open, a scrolling panel
-/// with each font this build embeds: its name, author, licence and the
-/// licence's full text (OFL 1.1 asks that it travel with the font). Nothing
-/// when the build embeds no fonts.
-pub(super) fn font_licences(ui: Ui) -> Vec<(AnyView, Shown)> {
-    let fonts = nanatype_theme::BuiltinFonts::embedded().fonts();
-    if fonts.is_empty() {
-        return Vec::new();
-    }
-    let open = signal(false);
-    let toggle = |key: &str, shown: bool| {
-        widget(Button::new(ui.now_t(key)).size(ControlSize::Small))
-            .visible(move || open.get() == shown)
-            .on(move |_: &Activate| open.set(!shown))
-            .into_any()
+/// A small icon button that sends `msg`, its name as the tooltip.
+fn icon_action(ui: Ui, key: &str, icon: Icon, msg: impl Fn() -> Msg + Send + 'static) -> AnyView {
+    widget(
+        IconButton::new(icon, ui.now_t(key))
+            .size(ControlSize::Small)
+            .with_tooltip(ui.now_t(key)),
+    )
+    .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
+    .into_any()
+}
+
+/// [`icon_action`] that opens `url` in the browser.
+fn link_icon(ui: Ui, key: &str, icon: Icon, url: &'static str) -> AnyView {
+    icon_action(ui, key, icon, move || Msg::OpenUrl(url))
+}
+
+/// A row's controls, side by side.
+fn controls(buttons: Vec<AnyView>) -> AnyView {
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center),
+    )
+    .children(buttons)
+    .into_any()
+}
+
+/// The chevron that unfolds (and folds back) what `open` shows.
+fn fold_toggle(ui: Ui, open: Signal<bool>) -> AnyView {
+    // Each chevron shows while it would change `open`.
+    let toggle = |icon: Icon, key: &str, opens: bool| {
+        widget(
+            IconButton::new(icon, ui.now_t(key))
+                .size(ControlSize::Small)
+                .with_tooltip(ui.now_t(key)),
+        )
+        .visible(move || open.get() != opens)
+        .on(move |_: &Activate| open.set(opens))
+        .into_any()
     };
-    let row_view = row(
-        ui,
-        "about-fonts",
-        Some("about-fonts-hint"),
-        widget(Stack::row(0.0))
-            .children((
-                toggle("about-fonts-show", false),
-                toggle("about-fonts-hide", true),
-            ))
-            .into_any(),
-    );
-    vec![
-        (row_view, None),
-        shown_if(font_licence_panel(ui), move || open.get()),
-    ]
+    controls(vec![
+        toggle(ti::CHEVRON_DOWN, "about-expand", true),
+        toggle(ti::CHEVRON_UP, "about-collapse", false),
+    ])
+}
+
+/// Long text in a fixed-height scrolling panel, inset like the rows.
+fn licence_panel(lines: Vec<AnyView>) -> AnyView {
+    widget(Stack::column(0.0).padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg))
+        .children(
+            widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
+                l.height = Some(LengthSpec::Px(LICENCE_H));
+            }))
+            .children(widget(Stack::column(0.0)).children(lines)),
+        )
+        .into_any()
 }
 
 /// Each font this build embeds, its author, version and licence, and the
@@ -310,23 +328,17 @@ pub fn font_licence_panel(ui: Ui) -> AnyView {
                 .into_any()
         })
         .collect();
-    widget(Stack::column(0.0).padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg))
-        .children(
-            widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
-                l.height = Some(LengthSpec::Px(LICENCE_H));
-            }))
-            .children(
-                widget(
-                    Stack::column(0.0)
-                        .gap_step(nana_ui_core::SpacingStep::Xxxl)
-                        .with_layout(|l| {
-                            l.padding_right = Some(LengthSpec::Px(space::XL));
-                        }),
-                )
-                .children(entries),
-            ),
+    licence_panel(vec![
+        widget(
+            Stack::column(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Xxxl)
+                .with_layout(|l| {
+                    l.padding_right = Some(LengthSpec::Px(space::XL));
+                }),
         )
-        .into_any()
+        .children(entries)
+        .into_any(),
+    ])
 }
 
 /// A licence's text as it is laid out upstream: one text per line (a text
@@ -351,3 +363,6 @@ pub(super) fn licence_lines(text: &str) -> Vec<AnyView> {
 
 /// Where the project lives.
 pub(super) const HOMEPAGE: &str = "https://github.com/sena-nana/NanaType";
+
+/// The developer's Bilibili space.
+pub(super) const BILIBILI: &str = "https://space.bilibili.com/82717585";

@@ -419,9 +419,22 @@ assets-phrase-hotkey = ショートカット
 
 ## 情報
 about-build = ビルド { $build }
-about-logs = ログフォルダを開く
-about-data = データフォルダを開く
-about-homepage = プロジェクトページ
+about-logs = ログフォルダー
+about-data = データフォルダー
+about-repository = 公式リポジトリ
+about-bilibili = 公式 bilibili
+about-disclaimer = 第三者に関する声明
+about-disclaimer-body = NanaType は独立して開発されたサードパーティ製ツールであり、bilibili、抖音（Douyin）などのプラットフォームおよびその運営者とは一切関係がなく、承認や許可も受けていません。各名称および商標はそれぞれの権利者に帰属します。
+about-custom-skins = スキンのカスタマイズ
+about-custom-skins-body = スキンのカスタマイズが必要な場合は、関連するクリエイターまたは開発者にご連絡ください。開発者は基本的なカスタマイズサービスを提供しています。
+about-contact = 開発者に連絡
+about-open = 開く
+about-open-link = リンクを開く
+about-expand = 展開
+about-collapse = 折りたたむ
+about-disclaimer-unofficial = 非公式ソフトウェア
+about-disclaimer-unofficial-hint = bilibili、抖音などのプラットフォームとは関係ありません
+about-licenses = オープンソースライセンス
 
 ## 初回起動
 onboard-welcome = NanaType へようこそ
@@ -556,7 +569,7 @@ onboard-skin-hint = ダイアログの見た目を選びましょう。下のプ
 onboard-mode-body = セリフを表示ウィンドウに出す方法を選びます。あとから入力ウィンドウでいつでも切り替えられます。
 onboard-obs-hint = Spout2 で表示ウィンドウを配信画面に送ります
 onboard-reopen = このガイドは「情報」ページからもう一度開けます。
-about-setup-guide = セットアップガイドを表示
+about-setup-guide = セットアップガイド
 playback-reduced-system-on = システム設定：オン
 playback-reduced-system-off = システム設定：オフ
 ## end wave4-onboarding
@@ -568,14 +581,9 @@ skins-fallback-font = 代替フォント
 ## wave5-fonts-licences
 about-fonts = オープンソースフォント
 about-fonts-hint = 内蔵スキンに同梱しているフォントと、そのライセンス全文
-about-fonts-show = ライセンスを表示
-about-fonts-hide = 閉じる
 about-fonts-author = 作者：{ $author }
 about-fonts-version = バージョン：{ $version }
 about-fonts-license-other = ライセンスは下記のとおり
-about-interfaces = API の出典とライセンス
-about-interfaces-hint = コメント API の仕様と署名実装は以下のコミュニティプロジェクトに基づきます。NanaType は接続・移植・調整を担当します。
-about-design = デザインの出典
 about-design-echo = オリジナル、ガラス、気泡、虚空の4種類のスキンは、Sheep-realms と貢献者による sheep-realms/Echo-Live のデザインを参考にしています。NanaType のスキン形式で実装・調整しています。
 about-design-upstream-license = 原プロジェクトのライセンス
 about-license-project = 独自コードは MIT。継承した資料は元のライセンスを維持します。Bilibili コンポーネントとアプリ全体には CC BY-NC 4.0 の資料も含まれ、表示と非営利条件が適用されます。

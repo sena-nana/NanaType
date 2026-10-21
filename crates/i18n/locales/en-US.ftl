@@ -425,9 +425,22 @@ assets-phrase-hotkey = Hotkey
 
 ## About
 about-build = Build { $build }
-about-logs = Open logs folder
-about-data = Open data folder
-about-homepage = Project page
+about-logs = Logs folder
+about-data = Data folder
+about-repository = Official repository
+about-bilibili = Official Bilibili
+about-disclaimer = Third-party notice
+about-disclaimer-body = NanaType is an independent third-party tool. It is not affiliated with, endorsed by or authorised by Bilibili, Douyin or any other platform or its operators. Names and trademarks belong to their respective owners.
+about-custom-skins = Custom skins
+about-custom-skins-body = If you need a custom skin, you can contact the relevant creators or the developer, who offers a basic customisation service.
+about-contact = Contact the developer
+about-open = Open
+about-open-link = Open link
+about-expand = Expand
+about-collapse = Collapse
+about-disclaimer-unofficial = Unofficial software
+about-disclaimer-unofficial-hint = Not affiliated with Bilibili, Douyin or other platforms
+about-licenses = Open-source licences
 
 ## Onboarding
 onboard-welcome = Welcome to NanaType
@@ -562,7 +575,7 @@ onboard-skin-hint = Pick a look for the dialogue box; the preview shows it live.
 onboard-mode-body = Choose how your lines reach the display. You can switch any time from the input window.
 onboard-obs-hint = Show the display in your stream through Spout2
 onboard-reopen = You can open this guide again from About.
-about-setup-guide = Show the setup guide
+about-setup-guide = Setup guide
 playback-reduced-system-on = System setting: on
 playback-reduced-system-off = System setting: off
 ## end wave4-onboarding
@@ -574,14 +587,9 @@ skins-fallback-font = Fallback font
 ## wave5-fonts-licences
 about-fonts = Open-source fonts
 about-fonts-hint = Fonts bundled for the built-in skins, with their full licences
-about-fonts-show = View licences
-about-fonts-hide = Hide
 about-fonts-author = By { $author }
 about-fonts-version = Version: { $version }
 about-fonts-license-other = Licence below
-about-interfaces = Interface sources and licences
-about-interfaces-hint = Chat protocols and signing implementations come from the community projects below. NanaType handles integration, porting and adaptation.
-about-design = Design sources
 about-design-echo = The Vanilla, Glass, Bubble and Void skins reference designs from sheep-realms/Echo-Live, by Sheep-realms and contributors. NanaType implements and adapts these styles in its local skin format.
 about-design-upstream-license = Upstream licensing
 about-license-project = Original code: MIT. Inherited material keeps its licence. The Bilibili component and combined app also include CC BY-NC 4.0 material, subject to attribution and NonCommercial conditions.
