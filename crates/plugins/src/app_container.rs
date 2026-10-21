@@ -4,9 +4,10 @@
 //! The worker starts suspended in a per-user AppContainer with no
 //! capabilities: no network, and only what is readable by every app package
 //! (system files) plus the worker executable, which is granted read and
-//! execute here. It inherits exactly its two pipe ends, gets an empty
-//! environment and the system directory as its working directory, and joins
-//! the same job object as an unconfined worker before its first instruction.
+//! execute here. It inherits exactly its two pipe ends, gets no environment
+//! but the container's own LOCALAPPDATA, TEMP and TMP, has the system
+//! directory as its working directory, and joins the same job object as an
+//! unconfined worker before its first instruction.
 #![allow(unsafe_code)]
 
 use std::ffi::OsStr;
@@ -16,6 +17,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{FromRawHandle, OwnedHandle};
 use std::path::Path;
 use std::ptr::{null, null_mut};
+use std::sync::{Mutex, PoisonError};
 
 use windows_sys::Win32::Foundation::{
     CloseHandle, ERROR_ALREADY_EXISTS, ERROR_SUCCESS, HANDLE, HANDLE_FLAG_INHERIT, LocalFree,
@@ -67,6 +69,12 @@ fn check(ok: i32) -> io::Result<()> {
     }
 }
 
+/// Prefix an error with the step that failed, so a bare OS code says where
+/// it came from.
+fn at(step: &'static str) -> impl FnOnce(io::Error) -> io::Error {
+    move |error| io::Error::new(error.kind(), format!("{step}: {error}"))
+}
+
 fn win32(error: u32) -> io::Result<()> {
     if error == ERROR_SUCCESS {
         Ok(())
@@ -87,6 +95,10 @@ impl Drop for Sid {
 
 /// The profile's SID, creating the profile on first use.
 fn container_sid() -> io::Result<Sid> {
+    // Two threads creating the profile at once can see ERROR_BAD_ENVIRONMENT
+    // from the one that loses, so creation is one at a time.
+    static CREATING: Mutex<()> = Mutex::new(());
+    let _creating = CREATING.lock().unwrap_or_else(PoisonError::into_inner);
     let name = wide(PROFILE);
     let display = wide("NanaType plugin worker");
     let mut sid: PSID = null_mut();
@@ -283,11 +295,11 @@ pub(crate) fn spawn(
     args: &[&str],
     env: &[(&str, &str)],
 ) -> io::Result<(Contained, File, File, crate::os_sandbox::Job)> {
-    let sid = container_sid()?;
+    let sid = container_sid().map_err(at("AppContainer profile"))?;
     // Under Program Files the user cannot write the DACL and need not.
     let _ = grant_read_execute(executable, &sid);
-    let (stdin, worker_stdin) = pipe(false)?;
-    let (stdout, worker_stdout) = pipe(true)?;
+    let (stdin, worker_stdin) = pipe(false).map_err(at("stdin pipe"))?;
+    let (stdout, worker_stdout) = pipe(true).map_err(at("stdout pipe"))?;
     let inherited = [raw(&worker_stdin), raw(&worker_stdout)];
     let capabilities = SECURITY_CAPABILITIES {
         AppContainerSid: sid.0,
@@ -295,19 +307,23 @@ pub(crate) fn spawn(
         CapabilityCount: 0,
         Reserved: 0,
     };
-    let mut attributes = Attributes::new(2)?;
+    let mut attributes = Attributes::new(2).map_err(at("InitializeProcThreadAttributeList"))?;
     // SAFETY: both values outlive CreateProcessW below.
     unsafe {
-        attributes.set(
-            PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES as usize,
-            &capabilities,
-            size_of::<SECURITY_CAPABILITIES>(),
-        )?;
-        attributes.set(
-            PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
-            inherited.as_ptr(),
-            size_of_val(&inherited),
-        )?;
+        attributes
+            .set(
+                PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES as usize,
+                &capabilities,
+                size_of::<SECURITY_CAPABILITIES>(),
+            )
+            .map_err(at("security capabilities attribute"))?;
+        attributes
+            .set(
+                PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+                inherited.as_ptr(),
+                size_of_val(&inherited),
+            )
+            .map_err(at("handle list attribute"))?;
     }
     let startup = STARTUPINFOEXW {
         StartupInfo: STARTUPINFOW {
@@ -326,17 +342,34 @@ pub(crate) fn spawn(
             .all(|arg| !arg.is_empty() && !arg.contains([' ', '\t', '"']))
     );
     let mut line = wide(format!("\"{}\" {}", executable.display(), args.join(" ")));
-    // `KEY=value` strings, each NUL-terminated, then an empty one.
-    let mut block: Vec<u16> = env
-        .iter()
-        .flat_map(|(key, value)| wide(format!("{key}={value}")))
-        .collect();
-    block.extend([0, 0]);
+    // CreateProcessW fails with ERROR_ENVVAR_NOT_FOUND when an AppContainer
+    // process's environment has no LOCALAPPDATA (and with ERROR_FILE_NOT_FOUND
+    // when it is empty), so the host's is passed on. Windows replaces it with
+    // the container's own folder and adds TEMP and TMP beneath it, so the
+    // worker never sees the host's path.
+    let local = std::env::var_os("LOCALAPPDATA")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "LOCALAPPDATA is not set"))?;
+    let mut vars = vec![(OsStr::new("LOCALAPPDATA"), local.as_os_str())];
+    vars.extend(
+        env.iter()
+            .map(|(key, value)| (OsStr::new(key), OsStr::new(value))),
+    );
+    vars.sort_by_key(|(key, _)| key.to_ascii_uppercase());
+    // `KEY=value` strings, sorted by name and each NUL-terminated, then an
+    // empty one.
+    let mut block = Vec::new();
+    for (key, value) in vars {
+        block.extend(key.encode_wide());
+        block.push(u16::from(b'='));
+        block.extend(value.encode_wide());
+        block.push(0);
+    }
+    block.push(0);
     let mut system = vec![0u16; 260];
     // SAFETY: the buffer's length is passed; the result is its used length.
     let used = unsafe { GetSystemDirectoryW(system.as_mut_ptr(), system.len() as u32) } as usize;
     if used == 0 || used >= system.len() {
-        return Err(io::Error::last_os_error());
+        return Err(at("GetSystemDirectoryW")(io::Error::last_os_error()));
     }
     system.truncate(used);
     system.push(0);
@@ -360,7 +393,8 @@ pub(crate) fn spawn(
             &startup.StartupInfo,
             &mut info,
         )
-    })?;
+    })
+    .map_err(at("CreateProcessW"))?;
     // SAFETY: CreateProcessW returned these handles to us.
     let thread = unsafe { OwnedHandle::from_raw_handle(info.hThread) };
     let mut process = Contained {
@@ -369,14 +403,16 @@ pub(crate) fn spawn(
     };
     // The worker owns its ends now.
     drop((worker_stdin, worker_stdout, attributes));
-    let started = crate::os_sandbox::confine_process(process.process).and_then(|job| {
-        // SAFETY: the primary thread of the process we just created.
-        if unsafe { ResumeThread(raw(&thread)) } == u32::MAX {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(job)
-        }
-    });
+    let started = crate::os_sandbox::confine_process(process.process)
+        .map_err(at("worker job"))
+        .and_then(|job| {
+            // SAFETY: the primary thread of the process we just created.
+            if unsafe { ResumeThread(raw(&thread)) } == u32::MAX {
+                Err(at("ResumeThread")(io::Error::last_os_error()))
+            } else {
+                Ok(job)
+            }
+        });
     match started {
         Ok(job) => Ok((process, stdin, stdout, job)),
         Err(error) => {
