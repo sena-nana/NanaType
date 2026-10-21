@@ -1,0 +1,17 @@
+[package]
+name = "nanatype-twitch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Twitch live chat over IRC and sending through the Helix API"
+
+[dependencies]
+nanatype-model.workspace = true
+nanatype-secrets.workspace = true
+serde_json.workspace = true
+crossbeam-channel = "0.5"
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
+tungstenite = { version = "0.30", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
+url = "2"
+getrandom = "0.4"

@@ -9,6 +9,7 @@
 - **联动**：VTube Studio（表情、热键、参数和口型同步，`[expr]` / `[vts]` 标记按打字位置触发）、OSC、本地 WebSocket 广播。
 - **双人联机**：通过 iroh 连接另一位主播，自己与伙伴的台词或实时输入镜像分别进入独立展示窗口和 OBS 输出源，共享本次会话的主播历史记录。
 - **B 站弹幕直连**：扫码登录 B 站后直接接收直播间消息，无需额外服务。弹幕面板里可 @ 或回复观众：@ 插入头像昵称标签，回复附带原消息引用；弹幕、醒目留言、礼物、上舰也可以混入历史记录。
+- **YouTube 与 Twitch**：YouTube 直播聊天无需 API Key 即可接收；Twitch 聊天匿名接收，用 Twitch 账号登录后可把台词同步发送到频道。
 - **第三方弹幕**：通过 blivechat 协议接收弹幕——连接本机或局域网运行的 [blivechat](https://github.com/xfgryujk/blivechat)，或经创意工坊插件接入 [彗星号](https://huixinghao.cn/)（彗星号支持的 B 站、抖音、快手等平台都能转发）。
 - **皮肤**：内置 28 套（情书、机器学习、十四行诗、蜡笔画、光环、夜色、羊皮纸、ADV 经典、RPG 窗口、香草、气泡、字幕、直播弹幕、漫画、终端、掌机像素、樱花、水墨、Echo-Live 原版、Echo-Live 玻璃、Echo-Live 气泡、Echo-Live 虚空、蔷薇哥特、星月魔法、森林精灵、潮汐水族馆、朱砂华灯、柠檬汽水；四套 Echo-Live 样式还原原作），可导入 / 导出 `.ntpkg` 皮肤包，支持热重载及受限 WGSL 高级动效。全部皮肤采用统一包格式，框架无皮肤专用分支；支持显式跨包资源依赖，以及禁止网络和文件访问的 Lua/Wasm 功能插件，见 [插件与包接口](docs/plugins.md)。
 - **多语言**：简体中文、English、日本語。
@@ -55,6 +56,18 @@
 4. 打开弹幕面板查看文字、表情和礼物，可与 B 站弹幕同时显示；来源标记、头像、@ 和引用独立。抖音礼物按原始抖币数量显示，不套用 B 站换算；当前不支持向抖音发送弹幕。
 
 原生 Rust 已在 Windows 公开直播间通过匿名弹幕接收与数据通道断网恢复验收。账号登录及 macOS 仍需独立验证。协议、许可核查和独立联网验收方式见 [抖音接入说明](docs/douyin.md)。
+
+### YouTube 直播聊天
+
+打开 **设置 › YouTube 直播**，填写视频地址、频道地址或 `@handle`，开启 **接收聊天**。填写频道时会自动找到正在进行的直播，未开播时每分钟重新检查。文字、频道表情、Super Chat、Super Sticker 和会员事件都会出现在弹幕面板，可与其他平台同时显示。接收与网页版聊天方式相同，不需要 API Key 或账号；暂不支持向 YouTube 发送，原因和后续方案见 [YouTube 接入说明](docs/youtube.md)。
+
+### Twitch 聊天与台词发送
+
+1. 打开 **设置 › Twitch**，填写频道名或 `https://www.twitch.tv/频道名`，开启 **接收聊天**。读取聊天不需要登录。
+2. 要发送台词，点击 **使用 Twitch 登录**，打开 twitch.tv/activate 输入页面显示的代码。令牌保存在系统保护的存储中（Windows DPAPI / macOS 钥匙串）。
+3. 打开 **把台词发送到 Twitch 聊天** 并确认，之后发送的台词会以你的身份发到频道。长台词按 500 字符拆分，失败时暂停队列等待重试或跳过。
+
+协议、登录与限速细节见 [Twitch 接入说明](docs/twitch.md)。
 
 ### 第三方弹幕：blivechat 与彗星号
 
@@ -207,6 +220,8 @@ Syphon.framework 放在 `Contents/Frameworks`，完整许可文本在 `Contents/
 | `crates/bridge` | VTube Studio、OSC、WebSocket |
 | `crates/bilibili` | B 站登录、受保护会话、弹幕直连与台词发送 |
 | `crates/douyin` | 抖音原生签名、会话、连接和消息解码 |
+| `crates/youtube` | YouTube 直播聊天（InnerTube 网页接口）接收 |
+| `crates/twitch` | Twitch IRC 匿名接收、设备码登录与 Helix 发送 |
 | `crates/blive` | blivechat 客户端（协议解析、连接与重连）和彗星号中转 |
 | `integrations/comet` | 彗星号创意工坊插件页面：把彗星号事件转换成 blivechat 消息 |
 | `crates/core` | 会话逻辑：草稿、发送、继续、队列、历史、回溯 |
@@ -223,6 +238,8 @@ NanaType 的弹幕接口依据和签名实现来自已有社区项目；本项�
 | 接口 | 来源仓库与使用范围 | 上游许可 |
 | --- | --- | --- |
 | B 站 | 直播协议资料与 WBI 签名依据来自 [SocialSisterYi/bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect)（[可访问镜像](https://github.com/bilibili-plugins/bilibili-api-collect)） | API-collect 继承资料：CC BY-NC 4.0 |
+| YouTube | 按公开网页聊天客户端的 InnerTube 请求自行实现，未移植第三方代码 | — |
+| Twitch | 按 Twitch 官方开发者文档（IRC、Device Code Flow、Helix）自行实现 | — |
 | 抖音 | 签名实现移植自 [jwwsjlm/douyinLive](https://github.com/jwwsjlm/douyinLive)，版本 `0e506f3cf935beede946296602af2e52d57ecea2` 的 `internal/webcastsign/native.go` 与 `sign/ab_sign.go`；连接参数参考同版本 | MIT，Copyright (c) 2025 今晚打打 |
 
 软件内可在 **设置 › 关于 › 接口来源与许可** 查看来源链接、版权声明和许可全文。

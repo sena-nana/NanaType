@@ -1,16 +1,8 @@
 use crate::ApiError;
-use nanatype_model::{Document, Inline, LineId};
-use unicode_segmentation::UnicodeSegmentation;
+use nanatype_model::{Document, LineId, outgoing};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DeliveryState {
-    Queued,
-    Sending,
-    Submitted,
-    Failed,
-    Uncertain,
-    Cancelled,
-}
+pub use nanatype_model::outgoing::{DeliveryState, image_count};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Delivery {
     pub line: LineId,
@@ -32,70 +24,18 @@ impl Delivery {
         self.completed == self.receipts.len()
     }
 }
-pub fn image_count(doc: &Document) -> usize {
-    doc.paragraphs
-        .iter()
-        .flat_map(|p| &p.inlines)
-        .filter(|i| matches!(i, Inline::Atom(_)))
-        .count()
-}
 pub fn plain_text(doc: &Document) -> Result<String, ApiError> {
-    if image_count(doc) > 0 {
-        return Err(ApiError::InvalidInput(
-            "images unavailable during danmaku synchronization".into(),
-        ));
-    }
-    let text = doc
-        .plain_text()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    if text.is_empty() {
-        return Err(ApiError::InvalidInput("no readable text".into()));
-    }
-    Ok(text)
+    outgoing::plain_text(doc).map_err(|e| ApiError::InvalidInput(e.to_string()))
 }
 /// Count Unicode scalars while preserving extended grapheme clusters.
 pub fn split(text: &str, limit: usize) -> Result<Vec<String>, ApiError> {
-    if limit == 0 {
-        return Err(ApiError::InvalidInput("invalid danmaku length".into()));
-    }
-    let gs: Vec<&str> = text.graphemes(true).collect();
-    let mut chunks = Vec::new();
-    let mut start = 0;
-    while start < gs.len() {
-        let mut end = start;
-        let mut count = 0;
-        let mut punctuation = None;
-        while end < gs.len() && count + gs[end].chars().count() <= limit {
-            count += gs[end].chars().count();
-            end += 1;
-            if gs[end - 1].chars().any(|c| "。！？；，,.!?; ".contains(c)) {
-                punctuation = Some(end);
-            }
-        }
-        if end == start {
-            return Err(ApiError::InvalidInput(
-                "one combined character exceeds the danmaku limit".into(),
-            ));
-        }
-        if end < gs.len()
-            && let Some(p) = punctuation.filter(|p| *p > start)
-        {
-            end = p;
-        }
-        let chunk = gs[start..end].concat();
-        if !chunk.trim().is_empty() {
-            chunks.push(chunk);
-        }
-        start = end;
-    }
-    Ok(chunks)
+    outgoing::split(text, limit).map_err(|e| ApiError::InvalidInput(e.to_string()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nanatype_model::Inline;
     #[test]
     fn chunks_preserve_content_and_combined_characters() {
         for text in [

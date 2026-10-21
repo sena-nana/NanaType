@@ -38,8 +38,8 @@ impl App {
                         "time" => Some(crate::ui::history::local_hm(nanatype_model::unix_millis())),
                         _ => None,
                     });
-                    if self.ui.bilibili.get_untracked().sending
-                        && nanatype_bilibili::sending::image_count(&parse(&expanded).doc) > 0
+                    if self.synchronizing()
+                        && nanatype_model::outgoing::image_count(&parse(&expanded).doc) > 0
                     {
                         self.notice(self.ui.now_t("bili-images-unavailable"), true);
                     } else if p.send {
@@ -63,7 +63,7 @@ impl App {
                 width,
                 height,
                 rgba,
-            } if self.ui.bilibili.get_untracked().sending => {
+            } if self.synchronizing() => {
                 let _ = (width, height, rgba);
                 self.notice(self.ui.now_t("bili-images-unavailable"), true);
             }

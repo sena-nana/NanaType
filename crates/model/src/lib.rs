@@ -14,6 +14,7 @@ mod document;
 mod envelope;
 mod line;
 mod link;
+pub mod outgoing;
 mod source;
 mod style;
 
@@ -30,7 +31,7 @@ pub use envelope::{DOCUMENT_FORMAT, DOCUMENT_VERSION, DocumentEnvelope, Envelope
 pub use line::{AfterLine, Line, LineId, LineMeta, Speaker, unix_millis};
 pub use link::LinkFault;
 pub use source::{
-    ChatRef, ChatUser, HistoryItem, MessageSource, SourceEvent, SourceId, SourceKind,
+    ChatRef, ChatRun, ChatUser, HistoryItem, MessageSource, SourceEvent, SourceId, SourceKind,
 };
 pub use style::{
     Continuous, ContinuousKind, Effects, Entrance, EntranceKind, FontSlot, Overflow, Pace, Shadow,

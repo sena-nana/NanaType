@@ -28,7 +28,7 @@ use nanatype_settings::{ChatFilter, ChatPanelStyle, Settings};
 use super::history;
 use super::rich::{Env, Look, MentionLook, to_rich};
 use super::{I18N, Ui};
-use crate::chat::{ChatKind, ChatMessage, super_chat_color};
+use crate::chat::ChatMessage;
 use crate::msg::Msg;
 use crate::skin_theme::rgba8;
 use crate::ui::kit::theme::palette;
@@ -200,10 +200,7 @@ fn row_view(ui: Ui, source: RowSource, width: f32) -> AnyView {
         RowSource::Chat(seq) => ui.chat.with_untracked(|rows| {
             rows.iter()
                 .find(|m| m.seq == seq)
-                .and_then(|m| match m.kind {
-                    ChatKind::SuperChat { price } => Some(super_chat_color(price)),
-                    _ => None,
-                })
+                .and_then(|m| crate::chat::paid_color(&m.kind))
         }),
         _ => None,
     };
@@ -445,11 +442,7 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
     let metadata = match source {
         RowSource::Chat(seq) => ui.chat.with_untracked(|rows| {
             rows.iter().find(|m| m.seq == seq).and_then(|m| {
-                let mut labels = vec![ui.now_t(match m.platform {
-                    crate::chat::Platform::Bilibili => "settings-bilibili",
-                    crate::chat::Platform::Douyin => "settings-douyin",
-                    crate::chat::Platform::Blivechat => "settings-blivechat",
-                })];
+                let mut labels = vec![ui.now_t(m.platform.label_key())];
                 if m.owner {
                     labels.push(ui.now_t("chat-room-owner"));
                 } else if m.admin {
@@ -638,7 +631,7 @@ fn filter_toggle(
 
 /// One dot for every source: green while any is connected, then amber while
 /// any connects, red when one failed, grey when all are off.
-pub fn combined_link(links: [Link; 3]) -> Link {
+pub fn combined_link(links: &[Link]) -> Link {
     [Link::Connected, Link::Connecting, Link::Error]
         .into_iter()
         .find(|want| links.contains(want))
@@ -660,10 +653,12 @@ fn header_layout(ui: Ui, narrow: bool) -> AnyView {
             nanatype_douyin::ConnectionState::Error(_) => Link::Error,
             _ => Link::Off,
         };
-        let link = combined_link([
+        let link = combined_link(&[
             ui.status.with(|x| x.bilibili_link),
             douyin,
             ui.status.with(|x| x.blivechat_link),
+            super::youtube::link(&ui.youtube.get().connection),
+            super::twitch::link(&ui.twitch.get().connection),
         ]);
         *s = crate::ui::kit::dot_frame().surface(link.tone().role());
     });
@@ -680,6 +675,20 @@ fn header_layout(ui: Ui, narrow: bool) -> AnyView {
                 "{v} · {}: {}",
                 ui.now_t("settings-douyin"),
                 super::douyin::connection(ui)
+            );
+        }
+        if ui.settings.with(|s| s.integrations.youtube.enabled) {
+            v = format!(
+                "{v} · {}: {}",
+                ui.now_t("settings-youtube"),
+                super::youtube::connection(ui)
+            );
+        }
+        if ui.settings.with(|s| s.integrations.twitch.enabled) {
+            v = format!(
+                "{v} · {}: {}",
+                ui.now_t("settings-twitch"),
+                super::twitch::connection(ui)
             );
         }
         if ui.settings.with(|s| s.integrations.blivechat.enabled) {
@@ -826,6 +835,8 @@ fn empty(ui: Ui) -> AnyView {
                 (b.enabled && !b.room.is_empty())
                     || (s.integrations.douyin.enabled && !s.integrations.douyin.room.is_empty())
                     || s.integrations.blivechat.enabled
+                    || (s.integrations.youtube.enabled && !s.integrations.youtube.target.is_empty())
+                    || (s.integrations.twitch.enabled && !s.integrations.twitch.channel.is_empty())
             });
             let key = if configured {
                 "chat-empty"
@@ -934,6 +945,7 @@ pub fn chat_window(ui: Ui) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chat::ChatKind;
     use nanatype_bilibili::Guard;
     use nanatype_model::{ChatUser, Document};
 

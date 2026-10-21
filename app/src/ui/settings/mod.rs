@@ -60,13 +60,15 @@ pub enum Page {
     Integrations,
     Bilibili,
     Douyin,
+    Youtube,
+    Twitch,
     Blivechat,
     Assets,
     About,
 }
 
 impl Page {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 16] = [
         Self::General,
         Self::Playback,
         Self::Skins,
@@ -78,6 +80,8 @@ impl Page {
         Self::Integrations,
         Self::Bilibili,
         Self::Douyin,
+        Self::Youtube,
+        Self::Twitch,
         Self::Blivechat,
         Self::Assets,
         Self::About,
@@ -87,6 +91,8 @@ impl Page {
         match self {
             Self::Bilibili => "settings-bilibili",
             Self::Douyin => "settings-douyin",
+            Self::Youtube => "settings-youtube",
+            Self::Twitch => "settings-twitch",
             Self::Blivechat => "settings-blivechat",
             Self::General => "settings-general",
             Self::Playback => "settings-playback",
@@ -107,6 +113,8 @@ impl Page {
         match self {
             Self::Bilibili => "settings-bilibili-sub",
             Self::Douyin => "settings-douyin-sub",
+            Self::Youtube => "settings-youtube-sub",
+            Self::Twitch => "settings-twitch-sub",
             Self::Blivechat => "settings-blivechat-sub",
             Self::General => "settings-general-sub",
             Self::Playback => "settings-playback-sub",
@@ -126,6 +134,8 @@ impl Page {
         match self {
             Self::Bilibili => ti::BRAND_BILIBILI,
             Self::Douyin => ti::MESSAGE_CIRCLE,
+            Self::Youtube => ti::BRAND_YOUTUBE,
+            Self::Twitch => ti::BRAND_TWITCH,
             Self::Blivechat => ti::COMET,
             Self::General => ti::ADJUSTMENTS,
             Self::Playback => ti::PLAYER_PLAY,
@@ -160,6 +170,8 @@ const GROUPS: &[(&str, &[Page])] = &[
             Page::Integrations,
             Page::Bilibili,
             Page::Douyin,
+            Page::Youtube,
+            Page::Twitch,
             Page::Blivechat,
         ],
     ),
@@ -381,6 +393,9 @@ pub fn settings_window(ui: Ui) -> impl IntoView {
         body,
         widget(nana_ui::runtime::OverlayHost::new())
             .css(nana_ui::runtime::view::css! {position: absolute; inset: 0;})
-            .children(super::bilibili::confirm_dialog(ui)),
+            .children((
+                super::bilibili::confirm_dialog(ui),
+                super::twitch::confirm_dialog(ui),
+            )),
     ))
 }

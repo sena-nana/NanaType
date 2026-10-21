@@ -29,6 +29,8 @@ pub mod surface;
 pub mod sweep;
 pub mod text_light;
 pub mod text_scramble;
+pub mod twitch;
+pub mod youtube;
 
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, Weak};
@@ -167,6 +169,8 @@ pub struct Ui {
     pub package_drafts: Signal<Arc<Vec<nanatype_theme::editor::DraftInfo>>>,
     pub bilibili: Signal<Arc<crate::app::bilibili::State>>,
     pub douyin: Signal<Arc<crate::app::douyin::State>>,
+    pub youtube: Signal<Arc<crate::app::youtube::State>>,
+    pub twitch: Signal<Arc<crate::app::twitch::State>>,
     pub blivechat: Signal<Arc<crate::app::blivechat::State>>,
     pub update: Signal<Arc<crate::app::update::State>>,
     /// Kept only in memory and cleared after import; never serialized with settings.
@@ -298,6 +302,8 @@ impl Ui {
             package_drafts: signal(Arc::new(Vec::new())),
             bilibili: signal(Arc::new(crate::app::bilibili::State::default())),
             douyin: signal(Arc::new(crate::app::douyin::State::default())),
+            youtube: signal(Arc::new(crate::app::youtube::State::default())),
+            twitch: signal(Arc::new(crate::app::twitch::State::default())),
             blivechat: signal(Arc::new(crate::app::blivechat::State::default())),
             update: signal(Arc::new(crate::app::update::State::default())),
             douyin_cookie: signal(String::new()),

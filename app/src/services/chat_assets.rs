@@ -21,7 +21,7 @@ const WORKERS: usize = 4;
 /// Downloaded viewer and peer pictures unused this long are deleted at start.
 /// Pasted images share the folder but are history content and never pruned.
 const CACHE_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 3600);
-const CACHE_PREFIXES: &[&str] = &["bili-", "blive-", "douyin-", "p2p-"];
+const CACHE_PREFIXES: &[&str] = &["bili-", "blive-", "douyin-", "yt-", "twitch-", "p2p-"];
 
 /// Remove stale downloaded pictures; a later message downloads them again.
 fn prune_cache(dir: &Path) {
@@ -66,6 +66,18 @@ enum Incoming {
     /// Bilibili's events, read directly or through blivechat.
     Bilibili(Platform, ChatEvent),
     Douyin(nanatype_douyin::ChatEvent),
+    Youtube(nanatype_youtube::ChatEvent),
+    Twitch(nanatype_twitch::ChatEvent),
+}
+
+/// Name the saved picture of `url`, queueing its download once per message.
+fn emote(jobs: &mut Vec<Job>, platform: Platform, url: &str) -> AssetRef {
+    let job = Job::emote(platform.cache_prefix(), url);
+    let asset = job.asset();
+    if !jobs.iter().any(|j| j.name == job.name) {
+        jobs.push(job);
+    }
+    asset
 }
 
 #[derive(Clone)]
@@ -179,16 +191,25 @@ impl ChatAssets {
             .spawn(move || {
                 let mut next = 1u64;
                 for (epoch, room, event) in rx {
-                    let (avatar, emote) = match &event {
+                    // Live platforms add their pictures while the message is built.
+                    let (avatar, mut emotes) = match &event {
                         Incoming::Douyin(event) => (
                             Job::avatar("douyin", &event.author.uid, &event.author.avatar),
                             match &event.content {
                                 nanatype_douyin::Content::Emote { url, .. } => {
-                                    Some(Job::emote("douyin", url))
+                                    vec![Job::emote("douyin", url)]
                                 }
-                                _ => None,
+                                _ => vec![],
                             },
                         ),
+                        Incoming::Youtube(event) => {
+                            let prefix = Platform::Youtube.cache_prefix();
+                            (
+                                Job::avatar(prefix, &event.author.channel_id, &event.author.avatar),
+                                vec![],
+                            )
+                        }
+                        Incoming::Twitch(_) => (None, vec![]),
                         Incoming::Bilibili(platform, event) => {
                             let prefix = platform.cache_prefix();
                             match event {
@@ -196,12 +217,16 @@ impl ChatAssets {
                                     author, emoticon, ..
                                 } => (
                                     Job::avatar(prefix, &author.uid, &author.avatar_url),
-                                    emoticon.as_deref().map(|url| Job::emote(prefix, url)),
+                                    emoticon
+                                        .as_deref()
+                                        .map(|url| Job::emote(prefix, url))
+                                        .into_iter()
+                                        .collect(),
                                 ),
                                 ChatEvent::Gift { author, .. }
                                 | ChatEvent::Member { author, .. }
                                 | ChatEvent::SuperChat { author, .. } => {
-                                    (Job::avatar(prefix, &author.uid, &author.avatar_url), None)
+                                    (Job::avatar(prefix, &author.uid, &author.avatar_url), vec![])
                                 }
                                 _ => continue,
                             }
@@ -211,16 +236,27 @@ impl ChatAssets {
                         Incoming::Douyin(event) => Some(ChatMessage::from_douyin(
                             event,
                             avatar.as_ref().map(Job::asset),
-                            emote.as_ref().map(Job::asset),
+                            emotes.first().map(Job::asset),
                             next,
                         )),
                         Incoming::Bilibili(platform, event) => ChatMessage::from_event(
                             event,
                             avatar.as_ref().map(Job::asset),
-                            emote.as_ref().map(Job::asset),
+                            emotes.first().map(Job::asset),
                             next,
                         )
                         .map(|m| ChatMessage { platform, ..m }),
+                        Incoming::Youtube(event) => Some(ChatMessage::from_youtube(
+                            event,
+                            avatar.as_ref().map(Job::asset),
+                            &mut |url| emote(&mut emotes, Platform::Youtube, url),
+                            next,
+                        )),
+                        Incoming::Twitch(event) => Some(ChatMessage::from_twitch(
+                            event,
+                            &mut |url| emote(&mut emotes, Platform::Twitch, url),
+                            next,
+                        )),
                     };
                     if let Some(mut message) = message {
                         message.epoch = epoch;
@@ -229,7 +265,7 @@ impl ChatAssets {
                         // Deliver before scheduling any network work, preserving arrival order.
                         deliver(message);
                     }
-                    for job in [avatar, emote].into_iter().flatten() {
+                    for job in avatar.into_iter().chain(emotes) {
                         let mut state = requests.lock().unwrap();
                         if state.reserve(&job, &blob_dir) && jobs.try_send(job.clone()).is_err() {
                             state.pending.remove(&job.name);
@@ -257,6 +293,12 @@ impl ChatAssets {
     }
     pub fn douyin(&self, epoch: u64, room: String, event: nanatype_douyin::ChatEvent) {
         let _ = self.tx.send((epoch, room, Incoming::Douyin(event)));
+    }
+    pub fn youtube(&self, epoch: u64, video: String, event: nanatype_youtube::ChatEvent) {
+        let _ = self.tx.send((epoch, video, Incoming::Youtube(event)));
+    }
+    pub fn twitch(&self, epoch: u64, channel: String, event: nanatype_twitch::ChatEvent) {
+        let _ = self.tx.send((epoch, channel, Incoming::Twitch(event)));
     }
 }
 

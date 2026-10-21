@@ -36,7 +36,7 @@ return {
 }
 ```
 
-- 事件包括 `init`（`reads` 列出可读数据）、`data`、`command`、播放开始／结束 `line_start`／`line_end`、`speaking`、`expression`、`portrait`、`shake`、`vts` 和 `chat_message`（平台 `bilibili`／`douyin`／`blivechat`、作者、纯文本）。事件字段是宿主已生成的本地值，不包含账户凭据。
+- 事件包括 `init`（`reads` 列出可读数据）、`data`、`command`、播放开始／结束 `line_start`／`line_end`、`speaking`、`expression`、`portrait`、`shake`、`vts` 和 `chat_message`（平台 `bilibili`／`douyin`／`blivechat`／`youtube`／`twitch`、作者、纯文本）。事件字段是宿主已生成的本地值，不包含账户凭据。
 - `commands = {{id = 'reset', label = 'Reset'}}` 声明本地命令。宿主显示命令入口，激活后向原插件发回 `{type='command', id='reset'}`；命令不能调用任意应用动作。
 - 视图挂载点为 `display`、`history`、`input`、`panel`，分别对应展示、历史、输入内容区和插件面板。通用界面仍使用独立的中性主题。
 - 组件为 `column`、`row`、`text`、`button`、`canvas`，每个组件都需稳定且唯一的 `id`。Lua 函数可以组合返回这些节点以定义可复用组件。

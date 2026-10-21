@@ -4,7 +4,7 @@
 use nanatype_bilibili::{Author, ChatEvent, Guard};
 use nanatype_i18n::Locale;
 use nanatype_model::{
-    AssetRef, Atom, AtomKind, ChatRef, ChatUser, Document, HistoryItem, Inline, SourceId,
+    AssetRef, Atom, AtomKind, ChatRef, ChatRun, ChatUser, Document, HistoryItem, Inline, SourceId,
     SourceKind, Style, TextRun,
 };
 use nanatype_settings::ChatFilter;
@@ -14,12 +14,14 @@ use crate::ui::I18N;
 /// History rows from Bilibili carry this source id.
 pub const SOURCE: &str = "bilibili";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Platform {
     Bilibili,
     Douyin,
     /// A blivechat server or the 彗星号 relay.
     Blivechat,
+    Youtube,
+    Twitch,
 }
 impl Platform {
     pub fn source(self) -> &'static str {
@@ -27,6 +29,8 @@ impl Platform {
             Self::Bilibili => SOURCE,
             Self::Douyin => "douyin",
             Self::Blivechat => "blivechat",
+            Self::Youtube => "youtube",
+            Self::Twitch => "twitch",
         }
     }
     /// Downloaded pictures are cached per platform under this prefix.
@@ -35,6 +39,18 @@ impl Platform {
             Self::Bilibili => "bili",
             Self::Douyin => "douyin",
             Self::Blivechat => "blive",
+            Self::Youtube => "yt",
+            Self::Twitch => "twitch",
+        }
+    }
+    /// The settings page title, which doubles as the platform's name.
+    pub fn label_key(self) -> &'static str {
+        match self {
+            Self::Bilibili => "settings-bilibili",
+            Self::Douyin => "settings-douyin",
+            Self::Blivechat => "settings-blivechat",
+            Self::Youtube => "settings-youtube",
+            Self::Twitch => "settings-twitch",
         }
     }
 }
@@ -62,6 +78,21 @@ pub enum ChatKind {
         num: u32,
         unit: String,
         coin: u64,
+    },
+    /// A YouTube Super Chat or Super Sticker, or Twitch Bits; `amount` is
+    /// the platform's own text.
+    Paid {
+        amount: String,
+        /// ARGB, as the platform colours the card.
+        color: u32,
+    },
+    /// A membership, subscription or raid, in the platform's own words.
+    Notice {
+        text: String,
+    },
+    /// YouTube memberships given to other viewers.
+    GiftMemberships {
+        count: u32,
     },
 }
 
@@ -159,6 +190,124 @@ impl ChatMessage {
             } else {
                 event.at
             },
+        }
+    }
+    /// Build from a YouTube event; `emote` names (and schedules) the saved
+    /// picture of a URL.
+    pub fn from_youtube(
+        event: nanatype_youtube::ChatEvent,
+        avatar: Option<AssetRef>,
+        emote: &mut dyn FnMut(&str) -> AssetRef,
+        seq: u64,
+    ) -> Self {
+        use nanatype_youtube::Content;
+        let (kind, doc) = match event.content {
+            Content::Text(runs) => (ChatKind::Text, inline_doc(runs, emote)),
+            Content::Paid {
+                amount,
+                color,
+                runs,
+            } => (ChatKind::Paid { amount, color }, inline_doc(runs, emote)),
+            Content::Sticker {
+                amount,
+                color,
+                url,
+                alt,
+            } => (
+                ChatKind::Paid { amount, color },
+                Document::from_inlines(vec![Inline::Atom(Atom {
+                    kind: AtomKind::Emote,
+                    asset: emote(&url),
+                    height_em: 2.2,
+                    alt,
+                    effects: Default::default(),
+                })]),
+            ),
+            Content::Membership { header, runs } => {
+                (ChatKind::Notice { text: header }, inline_doc(runs, emote))
+            }
+            Content::GiftMembership { count } => {
+                (ChatKind::GiftMemberships { count }, Document::new())
+            }
+        };
+        let a = event.author;
+        let user = ChatUser {
+            uid: namespaced("youtube", &a.channel_id),
+            name: a.name,
+            avatar,
+        };
+        Self::live(Platform::Youtube, event.id, seq, kind, user, doc, event.at)
+            .badged(a.owner, a.moderator)
+    }
+    /// Build from a Twitch event; Bits read like a paid message.
+    pub fn from_twitch(
+        event: nanatype_twitch::ChatEvent,
+        emote: &mut dyn FnMut(&str) -> AssetRef,
+        seq: u64,
+    ) -> Self {
+        use nanatype_twitch::Content;
+        let (kind, runs) = match event.content {
+            Content::Text(runs) => (ChatKind::Text, runs),
+            Content::Cheer { bits, runs } => (
+                ChatKind::Paid {
+                    amount: format!("{bits} Bits"),
+                    // Twitch's own purple.
+                    color: 0xff9146ff,
+                },
+                runs,
+            ),
+            Content::Notice { text, runs } => (ChatKind::Notice { text }, runs),
+        };
+        let a = event.author;
+        let user = ChatUser {
+            uid: namespaced("twitch", &a.user_id),
+            name: a.name,
+            avatar: None,
+        };
+        let doc = inline_doc(runs, emote);
+        Self::live(Platform::Twitch, event.id, seq, kind, user, doc, event.at)
+            .badged(a.broadcaster, a.moderator)
+    }
+    /// A message from a platform without Bilibili's guards and medals.
+    fn live(
+        platform: Platform,
+        id: String,
+        seq: u64,
+        kind: ChatKind,
+        user: ChatUser,
+        doc: Document,
+        at: u64,
+    ) -> Self {
+        Self {
+            platform,
+            epoch: 0,
+            room: String::new(),
+            seq,
+            id: if id.is_empty() {
+                format!("local-{seq}")
+            } else {
+                id
+            },
+            kind,
+            user,
+            guard: Guard::None,
+            owner: false,
+            admin: false,
+            medal_level: 0,
+            medal_name: String::new(),
+            doc,
+            at: if at == 0 {
+                nanatype_model::unix_millis()
+            } else {
+                at
+            },
+        }
+    }
+    fn badged(self, owner: bool, admin: bool) -> Self {
+        Self {
+            owner,
+            admin,
+            ..self
         }
     }
     /// Build from a Bilibili event; `avatar` and `emoticon` are the saved
@@ -286,6 +435,8 @@ impl ChatMessage {
             ChatKind::Gift { coin, .. } => filter.gift && *coin >= u64::from(filter.min_gift_coin),
             ChatKind::DouyinGift { .. } => filter.gift,
             ChatKind::Member { .. } => filter.member,
+            ChatKind::Paid { .. } => filter.super_chat,
+            ChatKind::Notice { .. } | ChatKind::GiftMemberships { .. } => filter.member,
         }
     }
 
@@ -299,7 +450,13 @@ impl ChatMessage {
     /// The event line of a gift or a membership, in the UI language.
     pub fn event_text(&self, locale: Locale) -> Option<String> {
         Some(match &self.kind {
-            ChatKind::Text | ChatKind::SuperChat { .. } => return None,
+            ChatKind::Text | ChatKind::SuperChat { .. } | ChatKind::Paid { .. } => return None,
+            ChatKind::Notice { text } => text.clone(),
+            ChatKind::GiftMemberships { count } => I18N.tr_in(
+                locale,
+                "chat-gift-memberships",
+                &[("count", (*count).into())],
+            ),
             ChatKind::Gift { name, num, .. } => I18N.tr_in(
                 locale,
                 "chat-gift",
@@ -338,21 +495,22 @@ impl ChatMessage {
     /// What the message says, as a document: the viewer's text, a Super
     /// Chat with its price, or the event line.
     pub fn display_doc(&self, locale: Locale) -> Document {
-        match &self.kind {
-            ChatKind::Text => self.doc.clone(),
-            ChatKind::SuperChat { price } => {
-                let mut inlines = vec![Inline::Text(TextRun::styled(
-                    format!("¥{price} "),
-                    Style {
-                        bold: Some(true),
-                        ..Style::default()
-                    },
-                ))];
-                inlines.extend(self.doc.paragraphs.iter().flat_map(|p| p.inlines.clone()));
-                Document::from_inlines(inlines)
-            }
-            _ => Document::plain(&self.event_text(locale).unwrap_or_default()),
-        }
+        let lead = match &self.kind {
+            ChatKind::Text => return self.doc.clone(),
+            ChatKind::SuperChat { price } => format!("¥{price}"),
+            ChatKind::Paid { amount, .. } => amount.clone(),
+            ChatKind::Notice { text } if !self.doc.is_blank() => text.clone(),
+            _ => return Document::plain(&self.event_text(locale).unwrap_or_default()),
+        };
+        let mut inlines = vec![Inline::Text(TextRun::styled(
+            format!("{lead} "),
+            Style {
+                bold: Some(true),
+                ..Style::default()
+            },
+        ))];
+        inlines.extend(self.doc.paragraphs.iter().flat_map(|p| p.inlines.clone()));
+        Document::from_inlines(inlines)
     }
 
     /// The message as plain text, for a quote.
@@ -379,6 +537,52 @@ impl ChatMessage {
             reply: None,
         }
     }
+}
+
+/// Text and inline platform pictures as one paragraph.
+fn inline_doc(runs: Vec<ChatRun>, emote: &mut dyn FnMut(&str) -> AssetRef) -> Document {
+    let inlines: Vec<Inline> = runs
+        .into_iter()
+        .filter_map(|run| match run {
+            ChatRun::Text(text) if text.is_empty() => None,
+            ChatRun::Text(text) => Some(Inline::Text(TextRun::plain(
+                text.replace(['\r', '\n'], " "),
+            ))),
+            ChatRun::Emote { alt, url } => Some(Inline::Atom(Atom {
+                kind: AtomKind::Emote,
+                asset: emote(&url),
+                height_em: 1.4,
+                alt,
+                effects: Default::default(),
+            })),
+        })
+        .collect();
+    if inlines.is_empty() {
+        Document::new()
+    } else {
+        Document::from_inlines(inlines)
+    }
+}
+
+/// Platform ids never collide with Bilibili's bare numbers.
+fn namespaced(platform: &str, id: &str) -> String {
+    if id.is_empty() {
+        String::new()
+    } else {
+        format!("{platform}:{id}")
+    }
+}
+
+/// The card colour of a paid message, by platform.
+pub fn paid_color(kind: &ChatKind) -> Option<[f32; 4]> {
+    let channel = |rgb: u32, shift: u32| ((rgb >> shift) & 0xff) as f32 / 255.0;
+    let rgb = match kind {
+        ChatKind::SuperChat { price } => return Some(super_chat_color(*price)),
+        ChatKind::Paid { color, .. } if *color != 0 => *color,
+        ChatKind::Paid { .. } => 0x1e88e5,
+        _ => return None,
+    };
+    Some([channel(rgb, 16), channel(rgb, 8), channel(rgb, 0), 1.0])
 }
 
 pub fn guard_key(guard: Guard) -> &'static str {
@@ -530,6 +734,109 @@ mod tests {
             ..ChatFilter::default()
         };
         assert!(!gift(1000).passes(&no_gifts));
+    }
+
+    fn emote(url: &str) -> AssetRef {
+        AssetRef::Blob(format!("emote-{}", url.len()))
+    }
+
+    #[test]
+    fn youtube_messages_keep_emoji_inline_and_paid_amounts_as_sent() {
+        use nanatype_youtube::{Author as YtAuthor, ChatEvent as YtEvent, Content, Run};
+        let author = YtAuthor {
+            channel_id: "UCabc".into(),
+            name: "Viewer".into(),
+            moderator: true,
+            ..YtAuthor::default()
+        };
+        let text = ChatMessage::from_youtube(
+            YtEvent {
+                id: "m1".into(),
+                author: author.clone(),
+                content: Content::Text(vec![
+                    Run::Text("hi\n".into()),
+                    Run::Emote {
+                        alt: ":wave:".into(),
+                        url: "https://yt3/e".into(),
+                    },
+                ]),
+                at: 9,
+            },
+            None,
+            &mut emote,
+            1,
+        );
+        assert_eq!(text.platform, Platform::Youtube);
+        assert_eq!(text.user.uid, "youtube:UCabc");
+        assert!(text.admin && !text.owner);
+        assert_eq!(text.doc.plain_text(), "hi :wave:");
+        assert_eq!(text.doc.unit_count(), 4);
+        let paid = ChatMessage::from_youtube(
+            YtEvent {
+                id: "p1".into(),
+                author,
+                content: Content::Paid {
+                    amount: "$5.00".into(),
+                    color: 0xff1e88e5,
+                    runs: vec![Run::Text("go".into())],
+                },
+                at: 9,
+            },
+            None,
+            &mut emote,
+            2,
+        );
+        assert_eq!(paid.plain(Locale::EnUs), "$5.00 go");
+        assert_eq!(paid.source_kind(), SourceKind::Event);
+        assert!(paid_color(&paid.kind).is_some());
+        let no_paid = ChatFilter {
+            super_chat: false,
+            ..ChatFilter::default()
+        };
+        assert!(!paid.passes(&no_paid));
+        assert_eq!(paid.history_item(Locale::EnUs).source.0, "youtube");
+    }
+
+    #[test]
+    fn twitch_cheers_and_subscriptions_read_in_the_ui_language() {
+        use nanatype_twitch::{Author as TwAuthor, ChatEvent as TwEvent, Content, Run};
+        let event = |content| TwEvent {
+            id: "t1".into(),
+            author: TwAuthor {
+                user_id: "42".into(),
+                name: "Fan".into(),
+                broadcaster: true,
+                ..TwAuthor::default()
+            },
+            content,
+            at: 0,
+        };
+        let cheer = ChatMessage::from_twitch(
+            event(Content::Cheer {
+                bits: 100,
+                runs: vec![Run::Text("nice".into())],
+            }),
+            &mut emote,
+            3,
+        );
+        assert_eq!(cheer.user.uid, "twitch:42");
+        assert!(cheer.owner);
+        assert!(cheer.at > 0, "a missing time is now");
+        assert_eq!(cheer.plain(Locale::EnUs), "100 Bits nice");
+        let sub = ChatMessage::from_twitch(
+            event(Content::Notice {
+                text: "Fan subscribed.".into(),
+                runs: vec![],
+            }),
+            &mut emote,
+            4,
+        );
+        assert_eq!(sub.plain(Locale::EnUs), "Fan subscribed.");
+        let no_members = ChatFilter {
+            member: false,
+            ..ChatFilter::default()
+        };
+        assert!(!sub.passes(&no_members));
     }
 
     #[test]

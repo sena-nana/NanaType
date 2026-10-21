@@ -4408,7 +4408,9 @@ dependencies = [
  "nanatype-secrets",
  "nanatype-settings",
  "nanatype-theme",
+ "nanatype-twitch",
  "nanatype-update",
+ "nanatype-youtube",
  "notify",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
@@ -4454,7 +4456,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tungstenite",
- "unicode-segmentation",
  "ureq",
 ]
 
@@ -4621,6 +4622,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "nanatype-twitch"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-channel",
+ "getrandom 0.4.3",
+ "nanatype-model",
+ "nanatype-secrets",
+ "serde_json",
+ "tungstenite",
+ "ureq",
+ "url",
+]
+
+[[package]]
 name = "nanatype-update"
 version = "0.1.0"
 dependencies = [
@@ -4633,6 +4648,17 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "ureq",
+]
+
+[[package]]
+name = "nanatype-youtube"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-channel",
+ "nanatype-model",
+ "serde_json",
+ "ureq",
+ "url",
 ]
 
 [[package]]

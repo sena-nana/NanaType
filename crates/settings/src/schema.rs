@@ -726,6 +726,22 @@ pub struct DouyinSettings {
     pub room: String,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct YoutubeSettings {
+    pub enabled: bool,
+    /// A video or channel address, an `@handle`, a channel id or a video id.
+    pub target: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TwitchSettings {
+    pub enabled: bool,
+    /// A channel login or its twitch.tv address.
+    pub channel: String,
+}
+
 /// Where third-party chat comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -793,6 +809,8 @@ pub struct Integrations {
     pub bilibili: BilibiliSettings,
     pub douyin: DouyinSettings,
     pub blivechat: BlivechatSettings,
+    pub youtube: YoutubeSettings,
+    pub twitch: TwitchSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -953,6 +971,10 @@ impl Settings {
             .collect();
         let d = &mut self.integrations.douyin;
         d.room = d.room.trim().chars().take(2048).collect();
+        let y = &mut self.integrations.youtube;
+        y.target = y.target.trim().chars().take(2048).collect();
+        let t = &mut self.integrations.twitch;
+        t.channel = t.channel.trim().chars().take(2048).collect();
         let b = &mut self.integrations.bilibili;
         b.room = b.room.trim().to_owned();
         let l = &mut self.integrations.blivechat;

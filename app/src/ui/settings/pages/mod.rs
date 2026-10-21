@@ -76,6 +76,8 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
     let body = match page {
         Page::Bilibili => crate::ui::bilibili::settings_page(ui),
         Page::Douyin => crate::ui::douyin::settings_page(ui),
+        Page::Youtube => crate::ui::youtube::settings_page(ui),
+        Page::Twitch => crate::ui::twitch::settings_page(ui),
         Page::Blivechat => crate::ui::blivechat::settings_page(ui),
         Page::General => general(ui),
         Page::Playback => playback(ui),

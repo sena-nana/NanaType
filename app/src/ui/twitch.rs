@@ -1,0 +1,260 @@
+//! Twitch: the channel to read, the device-code sign-in and sending.
+use super::Ui;
+use super::danmaku::Link;
+use super::settings::controls::{block, button, hint, row, section, switch, text};
+use crate::msg::Msg;
+use crate::ui::kit::{Type, gap, inset};
+use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
+use nana_ui::runtime::{
+    ConfirmDialog, ConfirmIntent, DialogCloseRequested, Stack, Switch, Text, ToggleChanged,
+};
+use nana_ui_core::{AlignSpec, SemanticColorRole};
+use nanatype_twitch::{AccountState, ConnectionState, DeliveryState};
+
+pub fn link(state: &ConnectionState) -> Link {
+    match state {
+        ConnectionState::Connected(_) => Link::Connected,
+        ConnectionState::Connecting => Link::Connecting,
+        ConnectionState::Error(_) => Link::Error,
+        ConnectionState::Off => Link::Off,
+    }
+}
+pub fn connection(ui: Ui) -> String {
+    match &ui.twitch.get().connection {
+        ConnectionState::Off => ui.now_t("tw-off"),
+        ConnectionState::Connecting => ui.now_t("tw-connecting"),
+        ConnectionState::Connected(room) => {
+            format!("{} · #{}", ui.now_t("tw-connected"), room.login)
+        }
+        ConnectionState::Error(code) => {
+            format!("{} · {}", ui.now_t("tw-error"), diagnostic(ui, code))
+        }
+    }
+}
+/// A stable code in the UI language; Twitch's own messages pass through.
+pub fn diagnostic(ui: Ui, code: &str) -> String {
+    let key = match code {
+        "invalid-channel" => "tw-invalid-channel",
+        "channel-unavailable" | "msg_channel_suspended" | "msg_room_not_found" => {
+            "tw-channel-unavailable"
+        }
+        "msg_banned" | "tos_ban" => "tw-banned",
+        "protected-storage-unavailable" => "tw-storage-error",
+        "login-expired" => "tw-login-expired",
+        "transport-connect-failed" | "disconnected" | "heartbeat-timeout" => "tw-network-error",
+        "worker-start-failed" | "invalid-endpoint" => "tw-network-error",
+        other => return other.to_owned(),
+    };
+    ui.now_t(key)
+}
+fn buttons(views: Vec<AnyView>) -> AnyView {
+    widget(Stack::row(0.0).gap_step(gap::step::CONTROL))
+        .children(views)
+        .into_any()
+}
+fn account_card(ui: Ui) -> AnyView {
+    dynamic(
+        move || (ui.twitch.get().account.clone(), ui.locale.get()),
+        move |(account, _)| {
+            let title = match account {
+                AccountState::Ready(p) => p.name.clone(),
+                AccountState::Restoring => ui.now_t("tw-restoring"),
+                AccountState::Pending { .. } => ui.now_t("tw-pending"),
+                AccountState::Expired => ui.now_t("tw-expired"),
+                AccountState::Failed(_) => ui.now_t("tw-login-failed"),
+                AccountState::SignedOut => ui.now_t("tw-signed-out"),
+            };
+            let mut body = vec![widget(Text::new(title).style(Type::Title.style())).into_any()];
+            match account {
+                AccountState::Ready(p) => {
+                    body.push(hint(format!("@{}", p.login)));
+                    body.push(buttons(vec![
+                        button(ui, "tw-refresh", || Msg::TwitchRefresh),
+                        button(ui, "tw-logout", || Msg::TwitchLogout),
+                    ]));
+                }
+                AccountState::Pending { code, .. } => {
+                    body.push(hint(ui.now_t("tw-pending-hint")));
+                    body.push(
+                        widget(Text::new(code.clone()).style(Type::PageTitle.style())).into_any(),
+                    );
+                    body.push(buttons(vec![
+                        button(ui, "tw-open-activation", || Msg::TwitchOpenActivation),
+                        button(ui, "common-cancel", || Msg::TwitchCancelLogin),
+                    ]));
+                }
+                AccountState::Restoring => {}
+                AccountState::Failed(message) => {
+                    body.push(hint(diagnostic(ui, message)));
+                    body.push(buttons(vec![
+                        button(ui, "tw-login", || Msg::TwitchLogin),
+                        button(ui, "tw-refresh", || Msg::TwitchRefresh),
+                    ]));
+                }
+                _ => {
+                    body.push(hint(ui.now_t("tw-login-hint")));
+                    body.push(button(ui, "tw-login", || Msg::TwitchLogin));
+                }
+            }
+            widget(
+                Stack::column(0.0)
+                    .gap_step(gap::step::GROUP)
+                    .padding_step(inset::step::CARD, inset::step::CARD),
+            )
+            .children(body)
+            .into_any()
+        },
+    )
+    .into_any()
+}
+fn send_toggle(ui: Ui) -> AnyView {
+    widget(Switch::new(String::new(), false))
+        .bind(move |s: &mut Switch| {
+            let state = ui.twitch.get();
+            s.checked = state.sending;
+            s.disabled = !state.can_send() && !state.sending;
+        })
+        .on_cx(|_, _: &ToggleChanged, cx| cx.dispatch_program_all(Msg::TwitchSendToggle))
+        .into_any()
+}
+fn deliveries(ui: Ui) -> AnyView {
+    dynamic(
+        move || (ui.twitch.get().deliveries.clone(), ui.locale.get()),
+        move |(deliveries, _)| {
+            let rows: Vec<AnyView> = deliveries
+                .iter()
+                .filter(|d| d.blocked)
+                .chain(deliveries.iter().rev().filter(|d| !d.blocked).take(20))
+                .map(|d| {
+                    let line = d.line;
+                    let remaining = d.remaining();
+                    let label = ui.now_t(match d.state {
+                        DeliveryState::Queued => "bili-queued",
+                        DeliveryState::Sending => "bili-sending",
+                        DeliveryState::Submitted => "tw-submitted",
+                        DeliveryState::Failed => "bili-failed",
+                        DeliveryState::Uncertain => "bili-uncertain",
+                        DeliveryState::Cancelled => "bili-cancelled",
+                    });
+                    let mut row = vec![
+                        widget(Text::new(d.chunks.concat()).style(Type::Chat.style())).into_any(),
+                        hint(format!("{label} · {}/{}", d.completed, d.chunks.len())),
+                    ];
+                    if !d.detail.is_empty() {
+                        row.push(hint(d.detail.clone()));
+                    }
+                    if matches!(d.state, DeliveryState::Failed | DeliveryState::Uncertain) {
+                        row.push(button(ui, "bili-copy-remaining", move || {
+                            Msg::CopyText(remaining.clone())
+                        }));
+                        if d.blocked {
+                            row.push(button(ui, "bili-retry", move || Msg::TwitchRetry(line)));
+                            row.push(button(ui, "bili-skip-failed", move || {
+                                Msg::TwitchSkipFailed(line)
+                            }));
+                        }
+                    }
+                    widget(
+                        Stack::column(0.0)
+                            .gap_step(gap::step::CONTROL)
+                            .padding_step(inset::step::PANEL, inset::step::PANEL)
+                            .surface(SemanticColorRole::Subtle)
+                            .radius(nana_ui_core::RadiusTier::Sm),
+                    )
+                    .children(row)
+                    .into_any()
+                })
+                .collect();
+            widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
+                .children(rows)
+                .into_any()
+        },
+    )
+    .into_any()
+}
+pub fn confirm_dialog(ui: Ui) -> AnyView {
+    widget(
+        ConfirmDialog::new(ui.now_t("tw-send-title"), ui.now_t("tw-send-warning"))
+            .confirm_label(ui.now_t("bili-enable"))
+            .cancel_label(ui.now_t("common-cancel")),
+    )
+    .bind(move |dialog: &mut ConfirmDialog| {
+        let state = ui.twitch.get();
+        let identity = match &state.account {
+            AccountState::Ready(p) => p.name.clone(),
+            _ => String::new(),
+        };
+        let room = match &state.connection {
+            ConnectionState::Connected(r) => format!("#{}", r.login),
+            _ => String::new(),
+        };
+        dialog.message = format!("{identity} · {room}\n\n{}", ui.now_t("tw-send-warning")).into();
+    })
+    .open(move || ui.twitch.get().confirm)
+    .on_cx(|_, intent: &ConfirmIntent, cx| {
+        cx.dispatch_program_all(Msg::TwitchSendConfirm(matches!(
+            intent,
+            ConfirmIntent::Confirm { .. }
+        )))
+    })
+    .on_cx(|_, _: &DialogCloseRequested, cx| cx.dispatch_program_all(Msg::TwitchSendConfirm(false)))
+    .into_any()
+}
+pub fn settings_page(ui: Ui) -> AnyView {
+    let status = widget(Text::new("")).bind(move |t: &mut Text| t.value = connection(ui));
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
+        .children((
+            section(
+                ui,
+                "tw-channel",
+                vec![
+                    row(
+                        ui,
+                        "tw-channel",
+                        Some("tw-channel-hint"),
+                        text(
+                            ui,
+                            ui.now_t("tw-channel-placeholder"),
+                            crate::ui::kit::field::MD,
+                            |s| s.integrations.twitch.channel.clone(),
+                            |s, v| {
+                                s.integrations.twitch.enabled = false;
+                                s.integrations.twitch.channel = v;
+                            },
+                        ),
+                    ),
+                    row(
+                        ui,
+                        "tw-enabled",
+                        None,
+                        switch(
+                            ui,
+                            |s| s.integrations.twitch.enabled,
+                            |s, v| s.integrations.twitch.enabled = v,
+                        ),
+                    ),
+                    block(status),
+                    block(
+                        widget(
+                            Stack::row(0.0)
+                                .gap_step(gap::step::CONTROL)
+                                .align(AlignSpec::Center),
+                        )
+                        .children(button(ui, "tw-open-panel", || {
+                            Msg::ShowWindow(crate::windows::WindowKind::Chat)
+                        })),
+                    ),
+                ],
+            ),
+            section(ui, "tw-account", vec![account_card(ui)]),
+            section(
+                ui,
+                "tw-send-section",
+                vec![
+                    row(ui, "tw-send-switch", Some("tw-send-hint"), send_toggle(ui)),
+                    deliveries(ui),
+                ],
+            ),
+        ))
+        .into_any()
+}

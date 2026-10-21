@@ -34,6 +34,14 @@ pub enum SourceKind {
     Event,
 }
 
+/// One piece of a live-platform message: text, or an inline platform
+/// picture (emoji, emote) with its alt text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChatRun {
+    Text(String),
+    Emote { alt: String, url: String },
+}
+
 /// A viewer on a live platform, as a line names or quotes them.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ChatUser {

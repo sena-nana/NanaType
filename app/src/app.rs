@@ -4,14 +4,17 @@ pub mod blivechat;
 mod chat;
 pub mod douyin;
 mod editor;
+mod live;
 mod package_editor;
 mod packages;
 mod skins;
 mod startup;
 mod stickers;
 mod system;
+pub mod twitch;
 pub mod update;
 mod window;
+pub mod youtube;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -93,6 +96,8 @@ pub struct App {
     /// The Bilibili connection and the thread saving its pictures.
     pub bilibili: BilibiliHandle,
     pub douyin: nanatype_douyin::DouyinHandle,
+    pub youtube: nanatype_youtube::YoutubeHandle,
+    pub twitch: nanatype_twitch::TwitchHandle,
     /// Third-party chat: the blivechat client and the 彗星号 relay it can join.
     pub blivechat: nanatype_blive::BliveHandle,
     pub comet_relay: nanatype_blive::RelayHandle,
@@ -103,6 +108,7 @@ pub struct App {
     /// Live chat, oldest first, capped at the panel's size.
     chat: VecDeque<Arc<ChatMessage>>,
     bili_echoes: bilibili::Echoes,
+    live_chat: live::LiveChat,
     pub hotkeys: Hotkeys,
     pub tray: Option<Tray>,
     pub persist: Persist,
@@ -238,6 +244,8 @@ impl App {
             bridge: workers.bridge,
             bilibili: workers.bilibili,
             douyin: workers.douyin,
+            youtube: workers.youtube,
+            twitch: workers.twitch,
             blivechat: workers.blivechat,
             comet_relay: workers.comet_relay,
             blivechat_auth,
@@ -246,6 +254,7 @@ impl App {
             _chat_assets: workers.chat_assets,
             chat: VecDeque::new(),
             bili_echoes: Default::default(),
+            live_chat: Default::default(),
             hotkeys: workers.hotkeys,
             tray: None,
             persist,
@@ -355,6 +364,11 @@ impl App {
 
     pub fn post(&self, msg: Msg) {
         self.ctx.dispatch(msg);
+    }
+
+    /// Lines also go to a live chat, which accepts plain text only.
+    pub fn synchronizing(&self) -> bool {
+        self.ui.bilibili.get_untracked().sending || self.ui.twitch.get_untracked().sending
     }
 
     pub fn notice(&mut self, text: String, error: bool) {
@@ -928,6 +942,8 @@ impl App {
         }
         self.sync_bilibili_speaker();
         self.douyin_configure();
+        self.youtube_configure();
+        self.twitch_configure();
         self.blivechat_configure();
         self.edit_status(|s| {
             if !i.vts.enabled {
@@ -1216,12 +1232,9 @@ impl App {
             return;
         }
         let is_send = matches!(cmd, Cmd::Send);
-        let fx = match bilibili::handle_command(
-            &mut self.core,
-            cmd,
-            self.ui.bilibili.get_untracked().sending,
-            clock::now_ms(),
-        ) {
+        let synchronizing = self.synchronizing();
+        let fx = match bilibili::handle_command(&mut self.core, cmd, synchronizing, clock::now_ms())
+        {
             Ok(fx) => fx,
             Err(()) => {
                 self.notice(self.ui.now_t("bili-images-unavailable"), true);
@@ -1294,6 +1307,7 @@ impl App {
         }
         for event in &fx.events {
             self.bilibili_submitted(event);
+            self.twitch_submitted(event);
             self.peer_submitted(event);
             self.bridge_event(event);
         }
@@ -1414,9 +1428,9 @@ impl App {
     /// Replace the editor text. `program` marks it as not typed by the user.
     fn set_source(&mut self, text: String, program: bool) {
         if !program
-            && self.ui.bilibili.get_untracked().sending
-            && nanatype_bilibili::sending::image_count(&parse(&text).doc)
-                > nanatype_bilibili::sending::image_count(self.core.draft())
+            && self.synchronizing()
+            && nanatype_model::outgoing::image_count(&parse(&text).doc)
+                > nanatype_model::outgoing::image_count(self.core.draft())
         {
             self.notice(self.ui.now_t("bili-images-unavailable"), true);
             return;
@@ -1492,9 +1506,9 @@ impl App {
     fn editor_changed(&mut self, rich: nana_ui_core::RichText) {
         let previous = self.core.draft().clone();
         let doc = sync_rich_draft(self.ui, rich);
-        if self.ui.bilibili.get_untracked().sending
-            && nanatype_bilibili::sending::image_count(&doc)
-                > nanatype_bilibili::sending::image_count(&previous)
+        if self.synchronizing()
+            && nanatype_model::outgoing::image_count(&doc)
+                > nanatype_model::outgoing::image_count(&previous)
         {
             self.set_source(serialize_line(&previous, &self.core.draft_meta()), true);
             self.notice(self.ui.now_t("bili-images-unavailable"), true);
@@ -1506,9 +1520,7 @@ impl App {
 
     /// A toolbar action: an editor command, or a markup edit in source mode.
     fn tool(&mut self, tool: crate::msg::Tool) {
-        if self.ui.bilibili.get_untracked().sending
-            && matches!(tool, crate::msg::Tool::Insert(Inline::Atom(_)))
-        {
+        if self.synchronizing() && matches!(tool, crate::msg::Tool::Insert(Inline::Atom(_))) {
             self.notice(self.ui.now_t("bili-images-unavailable"), true);
             return;
         }
@@ -1631,7 +1643,7 @@ impl App {
         self.source_edit_undoable |= !matches!(&edit, MarkupEdit::Typed { .. });
         let mut src = self.ui.source.get_untracked();
         let before = src.text.clone();
-        if !apply_source_markup_guarded(&mut src, edit, self.ui.bilibili.get_untracked().sending) {
+        if !apply_source_markup_guarded(&mut src, edit, self.synchronizing()) {
             self.ui.source.set(src);
             self.notice(self.ui.now_t("bili-images-unavailable"), true);
             return;
@@ -1643,7 +1655,7 @@ impl App {
     }
 
     fn insert_asset(&mut self, asset: AssetRef) {
-        if self.ui.bilibili.get_untracked().sending {
+        if self.synchronizing() {
             self.notice(self.ui.now_t("bili-images-unavailable"), true);
             return;
         }
@@ -1661,7 +1673,7 @@ impl App {
     // ---- files ----------------------------------------------------------------
 
     fn pick(&mut self, target: FileTarget) {
-        if target == FileTarget::InsertImage && self.ui.bilibili.get_untracked().sending {
+        if target == FileTarget::InsertImage && self.synchronizing() {
             self.notice(self.ui.now_t("bili-images-unavailable"), true);
             return;
         }
@@ -1905,6 +1917,17 @@ impl App {
             @ (Msg::Douyin(_) | Msg::DouyinRefresh | Msg::DouyinLogout | Msg::DouyinImport(_)) => {
                 self.douyin_msg(m)
             }
+            m @ (Msg::Youtube(_) | Msg::YoutubeRefresh) => self.youtube_msg(m),
+            m @ (Msg::Twitch(_)
+            | Msg::TwitchLogin
+            | Msg::TwitchCancelLogin
+            | Msg::TwitchOpenActivation
+            | Msg::TwitchRefresh
+            | Msg::TwitchLogout
+            | Msg::TwitchSendToggle
+            | Msg::TwitchSendConfirm(_)
+            | Msg::TwitchRetry(_)
+            | Msg::TwitchSkipFailed(_)) => self.twitch_msg(m),
             m @ (Msg::Blivechat(_)
             | Msg::CometRelay(_)
             | Msg::BlivechatAuthCode(_)
@@ -1983,6 +2006,8 @@ impl App {
             crate::chat::Platform::Bilibili => self.bilibili.epoch(),
             crate::chat::Platform::Douyin => self.douyin.epoch(),
             crate::chat::Platform::Blivechat => self.blivechat.epoch(),
+            crate::chat::Platform::Youtube => self.youtube.epoch(),
+            crate::chat::Platform::Twitch => self.twitch.epoch(),
         };
         if message.epoch != 0 && message.epoch != epoch {
             return;
@@ -1990,7 +2015,11 @@ impl App {
         if bilibili && self.bilibili_message_deleted(&message) {
             return;
         }
-        let include = !bilibili || self.bilibili_history(&message);
+        let include = if bilibili {
+            self.bilibili_history(&message)
+        } else {
+            !self.live_chat.echo(&message)
+        };
         self.ensure_urls(message_assets(&message));
         let history = &self.settings.history.chat;
         if include && history.enabled && message.passes(&history.filter) {
@@ -1998,6 +2027,8 @@ impl App {
             self.run(Cmd::External(message.history_item(locale)));
             if bilibili {
                 self.bilibili_record_row(&message);
+            } else {
+                self.live_record_row(&message);
             }
         }
         self.chat.push_back(message);
@@ -2274,8 +2305,8 @@ pub(crate) fn apply_source_markup_guarded(
     let mut candidate = src.clone();
     apply_source_markup(&mut candidate, edit);
     if synchronizing
-        && nanatype_bilibili::sending::image_count(&parse(&candidate.text).doc)
-            > nanatype_bilibili::sending::image_count(&parse(&src.text).doc)
+        && nanatype_model::outgoing::image_count(&parse(&candidate.text).doc)
+            > nanatype_model::outgoing::image_count(&parse(&src.text).doc)
     {
         // Trigger the retained editor binding to restore its pre-edit value.
         src.revision += 1;
