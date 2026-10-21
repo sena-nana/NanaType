@@ -52,6 +52,7 @@ fn identity(ui: Ui) -> Vec<(AnyView, Shown)> {
     ));
     vec![
         (header.into_any(), None),
+        (update_row(ui), None),
         (
             row_text(
                 ui.now_t("about-repository"),
@@ -78,6 +79,93 @@ fn identity(ui: Ui) -> Vec<(AnyView, Shown)> {
             None,
         ),
     ]
+}
+
+/// The update check's state and what can be done next.
+fn update_row(ui: Ui) -> AnyView {
+    widget(Stack::column(0.0))
+        .children(dynamic(
+            move || ui.update.get(),
+            move |state| update_status(ui, state),
+        ))
+        .into_any()
+}
+
+fn update_status(ui: Ui, state: &crate::app::update::State) -> AnyView {
+    use crate::app::update::State;
+    use nanatype_update::Kind;
+    let locale = ui.locale.get_untracked();
+    let tr = |key: &str, args: &[(&str, nanatype_i18n::Arg<'_>)]| I18N.tr_in(locale, key, args);
+    let check = || button(ui, "update-check", || Msg::CheckUpdate);
+    let (title, detail, buttons) = match state {
+        State::Idle => (
+            ui.now_t("about-update"),
+            Some(ui.now_t("about-update-hint")),
+            vec![check()],
+        ),
+        State::Checking => (ui.now_t("update-checking"), None, Vec::new()),
+        State::UpToDate => (
+            ui.now_t("update-up-to-date"),
+            Some(tr(
+                "update-current",
+                &[("version", nanatype_update::current().into())],
+            )),
+            vec![check()],
+        ),
+        State::Available { version, size } => (
+            tr("update-available", &[("version", version.as_str().into())]),
+            Some(tr(
+                "update-available-hint",
+                &[("size", megabytes(*size).into())],
+            )),
+            vec![
+                button(ui, "update-notes", || Msg::OpenUpdateNotes),
+                button(ui, "update-skip", || Msg::SkipUpdate),
+                primary(ui, "update-download", || Msg::DownloadUpdate),
+            ],
+        ),
+        State::Downloading {
+            version,
+            done,
+            total,
+            source,
+        } => (
+            tr(
+                "update-downloading",
+                &[("version", version.as_str().into())],
+            ),
+            Some(tr(
+                "update-downloading-hint",
+                &[
+                    ("percent", (done * 100 / (*total).max(1)).to_string().into()),
+                    ("source", source.as_str().into()),
+                ],
+            )),
+            vec![button(ui, "update-cancel", || Msg::CancelUpdate)],
+        ),
+        State::Ready { version, kind, .. } => {
+            let (hint_key, action) = match kind {
+                Kind::Installer => ("update-ready-installer", "update-install"),
+                Kind::Dmg => ("update-ready-dmg", "update-open"),
+                _ => ("update-ready-folder", "update-open"),
+            };
+            (
+                tr("update-ready", &[("version", version.as_str().into())]),
+                Some(ui.now_t(hint_key)),
+                vec![primary(ui, action, || Msg::InstallUpdate)],
+            )
+        }
+        State::Failed { message, detail } => (
+            message.clone(),
+            Some(detail.clone()),
+            vec![button(ui, "update-retry", || Msg::CheckUpdate)],
+        ),
+    };
+    row_text(title, detail, controls(buttons))
+}
+
+fn megabytes(bytes: u64) -> String {
+    format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
 }
 
 /// The log and data folders, and the first-run guide again.

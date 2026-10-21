@@ -96,6 +96,10 @@ node scripts/comet_publish.mjs "ws://127.0.0.1:12451/comet?token=…"
 
 关闭输出 5 秒内重开会复用原发送端，OBS 画面恢复中位约 15–30 ms；发送端生命周期与真实 OBS 实测见 [OBS / Spout 输出](docs/obs-spout.md)。
 
+### 检查更新
+
+**设置 › 关于** 检查 GitHub Release 上的新版本，**设置 › 通用 › 更新** 默认每天自动检查一次。新版本的安装包校验通过后才会打开。下载同时尝试 GitHub 和内置代理（gh-proxy.com、ghfast.top、ghproxy.net），也可加一个自定义代理；代理只负责传输，版本清单带 Ed25519 签名，安装包按 SHA-256 校验。详见 [检查更新](docs/updates.md)。
+
 ## 台词标记
 
 台词以 BBCode 风格的标记保存：源码模式、快捷短语和模板都用它。完整说明见 [docs/markup.md](docs/markup.md)。
@@ -174,6 +178,8 @@ scripts/package-macos.sh
 
 Syphon.framework 放在 `Contents/Frameworks`，完整许可文本在 `Contents/Resources/THIRD_PARTY_LICENSES.txt`（由 `scripts/macos-licenses.py` 按 macOS 目标的依赖生成）。
 
+推送 `vX.Y.Z` 标签时，`.github/workflows/release.yml` 在 Windows 和 macOS 上运行这两个脚本，生成签名的更新清单并创建草稿 Release，见 [检查更新](docs/updates.md)。
+
 开发辅助环境变量（仅调试构建或显式设置时生效）：
 
 | 变量 | 作用 |
@@ -205,6 +211,7 @@ Syphon.framework 放在 `Contents/Frameworks`，完整许可文本在 `Contents/
 | `integrations/comet` | 彗星号创意工坊插件页面：把彗星号事件转换成 blivechat 消息 |
 | `crates/core` | 会话逻辑：草稿、发送、继续、队列、历史、回溯 |
 | `crates/p2p` | iroh 双人联机、会话排序、重连恢复与图片传输 |
+| `crates/update` | 检查更新：签名的 Release 清单、文件代理、校验下载 |
 | `app` | NanaUI 宿主、窗口、视图、热键、托盘、Spout |
 
 纯逻辑 crate 不依赖界面框架，可单独测试。

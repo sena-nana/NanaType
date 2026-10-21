@@ -152,6 +152,11 @@ general-send-key-enter = Enter
 general-send-key-ctrl-enter = Ctrl+Enter
 general-send-key-hint = 另一种组合用于换行
 general-autostart = 开机启动
+general-updates = 更新
+general-check-updates = 自动检查更新
+general-check-updates-hint = 启动后在后台检查 GitHub Release，每天最多一次
+general-update-proxy = 自定义代理
+general-update-proxy-hint = 可选。更新会同时尝试 GitHub 与内置代理（gh-proxy.com、ghfast.top、ghproxy.net），这里可再加一个以 https:// 开头的前缀。代理只负责传输，版本信息带签名、安装包按 SHA-256 校验
 
 ## 播放
 playback-speed = 打字速度
@@ -419,6 +424,33 @@ assets-phrase-hotkey = 快捷键
 
 ## 关于
 about-build = 构建 { $build }
+about-update = 软件更新
+about-update-hint = 从 GitHub Release 获取新版本
+update-check = 检查更新
+update-checking = 正在检查更新…
+update-up-to-date = 已是最新版本
+update-current = 当前版本 v{ $version }
+update-available = 发现新版本 v{ $version }
+update-available-hint = 安装包 { $size }，下载后校验签名与 SHA-256
+update-notes = 更新说明
+update-skip = 跳过此版本
+update-download = 下载
+update-downloading = 正在下载 v{ $version }
+update-downloading-hint = { $percent }% · 来源 { $source }
+update-cancel = 取消
+update-ready = v{ $version } 已下载并通过校验
+update-ready-installer = 安装程序会替换当前版本，NanaType 将先退出
+update-ready-dmg = 打开磁盘映像后，把 NanaType 拖入“应用程序”文件夹
+update-ready-folder = 解压后替换当前的程序文件夹
+update-install = 安装
+update-open = 打开
+update-retry = 重试
+update-toast = NanaType v{ $version } 已发布，可在「设置 › 关于」下载
+update-error-unreachable = 无法连接更新源
+update-error-rejected = 更新信息未通过签名校验，已忽略
+update-error-no-asset = 新版本没有适合此系统的安装包
+update-error-download = 下载失败，或文件与发布的校验值不一致
+update-error-other = 更新出错
 about-logs = 日志文件夹
 about-data = 数据文件夹
 about-repository = 官方仓库

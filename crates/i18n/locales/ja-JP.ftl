@@ -152,6 +152,11 @@ general-send-key-enter = Enter
 general-send-key-ctrl-enter = Ctrl+Enter
 general-send-key-hint = もう一方の組み合わせで改行します
 general-autostart = ログイン時に起動
+general-updates = アップデート
+general-check-updates = アップデートを自動確認
+general-check-updates-hint = 起動後にバックグラウンドで GitHub Release を確認します（1 日 1 回まで）
+general-update-proxy = カスタムプロキシ
+general-update-proxy-hint = 任意。GitHub と内蔵プロキシ（gh-proxy.com、ghfast.top、ghproxy.net）を同時に試します。https:// で始まるプレフィックスを追加できます。プロキシは転送のみを担い、リリース情報は署名、インストーラーは SHA-256 で検証されます
 
 ## 再生
 playback-speed = 文字送りの速さ
@@ -419,6 +424,33 @@ assets-phrase-hotkey = ショートカット
 
 ## 情報
 about-build = ビルド { $build }
+about-update = アップデート
+about-update-hint = 新しいバージョンは GitHub Release から取得します
+update-check = アップデートを確認
+update-checking = アップデートを確認中…
+update-up-to-date = 最新バージョンです
+update-current = 現在のバージョン v{ $version }
+update-available = 新しいバージョン v{ $version } があります
+update-available-hint = ダウンロードサイズ { $size }。署名と SHA-256 で検証します
+update-notes = リリースノート
+update-skip = このバージョンをスキップ
+update-download = ダウンロード
+update-downloading = v{ $version } をダウンロード中
+update-downloading-hint = { $percent }% · 取得元 { $source }
+update-cancel = キャンセル
+update-ready = v{ $version } をダウンロードし、検証しました
+update-ready-installer = インストーラーが現在のバージョンを置き換えます。NanaType は先に終了します
+update-ready-dmg = ディスクイメージを開き、NanaType を「アプリケーション」へドラッグしてください
+update-ready-folder = 展開して、現在のプログラムフォルダと置き換えてください
+update-install = インストール
+update-open = 開く
+update-retry = 再試行
+update-toast = NanaType v{ $version } が公開されました。「設定 › 情報」からダウンロードできます
+update-error-unreachable = アップデート元に接続できません
+update-error-rejected = リリース情報の署名検証に失敗したため無視しました
+update-error-no-asset = 新しいバージョンにこのシステム向けのダウンロードがありません
+update-error-download = ダウンロードに失敗したか、公開されたチェックサムと一致しません
+update-error-other = アップデートに失敗しました
 about-logs = ログフォルダー
 about-data = データフォルダー
 about-repository = 公式リポジトリ

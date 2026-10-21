@@ -131,6 +131,17 @@ pub enum InputMode {
     Mirror,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdateSettings {
+    /// An extra file proxy, tried first; the built-in ones are always tried.
+    pub proxy: String,
+    /// A release the user chose not to be reminded of.
+    pub skipped_version: Option<String>,
+    /// The last automatic check, in Unix seconds.
+    pub last_check: Option<u64>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SendKey {
@@ -832,6 +843,7 @@ pub struct Settings {
     pub output: OutputSettings,
     pub integrations: Integrations,
     pub assets: AssetSettings,
+    pub update: UpdateSettings,
     /// Fields from a newer build, preserved verbatim.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, Value>,
@@ -853,6 +865,7 @@ impl Default for Settings {
             output: OutputSettings::default(),
             integrations: Integrations::default(),
             assets: AssetSettings::default(),
+            update: UpdateSettings::default(),
             unknown: BTreeMap::new(),
         }
     }
@@ -928,6 +941,7 @@ impl Settings {
             self.skin.id = DEFAULT_SKIN.into();
         }
         self.general.speaker_name = self.general.speaker_name.chars().take(64).collect();
+        self.update.proxy = self.update.proxy.trim().chars().take(512).collect();
         self.assets.telegram.api_id = self.assets.telegram.api_id.max(0);
         self.assets.telegram.proxy = self
             .assets

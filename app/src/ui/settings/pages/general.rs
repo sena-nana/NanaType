@@ -188,6 +188,32 @@ pub(super) fn general(ui: Ui) -> AnyView {
                     ),
                 ],
             ),
+            section_with(ui, "general-updates", updates(ui)),
         ))
         .into_any()
+}
+
+/// Automatic checks, and an extra proxy for reaching GitHub.
+fn updates(ui: Ui) -> Vec<(AnyView, Shown)> {
+    vec![
+        (
+            toggle_row!(ui, "general-check-updates", general.check_updates),
+            None,
+        ),
+        (
+            row(
+                ui,
+                "general-update-proxy",
+                Some("general-update-proxy-hint"),
+                code_text(
+                    ui,
+                    "https://example.com/".into(),
+                    field::MD,
+                    |s| s.update.proxy.clone(),
+                    |s, v| s.update.proxy = v,
+                ),
+            ),
+            None,
+        ),
+    ]
 }

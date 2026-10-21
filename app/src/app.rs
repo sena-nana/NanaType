@@ -10,6 +10,7 @@ mod skins;
 mod startup;
 mod stickers;
 mod system;
+pub mod update;
 mod window;
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -96,6 +97,8 @@ pub struct App {
     pub blivechat: nanatype_blive::BliveHandle,
     pub comet_relay: nanatype_blive::RelayHandle,
     blivechat_auth: blivechat::AuthCode,
+    updater: crate::services::updater::Updater,
+    pending_update: update::Pending,
     _chat_assets: ChatAssets,
     /// Live chat, oldest first, capped at the panel's size.
     chat: VecDeque<Arc<ChatMessage>>,
@@ -238,6 +241,8 @@ impl App {
             blivechat: workers.blivechat,
             comet_relay: workers.comet_relay,
             blivechat_auth,
+            updater: workers.updater,
+            pending_update: Default::default(),
             _chat_assets: workers.chat_assets,
             chat: VecDeque::new(),
             bili_echoes: Default::default(),
@@ -342,6 +347,7 @@ impl App {
             Ordering::Relaxed,
         );
         self.request_displays();
+        self.check_update_on_start();
         if !self.settings.general.onboarding_done {
             self.open_settings();
         }
@@ -1903,6 +1909,13 @@ impl App {
             | Msg::CometRelay(_)
             | Msg::BlivechatAuthCode(_)
             | Msg::CometResetToken) => self.blivechat_msg(m),
+            m @ (Msg::Update(_)
+            | Msg::CheckUpdate
+            | Msg::DownloadUpdate
+            | Msg::CancelUpdate
+            | Msg::InstallUpdate
+            | Msg::SkipUpdate
+            | Msg::OpenUpdateNotes) => self.update_msg(m),
             Msg::PeerStart { invitation, relay } => self.peer_start(invitation, relay),
             Msg::PeerLeave => self.peer_leave(),
             Msg::PeerPanel(expanded) => self.ui.peer_panel.set(expanded),

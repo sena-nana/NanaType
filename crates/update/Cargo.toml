@@ -1,0 +1,20 @@
+[package]
+name = "nanatype-update"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "NanaType update checks: signed GitHub Release manifests, mirrors and verified downloads"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
+ed25519-dalek = "3"
+sha2 = "0.10"
+semver = "1"
+crossbeam-channel = "0.5"
+
+[dev-dependencies]
+getrandom = "0.4"
+tempfile = "3"

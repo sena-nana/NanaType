@@ -28,6 +28,7 @@ pub(super) struct Workers {
     pub comet_relay: nanatype_blive::RelayHandle,
     pub sticker_manager: crate::stickers::Manager,
     pub telegram: crate::stickers::telegram::Service,
+    pub updater: crate::services::updater::Updater,
 }
 
 impl Workers {
@@ -63,6 +64,10 @@ impl Workers {
             telegram: crate::stickers::telegram::Service::new(
                 paths.data.clone(),
                 forward(&post, Msg::TelegramEvent),
+            ),
+            updater: crate::services::updater::Updater::new(
+                paths.cache.join("updates"),
+                forward(&post, Msg::Update),
             ),
         }
     }

@@ -16,6 +16,7 @@ members = [
     "crates/p2p",
     "crates/plugins",
     "crates/secrets",
+    "crates/update",
     "app",
 ]
 default-members = ["app"]
@@ -43,6 +44,7 @@ nanatype-core = { path = "crates/core" }
 nanatype-p2p = { path = "crates/p2p" }
 nanatype-plugins = { path = "crates/plugins" }
 nanatype-secrets = { path = "crates/secrets" }
+nanatype-update = { path = "crates/update" }
 nana-ui-platform = { git = "https://github.com/sena-nana/NanaUI", rev = "0aac2d55e401fdcec6f48ae5ec5a7b1b8e5f5e1c", default-features = false }
 nana-ui-core = { git = "https://github.com/sena-nana/NanaUI", rev = "0aac2d55e401fdcec6f48ae5ec5a7b1b8e5f5e1c", default-features = false }
 nana-text = { git = "https://github.com/sena-nana/NanaUI", rev = "0aac2d55e401fdcec6f48ae5ec5a7b1b8e5f5e1c" }

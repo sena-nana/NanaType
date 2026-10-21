@@ -6,6 +6,7 @@ pub mod overlay_menu;
 pub mod persist;
 pub mod sounds;
 pub mod tray;
+pub mod updater;
 pub mod watch;
 
 /// Open a folder (or file) in the system file manager.

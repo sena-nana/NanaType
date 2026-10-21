@@ -1,0 +1,94 @@
+name: Release
+
+# Pushing a tag vX.Y.Z (matching Cargo.toml) packages every platform and
+# drafts a GitHub Release with the signed update manifest; see docs/updates.md.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  package:
+    strategy:
+      matrix:
+        # Apple silicon only: no Intel macOS runner label is reliably available.
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag against Cargo.toml
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $version" >&2
+            exit 1
+          fi
+          echo "NANATYPE_BUILD_ID=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          rev=$(sed -n 's/^nana-ui = .*rev = "\([0-9a-f]*\)".*/\1/p' Cargo.toml)
+          echo "NANAUI_REV=$rev" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98"
+      - uses: Swatinem/rust-cache@v2
+      - name: nana-packager
+        run: cargo install --git https://github.com/sena-nana/NanaUI --rev ${{ env.NANAUI_REV }} nana-packager --locked
+      - name: Inno Setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dir = "C:\Program Files (x86)\Inno Setup 6"
+          if (-not (Test-Path "$dir\ISCC.exe")) { choco install innosetup -y --no-progress }
+          Add-Content $env:GITHUB_PATH $dir
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # Each run empties dist/, so the installer is moved aside first.
+        run: |
+          ./scripts/package.ps1
+          New-Item -ItemType Directory -Force release | Out-Null
+          Move-Item dist/*.exe release/
+          ./scripts/package.ps1 -Portable -SkipBuild
+          Move-Item dist/*.zip release/
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          scripts/package-macos.sh
+          mkdir -p release
+          mv dist/*.zip dist/*.dmg release/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ runner.os }}
+          path: release/*
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98"
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Sign the update manifest
+        env:
+          NANATYPE_UPDATE_KEY: ${{ secrets.NANATYPE_UPDATE_KEY }}
+        run: cargo run -p nanatype-update --example manifest --locked -- release "${GITHUB_REF_NAME#v}"
+      # A draft: clients see the release (through releases/latest) once it is published.
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" release/* --draft --verify-tag \
+            --generate-notes --title "NanaType $GITHUB_REF_NAME" $prerelease

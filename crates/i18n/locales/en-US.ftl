@@ -155,6 +155,11 @@ general-send-key-enter = Enter
 general-send-key-ctrl-enter = Ctrl+Enter
 general-send-key-hint = The other combination starts a new line
 general-autostart = Launch at login
+general-updates = Updates
+general-check-updates = Check for updates automatically
+general-check-updates-hint = Checks GitHub Releases in the background after launch, at most once a day
+general-update-proxy = Custom proxy
+general-update-proxy-hint = Optional. Updates try GitHub and the built-in proxies (gh-proxy.com, ghfast.top, ghproxy.net) at once; add another https:// prefix here. Proxies only carry files: release information is signed and installers are checked by SHA-256
 
 ## Playback
 playback-speed = Typing speed
@@ -425,6 +430,33 @@ assets-phrase-hotkey = Hotkey
 
 ## About
 about-build = Build { $build }
+about-update = Updates
+about-update-hint = New versions come from GitHub Releases
+update-check = Check for updates
+update-checking = Checking for updates…
+update-up-to-date = NanaType is up to date
+update-current = Current version v{ $version }
+update-available = Version v{ $version } is available
+update-available-hint = { $size } download, checked against its signature and SHA-256
+update-notes = Release notes
+update-skip = Skip this version
+update-download = Download
+update-downloading = Downloading v{ $version }
+update-downloading-hint = { $percent }% · from { $source }
+update-cancel = Cancel
+update-ready = v{ $version } is downloaded and verified
+update-ready-installer = The installer replaces this version; NanaType quits first
+update-ready-dmg = Open the disk image and drag NanaType into Applications
+update-ready-folder = Unzip it and replace the current program folder
+update-install = Install
+update-open = Open
+update-retry = Try again
+update-toast = NanaType v{ $version } is out. Download it from Settings › About
+update-error-unreachable = Could not reach an update source
+update-error-rejected = Release information failed its signature check and was ignored
+update-error-no-asset = The new version has no download for this system
+update-error-download = The download failed or did not match the published checksum
+update-error-other = Update failed
 about-logs = Logs folder
 about-data = Data folder
 about-repository = Official repository

@@ -318,6 +318,16 @@ pub enum Msg {
     ClearReply,
     /// Empty the chat panel.
     ClearChat,
+    /// The update checker reported.
+    Update(crate::services::updater::Event),
+    CheckUpdate,
+    DownloadUpdate,
+    CancelUpdate,
+    /// Open the downloaded installer (or its folder).
+    InstallUpdate,
+    /// Stop reminding about the release on offer.
+    SkipUpdate,
+    OpenUpdateNotes,
     /// Show a message in the status line.
     Notice {
         text: String,

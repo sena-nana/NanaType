@@ -168,6 +168,7 @@ pub struct Ui {
     pub bilibili: Signal<Arc<crate::app::bilibili::State>>,
     pub douyin: Signal<Arc<crate::app::douyin::State>>,
     pub blivechat: Signal<Arc<crate::app::blivechat::State>>,
+    pub update: Signal<Arc<crate::app::update::State>>,
     /// Kept only in memory and cleared after import; never serialized with settings.
     pub douyin_cookie: Signal<String>,
     pub speaker: Signal<nanatype_model::Speaker>,
@@ -298,6 +299,7 @@ impl Ui {
             bilibili: signal(Arc::new(crate::app::bilibili::State::default())),
             douyin: signal(Arc::new(crate::app::douyin::State::default())),
             blivechat: signal(Arc::new(crate::app::blivechat::State::default())),
+            update: signal(Arc::new(crate::app::update::State::default())),
             douyin_cookie: signal(String::new()),
             speaker: signal(speaker),
             chrome_dark: signal(crate::skin_theme::dark_mode(settings.skin.chrome, false)),

@@ -37,6 +37,7 @@ nanatype-core.workspace = true
 nanatype-p2p.workspace = true
 nanatype-plugins.workspace = true
 nanatype-secrets.workspace = true
+nanatype-update.workspace = true
 getrandom = "0.4"
 nana-ui.workspace = true
 nana-text.workspace = true
