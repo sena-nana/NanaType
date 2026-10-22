@@ -499,7 +499,9 @@ fn completion(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
             preview.clone()
         });
         let items = match trigger {
-            Trigger::Command => completion::commands(&skin, needle, scene.locale),
+            Trigger::Command => {
+                completion::commands(&skin, Default::default(), needle, scene.locale)
+            }
             Trigger::Mention => completion::users(
                 chat.iter().rev().map(|m| (m.platform, &m.user)),
                 needle,
@@ -510,7 +512,8 @@ fn completion(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
         ui.completion.set(Some(Arc::new(CompletionView {
             trigger,
             start: draft.rfind([' ', '/', '@']).map_or(0, |i| i + 1),
-            items: items.into(),
+            first: 0,
+            items: items.into_iter().take(completion::MAX_ITEMS).collect(),
             selected: 0,
         })));
         if let Ok(views) = std::env::var("NANATYPE_SNAPSHOT_VIEWS")

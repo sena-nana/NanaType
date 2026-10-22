@@ -233,13 +233,20 @@ fn style_merge_prefers_the_override() {
 }
 
 #[test]
-fn effects_toggle_adds_and_removes() {
+fn effects_switch_adds_replaces_and_removes() {
     let mut effects = Effects::default();
-    effects.toggle(ContinuousKind::Wave);
-    effects.toggle(ContinuousKind::Shake);
+    effects.switch(Continuous::new(ContinuousKind::Wave));
+    effects.switch(Continuous::new(ContinuousKind::Shake));
     assert!(effects.has(ContinuousKind::Wave));
     assert_eq!(effects.continuous[0].kind, ContinuousKind::Shake);
-    effects.toggle(ContinuousKind::Wave);
+    // The same kind at other values replaces it.
+    let strong = Continuous {
+        amp: 2.0,
+        ..Continuous::new(ContinuousKind::Wave)
+    };
+    effects.switch(strong);
+    assert_eq!(effects.continuous[1], strong);
+    effects.switch(strong);
     assert!(!effects.has(ContinuousKind::Wave));
 }
 

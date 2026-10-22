@@ -150,7 +150,13 @@ impl App {
                         locale,
                     ),
                     completion::Trigger::Command => {
-                        completion::commands(&self.skin, &token.needle, locale)
+                        let hotkeys: Vec<String> = self.ui.status.with_untracked(|s| {
+                            s.vts_hotkeys.iter().map(|(_, n)| n.clone()).collect()
+                        });
+                        let names = completion::Names {
+                            vts_hotkeys: &hotkeys,
+                        };
+                        completion::commands(&self.skin, names, &token.needle, locale)
                     }
                 }
                 .into();
@@ -158,16 +164,17 @@ impl App {
                     return None;
                 }
                 // The choice holds while the rows stay the same.
-                let selected = self
+                let (selected, first) = self
                     .completer
                     .open
                     .as_ref()
                     .filter(|c| c.token.range.start == token.range.start && c.items == items)
-                    .map_or(0, |c| c.selected);
+                    .map_or((0, 0), |c| (c.selected, c.first));
                 Some(completion::Completion {
                     token,
                     items,
                     selected,
+                    first,
                 })
             });
         self.completer.open = open;
@@ -219,7 +226,7 @@ impl App {
                     return;
                 };
                 let range = open.token.range;
-                if matches!(item.insert, completion::Insert::Inline(_)) {
+                if !matches!(item.insert, completion::Insert::Text(_)) {
                     // The rich editor reports the new text later; the list
                     // must not reopen on the token it just replaced.
                     self.completer.dismissed = Some(range.start);
@@ -238,18 +245,31 @@ impl App {
                 match item.insert {
                     completion::Insert::Inline(inline) => self.insert_inline(inline),
                     // A command's name: the list goes on to its arguments.
-                    completion::Insert::Text(text) => {
+                    completion::Insert::Text(text) => self.replace_token(text),
+                    // Gone the token, the effect is set where it was.
+                    completion::Insert::Tool(tool) => {
                         self.focus_editor = true;
                         if self.ui.source_mode.get_untracked() {
-                            self.markup(MarkupEdit::Insert(text));
+                            self.markup(MarkupEdit::Insert(String::new()));
                         } else {
-                            self.rich_commands
-                                .push(RichEditCommand::InsertText(text).into());
+                            self.rich_commands.push(EditorCommand::Delete);
                         }
+                        self.tool(tool);
                     }
                 }
             }
         }
         self.publish_completion();
+    }
+
+    /// Put `text` in place of the selected token.
+    fn replace_token(&mut self, text: String) {
+        self.focus_editor = true;
+        if self.ui.source_mode.get_untracked() {
+            self.markup(MarkupEdit::Insert(text));
+        } else {
+            self.rich_commands
+                .push(RichEditCommand::InsertText(text).into());
+        }
     }
 }

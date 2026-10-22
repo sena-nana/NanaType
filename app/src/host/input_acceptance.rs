@@ -1847,6 +1847,7 @@ fn open_mentions(f: &Fixture) {
         .set(Some(Arc::new(crate::completion::CompletionView {
             trigger: crate::completion::Trigger::Mention,
             start: 3,
+            first: 0,
             items: items.into(),
             selected: 0,
         })));
@@ -1917,6 +1918,7 @@ fn open_commands(f: &Fixture, caret: usize) -> crate::completion::Completion {
     let token = crate::completion::token(&text, caret).unwrap();
     let items = crate::completion::commands(
         &f.ui.skin.get_untracked(),
+        Default::default(),
         &token.needle,
         nanatype_i18n::Locale::ZhCn,
     );
@@ -1924,6 +1926,7 @@ fn open_commands(f: &Fixture, caret: usize) -> crate::completion::Completion {
         token,
         items: items.into(),
         selected: 0,
+        first: 0,
     };
     let completer = crate::completion::Completer {
         open: Some(open.clone()),
@@ -2102,6 +2105,62 @@ fn accepting_replaces_the_token_with_a_mention() {
     );
     assert!(src.text.starts_with("hi [at="), "{}", src.text);
     assert!(!src.text.contains("@Al"));
+}
+
+#[test]
+fn accepting_an_effect_drops_the_token_and_styles_what_follows() {
+    let mut f = Fixture::new(false, false, "");
+    f.focus();
+    f.event(InputPayload::Text(nana_ui_platform::CommittedText::new(
+        "hi /wave",
+    )));
+    let token = crate::completion::token(&f.text(), f.text().len()).unwrap();
+    // As the app accepts it: select the token, delete it, set the effect.
+    let mut effects = nanatype_model::Effects::default();
+    effects.switch(nanatype_model::Continuous::new(
+        nanatype_model::ContinuousKind::Wave,
+    ));
+    let wave = nana_ui_core::RichSpanStyle::new().effect(crate::ui::rich::attr_index_any(
+        &effects,
+        nanatype_model::Pace::Inherit,
+    ));
+    sync_editor(
+        f.session.document_mut(),
+        f.ui,
+        f.editor,
+        Some(f.source),
+        vec![
+            RichEditCommand::Select(token.range).into(),
+            crate::app::EditorCommand::Delete,
+            RichEditCommand::SetAttrs(wave).into(),
+        ],
+        true,
+        false,
+    );
+    f.pump();
+    f.session.flush().unwrap();
+    assert_eq!(f.text(), "hi ");
+    f.event(InputPayload::Text(nana_ui_platform::CommittedText::new(
+        "x",
+    )));
+    let draft = f.ui.draft.get_untracked();
+    let runs: Vec<_> = draft.paragraphs[0]
+        .inlines
+        .iter()
+        .filter_map(|i| match i {
+            nanatype_model::Inline::Text(run) => Some((run.text.as_str(), run.effects.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        runs,
+        [("hi ", Default::default()), ("x", effects)],
+        "{draft:?}"
+    );
+    // Deleting the token was one undo step of its own.
+    f.sync(true, false, vec![RichEditCommand::Undo]);
+    f.sync(true, false, vec![RichEditCommand::Undo]);
+    assert_eq!(f.text(), "hi /wave");
 }
 
 #[test]

@@ -77,6 +77,8 @@ fn share_input_keys(keys: &InputKeys) {
 pub enum EditorCommand {
     Edit(nana_ui::runtime::RichEditCommand),
     Insert(nana_ui_core::RichText),
+    /// Delete the selection as one undo step.
+    Delete,
 }
 
 impl From<nana_ui::runtime::RichEditCommand> for EditorCommand {
@@ -1699,19 +1701,19 @@ impl App {
             Tool::Ruby(text) => {
                 RichEditCommand::SetRuby((!text.trim().is_empty()).then(|| text.trim().to_owned()))
             }
-            Tool::Effect(_) | Tool::Emphasis | Tool::Entrance(_) | Tool::Pace(_) => {
+            Tool::Effect(_) | Tool::Emphasis(_) | Tool::Entrance(..) | Tool::Pace(_) => {
                 match tool {
-                    Tool::Effect(kind) => effects.toggle(kind),
-                    Tool::Emphasis => {
+                    Tool::Effect(effect) => effects.switch(effect),
+                    Tool::Emphasis(em) => {
                         effects.emphasis = match effects.emphasis {
-                            Some(_) => None,
-                            None => Some(nanatype_model::Emphasis::default()),
+                            Some(on) if on == em => None,
+                            _ => Some(em),
                         }
                     }
-                    Tool::Entrance(kind) => {
+                    Tool::Entrance(kind, ms) => {
                         effects.entrance = Some(nanatype_model::Entrance {
                             kind,
-                            ms: self.skin.dialogue.reveal.entrance.ms.max(120),
+                            ms: ms.unwrap_or(self.skin.dialogue.reveal.entrance.ms.max(120)),
                         })
                     }
                     Tool::Pace(p) => pace = p,
@@ -2503,7 +2505,7 @@ fn strip_tags(text: &str) -> String {
     serialize(&doc.normalized())
 }
 
-fn quote(v: &str) -> String {
+pub(crate) fn quote(v: &str) -> String {
     if v.chars()
         .any(|c| c.is_whitespace() || matches!(c, ']' | '"' | '[' | '\\'))
     {
@@ -2518,7 +2520,7 @@ fn quote(v: &str) -> String {
 fn demo_editor(ctx: &RuntimeProgramContext<Msg>) {
     use crate::msg::Tool;
     use nana_ui::runtime::RichEditCommand as C;
-    use nanatype_model::{ContinuousKind, Inline, Marker};
+    use nanatype_model::{Continuous, ContinuousKind, Inline, Marker};
     let text = |t: &str| Msg::EditorCommand(C::InsertText(t.into()));
     let steps = [
         text("你好，这是"),
@@ -2526,9 +2528,9 @@ fn demo_editor(ctx: &RuntimeProgramContext<Msg>) {
         text("粗体"),
         Msg::Tool(Tool::Bold),
         text("和"),
-        Msg::Tool(Tool::Effect(ContinuousKind::Wave)),
+        Msg::Tool(Tool::Effect(Continuous::new(ContinuousKind::Wave))),
         text("波浪"),
-        Msg::Tool(Tool::Effect(ContinuousKind::Wave)),
+        Msg::Tool(Tool::Effect(Continuous::new(ContinuousKind::Wave))),
         Msg::Tool(Tool::Insert(Inline::Marker(Marker::Wait { ms: 400 }))),
         Msg::Tool(Tool::Color("#e8505b".parse().expect("colour"))),
         text("红色！"),
@@ -2577,16 +2579,33 @@ pub(crate) fn markup_for(tool: &crate::msg::Tool) -> Option<MarkupEdit> {
             "[/shadow]",
         ),
         Tool::Ruby(r) => wrap(format!("[ruby={}]", quote(r)), "[/ruby]"),
-        Tool::Effect(k) => wrap(format!("[{}]", k.key()), &format!("[/{}]", k.key())),
-        Tool::Emphasis => wrap("[em]".into(), "[/em]"),
-        Tool::Entrance(k) => {
+        Tool::Effect(e) => {
+            let mut open = format!("[{}", e.kind.key());
+            if e.amp != 1.0 {
+                open.push_str(&format!(" amp={}", e.amp));
+            }
+            if e.speed != 1.0 {
+                open.push_str(&format!(" speed={}", e.speed));
+            }
+            open.push(']');
+            wrap(open, &format!("[/{}]", e.kind.key()))
+        }
+        Tool::Emphasis(em) if *em == nanatype_model::Emphasis::default() => {
+            wrap("[em]".into(), "[/em]")
+        }
+        Tool::Emphasis(em) => wrap(format!("[em={}]", em.ms), "[/em]"),
+        Tool::Entrance(k, ms) => {
             let tag = match k {
                 nanatype_model::EntranceKind::Fade => "fade",
                 nanatype_model::EntranceKind::Pop => "pop",
                 nanatype_model::EntranceKind::SlideUp => "slide",
                 nanatype_model::EntranceKind::None => "noentrance",
             };
-            wrap(format!("[{tag}]"), &format!("[/{tag}]"))
+            let open = match ms {
+                Some(ms) => format!("[{tag}={ms}]"),
+                None => format!("[{tag}]"),
+            };
+            wrap(open, &format!("[/{tag}]"))
         }
         Tool::Pace(nanatype_model::Pace::Instant) => wrap("[instant]".into(), "[/instant]"),
         Tool::Pace(nanatype_model::Pace::Scale(s)) => wrap(format!("[speed={s}]"), "[/speed]"),

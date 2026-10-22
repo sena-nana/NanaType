@@ -681,6 +681,7 @@ fn sync_editor(
             crate::app::EditorCommand::Insert(fragment) => {
                 insert_rich_fragment(cx, ui, editor, &fragment)
             }
+            crate::app::EditorCommand::Delete => delete_rich_selection(cx, ui, editor),
         };
         if let Err(error) = result {
             crate::debug_log(&format!("rich edit: {error}"));
@@ -721,6 +722,35 @@ fn insert_rich_fragment(
     })?;
     // Following typing starts a new undo step and reads the final attributes.
     cx.rich_edit(editor, RichEditCommand::Select(end..end))?;
+    Ok(true)
+}
+
+/// NanaUI has no delete command: typing over the selection records the undo
+/// step, then the typed character goes too.
+fn delete_rich_selection(
+    cx: &mut nana_ui::runtime::AppContext,
+    ui: crate::ui::Ui,
+    editor: Entity<RichTextEditor>,
+) -> Result<bool, FrameworkError> {
+    use nana_ui::runtime::{RichEditCommand, RichTextEditorEvent};
+    if cx.read(editor, |e| e.read_only || e.disabled)? {
+        return Ok(false);
+    }
+    let selection = cx.read(editor, |e| e.selection())?;
+    let start = selection.0.min(selection.1);
+    if start == selection.0.max(selection.1) {
+        return Ok(false);
+    }
+    ui.editor_transaction.set(true);
+    let typed = cx.rich_edit(editor, RichEditCommand::InsertText(" ".into()));
+    ui.editor_transaction.set(false);
+    typed?;
+    // The caret first, so it never lies past the shortened text.
+    cx.rich_edit(editor, RichEditCommand::Select(start..start))?;
+    cx.update_component(editor, |e, cx| {
+        e.value.replace_range(start..start + 1, "");
+        cx.emit(RichTextEditorEvent::Changed(e.value.clone()));
+    })?;
     Ok(true)
 }
 

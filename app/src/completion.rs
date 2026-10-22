@@ -6,13 +6,19 @@ use std::{ops::Range, sync::Arc};
 
 use nana_ui::runtime::{TextCompletion, TextCompletionEdit};
 use nanatype_i18n::Locale;
-use nanatype_model::{ChatUser, Document, Inline, Marker, Mention};
+use nanatype_model::{
+    ChatUser, Continuous, ContinuousKind, Document, Emphasis, EntranceKind, Inline, Marker,
+    Mention, Pace, VtsAction,
+};
 
 use crate::chat::Platform;
+use crate::msg::{MarkupEdit, Tool};
 use crate::ui::I18N;
 
-/// At most this many rows are offered.
+/// At most this many rows are shown; the list scrolls through the rest.
 pub const MAX_ITEMS: usize = 8;
+/// At most this many rows are offered.
+const MAX_MATCHES: usize = 32;
 /// A token longer than this is prose, not something to complete.
 const MAX_TOKEN: usize = 48;
 /// What an inline object stands as in the rich editor's text.
@@ -87,6 +93,9 @@ pub enum Insert {
     /// Replace the token with text and go on completing: a command that
     /// needs an argument.
     Text(String),
+    /// Remove the token and apply a span effect at the caret, as its
+    /// toolbar button does: what is typed next carries it.
+    Tool(Tool),
 }
 
 /// One row of the list.
@@ -151,9 +160,15 @@ pub fn users<'a>(
 enum Arg {
     Ms,
     Amp,
+    Speed,
+    /// A rate or a fixed `Nms` per character.
+    Rate,
     Name,
     Volume,
     Intensity,
+    /// `on` or `off`.
+    Active,
+    Value,
 }
 
 impl Arg {
@@ -161,9 +176,13 @@ impl Arg {
         let (key, required) = match self {
             Self::Ms => ("complete-arg-ms", false),
             Self::Amp => ("complete-arg-amp", false),
+            Self::Speed => ("complete-arg-speed", false),
+            Self::Rate => ("complete-arg-rate", true),
             Self::Name => ("complete-arg-name", true),
             Self::Volume => ("complete-arg-volume", false),
             Self::Intensity => ("complete-arg-intensity", false),
+            Self::Active => ("complete-arg-active", false),
+            Self::Value => ("complete-arg-value", true),
         };
         let name = I18N.t_in(locale, key);
         if required {
@@ -174,7 +193,7 @@ impl Arg {
     }
 }
 
-/// A `/` command: a marker's markup tag, with its arguments in order.
+/// A `/` command: a markup tag, with its arguments in order.
 struct Command {
     name: &'static str,
     /// What it does, shown beside its name.
@@ -182,46 +201,61 @@ struct Command {
     args: &'static [Arg],
 }
 
+const fn command(name: &'static str, about: &'static str, args: &'static [Arg]) -> Command {
+    Command { name, about, args }
+}
+
+const LOOP: &[Arg] = &[Arg::Amp, Arg::Speed];
+
 const COMMANDS: &[Command] = &[
-    Command {
-        name: "wait",
-        about: "cheat-wait",
-        args: &[Arg::Ms],
-    },
-    Command {
-        name: "pause",
-        about: "cheat-pause",
-        args: &[Arg::Ms],
-    },
-    Command {
-        name: "page",
-        about: "cheat-page",
-        args: &[],
-    },
-    Command {
-        name: "screenshake",
-        about: "complete-about-shake",
-        args: &[Arg::Amp, Arg::Ms],
-    },
-    Command {
-        name: "se",
-        about: "cheat-se",
-        args: &[Arg::Name, Arg::Volume],
-    },
-    Command {
-        name: "expr",
-        about: "cheat-expr",
-        args: &[Arg::Name, Arg::Intensity],
-    },
-    Command {
-        name: "portrait",
-        about: "complete-portrait",
-        args: &[Arg::Name],
-    },
+    command("wait", "cheat-wait", &[Arg::Ms]),
+    command("pause", "cheat-pause", &[Arg::Ms]),
+    command("page", "cheat-page", &[]),
+    command("em", "complete-about-em", &[Arg::Ms]),
+    command("speed", "complete-about-speed", &[Arg::Rate]),
+    command("instant", "tb-speed-instant", &[]),
+    command("shake", "tb-effect-shake", LOOP),
+    command("wave", "tb-effect-wave", LOOP),
+    command("jump", "tb-effect-jump", LOOP),
+    command("rainbow", "tb-effect-rainbow", LOOP),
+    command("pulse", "tb-effect-pulse", LOOP),
+    command("flicker", "tb-effect-flicker", LOOP),
+    command("fade", "tb-entrance-fade", &[Arg::Ms]),
+    command("pop", "tb-entrance-pop", &[Arg::Ms]),
+    command("slide", "tb-entrance-slide", &[Arg::Ms]),
+    command("screenshake", "complete-about-shake", &[Arg::Amp, Arg::Ms]),
+    command("se", "cheat-se", &[Arg::Name, Arg::Volume]),
+    command("expr", "cheat-expr", &[Arg::Name, Arg::Intensity]),
+    command("portrait", "complete-portrait", &[Arg::Name]),
+    command("vts-hotkey", "complete-about-vts-hotkey", &[Arg::Name]),
+    command(
+        "vts-expr",
+        "complete-about-vts-expr",
+        &[Arg::Name, Arg::Active],
+    ),
+    command(
+        "vts-param",
+        "complete-about-vts-param",
+        &[Arg::Name, Arg::Value, Arg::Ms],
+    ),
 ];
 
-/// Waits the list offers before one is typed.
+/// Values the list offers before one is typed.
 const WAITS: [&str; 3] = ["250", "500", "1000"];
+const SPEEDS: [&str; 3] = ["0.5", "2", "40ms"];
+
+/// What completing can draw its names from besides the skin.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Names<'a> {
+    /// The connected VTube Studio model's hotkeys.
+    pub vts_hotkeys: &'a [String],
+}
+
+/// Whether `name` is a span tag rather than a marker.
+fn span(name: &str) -> bool {
+    matches!(name, "em" | "speed" | "instant" | "fade" | "pop" | "slide")
+        || ContinuousKind::from_key(name).is_some()
+}
 
 impl Command {
     fn hint(&self, locale: Locale) -> String {
@@ -229,23 +263,62 @@ impl Command {
         hints.join(" ")
     }
 
-    /// What the command inserts with no arguments; none when it needs one.
-    fn default(&self, skin: &nanatype_theme::Skin) -> Option<Marker> {
+    /// What the command does with no arguments; none when it needs one.
+    fn default(&self, skin: &nanatype_theme::Skin) -> Option<Insert> {
+        let marker = |m| Some(Insert::Inline(Inline::Marker(m)));
         match self.name {
-            "wait" => Some(Marker::Wait { ms: 500 }),
-            "pause" => Some(Marker::Pause { auto_ms: None }),
-            "page" => Some(Marker::Page),
-            "screenshake" => Some(Marker::ScreenShake {
+            "wait" => marker(Marker::Wait { ms: 500 }),
+            "pause" => marker(Marker::Pause { auto_ms: None }),
+            "page" => marker(Marker::Page),
+            "screenshake" => marker(Marker::ScreenShake {
                 amp: skin.effects.screen_shake_px,
                 ms: 300,
             }),
-            _ => None,
+            "em" => Some(Insert::Tool(Tool::Emphasis(Emphasis::default()))),
+            "instant" => Some(Insert::Tool(Tool::Pace(Pace::Instant))),
+            name => {
+                if let Some(kind) = ContinuousKind::from_key(name) {
+                    return Some(Insert::Tool(Tool::Effect(Continuous::new(kind))));
+                }
+                let kind = EntranceKind::ALL
+                    .into_iter()
+                    .find(|k| *k != EntranceKind::None && k.key() == name)?;
+                // The skin's duration, as the toolbar gives it.
+                Some(Insert::Tool(Tool::Entrance(kind, None)))
+            }
         }
     }
 
-    /// The marker these arguments make, read by the markup parser so `/`
-    /// accepts exactly what the tag does (`/wait 800ms`, `/se laugh 0.5`).
-    fn marker(&self, args: &[&str], skin: &nanatype_theme::Skin) -> Option<Marker> {
+    /// The tag these arguments make, as one would write it.
+    fn tag(&self, args: &[&str]) -> Option<String> {
+        let q = |v: &str| crate::app::quote(v);
+        Some(match (self.name, args) {
+            ("screenshake", _) => format!("[screenshake={}]", args.join(",")),
+            ("se", [name, vol]) => format!("[se={} vol={vol}]", q(name)),
+            ("expr", [name, x]) => format!("[expr={} intensity={x}]", q(name)),
+            ("vts-hotkey", [name]) => format!("[vts hotkey={}]", q(name)),
+            ("vts-expr", [file]) => format!("[vts expr={}]", q(file)),
+            ("vts-expr", [file, on]) => format!("[vts expr={} active={on}]", q(file)),
+            ("vts-param", [name, value]) => format!("[vts param={} value={value}]", q(name)),
+            ("vts-param", [name, value, ms]) => {
+                format!("[vts param={} value={value} ms={ms}]", q(name))
+            }
+            ("vts-param", _) => return None,
+            (name, [amp]) if ContinuousKind::from_key(name).is_some() => {
+                format!("[{name} amp={amp}]x[/{name}]")
+            }
+            (name, [amp, speed]) if ContinuousKind::from_key(name).is_some() => {
+                format!("[{name} amp={amp} speed={speed}]x[/{name}]")
+            }
+            (name, [value]) if span(name) => format!("[{name}={value}]x[/{name}]"),
+            (name, [value]) => format!("[{name}={}]", q(value)),
+            _ => return None,
+        })
+    }
+
+    /// What these arguments make, read by the markup parser so `/` accepts
+    /// exactly what the tag does (`/wait 800ms`, `/se laugh 0.5`).
+    fn insert(&self, args: &[&str], skin: &nanatype_theme::Skin) -> Option<Insert> {
         if args.is_empty() {
             return self.default(skin);
         }
@@ -256,44 +329,68 @@ impl Command {
         {
             return None;
         }
-        let tag = match (self.name, args) {
-            ("screenshake", _) => format!("[screenshake={}]", args.join(",")),
-            ("se", [name, vol]) => format!("[se={name} vol={vol}]"),
-            ("expr", [name, x]) => format!("[expr={name} intensity={x}]"),
-            (name, [value]) => format!("[{name}={value}]"),
-            _ => return None,
-        };
-        let parsed = nanatype_markup::parse(&tag);
+        let parsed = nanatype_markup::parse(&self.tag(args)?);
         if !parsed.diagnostics.is_empty() {
             return None;
         }
-        match parsed.doc.paragraphs.as_slice() {
-            [p] => match p.inlines.as_slice() {
-                [Inline::Marker(m)] => Some(m.clone()),
-                _ => None,
-            },
+        let [p] = parsed.doc.paragraphs.as_slice() else {
+            return None;
+        };
+        match p.inlines.as_slice() {
+            [Inline::Marker(m)] => Some(Insert::Inline(Inline::Marker(m.clone()))),
+            [Inline::Text(run)] => {
+                let tool = if let Some(effect) = run.effects.continuous.first() {
+                    Tool::Effect(*effect)
+                } else if let Some(em) = run.effects.emphasis {
+                    Tool::Emphasis(em)
+                } else if let Some(e) = run.effects.entrance {
+                    Tool::Entrance(e.kind, Some(e.ms))
+                } else if !run.pace.is_inherit() {
+                    Tool::Pace(run.pace)
+                } else {
+                    return None;
+                };
+                Some(Insert::Tool(tool))
+            }
             _ => None,
         }
     }
 
-    /// The names the skin offers for the first argument.
-    fn names(&self, skin: &nanatype_theme::Skin) -> Vec<String> {
+    /// The names offered for the first argument.
+    fn names(&self, skin: &nanatype_theme::Skin, names: Names<'_>) -> Vec<String> {
         match self.name {
             "se" => skin.sounds.se.keys().cloned().collect(),
             "expr" | "portrait" => skin.dialogue.portrait.variants.keys().cloned().collect(),
+            "vts-hotkey" => names.vts_hotkeys.to_vec(),
             _ => Vec::new(),
+        }
+    }
+
+    /// Values offered before the only argument is typed.
+    fn values(&self) -> &'static [&'static str] {
+        match self.name {
+            "wait" => &WAITS,
+            "speed" => &SPEEDS,
+            _ => &[],
         }
     }
 
     /// The row inserting this command with `args`, named by the word being
     /// completed, as an IDE lists the member after a dot.
     fn row(&self, args: &[&str], skin: &nanatype_theme::Skin, locale: Locale) -> Option<Item> {
-        let marker = self.marker(args, skin)?;
+        let insert = self.insert(args, skin)?;
+        let detail = match &insert {
+            Insert::Inline(Inline::Marker(m)) => meaning(m, locale),
+            Insert::Tool(tool) => {
+                effect_meaning(tool, locale).unwrap_or_else(|| I18N.t_in(locale, self.about))
+            }
+            _ => I18N.t_in(locale, self.about),
+        };
         Some(Item {
             label: args.last().copied().unwrap_or(self.name).to_owned(),
             note: String::new(),
-            detail: meaning(&marker, locale),
-            insert: Insert::Inline(Inline::Marker(marker)),
+            detail,
+            insert,
         })
     }
 }
@@ -318,14 +415,50 @@ fn meaning(marker: &Marker, locale: Locale) -> String {
         } => tr("complete-intensity", &[("x", f64::from(*x).into())]),
         Marker::Expression { .. } => t("cheat-expr"),
         Marker::Portrait { .. } => t("complete-portrait"),
-        Marker::Vts(_) => crate::ui::input::marker_label(marker, locale),
+        Marker::Vts(VtsAction::Hotkey { .. }) => t("complete-about-vts-hotkey"),
+        Marker::Vts(VtsAction::Expression { active: true, .. }) => t("complete-about-vts-expr"),
+        Marker::Vts(VtsAction::Expression { active: false, .. }) => t("complete-vts-expr-off"),
+        Marker::Vts(VtsAction::Param { value, ms: 0, .. }) => {
+            tr("complete-vts-param", &[("value", f64::from(*value).into())])
+        }
+        Marker::Vts(VtsAction::Param { value, ms, .. }) => tr(
+            "complete-vts-param-hold",
+            &[("value", f64::from(*value).into()), ("ms", (*ms).into())],
+        ),
     }
 }
 
-/// The markers matching `needle`. A bare name lists the commands (by tag or
-/// by what they do); after a space come its arguments: the skin's names for
-/// a sound or an expression, or the marker the typed values make.
-pub fn commands(skin: &nanatype_theme::Skin, needle: &str, locale: Locale) -> Vec<Item> {
+/// What an effect at other than its usual values does; none at those,
+/// where the command's own words say it.
+fn effect_meaning(tool: &Tool, locale: Locale) -> Option<String> {
+    let tr = |k: &str, args: &[(&str, nanatype_i18n::Arg<'_>)]| I18N.tr_in(locale, k, args);
+    Some(match tool {
+        Tool::Effect(e) if e.amp == 1.0 && e.speed == 1.0 => return None,
+        Tool::Effect(e) => tr(
+            "complete-effect",
+            &[
+                ("amp", f64::from(e.amp).into()),
+                ("speed", f64::from(e.speed).into()),
+            ],
+        ),
+        Tool::Emphasis(em) if *em == Emphasis::default() => return None,
+        Tool::Emphasis(em) => tr("complete-em", &[("ms", em.ms.into())]),
+        Tool::Entrance(_, Some(ms)) => tr("complete-entrance", &[("ms", (*ms).into())]),
+        Tool::Pace(Pace::Scale(x)) => tr("complete-speed", &[("x", f64::from(*x).into())]),
+        Tool::Pace(Pace::FixedMs(ms)) => tr("complete-speed-ms", &[("ms", (*ms).into())]),
+        _ => return None,
+    })
+}
+
+/// The commands matching `needle`. A bare name lists the commands (by tag or
+/// by what they do); after a space come its arguments: the names on offer
+/// for a sound, an expression or a hotkey, or what the typed values make.
+pub fn commands(
+    skin: &nanatype_theme::Skin,
+    names: Names<'_>,
+    needle: &str,
+    locale: Locale,
+) -> Vec<Item> {
     let Some((head, rest)) = needle.split_once(char::is_whitespace) else {
         let needle = needle.to_lowercase();
         let ranked = COMMANDS
@@ -333,10 +466,9 @@ pub fn commands(skin: &nanatype_theme::Skin, needle: &str, locale: Locale) -> Ve
             .filter_map(|c| {
                 let about = I18N.t_in(locale, c.about);
                 let r = rank(c.name, &needle).or_else(|| rank(&about, &needle).map(|_| 1))?;
-                let insert = match c.default(skin) {
-                    Some(m) => Insert::Inline(Inline::Marker(m)),
-                    None => Insert::Text(format!("/{} ", c.name)),
-                };
+                let insert = c
+                    .default(skin)
+                    .unwrap_or_else(|| Insert::Text(format!("/{} ", c.name)));
                 Some((
                     r,
                     Item {
@@ -358,33 +490,33 @@ pub fn commands(skin: &nanatype_theme::Skin, needle: &str, locale: Locale) -> Ve
         return Vec::new();
     }
     let args: Vec<&str> = rest.split_whitespace().collect();
-    let names = command.names(skin);
-    if !names.is_empty() && args.len() <= 1 {
-        // A name: the skin's, then whatever was typed (an asset, a VTS
+    let offered = command.names(skin, names);
+    if !offered.is_empty() && args.len() <= 1 {
+        // A name: those on offer, then whatever was typed (an asset, a VTS
         // expression the skin does not draw).
         let typed = args.first().copied().unwrap_or("");
         let lower = typed.to_lowercase();
-        let mut ranked: Vec<(u8, Item)> = names
+        let mut ranked: Vec<(u8, Item)> = offered
             .iter()
             .filter_map(|n| {
                 let r = rank(n, &lower)?;
                 Some((r, command.row(&[n.as_str()], skin, locale)?))
             })
             .collect();
-        if !typed.is_empty() && !names.iter().any(|n| n == typed) {
+        if !typed.is_empty() && !offered.iter().any(|n| n == typed) {
             ranked.extend(command.row(&[typed], skin, locale).map(|i| (2, i)));
         }
         return finish(ranked);
     }
     if args.is_empty() {
-        let rows: Vec<Item> = match command.name {
-            "wait" => WAITS
-                .iter()
-                .filter_map(|ms| command.row(&[ms], skin, locale))
-                .collect(),
-            _ => command.row(&[], skin, locale).into_iter().collect(),
-        };
-        return rows;
+        let values = command.values();
+        if values.is_empty() {
+            return command.row(&[], skin, locale).into_iter().collect();
+        }
+        return values
+            .iter()
+            .filter_map(|v| command.row(&[v], skin, locale))
+            .collect();
     }
     command.row(&args, skin, locale).into_iter().collect()
 }
@@ -395,7 +527,7 @@ fn finish(mut ranked: Vec<(u8, Item)>) -> Vec<Item> {
     ranked
         .into_iter()
         .map(|(_, item)| item)
-        .take(MAX_ITEMS)
+        .take(MAX_MATCHES)
         .collect()
 }
 
@@ -405,6 +537,8 @@ pub struct Completion {
     pub token: Token,
     pub items: Arc<[Item]>,
     pub selected: usize,
+    /// The first row shown.
+    pub first: usize,
 }
 
 impl Completion {
@@ -415,6 +549,7 @@ impl Completion {
         self.items
             .iter()
             .map(|item| {
+                let mut stops = Vec::new();
                 let text = match &item.insert {
                     Insert::Inline(inline) => {
                         let mut tag = nanatype_markup::serialize(&Document::from_inlines(vec![
@@ -427,6 +562,14 @@ impl Completion {
                         tag
                     }
                     Insert::Text(text) => text.clone(),
+                    // The pair of tags, the caret between them.
+                    Insert::Tool(tool) => match crate::app::markup_for(tool) {
+                        Some(MarkupEdit::Wrap { open, close }) => {
+                            stops.push(open.len()..open.len());
+                            open + &close
+                        }
+                        _ => String::new(),
+                    },
                 };
                 TextCompletion::new(item.label.clone(), item.detail.clone())
                     .detail(item.note.clone())
@@ -438,17 +581,23 @@ impl Completion {
                         range: self.token.range.clone(),
                         text,
                         additional: Vec::new(),
-                        stops: Vec::new(),
+                        stops,
                     })
             })
             .collect()
     }
 
-    /// Move the choice by `delta` rows, wrapping around.
+    /// Move the choice by `delta` rows, wrapping around; the rows shown
+    /// follow it.
     pub fn move_by(&mut self, delta: i32) {
         let n = self.items.len() as i64;
         if n > 0 {
             self.selected = (self.selected as i64 + delta as i64).rem_euclid(n) as usize;
+        }
+        if self.selected < self.first {
+            self.first = self.selected;
+        } else if self.selected >= self.first + MAX_ITEMS {
+            self.first = self.selected + 1 - MAX_ITEMS;
         }
     }
 }
@@ -474,10 +623,13 @@ impl Completer {
                 .char_indices()
                 .rfind(|(_, ch)| ch.is_whitespace())
                 .map_or(0, |(i, ch)| i + ch.len_utf8());
+            let first = c.first.min(c.items.len());
+            let shown = &c.items[first..(first + MAX_ITEMS).min(c.items.len())];
             Arc::new(CompletionView {
                 trigger: c.token.trigger,
                 start: c.token.range.start + 1 + word,
-                items: c.items.clone(),
+                first,
+                items: shown.into(),
                 selected: c.selected,
             })
         })
@@ -491,7 +643,11 @@ pub struct CompletionView {
     /// Where the word being completed starts in the editor's text: the
     /// list hangs there, its labels under the word.
     pub start: usize,
+    /// Where the rows shown start among those offered.
+    pub first: usize,
+    /// The rows shown.
     pub items: Arc<[Item]>,
+    /// The chosen row among those offered.
     pub selected: usize,
 }
 
@@ -567,6 +723,13 @@ mod tests {
         assert_eq!(users(other.into_iter(), "", Locale::EnUs).len(), 2);
     }
 
+    fn tool(item: &Item) -> &Tool {
+        match &item.insert {
+            Insert::Tool(t) => t,
+            other => panic!("not an effect: {other:?}"),
+        }
+    }
+
     fn marker(item: &Item) -> &Marker {
         match &item.insert {
             Insert::Inline(Inline::Marker(m)) => m,
@@ -589,12 +752,12 @@ mod tests {
     #[test]
     fn commands_match_by_tag_or_what_they_do() {
         let skin = skin();
-        let wait = commands(&skin, "wa", Locale::EnUs);
+        let wait = commands(&skin, Names::default(), "wa", Locale::EnUs);
         // Only the word being completed, IDE-style, and what it does.
         assert_eq!(wait[0].label, "wait");
         assert_eq!(wait[0].note, "[ms]");
         assert_eq!(wait[0].detail, I18N.t_in(Locale::EnUs, "cheat-wait"));
-        let about: Vec<_> = commands(&skin, "", Locale::ZhCn)
+        let about: Vec<_> = commands(&skin, Names::default(), "", Locale::ZhCn)
             .into_iter()
             .map(|i| (i.label, i.detail))
             .collect();
@@ -604,7 +767,7 @@ mod tests {
         );
         assert!(about.contains(&("screenshake".into(), "震动整个对话框".into())));
         let value = |needle: &str| {
-            let rows = commands(&skin, needle, Locale::ZhCn);
+            let rows = commands(&skin, Names::default(), needle, Locale::ZhCn);
             (rows[0].label.clone(), rows[0].detail.clone())
         };
         assert_eq!(
@@ -617,12 +780,15 @@ mod tests {
         );
         assert_eq!(value("se la"), ("laugh".into(), "播放音效".into()));
         assert_eq!(*marker(&wait[0]), Marker::Wait { ms: 500 });
-        assert_eq!(commands(&skin, "", Locale::EnUs).len(), COMMANDS.len());
-        assert!(commands(&skin, "zzz", Locale::EnUs).is_empty());
-        let page = commands(&skin, "翻", Locale::ZhCn);
+        assert_eq!(
+            commands(&skin, Names::default(), "", Locale::EnUs).len(),
+            COMMANDS.len()
+        );
+        assert!(commands(&skin, Names::default(), "zzz", Locale::EnUs).is_empty());
+        let page = commands(&skin, Names::default(), "翻", Locale::ZhCn);
         assert!(page.iter().any(|i| i.label == "page"));
         // A command that needs a name fills in its own and waits for one.
-        let se = commands(&skin, "se", Locale::EnUs);
+        let se = commands(&skin, Names::default(), "se", Locale::EnUs);
         assert_eq!(se[0].label, "se");
         assert_eq!(se[0].insert, Insert::Text("/se ".into()));
         assert_eq!(se[0].note, "<name> [volume]");
@@ -632,7 +798,7 @@ mod tests {
     fn arguments_make_the_marker_the_tag_would() {
         let skin = skin();
         let one = |needle: &str| {
-            let rows = commands(&skin, needle, Locale::EnUs);
+            let rows = commands(&skin, Names::default(), needle, Locale::EnUs);
             assert_eq!(rows.len(), 1, "{needle}: {rows:?}");
             marker(&rows[0]).clone()
         };
@@ -668,7 +834,7 @@ mod tests {
             }
         );
         // Offered values before one is typed.
-        let waits: Vec<_> = commands(&skin, "wait ", Locale::EnUs)
+        let waits: Vec<_> = commands(&skin, Names::default(), "wait ", Locale::EnUs)
             .into_iter()
             .map(|i| i.label)
             .collect();
@@ -683,7 +849,10 @@ mod tests {
             "page ",
             "nope 1",
         ] {
-            assert!(commands(&skin, needle, Locale::EnUs).is_empty(), "{needle}");
+            assert!(
+                commands(&skin, Names::default(), needle, Locale::EnUs).is_empty(),
+                "{needle}"
+            );
         }
     }
 
@@ -691,7 +860,7 @@ mod tests {
     fn a_name_lists_the_skins_then_what_was_typed() {
         let skin = skin();
         let labels = |needle: &str| -> Vec<String> {
-            commands(&skin, needle, Locale::EnUs)
+            commands(&skin, Names::default(), needle, Locale::EnUs)
                 .into_iter()
                 .map(|i| i.label)
                 .collect()
@@ -701,6 +870,157 @@ mod tests {
         assert_eq!(labels("se laugh"), ["laugh"]);
         assert_eq!(labels("expr wink"), ["wink"]);
         assert_eq!(labels("portrait sm"), ["smile", "sm"]);
+    }
+
+    /// The command for each kind of marker, so a new one fails to compile
+    /// until `/` can make it.
+    fn command_of(marker: &Marker) -> &'static str {
+        match marker {
+            Marker::Wait { .. } => "wait",
+            Marker::Pause { .. } => "pause",
+            Marker::Page => "page",
+            Marker::Sound { .. } => "se",
+            Marker::Expression { .. } => "expr",
+            Marker::Portrait { .. } => "portrait",
+            Marker::ScreenShake { .. } => "screenshake",
+            Marker::Vts(VtsAction::Hotkey { .. }) => "vts-hotkey",
+            Marker::Vts(VtsAction::Expression { .. }) => "vts-expr",
+            Marker::Vts(VtsAction::Param { .. }) => "vts-param",
+        }
+    }
+
+    #[test]
+    fn every_performance_has_a_command() {
+        let skin = skin();
+        let one = |needle: &str| {
+            let rows = commands(&skin, Names::default(), needle, Locale::EnUs);
+            assert_eq!(rows.len(), 1, "{needle}: {rows:?}");
+            rows[0].insert.clone()
+        };
+        let has = |name: &str| COMMANDS.iter().any(|c| c.name == name);
+        for kind in ContinuousKind::ALL {
+            assert!(has(kind.key()), "{kind:?}");
+        }
+        for kind in EntranceKind::ALL {
+            assert!(kind == EntranceKind::None || has(kind.key()), "{kind:?}");
+        }
+        for name in ["em", "speed", "instant"] {
+            assert!(has(name), "{name}");
+        }
+        // Each marker comes out of its own command.
+        for needle in [
+            "wait 800",
+            "pause 2000",
+            "screenshake 8",
+            "se laugh",
+            "expr smile",
+            "portrait smile",
+            "vts-hotkey Wave",
+            "vts-expr Smile.exp3.json off",
+            "vts-param MouthSmile 0.8 1500",
+        ] {
+            let Insert::Inline(Inline::Marker(m)) = one(needle) else {
+                panic!("{needle}: not a marker");
+            };
+            assert!(needle.starts_with(command_of(&m)), "{needle}: {m:?}");
+        }
+    }
+
+    #[test]
+    fn span_commands_set_the_effect_the_tag_would() {
+        let skin = skin();
+        let one = |needle: &str| {
+            let rows = commands(&skin, Names::default(), needle, Locale::EnUs);
+            assert_eq!(rows.len(), 1, "{needle}: {rows:?}");
+            tool(&rows[0]).clone()
+        };
+        let bare = |name: &str| {
+            let rows = commands(&skin, Names::default(), name, Locale::EnUs);
+            let row = rows.iter().find(|r| r.label == name).expect(name);
+            row.insert.clone()
+        };
+        let wave = Continuous::new(ContinuousKind::Wave);
+        assert_eq!(bare("wave"), Insert::Tool(Tool::Effect(wave)));
+        assert_eq!(
+            one("wave 2 0.5"),
+            Tool::Effect(Continuous {
+                amp: 2.0,
+                speed: 0.5,
+                ..wave
+            })
+        );
+        assert_eq!(
+            bare("em"),
+            Insert::Tool(Tool::Emphasis(Emphasis::default()))
+        );
+        assert_eq!(one("em 200"), Tool::Emphasis(Emphasis { ms: 200 }));
+        assert_eq!(
+            bare("pop"),
+            Insert::Tool(Tool::Entrance(EntranceKind::Pop, None))
+        );
+        assert_eq!(
+            one("slide 120"),
+            Tool::Entrance(EntranceKind::SlideUp, Some(120))
+        );
+        assert_eq!(bare("instant"), Insert::Tool(Tool::Pace(Pace::Instant)));
+        // A speed needs one, and offers some.
+        assert_eq!(bare("speed"), Insert::Text("/speed ".into()));
+        let speeds: Vec<_> = commands(&skin, Names::default(), "speed ", Locale::EnUs)
+            .into_iter()
+            .map(|i| i.label)
+            .collect();
+        assert_eq!(speeds, ["0.5", "2", "40ms"]);
+        assert_eq!(one("speed 40ms"), Tool::Pace(Pace::FixedMs(40)));
+        assert_eq!(one("speed 0.5"), Tool::Pace(Pace::Scale(0.5)));
+        let rows = commands(&skin, Names::default(), "speed 40ms", Locale::ZhCn);
+        assert_eq!(rows[0].detail, "每字 40 毫秒");
+        for needle in [
+            "wave x",
+            "wave 1 2 3",
+            "em soon",
+            "speed 0",
+            "instant 1",
+            "pop x",
+        ] {
+            assert!(
+                commands(&skin, Names::default(), needle, Locale::EnUs).is_empty(),
+                "{needle}"
+            );
+        }
+    }
+
+    #[test]
+    fn hotkeys_come_from_vts() {
+        let skin = skin();
+        let hotkeys = ["Wave hand".to_owned(), "Cry".to_owned()];
+        let names = Names {
+            vts_hotkeys: &hotkeys,
+        };
+        let rows = commands(&skin, names, "vts-hotkey wa", Locale::EnUs);
+        let labels: Vec<_> = rows.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(labels, ["Wave hand", "wa"]);
+        // A name with a space is quoted, so it reads back whole.
+        assert_eq!(
+            *marker(&rows[0]),
+            Marker::Vts(VtsAction::Hotkey {
+                hotkey: "Wave hand".into()
+            })
+        );
+    }
+
+    #[test]
+    fn the_source_popup_puts_the_caret_between_the_tags() {
+        let skin = skin();
+        let items = commands(&skin, Names::default(), "wave 2", Locale::EnUs);
+        let c = Completion {
+            token: at("/wave 2").unwrap(),
+            items: items.into(),
+            selected: 0,
+            first: 0,
+        };
+        let edit = c.text_completions("/wave 2")[0].edit.clone().unwrap();
+        assert_eq!(edit.text, "[wave amp=2][/wave]");
+        assert_eq!(edit.stops, vec![12..12]);
     }
 
     #[test]
@@ -715,10 +1035,39 @@ mod tests {
             token: at("/").unwrap(),
             items: Arc::from(vec![item.clone(), item.clone(), item]),
             selected: 0,
+            first: 0,
         };
         c.move_by(-1);
         assert_eq!(c.selected, 2);
         c.move_by(2);
         assert_eq!(c.selected, 1);
+    }
+
+    #[test]
+    fn the_rows_shown_follow_the_choice() {
+        let skin = skin();
+        let mut c = Completer {
+            open: Some(Completion {
+                token: at("/").unwrap(),
+                items: commands(&skin, Names::default(), "", Locale::EnUs).into(),
+                selected: 0,
+                first: 0,
+            }),
+            ..Default::default()
+        };
+        let open = c.open.as_mut().unwrap();
+        assert!(open.items.len() > MAX_ITEMS);
+        open.move_by(MAX_ITEMS as i32);
+        assert_eq!((open.selected, open.first), (MAX_ITEMS, 1));
+        // Back up inside the window: it stays.
+        open.move_by(-2);
+        assert_eq!(open.first, 1);
+        // Wrapping to the last row shows the end of the list.
+        open.move_by(-(open.selected as i32 + 1));
+        let n = open.items.len();
+        assert_eq!((open.selected, open.first), (n - 1, n - MAX_ITEMS));
+        let view = c.view().unwrap();
+        assert_eq!(view.items.len(), MAX_ITEMS);
+        assert_eq!(view.items.last(), c.open.as_ref().unwrap().items.last());
     }
 }

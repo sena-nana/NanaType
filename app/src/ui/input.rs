@@ -24,8 +24,8 @@ use nana_ui_core::{
 };
 use nanatype_core::Cmd;
 use nanatype_model::{
-    AssetRef, Atom, AtomKind, ContinuousKind, EntranceKind, Inline, Marker, Pace, Rgba8, Shadow,
-    Size, Stroke,
+    AssetRef, Atom, AtomKind, Continuous, ContinuousKind, Emphasis, EntranceKind, Inline, Marker,
+    Pace, Rgba8, Shadow, Size, Stroke,
 };
 use nanatype_settings::{InputKey, InputMode, Settings};
 
@@ -959,18 +959,24 @@ fn toolbar(ui: Ui) -> AnyView {
             (ContinuousKind::Flicker, "tb-effect-flicker"),
         ]
         .into_iter()
-        .map(|(kind, key)| item(t(key), fx_open, move || act(Tool::Effect(kind))))
+        .map(|(kind, key)| {
+            item(t(key), fx_open, move || {
+                act(Tool::Effect(Continuous::new(kind)))
+            })
+        })
         .chain([
-            item(t("tb-emphasis"), fx_open, || act(Tool::Emphasis)),
+            item(t("tb-emphasis"), fx_open, || {
+                act(Tool::Emphasis(Emphasis::default()))
+            }),
             widget(Divider::horizontal()).into_any(),
             item(t("tb-entrance-fade"), fx_open, || {
-                act(Tool::Entrance(EntranceKind::Fade))
+                act(Tool::Entrance(EntranceKind::Fade, None))
             }),
             item(t("tb-entrance-pop"), fx_open, || {
-                act(Tool::Entrance(EntranceKind::Pop))
+                act(Tool::Entrance(EntranceKind::Pop, None))
             }),
             item(t("tb-entrance-slide"), fx_open, || {
-                act(Tool::Entrance(EntranceKind::SlideUp))
+                act(Tool::Entrance(EntranceKind::SlideUp, None))
             }),
         ])
         .collect();

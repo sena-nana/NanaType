@@ -126,7 +126,7 @@ pub(super) fn popup(ui: Ui) -> AnyView {
             view.items
                 .iter()
                 .enumerate()
-                .map(|(i, item)| row(ui, i, item, glyph))
+                .map(|(i, item)| row(ui, view.first + i, item, glyph))
                 .collect()
         },
     );

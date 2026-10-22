@@ -256,13 +256,18 @@ impl Effects {
         self.continuous.iter().any(|effect| effect.kind == kind)
     }
 
-    /// Add `kind` if missing, remove it if present.
-    pub fn toggle(&mut self, kind: ContinuousKind) {
-        if let Some(index) = self.continuous.iter().position(|e| e.kind == kind) {
-            self.continuous.remove(index);
-        } else {
-            self.continuous.push(Continuous::new(kind));
-            self.continuous.sort_by_key(|e| e.kind as u8);
+    /// Remove `effect` if it is there as given, else set it, replacing the
+    /// same kind at other values.
+    pub fn switch(&mut self, effect: Continuous) {
+        match self.continuous.iter().position(|e| e.kind == effect.kind) {
+            Some(index) if self.continuous[index] == effect => {
+                self.continuous.remove(index);
+            }
+            Some(index) => self.continuous[index] = effect,
+            None => {
+                self.continuous.push(effect);
+                self.continuous.sort_by_key(|e| e.kind as u8);
+            }
         }
     }
 }

@@ -501,10 +501,12 @@ pub enum Tool {
     Stroke(Option<nanatype_model::Stroke>),
     Shadow(Option<nanatype_model::Shadow>),
     Ruby(String),
-    Effect(nanatype_model::ContinuousKind),
+    /// Toggle a looping effect; at other values it replaces the same kind.
+    Effect(nanatype_model::Continuous),
     /// Toggle bold, spaced, one-character-at-a-time emphasis.
-    Emphasis,
-    Entrance(nanatype_model::EntranceKind),
+    Emphasis(nanatype_model::Emphasis),
+    /// An entrance; `None` takes the skin's duration.
+    Entrance(nanatype_model::EntranceKind, Option<u16>),
     Pace(nanatype_model::Pace),
     /// Insert a marker or a picture at the caret.
     Insert(nanatype_model::Inline),
