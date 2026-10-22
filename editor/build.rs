@@ -14,7 +14,7 @@ fn main() {
         return;
     }
     if targets_msvc() {
-        common_controls(&PRODUCT);
+        common_controls(&format!("cargo:rustc-link-arg-bin={}=", PRODUCT.bin));
     }
     windows_resources(&PRODUCT, &build);
 }

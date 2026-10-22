@@ -41,19 +41,14 @@ fn targets_msvc() -> bool {
     std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
 }
 
-/// The Common Controls 6 activation context for `product`'s binary and the
-/// crate's examples (standalone tools, also when copied elsewhere).
-fn common_controls(product: &Product) {
-    for target in [
-        format!("cargo:rustc-link-arg-bin={}=", product.bin),
-        "cargo:rustc-link-arg-examples=".to_owned(),
-    ] {
-        println!("{target}/MANIFEST:EMBED");
-        println!(
-            "{target}/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
-        );
-        println!("{target}/MANIFESTUAC:level='asInvoker' uiAccess='false'");
-    }
+/// The Common Controls 6 activation context for the targets `link_arg`
+/// names (`cargo:rustc-link-arg-bin=NAME=`, `cargo:rustc-link-arg-examples=`).
+fn common_controls(link_arg: &str) {
+    println!("{link_arg}/MANIFEST:EMBED");
+    println!(
+        "{link_arg}/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
+    );
+    println!("{link_arg}/MANIFESTUAC:level='asInvoker' uiAccess='false'");
 }
 
 /// The development copy of the shader compiler, then the icon and version

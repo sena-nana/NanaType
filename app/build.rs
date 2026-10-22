@@ -33,8 +33,9 @@ fn main() {
             println!("cargo:rustc-link-arg=/IGNORE:4217,4286");
         }
 
+        common_controls(&format!("cargo:rustc-link-arg-bin={}=", PRODUCT.bin));
         // Standalone snapshot/performance tools link the same tray stack.
-        common_controls(&PRODUCT);
+        common_controls("cargo:rustc-link-arg-examples=");
     }
     windows_resources(&PRODUCT, &build);
 }
