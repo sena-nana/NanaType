@@ -221,6 +221,15 @@ impl Fixture {
         self.pointer(PointerPhase::Down, x, y);
         self.pointer(PointerPhase::Up, x, y);
     }
+    /// Run animations `ms` on, as frames would.
+    fn settle(&mut self, ms: u64) {
+        self.input.advance(Duration::from_millis(ms));
+        self.session
+            .document_mut()
+            .context_mut()
+            .advance_animations(self.input.now());
+        self.session.flush().unwrap();
+    }
     fn wheel(&mut self, delta: f32) {
         let b = self.visible_bounds();
         self.event(InputPayload::Wheel(WheelInput {
@@ -610,12 +619,7 @@ fn unfocused_wheel_boundaries_hit_testing_caret_follow_and_edge_drag_use_one_vie
         f.pointer(PointerPhase::Move, b.x + 20.0, b.y + b.height + 80.0);
         let scroll = f.offset();
         for _ in 0..5 {
-            f.input.advance(Duration::from_millis(20));
-            f.session
-                .document_mut()
-                .context_mut()
-                .advance_animations(f.input.now());
-            f.session.flush().unwrap();
+            f.settle(20);
         }
         assert!(
             f.offset() > scroll,
@@ -1771,6 +1775,9 @@ fn typography_popovers_keep_selection_and_dispatch_authored_attributes() {
             button.x + button.width / 2.0,
             button.y + button.height / 2.0,
         );
+        // The menu grows into place, moving its items under a still pointer:
+        // a press and release mid-entrance can land on different items.
+        f.settle(300);
         let label = f.ui.now_t(panel);
         let button = f
             .session
@@ -1789,12 +1796,7 @@ fn typography_popovers_keep_selection_and_dispatch_authored_attributes() {
             selection,
             "opening {panel} must retain selection"
         );
-        f.input.advance(Duration::from_millis(300));
-        f.session
-            .document_mut()
-            .context_mut()
-            .advance_animations(f.input.now());
-        f.session.flush().unwrap();
+        f.settle(300);
         if let Some(out) = std::env::var_os("NANATYPE_TYPOGRAPHY_CAPTURE_DIR") {
             let out = std::path::PathBuf::from(out);
             std::fs::create_dir_all(&out).unwrap();

@@ -4,7 +4,11 @@ mod common;
 
 use std::{sync::Arc, time::Duration};
 
-use nana_ui_devtools::agent::{AccessibilityDumpNode, AgentSession, RuntimeAgentSession};
+use nana_ui::runtime::{ComponentGeometry, StableNodeId};
+use nana_ui_devtools::agent::{
+    A11yFilter, AccessibilityDumpNode, AgentSession, RuntimeAgentSession,
+};
+use nana_ui_platform::InputModifiers;
 use nanatype::{
     msg::Msg,
     ui::{
@@ -105,6 +109,20 @@ impl Fixture {
         self.session.flush().unwrap();
     }
 
+    /// The text field in the settings row labelled `key`.
+    fn field(&self, key: &str) -> AccessibilityDumpNode {
+        let filter = A11yFilter {
+            root: Some(self.find("generic", key).id),
+            role: Some("text-input".into()),
+            ..A11yFilter::default()
+        };
+        let (fields, _) = self.session.filtered_accessibility(&filter);
+        fields
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| panic!("no text field in {key}"))
+    }
+
     fn settle(&mut self, seconds: u64) {
         let at = Duration::from_secs(seconds);
         self.session
@@ -148,6 +166,40 @@ fn speaker_hints_remain_readable_in_all_locales_and_window_sizes() {
                 assert!(f.find("text", "general-speaker-hint").bounds.width >= 120.0);
             }
         }
+    }
+}
+
+/// The empty speaker field, in the first-run guide and on the page: a click
+/// focuses it with a caret and the focus fill and border; typing and Backspace
+/// edit the setting.
+#[test]
+fn the_empty_speaker_field_takes_a_click_typing_and_backspace() {
+    let palette = nanatype::ui::kit::theme::palette(false);
+    for (onboarding, key) in [(true, "onboard-speaker"), (false, "general-speaker")] {
+        let mut f = Fixture::new(Locale::ZhCn, onboarding, Page::General);
+        let field = f.field(key);
+        f.click(&field);
+        let id = StableNodeId::new(field.id).unwrap();
+        let world = f.session.document().context().world();
+        assert_eq!(world.focused(f.session.document().document()), Some(id));
+        let Some(ComponentGeometry::TextInput {
+            caret,
+            background,
+            border,
+            ..
+        }) = world.component_geometry(id)
+        else {
+            panic!("{key}: the focused field has no geometry");
+        };
+        assert!(caret.is_some_and(|c| c.height > 0.0), "{key}: no caret");
+        assert_eq!(border, Some(palette.focus_border.as_rgba_array()));
+        assert!(background.is_some_and(|b| b != palette.background.as_rgba_array()));
+        f.session.type_text("ab").unwrap();
+        f.session
+            .key_press("Backspace", "Backspace", InputModifiers::default())
+            .unwrap();
+        f.apply_edits();
+        assert_eq!(f.ui.settings.get_untracked().general.speaker_name, "a");
     }
 }
 

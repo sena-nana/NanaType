@@ -111,11 +111,7 @@ impl Playback {
                 let Ok(texture) = texture(gpu, &preview) else {
                     continue;
                 };
-                let host = HostTexture::new(
-                    u64::from_str_radix(&cache.key[..16], 16).unwrap_or(1),
-                    1,
-                    &texture,
-                );
+                let host = HostTexture::new(&texture);
                 self.slots.insert(
                     slot.clone(),
                     Playing {
