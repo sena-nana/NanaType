@@ -136,9 +136,6 @@ general-presence-resident = 常驻
 general-presence-summon = 快捷键唤出
 general-input = 输入
 general-mode = 输入模式
-general-send-key = 发送键
-general-send-key-enter = Enter
-general-send-key-ctrl-enter = Ctrl+Enter
 general-autostart = 开机启动
 general-updates = 更新
 general-check-updates = 自动检查更新
@@ -299,6 +296,14 @@ hotkeys-badge-unsafe = 不安全
 hotkeys-click-to-set = 点击设置
 hotkeys-press-keys = 请按下按键 · Esc 取消
 hotkeys-local = 输入框内快捷键
+hotkeys-global = 全局快捷键
+hotkeys-phrases = 快捷短语
+hotkeys-phrases-empty = 还没有快捷短语
+hotkeys-edit-phrases = 编辑快捷短语
+hotkeys-reset = 恢复默认
+hotkeys-unsafe-local = 字母、数字等会打字的键请加上 Ctrl、Alt 或 Shift
+hotkeys-recall-prev = 上一句
+hotkeys-recall-next = 下一句
 
 ## 输出
 output-display = 展示框

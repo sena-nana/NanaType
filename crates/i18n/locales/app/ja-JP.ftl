@@ -136,9 +136,6 @@ general-presence-resident = 常に表示
 general-presence-summon = ショートカットで呼び出す
 general-input = 入力
 general-mode = 入力モード
-general-send-key = 送信キー
-general-send-key-enter = Enter
-general-send-key-ctrl-enter = Ctrl+Enter
 general-autostart = ログイン時に起動
 general-updates = アップデート
 general-check-updates = アップデートを自動確認
@@ -299,6 +296,14 @@ hotkeys-badge-unsafe = 安全でない
 hotkeys-click-to-set = クリックして設定
 hotkeys-press-keys = キーを押す · Esc で取消
 hotkeys-local = 入力ウィンドウ内のショートカット
+hotkeys-global = グローバルショートカット
+hotkeys-phrases = 定型文
+hotkeys-phrases-empty = 定型文はまだありません
+hotkeys-edit-phrases = 定型文を編集
+hotkeys-reset = 既定に戻す
+hotkeys-unsafe-local = 文字を入力するキーには Ctrl・Alt・Shift を組み合わせてください
+hotkeys-recall-prev = 前の台詞
+hotkeys-recall-next = 次の台詞
 
 ## 出力
 output-display = 表示ウィンドウ

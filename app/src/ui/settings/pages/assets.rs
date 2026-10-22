@@ -138,7 +138,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
             let rows: Vec<AnyView> = (0..*n)
                 .map(|i| {
                     let p = ui.settings.with_untracked(|s| s.assets.phrases[i].clone());
-                    let action = GlobalAction::Phrase(i);
+                    let action = Shortcut::Global(GlobalAction::Phrase(i));
                     // Two lines: name, hotkey, send and remove; then the
                     // content across the full width.
                     let first = widget(

@@ -6,7 +6,7 @@ use nanatype_audio::AudioStatus;
 use nanatype_bridge::BridgeStatus;
 use nanatype_core::Cmd;
 use nanatype_playback::CueKind;
-use nanatype_settings::{Hotkey, Settings};
+use nanatype_settings::{Hotkey, InputKey, Settings};
 
 use crate::windows::WindowKind;
 
@@ -71,6 +71,14 @@ impl GlobalAction {
         }
     }
 
+    /// The binding a fresh install has.
+    pub fn default_binding(self) -> Option<Hotkey> {
+        match self {
+            Self::Phrase(_) => None,
+            _ => Self::get(self, &Settings::default()).cloned(),
+        }
+    }
+
     pub fn set(self, s: &mut Settings, value: Option<Hotkey>) {
         if let Self::Phrase(i) = self {
             if let Some(p) = s.assets.phrases.get_mut(i) {
@@ -88,6 +96,97 @@ impl GlobalAction {
             Self::ToggleOverlays => &mut h.toggle_overlays,
             Self::Phrase(_) => unreachable!("handled above"),
         } = value;
+    }
+}
+
+/// Anything a chord can be bound to: a system-wide hotkey, or one of the
+/// input window's own keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Shortcut {
+    Global(GlobalAction),
+    Input(InputKey),
+}
+
+impl Shortcut {
+    pub fn label_key(self) -> &'static str {
+        match self {
+            Self::Global(a) => a.label_key(),
+            Self::Input(k) => match k {
+                InputKey::Send => "tb-send",
+                InputKey::Newline => "cheat-newline",
+                InputKey::RecallPrev => "hotkeys-recall-prev",
+                InputKey::RecallNext => "hotkeys-recall-next",
+                InputKey::Hide => "cheat-hide",
+                InputKey::Bold => "tb-bold",
+                InputKey::Italic => "tb-italic",
+                InputKey::Underline => "tb-underline",
+            },
+        }
+    }
+
+    /// Every bindable action. A chord belongs to one of them only: a global
+    /// hotkey takes its chord system-wide, so an input key sharing it would
+    /// never fire.
+    pub fn all_in(s: &Settings) -> impl Iterator<Item = Self> + '_ {
+        GlobalAction::all_in(s)
+            .map(Self::Global)
+            .chain(InputKey::ALL.into_iter().map(Self::Input))
+    }
+
+    pub fn get(self, s: &Settings) -> Option<&Hotkey> {
+        match self {
+            Self::Global(a) => a.get(s),
+            Self::Input(k) => k.get(&s.hotkeys.input),
+        }
+    }
+
+    pub fn set(self, s: &mut Settings, value: Option<Hotkey>) {
+        match self {
+            Self::Global(a) => a.set(s, value),
+            Self::Input(k) => *k.slot(&mut s.hotkeys.input) = value,
+        }
+    }
+
+    /// Bind `value` here, taking it from whichever action had it.
+    pub fn bind(self, s: &mut Settings, value: Option<Hotkey>) {
+        if let Some(chord) = &value {
+            let taken: Vec<Self> = Self::all_in(s)
+                .filter(|o| *o != self && o.get(s) == Some(chord))
+                .collect();
+            for other in taken {
+                other.set(s, None);
+            }
+        }
+        self.set(s, value);
+    }
+
+    pub fn default_binding(self) -> Option<Hotkey> {
+        match self {
+            Self::Global(a) => a.default_binding(),
+            Self::Input(k) => k.default_binding(),
+        }
+    }
+
+    /// Whether `hotkey` may be bound here without swallowing typing.
+    pub fn is_safe(self, hotkey: &Hotkey) -> bool {
+        match self {
+            Self::Global(_) => hotkey.is_safe_global(),
+            Self::Input(_) => hotkey.is_safe_local(),
+        }
+    }
+}
+
+/// What an input window key does.
+pub fn input_message(key: InputKey) -> Msg {
+    match key {
+        InputKey::Send => Msg::Core(Cmd::Send),
+        InputKey::Newline => Msg::InsertNewline,
+        InputKey::RecallPrev => Msg::Core(Cmd::Recall(-1)),
+        InputKey::RecallNext => Msg::Core(Cmd::Recall(1)),
+        InputKey::Hide => Msg::HideInput,
+        InputKey::Bold => Msg::Tool(Tool::Bold),
+        InputKey::Italic => Msg::Tool(Tool::Italic),
+        InputKey::Underline => Msg::Tool(Tool::Underline),
     }
 }
 
@@ -186,7 +285,7 @@ pub enum Msg {
     ToggleSource,
     Hotkey(GlobalAction),
     /// Start recording a chord for an action; `None` stops recording.
-    RecordHotkey(Option<GlobalAction>),
+    RecordHotkey(Option<Shortcut>),
     /// A chord was captured while recording.
     HotkeyCaptured(Hotkey),
     ToggleWindow(WindowKind),
@@ -210,6 +309,8 @@ pub enum Msg {
     VtsAuthorize,
     VtsRefresh,
     InsertPhrase(usize),
+    /// Break the line at the caret (the input window's newline key).
+    InsertNewline,
     DismissNotice(u64),
     /// The tray stops showing error notice `id` in its tooltip.
     TrayErrorExpired(u64),

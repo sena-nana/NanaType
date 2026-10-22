@@ -48,6 +48,27 @@ pub fn migrate(value: &mut Value) -> Result<u32, MigrateError> {
         }
         obj.insert("schema".into(), json!(2));
     }
+    if from < 3 {
+        // The Enter / Ctrl+Enter choice became the input window's own keys.
+        let send_key = obj
+            .get_mut("general")
+            .and_then(Value::as_object_mut)
+            .and_then(|g| g.remove("send_key"));
+        if send_key.as_ref().and_then(Value::as_str) == Some("ctrl_enter") {
+            let hotkeys = obj
+                .entry("hotkeys")
+                .or_insert_with(|| json!({}))
+                .as_object_mut();
+            if let Some(hotkeys) = hotkeys {
+                let input = hotkeys.entry("input").or_insert_with(|| json!({}));
+                if let Some(input) = input.as_object_mut() {
+                    input.insert("send".into(), json!({ "ctrl": true, "key": "Enter" }));
+                    input.insert("newline".into(), json!({ "key": "Enter" }));
+                }
+            }
+        }
+        obj.insert("schema".into(), json!(3));
+    }
     Ok(from)
 }
 

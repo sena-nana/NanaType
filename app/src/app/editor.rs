@@ -59,6 +59,14 @@ impl App {
                     }
                 }
             }
+            Msg::InsertNewline => {
+                if self.ui.source_mode.get_untracked() {
+                    self.markup(MarkupEdit::Insert("\n".into()));
+                } else {
+                    self.rich_commands
+                        .push(nana_ui::runtime::RichEditCommand::InsertText("\n".into()).into());
+                }
+            }
             Msg::PasteImage {
                 width,
                 height,

@@ -1,5 +1,5 @@
 use super::App;
-use crate::msg::GlobalAction;
+use crate::msg::Shortcut;
 use crate::services::sounds;
 use nanatype_audio::AudioStatus;
 use nanatype_core::Cmd;
@@ -7,7 +7,7 @@ use nanatype_settings::Hotkey;
 use std::time::Duration;
 
 impl App {
-    pub(super) fn record_hotkey(&mut self, action: Option<GlobalAction>) {
+    pub(super) fn record_hotkey(&mut self, action: Option<Shortcut>) {
         self.ui.recording.set(action);
         self.apply_services();
     }
@@ -15,16 +15,8 @@ impl App {
     pub(super) fn hotkey_captured(&mut self, hotkey: Hotkey) {
         if let Some(action) = self.ui.recording.get_untracked() {
             self.ui.recording.set(None);
-            self.edit(|s| {
-                // A chord can belong to one action only.
-                let taken: Vec<GlobalAction> = GlobalAction::all_in(s)
-                    .filter(|o| *o != action && o.get(s) == Some(&hotkey))
-                    .collect();
-                for other in taken {
-                    other.set(s, None);
-                }
-                action.set(s, Some(hotkey));
-            });
+            // A chord can belong to one action only.
+            self.edit(move |s| action.bind(s, Some(hotkey)));
             self.apply_services();
         }
     }

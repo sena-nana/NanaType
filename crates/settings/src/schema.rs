@@ -11,7 +11,7 @@ use nanatype_playback::QueuePolicy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const SETTINGS_SCHEMA: u32 = 2;
+pub const SETTINGS_SCHEMA: u32 = 3;
 pub const DEFAULT_SKIN: &str = "nanatype.halo";
 /// Raised whenever scripts gain data or host interfaces: 1 granted events and
 /// views, 2 adds declared data reads. Older approvals must be reviewed again.
@@ -67,6 +67,13 @@ impl Hotkey {
         }
     }
 
+    pub fn shift(key: impl Into<String>) -> Self {
+        Self {
+            shift: true,
+            ..Self::bare(key)
+        }
+    }
+
     pub fn has_modifier(&self) -> bool {
         self.ctrl || self.shift || self.alt || self.meta
     }
@@ -86,11 +93,17 @@ impl Hotkey {
         if self.meta {
             parts.push(meta_label);
         }
-        let key = self
-            .key
-            .strip_prefix("Key")
-            .or_else(|| self.key.strip_prefix("Digit"))
-            .unwrap_or(&self.key);
+        let key = match self.key.as_str() {
+            "ArrowUp" => "↑",
+            "ArrowDown" => "↓",
+            "ArrowLeft" => "←",
+            "ArrowRight" => "→",
+            "Escape" => "Esc",
+            k => k
+                .strip_prefix("Key")
+                .or_else(|| k.strip_prefix("Digit"))
+                .unwrap_or(k),
+        };
         let mut out = parts.join("+");
         if !out.is_empty() {
             out.push('+');
@@ -110,6 +123,32 @@ impl Hotkey {
             && k.starts_with('F')
             && k[1..].parse::<u8>().is_ok_and(|n| (1..=24).contains(&n)))
             || matches!(k, "Pause" | "ScrollLock" | "Insert")
+    }
+
+    /// Inside the input window a bare key is fine as long as it does not type
+    /// text: Enter, Esc, arrows, paging and the function keys.
+    pub fn is_safe_local(&self) -> bool {
+        if self.key.is_empty() {
+            return false;
+        }
+        self.has_modifier()
+            || self.is_safe_global()
+            || matches!(
+                self.key.as_str(),
+                "Enter"
+                    | "NumpadEnter"
+                    | "Escape"
+                    | "Tab"
+                    | "ArrowUp"
+                    | "ArrowDown"
+                    | "ArrowLeft"
+                    | "ArrowRight"
+                    | "Home"
+                    | "End"
+                    | "PageUp"
+                    | "PageDown"
+                    | "Delete"
+            )
     }
 }
 
@@ -144,16 +183,6 @@ pub struct UpdateSettings {
     pub last_check: Option<u64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SendKey {
-    /// Enter sends, Shift+Enter breaks the line.
-    #[default]
-    Enter,
-    /// Ctrl+Enter sends, Enter breaks the line.
-    CtrlEnter,
-}
-
 /// The recordings played for keys pressed in the input window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -175,7 +204,6 @@ pub struct General {
     pub input_mode: InputMode,
     /// Show the draft inside the skin's stream canvas instead of a full editor.
     pub input_skin_preview: bool,
-    pub send_key: SendKey,
     pub launch_at_login: bool,
     pub onboarding_done: bool,
     pub check_updates: bool,
@@ -190,7 +218,6 @@ impl Default for General {
             input_presence: InputPresence::Resident,
             input_mode: InputMode::Compose,
             input_skin_preview: false,
-            send_key: SendKey::Enter,
             launch_at_login: false,
             onboarding_done: false,
             check_updates: true,
@@ -633,6 +660,8 @@ pub struct HotkeySettings {
     pub clear: Option<Hotkey>,
     pub toggle_mode: Option<Hotkey>,
     pub toggle_overlays: Option<Hotkey>,
+    /// Keys handled by the input window itself, not registered system-wide.
+    pub input: InputKeys,
 }
 
 impl Default for HotkeySettings {
@@ -644,6 +673,114 @@ impl Default for HotkeySettings {
             clear: None,
             toggle_mode: None,
             toggle_overlays: None,
+            input: InputKeys::default(),
+        }
+    }
+}
+
+/// The input window's own keys. `None` leaves the key to the editor.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InputKeys {
+    pub send: Option<Hotkey>,
+    pub newline: Option<Hotkey>,
+    pub recall_prev: Option<Hotkey>,
+    pub recall_next: Option<Hotkey>,
+    pub hide: Option<Hotkey>,
+    pub bold: Option<Hotkey>,
+    pub italic: Option<Hotkey>,
+    pub underline: Option<Hotkey>,
+}
+
+impl Default for InputKeys {
+    fn default() -> Self {
+        let mut keys = Self {
+            send: None,
+            newline: None,
+            recall_prev: None,
+            recall_next: None,
+            hide: None,
+            bold: None,
+            italic: None,
+            underline: None,
+        };
+        for key in InputKey::ALL {
+            *key.slot(&mut keys) = key.default_binding();
+        }
+        keys
+    }
+}
+
+impl InputKeys {
+    /// The action bound to `chord`, if any.
+    pub fn matching(&self, chord: &Hotkey) -> Option<InputKey> {
+        InputKey::ALL
+            .into_iter()
+            .find(|k| k.get(self) == Some(chord))
+    }
+}
+
+/// An action of the input window's own keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum InputKey {
+    Send,
+    Newline,
+    RecallPrev,
+    RecallNext,
+    Hide,
+    Bold,
+    Italic,
+    Underline,
+}
+
+impl InputKey {
+    pub const ALL: [Self; 8] = [
+        Self::Send,
+        Self::Newline,
+        Self::RecallPrev,
+        Self::RecallNext,
+        Self::Hide,
+        Self::Bold,
+        Self::Italic,
+        Self::Underline,
+    ];
+
+    pub fn default_binding(self) -> Option<Hotkey> {
+        Some(match self {
+            Self::Send => Hotkey::bare("Enter"),
+            Self::Newline => Hotkey::shift("Enter"),
+            Self::RecallPrev => Hotkey::ctrl("ArrowUp"),
+            Self::RecallNext => Hotkey::ctrl("ArrowDown"),
+            Self::Hide => Hotkey::bare("Escape"),
+            Self::Bold => Hotkey::ctrl("KeyB"),
+            Self::Italic => Hotkey::ctrl("KeyI"),
+            Self::Underline => Hotkey::ctrl("KeyU"),
+        })
+    }
+
+    pub fn get(self, keys: &InputKeys) -> Option<&Hotkey> {
+        match self {
+            Self::Send => keys.send.as_ref(),
+            Self::Newline => keys.newline.as_ref(),
+            Self::RecallPrev => keys.recall_prev.as_ref(),
+            Self::RecallNext => keys.recall_next.as_ref(),
+            Self::Hide => keys.hide.as_ref(),
+            Self::Bold => keys.bold.as_ref(),
+            Self::Italic => keys.italic.as_ref(),
+            Self::Underline => keys.underline.as_ref(),
+        }
+    }
+
+    pub fn slot(self, keys: &mut InputKeys) -> &mut Option<Hotkey> {
+        match self {
+            Self::Send => &mut keys.send,
+            Self::Newline => &mut keys.newline,
+            Self::RecallPrev => &mut keys.recall_prev,
+            Self::RecallNext => &mut keys.recall_next,
+            Self::Hide => &mut keys.hide,
+            Self::Bold => &mut keys.bold,
+            Self::Italic => &mut keys.italic,
+            Self::Underline => &mut keys.underline,
         }
     }
 }

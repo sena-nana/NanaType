@@ -153,35 +153,6 @@ fn settings_body(ui: Ui) -> AnyView {
                         move || mirror(ui),
                     ),
                     (
-                        row(
-                            ui,
-                            "general-send-key",
-                            None,
-                            select(
-                                ui,
-                                select_keys(
-                                    ui,
-                                    &[
-                                        ("enter", "general-send-key-enter"),
-                                        ("ctrl", "general-send-key-ctrl-enter"),
-                                    ],
-                                ),
-                                |s| match s.general.send_key {
-                                    SendKey::Enter => "enter".into(),
-                                    SendKey::CtrlEnter => "ctrl".into(),
-                                },
-                                |s, v| {
-                                    s.general.send_key = if v == "ctrl" {
-                                        SendKey::CtrlEnter
-                                    } else {
-                                        SendKey::Enter
-                                    }
-                                },
-                            ),
-                        ),
-                        None,
-                    ),
-                    (
                         toggle_row!(ui, "general-autostart", general.launch_at_login),
                         None,
                     ),

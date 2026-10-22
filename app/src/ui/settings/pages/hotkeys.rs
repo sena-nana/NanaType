@@ -4,7 +4,7 @@ use super::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum KeyIssue {
     /// Another action has the same chord.
-    Duplicate(GlobalAction),
+    Duplicate(Shortcut),
     /// Another program owns the chord.
     Conflict,
     /// The chord would swallow typing, or cannot be registered.
@@ -34,7 +34,7 @@ impl KeyIssue {
         }
     }
 
-    fn message(self, locale: Locale, s: &Settings) -> String {
+    fn message(self, locale: Locale, s: &Settings, of: Shortcut) -> String {
         match self {
             Self::Duplicate(other) => I18N.tr_in(
                 locale,
@@ -42,15 +42,21 @@ impl KeyIssue {
                 &[("action", action_name(locale, s, other).into())],
             ),
             Self::Conflict => I18N.t_in(locale, "hotkeys-conflict-os"),
-            Self::Unsafe => I18N.t_in(locale, "hotkeys-unsafe"),
+            Self::Unsafe => I18N.t_in(
+                locale,
+                match of {
+                    Shortcut::Global(_) => "hotkeys-unsafe",
+                    Shortcut::Input(_) => "hotkeys-unsafe-local",
+                },
+            ),
         }
     }
 }
 
 /// What an action is called: its label, or a phrase's own label.
-pub(super) fn action_name(locale: Locale, s: &Settings, action: GlobalAction) -> String {
+pub(super) fn action_name(locale: Locale, s: &Settings, action: Shortcut) -> String {
     match action {
-        GlobalAction::Phrase(i) => s
+        Shortcut::Global(GlobalAction::Phrase(i)) => s
             .assets
             .phrases
             .get(i)
@@ -64,25 +70,25 @@ pub(super) fn action_name(locale: Locale, s: &Settings, action: GlobalAction) ->
 pub(super) fn key_issue(
     s: &Settings,
     states: &HashMap<GlobalAction, HotkeyState>,
-    action: GlobalAction,
+    action: Shortcut,
 ) -> Option<KeyIssue> {
     let mine = action.get(s)?;
-    if let Some(other) = GlobalAction::all_in(s).find(|o| *o != action && o.get(s) == Some(mine)) {
+    if let Some(other) = Shortcut::all_in(s).find(|o| *o != action && o.get(s) == Some(mine)) {
         return Some(KeyIssue::Duplicate(other));
     }
-    match states.get(&action) {
+    let state = match action {
+        Shortcut::Global(a) => states.get(&a),
+        Shortcut::Input(_) => None,
+    };
+    match state {
         Some(HotkeyState::Conflict) => Some(KeyIssue::Conflict),
         Some(HotkeyState::Invalid) => Some(KeyIssue::Unsafe),
-        _ if !mine.is_safe_global() => Some(KeyIssue::Unsafe),
+        _ if !action.is_safe(mine) => Some(KeyIssue::Unsafe),
         _ => None,
     }
 }
 
-pub(super) const META_LABEL: &str = if cfg!(target_os = "macos") {
-    "⌘"
-} else {
-    "Win"
-};
+pub(super) use crate::ui::META_LABEL;
 
 /// Most keys a chord has: Ctrl, Shift, Alt, Win and the key.
 pub(super) const CHORD_KEYS: usize = 5;
@@ -124,9 +130,14 @@ pub(super) fn keycap(
     .into_any()
 }
 
-pub(super) fn hotkey_control(ui: Ui, action: GlobalAction) -> AnyView {
+pub(super) fn hotkey_control(ui: Ui, action: Shortcut) -> AnyView {
     let recording = move || ui.recording.get() == Some(action);
     let bound = move || ui.settings.with(|s| action.get(s).is_some());
+    let default = action.default_binding();
+    let changed = {
+        let default = default.clone();
+        move || default.is_some() && ui.settings.with(|s| action.get(s) != default.as_ref())
+    };
     let issue = move || {
         let states = ui.hotkeys.get();
         ui.settings.with(|s| key_issue(s, &states, action))
@@ -146,10 +157,13 @@ pub(super) fn hotkey_control(ui: Ui, action: GlobalAction) -> AnyView {
         }
         match issue() {
             Some(i) => Some((I18N.t_in(locale, i.badge_key()), i.tone())),
-            None => ui
-                .hotkeys
-                .with(|h| matches!(h.get(&action), Some(HotkeyState::Registered)))
-                .then(|| (I18N.t_in(locale, "hotkeys-ok"), StatusTone::Success)),
+            None => match action {
+                Shortcut::Global(a) => ui
+                    .hotkeys
+                    .with(|h| matches!(h.get(&a), Some(HotkeyState::Registered)))
+                    .then(|| (I18N.t_in(locale, "hotkeys-ok"), StatusTone::Success)),
+                Shortcut::Input(_) => None,
+            },
         }
     };
     let caps: Vec<AnyView> = (0..CHORD_KEYS).map(|i| keycap(i, parts, danger)).collect();
@@ -236,12 +250,22 @@ pub(super) fn hotkey_control(ui: Ui, action: GlobalAction) -> AnyView {
         .on_cx(move |_, _: &Activate, cx| {
             cx.dispatch_program_all(edit(move |s| action.set(s, None)))
         }),
+        widget(
+            IconButton::new(ti::ARROW_BACK_UP, ui.now_t("hotkeys-reset"))
+                .size(ControlSize::Small)
+                .with_tooltip(ui.now_t("hotkeys-reset")),
+        )
+        .visible(changed)
+        .on_cx(move |_, _: &Activate, cx| {
+            let default = default.clone();
+            cx.dispatch_program_all(edit(move |s| action.bind(s, default)))
+        }),
     ))
     .into_any()
 }
 
 /// The wrapping line under a hotkey row that says what is wrong.
-pub(super) fn hotkey_issue_line(ui: Ui, action: GlobalAction) -> AnyView {
+pub(super) fn hotkey_issue_line(ui: Ui, action: Shortcut) -> AnyView {
     let issue = move || {
         let states = ui.hotkeys.get();
         ui.settings.with(|s| key_issue(s, &states, action))
@@ -255,7 +279,7 @@ pub(super) fn hotkey_issue_line(ui: Ui, action: GlobalAction) -> AnyView {
     .children(
         widget(Text::new(String::new()).style(Type::Caption.style())).bind(move |t: &mut Text| {
             if let Some(i) = issue() {
-                let text = ui.settings.with(|s| i.message(ui.locale.get(), s));
+                let text = ui.settings.with(|s| i.message(ui.locale.get(), s, action));
                 if t.value != text {
                     t.value = text;
                 }
@@ -266,56 +290,89 @@ pub(super) fn hotkey_issue_line(ui: Ui, action: GlobalAction) -> AnyView {
     .into_any()
 }
 
-/// The input window's own keys, each a row with its chord as keycaps.
-fn local_keys(ui: Ui) -> Vec<AnyView> {
-    use crate::ui::kit::keycap::{chord, keycap};
-    let (send, newline) = match ui.settings.with_untracked(|s| s.general.send_key) {
-        SendKey::Enter => ("Enter", "Shift+Enter"),
-        SendKey::CtrlEnter => ("Ctrl+Enter", "Enter"),
-    };
-    let recall = widget(
-        Stack::row(0.0)
-            .gap_step(gap::step::TIGHT)
-            .align(AlignSpec::Center),
+/// A shortcut's row: its name and recorder, then what is wrong with it.
+fn shortcut_row(ui: Ui, label: String, action: Shortcut) -> AnyView {
+    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs))
+        .children((
+            row_text(label, None, hotkey_control(ui, action)),
+            hotkey_issue_line(ui, action),
+        ))
+        .into_any()
+}
+
+/// One row per quick phrase; renaming or adding one on the Assets page
+/// rebuilds the list.
+fn phrase_rows(ui: Ui) -> AnyView {
+    dynamic(
+        move || {
+            ui.settings.with(|s| {
+                s.assets
+                    .phrases
+                    .iter()
+                    .map(|p| p.label.clone())
+                    .collect::<Vec<_>>()
+            })
+        },
+        move |labels| {
+            if labels.is_empty() {
+                return crate::ui::kit::empty_state::<Msg>(
+                    ui.now_t("hotkeys-phrases-empty"),
+                    Some((
+                        ui.now_t("hotkeys-edit-phrases"),
+                        Box::new(|| Msg::SettingsPage(Page::Assets)),
+                    )),
+                );
+            }
+            let rows: Vec<AnyView> = (0..labels.len())
+                .map(|i| {
+                    let action = Shortcut::Global(GlobalAction::Phrase(i));
+                    let name = ui
+                        .settings
+                        .with_untracked(|s| action_name(ui.locale.get_untracked(), s, action));
+                    shortcut_row(ui, name, action)
+                })
+                .collect();
+            widget(Stack::column(0.0))
+                .children(divided(rows))
+                .into_any()
+        },
     )
-    .children((
-        chord("Ctrl+↑"),
-        widget(
-            Type::Small
-                .text("/")
-                .color(SemanticColorRole::Muted)
-                .decorative(),
-        ),
-        keycap("↓"),
-    ))
-    .into_any();
-    vec![
-        row(ui, "tb-send", None, chord(send)),
-        row(ui, "cheat-newline", None, chord(newline)),
-        row(ui, "tb-bold", None, chord("Ctrl+B")),
-        row(ui, "tb-italic", None, chord("Ctrl+I")),
-        row(ui, "tb-underline", None, chord("Ctrl+U")),
-        row(ui, "cheat-recall", None, recall),
-        row(ui, "cheat-hide", None, chord("Esc")),
-    ]
+    .into_any()
 }
 
 pub(super) fn hotkeys(ui: Ui) -> AnyView {
-    let rows: Vec<AnyView> = GlobalAction::ALL
-        .into_iter()
-        .map(|action| {
-            widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs))
-                .children((
-                    row(ui, action.label_key(), None, hotkey_control(ui, action)),
-                    hotkey_issue_line(ui, action),
-                ))
-                .into_any()
-        })
-        .collect();
+    let rows = |actions: Vec<Shortcut>| -> Vec<AnyView> {
+        actions
+            .into_iter()
+            .map(|action| shortcut_row(ui, ui.now_t(action.label_key()), action))
+            .collect()
+    };
+    let global = rows(
+        GlobalAction::ALL
+            .into_iter()
+            .map(Shortcut::Global)
+            .collect(),
+    );
+    let local = rows(InputKey::ALL.into_iter().map(Shortcut::Input).collect());
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
-            section(ui, "", rows),
-            section(ui, "hotkeys-local", local_keys(ui)),
+            section(ui, "hotkeys-global", global),
+            section(ui, "hotkeys-local", local),
+            section(
+                ui,
+                "hotkeys-phrases",
+                vec![
+                    phrase_rows(ui),
+                    widget(
+                        Stack::row(0.0)
+                            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
+                    )
+                    .children(button(ui, "hotkeys-edit-phrases", || {
+                        Msg::SettingsPage(Page::Assets)
+                    }))
+                    .into_any(),
+                ],
+            ),
         ))
         .into_any()
 }

@@ -27,7 +27,7 @@ use nanatype_model::{
     AssetRef, Atom, AtomKind, ContinuousKind, EntranceKind, Inline, Marker, Pace, Rgba8, Shadow,
     Size, Stroke,
 };
-use nanatype_settings::{InputMode, SendKey, Settings};
+use nanatype_settings::{InputKey, InputMode, Settings};
 
 use super::dialogue::{Source, dialogue_box};
 use super::rich::{ChipKind, MarkerLook};
@@ -842,55 +842,46 @@ pub fn cheat_sheet(ui: Ui) -> AnyView {
         )
     })
     .collect();
-    let (send, newline) = match ui.settings.with_untracked(|s| s.general.send_key) {
-        SendKey::Enter => ("Enter", "Shift+Enter"),
-        SendKey::CtrlEnter => ("Ctrl+Enter", "Enter"),
+    // The keys as bound in Settings › Hotkeys; unbound ones are left out.
+    let input = ui.settings.with_untracked(|s| s.hotkeys.input.clone());
+    let bound = |k: InputKey| k.get(&input).map(|h| h.label(super::META_LABEL));
+    let row = |k: InputKey, meaning: &str| {
+        bound(k).map(|h| sheet_row(super::kit::keycap::chord(&h), SHEET_KEYS_W, t(meaning)))
     };
-    let recall = widget(
-        Stack::row(0.0)
-            .gap_step(gap::step::TIGHT)
-            .align(AlignSpec::Center),
-    )
-    .children((
-        super::kit::keycap::chord("Ctrl+↑"),
-        widget(
-            Text::new("/")
-                .decorative()
-                .style(Type::Small.style())
-                .color(SemanticColorRole::Muted),
+    let recall = match (bound(InputKey::RecallPrev), bound(InputKey::RecallNext)) {
+        (Some(prev), Some(next)) => Some(
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .align(AlignSpec::Center),
+            )
+            .children((
+                super::kit::keycap::chord(&prev),
+                widget(
+                    Text::new("/")
+                        .decorative()
+                        .style(Type::Small.style())
+                        .color(SemanticColorRole::Muted),
+                ),
+                super::kit::keycap::chord(&next),
+            ))
+            .into_any(),
         ),
-        super::kit::keycap::keycap("↓"),
-    ))
-    .into_any();
-    let keys: Vec<AnyView> = vec![
-        sheet_row(super::kit::keycap::chord(send), SHEET_KEYS_W, t("tb-send")),
-        sheet_row(
-            super::kit::keycap::chord(newline),
-            SHEET_KEYS_W,
-            t("cheat-newline"),
-        ),
-        sheet_row(
-            super::kit::keycap::chord("Ctrl+B"),
-            SHEET_KEYS_W,
-            t("tb-bold"),
-        ),
-        sheet_row(
-            super::kit::keycap::chord("Ctrl+I"),
-            SHEET_KEYS_W,
-            t("tb-italic"),
-        ),
-        sheet_row(
-            super::kit::keycap::chord("Ctrl+U"),
-            SHEET_KEYS_W,
-            t("tb-underline"),
-        ),
-        sheet_row(recall, SHEET_KEYS_W, t("cheat-recall")),
-        sheet_row(
-            super::kit::keycap::chord("Esc"),
-            SHEET_KEYS_W,
-            t("cheat-hide"),
-        ),
-    ];
+        (one, other) => one.or(other).map(|h| super::kit::keycap::chord(&h)),
+    }
+    .map(|lead| sheet_row(lead, SHEET_KEYS_W, t("cheat-recall")));
+    let keys: Vec<AnyView> = [
+        row(InputKey::Send, "tb-send"),
+        row(InputKey::Newline, "cheat-newline"),
+        row(InputKey::Bold, "tb-bold"),
+        row(InputKey::Italic, "tb-italic"),
+        row(InputKey::Underline, "tb-underline"),
+        recall,
+        row(InputKey::Hide, "cheat-hide"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
     let column = |title: String, rows: Vec<AnyView>| {
         widget(
             Stack::column(0.0)
@@ -927,7 +918,7 @@ fn toolbar(ui: Ui) -> AnyView {
             ui.settings.with(|s| {
                 (
                     s.general.input_mode,
-                    s.general.send_key,
+                    s.hotkeys.input.clone(),
                     s.assets.phrases.len(),
                 )
             }),

@@ -64,13 +64,13 @@ use nanatype_i18n::Locale;
 use nanatype_model::{AfterLine, EntranceKind, Overflow, VtsReset};
 use nanatype_playback::QueuePolicy;
 use nanatype_settings::{
-    CaptureBackground, ChromeMode, HideLatest, HistorySync, InputMode, InputPresence,
-    KeystrokeScheme, Lock, QuickPhrase, SendKey, Settings,
+    CaptureBackground, ChromeMode, HideLatest, HistorySync, InputKey, InputMode, InputPresence,
+    KeystrokeScheme, Lock, QuickPhrase, Settings,
 };
 
 use super::Page;
 use super::controls::*;
-use crate::msg::{FileTarget, GlobalAction, Msg};
+use crate::msg::{FileTarget, GlobalAction, Msg, Shortcut};
 use crate::services::hotkeys::HotkeyState;
 use crate::ui::{I18N, LinkState, SkinRow, Ui};
 use crate::windows::WindowKind;

@@ -200,7 +200,7 @@ fn input_skin_preview_defaults_to_plain_text_and_survives_restart() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("settings.json");
     let old: Settings =
-        serde_json::from_str(r#"{"schema":2,"general":{"speaker_name":"奈奈"}}"#).unwrap();
+        serde_json::from_str(r#"{"schema":3,"general":{"speaker_name":"奈奈"}}"#).unwrap();
     assert!(!old.general.input_skin_preview);
     let mut settings = old;
     for preview in [true, false] {
@@ -217,7 +217,7 @@ fn legacy_chat_preferences_migrate_without_service_or_auth_code() {
         let mut value = serde_json::json!({"schema":1,"integrations":{"blivechat":{"enabled":true,"room_kind":kind,"room":room,"host":"127.0.0.1","port":12450,"panel_style":"history","panel_open":true,"panel":{"gift":false}}}});
         assert_eq!(migrate(&mut value).unwrap(), 1);
         let settings: Settings = serde_json::from_value(value.clone()).unwrap();
-        assert_eq!(settings.schema, 2);
+        assert_eq!(settings.schema, SETTINGS_SCHEMA);
         assert_eq!(settings.integrations.bilibili.room, expected);
         assert_eq!(
             settings.integrations.bilibili.panel_style,
@@ -261,6 +261,63 @@ fn chat_panel_style_defaults_and_round_trips_without_a_schema_change() {
         assert!(loaded.integrations.bilibili.panel_open);
         assert_eq!(loaded.schema, SETTINGS_SCHEMA);
     }
+}
+
+#[test]
+fn send_key_choice_migrates_into_the_input_window_keys() {
+    for (wire, send, newline) in [
+        ("enter", Hotkey::bare("Enter"), Hotkey::shift("Enter")),
+        ("ctrl_enter", Hotkey::ctrl("Enter"), Hotkey::bare("Enter")),
+    ] {
+        let mut value =
+            serde_json::json!({"schema":2,"general":{"send_key":wire,"speaker_name":"奈奈"}});
+        assert_eq!(migrate(&mut value).unwrap(), 2);
+        assert!(value["general"].get("send_key").is_none());
+        let settings: Settings = serde_json::from_value(value).unwrap();
+        assert_eq!(settings.schema, SETTINGS_SCHEMA);
+        assert_eq!(settings.general.speaker_name, "奈奈");
+        let input = &settings.hotkeys.input;
+        assert_eq!(input.send.as_ref(), Some(&send));
+        assert_eq!(input.newline.as_ref(), Some(&newline));
+        assert_eq!(input.bold, InputKeys::default().bold);
+        assert!(settings.unknown.is_empty(), "{:?}", settings.unknown);
+    }
+}
+
+#[test]
+fn input_keys_default_round_trip_and_match_their_chords() {
+    let keys = InputKeys::default();
+    for key in InputKey::ALL {
+        let chord = key.get(&keys).expect("every input key has a default");
+        assert_eq!(keys.matching(chord), Some(key));
+        assert!(chord.is_safe_local(), "{key:?}");
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("settings.json");
+    let mut settings = Settings::default();
+    settings.hotkeys.input.send = Some(Hotkey {
+        alt: true,
+        ..Hotkey::bare("KeyS")
+    });
+    settings.hotkeys.input.italic = None;
+    save_json(&path, &settings).unwrap();
+    assert_eq!(load_settings(&path, None).value, settings);
+}
+
+#[test]
+fn local_keys_may_be_bare_only_when_they_do_not_type() {
+    for key in [
+        "Enter", "Escape", "Tab", "ArrowUp", "PageDown", "F5", "Delete",
+    ] {
+        assert!(Hotkey::bare(key).is_safe_local(), "{key}");
+    }
+    for key in ["KeyA", "Digit1", "Space", "Backquote", ""] {
+        assert!(!Hotkey::bare(key).is_safe_local(), "{key}");
+    }
+    assert!(Hotkey::ctrl("KeyA").is_safe_local());
+    assert!(!Hotkey::bare("Enter").is_safe_global());
+    assert_eq!(Hotkey::ctrl("ArrowUp").label("Win"), "Ctrl+↑");
+    assert_eq!(Hotkey::bare("Escape").label("Win"), "Esc");
 }
 
 #[test]

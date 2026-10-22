@@ -70,8 +70,9 @@ impl Fixture {
         for source_mode in [false, true] {
             let observed = messages.clone();
             // Same classifier and pre-editor callback phase as Host::mount.
+            let keys = test_keys(ctrl_enter);
             let policy = move |key: &KeyInput| {
-                if let Some(msg) = input_shortcut(key, source_mode, ctrl_enter) {
+                if let Some(msg) = input_shortcut(key, source_mode, &keys) {
                     observed.lock().unwrap().push(msg);
                     true
                 } else {
@@ -1511,7 +1512,7 @@ fn windows_system_clipboard_round_trip_and_image_fallback() {
     );
     let key = KeyInput::named("KeyV", "v", KeyState::Pressed, CTRL);
     assert!(matches!(
-        input_shortcut(&key, true, false),
+        input_shortcut(&key, true, &test_keys(false)),
         Some(Msg::PasteImage {
             width: 2,
             height: 1,

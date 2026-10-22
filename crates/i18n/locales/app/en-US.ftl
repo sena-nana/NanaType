@@ -139,9 +139,6 @@ general-presence-resident = Always open
 general-presence-summon = Summon with hotkey
 general-input = Input
 general-mode = Input mode
-general-send-key = Send key
-general-send-key-enter = Enter
-general-send-key-ctrl-enter = Ctrl+Enter
 general-autostart = Launch at login
 general-updates = Updates
 general-check-updates = Check for updates automatically
@@ -302,6 +299,14 @@ hotkeys-badge-unsafe = Unsafe
 hotkeys-click-to-set = Click to set
 hotkeys-press-keys = Press keys · Esc to cancel
 hotkeys-local = Input window shortcuts
+hotkeys-global = Global hotkeys
+hotkeys-phrases = Quick phrases
+hotkeys-phrases-empty = No quick phrases yet
+hotkeys-edit-phrases = Edit quick phrases
+hotkeys-reset = Restore default
+hotkeys-unsafe-local = Keys that type text need Ctrl, Alt or Shift
+hotkeys-recall-prev = Previous line
+hotkeys-recall-next = Next line
 
 ## Output
 output-display = Display

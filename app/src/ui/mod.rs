@@ -36,7 +36,7 @@ use nanatype_model::ChatRef;
 use nanatype_settings::Settings;
 use nanatype_theme::Skin;
 
-use crate::msg::GlobalAction;
+use crate::msg::{GlobalAction, Shortcut};
 use crate::services::hotkeys::HotkeyState;
 
 /// A notice, shown as a toast (see [`feedback`]).
@@ -131,6 +131,13 @@ pub struct StickerRow {
     pub pack_title: String,
 }
 
+/// How the Windows / Command key is spelled on a keycap.
+pub const META_LABEL: &str = if cfg!(target_os = "macos") {
+    "⌘"
+} else {
+    "Win"
+};
+
 /// Shared reactive state. `Copy`: views capture it freely. The skin
 /// renderer's part is the [`Stage`] it derefs to.
 #[derive(Clone, Copy)]
@@ -177,7 +184,7 @@ pub struct Ui {
     pub stickers: Signal<Arc<Vec<StickerRow>>>,
     pub sticker_packs: Signal<Arc<Vec<crate::stickers::PackRow>>>,
     pub telegram: Signal<Arc<crate::stickers::telegram::State>>,
-    pub recording: Signal<Option<GlobalAction>>,
+    pub recording: Signal<Option<Shortcut>>,
     pub hotkeys: Signal<Arc<HashMap<GlobalAction, HotkeyState>>>,
     /// The system's own reduce-motion preference, as last reported.
     pub system_reduced_motion: Signal<bool>,

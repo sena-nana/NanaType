@@ -23,8 +23,7 @@ pub mod youtube;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Arc, LazyLock, RwLock};
 use std::time::Duration;
 
 use nana_ui::{CompiledTheme, RuntimeProgramContext, RuntimeProgramUpdate};
@@ -41,7 +40,7 @@ use nanatype_i18n::Locale;
 use nanatype_markup::{parse, serialize, serialize_line};
 use nanatype_model::{AssetRef, Document, Inline};
 use nanatype_playback::CueKind;
-use nanatype_settings::{GeometryStore, InputPresence, LoadNote, SendKey, Settings};
+use nanatype_settings::{GeometryStore, InputKeys, InputPresence, LoadNote, Settings};
 use nanatype_theme::{LoadedSkin, LoadedSoundPack, SkinRegistry};
 
 use crate::assets::AssetLibrary;
@@ -63,8 +62,16 @@ use crate::windows::{self, WindowKind, WindowManager};
 /// Chat messages the panel keeps.
 const CHAT_CAP: usize = 500;
 
-/// Send-key mode shared with the editor's key handler.
-pub static SEND_KEY: AtomicU8 = AtomicU8::new(0);
+/// The input window's own keys, shared with the editor's key handler.
+pub static INPUT_KEYS: LazyLock<RwLock<InputKeys>> = LazyLock::new(Default::default);
+
+fn share_input_keys(keys: &InputKeys) {
+    if let Ok(mut shared) = INPUT_KEYS.write()
+        && *shared != *keys
+    {
+        *shared = keys.clone();
+    }
+}
 
 /// Editor operations applied by the host without replacing its editing state.
 pub enum EditorCommand {
@@ -385,10 +392,7 @@ impl App {
         }
         self.sync_tray_skins();
         self.sync_tray();
-        SEND_KEY.store(
-            matches!(self.settings.general.send_key, SendKey::CtrlEnter) as u8,
-            Ordering::Relaxed,
-        );
+        share_input_keys(&self.settings.hotkeys.input);
         self.request_displays();
         #[cfg(feature = "updates")]
         self.check_update_on_start();
@@ -1177,10 +1181,7 @@ impl App {
         if prev.general.input_skin_preview != s.general.input_skin_preview {
             self.focus_editor = true;
         }
-        SEND_KEY.store(
-            matches!(s.general.send_key, SendKey::CtrlEnter) as u8,
-            Ordering::Relaxed,
-        );
+        share_input_keys(&s.hotkeys.input);
         self.sync_reduced_motion();
         if chrome_changed {
             self.refresh_theme();
@@ -1944,6 +1945,7 @@ impl App {
             | Msg::EditorContext { .. }
             | Msg::EditorAction { .. }
             | Msg::InsertPhrase(_)
+            | Msg::InsertNewline
             | Msg::PasteImage { .. }) => self.editor_msg(m),
             m @ (Msg::OverlayAction(..)
             | Msg::ToggleWindow(_)

@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use nana_ui::runtime::view::{entity_ref, with_refs};
@@ -19,11 +18,13 @@ use nana_ui_platform::host::WindowCommand;
 use nana_ui_platform::{InputPayload, KeyState, WindowEvent, WindowId};
 use nanatype_core::Cmd;
 use nanatype_model::Overflow;
-use nanatype_settings::{Hotkey, InputPresence};
+use nanatype_settings::{Hotkey, InputKey, InputKeys, InputPresence};
 
-use crate::app::{App, SEND_KEY};
+use crate::app::{App, INPUT_KEYS};
 use crate::clock;
-use crate::msg::{Msg, Tool};
+#[cfg(test)]
+use crate::msg::Tool;
+use crate::msg::{Msg, Shortcut, input_message};
 use crate::services::sounds::Keystroke;
 use crate::ui::overflow::{self, Measure, PageKey};
 use crate::ui::{danmaku, dialogue, history, input, settings};
@@ -724,16 +725,19 @@ fn clipboard_image() -> Option<Msg> {
     })
 }
 
-/// The input window's keys before the editor's own editing: send, recall,
-/// hide and the formatting shortcuts. The markup `source` field also pastes
-/// clipboard images (the rich editor asks for that itself).
+/// The input window's keys before the editor's own editing: the bindings of
+/// Settings › Hotkeys. The markup `source` field also pastes clipboard images
+/// (the rich editor asks for that itself).
 fn key_policy(
     post: RuntimeProgramContext<Msg>,
     source: bool,
 ) -> impl FnMut(&nana_ui::KeyInput) -> bool + Send + 'static {
     move |key| {
-        let Some(message) = input_shortcut(key, source, SEND_KEY.load(Ordering::Relaxed) == 1)
-        else {
+        let message = {
+            let keys = INPUT_KEYS.read().unwrap_or_else(|e| e.into_inner());
+            input_shortcut(key, source, &keys)
+        };
+        let Some(message) = message else {
             return false;
         };
         post.dispatch(message);
@@ -741,27 +745,56 @@ fn key_policy(
     }
 }
 
-fn input_shortcut(key: &nana_ui::KeyInput, source: bool, ctrl_enter: bool) -> Option<Msg> {
+/// A key press as a chord. Letters and digits follow the logical key, so a
+/// binding means the same letter on any layout; other keys are named as the
+/// W3C code names them.
+fn chord_of(key: &nana_ui::KeyInput) -> Hotkey {
+    let m = key.modifiers;
+    let logical = key.logical.0.as_ref();
+    let mut chars = logical.chars();
+    let name = match (chars.next(), chars.next()) {
+        (Some(c), None) if c.is_ascii_alphabetic() => format!("Key{}", c.to_ascii_uppercase()),
+        (Some(c), None) if c.is_ascii_digit() => format!("Digit{c}"),
+        (Some(' '), None) => "Space".to_owned(),
+        (Some(_), Some(_)) if logical != "Unidentified" => logical.to_owned(),
+        _ => key.physical.0.as_ref().to_owned(),
+    };
+    Hotkey {
+        ctrl: m.control,
+        shift: m.shift,
+        alt: m.alt,
+        meta: m.meta,
+        key: name,
+    }
+}
+
+/// Enter and Shift+Enter already break the line in the editor.
+fn editor_breaks_line(chord: &Hotkey) -> bool {
+    chord.key == "Enter" && !chord.ctrl && !chord.alt && !chord.meta
+}
+
+/// The default keys, or the Ctrl+Enter-sends layout.
+#[cfg(test)]
+fn test_keys(ctrl_enter: bool) -> InputKeys {
+    let mut keys = InputKeys::default();
+    if ctrl_enter {
+        keys.send = Some(Hotkey::ctrl("Enter"));
+        keys.newline = Some(Hotkey::bare("Enter"));
+    }
+    keys
+}
+
+fn input_shortcut(key: &nana_ui::KeyInput, source: bool, keys: &InputKeys) -> Option<Msg> {
     if key.state != KeyState::Pressed {
         return None;
     }
-    let m = key.modifiers;
-    let logical = key.logical.0.as_ref();
-    let plain = m.control && !m.shift && !m.alt && !m.meta;
-    let unmodified = !m.control && !m.shift && !m.alt && !m.meta;
-    let msg = match logical {
-        "Enter" if !ctrl_enter && unmodified => Msg::Core(Cmd::Send),
-        "Enter" if ctrl_enter && plain => Msg::Core(Cmd::Send),
-        "ArrowUp" if plain => Msg::Core(Cmd::Recall(-1)),
-        "ArrowDown" if plain => Msg::Core(Cmd::Recall(1)),
-        "Escape" if unmodified => Msg::HideInput,
-        "b" | "B" if plain => Msg::Tool(Tool::Bold),
-        "i" | "I" if plain => Msg::Tool(Tool::Italic),
-        "u" | "U" if plain => Msg::Tool(Tool::Underline),
-        "v" | "V" if plain && source => clipboard_image()?,
-        _ => return None,
-    };
-    Some(msg)
+    let chord = chord_of(key);
+    match keys.matching(&chord) {
+        Some(InputKey::Newline) if editor_breaks_line(&chord) => None,
+        Some(action) => Some(input_message(action)),
+        None if source && chord == Hotkey::ctrl("KeyV") => clipboard_image(),
+        None => None,
+    }
 }
 
 impl RuntimeProgram for Host {
@@ -1083,23 +1116,32 @@ impl RuntimeProgram for Host {
         if key.state != KeyState::Pressed {
             return Ok(RuntimeProgramUpdate::default());
         }
-        if self.app.ui.recording.get_untracked().is_some() {
+        if let Some(target) = self.app.ui.recording.get_untracked() {
             let code = key.physical.0.as_ref();
             if code == "Escape" {
                 self.app.update(Msg::RecordHotkey(None));
                 return Ok(self.finish());
             }
             if !is_modifier(code) {
-                let m = key.modifiers;
-                let hotkey = Hotkey {
-                    ctrl: m.control,
-                    shift: m.shift,
-                    alt: m.alt,
-                    meta: m.meta,
-                    key: code.to_owned(),
+                let hotkey = match target {
+                    // System-wide hotkeys are registered by physical key.
+                    Shortcut::Global(_) => {
+                        let m = key.modifiers;
+                        Hotkey {
+                            ctrl: m.control,
+                            shift: m.shift,
+                            alt: m.alt,
+                            meta: m.meta,
+                            key: code.to_owned(),
+                        }
+                    }
+                    Shortcut::Input(_) => chord_of(key),
                 };
-                if !hotkey.is_safe_global() {
-                    let text = self.app.ui.now_t("hotkeys-unsafe");
+                if !target.is_safe(&hotkey) {
+                    let text = self.app.ui.now_t(match target {
+                        Shortcut::Global(_) => "hotkeys-unsafe",
+                        Shortcut::Input(_) => "hotkeys-unsafe-local",
+                    });
                     self.app.notice(text, true);
                     return Ok(self.finish());
                 }
@@ -1107,10 +1149,10 @@ impl RuntimeProgram for Host {
                 return Ok(self.finish());
             }
         }
+        // The editor did not take the hide key (no editor focused).
         if WindowKind::from_id(id) == Some(WindowKind::Input)
-            && key.logical.0 == "Escape"
-            && key.modifiers == nana_ui_platform::InputModifiers::default()
             && !input.disposition.handled
+            && self.app.settings.hotkeys.input.hide.as_ref() == Some(&chord_of(key))
         {
             self.app.update(Msg::HideInput);
             return Ok(self.finish());
@@ -1299,36 +1341,35 @@ mod redraw_tests {
             control: true,
             ..plain
         };
+        let shift = InputModifiers {
+            shift: true,
+            ..plain
+        };
         let key =
             |name, modifiers| KeyInput::named("Unidentified", name, KeyState::Pressed, modifiers);
+        let enter = test_keys(false);
+        let ctrl_enter = test_keys(true);
         assert!(matches!(
-            input_shortcut(&key("Enter", plain), false, false),
+            input_shortcut(&key("Enter", plain), false, &enter),
             Some(Msg::Core(Cmd::Send))
         ));
-        assert!(
-            input_shortcut(
-                &key(
-                    "Enter",
-                    InputModifiers {
-                        shift: true,
-                        ..plain
-                    }
-                ),
-                false,
-                false
-            )
-            .is_none()
-        );
+        // Shift+Enter is the newline key, and the editor breaks the line.
+        assert!(input_shortcut(&key("Enter", shift), false, &enter).is_none());
         assert!(matches!(
-            input_shortcut(&key("Enter", ctrl), false, true),
+            input_shortcut(&key("Enter", ctrl), false, &ctrl_enter),
             Some(Msg::Core(Cmd::Send))
         ));
+        assert!(input_shortcut(&key("Enter", plain), false, &ctrl_enter).is_none());
         assert!(matches!(
-            input_shortcut(&key("ArrowUp", ctrl), false, false),
+            input_shortcut(&key("ArrowUp", ctrl), false, &enter),
             Some(Msg::Core(Cmd::Recall(-1)))
         ));
+        assert!(matches!(
+            input_shortcut(&key("B", ctrl), false, &enter),
+            Some(Msg::Tool(Tool::Bold))
+        ));
         for source in [false, true] {
-            for ctrl_enter in [false, true] {
+            for keys in [&enter, &ctrl_enter] {
                 for modifiers in [
                     InputModifiers {
                         shift: true,
@@ -1339,13 +1380,49 @@ mod redraw_tests {
                 ] {
                     for name in ["ArrowUp", "ArrowDown", "Enter", "b", "i", "u"] {
                         assert!(
-                            input_shortcut(&key(name, modifiers), source, ctrl_enter).is_none(),
+                            input_shortcut(&key(name, modifiers), source, keys).is_none(),
                             "{name} {modifiers:?}"
                         );
                     }
                 }
             }
         }
+    }
+
+    #[test]
+    fn rebound_input_keys_replace_the_defaults() {
+        use nana_ui_platform::{InputModifiers, KeyInput};
+        let alt = InputModifiers {
+            alt: true,
+            ..Default::default()
+        };
+        let ctrl = InputModifiers {
+            control: true,
+            ..Default::default()
+        };
+        let keys = InputKeys {
+            send: Some(Hotkey {
+                alt: true,
+                ..Hotkey::bare("KeyS")
+            }),
+            newline: Some(Hotkey::ctrl("Enter")),
+            bold: None,
+            ..InputKeys::default()
+        };
+        // Option+S types "ß" on a Mac: the physical key names the chord.
+        let send = KeyInput::named("KeyS", "ß", KeyState::Pressed, alt);
+        assert!(matches!(
+            input_shortcut(&send, false, &keys),
+            Some(Msg::Core(Cmd::Send))
+        ));
+        let enter = |m| KeyInput::named("Enter", "Enter", KeyState::Pressed, m);
+        assert!(input_shortcut(&enter(Default::default()), false, &keys).is_none());
+        assert!(matches!(
+            input_shortcut(&enter(ctrl), false, &keys),
+            Some(Msg::InsertNewline)
+        ));
+        let bold = KeyInput::named("KeyB", "b", KeyState::Pressed, ctrl);
+        assert!(input_shortcut(&bold, false, &keys).is_none());
     }
 
     #[test]
