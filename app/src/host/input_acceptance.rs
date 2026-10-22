@@ -72,11 +72,13 @@ impl Fixture {
             // Same classifier and pre-editor callback phase as Host::mount.
             let keys = test_keys(ctrl_enter);
             let policy = move |key: &KeyInput| {
-                if let Some(msg) = input_shortcut(key, source_mode, &keys) {
-                    observed.lock().unwrap().push(msg);
-                    true
-                } else {
-                    false
+                let completing = ui.completion.with_untracked(Option::is_some);
+                match input_key(key, source_mode, completing, &keys) {
+                    Some((msg, consumed)) => {
+                        observed.lock().unwrap().push(msg);
+                        consumed
+                    }
+                    None => false,
                 }
             };
             if source_mode {
@@ -1827,4 +1829,133 @@ fn typography_popovers_keep_selection_and_dispatch_authored_attributes() {
         }
         assert_eq!(f.selection(), selection);
     }
+}
+
+/// An open `@` list as the app publishes it.
+fn open_mentions(f: &Fixture) {
+    let user = nanatype_model::ChatUser {
+        uid: "1".into(),
+        name: "Alice".into(),
+        avatar: None,
+    };
+    let items = crate::completion::users(
+        [(crate::chat::Platform::Twitch, &user)].into_iter(),
+        "",
+        nanatype_i18n::Locale::ZhCn,
+    );
+    f.ui.completion
+        .set(Some(Arc::new(crate::completion::CompletionView {
+            trigger: crate::completion::Trigger::Mention,
+            items: items.into(),
+            selected: 0,
+        })));
+}
+
+#[test]
+fn an_open_completion_list_takes_tab_enter_arrows_and_escape_first() {
+    use crate::msg::Complete;
+    for source in [false, true] {
+        let mut f = Fixture::new(source, false, "");
+        f.focus();
+        f.event(InputPayload::Text(nana_ui_platform::CommittedText::new(
+            "hi @",
+        )));
+        assert_eq!(f.text(), "hi @");
+        if source {
+            let src = f.ui.source.get_untracked();
+            assert_eq!(src.selection, (4, 4));
+        } else {
+            // The caret reaches the app, which completes from it.
+            assert!(
+                f.pending
+                    .iter()
+                    .any(|m| matches!(m, Msg::EditorSelection(s) if *s == (4..4))),
+                "caret not reported"
+            );
+        }
+        let token = crate::completion::token(&f.text(), 4).unwrap();
+        assert_eq!(token.trigger, crate::completion::Trigger::Mention);
+        assert_eq!(token.range, 3..4);
+        open_mentions(&f);
+        f.session.flush().unwrap();
+        f.messages.lock().unwrap().clear();
+        for (name, shift, expected) in [
+            ("Tab", false, Complete::Accept(None)),
+            ("Enter", false, Complete::Accept(None)),
+            ("ArrowDown", false, Complete::Move(1)),
+            ("ArrowUp", false, Complete::Move(-1)),
+            ("Tab", true, Complete::Move(-1)),
+            ("Escape", false, Complete::Dismiss),
+        ] {
+            f.key(
+                name,
+                InputModifiers {
+                    shift,
+                    ..Default::default()
+                },
+            );
+            let got = f.messages.lock().unwrap().pop();
+            assert!(
+                matches!(got, Some(Msg::Complete(c)) if c == expected),
+                "{name} shift={shift}"
+            );
+        }
+        // None of them reached the editor.
+        assert_eq!(f.text(), "hi @");
+        if source {
+            // The markup field reports no caret moves: leaving the token
+            // closes the list, and the caret still moves.
+            f.key("ArrowLeft", Default::default());
+            assert!(matches!(
+                f.messages.lock().unwrap().pop(),
+                Some(Msg::Complete(Complete::Dismiss))
+            ));
+            assert_eq!(f.selection(), (3, 3));
+        }
+        // Closed, the keys are the input window's own again.
+        f.ui.completion.set(None);
+        f.key("Escape", Default::default());
+        assert!(matches!(
+            f.messages.lock().unwrap().pop(),
+            Some(Msg::HideInput)
+        ));
+    }
+}
+
+#[test]
+fn accepting_replaces_the_token_with_a_mention() {
+    // Rich: select the token, then insert the mention as the app does.
+    let mut f = Fixture::new(false, false, "");
+    f.focus();
+    f.event(InputPayload::Text(nana_ui_platform::CommittedText::new(
+        "hi @Al",
+    )));
+    let token = crate::completion::token(&f.text(), 6).unwrap();
+    f.sync(true, false, vec![RichEditCommand::Select(token.range)]);
+    f.insert_phrase("[at=1 name=\"Alice\"] ");
+    let draft = f.ui.draft.get_untracked();
+    assert!(draft.plain_text().starts_with("hi @Alice"), "{draft:?}");
+    assert!(!f.text().contains('@'), "{:?}", f.text());
+    assert!(crate::completion::token(&f.text(), f.text().len()).is_none());
+
+    // Source: the token's range becomes the tag.
+    let mut src = crate::ui::Source {
+        text: "hi @Al".into(),
+        selection: (3, 6),
+        revision: 0,
+    };
+    crate::app::apply_source_markup(
+        &mut src,
+        crate::msg::MarkupEdit::Insert(nanatype_markup::serialize(
+            &nanatype_model::Document::from_inlines(vec![nanatype_model::Inline::Mention(
+                nanatype_model::Mention::new(nanatype_model::ChatUser {
+                    uid: "1".into(),
+                    name: "Alice".into(),
+                    avatar: None,
+                }),
+            )]),
+        )),
+    );
+    assert!(src.text.starts_with("hi [at="), "{}", src.text);
+    assert!(!src.text.contains("@Al"));
 }

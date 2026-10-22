@@ -202,6 +202,8 @@ pub struct Ui {
     pub chat_width: Signal<f32>,
     /// Last chat action, retained while editing its reply.
     pub chat_target: Signal<Option<u64>>,
+    /// The `@` / `/` list open over the editor.
+    pub completion: Signal<Option<Arc<crate::completion::CompletionView>>>,
     /// The skin library shows cards (`true`) or the list; kept while the
     /// user visits other pages.
     pub skins_grid: Signal<bool>,
@@ -270,6 +272,7 @@ impl Ui {
             reply: signal(None),
             chat_width: signal(400.0),
             chat_target: signal(None),
+            completion: signal(None),
             skins_grid: signal(true),
         }
     }

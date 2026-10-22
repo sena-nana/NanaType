@@ -26,6 +26,8 @@ pub enum EditorEvent {
         keyboard: bool,
     },
     Changed(nana_ui_core::RichText),
+    /// The rich editor's selection moved (byte offsets).
+    Selection(std::ops::Range<usize>),
     Paste,
     /// The markup source was typed in.
     Typed {
@@ -197,11 +199,11 @@ pub fn editor_area<M: Send + 'static>(
                             {
                                 EditorEvent::Changed(rich.clone())
                             }
-                            RichTextEditorEvent::SelectionChanged { attrs, .. } => {
+                            RichTextEditorEvent::SelectionChanged { selection, attrs } => {
                                 if ui.sel_attrs.with_untracked(|a| a != attrs) {
                                     ui.sel_attrs.set(attrs.clone());
                                 }
-                                return;
+                                EditorEvent::Selection(selection.clone())
                             }
                             RichTextEditorEvent::PasteRequested => EditorEvent::Paste,
                             _ => return,

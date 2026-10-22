@@ -155,6 +155,7 @@ pub struct App {
     pub rich_commands: Vec<EditorCommand>,
     pub focus_editor: bool,
     pub source_edit_undoable: bool,
+    completer: crate::completion::Completer,
     /// Fonts packaged with the active skin, registered while it is active.
     fonts: nana_ui::HostFontScope,
     /// Built-in (embedded) fonts the active skin names, each registered once.
@@ -310,6 +311,7 @@ impl App {
             rich_commands: Vec::new(),
             focus_editor: false,
             source_edit_undoable: false,
+            completer: Default::default(),
             fonts: nana_ui::HostFontScope::new(),
             builtin_fonts: Default::default(),
             skin_families: [None, None, None],
@@ -1568,6 +1570,7 @@ impl App {
         self.ui.draft.set(Arc::new(doc.clone()));
         self.run(Cmd::DraftMeta(parsed.meta));
         self.run(Cmd::DraftChanged(doc));
+        self.refresh_completion();
     }
 
     /// The editor's look: the dialogue text of the active skin.
@@ -1940,6 +1943,8 @@ impl App {
             | Msg::Tool(_)
             | Msg::EditorCommand(_)
             | Msg::EditorChanged(_)
+            | Msg::EditorSelection(_)
+            | Msg::Complete(_)
             | Msg::EditorPaste
             | Msg::ToggleSource
             | Msg::EditorContext { .. }
@@ -2117,10 +2122,13 @@ impl App {
         self.publish_chat();
     }
 
-    fn publish_chat(&self) {
+    fn publish_chat(&mut self) {
         self.ui
             .chat
             .set(Arc::new(self.chat.iter().cloned().collect()));
+        if self.completer.open.is_some() {
+            self.refresh_completion();
+        }
     }
 
     fn mention(&mut self, seq: u64, reply: bool) {
@@ -2131,15 +2139,9 @@ impl App {
             let locale = self.ui.locale.get_untracked();
             self.run(Cmd::SetReply(Some(message.quote(locale))));
         } else {
-            let mention = Inline::Mention(nanatype_model::Mention::new(message.user.clone()));
-            self.tool(crate::msg::Tool::Insert(mention));
-            // A space after the label, so typing goes on as text.
-            if self.ui.source_mode.get_untracked() {
-                self.markup(MarkupEdit::Insert(" ".into()));
-            } else {
-                self.rich_commands
-                    .push(nana_ui::runtime::RichEditCommand::InsertText(" ".into()).into());
-            }
+            self.insert_inline(Inline::Mention(nanatype_model::Mention::new(
+                message.user.clone(),
+            )));
         }
         self.ui.chat_target.set(Some(seq));
         self.focus_editor = true;

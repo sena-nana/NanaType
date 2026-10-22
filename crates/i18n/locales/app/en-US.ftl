@@ -532,6 +532,7 @@ cheat-at = Mention a viewer
 cheat-newline = New line
 cheat-recall = Recall a sent line
 cheat-hide = Hide the input window
+cheat-complete = Complete a viewer after @ or a marker after /
 
 ## wave3-settings
 settings-group-input = Input

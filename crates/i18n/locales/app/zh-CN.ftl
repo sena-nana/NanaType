@@ -526,6 +526,7 @@ cheat-at = 提到一位观众
 cheat-newline = 换行
 cheat-recall = 上一句 / 下一句
 cheat-hide = 隐藏输入窗
+cheat-complete = 输入 @ 或 / 后补全观众或标记
 
 ## wave3-settings
 settings-group-input = 输入

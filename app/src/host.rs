@@ -27,7 +27,7 @@ use crate::msg::Tool;
 use crate::msg::{Msg, Shortcut, input_message};
 use crate::services::sounds::Keystroke;
 use crate::ui::overflow::{self, Measure, PageKey};
-use crate::ui::{danmaku, dialogue, history, input, settings};
+use crate::ui::{Ui, danmaku, dialogue, history, input, settings};
 use crate::windows::WindowKind;
 
 mod overlay;
@@ -444,10 +444,10 @@ impl Host {
                     .mount_view_root(doc_id, move || input::input_window(ui))
                     .map_err(err)?;
                 context
-                    .on_key(editor, key_policy(self.app.ctx.clone(), false))
+                    .on_key(editor, key_policy(self.app.ctx.clone(), ui, false))
                     .map_err(err)?;
                 context
-                    .on_key(source, key_policy(self.app.ctx.clone(), true))
+                    .on_key(source, key_policy(self.app.ctx.clone(), ui, true))
                     .map_err(err)?;
                 self.editor = Some(editor);
                 self.source = Some(source);
@@ -725,24 +725,48 @@ fn clipboard_image() -> Option<Msg> {
     })
 }
 
-/// The input window's keys before the editor's own editing: the bindings of
-/// Settings › Hotkeys. The markup `source` field also pastes clipboard images
-/// (the rich editor asks for that itself).
+/// The input window's keys before the editor's own editing: the `@` / `/`
+/// list's keys while it is open, then the bindings of Settings › Hotkeys.
+/// The markup `source` field also pastes clipboard images (the rich editor
+/// asks for that itself).
 fn key_policy(
     post: RuntimeProgramContext<Msg>,
+    ui: Ui,
     source: bool,
 ) -> impl FnMut(&nana_ui::KeyInput) -> bool + Send + 'static {
     move |key| {
-        let message = {
+        let completing = ui.completion.with_untracked(Option::is_some);
+        let action = {
             let keys = INPUT_KEYS.read().unwrap_or_else(|e| e.into_inner());
-            input_shortcut(key, source, &keys)
+            input_key(key, source, completing, &keys)
         };
-        let Some(message) = message else {
+        let Some((message, consumed)) = action else {
             return false;
         };
         post.dispatch(message);
-        true
+        consumed
     }
+}
+
+/// What a key in the input editor does before the editor's own editing: a
+/// message, and whether the key stops there.
+fn input_key(
+    key: &nana_ui::KeyInput,
+    source: bool,
+    completing: bool,
+    keys: &InputKeys,
+) -> Option<(Msg, bool)> {
+    if completing {
+        if source && moves_caret(key) {
+            // The markup field reports no caret moves: close the list rather
+            // than leave it on a token the caret has left.
+            return Some((Msg::Complete(crate::msg::Complete::Dismiss), false));
+        }
+        if let Some(message) = completion_key(key) {
+            return Some((message, true));
+        }
+    }
+    input_shortcut(key, source, keys).map(|m| (m, true))
 }
 
 /// A key press as a chord. Letters and digits follow the logical key, so a
@@ -782,6 +806,33 @@ fn test_keys(ctrl_enter: bool) -> InputKeys {
         keys.newline = Some(Hotkey::bare("Enter"));
     }
     keys
+}
+
+/// The open completion list's keys, ahead of every binding: Tab or Enter
+/// fills in, ↑/↓ (and Shift+Tab) choose, Esc closes.
+fn completion_key(key: &nana_ui::KeyInput) -> Option<Msg> {
+    use crate::msg::Complete;
+    let m = key.modifiers;
+    if key.state != KeyState::Pressed || m.control || m.alt || m.meta {
+        return None;
+    }
+    let action = match (chord_of(key).key.as_str(), m.shift) {
+        ("Tab", false) | ("Enter", false) => Complete::Accept(None),
+        ("Tab", true) | ("ArrowUp", false) => Complete::Move(-1),
+        ("ArrowDown", false) => Complete::Move(1),
+        ("Escape", false) => Complete::Dismiss,
+        _ => return None,
+    };
+    Some(Msg::Complete(action))
+}
+
+/// Keys that move the caret without typing.
+fn moves_caret(key: &nana_ui::KeyInput) -> bool {
+    key.state == KeyState::Pressed
+        && matches!(
+            chord_of(key).key.as_str(),
+            "ArrowLeft" | "ArrowRight" | "Home" | "End" | "PageUp" | "PageDown"
+        )
 }
 
 fn input_shortcut(key: &nana_ui::KeyInput, source: bool, keys: &InputKeys) -> Option<Msg> {
@@ -1387,6 +1438,59 @@ mod redraw_tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn an_open_completion_list_comes_before_the_bindings() {
+        use crate::msg::Complete;
+        use nana_ui_platform::{InputModifiers, KeyInput};
+        let key =
+            |name, modifiers| KeyInput::named("Unidentified", name, KeyState::Pressed, modifiers);
+        let plain = InputModifiers::default();
+        let ctrl = InputModifiers {
+            control: true,
+            ..plain
+        };
+        let keys = test_keys(false);
+        let complete = |k: &KeyInput, source| match input_key(k, source, true, &keys) {
+            Some((Msg::Complete(c), consumed)) => Some((c, consumed)),
+            _ => None,
+        };
+        for source in [false, true] {
+            assert_eq!(
+                complete(&key("Enter", plain), source),
+                Some((Complete::Accept(None), true))
+            );
+            assert_eq!(
+                complete(&key("Tab", plain), source),
+                Some((Complete::Accept(None), true))
+            );
+            assert_eq!(
+                complete(&key("Escape", plain), source),
+                Some((Complete::Dismiss, true))
+            );
+            assert_eq!(
+                complete(&key("ArrowDown", plain), source),
+                Some((Complete::Move(1), true))
+            );
+            // Chords stay the bindings': Ctrl+↑ still recalls.
+            assert!(matches!(
+                input_key(&key("ArrowUp", ctrl), source, true, &keys),
+                Some((Msg::Core(Cmd::Recall(-1)), true))
+            ));
+            // Closed, Enter sends and Tab is the editor's.
+            assert!(matches!(
+                input_key(&key("Enter", plain), source, false, &keys),
+                Some((Msg::Core(Cmd::Send), true))
+            ));
+            assert!(input_key(&key("Tab", plain), source, false, &keys).is_none());
+        }
+        // Moving the markup caret closes the list but still moves it.
+        assert_eq!(
+            complete(&key("ArrowLeft", plain), true),
+            Some((Complete::Dismiss, false))
+        );
+        assert!(input_key(&key("ArrowLeft", plain), false, true, &keys).is_none());
     }
 
     #[test]

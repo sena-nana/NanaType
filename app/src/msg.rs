@@ -269,6 +269,10 @@ pub enum Msg {
     EditorCommand(nana_ui::runtime::RichEditCommand),
     /// The rich editor's document changed.
     EditorChanged(nana_ui_core::RichText),
+    /// The rich editor's selection moved (byte offsets).
+    EditorSelection(std::ops::Range<usize>),
+    /// The `@` / `/` completion list.
+    Complete(Complete),
     /// The rich editor found no text to paste (try an image).
     EditorPaste,
     EditorContext {
@@ -503,6 +507,17 @@ pub enum Tool {
     /// Insert a marker or a picture at the caret.
     Insert(nanatype_model::Inline),
     ClearFormat,
+}
+
+/// The `@` / `/` completion list's keys and clicks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Complete {
+    /// Fill in this row, or the chosen one.
+    Accept(Option<usize>),
+    /// Move the choice by rows.
+    Move(i32),
+    /// Close the list until another token starts.
+    Dismiss,
 }
 
 /// Toolbar edits of the markup editor.

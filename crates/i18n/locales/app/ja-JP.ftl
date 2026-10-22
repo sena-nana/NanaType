@@ -526,6 +526,7 @@ cheat-at = 視聴者をメンション
 cheat-newline = 改行
 cheat-recall = 前 / 次の台詞
 cheat-hide = 入力ウィンドウを隠す
+cheat-complete = @ で視聴者、/ でマーカーを補完
 
 ## wave3-settings
 settings-group-input = 入力

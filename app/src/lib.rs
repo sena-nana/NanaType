@@ -21,6 +21,7 @@ compile_error!(
 pub mod app;
 pub mod assets;
 pub mod chat;
+pub mod completion;
 pub mod distribution;
 pub mod host;
 pub mod msg;

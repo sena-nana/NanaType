@@ -1,13 +1,27 @@
 use super::{App, EditorCommand};
-use crate::msg::{MarkupEdit, Msg};
+use crate::completion;
+use crate::msg::{Complete, MarkupEdit, Msg, Tool};
+use nana_ui::runtime::RichEditCommand;
 use nanatype_core::Cmd;
 use nanatype_markup::{parse, serialize_line};
-use nanatype_model::Document;
+use nanatype_model::{Document, Inline};
 
 impl App {
     /// The input editor: markup, tools, paste and phrases.
     pub(super) fn editor_msg(&mut self, msg: Msg) {
+        if let Msg::Complete(action) = msg {
+            self.complete(action);
+            return;
+        }
+        self.editor_edit(msg);
+        self.refresh_completion();
+    }
+
+    fn editor_edit(&mut self, msg: Msg) {
         match msg {
+            Msg::EditorSelection(selection) => {
+                self.completer.caret = (selection.start == selection.end).then_some(selection.end);
+            }
             Msg::Markup(edit) => self.markup(edit),
             Msg::Tool(tool) => self.tool(tool),
             Msg::EditorCommand(command) => self.rich_commands.push(command.into()),
@@ -88,5 +102,126 @@ impl App {
             },
             _ => unreachable!("not a editor message"),
         }
+    }
+}
+
+impl App {
+    /// Insert a mention or marker at the caret; a mention is followed by a
+    /// space, so typing goes on as text.
+    pub(super) fn insert_inline(&mut self, inline: Inline) {
+        let mention = matches!(inline, Inline::Mention(_));
+        self.tool(Tool::Insert(inline));
+        if !mention {
+            return;
+        }
+        if self.ui.source_mode.get_untracked() {
+            self.markup(MarkupEdit::Insert(" ".into()));
+        } else {
+            self.rich_commands
+                .push(RichEditCommand::InsertText(" ".into()).into());
+        }
+    }
+
+    /// Open, update or close the `@` / `/` list for the text before the caret.
+    pub(super) fn refresh_completion(&mut self) {
+        let token = if self.ui.source_mode.get_untracked() {
+            self.ui.source.with_untracked(|s| {
+                let (a, b) = s.selection;
+                (a == b).then(|| completion::token(&s.text, b)).flatten()
+            })
+        } else {
+            let caret = self.completer.caret;
+            self.ui
+                .editor_value
+                .with_untracked(|v| caret.and_then(|c| completion::token(v.text(), c)))
+        };
+        let start = token.as_ref().map(|t| t.range.start);
+        if self.completer.dismissed.is_some() && self.completer.dismissed != start {
+            self.completer.dismissed = None;
+        }
+        let open = token
+            .filter(|_| self.completer.dismissed.is_none())
+            .and_then(|token| {
+                let locale = self.ui.locale.get_untracked();
+                let items: std::sync::Arc<[completion::Item]> = match token.trigger {
+                    completion::Trigger::Mention => completion::users(
+                        self.chat.iter().rev().map(|m| (m.platform, &m.user)),
+                        &token.needle,
+                        locale,
+                    ),
+                    completion::Trigger::Command => {
+                        completion::commands(&self.skin, &token.needle, locale)
+                    }
+                }
+                .into();
+                if items.is_empty() {
+                    return None;
+                }
+                // The choice holds while the rows stay the same.
+                let selected = self
+                    .completer
+                    .open
+                    .as_ref()
+                    .filter(|c| c.token.range.start == token.range.start && c.items == items)
+                    .map_or(0, |c| c.selected);
+                Some(completion::Completion {
+                    token,
+                    items,
+                    selected,
+                })
+            });
+        self.completer.open = open;
+        self.publish_completion();
+    }
+
+    fn publish_completion(&self) {
+        let view = self.completer.view();
+        if self
+            .ui
+            .completion
+            .with_untracked(|v| v.as_deref() != view.as_deref())
+        {
+            self.ui.completion.set(view);
+        }
+    }
+
+    fn complete(&mut self, action: Complete) {
+        match action {
+            Complete::Move(delta) => {
+                if let Some(open) = &mut self.completer.open {
+                    open.move_by(delta);
+                }
+            }
+            Complete::Dismiss => {
+                if let Some(open) = self.completer.open.take() {
+                    self.completer.dismissed = Some(open.token.range.start);
+                }
+            }
+            Complete::Accept(row) => {
+                let Some(open) = self.completer.open.take() else {
+                    return;
+                };
+                let Some(item) = open.items.get(row.unwrap_or(open.selected)).cloned() else {
+                    return;
+                };
+                let range = open.token.range;
+                // The rich editor reports the new text later; the list must
+                // not reopen on the token it just replaced.
+                self.completer.dismissed = Some(range.start);
+                if self.ui.source_mode.get_untracked() {
+                    let mut src = self.ui.source.get_untracked();
+                    if src.text.get(range.clone()).is_none() {
+                        return;
+                    }
+                    src.selection = (range.start, range.end);
+                    self.ui.source.set(src);
+                } else {
+                    self.rich_commands
+                        .push(RichEditCommand::Select(range).into());
+                }
+                self.insert_inline(item.insert);
+            }
+        }
+        self.publish_completion();
     }
 }

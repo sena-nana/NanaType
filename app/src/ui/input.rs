@@ -50,6 +50,7 @@ const SHEET_KEYS_W: f32 = 136.0;
 /// The quoted viewer's avatar on the reply bar.
 const REPLY_AVATAR: f32 = 18.0;
 
+mod completion;
 mod stickers;
 mod workspace;
 
@@ -878,6 +879,12 @@ pub fn cheat_sheet(ui: Ui) -> AnyView {
         row(InputKey::Underline, "tb-underline"),
         recall,
         row(InputKey::Hide, "cheat-hide"),
+        // The `@` / `/` list's own key; not rebindable.
+        Some(sheet_row(
+            super::kit::keycap::chord("Tab"),
+            SHEET_KEYS_W,
+            t("cheat-complete"),
+        )),
     ]
     .into_iter()
     .flatten()
@@ -1457,6 +1464,7 @@ fn editor_area(
                 keyboard,
             },
             EditorEvent::Changed(rich) => Msg::EditorChanged(rich),
+            EditorEvent::Selection(selection) => Msg::EditorSelection(selection),
             EditorEvent::Paste => Msg::EditorPaste,
             EditorEvent::Typed { text, selection } => {
                 Msg::Markup(MarkupEdit::Typed { text, selection })
@@ -1630,12 +1638,14 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
             ui,
             widget(Stack::fill_column(0.0).with_layout(|l| {
                 l.min_width = Some(LengthSpec::Px(0.0));
+                l.position = PositionSpec::Relative;
             }))
             .children((
                 toolbar(ui),
                 crate::ui::kit::rule(),
                 preview,
                 super::plugins::mounted(ui, nanatype_plugins::Mount::Input),
+                completion::popup(ui),
             )),
         ),
         workspace::footer(ui, invitation, relay),
