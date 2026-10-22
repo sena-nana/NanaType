@@ -90,6 +90,7 @@ pub struct App {
     pub scheduler: Scheduler,
     pub audio: AudioHandle,
     pub bank: Bank,
+    keys: sounds::Keys,
     pub bridge: BridgeHandle,
     /// The Bilibili connection and the thread saving its pictures.
     pub bilibili: BilibiliHandle,
@@ -229,6 +230,7 @@ impl App {
             scheduler: workers.scheduler,
             audio: workers.audio,
             bank: Vec::new(),
+            keys: sounds::Keys::default(),
             bridge: workers.bridge,
             bilibili: workers.bilibili,
             douyin: workers.douyin,
@@ -1021,6 +1023,7 @@ impl App {
         self.audio.set_bus(Bus::Typing, s.typing_volume);
         self.audio.set_bus(Bus::Effects, s.effects_volume);
         self.audio.set_bus(Bus::Ui, s.ui_volume);
+        self.audio.set_bus(Bus::Keys, s.keystroke_volume);
     }
 
     fn save_settings(&self) {
@@ -1237,6 +1240,14 @@ impl App {
                 feedback::SENT_MS,
                 false,
             ));
+        }
+    }
+
+    /// Click for a key pressed in the input window, when enabled.
+    pub fn keystroke(&mut self, key: sounds::Keystroke) {
+        if self.settings.sound.keystroke {
+            let scheme = self.settings.sound.keystroke_scheme;
+            self.audio.play(self.keys.voice(scheme, key));
         }
     }
 

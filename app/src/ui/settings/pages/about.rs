@@ -272,6 +272,20 @@ fn licences(ui: Ui) -> Vec<(AnyView, Shown)> {
             None,
             include_str!("../../../../../crates/douyin/LICENSE-DOUYINLIVE"),
         ),
+        (
+            "jim-ph · Vintage Keyboard · CC0-1.0",
+            "about-source-key-sounds",
+            "https://freesound.org/people/jim-ph/packs/12363/",
+            None,
+            include_str!("../../../../../packaging/licenses/KeySounds-CC0.txt"),
+        ),
+        (
+            "Glaneur de sons · Bubbles · CC BY 3.0",
+            "about-source-key-sounds-bubble",
+            "https://freesound.org/people/Glaneur%20de%20sons/packs/6686/",
+            None,
+            include_str!("../../../../../packaging/licenses/KeySounds-Bubble-CC-BY-3.0.txt"),
+        ),
     ];
     let mut rows = Vec::new();
     for (name, description, url, mirror, licence) in entries {

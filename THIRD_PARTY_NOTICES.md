@@ -12,6 +12,7 @@ below identify those sections:
 | `DouyinLive-MIT.txt` | Douyin signing source, Copyright (c) 2025 今晚打打 |
 | `FusionPixel12pxProportionalSC.LICENSE.txt`, `LXGWWenKai-Regular.LICENSE.txt`, `Tangerine-Bold.LICENSE.txt` | The fonts embedded for the built-in skins (also on the About page under "Open-source fonts"); Tangerine by Toshi Omagari, OFL-1.1 |
 | `NotoSansSC-OFL.txt` | NanaUI's interface font |
+| `KeySounds-CC0.txt`, `KeySounds-Bubble-CC-BY-3.0.txt` | The input window's keystroke sounds (mechanical keyboard, CC0 1.0; bubbles, CC BY 3.0), with their provenance |
 | `rust-crates.txt` | Every Rust crate's own licence files, written at packaging time |
 | `libvpx-BSD.txt` | libvpx VP9 decoder, distributed through shiguredo_libvpx |
 | `dxc\` | The DirectX Shader Compiler's licence files, when the package was built from an official DXC release (see below) |
@@ -127,6 +128,37 @@ with Reserved Font Name 'Source'. SIL Open Font License 1.1.
 
 Licence text: `NotoSansSC-OFL.txt` (copied from NanaUI's
 `crates/nana-ui/assets/fonts/OFL.txt` at the revision in `Cargo.lock`).
+
+## Sounds embedded in NanaType
+
+The input window's keystroke sounds (`app/assets/sounds/keys/`) come in two
+sets, both taken unmodified, apart from their names, from
+[Tickeys](https://github.com/yingDev/Tickeys) (MIT), which ships them with their
+Freesound notices. [Keyda](https://github.com/miaomiaosoft/Keyda) offers the
+mechanical set too; Keyda itself carries no licence, so nothing else of it is
+used. Tickeys' other sets (sword, typewriter, Cherry G80) have no recorded
+source and are not used.
+
+### Vintage Keyboard, by jim-ph
+
+The "Mechanical keyboard" set (`mechanical/`) consists of jim-ph's
+recordings of a 1986 DOS mechanical keyboard, Freesound pack
+[12363](https://freesound.org/people/jim-ph/packs/12363/) (sounds 194795–194799),
+dedicated to the public domain under **CC0 1.0**.
+
+Licence text and file mapping: `KeySounds-CC0.txt`.
+
+### Bubbles, by Glaneur de sons
+
+The "Bubbles" set (`bubble/`) is by
+[Glaneur de sons](https://freesound.org/people/Glaneur%20de%20sons/),
+Freesound pack [6686](https://freesound.org/people/Glaneur%20de%20sons/packs/6686/)
+(sounds 104940–104950), licensed under
+[**CC BY 3.0**](https://creativecommons.org/licenses/by/3.0/). Tickeys' copies
+may have been trimmed or converted from the originals; NanaType ships them
+unmodified and only varies their pitch during playback.
+
+Licence text: `KeySounds-Bubble-CC-BY-3.0.txt`.
 
 ## DirectX Shader Compiler
 

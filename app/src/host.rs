@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::time::{Duration, Instant};
 
 use nana_ui::runtime::view::{entity_ref, with_refs};
 use nana_ui::runtime::{
@@ -23,6 +24,7 @@ use nanatype_settings::{Hotkey, InputPresence};
 use crate::app::{App, SEND_KEY};
 use crate::clock;
 use crate::msg::{Msg, Tool};
+use crate::services::sounds::Keystroke;
 use crate::ui::overflow::{self, Measure, PageKey};
 use crate::ui::{danmaku, dialogue, history, input, settings};
 use crate::windows::WindowKind;
@@ -50,6 +52,9 @@ pub struct Host {
     /// Language and forced reduced motion each document was last given;
     /// re-sent only when they change (or to a new window), not per message.
     doc_env: HashMap<WindowId, (&'static str, bool)>,
+    /// The last keystroke click, and whether a key press (rather than IME
+    /// text) played it.
+    last_keystroke: Option<(Instant, bool)>,
 }
 
 /// Application-clock work is separate from rendering-only work (GPU sweep,
@@ -133,6 +138,9 @@ fn default_language(tag: &str) -> Option<nana_ui::runtime::LanguageTag> {
     nana_ui::runtime::LanguageTag::new(tag)
 }
 
+/// How close IME text must follow a click to count as the same keystroke.
+const KEYSTROKE_DEDUP: Duration = Duration::from_millis(40);
+
 fn is_modifier(code: &str) -> bool {
     matches!(
         code,
@@ -150,6 +158,47 @@ fn is_modifier(code: &str) -> bool {
 }
 
 impl Host {
+    /// Click for a key pressed in the input window. Held keys click once.
+    /// Keys an IME swallows may never arrive as presses, so preedit changes
+    /// and commits click too, unless a press just did.
+    fn keystroke_sound(&mut self, payload: &InputPayload) {
+        if !self.app.settings.sound.keystroke {
+            return;
+        }
+        let now = Instant::now();
+        // A press skips only an IME click it follows; IME text skips any.
+        let recent = |any: bool| {
+            self.last_keystroke
+                .is_some_and(|(at, key)| (any || !key) && now - at < KEYSTROKE_DEDUP)
+        };
+        let key = match payload {
+            InputPayload::Key(key) => {
+                if key.state != KeyState::Pressed
+                    || key.repeat
+                    || is_modifier(key.physical.0.as_ref())
+                    || recent(false)
+                {
+                    return;
+                }
+                self.last_keystroke = Some((now, true));
+                Keystroke::of(key.logical.0.as_ref())
+            }
+            // Plain text always follows its own key press, repeats included.
+            InputPayload::Composition(
+                nana_ui_platform::CompositionInput::Update { .. }
+                | nana_ui_platform::CompositionInput::Commit(_),
+            ) => {
+                if recent(true) {
+                    return;
+                }
+                self.last_keystroke = Some((now, false));
+                Keystroke::Normal
+            }
+            _ => return,
+        };
+        self.app.keystroke(key);
+    }
+
     fn editor_target(&self, source: bool) -> Option<nana_ui::runtime::StableNodeId> {
         if source {
             self.source.map(|e| e.stable_id())
@@ -735,6 +784,7 @@ impl RuntimeProgram for Host {
             toasts: HashMap::new(),
             stickers: Default::default(),
             doc_env: HashMap::new(),
+            last_keystroke: None,
         };
         // The primary window exists before `initialize_window` is ever
         // called, so its document is built here.
@@ -1032,6 +1082,9 @@ impl RuntimeProgram for Host {
             }
             self.app.commands.push(command);
             return Ok(self.finish());
+        }
+        if WindowKind::from_id(id) == Some(WindowKind::Input) {
+            self.keystroke_sound(&input.event.payload);
         }
         let InputPayload::Key(key) = &input.event.payload else {
             return Ok(RuntimeProgramUpdate::default());

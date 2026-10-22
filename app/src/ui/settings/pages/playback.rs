@@ -266,6 +266,43 @@ pub(super) fn playback(ui: Ui) -> AnyView {
                             |s, v| s.sound.effects_volume = v as f32,
                         ),
                     ),
+                    toggle_row!(ui, "playback-keystroke", sound.keystroke),
+                    row(
+                        ui,
+                        "playback-keystroke-scheme",
+                        None,
+                        select(
+                            ui,
+                            select_keys(
+                                ui,
+                                &[
+                                    ("mechanical", "playback-keystroke-scheme-mechanical"),
+                                    ("bubble", "playback-keystroke-scheme-bubble"),
+                                ],
+                            ),
+                            |s| match s.sound.keystroke_scheme {
+                                KeystrokeScheme::Mechanical => "mechanical".into(),
+                                KeystrokeScheme::Bubble => "bubble".into(),
+                            },
+                            |s, v| {
+                                s.sound.keystroke_scheme = if v == "bubble" {
+                                    KeystrokeScheme::Bubble
+                                } else {
+                                    KeystrokeScheme::Mechanical
+                                }
+                            },
+                        ),
+                    ),
+                    row(
+                        ui,
+                        "playback-volume-keystroke",
+                        None,
+                        percent(
+                            ui,
+                            |s| f64::from(s.sound.keystroke_volume),
+                            |s, v| s.sound.keystroke_volume = v as f32,
+                        ),
+                    ),
                     row(
                         ui,
                         "playback-device",

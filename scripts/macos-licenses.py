@@ -75,7 +75,8 @@ def rust_crates(target: str, package: str, product: str) -> str:
 # packaging/licenses files only NanaType ships, by package.
 APP_ONLY = {
     "nanatype": set(),
-    "nanatype-editor": {"LiliaBilibili-MIT.txt", "libvpx-BSD.txt"},
+    "nanatype-editor": {"LiliaBilibili-MIT.txt", "libvpx-BSD.txt", "KeySounds-CC0.txt",
+                        "KeySounds-Bubble-CC-BY-3.0.txt"},
 }
 
 

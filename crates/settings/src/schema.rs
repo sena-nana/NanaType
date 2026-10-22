@@ -152,6 +152,15 @@ pub enum SendKey {
     CtrlEnter,
 }
 
+/// The recordings played for keys pressed in the input window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KeystrokeScheme {
+    #[default]
+    Mechanical,
+    Bubble,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct General {
@@ -230,6 +239,10 @@ pub struct SoundSettings {
     pub typing_volume: f32,
     pub effects_volume: f32,
     pub ui_volume: f32,
+    /// Click on every key pressed in the input window.
+    pub keystroke: bool,
+    pub keystroke_scheme: KeystrokeScheme,
+    pub keystroke_volume: f32,
     /// Output device name; `None` is the system default.
     pub device: Option<String>,
 }
@@ -242,6 +255,9 @@ impl Default for SoundSettings {
             typing_volume: 0.7,
             effects_volume: 0.9,
             ui_volume: 0.5,
+            keystroke: false,
+            keystroke_scheme: KeystrokeScheme::Mechanical,
+            keystroke_volume: 0.6,
             device: None,
         }
     }
@@ -920,6 +936,7 @@ impl Settings {
             &mut s.typing_volume,
             &mut s.effects_volume,
             &mut s.ui_volume,
+            &mut s.keystroke_volume,
         ] {
             *v = finite_or(*v, 1.0).clamp(0.0, 1.0);
         }

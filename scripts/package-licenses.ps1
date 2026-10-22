@@ -6,7 +6,7 @@ param(
     [ValidateSet("app", "editor")][string]$Product = "app"
 )
 # packaging\licenses files only NanaType ships.
-$appOnly = @("LiliaBilibili-MIT.txt", "libvpx-BSD.txt")
+$appOnly = @("LiliaBilibili-MIT.txt", "libvpx-BSD.txt", "KeySounds-CC0.txt", "KeySounds-Bubble-CC-BY-3.0.txt")
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $Destination) { $Destination = Join-Path $Staged "THIRD_PARTY_LICENSES.txt" }

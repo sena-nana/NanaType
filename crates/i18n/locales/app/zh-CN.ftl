@@ -171,6 +171,12 @@ playback-audio = 声音
 playback-volume = 主音量
 playback-volume-typing = 打字音量
 playback-volume-effects = 音效音量
+playback-keystroke = 输入按键音
+playback-keystroke-hint = 在输入框打字时播放按键音，回车和退格有单独的声音
+playback-keystroke-scheme = 按键音方案
+playback-keystroke-scheme-mechanical = 机械键盘
+playback-keystroke-scheme-bubble = 气泡
+playback-volume-keystroke = 按键音量
 playback-device = 输出设备
 playback-device-default = 系统默认
 
@@ -553,6 +559,8 @@ about-design-upstream-license = 原项目授权说明
 about-license-project = 原创代码采用 MIT；继承资料保留原许可。B 站组件及完整应用同时包含 CC BY-NC 4.0 材料，须遵守其署名及非商业条件。
 about-source-api-collect = 原始 B 站协议资料来源：SocialSisterYi 及项目贡献者。继承的直播协议说明与 WBI 材料经过适配，保留 CC BY-NC 4.0 署名及非商业条件。原仓库目前不可用，可访问镜像。
 about-source-douyin = 抖音 WebSocket 签名与 HTTP a_bogus 实现移植自版本 0e506f3，连接参数参考同版本。Copyright (c) 2025 今晚打打。
+about-source-key-sounds = 「机械键盘」按键音来自 jim-ph 在 Freesound 发布的 1986 年 DOS 机械键盘录音，CC0 公共领域贡献，经 Tickeys 收录。
+about-source-key-sounds-bubble = 「气泡」按键音来自 Glaneur de sons 在 Freesound 发布的气泡录音，采用 CC BY 3.0 许可，经 Tickeys 收录，NanaType 未作修改。
 about-source-repository = 来源仓库
 about-source-mirror = 文档镜像
 

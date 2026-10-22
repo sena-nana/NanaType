@@ -17,6 +17,8 @@ pub enum Bus {
     Typing,
     Effects,
     Ui,
+    /// Keystrokes in the input window.
+    Keys,
 }
 
 impl Bus {
@@ -25,6 +27,7 @@ impl Bus {
             Self::Typing => 0,
             Self::Effects => 1,
             Self::Ui => 2,
+            Self::Keys => 3,
         }
     }
 }
@@ -70,7 +73,7 @@ pub(crate) struct Mixer {
     voices: Vec<Playing>,
     pending: Vec<(u64, Scheduled)>,
     master: f32,
-    buses: [f32; 3],
+    buses: [f32; 4],
 }
 
 impl Mixer {
@@ -81,7 +84,7 @@ impl Mixer {
             voices: Vec::with_capacity(MAX_VOICES),
             pending: Vec::with_capacity(256),
             master: 0.8,
-            buses: [1.0; 3],
+            buses: [1.0; 4],
         }
     }
 

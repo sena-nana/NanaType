@@ -171,6 +171,12 @@ playback-audio = サウンド
 playback-volume = 全体の音量
 playback-volume-typing = タイプ音の音量
 playback-volume-effects = 効果音の音量
+playback-keystroke = 入力キー音
+playback-keystroke-hint = 入力ウィンドウで打つたびにキー音を鳴らします。Enter と Backspace は別の音です
+playback-keystroke-scheme = キー音のセット
+playback-keystroke-scheme-mechanical = メカニカルキーボード
+playback-keystroke-scheme-bubble = 泡
+playback-volume-keystroke = キー音の音量
 playback-device = 出力デバイス
 playback-device-default = システムの既定
 
@@ -553,6 +559,8 @@ about-design-upstream-license = 原プロジェクトのライセンス
 about-license-project = 独自コードは MIT。継承した資料は元のライセンスを維持します。Bilibili コンポーネントとアプリ全体には CC BY-NC 4.0 の資料も含まれ、表示と非営利条件が適用されます。
 about-source-api-collect = Bilibili 通信仕様の元の出典：SocialSisterYi と貢献者。調整したライブ通信仕様と WBI 資料には CC BY-NC 4.0 の表示と非営利条件を維持します。元のリポジトリは現在利用できないため、ミラーも掲載しています。
 about-source-douyin = リビジョン 0e506f3 の WebSocket 署名と HTTP a_bogus を移植し、接続パラメーターも参照しています。Copyright (c) 2025 今晚打打。
+about-source-key-sounds = 「メカニカルキーボード」のキー音は jim-ph が Freesound で公開した 1986 年製 DOS メカニカルキーボードの録音です。CC0 でパブリックドメインに提供され、Tickeys に収録されています。
+about-source-key-sounds-bubble = 「泡」のキー音は Glaneur de sons が Freesound で公開した録音で、CC BY 3.0 で提供され、Tickeys に収録されています。NanaType は改変せずに同梱しています。
 about-source-repository = 出典リポジトリ
 about-source-mirror = 資料のミラー
 

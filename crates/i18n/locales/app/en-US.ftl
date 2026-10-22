@@ -174,6 +174,12 @@ playback-audio = Sound
 playback-volume = Master volume
 playback-volume-typing = Typing volume
 playback-volume-effects = Effects volume
+playback-keystroke = Keystroke sounds
+playback-keystroke-hint = Key sounds as you type in the input window; Enter and Backspace sound different
+playback-keystroke-scheme = Keystroke sound set
+playback-keystroke-scheme-mechanical = Mechanical keyboard
+playback-keystroke-scheme-bubble = Bubbles
+playback-volume-keystroke = Keystroke volume
 playback-device = Output device
 playback-device-default = System default
 
@@ -559,6 +565,8 @@ about-design-upstream-license = Upstream licensing
 about-license-project = Original code: MIT. Inherited material keeps its licence. The Bilibili component and combined app also include CC BY-NC 4.0 material, subject to attribution and NonCommercial conditions.
 about-source-api-collect = Original Bilibili protocol documentation by SocialSisterYi and contributors. Adapted live protocol descriptions and WBI material retain CC BY-NC 4.0 attribution and NonCommercial conditions. The original repository is unavailable; a mirror is linked.
 about-source-douyin = WebSocket signing and HTTP a_bogus ported from revision 0e506f3; connection parameters reference the same revision. Copyright (c) 2025 今晚打打.
+about-source-key-sounds = The "Mechanical keyboard" keystroke sounds are jim-ph's recordings of a 1986 DOS mechanical keyboard on Freesound, dedicated to the public domain under CC0, as collected by Tickeys.
+about-source-key-sounds-bubble = The "Bubbles" keystroke sounds are recordings by Glaneur de sons on Freesound, licensed under CC BY 3.0, as collected by Tickeys; NanaType ships them unmodified.
 about-source-repository = Source repository
 about-source-mirror = Documentation mirror
 

@@ -141,4 +141,29 @@ fn pitch_changes_the_playback_rate() {
     assert_eq!(m.voices(), 0, "480 frames at double speed end within 300");
 }
 
+#[test]
+fn keys_bus_has_its_own_gain() {
+    let mut m = Mixer::new(48_000);
+    let id: SoundId = "c".into();
+    m.apply(Command::Load(id.clone(), click()));
+    m.apply(Command::BusGain(Bus::Keys, 0.0));
+    m.apply(Command::Play(Voice {
+        sound: id.clone(),
+        bus: Bus::Keys,
+        gain: 1.0,
+        pitch: 1.0,
+    }));
+    let mut out = vec![0.0f32; 64];
+    m.render(&mut out, 1, Instant::now());
+    assert!(out.iter().all(|s| *s == 0.0));
+    m.apply(Command::Play(Voice {
+        sound: id,
+        bus: Bus::Typing,
+        gain: 1.0,
+        pitch: 1.0,
+    }));
+    m.render(&mut out, 1, Instant::now());
+    assert!(out.iter().any(|s| *s != 0.0), "other buses keep playing");
+}
+
 use crate::mixer;

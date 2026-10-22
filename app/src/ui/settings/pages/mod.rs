@@ -63,8 +63,8 @@ use nanatype_i18n::Locale;
 use nanatype_model::{AfterLine, EntranceKind, Overflow, VtsReset};
 use nanatype_playback::QueuePolicy;
 use nanatype_settings::{
-    CaptureBackground, ChromeMode, HideLatest, HistorySync, InputMode, InputPresence, Lock,
-    QuickPhrase, SendKey, Settings,
+    CaptureBackground, ChromeMode, HideLatest, HistorySync, InputMode, InputPresence,
+    KeystrokeScheme, Lock, QuickPhrase, SendKey, Settings,
 };
 
 use super::Page;

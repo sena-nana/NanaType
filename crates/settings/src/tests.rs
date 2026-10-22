@@ -290,6 +290,12 @@ fn v0_settings_migrate_into_the_new_schema() {
         Some(nanatype_model::EntranceKind::None)
     );
     assert!(s.sound.typing);
+    assert!(
+        !s.sound.keystroke,
+        "keystroke clicks stay off until enabled"
+    );
+    assert_eq!(s.sound.keystroke_volume, 0.6);
+    assert_eq!(s.sound.keystroke_scheme, KeystrokeScheme::Mechanical);
     assert!(s.hotkeys.summon.as_ref().unwrap().shift);
     assert_eq!(
         s.hotkeys.continue_,
