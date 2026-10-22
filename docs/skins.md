@@ -418,7 +418,7 @@ fn effect(i: EffectInput) -> vec4<f32> {
 
 完整作者示例见 [aurora/skin.toml](examples/aurora/skin.toml)，可直接导入 [aurora.ntpkg](examples/aurora.ntpkg)。六套新内置主题每套使用一个 WGSL、一张透明装饰纹理、零自定义参数、零装饰节点，构图和静态回退见[设计说明](skin-art-direction.md)，素材参考与矢量源图见[来源记录](skin-art-sources.md)。
 
-`target = "artwork"` 用于完整画面：程序自行绘制透明轮廓、材质、边框和装饰，宿主提供展示框矩形画布，不再使用原有框体的覆盖遮罩。多个 artwork 实例按 `shader_effects` 的顺序叠加；单个程序超出节点上限时，可以拆成背层和前层。配置 `dialogue.box.frame` 作为完整静态回退；可以运行 `cargo run -p nanatype --example skin_artwork -- crates/theme/builtin` 重新烘焙内置图，用 `-- --package <目录> [--preset <预设>] [--out <png>]` 烘焙一个包（按顺序叠加它的全部 artwork 层）。`cargo run -p nanatype-theme --example check_package -- <目录或 .ntpkg>` 按应用的方式校验包，并列出每个着色器的 IR 与展开成本；超出上限时也会报告。回退与 WGSL 都绘制在正文、引用和姓名之前；未声明静态回退的第三方程序在关闭动效时不提交用户代码；`static_fallback = true` 的响应式版画冻结时钟以保留完整材质和装饰，停止申请动画帧。
+`target = "artwork"` 用于完整画面：程序自行绘制透明轮廓、材质、边框和装饰，宿主提供展示框矩形画布，不再使用原有框体的覆盖遮罩。多个 artwork 实例按 `shader_effects` 的顺序叠加；单个程序超出节点上限时，可以拆成背层和前层。配置 `dialogue.box.frame` 作为完整静态回退；可以运行 `cargo run -p nanatype --example skin_artwork -- crates/theme/builtin` 重新烘焙内置图，用 `-- --package <目录> [--preset <预设>] [--out <png>] [--at <毫秒>] [--scale <倍数>]` 烘焙一个包（按顺序叠加它的全部 artwork 层；`--at` 渲染 16 秒循环中的其他时刻，用于检查动效；`--scale` 按高分屏倍数渲染，用于检查线宽和抗锯齿）。`cargo run -p nanatype-theme --example check_package -- <目录或 .ntpkg>` 按应用的方式校验包，并列出每个着色器的 IR 与展开成本；超出上限时也会报告。回退与 WGSL 都绘制在正文、引用和姓名之前；未声明静态回退的第三方程序在关闭动效时不提交用户代码；`static_fallback = true` 的响应式版画冻结时钟以保留完整材质和装饰，停止申请动画帧。
 
 ## 内容配色参考（chrome）
 
@@ -650,7 +650,7 @@ color = { param = "fur" }                   # 任意字段都可以写成占位
 | 缩略图、输入窗、编辑器 | `still.png`，即默认值 |
 | 展示框与设置预览，`static_fallback = true` 时 | 用当前参数运行同一程序；关闭动效时冻结在静止姿态 |
 
-[NanaTypeSkins](https://github.com/sena-nana/NanaTypeSkins) 的 Kemomimi（兽耳）是第一套参数化皮肤：47 个参数、10 个预设，耳朵、尾巴和框体全部由同一个 SDF 程序按参数生成，拆成背层和前层两个 artwork。
+[NanaTypeSkins](https://github.com/sena-nana/NanaTypeSkins) 的 Kemomimi（兽耳）是第一套参数化皮肤：46 个参数、10 个预设，耳朵、尾巴和框体全部由同一个 SDF 程序按参数生成，拆成背层（阴影、与框体连成同一轮廓的尾巴、框面与斑纹）和前层（耳朵及其与头顶的衔接）两个 artwork。耳朵承担表情：开句竖起、换说话人时一竖、打字时警觉、等待时放松，句间按 16 秒脚本抖耳、单耳侧转倾听、随歪头一起倾斜，耳尖随动作滞后。
 
 ## 热重载
 

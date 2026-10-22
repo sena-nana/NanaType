@@ -1,8 +1,10 @@
 //! Bake procedural skin artwork through the production restricted renderer.
 //! `cargo run -p nanatype --example skin_artwork -- <output-directory>`
-//! `cargo run -p nanatype --example skin_artwork -- --package <dir> [--preset <id>] [--out <png>]`
+//! `cargo run -p nanatype --example skin_artwork -- --package <dir> [--preset <id>] [--out <png>] [--at <ms>] [--scale <x>]`
 //! bakes a package's own `artwork` shader at its region size, with a preset's
 //! param values when given, into `<dir>/still.png` unless `--out` says where.
+//! `--at` renders another moment of the loop than the still pose at 16 s;
+//! `--scale` renders at that many device pixels per logical pixel.
 //! Static images use identical geometry, palette, color conversion and seed.
 use nana_ui::runtime::view::widget;
 use nana_ui::runtime::{DocumentId, RuntimeDocument, Stack};
@@ -77,7 +79,7 @@ fn main() {
             };
             let folder = out.join(name);
             std::fs::create_dir_all(&folder).unwrap();
-            bake(skin.clone(), [w, h], &folder.join("still.png"), name);
+            bake(skin.clone(), [w, h], 1., &folder.join("still.png"), name);
             if name == "gothic" {
                 // The original plate samples a two-cell atlas. Responsive
                 // native nodes need independent, aspect-preserving ornaments.
@@ -114,7 +116,13 @@ impl nanatype_theme::SkinFiles for ArtworkFiles {
 }
 
 /// Render `skin`'s `artwork` shader at `w`×`h` into the PNG at `path`.
-fn bake(skin: Arc<nanatype_theme::Skin>, [w, h]: [u32; 2], path: &std::path::Path, name: &str) {
+fn bake(
+    skin: Arc<nanatype_theme::Skin>,
+    [w, h]: [u32; 2],
+    scale: f32,
+    path: &std::path::Path,
+    name: &str,
+) {
     let ui = Ui::new(
         Arc::new(Default::default()),
         skin.clone(),
@@ -160,7 +168,7 @@ fn bake(skin: Arc<nanatype_theme::Skin>, [w, h]: [u32; 2], path: &std::path::Pat
             .children(artwork)
         })
         .unwrap();
-    let mut session = RuntimeAgentSession::new(doc, w, h).unwrap();
+    let mut session = RuntimeAgentSession::new_scaled(doc, w, h, scale).unwrap();
     session.set_gpu_renderers(sweep::renderers());
     session.set_clear(Some([0.; 4]));
     let _ = session.screenshot_rgba().unwrap();
@@ -188,8 +196,10 @@ fn bake_package() {
             .cloned()
     };
     let preset = flag("--preset");
+    let at = flag("--at").map_or(16_000, |v| v.parse().expect("--at <ms>"));
+    let scale = flag("--scale").map_or(1., |v| v.parse().expect("--scale <x>"));
     let out = flag("--out").map_or_else(|| dir.join("still.png"), PathBuf::from);
-    nanatype::clock::capture_at(16_000, || {
+    nanatype::clock::capture_at(at, || {
         let files = Arc::new(PackageFiles {
             files: Arc::new(DirFiles::new(&dir)),
         });
@@ -217,7 +227,7 @@ fn bake_package() {
         if let Some(parent) = out.parent() {
             std::fs::create_dir_all(parent).unwrap();
         }
-        bake(skin, size, &out, "package");
+        bake(skin, size, scale, &out, "package");
         println!("{}: {}x{}", out.display(), size[0], size[1]);
     });
 }
