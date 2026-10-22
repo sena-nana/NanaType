@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="236" viewBox="0 0 860 236">
+  <!-- 蜡笔画 crayon · 保持现有风格：米白画纸、柔彩蜡笔四边、右上淡橙太阳与右下粉色小花、左下几笔短线，深色彩铅文楷。只做共性修正：浅底提及、两行正文的框高 -->
+  <defs>
+    <!-- 画纸：细颗粒 + 极淡纸纹 -->
+    <filter id="tooth" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="17" result="g"/>
+      <feColorMatrix in="g" type="matrix" values="0 0 0 0 0.62  0 0 0 0 0.55  0 0 0 0 0.45  0 0 0 -1.2 0.5" result="pits"/>
+      <feComposite in="pits" in2="SourceGraphic" operator="in"/>
+    </filter>
+    <!-- 蜡笔：轻抖动 + 纸齿漏白 -->
+    <filter id="crayon" filterUnits="userSpaceOnUse" x="0" y="0" width="860" height="236">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="3" result="wob"/>
+      <feDisplacementMap in="SourceGraphic" in2="wob" scale="5" xChannelSelector="R" yChannelSelector="G" result="shaped"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.9 0.6" numOctaves="2" seed="19" result="g"/>
+      <feComponentTransfer in="g" result="mask"><feFuncA type="linear" slope="3" intercept="-0.55"/></feComponentTransfer>
+      <feComposite in="shaped" in2="mask" operator="in"/>
+    </filter>
+    <filter id="crayonSoft" filterUnits="userSpaceOnUse" x="0" y="0" width="860" height="236">
+      <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="9" result="wob"/>
+      <feDisplacementMap in="SourceGraphic" in2="wob" scale="3" xChannelSelector="R" yChannelSelector="G" result="shaped"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.9 0.7" numOctaves="2" seed="23" result="g"/>
+      <feComponentTransfer in="g" result="mask"><feFuncA type="linear" slope="2.6" intercept="-0.3"/></feComponentTransfer>
+      <feComposite in="shaped" in2="mask" operator="in"/>
+    </filter>
+    <!-- 正文彩铅材质 -->
+    <filter id="pencil" filterUnits="userSpaceOnUse" x="0" y="0" width="860" height="236">
+      <feTurbulence type="fractalNoise" baseFrequency="1.2" numOctaves="1" seed="41" result="g"/>
+      <feComponentTransfer in="g" result="mask"><feFuncA type="linear" slope="2.5" intercept="0.2"/></feComponentTransfer>
+      <feComposite in="SourceGraphic" in2="mask" operator="in"/>
+    </filter>
+    <filter id="lift" x="-3%" y="-10%" width="106%" height="125%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#8A6A4A" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <!-- 画纸 -->
+  <rect x="10" y="10" width="840" height="216" rx="4" fill="#FFF9EC" filter="url(#lift)"/>
+  <rect x="10" y="10" width="840" height="216" rx="4" fill="#000" filter="url(#tooth)" opacity="0.6"/>
+
+  <!-- 柔彩四边：上桃、右灰蓝、下粉、左灰绿 -->
+  <g fill="none" stroke-linecap="round" filter="url(#crayon)" opacity="0.85">
+    <path d="M24 22 C 220 19 440 24 640 21 S 800 22 838 20" stroke="#EFB38A" stroke-width="4.5"/>
+    <path d="M40 25 C 260 23 500 26 820 24" stroke="#F3C7A6" stroke-width="2.5"/>
+    <path d="M840 30 C 837 80 842 140 838 186 S 840 210 839 216" stroke="#A9BFD3" stroke-width="4"/>
+    <path d="M24 214 C 200 217 380 212 560 216 S 760 213 836 215" stroke="#E3A0A0" stroke-width="5"/>
+    <path d="M40 211 C 240 213 470 210 820 212" stroke="#EDBDBD" stroke-width="2.5"/>
+    <path d="M20 30 C 22 80 18 140 21 186 S 20 206 22 212" stroke="#A7C0A6" stroke-width="4"/>
+  </g>
+
+  <!-- 左下几笔短线 -->
+  <g fill="none" stroke="#A9BFD3" stroke-width="2.5" stroke-linecap="round" filter="url(#crayonSoft)">
+    <path d="M44 196 L 62 193 M68 192 L 84 189"/>
+    <path d="M48 202 L 66 200"/>
+  </g>
+
+  <!-- 右上淡橙太阳 -->
+  <g fill="none" stroke-linecap="round" filter="url(#crayonSoft)">
+    <circle cx="804" cy="52" r="14" fill="#FBE3C6" stroke="#EFB38A" stroke-width="3"/>
+    <path d="M804 30 L 804 24 M820 36 L 825 31 M826 52 L 833 52 M820 68 L 825 73 M804 74 L 804 80 M788 68 L 783 73 M782 52 L 775 52 M788 36 L 783 31" stroke="#EFB38A" stroke-width="2.5"/>
+  </g>
+
+  <!-- 右下粉色小花 -->
+  <g stroke-linecap="round" stroke-linejoin="round" filter="url(#crayonSoft)">
+    <path d="M804 202 C 805 186 802 170 804 150" fill="none" stroke="#9DB89A" stroke-width="2.5"/>
+    <path d="M804 184 C 794 176 786 178 784 184 C 790 188 798 188 804 184 Z" fill="#C4D8BF" stroke="#9DB89A" stroke-width="2"/>
+    <path d="M805 172 C 814 166 822 168 823 174 C 817 178 810 177 805 172 Z" fill="#C4D8BF" stroke="#9DB89A" stroke-width="2"/>
+    <g fill="#F6C9C9" stroke="#E3A0A0" stroke-width="2">
+      <ellipse cx="804" cy="132" rx="7" ry="9"/>
+      <ellipse cx="816" cy="141" rx="9" ry="7"/>
+      <ellipse cx="811" cy="155" rx="8" ry="7"/>
+      <ellipse cx="797" cy="155" rx="8" ry="7"/>
+      <ellipse cx="792" cy="141" rx="9" ry="7"/>
+    </g>
+    <circle cx="804" cy="144" r="5" fill="#E8A38E" stroke="#D98C7A" stroke-width="1.5"/>
+  </g>
+
+  <g font-family="LXGW WenKai">
+    <text x="52" y="56" font-size="20" fill="#A65B49">奈奈</text>
+    <!-- 引用 -->
+    <rect x="52" y="74" width="2" height="17" rx="1" fill="#D98C7A"/>
+    <text x="62" y="87.5" font-size="15" fill="#6E6058">星野ほたる：主播晚上好！今天打什么字呀</text>
+    <!-- 提及：浅棕底 + 深棕字 -->
+    <rect x="52" y="104" width="150" height="30" rx="15" fill="#B46A58" fill-opacity="0.14"/>
+  </g>
+  <circle cx="67" cy="119" r="9" fill="#E9B4A6" stroke="#D98C7A" stroke-width="2" filter="url(#crayonSoft)"/>
+  <g font-family="LXGW WenKai" filter="url(#pencil)">
+    <text x="82" y="127" font-size="22" fill="#8A4A3C">星野ほたる</text>
+    <text x="210" y="129" font-size="27" fill="#51413A">晚上好！今天也谢谢你来～</text>
+    <text x="52" y="168" font-size="27" fill="#51413A">我们接着上次的故事讲吧。</text>
+  </g>
+</svg>

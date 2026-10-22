@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="276" viewBox="0 0 920 276">
+  <!-- 朱砂华灯 lantern · 设计稿：夜里的灯。黑漆底、朱砂外框、描金内线；右上横梁垂下一大一小两盏灯，悬在框外、跨过上沿；暖光落在漆面
+       region 由规格 920×250 放大到 920×276：顶部余量 56，灯体才能真正悬在框外 -->
+  <defs>
+    <linearGradient id="lacquer" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#24140F"/>
+      <stop offset="1" stop-color="#1A0F0E"/>
+    </linearGradient>
+    <linearGradient id="cinnabar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C9473F"/>
+      <stop offset="1" stop-color="#9A2E2C"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F1D49A"/>
+      <stop offset="0.5" stop-color="#D9A84E"/>
+      <stop offset="1" stop-color="#A97B36"/>
+    </linearGradient>
+    <radialGradient id="warm" cx="826" cy="84" r="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF8A3D" stop-opacity="0.36"/>
+      <stop offset="0.4" stop-color="#FF8A3D" stop-opacity="0.11"/>
+      <stop offset="1" stop-color="#FF8A3D" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bloom" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFB46B" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#FF8A3D" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="panel"><rect x="12" y="62" width="896" height="204" rx="2"/></clipPath>
+    <filter id="lift" x="-5%" y="-20%" width="110%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- 框：朱砂外框 + 黑漆面 -->
+  <rect x="6" y="56" width="908" height="216" rx="5" fill="url(#cinnabar)" filter="url(#lift)"/>
+  <rect x="12" y="62" width="896" height="204" rx="2" fill="url(#lacquer)"/>
+  <!-- 灯光落在漆面 -->
+  <rect x="12" y="62" width="896" height="204" fill="url(#warm)" clip-path="url(#panel)"/>
+  <!-- 描金内线 + 顶部菱格饰带 -->
+  <rect x="17" y="67" width="886" height="194" rx="1" fill="none" stroke="url(#gold)" stroke-width="1.5"/>
+  <path d="M22 72 L28 66 L34 72 L28 78 Z M34 72 L40 66 L46 72 L40 78 Z M46 72 L52 66 L58 72 L52 78 Z M58 72 L64 66 L70 72 L64 78 Z M70 72 L76 66 L82 72 L76 78 Z M82 72 L88 66 L94 72 L88 78 Z M94 72 L100 66 L106 72 L100 78 Z M106 72 L112 66 L118 72 L112 78 Z M118 72 L124 66 L130 72 L124 78 Z M130 72 L136 66 L142 72 L136 78 Z M142 72 L148 66 L154 72 L148 78 Z M154 72 L160 66 L166 72 L160 78 Z M166 72 L172 66 L178 72 L172 78 Z M178 72 L184 66 L190 72 L184 78 Z M190 72 L196 66 L202 72 L196 78 Z M202 72 L208 66 L214 72 L208 78 Z M214 72 L220 66 L226 72 L220 78 Z M226 72 L232 66 L238 72 L232 78 Z M238 72 L244 66 L250 72 L244 78 Z M250 72 L256 66 L262 72 L256 78 Z M262 72 L268 66 L274 72 L268 78 Z M274 72 L280 66 L286 72 L280 78 Z M286 72 L292 66 L298 72 L292 78 Z M298 72 L304 66 L310 72 L304 78 Z M310 72 L316 66 L322 72 L316 78 Z M322 72 L328 66 L334 72 L328 78 Z M334 72 L340 66 L346 72 L340 78 Z M346 72 L352 66 L358 72 L352 78 Z M358 72 L364 66 L370 72 L364 78 Z M370 72 L376 66 L382 72 L376 78 Z M382 72 L388 66 L394 72 L388 78 Z M394 72 L400 66 L406 72 L400 78 Z M406 72 L412 66 L418 72 L412 78 Z M418 72 L424 66 L430 72 L424 78 Z M430 72 L436 66 L442 72 L436 78 Z M442 72 L448 66 L454 72 L448 78 Z M454 72 L460 66 L466 72 L460 78 Z M466 72 L472 66 L478 72 L472 78 Z M478 72 L484 66 L490 72 L484 78 Z M490 72 L496 66 L502 72 L496 78 Z M502 72 L508 66 L514 72 L508 78 Z M514 72 L520 66 L526 72 L520 78 Z M526 72 L532 66 L538 72 L532 78 Z M538 72 L544 66 L550 72 L544 78 Z M550 72 L556 66 L562 72 L556 78 Z M562 72 L568 66 L574 72 L568 78 Z M574 72 L580 66 L586 72 L580 78 Z M586 72 L592 66 L598 72 L592 78 Z M598 72 L604 66 L610 72 L604 78 Z M610 72 L616 66 L622 72 L616 78 Z M622 72 L628 66 L634 72 L628 78 Z M634 72 L640 66 L646 72 L640 78 Z M646 72 L652 66 L658 72 L652 78 Z M658 72 L664 66 L670 72 L664 78 Z M670 72 L676 66 L682 72 L676 78 Z M682 72 L688 66 L694 72 L688 78 Z M694 72 L700 66 L706 72 L700 78 Z M706 72 L712 66 L718 72 L712 78 Z M718 72 L724 66 L730 72 L724 78 Z M730 72 L736 66 L742 72 L736 78 Z M742 72 L748 66 L754 72 L748 78 Z M754 72 L760 66 L766 72 L760 78 Z M766 72 L772 66 L778 72 L772 78 Z M778 72 L784 66 L790 72 L784 78 Z M790 72 L796 66 L802 72 L796 78 Z M802 72 L808 66 L814 72 L808 78 Z M814 72 L820 66 L826 72 L820 78 Z M826 72 L832 66 L838 72 L832 78 Z M838 72 L844 66 L850 72 L844 78 Z M850 72 L856 66 L862 72 L856 78 Z M862 72 L868 66 L874 72 L868 78 Z M874 72 L880 66 L886 72 L880 78 Z M886 72 L892 66 L898 72 L892 78 Z" fill="none" stroke="#D9A84E" stroke-width="1" stroke-opacity="0.45" clip-path="url(#panel)"/>
+  <path d="M17 79 H903" stroke="url(#gold)" stroke-width="1.5"/>
+
+  <!-- 两盏灯：小灯高、大灯低，灯体悬在框外并跨过上沿 -->
+  <ellipse cx="836" cy="82" rx="84" ry="74" fill="url(#bloom)"/>
+  <ellipse cx="752" cy="56" rx="52" ry="44" fill="url(#bloom)" opacity="0.7"/>
+  <path d="M752 6 V20 M836 6 V26" stroke="#B83B38" stroke-width="2"/>
+  <image href="ornament/lantern.png" x="705.9" y="7.2" width="92.2" height="115.2"/>
+  <image href="ornament/lantern.png" x="764.3" y="4.2" width="143.4" height="179.2"/>
+  <!-- 横梁：自右侧出血伸入，压住吊绳 -->
+  <rect x="694" y="-4" width="226" height="11" fill="url(#cinnabar)"/>
+  <path d="M694 6.25 H920" stroke="#D9A84E" stroke-width="1.5"/>
+  <circle cx="694" cy="1.5" r="7" fill="url(#gold)"/>
+  <circle cx="694" cy="1.5" r="2.8" fill="#9A2E2C"/>
+
+  <g font-family="Songti SC">
+    <!-- 名牌：朱砂木牌描金，压在饰带下沿 -->
+    <rect x="44" y="73" width="72" height="31" rx="2" fill="url(#cinnabar)"/>
+    <rect x="47.5" y="76.5" width="65" height="24" rx="1" fill="none" stroke="#D9A84E" stroke-width="1.5"/>
+    <text x="80" y="95.5" font-size="20" font-weight="700" fill="#FFF1D8" text-anchor="middle" letter-spacing="1">奈奈</text>
+    <!-- 回复引用 -->
+    <rect x="44" y="120" width="2" height="18" rx="1" fill="#C7A88C" opacity="0.7"/>
+    <text x="54" y="134" font-size="14" fill="#C7A88C"><tspan font-weight="700">星野ほたる：</tspan>主播晚上好！今天打什么字呀</text>
+    <!-- 提及 + 正文 -->
+    <rect x="44" y="157" width="150" height="31" rx="3" fill="#D9A84E" fill-opacity="0.15"/>
+    <circle cx="60" cy="172.5" r="10.5" fill="#B83B38"/>
+    <text x="76" y="180" font-size="21" font-weight="700" fill="#F2CE8A">星野ほたる</text>
+    <text x="204" y="182" font-size="26" fill="#F6E7D4">晚上好！今天也谢谢你来～</text>
+    <text x="44" y="224" font-size="26" fill="#F6E7D4">我们接着上次的故事讲吧。</text>
+  </g>
+</svg>

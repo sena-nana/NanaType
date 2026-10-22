@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="214" viewBox="0 0 760 214">
+  <!-- 气泡 bubble · 设计稿：糖果贴纸——浅粉渐变底、深梅色粗描边、粉色色块错位阴影（不用黑）、圆头尾巴；梅色描边的糖果胶囊名牌；右上一枚掀起一角的爱心贴纸。region 由 184 加高到 214，容纳尾巴与错位阴影 -->
+  <defs>
+    <path id="bub" d="M48 22 H694 A30 30 0 0 1 724 52 V156 A30 30 0 0 1 694 186 H146 C136 196 116 205 92 207 Q84 207 87 201 C98 196 106 192 110 186 H48 A30 30 0 0 1 18 156 V52 A30 30 0 0 1 48 22 Z"/>
+    <linearGradient id="candy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFF4F8"/>
+      <stop offset="1" stop-color="#FFE3EE"/>
+    </linearGradient>
+    <linearGradient id="pill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF9CBF"/>
+      <stop offset="1" stop-color="#FF7AA8"/>
+    </linearGradient>
+    <linearGradient id="flap" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EBD3DE"/>
+    </linearGradient>
+    <filter id="peel" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="-1" dy="1.5" stdDeviation="1.2" flood-color="#7A2E59" flood-opacity="0.35"/>
+    </filter>
+    <filter id="stick" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="1" dy="2" stdDeviation="1.5" flood-color="#7A2E59" flood-opacity="0.25"/>
+    </filter>
+    <mask id="peeled">
+      <rect x="-40" y="-40" width="80" height="80" fill="#fff"/>
+      <path d="M-4 -30 L30 -30 L30 4 Z" fill="#000"/>
+    </mask>
+  </defs>
+  <!-- 粉色色块错位阴影 -->
+  <use href="#bub" transform="translate(8 8)" fill="#FFB3CF"/>
+  <!-- 糖果底 + 梅色粗描边 -->
+  <use href="#bub" fill="url(#candy)" stroke="#7A2E59" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- 糖果高光 -->
+  <path d="M33 72 V58 A22 22 0 0 1 44 39" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" opacity="0.95"/>
+  <circle cx="33" cy="84" r="2.5" fill="#FFFFFF" opacity="0.95"/>
+  <!-- 爱心贴纸（右上，掀起一角） -->
+  <g transform="translate(712 30) rotate(14) scale(1.15)">
+    <g mask="url(#peeled)" filter="url(#stick)">
+      <path d="M0 13 C-17 3 -21 -8 -15 -14 C-9 -20 -2 -17 0 -11 C2 -17 9 -20 15 -14 C21 -8 17 3 0 13 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="8" stroke-linejoin="round"/>
+      <path d="M0 13 C-17 3 -21 -8 -15 -14 C-9 -20 -2 -17 0 -11 C2 -17 9 -20 15 -14 C21 -8 17 3 0 13 Z" fill="#FF7AA8" stroke="#7A2E59" stroke-width="2.5" stroke-linejoin="round"/>
+      <ellipse cx="-9" cy="-9" rx="3.2" ry="2" transform="rotate(-35 -9 -9)" fill="#FFFFFF" opacity="0.85"/>
+    </g>
+    <path d="M7 -19 Q5 -10 8 -8 Q11 -5 19 -7 Z" fill="url(#flap)" stroke="#E2BFD0" stroke-width="0.8" stroke-linejoin="round" filter="url(#peel)"/>
+  </g>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <!-- 名牌：梅色描边糖果胶囊 -->
+    <rect x="51" y="11" width="72" height="30" rx="15" fill="#FFB3CF"/>
+    <rect x="48" y="8" width="72" height="30" rx="15" fill="url(#pill)" stroke="#7A2E59" stroke-width="3"/>
+    <rect x="58" y="12" width="40" height="5" rx="2.5" fill="#FFFFFF" opacity="0.55"/>
+    <text x="84" y="30" font-size="19" font-weight="700" fill="#5A1E42" text-anchor="middle">奈奈</text>
+    <!-- 回复引用 -->
+    <rect x="48" y="59" width="2" height="16" rx="1" fill="#86566F" opacity="0.7"/>
+    <text x="57" y="72" font-size="15" fill="#86566F"><tspan font-weight="600">星野ほたる：</tspan>主播晚上好！今天打什么字呀</text>
+    <!-- 提及：浅粉底 + 梅色字 -->
+    <rect x="48" y="88" width="155" height="30" rx="15" fill="#FFD6E6"/>
+    <circle cx="63" cy="103" r="10" fill="#FFB3CF" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="78" y="111" font-size="23" font-weight="600" fill="#7A2E59">星野ほたる</text>
+    <text x="211" y="113" font-size="28" font-weight="600" fill="#4A2440">晚上好！今天也谢谢你来～</text>
+    <text x="48" y="152" font-size="28" font-weight="600" fill="#4A2440">我们接着上次的故事讲吧。</text>
+  </g>
+  <!-- 继续提示 ▼ -->
+  <path d="M682 152 H698 Q701 152 699.5 154.6 L692.6 165 Q690 168.6 687.4 165 L680.5 154.6 Q679 152 682 152 Z" fill="#FF7AA8" stroke="#7A2E59" stroke-width="2" stroke-linejoin="round"/>
+</svg>

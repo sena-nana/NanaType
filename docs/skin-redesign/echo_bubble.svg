@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="210" viewBox="0 0 1280 210">
+  <!-- Echo 气泡 echo_bubble · 还原稿：5px 灰描边圆角框 + 11px 灰色错位硬投影、菜单栏照 Echo-Live 原作不改；只修共性——提及改浅底 #0000000F + 原文字色、头像占位用原作灰、继续提示去光环蓝。region 由 180 加高到 210（框 169→199），容纳第二行正文 -->
+  <rect x="11" y="11" width="1269" height="199" rx="20" fill="#888888"/>
+  <rect x="2.5" y="2.5" width="1264" height="194" rx="17.5" fill="#FFFFFF" stroke="#888888" stroke-width="5"/>
+  <g font-family="PingFang SC, Hiragino Sans GB" fill="#202124">
+    <text x="39" y="44" font-size="27">奈奈</text>
+    <rect x="66" y="52" width="2" height="18" fill="#C0C4CC"/>
+    <text x="75" y="66" font-size="14" fill="#606266"><tspan font-weight="600">星野ほたる：</tspan>主播晚上好！今天打什么字呀</text>
+    <rect x="66" y="81" width="148" height="30" rx="15" fill="#000000" fill-opacity="0.06"/>
+    <circle cx="81" cy="96" r="10" fill="#C0C4CC"/>
+    <text x="96" y="104" font-size="22">星野ほたる</text>
+    <text x="222" y="106" font-size="27">晚上好！今天也谢谢你来～</text>
+    <text x="66" y="144" font-size="27">我们接着上次的故事讲吧。</text>
+    <path d="M400 134 H412 L406 141 Z" fill="#888888"/>
+    <g font-size="18" fill="#888888">
+      <text x="62" y="183">SAVE</text>
+      <text x="121" y="183">LOAD</text>
+      <text x="182" y="183">Q.SAVE</text>
+      <text x="257" y="183">Q.LOAD</text>
+      <text x="334" y="183">« ‹ › »</text>
+      <text x="399" y="183">HISTORY</text>
+      <text x="490" y="183">✕</text>
+    </g>
+  </g>
+</svg>

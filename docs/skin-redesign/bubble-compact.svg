@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 气泡 bubble · 紧凑态（300 宽窄窗）：去尾巴与爱心贴纸，保留梅色描边、粉色错位阴影和 #FF7AA8 糖果胶囊名牌 -->
+  <defs>
+    <linearGradient id="candy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFF4F8"/>
+      <stop offset="1" stop-color="#FFE3EE"/>
+    </linearGradient>
+  </defs>
+  <rect x="9" y="9" width="285" height="105" rx="20" fill="#FFB3CF"/>
+  <rect x="5" y="5" width="285" height="105" rx="20" fill="url(#candy)" stroke="#7A2E59" stroke-width="3"/>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <rect x="18" y="15" width="50" height="22" rx="11" fill="#FF7AA8" stroke="#7A2E59" stroke-width="2"/>
+    <text x="43" y="31" font-size="14" font-weight="700" fill="#5A1E42" text-anchor="middle">奈奈</text>
+    <text x="18" y="68" font-size="20" font-weight="600" fill="#4A2440">晚上好！今天也谢谢</text>
+    <text x="18" y="96" font-size="20" font-weight="600" fill="#4A2440">你来～我们接着讲吧。</text>
+  </g>
+</svg>

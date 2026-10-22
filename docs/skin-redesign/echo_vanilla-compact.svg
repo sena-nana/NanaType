@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- Echo 原版 echo_vanilla · 紧凑态（300 宽窄窗）：去菜单栏，名牌胶囊改原作强调色 #606266（不再用光环蓝） -->
+  <rect x="0" y="14" width="300" height="106" fill="#FFFFFF"/>
+  <rect x="0" y="14" width="300" height="1.5" fill="#CCCCCC"/>
+  <path d="M287 14 H300 V27 Z" fill="#CCCCCC"/>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <rect x="16" y="2" width="52" height="24" rx="12" fill="#606266"/>
+    <text x="42" y="19" font-size="14" fill="#FFFFFF" text-anchor="middle">奈奈</text>
+    <text x="16" y="66" font-size="20" fill="#202124">晚上好！今天也谢谢</text>
+    <text x="16" y="96" font-size="20" fill="#202124">你来～我们接着讲吧。</text>
+  </g>
+</svg>

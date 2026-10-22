@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="214" viewBox="0 0 760 214">
+  <!-- 漫画 comic · 设计稿：黑白印刷 + 一个印刷黄专色；粗细变化的手绘墨线（两道错位墨线叠成）、尖尾巴、硬黑错位投影；网点只在左上与右下角渐疏；速度线在框外右侧；说话人是倾斜 -3° 的黄色说明框 -->
+  <defs>
+    <path id="panel" d="M34 28 Q360 23 690 27 Q699 28 699 37 Q701 100 697 166 Q696 175 687 175 Q400 178 180 176 Q146 189 104 201 Q116 189 118 176 Q70 176 35 175 Q25 174 25 165 Q22 100 26 37 Q26 28 34 28 Z"/>
+    <clipPath id="inside"><use href="#panel"/></clipPath>
+    <pattern id="tone" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <circle cx="3.5" cy="3.5" r="1.6" fill="#111111"/>
+    </pattern>
+    <pattern id="toneFine" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <circle cx="2" cy="2" r="0.9" fill="#111111"/>
+    </pattern>
+    <radialGradient id="fadeTL" cx="18" cy="20" r="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.55"/>
+      <stop offset="0.45" stop-color="#fff" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="fadeBR" cx="704" cy="182" r="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.6"/>
+      <stop offset="0.5" stop-color="#fff" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="mTL"><rect width="760" height="214" fill="url(#fadeTL)"/></mask>
+    <mask id="mBR"><rect width="760" height="214" fill="url(#fadeBR)"/></mask>
+  </defs>
+  <!-- 速度线（框外右侧，region 余量） -->
+  <g fill="#111111">
+    <path d="M716 44 L750 38 L716 48 Z"/>
+    <path d="M718 63 L740 59.5 L718 66 Z"/>
+    <path d="M716 80 L756 76 L716 84.5 Z"/>
+    <path d="M720 99 L738 98.5 L720 101.5 Z"/>
+    <path d="M716 116 L752 119 L716 120.5 Z"/>
+    <path d="M718 134 L742 138 L718 137.5 Z"/>
+    <path d="M716 150 L748 158 L716 154 Z"/>
+  </g>
+  <!-- 硬黑错位投影 -->
+  <use href="#panel" transform="translate(9 9)" fill="#111111"/>
+  <!-- 墨线：右下加重的第二道 + 主线 -->
+  <use href="#panel" transform="translate(2.5 2.5)" fill="#111111" stroke="#111111" stroke-width="6" stroke-linejoin="round"/>
+  <use href="#panel" fill="#111111" stroke="#111111" stroke-width="5" stroke-linejoin="miter"/>
+  <use href="#panel" fill="#FFFFFF"/>
+  <!-- 角落网点 -->
+  <g clip-path="url(#inside)">
+    <rect width="760" height="214" fill="url(#tone)" mask="url(#mTL)"/>
+    <rect width="760" height="214" fill="url(#tone)" mask="url(#mBR)"/>
+  </g>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <!-- 说话人：倾斜的黄色说明框 -->
+    <g transform="rotate(-3 90 22)">
+      <rect x="57" y="10" width="72" height="30" fill="#111111"/>
+      <rect x="53" y="6" width="72" height="30" fill="#FFD400" stroke="#111111" stroke-width="2.5"/>
+      <text x="89" y="28" font-size="20" font-weight="700" fill="#111111" text-anchor="middle">奈奈</text>
+    </g>
+    <!-- 回复引用 -->
+    <rect x="56" y="60" width="2" height="16" fill="#555555"/>
+    <text x="65" y="73" font-size="15" fill="#555555"><tspan font-weight="600">星野ほたる：</tspan>主播晚上好！今天打什么字呀</text>
+    <!-- 提及：浅灰底 + 黑字，头像是网点圆 -->
+    <rect x="56" y="91" width="157" height="30" rx="5" fill="#EDEDED"/>
+    <circle cx="71" cy="106" r="10" fill="#FFFFFF"/>
+    <circle cx="71" cy="106" r="10" fill="url(#toneFine)"/>
+    <circle cx="71" cy="106" r="10" fill="none" stroke="#111111" stroke-width="1.5"/>
+    <text x="87" y="114" font-size="23" font-weight="600" fill="#111111">星野ほたる</text>
+    <text x="221" y="116" font-size="28" font-weight="600" fill="#111111">晚上好！今天也谢谢你来～</text>
+    <text x="56" y="155" font-size="28" font-weight="600" fill="#111111">我们接着上次的故事讲吧。</text>
+  </g>
+  <!-- 继续提示 ▶ -->
+  <path d="M662 144 L678 152 L662 160 Z" fill="#FFD400" stroke="#111111" stroke-width="2" stroke-linejoin="round"/>
+</svg>

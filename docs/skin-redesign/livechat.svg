@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="184" viewBox="0 0 800 184">
+  <!-- 直播弹幕 livechat · 保持现有风格：渐变圆头像、浅青标题带、青色纯文字姓名、珊瑚色 LIVE。只做共性修正：浅底提及、头像占位取青色、两行正文的框高 -->
+  <defs>
+    <linearGradient id="avatar" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7ED0FF"/>
+      <stop offset="1" stop-color="#FF9EC4"/>
+    </linearGradient>
+    <linearGradient id="live" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F5506F"/>
+      <stop offset="1" stop-color="#FF8A5C"/>
+    </linearGradient>
+    <filter id="lift" x="-5%" y="-20%" width="110%" height="150%">
+      <feDropShadow dx="0" dy="4" stdDeviation="7" flood-color="#1F2A36" flood-opacity="0.2"/>
+    </filter>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#1F2A36" flood-opacity="0.2"/>
+    </filter>
+    <clipPath id="card"><path d="M68 14 H762 a18 18 0 0 1 18 18 V152 a18 18 0 0 1 -18 18 H82 a18 18 0 0 1 -18 -18 V18 a4 4 0 0 1 4 -4 Z"/></clipPath>
+  </defs>
+  <path d="M68 14 H762 a18 18 0 0 1 18 18 V152 a18 18 0 0 1 -18 18 H82 a18 18 0 0 1 -18 -18 V18 a4 4 0 0 1 4 -4 Z" fill="#FFFFFF" filter="url(#lift)"/>
+  <rect x="64" y="14" width="716" height="38" fill="#EEF7FB" clip-path="url(#card)"/>
+  <path d="M68 14.5 H762 a17.5 17.5 0 0 1 17.5 17.5 V152 a17.5 17.5 0 0 1 -17.5 17.5 H82 a17.5 17.5 0 0 1 -17.5 -17.5 V18 a3.5 3.5 0 0 1 3.5 -3.5 Z" fill="none" stroke="#CBE0EF" stroke-width="1"/>
+  <circle cx="29" cy="33" r="21" fill="url(#avatar)" stroke="#FFFFFF" stroke-width="2" filter="url(#soft)"/>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <text x="29" y="40" font-size="20" fill="#FFFFFF" text-anchor="middle">♪</text>
+    <rect x="722" y="26" width="44" height="20" rx="10" fill="url(#live)"/>
+    <text x="744" y="40" font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.5">LIVE</text>
+    <circle cx="737" cy="54" r="1.8" fill="#9FBFD0"/>
+    <circle cx="744" cy="52" r="1.8" fill="#9FBFD0"/>
+    <circle cx="751" cy="54" r="1.8" fill="#9FBFD0"/>
+    <text x="82" y="40" font-size="17" font-weight="600" fill="#137C9A">奈奈</text>
+    <rect x="84" y="62" width="2" height="17" rx="1" fill="#23ADE5"/>
+    <text x="94" y="75" font-size="14" fill="#5F6E80"><tspan font-weight="700" fill="#3E4C5C">星野ほたる：</tspan>主播晚上好！今天打什么字呀</text>
+    <rect x="84" y="92" width="145" height="28" rx="14" fill="#23ADE5" fill-opacity="0.14"/>
+    <circle cx="98" cy="106" r="9" fill="#7ED0FF"/>
+    <text x="112" y="113" font-size="21" fill="#106F8A" font-weight="600">星野ほたる</text>
+    <text x="237" y="115" font-size="26" fill="#1F2A36">晚上好！今天也谢谢你来～</text>
+    <text x="84" y="153" font-size="26" fill="#1F2A36">我们接着上次的故事讲吧。</text>
+    <path d="M756 150 l9 0 l-4.5 6 z" fill="#23ADE5"/>
+  </g>
+</svg>

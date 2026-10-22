@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 蔷薇哥特 gothic · 紧凑态（300 宽窄窗）：去两端尖窗，只留中轴小山墙与玫瑰窗作识别 -->
+  <defs>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A1420"/>
+      <stop offset="1" stop-color="#17111A"/>
+    </linearGradient>
+    <linearGradient id="pewter" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#D6D7DF"/>
+      <stop offset="0.5" stop-color="#A8A9B4"/>
+      <stop offset="1" stop-color="#7C7D89"/>
+    </linearGradient>
+  </defs>
+  <path d="M10 14 H126 C132 7 140 3 150 1 C160 3 168 7 174 14 H290 L296 20 V110 L290 116 H10 L4 110 V20 Z" fill="url(#face)" stroke="url(#pewter)" stroke-width="2" stroke-linejoin="round"/>
+  <g transform="translate(150 17)">
+    <circle r="10" fill="#120C14" stroke="#A8A9B4" stroke-width="1.5"/>
+    <g stroke="#17111A" stroke-width="0.8">
+      <circle cx="0" cy="-5.5" r="3.2" fill="#B3224A"/>
+      <circle cx="5.5" cy="0" r="3.2" fill="#2F4DA8"/>
+      <circle cx="0" cy="5.5" r="3.2" fill="#B3224A"/>
+      <circle cx="-5.5" cy="0" r="3.2" fill="#2F4DA8"/>
+    </g>
+    <circle r="2.4" fill="#D99A3A"/>
+  </g>
+  <g font-family="Songti SC">
+    <path d="M22 22 H62 L66 26 V35 L64 38 L44 42 L20 38 L18 35 V26 Z" fill="#B3224A" stroke="url(#pewter)" stroke-width="1.5" stroke-linejoin="round"/>
+    <text x="42" y="36" font-size="13" font-weight="700" fill="#F3E6EC" text-anchor="middle" letter-spacing="1">奈奈</text>
+    <text x="18" y="72" font-size="20" fill="#F3E6EC">晚上好！今天也谢谢</text>
+    <text x="18" y="101" font-size="20" fill="#F3E6EC">你来～我们接着讲吧。</text>
+  </g>
+</svg>

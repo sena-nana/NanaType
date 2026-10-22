@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 直播弹幕 livechat · 紧凑态（300 宽窄窗）：去头像，保留浅青标题带与 LIVE -->
+  <defs>
+    <linearGradient id="live" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F5506F"/>
+      <stop offset="1" stop-color="#FF8A5C"/>
+    </linearGradient>
+    <clipPath id="card"><rect x="4" y="4" width="292" height="112" rx="14"/></clipPath>
+  </defs>
+  <rect x="4" y="4" width="292" height="112" rx="14" fill="#FFFFFF" stroke="#CBE0EF"/>
+  <rect x="4" y="4" width="292" height="28" fill="#EEF7FB" clip-path="url(#card)"/>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <text x="16" y="23" font-size="13" font-weight="600" fill="#137C9A">奈奈</text>
+    <rect x="252" y="11" width="34" height="15" rx="7.5" fill="url(#live)"/>
+    <text x="269" y="22" font-size="8" font-weight="700" fill="#FFFFFF" text-anchor="middle">LIVE</text>
+    <text x="16" y="64" font-size="20" fill="#1F2A36">晚上好！今天也谢谢</text>
+    <text x="16" y="94" font-size="20" fill="#1F2A36">你来～我们接着讲吧。</text>
+  </g>
+</svg>

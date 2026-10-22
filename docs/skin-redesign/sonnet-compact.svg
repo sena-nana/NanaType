@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 十四行诗 sonnet · 紧凑态（300 宽窄窗）：名字 #E5BF83 字、去花体与光尘，保留暖金光晕。皮肤透明，暗色画面只是示意背景 -->
+  <defs>
+    <linearGradient id="night" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1F1A2B"/>
+      <stop offset="0.55" stop-color="#2C2333"/>
+      <stop offset="1" stop-color="#3A2A2A"/>
+    </linearGradient>
+    <filter id="glow" x="-5%" y="-40%" width="110%" height="180%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="a"/>
+      <feOffset in="a" dy="1" result="ao"/>
+      <feFlood flood-color="#17121D" flood-opacity="0.7"/>
+      <feComposite in2="ao" operator="in" result="dark"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="b"/>
+      <feFlood flood-color="#FFD593" flood-opacity="0.35"/>
+      <feComposite in2="b" operator="in" result="gold"/>
+      <feMerge><feMergeNode in="gold"/><feMergeNode in="dark"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="300" height="120" fill="url(#night)"/>
+  <g font-family="LXGW WenKai" filter="url(#glow)">
+    <text x="16" y="30" font-size="16" fill="#E5BF83">奈奈</text>
+    <text x="16" y="68" font-size="22" fill="#FFF8EA">晚上好！今天也谢谢</text>
+    <text x="16" y="100" font-size="22" fill="#FFF8EA">你来～我们接着讲吧。</text>
+  </g>
+</svg>

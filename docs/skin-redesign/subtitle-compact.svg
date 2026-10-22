@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 字幕 subtitle · 紧凑态（300 宽窄窗）：名字 #FFD27F 字、无底板，两行居中白字黑描边。皮肤透明，暗色游戏画面只是示意背景 -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#27304A"/>
+      <stop offset="0.6" stop-color="#3D3448"/>
+      <stop offset="1" stop-color="#4A3A36"/>
+    </linearGradient>
+    <filter id="haze" x="-20%" y="-50%" width="140%" height="200%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <filter id="soft" x="-5%" y="-30%" width="110%" height="160%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+  <rect width="300" height="120" fill="url(#sky)"/>
+  <g filter="url(#haze)">
+    <ellipse cx="240" cy="24" rx="40" ry="20" fill="#E9A15F" opacity="0.45"/>
+    <path d="M-20 90 Q80 60 160 84 T320 80 V140 H-20 Z" fill="#1E2531"/>
+  </g>
+  <g font-family="PingFang SC, Hiragino Sans GB" font-weight="600" text-anchor="middle" paint-order="stroke" stroke="#000000" stroke-linejoin="round" filter="url(#soft)">
+    <text x="150" y="30" font-size="14" fill="#FFD27F" stroke-width="3.5">奈奈</text>
+    <text x="150" y="68" font-size="22" fill="#FFFFFF" stroke-width="4.5">晚上好！今天也谢谢</text>
+    <text x="150" y="100" font-size="22" fill="#FFFFFF" stroke-width="4.5">你来～我们接着讲吧。</text>
+  </g>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- Echo 气泡 echo_bubble · 紧凑态（300 宽窄窗）：去菜单栏，描边与错位投影按比例收细，名牌胶囊用原作强调色 #888888 -->
+  <rect x="7" y="18" width="293" height="102" rx="14" fill="#888888"/>
+  <rect x="1.5" y="12.5" width="291" height="100" rx="12.5" fill="#FFFFFF" stroke="#888888" stroke-width="3"/>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <rect x="16" y="2" width="52" height="24" rx="12" fill="#888888" stroke="#FFFFFF" stroke-width="2"/>
+    <text x="42" y="19" font-size="14" fill="#FFFFFF" text-anchor="middle">奈奈</text>
+    <text x="16" y="64" font-size="20" fill="#202124">晚上好！今天也谢谢</text>
+    <text x="16" y="94" font-size="20" fill="#202124">你来～我们接着讲吧。</text>
+  </g>
+</svg>

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="200" viewBox="0 0 1280 200">
+  <!-- Echo 虚空 echo_void · 还原稿：无框、深色字，构图、字号与菜单栏照 Echo-Live 原作不改；只修共性——提及改浅底 #0000000F + 原文字色、头像占位用原作灰、继续提示去光环蓝。皮肤透明，棋盘格只是示意透明背景。region 由 180 加高到 200，容纳第二行正文 -->
+  <defs>
+    <pattern id="checker" width="32" height="32" patternUnits="userSpaceOnUse">
+      <rect width="32" height="32" fill="#E4E4E4"/>
+      <rect width="16" height="16" fill="#D2D2D2"/>
+      <rect x="16" y="16" width="16" height="16" fill="#D2D2D2"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="200" fill="url(#checker)"/>
+  <g font-family="PingFang SC, Hiragino Sans GB" fill="#202124">
+    <text x="146" y="40" font-size="27">奈奈</text>
+    <rect x="173" y="54" width="2" height="18" fill="#9A9DA3"/>
+    <text x="182" y="68" font-size="14" fill="#4A4D52"><tspan font-weight="600">星野ほたる：</tspan>主播晚上好！今天打什么字呀</text>
+    <rect x="173" y="83" width="148" height="30" rx="15" fill="#000000" fill-opacity="0.06"/>
+    <circle cx="188" cy="98" r="10" fill="#A8ABB2"/>
+    <text x="203" y="106" font-size="22">星野ほたる</text>
+    <text x="329" y="108" font-size="27">晚上好！今天也谢谢你来～</text>
+    <text x="173" y="146" font-size="27">我们接着上次的故事讲吧。</text>
+    <path d="M507 136 H519 L513 143 Z" fill="#73767C"/>
+    <g font-size="18" fill="#73767C">
+      <text x="169" y="187">SAVE</text>
+      <text x="228" y="187">LOAD</text>
+      <text x="289" y="187">Q.SAVE</text>
+      <text x="364" y="187">Q.LOAD</text>
+      <text x="441" y="187">« ‹ › »</text>
+      <text x="506" y="187">HISTORY</text>
+      <text x="597" y="187">✕</text>
+    </g>
+  </g>
+</svg>

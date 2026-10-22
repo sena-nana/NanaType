@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="240" viewBox="0 0 900 240">
+  <!-- 情书 love_letter · 设计稿：象牙罗纹信纸（竖向链纹 + 极细帘纹）+ 信笺横格对齐正文基线；From 用 Tangerine；右下一枚酒红火漆是唯一强装饰 -->
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFDF7"/>
+      <stop offset="1" stop-color="#FFFBF2"/>
+    </linearGradient>
+    <!-- 帘纹：每 3px 一条极淡横线 -->
+    <pattern id="laid" width="6" height="3" patternUnits="userSpaceOnUse">
+      <rect width="6" height="1" fill="#E9DCC8" opacity="0.35"/>
+    </pattern>
+    <!-- 链纹：每 26px 一条竖线，边缘略晕 -->
+    <pattern id="chain" x="30" width="46" height="240" patternUnits="userSpaceOnUse">
+      <rect x="0" width="1.2" height="240" fill="#E9DCC8"/>
+      <rect x="-1.5" width="4" height="240" fill="#E9DCC8" opacity="0.18"/>
+    </pattern>
+    <filter id="fiber" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02 0.004" numOctaves="3" seed="13" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.85  0 0 0 0 0.75  0 0 0 0 0.6  0.6 0 0 0 -0.25" result="cloud"/>
+      <feComposite in="cloud" in2="SourceGraphic" operator="in"/>
+    </filter>
+    <filter id="lift" x="-3%" y="-10%" width="106%" height="125%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#4E2A33" flood-opacity="0.14"/>
+    </filter>
+    <!-- 火漆：不规则外缘 -->
+    <filter id="blob" x="-30%" y="-30%" width="160%" height="160%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="2" seed="27" result="d"/>
+      <feDisplacementMap in="SourceGraphic" in2="d" scale="6" xChannelSelector="R" yChannelSelector="G" result="shape"/>
+      <feDropShadow in="shape" dx="1" dy="2.5" stdDeviation="2" flood-color="#2A0A12" flood-opacity="0.45"/>
+    </filter>
+    <radialGradient id="wax" cx="0.38" cy="0.32" r="0.75">
+      <stop offset="0" stop-color="#9A2E45"/>
+      <stop offset="0.55" stop-color="#7E1F35"/>
+      <stop offset="1" stop-color="#561020"/>
+    </radialGradient>
+    <radialGradient id="well" cx="0.6" cy="0.65" r="0.7">
+      <stop offset="0" stop-color="#7A1C31"/>
+      <stop offset="1" stop-color="#5E1426"/>
+    </radialGradient>
+    <clipPath id="sheet"><rect x="6" y="6" width="888" height="226" rx="2"/></clipPath>
+  </defs>
+
+  <!-- 信纸 -->
+  <rect x="6" y="6" width="888" height="226" rx="2" fill="url(#paper)" filter="url(#lift)"/>
+  <g clip-path="url(#sheet)">
+    <rect x="6" y="6" width="888" height="226" fill="url(#laid)"/>
+    <rect x="6" y="6" width="888" height="226" fill="url(#chain)" opacity="0.45"/>
+    <rect x="6" y="6" width="888" height="226" fill="#000" filter="url(#fiber)"/>
+  </g>
+  <rect x="6.5" y="6.5" width="887" height="225" rx="1.5" fill="none" stroke="#E4C9C9" stroke-width="1"/>
+
+  <!-- 信笺横格：间距 = 行高 51.2，落在字脚 -->
+  <g transform="translate(0 6)">
+  <g stroke="#E4C9C9" stroke-width="1.5">
+    <line x1="30" y1="82" x2="870" y2="82"/>
+    <line x1="30" y1="133.2" x2="870" y2="133.2"/>
+    <line x1="30" y1="184.4" x2="870" y2="184.4"/>
+  </g>
+
+  <!-- From 奈奈 -->
+  <text x="48" y="47" font-family="Tangerine" font-size="38" fill="#7E1F35">From</text>
+  <g font-family="LXGW WenKai">
+    <text x="116" y="46" font-size="20" fill="#7E1F35">奈奈</text>
+
+    <!-- 引用：字脚落在第一条横格上 -->
+    <rect x="48" y="62" width="2" height="18" rx="1" fill="#7E5F68" opacity="0.55"/>
+    <text x="58" y="77.5" font-size="17" fill="#7E5F68">星野ほたる：主播晚上好！今天打什么字呀</text>
+
+    <!-- 提及 -->
+    <rect x="48" y="98" width="182" height="36" rx="18" fill="#7E1F35" fill-opacity="0.08"/>
+    <circle cx="66" cy="116" r="13" fill="#D9A3AE"/>
+    <text x="86" y="125.5" font-size="26" fill="#7E1F35">星野ほたる</text>
+
+    <text x="238" y="128.5" font-size="32" fill="#4E2A33">晚上好！今天也谢谢你来～</text>
+    <text x="48" y="179.7" font-size="32" fill="#4E2A33">我们接着上次的故事讲吧。</text>
+  </g>
+
+  </g>
+  <!-- 火漆 -->
+  <g transform="translate(824 180) rotate(-8)">
+    <path d="M33.5 0.0 C 34.0 3.1 33.9 6.4 33.8 9.9 C 33.6 13.4 34.2 17.9 32.5 20.9 C 30.9 23.9 27.1 26.0 24.0 27.7 C 20.9 29.4 17.3 29.8 14.1 30.9 C 10.9 32.0 8.0 34.2 4.9 34.2 C 1.8 34.2 -1.4 31.7 -4.5 31.0 C -7.6 30.3 -10.6 30.7 -13.7 29.9 C -16.7 29.1 -20.0 28.0 -22.8 26.3 C -25.6 24.6 -28.4 22.2 -30.5 19.6 C -32.6 16.9 -35.2 13.7 -35.4 10.4 C -35.6 7.1 -32.4 3.3 -31.7 0.0 C -31.1 -3.3 -32.3 -6.4 -31.6 -9.3 C -30.8 -12.2 -28.6 -14.7 -27.0 -17.3 C -25.4 -20.0 -23.9 -22.7 -21.8 -25.2 C -19.7 -27.6 -17.5 -31.0 -14.7 -32.1 C -11.8 -33.3 -7.8 -32.2 -4.6 -32.1 C -1.4 -32.0 1.6 -32.1 4.6 -31.7 C 7.6 -31.2 10.4 -30.2 13.4 -29.3 C 16.4 -28.4 20.1 -27.9 22.6 -26.1 C 25.1 -24.2 27.3 -21.2 28.6 -18.4 C 29.9 -15.5 29.7 -12.0 30.5 -9.0 C 31.3 -5.9 32.9 -3.1 33.5 0.0 Z" fill="url(#wax)" filter="url(#blob)"/>
+    <circle r="22.5" fill="url(#well)"/>
+    <circle r="22.5" fill="none" stroke="#3E0915" stroke-width="2" opacity="0.55" transform="translate(-0.8 -0.8)"/>
+    <circle r="22.5" fill="none" stroke="#B45468" stroke-width="1.5" opacity="0.7" transform="translate(0.9 0.9)"/>
+    <g transform="translate(0 1)">
+      <path d="M0 9 C -10 1 -13 -5 -9 -9 C -6 -12 -1.5 -11 0 -6.5 C 1.5 -11 6 -12 9 -9 C 13 -5 10 1 0 9 Z" fill="#C2667A" opacity="0.65" transform="translate(-1.1 -1.1)"/>
+      <path d="M0 9 C -10 1 -13 -5 -9 -9 C -6 -12 -1.5 -11 0 -6.5 C 1.5 -11 6 -12 9 -9 C 13 -5 10 1 0 9 Z" fill="#3E0915" opacity="0.6" transform="translate(1.1 1.1)"/>
+      <path d="M0 9 C -10 1 -13 -5 -9 -9 C -6 -12 -1.5 -11 0 -6.5 C 1.5 -11 6 -12 9 -9 C 13 -5 10 1 0 9 Z" fill="#82203A"/>
+    </g>
+    <ellipse cx="-14" cy="-20" rx="8" ry="3.5" fill="#FFFFFF" opacity="0.22" transform="rotate(-30 -14 -20)"/>
+  </g>
+</svg>

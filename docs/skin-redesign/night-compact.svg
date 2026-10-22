@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 夜色 night · 紧凑态（300 宽窄窗）：灯管只留外辉 + 管体 + 亮芯，去卡扣与继续提示；名牌仍打断上沿 -->
+  <defs>
+    <linearGradient id="board" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B1128"/>
+      <stop offset="1" stop-color="#120B1C"/>
+    </linearGradient>
+    <filter id="bloom" x="-10%" y="-30%" width="120%" height="160%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+    <filter id="litText" x="-40%" y="-60%" width="180%" height="220%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="b"/>
+      <feFlood flood-color="#FF4FB8" flood-opacity="0.9"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <path id="tube" d="M64 16 H280 A10 10 0 0 1 290 26 V100 A10 10 0 0 1 280 110 H20 A10 10 0 0 1 10 100 V26 A10 10 0 0 1 20 16 H22"/>
+  </defs>
+  <rect x="2" y="4" width="296" height="114" rx="14" fill="url(#board)"/>
+  <use href="#tube" fill="none" stroke="#FF4FB8" stroke-width="7" stroke-opacity="0.6" filter="url(#bloom)"/>
+  <use href="#tube" fill="none" stroke="#FF4FB8" stroke-width="2.5" stroke-linecap="round"/>
+  <use href="#tube" fill="none" stroke="#FFE3F4" stroke-width="1" stroke-linecap="round"/>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <text x="30" y="21" font-size="15" font-weight="700" fill="#FFE3F4" stroke="#FF4FB8" stroke-width="2" stroke-linejoin="round" paint-order="stroke" filter="url(#litText)">奈奈</text>
+    <text x="22" y="60" font-size="20" fill="#F3E9FF">晚上好！今天也谢谢</text>
+    <text x="22" y="90" font-size="20" fill="#F3E9FF">你来～我们接着讲吧。</text>
+  </g>
+</svg>

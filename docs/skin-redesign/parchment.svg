@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="178" viewBox="0 0 780 178">
+  <!-- 羊皮纸 parchment · 设计稿：犊皮纸斑驳 + 双压线框；深棕皮签内压金线，骑在上沿压线上；四角藤蔓用原角饰素材 -->
+  <defs>
+    <radialGradient id="vellum" cx="0.45" cy="0.42" r="0.75">
+      <stop offset="0" stop-color="#F8EBD1"/>
+      <stop offset="0.65" stop-color="#F4E3C3"/>
+      <stop offset="1" stop-color="#E9D1A4"/>
+    </radialGradient>
+    <linearGradient id="leather" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6E4024"/>
+      <stop offset="0.5" stop-color="#5C341C"/>
+      <stop offset="1" stop-color="#4A2914"/>
+    </linearGradient>
+    <!-- 犊皮纸：大块斑驳 + 细颗粒，按纸形裁切 -->
+    <filter id="mottle" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.006 0.011" numOctaves="4" seed="7" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.55  0 0 0 0 0.36  0 0 0 0 0.16  1.4 0 0 0 -0.58" result="blot"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3" result="g"/>
+      <feColorMatrix in="g" type="matrix" values="0 0 0 0 0.45  0 0 0 0 0.3  0 0 0 0 0.15  0 0 0 -1.1 0.62" result="grain"/>
+      <feMerge result="tex"><feMergeNode in="blot"/><feMergeNode in="grain"/></feMerge>
+      <feComposite in="tex" in2="SourceGraphic" operator="in"/>
+    </filter>
+    <!-- 皮革粒面 -->
+    <filter id="pebble" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="11" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.12  0 0 0 0 0.06  0 0 0 0 0.02  0 0 0 -2.2 1.25"/>
+      <feComposite in2="SourceGraphic" operator="in"/>
+    </filter>
+    <filter id="lift" x="-5%" y="-20%" width="110%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3.5" flood-color="#3A2617" flood-opacity="0.28"/>
+    </filter>
+    <filter id="labelShadow" x="-20%" y="-30%" width="140%" height="170%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.2" flood-color="#2A170B" flood-opacity="0.45"/>
+    </filter>
+    <clipPath id="paperClip"><rect x="4" y="8" width="772" height="164" rx="5"/></clipPath>
+  </defs>
+
+  <!-- 纸 -->
+  <rect x="4" y="8" width="772" height="164" rx="5" fill="url(#vellum)" filter="url(#lift)"/>
+  <rect x="4" y="8" width="772" height="164" rx="5" fill="#000" filter="url(#mottle)"/>
+  <rect x="4.75" y="8.75" width="770.5" height="162.5" rx="4.5" fill="none" stroke="#B48A55" stroke-width="1.5" opacity="0.55"/>
+
+  <!-- 双压线：暗线 + 下方 1px 亮边，读作压印而非描线 -->
+  <g fill="none">
+    <rect x="13" y="17" width="754" height="146" rx="2" stroke="#FFF6E2" stroke-width="1" opacity="0.7" transform="translate(0.8 0.8)"/>
+    <rect x="13" y="17" width="754" height="146" rx="2" stroke="#8A5A2B" stroke-width="1.5" opacity="0.75"/>
+    <rect x="18" y="22" width="744" height="136" rx="1" stroke="#FFF6E2" stroke-width="1" opacity="0.6" transform="translate(0.7 0.7)"/>
+    <rect x="18" y="22" width="744" height="136" rx="1" stroke="#8A5A2B" stroke-width="1" opacity="0.55"/>
+  </g>
+
+  <!-- 四角藤蔓（原 ornament.png 左上角饰，镜像到四角） -->
+  <g opacity="0.8">
+    <image href="ornament/parchment.png" width="720" height="280" transform="translate(18 18) scale(0.24)"/>
+    <image href="ornament/parchment.png" width="720" height="280" transform="translate(762 18) scale(-0.24 0.24)"/>
+    <image href="ornament/parchment.png" width="720" height="280" transform="translate(18 162) scale(0.24 -0.24)"/>
+    <image href="ornament/parchment.png" width="720" height="280" transform="translate(762 162) scale(-0.24 -0.24)"/>
+  </g>
+
+  <!-- 皮签：深棕皮革，内压金线，骑在双压线上沿 -->
+  <g filter="url(#labelShadow)">
+    <rect x="38" y="4" width="78" height="32" rx="3" fill="url(#leather)"/>
+  </g>
+  <rect x="38" y="4" width="78" height="32" rx="3" fill="#000" filter="url(#pebble)" opacity="0.6"/>
+  <rect x="38.5" y="4.5" width="77" height="31" rx="2.5" fill="none" stroke="#8C5A33" stroke-width="1" opacity="0.7"/>
+  <rect x="42.5" y="8.5" width="69" height="23" rx="1" fill="none" stroke="#D9B26A" stroke-width="1"/>
+  <g font-family="Songti SC">
+    <text x="77" y="27.5" font-size="20" font-weight="900" fill="#F0D79E" text-anchor="middle">奈奈</text>
+
+    <!-- 引用 -->
+    <rect x="38" y="43" width="2" height="17" rx="1" fill="#7A5A3C" opacity="0.6"/>
+    <text x="48" y="56.5" font-size="16" fill="#7A5A3C"><tspan font-weight="900">星野ほたる：</tspan>主播晚上好！今天打什么字呀</text>
+
+    <!-- 提及：浅皮色底 + 深棕字 -->
+    <rect x="38" y="72" width="168" height="32" rx="16" fill="#E3C99A"/>
+    <circle cx="54" cy="88" r="11" fill="#A9743F"/>
+    <text x="71" y="96.5" font-size="25" fill="#4A2E17">星野ほたる</text>
+
+    <text x="214" y="99" font-size="30" fill="#3A2617">晚上好！今天也谢谢你来～</text>
+    <text x="38" y="142" font-size="30" fill="#3A2617">我们接着上次的故事讲吧。</text>
+  </g>
+  <!-- 继续标记：皮签色小三角 -->
+  <path d="M720 134 l10 0 l-5 7 z" fill="#5C341C"/>
+</svg>

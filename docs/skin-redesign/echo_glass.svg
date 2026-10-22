@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="200" viewBox="0 0 1280 200">
+  <!-- Echo 玻璃 echo_glass · 还原稿：构图、字号与菜单栏照 Echo-Live 原作不改；只修共性——提及改浅底 #FFFFFF26 + 白字、头像占位用原作灰、继续提示去光环蓝。皮肤是透明渐变叠加层，底下的游戏画面只是示意背景，不属于皮肤。region 由 180 加高到 200，容纳第二行正文 -->
+  <defs>
+    <linearGradient id="scene" x1="0" y1="0" x2="1" y2="0.4">
+      <stop offset="0" stop-color="#9A8C9E"/>
+      <stop offset="0.5" stop-color="#C7A98F"/>
+      <stop offset="1" stop-color="#8F9A86"/>
+    </linearGradient>
+    <filter id="blur" x="-20%" y="-50%" width="140%" height="200%">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+    <linearGradient id="glass" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#000000" stop-opacity="0.6"/>
+      <stop offset="0.45" stop-color="#000000" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#000000"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="edge" x="-5%" y="-30%" width="110%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="1.25" result="b"/>
+      <feFlood flood-color="#000000"/>
+      <feComposite in2="b" operator="in" result="s"/>
+      <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- 示意背景 -->
+  <rect width="1280" height="200" fill="url(#scene)"/>
+  <g filter="url(#blur)">
+    <ellipse cx="980" cy="50" rx="160" ry="50" fill="#F2D3A8" opacity="0.6"/>
+    <path d="M-40 120 Q200 70 460 110 T900 100 T1320 110 V240 H-40 Z" fill="#6E6A5E"/>
+    <rect x="300" y="30" width="60" height="140" fill="#5B5560" opacity="0.7"/>
+  </g>
+  <!-- 皮肤：玻璃渐变 + 底部 70px 压暗 -->
+  <rect width="1280" height="200" fill="url(#glass)"/>
+  <rect y="130" width="1280" height="70" fill="url(#floor)"/>
+  <g font-family="PingFang SC, Hiragino Sans GB" fill="#FFFFFF" stroke="#000000" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round" filter="url(#edge)">
+    <text x="146" y="40" font-size="27">奈奈</text>
+    <rect x="173" y="54" width="2" height="18" fill="#DDDDDD" stroke="none"/>
+    <text x="182" y="68" font-size="14" fill="#E6E6E6" stroke-width="1"><tspan font-weight="600">星野ほたる：</tspan>主播晚上好！今天打什么字呀</text>
+    <rect x="173" y="83" width="148" height="30" rx="15" fill="#FFFFFF" fill-opacity="0.15" stroke="none"/>
+    <circle cx="188" cy="98" r="10" fill="#B8BEC8" stroke="none"/>
+    <text x="203" y="106" font-size="22">星野ほたる</text>
+    <text x="329" y="108" font-size="27">晚上好！今天也谢谢你来～</text>
+    <text x="173" y="146" font-size="27">我们接着上次的故事讲吧。</text>
+    <path d="M507 136 H519 L513 143 Z"/>
+  </g>
+  <g font-family="PingFang SC, Hiragino Sans GB" font-size="18" fill="#DDDDDD">
+    <text x="665" y="169">SAVE</text>
+    <text x="724" y="169">LOAD</text>
+    <text x="785" y="169">Q.SAVE</text>
+    <text x="860" y="169">Q.LOAD</text>
+    <text x="937" y="169">« ‹ › »</text>
+    <text x="1002" y="169">HISTORY</text>
+    <text x="1093" y="169">✕</text>
+  </g>
+</svg>

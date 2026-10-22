@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="204" viewBox="0 0 780 204">
+  <!-- 水墨 ink · 设计稿：生宣冷白 + 纤维；框只剩底边一段干笔，左侧留白；姓名前一方朱印；馆藏墨竹从右边出血，竹梢越过上沿。region 由 178 加高到 204：竹梢越框需顶部 14 余量，正文按 B32/1.4 两行实际需 184 -->
+  <defs>
+    <!-- 生宣：长短纤维 + 极淡云絮 -->
+    <filter id="xuan" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="turbulence" baseFrequency="0.07 0.1" numOctaves="1" seed="21" result="t"/>
+      <feColorMatrix in="t" type="matrix" values="0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.48  -9 0 0 0 0.16" result="fiber"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves="3" seed="4" result="c"/>
+      <feColorMatrix in="c" type="matrix" values="0 0 0 0 0.6  0 0 0 0 0.6  0 0 0 0 0.56  0.5 0 0 0 -0.2" result="cloud"/>
+      <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="1" seed="9" result="g"/>
+      <feColorMatrix in="g" type="matrix" values="0 0 0 0 0.3  0 0 0 0 0.3  0 0 0 0 0.3  0 0 0 -0.9 0.5" result="grain"/>
+      <feMerge result="tex"><feMergeNode in="cloud"/><feMergeNode in="fiber"/><feMergeNode in="grain"/></feMerge>
+      <feComposite in="tex" in2="SourceGraphic" operator="in"/>
+    </filter>
+    <!-- 干笔：沿笔向拉长的噪声做飞白 + 毛边位移 -->
+    <filter id="rough" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.18" numOctaves="2" seed="6" result="d"/>
+      <feDisplacementMap in="SourceGraphic" in2="d" scale="5" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="dryH" x="-5%" y="-40%" width="110%" height="180%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.005 0.32" numOctaves="3" seed="15" result="n"/>
+      <feComponentTransfer in="n" result="streak">
+        <feFuncA type="linear" slope="3.2" intercept="-0.85"/>
+      </feComponentTransfer>
+      <feTurbulence type="fractalNoise" baseFrequency="0.25" numOctaves="2" seed="2" result="d"/>
+      <feDisplacementMap in="SourceGraphic" in2="d" scale="4" xChannelSelector="R" yChannelSelector="G" result="rough"/>
+      <feComposite in="rough" in2="streak" operator="in"/>
+    </filter>
+    <!-- 印泥：边缘略崩，面上有漏白 -->
+    <filter id="seal" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.4" numOctaves="2" seed="31" result="d"/>
+      <feDisplacementMap in="SourceGraphic" in2="d" scale="2.2" xChannelSelector="R" yChannelSelector="G" result="rough"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="12" result="s"/>
+      <feComponentTransfer in="s" result="speck"><feFuncA type="linear" slope="6" intercept="-1.6"/></feComponentTransfer>
+      <feComposite in="rough" in2="speck" operator="in"/>
+    </filter>
+    <filter id="lift" x="-5%" y="-10%" width="110%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#1E1E1E" flood-opacity="0.12"/>
+    </filter>
+    <linearGradient id="inkH" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#111"/><stop offset="0.6" stop-color="#1E1E1E" stop-opacity="0.85"/><stop offset="1" stop-color="#2B2B2B" stop-opacity="0.35"/>
+    </linearGradient>
+    <clipPath id="bleed"><rect x="0" y="0" width="776" height="198"/></clipPath>
+  </defs>
+
+  <!-- 纸 -->
+  <rect x="4" y="14" width="772" height="184" rx="2" fill="#FBFAF6" filter="url(#lift)"/>
+  <rect x="4" y="14" width="772" height="184" rx="2" fill="#000" filter="url(#xuan)"/>
+
+  <!-- 底边一笔干笔，只走到 55%；左侧不再有竖笔 -->
+  <path d="M26 184 C 30 180 40 180 56 181 C 80 182 110 182 140 183 L 140 191 C 110 192 80 193 54 193 C 40 193 30 191 26 184 Z" fill="#141414" filter="url(#rough)"/>
+  <path d="M26 184 C 32 179 44 180 64 181 C 170 183 290 183 410 185 C 428 185 442 186 452 188 C 440 191 410 191 380 191 C 260 192 140 193 54 193 C 40 193 30 191 26 184 Z" fill="url(#inkH)" filter="url(#dryH)"/>
+
+  <!-- 墨竹：馆藏原图，只缩放与定位，右侧出血，竹梢越过上沿 -->
+  <image href="ornament/ink-bamboo.png" x="628" y="-24" width="164.9" height="242.3" clip-path="url(#bleed)"/>
+
+  <!-- 朱印 -->
+  <g filter="url(#seal)">
+    <rect x="40" y="28" width="24" height="24" rx="1.5" fill="#B0302A"/>
+  </g>
+  <g font-family="LXGW WenKai">
+    <text x="52" y="46.5" font-size="18" fill="#FBFAF6" text-anchor="middle">奈</text>
+    <text x="72" y="48.5" font-size="20" fill="#1E1E1E" letter-spacing="2">奈奈</text>
+
+    <!-- 引用 -->
+    <rect x="40" y="60" width="2" height="17" rx="1" fill="#6E6A62" opacity="0.55"/>
+    <text x="50" y="73.5" font-size="16" fill="#6E6A62">星野ほたる：主播晚上好！今天打什么字呀</text>
+
+    <!-- 提及：极淡朱底 + 深朱字，淡墨圆头像 -->
+    <rect x="40" y="90" width="178" height="34" rx="17" fill="#B0302A" fill-opacity="0.08"/>
+    <circle cx="57" cy="107" r="12" fill="#2B2B2B" fill-opacity="0.6"/>
+    <text x="75" y="116" font-size="26" fill="#8E241F">星野ほたる</text>
+
+    <text x="226" y="119" font-size="32" fill="#1E1E1E">晚上好！今天也谢谢你来～</text>
+    <text x="40" y="164" font-size="32" fill="#1E1E1E">我们接着上次的故事讲吧。</text>
+  </g>
+</svg>

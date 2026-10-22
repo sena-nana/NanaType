@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 机器学习 machine_learning · 紧凑态（300 宽窄窗）：网络只留右上角一小簇，去取景括号与继续提示 -->
+  <defs>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1C1F26"/>
+      <stop offset="1" stop-color="#15171C"/>
+    </linearGradient>
+    <clipPath id="box"><rect x="4" y="4" width="292" height="112" rx="5"/></clipPath>
+  </defs>
+  <rect x="4" y="4" width="292" height="112" rx="5" fill="#191C22"/>
+  <g clip-path="url(#box)" opacity="0.7">
+<g stroke="#A99BFF" stroke-width="1" fill="none">
+<path d="M288.8 66.8 L287.5 33.3" stroke-opacity="0.32"/>
+<path d="M288.8 66.8 L262.3 75.0" stroke-opacity="0.27"/>
+<path d="M288.8 66.8 L295.2 53.9" stroke-opacity="0.34"/>
+<path d="M288.8 66.8 L285.3 84.2" stroke-opacity="0.32"/>
+<path d="M254.7 15.1 L284.9 11.3" stroke-opacity="0.25"/>
+<path d="M254.7 15.1 L219.9 18.5" stroke-opacity="0.14"/>
+<path d="M254.7 15.1 L254.6 40.5" stroke-opacity="0.19"/>
+<path d="M296.0 98.4 L273.7 109.0" stroke-opacity="0.31"/>
+<path d="M296.0 98.4 L285.3 84.2" stroke-opacity="0.33"/>
+<path d="M296.0 98.4 L293.1 115.1" stroke-opacity="0.35"/>
+<path d="M287.5 33.3 L284.9 11.3" stroke-opacity="0.32"/>
+<path d="M287.5 33.3 L254.6 40.5" stroke-opacity="0.25"/>
+<path d="M287.5 33.3 L295.2 53.9" stroke-opacity="0.34"/>
+<path d="M200.8 58.8 L237.7 71.8" stroke-opacity="0.09"/>
+<path d="M200.8 58.8 L219.9 18.5" stroke-opacity="0.07"/>
+<path d="M200.8 58.8 L254.6 40.5" stroke-opacity="0.11"/>
+<path d="M253.6 101.7 L237.7 71.8" stroke-opacity="0.16"/>
+<path d="M253.6 101.7 L273.7 109.0" stroke-opacity="0.23"/>
+<path d="M253.6 101.7 L219.6 113.9" stroke-opacity="0.13"/>
+<path d="M253.6 101.7 L262.3 75.0" stroke-opacity="0.20"/>
+<path d="M237.7 71.8 L254.6 40.5" stroke-opacity="0.16"/>
+<path d="M237.7 71.8 L219.6 113.9" stroke-opacity="0.11"/>
+<path d="M237.7 71.8 L262.3 75.0" stroke-opacity="0.18"/>
+<path d="M284.9 11.3 L254.6 40.5" stroke-opacity="0.25"/>
+<path d="M273.7 109.0 L219.6 113.9" stroke-opacity="0.17"/>
+<path d="M273.7 109.0 L293.1 115.1" stroke-opacity="0.30"/>
+<path d="M219.9 18.5 L254.6 40.5" stroke-opacity="0.14"/>
+<path d="M254.6 40.5 L262.3 75.0" stroke-opacity="0.21"/>
+<path d="M262.3 75.0 L285.3 84.2" stroke-opacity="0.26"/>
+<path d="M295.2 53.9 L285.3 84.2" stroke-opacity="0.33"/>
+<path d="M285.3 84.2 L293.1 115.1" stroke-opacity="0.33"/>
+</g>
+<g fill="#A99BFF">
+<circle cx="288.8" cy="66.8" r="3.7" fill-opacity="0.59"/>
+<circle cx="254.7" cy="15.1" r="2.4" fill-opacity="0.35"/>
+<circle cx="296.0" cy="98.4" r="3.0" fill-opacity="0.65"/>
+<circle cx="287.5" cy="33.3" r="2.9" fill-opacity="0.58"/>
+<circle cx="200.8" cy="58.8" r="1.6" fill-opacity="0.10"/>
+<circle cx="253.6" cy="101.7" r="2.4" fill-opacity="0.34"/>
+<circle cx="237.7" cy="71.8" r="2.1" fill-opacity="0.25"/>
+<circle cx="284.9" cy="11.3" r="3.6" fill-opacity="0.56"/>
+<circle cx="273.7" cy="109.0" r="2.7" fill-opacity="0.48"/>
+<circle cx="219.9" cy="18.5" r="1.9" fill-opacity="0.16"/>
+<circle cx="254.6" cy="40.5" r="2.4" fill-opacity="0.35"/>
+<circle cx="219.6" cy="113.9" r="1.9" fill-opacity="0.16"/>
+<circle cx="262.3" cy="75.0" r="2.5" fill-opacity="0.40"/>
+<circle cx="295.2" cy="53.9" r="3.0" fill-opacity="0.64"/>
+<circle cx="285.3" cy="84.2" r="3.6" fill-opacity="0.57"/>
+<circle cx="293.1" cy="115.1" r="3.0" fill-opacity="0.63"/>
+</g>
+
+  </g>
+  <rect x="4.75" y="4.75" width="290.5" height="110.5" rx="4.25" fill="none" stroke="#2C303A" stroke-width="1.5"/>
+  <path d="M23.00 21.50 L27.33 24.00 L27.33 29.00 L23.00 31.50 L18.67 29.00 L18.67 24.00 Z" fill="none" stroke="#A99BFF" stroke-width="1.5"/>
+  <circle cx="23" cy="26.5" r="1.6" fill="#A99BFF"/>
+  <text x="34" y="31" font-family="Maple Mono NF CN" font-size="14" font-weight="700" letter-spacing="1" fill="#A99BFF">奈奈</text>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <text x="18" y="66" font-size="20" fill="#E8ECF2">晚上好！今天也谢谢</text>
+    <text x="18" y="96" font-size="20" fill="#E8ECF2">你来～我们接着讲吧。</text>
+  </g>
+</svg>

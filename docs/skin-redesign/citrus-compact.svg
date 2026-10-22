@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 柠檬汽水 citrus · 紧凑态（300 宽窄窗）：去柠檬片，保留斜切标签与网点作识别；贴纸名牌缩小仍倾斜 -->
+  <defs>
+    <pattern id="dots" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
+      <circle cx="3.5" cy="3.5" r="1.4" fill="#4FA48A" fill-opacity="0.6"/>
+    </pattern>
+    <filter id="sticker" x="-20%" y="-40%" width="140%" height="180%">
+      <feDropShadow dx="1" dy="2" stdDeviation="1.2" flood-color="#4A3720" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <rect x="4" y="4" width="292" height="112" rx="10" fill="#7CC4AE"/>
+  <rect x="4" y="4" width="292" height="112" rx="10" fill="url(#dots)"/>
+  <path d="M14 12 H276 L252 108 H14 Q10 108 10 104 V16 Q10 12 14 12 Z" fill="#FFF6D6"/>
+  <path d="M276 12 L282 12 L258 108 L252 108 Z" fill="#FFC93C"/>
+  <g font-family="PingFang SC">
+    <g transform="rotate(-4 44 27)" filter="url(#sticker)">
+      <rect x="20" y="17" width="50" height="22" rx="7" fill="#FFC93C" stroke="#FFFDF2" stroke-width="2.5"/>
+      <text x="45" y="33" font-size="13" font-weight="800" fill="#5A3B12" text-anchor="middle">奈奈</text>
+    </g>
+    <text x="20" y="69" font-size="20" font-weight="500" fill="#4A3720">晚上好！今天也谢谢</text>
+    <text x="20" y="97" font-size="20" font-weight="500" fill="#4A3720">你来～我们接着讲吧。</text>
+  </g>
+</svg>

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 终端 terminal · 紧凑态（300 宽窄窗）：去标题栏与状态块，只留提示符名牌、荧光与扫描线 -->
+  <defs>
+    <pattern id="scan" width="4" height="3" patternUnits="userSpaceOnUse">
+      <rect width="4" height="1" fill="#000000"/>
+    </pattern>
+    <filter id="phosphor" x="-5%" y="-30%" width="110%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.8" result="b"/>
+      <feComponentTransfer in="b" result="bd"><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+      <feMerge><feMergeNode in="bd"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="4" y="4" width="292" height="112" rx="5" fill="#0D0A05"/>
+  <rect x="4" y="4" width="292" height="112" rx="5" fill="url(#scan)" opacity="0.16"/>
+  <rect x="4.75" y="4.75" width="290.5" height="110.5" rx="4.25" fill="none" stroke="#FFB000" stroke-opacity="0.32" stroke-width="1.5"/>
+  <g font-family="Maple Mono NF CN" filter="url(#phosphor)">
+    <text x="18" y="31" font-size="13" fill="#FFB000"><tspan font-weight="700">奈奈</tspan>@live:~$</text>
+    <text x="18" y="66" font-size="20" fill="#FFC547">晚上好！今天也谢谢</text>
+    <text x="18" y="96" font-size="20" fill="#FFC547">你来～我们接着讲吧。</text>
+  </g>
+</svg>

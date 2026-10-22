@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 光环 halo · 紧凑态（300 宽窄窗）：保持胶囊名牌压上沿 -->
+  <defs>
+    <linearGradient id="face" x1="0.33" y1="0" x2="0.67" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EEF6FD"/>
+    </linearGradient>
+    <linearGradient id="plate" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#087FD1"/>
+      <stop offset="1" stop-color="#249FDF"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="14" width="292" height="102" rx="18" fill="url(#face)" stroke="#DCEBF7" stroke-width="1"/>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <rect x="16" y="4" width="50" height="22" rx="11" fill="url(#plate)" stroke="#D7EFFF" stroke-width="0.8"/>
+    <text x="41" y="20" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">奈奈</text>
+    <text x="18" y="62" font-size="20" fill="#1B2F4B">晚上好！今天也谢谢</text>
+    <text x="18" y="92" font-size="20" fill="#1B2F4B">你来～我们接着讲吧。</text>
+  </g>
+</svg>

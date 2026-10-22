@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="210" viewBox="0 0 780 210">
+  <!-- 樱花 sakura · 设计稿：无纸感、无尾巴的半透明粉色毛玻璃；面内是粉雾；花枝从右上框外伸入，压在玻璃后的部分被磨砂虚化；落瓣只在框外右下；说话人是小樱花 + 粉字 -->
+  <defs>
+    <linearGradient id="glass" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#FFF7FA" stop-opacity="0.92"/>
+      <stop offset="1" stop-color="#FFF0F5" stop-opacity="0.85"/>
+    </linearGradient>
+    <radialGradient id="mistA" cx="0.12" cy="1" r="0.55">
+      <stop offset="0" stop-color="#F7B8CE" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#F7B8CE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="mistB" cx="0.92" cy="0.05" r="0.45">
+      <stop offset="0" stop-color="#F7B8CE" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#F7B8CE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="mistC" cx="0.6" cy="0.9" r="0.35">
+      <stop offset="0" stop-color="#FCD3E1" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#FCD3E1" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.45"/>
+    </linearGradient>
+    <filter id="soft" x="-10%" y="-20%" width="120%" height="150%">
+      <feDropShadow dx="0" dy="6" stdDeviation="9" flood-color="#6B2141" flood-opacity="0.16"/>
+    </filter>
+    <filter id="frost" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="3.2"/>
+    </filter>
+    <clipPath id="inside"><rect x="4" y="24" width="740" height="180" rx="18"/></clipPath>
+    <radialGradient id="cornerFade" gradientUnits="userSpaceOnUse" cx="792" cy="62" r="160">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#FFFFFF"/>
+      <stop offset="0.85" stop-color="#000000"/>
+    </radialGradient>
+    <!-- 清晰层：框外全部 + 右上角渐隐区；再往里只剩磨砂层 -->
+    <mask id="sharp" maskUnits="userSpaceOnUse" x="0" y="0" width="780" height="210">
+      <rect width="780" height="210" fill="url(#cornerFade)"/>
+      <path fill="#FFFFFF" fill-rule="evenodd" d="M0 0 H780 V210 H0 Z M22 24 H726 A18 18 0 0 1 744 42 V186 A18 18 0 0 1 726 204 H22 A18 18 0 0 1 4 186 V42 A18 18 0 0 1 22 24 Z"/>
+    </mask>
+    <g id="branch">
+      <image href="ornament/sakura.png" width="768" height="264" transform="translate(806 112) rotate(-4) scale(0.5) translate(-762 -248)"/>
+    </g>
+    <path id="petal" d="M0 7 C -4.5 4.5 -5.5 -2 -3.2 -6.5 L 0 -4.2 L 3.2 -6.5 C 5.5 -2 4.5 4.5 0 7 Z"/>
+  </defs>
+
+  <!-- 玻璃面板 -->
+  <rect x="4" y="24" width="740" height="180" rx="18" fill="url(#glass)" filter="url(#soft)"/>
+  <rect x="4" y="24" width="740" height="180" rx="18" fill="url(#mistA)"/>
+  <rect x="4" y="24" width="740" height="180" rx="18" fill="url(#mistB)"/>
+  <rect x="4" y="24" width="740" height="180" rx="18" fill="url(#mistC)"/>
+  <!-- 玻璃后的花枝：磨砂虚化 -->
+  <g clip-path="url(#inside)" opacity="0.55"><use href="#branch" filter="url(#frost)"/></g>
+  <!-- 玻璃边：上亮下柔 -->
+  <rect x="4.75" y="24.75" width="738.5" height="178.5" rx="17.25" fill="none" stroke="url(#sheen)" stroke-width="1.5"/>
+  <rect x="4.25" y="24.25" width="739.5" height="179.5" rx="17.75" fill="none" stroke="#E7A3BC" stroke-width="1" opacity="0.45"/>
+
+  <!-- 花枝：框外与右上角清晰，往里渐入玻璃后 -->
+  <g mask="url(#sharp)"><use href="#branch"/></g>
+
+  <!-- 框外落瓣 -->
+  <g fill="#F7B8CE" stroke="#E592AF" stroke-width="0.6">
+    <use href="#petal" transform="translate(760 136) rotate(30)"/>
+    <use href="#petal" transform="translate(770 166) rotate(-40) scale(0.8)" opacity="0.85"/>
+    <use href="#petal" transform="translate(754 188) rotate(75) scale(0.9)"/>
+    <use href="#petal" transform="translate(772 202) rotate(-10) scale(0.65)" opacity="0.7"/>
+  </g>
+
+  <!-- 说话人：小樱花 + 粉字 -->
+  <g transform="translate(46 51)" fill="#C2416F">
+    <g id="bloom">
+      <ellipse cx="0" cy="-4.2" rx="3" ry="4"/>
+      <ellipse cx="0" cy="-4.2" rx="3" ry="4" transform="rotate(72)"/>
+      <ellipse cx="0" cy="-4.2" rx="3" ry="4" transform="rotate(144)"/>
+      <ellipse cx="0" cy="-4.2" rx="3" ry="4" transform="rotate(216)"/>
+      <ellipse cx="0" cy="-4.2" rx="3" ry="4" transform="rotate(288)"/>
+    </g>
+    <circle r="1.8" fill="#FFF0F5"/>
+  </g>
+  <g font-family="LXGW WenKai">
+    <text x="60" y="57.5" font-size="18" fill="#C2416F">奈奈</text>
+
+    <!-- 引用 -->
+    <rect x="38" y="73" width="2" height="17" rx="1" fill="#8E4C68" opacity="0.55"/>
+    <text x="48" y="86.5" font-size="15" fill="#8E4C68">星野ほたる：主播晚上好！今天打什么字呀</text>
+
+    <!-- 提及 -->
+    <rect x="38" y="103" width="152" height="30" rx="15" fill="#F8D3E1"/>
+    <circle cx="53" cy="118" r="10" fill="#F7B8CE"/>
+    <text x="68" y="126" font-size="22" fill="#8E2A55">星野ほたる</text>
+
+    <text x="198" y="128" font-size="27" fill="#6B2141">晚上好！今天也谢谢你来～</text>
+    <text x="38" y="167" font-size="27" fill="#6B2141">我们接着上次的故事讲吧。</text>
+  </g>
+</svg>

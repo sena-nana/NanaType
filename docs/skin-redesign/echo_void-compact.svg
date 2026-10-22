@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- Echo 虚空 echo_void · 紧凑态（300 宽窄窗）：去菜单栏，名牌胶囊用原作强调色 #888888。皮肤透明，棋盘格只是示意透明背景 -->
+  <defs>
+    <pattern id="checker" width="32" height="32" patternUnits="userSpaceOnUse">
+      <rect width="32" height="32" fill="#E4E4E4"/>
+      <rect width="16" height="16" fill="#D2D2D2"/>
+      <rect x="16" y="16" width="16" height="16" fill="#D2D2D2"/>
+    </pattern>
+  </defs>
+  <rect width="300" height="120" fill="url(#checker)"/>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <rect x="16" y="10" width="52" height="24" rx="12" fill="#888888"/>
+    <text x="42" y="27" font-size="14" fill="#FFFFFF" text-anchor="middle">奈奈</text>
+    <text x="16" y="70" font-size="20" fill="#202124">晚上好！今天也谢谢</text>
+    <text x="16" y="100" font-size="20" fill="#202124">你来～我们接着讲吧。</text>
+  </g>
+</svg>

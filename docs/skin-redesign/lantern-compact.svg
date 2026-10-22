@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 朱砂华灯 lantern · 紧凑态（300 宽窄窗）：去灯笼与横梁，只留右上一团暖光；名牌改朱砂底米白字 -->
+  <defs>
+    <linearGradient id="lacquer" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#24140F"/>
+      <stop offset="1" stop-color="#1A0F0E"/>
+    </linearGradient>
+    <radialGradient id="warm" cx="280" cy="10" r="170" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF8A3D" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#FF8A3D" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="4" y="4" width="292" height="112" rx="4" fill="#B83B38"/>
+  <rect x="8" y="8" width="284" height="104" rx="2" fill="url(#lacquer)"/>
+  <rect x="8" y="8" width="284" height="104" rx="2" fill="url(#warm)"/>
+  <rect x="11.75" y="11.75" width="276.5" height="96.5" rx="1" fill="none" stroke="#D9A84E" stroke-width="1.5"/>
+  <g font-family="Songti SC">
+    <rect x="18" y="18" width="50" height="22" rx="2" fill="#B83B38"/>
+    <text x="43" y="34" font-size="13" font-weight="700" fill="#FFF1D8" text-anchor="middle" letter-spacing="1">奈奈</text>
+    <text x="18" y="70" font-size="20" fill="#F6E7D4">晚上好！今天也谢谢</text>
+    <text x="18" y="99" font-size="20" fill="#F6E7D4">你来～我们接着讲吧。</text>
+  </g>
+</svg>

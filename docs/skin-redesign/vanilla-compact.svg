@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 香草 vanilla · 紧凑态（300 宽窄窗）：保留竖线与栏目头，去页码与对位十字 -->
+  <defs>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFDF8"/>
+      <stop offset="1" stop-color="#FBF8F1"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="292" height="112" rx="2" fill="url(#face)"/>
+  <rect x="4.5" y="4.5" width="291" height="111" rx="1.5" fill="none" stroke="#24201B" stroke-opacity="0.12" stroke-width="1"/>
+  <rect x="4" y="4" width="4" height="112" fill="#3B2A20"/>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <text x="24" y="31" font-size="13" font-weight="700" letter-spacing="1.6" fill="#8A6A3A">奈奈</text>
+    <rect x="61" y="26" width="18" height="2" fill="#8A6A3A"/>
+    <text x="24" y="66" font-size="20" fill="#24201B">晚上好！今天也谢谢</text>
+    <text x="24" y="96" font-size="20" fill="#24201B">你来～我们接着讲吧。</text>
+  </g>
+</svg>

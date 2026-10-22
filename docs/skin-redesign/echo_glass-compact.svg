@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- Echo 玻璃 echo_glass · 紧凑态（300 宽窄窗）：去菜单栏，名牌胶囊用原作强调色 #1A62BE。皮肤透明，游戏画面只是示意背景 -->
+  <defs>
+    <linearGradient id="scene" x1="0" y1="0" x2="1" y2="0.4">
+      <stop offset="0" stop-color="#9A8C9E"/>
+      <stop offset="0.5" stop-color="#C7A98F"/>
+      <stop offset="1" stop-color="#8F9A86"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#000000" stop-opacity="0.65"/>
+      <stop offset="0.6" stop-color="#000000" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="edge" x="-5%" y="-30%" width="110%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="1" result="b"/>
+      <feFlood flood-color="#000000"/>
+      <feComposite in2="b" operator="in" result="s"/>
+      <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="300" height="120" fill="url(#scene)"/>
+  <rect y="10" width="300" height="110" fill="url(#glass)"/>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <rect x="16" y="10" width="52" height="24" rx="12" fill="#1A62BE"/>
+    <text x="42" y="27" font-size="14" fill="#FFFFFF" text-anchor="middle">奈奈</text>
+    <g fill="#FFFFFF" stroke="#000000" stroke-width="1.2" paint-order="stroke" stroke-linejoin="round" filter="url(#edge)">
+      <text x="16" y="70" font-size="20">晚上好！今天也谢谢</text>
+      <text x="16" y="100" font-size="20">你来～我们接着讲吧。</text>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- ADV adv · 紧凑态（300 宽窄窗）：遮幅渐变与白线保留；外置宋体姓名改为 #3A3D46 小牌，免得在透明区里看不清 -->
+  <defs>
+    <linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#050507" stop-opacity="0.35"/>
+      <stop offset="0.3" stop-color="#0D0D12" stop-opacity="0.82"/>
+      <stop offset="1" stop-color="#050507" stop-opacity="0.95"/>
+    </linearGradient>
+    <linearGradient id="rule" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.08" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="0.92" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="300" height="120" fill="url(#scrim)"/>
+  <rect x="0" y="24" width="300" height="1.5" fill="url(#rule)"/>
+  <rect x="18" y="12" width="52" height="24" fill="#3A3D46"/>
+  <text x="44" y="29.5" font-family="Songti SC" font-size="15" font-weight="900" letter-spacing="3" fill="#FFFFFF" text-anchor="middle">奈奈</text>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <text x="18" y="66" font-size="20" fill="#FFFFFF">晚上好！今天也谢谢</text>
+    <text x="18" y="96" font-size="20" fill="#FFFFFF">你来～我们接着讲吧。</text>
+  </g>
+</svg>

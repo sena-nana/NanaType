@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="228" viewBox="0 0 1280 228">
+  <!-- ADV adv · 设计稿：电影遮幅；无边框，自上而下由透明渐入近黑，1.5px 白线定上沿，白色宋体姓名外置于线上方左侧并带 40px 短线 -->
+  <defs>
+    <linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#050507" stop-opacity="0"/>
+      <stop offset="0.14" stop-color="#050507" stop-opacity="0.30"/>
+      <stop offset="0.30" stop-color="#0D0D12" stop-opacity="0.74"/>
+      <stop offset="0.6" stop-color="#050507" stop-opacity="0.90"/>
+      <stop offset="1" stop-color="#050507" stop-opacity="0.95"/>
+    </linearGradient>
+    <linearGradient id="rule" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.06" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="0.94" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="nameShadow" x="-20%" y="-50%" width="140%" height="200%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.75"/>
+    </filter>
+  </defs>
+  <rect x="0" y="0" width="1280" height="228" fill="url(#scrim)"/>
+  <!-- 姓名：外置于上沿白线之上 -->
+  <text x="96" y="44" font-family="Songti SC" font-size="26" font-weight="900" letter-spacing="6" fill="#FFFFFF" filter="url(#nameShadow)">奈奈</text>
+  <rect x="96" y="54" width="40" height="2" fill="#FFFFFF" filter="url(#nameShadow)"/>
+  <rect x="0" y="66" width="1280" height="1.5" fill="url(#rule)"/>
+  <g font-family="PingFang SC, Hiragino Sans GB">
+    <rect x="96" y="86" width="2" height="20" rx="1" fill="#B8BCC6" opacity="0.6"/>
+    <text x="108" y="102" font-size="18" fill="#B8BCC6"><tspan font-weight="700">星野ほたる：</tspan>主播晚上好！今天打什么字呀</text>
+    <rect x="96" y="118" width="196" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.12"/>
+    <circle cx="115" cy="137" r="12.5" fill="#9AA0AC"/>
+    <text x="136" y="147" font-size="28" fill="#FFFFFF">星野ほたる</text>
+    <text x="304" y="150" font-size="34" fill="#FFFFFF">晚上好！今天也谢谢你来～</text>
+    <text x="96" y="201" font-size="34" fill="#FFFFFF">我们接着上次的故事讲吧。</text>
+  </g>
+  <!-- 继续提示 -->
+  <path d="M1172 186 h14 l-7 9 z" fill="#FFFFFF"/>
+</svg>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <!-- 蜡笔画 crayon · 紧凑态（300 宽窄窗）：保留柔彩四边，去掉涂鸦 -->
+  <defs>
+    <filter id="crayon" filterUnits="userSpaceOnUse" x="0" y="0" width="300" height="120">
+      <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="3" result="wob"/>
+      <feDisplacementMap in="SourceGraphic" in2="wob" scale="3" xChannelSelector="R" yChannelSelector="G" result="shaped"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.9 0.6" numOctaves="2" seed="19" result="g"/>
+      <feComponentTransfer in="g" result="mask"><feFuncA type="linear" slope="3" intercept="-0.55"/></feComponentTransfer>
+      <feComposite in="shaped" in2="mask" operator="in"/>
+    </filter>
+  </defs>
+  <rect x="4" y="4" width="292" height="112" rx="4" fill="#FFF9EC"/>
+  <g fill="none" stroke-linecap="round" filter="url(#crayon)" opacity="0.85">
+    <path d="M12 12 C 100 10 200 13 288 11" stroke="#EFB38A" stroke-width="3.5"/>
+    <path d="M289 16 C 287 50 290 80 288 108" stroke="#A9BFD3" stroke-width="3"/>
+    <path d="M12 109 C 100 111 200 108 286 110" stroke="#E3A0A0" stroke-width="3.5"/>
+    <path d="M10 16 C 12 50 9 80 11 106" stroke="#A7C0A6" stroke-width="3"/>
+  </g>
+  <g font-family="LXGW WenKai">
+    <text x="20" y="34" font-size="15" fill="#A65B49">奈奈</text>
+    <text x="20" y="66" font-size="20" fill="#51413A">晚上好！今天也谢谢</text>
+    <text x="20" y="94" font-size="20" fill="#51413A">你来～我们接着讲吧。</text>
+  </g>
+</svg>

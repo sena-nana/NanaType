@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120" shape-rendering="crispEdges">
+  <!-- 掌机像素 pixel · 紧凑态（300 宽窄窗）：去角标与液晶格，名牌 #0F380F 底 #9BBC0F 字收进框内 -->
+  <path d="M8 8H292V12H296V112H292V116H8V112H4V12H8Z" fill="#0F380F"/>
+  <path d="M10 12H290V14H292V110H290V112H10V110H8V14H10Z" fill="#9BBC0F"/>
+  <g font-family="'Fusion Pixel 12px Prop zh-Hans'">
+    <path d="M18 16H62V18H64V34H62V36H18V34H16V18H18Z" fill="#0F380F"/>
+    <text x="28" y="31" font-size="12" fill="#9BBC0F">奈奈</text>
+    <text x="16" y="70" font-size="24" fill="#0F380F">晚上好！今天也谢谢</text>
+    <text x="16" y="102" font-size="24" fill="#0F380F">你来～我们接着讲吧。</text>
+  </g>
+</svg>

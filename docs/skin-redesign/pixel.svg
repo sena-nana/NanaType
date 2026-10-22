@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="168" viewBox="0 0 768 168" shape-rendering="crispEdges">
+  <!-- 掌机像素 pixel · 设计稿：DMG 四阶绿液晶屏；外框、名牌、提及全部是 4px 网格上的直角像素块，无曲线、无抗锯齿 -->
+  <defs>
+    <pattern id="lcd" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect x="0" y="3" width="4" height="1" fill="#8BAC0F" opacity="0.35"/>
+      <rect x="3" y="0" width="1" height="4" fill="#8BAC0F" opacity="0.35"/>
+    </pattern>
+  </defs>
+  <!-- 硬投影 -->
+  <path d="M12 20H756V24H760V156H756V160H12V156H8V24H12Z" fill="#0F380F"/>
+  <!-- 外轮廓 4px -->
+  <path d="M8 16H752V20H756V152H752V156H8V152H4V20H8Z" fill="#0F380F"/>
+  <!-- 内框带（面色） -->
+  <path d="M12 20H748V24H752V148H748V152H12V148H8V24H12Z" fill="#8BAC0F"/>
+  <!-- 液晶屏 -->
+  <rect x="14" y="26" width="732" height="120" fill="#306230"/>
+  <rect x="16" y="28" width="730" height="118" fill="#9BBC0F"/>
+  <rect x="16" y="28" width="730" height="118" fill="url(#lcd)"/>
+  <!-- 屏幕角标 -->
+  <g fill="#306230">
+    <rect x="732" y="32" width="10" height="2"/><rect x="740" y="32" width="2" height="10"/>
+    <rect x="20" y="132" width="2" height="10"/><rect x="20" y="140" width="10" height="2"/>
+  </g>
+  <g font-family="'Fusion Pixel 12px Prop zh-Hans'">
+    <!-- 名牌：反白像素块，骑在上沿，左缘对齐正文 -->
+    <path d="M32 0H104V4H108V36H104V40H32V36H28V4H32Z" fill="#0F380F"/>
+    <path d="M33 5H103V35H33Z" fill="none" stroke="#8BAC0F" stroke-width="2"/>
+    <text x="44" y="30" font-size="24" fill="#9BBC0F">奈奈</text>
+    <!-- 回复引用 12px -->
+    <rect x="28" y="44" width="2" height="12" fill="#306230"/>
+    <text x="36" y="54" font-size="12" fill="#0F380F">星野ほたる：主播晚上好！今天打什么字呀</text>
+    <!-- 提及：方块、无头像 -->
+    <rect x="28" y="68" width="132" height="30" fill="#8BAC0F"/>
+    <rect x="28" y="96" width="132" height="2" fill="#306230"/>
+    <text x="34" y="92" font-size="24" fill="#0F380F">星野ほたる</text>
+    <text x="168" y="92" font-size="24" fill="#0F380F">晚上好！今天也谢谢你来～</text>
+    <text x="28" y="128" font-size="24" fill="#0F380F">我们接着上次的故事讲吧。</text>
+  </g>
+  <!-- 继续提示 ▼（逐格闪烁） -->
+  <g fill="#0F380F">
+    <rect x="724" y="124" width="16" height="2"/>
+    <rect x="726" y="126" width="12" height="2"/>
+    <rect x="728" y="128" width="8" height="2"/>
+    <rect x="730" y="130" width="4" height="2"/>
+  </g>
+</svg>
