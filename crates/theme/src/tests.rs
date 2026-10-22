@@ -270,16 +270,9 @@ fn every_builtin_loads_without_warnings() {
     }
     let night = registry.load("nanatype.night").unwrap();
     assert_eq!(night.skin.chrome.appearance, Appearance::Dark);
-    assert_eq!(
-        night.skin.dialogue.box_.border_color,
-        Rgba8::rgb(0x5c, 0xb8, 0xff)
-    );
-    // Untouched fields keep the defaults.
-    assert_eq!(night.skin.dialogue.region, [760.0, 150.0]);
+    assert_eq!(night.skin.chrome.accent, Rgba8::rgb(0xff, 0x4f, 0xb8));
     // A partial `[history.text]` keeps the history defaults, not the dialogue's.
     assert_eq!(night.skin.history.text.size, 18.0);
-    let bubble = registry.load("nanatype.bubble").unwrap();
-    assert!(bubble.skin.dialogue.tail.is_some());
     let ink = registry.load("nanatype.ink").unwrap();
     assert!(ink.skin.dialogue.decor.iter().any(|d| d.image.is_some()));
     let echo = registry.load("nanatype.echo_vanilla").unwrap();
@@ -391,7 +384,6 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
         let original = registry.load(&id).unwrap();
         assert_eq!(original.skin.meta.schema, SKIN_SCHEMA);
         assert_eq!(original.skin.shader_programs.len(), 3);
-        assert!(original.skin.dialogue.decor.is_empty());
         assert_eq!(original.skin.dialogue.shader_effects.len(), 1);
         assert_eq!(
             original.skin.dialogue.shader_effects[0].target,
@@ -412,16 +404,18 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
             compact.dialogue.shader_effects[0].shader,
             "responsive_compact"
         );
-        assert_eq!(original.skin.shaders["artwork"].textures.len(), 1);
+        // Gothic draws its glass procedurally; the others sample one ornament.
+        assert!(original.skin.shaders["artwork"].textures.len() <= 1);
         let file = tmp.path().join(format!("{name}.ntpkg"));
         registry.export(&id, &file).unwrap();
         let loaded = registry.inspect_archive(&file).unwrap();
         assert_eq!(loaded.skin.shader_programs, original.skin.shader_programs);
-        let texture = &original.skin.shaders["artwork"].textures[0];
-        assert_eq!(
-            loaded.files.read(texture).unwrap(),
-            original.files.read(texture).unwrap()
-        );
+        for texture in &original.skin.shaders["artwork"].textures {
+            assert_eq!(
+                loaded.files.read(texture).unwrap(),
+                original.files.read(texture).unwrap()
+            );
+        }
         let fallback = &original.skin.dialogue.box_.frame.as_ref().unwrap().image;
         assert_eq!(
             loaded.files.read(fallback).unwrap(),
@@ -430,14 +424,17 @@ fn shader_packages_roundtrip_and_inherit_validated_program_bytes() {
         let still = image::load_from_memory(&loaded.files.read(fallback).unwrap())
             .unwrap()
             .to_rgba8();
-        assert_eq!(still.dimensions(), (920, 220));
+        // Full-region artwork: headroom for ornaments outside the box is
+        // transparent, the reading plane below it opaque.
+        let [w, h] = original.skin.dialogue.region.map(|v| v as u32);
+        assert_eq!(still.dimensions(), (w, h));
         assert_eq!(
             still.get_pixel(0, 0).0[3],
             0,
             "{name}: transparent canvas edge"
         );
         assert_eq!(
-            still.get_pixel(460, 110).0[3],
+            still.get_pixel(w / 2, h * 3 / 5).0[3],
             255,
             "{name}: static reading plane missing"
         );
@@ -618,17 +615,6 @@ fn classic_artwork_exports_its_complete_static_fallback_and_keeps_special_layout
         );
         assert_eq!(skin.dialogue.box_.color.a, 0);
         assert!(skin.dialogue.box_.frame.is_none());
-    }
-    for name in ["bubble", "comic", "sakura"] {
-        assert!(
-            registry
-                .load(&format!("nanatype.{name}"))
-                .unwrap()
-                .skin
-                .dialogue
-                .tail
-                .is_some()
-        );
     }
 }
 
@@ -1190,9 +1176,13 @@ color = "#ffe0ecf0"
         skin.skin.dialogue.box_.color,
         Rgba8::rgba(0xff, 0xe0, 0xec, 0xf0)
     );
+    let base = SkinRegistry::new(None, APP)
+        .load("nanatype.night")
+        .unwrap()
+        .skin;
     assert_eq!(
         skin.skin.dialogue.box_.border_color,
-        Rgba8::rgb(0x5c, 0xb8, 0xff)
+        base.dialogue.box_.border_color
     );
     assert_eq!(skin.skin.display_name("en-US"), "Sakura");
     assert!(skin.warnings.is_empty(), "{:?}", skin.warnings);
@@ -1629,6 +1619,21 @@ fn echo_menu_rows_show_only_on_the_display() {
     }
     let d: DecorSpec = toml::from_str("when = \"display\"").unwrap();
     assert_eq!(d.when, DecorWhen::Display);
+}
+
+#[test]
+fn halo_blue_stays_in_halo() {
+    // Every skin owns its compact palette; Halo's blue used to leak into
+    // each narrow layout and continue marker.
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("builtin");
+    for entry in fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path().join("skin.toml");
+        if path.parent().unwrap().ends_with("halo") || !path.exists() {
+            continue;
+        }
+        let text = fs::read_to_string(&path).unwrap().to_ascii_lowercase();
+        assert!(!text.contains("#0876d0"), "{}", path.display());
+    }
 }
 
 // ---- docs consistency ------------------------------------------------------

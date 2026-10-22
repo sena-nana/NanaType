@@ -79,7 +79,11 @@ fn both_editors_keep_a_bounded_scrollable_viewport_across_skin_scale_and_mode_ch
                 );
                 let (x, y) = ((left + right) / 2.0, (top + bottom) / 2.0);
                 session.click_xy(x, y).unwrap();
-                assert_eq!(session.document().context().world().focused(id), Some(node));
+                assert_eq!(
+                    session.document().context().world().focused(id),
+                    Some(node),
+                    "click did not focus the editor: {skin_id} width={width} scale={scale}"
+                );
                 session
                     .key_press(
                         "End",

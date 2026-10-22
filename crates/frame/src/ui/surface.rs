@@ -655,6 +655,19 @@ mod tests {
     fn nine_slice_frames_keep_precedence_and_do_not_integrate_a_second_tail() {
         let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
         let mut skin = (*registry.load("nanatype.bubble").unwrap().skin).clone();
+        // Bubble now bakes its tail and offset shadow into the plate; give the
+        // vector fallback both back so the precedence rules stay covered.
+        skin.dialogue.tail = Some(nanatype_theme::TailSpec::default());
+        skin.dialogue.box_.shape.contour = Some(nanatype_theme::ContourPreset::Rounded);
+        skin.dialogue.box_.color = Rgba8::rgb(255, 255, 255);
+        skin.dialogue.box_.shape.shadows = vec![ShadowSpec {
+            color: Rgba8::BLACK.into(),
+            dx: 4.0,
+            dy: 4.0,
+            blur: 0.0,
+            spread: 0.0,
+            inset: false,
+        }];
         skin.dialogue.box_.frame = Some(NineSlice {
             image: "frame.png".into(),
             slice: [8; 4],

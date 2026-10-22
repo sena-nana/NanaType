@@ -343,8 +343,18 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
                 "{w}x{h}: the network must actually render"
             );
         }
+        // The name itself is lavender like the network; only its rail around it
+        // must stay clear.
+        let b = &label.bounds;
+        let in_name = |x: u32, y: u32| {
+            let (x, y) = (x as f32, y as f32);
+            x >= b.x - 2. && x <= b.x + b.width + 2. && y >= b.y - 2. && y <= b.y + b.height + 2.
+        };
         for y in 16..60 {
             for x in label.bounds.x.floor().max(0.) as u32..w - 16 {
+                if in_name(x, y) {
+                    continue;
+                }
                 assert!(
                     !purple(x, y),
                     "{w}x{h}: a network node overlaps the name rail"

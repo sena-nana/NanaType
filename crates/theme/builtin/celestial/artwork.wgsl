@@ -1,5 +1,5 @@
 // Original procedural print artwork. All dimensions are logical pixels.
-// Declared ornament texture; no user loops, persistent state or per-frame randomness.
+// No user loops, persistent state or per-frame randomness.
 fn aa(d: f32) -> f32 { return 1. - smoothstep(-0.65, 0.65, d); }
 fn line(d: f32, w: f32) -> f32 { return aa(abs(d) - w); }
 fn disc(p: vec2<f32>, r: f32) -> f32 { return aa(length(p) - r); }
@@ -13,85 +13,120 @@ fn segment(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>, w: f32) -> f32 {
     return aa(length(p-a-d*clamp(dot(p-a,d)/dot(d,d),0.,1.))-w);
 }
 fn ink(r: f32, g: f32, b: f32) -> vec3<f32> { return pow(vec3(r,g,b)/255., vec3(2.2)); }
-fn grain(p: vec2<f32>) -> f32 { return fract(sin(dot(floor(p),vec2(12.9898,78.233)))*43758.5453); }
 fn rotate(p: vec2<f32>, a: f32) -> vec2<f32> {
     return vec2(cos(a)*p.x-sin(a)*p.y, sin(a)*p.x+cos(a)*p.y);
 }
-// LUNAR ATLAS: offset astrolabe and engraved coordinates, open night sky.
-// One immutable, declared PNG: SVG master lives beside this program.
-fn decal(p:vec2<f32>, origin:vec2<f32>, extent:vec2<f32>) -> vec4<f32> {
-    let uv=(p-origin)/extent;
-    if(any(uv<vec2(0.)) || any(uv>vec2(1.))) { return vec4(0.); }
-    return sample0(uv);
+// LUNAR ATLAS: an astrolabe centred on the plate's lower-right corner,
+// bleeding off the region; its outermost arcs pass faintly behind the text.
+fn brass(t: f32) -> vec3<f32> {
+    return mix(mix(ink(241.,221.,168.), ink(201.,163.,90.), smoothstep(0.,.5,t)),
+        ink(156.,118.,56.), smoothstep(.5,1.,t));
 }
-// Recompose the original print vocabulary in logical pixels; no scaled canvas.
+// Distance to an ellipse outline (first-order estimate, fine for strokes).
+fn ellipse(q: vec2<f32>, ab: vec2<f32>) -> f32 {
+    let k0 = length(q/ab); let k1 = length(q/(ab*ab));
+    return k0*(k0 - 1.)/max(k1, 1e-4);
+}
+// Radial ticks hanging inward from radius r0 every `step` radians; every
+// fifth tick is `major` long instead of `len`.
+fn ticks(v: vec2<f32>, r0: f32, len: f32, major: f32, step: f32, w: f32) -> f32 {
+    let r = length(v);
+    let k = atan2(v.y, v.x)/step;
+    let n = round(k);
+    let big = abs(n*.2 - round(n*.2)) < .05;
+    let reach = select(len, major, big);
+    let band = aa(r0 - reach - r)*aa(r - r0);
+    return line((k - n)*step*r, select(w, w*1.5, big))*band;
+}
+fn sparkle(q: vec2<f32>, h: f32) -> f32 {
+    let a = abs(q)/vec2(h*.45, h);
+    return aa((sqrt(a.x) + sqrt(a.y) - 1.)*h*.5);
+}
+fn field(p: vec2<f32>) -> f32 {
+    let cells = vec2(147.,91.); let cell = floor(p/cells); let local = fract(p/cells)*cells;
+    let star = local - vec2(36. + 31.*sin(cell.y*3.), 24. + 17.*cos(cell.x*7.));
+    return disc(star, .9);
+}
+// Narrow, short and portrait layouts: a quiet plate with a corner arc.
 fn responsive_print(i: EffectInput) -> vec4<f32> {
-    let p=i.uv*i.size; let s=i.size; let compact=i.params0.z > .5;
-    let phase=i.phase*6.283185;
-    let edge=rect(p-s*.5,s*.5-vec2(3.),select(22.,12.,compact));
-    var c=mix(ink(17.,20.,43.),i.base.rgb,i.uv.x);
-    c=mix(c,i.border.rgb,line(edge+8.,.5)*.56);
-    c=mix(c,i.accent.rgb,line(edge+3.,.4)*.17);
-    let cells=vec2(147.,91.); let cell=floor(p/cells); let local=fract(p/cells)*cells;
-    let star=local-vec2(36.+31.*sin(cell.y*3.),24.+17.*cos(cell.x*7.));
-    let spark=max(aa(abs(star.x)+abs(star.y)-2.4),disc(star,1.));
-    c=mix(c,i.border.rgb,spark*(.42+.06*sin(phase+cell.x)));
-    if !compact {
-        let grid=aa(s.y-158.-p.y)*max(line(p.y-s.y+86.,.3),line(p.x-70.,.3));
-        c=mix(c,i.accent.rgb,grid*.2);
-        let ticks=line(fract((p.y-35.)/18.)*18.-9.,.35)*aa(abs(p.x-s.x+15.)-2.);
-        c=mix(c,i.border.rgb,ticks*.35);
-    }
-    c*=.992+.015*grain(p);
-    return vec4(c,aa(edge));
+    let p = i.uv*i.size; let s = i.size;
+    let d = rect(p - s*.5, s*.5 - vec2(4.), 12.);
+    var c = mix(ink(27.,22.,56.), ink(42.,30.,82.), clamp((i.uv.x + i.uv.y)*.5, 0., 1.));
+    c = mix(c, ink(244.,238.,255.), field(p)*.35);
+    let v = p - (s - vec2(4.));
+    let inside = aa(d);
+    c = mix(c, i.accent.rgb, ring(v, 54., .75)*.55*inside);
+    let dash = step(fract(atan2(v.y, v.x)*46./5.5), .3);
+    c = mix(c, i.accent.rgb, ring(v, 46., .5)*.35*dash*inside);
+    c = mix(c, i.accent.rgb, line(d + .75, .75)*.55);
+    return vec4(c, aa(d));
 }
 fn effect(i: EffectInput) -> vec4<f32> {
-    if(i.params0.y > .5 || i.params0.z > .5) { return responsive_print(i); }
-    let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
-    let edge=rect(p-s*.5,s*.5-vec2(3.),22.);
-    var c=mix(ink(17.,20.,43.),i.base.rgb,i.uv.x);
-    let center=vec2(s.x-87.,s.y*.5); let v=p-center; let r=length(v);
-    let a=atan2(v.y,v.x);
-    // Responsive layouts place the subject in an independent aspect-locked layer.
-    if(i.params0.x < .5) {
-    c=mix(c,ink(52.,43.,82.),disc(v,111.));
-    c=mix(c,i.accent.rgb,disc(v,93.)*.08);
-    let instrument=decal(p,vec2(s.x-203.,s.y*.5-145.),vec2(232.,290.));
-    c=mix(c,instrument.rgb,instrument.a);
-    // The engraved plate stays still. A fine orbital ring precesses over it.
-    let orbital=rotate(v,.42+.10*sin(t));
-    let ellipse=vec2(orbital.x,orbital.y/.46);
-    let orbit=ring(ellipse,91.,.55)*smoothstep(s.x-210.,s.x-196.,p.x);
-    c=mix(c,i.accent.rgb,orbit*.22);
-    let star_pos=rotate(vec2(cos(-t)*91.,sin(-t)*91.*.46),-.42-.10*sin(t));
-    c=mix(c,i.border.rgb,disc(v-star_pos,1.8)*.8);
-    let trail=ring(ellipse,91.,.65)*pow(max(0.,cos(atan2(ellipse.y,ellipse.x)+t)),28.);
-    c+=i.border.rgb*trail*.07;
-    }
-    let header=segment(p,vec2(35.,51.),vec2(s.x-217.,51.),.5);
-    c=mix(c,i.accent.rgb,header*.45);
-    let grid=step(s.x-205.,p.x)*max(line(p.y-s.y*.5,.3),line(p.x-center.x,.3));
-    c=mix(c,i.accent.rgb,grid*.2);
-    let stars=vec2(147.,91.); let cell=floor(p/stars); let local=fract(p/stars)*stars;
-    let star=local-vec2(36.+31.*sin(cell.y*3.),24.+17.*cos(cell.x*7.));
-    let twinkle=.46+.10*sin(t+dot(cell,vec2(1.7,3.1)));
-    let spark=max(aa(abs(star.x)+abs(star.y)-2.4),disc(star,1.));
-    c=mix(c,i.border.rgb,spark*twinkle*(1.-aa(p.x-s.x+210.)));
-    c=mix(c,i.border.rgb,line(edge+8.,.5)*.56);
-    // A second hairline and sparse calibration marks share the atlas engraving.
-    c=mix(c,i.accent.rgb,line(edge+3.,.4)*.17);
-    let ticks=line(fract((p.x-35.)/18.)*18.-9.,.35)
-        *aa(abs(p.y-s.y+15.)-2.)*aa(35.-p.x)*aa(p.x-s.x+217.);
-    c=mix(c,i.border.rgb,ticks*.35);
-    let terminal=aa(abs(p.x-s.x+217.)+abs(p.y-51.)-2.8);
-    c=mix(c,i.border.rgb,terminal*.7);
-    // The top-edge badge seats into a short engraved bracket, rather than floats.
-    let seat=max(segment(p,vec2(29.,12.),vec2(29.,32.),.45),
-        segment(p,vec2(29.,32.),vec2(41.,32.),.45));
-    c=mix(c,i.border.rgb,seat*.5);
-    let opening=.65*(1.-exp(-i.line_age*8.));
-    let arc=ring(v,117.,.9)*aa(abs(a+.6)-opening)*exp(-i.line_age*3.);
-    c+=i.accent.rgb*arc*.32*smoothstep(s.x-211.,s.x-198.,p.x);
-    c*=.992+.015*grain(p);
-    return vec4(c,aa(edge));
+    if (i.params0.y > .5 || i.params0.z > .5) { return responsive_print(i); }
+    let p = i.uv*i.size; let s = i.size; let t = i.phase*6.283185;
+    let gold = ink(201.,163.,90.); let lilac = ink(169.,156.,200.); let pale = ink(231.,204.,148.);
+    let lo = vec2(6., 16.); let hi = s - vec2(20., 12.);
+    let d = rect(p - (lo + hi)*.5, (hi - lo)*.5, 14.);
+    let inside = aa(d);
+    let k = clamp(((p.x - lo.x)/(hi.x - lo.x) + (p.y - lo.y)/(hi.y - lo.y))*.5, 0., 1.);
+    var c = mix(ink(27.,22.,56.), ink(42.,30.,82.), k);
+    c = mix(c, ink(244.,238.,255.), field(p)*.35);
+    // The outermost rings, ticks and a tilted ecliptic: 12%, still.
+    let v = p - hi; let r = length(v);
+    let f = .12*inside;
+    c = mix(c, gold, ring(v, 470., .75)*f);
+    c = mix(c, gold, ticks(v, 470., 8., 16., .0349066, .5)*f);
+    c = mix(c, lilac, ring(v, 380., .75)*f);
+    let dash = step(fract(atan2(v.y, v.x)*290./8.), .25);
+    c = mix(c, gold, ring(v, 290., .75)*dash*f);
+    c = mix(c, lilac, line(ellipse(rotate(v - vec2(-36.4, 19.4), .244346), vec2(420., 150.)), .75)*f);
+    c = mix(c, gold, line(d + .75, .75)*.55);
+    var alpha = aa(d);
+    // The speaker's four-point star, beside the gilt name.
+    c = mix(c, ink(231.,204.,148.), sparkle(p - vec2(47., 49.), 8.));
+    // Shadow under the plate.
+    let sh = .38*(1. - smoothstep(-4., 9., rect(p - (lo + hi)*.5 - vec2(0., 4.), (hi - lo)*.5, 14.)));
+    // The instrument: outer brass ring breaks the top edge.
+    let bt = clamp(((v.x + 210.)/420. + (v.y + 210.)/420.)*.5, 0., 1.);
+    let outer = ring(v, 210., 1.) + ticks(v, 210., 7., 7., .0872665, .5)*.8;
+    c = mix(c, brass(bt), clamp(outer, 0., 1.));
+    alpha = max(alpha, clamp(outer, 0., 1.));
+    c = mix(c, ink(27.,22.,56.), disc(v, 186.)*.55*inside);
+    let face = mix(mix(ink(58.,43.,110.), ink(42.,30.,82.), smoothstep(0., .75, r/176.)),
+        ink(35.,26.,71.), smoothstep(.75, 1., r/176.));
+    let plate = disc(v, 177.25);
+    c = mix(c, face, plate);
+    alpha = max(alpha, plate);
+    let dt = clamp(((v.x + 176.)/352. + (v.y + 176.)/352.)*.5, 0., 1.);
+    c = mix(c, brass(dt), ring(v, 176., 1.25));
+    c = mix(c, gold, ring(v, 168., .5)*.8);
+    c = mix(c, gold, ticks(v, 176., 8., 16., .0523599, .5)*.9);
+    c = mix(c, gold, ring(v, 132., .75)*.75);
+    c = mix(c, gold, ring(v, 98., .5)*.5);
+    let spokes = max(segment(v, vec2(0.), vec2(-162.3, -43.5), .5),
+        max(segment(v, vec2(0.), vec2(-118.8, -118.8), .5), segment(v, vec2(0.), vec2(-43.5, -162.3), .5)));
+    c = mix(c, gold, spokes*.35);
+    c = mix(c, lilac, ring(v - vec2(-34., -30.), 104., .75)*.85*plate);
+    c = mix(c, lilac, line(ellipse(rotate(v - vec2(-50., -60.), .628319), vec2(64., 110.)), .5)*.6*plate);
+    // The orbit precesses and a small star rides it; both stay off the text.
+    let quiet = 1. - aa(rect(p - vec2(395., 137.), vec2(359., 69.), 0.) - 1.);
+    let tilt = .488692 + .10*sin(t);
+    let o = rotate(v - vec2(-60., -40.), tilt);
+    c = mix(c, gold, line(ellipse(o, vec2(120., 46.)), .75)*.8*plate*quiet);
+    let star = rotate(vec2(120.*cos(-t), 46.*sin(-t)), -tilt) + vec2(-60., -40.);
+    c = mix(c, pale, disc(v - star, 2.2)*quiet);
+    c += pale*line(ellipse(o, vec2(120., 46.)), 1.)*pow(max(0., cos(atan2(o.y/46., o.x/120.) + t)), 24.)*.12*quiet*plate;
+    // Alidade, sparkles and the crescent near the centre.
+    c = mix(c, brass(.4), segment(v, vec2(0.), vec2(-197.1, -56.5), 1.));
+    c = mix(c, pale, disc(v - vec2(-197.1, -56.5), 3.2));
+    c = mix(c, pale, sparkle(v - vec2(-114., -126.), 7.));
+    c = mix(c, ink(244.,238.,255.), sparkle(v - vec2(-62., -144.), 5.)*.9);
+    c = mix(c, pale, sparkle(v - vec2(-138., -70.), 4.)*.85);
+    c = mix(c, ink(244.,238.,255.), sparkle(v - vec2(-8., -106.), 4.)*.8);
+    c = mix(c, pale, disc(v - vec2(-54., -52.), 34.)*.1);
+    let moon = disc(v - vec2(-54., -52.), 27.)*(1. - disc(v - vec2(-40., -61.), 23.));
+    c = mix(c, brass(clamp(((v.x + 120.)/120. + (v.y + 108.)/110.)*.5, 0., 1.)), moon);
+    c = mix(c, pale, disc(v, 5.));
+    let total = alpha + (1. - alpha)*sh;
+    return vec4(c*alpha/max(total, 1e-4), total);
 }

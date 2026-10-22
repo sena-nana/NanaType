@@ -4,101 +4,119 @@ fn aa(d: f32) -> f32 { return 1. - smoothstep(-0.65, 0.65, d); }
 fn line(d: f32, w: f32) -> f32 { return aa(abs(d) - w); }
 fn disc(p: vec2<f32>, r: f32) -> f32 { return aa(length(p) - r); }
 fn ring(p: vec2<f32>, r: f32, w: f32) -> f32 { return line(length(p) - r, w); }
-fn rect(p: vec2<f32>, b: vec2<f32>, r: f32) -> f32 {
-    let q = abs(p) - b + r;
-    return length(max(q, vec2(0.))) + min(max(q.x,q.y),0.) - r;
-}
-fn segment(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>, w: f32) -> f32 {
-    let d = b - a;
-    return aa(length(p-a-d*clamp(dot(p-a,d)/dot(d,d),0.,1.))-w);
-}
 fn ink(r: f32, g: f32, b: f32) -> vec3<f32> { return pow(vec3(r,g,b)/255., vec3(2.2)); }
-fn grain(p: vec2<f32>) -> f32 { return fract(sin(dot(floor(p),vec2(12.9898,78.233)))*43758.5453); }
 fn rotate(p: vec2<f32>, a: f32) -> vec2<f32> {
     return vec2(cos(a)*p.x-sin(a)*p.y, sin(a)*p.x+cos(a)*p.y);
 }
-// PELAGIC GLASS: sculpted water edge, deep teal reading plane, medusa specimen.
+// AQUARIUM WATERLINE: the plate's top edge is a rippling water surface; a
+// medusa's bell breaks it, tentacles trail into the deep-teal reading water.
 // One immutable, declared PNG: SVG master lives beside this program.
-fn decal(p:vec2<f32>, origin:vec2<f32>, extent:vec2<f32>) -> vec4<f32> {
-    let uv=(p-origin)/extent;
-    if(any(uv<vec2(0.)) || any(uv>vec2(1.))) { return vec4(0.); }
+fn decal(p: vec2<f32>, origin: vec2<f32>, extent: vec2<f32>) -> vec4<f32> {
+    let uv = (p - origin)/extent;
+    if (any(uv < vec2(0.)) || any(uv > vec2(1.))) { return vec4(0.); }
     return sample0(uv);
 }
-// Recompose the original print vocabulary in logical pixels; no scaled canvas.
+// Water vessel: sides x0..x1, rounded bottom at y1, open top at the surface.
+fn vessel(p: vec2<f32>, x0: f32, x1: f32, y1: f32, r: f32) -> f32 {
+    let c = vec2((x0 + x1)*.5, y1 - r);
+    let q = vec2(abs(p.x - c.x) - (x1 - x0)*.5 + r, p.y - c.y);
+    let corner = length(max(q, vec2(0.))) - r;
+    return select(max(abs(p.x - c.x) - (x1 - x0)*.5, p.y - y1), corner, q.x > 0. && q.y > 0.);
+}
+// Narrow, short and portrait layouts: the waterline alone, no medusa.
 fn responsive_print(i: EffectInput) -> vec4<f32> {
-    let p=i.uv*i.size; let s=i.size; let compact=i.params0.z > .5;
-    let phase=i.phase*6.283185;
-    let wave=select(3.,1.4,compact)*sin(p.x*.045);
-    let edge=rect(p-s*.5+vec2(0.,wave),s*.5-vec2(5.,9.),select(29.,12.,compact));
-    var c=mix(ink(12.,44.,58.),i.base.rgb,i.uv.y);
-    let panel=select(aa(s.y-158.-p.y),aa(s.x-24.-p.x),compact);
-    let caustic=sin(p.x*.055+sin(p.y*.042+phase)*.9)+sin(p.y*.07-phase);
-    c=mix(c,i.accent.rgb,line(caustic,.045)*.035*panel);
-    let glass=line(edge+6.,.7); let inner=line(edge+11.,.45);
-    c=mix(c,i.accent.rgb,glass*.72+inner*.22);
-    let bevel=aa(edge+1.)*(1.-aa(edge+6.));
-    c=mix(c,i.accent.rgb,bevel*(.08+.1*(.5+.5*sin(i.uv.x*4.2-i.uv.y*2.4+.5))));
-    let bubble=p-vec2(s.x-26.+1.8*sin(phase),s.y-38.-12.*sin(phase));
-    c=mix(c,i.border.rgb,ring(bubble,3.8,.55)*.23);
-    c+=i.accent.rgb*glass*.025*(1.+sin(phase));
-    return vec4(c,aa(edge));
+    let p = i.uv*i.size; let s = i.size;
+    let surface = 22. + 1.8*sin((p.x - 4.)*.0872665);
+    let body = vessel(p, 4., s.x - 4., s.y - 4., 12.);
+    let d = max(body, surface - p.y);
+    var c = mix(ink(14.,58.,68.), ink(7.,38.,48.), clamp((p.y - 18.)/max(s.y - 22., 1.), 0., 1.));
+    c = mix(c, i.accent.rgb, .18*(1. - smoothstep(0., 30., p.y - surface)));
+    c = mix(c, i.accent.rgb, line(body, .75)*.55*step(surface, p.y));
+    c = mix(c, i.accent.rgb, line(p.y - surface, 1.)*aa(abs(p.x - s.x*.5) - s.x*.5 + 4.));
+    return vec4(c, max(aa(d), line(p.y - surface, 1.)*aa(abs(p.x - s.x*.5) - s.x*.5 + 4.)));
 }
 fn effect(i: EffectInput) -> vec4<f32> {
-    if(i.params0.y > .5 || i.params0.z > .5) { return responsive_print(i); }
-    let p=i.uv*i.size; let s=i.size; let t=i.phase*6.283185;
-    // Keep the glass silhouette aligned with the static fallback beneath it.
-    // Reflections and caustics carry the motion without moving this alpha edge.
-    let wave=3.*sin(i.uv.x*12.);
-    let edge=rect(p-s*.5+vec2(0.,wave),s*.5-vec2(5.,9.),29.);
-    var c=mix(ink(12.,44.,58.),i.base.rgb,i.uv.y);
-    let v=p-vec2(s.x-93.,s.y*.49); let r=length(v);
-    if(i.params0.x < .5) { c=mix(c,ink(34.,103.,116.),disc(v,94.)*.9); }
-    // Integer temporal harmonics close the 16s loop; fade into the water panel.
-    let caustic=sin(p.x*.055+sin(p.y*.042+t)*.9)+sin(p.y*.07-t);
-    let water=smoothstep(s.x-205.,s.x-110.,p.x);
-    c=mix(c,i.accent.rgb,line(caustic,.045)*.035*water);
-    // A quick squeeze pushes water, the body follows with a short inertial lag,
-    // and the bell opens slowly. All three motions share the same 4s stroke.
-    let pivot=vec2(s.x-93.,s.y*.49-24.);
-    let cycle=fract(i.phase*4.);
-    let squeeze=smoothstep(.08,.30,cycle)*(1.-smoothstep(.30,.88,cycle));
-    let push=smoothstep(.13,.43,cycle)*(1.-smoothstep(.43,1.,cycle));
-    let bank=.16*sin(t)+.018*sin(2.*t);
-    let old_bank=.16*sin(t-.28)+.018*sin(2.*t-.56);
-    let drift=vec2(5.8*sin(t)-sin(bank)*8.5*push,-8.5*push-1.8*(1.-cos(t)));
-    var local=rotate(p-pivot-drift,bank);
-    let bell=1.-smoothstep(18.,48.,local.y);
-    let tail=smoothstep(24.,112.,local.y);
-    // The collar follows the bell, then the lag grows down the free tentacles.
-    let drag=3.8*sin(4.*t-tail*1.6)+sin(8.*t-tail*2.3)
-        +local.y*(sin(bank)-sin(old_bank));
-    local.x=local.x*(1.+.18*squeeze*bell)+tail*drag;
-    local.y=local.y*(1.-.10*squeeze*bell);
-    let jelly=decal(local+pivot,vec2(s.x-163.4,s.y*.49-70.),vec2(140.8,176.));
-    if(i.params0.x < .5) { c=mix(c,jelly.rgb,jelly.a); }
-    let halo=ring(v,87.,.45)*aa(v.x+55.);
-    if(i.params0.x < .5) { c=mix(c,i.accent.rgb,halo*.58); }
-    // Bubbles fade before wrapping, and stay inside the ornamental water strip.
-    let bubble=p-vec2(s.x-30.+1.8*sin(2.*t),s.y+12.-fract(i.phase+.3)*(s.y+24.));
-    let bubble2=p-vec2(s.x-156.+1.2*sin(t),s.y+12.-fract(i.phase+.78)*(s.y+24.));
-    let fade=smoothstep(15.,34.,p.y)*(1.-smoothstep(s.y-34.,s.y-15.,p.y));
-    c=mix(c,i.border.rgb,(ring(bubble,3.8,.55)*.23+ring(bubble2,2.3,.45)*.15)*fade);
-    let glass=line(edge+6.,.7); let inner=line(edge+11.,.45);
-    c=mix(c,i.accent.rgb,glass*.72+inner*.22);
-    // The rounded glass lip catches light at the upper left and lower right.
-    let bevel=aa(edge+1.)*(1.-aa(edge+6.));
-    let reflection=.5+.5*sin(i.uv.x*4.2-i.uv.y*2.4+.5);
-    c=mix(c,i.accent.rgb,bevel*(.08+.1*reflection));
-    let glint=line(edge+8.,.35)*pow(max(0.,cos(i.uv.x*5.-i.uv.y*3.)),12.);
-    c=mix(c,i.border.rgb,glint*(.44+.08*sin(t)));
-    let header=segment(p,vec2(37.,52.),vec2(s.x-208.,52.),.55);
-    c=mix(c,i.accent.rgb,header*.5);
-    // Pearl mount: a small open cradle echoes the name capsule and water halo.
-    let cradle=ring(p-vec2(53.,27.),23.,.5)*aa(p.x-38.)*aa(19.-p.y);
-    c=mix(c,i.accent.rgb,cradle*.65);
-    c=mix(c,i.border.rgb,disc(p-vec2(s.x-208.,52.),1.5)*.6);
-    let ripple=ring(p-vec2(45.,36.),i.line_age*160.,1.4)*exp(-i.line_age*3.);
-    c+=i.accent.rgb*ripple*(glass*.12+header*.08+halo*.06);
-    c+=i.accent.rgb*glass*.025*(1.+sin(t));
-    return vec4(c,aa(edge));
+    if (i.params0.y > .5 || i.params0.z > .5) { return responsive_print(i); }
+    let p = i.uv*i.size; let s = i.size; let t = i.phase*6.283185;
+    let teal = i.accent.rgb; let foam = ink(189.,240.,235.);
+    // The surface: a slow standing swell, lifted where the bell breaks it.
+    let jx = s.x - 90.;
+    let surface = 44. + 2.6*sin((p.x - 6.)*.0541654) - 3.*exp(-pow((p.x - jx)/40., 2.));
+    let under = p.y >= surface;
+    let body = vessel(p, 6., s.x - 6., s.y - 6., 18.);
+    let water = max(body, surface - p.y);
+    // Reading area: nothing that moves may touch it.
+    let rq = abs(p - vec2(395., 143.)) - vec2(359., 76.);
+    let quiet = 1. - aa(max(rq.x, rq.y) - 1.);
+    var c = mix(ink(14.,58.,68.), ink(7.,38.,48.), clamp((p.y - 41.)/197., 0., 1.));
+    c = mix(c, teal, .22*(1. - smoothstep(30., 70., p.y)));
+    c = mix(c, teal, .22*max(0., 1. - length(p - vec2(jx, 60.))/150.));
+    // Caustics shimmer only in the water beside the medusa.
+    let caustic = sin(p.x*.055 + sin(p.y*.042 + t)*.9) + sin(p.y*.07 - t);
+    c = mix(c, foam, line(caustic, .05)*.06*smoothstep(s.x - 200., s.x - 120., p.x)*quiet);
+    // The medusa: one 4s stroke squeezes, pushes and opens the bell. The
+    // silhouette above water keeps still (its alpha is the window's edge);
+    // the swim grows in with depth, so the body stays joined at the surface.
+    let k = 1.4545;
+    let amp = smoothstep(surface, surface + 36., p.y);
+    let origin = vec2(s.x - 192., -27.6); let extent = vec2(204.8, 256.);
+    let pivot = origin + vec2(102.4, 66.8);
+    let cycle = fract(i.phase*4.);
+    let squeeze = amp*smoothstep(.08, .30, cycle)*(1. - smoothstep(.30, .88, cycle));
+    let push = smoothstep(.13, .43, cycle)*(1. - smoothstep(.43, 1., cycle));
+    let bank = amp*(.16*sin(t) + .018*sin(2.*t));
+    let old_bank = amp*(.16*sin(t - .28) + .018*sin(2.*t - .56));
+    let drift = amp*k*vec2(5.8*sin(t) - sin(bank)*8.5*push, -8.5*push - 1.8*(1. - cos(t)));
+    var local = rotate(p - pivot - drift, bank);
+    let bell = 1. - smoothstep(18.*k, 48.*k, local.y);
+    let tail = smoothstep(24.*k, 112.*k, local.y);
+    let drag = amp*k*(3.8*sin(4.*t - tail*1.6) + sin(8.*t - tail*2.3))
+        + local.y*(sin(bank) - sin(old_bank));
+    local.x = local.x*(1. + .18*squeeze*bell) + tail*drag;
+    local.y = local.y*(1. - .10*squeeze*bell);
+    let swim = local + pivot - select(vec2(0.), vec2(2., 0.), under);
+    let at = mix(p - select(vec2(0.), vec2(2., 0.), under), swim, quiet);
+    let jelly = decal(at, origin, extent);
+    let shape = smoothstep(.03, .07, jelly.a);
+    if (under) {
+        c = mix(c, teal, shape*.12);
+        c = mix(c, jelly.rgb, jelly.a*.75);
+        let b1 = p - vec2(s.x - 36. + 1.8*sin(2.*t), s.y + 12. - fract(i.phase + .3)*(s.y + 24.));
+        let b2 = p - vec2(s.x - 46. + 1.2*sin(t), s.y + 12. - fract(i.phase + .78)*(s.y + 24.));
+        let fade = smoothstep(surface + 8., surface + 30., p.y)*(1. - smoothstep(s.y - 34., s.y - 15., p.y));
+        c = mix(c, foam, (ring(b1, 3.8, .7)*.5 + ring(b2, 2.4, .6)*.4)*fade*quiet);
+    }
+    // Glass: side walls rise a little above the surface; a faint inner line.
+    c = mix(c, teal, line(body, 1.)*.55*step(surface, p.y));
+    c = mix(c, ink(229.,248.,245.), line(body + 6., .5)*.12*step(surface + 8., p.y));
+    var alpha = aa(water);
+    let wall = line(abs(p.x - s.x*.5) - s.x*.5 + 6., 1.)*step(30., p.y)*step(p.y, surface);
+    let lip = .06*step(30., p.y)*step(p.y, surface)*aa(abs(p.x - s.x*.5) - s.x*.5 + 6.);
+    c = mix(c, teal, max(wall*.7, lip)*(1. - alpha) + wall*.7*alpha);
+    alpha = max(alpha, max(wall*.7, lip));
+    // Above water: an opaque deep-teal backing keeps the translucent bell
+    // legible over any scene.
+    if (!under) {
+        let back = mix(ink(46.,124.,130.), ink(14.,58.,68.), clamp((p.y - origin.y - 30.)/50., 0., 1.));
+        c = mix(c, back, shape);
+        c = mix(c, jelly.rgb, jelly.a);
+        alpha = max(alpha, max(shape, jelly.a));
+    }
+    // The surface line, its meniscus and the rings around the bell.
+    let inside = aa(abs(p.x - s.x*.5) - s.x*.5 + 6.);
+    let edge = line(p.y - surface, 1.)*inside;
+    c = mix(c, teal, edge);
+    alpha = max(alpha, edge);
+    c = mix(c, ink(229.,248.,245.), line(p.y - surface - 4., .5)*.25*inside);
+    let rip = (p - vec2(jx, 42.))/vec2(96., 5.);
+    let rip2 = (p - vec2(jx, 42.))/vec2(128., 7.);
+    let rings = line((length(rip) - 1.)*5., .75)*.45 + line((length(rip2) - 1.)*7., .75)*.2;
+    c = mix(c, foam, rings);
+    alpha = max(alpha, rings);
+    // The pearl's reflection under the floating name.
+    let refl = max(line(p.y - 62., .75)*aa(abs(p.x - 75.) - 29.), line(p.y - 67., .75)*aa(abs(p.x - 75.) - 21.));
+    c = mix(c, ink(238.,249.,246.), refl*.14);
+    let sh = .4*(1. - smoothstep(-4., 10., max(vessel(p - vec2(0., 4.), 6., s.x - 6., s.y - 6., 18.), surface + 4. - p.y)));
+    let total = alpha + (1. - alpha)*sh;
+    return vec4(c*alpha/max(total, 1e-4), total);
 }

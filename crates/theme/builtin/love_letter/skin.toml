@@ -1,99 +1,72 @@
 [chrome]
-accent = "#ba7385"
-surface = "#fff9ef"
-text = "#784b56"
+accent = "#7e1f35"
+surface = "#fffbf2"
+text = "#4e2a33"
 
 [dialogue]
 overscan = 16.0
-padding = [42.0, 58.0, 38.0, 30.0]
+padding = [48.0, 58.0, 120.0, 30.0]
 region = [900.0, 240.0]
 
 [dialogue.box]
-border_color = "#ddb7bb"
+border_color = "#e4c9c9"
 border_width = 1.0
-color = "#fff9ef"
+color = "#fffbf2"
+margin = [6.0, 6.0, 8.0, 6.0]
 material = "paper"
-radius = 7.0
+radius = 2.0
 
-[dialogue.box.shadow]
-blur = 12.0
-color = "#6d3f4b18"
+[[dialogue.box.shadows]]
+blur = 8.0
+color = "#4e2a3324"
 dx = 0.0
 dy = 3.0
+inset = false
+spread = 0.0
 
 [dialogue.continue]
 bob_px = 3.0
-color = "#ba7385"
+color = "#7e1f35"
 glyph = "♡"
-offset = [-18.0, -12.0]
+offset = [-110.0, -14.0]
 size = 17.0
 
 [[dialogue.decor]]
-anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
-font = "accent"
-layer = "above"
-offset = [-18.0, 16.0]
-opacity = 1.0
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = [24.0, 24.0]
-text = "♡"
-text_color = "#ca95a2"
-text_size = 24.0
-when = "always"
-
-[[dialogue.decor]]
 anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
-color = "#ddb7bb70"
 font = "accent"
 layer = "above"
-offset = [26.0, 45.0]
-opacity = 1.0
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = ["92%", 1.0]
-text = ""
-text_color = "text"
-text_size = 16.0
-when = "always"
+offset = [40.0, 12.0]
+size = [64.0, 44.0]
+text = "From"
+text_color = "#7e1f35"
+text_size = 38.0
+when = "speaker"
 
 [dialogue.nameplate]
-offset = [42.0, 18.0]
+color = "#00000000"
+offset = [108.0, 22.0]
 padding = [0.0, 0.0]
-radius = 10.0
-size = 19.0
-text_color = "#ae6f80"
+radius = 0.0
+size = 20.0
+text_color = "#7e1f35"
+
+[dialogue.reply]
+color = "#7e5f68"
+opacity = 1.0
+size = 17.0
 
 [dialogue.responsive.landscape]
 
 [dialogue.responsive.portrait]
+# Vertical writing: the name stands alone at the top right, without "From".
+decor = []
 padding = [24.0, 58.0, 24.0, 30.0]
 
-[[dialogue.responsive.portrait.decor]]
-anchor = "bottom_left"
-border_style = "solid"
-border_width = 0.0
-font = "accent"
-layer = "above"
-offset = [16.0, -16.0]
-opacity = 1.0
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = [24.0, 24.0]
-text = "♡"
-text_color = "#ca95a2"
-text_size = 24.0
-when = "always"
+[dialogue.responsive.portrait.box]
+material = "letter"
+
+[dialogue.responsive.portrait.continue]
+offset = [-18.0, -12.0]
 
 [dialogue.responsive.portrait.nameplate]
 anchor = "top_right"
@@ -105,29 +78,37 @@ max_width = 600.0
 portrait = false
 
 [dialogue.responsive.rules.layout]
-padding = [22.0, 52.0, 22.0, 24.0]
+padding = [22.0, 58.0, 22.0, 24.0]
+
+[dialogue.responsive.rules.layout.box]
+margin = [2.0, 2.0, 2.0, 2.0]
+material = "letter"
+
+[dialogue.responsive.rules.layout.continue]
+offset = [-18.0, -12.0]
 
 [[dialogue.responsive.rules.layout.decor]]
-anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
+anchor = "top_left"
 font = "accent"
 layer = "above"
-offset = [-16.0, 12.0]
-opacity = 1.0
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = [22.0, 22.0]
-text = "♡"
-text_color = "#ca95a2"
-text_size = 22.0
-when = "always"
+offset = [14.0, 8.0]
+size = [52.0, 36.0]
+text = "From"
+text_color = "#7e1f35"
+text_size = 30.0
+when = "speaker"
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [22.0, 15.0]
-size = 18.0
+offset = [66.0, 16.0]
+size = 17.0
+
+[[dialogue.responsive.rules]]
+max_height = 160.0
+max_width = 8192.0
+
+[dialogue.responsive.rules.layout.box]
+margin = [0.0, 0.0, 0.0, 0.0]
+material = "letter"
 
 [[dialogue.responsive.rules]]
 max_height = 140.0
@@ -137,8 +118,12 @@ max_width = 200.0
 decor = []
 padding = [12.0, 14.0, 12.0, 14.0]
 
+[dialogue.responsive.rules.layout.box]
+margin = [0.0, 0.0, 0.0, 0.0]
+material = "letter"
+
 [dialogue.responsive.rules.layout.nameplate]
-color = "#0876d0"
+color = "#7e1f35"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 size = 18.0
@@ -156,9 +141,14 @@ ms = 700
 scope = "text"
 
 [dialogue.text]
-color = "#784b56"
+color = "#4e2a33"
 line_height = 1.600000023841858
 size = 32.0
+
+[fonts.accent]
+families = ["Tangerine", "Segoe Script", "Noto Sans SC"]
+file = "builtin:fonts/Tangerine-Bold.ttf"
+weight = 700
 
 [fonts.body]
 families = ["LXGW WenKai", "KaiTi", "Noto Sans SC"]
@@ -171,33 +161,37 @@ file = "builtin:fonts/LXGWWenKai-Regular.ttf"
 weight = 400
 
 [history]
-bubble_border = "#ddb7bb"
+bubble_border = "#e4c9c9"
 bubble_border_width = 1.0
-bubble_color = "#fff9ef"
-bubble_material = "paper"
+bubble_color = "#fffbf2"
+bubble_material = "sheet"
 bubble_padding = [20.0, 14.0]
-bubble_radius = 7.0
+bubble_radius = 2.0
 entrance = "slide_up"
-name_color = "#ae6f80"
+name_color = "#7e1f35"
 name_weight = 400
-time_color = "#947778"
+time_color = "#7e5f68"
 
 [history.avatar]
 shape = "none"
 
 [history.panel]
-border_color = "#ddb7bb"
+border_color = "#e4c9c9"
 border_style = "solid"
 border_width = 1.0
-color = "#fff9ef"
+color = "#fffbf2"
 margin = [8.0, 8.0, 8.0, 8.0]
-material = "paper"
+material = "sheet"
 padding = [16.0, 14.0, 16.0, 14.0]
-radius = 7.0
+radius = 2.0
 shadows = []
 
+[history.reply]
+color = "#7e5f68"
+opacity = 1.0
+
 [history.text]
-color = "#784b56"
+color = "#4e2a33"
 line_height = 1.600000023841858
 size = 23.0
 
@@ -206,8 +200,18 @@ params = []
 source = "dissolve.wgsl"
 textures = []
 
+[materials.letter]
+params = [0.0, 1.0]
+source = "paper.wgsl"
+textures = []
+
 [materials.paper]
-params = []
+params = [1.0, 1.0]
+source = "paper.wgsl"
+textures = []
+
+[materials.sheet]
+params = [0.0, 0.0]
 source = "paper.wgsl"
 textures = []
 
@@ -216,6 +220,11 @@ params = []
 source = "write.wgsl"
 textures = [{ pipeline = "stroke_map", output = "time" }]
 uniforms = [{ pipeline = "stroke_map", output = "extent" }]
+
+[mention]
+fill = "#f5eae6"
+scale = 0.72
+text_color = "#7e1f35"
 
 [pipelines.stroke_map]
 processor = "text.stroke_time_map"

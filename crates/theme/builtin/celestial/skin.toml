@@ -1,19 +1,19 @@
 [chrome]
-accent = "#b5a1e8"
+accent = "#c9a35a"
 appearance = "dark"
-surface = "#211c39"
+surface = "#1b1638"
 text = "#f4eeff"
 
 [dialogue]
 overscan = 16.0
-padding = [36.0, 65.0, 217.0, 28.0]
-region = [920.0, 220.0]
+padding = [40.0, 72.0, 170.0, 28.0]
+region = [920.0, 230.0]
 
 [dialogue.box]
-border_color = "#e7cc94"
+border_color = "#c9a35a"
 border_width = 1.0
-color = "#211c39"
-radius = 18.0
+color = "#1b1638"
+radius = 14.0
 
 [dialogue.box.frame]
 fill = true
@@ -25,25 +25,18 @@ slice = [0, 0, 0, 0]
 
 [dialogue.continue]
 bob_px = 3.0
-color = "#b5a1e8"
+color = "#c9a35a"
 glyph = "· · ·"
+offset = [-184.0, -22.0]
 
 [dialogue.nameplate]
-border_color = "#e7cc94"
-border_width = 1.0
-color = "#211c39"
-offset = [36.0, -4.0]
-padding = [12.0, 3.0]
-radius = 12.0
+border_width = 0.0
+color = "#00000000"
+offset = [56.0, 34.0]
+padding = [4.0, 3.0]
+radius = 4.0
 size = 19.0
 text_color = "#e7cc94"
-
-[dialogue.nameplate.gradient]
-angle = 180.0
-center = [50.0, 50.0]
-circle = false
-kind = "linear"
-stops = [[0.0, "#393153"], [0.5, "#211c39"], [1.0, "#29223f"]]
 
 [dialogue.responsive.landscape]
 decor = []
@@ -102,34 +95,17 @@ max_width = 600.0
 portrait = false
 
 [dialogue.responsive.rules.layout]
-padding = [16.0, 40.0, 52.0, 16.0]
+decor = []
+padding = [18.0, 52.0, 18.0, 14.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
 
-[[dialogue.responsive.rules.layout.decor]]
-anchor = "bottom_right"
-aspect_ratio = 0.800000011920929
-border_style = "solid"
-border_width = 0.0
-font = "accent"
-image = "ornament.png"
-layer = "above"
-min_window = [280.0, 180.0]
-offset = [-8.0, -8.0]
-opacity = 1.0
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = [32.0, 40.0]
-text = ""
-text_color = "text"
-text_size = 16.0
-when = "always"
-
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+color = "#c9a35a"
+offset = [16.0, 14.0]
+padding = [8.0, 2.0]
+text_color = "#1b1638"
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_compact"
@@ -142,13 +118,17 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 40.0, 16.0, 16.0]
+padding = [18.0, 36.0, 18.0, 4.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+color = "#c9a35a"
+offset = [16.0, 6.0]
+padding = [8.0, 1.0]
+size = 17.0
+text_color = "#1b1638"
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_compact"
@@ -237,17 +217,16 @@ portrait = true
 [dialogue.responsive.rules.layout]
 decor = []
 padding = [12.0, 12.0, 12.0, 12.0]
-unset = ["nameplate.border_color", "nameplate.gradient"]
 
 [dialogue.responsive.rules.layout.nameplate]
 anchor = "top_right"
 border_width = 0.0
-color = "#0876d0"
+color = "#c9a35a"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
 size = 18.0
-text_color = "#ffffff"
+text_color = "#1b1638"
 visible = false
 
 [[dialogue.responsive.rules.layout.shader_effects]]
@@ -261,18 +240,18 @@ max_width = 200.0
 [dialogue.responsive.rules.layout]
 decor = []
 padding = [10.0, 12.0, 10.0, 12.0]
-unset = ["box.frame", "nameplate.border_color", "nameplate.gradient"]
+unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
 
 [dialogue.responsive.rules.layout.nameplate]
 border_width = 0.0
-color = "#0876d0"
+color = "#c9a35a"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
 size = 18.0
-text_color = "#ffffff"
+text_color = "#1b1638"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
@@ -289,24 +268,41 @@ ms = 140
 shader = "artwork"
 target = "artwork"
 
+[dialogue.reply]
+color = "#a99cc8"
+size = 14.0
+
 [dialogue.text]
 color = "#f4eeff"
-line_height = 1.4500000476837158
+line_height = 1.45
 size = 26.0
 
+[fonts.body]
+families = ["Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun"]
+weight = 400
+
+[fonts.name]
+families = ["Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun"]
+weight = 700
+
+[mention]
+fill = "#3b2f48"
+scale = 0.72
+text_color = "#e7cc94"
+
 [history]
-bubble_border = "#e7cc9480"
+bubble_border = "#c9a35a80"
 bubble_border_width = 0.800000011920929
-bubble_color = "#211c39"
+bubble_color = "#2a1e52"
 bubble_contour = "orbit"
 bubble_radius = 14.0
 entrance = "slide_up"
 name_color = "#e7cc94"
-time_color = "#c4b5d7"
+time_color = "#a99cc8"
 
 [history.avatar]
-color = "#393153"
-ring_color = "#e7cc94"
+color = "#8e7cc3"
+ring_color = "#c9a35a"
 ring_width = 1.0
 size = 36.0
 
@@ -315,7 +311,7 @@ angle = 160.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#393153"], [1.0, "#211c39"]]
+stops = [[0.0, "#2a1e52"], [1.0, "#1b1638"]]
 
 [[history.bubble_shadows]]
 blur = 0.0
@@ -365,10 +361,10 @@ text_size = 16.0
 when = "always"
 
 [history.name_plate]
-border_color = "#e7cc94"
+border_color = "#c9a35a"
 border_style = "solid"
 border_width = 0.800000011920929
-color = "#211c39"
+color = "#1b1638"
 padding = [9.0, 2.0]
 radius = 8.0
 shadows = []
@@ -379,13 +375,13 @@ angle = 180.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#393153"], [1.0, "#211c39"]]
+stops = [[0.0, "#2a1e52"], [1.0, "#1b1638"]]
 
 [history.panel]
-border_color = "#e7cc9480"
+border_color = "#c9a35a80"
 border_style = "solid"
 border_width = 1.0
-color = "#211c39f5"
+color = "#1b1638f5"
 margin = [8.0, 8.0, 8.0, 8.0]
 padding = [14.0, 14.0, 14.0, 18.0]
 radius = 20.0
@@ -417,7 +413,6 @@ params = []
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true
-textures = ["ornament.png"]
 
 [shaders.responsive_artwork]
 animated = true
@@ -426,7 +421,6 @@ params = [1.0, 1.0]
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true
-textures = ["ornament.png"]
 
 [shaders.responsive_compact]
 animated = true
@@ -435,4 +429,3 @@ params = [1.0, 0.0, 1.0]
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true
-textures = ["ornament.png"]

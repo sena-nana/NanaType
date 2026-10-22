@@ -39,40 +39,40 @@ base = "nanatype.halo"           # 可选，只继承配置
 
 | id | 名称 | 标签 | 特点 |
 |---|---|---|---|
-| `nanatype.machine_learning` | 机器学习 | minimal, game | 石墨黑神经实验室、冰青正文与淡紫节点；字符快速演算后锁定，整段乱码随机消隐 |
+| `nanatype.machine_learning` | 机器学习 | minimal, game | 石墨底、冷白正文与淡紫节点网络；字符快速演算后锁定，整段乱码随机消隐 |
 | `nanatype.crayon` | 蜡笔画 | cute, elegant | 米白画纸、柔彩蜡笔与小花涂鸦，深色彩铅文字；静态 GPU 材质 |
 | `nanatype.halo` | 光环 | classic, minimal | 默认。精简蓝白圆润卡片、轻阴影、天蓝胶囊名牌，无右上角动效 |
 | `nanatype.sonnet` | 十四行诗 | elegant, minimal | 透明诗句字幕，中文文楷与英文花体；逐字金光、星火光丝，整段同步化为光尘 |
-| `nanatype.love_letter` | 情书 | cute, elegant | 奶油信纸、淡粉边饰与玫瑰墨迹；文楷按笔顺错峰书写，整段同步消融，见[情书说明](love-letter.md) |
-| `nanatype.night` | 夜色 | classic | 深蓝玻璃、切角仪表框、霓虹描边与呼吸光带 |
-| `nanatype.parchment` | 羊皮纸 | classic, elegant | 双线压印框、暖色纸纤维、卷草包角、宋体 |
-| `nanatype.adv` | ADV 经典 | game | 1280×180 宽幅剧情框、端部缺口、金色姓名基线 |
-| `nanatype.rpg` | RPG 窗口 | game, retro | 蓝色渐变窗口、阶梯切角、白色嵌套框线 |
-| `nanatype.vanilla` | 香草 | streaming, minimal | 端正白条、竖直左侧强调色、名字在框内 |
-| `nanatype.bubble` | 气泡 | streaming, cute | 平滑圆角气泡、连续曲线尾巴、胶囊名牌与圆润星芒 |
-| `nanatype.subtitle` | 字幕 | streaming, minimal | 无框，居中粗描边白字 |
+| `nanatype.love_letter` | 情书 | cute, elegant | 象牙罗纹信笺、横格与链纹、酒红火漆，From 花体署名；文楷按笔顺错峰书写，整段同步消融，见[情书说明](love-letter.md) |
+| `nanatype.night` | 夜色 | classic | 霓虹灯管招牌：茄紫黑底、品红灯管与卡扣，姓名是点亮的一段字；换句时灯管闪两下 |
+| `nanatype.parchment` | 羊皮纸 | classic, elegant | 犊皮纸、双压线框、四角卷草，内压金线的皮签名牌，宋体 |
+| `nanatype.adv` | ADV 经典 | game | 1280 宽电影遮幅：上方透明渐入深黑、白色细线，宋体白名带短下划线 |
+| `nanatype.rpg` | RPG 窗口 | game, retro | 皇家蓝搪瓷窗、三层倒角、独立名牌小窗与像素字，等待时水晶跳动 |
+| `nanatype.vanilla` | 香草 | streaming, minimal | 瑞士编辑版式：暖白直角纸面、香草荚深棕竖线、栏目式姓名与对位十字 |
+| `nanatype.bubble` | 气泡 | streaming, cute | 糖果贴纸：浅粉底、深梅粗描边、粉色错位阴影、糖果胶囊名牌与弹性爱心 |
+| `nanatype.subtitle` | 字幕 | streaming, minimal | 无框，居中粗描边白字；姓名为金色描边字，不加底板 |
 | `nanatype.livechat` | 直播弹幕 | streaming | 圆形头像、纯文字姓名、圆角评论气泡与 LIVE 标识 |
-| `nanatype.comic` | 漫画 | game, cute | 分镜框、尖角尾巴、渐疏网点、黑色硬投影 |
-| `nanatype.terminal` | 终端 | retro, minimal | 黑底绿字、机壳切角、分隔标题栏、闪烁光标 |
+| `nanatype.comic` | 漫画 | game, cute | 黑白印刷加印刷黄：粗细变化的墨线、尖尾巴、两角网点、速度线与倾斜黄色说明框 |
+| `nanatype.terminal` | 终端 | retro, minimal | 琥珀荧光屏、标题栏路径与忙碌符号、极淡扫描线、空心光标 |
 | `nanatype.pixel` | 掌机像素 | game, retro | 四阶绿色、阶梯框与像素凹槽、像素字 |
-| `nanatype.sakura` | 樱花 | cute | 柔和圆角框、带缺口的五瓣樱花、粉色渐变与爱心提示 |
-| `nanatype.ink` | 水墨 | elegant | 平整宣纸底色、墨竹画作与朱印、楷体 |
+| `nanatype.sakura` | 樱花 | cute | 半透明粉色毛玻璃、无尾巴，花枝越出右上角、框外几片落瓣，小樱花引出姓名 |
+| `nanatype.ink` | 水墨 | elegant | 生宣留白、底边一笔干笔，墨竹出血越框，朱印落款与楷体 |
 | `nanatype.echo_vanilla` | Echo-Live 原版 | streaming, minimal | 还原 Echo-Live 原版：白底、顶部灰线、右上角三角、名字左凸、底部菜单栏 |
 | `nanatype.echo_glass` | Echo-Live 玻璃 | streaming | 还原 Echo-Live 玻璃：自下而上黑色渐变、黑边白字、菜单栏靠右 |
 | `nanatype.echo_bubble` | Echo-Live 气泡 | streaming, cute | 还原 Echo-Live 气泡：白色圆角框、灰色粗边、右下硬投影 |
 | `nanatype.echo_void` | Echo-Live 虚空 | streaming, minimal | 还原 Echo-Live 虚空：完全透明，只有黑字和灰色菜单栏 |
-| `nanatype.gothic` | 蔷薇哥特 | streaming, elegant | 酒红书脊、蚀刻玫瑰窗与金色尖拱 |
-| `nanatype.celestial` | 星月魔法 | streaming, elegant | 偏心天球仪、金色月相与轨道刻度 |
-| `nanatype.forest` | 森林精灵 | streaming, cute | 植物标本手札、装订孔与纸张颗粒 |
-| `nanatype.tidal` | 潮汐水族馆 | streaming, elegant | 流体玻璃、水母标本与深海阅读面 |
-| `nanatype.lantern` | 朱砂华灯 | streaming, elegant | 朱砂版画侧栏、菱格窗棂与垂灯 |
-| `nanatype.citrus` | 柠檬汽水 | streaming, cute | 薄荷斜向包纸、水果剖面与网点标签 |
+| `nanatype.gothic` | 蔷薇哥特 | streaming, elegant | 教堂立面：两扇彩窗尖窗、山墙玫瑰窗、锡银窗棂与酒红阅读面 |
+| `nanatype.celestial` | 星月魔法 | streaming, elegant | 以右下角为圆心出血的黄铜星盘、新月与穿过正文背后的淡星弧 |
+| `nanatype.forest` | 森林精灵 | streaming, cute | 鼠尾草绿衬卡上的标本纸、纸胶带名牌、越出上沿的蕨叶与标本签 |
+| `nanatype.tidal` | 潮汐水族馆 | streaming, elegant | 起伏水线为上沿，水母伞体浮出水面，珍珠名牌漂在水线上 |
+| `nanatype.lantern` | 朱砂华灯 | streaming, elegant | 黑漆朱框描金，横梁垂下两盏灯笼悬在框外，暖光映在漆面上 |
+| `nanatype.citrus` | 柠檬汽水 | streaming, cute | 薄荷网点上的斜切汽水标签、从角上出血的柠檬片与倾斜贴纸名牌 |
 
 ![内置皮肤一览](skins-preview.png)
 
 设置 › 皮肤 顶部的预览卡会用示例台词实时画出所选皮肤（含个性化设置），点击某一行即可预览而不切换（行尾的“⋯”菜单里有复制、导出等操作）；标签和浅色 / 深色可用来筛选列表。水墨保留开放授权墨竹素材，程序版画携带同源静态回退，复杂花枝与卷草使用原创透明纹理；想改造它们时用「复制为可编辑」。缩略图使用与展示框相同的静态装饰、尾巴与表面绘制，并为外扩装饰和阴影留出空间；无继续提示的皮肤不显示占位圆点。
 
-原有十八套按各自特征重新确定设计，光环回归精简胶囊卡片，香草使用端正轮廓，直播姓名使用纯文字，漫画使用网点，羊皮纸加强纸浆与纤维材质，详见[经典皮肤设计记录](classic-skin-refinement.md)。七套使用物件或状态动效：电路数据点、准备水晶、弹性爱心、打字三点、终端符号、液晶格和花枝；其余皮肤以纸张、线条和排版保持静态。响应式竖版与窄窗复用原来的版画程序重排纹理、角花和状态物件；静态程序不申请动画帧。关闭高级动效后保留静态外观。完整画面为超长姓名预留空间，姓名在名牌内省略，原始姓名不变。显式设置个性化框色时优先使用所选颜色与原生框体。
+2026-10 按[皮肤重设计](skin-redesign.md)重新拉开色域与构图：版画六套各换独立骨架，终端改琥珀、夜色改霓虹、华灯改暗底、哥特改锡银、ADV 去金；光环、直播弹幕、蜡笔画与 Echo 四套保持原风格。全部皮肤的 @提及改为浅底深字，紧凑态不再借用光环蓝。更早的细化见[经典皮肤设计记录](classic-skin-refinement.md)。七套使用物件或状态动效：霓虹灯管闪烁、准备水晶、弹性爱心、打字三点、终端符号、液晶格和花枝；其余皮肤以纸张、线条和排版保持静态。响应式竖版与窄窗复用原来的版画程序重排纹理、角花和状态物件；静态程序不申请动画帧。关闭高级动效后保留静态外观。完整画面为超长姓名预留空间，姓名在名牌内省略，原始姓名不变。显式设置个性化框色时优先使用所选颜色与原生框体。
 
 历史记录延续展示框的名牌、框线和排版：纸张主题使用静态纤维、双线或朱印；六套新增主题各自保留酒红装订、星轨、装订孔、玻璃水线、朱砂印章和薄荷纸层。历史装饰保持静态，不执行展示框的动效。主播和观众的姓名底板、无图头像遵循同一套皮肤配色，真实头像保留原图。掌机像素和 RPG 的正文、姓名、时间与引用使用 12px 的整数倍字号；字幕不显示头像。
 

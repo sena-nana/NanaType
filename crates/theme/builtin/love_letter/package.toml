@@ -19,9 +19,9 @@ ja-JP = "ラブレター"
 zh-CN = "情书"
 
 [description]
-en-US = "Rose ink on cream stationery, overlapping handwritten strokes and a shared ink dissolve"
-ja-JP = "クリーム色の便箋に薔薇色のインク。筆順に沿って綴り、文章全体が溶けてゆく"
-zh-CN = "奶油信纸与玫瑰墨迹，按笔顺错峰书写，整段温柔消融"
+en-US = "Wine ink on ivory laid paper ruled to the line pitch, sealed with dark-wine wax; strokes written in order, then dissolved together"
+ja-JP = "罫線入りのアイボリーのレイド紙にワインレッドのインクと封蝋。筆順に沿って綴り、文章全体が溶けてゆく"
+zh-CN = "象牙罗纹信笺与酒红火漆，按笔顺错峰书写，整段温柔消融"
 
 [data.strokes]
 path = "strokes.nthz"

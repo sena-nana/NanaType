@@ -4,7 +4,7 @@ text = "#1f2a36"
 
 [dialogue]
 padding = [20.0, 42.0, 22.0, 14.0]
-region = [800.0, 176.0]
+region = [800.0, 184.0]
 
 [dialogue.box]
 border_color = "#cbe0ef"
@@ -94,12 +94,12 @@ angle = 90.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#ff5c7a"], [1.0, "#ff8a5c"]]
+stops = [[0.0, "#f5506f"], [1.0, "#ff8a5c"]]
 
 [dialogue.nameplate]
 offset = [18.0, 12.0]
 padding = [0.0, 2.0]
-size = 16.0
+size = 17.0
 text_color = "#137c9a"
 
 [[dialogue.responsive.landscape.decor]]
@@ -158,7 +158,7 @@ angle = 90.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#ff5c7a"], [1.0, "#ff8a5c"]]
+stops = [[0.0, "#f5506f"], [1.0, "#ff8a5c"]]
 
 [dialogue.responsive.portrait]
 padding = [20.0, 24.0, 56.0, 72.0]
@@ -230,7 +230,7 @@ angle = 90.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#ff5c7a"], [1.0, "#ff8a5c"]]
+stops = [[0.0, "#f5506f"], [1.0, "#ff8a5c"]]
 
 [dialogue.responsive.portrait.nameplate]
 anchor = "top_right"
@@ -314,7 +314,7 @@ angle = 90.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#ff5c7a"], [1.0, "#ff8a5c"]]
+stops = [[0.0, "#f5506f"], [1.0, "#ff8a5c"]]
 
 [dialogue.responsive.rules.layout.nameplate]
 offset = [52.0, 6.0]
@@ -410,7 +410,7 @@ angle = 90.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#ff5c7a"], [1.0, "#ff8a5c"]]
+stops = [[0.0, "#f5506f"], [1.0, "#ff8a5c"]]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_print"
@@ -482,7 +482,7 @@ angle = 90.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#ff5c7a"], [1.0, "#ff8a5c"]]
+stops = [[0.0, "#f5506f"], [1.0, "#ff8a5c"]]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_print"
@@ -499,7 +499,7 @@ padding = [12.0, 12.0, 12.0, 12.0]
 
 [dialogue.responsive.rules.layout.nameplate]
 anchor = "top_right"
-color = "#0876d0"
+color = "#137c9a"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
@@ -525,7 +525,7 @@ margin = [0.0, 0.0, 0.0, 0.0]
 width_fraction = 1.0
 
 [dialogue.responsive.rules.layout.nameplate]
-color = "#0876d0"
+color = "#137c9a"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
@@ -538,6 +538,9 @@ visible = false
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "minimal_print"
 target = "artwork"
+
+[dialogue.reply]
+color = "#5f6e80"
 
 [dialogue.reveal.entrance]
 kind = "fade"
@@ -557,6 +560,11 @@ contrast_guard = 3.0
 [fonts.accent]
 families = ["Segoe UI Symbol", "Microsoft YaHei UI", "PingFang SC"]
 weight = 700
+
+[mention]
+fill = "#e0f3fb"
+scale = 0.72
+text_color = "#106f8a"
 
 [history]
 bubble_color = "#ffffff"

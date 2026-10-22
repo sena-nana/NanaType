@@ -1,18 +1,37 @@
 [chrome]
-accent = "#33ff66"
+accent = "#ffb000"
 appearance = "dark"
-surface = "#0d140e"
-text = "#c8ffd4"
+surface = "#1a1308"
+text = "#ffc547"
 
 [dialogue]
-padding = [22.0, 40.0, 22.0, 14.0]
+padding = [24.0, 60.0, 48.0, 14.0]
+region = [760.0, 184.0]
+
+[[dialogue.decor]]
+anchor = "top"
+font = "accent"
+offset = [0.0, 3.0]
+size = [160.0, 18.0]
+text = "~/stream"
+text_color = "#a88536"
+text_size = 12.0
+
+[[dialogue.decor]]
+anchor = "top_right"
+font = "accent"
+offset = [-10.0, 3.0]
+opacity = 0.7
+size = [48.0, 18.0]
+text = "utf-8"
+text_color = "#a88536"
+text_size = 12.0
 
 [dialogue.box]
-border_color = "#1f5f2a"
-border_width = 1.0
-color = "#0a0f0af2"
-contour = "terminal"
-radius = 4.0
+border_color = "#ffb00052"
+border_width = 1.5
+color = "#0d0a05f2"
+radius = 6.0
 
 [dialogue.box.frame]
 fill = true
@@ -20,38 +39,42 @@ image = "still.png"
 layout_inset = false
 repeat = false
 scale = 1.0
-slice = [28, 28, 16, 54]
+slice = [28, 28, 16, 72]
 
 [[dialogue.box.shadows]]
-blur = 16.0
-color = "#33ff6626"
+blur = 8.0
+color = "#00000059"
 dx = 0.0
-dy = 0.0
+dy = 3.0
 inset = false
 spread = 0.0
 
 [dialogue.continue]
 bob_px = 3.0
-color = "#33ff66"
-glyph = "█"
+color = "#ffb000"
+glyph = "▯"
 motion = "blink"
+offset = [-22.0, -18.0]
 period_s = 1.0
+size = 24.0
 
 [dialogue.nameplate]
-anchor = "top_right"
-offset = [-12.0, 4.0]
+offset = [24.0, 33.0]
 padding = [0.0, 0.0]
-size = 13.0
-text_color = "#33ff66"
+size = 17.0
+text_color = "#ffb000"
 
 [dialogue.nameplate.text_shadow]
 blur = 4.0
-color = "#33ff6680"
+color = "#ffb00080"
 dx = 0.0
 dy = 0.0
 
+[dialogue.reply]
+color = "#a88536"
+size = 14.0
+
 [dialogue.responsive.landscape]
-decor = []
 
 [dialogue.responsive.portrait]
 decor = []
@@ -65,6 +88,7 @@ anchor = "bottom_left"
 offset = [12.0, -8.0]
 
 [dialogue.responsive.portrait.nameplate]
+anchor = "top_right"
 offset = [-8.0, 12.0]
 padding = [4.0, 4.0]
 
@@ -81,14 +105,14 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 46.0, 16.0, 16.0]
+padding = [14.0, 38.0, 14.0, 14.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
+radius = 5.0
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-offset = [82.0, 3.0]
+offset = [14.0, 10.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "compact_print"
@@ -101,14 +125,14 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 46.0, 16.0, 16.0]
+padding = [14.0, 38.0, 14.0, 14.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
+radius = 5.0
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-offset = [82.0, 3.0]
+offset = [14.0, 10.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "compact_print"
@@ -152,13 +176,12 @@ unset = ["box.frame", "nameplate.text_shadow"]
 [dialogue.responsive.rules.layout.box]
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-color = "#0876d0"
+color = "#ffb000"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
 size = 18.0
-text_color = "#ffffff"
+text_color = "#0d0a05"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
@@ -176,13 +199,14 @@ shader = "artwork"
 target = "artwork"
 
 [dialogue.text]
-color = "#33ff66"
+color = "#ffc547"
 letter_spacing = 0.5
+line_height = 1.5
 size = 24.0
 
 [dialogue.text.shadow]
-blur = 6.0
-color = "#33ff6680"
+blur = 5.0
+color = "#ffb0008c"
 dx = 0.0
 dy = 0.0
 
@@ -199,56 +223,65 @@ weight = 400
 
 [fonts.name]
 families = ["Cascadia Mono", "Consolas", "Sarasa Mono SC", "NSimSun", "Menlo"]
-weight = 400
+weight = 700
 
 [history]
-bubble_border = "#286637"
+bubble_border = "#ffb00052"
 bubble_border_width = 1.0
-bubble_color = "#0a0f0ae6"
+bubble_color = "#0d0a05e6"
 bubble_contour = "terminal"
 bubble_radius = 2.0
-name_color = "#33ff66"
+name_color = "#ffb000"
 name_size = 17.0
 name_weight = 400
-time_color = "#4f8f5e"
+time_color = "#a88536"
 time_size = 12.0
 
 [history.avatar]
-color = "#0a0f0a"
+color = "#ffb000"
 radius = 0.0
-ring_color = "#33ff66"
+ring_color = "#ffb000"
 ring_width = 1.0
 shape = "square"
 size = 32.0
 
 [history.panel]
-border_color = "#286637"
+border_color = "#ffb00052"
 border_style = "solid"
 border_width = 1.0
-color = "#0a0f0af5"
+color = "#0d0a05f5"
 margin = [8.0, 8.0, 8.0, 8.0]
 padding = [12.0, 12.0, 12.0, 12.0]
 radius = 2.0
 shadows = []
 
+[history.reply]
+color = "#a88536"
+
 [history.text]
-color = "#33ff66"
+color = "#ffc547"
 size = 17.0
 
 [history.text.shadow]
 blur = 4.0
-color = "#33ff6660"
+color = "#ffb00060"
 dx = 0.0
 dy = 0.0
 
 [history.title]
-background = "#102416"
-color = "#33ff66"
+background = "#1a1308"
+color = "#ffb000"
 height = 36.0
 padding = 14.0
 size = 13.0
 text = "> HISTORY"
 weight = 400
+
+[mention]
+avatar = true
+fill = "#2f2104"
+scale = 0.72
+text_color = "#ffd27a"
 
 [shaders.artwork]
 animated = true

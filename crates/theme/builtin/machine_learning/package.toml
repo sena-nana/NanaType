@@ -19,6 +19,6 @@ ja-JP = "機械学習"
 zh-CN = "机器学习"
 
 [description]
-en-US = "A graphite neural lab: characters scramble, lock in, and vanish in random order"
-ja-JP = "黒鉛色のニューラルラボ。文字が高速に変換・収束し、ランダムに消える"
-zh-CN = "石墨黑神经实验室，字符快速演算并锁定，整段乱码随机消隐"
+en-US = "Graphite with a lavender node network: characters scramble, lock in, and vanish in random order"
+ja-JP = "黒鉛色に薄紫のノード網。文字が高速に変換・収束し、ランダムに消える"
+zh-CN = "石墨底与淡紫节点网络，字符快速演算并锁定，整段乱码随机消隐"

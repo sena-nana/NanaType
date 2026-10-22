@@ -1,18 +1,18 @@
 [chrome]
-accent = "#9e3153"
+accent = "#b3224a"
 appearance = "dark"
-surface = "#18131c"
-text = "#f5e8ed"
+surface = "#17111a"
+text = "#f3e6ec"
 
 [dialogue]
 overscan = 16.0
-padding = [145.0, 70.0, 128.0, 28.0]
-region = [920.0, 220.0]
+padding = [108.0, 84.0, 108.0, 28.0]
+region = [920.0, 244.0]
 
 [dialogue.box]
-border_color = "#c7ab76"
+border_color = "#a8a9b4"
 border_width = 1.0
-color = "#18131c"
+color = "#17111a"
 radius = 18.0
 
 [dialogue.box.frame]
@@ -25,26 +25,28 @@ slice = [0, 0, 0, 0]
 
 [dialogue.continue]
 bob_px = 3.0
-color = "#9e3153"
-glyph = "· · ·"
+color = "#a8a9b4"
+glyph = "▲"
+offset = [-110.0, -26.0]
+size = 12.0
 
 [dialogue.nameplate]
-border_color = "#c7ab76"
-border_width = 0.800000011920929
-color = "#9e3153"
+border_color = "#a8a9b4"
+border_width = 1.5
+color = "#b3224a"
 contour = "terminal"
-offset = [140.0, 12.0]
-padding = [12.0, 3.0]
+offset = [108.0, 42.0]
+padding = [14.0, 3.0]
 radius = 2.0
 size = 19.0
-text_color = "#f5e8ed"
+text_color = "#f3e6ec"
 
 [dialogue.nameplate.gradient]
 angle = 180.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#a13d5d"], [1.0, "#76263f"]]
+stops = [[0.0, "#c22d57"], [1.0, "#8e1a3b"]]
 
 [dialogue.responsive.landscape]
 decor = []
@@ -125,34 +127,14 @@ max_width = 600.0
 portrait = false
 
 [dialogue.responsive.rules.layout]
-padding = [16.0, 40.0, 52.0, 16.0]
+decor = []
+padding = [18.0, 58.0, 18.0, 16.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
 
-[[dialogue.responsive.rules.layout.decor]]
-anchor = "bottom_right"
-aspect_ratio = 0.800000011920929
-border_style = "solid"
-border_width = 0.0
-font = "accent"
-image = "rose.png"
-layer = "above"
-min_window = [280.0, 180.0]
-offset = [-8.0, -8.0]
-opacity = 1.0
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = [32.0, 40.0]
-text = ""
-text_color = "text"
-text_size = 16.0
-when = "always"
-
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+offset = [16.0, 20.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_compact"
@@ -165,13 +147,15 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 40.0, 16.0, 16.0]
+padding = [18.0, 36.0, 18.0, 4.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+offset = [16.0, 1.0]
+padding = [10.0, 1.0]
+size = 17.0
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_compact"
@@ -287,12 +271,12 @@ unset = ["nameplate.border_color", "nameplate.contour", "nameplate.gradient"]
 [dialogue.responsive.rules.layout.nameplate]
 anchor = "top_right"
 border_width = 0.0
-color = "#0876d0"
+color = "#b3224a"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
 size = 18.0
-text_color = "#ffffff"
+text_color = "#f3e6ec"
 visible = false
 
 [[dialogue.responsive.rules.layout.shader_effects]]
@@ -305,19 +289,19 @@ max_width = 200.0
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [10.0, 12.0, 10.0, 12.0]
+padding = [10.0, 22.0, 10.0, 8.0]
 unset = ["box.frame", "nameplate.border_color", "nameplate.contour", "nameplate.gradient"]
 
 [dialogue.responsive.rules.layout.box]
 
 [dialogue.responsive.rules.layout.nameplate]
 border_width = 0.0
-color = "#0876d0"
+color = "#b3224a"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
 size = 18.0
-text_color = "#ffffff"
+text_color = "#f3e6ec"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
@@ -334,25 +318,42 @@ ms = 140
 shader = "artwork"
 target = "artwork"
 
+[dialogue.reply]
+color = "#b79aa8"
+size = 14.0
+
 [dialogue.text]
-color = "#f5e8ed"
-line_height = 1.4500000476837158
-size = 24.0
+color = "#f3e6ec"
+line_height = 1.45
+size = 25.0
+
+[fonts.body]
+families = ["Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun"]
+weight = 400
+
+[fonts.name]
+families = ["Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun"]
+weight = 700
+
+[mention]
+fill = "#3d1527"
+scale = 0.72
+text_color = "#f3c6d3"
 
 [history]
-bubble_border = "#c7ab7680"
+bubble_border = "#a8a9b480"
 bubble_border_width = 1.0
-bubble_color = "#221720"
+bubble_color = "#2a1420"
 bubble_contour = "terminal"
 bubble_radius = 3.0
 entrance = "slide_up"
-name_color = "#f5e8ed"
-time_color = "#c7ab76"
+name_color = "#f3e6ec"
+time_color = "#b79aa8"
 
 [history.avatar]
-color = "#76263f"
+color = "#b3224a"
 radius = 2.0
-ring_color = "#c7ab76"
+ring_color = "#a8a9b4"
 ring_width = 1.0
 shape = "square"
 size = 36.0
@@ -362,11 +363,11 @@ angle = 180.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#30202e"], [1.0, "#18131c"]]
+stops = [[0.0, "#2a1420"], [1.0, "#17111a"]]
 
 [[history.bubble_shadows]]
 blur = 0.0
-color = "#9e315340"
+color = "#b3224a40"
 dx = 3.0
 dy = 0.0
 inset = true
@@ -374,7 +375,7 @@ spread = 0.0
 
 [[history.decor]]
 anchor = "top_left"
-border_color = "#c7ab7640"
+border_color = "#a8a9b440"
 border_style = "solid"
 border_width = 0.6000000238418579
 font = "accent"
@@ -412,39 +413,39 @@ text_size = 16.0
 when = "always"
 
 [history.name_plate]
-border_color = "#c7ab76"
+border_color = "#a8a9b4"
 border_style = "solid"
 border_width = 0.800000011920929
-color = "#9e3153"
+color = "#b3224a"
 contour = "terminal"
 padding = [9.0, 2.0]
 radius = 2.0
 shadows = []
-text_color = "#f5e8ed"
+text_color = "#f3e6ec"
 
 [history.name_plate.gradient]
 angle = 180.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#a13d5d"], [1.0, "#76263f"]]
+stops = [[0.0, "#c22d57"], [1.0, "#8e1a3b"]]
 
 [history.panel]
-border_color = "#c7ab76"
+border_color = "#a8a9b4"
 border_style = "solid"
 border_width = 1.0
-color = "#18131cf5"
+color = "#17111af5"
 margin = [8.0, 8.0, 8.0, 8.0]
 padding = [14.0, 14.0, 14.0, 18.0]
 radius = 3.0
 shadows = []
 
 [history.text]
-color = "#f5e8ed"
+color = "#f3e6ec"
 
 [history.title]
-background = "#76263f"
-color = "#f5e8ed"
+background = "#5c1a30"
+color = "#f3e6ec"
 height = 52.0
 padding = 18.0
 size = 14.0
@@ -458,7 +459,6 @@ params = []
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true
-textures = ["ornament.png"]
 
 [shaders.responsive_artwork]
 animated = true
@@ -467,7 +467,6 @@ params = [1.0, 1.0]
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true
-textures = ["ornament.png"]
 
 [shaders.responsive_compact]
 animated = true
@@ -476,4 +475,3 @@ params = [1.0, 0.0, 1.0]
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true
-textures = ["ornament.png"]

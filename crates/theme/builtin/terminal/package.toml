@@ -19,6 +19,6 @@ ja-JP = "ターミナル"
 zh-CN = "终端"
 
 [description]
-en-US = "A green-on-black console window with a title bar and a blinking cursor"
-ja-JP = "黒地に緑文字のコンソール。タイトルバーと点滅カーソル付き"
-zh-CN = "黑底绿字的命令行窗口，带标题栏与闪烁光标"
+en-US = "An amber phosphor console with a title bar, a busy spinner and a hollow cursor"
+ja-JP = "琥珀色の蛍光ターミナル。タイトルバーにビジー表示、中空のカーソル"
+zh-CN = "琥珀荧光屏终端，标题栏带忙碌符号与空心光标"

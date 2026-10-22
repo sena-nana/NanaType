@@ -1,18 +1,16 @@
 [chrome]
-accent = "#ffcc00"
+accent = "#ffd400"
 text = "#111111"
 
 [dialogue]
-padding = [28.0, 30.0, 28.0, 18.0]
-region = [760.0, 202.0]
+padding = [35.0, 30.0, 90.0, 50.0]
+region = [760.0, 214.0]
 
 [dialogue.box]
-border_color = "#000000"
-border_width = 4.0
-color = "#ffffff"
-contour = "comic"
-margin = [32.0, 8.0, 30.0, 0.0]
-radius = 14.0
+border_color = "#111111"
+border_width = 0.0
+color = "#ffffff00"
+margin = [26.0, 0.0, 0.0, 0.0]
 
 [dialogue.box.frame]
 fill = true
@@ -20,45 +18,30 @@ image = "still.png"
 layout_inset = false
 repeat = false
 scale = 1.0
-slice = [52, 86, 32, 32]
-
-[[dialogue.box.shadows]]
-blur = 0.0
-color = "#000000"
-dx = 8.0
-dy = 8.0
-inset = false
-spread = 0.0
+slice = [60, 150, 70, 160]
 
 [dialogue.continue]
 bob_px = 3.0
 color = "#111111"
 glyph = "▶"
 motion = "pulse"
-offset = [-24.0, -14.0]
+offset = [-84.0, -50.0]
 period_s = 0.800000011920929
 
 [dialogue.nameplate]
-border_color = "#000000"
-border_width = 3.0
+border_color = "#111111"
+border_width = 2.5
 color = "#ffd400"
-contour = "ribbon"
-offset = [22.0, -20.0]
-padding = [14.0, 3.0]
-radius = 4.0
+offset = [32.0, -20.0]
+padding = [12.0, 2.0]
+radius = 0.0
 rotate = -3.0
+size = 20.0
 text_color = "#111111"
-
-[dialogue.nameplate.gradient]
-angle = 180.0
-center = [50.0, 50.0]
-circle = false
-kind = "linear"
-stops = [[0.0, "#ffde40"], [1.0, "#ffca00"]]
 
 [[dialogue.nameplate.shadows]]
 blur = 0.0
-color = "#000000"
+color = "#111111"
 dx = 4.0
 dy = 4.0
 inset = false
@@ -73,7 +56,7 @@ padding = [20.0, 24.0, 56.0, 72.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.portrait.box]
-margin = [0.0, 8.0, 30.0, 0.0]
+margin = [0.0, 0.0, 0.0, 0.0]
 
 [dialogue.responsive.portrait.continue]
 anchor = "bottom_left"
@@ -98,14 +81,14 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 40.0, 16.0, 16.0]
+padding = [18.0, 50.0, 18.0, 18.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
-margin = [0.0, 8.0, 30.0, 0.0]
+margin = [0.0, 0.0, 0.0, 0.0]
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+offset = [14.0, 12.0]
 rotate = 0.0
 
 [[dialogue.responsive.rules.layout.shader_effects]]
@@ -119,14 +102,14 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 40.0, 16.0, 16.0]
+padding = [18.0, 50.0, 18.0, 18.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
 margin = [0.0, 0.0, 0.0, 0.0]
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+offset = [14.0, 12.0]
 rotate = 0.0
 
 [[dialogue.responsive.rules.layout.shader_effects]]
@@ -166,20 +149,20 @@ max_width = 200.0
 [dialogue.responsive.rules.layout]
 decor = []
 padding = [10.0, 12.0, 10.0, 12.0]
-unset = ["box.frame", "nameplate.border_color", "nameplate.contour", "nameplate.gradient"]
+unset = ["box.frame", "nameplate.border_color"]
 
 [dialogue.responsive.rules.layout.box]
 margin = [0.0, 0.0, 0.0, 0.0]
 
 [dialogue.responsive.rules.layout.nameplate]
 border_width = 0.0
-color = "#0876d0"
+color = "#ffd400"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
-radius = 10.0
+radius = 0.0
 rotate = 0.0
 shadows = []
-text_color = "#ffffff"
+text_color = "#111111"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
@@ -192,16 +175,14 @@ target = "artwork"
 kind = "fade"
 ms = 140
 
-[dialogue.tail]
-at = 0.11999999731779099
-lean = -12.0
-length = 28.0
-shadow = true
-side = "bottom"
-width = 36.0
+[dialogue.reply]
+color = "#555555"
+size = 15.0
 
 [dialogue.text]
 color = "#111111"
+line_height = 1.4
+size = 28.0
 
 [effects]
 contrast_guard = 3.0
@@ -210,10 +191,10 @@ screen_shake_px = 10.0
 shake_px = 2.4000000953674316
 
 [fonts.body]
-weight = 800
+weight = 700
 
 [fonts.name]
-weight = 900
+weight = 800
 
 [history]
 bubble_border = "#000000"
@@ -223,8 +204,8 @@ bubble_contour = "comic"
 bubble_radius = 8.0
 entrance = "slide_up"
 name_color = "#111111"
-name_weight = 900
-time_color = "#666666"
+name_weight = 800
+time_color = "#555555"
 
 [history.avatar]
 ring_color = "#000000"
@@ -239,13 +220,12 @@ inset = false
 spread = 0.0
 
 [history.name_plate]
-border_color = "#000000"
+border_color = "#111111"
 border_style = "solid"
 border_width = 2.0
 color = "#ffd400"
-contour = "ribbon"
 padding = [9.0, 2.0]
-radius = 3.0
+radius = 0.0
 text_color = "#111111"
 
 [[history.name_plate.shadows]]
@@ -262,7 +242,7 @@ color = "#111111"
 [shaders.compact_print]
 animated = false
 intensity = 1.0
-params = [2.0]
+params = [2.0, 1.0]
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true
@@ -285,3 +265,8 @@ period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true
 textures = []
+
+[mention]
+fill = "#ededed"
+scale = 0.72
+text_color = "#111111"

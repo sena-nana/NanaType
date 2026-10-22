@@ -6,7 +6,7 @@ text = "#51413a"
 [dialogue]
 overscan = 12.0
 padding = [40.0, 66.0, 126.0, 34.0]
-region = [860.0, 230.0]
+region = [860.0, 236.0]
 
 [dialogue.box]
 border_color = "#c29477"
@@ -75,7 +75,7 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 40.0, 16.0, 72.0]
+padding = [16.0, 46.0, 16.0, 72.0]
 
 [dialogue.responsive.rules.layout.box]
 material = "responsive_paper"
@@ -86,7 +86,7 @@ image = "bubble.png"
 slice = [18, 18, 18, 18]
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+offset = [22.0, 14.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "paper_narrow"
@@ -99,7 +99,7 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 40.0, 16.0, 16.0]
+padding = [16.0, 44.0, 16.0, 16.0]
 
 [dialogue.responsive.rules.layout.box]
 material = "responsive_paper"
@@ -110,7 +110,7 @@ image = "bubble.png"
 slice = [18, 18, 18, 18]
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+offset = [22.0, 14.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "paper_compact"
@@ -153,7 +153,7 @@ padding = [12.0, 12.0, 12.0, 12.0]
 
 [dialogue.responsive.rules.layout.nameplate]
 anchor = "top_right"
-color = "#0876d0"
+color = "#a65b49"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
@@ -182,7 +182,7 @@ image = "bubble.png"
 slice = [18, 18, 18, 18]
 
 [dialogue.responsive.rules.layout.nameplate]
-color = "#0876d0"
+color = "#a65b49"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
@@ -195,6 +195,9 @@ visible = false
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "paper_compact"
 target = "artwork"
+
+[dialogue.reply]
+color = "#6e6058"
 
 [dialogue.reveal.entrance]
 kind = "fade"
@@ -224,6 +227,11 @@ weight = 400
 families = ["LXGW WenKai", "KaiTi", "Noto Sans SC"]
 file = "builtin:fonts/LXGWWenKai-Regular.ttf"
 weight = 400
+
+[mention]
+fill = "#f4e7da"
+scale = 0.72
+text_color = "#8a4a3c"
 
 [history]
 bubble_color = "#fffbef"

@@ -41,9 +41,9 @@ fn main() {
             // is an authoring tool only: load it for baking, never for playback
             // or export. Do not add an effect instance to the saved manifest.
             if !manifest.contains("[shaders.artwork]") {
-                manifest.push_str(&format!("\n[shaders.artwork]\nsource = \"{name}/artwork.wgsl\"\nintensity = 1\nperiod_s = 16\n"));
+                manifest.push_str("\n[shaders.artwork]\nsource = \"artwork.wgsl\"\nintensity = 1\nperiod_s = 16\n");
                 if name == "parchment" {
-                    manifest.push_str("textures = [\"parchment/ornament.png\"]\n");
+                    manifest.push_str("textures = [\"ornament.png\"]\n");
                 }
             }
             let manifest = manifest.into_bytes();

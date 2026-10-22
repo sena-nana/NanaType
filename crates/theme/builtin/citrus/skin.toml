@@ -1,18 +1,18 @@
 [chrome]
-accent = "#f4a340"
-surface = "#fff8dd"
-text = "#644a28"
+accent = "#ffc93c"
+surface = "#fff6d6"
+text = "#4a3720"
 
 [dialogue]
 overscan = 16.0
-padding = [69.0, 68.0, 202.0, 28.0]
-region = [920.0, 220.0]
+padding = [56.0, 70.0, 180.0, 28.0]
+region = [920.0, 230.0]
 
 [dialogue.box]
-border_color = "#73bda8"
+border_color = "#7cc4ae"
 border_width = 1.0
-color = "#fff8dd"
-radius = 18.0
+color = "#fff6d6"
+radius = 14.0
 
 [dialogue.box.frame]
 fill = true
@@ -24,47 +24,44 @@ slice = [0, 0, 0, 0]
 
 [dialogue.continue]
 bob_px = 3.0
-color = "#f4a340"
+color = "#2f6e5c"
 glyph = "· · ·"
 
 [dialogue.nameplate]
-border_color = "#fff8dd"
-border_width = 1.0
-color = "#f4a340"
-offset = [69.0, 12.0]
-padding = [12.0, 3.0]
-radius = 3.0
-rotate = -2.0
-size = 19.0
-text_color = "#4c351d"
-
-[dialogue.nameplate.gradient]
-angle = 180.0
-center = [50.0, 50.0]
-circle = false
-kind = "linear"
-stops = [[0.0, "#ffd17c"], [1.0, "#f4a340"]]
+border_color = "#fffdf2"
+border_width = 4.0
+color = "#ffc93c"
+offset = [52.0, 8.0]
+padding = [20.0, 4.0]
+radius = 12.0
+rotate = -4.0
+size = 20.0
+text_color = "#5a3b12"
 
 [[dialogue.nameplate.shadows]]
-blur = 0.0
-color = "#73bda87a"
-dx = 0.0
-dy = 2.0
+blur = 4.0
+color = "#4a37204d"
+dx = 1.5
+dy = 3.0
 inset = false
 spread = 0.0
+
+[dialogue.reply]
+color = "#7a6243"
+size = 14.0
 
 [dialogue.responsive.landscape]
 decor = []
 
 [dialogue.responsive.portrait]
-padding = [20.0, 24.0, 56.0, 164.0]
+padding = [20.0, 56.0, 56.0, 164.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.portrait.box]
 
 [dialogue.responsive.portrait.continue]
 anchor = "bottom_left"
-offset = [12.0, -8.0]
+offset = [16.0, -14.0]
 
 [[dialogue.responsive.portrait.decor]]
 anchor = "bottom_left"
@@ -75,7 +72,7 @@ font = "accent"
 image = "ornament.png"
 layer = "above"
 max_fraction = [0.3199999928474426, 0.18000000715255737]
-offset = [12.0, -12.0]
+offset = [16.0, -16.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
@@ -95,9 +92,9 @@ phase = 0.0
 
 [dialogue.responsive.portrait.nameplate]
 anchor = "top_right"
-offset = [-8.0, 12.0]
-padding = [4.0, 4.0]
-rotate = 0.0
+offset = [-16.0, 14.0]
+padding = [14.0, 3.0]
+rotate = -4.0
 
 [dialogue.responsive.portrait.portrait]
 
@@ -111,7 +108,7 @@ max_width = 600.0
 portrait = false
 
 [dialogue.responsive.rules.layout]
-padding = [16.0, 40.0, 52.0, 16.0]
+padding = [20.0, 58.0, 52.0, 18.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
@@ -125,7 +122,7 @@ font = "accent"
 image = "ornament.png"
 layer = "above"
 min_window = [280.0, 180.0]
-offset = [-8.0, -8.0]
+offset = [-12.0, -12.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
@@ -138,8 +135,8 @@ text_size = 16.0
 when = "always"
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
-rotate = 0.0
+offset = [16.0, 12.0]
+rotate = -4.0
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_compact"
@@ -152,14 +149,14 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 40.0, 16.0, 16.0]
+padding = [20.0, 44.0, 20.0, 14.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
-rotate = 0.0
+offset = [16.0, 8.0]
+rotate = -4.0
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_compact"
@@ -171,7 +168,7 @@ max_width = 240.0
 portrait = true
 
 [dialogue.responsive.rules.layout]
-padding = [12.0, 16.0, 48.0, 84.0]
+padding = [18.0, 52.0, 48.0, 84.0]
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "bottom_left"
@@ -182,7 +179,7 @@ font = "accent"
 image = "ornament.png"
 layer = "above"
 max_fraction = [0.3199999928474426, 0.18000000715255737]
-offset = [12.0, -12.0]
+offset = [16.0, -16.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
@@ -210,7 +207,7 @@ max_width = 8192.0
 portrait = true
 
 [dialogue.responsive.rules.layout]
-padding = [12.0, 16.0, 48.0, 92.0]
+padding = [18.0, 52.0, 48.0, 92.0]
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "bottom_left"
@@ -222,7 +219,7 @@ image = "ornament.png"
 layer = "above"
 max_fraction = [0.3199999928474426, 0.18000000715255737]
 min_window = [160.0, 260.0]
-offset = [12.0, -12.0]
+offset = [16.0, -16.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
@@ -247,20 +244,20 @@ portrait = true
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [12.0, 12.0, 12.0, 12.0]
-unset = ["nameplate.border_color", "nameplate.gradient"]
+padding = [16.0, 16.0, 16.0, 16.0]
+unset = ["nameplate.border_color"]
 
 [dialogue.responsive.rules.layout.nameplate]
 anchor = "top_right"
 border_width = 0.0
-color = "#0876d0"
+color = "#ffc93c"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
 rotate = 0.0
 shadows = []
 size = 18.0
-text_color = "#ffffff"
+text_color = "#5a3b12"
 visible = false
 
 [[dialogue.responsive.rules.layout.shader_effects]]
@@ -274,20 +271,20 @@ max_width = 200.0
 [dialogue.responsive.rules.layout]
 decor = []
 padding = [10.0, 12.0, 10.0, 12.0]
-unset = ["box.frame", "nameplate.border_color", "nameplate.gradient"]
+unset = ["box.frame", "nameplate.border_color"]
 
 [dialogue.responsive.rules.layout.box]
 
 [dialogue.responsive.rules.layout.nameplate]
 border_width = 0.0
-color = "#0876d0"
+color = "#ffc93c"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
 rotate = 0.0
 shadows = []
 size = 18.0
-text_color = "#ffffff"
+text_color = "#5a3b12"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
@@ -305,22 +302,25 @@ shader = "artwork"
 target = "artwork"
 
 [dialogue.text]
-color = "#644a28"
+color = "#4a3720"
 line_height = 1.4500000476837158
 size = 26.0
 
+[fonts.name]
+weight = 800
+
 [history]
-bubble_border = "#73bda8"
+bubble_border = "#7cc4ae"
 bubble_border_width = 1.0
-bubble_color = "#fff8dd"
+bubble_color = "#fff6d6"
 bubble_contour = "slant"
 bubble_radius = 3.0
 entrance = "slide_up"
-name_color = "#644a28"
-time_color = "#7b7650"
+name_color = "#2f6e5c"
+time_color = "#7a6243"
 
 [history.avatar]
-color = "#f4a340"
+color = "#ffc93c"
 radius = 3.0
 ring_color = "#fff8dd"
 ring_width = 1.0
@@ -336,7 +336,7 @@ stops = [[0.0, "#fffced"], [1.0, "#fff1c4"]]
 
 [[history.bubble_shadows]]
 blur = 0.0
-color = "#73bda870"
+color = "#7cc4ae70"
 dx = 2.0
 dy = 2.0
 inset = false
@@ -346,7 +346,7 @@ spread = 0.0
 anchor = "top_right"
 border_style = "solid"
 border_width = 0.0
-color = "#73bda8"
+color = "#7cc4ae"
 font = "accent"
 layer = "below"
 offset = [0.0, 0.0]
@@ -384,7 +384,7 @@ when = "always"
 anchor = "bottom_right"
 border_style = "solid"
 border_width = 0.0
-color = "#f4a340"
+color = "#ffc93c"
 font = "accent"
 layer = "below"
 motif = "citrus_slice"
@@ -401,57 +401,63 @@ text_size = 16.0
 when = "always"
 
 [history.name_plate]
-border_color = "#fff8dd"
+border_color = "#fffdf2"
 border_style = "solid"
 border_width = 1.0
-color = "#f4a340"
+color = "#ffc93c"
 padding = [9.0, 2.0]
 radius = 3.0
-text_color = "#4c351d"
+text_color = "#5a3b12"
 
 [history.name_plate.gradient]
 angle = 180.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#ffd17c"], [1.0, "#f4a340"]]
+stops = [[0.0, "#ffd56a"], [1.0, "#ffc93c"]]
 
 [[history.name_plate.shadows]]
 blur = 0.0
-color = "#73bda8"
+color = "#7cc4ae"
 dx = 0.0
 dy = 2.0
 inset = false
 spread = 0.0
 
 [history.panel]
-border_color = "#73bda8"
+border_color = "#7cc4ae"
 border_style = "solid"
 border_width = 1.0
-color = "#fff8ddfa"
+color = "#fff6d6fa"
 margin = [8.0, 10.0, 10.0, 8.0]
 padding = [14.0, 14.0, 14.0, 18.0]
 radius = 4.0
 
 [[history.panel.shadows]]
 blur = 0.0
-color = "#73bda8"
+color = "#7cc4ae"
 dx = 2.0
 dy = 2.0
 inset = false
 spread = 0.0
 
 [history.text]
-color = "#644a28"
+color = "#4a3720"
 
 [history.title]
 background = "#d4eadf"
-color = "#4c351d"
+color = "#5a3b12"
 height = 56.0
 padding = 18.0
 size = 14.0
 text = "HISTORY"
 weight = 600
+
+[mention]
+avatar = true
+fill = "#e5ecce"
+scale = 0.72
+text_color = "#2f6e5c"
 
 [shaders.artwork]
 animated = true

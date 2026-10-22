@@ -4,6 +4,7 @@ text = "#1b2f4b"
 
 [dialogue]
 padding = [28.0, 26.0, 24.0, 14.0]
+region = [760.0, 200.0]
 
 [dialogue.box]
 border_color = "#ffffff"
@@ -183,11 +184,20 @@ target = "artwork"
 kind = "fade"
 ms = 140
 
+[dialogue.reply]
+color = "#5a6b85"
+
 [dialogue.text]
 color = "#1b2f4b"
+line_height = 1.45
 
 [effects]
 contrast_guard = 3.0
+
+[mention]
+fill = "#d9eaf8"
+scale = 0.72
+text_color = "#0b5fa8"
 
 [history]
 bubble_border_width = 1.0

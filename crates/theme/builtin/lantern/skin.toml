@@ -1,18 +1,19 @@
 [chrome]
 accent = "#b83b38"
-surface = "#faf0dd"
-text = "#55312a"
+appearance = "dark"
+surface = "#24140f"
+text = "#f6e7d4"
 
 [dialogue]
 overscan = 16.0
-padding = [66.0, 66.0, 155.0, 28.0]
-region = [920.0, 220.0]
+padding = [44.0, 92.0, 160.0, 28.0]
+region = [920.0, 276.0]
 
 [dialogue.box]
-border_color = "#c6a15b"
+border_color = "#d9a84e"
 border_width = 1.0
-color = "#faf0dd"
-radius = 18.0
+color = "#24140f"
+radius = 5.0
 
 [dialogue.box.frame]
 fill = true
@@ -24,18 +25,18 @@ slice = [0, 0, 0, 0]
 
 [dialogue.continue]
 bob_px = 3.0
-color = "#b83b38"
+color = "#d9a84e"
 glyph = "· · ·"
 
 [dialogue.nameplate]
-border_color = "#d9b77a"
-border_width = 0.800000011920929
+border_color = "#d9a84e"
+border_width = 1.5
 color = "#b83b38"
-contour = "seal"
-offset = [66.0, 11.0]
+offset = [47.0, 42.0]
+padding = [12.0, 2.0]
 radius = 1.0
-size = 19.0
-text_color = "#faf0dd"
+size = 20.0
+text_color = "#fff1d8"
 
 [dialogue.nameplate.gradient]
 angle = 180.0
@@ -44,18 +45,38 @@ circle = false
 kind = "linear"
 stops = [[0.0, "#bc4540"], [1.0, "#a23030"]]
 
+[[dialogue.nameplate.shadows]]
+blur = 0.0
+color = "#9a2e2c"
+dx = 0.0
+dy = 0.0
+inset = false
+spread = 3.0
+
+[[dialogue.nameplate.shadows]]
+blur = 6.0
+color = "#00000066"
+dx = 0.0
+dy = 3.0
+inset = false
+spread = 3.0
+
+[dialogue.reply]
+color = "#c7a88c"
+size = 14.0
+
 [dialogue.responsive.landscape]
 decor = []
 
 [dialogue.responsive.portrait]
-padding = [20.0, 24.0, 56.0, 164.0]
+padding = [20.0, 56.0, 56.0, 164.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.portrait.box]
 
 [dialogue.responsive.portrait.continue]
 anchor = "bottom_left"
-offset = [12.0, -8.0]
+offset = [16.0, -14.0]
 
 [[dialogue.responsive.portrait.decor]]
 anchor = "bottom_left"
@@ -66,7 +87,7 @@ font = "accent"
 image = "ornament.png"
 layer = "above"
 max_fraction = [0.3199999928474426, 0.18000000715255737]
-offset = [12.0, -12.0]
+offset = [18.0, -18.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
@@ -86,7 +107,7 @@ phase = 0.0
 
 [dialogue.responsive.portrait.nameplate]
 anchor = "top_right"
-offset = [-8.0, 12.0]
+offset = [-17.0, 17.0]
 padding = [4.0, 4.0]
 
 [dialogue.responsive.portrait.portrait]
@@ -101,7 +122,7 @@ max_width = 600.0
 portrait = false
 
 [dialogue.responsive.rules.layout]
-padding = [16.0, 40.0, 52.0, 16.0]
+padding = [20.0, 54.0, 52.0, 18.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
@@ -115,7 +136,7 @@ font = "accent"
 image = "ornament.png"
 layer = "above"
 min_window = [280.0, 180.0]
-offset = [-8.0, -8.0]
+offset = [-16.0, -16.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
@@ -128,7 +149,7 @@ text_size = 16.0
 when = "always"
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+offset = [17.0, 17.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_compact"
@@ -141,13 +162,13 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 40.0, 16.0, 16.0]
+padding = [18.0, 42.0, 18.0, 14.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+offset = [17.0, 7.0]
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_compact"
@@ -159,7 +180,7 @@ max_width = 240.0
 portrait = true
 
 [dialogue.responsive.rules.layout]
-padding = [12.0, 16.0, 48.0, 84.0]
+padding = [18.0, 52.0, 48.0, 84.0]
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "bottom_left"
@@ -170,7 +191,7 @@ font = "accent"
 image = "ornament.png"
 layer = "above"
 max_fraction = [0.3199999928474426, 0.18000000715255737]
-offset = [12.0, -12.0]
+offset = [18.0, -18.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
@@ -198,7 +219,7 @@ max_width = 8192.0
 portrait = true
 
 [dialogue.responsive.rules.layout]
-padding = [12.0, 16.0, 48.0, 92.0]
+padding = [18.0, 52.0, 48.0, 92.0]
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "bottom_left"
@@ -210,7 +231,7 @@ image = "ornament.png"
 layer = "above"
 max_fraction = [0.3199999928474426, 0.18000000715255737]
 min_window = [160.0, 260.0]
-offset = [12.0, -12.0]
+offset = [18.0, -18.0]
 opacity = 1.0
 polygon = []
 radius = 0.0
@@ -235,17 +256,18 @@ portrait = true
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [12.0, 12.0, 12.0, 12.0]
-unset = ["nameplate.border_color", "nameplate.contour", "nameplate.gradient"]
+padding = [16.0, 16.0, 16.0, 16.0]
+unset = ["nameplate.border_color", "nameplate.gradient"]
 
 [dialogue.responsive.rules.layout.nameplate]
 anchor = "top_right"
 border_width = 0.0
-color = "#0876d0"
+color = "#b83b38"
 offset = [16.0, -12.0]
-radius = 10.0
+radius = 2.0
+shadows = []
 size = 18.0
-text_color = "#ffffff"
+text_color = "#fff1d8"
 visible = false
 
 [[dialogue.responsive.rules.layout.shader_effects]]
@@ -259,17 +281,18 @@ max_width = 200.0
 [dialogue.responsive.rules.layout]
 decor = []
 padding = [10.0, 12.0, 10.0, 12.0]
-unset = ["box.frame", "nameplate.border_color", "nameplate.contour", "nameplate.gradient"]
+unset = ["box.frame", "nameplate.border_color", "nameplate.gradient"]
 
 [dialogue.responsive.rules.layout.box]
 
 [dialogue.responsive.rules.layout.nameplate]
 border_width = 0.0
-color = "#0876d0"
+color = "#b83b38"
 offset = [16.0, -12.0]
-radius = 10.0
+radius = 2.0
+shadows = []
 size = 18.0
-text_color = "#ffffff"
+text_color = "#fff1d8"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
@@ -287,30 +310,38 @@ shader = "artwork"
 target = "artwork"
 
 [dialogue.text]
-color = "#55312a"
+color = "#f6e7d4"
 line_height = 1.4500000476837158
-size = 25.0
+size = 26.0
+
+[fonts.body]
+families = ["Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun"]
+weight = 500
+
+[fonts.name]
+families = ["Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun"]
+weight = 700
 
 [history]
-bubble_border = "#c6a15b"
-bubble_border_width = 0.800000011920929
-bubble_color = "#faf0dd"
+bubble_border = "#d9a84e70"
+bubble_border_width = 1.0
+bubble_color = "#24140f"
 bubble_radius = 2.0
 entrance = "slide_up"
-name_color = "#b83b38"
-time_color = "#8b6b42"
+name_color = "#f2ce8a"
+time_color = "#c7a88c"
 
 [history.avatar]
-color = "#faf0dd"
+color = "#b83b38"
 radius = 1.0
-ring_color = "#b83b38"
-ring_width = 2.0
+ring_color = "#d9a84e"
+ring_width = 1.5
 shape = "square"
 size = 36.0
 
 [[history.bubble_shadows]]
 blur = 0.0
-color = "#b83b3840"
+color = "#b83b38"
 dx = 3.0
 dy = 0.0
 inset = true
@@ -318,9 +349,9 @@ spread = 0.0
 
 [[history.decor]]
 anchor = "top_left"
-border_color = "#c6a15b70"
+border_color = "#d9a84e70"
 border_style = "solid"
-border_width = 0.6000000238418579
+border_width = 1.0
 font = "accent"
 inset = [6.0, 6.0, 6.0, 10.0]
 layer = "below"
@@ -357,7 +388,7 @@ when = "always"
 
 [[history.decor]]
 anchor = "bottom_right"
-border_color = "#c6a15b"
+border_color = "#d9a84e"
 border_style = "solid"
 border_width = 1.0
 font = "accent"
@@ -375,15 +406,14 @@ text_size = 16.0
 when = "always"
 
 [history.name_plate]
-border_color = "#d9b77a"
+border_color = "#d9a84e"
 border_style = "solid"
-border_width = 0.800000011920929
+border_width = 1.0
 color = "#b83b38"
-contour = "seal"
 padding = [8.0, 2.0]
 radius = 1.0
 shadows = []
-text_color = "#faf0dd"
+text_color = "#fff1d8"
 
 [history.name_plate.gradient]
 angle = 180.0
@@ -393,33 +423,47 @@ kind = "linear"
 stops = [[0.0, "#bc4540"], [1.0, "#a23030"]]
 
 [history.panel]
-border_color = "#c6a15b"
+border_color = "#b83b38"
 border_style = "solid"
-border_width = 1.0
-color = "#faf0ddfa"
+border_width = 2.0
+color = "#1a0f0efa"
 margin = [8.0, 8.0, 8.0, 8.0]
 padding = [14.0, 14.0, 14.0, 18.0]
-radius = 2.0
+radius = 3.0
 
 [[history.panel.shadows]]
 blur = 0.0
-color = "#b83b38"
-dx = 4.0
+color = "#d9a84e"
+dx = 0.0
 dy = 0.0
 inset = true
-spread = 0.0
+spread = 4.0
+
+[[history.panel.shadows]]
+blur = 0.0
+color = "#1a0f0e"
+dx = 0.0
+dy = 0.0
+inset = true
+spread = 2.5
 
 [history.text]
-color = "#55312a"
+color = "#f6e7d4"
 
 [history.title]
 background = "#00000000"
-color = "#b83b38"
+color = "#d9a84e"
 height = 56.0
 padding = 18.0
 size = 14.0
 text = "HISTORY"
 weight = 600
+
+[mention]
+avatar = true
+fill = "#3f2a18"
+scale = 0.72
+text_color = "#f2ce8a"
 
 [shaders.artwork]
 animated = true

@@ -182,7 +182,12 @@ mod tests {
                         "portrait stretched plate: {}",
                         entry.id
                     );
-                    assert_eq!(resolved.dialogue.nameplate.anchor, Anchor::TopRight);
+                    assert_eq!(
+                        resolved.dialogue.nameplate.anchor,
+                        Anchor::TopRight,
+                        "{} {size:?}",
+                        entry.id
+                    );
                 }
                 for d in &resolved.dialogue.decor {
                     if let Some(ratio) = d.aspect_ratio {

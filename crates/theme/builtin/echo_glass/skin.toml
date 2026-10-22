@@ -6,7 +6,7 @@ text = "#ffffff"
 
 [dialogue]
 padding = [173.0, 52.0, 173.0, 50.0]
-region = [1280.0, 180.0]
+region = [1280.0, 200.0]
 
 [dialogue.box]
 border_color = "#cbe0ef"
@@ -20,7 +20,7 @@ stops = [[0.0, "#00000099"], [0.44999998807907104, "#00000080"], [1.0, "#0000000
 
 [dialogue.continue]
 bob_px = 3.0
-color = "#0876d0"
+color = "#ffffff"
 
 [[dialogue.decor]]
 anchor = "bottom"
@@ -571,7 +571,7 @@ kind = "linear"
 stops = [[0.0, "#000000"], [1.0, "#00000000"]]
 
 [dialogue.responsive.rules.layout.nameplate]
-color = "#0876d0"
+color = "#1a62be"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
@@ -609,6 +609,11 @@ weight = 400
 [fonts.name]
 families = ["Source Han Sans SC", "思源黑体", "Noto Sans CJK SC", "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC"]
 weight = 400
+
+[mention]
+fill = "#76767666"
+scale = 0.72
+text_color = "#ffffff"
 
 [history]
 bubble_padding = [0.0, 0.0]

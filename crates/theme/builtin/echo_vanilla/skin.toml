@@ -3,7 +3,7 @@ accent = "#606266"
 
 [dialogue]
 padding = [226.0, 52.0, 333.0, 44.0]
-region = [1280.0, 180.0]
+region = [1280.0, 200.0]
 
 [dialogue.box]
 border_color = "#cccccc"
@@ -20,7 +20,7 @@ slice = [10, 24, 10, 100]
 
 [dialogue.continue]
 bob_px = 3.0
-color = "#0876d0"
+color = "#606266"
 
 [[dialogue.decor]]
 anchor = "top_right"
@@ -530,7 +530,7 @@ text_size = 16.0
 when = "always"
 
 [dialogue.responsive.rules.layout.nameplate]
-color = "#0876d0"
+color = "#606266"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
@@ -565,6 +565,11 @@ weight = 400
 [fonts.name]
 families = ["Source Han Sans SC", "思源黑体", "Noto Sans CJK SC", "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC"]
 weight = 400
+
+[mention]
+fill = "#f0f0f0"
+scale = 0.72
+text_color = "text"
 
 [history]
 bubble_padding = [0.0, 0.0]

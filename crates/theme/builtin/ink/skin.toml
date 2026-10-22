@@ -1,16 +1,18 @@
 [chrome]
 accent = "#b0302a"
-surface = "#fdfaf3"
-text = "#222222"
+surface = "#fbfaf6"
+text = "#1e1e1e"
 
 [dialogue]
-padding = [28.0, 40.0, 64.0, 18.0]
+padding = [36.0, 46.0, 120.0, 24.0]
+region = [780.0, 204.0]
 
 [dialogue.box]
-border_color = "#86775e52"
-border_width = 0.800000011920929
-color = "#faf7effa"
-radius = 4.0
+border_color = "#86775e00"
+border_width = 0.0
+color = "#fbfaf6"
+margin = [14.0, 4.0, 6.0, 4.0]
+radius = 2.0
 
 [dialogue.box.frame]
 fill = true
@@ -18,20 +20,13 @@ image = "still.png"
 layout_inset = false
 repeat = false
 scale = 1.0
-slice = [34, 90, 24, 64]
-
-[dialogue.box.gradient]
-angle = 180.0
-center = [50.0, 50.0]
-circle = false
-kind = "radial"
-stops = [[0.0, "#fffdf8fa"], [1.0, "#e8dfccf5"]]
+slice = [16, 16, 30, 40]
 
 [[dialogue.box.shadows]]
-blur = 16.0
-color = "#2222221f"
+blur = 8.0
+color = "#1e1e1e1f"
 dx = 0.0
-dy = 4.0
+dy = 2.0
 inset = false
 spread = 0.0
 
@@ -40,95 +35,68 @@ bob_px = 3.0
 color = "#b0302a"
 glyph = "〆"
 motion = "bob"
-offset = [-22.0, -12.0]
+offset = [-22.0, -14.0]
 size = 18.0
 
 [[dialogue.decor]]
-anchor = "bottom_right"
-border_style = "solid"
-border_width = 0.0
-font = "accent"
-image = "bamboo.png"
-layer = "above"
-offset = [12.0, 14.0]
-opacity = 0.949999988079071
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = [76.0, 138.0]
-text = ""
-text_color = "text"
-text_size = 16.0
-when = "always"
-
-[[dialogue.decor]]
-anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
+anchor = "top_left"
 color = "#b0302a"
 contour = "seal"
 font = "accent"
 layer = "above"
-offset = [-20.0, 16.0]
-opacity = 1.0
-polygon = []
-radius = 4.0
-rotate = -6.0
-shadows = []
-size = [30.0, 34.0]
+offset = [36.0, 14.0]
+radius = 2.0
+size = [22.0, 22.0]
 text = "印"
-text_color = "#fff3ea"
-text_size = 19.0
+text_color = "#fbfaf6"
+text_size = 15.0
+when = "speaker"
+
+[[dialogue.decor]]
+anchor = "bottom_right"
+aspect_ratio = 0.680701732635498
+image = "bamboo.png"
+layer = "above"
+offset = [12.0, 0.0]
+opacity = 0.95
+size = [144.0, 212.0]
 when = "always"
 
 [dialogue.nameplate]
-border_color = "#b0302a"
-border_widths = [0.0, 0.0, 0.0, 3.0]
-offset = [24.0, 12.0]
-padding = [8.0, 0.0]
+color = "#00000000"
+offset = [66.0, 13.0]
+padding = [0.0, 0.0]
 size = 20.0
-text_color = "#222222"
+text_color = "#1e1e1e"
+
+[dialogue.reply]
+color = "#6e6a62"
+opacity = 1.0
+size = 16.0
+
+[[dialogue.responsive.landscape.decor]]
+anchor = "top_left"
+color = "#b0302a"
+contour = "seal"
+font = "accent"
+layer = "above"
+offset = [36.0, 14.0]
+radius = 2.0
+size = [22.0, 22.0]
+text = "印"
+text_color = "#fbfaf6"
+text_size = 15.0
+when = "speaker"
 
 [[dialogue.responsive.landscape.decor]]
 anchor = "bottom_right"
 aspect_ratio = 0.680701732635498
-border_style = "solid"
-border_width = 0.0
-font = "accent"
 image = "bamboo.png"
 layer = "above"
 max_fraction = [0.30000001192092896, 1.2000000476837158]
-offset = [12.0, 14.0]
-opacity = 0.949999988079071
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = [76.0, 138.0]
-text = ""
-text_color = "text"
-text_size = 16.0
-when = "always"
-
-[[dialogue.responsive.landscape.decor]]
-anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
-color = "#b0302a"
-contour = "seal"
-font = "accent"
-layer = "above"
-offset = [-20.0, 16.0]
-opacity = 1.0
-polygon = []
-radius = 4.0
-rotate = -6.0
-shadows = []
-size = [30.0, 34.0]
-text = "印"
-text_color = "#fff3ea"
-text_size = 19.0
+offset = [12.0, 0.0]
+opacity = 0.95
+size = [144.0, 212.0]
 when = "always"
 
 [dialogue.responsive.portrait]
@@ -136,6 +104,7 @@ padding = [20.0, 24.0, 56.0, 164.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.portrait.box]
+margin = [2.0, 2.0, 2.0, 2.0]
 
 [dialogue.responsive.portrait.continue]
 anchor = "bottom_left"
@@ -143,52 +112,36 @@ offset = [12.0, -8.0]
 
 [[dialogue.responsive.portrait.decor]]
 anchor = "bottom_left"
-aspect_ratio = 0.5507246255874634
-border_style = "solid"
-border_width = 0.0
-font = "accent"
+aspect_ratio = 0.680701732635498
 image = "bamboo.png"
 layer = "above"
 max_fraction = [0.3199999928474426, 0.18000000715255737]
 min_window = [240.0, 360.0]
 offset = [14.0, -14.0]
-opacity = 0.949999988079071
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
+opacity = 0.95
 size = [76.0, 138.0]
-text = ""
-text_color = "text"
-text_size = 16.0
 when = "always"
 
 [[dialogue.responsive.portrait.decor]]
-anchor = "bottom_right"
-aspect_ratio = 0.8571428656578064
-border_style = "solid"
-border_width = 0.0
+anchor = "top_right"
 color = "#b0302a"
 contour = "seal"
 font = "accent"
 layer = "above"
-min_window = [240.0, 360.0]
-offset = [-18.0, -20.0]
-opacity = 1.0
-polygon = []
-radius = 4.0
-rotate = -6.0
-shadows = []
-size = [24.0, 28.0]
+offset = [-20.0, 12.0]
+radius = 2.0
+size = [18.0, 18.0]
 text = "印"
-text_color = "#fff3ea"
-text_size = 19.0
-when = "always"
+text_color = "#fbfaf6"
+text_size = 12.0
+when = "speaker"
 
+# Vertical writing: the seal heads the name column at the top right.
 [dialogue.responsive.portrait.nameplate]
 anchor = "top_right"
-offset = [-8.0, 12.0]
-padding = [4.0, 4.0]
+offset = [-20.0, 36.0]
+padding = [0.0, 0.0]
+size = 18.0
 
 [dialogue.responsive.portrait.portrait]
 
@@ -202,56 +155,30 @@ max_width = 600.0
 portrait = false
 
 [dialogue.responsive.rules.layout]
-padding = [20.0, 44.0, 20.0, 68.0]
+padding = [22.0, 40.0, 20.0, 24.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
+margin = [2.0, 2.0, 2.0, 2.0]
 
 [[dialogue.responsive.rules.layout.decor]]
-anchor = "bottom_right"
-aspect_ratio = 0.5507246255874634
-border_style = "solid"
-border_width = 0.0
-font = "accent"
-image = "bamboo.png"
-layer = "above"
-min_window = [240.0, 180.0]
-offset = [-12.0, -8.0]
-opacity = 0.949999988079071
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
-size = [32.0, 58.0]
-text = ""
-text_color = "text"
-text_size = 16.0
-when = "always"
-
-[[dialogue.responsive.rules.layout.decor]]
-anchor = "bottom_left"
-aspect_ratio = 0.8571428656578064
-border_style = "solid"
-border_width = 0.0
+anchor = "top_left"
 color = "#b0302a"
 contour = "seal"
 font = "accent"
 layer = "above"
-min_window = [240.0, 180.0]
-offset = [12.0, -14.0]
-opacity = 1.0
-polygon = []
-radius = 4.0
-rotate = -6.0
-shadows = []
-size = [24.0, 28.0]
+offset = [22.0, 12.0]
+radius = 2.0
+size = [18.0, 18.0]
 text = "印"
-text_color = "#fff3ea"
-text_size = 19.0
-when = "always"
+text_color = "#fbfaf6"
+text_size = 12.0
+when = "speaker"
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+offset = [46.0, 11.0]
+size = 17.0
+text_color = "#b0302a"
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "compact_print"
@@ -263,14 +190,30 @@ max_width = 8192.0
 portrait = false
 
 [dialogue.responsive.rules.layout]
-decor = []
-padding = [16.0, 40.0, 16.0, 16.0]
+padding = [22.0, 40.0, 20.0, 16.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
+margin = [0.0, 0.0, 0.0, 0.0]
+
+[[dialogue.responsive.rules.layout.decor]]
+anchor = "top_left"
+color = "#b0302a"
+contour = "seal"
+font = "accent"
+layer = "above"
+offset = [22.0, 12.0]
+radius = 2.0
+size = [18.0, 18.0]
+text = "印"
+text_color = "#fbfaf6"
+text_size = 12.0
+when = "speaker"
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+offset = [46.0, 11.0]
+size = 17.0
+text_color = "#b0302a"
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "compact_print"
@@ -282,51 +225,38 @@ max_width = 240.0
 portrait = true
 
 [dialogue.responsive.rules.layout]
-padding = [12.0, 16.0, 48.0, 132.0]
+padding = [12.0, 40.0, 12.0, 132.0]
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "bottom_left"
-aspect_ratio = 0.5507246255874634
-border_style = "solid"
-border_width = 0.0
-font = "accent"
+aspect_ratio = 0.680701732635498
 image = "bamboo.png"
 layer = "above"
 max_fraction = [0.3199999928474426, 0.18000000715255737]
 min_window = [160.0, 260.0]
 offset = [14.0, -14.0]
-opacity = 0.949999988079071
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
+opacity = 0.95
 size = [76.0, 138.0]
-text = ""
-text_color = "text"
-text_size = 16.0
 when = "always"
 
 [[dialogue.responsive.rules.layout.decor]]
-anchor = "bottom_right"
-aspect_ratio = 0.8571428656578064
-border_style = "solid"
-border_width = 0.0
+anchor = "top_left"
 color = "#b0302a"
 contour = "seal"
 font = "accent"
 layer = "above"
-min_window = [240.0, 360.0]
-offset = [-18.0, -20.0]
-opacity = 1.0
-polygon = []
-radius = 4.0
-rotate = -6.0
-shadows = []
-size = [24.0, 28.0]
+offset = [12.0, 12.0]
+radius = 2.0
+size = [16.0, 16.0]
 text = "印"
-text_color = "#fff3ea"
-text_size = 19.0
-when = "always"
+text_color = "#fbfaf6"
+text_size = 11.0
+when = "speaker"
+
+[dialogue.responsive.rules.layout.nameplate]
+offset = [34.0, 10.0]
+size = 17.0
+text_color = "#b0302a"
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_print"
@@ -338,51 +268,38 @@ max_width = 8192.0
 portrait = true
 
 [dialogue.responsive.rules.layout]
-padding = [12.0, 16.0, 48.0, 88.0]
+padding = [12.0, 40.0, 12.0, 88.0]
 
 [[dialogue.responsive.rules.layout.decor]]
 anchor = "bottom_left"
-aspect_ratio = 0.5507246255874634
-border_style = "solid"
-border_width = 0.0
-font = "accent"
+aspect_ratio = 0.680701732635498
 image = "bamboo.png"
 layer = "above"
 max_fraction = [0.3199999928474426, 0.18000000715255737]
 min_window = [160.0, 260.0]
 offset = [14.0, -14.0]
-opacity = 0.949999988079071
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
+opacity = 0.95
 size = [40.0, 72.63157653808594]
-text = ""
-text_color = "text"
-text_size = 16.0
 when = "always"
 
 [[dialogue.responsive.rules.layout.decor]]
-anchor = "bottom_right"
-aspect_ratio = 0.8571428656578064
-border_style = "solid"
-border_width = 0.0
+anchor = "top_left"
 color = "#b0302a"
 contour = "seal"
 font = "accent"
 layer = "above"
-min_window = [240.0, 260.0]
-offset = [-18.0, -20.0]
-opacity = 1.0
-polygon = []
-radius = 4.0
-rotate = -6.0
-shadows = []
-size = [18.0, 21.0]
+offset = [12.0, 12.0]
+radius = 2.0
+size = [16.0, 16.0]
 text = "印"
-text_color = "#fff3ea"
-text_size = 19.0
-when = "always"
+text_color = "#fbfaf6"
+text_size = 11.0
+when = "speaker"
+
+[dialogue.responsive.rules.layout.nameplate]
+offset = [34.0, 10.0]
+size = 17.0
+text_color = "#b0302a"
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "responsive_print"
@@ -396,16 +313,14 @@ portrait = true
 [dialogue.responsive.rules.layout]
 decor = []
 padding = [12.0, 12.0, 12.0, 12.0]
-unset = ["nameplate.border_color", "nameplate.border_widths"]
 
 [dialogue.responsive.rules.layout.nameplate]
 anchor = "top_right"
-color = "#0876d0"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
 size = 18.0
-text_color = "#ffffff"
+text_color = "#b0302a"
 visible = false
 
 [[dialogue.responsive.rules.layout.shader_effects]]
@@ -419,17 +334,17 @@ max_width = 200.0
 [dialogue.responsive.rules.layout]
 decor = []
 padding = [10.0, 12.0, 10.0, 12.0]
-unset = ["box.frame", "nameplate.border_color", "nameplate.border_widths"]
+unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
+margin = [0.0, 0.0, 0.0, 0.0]
 
 [dialogue.responsive.rules.layout.nameplate]
-color = "#0876d0"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
 size = 18.0
-text_color = "#ffffff"
+text_color = "#b0302a"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
@@ -443,8 +358,9 @@ kind = "fade"
 ms = 220
 
 [dialogue.text]
-color = "#222222"
-size = 30.0
+color = "#1e1e1e"
+line_height = 1.4
+size = 32.0
 
 [effects]
 contrast_guard = 3.0
@@ -452,7 +368,7 @@ contrast_guard = 3.0
 [fonts.accent]
 families = ["LXGW WenKai", "KaiTi", "STKaiti", "Kaiti SC", "SimSun"]
 file = "builtin:fonts/LXGWWenKai-Regular.ttf"
-weight = 700
+weight = 400
 
 [fonts.body]
 families = ["LXGW WenKai", "KaiTi", "STKaiti", "Kaiti SC", "SimSun"]
@@ -462,17 +378,17 @@ weight = 400
 [fonts.name]
 families = ["LXGW WenKai", "KaiTi", "STKaiti", "Kaiti SC", "SimSun"]
 file = "builtin:fonts/LXGWWenKai-Regular.ttf"
-weight = 700
+weight = 400
 
 [history]
-bubble_border = "#86775e52"
+bubble_border = "#1e1e1e1a"
 bubble_border_width = 0.800000011920929
-bubble_color = "#f6f0e2f2"
-bubble_radius = 4.0
+bubble_color = "#fbfaf6f2"
+bubble_radius = 2.0
 entrance = "slide_up"
-name_color = "#222222"
+name_color = "#1e1e1e"
 name_weight = 400
-time_color = "#8a8070"
+time_color = "#6e6a62"
 
 [history.avatar]
 ring_color = "#b0302a"
@@ -483,12 +399,12 @@ shape = "square"
 angle = 180.0
 center = [50.0, 50.0]
 circle = false
-kind = "radial"
-stops = [[0.0, "#faf6eef5"], [1.0, "#ece4d4f0"]]
+kind = "linear"
+stops = [[0.0, "#fcfbf8f5"], [1.0, "#f3f1eaf0"]]
 
 [[history.bubble_shadows]]
 blur = 8.0
-color = "#2222221a"
+color = "#1e1e1e14"
 dx = 0.0
 dy = 2.0
 inset = false
@@ -496,97 +412,79 @@ spread = 0.0
 
 [[history.decor]]
 anchor = "top_left"
-border_style = "solid"
-border_width = 0.0
-color = "#86775e"
+color = "#6e6a62"
 font = "accent"
 inset = [4.0, 4.0, 4.0, 4.0]
 layer = "below"
 motif = "paper"
 offset = [0.0, 0.0]
 opacity = 0.07999999821186066
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
 size = [16.0, 16.0]
-text = ""
-text_color = "text"
-text_size = 16.0
 when = "always"
 
 [[history.decor]]
 anchor = "top_right"
-border_style = "solid"
-border_width = 0.0
 color = "#b0302a"
 contour = "seal"
 font = "body"
 layer = "above"
-offset = [-18.0, 12.0]
-opacity = 1.0
-polygon = []
-radius = 0.0
-rotate = -6.0
-shadows = []
-size = [24.0, 24.0]
+offset = [-18.0, 14.0]
+radius = 2.0
+size = [22.0, 22.0]
 text = "印"
-text_color = "#f6f0e2"
-text_size = 17.0
+text_color = "#fbfaf6"
+text_size = 15.0
 when = "always"
 
 [[history.decor]]
 anchor = "bottom_right"
-border_style = "solid"
-border_width = 0.0
-font = "accent"
 image = "bamboo.png"
 layer = "below"
 offset = [-10.0, -12.0]
 opacity = 0.1599999964237213
-polygon = []
-radius = 0.0
-rotate = 0.0
-shadows = []
 size = [90.0, 132.0]
-text = ""
-text_color = "text"
-text_size = 16.0
 when = "always"
 
 [history.name_plate]
-border_color = "#b0302a"
 border_style = "solid"
 border_width = 0.0
-border_widths = [0.0, 0.0, 0.0, 3.0]
 color = "#00000000"
-padding = [7.0, 1.0]
+padding = [0.0, 1.0]
 radius = 0.0
 shadows = []
-text_color = "#222222"
+text_color = "#1e1e1e"
 
 [history.panel]
-border_color = "#86775e52"
+border_color = "#1e1e1e1a"
 border_style = "solid"
 border_width = 0.800000011920929
-color = "#f6f0e2f8"
+color = "#f6f4eef8"
 margin = [8.0, 8.0, 8.0, 8.0]
 padding = [14.0, 14.0, 14.0, 18.0]
 radius = 1.0
 shadows = []
 
+[history.reply]
+color = "#6e6a62"
+opacity = 1.0
+
 [history.text]
-color = "#222222"
+color = "#1e1e1e"
 size = 19.0
 
 [history.title]
 background = "#00000000"
-color = "#222222"
+color = "#1e1e1e"
 height = 52.0
 padding = 18.0
 size = 14.0
 text = "HISTORY"
 weight = 400
+
+[mention]
+fill = "#f4e6e1"
+scale = 0.72
+text_color = "#8e241f"
 
 [shaders.compact_print]
 animated = false

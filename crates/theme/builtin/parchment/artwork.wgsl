@@ -46,14 +46,21 @@ fn effect(i:EffectInput)->vec4<f32> {
  // Two quiet impressed fillets, with a broken ivory lip rather than a
  // polished raised rim. Four corner sprigs grow out of the inner fillet.
  let impression=.76+.18*paper_noise(p/3.);
- c=mix(c,rgb(128.,89.,48.),line(edge+1.8,.48)*.72*impression);
- c=mix(c,rgb(154.,117.,73.),line(edge+8.,.35)*.56*impression);
- c=mix(c,rgb(255.,245.,218.),line(edge+2.7,.32)*.42);
+ // Main sheets carry the bound-book double rule further in; compact and
+ // portrait instances keep the original tight fillets.
+ let main=i.params0.x<.5;
+ let r1=select(1.8,9.,main); let r2=select(8.,14.,main);
+ c=mix(c,rgb(180.,138.,85.),line(edge+.8,.5)*.45*select(0.,1.,main));
+ c=mix(c,rgb(138.,90.,43.),line(edge+r1,.6)*.75*impression);
+ c=mix(c,rgb(255.,246.,226.),line(edge+r1-1.1,.4)*.5);
+ c=mix(c,rgb(138.,90.,43.),line(edge+r2,.45)*.6*impression);
+ c=mix(c,rgb(255.,246.,226.),line(edge+r2-.9,.35)*.45);
  let sprig=select(vec2(144.,56.),vec2(min(144.,s.x*.42),min(144.,s.x*.42)*56./144.),i.params0.x>.5);
- let tl=decal(p,vec2(4.,2.),sprig);
- let tr=decal(vec2(s.x-p.x,p.y),vec2(4.,2.),sprig);
- let bl=decal(vec2(p.x,s.y-p.y),vec2(4.,2.),sprig);
- let br=decal(s-p,vec2(4.,2.),sprig);
+ let at=select(vec2(4.,2.),vec2(14.,10.),main);
+ let tl=decal(p,at,sprig);
+ let tr=decal(vec2(s.x-p.x,p.y),at,sprig);
+ let bl=decal(vec2(p.x,s.y-p.y),at,sprig);
+ let br=decal(s-p,at,sprig);
  let pressure=.78+.14*pulp;
  c=mix(c,tl.rgb,tl.a*pressure); c=mix(c,tr.rgb,tr.a*pressure);
  c=mix(c,bl.rgb,bl.a*pressure); c=mix(c,br.rgb,br.a*pressure);

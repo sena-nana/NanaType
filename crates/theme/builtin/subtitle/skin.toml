@@ -5,15 +5,15 @@ surface = "#1e1e22"
 text = "#f2f2f5"
 
 [dialogue]
-padding = [24.0, 38.0, 24.0, 10.0]
-region = [960.0, 170.0]
+padding = [24.0, 40.0, 24.0, 12.0]
+region = [960.0, 180.0]
 
 [dialogue.box]
 border_color = "#cbe0ef"
 
 [dialogue.continue]
 bob_px = 3.0
-color = "#0876d0"
+color = "#ffffff"
 motion = "bob"
 
 [dialogue.nameplate]
@@ -21,8 +21,8 @@ anchor = "top"
 offset = [0.0, 7.0]
 padding = [0.0, 0.0]
 radius = 10.0
-size = 19.0
-text_color = "#ffe1a3"
+size = 22.0
+text_color = "#ffd27f"
 
 [dialogue.nameplate.stroke]
 color = "#111115"
@@ -62,8 +62,8 @@ shader_effects = []
 [dialogue.responsive.rules.layout.box]
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-offset = [12.0, 4.0]
+anchor = "top"
+offset = [0.0, 6.0]
 
 [[dialogue.responsive.rules]]
 max_height = 160.0
@@ -78,8 +78,8 @@ shader_effects = []
 [dialogue.responsive.rules.layout.box]
 
 [dialogue.responsive.rules.layout.nameplate]
-anchor = "top_left"
-offset = [12.0, 4.0]
+anchor = "top"
+offset = [0.0, 6.0]
 
 [[dialogue.responsive.rules]]
 max_height = 8192.0
@@ -114,14 +114,18 @@ unset = ["nameplate.stroke"]
 
 [dialogue.responsive.rules.layout.nameplate]
 anchor = "top_left"
-color = "#0876d0"
+color = "#00000000"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 size = 18.0
-text_color = "#ffffff"
+text_color = "#ffd27f"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
+
+[dialogue.reply]
+color = "#e6e6e6"
+size = 19.0
 
 [dialogue.reveal.entrance]
 kind = "fade"
@@ -130,8 +134,8 @@ ms = 120
 [dialogue.text]
 align = "center"
 color = "#ffffff"
-line_height = 1.3799999952316284
-size = 34.0
+line_height = 1.35
+size = 36.0
 
 [dialogue.text.shadow]
 blur = 2.0
@@ -149,11 +153,17 @@ weight = 800
 [fonts.name]
 weight = 800
 
+[mention]
+avatar = false
+fill = "#00000000"
+scale = 0.83
+text_color = "#ffd27f"
+
 [history]
 bubble_border_width = 1.0
 bubble_padding = [2.0, 0.0]
 entrance = "slide_up"
-name_color = "#ffe1a3"
+name_color = "#ffd27f"
 time_color = "#c8c8d0"
 
 [history.avatar]

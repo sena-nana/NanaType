@@ -1640,11 +1640,9 @@ mod tests {
             );
             assert!(crate::skin_theme::contrast(text, fill.with_alpha(255)) >= MENTION_MIN);
         }
-        // rpg's light periwinkle accent is deepened, pixel's dark green kept.
-        let rpg = reg.load("nanatype.rpg").unwrap().skin;
-        assert_ne!(mention_colors(&rpg).0.with_alpha(255), rpg.chrome.accent);
+        // A fill that already reads is kept exactly as the skin authored it.
         let pixel = reg.load("nanatype.pixel").unwrap().skin;
-        assert_eq!(mention_colors(&pixel).0, pixel.chrome.accent);
+        assert_eq!(mention_colors(&pixel).0, pixel.color(pixel.mention.fill));
     }
 
     #[test]
@@ -1845,7 +1843,7 @@ mod tests {
         let terminal = builtin("terminal");
         let spans = display_spans(&terminal, "[color=#ff5050]红[/color]");
         let shadows = spans[0].paint.shadows.as_deref().expect("own shadow");
-        assert_eq!(shadows[0].color, color(Rgba8::rgba(255, 80, 80, 0x80)));
+        assert_eq!(shadows[0].color, color(Rgba8::rgba(255, 80, 80, 0x8c)));
     }
 
     #[test]

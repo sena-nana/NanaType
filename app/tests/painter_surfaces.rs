@@ -24,7 +24,31 @@ fn pixel(pixels: &[u8], width: u32, x: f32, y: f32, scale: f32) -> [u8; 4] {
 #[test]
 fn vector_alpha_tail_and_same_node_palette_updates_survive_dpi_changes() {
     let registry = common::registry();
-    let skin = registry.load("nanatype.bubble").unwrap().skin;
+    // Bubble now bakes its outline, shadow and tail into the plate. Give the
+    // vector path the former white, outlined, hard-shadowed bubble back.
+    let mut skin = (*registry.load("nanatype.bubble").unwrap().skin).clone();
+    let b = &mut skin.dialogue.box_;
+    b.color = Rgba8::rgb(255, 255, 255);
+    b.border_color = Rgba8::rgb(0x2b, 0x2b, 0x3a);
+    b.border_width = 4.0;
+    b.radius = 30.0;
+    b.margin = [0.0, 0.0, 26.0, 0.0];
+    b.shape.contour = Some(ContourPreset::Rounded);
+    b.shape.shadows = vec![nanatype_theme::ShadowSpec {
+        color: Rgba8::rgba(0x2b, 0x2b, 0x3a, 0x40).into(),
+        dx: 0.0,
+        dy: 6.0,
+        blur: 0.0,
+        spread: 0.0,
+        inset: false,
+    }];
+    skin.dialogue.tail = Some(nanatype_theme::TailSpec {
+        at: 0.14,
+        lean: -10.0,
+        length: 24.0,
+        width: 34.0,
+        ..Default::default()
+    });
     for scale in [1.0, 1.5, 2.0] {
         let mut frame = Surface::dialogue_box(&skin, None);
         // Exercise a concave outline independently of the built-in art direction.

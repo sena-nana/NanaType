@@ -1,19 +1,20 @@
 [chrome]
-accent = "#8fa8ff"
+accent = "#ffd45c"
 appearance = "dark"
 surface = "#16205a"
 text = "#ffffff"
 
 [dialogue]
 overflow = "page"
-padding = [26.0, 28.0, 26.0, 18.0]
+padding = [34.0, 30.0, 40.0, 22.0]
+region = [760.0, 188.0]
 
 [dialogue.box]
 border_color = "#ffffff"
 border_width = 3.0
-color = "#10206ee6"
-contour = "rpg"
-radius = 6.0
+color = "#14257e"
+margin = [22.0, 0.0, 0.0, 0.0]
+radius = 8.0
 
 [dialogue.box.frame]
 fill = true
@@ -21,52 +22,74 @@ image = "still.png"
 layout_inset = false
 repeat = false
 scale = 1.0
-slice = [18, 24, 18, 24]
+slice = [24, 24, 24, 24]
 
 [dialogue.box.gradient]
 angle = 180.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#2840a8f0"], [1.0, "#0c1450f0"]]
+stops = [[0.0, "#2a3fb8"], [1.0, "#14257e"]]
 
 [dialogue.box.shadow]
-blur = 0.0
-color = "#000000aa"
+blur = 6.0
+color = "#050a3373"
 dx = 0.0
 dy = 3.0
 
 [dialogue.continue]
 bob_px = 3.0
 color = "#ffffff"
-glyph = "▼"
+glyph = ""
 motion = "blink"
 period_s = 0.8999999761581421
 
 [dialogue.nameplate]
-border_color = "#edf5ff"
+border_color = "#c6d0ff"
 border_width = 2.0
-color = "#10206e"
-contour = "rpg"
-offset = [14.0, -18.0]
-padding = [12.0, 3.0]
+color = "#14257e"
+offset = [22.0, -22.0]
+padding = [10.0, 3.0]
+radius = 3.0
 size = 24.0
-text_color = "#ffffff"
+text_color = "#ffd45c"
+
+[dialogue.nameplate.text_shadow]
+blur = 0.0
+color = "#10206e"
+dx = 2.0
+dy = 2.0
 
 [dialogue.nameplate.gradient]
 angle = 180.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#2840a8"], [1.0, "#0c1450"]]
+stops = [[0.0, "#2a3fb8"], [1.0, "#14257e"]]
 
 [[dialogue.nameplate.shadows]]
 blur = 0.0
-color = "#000000aa"
+color = "#ffffff"
 dx = 0.0
-dy = 2.0
+dy = 0.0
 inset = false
-spread = 0.0
+spread = 4.0
+
+[[dialogue.nameplate.shadows]]
+blur = 0.0
+color = "#050a33"
+dx = 0.0
+dy = 0.0
+inset = false
+spread = 6.0
+
+[[dialogue.nameplate.shadows]]
+blur = 6.0
+color = "#050a3373"
+dx = 0.0
+dy = 3.0
+inset = false
+spread = 6.0
 
 [dialogue.responsive.landscape]
 decor = []
@@ -77,6 +100,7 @@ padding = [20.0, 24.0, 56.0, 72.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.portrait.box]
+margin = [0.0, 0.0, 0.0, 0.0]
 
 [dialogue.responsive.portrait.continue]
 anchor = "bottom_left"
@@ -100,13 +124,23 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 40.0, 16.0, 16.0]
-unset = ["box.frame"]
+padding = [16.0, 48.0, 16.0, 16.0]
+unset = ["box.frame", "nameplate.gradient"]
 
 [dialogue.responsive.rules.layout.box]
+margin = [0.0, 0.0, 0.0, 0.0]
+
+[dialogue.responsive.rules.layout.continue]
+glyph = "▼"
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+border_width = 0.0
+color = "#10206e"
+offset = [16.0, 8.0]
+padding = [6.0, 2.0]
+radius = 0.0
+shadows = []
+text_color = "#ffffff"
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "compact_print"
@@ -119,13 +153,23 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 40.0, 16.0, 16.0]
-unset = ["box.frame"]
+padding = [16.0, 48.0, 16.0, 16.0]
+unset = ["box.frame", "nameplate.gradient"]
 
 [dialogue.responsive.rules.layout.box]
+margin = [0.0, 0.0, 0.0, 0.0]
+
+[dialogue.responsive.rules.layout.continue]
+glyph = "▼"
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+border_width = 0.0
+color = "#10206e"
+offset = [16.0, 8.0]
+padding = [6.0, 2.0]
+radius = 0.0
+shadows = []
+text_color = "#ffffff"
 
 [[dialogue.responsive.rules.layout.shader_effects]]
 shader = "compact_print"
@@ -164,13 +208,14 @@ max_width = 200.0
 [dialogue.responsive.rules.layout]
 decor = []
 padding = [10.0, 12.0, 10.0, 12.0]
-unset = ["box.frame", "nameplate.border_color", "nameplate.contour", "nameplate.gradient"]
+unset = ["box.frame", "nameplate.border_color", "nameplate.gradient"]
 
 [dialogue.responsive.rules.layout.box]
+margin = [0.0, 0.0, 0.0, 0.0]
 
 [dialogue.responsive.rules.layout.nameplate]
 border_width = 0.0
-color = "#0876d0"
+color = "#10206e"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
@@ -191,6 +236,10 @@ base_ms = 40
 shader = "artwork"
 target = "artwork"
 
+[dialogue.reply]
+color = "#c6d0ff"
+size = 12.0
+
 [dialogue.text]
 color = "#ffffff"
 line_height = 1.5
@@ -198,7 +247,7 @@ size = 24.0
 
 [dialogue.text.shadow]
 blur = 0.0
-color = "#000000"
+color = "#10206e"
 dx = 2.0
 dy = 2.0
 
@@ -217,20 +266,19 @@ file = "builtin:fonts/FusionPixel12pxProportionalSC.ttf"
 weight = 400
 
 [history]
-bubble_border = "#d8e1ff"
+bubble_border = "#c6d0ff"
 bubble_border_width = 2.0
-bubble_color = "#10206ee0"
-bubble_contour = "rpg"
-bubble_radius = 4.0
+bubble_color = "#14257ee6"
+bubble_radius = 6.0
 entrance = "slide_up"
-name_color = "#ffffff"
+name_color = "#ffd45c"
 name_size = 24.0
 name_weight = 400
-time_color = "#c0c8f0"
+time_color = "#c6d0ff"
 time_size = 12.0
 
 [history.avatar]
-color = "#2a3a9a"
+color = "#ffd45c"
 radius = 0.0
 ring_color = "#ffffff"
 ring_width = 2.0
@@ -241,7 +289,15 @@ angle = 180.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#2840a8e6"], [1.0, "#0c1450e6"]]
+stops = [[0.0, "#2a3fb8e6"], [1.0, "#14257ee6"]]
+
+[[history.bubble_shadows]]
+blur = 0.0
+color = "#050a33"
+dx = 0.0
+dy = 0.0
+inset = false
+spread = 2.0
 
 [history.chat]
 text_scale = 1.0
@@ -256,12 +312,14 @@ size = 24.0
 
 [history.text.shadow]
 blur = 0.0
-color = "#000000"
+color = "#10206e"
 dx = 1.0
 dy = 1.0
 
 [mention]
+fill = "#4a5cc4"
 scale = 1.0
+text_color = "#ffffff"
 
 [shaders.artwork]
 animated = true
@@ -275,7 +333,7 @@ textures = []
 [shaders.compact_print]
 animated = true
 intensity = 1.0
-params = [2.0]
+params = [2.0, 1.0]
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true

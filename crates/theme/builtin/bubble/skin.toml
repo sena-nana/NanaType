@@ -1,18 +1,15 @@
 [chrome]
 accent = "#ff7aa8"
-text = "#2b2b3a"
+text = "#4a2440"
 
 [dialogue]
-padding = [30.0, 30.0, 30.0, 18.0]
-region = [760.0, 170.0]
+padding = [50.0, 52.0, 68.0, 50.0]
+region = [760.0, 214.0]
 
 [dialogue.box]
-border_color = "#2b2b3a"
-border_width = 4.0
-color = "#ffffff"
-contour = "rounded"
-margin = [0.0, 0.0, 26.0, 0.0]
-radius = 30.0
+border_color = "#7a2e59"
+border_width = 0.0
+color = "#ffe8f100"
 
 [dialogue.box.frame]
 fill = true
@@ -20,39 +17,39 @@ image = "still.png"
 layout_inset = false
 repeat = false
 scale = 1.0
-slice = [32, 74, 36, 34]
-
-[[dialogue.box.shadows]]
-blur = 0.0
-color = "#2b2b3a40"
-dx = 0.0
-dy = 6.0
-inset = false
-spread = 0.0
+slice = [64, 80, 64, 170]
 
 [dialogue.continue]
 bob_px = 3.0
 color = "#ff7aa8"
 glyph = "▼"
 motion = "bob"
-offset = [-26.0, -12.0]
+offset = [-60.0, -46.0]
 
 [dialogue.nameplate]
-border_color = "border"
+border_color = "#7a2e59"
 border_width = 3.0
 color = "#ff7aa8"
-offset = [28.0, -18.0]
-padding = [14.0, 3.0]
+offset = [44.0, 8.0]
+padding = [14.0, 2.0]
 radius = 999.0
-rotate = -2.0
-text_color = "#6a2445"
+size = 19.0
+text_color = "#5a1e42"
 
 [dialogue.nameplate.gradient]
 angle = 180.0
 center = [50.0, 50.0]
 circle = false
 kind = "linear"
-stops = [[0.0, "#ff95b8"], [1.0, "#f36d9d"]]
+stops = [[0.0, "#ff9cbf"], [1.0, "#ff7aa8"]]
+
+[[dialogue.nameplate.shadows]]
+blur = 0.0
+color = "#ffb3cf"
+dx = 3.0
+dy = 3.0
+inset = false
+spread = 0.0
 
 [dialogue.responsive.landscape]
 decor = []
@@ -87,13 +84,14 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 40.0, 16.0, 16.0]
+padding = [16.0, 48.0, 18.0, 18.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
+margin = [0.0, 0.0, 0.0, 0.0]
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+offset = [14.0, 10.0]
 rotate = 0.0
 
 [[dialogue.responsive.rules.layout.shader_effects]]
@@ -107,14 +105,14 @@ portrait = false
 
 [dialogue.responsive.rules.layout]
 decor = []
-padding = [16.0, 40.0, 16.0, 16.0]
+padding = [16.0, 48.0, 18.0, 18.0]
 unset = ["box.frame"]
 
 [dialogue.responsive.rules.layout.box]
 margin = [0.0, 0.0, 0.0, 0.0]
 
 [dialogue.responsive.rules.layout.nameplate]
-offset = [12.0, 4.0]
+offset = [14.0, 10.0]
 rotate = 0.0
 
 [[dialogue.responsive.rules.layout.shader_effects]]
@@ -161,12 +159,12 @@ margin = [0.0, 0.0, 0.0, 0.0]
 
 [dialogue.responsive.rules.layout.nameplate]
 border_width = 0.0
-color = "#0876d0"
+color = "#ff7aa8"
 offset = [16.0, -12.0]
 padding = [10.0, 4.0]
 radius = 10.0
 rotate = 0.0
-text_color = "#ffffff"
+text_color = "#5a1e42"
 visible = false
 
 [dialogue.responsive.rules.layout.portrait]
@@ -183,16 +181,14 @@ ms = 140
 shader = "artwork"
 target = "artwork"
 
-[dialogue.tail]
-at = 0.14000000059604645
-lean = -10.0
-length = 24.0
-shadow = true
-side = "bottom"
-width = 34.0
+[dialogue.reply]
+color = "#86566f"
+size = 15.0
 
 [dialogue.text]
-color = "#2b2b3a"
+color = "#4a2440"
+line_height = 1.4
+size = 28.0
 
 [effects]
 contrast_guard = 3.0
@@ -202,46 +198,46 @@ families = ["Segoe UI Symbol", "Microsoft YaHei UI", "PingFang SC"]
 weight = 400
 
 [fonts.body]
-weight = 700
+weight = 600
 
 [fonts.name]
 weight = 800
 
 [history]
-bubble_border = "#2b2b3a"
+bubble_border = "#7a2e59"
 bubble_border_width = 3.0
-bubble_color = "#ffffff"
+bubble_color = "#fff4f8"
 bubble_contour = "rounded"
 bubble_radii = [5.0, 18.0, 18.0, 18.0]
 bubble_radius = 18.0
 entrance = "slide_up"
-name_color = "#ff5c95"
-time_color = "#8aa0b4"
+name_color = "#7a2e59"
+time_color = "#86566f"
 
 [history.avatar]
-ring_color = "#2b2b3a"
+ring_color = "#7a2e59"
 ring_width = 3.0
 
 [[history.bubble_shadows]]
 blur = 0.0
-color = "#2b2b3a40"
-dx = 0.0
-dy = 3.0
+color = "#ffb3cf"
+dx = 4.0
+dy = 4.0
 inset = false
 spread = 0.0
 
 [history.name_plate]
-border_color = "#2b2b3a"
+border_color = "#7a2e59"
 border_style = "solid"
 border_width = 2.0
-color = "name"
+color = "#ff7aa8"
 padding = [9.0, 2.0]
 radius = 999.0
 shadows = []
-text_color = "name_text"
+text_color = "#5a1e42"
 
 [history.text]
-color = "#2b2b3a"
+color = "#4a2440"
 
 [shaders.artwork]
 animated = true
@@ -253,9 +249,9 @@ static_fallback = false
 textures = []
 
 [shaders.compact_print]
-animated = true
+animated = false
 intensity = 1.0
-params = [2.0]
+params = [2.0, 1.0]
 period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true
@@ -278,3 +274,8 @@ period_s = 16.0
 source = "artwork.wgsl"
 static_fallback = true
 textures = []
+
+[mention]
+fill = "#ffd6e6"
+scale = 0.72
+text_color = "#7a2e59"
