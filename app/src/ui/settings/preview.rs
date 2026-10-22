@@ -36,11 +36,11 @@ pub fn load_draft(settings: &Settings, id: &str, ui: Ui) -> Draft {
     Draft::load(settings, id, *ui, overscan(ui, id))
 }
 
-fn draft(ui: Ui, id: &str) -> Draft {
+pub(super) fn draft(ui: Ui, id: &str) -> Draft {
     nanatype_frame::ui::preview::draft(*ui, id, overscan(ui, id))
 }
 
-fn change(ui: Ui, id: &str, f: impl FnOnce(&mut Draft)) {
+pub(super) fn change(ui: Ui, id: &str, f: impl FnOnce(&mut Draft)) {
     nanatype_frame::ui::preview::change(*ui, id, overscan(ui, id), f)
 }
 
@@ -227,6 +227,7 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
     let valid_id = id.to_owned();
     let valid_base = base.clone();
     let save_base = base.clone();
+    let params = super::skin_params::view(ui, id, base.clone());
     let status_id = id.to_owned();
     let status = dynamic(
         move || {
@@ -266,6 +267,7 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
             .width(LengthSpec::Fill),
     )
     .children((
+        params,
         widget(
             Stack::row(0.0)
                 .gap_step(gap::step::CONTROL)
@@ -297,6 +299,7 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
                             text,
                             ..Default::default()
                         };
+                        d.params = Default::default();
                     })
                 },
             ),
@@ -623,6 +626,131 @@ mod tests {
         change(ui, id, |d| d.history.size = "72".into());
         click(&mut session, &ui.now_t("skin-edit-discard"));
         assert!(!ui.skin_drafts.with_untracked(|m| m.contains_key(id)));
+    }
+
+    /// A standalone skin with one param of each kind and a preset.
+    fn param_skin() -> Arc<Skin> {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(nanatype_theme::MANIFEST),
+            r##"
+[meta]
+id = "test.params"
+[params.fur]
+type = "color"
+default = "#fff7ec"
+name = { zh-CN = "毛色" }
+[params.size]
+type = "number"
+default = 28
+min = 16
+max = 40
+step = 2
+[params.align]
+type = "enum"
+default = "start"
+options = [{ id = "start" }, { id = "center" }]
+[params.shadow]
+type = "bool"
+default = false
+[presets.night]
+name = { zh-CN = "夜晚" }
+values = { fur = "#2b2730", size = 32 }
+[dialogue.box]
+color = { param = "fur" }
+[dialogue.text]
+size = { param = "size" }
+align = { param = "align" }
+"##,
+        )
+        .unwrap();
+        let files: Arc<dyn nanatype_theme::SkinFiles> =
+            Arc::new(nanatype_theme::DirFiles::new(dir.path()));
+        let loaded = nanatype_theme::load(
+            files,
+            nanatype_theme::SkinOrigin::Directory(dir.path().into()),
+            &(),
+            env!("CARGO_PKG_VERSION"),
+        )
+        .unwrap();
+        loaded.skin
+    }
+
+    #[test]
+    fn param_controls_edit_the_draft_keep_valid_values_and_save_them() {
+        let (ui, _) = fixture();
+        let base = param_skin();
+        let id = "test.params";
+        let doc_id = DocumentId::new(5).unwrap();
+        let mut doc = RuntimeDocument::new(doc_id);
+        let render_base = base.clone();
+        doc.context_mut()
+            .mount_view_root(doc_id, move || controls(ui, id, render_base, false, false))
+            .unwrap();
+        let mut session = RuntimeAgentSession::new(doc, 700, 1800).unwrap();
+        session.flush().unwrap();
+        let fur = session
+            .accessibility_dump()
+            .into_iter()
+            .find(|n| {
+                n.agent_path
+                    .as_deref()
+                    .is_some_and(|p| p.contains("skin-param-fur"))
+            })
+            .expect("hex field for the colour param");
+        session.click_node(fur.id).unwrap();
+        session.type_text("zz").unwrap();
+        session.flush().unwrap();
+        // Unparsable text stays in the field; the sample keeps the last
+        // valid colour and the draft can still be saved.
+        let d = draft(ui, id);
+        assert!(d.params.raw.contains_key("fur"));
+        assert!(!d.params.values.contains_key("fur"));
+        assert!(d.profile(&base).unwrap().params.is_empty());
+        assert!(session.accessibility_dump().iter().any(|n| {
+            n.label.as_deref() == Some(ui.now_t("skin-params-invalid-color").as_str())
+        }));
+
+        change(ui, id, |d| {
+            let _ = d.params.input(&base, "fur", "#102030");
+        });
+        let p = draft(ui, id).profile(&base).unwrap();
+        assert_eq!(
+            p.params.get("fur"),
+            Some(&nanatype_model::ParamValue::Text("#102030".into()))
+        );
+
+        // A preset chip applies its values; matching values light it up.
+        click(&mut session, "夜晚");
+        let d = draft(ui, id);
+        assert_eq!(d.params.matching_preset(&base), Some("night"));
+        assert!(d.params.raw.is_empty());
+        click(&mut session, &ui.now_t("skin-edit-save"));
+        let saved = session
+            .document_mut()
+            .context_mut()
+            .take_program_messages()
+            .into_iter()
+            .find_map(|m| m.downcast::<Msg>().ok())
+            .unwrap();
+        let Msg::SaveSkinPersonalization { profile, .. } = *saved else {
+            panic!("save message");
+        };
+        // Only values that differ from the defaults are kept.
+        assert_eq!(profile.params.len(), 2);
+        assert_eq!(
+            profile.params.get("size"),
+            Some(&nanatype_model::ParamValue::Number(32.0))
+        );
+
+        click(&mut session, &ui.now_t("skin-params-default"));
+        assert!(draft(ui, id).params.values.is_empty());
+        change(ui, id, |d| {
+            d.params
+                .set("shadow", nanatype_model::ParamValue::Bool(true))
+        });
+        click(&mut session, &ui.now_t("skin-edit-reset"));
+        assert!(draft(ui, id).params.values.is_empty());
     }
 
     #[test]

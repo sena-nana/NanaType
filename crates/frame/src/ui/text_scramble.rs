@@ -899,6 +899,7 @@ impl SceneGpuRenderer for Renderer {
             &p.sampler,
             super::effect_uniforms::output_key(&c, scale),
             upload.len(),
+            None,
         );
         interop.queue().write_buffer(&binding.buffer, 0, &upload);
         if let Some(work) = c.gpu_work {

@@ -27,6 +27,7 @@ pub fn validate_material(source: &str) -> Result<ShaderProgram, String> {
         "material",
         "MaterialInput",
         4,
+        crate::shader::MATERIAL_HELPERS,
     )?;
     Ok(ShaderProgram {
         hash: blake3::hash(full.as_bytes()).to_hex().to_string(),

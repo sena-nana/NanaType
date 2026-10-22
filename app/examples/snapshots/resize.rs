@@ -36,6 +36,7 @@ pub fn audit(
                 line_height: font.map(|_| 1.8),
                 ..Default::default()
             },
+            ..Default::default()
         };
         settings
             .skin

@@ -1793,6 +1793,7 @@ fn continue_indicator_on(ui: Stage, ctx: &BoxCtx, animate: bool) -> impl IntoVie
     let cs = ctx.skin.dialogue.continue_.clone();
     let image = cs.image.as_ref().and_then(|i| ctx.url(i));
     let hidden = image.is_none() && cs.glyph.is_empty();
+    let skin = ctx.skin.clone();
     let frames = cs.frames.max(1);
     let fps = cs.fps;
     let child: AnyView = match image {
@@ -1855,6 +1856,7 @@ fn continue_indicator_on(ui: Stage, ctx: &BoxCtx, animate: bool) -> impl IntoVie
                     Source::Draft => false,
                     Source::Preview => true,
                 }
+                && !super::shader_effects::owns_continue(ui, source, &skin)
         })
         .children(mark.children(child))
 }

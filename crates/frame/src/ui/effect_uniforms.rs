@@ -88,6 +88,8 @@ impl Uniforms {
     pub fn bytes(&self) -> usize {
         self.entries.iter().map(|(_, size, _)| *size).sum()
     }
+    // Each argument is one binding of the shared layout.
+    #[allow(clippy::too_many_arguments)]
     pub fn binding(
         &mut self,
         gpu: &GpuContext,
@@ -96,6 +98,7 @@ impl Uniforms {
         sampler: &wgpu::Sampler,
         key: OutputKey,
         size: usize,
+        slots: Option<&wgpu::Buffer>,
     ) -> &Binding {
         if let Some(index) = self.entries.iter().position(|(k, _, _)| *k == key) {
             let entry = self.entries.remove(index);
@@ -132,6 +135,12 @@ impl Uniforms {
                 entries.push(wgpu::BindGroupEntry {
                     binding: i as u32 + 2,
                     resource: wgpu::BindingResource::TextureView(texture),
+                });
+            }
+            if let Some(slots) = slots {
+                entries.push(wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: slots.as_entire_binding(),
                 });
             }
             let group = device.create_bind_group(&wgpu::BindGroupDescriptor {

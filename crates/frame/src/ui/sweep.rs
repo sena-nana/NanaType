@@ -411,6 +411,7 @@ impl SceneGpuRenderer for SweepRenderer {
             &prepared.sampler,
             super::effect_uniforms::output_key(&context, scale),
             upload.len(),
+            None,
         );
         interop.queue().write_buffer(&binding.buffer, 0, &upload);
         if let Some(work) = context.gpu_work {

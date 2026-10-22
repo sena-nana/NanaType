@@ -58,6 +58,8 @@ license = "MIT"
 constraints = { type = "object", required = ["items"], max_depth = 8 }
 ```
 
+`skin` 能力可以在 `skin.toml` 中声明用户参数与预设（见[皮肤参数](skins.md#皮肤参数)）。参数值按皮肤 ID 存在用户设置里，不写回包内文件，也不会改变包读取的文件，所以签名和完整性校验不受影响。
+
 ## 命名空间与依赖闭包
 
 - 包内资源使用相对路径；跨包资源使用 `pkg:<包ID>/<路径>`；常用字体使用 `builtin:fonts/...`。

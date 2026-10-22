@@ -726,6 +726,55 @@ fn personalization_rejects_invalid_inputs_and_sanitizes_hand_edited_files() {
 }
 
 #[test]
+fn skin_params_round_trip_and_bad_values_never_fail_the_file() {
+    use nanatype_model::ParamValue;
+    let mut s = Settings::default();
+    let mut p = SkinPersonalization::default();
+    p.params
+        .insert("ear_height".into(), ParamValue::Number(42.0));
+    p.params
+        .insert("fur".into(), ParamValue::Text("#fff7ec".into()));
+    p.params.insert("tail".into(), ParamValue::Bool(false));
+    s.skin
+        .personalizations
+        .insert("test.skin".into(), p.clone());
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    save_json(&path, &s).unwrap();
+    assert_eq!(
+        load_settings(&path, None).value.skin.personalizations["test.skin"],
+        p
+    );
+    // Without params the field is not written at all.
+    let plain = serde_json::to_value(SkinPersonalization::default()).unwrap();
+    assert!(plain.get("params").is_none());
+
+    let loaded: Settings = serde_json::from_str(
+        r#"{"skin":{"personalizations":{"a":{"display":{"text_size":30},"params":{"ok":1,"Bad":2,"n":null,"arr":[1],"obj":{}}}, "b":{"params":"nonsense"}}}}"#,
+    )
+    .unwrap();
+    let a = &loaded.skin.personalizations["a"];
+    assert_eq!(a.display.text_size, Some(30.0));
+    assert_eq!(a.params.len(), 1);
+    assert_eq!(a.params["ok"], ParamValue::Number(1.0));
+    assert!(loaded.skin.personalizations["b"].params.is_empty());
+
+    let mut big = SkinPersonalization::default();
+    for i in 0..70 {
+        big.params.insert(format!("p{i}"), ParamValue::Bool(true));
+    }
+    big.params
+        .insert("long".into(), ParamValue::Text("x".repeat(300)));
+    assert!(!big.valid());
+    let mut s = Settings::default();
+    s.skin.personalizations.insert("big".into(), big);
+    s.sanitize();
+    let big = &s.skin.personalizations["big"];
+    assert!(big.valid());
+    assert_eq!(big.params.len(), 64);
+}
+
+#[test]
 fn third_party_chat_defaults_off_and_round_trips_at_schema_2() {
     let old: Settings = serde_json::from_str(r#"{"schema":2}"#).unwrap();
     let b = &old.integrations.blivechat;

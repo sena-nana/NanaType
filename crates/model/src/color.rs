@@ -37,6 +37,25 @@ impl Rgba8 {
             format!("#{:02x}{:02x}{:02x}{:02x}", self.r, self.g, self.b, self.a)
         }
     }
+
+    /// WCAG relative luminance of the colour, ignoring alpha.
+    pub fn luminance(self) -> f32 {
+        let lin = |v: u8| {
+            let v = f32::from(v) / 255.0;
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * lin(self.r) + 0.7152 * lin(self.g) + 0.0722 * lin(self.b)
+    }
+
+    /// WCAG contrast ratio against `other`, treating both as opaque.
+    pub fn contrast(self, other: Self) -> f32 {
+        let (a, b) = (self.luminance(), other.luminance());
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

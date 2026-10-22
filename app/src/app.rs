@@ -917,8 +917,27 @@ impl App {
     }
 
     fn apply_skin(&mut self) {
-        let mut personalized =
-            skin_theme::personalized(&self.loaded.skin, &self.settings, &self.settings.skin.id);
+        let (mut personalized, warnings) = skin_theme::personalized_with_diagnostics(
+            &self.loaded.skin,
+            &self.settings,
+            &self.settings.skin.id,
+        );
+        // Saved param values the skin now refuses: say so once per skin and
+        // problem, and keep the stored values (a hot reload may fix them).
+        static TOLD: std::sync::LazyLock<std::sync::Mutex<HashSet<String>>> =
+            std::sync::LazyLock::new(Default::default);
+        for w in warnings {
+            let key = format!("{}\n{w}", self.settings.skin.id);
+            if TOLD.lock().unwrap_or_else(|e| e.into_inner()).insert(key) {
+                self.notice(
+                    format!(
+                        "{}: {w}",
+                        personalized.display_name(self.ui.locale.get_untracked().tag())
+                    ),
+                    false,
+                );
+            }
+        }
         if let Some(pack) = &self.sound_pack {
             personalized.sounds = nanatype_theme::layer_sounds(&personalized.sounds, &pack.sounds);
         }

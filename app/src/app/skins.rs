@@ -70,8 +70,16 @@ impl App {
                     );
                 }
             }
-            Msg::SaveSkinPersonalization { id, profile } => {
+            Msg::SaveSkinPersonalization { id, mut profile } => {
                 if profile.valid() && self.registry.entries().iter().any(|r| r.id == id) {
+                    // Keep only values the skin's params accept and that
+                    // differ from their defaults.
+                    match self.registry.load(&id) {
+                        Ok(loaded) => {
+                            nanatype_theme::retain_valid_params(&loaded.skin, &mut profile.params)
+                        }
+                        Err(_) => profile.params.clear(),
+                    }
                     let active = id == self.settings.skin.id;
                     self.edit(move |s| {
                         s.skin.personalizations.insert(id, profile);
@@ -162,6 +170,23 @@ impl App {
             let mut ch = TomlTable::new();
             ch.insert("accent".into(), c.to_hex().into());
             over.insert("chrome".into(), ch.into());
+        }
+        // Param values become the copy's defaults, so the copy carries the
+        // look on its own and its profile starts without them.
+        let mut profile = profile;
+        if let Some(p) = profile.as_mut().filter(|p| !p.params.is_empty()) {
+            let mut params = TomlTable::new();
+            for (key, value) in std::mem::take(&mut p.params) {
+                let value = match value {
+                    nanatype_model::ParamValue::Bool(b) => b.into(),
+                    nanatype_model::ParamValue::Number(n) => n.into(),
+                    nanatype_model::ParamValue::Text(t) => t.into(),
+                };
+                let mut spec = TomlTable::new();
+                spec.insert("default".into(), value);
+                params.insert(key, spec.into());
+            }
+            over.insert("params".into(), params.into());
         }
         match self.registry.duplicate(base, &id, &name, &over) {
             Ok(dir) => {

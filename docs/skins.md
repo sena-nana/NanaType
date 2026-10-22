@@ -387,7 +387,22 @@ WGSL 文件只实现 `fn effect(input: EffectInput) -> vec4<f32>`，可添加纯
 
 `EffectInput` 包含 `uv: vec2<f32>`（局部 0–1）、`size: vec2<f32>`（逻辑像素）、`phase: f32`（循环相位 0–1）、`seed: f32`（固定种子）；`line_age` / `speaker_age` 是对应事件后的秒数，`reveal` 是当前页面的打字进度，`waiting` 为 0 或 1；`base`、`accent`、`border`、`text` 为线性 `vec4<f32>` 主题色；`params0` / `params1` 各包含四个参数，未提供的值为零。
 
-宿主提供 `sample0(uv)`、`sample1(uv)` 和 `particles(uv, phase, seed)`。采样仅访问声明的图片，UV 限制在图片边缘，没有绑定图片时返回透明。`particles` 使用固定十六个点，无需跨帧状态。程序可用 phase、三角函数和固定种子组合流光、焦散、星环、气泡及短暂事件响应。
+宿主提供 `sample0(uv)`、`sample1(uv)`、`particles(uv, phase, seed)` 和 `param(i)`。采样仅访问声明的图片，UV 限制在图片边缘，没有绑定图片时返回透明。`particles` 使用固定十六个点，无需跨帧状态。`param(i: u32) -> vec4<f32>` 读取 `bindings` 的第 `i` 项（见[皮肤参数](#皮肤参数)），未绑定的槽为零。程序可用 phase、三角函数和固定种子组合流光、焦散、星环、气泡及短暂事件响应。
+
+着色器接口版本为 ABI 2：在 ABI 1 的基础上增加了 `param(i)` 及其绑定。`param` 与 `fx_` 前缀一样由宿主保留，自定义同名函数会被拒绝。
+
+```toml
+[shaders.art]
+source = "art.wgsl"
+bindings = [
+    [34, 100, 100, 40],                     # 字面量
+    ["ear_height", "ear_width", "tail", 3], # 最多四个标量：数值原样，布尔为 0/1，枚举为选项序号
+    "fur",                                  # 颜色：线性 rgba（直通 alpha），与 base/accent 一致
+]
+owns_continue = true                        # artwork 播放时由程序自绘继续提示
+```
+
+`bindings` 最多 64 项，每项占一个 `vec4`。文本参数不能绑定，颜色参数只能单独占一项。参数变化只更新这块 uniform，不会重新编译着色器。`owns_continue = true` 只对 `target = "artwork"` 的程序生效：程序正在播放时宿主隐藏 `dialogue.continue`；冻结、关闭高级效果或编译失败时宿主照常绘制，所以静态画面也有继续提示。
 
 ```wgsl
 fn effect(i: EffectInput) -> vec4<f32> {
@@ -403,7 +418,7 @@ fn effect(i: EffectInput) -> vec4<f32> {
 
 完整作者示例见 [aurora/skin.toml](examples/aurora/skin.toml)，可直接导入 [aurora.ntpkg](examples/aurora.ntpkg)。六套新内置主题每套使用一个 WGSL、一张透明装饰纹理、零自定义参数、零装饰节点，构图和静态回退见[设计说明](skin-art-direction.md)，素材参考与矢量源图见[来源记录](skin-art-sources.md)。
 
-`target = "artwork"` 用于完整画面：程序自行绘制透明轮廓、材质、边框和装饰，宿主提供展示框矩形画布，不再使用原有框体的覆盖遮罩。配置 `dialogue.box.frame` 作为完整静态回退；可以运行 `cargo run -p nanatype --example skin_artwork -- crates/theme/builtin` 重新烘焙内置图。回退与 WGSL 都绘制在正文、引用和姓名之前；未声明静态回退的第三方程序在关闭动效时不提交用户代码；`static_fallback = true` 的响应式版画冻结时钟以保留完整材质和装饰，停止申请动画帧。
+`target = "artwork"` 用于完整画面：程序自行绘制透明轮廓、材质、边框和装饰，宿主提供展示框矩形画布，不再使用原有框体的覆盖遮罩。多个 artwork 实例按 `shader_effects` 的顺序叠加；单个程序超出节点上限时，可以拆成背层和前层。配置 `dialogue.box.frame` 作为完整静态回退；可以运行 `cargo run -p nanatype --example skin_artwork -- crates/theme/builtin` 重新烘焙内置图，用 `-- --package <目录> [--preset <预设>] [--out <png>]` 烘焙一个包（按顺序叠加它的全部 artwork 层）。`cargo run -p nanatype-theme --example check_package -- <目录或 .ntpkg>` 按应用的方式校验包，并列出每个着色器的 IR 与展开成本；超出上限时也会报告。回退与 WGSL 都绘制在正文、引用和姓名之前；未声明静态回退的第三方程序在关闭动效时不提交用户代码；`static_fallback = true` 的响应式版画冻结时钟以保留完整材质和装饰，停止申请动画帧。
 
 ## 内容配色参考（chrome）
 
@@ -541,11 +556,101 @@ NanaUI 一次只用一个字体名，NanaType 会从 `families` 里挑第一个�
 - 字体无法解析；音效不是 WAV / OGG / FLAC / MP3；
 - 颜色或数值不合法（如字号不在 4–400）；
 - 渐变色标不是 2–8 个或位置递减；圆角不在 0–2000、边框不在 0–64；阴影超过 4 层；
-- 装饰超过 16 个、多边形不是 3–8 点、文字超过 8 个字；尾巴、`continue` 的帧数和速度超出范围；`margin` 占满了区域。
+- 装饰超过 16 个、多边形不是 3–8 点、文字超过 8 个字；尾巴、`continue` 的帧数和速度超出范围；`margin` 占满了区域；
+- 参数声明、预设或 `{ param = … }` 占位不合法，或参数可取的某个值（范围两端、每个选项、最长文本、每个预设）会让它填入的字段越界（见[皮肤参数](#皮肤参数)）。
 
 `tags` 不合规只会提示。
 
 清单中不认识的字段会提示并忽略；制作皮肤时应清理这些字段。
+
+## 皮肤参数
+
+皮肤可以声明一组参数，用户在 设置 › 皮肤 › 预览 中调整。参数值保存在这套皮肤的个人配置里，不修改皮肤文件；「恢复皮肤默认」会一并清空，「默认」预设也会回到默认值。一个参数可以填入宿主绘制的字段，也可以绑定到着色器，或两者兼有。
+
+```toml
+[param_groups.ears]
+name = { zh-CN = "耳朵", en-US = "Ears" }
+order = 1                                   # 分组与参数都按 order、再按 id 排列
+
+[params.fur]
+type = "color"                              # number | color | bool | enum | text
+group = "ears"
+name = { zh-CN = "毛色", en-US = "Fur" }
+default = "#fff7ec"
+# alpha = true                              # 允许半透明；默认必须不透明
+
+[params.ear_height]
+type = "number"
+default = 36
+min = 16
+max = 80
+step = 1
+unit = "px"                                 # 显示单位；"%" 表示把 0–1 的值显示为百分比
+
+[params.motion]
+type = "enum"
+default = "cat"
+options = [{ id = "cat", name = { zh-CN = "猫" } }, { id = "fox", name = { zh-CN = "狐" } }]
+
+[params.sign]
+type = "text"
+default = "喵"
+max_len = 4                                 # 1–64 个字形簇；allow_empty = true 允许留空
+
+[presets.red_fox]
+name = { zh-CN = "赤狐" }
+values = { fur = "#fff3e6", motion = "fox" } # 未列出的参数取默认值
+
+[[param_checks]]                            # 只提示，不拒绝
+foreground = "text"                         # 颜色参数，或颜色角色 box、border、accent、text、name、name_text
+background = "fur"
+min = 4.5
+
+[dialogue.box]
+color = { param = "fur" }                   # 任意字段都可以写成占位
+```
+
+**占位**：`{ param = "<id>" }` 必须是整个值，不能再带别的键。加载时先代入默认值，再按普通清单校验；用户的值之后写入相同位置。占位不能出现在 `fonts`、`sounds`、`pipelines`、`materials` 之下，不能出现在 `shaders` 中除 `params`、`intensity` 以外的位置，不能出现在 `dialogue.responsive.rules` 之下，也不能出现在 `image`、`file`、`source`、`textures`、`families`、`font_family` 字段中，因此参数不会改变皮肤读取的文件。写在 `[dialogue]` 里的占位会随响应式布局一起展开。整数字段只能填入范围和步长都是整数的数值参数。
+
+**校验**：
+- 参数 id、分组 id、预设 id 和选项 id 都由 1–32 个 a-z、0-9、`_` 组成；
+- 数量上限：参数最多 64 个，分组最多 16 个，预设最多 32 个，检查最多 16 条；
+- number 需要有限的 `min` < `max`，`step` 大于 0 且不超过范围，默认值落在步进网格上；
+- enum 有 1–16 个不重复的选项，默认值是其中之一；
+- text 不允许换行和控制字符；
+- 预设中的每个值都要符合对应参数的规则；
+- 加载时还会把每个参数的两端、每个选项、最长文本和每个预设分别代入清单再校验一遍：比如文本参数绑定到装饰 `text`（最多 8 个字）时，`max_len` 不能超过 8。
+
+只声明却未使用的参数会给出提示。
+
+**存储与回退**：
+- 个人配置只保存与默认值不同的值，读取时宽松处理：不是布尔、有限数字或字符串的值直接丢弃，不会让设置文件失效。
+- 应用皮肤时，不再符合参数规则的值回到默认值，并提示一次；保存的值保持不变，因为热重载后它可能重新有效。
+- 一组值让皮肤校验失败时，整套参数都忽略，并给出提示。
+- 旧的全局颜色覆盖仍然优先于参数。
+
+**界面**：设置页按参数类型生成控件：
+
+| 类型 | 控件 |
+|---|---|
+| number | 滑块，带读数 |
+| color | 取色器，加十六进制输入框 |
+| bool | 开关 |
+| enum | 不超过四个短选项时用分段控件，否则用下拉框 |
+| text | 文本框 |
+
+输入无法解析时，字段内显示原因，预览保留上一个有效值，保存时只写入有效值。预设显示为一排标签，当前取值恰好等于某个预设时高亮它。没有通过 `param_checks` 的颜色组合会以提示的形式列出。
+
+**继承与导出**：`[params.<id>]`、`[param_groups.<id>]`、`[presets.<id>]` 按 id 深合并，子皮肤可以改默认值、范围和名称；`param_checks` 与 `bindings` 是数组，整体替换。导出和独立清单会保留占位。「复制为可编辑」会把当前的参数值写成副本中参数的默认值。
+
+**静态画面**：
+
+| 场景 | 显示 |
+|---|---|
+| 缩略图、输入窗、编辑器 | `still.png`，即默认值 |
+| 展示框与设置预览，`static_fallback = true` 时 | 用当前参数运行同一程序；关闭动效时冻结在静止姿态 |
+
+[NanaTypeSkins](https://github.com/sena-nana/NanaTypeSkins) 的 Kemomimi（兽耳）是第一套参数化皮肤：47 个参数、10 个预设，耳朵、尾巴和框体全部由同一个 SDF 程序按参数生成，拆成背层和前层两个 artwork。
 
 ## 热重载
 

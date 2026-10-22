@@ -4689,6 +4689,7 @@ dependencies = [
  "toml",
  "toml_edit",
  "ttf-parser",
+ "unicode-segmentation",
  "zip",
 ]
 

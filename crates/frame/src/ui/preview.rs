@@ -76,6 +76,80 @@ impl Pane {
 pub struct Draft {
     pub display: Pane,
     pub history: Pane,
+    pub params: ParamDraft,
+}
+
+/// Unsaved param values. `values` holds the last valid value of each param
+/// the user touched; `raw` the text of fields that do not parse yet, which
+/// the page shows with an error while the sample keeps the valid value.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ParamDraft {
+    pub values: std::collections::BTreeMap<String, nanatype_model::ParamValue>,
+    pub raw: std::collections::BTreeMap<String, String>,
+}
+
+impl ParamDraft {
+    /// The value `id` currently shows: the draft's, else the skin default.
+    pub fn current(&self, skin: &Skin, id: &str) -> Option<nanatype_theme::Resolved> {
+        let spec = skin.params.get(id)?;
+        self.values
+            .get(id)
+            .and_then(|v| spec.coerce(v).ok())
+            .or_else(|| skin.param_defaults().remove(id))
+    }
+
+    /// Every param's current value.
+    pub fn resolved(
+        &self,
+        skin: &Skin,
+    ) -> std::collections::BTreeMap<String, nanatype_theme::Resolved> {
+        nanatype_theme::coerce_values(skin, &self.values, &mut Vec::new())
+    }
+
+    pub fn set(&mut self, id: &str, value: nanatype_model::ParamValue) {
+        self.raw.remove(id);
+        self.values.insert(id.to_owned(), value);
+    }
+
+    /// Text typed into `id`'s field: kept as the value when it parses,
+    /// otherwise kept aside so the field can show what is wrong.
+    pub fn input(
+        &mut self,
+        skin: &Skin,
+        id: &str,
+        text: &str,
+    ) -> Result<(), nanatype_theme::ParamError> {
+        let Some(spec) = skin.params.get(id) else {
+            return Ok(());
+        };
+        match spec.parse_input(text) {
+            Ok(v) => {
+                self.set(id, v);
+                Ok(())
+            }
+            Err(e) => {
+                self.raw.insert(id.to_owned(), text.to_owned());
+                Err(e)
+            }
+        }
+    }
+
+    /// Apply a preset: its values, and every other param back to default.
+    pub fn apply_preset(&mut self, skin: &Skin, preset: &str) {
+        if let Some(values) = skin.preset_values(preset) {
+            self.raw.clear();
+            self.values = values.into_iter().map(|(k, v)| (k, v.to_value())).collect();
+        }
+    }
+
+    /// The preset whose values the draft shows exactly, if any.
+    pub fn matching_preset<'a>(&self, skin: &'a Skin) -> Option<&'a str> {
+        let current = self.resolved(skin);
+        skin.ordered_presets()
+            .into_iter()
+            .map(|(id, _)| id)
+            .find(|id| skin.preset_values(id).as_ref() == Some(&current))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -116,10 +190,15 @@ impl Draft {
                     size: settings.overlays.history.size,
                     ..Default::default()
                 },
+                params: Default::default(),
             });
         Self {
             display: Pane::from_saved(&p.display, ui.now_t("skin-edit-sample")),
             history: Pane::from_saved(&p.history, ui.now_t("skin-edit-history-sample")),
+            params: ParamDraft {
+                values: p.params,
+                raw: Default::default(),
+            },
         }
     }
 
@@ -148,6 +227,11 @@ impl Draft {
                 .history
                 .parse(default_size(base, true))
                 .map_err(|()| InvalidProfile)?,
+            params: {
+                let mut values = self.params.values.clone();
+                nanatype_theme::retain_valid_params(base, &mut values);
+                values
+            },
         })
     }
 }

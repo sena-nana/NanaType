@@ -32,6 +32,12 @@ pub use pipeline::{
     processor,
 };
 mod package;
+mod params;
+pub use params::{
+    EnumOption, MAX_PARAMS, ParamCheck, ParamError, ParamGroup, ParamGroupListing, ParamSite,
+    ParamSpec, ParamType, PresetSpec, Resolved, coerce_values, resolve as resolve_params,
+    retain_valid as retain_valid_params, text_len,
+};
 mod project;
 pub use package::{
     LuaSpec, PACKAGE_FORMAT, PACKAGE_MANIFEST, PackageCapability, PackageManifest,

@@ -5,6 +5,7 @@
 pub(crate) mod controls;
 mod pages;
 pub mod preview;
+mod skin_params;
 mod telegram;
 
 pub use controls::{base64, links_pulsing};

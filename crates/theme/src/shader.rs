@@ -12,7 +12,10 @@ use std::{
 type ValidatedPrograms = Vec<(blake3::Hash, Weak<ShaderProgram>)>;
 static VALIDATED: LazyLock<Mutex<ValidatedPrograms>> = LazyLock::new(Default::default);
 
-pub const SHADER_ABI: u32 = 1;
+/// 2: `param(i)` reads skin-param slots bound at `@binding(5)`.
+pub const SHADER_ABI: u32 = 2;
+/// Slots a shader may bind through `bindings`, one `vec4` each.
+pub const MAX_SHADER_SLOTS: usize = 64;
 pub const SHADER_WRAPPER: &str = include_str!("shader_host.wgsl");
 pub const MAX_SHADER_BYTES: usize = 64 * 1024;
 pub const MAX_SHADER_NODES: usize = 4096;
@@ -29,6 +32,48 @@ pub struct ShaderSpec {
     /// Render the same geometry with a frozen clock when motion is disabled.
     pub static_fallback: bool,
     pub animated: bool,
+    /// Skin params and literals packed into `param(i)`, one `vec4` per entry.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub bindings: Vec<SlotBinding>,
+    /// An artwork that draws its own continue indicator while it plays; the
+    /// host's `dialogue.continue` shows whenever the program is frozen or off.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub owns_continue: bool,
+}
+
+/// One `bindings` entry. A param fills `x` (numbers, bools as 0/1, enums as
+/// the option index) or all of `rgba` (colours, linear and straight alpha);
+/// a list packs up to four scalar params or literals into `xyzw`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SlotBinding {
+    Param(String),
+    Number(f32),
+    Tuple(Vec<SlotComponent>),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SlotComponent {
+    Param(String),
+    Number(f32),
+}
+
+impl ShaderSpec {
+    /// Every param id the bindings name.
+    pub fn bound_params(&self) -> impl Iterator<Item = &str> {
+        self.bindings.iter().flat_map(|b| {
+            let (one, many): (Option<&str>, &[SlotComponent]) = match b {
+                SlotBinding::Param(id) => (Some(id), &[]),
+                SlotBinding::Number(_) => (None, &[]),
+                SlotBinding::Tuple(parts) => (None, parts),
+            };
+            one.into_iter().chain(many.iter().filter_map(|c| match c {
+                SlotComponent::Param(id) => Some(id.as_str()),
+                SlotComponent::Number(_) => None,
+            }))
+        })
+    }
 }
 impl Default for ShaderSpec {
     fn default() -> Self {
@@ -40,6 +85,8 @@ impl Default for ShaderSpec {
             params: vec![],
             static_fallback: false,
             animated: true,
+            bindings: vec![],
+            owns_continue: false,
         }
     }
 }
@@ -85,6 +132,9 @@ struct EffectInput {
 @group(0) @binding(2) var fx_sampler: sampler;
 fn sample0(uv: vec2<f32>) -> vec4<f32> { return textureSampleLevel(fx_texture0, fx_sampler, clamp(uv, vec2(0.), vec2(1.)), 0.); }
 fn sample1(uv: vec2<f32>) -> vec4<f32> { return textureSampleLevel(fx_texture1, fx_sampler, clamp(uv, vec2(0.), vec2(1.)), 0.); }
+struct FxSlots { v: array<vec4<f32>, 64> };
+@group(0) @binding(5) var<uniform> fx_slots: FxSlots;
+fn param(i: u32) -> vec4<f32> { return fx_slots.v[min(i, 63u)]; }
 fn particles(uv: vec2<f32>, phase: f32, seed: f32) -> f32 {
     var result = 0.;
     for (var n = 0u; n < 16u; n++) {
@@ -138,58 +188,77 @@ fn forbidden_directive(source: &str) -> bool {
     false
 }
 
-fn block_cost(block: &naga::Block, module: &naga::Module, depth: usize) -> Result<usize, String> {
+/// Host helpers a contract's prelude defines, with the cost a call counts.
+/// User code cannot redefine them: the prelude is always appended, so a
+/// second definition fails to parse.
+pub(crate) type Helpers = &'static [(&'static str, usize)];
+pub(crate) const EFFECT_HELPERS: Helpers = &[
+    ("sample0", 32),
+    ("sample1", 32),
+    ("particles", 512),
+    ("param", 4),
+];
+pub(crate) const MATERIAL_HELPERS: Helpers = &[
+    ("material_param", 32),
+    ("material_sample0", 32),
+    ("material_sample1", 32),
+];
+
+fn block_cost(
+    block: &naga::Block,
+    module: &naga::Module,
+    depth: usize,
+    helpers: Helpers,
+    limit: usize,
+) -> Result<usize, String> {
     let mut cost = 0usize;
     for stmt in block.iter() {
         cost += 1;
         cost += match stmt {
             S::Emit(_) | S::Return { .. } | S::Store { .. } | S::Break => 0,
-            S::Block(b) => block_cost(b, module, depth)?,
+            S::Block(b) => block_cost(b, module, depth, helpers, limit)?,
             S::If { accept, reject, .. } => {
-                block_cost(accept, module, depth)? + block_cost(reject, module, depth)?
+                block_cost(accept, module, depth, helpers, limit)?
+                    + block_cost(reject, module, depth, helpers, limit)?
             }
             S::Switch { cases, .. } => {
                 let mut n = 0;
                 for c in cases {
-                    n += block_cost(&c.body, module, depth)?;
+                    n += block_cost(&c.body, module, depth, helpers, limit)?;
                 }
                 n
             }
-            S::Call { function, .. } => {
-                function_cost(&module.functions[*function], module, depth + 1)?
-            }
+            S::Call { function, .. } => function_cost(
+                &module.functions[*function],
+                module,
+                depth + 1,
+                helpers,
+                limit,
+            )?,
             _ => {
                 return Err(
                     "loops, discard, atomics, barriers and resource writes are not allowed".into(),
                 );
             }
         };
-        if cost > MAX_SHADER_NODES {
+        if cost > limit {
             return Err("expanded shader exceeds 4096 nodes".into());
         }
     }
     Ok(cost)
 }
-fn trusted(f: &naga::Function, module: &naga::Module) -> bool {
-    match module.global_variables.len() {
-        3 => matches!(f.name.as_deref(), Some("sample0" | "sample1" | "particles")),
-        4 => matches!(
-            f.name.as_deref(),
-            Some("material_param" | "material_sample0" | "material_sample1")
-        ),
-        _ => false,
-    }
-}
-fn function_cost(f: &naga::Function, m: &naga::Module, depth: usize) -> Result<usize, String> {
+fn function_cost(
+    f: &naga::Function,
+    m: &naga::Module,
+    depth: usize,
+    helpers: Helpers,
+    limit: usize,
+) -> Result<usize, String> {
     if depth > 8 {
         return Err("shader call depth exceeds eight".into());
     }
-    if trusted(f, m) {
-        return Ok(if f.name.as_deref() == Some("particles") {
-            512
-        } else {
-            32
-        });
+    if let Some((_, cost)) = helpers.iter().find(|(n, _)| f.name.as_deref() == Some(*n)) {
+        return Ok(*cost);
     }
     for (_, e) in f.expressions.iter() {
         if !matches!(
@@ -216,8 +285,8 @@ fn function_cost(f: &naga::Function, m: &naga::Module, depth: usize) -> Result<u
             return Err("only local arithmetic and host sampling helpers are allowed".into());
         }
     }
-    let n = f.expressions.len() + block_cost(&f.body, m, depth)?;
-    if n > MAX_SHADER_NODES {
+    let n = f.expressions.len() + block_cost(&f.body, m, depth, helpers, limit)?;
+    if n > limit {
         return Err("expanded shader exceeds 4096 nodes".into());
     }
     Ok(n)
@@ -230,6 +299,7 @@ pub(crate) fn validate_fragment(
     entry: &str,
     input: &str,
     bindings: usize,
+    helpers: Helpers,
 ) -> Result<(naga::Module, String), String> {
     if source.len() > MAX_SHADER_BYTES {
         return Err("shader exceeds 64 KiB".into());
@@ -316,7 +386,7 @@ pub(crate) fn validate_fragment(
         return Err(format!("expected fn {entry}(input: {input}) -> vec4<f32>"));
     }
     for (_, f) in module.functions.iter() {
-        function_cost(f, &module, 1)?;
+        function_cost(f, &module, 1, helpers, MAX_SHADER_NODES)?;
         if f.local_variables
             .iter()
             .map(|(_, v)| layouts[v.ty].size as usize)
@@ -330,7 +400,14 @@ pub(crate) fn validate_fragment(
 }
 
 pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
-    let (module, combined) = validate_fragment(source, SHADER_PRELUDE, "effect", "EffectInput", 3)?;
+    let (module, combined) = validate_fragment(
+        source,
+        SHADER_PRELUDE,
+        "effect",
+        "EffectInput",
+        4,
+        EFFECT_HELPERS,
+    )?;
     if module
         .functions
         .iter()
@@ -351,6 +428,81 @@ pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
         source: combined.into(),
         textures: vec![],
     })
+}
+
+fn check_bindings(
+    bindings: &[SlotBinding],
+    params: &BTreeMap<String, crate::ParamSpec>,
+) -> Result<(), String> {
+    use crate::ParamType;
+    if bindings.len() > MAX_SHADER_SLOTS {
+        return Err(format!("at most {MAX_SHADER_SLOTS} bindings"));
+    }
+    let kind = |id: &str| {
+        params
+            .get(id)
+            .map(|p| p.kind)
+            .ok_or_else(|| format!("binding names `{id}`, which is not a declared param"))
+    };
+    for (i, b) in bindings.iter().enumerate() {
+        match b {
+            SlotBinding::Param(id) => {
+                if kind(id)? == ParamType::Text {
+                    return Err(format!("binding {i}: text params cannot be bound"));
+                }
+            }
+            SlotBinding::Number(v) if !v.is_finite() => {
+                return Err(format!("binding {i} is not finite"));
+            }
+            SlotBinding::Number(_) => {}
+            SlotBinding::Tuple(parts) => {
+                if !(1..=4).contains(&parts.len()) {
+                    return Err(format!("binding {i}: a list packs 1–4 values"));
+                }
+                for part in parts {
+                    match part {
+                        SlotComponent::Param(id) => {
+                            if matches!(kind(id)?, ParamType::Text | ParamType::Color) {
+                                return Err(format!(
+                                    "binding {i}: `{id}` is not a scalar; bind colours on their own"
+                                ));
+                            }
+                        }
+                        SlotComponent::Number(v) if !v.is_finite() => {
+                            return Err(format!("binding {i} is not finite"));
+                        }
+                        SlotComponent::Number(_) => {}
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// IR nodes and the expanded cost (every call counts the callee again) that
+/// the 4096-node limits measure, without enforcing them: for authors sizing
+/// an effect. Parses but does not validate.
+pub fn shader_cost(source: &str) -> Result<(usize, usize), String> {
+    let combined = format!("{source}\n{SHADER_PRELUDE}");
+    let module =
+        naga::front::wgsl::parse_str(&combined).map_err(|e| e.emit_to_string(&combined))?;
+    let ir = module.types.len()
+        + module.global_expressions.len()
+        + module
+            .functions
+            .iter()
+            .map(|(_, f)| f.expressions.len())
+            .sum::<usize>();
+    let (_, entry) = module
+        .functions
+        .iter()
+        .find(|(_, f)| f.name.as_deref() == Some("effect"))
+        .ok_or("missing fn effect")?;
+    Ok((
+        ir,
+        function_cost(entry, &module, 1, EFFECT_HELPERS, usize::MAX)?,
+    ))
 }
 
 pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec<SkinDiagnostic>) {
@@ -432,6 +584,7 @@ pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec
             {
                 return Err("at most eight finite parameters and two textures".into());
             }
+            check_bindings(&spec.bindings, &skin.params)?;
             let path = crate::clean_resource_path(&spec.source).map_err(|e| e.to_string())?;
             let bytes = files.read(&path).map_err(|e| e.to_string())?;
             let source = std::str::from_utf8(&bytes).map_err(|e| e.to_string())?;
@@ -554,6 +707,20 @@ pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec
                 "dialogue.shader_effects".into(),
                 format!("unknown shader `{id}`"),
             ));
+        }
+    }
+    for (id, spec) in &skin.shaders {
+        let artwork = skin
+            .dialogue
+            .shader_effects
+            .iter()
+            .any(|e| &e.shader == id && e.target == ShaderTarget::Artwork);
+        if spec.owns_continue && !artwork {
+            out.push(SkinDiagnostic {
+                severity: Severity::Warning,
+                field: format!("shaders.{id}.owns_continue"),
+                message: "only an artwork shader can own the continue indicator".into(),
+            });
         }
     }
     skin.shader_programs = programs;

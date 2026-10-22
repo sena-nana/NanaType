@@ -1567,6 +1567,21 @@ pub struct Skin {
     pub sounds: Sounds,
     pub effects: EffectDefaults,
     pub mention: MentionSpec,
+    /// User-configurable parameters (`[params.<id>]`).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<String, crate::ParamSpec>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub param_groups: BTreeMap<String, crate::ParamGroup>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub presets: BTreeMap<String, crate::PresetSpec>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub param_checks: Vec<crate::ParamCheck>,
+    /// Where `{ param = … }` placeholders stood, compiled at load.
+    #[serde(skip)]
+    pub param_sites: std::sync::Arc<[crate::ParamSite]>,
+    /// The param values this skin currently shows (defaults after load).
+    #[serde(skip)]
+    pub param_values: std::sync::Arc<BTreeMap<String, crate::Resolved>>,
 }
 
 impl Skin {

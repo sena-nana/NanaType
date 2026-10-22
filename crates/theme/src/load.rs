@@ -39,7 +39,7 @@ pub struct SkinDiagnostic {
 }
 
 impl SkinDiagnostic {
-    fn error(field: impl Into<String>, message: impl Into<String>) -> Self {
+    pub(crate) fn error(field: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             severity: Severity::Error,
             field: field.into(),
@@ -47,7 +47,7 @@ impl SkinDiagnostic {
         }
     }
 
-    fn warning(field: impl Into<String>, message: impl Into<String>) -> Self {
+    pub(crate) fn warning(field: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             severity: Severity::Warning,
             field: field.into(),
@@ -299,9 +299,10 @@ pub fn standalone_manifest(skin: &Skin) -> Result<Table, toml::ser::Error> {
     }
     let mut resolved = skin.clone();
     resolved.meta.base = None;
-    let Value::Table(mut table) = Value::try_from(resolved)? else {
+    let Value::Table(mut table) = Value::try_from(&resolved)? else {
         unreachable!()
     };
+    crate::params::restore_placeholders(&mut table, &resolved.param_sites);
     if let Some(Value::Table(dialogue)) = table.get_mut("dialogue") {
         prune_responsive(dialogue);
     }
@@ -442,6 +443,10 @@ fn load_impl(
     }
 
     expand_responsive(&mut merged, &mut diagnostics);
+    let sites = crate::params::compile(&mut merged, &DEFAULT_TABLE, &mut diagnostics);
+    if diagnostics.iter().any(|d| d.severity == Severity::Error) {
+        return Err(diagnostics);
+    }
     if merged
         .get("dialogue")
         .and_then(|d| d.get("reveal"))
@@ -478,7 +483,9 @@ fn load_impl(
     } else {
         Arc::new(LayeredFiles { layers })
     };
-    validate(&skin, &*files, app_version, &mut diagnostics);
+    validate_values(&skin, app_version, &mut diagnostics);
+    validate_files(&skin, &*files, &mut diagnostics);
+    crate::params::finish(&mut skin, sites, app_version, &mut diagnostics);
     diagnostics.extend(crate::pipeline::validate(&skin, crate::PROCESSORS));
     if prepare_shaders {
         crate::pipeline::bind(&mut skin, &*files, true, &mut diagnostics);
@@ -497,7 +504,8 @@ fn load_impl(
     })
 }
 
-fn validate(skin: &Skin, files: &dyn SkinFiles, app_version: &str, out: &mut Vec<SkinDiagnostic>) {
+/// Every check that needs no file: cheap enough to rerun per param change.
+pub(crate) fn validate_values(skin: &Skin, app_version: &str, out: &mut Vec<SkinDiagnostic>) {
     let meta = &skin.meta;
     if meta.schema != SKIN_SCHEMA {
         out.push(SkinDiagnostic::error(
@@ -689,7 +697,10 @@ fn validate(skin: &Skin, files: &dyn SkinFiles, app_version: &str, out: &mut Vec
         ));
     }
     validate_shapes(skin, out);
+}
 
+/// Every referenced file exists, stays inside the package and parses.
+fn validate_files(skin: &Skin, files: &dyn SkinFiles, out: &mut Vec<SkinDiagnostic>) {
     for (field, path, kind) in skin.referenced_files() {
         if kind == FileKind::Font && is_builtin_font(path) {
             validate_builtin_font(field, path, &BuiltinFonts::embedded(), out);

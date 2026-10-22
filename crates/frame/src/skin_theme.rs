@@ -84,6 +84,17 @@ pub fn with_overrides(skin: &Skin, o: &SkinOverrides) -> Skin {
 
 /// Resolve one skin's saved body settings without changing its source manifest.
 pub fn personalized(base: &Skin, settings: &nanatype_settings::Settings, id: &str) -> Skin {
+    personalized_with_diagnostics(base, settings, id).0
+}
+
+/// [`personalized`], with warnings for saved param values the skin refused.
+/// Param values go in first, so legacy overrides and the profile's text
+/// settings still win over a param that sets the same field.
+pub fn personalized_with_diagnostics(
+    base: &Skin,
+    settings: &nanatype_settings::Settings,
+    id: &str,
+) -> (Skin, Vec<nanatype_theme::SkinDiagnostic>) {
     let mut overrides = settings.skin.overrides.clone();
     let profile = settings.skin.personalizations.get(id);
     if profile.is_some() {
@@ -91,7 +102,13 @@ pub fn personalized(base: &Skin, settings: &nanatype_settings::Settings, id: &st
         overrides.text_size = None;
         overrides.region = None;
     }
-    let mut skin = with_overrides(base, &overrides);
+    let (resolved, diagnostics) = match profile {
+        Some(p) if !base.params.is_empty() => {
+            nanatype_theme::resolve_params(base, &p.params, env!("CARGO_PKG_VERSION"))
+        }
+        _ => (base.clone(), Vec::new()),
+    };
+    let mut skin = with_overrides(&resolved, &overrides);
     if let Some(profile) = profile {
         for (text, p) in [
             (&mut skin.dialogue.text, &profile.display),
@@ -109,7 +126,7 @@ pub fn personalized(base: &Skin, settings: &nanatype_settings::Settings, id: &st
             }
         }
     }
-    skin
+    (skin, diagnostics)
 }
 
 /// The skin as drawn: the user's personalisation applied, and each font
@@ -227,21 +244,12 @@ pub fn mix(a: Rgba8, b: Rgba8, t: f32) -> Rgba8 {
 }
 
 fn luminance(c: Rgba8) -> f32 {
-    let lin = |v: u8| {
-        let v = f32::from(v) / 255.0;
-        if v <= 0.04045 {
-            v / 12.92
-        } else {
-            ((v + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+    c.luminance()
 }
 
 /// WCAG contrast ratio between two opaque colours.
 pub fn contrast(a: Rgba8, b: Rgba8) -> f32 {
-    let (la, lb) = (luminance(a), luminance(b));
-    (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    a.contrast(b)
 }
 
 /// The foreground that reads best on `bg`: the dark ink or white, whichever

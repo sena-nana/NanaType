@@ -121,6 +121,53 @@ struct Material {
     program: Arc<ShaderProgram>,
     spec: ShaderSpec,
     palette: [[f32; 4]; 4],
+    /// `param(i)` slots packed from `spec.bindings` and the skin's params.
+    slots: Box<[f32; SLOT_FLOATS]>,
+}
+const SLOT_FLOATS: usize = nanatype_theme::MAX_SHADER_SLOTS * 4;
+const SLOT_BYTES: usize = SLOT_FLOATS * 4;
+
+/// Pack `bindings` one `vec4` each: scalars in `x`, colours as linear
+/// straight-alpha `rgba` (as the palette), lists component by component.
+fn pack_slots(
+    bindings: &[nanatype_theme::SlotBinding],
+    values: &std::collections::BTreeMap<String, nanatype_theme::Resolved>,
+) -> Box<[f32; SLOT_FLOATS]> {
+    use nanatype_theme::{Resolved, SlotBinding, SlotComponent};
+    let mut out = Box::new([0f32; SLOT_FLOATS]);
+    let scalar = |id: &str| values.get(id).and_then(Resolved::scalar).unwrap_or(0.);
+    for (slot, binding) in out.as_chunks_mut::<4>().0.iter_mut().zip(bindings) {
+        match binding {
+            SlotBinding::Number(v) => slot[0] = *v,
+            SlotBinding::Param(id) => match values.get(id) {
+                Some(Resolved::Color(c)) => slot.copy_from_slice(&color(*c)),
+                _ => slot[0] = scalar(id),
+            },
+            SlotBinding::Tuple(parts) => {
+                for (dst, part) in slot.iter_mut().zip(parts) {
+                    *dst = match part {
+                        SlotComponent::Number(v) => *v,
+                        SlotComponent::Param(id) => scalar(id),
+                    };
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The artwork draws its own continue indicator right now: it declares
+/// `owns_continue`, compiled, and is playing rather than frozen or off.
+pub fn owns_continue(ui: Stage, source: Source, skin: &Skin) -> bool {
+    let playing = !ui.reduced_motion.get()
+        && ui.settings.with(|s| s.skin.advanced_effects)
+        && (source != Source::Preview || ui.shader_preview.get());
+    playing
+        && skin.dialogue.shader_effects.iter().any(|e| {
+            e.target == ShaderTarget::Artwork
+                && skin.shaders.get(&e.shader).is_some_and(|s| s.owns_continue)
+                && runnable(skin, &e.shader)
+        })
 }
 fn warming(ui: Stage, source: Source) -> bool {
     // View reconciliation may create/drop materials while holding reactive
@@ -195,6 +242,7 @@ pub fn view(
 ) -> Option<AnyView> {
     let program = skin.shader_programs.get(id)?.clone();
     let spec = skin.shaders.get(id)?.clone();
+    let slots = pack_slots(&spec.bindings, &skin.param_values);
     if spec.intensity == 0. {
         return None;
     }
@@ -229,6 +277,7 @@ pub fn view(
             color(skin.dialogue.box_.border_color),
             color(skin.dialogue.text.color),
         ],
+        slots,
     });
     {
         let mut materials = MATERIALS.lock().unwrap_or_else(|e| e.into_inner());
@@ -282,6 +331,8 @@ struct Prepared {
     uniforms: super::effect_uniforms::Uniforms,
     pipeline: Arc<Pipeline>,
     textures: [wgpu::TextureView; 3],
+    /// The material's param slots, written once when prepared.
+    slots: wgpu::Buffer,
     bytes: usize,
 }
 #[derive(Default)]
@@ -376,7 +427,7 @@ fn compile(
             count: None,
         };
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("skin shader ABI 1"),
+            label: Some("skin shader ABI 2"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -397,6 +448,16 @@ fn compile(
                 },
                 texture_entry(3),
                 texture_entry(4),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: std::num::NonZeroU64::new(SLOT_BYTES as u64),
+                    },
+                    count: None,
+                },
             ],
         });
         let source = format!("{}\n{}", program.source, nanatype_theme::SHADER_WRAPPER);
@@ -676,6 +737,7 @@ impl State {
                 + texture_used
                 + mask_bytes
                 + 8 * 176
+                + SLOT_BYTES
                 > MAX_SHADER_CACHE_BYTES
         {
             self.masks
@@ -689,6 +751,8 @@ impl State {
                     + texture_used
                     + mask_bytes
                     + 8 * 176
+                    + SLOT_BYTES
+                    + SLOT_BYTES
                     > MAX_SHADER_CACHE_BYTES
             {
                 return None;
@@ -743,6 +807,18 @@ impl State {
             );
         };
         upload(&mask_texture, extent, &mask);
+        let slots = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("skin shader param slots"),
+            size: SLOT_BYTES as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let slot_bytes: Vec<u8> = material
+            .slots
+            .iter()
+            .flat_map(|v| v.to_ne_bytes())
+            .collect();
+        gpu.queue().write_buffer(&slots, 0, &slot_bytes);
         // Textures are immutable; upload once with their first prepared mask.
         let first = !pipeline.uploaded.swap(true, Ordering::Relaxed);
         if first {
@@ -756,7 +832,7 @@ impl State {
         }
         if let Some(w) = c.gpu_work {
             w.record_realloc();
-            w.record_upload(mask.len() + if first { texture_bytes } else { 0 });
+            w.record_upload(mask.len() + SLOT_BYTES + if first { texture_bytes } else { 0 });
         }
         self.masks.insert(
             key,
@@ -769,7 +845,8 @@ impl State {
                     pipeline.textures[1].create_view(&Default::default()),
                 ],
                 pipeline: pipeline.clone(),
-                bytes: mask_bytes,
+                slots,
+                bytes: mask_bytes + SLOT_BYTES,
             },
         );
         self.masks.get_mut(&key)
@@ -941,6 +1018,7 @@ impl SceneGpuRenderer for Renderer {
             &pipeline.sampler,
             super::effect_uniforms::output_key(&c, scale),
             bytes.len(),
+            Some(&prepared.slots),
         );
         gpu.queue().write_buffer(&binding.buffer, 0, &bytes);
         if let Some(w) = c.gpu_work {
@@ -995,6 +1073,70 @@ mod tests {
         });
         assert_eq!(&event_values(ui.remote(), 2000)[..2], &[0., 0.]);
         assert_eq!(&event_values(ui, 2500)[..2], &[0.5, 1.5]);
+    }
+    #[test]
+    fn slots_pack_params_as_vec4s_in_the_palette_colour_space() {
+        use nanatype_theme::{Resolved, SlotBinding, SlotComponent};
+        let values: std::collections::BTreeMap<String, Resolved> = [
+            ("size".to_owned(), Resolved::Number(36.)),
+            ("on".to_owned(), Resolved::Bool(true)),
+            (
+                "kind".to_owned(),
+                Resolved::Enum {
+                    id: "dog".into(),
+                    index: 2,
+                },
+            ),
+            (
+                "fur".to_owned(),
+                Resolved::Color(nanatype_model::Rgba8::rgba(255, 128, 0, 64)),
+            ),
+        ]
+        .into();
+        let slots = pack_slots(
+            &[
+                SlotBinding::Tuple(vec![
+                    SlotComponent::Param("size".into()),
+                    SlotComponent::Number(4.),
+                    SlotComponent::Param("on".into()),
+                    SlotComponent::Param("kind".into()),
+                ]),
+                SlotBinding::Param("fur".into()),
+                SlotBinding::Number(7.),
+                SlotBinding::Param("missing".into()),
+            ],
+            &values,
+        );
+        assert_eq!(&slots[..4], &[36., 4., 1., 2.]);
+        assert_eq!(
+            &slots[4..8],
+            &color(nanatype_model::Rgba8::rgba(255, 128, 0, 64))
+        );
+        assert_eq!(&slots[8..12], &[7., 0., 0., 0.]);
+        assert!(slots[12..].iter().all(|v| *v == 0.));
+    }
+    #[test]
+    fn an_artwork_owns_the_continue_mark_only_while_it_plays() {
+        let ui = ui();
+        let mut skin = (*ui.skin.get_untracked()).clone();
+        let artwork = skin
+            .dialogue
+            .shader_effects
+            .iter()
+            .find(|e| e.target == ShaderTarget::Artwork)
+            .map(|e| e.shader.clone())
+            .expect("tidal has an artwork");
+        assert!(!owns_continue(ui, Source::Display, &skin));
+        skin.shaders.get_mut(&artwork).unwrap().owns_continue = true;
+        assert!(owns_continue(ui, Source::Display, &skin));
+        // A preview owns it only while it plays effects.
+        assert!(!owns_continue(ui, Source::Preview, &skin));
+        ui.reduced_motion.set(true);
+        assert!(!owns_continue(ui, Source::Display, &skin));
+        ui.reduced_motion.set(false);
+        ui.settings
+            .update(|s| Arc::make_mut(s).skin.advanced_effects = false);
+        assert!(!owns_continue(ui, Source::Display, &skin));
     }
     #[test]
     fn only_enabled_nonempty_display_tracks_request_frames() {

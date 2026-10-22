@@ -4,7 +4,9 @@
 
 use std::collections::BTreeMap;
 
-use nanatype_model::{AfterLine, EntranceKind, Overflow, Rgba8, VtsReset};
+use nanatype_model::{
+    AfterLine, EntranceKind, Overflow, ParamValue, Rgba8, VtsReset, valid_param_id,
+};
 use nanatype_playback::QueuePolicy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -337,11 +339,69 @@ impl SurfacePersonalization {
 pub struct SkinPersonalization {
     pub display: SurfacePersonalization,
     pub history: SurfacePersonalization,
+    /// Values for the skin's declared params that differ from its defaults.
+    /// The skin's schema checks them when applied; a value it refuses falls
+    /// back to the default, so this map never needs a migration.
+    #[serde(
+        skip_serializing_if = "BTreeMap::is_empty",
+        deserialize_with = "lenient_params"
+    )]
+    pub params: BTreeMap<String, ParamValue>,
+}
+
+/// Most params a skin can declare, and so most values one profile keeps.
+pub const MAX_SKIN_PARAMS: usize = 64;
+const MAX_PARAM_TEXT_BYTES: usize = 256;
+
+fn param_entry_valid(id: &str, value: &ParamValue) -> bool {
+    valid_param_id(id)
+        && match value {
+            ParamValue::Number(v) => v.is_finite(),
+            ParamValue::Bool(_) => true,
+            ParamValue::Text(t) => t.len() <= MAX_PARAM_TEXT_BYTES,
+        }
+}
+
+/// Keep the well-formed entries and drop the rest instead of failing: a bad
+/// param value must not make the whole settings file unreadable.
+fn lenient_params<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<String, ParamValue>, D::Error> {
+    // Any JSON value parses; only then is its shape inspected, so a stray
+    // array or string here never fails the settings file.
+    let Value::Object(raw) = Value::deserialize(deserializer)? else {
+        return Ok(BTreeMap::new());
+    };
+    Ok(raw
+        .into_iter()
+        .filter_map(|(id, v)| {
+            let value = match v {
+                Value::Bool(b) => ParamValue::Bool(b),
+                Value::Number(n) => ParamValue::Number(n.as_f64()?),
+                Value::String(s) => ParamValue::Text(s),
+                _ => return None,
+            };
+            param_entry_valid(&id, &value).then_some((id, value))
+        })
+        .take(MAX_SKIN_PARAMS)
+        .collect())
 }
 
 impl SkinPersonalization {
     pub fn valid(&self) -> bool {
-        self.display.valid() && self.history.valid()
+        self.display.valid()
+            && self.history.valid()
+            && self.params.len() <= MAX_SKIN_PARAMS
+            && self.params.iter().all(|(id, v)| param_entry_valid(id, v))
+    }
+
+    fn sanitize(&mut self) {
+        self.display.sanitize();
+        self.history.sanitize();
+        self.params.retain(|id, v| param_entry_valid(id, v));
+        while self.params.len() > MAX_SKIN_PARAMS {
+            self.params.pop_last();
+        }
     }
 }
 
@@ -953,8 +1013,7 @@ impl Settings {
             *size = finite_or(*size, 28.0).clamp(8.0, 200.0);
         }
         for profile in self.skin.personalizations.values_mut() {
-            profile.display.sanitize();
-            profile.history.sanitize();
+            profile.sanitize();
         }
         for o in [
             &mut self.overlays.input,
