@@ -961,6 +961,7 @@ fn toolbar(ui: Ui) -> AnyView {
         .into_iter()
         .map(|(kind, key)| item(t(key), fx_open, move || act(Tool::Effect(kind))))
         .chain([
+            item(t("tb-emphasis"), fx_open, || act(Tool::Emphasis)),
             widget(Divider::horizontal()).into_any(),
             item(t("tb-entrance-fade"), fx_open, || {
                 act(Tool::Entrance(EntranceKind::Fade))

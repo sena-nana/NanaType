@@ -195,6 +195,7 @@ fn envelope_round_trips_and_rejects_foreign_json() {
             effects: Effects {
                 continuous: vec![Continuous::new(ContinuousKind::Shake)],
                 entrance: None,
+                emphasis: Some(Emphasis { ms: 150 }),
             },
             pace: Pace::Scale(0.5),
         }),

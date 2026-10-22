@@ -1,9 +1,9 @@
 use std::ops::Range;
 
 use nanatype_model::{
-    AssetRef, Atom, AtomKind, ChatUser, Continuous, ContinuousKind, Document, Effects, Entrance,
-    EntranceKind, FontSlot, Inline, LineMeta, Marker, Mention, Pace, Paragraph, Rgba8, RubyGroup,
-    Shadow, Size, Stroke, Style, TextRun, VtsAction,
+    AssetRef, Atom, AtomKind, ChatUser, Continuous, ContinuousKind, Document, Effects, Emphasis,
+    Entrance, EntranceKind, FontSlot, Inline, LineMeta, Marker, Mention, Pace, Paragraph, Rgba8,
+    RubyGroup, Shadow, Size, Stroke, Style, TextRun, VtsAction,
 };
 
 use crate::value::{self, Tag, parse_tag};
@@ -51,6 +51,7 @@ enum Attr {
     Font(Option<FontSlot>),
     Continuous(Continuous),
     Entrance(Entrance),
+    Emphasis(Emphasis),
     Pace(Pace),
 }
 
@@ -205,6 +206,7 @@ impl Builder<'_> {
                     effects.continuous.push(*c);
                 }
                 Attr::Entrance(e) => effects.entrance = Some(*e),
+                Attr::Emphasis(e) => effects.emphasis = Some(*e),
                 Attr::Pace(p) => run.pace = *p,
             }
         }
@@ -599,6 +601,7 @@ fn span_attr(tag: &Tag) -> Option<Option<Attr>> {
         }),
         "speed" => with(|v| value::pace(v).map(Attr::Pace)),
         "instant" => Some(v.is_none().then_some(Attr::Pace(Pace::Instant))),
+        "em" => Some(value::emphasis(tag).map(Attr::Emphasis)),
         name => {
             if let Some(kind) = ContinuousKind::from_key(name) {
                 return Some(value::continuous(tag, kind).map(Attr::Continuous));

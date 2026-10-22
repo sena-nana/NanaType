@@ -647,6 +647,7 @@ peer-window-toggle = 伙伴窗口
 output-name-conflict = 输出名称重复，请为每个输出设置不同的名称。
 tb-effect-pulse = 脉动
 tb-effect-flicker = 闪烁
+tb-emphasis = 强调
 
 # Editor context menu
 edit-undo = 撤销

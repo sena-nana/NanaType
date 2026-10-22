@@ -653,6 +653,7 @@ peer-window-toggle = Partner window
 output-name-conflict = Output names must be unique. Choose a different name for each output.
 tb-effect-pulse = Pulse
 tb-effect-flicker = Flicker
+tb-emphasis = Emphasis
 
 # Editor context menu
 edit-undo = Undo

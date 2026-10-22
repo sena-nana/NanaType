@@ -38,6 +38,6 @@ pub use source::{
     ChatRef, ChatRun, ChatUser, HistoryItem, MessageSource, SourceEvent, SourceId, SourceKind,
 };
 pub use style::{
-    Continuous, ContinuousKind, Effects, Entrance, EntranceKind, FontSlot, Overflow, Pace, Shadow,
-    Size, Stroke, Style,
+    Continuous, ContinuousKind, Effects, Emphasis, Entrance, EntranceKind, FontSlot, Overflow,
+    Pace, Shadow, Size, Stroke, Style,
 };

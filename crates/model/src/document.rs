@@ -5,7 +5,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{CharClass, ChatUser, Effects, Pace, Style, classify};
+use crate::{CharClass, ChatUser, Effects, Emphasis, Pace, Style, classify};
 
 /// A line longer than this many reveal units is cut at normalization.
 pub const MAX_UNITS: usize = 4096;
@@ -343,6 +343,7 @@ pub struct Unit {
     pub bytes: Range<usize>,
     pub kind: UnitKind,
     pub pace: Pace,
+    pub emphasis: Option<Emphasis>,
 }
 
 impl Unit {
@@ -468,6 +469,7 @@ impl Document {
                                 ruby,
                             },
                             pace: run.pace,
+                            emphasis: run.effects.emphasis,
                         }));
                     }
                 };
@@ -480,6 +482,7 @@ impl Document {
                         bytes: 0..0,
                         kind: UnitKind::Atom,
                         pace: Pace::Inherit,
+                        emphasis: None,
                     })),
                     Inline::Marker(marker) => visit(Item::Marker(marker)),
                 }

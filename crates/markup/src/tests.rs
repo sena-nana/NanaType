@@ -231,8 +231,9 @@ fn arb_effects() -> impl Strategy<Value = Effects> {
     (
         prop::collection::btree_set(0usize..ContinuousKind::ALL.len(), 0..3),
         prop::option::of((0usize..4, 1u16..900)),
+        prop::option::of(0u16..900),
     )
-        .prop_map(|(kinds, entrance)| Effects {
+        .prop_map(|(kinds, entrance, emphasis)| Effects {
             continuous: kinds
                 .into_iter()
                 .map(|k| Continuous::new(ContinuousKind::ALL[k]))
@@ -241,6 +242,7 @@ fn arb_effects() -> impl Strategy<Value = Effects> {
                 kind: EntranceKind::ALL[k],
                 ms: if k == 0 { 160 } else { ms },
             }),
+            emphasis: emphasis.map(|ms| Emphasis { ms }),
         })
 }
 
@@ -392,6 +394,31 @@ fn pulse_flicker_and_nested_continuous_effects_roundtrip() {
     assert!(fx.has(ContinuousKind::Pulse) && fx.has(ContinuousKind::Flicker));
     let markup = crate::serialize(&parsed.doc);
     assert_eq!(parse(&markup).doc, parsed.doc);
+}
+
+#[test]
+fn emphasis_parses_and_roundtrips() {
+    let parsed =
+        parse("前[em]重要[/em][em=250ms][b=0][shake][speed=0.5]事[/speed][/shake][/b][/em]后");
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+    let r = runs(&parsed.doc);
+    assert_eq!(r[0].effects.emphasis, None);
+    assert_eq!(
+        r[1].effects.emphasis,
+        Some(Emphasis {
+            ms: Emphasis::DEFAULT_MS
+        })
+    );
+    assert_eq!(r[1].style.bold, None, "emphasis is not a bold tag");
+    assert_eq!(r[2].effects.emphasis, Some(Emphasis { ms: 250 }));
+    assert_eq!(r[2].style.bold, Some(false));
+    assert!(r[2].effects.has(ContinuousKind::Shake));
+    assert_eq!(r[2].pace, Pace::Scale(0.5));
+    let markup = crate::serialize(&parsed.doc);
+    assert!(markup.contains("[em]重要[/em]"), "{markup}");
+    assert!(markup.contains("em=250"), "{markup}");
+    assert_eq!(parse(&markup).doc, parsed.doc);
+    assert!(!parse("[em=fast]x[/em]").diagnostics.is_empty());
 }
 
 #[test]

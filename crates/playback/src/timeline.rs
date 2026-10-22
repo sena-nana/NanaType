@@ -275,6 +275,13 @@ pub fn compile(doc: &Document, pacing: &PacingParams, sound: &TypingSoundRule) -
     let mut pending_delay = 0u32;
     doc.walk(|item| match item {
         Item::Unit(unit) => {
+            let class = unit.class();
+            // Emphasis waits before and after each of its characters.
+            let emphasis = match unit.emphasis {
+                Some(e) if pacing.typing && class != CharClass::Space => u32::from(e.ms),
+                _ => 0,
+            };
+            pending_delay = pending_delay.saturating_add(emphasis);
             if d.speaking && pending_delay >= SPEAKING_GAP_MS {
                 d.cues.push(Cue {
                     at_ms: d.clock.saturating_add(SPEAKING_TAIL_MS),
@@ -283,7 +290,6 @@ pub fn compile(doc: &Document, pacing: &PacingParams, sound: &TypingSoundRule) -
                 d.speaking = false;
             }
             d.clock = d.clock.saturating_add(pending_delay);
-            let class = unit.class();
             if !d.speaking && !matches!(class, CharClass::Space) {
                 d.cues.push(Cue {
                     at_ms: d.clock,
@@ -313,7 +319,7 @@ pub fn compile(doc: &Document, pacing: &PacingParams, sound: &TypingSoundRule) -
                     last_click = Some(d.clock);
                 }
             }
-            pending_delay = pacing.delay_ms(class, unit.pace);
+            pending_delay = pacing.delay_ms(class, unit.pace).saturating_add(emphasis);
             ordinal += 1;
         }
         Item::Marker(marker) => {

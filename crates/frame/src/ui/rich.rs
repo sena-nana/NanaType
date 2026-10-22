@@ -968,6 +968,13 @@ fn color(c: Rgba8) -> PaintColor {
     PaintColor::srgb(crate::skin_theme::rgba(c))
 }
 
+/// Extra letter spacing of an emphasis run, in ems.
+const EMPHASIS_TRACKING_EM: f32 = 0.2;
+
+fn bold_weight(look: &Look) -> u16 {
+    700.max(look.weight + 200).min(900)
+}
+
 fn span_style(style: &Style, effects: &Effects, pace: Pace, look: &Look) -> RichSpanStyle {
     let mut s = RichSpanStyle::new();
     if let Some(c) = style.color {
@@ -980,9 +987,13 @@ fn span_style(style: &Style, effects: &Effects, pace: Pace, look: &Look) -> Rich
         };
     }
     match style.bold {
-        Some(true) => s = s.weight(700.max(look.weight + 200).min(900)),
+        Some(true) => s = s.weight(bold_weight(look)),
         Some(false) => s = s.weight(400.min(look.weight)),
+        None if effects.emphasis.is_some() => s = s.weight(bold_weight(look)),
         None => {}
+    }
+    if effects.emphasis.is_some() {
+        s = s.letter_spacing(look.size * EMPHASIS_TRACKING_EM);
     }
     if let Some(i) = style.italic {
         s = s.italic(i);
@@ -1084,6 +1095,7 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
             match inline {
                 Inline::Text(run) => {
                     let s = span_style(&run.style, &run.effects, run.pace, env.look);
+                    let styled = run.style.bold.is_some() || run.effects.emphasis.is_some();
                     if let Some((family, weight)) = &env.look.latin
                         && run.style.font.is_none()
                     {
@@ -1100,14 +1112,12 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
                             if previous.is_some_and(|last| last != latin) || end == run.text.len() {
                                 let mut part = s.clone();
                                 if previous == Some(true) {
-                                    part = part.family(family.clone()).family_alias(
-                                        if run.style.bold.is_none() {
-                                            "latin-default"
-                                        } else {
-                                            "latin-styled"
-                                        },
-                                    );
-                                    if run.style.bold.is_none() && !env.editor {
+                                    part = part.family(family.clone()).family_alias(if styled {
+                                        "latin-styled"
+                                    } else {
+                                        "latin-default"
+                                    });
+                                    if !styled && !env.editor {
                                         part = part.weight(*weight);
                                     }
                                 }
@@ -1210,7 +1220,7 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
 
 // ---- rich text → document -------------------------------------------------
 
-fn style_back(s: Option<&RichSpanStyle>, _look: &Look) -> (Style, Effects, Pace) {
+fn style_back(s: Option<&RichSpanStyle>, look: &Look) -> (Style, Effects, Pace) {
     let Some(s) = s else {
         return (Style::default(), Effects::default(), Pace::Inherit);
     };
@@ -1225,7 +1235,11 @@ fn style_back(s: Option<&RichSpanStyle>, _look: &Look) -> (Style, Effects, Pace)
         .size_em
         .map(Size::Em)
         .or_else(|| s.shape.size_px.map(Size::Px));
-    if let Some(w) = s.shape.weight {
+    let (effects, pace) = s.effect.map(attr_of).unwrap_or_default();
+    // Emphasis draws bold by itself; only a weight it would not pick is a `[b]`.
+    if let Some(w) = s.shape.weight
+        && !(effects.emphasis.is_some() && w == bold_weight(look))
+    {
         style.bold = Some(w >= 600);
     }
     style.italic = s.shape.italic;
@@ -1271,7 +1285,6 @@ fn style_back(s: Option<&RichSpanStyle>, _look: &Look) -> (Style, Effects, Pace)
             blur: sh.blur_px,
         });
     }
-    let (effects, pace) = s.effect.map(attr_of).unwrap_or_default();
     (style, effects, pace)
 }
 
@@ -1595,6 +1608,30 @@ mod tests {
     }
 
     #[test]
+    fn emphasis_draws_bold_and_spaced_and_survives_the_editor() {
+        round_trip("前[em]重要[/em][em=250][b=0]轻[/b][/em][em][i]斜[/i][/em]后");
+        let doc = nanatype_markup::parse("[em]强调[/em]").doc;
+        let urls = HashMap::new();
+        let look = look();
+        let rich = to_rich(
+            &doc,
+            &Env {
+                look: &look,
+                urls: &urls,
+                editor: true,
+                locale: Locale::ZhCn,
+            },
+        );
+        let style = rich.style_at(0).unwrap();
+        assert_eq!(style.shape.weight, Some(bold_weight(&look)));
+        assert_eq!(
+            style.shape.letter_spacing_px,
+            Some(look.size * EMPHASIS_TRACKING_EM)
+        );
+        assert_eq!(from_rich(&rich, &look), doc);
+    }
+
+    #[test]
     fn documents_survive_the_editor() {
         round_trip("你好[b]粗[/b][i]斜[/i][u]下[/u][s]删[/s]");
         round_trip(
@@ -1897,6 +1934,7 @@ mod effect_cache_tests {
                 nanatype_model::Continuous::new(ContinuousKind::Rainbow),
             ],
             entrance: None,
+            emphasis: None,
         };
         let index = attr_index(&effects, Pace::Inherit).unwrap() as usize;
         let table = effect_table(&defaults, false);

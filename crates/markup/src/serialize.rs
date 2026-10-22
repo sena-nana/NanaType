@@ -1,8 +1,8 @@
 use nanatype_model::{AfterLine, Document, Effects, Inline, LineMeta, Marker, TextRun, VtsAction};
 
 use crate::value::{
-    fmt_continuous, fmt_entrance, fmt_font, fmt_num, fmt_pace, fmt_shadow, fmt_size, fmt_stroke,
-    quote,
+    fmt_continuous, fmt_emphasis, fmt_entrance, fmt_font, fmt_num, fmt_pace, fmt_shadow, fmt_size,
+    fmt_stroke, quote,
 };
 
 /// One open span: the text inside `[...]` and the name that closes it.
@@ -73,6 +73,13 @@ fn effect_tags(effects: &Effects, pace: Option<&nanatype_model::Pace>) -> Vec<Sp
         tags.push(SpanTag {
             open: fmt_entrance(e),
             name: crate::value::entrance_tag(e.kind),
+            effect: true,
+        });
+    }
+    if let Some(e) = effects.emphasis {
+        tags.push(SpanTag {
+            open: fmt_emphasis(e),
+            name: "em",
             effect: true,
         });
     }

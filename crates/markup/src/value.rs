@@ -1,8 +1,8 @@
 //! Tag value grammar shared by the parser and the serializer.
 
 use nanatype_model::{
-    AfterLine, Continuous, ContinuousKind, Entrance, EntranceKind, FontSlot, Pace, Rgba8, Shadow,
-    Size, Stroke,
+    AfterLine, Continuous, ContinuousKind, Emphasis, Entrance, EntranceKind, FontSlot, Pace, Rgba8,
+    Shadow, Size, Stroke,
 };
 
 /// `[name=value key=value]` after the brackets are stripped.
@@ -277,6 +277,22 @@ pub(crate) fn fmt_entrance(e: Entrance) -> String {
         name.to_owned()
     } else {
         format!("{name}={}", e.ms)
+    }
+}
+
+pub(crate) fn emphasis(tag: &Tag) -> Option<Emphasis> {
+    let ms = match tag.value.as_deref().or(tag.arg("ms")) {
+        Some(v) => u16::try_from(self::ms(v)?).ok()?,
+        None => Emphasis::DEFAULT_MS,
+    };
+    Some(Emphasis { ms })
+}
+
+pub(crate) fn fmt_emphasis(e: Emphasis) -> String {
+    if e.ms == Emphasis::DEFAULT_MS {
+        "em".to_owned()
+    } else {
+        format!("em={}", e.ms)
     }
 }
 

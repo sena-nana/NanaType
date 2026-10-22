@@ -502,6 +502,8 @@ pub enum Tool {
     Shadow(Option<nanatype_model::Shadow>),
     Ruby(String),
     Effect(nanatype_model::ContinuousKind),
+    /// Toggle bold, spaced, one-character-at-a-time emphasis.
+    Emphasis,
     Entrance(nanatype_model::EntranceKind),
     Pace(nanatype_model::Pace),
     /// Insert a marker or a picture at the caret.

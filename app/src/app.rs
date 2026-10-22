@@ -1699,9 +1699,15 @@ impl App {
             Tool::Ruby(text) => {
                 RichEditCommand::SetRuby((!text.trim().is_empty()).then(|| text.trim().to_owned()))
             }
-            Tool::Effect(_) | Tool::Entrance(_) | Tool::Pace(_) => {
+            Tool::Effect(_) | Tool::Emphasis | Tool::Entrance(_) | Tool::Pace(_) => {
                 match tool {
                     Tool::Effect(kind) => effects.toggle(kind),
+                    Tool::Emphasis => {
+                        effects.emphasis = match effects.emphasis {
+                            Some(_) => None,
+                            None => Some(nanatype_model::Emphasis::default()),
+                        }
+                    }
                     Tool::Entrance(kind) => {
                         effects.entrance = Some(nanatype_model::Entrance {
                             kind,
@@ -2572,6 +2578,7 @@ pub(crate) fn markup_for(tool: &crate::msg::Tool) -> Option<MarkupEdit> {
         ),
         Tool::Ruby(r) => wrap(format!("[ruby={}]", quote(r)), "[/ruby]"),
         Tool::Effect(k) => wrap(format!("[{}]", k.key()), &format!("[/{}]", k.key())),
+        Tool::Emphasis => wrap("[em]".into(), "[/em]"),
         Tool::Entrance(k) => {
             let tag = match k {
                 nanatype_model::EntranceKind::Fade => "fade",

@@ -216,6 +216,25 @@ pub struct Entrance {
     pub ms: u16,
 }
 
+/// Bold, letter-spaced text read out one character at a time: `ms` of wait
+/// before and after every character.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Emphasis {
+    pub ms: u16,
+}
+
+impl Emphasis {
+    pub const DEFAULT_MS: u16 = 100;
+}
+
+impl Default for Emphasis {
+    fn default() -> Self {
+        Self {
+            ms: Self::DEFAULT_MS,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Effects {
@@ -224,11 +243,13 @@ pub struct Effects {
     /// `None` uses the skin's entrance.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entrance: Option<Entrance>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub emphasis: Option<Emphasis>,
 }
 
 impl Effects {
     pub fn is_none(&self) -> bool {
-        self.continuous.is_empty() && self.entrance.is_none()
+        self.continuous.is_empty() && self.entrance.is_none() && self.emphasis.is_none()
     }
 
     pub fn has(&self, kind: ContinuousKind) -> bool {

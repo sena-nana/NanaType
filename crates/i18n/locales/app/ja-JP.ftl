@@ -647,6 +647,7 @@ peer-window-toggle = 相手の表示枠
 output-name-conflict = 出力名が重複しています。出力ごとに異なる名前を指定してください。
 tb-effect-pulse = 脈動
 tb-effect-flicker = 明滅
+tb-emphasis = 強調
 
 # Editor context menu
 edit-undo = 元に戻す

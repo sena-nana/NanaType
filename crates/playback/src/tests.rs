@@ -68,6 +68,19 @@ fn wait_speed_and_instant_change_the_clock() {
 }
 
 #[test]
+fn emphasis_waits_before_and_after_each_character() {
+    let r = &tl("a[em]bc[/em]d", &no_punct()).segments[0].reveal_ms;
+    assert_eq!(&**r, &[0, 150, 400, 550], "lead-in, both sides, trailing");
+    let spaced = &tl("[em=20]b c[/em]", &no_punct()).segments[0].reveal_ms;
+    assert_eq!(&**spaced, &[20, 90, 160], "spaces get no wait of their own");
+    let off = PacingParams {
+        typing: false,
+        ..no_punct()
+    };
+    assert_eq!(&*tl("a[em]bc[/em]", &off).segments[0].reveal_ms, &[0, 0, 0]);
+}
+
+#[test]
 fn global_speed_scale_and_typing_off() {
     let fast = PacingParams {
         speed_scale: 0.5,
