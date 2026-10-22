@@ -95,6 +95,24 @@ $env:NANATYPE_SNAPSHOT_TRANSPARENT='1'
 
 `echo_vanilla`、`echo_glass`、`echo_bubble`、`echo_void` 四套皮肤的设计参考自 [sheep-realms/Echo-Live](https://github.com/sheep-realms/Echo-Live)，原作者为 Sheep-realms 及该项目贡献者。NanaType 使用本地 TOML 皮肤格式实现和适配这些样式。原项目采用 GPL-3.0-or-later，详见其 [授权协议与声明](https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md)；本地清单中的 CC0-1.0 声明仅覆盖 NanaType 自身的贡献。
 
+## 音效包
+
+音效包是声明 `capabilities = ["sounds"]` 的包，根目录有 `sounds.toml`，内容与皮肤的 `[sounds]` 表相同：
+
+```toml
+[sounds]
+open = "sounds/open.ogg"
+[sounds.typing]
+files = ["sounds/key-1.wav", "sounds/key-2.wav"]
+volume = 0.5
+[sounds.se]
+coin = "sounds/coin.ogg"
+```
+
+在 **设置 › 播放 › 音效包** 中选择后：音效包定义了 `typing` 就替换皮肤的打字音及其节奏（`every_n`、`skip_punct` 等），定义了 `open`、`advance` 就替换对应音效；`se` 按名字覆盖或补充，皮肤的其他命名音效保留，写给皮肤的 `[se=…]` 标记照常发声。引用的文件必须在包内（或依赖包中，`pkg:<包ID>/<路径>`），缺失时整包拒绝加载。
+
+选中的音效包被删除、无法加载或在当前构建中不可见（例如 GitHub 版看不到 Steam 创意工坊的条目）时，暂用皮肤自带的音效并提示一次，设置保持不变。音效包可以和皮肤放在同一个包里（`capabilities = ["skin", "sounds"]`）。
+
 ## 历史窗口的通用布局
 
 `history.group_speakers` 控制相邻同一说话人的消息是否共用姓名栏；`history.padding` 是无面板时的左、上、右、下内边距，`history.margin` 是上、右、下、左外边距；`history.row_padding` 是每行的水平留白，`history.column_inset` 是正文列旁额外预留的宽度。头像尺寸与 `history.text.size` 由皮肤配置，用户个性化设置正常覆盖，不存在按皮肤 ID 改写的流程。

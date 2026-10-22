@@ -43,6 +43,7 @@ packages-none = No packages yet. Import one to add skins, resources or features.
 packages-kind-skin = Skin
 packages-kind-resources = Shared resources
 packages-kind-function = Functional plugin
+packages-kind-sounds = Sound pack
 
 # Package provenance and explicit script consent
 package-author = Author

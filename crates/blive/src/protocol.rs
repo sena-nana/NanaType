@@ -51,9 +51,9 @@ impl RoomKey {
     }
 }
 
-pub use nanatype_bilibili::protocol::{Author, ChatEvent, Guard};
+pub use nanatype_chat::{Author, ChatEvent, Guard};
 // The same lenient field readers as the Bilibili parser: both feed one panel.
-pub(crate) use nanatype_bilibili::protocol::{int, millis, string, url};
+pub(crate) use nanatype_chat::{int, millis, string, url};
 
 /// Why blivechat gave up on a room (`FATAL_ERROR`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

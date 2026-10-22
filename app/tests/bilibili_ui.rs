@@ -1,3 +1,5 @@
+#![cfg(feature = "unofficial-chat")]
+
 mod common;
 
 use nana_ui_devtools::agent::RuntimeAgentSession;

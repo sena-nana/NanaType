@@ -8,7 +8,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use crate::chat::{ChatMessage, Platform};
 use crossbeam_channel::{Sender, bounded, unbounded};
-use nanatype_bilibili::ChatEvent;
+use nanatype_chat::ChatEvent;
 use nanatype_model::AssetRef;
 
 const AVATAR_TTL: Duration = Duration::from_secs(3 * 24 * 3600);
@@ -63,9 +63,11 @@ pub struct ChatAssets {
     tx: Sender<(u64, String, Incoming)>,
 }
 enum Incoming {
-    /// Bilibili's events, read directly or through blivechat.
-    Bilibili(Platform, ChatEvent),
+    /// Events in the shared chat shape: Bilibili's own, or through blivechat.
+    Chat(Platform, ChatEvent),
+    #[cfg(feature = "unofficial-chat")]
     Douyin(nanatype_douyin::ChatEvent),
+    #[cfg(feature = "unofficial-chat")]
     Youtube(nanatype_youtube::ChatEvent),
     Twitch(nanatype_twitch::ChatEvent),
 }
@@ -193,6 +195,7 @@ impl ChatAssets {
                 for (epoch, room, event) in rx {
                     // Live platforms add their pictures while the message is built.
                     let (avatar, mut emotes) = match &event {
+                        #[cfg(feature = "unofficial-chat")]
                         Incoming::Douyin(event) => (
                             Job::avatar("douyin", &event.author.uid, &event.author.avatar),
                             match &event.content {
@@ -202,6 +205,7 @@ impl ChatAssets {
                                 _ => vec![],
                             },
                         ),
+                        #[cfg(feature = "unofficial-chat")]
                         Incoming::Youtube(event) => {
                             let prefix = Platform::Youtube.cache_prefix();
                             (
@@ -210,7 +214,7 @@ impl ChatAssets {
                             )
                         }
                         Incoming::Twitch(_) => (None, vec![]),
-                        Incoming::Bilibili(platform, event) => {
+                        Incoming::Chat(platform, event) => {
                             let prefix = platform.cache_prefix();
                             match event {
                                 ChatEvent::Text {
@@ -233,19 +237,21 @@ impl ChatAssets {
                         }
                     };
                     let message = match event {
+                        #[cfg(feature = "unofficial-chat")]
                         Incoming::Douyin(event) => Some(ChatMessage::from_douyin(
                             event,
                             avatar.as_ref().map(Job::asset),
                             emotes.first().map(Job::asset),
                             next,
                         )),
-                        Incoming::Bilibili(platform, event) => ChatMessage::from_event(
+                        Incoming::Chat(platform, event) => ChatMessage::from_event(
                             event,
                             avatar.as_ref().map(Job::asset),
                             emotes.first().map(Job::asset),
                             next,
                         )
                         .map(|m| ChatMessage { platform, ..m }),
+                        #[cfg(feature = "unofficial-chat")]
                         Incoming::Youtube(event) => Some(ChatMessage::from_youtube(
                             event,
                             avatar.as_ref().map(Job::asset),
@@ -276,11 +282,12 @@ impl ChatAssets {
             .expect("spawn chat ingest");
         Self { tx }
     }
+    #[cfg(feature = "unofficial-chat")]
     pub fn bilibili(&self, epoch: u64, room: u64, event: ChatEvent) {
         let _ = self.tx.send((
             epoch,
             room.to_string(),
-            Incoming::Bilibili(Platform::Bilibili, event),
+            Incoming::Chat(Platform::Bilibili, event),
         ));
     }
     /// Third-party chat has no room of its own: a 彗星号 feed can mix rooms.
@@ -288,12 +295,14 @@ impl ChatAssets {
         let _ = self.tx.send((
             epoch,
             String::new(),
-            Incoming::Bilibili(Platform::Blivechat, event),
+            Incoming::Chat(Platform::Blivechat, event),
         ));
     }
+    #[cfg(feature = "unofficial-chat")]
     pub fn douyin(&self, epoch: u64, room: String, event: nanatype_douyin::ChatEvent) {
         let _ = self.tx.send((epoch, room, Incoming::Douyin(event)));
     }
+    #[cfg(feature = "unofficial-chat")]
     pub fn youtube(&self, epoch: u64, video: String, event: nanatype_youtube::ChatEvent) {
         let _ = self.tx.send((epoch, video, Incoming::Youtube(event)));
     }
@@ -366,9 +375,10 @@ fn fnv(text: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nanatype_bilibili::Author;
+    use nanatype_chat::Author;
     use std::io::{Read, Write};
     use std::net::TcpListener;
+    #[cfg(feature = "unofficial-chat")]
     #[test]
     fn platform_images_and_ingestion_ids_are_isolated() {
         assert_ne!(
@@ -464,10 +474,10 @@ mod tests {
                 let _ = ready.send(a);
             },
         );
-        service.bilibili(0, 0, event(url.clone(), 1));
+        service.blivechat(0, event(url.clone(), 1));
         accepted.recv_timeout(Duration::from_secs(2)).unwrap();
         for n in 2..=20 {
-            service.bilibili(0, 0, event(url.clone(), n));
+            service.blivechat(0, event(url.clone(), n));
         }
         for n in 1..=20 {
             let m = got
@@ -475,7 +485,7 @@ mod tests {
                 .expect("message must not wait for image");
             assert_eq!(m.seq, n);
             assert_eq!(m.doc.plain_text(), format!("message {n}"));
-            assert_eq!(m.user.avatar, Some(AssetRef::Blob("bili-face-42".into())));
+            assert_eq!(m.user.avatar, Some(AssetRef::Blob("blive-face-42".into())));
         }
         release.send(()).unwrap();
         server.join().unwrap();
@@ -514,13 +524,13 @@ mod tests {
                 let _ = ready.send(a);
             },
         );
-        service.bilibili(0, 0, event(url, 1));
+        service.blivechat(0, event(url, 1));
         let message = got.recv_timeout(Duration::from_secs(2)).unwrap();
         assert_eq!(
             Some(assets.recv_timeout(Duration::from_secs(2)).unwrap()),
             message.user.avatar
         );
-        assert!(dir.join("bili-face-42.png").is_file());
+        assert!(dir.join("blive-face-42.png").is_file());
         assert!(got.try_recv().is_err());
         server.join().unwrap();
     }

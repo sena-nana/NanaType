@@ -2,7 +2,7 @@ use crate::{app::App, msg::Msg};
 use nanatype_bilibili::{
     AccountState, ConnectionState, Delivery, DeliveryState, Event, SessionEvent, sending,
 };
-use nanatype_core::{Cmd, Core, Effects, Event as CoreEvent};
+use nanatype_core::{Cmd, Event as CoreEvent};
 use nanatype_model::{Document, Speaker};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
@@ -58,6 +58,8 @@ impl Echoes {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::chat::handle_command;
+    use nanatype_core::Core;
 
     fn ready_to_confirm() -> State {
         State {
@@ -225,32 +227,6 @@ impl State {
     }
 }
 
-/// All local commands, including the editor's Send, pass this boundary before
-/// consuming the draft or producing submission/history events.
-pub(super) fn handle_command(
-    core: &mut Core,
-    cmd: Cmd,
-    synchronizing: bool,
-    now: u64,
-) -> Result<Effects, ()> {
-    if synchronizing {
-        let invalid = match &cmd {
-            Cmd::Send => !core.draft().is_blank() && sending::plain_text(core.draft()).is_err(),
-            Cmd::SendMarkup(markup) => {
-                let doc = nanatype_markup::parse(markup).doc;
-                !doc.is_blank() && sending::plain_text(&doc).is_err()
-            }
-            Cmd::DraftChanged(doc) => {
-                sending::image_count(doc) > sending::image_count(core.draft())
-            }
-            _ => false,
-        };
-        if invalid {
-            return Err(());
-        }
-    }
-    Ok(core.handle(cmd, now))
-}
 impl App {
     /// Bilibili login, chat and sending.
     pub(super) fn bilibili_msg(&mut self, msg: Msg) {

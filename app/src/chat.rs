@@ -1,7 +1,7 @@
 //! Live chat as the app keeps it: platform-tagged events with their pictures saved
 //! locally, ready for the chat panel, the history list and replies.
 
-use nanatype_bilibili::{Author, ChatEvent, Guard};
+use nanatype_chat::{Author, ChatEvent, Guard};
 use nanatype_i18n::Locale;
 use nanatype_model::{
     AssetRef, Atom, AtomKind, ChatRef, ChatRun, ChatUser, Document, HistoryItem, Inline, SourceId,
@@ -24,13 +24,18 @@ pub enum Platform {
     Twitch,
 }
 impl Platform {
-    pub const ALL: [Self; 5] = [
+    /// The sources this build connects to, in settings order. Every variant
+    /// stays so history saved by another build still reads.
+    #[cfg(feature = "unofficial-chat")]
+    pub const ALL: &[Self] = &[
         Self::Bilibili,
         Self::Douyin,
         Self::Youtube,
         Self::Twitch,
         Self::Blivechat,
     ];
+    #[cfg(not(feature = "unofficial-chat"))]
+    pub const ALL: &[Self] = &[Self::Twitch, Self::Blivechat];
     pub fn source(self) -> &'static str {
         match self {
             Self::Bilibili => SOURCE,
@@ -128,6 +133,7 @@ pub struct ChatMessage {
 }
 
 impl ChatMessage {
+    #[cfg(feature = "unofficial-chat")]
     pub fn from_douyin(
         event: nanatype_douyin::ChatEvent,
         avatar: Option<AssetRef>,
@@ -199,6 +205,7 @@ impl ChatMessage {
             },
         }
     }
+    #[cfg(feature = "unofficial-chat")]
     /// Build from a YouTube event; `emote` names (and schedules) the saved
     /// picture of a URL.
     pub fn from_youtube(
@@ -617,6 +624,7 @@ pub fn super_chat_color(price: u64) -> [f32; 4] {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "unofficial-chat")]
     #[test]
     fn douyin_identity_reply_and_gift_units_stay_separate_from_bilibili() {
         let event = nanatype_douyin::ChatEvent {
@@ -747,6 +755,7 @@ mod tests {
         AssetRef::Blob(format!("emote-{}", url.len()))
     }
 
+    #[cfg(feature = "unofficial-chat")]
     #[test]
     fn youtube_messages_keep_emoji_inline_and_paid_amounts_as_sent() {
         use nanatype_youtube::{Author as YtAuthor, ChatEvent as YtEvent, Content, Run};

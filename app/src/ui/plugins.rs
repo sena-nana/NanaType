@@ -53,6 +53,12 @@ fn package_card(
     let name = nanatype_theme::localized(&package.meta.name, ui.locale.get_untracked().tag(), &id);
     let functional = package.capabilities.contains(&Cap::Lua);
     let builtin = row.origin == nanatype_theme::SkinOrigin::Builtin;
+    // Steam owns a Workshop package's folder: unsubscribing removes it, and
+    // sharing it is its author's call.
+    let workshop = match row.origin {
+        nanatype_theme::SkinOrigin::Workshop { item, .. } => Some(item),
+        _ => None,
+    };
     let glyph = if functional {
         ti::CODE
     } else if package.capabilities.contains(&Cap::Skin) {
@@ -73,6 +79,7 @@ fn package_card(
                 Cap::Skin => "packages-kind-skin",
                 Cap::Resources => "packages-kind-resources",
                 Cap::Lua => "packages-kind-function",
+                Cap::Sounds => "packages-kind-sounds",
             }))
         })
         .collect();
@@ -169,21 +176,30 @@ fn package_card(
             )
             .children((
                 (!builtin).then(|| {
+                    let key = match workshop {
+                        Some(_) => "workshop-unsubscribe",
+                        None => "packages-remove",
+                    };
                     widget(
-                        Button::new(ui.now_t("packages-remove"))
+                        Button::new(ui.now_t(key))
                             .kind(ButtonKind::Text)
                             .size(ControlSize::Small),
                     )
                     .on_cx(move |_, _: &Activate, cx| {
-                        cx.dispatch_program_all(Msg::RemovePackage(remove_id.clone()))
+                        cx.dispatch_program_all(match workshop {
+                            Some(item) => Msg::WorkshopUnsubscribe(item),
+                            None => Msg::RemovePackage(remove_id.clone()),
+                        })
                     })
                 }),
                 kit::spacer(),
-                widget(Button::new(ui.now_t("skins-export")).size(ControlSize::Small)).on_cx(
-                    move |_, _: &Activate, cx| {
-                        cx.dispatch_program_all(Msg::ExportSkin(export_id.clone()))
-                    },
-                ),
+                workshop.is_none().then(|| {
+                    widget(Button::new(ui.now_t("skins-export")).size(ControlSize::Small)).on_cx(
+                        move |_, _: &Activate, cx| {
+                            cx.dispatch_program_all(Msg::ExportSkin(export_id.clone()))
+                        },
+                    )
+                }),
                 toggle,
             )),
         ))

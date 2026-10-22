@@ -20,13 +20,7 @@ fn settings_body(ui: Ui) -> AnyView {
     let avatar_row = {
         let has = ui.settings.get_untracked().general.avatar.is_some();
         widget(Stack::row(0.0).gap_step(gap::step::CONTROL))
-            .visible(move || {
-                !(ui.settings.with(|s| s.integrations.bilibili.sync_profile)
-                    && matches!(
-                        ui.bilibili.get().account,
-                        nanatype_bilibili::AccountState::Ready(_)
-                    ))
-            })
+            .visible(move || !crate::ui::sources::profile_bound(ui))
             .children((
                 button(ui, "general-avatar-pick", || {
                     Msg::PickFile(FileTarget::Avatar)
@@ -81,7 +75,7 @@ fn settings_body(ui: Ui) -> AnyView {
                         speaker_field(ui),
                     ),
                     row(ui, "general-avatar", None, avatar_row),
-                    crate::ui::bilibili::identity_hint(ui),
+                    crate::ui::sources::identity_hint(ui),
                 ],
             ),
             section_with(
@@ -193,7 +187,8 @@ fn settings_body(ui: Ui) -> AnyView {
                     ),
                 ],
             ),
-            section_with(ui, "general-updates", updates(ui)),
+            // A Steam build updates through Steam.
+            crate::distribution::UPDATES.then(|| section_with(ui, "general-updates", updates(ui))),
         ))
         .into_any()
 }

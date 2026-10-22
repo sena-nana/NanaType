@@ -58,17 +58,9 @@ impl App {
                 self.update(Msg::SettingsPage(crate::ui::settings::Page::Platforms));
             }
             Msg::SettingsPage(page) => {
-                // A QR sign-in only lives while its card is in view.
                 let on_bilibili = page == crate::ui::settings::Page::Platforms
                     && self.ui.platform_tab.get_untracked() == crate::chat::Platform::Bilibili;
-                if !on_bilibili
-                    && matches!(
-                        self.ui.bilibili.get_untracked().account,
-                        nanatype_bilibili::AccountState::Qr { .. }
-                    )
-                {
-                    self.bilibili.cancel_login();
-                }
+                self.unofficial_page_left(on_bilibili);
                 self.ui.page.set(page);
                 self.open_settings();
             }

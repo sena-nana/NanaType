@@ -35,7 +35,7 @@ fn text(session: &Session, path: &str) -> String {
 }
 
 #[test]
-fn four_project_kinds_open_edit_export_and_reimport() {
+fn every_project_kind_opens_edits_exports_and_reimports() {
     let dir = tempfile::tempdir().unwrap();
     let mut registry = registry(dir.path());
     let drafts = dir.path().join("drafts");
@@ -53,6 +53,7 @@ fn four_project_kinds_open_edit_export_and_reimport() {
                     .unwrap();
                 ("assets/notes.json", "edited\n".to_owned())
             }
+            ProjectKind::Sounds => (nanatype_theme::SOUNDS_MANIFEST, "[sounds.se]\n".to_owned()),
             ProjectKind::Lua | ProjectKind::Mixed => (
                 "main.lua",
                 text(&session, "main.lua").replace("waiting for a line", "edited"),

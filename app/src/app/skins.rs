@@ -46,6 +46,7 @@ impl App {
                     Ok(prepared) => {
                         self.skin_reload_scan = false;
                         self.registry = prepared.registry;
+                        self.reapply_workshop();
                         self.prepared_skin_urls = prepared.image_urls;
                         self.apply_loaded_skin(prepared.loaded);
                         if prepared.scanned {
@@ -80,8 +81,15 @@ impl App {
                     }
                 }
             }
-            Msg::SoundsLoaded { skin, bank, errors } => {
-                if skin == self.loaded.skin.meta.id {
+            Msg::SoundsLoaded {
+                skin,
+                pack,
+                bank,
+                errors,
+            } => {
+                if skin == self.loaded.skin.meta.id
+                    && pack == self.sound_pack.as_ref().map(|p| p.id.clone())
+                {
                     sounds::install(&self.audio, &self.bank, &bank);
                     self.bank = bank;
                     if let Some(e) = errors.first() {

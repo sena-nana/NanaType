@@ -680,7 +680,7 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) 
             .children((
                 mode_control,
                 status_content(ui),
-                super::super::bilibili::input_send_status(ui),
+                super::super::sources::input_send_status(ui),
                 popover(
                     ti::USERS,
                     ui.now_t("input-management"),
@@ -695,7 +695,7 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) 
                     )),
                 ),
                 tool(ui, ti::SETTINGS, "window-settings", || Msg::OpenSettings),
-                super::super::bilibili::account_button(ui),
+                super::super::sources::account_button(ui),
                 widget(crate::ui::kit::cta(
                     Button::new(ui.now_t("tb-send")).icon(ti::SEND),
                 ))

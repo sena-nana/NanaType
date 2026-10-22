@@ -12,6 +12,7 @@ pkgedit-intro = 変更は .ntpkg を書き出して読み込むまで下書き�
 pkgedit-kind-skin = スキンのみ
 pkgedit-kind-resources = リソースのみ
 pkgedit-kind-lua = Lua のみ
+pkgedit-kind-sounds = サウンドパックのみ
 pkgedit-kind-mixed = 混在
 pkgedit-id-placeholder = パッケージ ID（例: my.package）
 pkgedit-new = 新規作成

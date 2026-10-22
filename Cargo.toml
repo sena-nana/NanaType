@@ -9,6 +9,7 @@ members = [
     "crates/settings",
     "crates/audio",
     "crates/bridge",
+    "crates/chat",
     "crates/bilibili",
     "crates/blive",
     "crates/douyin",
@@ -19,6 +20,7 @@ members = [
     "crates/plugins",
     "crates/secrets",
     "crates/update",
+    "crates/steam",
     "crates/frame",
     "app",
     "editor",
@@ -41,6 +43,7 @@ nanatype-i18n = { path = "crates/i18n" }
 nanatype-settings = { path = "crates/settings" }
 nanatype-audio = { path = "crates/audio" }
 nanatype-bridge = { path = "crates/bridge" }
+nanatype-chat = { path = "crates/chat" }
 nanatype-bilibili = { path = "crates/bilibili" }
 nanatype-blive = { path = "crates/blive" }
 nanatype-douyin = { path = "crates/douyin" }
@@ -51,6 +54,7 @@ nanatype-p2p = { path = "crates/p2p" }
 nanatype-plugins = { path = "crates/plugins" }
 nanatype-secrets = { path = "crates/secrets" }
 nanatype-update = { path = "crates/update" }
+nanatype-steam = { path = "crates/steam" }
 nanatype-frame = { path = "crates/frame" }
 nana-ui-platform = { git = "https://github.com/sena-nana/NanaUI", rev = "0aac2d55e401fdcec6f48ae5ec5a7b1b8e5f5e1c", default-features = false }
 nana-ui-core = { git = "https://github.com/sena-nana/NanaUI", rev = "0aac2d55e401fdcec6f48ae5ec5a7b1b8e5f5e1c", default-features = false }

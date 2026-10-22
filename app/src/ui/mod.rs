@@ -3,10 +3,12 @@
 //! skin renderer itself lives in `nanatype-frame` and reads the [`Stage`]
 //! inside [`Ui`].
 
+#[cfg(feature = "unofficial-chat")]
 pub mod bilibili;
 pub mod blivechat;
 pub mod danmaku;
 pub mod dialogue;
+#[cfg(feature = "unofficial-chat")]
 pub mod douyin;
 pub mod history;
 pub mod input;
@@ -14,7 +16,9 @@ pub mod link_text;
 pub mod p2p;
 pub mod plugins;
 pub mod settings;
+pub mod sources;
 pub mod twitch;
+#[cfg(feature = "unofficial-chat")]
 pub mod youtube;
 
 pub use nanatype_frame::ui::{
@@ -93,6 +97,8 @@ pub struct SkinRow {
     pub builtin: bool,
     pub error: Option<String>,
     pub folder: Option<std::path::PathBuf>,
+    /// The Steam Workshop item it comes from.
+    pub workshop: Option<u64>,
     pub image_urls: Arc<HashMap<String, String>>,
     pub accent: [f32; 4],
     pub box_color: [f32; 4],
@@ -101,6 +107,18 @@ pub struct SkinRow {
     /// NanaUI, so its text shows in a stand-in
     /// ([`crate::skin_theme::uses_fallback_font`]).
     pub fallback_font: bool,
+}
+
+/// One installed sound pack, for the picker on the Playback page.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SoundPackRow {
+    pub id: String,
+    pub name: String,
+    pub author: String,
+    pub error: Option<String>,
+    pub folder: Option<std::path::PathBuf>,
+    /// The Steam Workshop item it comes from.
+    pub workshop: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -124,13 +142,18 @@ pub struct Ui {
     pub plugin_source_trusted: Signal<bool>,
     pub plugin_activation_busy: Signal<bool>,
     pub plugin_activation_error: Signal<Option<String>>,
+    #[cfg(feature = "unofficial-chat")]
     pub bilibili: Signal<Arc<crate::app::bilibili::State>>,
+    #[cfg(feature = "unofficial-chat")]
     pub douyin: Signal<Arc<crate::app::douyin::State>>,
+    #[cfg(feature = "unofficial-chat")]
     pub youtube: Signal<Arc<crate::app::youtube::State>>,
     pub twitch: Signal<Arc<crate::app::twitch::State>>,
     pub blivechat: Signal<Arc<crate::app::blivechat::State>>,
+    #[cfg(feature = "updates")]
     pub update: Signal<Arc<crate::app::update::State>>,
     /// Kept only in memory and cleared after import; never serialized with settings.
+    #[cfg(feature = "unofficial-chat")]
     pub douyin_cookie: Signal<String>,
     pub skin_preview_history: Signal<bool>,
     /// The platform the live-platforms settings page shows.
@@ -148,6 +171,9 @@ pub struct Ui {
     pub page: Signal<settings::Page>,
     pub status: Signal<Arc<Status>>,
     pub skins: Signal<Arc<Vec<SkinRow>>>,
+    pub sound_packs: Signal<Arc<Vec<SoundPackRow>>>,
+    /// Steam Workshop subscriptions; empty and hidden outside the Steam build.
+    pub workshop: Signal<Arc<crate::workshop::View>>,
     pub stickers: Signal<Arc<Vec<StickerRow>>>,
     pub sticker_packs: Signal<Arc<Vec<crate::stickers::PackRow>>>,
     pub telegram: Signal<Arc<crate::stickers::telegram::State>>,
@@ -197,12 +223,17 @@ impl Ui {
             plugin_source_trusted: signal(false),
             plugin_activation_busy: signal(false),
             plugin_activation_error: signal(None),
+            #[cfg(feature = "unofficial-chat")]
             bilibili: signal(Arc::new(crate::app::bilibili::State::default())),
+            #[cfg(feature = "unofficial-chat")]
             douyin: signal(Arc::new(crate::app::douyin::State::default())),
+            #[cfg(feature = "unofficial-chat")]
             youtube: signal(Arc::new(crate::app::youtube::State::default())),
             twitch: signal(Arc::new(crate::app::twitch::State::default())),
             blivechat: signal(Arc::new(crate::app::blivechat::State::default())),
+            #[cfg(feature = "updates")]
             update: signal(Arc::new(crate::app::update::State::default())),
+            #[cfg(feature = "unofficial-chat")]
             douyin_cookie: signal(String::new()),
             skin_preview_history: signal(false),
             input_width: signal(crate::windows::INPUT_SIZE.0),
@@ -211,12 +242,14 @@ impl Ui {
             input_dock_selected: signal(input_dock.selected),
             input_split: node_ref(),
             peer,
-            platform_tab: signal(crate::chat::Platform::Bilibili),
+            platform_tab: signal(crate::chat::Platform::ALL[0]),
             peer_panel: signal(true),
             diagnostics: signal(Arc::new(Vec::new())),
             page,
             status: signal(Arc::new(Status::default())),
             skins: signal(Arc::new(Vec::new())),
+            sound_packs: signal(Arc::new(Vec::new())),
+            workshop: signal(Arc::new(crate::workshop::View::default())),
             stickers: signal(Arc::new(Vec::new())),
             sticker_packs: signal(Arc::new(Vec::new())),
             telegram: signal(Arc::new(Default::default())),
@@ -294,8 +327,10 @@ pub fn skin_rows(registry: &nanatype_theme::SkinRegistry, locale: Locale) -> Vec
                 error: e.errors.first().map(|d| d.to_string()),
                 folder: match &e.origin {
                     nanatype_theme::SkinOrigin::Directory(p) => Some(p.clone()),
+                    nanatype_theme::SkinOrigin::Workshop { folder, .. } => Some(folder.clone()),
                     _ => None,
                 },
+                workshop: e.workshop_item(),
                 image_urls: picker_image_urls(e),
                 accent: [0.5; 4],
                 box_color: [0.5; 4],
@@ -320,6 +355,31 @@ pub fn skin_rows(registry: &nanatype_theme::SkinRegistry, locale: Locale) -> Vec
                 row.fallback_font = crate::skin_theme::uses_fallback_font(s);
             }
             row
+        })
+        .collect()
+}
+
+pub fn sound_pack_rows(
+    registry: &nanatype_theme::SkinRegistry,
+    locale: Locale,
+) -> Vec<SoundPackRow> {
+    registry
+        .sound_packs()
+        .iter()
+        .map(|p| SoundPackRow {
+            id: p.id.clone(),
+            name: nanatype_theme::localized(&p.name, locale.tag(), &p.id),
+            author: p.author.clone(),
+            error: p.errors.first().map(|d| d.to_string()),
+            folder: match &p.origin {
+                nanatype_theme::SkinOrigin::Directory(path) => Some(path.clone()),
+                nanatype_theme::SkinOrigin::Workshop { folder, .. } => Some(folder.clone()),
+                _ => None,
+            },
+            workshop: match p.origin {
+                nanatype_theme::SkinOrigin::Workshop { item, .. } => Some(item),
+                _ => None,
+            },
         })
         .collect()
 }

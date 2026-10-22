@@ -1,5 +1,54 @@
 use super::*;
 
+/// The sound pack layered over the skin's sounds, and where packs come from:
+/// an imported `.ntpkg` lands in the packages folder like any package.
+fn sound_pack(ui: Ui) -> AnyView {
+    let packages = crate::paths::Paths::resolve().packages();
+    let picker = dynamic(
+        move || {
+            (
+                ui.sound_packs.get(),
+                ui.settings.with(|s| s.sound.pack.clone()),
+            )
+        },
+        move |(packs, chosen)| {
+            let mut options = vec![(String::new(), ui.now_t("sound-pack-skin"))];
+            options.extend(packs.iter().filter(|p| p.error.is_none()).map(|p| {
+                let name = match p.workshop {
+                    Some(_) => ui.tr("sound-pack-workshop", &[("name", p.name.as_str().into())]),
+                    None => p.name.clone(),
+                };
+                (p.id.clone(), name)
+            }));
+            // A pack this build cannot see stays chosen, and says so.
+            if let Some(id) = chosen
+                && !options.iter().any(|(v, _)| v == id)
+            {
+                options.push((
+                    id.clone(),
+                    ui.tr("sound-pack-unavailable", &[("id", id.as_str().into())]),
+                ));
+            }
+            select(
+                ui,
+                options,
+                |s| s.sound.pack.clone().unwrap_or_default(),
+                |s, v| s.sound.pack = (!v.is_empty()).then(|| v.to_owned()),
+            )
+        },
+    )
+    .into_any();
+    controls(vec![
+        picker,
+        icon_action(ui, "sound-pack-import", ti::FILE_IMPORT, || {
+            Msg::PickFile(FileTarget::ImportSkin)
+        }),
+        icon_action(ui, "sound-pack-folder", ti::FOLDER_OPEN, move || {
+            Msg::OpenFolder(packages.clone())
+        }),
+    ])
+}
+
 /// Reads 0 as "Off".
 pub(super) fn off_at_zero(locale: Locale, v: f64) -> Option<String> {
     (v <= 0.0).then(|| I18N.t_in(locale, "playback-auto-off"))
@@ -236,6 +285,7 @@ pub(super) fn playback(ui: Ui) -> AnyView {
                 "playback-audio",
                 vec![
                     toggle_row!(ui, "playback-sound", sound.typing),
+                    row(ui, "sound-pack", Some("sound-pack-hint"), sound_pack(ui)),
                     row(
                         ui,
                         "playback-volume",
@@ -315,6 +365,11 @@ pub(super) fn playback(ui: Ui) -> AnyView {
                         ),
                     ),
                 ],
+            ),
+            workshop::subscriptions(
+                ui,
+                &[crate::workshop::Kind::SoundPack],
+                crate::workshop::Tag::SoundPacks,
             ),
         ))
         .into_any()

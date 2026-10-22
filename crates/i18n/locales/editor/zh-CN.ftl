@@ -12,6 +12,7 @@ pkgedit-intro = 修改只保存在草稿里，导出 .ntpkg 并导入后才会�
 pkgedit-kind-skin = 纯皮肤
 pkgedit-kind-resources = 纯资源
 pkgedit-kind-lua = 纯 Lua
+pkgedit-kind-sounds = 纯音效包
 pkgedit-kind-mixed = 混装
 pkgedit-id-placeholder = 包 ID，例如 my.package
 pkgedit-new = 新建

@@ -4397,6 +4397,7 @@ dependencies = [
  "nanatype-bilibili",
  "nanatype-blive",
  "nanatype-bridge",
+ "nanatype-chat",
  "nanatype-core",
  "nanatype-douyin",
  "nanatype-frame",
@@ -4408,6 +4409,7 @@ dependencies = [
  "nanatype-plugins",
  "nanatype-secrets",
  "nanatype-settings",
+ "nanatype-steam",
  "nanatype-theme",
  "nanatype-twitch",
  "nanatype-update",
@@ -4451,6 +4453,7 @@ dependencies = [
  "crossbeam-channel",
  "flate2",
  "md-5",
+ "nanatype-chat",
  "nanatype-model",
  "nanatype-secrets",
  "serde",
@@ -4465,7 +4468,7 @@ name = "nanatype-blive"
 version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
- "nanatype-bilibili",
+ "nanatype-chat",
  "nanatype-model",
  "serde_json",
  "tungstenite",
@@ -4481,6 +4484,13 @@ dependencies = [
  "serde",
  "serde_json",
  "tungstenite",
+]
+
+[[package]]
+name = "nanatype-chat"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -4649,6 +4659,14 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "nanatype-steam"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-channel",
+ "steamworks",
 ]
 
 [[package]]
@@ -7041,6 +7059,24 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "steamworks"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ff29921f6a7e8c85b0c971ec3c42002b9f535e3b8f4358cb22911d43709739a"
+dependencies = [
+ "bitflags 2.13.2",
+ "paste",
+ "steamworks-sys",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "steamworks-sys"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae139f051204a4af015d4f0ed3a1f7a51020d03a44c7cf249168c543d88131e9"
 
 [[package]]
 name = "strict-num"

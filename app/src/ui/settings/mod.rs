@@ -343,7 +343,7 @@ pub fn settings_window(ui: Ui) -> impl IntoView {
         widget(nana_ui::runtime::OverlayHost::new())
             .css(nana_ui::runtime::view::css! {position: absolute; inset: 0;})
             .children((
-                super::bilibili::confirm_dialog(ui),
+                super::sources::confirm_dialog(ui),
                 super::twitch::confirm_dialog(ui),
             )),
     ))

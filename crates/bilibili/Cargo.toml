@@ -9,6 +9,7 @@ description = "Authenticated Bilibili live chat and typewriter delivery"
 [dependencies]
 nanatype-secrets.workspace = true
 nanatype-model.workspace = true
+nanatype-chat.workspace = true
 serde.workspace = true
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
 md-5 = "0.10"

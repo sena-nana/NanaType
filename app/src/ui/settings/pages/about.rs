@@ -50,9 +50,8 @@ fn identity(ui: Ui) -> Vec<(AnyView, Shown)> {
             hint(build),
         )),
     ));
-    vec![
+    let rows = vec![
         (header.into_any(), None),
-        (update_row(ui), None),
         (
             row_text(
                 ui.now_t("about-repository"),
@@ -78,10 +77,18 @@ fn identity(ui: Ui) -> Vec<(AnyView, Shown)> {
             ),
             None,
         ),
-    ]
+    ];
+    #[cfg(feature = "updates")]
+    let rows = {
+        let mut rows = rows;
+        rows.insert(1, (update_row(ui), None));
+        rows
+    };
+    rows
 }
 
 /// The update check's state and what can be done next.
+#[cfg(feature = "updates")]
 fn update_row(ui: Ui) -> AnyView {
     widget(Stack::column(0.0))
         .children(dynamic(
@@ -91,6 +98,7 @@ fn update_row(ui: Ui) -> AnyView {
         .into_any()
 }
 
+#[cfg(feature = "updates")]
 fn update_status(ui: Ui, state: &crate::app::update::State) -> AnyView {
     use crate::app::update::State;
     use nanatype_update::Kind;
@@ -157,6 +165,7 @@ fn update_status(ui: Ui, state: &crate::app::update::State) -> AnyView {
     row_text(title, detail, controls(buttons))
 }
 
+#[cfg(feature = "updates")]
 fn megabytes(bytes: u64) -> String {
     format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
 }
@@ -246,18 +255,15 @@ fn notices(ui: Ui) -> Vec<(AnyView, Shown)> {
 /// Each licence's source stays a click away; its text is embedded for
 /// offline reading and unfolds under its row. The fonts close the list.
 fn licences(ui: Ui) -> Vec<(AnyView, Shown)> {
-    let entries = [
+    let entries = vec![
         (
-            "NanaType · MIT AND CC-BY-NC-4.0",
+            crate::distribution::LICENSE_LABEL,
             "about-license-project",
             HOMEPAGE,
             None,
-            concat!(
-                include_str!("../../../../../LICENSE"),
-                "\n",
-                include_str!("../../../../../LICENSE-MIT")
-            ),
+            crate::distribution::LICENSE_TEXT,
         ),
+        #[cfg(feature = "unofficial-chat")]
         (
             "SocialSisterYi/bilibili-API-collect · CC BY-NC 4.0",
             "about-source-api-collect",
@@ -265,6 +271,7 @@ fn licences(ui: Ui) -> Vec<(AnyView, Shown)> {
             Some("https://github.com/bilibili-plugins/bilibili-api-collect"),
             include_str!("../../../../../crates/bilibili/LICENSE-API-COLLECT"),
         ),
+        #[cfg(feature = "unofficial-chat")]
         (
             "jwwsjlm/douyinLive · MIT",
             "about-source-douyin",
@@ -329,7 +336,12 @@ fn licences(ui: Ui) -> Vec<(AnyView, Shown)> {
 }
 
 /// A small icon button that sends `msg`, its name as the tooltip.
-fn icon_action(ui: Ui, key: &str, icon: Icon, msg: impl Fn() -> Msg + Send + 'static) -> AnyView {
+pub(super) fn icon_action(
+    ui: Ui,
+    key: &str,
+    icon: Icon,
+    msg: impl Fn() -> Msg + Send + 'static,
+) -> AnyView {
     widget(
         IconButton::new(icon, ui.now_t(key))
             .size(ControlSize::Small)
@@ -345,7 +357,7 @@ fn link_icon(ui: Ui, key: &str, icon: Icon, url: &'static str) -> AnyView {
 }
 
 /// A row's controls, side by side.
-fn controls(buttons: Vec<AnyView>) -> AnyView {
+pub(super) fn controls(buttons: Vec<AnyView>) -> AnyView {
     widget(
         Stack::row(0.0)
             .gap_step(gap::step::TIGHT)

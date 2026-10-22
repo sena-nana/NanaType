@@ -80,6 +80,7 @@ fn tool_button(icon: nana_ui::runtime::Icon, label: String, tip: String) -> Icon
     b
 }
 
+#[cfg(feature = "unofficial-chat")]
 pub(super) fn footer_icon(icon: nana_ui::runtime::Icon, label: String) -> IconButton {
     tool_button(icon, label.clone(), label)
 }
@@ -1013,7 +1014,9 @@ fn toolbar(ui: Ui) -> AnyView {
         let shake = skin.effects.screen_shake_px;
         let mut inserts: Vec<AnyView> = vec![
             widget(ActionMenuItem::new(t("tb-image")))
-                .bind(move |item: &mut ActionMenuItem| item.disabled = ui.bilibili.get().sending)
+                .bind(move |item: &mut ActionMenuItem| {
+                    item.disabled = super::sources::plain_text_only(ui)
+                })
                 .on_cx(move |_, _: &Activate, cx| {
                     insert_open.set(false);
                     cx.dispatch_program_all(Msg::PickFile(FileTarget::InsertImage));

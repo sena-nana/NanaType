@@ -7,6 +7,7 @@
 //! both go through here, so what a screenshot shows is what users read.
 
 use nana_ui::WindowOutputStatus;
+#[cfg(feature = "unofficial-chat")]
 use nanatype_bilibili::ConnectionState;
 use nanatype_blive::{BliveStatus, FatalKind, RelayStatus};
 use nanatype_bridge::{BridgeStatus, Sink};
@@ -77,6 +78,7 @@ pub fn bridge(locale: Locale, status: &BridgeStatus) -> Option<(Sink, LinkState)
 }
 
 /// Bilibili's status line and the chat panel's dot for `status` in `room`.
+#[cfg(feature = "unofficial-chat")]
 pub fn bilibili(locale: Locale, status: &ConnectionState, _room: &str) -> (String, Link) {
     match status {
         ConnectionState::Off => (I18N.t_in(locale, "int-status-off"), Link::Off),
@@ -154,7 +156,7 @@ pub fn blivechat(
                 return (I18N.t_in(locale, "chat-status-no-room"), Link::Off);
             }
             // Never show the auth code itself.
-            let room = match settings.room_kind {
+            let room = match crate::distribution::blive_room_kind(settings) {
                 BliveRoomKind::RoomId => settings.room_id.clone(),
                 BliveRoomKind::AuthCode => I18N.t_in(locale, "int-blive-auth-code"),
             };
@@ -254,6 +256,7 @@ mod tests {
                 texts.push(t);
             }
 
+            #[cfg(feature = "unofficial-chat")]
             for state in [
                 ConnectionState::Off,
                 ConnectionState::NeedsLogin,

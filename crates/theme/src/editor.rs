@@ -27,15 +27,23 @@ pub enum ProjectKind {
     Skin,
     Resources,
     Lua,
+    Sounds,
     Mixed,
 }
 impl ProjectKind {
-    pub const ALL: [Self; 4] = [Self::Skin, Self::Resources, Self::Lua, Self::Mixed];
+    pub const ALL: [Self; 5] = [
+        Self::Skin,
+        Self::Resources,
+        Self::Lua,
+        Self::Sounds,
+        Self::Mixed,
+    ];
     pub fn key(self) -> &'static str {
         match self {
             Self::Skin => "skin",
             Self::Resources => "resources",
             Self::Lua => "lua",
+            Self::Sounds => "sounds",
             Self::Mixed => "mixed",
         }
     }
@@ -44,6 +52,7 @@ impl ProjectKind {
             Self::Skin => vec![PackageCapability::Skin],
             Self::Resources => vec![PackageCapability::Resources],
             Self::Lua => vec![PackageCapability::Lua],
+            Self::Sounds => vec![PackageCapability::Sounds],
             Self::Mixed => vec![
                 PackageCapability::Skin,
                 PackageCapability::Resources,
@@ -56,6 +65,7 @@ impl ProjectKind {
             [PackageCapability::Skin] => Self::Skin,
             [PackageCapability::Resources] => Self::Resources,
             [PackageCapability::Lua] => Self::Lua,
+            [PackageCapability::Sounds] => Self::Sounds,
             _ => Self::Mixed,
         }
     }
@@ -63,6 +73,7 @@ impl ProjectKind {
 
 const SKIN_TEMPLATE: &str =
     "# Dialogue, history and input styling. See docs/skins.md.\n[chrome]\naccent = \"#7c6cf0\"\n";
+const SOUNDS_TEMPLATE: &str = "# Typing, line and effect sounds that replace a skin's. See docs/skins.md.\n# Add audio files to the package and name them here, for example:\n# [sounds.typing]\n# files = [\"sounds/key-1.wav\", \"sounds/key-2.wav\"]\n[sounds]\n";
 const NOTES_TEMPLATE: &str = "first line\nsecond line\n";
 const LUA_TEMPLATE: &str = r#"-- Runs only in an isolated plugin worker, after explicit consent.
 local last = 'waiting for a line'
@@ -130,6 +141,11 @@ pub fn template(kind: ProjectKind, id: &str) -> Result<PackageProject, FileError
     }
     if matches!(kind, ProjectKind::Skin | ProjectKind::Mixed) {
         project.files.insert(MANIFEST.into(), SKIN_TEMPLATE.into());
+    }
+    if kind == ProjectKind::Sounds {
+        project
+            .files
+            .insert(crate::SOUNDS_MANIFEST.into(), SOUNDS_TEMPLATE.into());
     }
     project
         .files
@@ -771,6 +787,7 @@ pub fn apply_metadata(project: &mut PackageProject, metadata: &Metadata) -> Resu
         PackageCapability::Skin,
         PackageCapability::Resources,
         PackageCapability::Lua,
+        PackageCapability::Sounds,
     ] {
         if metadata.capabilities.contains(&c) {
             capabilities.push(format!("{c:?}").to_lowercase());
@@ -805,6 +822,11 @@ pub fn apply_metadata(project: &mut PackageProject, metadata: &Metadata) -> Resu
         && !next.files.contains_key(MANIFEST)
     {
         next.set(MANIFEST, SKIN_TEMPLATE.into())?;
+    }
+    if metadata.capabilities.contains(&PackageCapability::Sounds)
+        && !next.files.contains_key(crate::SOUNDS_MANIFEST)
+    {
+        next.set(crate::SOUNDS_MANIFEST, SOUNDS_TEMPLATE.into())?;
     }
     write_manifest(&mut next, &doc)?;
     *project = next;

@@ -43,6 +43,7 @@ packages-none = 还没有包。导入一个包来添加皮肤、资源或功能�
 packages-kind-skin = 皮肤
 packages-kind-resources = 共享资源
 packages-kind-function = 功能插件
+packages-kind-sounds = 音效包
 
 # Package provenance and explicit script consent
 package-author = 作者

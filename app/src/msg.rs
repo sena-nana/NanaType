@@ -261,6 +261,8 @@ pub enum Msg {
     /// Skin sounds finished decoding.
     SoundsLoaded {
         skin: String,
+        /// The sound pack layered over the skin's sounds.
+        pack: Option<String>,
         bank: crate::services::sounds::Bank,
         errors: Vec<String>,
     },
@@ -279,13 +281,20 @@ pub enum Msg {
     Chat(std::sync::Arc<crate::chat::ChatMessage>),
     /// A referenced picture is now in the local cache. Never adds messages.
     ChatAssetReady(nanatype_model::AssetRef),
+    #[cfg(feature = "unofficial-chat")]
     /// The Bilibili connection changed.
     Bilibili(nanatype_bilibili::SessionEvent),
+    #[cfg(feature = "unofficial-chat")]
     Douyin(nanatype_douyin::SessionEvent),
+    #[cfg(feature = "unofficial-chat")]
     DouyinRefresh,
+    #[cfg(feature = "unofficial-chat")]
     DouyinLogout,
+    #[cfg(feature = "unofficial-chat")]
     DouyinImport(String),
+    #[cfg(feature = "unofficial-chat")]
     Youtube(nanatype_youtube::SessionEvent),
+    #[cfg(feature = "unofficial-chat")]
     /// Connect (again) to the configured YouTube stream.
     YoutubeRefresh,
     Twitch(nanatype_twitch::SessionEvent),
@@ -299,14 +308,23 @@ pub enum Msg {
     TwitchSendConfirm(bool),
     TwitchRetry(nanatype_model::LineId),
     TwitchSkipFailed(nanatype_model::LineId),
+    #[cfg(feature = "unofficial-chat")]
     BilibiliLogin,
+    #[cfg(feature = "unofficial-chat")]
     BilibiliCancelLogin,
+    #[cfg(feature = "unofficial-chat")]
     BilibiliRefresh,
+    #[cfg(feature = "unofficial-chat")]
     BilibiliLogout,
+    #[cfg(feature = "unofficial-chat")]
     BilibiliOwnRoom,
+    #[cfg(feature = "unofficial-chat")]
     BilibiliSendToggle,
+    #[cfg(feature = "unofficial-chat")]
     BilibiliSendConfirm(bool),
+    #[cfg(feature = "unofficial-chat")]
     BilibiliRetry(nanatype_model::LineId),
+    #[cfg(feature = "unofficial-chat")]
     BilibiliSkipFailed(nanatype_model::LineId),
     /// The third-party (blivechat protocol) connection reported.
     Blivechat(nanatype_blive::BliveEvent),
@@ -326,16 +344,32 @@ pub enum Msg {
     ClearReply,
     /// Empty the chat panel.
     ClearChat,
+    #[cfg(feature = "updates")]
     /// The update checker reported.
     Update(crate::services::updater::Event),
+    #[cfg(feature = "updates")]
     CheckUpdate,
+    #[cfg(feature = "updates")]
     DownloadUpdate,
+    #[cfg(feature = "updates")]
     CancelUpdate,
+    #[cfg(feature = "updates")]
     /// Open the downloaded installer (or its folder).
     InstallUpdate,
+    #[cfg(feature = "updates")]
     /// Stop reminding about the release on offer.
     SkipUpdate,
+    #[cfg(feature = "updates")]
     OpenUpdateNotes,
+    /// The Steam Workshop reported.
+    Workshop(nanatype_steam::Event),
+    /// Browse the Workshop for this kind of content.
+    WorkshopBrowse(crate::workshop::Tag),
+    /// Open a subscribed item's Workshop page.
+    WorkshopOpen(u64),
+    WorkshopUnsubscribe(u64),
+    /// Download a subscribed item again.
+    WorkshopDownload(u64),
     /// Show a message in the status line.
     Notice {
         text: String,

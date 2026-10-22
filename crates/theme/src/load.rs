@@ -69,6 +69,11 @@ pub enum SkinOrigin {
     Directory(PathBuf),
     /// Previewed straight from a `.ntpkg` file.
     Archive(PathBuf),
+    /// A read-only folder another program manages: a Steam Workshop item.
+    Workshop {
+        folder: PathBuf,
+        item: u64,
+    },
 }
 
 /// Files of a skin layered over the files of its bases.

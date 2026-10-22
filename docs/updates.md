@@ -1,6 +1,6 @@
 # 检查更新
 
-NanaType 从 GitHub Release 获取新版本。文件可以经第三方代理下载，是否可信只看签名与摘要，与下载来源无关。
+NanaType 从 GitHub Release 获取新版本。Steam 版不含本文的更新检查（不编译 `updates` feature），由 SteamPipe 更新，见 [Steam 版](steam.md)。文件可以经第三方代理下载，是否可信只看签名与摘要，与下载来源无关。
 
 ## 流程
 

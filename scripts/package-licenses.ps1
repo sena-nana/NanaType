@@ -3,10 +3,15 @@
 param(
     [string]$Staged = (Join-Path (Split-Path -Parent $PSScriptRoot) "target\licenses"),
     [string]$Destination,
-    [ValidateSet("app", "editor")][string]$Product = "app"
+    [ValidateSet("app", "editor")][string]$Product = "app",
+    # The Steam edition: its LICENSE and notices come staged by
+    # third-party-notices.ps1 -Steam, without the unofficial chat sources.
+    [switch]$Steam
 )
 # packaging\licenses files only NanaType ships.
 $appOnly = @("LiliaBilibili-MIT.txt", "libvpx-BSD.txt", "KeySounds-CC0.txt", "KeySounds-Bubble-CC-BY-3.0.txt")
+# ...and those the Steam edition leaves out with the Bilibili web source.
+$unofficialOnly = @("LiliaBilibili-MIT.txt")
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $Destination) { $Destination = Join-Path $Staged "THIRD_PARTY_LICENSES.txt" }
@@ -25,7 +30,8 @@ function Add-LicenseSource([string]$Name, [string]$Path, [string]$Category) {
     $licenseSources[$Name] = $Path
 }
 
-foreach ($name in @("LICENSE", "LICENSE-MIT", "THIRD_PARTY_NOTICES.md")) {
+$project = if ($Steam) { @("LICENSE-MIT") } else { @("LICENSE", "LICENSE-MIT", "THIRD_PARTY_NOTICES.md") }
+foreach ($name in $project) {
     Add-LicenseSource $name (Join-Path $repoRoot $name) "project"
 }
 foreach ($name in @("WASMOON-LICENSE", "LUA-LICENSE")) {
@@ -53,12 +59,13 @@ foreach ($folder in @((Join-Path $repoRoot "packaging\licenses"), $Staged)) {
     foreach ($file in (Get-ChildItem -LiteralPath $folder -File -Recurse | Sort-Object FullName)) {
         $name = [IO.Path]::GetRelativePath($folder, $file.FullName).Replace('\', '/')
         if ($Product -eq "editor" -and $appOnly -contains $name) { continue }
+        if ($Steam -and $unofficialOnly -contains $name) { continue }
         Add-LicenseSource $name $file.FullName "packaging"
     }
 }
 
 $text = [Text.StringBuilder]::new()
-$title = if ($Product -eq "editor") { "NanaType Editor" } else { "NanaType" }
+$title = if ($Product -eq "editor") { "NanaType Editor" } elseif ($Steam) { "NanaType (Steam edition)" } else { "NanaType" }
 [void]$text.AppendLine("$title redistribution licences and notices")
 [void]$text.AppendLine("Every named section below retains the complete source text.")
 [void]$text.AppendLine()

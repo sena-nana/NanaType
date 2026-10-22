@@ -27,7 +27,7 @@ fn message(seq: u64) -> Arc<ChatMessage> {
             name: format!("观众 {seq} very long viewer name"),
             avatar: None,
         },
-        guard: nanatype_bilibili::Guard::None,
+        guard: nanatype_chat::Guard::None,
         owner: false,
         admin: false,
         medal_level: 0,

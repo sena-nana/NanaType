@@ -1,0 +1,16 @@
+[package]
+name = "nanatype-steam"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "NanaType on Steam: launch through Steam and read subscribed Workshop items"
+
+[features]
+# Link the Steamworks SDK. Without it every call is inert, so the app needs
+# no Steam-specific code paths to build without Steam.
+steamworks = ["dep:steamworks"]
+
+[dependencies]
+steamworks = { version = "=0.13.1", optional = true }
+crossbeam-channel = "0.5"

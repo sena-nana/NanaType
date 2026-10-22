@@ -1,0 +1,13 @@
+# Copy to .cargo/config.toml (gitignored) and fill in the Steam ids to build
+# and package the Steam edition (docs/steam.md). Cargo passes [env] to every
+# build; the package scripts read the same values. CI sets them as secrets.
+[env]
+# The Steam app. A release Steam build refuses to build without it; debug
+# builds fall back to Valve's test app, Spacewar (480).
+NANATYPE_STEAM_APP_ID = "480"
+# One SteamPipe depot per platform, for scripts/package*.
+NANATYPE_STEAM_DEPOT_WINDOWS = "481"
+NANATYPE_STEAM_DEPOT_MACOS = "482"
+# Workshop tags the browse buttons ask for (these are the defaults).
+# NANATYPE_STEAM_TAG_SKIN = "Skin"
+# NANATYPE_STEAM_TAG_SOUNDS = "Sound Pack"

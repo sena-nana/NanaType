@@ -8,9 +8,20 @@
 
 #![recursion_limit = "512"]
 
+// A Steam build updates through SteamPipe and ships no reverse-engineered
+// chat; see docs/steam.md for the feature sets.
+#[cfg(all(
+    feature = "steam",
+    any(feature = "updates", feature = "unofficial-chat")
+))]
+compile_error!(
+    "the `steam` feature excludes `updates` and `unofficial-chat`: build with --no-default-features --features builtin-fonts,steam"
+);
+
 pub mod app;
 pub mod assets;
 pub mod chat;
+pub mod distribution;
 pub mod host;
 pub mod msg;
 pub mod output;
@@ -22,6 +33,7 @@ pub mod services;
 pub mod stickers;
 pub mod ui;
 pub mod windows;
+pub mod workshop;
 
 pub use nanatype_frame::{clock, debug_log, localtime, paths, skin_fonts, skin_theme};
 
@@ -38,10 +50,19 @@ pub fn run() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     debug_log("main start");
+    // Started outside Steam, a Steam release relaunches through it; the copy
+    // Steam starts must find the single-instance lock free.
+    if std::env::var_os(nana_ui::SELF_CHECK_ENV).is_none()
+        && nanatype_steam::restart_through_steam()
+    {
+        debug_log("relaunching through Steam");
+        return ExitCode::SUCCESS;
+    }
     if !instance::claim(Product::APP) {
         debug_log("secondary instance; exiting");
         return ExitCode::SUCCESS;
     }
+    services::steam::connect();
     clock::now_ms();
 
     // The macro embeds the identity marker the packager validates against.

@@ -46,6 +46,11 @@ pub use material::*;
 pub use responsive::*;
 mod shader;
 pub use shader::*;
+mod sound_pack;
+pub use sound_pack::{
+    LoadedSoundPack, SOUNDS_MANIFEST, SoundPackEntry, layer as layer_sounds, read_sounds,
+    supplies_typing,
+};
 
 #[cfg(test)]
 mod tests;
@@ -66,5 +71,8 @@ pub use load::{
     standalone_manifest,
 };
 pub use manifest::*;
-pub use registry::{DEFAULT_SKIN, InstallOutcome, SkinEntry, SkinRegistry};
+pub use registry::{
+    DEFAULT_SKIN, ExternalProblem, ExternalRoot, ExternalStatus, InstallOutcome, SkinEntry,
+    SkinRegistry,
+};
 pub use toml::Table as TomlTable;

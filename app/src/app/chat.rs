@@ -1,6 +1,7 @@
 use super::App;
 use crate::msg::Msg;
-use nanatype_core::Cmd;
+use nanatype_core::{Cmd, Core, Effects};
+use nanatype_model::outgoing;
 use std::sync::Arc;
 
 impl App {
@@ -32,4 +33,31 @@ impl App {
             _ => unreachable!("not a chat message"),
         }
     }
+}
+
+/// All local commands, including the editor's Send, pass this boundary before
+/// consuming the draft or producing submission/history events.
+pub(super) fn handle_command(
+    core: &mut Core,
+    cmd: Cmd,
+    synchronizing: bool,
+    now: u64,
+) -> Result<Effects, ()> {
+    if synchronizing {
+        let invalid = match &cmd {
+            Cmd::Send => !core.draft().is_blank() && outgoing::plain_text(core.draft()).is_err(),
+            Cmd::SendMarkup(markup) => {
+                let doc = nanatype_markup::parse(markup).doc;
+                !doc.is_blank() && outgoing::plain_text(&doc).is_err()
+            }
+            Cmd::DraftChanged(doc) => {
+                outgoing::image_count(doc) > outgoing::image_count(core.draft())
+            }
+            _ => false,
+        };
+        if invalid {
+            return Err(());
+        }
+    }
+    Ok(core.handle(cmd, now))
 }

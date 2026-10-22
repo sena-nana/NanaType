@@ -245,6 +245,11 @@ pub struct SoundSettings {
     pub keystroke_volume: f32,
     /// Output device name; `None` is the system default.
     pub device: Option<String>,
+    /// Installed sound pack layered over the skin's sounds; `None` plays the
+    /// skin's own. Kept when the pack is missing, so a pack this build cannot
+    /// see (a Workshop item, say) comes back with the build that can.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pack: Option<String>,
 }
 
 impl Default for SoundSettings {
@@ -259,6 +264,7 @@ impl Default for SoundSettings {
             keystroke_scheme: KeystrokeScheme::Mechanical,
             keystroke_volume: 0.6,
             device: None,
+            pack: None,
         }
     }
 }

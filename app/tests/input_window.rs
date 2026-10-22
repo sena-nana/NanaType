@@ -393,6 +393,7 @@ fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
     }
 }
 
+#[cfg(feature = "unofficial-chat")]
 #[test]
 fn dock_inserts_real_stickers_and_disables_them_during_sync_sending() {
     for width in [720, 1200] {

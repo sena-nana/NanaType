@@ -79,67 +79,72 @@ fn source_choice(ui: Ui) -> AnyView {
 }
 
 fn server_section(ui: Ui) -> AnyView {
-    section(
-        ui,
-        "int-blive-section",
-        vec![
-            row(
+    let mut rows = Vec::new();
+    // A room number has blivechat read Bilibili's web danmaku; a build without
+    // the unofficial sources offers only the open platform's auth code.
+    if crate::distribution::UNOFFICIAL_CHAT {
+        rows.push(row(
+            ui,
+            "int-blive-room-kind",
+            None,
+            segmented(
                 ui,
-                "int-blive-room-kind",
-                None,
-                segmented(
+                select_keys(
                     ui,
-                    select_keys(
-                        ui,
-                        &[
-                            ("auth_code", "int-blive-auth-code"),
-                            ("room_id", "int-blive-room-id"),
-                        ],
-                    ),
-                    |s| match s.integrations.blivechat.room_kind {
-                        BliveRoomKind::AuthCode => "auth_code".into(),
-                        BliveRoomKind::RoomId => "room_id".into(),
-                    },
-                    |s, v| {
-                        s.integrations.blivechat.room_kind = match v {
-                            "room_id" => BliveRoomKind::RoomId,
-                            _ => BliveRoomKind::AuthCode,
-                        }
-                    },
+                    &[
+                        ("auth_code", "int-blive-auth-code"),
+                        ("room_id", "int-blive-room-id"),
+                    ],
                 ),
-            ),
-            dynamic(
-                move || ui.settings.with(|s| s.integrations.blivechat.room_kind),
-                move |kind| match kind {
-                    BliveRoomKind::AuthCode => row(ui, "int-blive-auth-code", None, auth_field(ui)),
-                    BliveRoomKind::RoomId => row(ui, "int-blive-room-id", None, room_field(ui)),
+                |s| match s.integrations.blivechat.room_kind {
+                    BliveRoomKind::AuthCode => "auth_code".into(),
+                    BliveRoomKind::RoomId => "room_id".into(),
                 },
-            )
-            .into_any(),
-            row(
-                ui,
-                "int-blive-host",
-                None,
-                code_text(
-                    ui,
-                    "127.0.0.1".into(),
-                    crate::ui::kit::field::SM,
-                    |s| s.integrations.blivechat.host.clone(),
-                    |s, v| s.integrations.blivechat.host = v,
-                ),
+                |s, v| {
+                    s.integrations.blivechat.room_kind = match v {
+                        "room_id" => BliveRoomKind::RoomId,
+                        _ => BliveRoomKind::AuthCode,
+                    }
+                },
             ),
-            row(
+        ));
+    }
+    rows.extend([
+        dynamic(
+            move || {
+                ui.settings
+                    .with(|s| crate::distribution::blive_room_kind(&s.integrations.blivechat))
+            },
+            move |kind| match kind {
+                BliveRoomKind::AuthCode => row(ui, "int-blive-auth-code", None, auth_field(ui)),
+                BliveRoomKind::RoomId => row(ui, "int-blive-room-id", None, room_field(ui)),
+            },
+        )
+        .into_any(),
+        row(
+            ui,
+            "int-blive-host",
+            None,
+            code_text(
                 ui,
-                "int-blive-port",
-                None,
-                port(
-                    ui,
-                    |s| s.integrations.blivechat.port,
-                    |s, v| s.integrations.blivechat.port = v,
-                ),
+                "127.0.0.1".into(),
+                crate::ui::kit::field::SM,
+                |s| s.integrations.blivechat.host.clone(),
+                |s, v| s.integrations.blivechat.host = v,
             ),
-        ],
-    )
+        ),
+        row(
+            ui,
+            "int-blive-port",
+            None,
+            port(
+                ui,
+                |s| s.integrations.blivechat.port,
+                |s, v| s.integrations.blivechat.port = v,
+            ),
+        ),
+    ]);
+    section(ui, "int-blive-section", rows)
 }
 
 /// The room number: typed freely, applied on Enter or with the button so a

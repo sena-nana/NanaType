@@ -111,7 +111,7 @@ node scripts/comet_publish.mjs "ws://127.0.0.1:12451/comet?token=…"
 
 ### 检查更新
 
-**设置 › 关于** 检查 GitHub Release 上的新版本，**设置 › 通用 › 更新** 默认每天自动检查一次。新版本的安装包校验通过后才会打开。下载同时尝试 GitHub 和内置代理（gh-proxy.com、ghfast.top、ghproxy.net），也可加一个自定义代理；代理只负责传输，版本清单带 Ed25519 签名，安装包按 SHA-256 校验。详见 [检查更新](docs/updates.md)。
+Steam 版由 Steam 更新，没有这一项。GitHub 版在 **设置 › 关于** 检查 GitHub Release 上的新版本，**设置 › 通用 › 更新** 默认每天自动检查一次。新版本的安装包校验通过后才会打开。下载同时尝试 GitHub 和内置代理（gh-proxy.com、ghfast.top、ghproxy.net），也可加一个自定义代理；代理只负责传输，版本清单带 Ed25519 签名，安装包按 SHA-256 校验。详见 [检查更新](docs/updates.md)。
 
 ## 台词标记
 
@@ -146,6 +146,8 @@ API Hash、手机号、验证码及密码只在登录期间使用，不写入配
 ## 皮肤
 
 皮肤是一个含 `skin.toml` 的文件夹或 `.ntpkg` 压缩包，可继承内置皮肤只写差异。格式见 [docs/skins.md](docs/skins.md)。
+
+音效包是含 `sounds.toml` 的包，在 **设置 › 播放 › 音效包** 中选择后，替换皮肤自带的打字音、开场与继续音效，其余音效仍由皮肤提供，见 [音效包](docs/skins.md#音效包)。
 
 ## 构建
 
@@ -200,6 +202,18 @@ scripts/package-macos.sh --product editor
 Syphon.framework 放在 `Contents/Frameworks`，完整许可文本在 `Contents/Resources/THIRD_PARTY_LICENSES.txt`（由 `scripts/macos-licenses.py` 按 macOS 目标的依赖生成）。
 
 推送 `vX.Y.Z` 标签时，`.github/workflows/release.yml` 在 Windows 和 macOS 上运行这两个脚本，生成签名的更新清单并创建草稿 Release，见 [检查更新](docs/updates.md)。
+
+Steam 版用 `steam` feature 构建：不含更新检查和 B 站网页、抖音、YouTube 弹幕来源，皮肤页与播放页可访问创意工坊订阅，设置与 GitHub 版共用。Steam ID 放在不提交的 `.cargo/config.toml`（参照 `.cargo/config.example.toml`），然后：
+
+```bash
+pwsh scripts/package.ps1 -Steam
+```
+
+```bash
+scripts/package-macos.sh --steam
+```
+
+详见 [Steam 版](docs/steam.md)。
 
 开发辅助环境变量（仅调试构建或显式设置时生效）：
 

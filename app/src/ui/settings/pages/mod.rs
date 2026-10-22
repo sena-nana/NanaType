@@ -27,6 +27,7 @@ mod playback;
 mod skin_grid;
 mod skins;
 mod windows;
+mod workshop;
 
 pub use self::about::font_licence_panel;
 
@@ -97,6 +98,18 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
 /// The open page's page-wide actions, shown in its header.
 pub fn actions(ui: Ui, page: Page) -> Option<AnyView> {
     match page {
+        Page::Skins if crate::distribution::STEAM => Some(
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::CONTROL)
+                    .align(AlignSpec::Center),
+            )
+            .children((
+                workshop::browse_button(ui, crate::workshop::Tag::Skins),
+                primary(ui, "skins-import", || Msg::PickFile(FileTarget::ImportSkin)),
+            ))
+            .into_any(),
+        ),
         Page::Skins => Some(primary(ui, "skins-import", || {
             Msg::PickFile(FileTarget::ImportSkin)
         })),
@@ -139,13 +152,7 @@ fn speaker_field(ui: Ui) -> AnyView {
             }),
     )
     .children(dynamic(
-        move || {
-            ui.settings.with(|s| s.integrations.bilibili.sync_profile)
-                && matches!(
-                    ui.bilibili.get().account,
-                    nanatype_bilibili::AccountState::Ready(_)
-                )
-        },
+        move || crate::ui::sources::profile_bound(ui),
         move |bound| {
             if *bound {
                 dynamic(

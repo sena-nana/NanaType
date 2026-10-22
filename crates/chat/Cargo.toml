@@ -1,0 +1,10 @@
+[package]
+name = "nanatype-chat"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "NanaType live chat events shared by every chat source"
+
+[dependencies]
+serde_json.workspace = true

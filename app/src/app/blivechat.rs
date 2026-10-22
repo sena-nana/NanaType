@@ -179,7 +179,7 @@ impl App {
                 }),
             ),
             (true, BlivechatSource::Server) => {
-                let room = match b.room_kind {
+                let room = match crate::distribution::blive_room_kind(b) {
                     BliveRoomKind::AuthCode => {
                         // Only read the secret store once the code is wanted.
                         let code = self.blivechat_auth.get();

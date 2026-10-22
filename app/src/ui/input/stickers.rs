@@ -92,7 +92,9 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
                         },
                     ))
                     .children(content)
-                    .bind(move |b: &mut Button| b.disabled = ui.bilibili.get().sending)
+                    .bind(move |b: &mut Button| {
+                        b.disabled = crate::ui::sources::plain_text_only(ui)
+                    })
                     .on_cx(move |_, _: &Activate, cx| {
                         if let Some(open) = close_on_insert {
                             open.set(false);

@@ -1,3 +1,5 @@
+#![cfg(feature = "unofficial-chat")]
+
 mod common;
 
 use nanatype::ui::{Ui, settings};

@@ -9,7 +9,7 @@ use nanatype_audio::{AudioHandle, Bus, Pcm, SoundId, Voice, decode};
 use nanatype_core::DEFAULT_TYPING_VARIANTS;
 use nanatype_playback::CueKind;
 use nanatype_settings::KeystrokeScheme;
-use nanatype_theme::LoadedSkin;
+use nanatype_theme::{LoadedSkin, LoadedSoundPack, SkinFiles, Sounds};
 
 pub type Bank = Vec<(SoundId, Arc<Pcm>)>;
 
@@ -187,13 +187,14 @@ fn synth_click(variant: u8) -> Pcm {
     }
 }
 
-/// Decode every sound of `skin` (runs on a worker thread).
-pub fn load(skin: &LoadedSkin) -> (Bank, Vec<String>) {
+/// Decode every sound of `skin`, with `pack` layered over it (runs on a
+/// worker thread). Each sound comes from whichever of the two supplies it.
+pub fn load(skin: &LoadedSkin, pack: Option<&LoadedSoundPack>) -> (Bank, Vec<String>) {
     let mut bank: Bank = Vec::new();
     let mut errors = Vec::new();
-    let mut read = |path: &str| -> Option<Arc<Pcm>> {
+    let mut read = |files: &dyn SkinFiles, path: &str| -> Option<Arc<Pcm>> {
         let ext = path.rsplit('.').next().map(str::to_owned);
-        match skin.files.read(path) {
+        match files.read(path) {
             Ok(bytes) => match decode(bytes, ext.as_deref()) {
                 Ok(pcm) => Some(Arc::new(pcm)),
                 Err(e) => {
@@ -207,30 +208,52 @@ pub fn load(skin: &LoadedSkin) -> (Bank, Vec<String>) {
             }
         }
     };
-    let sounds = &skin.skin.sounds;
+    let own = (&*skin.files, &skin.skin.sounds);
+    let from_pack = |defined: fn(&Sounds) -> bool| {
+        pack.filter(|p| defined(&p.sounds))
+            .map_or(own, |p| (&*p.files, &p.sounds))
+    };
+    let (files, sounds) = from_pack(nanatype_theme::supplies_typing);
     if sounds.typing.files.is_empty() {
         for v in 0..DEFAULT_TYPING_VARIANTS {
             bank.push((typing_id(v), Arc::new(synth_click(v))));
         }
     } else {
         for (i, file) in sounds.typing.files.iter().enumerate() {
-            if let Some(pcm) = read(file) {
+            if let Some(pcm) = read(files, file) {
                 bank.push((typing_id(i as u8), pcm));
             }
         }
     }
-    for (name, file) in &sounds.se {
-        if let Some(pcm) = read(file) {
+    let mut effects: Vec<(&dyn SkinFiles, &String, &String)> = own
+        .1
+        .se
+        .iter()
+        .filter(|(name, _)| pack.is_none_or(|p| !p.sounds.se.contains_key(*name)))
+        .map(|(name, file)| (own.0, name, file))
+        .collect();
+    if let Some(p) = pack {
+        effects.extend(
+            p.sounds
+                .se
+                .iter()
+                .map(|(name, file)| (&*p.files, name, file)),
+        );
+    }
+    for (files, name, file) in effects {
+        if let Some(pcm) = read(files, file) {
             bank.push((se_id(name), pcm));
         }
     }
+    let (files, sounds) = from_pack(|s| s.open.is_some());
     if let Some(file) = &sounds.open
-        && let Some(pcm) = read(file)
+        && let Some(pcm) = read(files, file)
     {
         bank.push((OPEN.into(), pcm));
     }
+    let (files, sounds) = from_pack(|s| s.advance.is_some());
     if let Some(file) = &sounds.advance
-        && let Some(pcm) = read(file)
+        && let Some(pcm) = read(files, file)
     {
         bank.push((ADVANCE.into(), pcm));
     }
@@ -249,11 +272,12 @@ pub fn install(audio: &AudioHandle, previous: &Bank, next: &Bank) {
     }
 }
 
-/// The voice a cue plays, if it plays one.
-pub fn voice(cue: &CueKind, skin: &LoadedSkin) -> Option<Voice> {
+/// The voice a cue plays, if it plays one, with the sounds in play (the
+/// skin's, with any sound pack layered over them).
+pub fn voice(cue: &CueKind, sounds: &Sounds) -> Option<Voice> {
     match cue {
         CueKind::TypeSound { variant, seed, .. } => {
-            let t = &skin.skin.sounds.typing;
+            let t = &sounds.typing;
             let r = (seed.wrapping_mul(0x2545_F491) >> 8) as f32 / (1u32 << 24) as f32;
             Some(Voice {
                 sound: typing_id(*variant),

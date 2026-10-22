@@ -135,6 +135,7 @@ pub fn link_badge(ui: Ui, get: fn(&Status) -> &LinkState) -> AnyView {
 
 /// Bilibili's badge: its own status line and the chat panel's dot state,
 /// drawn like the other links.
+#[cfg(feature = "unofficial-chat")]
 pub fn bilibili_badge(ui: Ui) -> AnyView {
     chat_badge(ui, |s| (&s.bilibili, s.bilibili_link))
 }

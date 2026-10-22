@@ -12,6 +12,8 @@ pub enum PackageCapability {
     Skin,
     Resources,
     Lua,
+    /// A sound pack: `sounds.toml` (see `crate::sound_pack`).
+    Sounds,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -100,6 +102,11 @@ impl PackageManifest {
                 "the skin capability and skin.toml must appear together",
             ));
         }
+        if has(PackageCapability::Sounds) != exists(crate::SOUNDS_MANIFEST) {
+            return Err(invalid(
+                "the sounds capability and sounds.toml must appear together",
+            ));
+        }
         if let Some(entry) = self.entry()
             && !exists(entry)
         {
@@ -125,6 +132,7 @@ impl PackageManifest {
                         PACKAGE_MANIFEST,
                         crate::INTEGRITY_FILE,
                         crate::load::MANIFEST,
+                        crate::SOUNDS_MANIFEST,
                     ]
                     .contains(&path.as_str())
                     && self.entry() != Some(path)
@@ -165,7 +173,7 @@ impl PackageManifest {
         if !valid_id(&self.meta.id)
             || !exact_version(&self.meta.version)
             || self.capabilities.is_empty()
-            || self.capabilities.len() > 3
+            || self.capabilities.len() > 4
             || self.dependencies.len() > 32
         {
             return Err(invalid(

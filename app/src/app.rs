@@ -1,7 +1,9 @@
 //! Application state and the single update function.
+#[cfg(feature = "unofficial-chat")]
 pub mod bilibili;
 pub mod blivechat;
 mod chat;
+#[cfg(feature = "unofficial-chat")]
 pub mod douyin;
 mod editor;
 mod live;
@@ -11,8 +13,12 @@ mod startup;
 mod stickers;
 mod system;
 pub mod twitch;
+mod unofficial;
+#[cfg(feature = "updates")]
 pub mod update;
 mod window;
+mod workshop;
+#[cfg(feature = "unofficial-chat")]
 pub mod youtube;
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -25,7 +31,8 @@ use nana_ui::{CompiledTheme, RuntimeProgramContext, RuntimeProgramUpdate};
 use nana_ui_core::{FileDialogKind, FileDialogRequest, FileFilter};
 use nana_ui_platform::host::WindowCommand;
 use nanatype_audio::{AudioHandle, Bus, Scheduled};
-use nanatype_bilibili::{BilibiliConfig, BilibiliHandle};
+#[cfg(feature = "unofficial-chat")]
+use nanatype_bilibili::BilibiliHandle;
 use nanatype_bridge::{
     BridgeEvent, BridgeHandle, BridgeStatus, LipSync, OscConfig, Sink, VtsConfig, WsConfig,
 };
@@ -35,7 +42,7 @@ use nanatype_markup::{parse, serialize, serialize_line};
 use nanatype_model::{AssetRef, Document, Inline};
 use nanatype_playback::CueKind;
 use nanatype_settings::{GeometryStore, InputPresence, LoadNote, SendKey, Settings};
-use nanatype_theme::{LoadedSkin, SkinRegistry};
+use nanatype_theme::{LoadedSkin, LoadedSoundPack, SkinRegistry};
 
 use crate::assets::AssetLibrary;
 use crate::chat::ChatMessage;
@@ -90,22 +97,35 @@ pub struct App {
     pub scheduler: Scheduler,
     pub audio: AudioHandle,
     pub bank: Bank,
+    /// The chosen sound pack, layered over the skin's sounds.
+    sound_pack: Option<LoadedSoundPack>,
+    /// A chosen pack that is not installed (or does not load), already reported.
+    sound_pack_missing: Option<String>,
     keys: sounds::Keys,
     pub bridge: BridgeHandle,
     /// The Bilibili connection and the thread saving its pictures.
+    #[cfg(feature = "unofficial-chat")]
     pub bilibili: BilibiliHandle,
+    #[cfg(feature = "unofficial-chat")]
     pub douyin: nanatype_douyin::DouyinHandle,
+    #[cfg(feature = "unofficial-chat")]
     pub youtube: nanatype_youtube::YoutubeHandle,
     pub twitch: nanatype_twitch::TwitchHandle,
     /// Third-party chat: the blivechat client and the 彗星号 relay it can join.
     pub blivechat: nanatype_blive::BliveHandle,
     pub comet_relay: nanatype_blive::RelayHandle,
+    /// Steam: Workshop subscriptions (inert outside the Steam build).
+    steam: nanatype_steam::SteamHandle,
+    workshop: crate::workshop::Workshop,
     blivechat_auth: blivechat::AuthCode,
+    #[cfg(feature = "updates")]
     updater: crate::services::updater::Updater,
+    #[cfg(feature = "updates")]
     pending_update: update::Pending,
     _chat_assets: ChatAssets,
     /// Live chat, oldest first, capped at the panel's size.
     chat: VecDeque<Arc<ChatMessage>>,
+    #[cfg(feature = "unofficial-chat")]
     bili_echoes: bilibili::Echoes,
     live_chat: live::LiveChat,
     pub hotkeys: Hotkeys,
@@ -183,7 +203,18 @@ impl App {
                 })
             }
         });
-        let registry = SkinRegistry::new(Some(paths.packages()), env!("CARGO_PKG_VERSION"));
+        // Installed Workshop items are read from the first scan, so a chosen
+        // Workshop skin starts without falling back first.
+        let (steam, availability) = crate::services::steam::take();
+        let workshop = crate::workshop::Workshop::new(
+            availability,
+            steam.as_ref().map(|s| s.items()).unwrap_or_default(),
+        );
+        let registry = SkinRegistry::with_external(
+            Some(paths.packages()),
+            env!("CARGO_PKG_VERSION"),
+            workshop.roots(),
+        );
         let (loaded, fallback) = registry.load_scanned_or_default(&settings.skin.id);
         let skin = Arc::new(skin_theme::personalized(
             &loaded.skin,
@@ -201,7 +232,7 @@ impl App {
         ));
         let ui = startup::ui(ctx, &settings, &skin, locale, &geometry, system_dark);
 
-        let workers = startup::Workers::start(&paths, &settings, post.clone());
+        let workers = startup::Workers::start(&paths, &settings, steam, post.clone());
         let mut core = Core::new(settings.clone(), skin.clone());
         core.handle(
             Cmd::SetReducedMotion(settings.playback.reduced_motion || ctx.reduced_motion()),
@@ -230,19 +261,29 @@ impl App {
             scheduler: workers.scheduler,
             audio: workers.audio,
             bank: Vec::new(),
+            sound_pack: None,
+            sound_pack_missing: None,
             keys: sounds::Keys::default(),
             bridge: workers.bridge,
+            #[cfg(feature = "unofficial-chat")]
             bilibili: workers.bilibili,
+            #[cfg(feature = "unofficial-chat")]
             douyin: workers.douyin,
+            #[cfg(feature = "unofficial-chat")]
             youtube: workers.youtube,
             twitch: workers.twitch,
             blivechat: workers.blivechat,
             comet_relay: workers.comet_relay,
+            steam: workers.steam,
+            workshop,
             blivechat_auth,
+            #[cfg(feature = "updates")]
             updater: workers.updater,
+            #[cfg(feature = "updates")]
             pending_update: Default::default(),
             _chat_assets: workers.chat_assets,
             chat: VecDeque::new(),
+            #[cfg(feature = "unofficial-chat")]
             bili_echoes: Default::default(),
             live_chat: Default::default(),
             hotkeys: workers.hotkeys,
@@ -328,6 +369,7 @@ impl App {
 
     /// Fonts, skin, assets, services and tray state for a newly built app.
     fn finish_startup(&mut self, locale: Locale) {
+        self.sync_sound_pack();
         self.register_fonts();
         self.apply_skin();
         self.refresh_skin_rows();
@@ -348,6 +390,7 @@ impl App {
             Ordering::Relaxed,
         );
         self.request_displays();
+        #[cfg(feature = "updates")]
         self.check_update_on_start();
         if !self.settings.general.onboarding_done {
             self.open_settings();
@@ -360,7 +403,7 @@ impl App {
 
     /// Lines also go to a live chat, which accepts plain text only.
     pub fn synchronizing(&self) -> bool {
-        self.ui.bilibili.get_untracked().sending || self.ui.twitch.get_untracked().sending
+        self.unofficial_sending() || self.ui.twitch.get_untracked().sending
     }
 
     pub fn notice(&mut self, text: String, error: bool) {
@@ -525,6 +568,44 @@ impl App {
         let rows = crate::ui::skin_rows(&self.registry, locale);
         self.ui.skins.set(Arc::new(rows));
         crate::ui::retire_skin_urls(self.ui, previous);
+        self.ui
+            .sound_packs
+            .set(Arc::new(crate::ui::sound_pack_rows(&self.registry, locale)));
+        self.publish_workshop();
+        if self.sync_sound_pack() {
+            self.apply_skin();
+            self.load_sounds();
+        }
+    }
+
+    /// Take the chosen sound pack from the last scan; true when what plays
+    /// changed. A pack that is missing or broken leaves the skin's sounds
+    /// playing and is reported once; the setting stays for when it returns.
+    fn sync_sound_pack(&mut self) -> bool {
+        let wanted = self.settings.sound.pack.clone();
+        let entry = wanted
+            .as_deref()
+            .and_then(|id| self.registry.sound_pack(id));
+        let next = entry.and_then(|e| e.pack.clone());
+        if let Some(id) = &wanted
+            && next.is_none()
+            && self.sound_pack_missing.as_ref() != Some(id)
+        {
+            let detail = entry
+                .and_then(|e| e.errors.first())
+                .map(|d| format!(": {d}"))
+                .unwrap_or_default();
+            let text = self
+                .ui
+                .tr("sound-pack-missing", &[("id", id.as_str().into())]);
+            self.notice(format!("{text}{detail}"), true);
+        }
+        self.sound_pack_missing = wanted.filter(|_| next.is_none());
+        let key =
+            |p: &Option<LoadedSoundPack>| p.as_ref().map(|p| (p.id.clone(), p.sounds.clone()));
+        let changed = key(&next) != key(&self.sound_pack);
+        self.sound_pack = next;
+        changed
     }
 
     fn sync_tray_skins(&mut self) {
@@ -643,11 +724,13 @@ impl App {
 
     fn load_sounds(&self) {
         let skin = self.loaded.clone();
+        let pack = self.sound_pack.clone();
         let ctx = self.ctx.clone();
         std::thread::spawn(move || {
-            let (bank, errors) = sounds::load(&skin);
+            let (bank, errors) = sounds::load(&skin, pack.as_ref());
             ctx.dispatch(Msg::SoundsLoaded {
                 skin: skin.skin.meta.id.clone(),
+                pack: pack.map(|p| p.id),
                 bank,
                 errors,
             });
@@ -836,6 +919,9 @@ impl App {
     fn apply_skin(&mut self) {
         let mut personalized =
             skin_theme::personalized(&self.loaded.skin, &self.settings, &self.settings.skin.id);
+        if let Some(pack) = &self.sound_pack {
+            personalized.sounds = nanatype_theme::layer_sounds(&personalized.sounds, &pack.sounds);
+        }
         if let (Some(role), Some(family)) = (&mut personalized.fonts.latin, &self.skin_latin_family)
         {
             role.families.insert(0, family.clone());
@@ -911,20 +997,7 @@ impl App {
         self.bridge.set_ws(i.websocket.enabled.then_some(WsConfig {
             port: i.websocket.port,
         }));
-        let b = &i.bilibili;
-        let config = BilibiliConfig {
-            enabled: b.enabled
-                && (b.room.is_empty() || b.room.parse::<u64>().is_ok_and(|id| id > 0)),
-            room: b.room.trim().parse().ok().filter(|id| *id > 0),
-        };
-        let previous_epoch = self.bilibili.epoch();
-        self.bilibili.set(config);
-        if self.bilibili.epoch() != previous_epoch {
-            self.bilibili_reconnecting();
-        }
-        self.sync_bilibili_speaker();
-        self.douyin_configure();
-        self.youtube_configure();
+        self.unofficial_configure(&i);
         self.twitch_configure();
         self.blivechat_configure();
         self.edit_status(|s| {
@@ -1080,6 +1153,7 @@ impl App {
         let chrome_changed = prev.skin.chrome != s.skin.chrome;
         let assets_changed = prev.assets.sticker_dirs != s.assets.sticker_dirs;
         let device_changed = prev.sound.device != s.sound.device;
+        let pack_changed = prev.sound.pack != s.sound.pack;
         let autostart_changed = prev.general.launch_at_login != s.general.launch_at_login;
         if prev.general.input_skin_preview != s.general.input_skin_preview {
             self.focus_editor = true;
@@ -1131,6 +1205,10 @@ impl App {
         }
         if device_changed {
             self.audio.set_device(self.settings.sound.device.clone());
+        }
+        if pack_changed && self.sync_sound_pack() {
+            self.apply_skin();
+            self.load_sounds();
         }
         if autostart_changed
             && let Err(e) = crate::services::set_autostart(self.settings.general.launch_at_login)
@@ -1216,8 +1294,7 @@ impl App {
         }
         let is_send = matches!(cmd, Cmd::Send);
         let synchronizing = self.synchronizing();
-        let fx = match bilibili::handle_command(&mut self.core, cmd, synchronizing, clock::now_ms())
-        {
+        let fx = match chat::handle_command(&mut self.core, cmd, synchronizing, clock::now_ms()) {
             Ok(fx) => fx,
             Err(()) => {
                 self.notice(self.ui.now_t("bili-images-unavailable"), true);
@@ -1252,7 +1329,7 @@ impl App {
     }
 
     fn play_cue_now(&mut self, cue: &CueKind) {
-        if let Some(v) = sounds::voice(cue, &self.loaded) {
+        if let Some(v) = sounds::voice(cue, &self.skin.sounds) {
             self.audio.play(v);
         } else {
             self.run(Cmd::CueFired(cue.clone()));
@@ -1271,7 +1348,7 @@ impl App {
             let mut audio = Vec::new();
             for cue in batch.cues.iter() {
                 let at = batch.origin_ms + u64::from(cue.at_ms);
-                match sounds::voice(&cue.kind, &self.loaded) {
+                match sounds::voice(&cue.kind, &self.skin.sounds) {
                     Some(voice) => audio.push(Scheduled {
                         at: clock::instant(at),
                         voice,
@@ -1297,7 +1374,7 @@ impl App {
             });
         }
         for event in &fx.events {
-            self.bilibili_submitted(event);
+            self.unofficial_submitted(event);
             self.twitch_submitted(event);
             self.peer_submitted(event);
             self.bridge_event(event);
@@ -1763,6 +1840,7 @@ impl App {
             Ok((outcome, registry)) => {
                 self.plugin_activation.cancel(self.ui);
                 self.registry = *registry;
+                self.reapply_workshop();
                 self.skin_reload.invalidate();
                 self.refresh_skin_rows();
                 self.sync_tray_skins();
@@ -1872,6 +1950,7 @@ impl App {
             | Msg::ChatMention { .. }
             | Msg::ClearReply
             | Msg::ClearChat) => self.chat_msg(m),
+            #[cfg(feature = "unofficial-chat")]
             m @ (Msg::Bilibili(_)
             | Msg::BilibiliLogin
             | Msg::BilibiliCancelLogin
@@ -1882,10 +1961,12 @@ impl App {
             | Msg::BilibiliSendConfirm(_)
             | Msg::BilibiliRetry(_)
             | Msg::BilibiliSkipFailed(_)) => self.bilibili_msg(m),
+            #[cfg(feature = "unofficial-chat")]
             m
             @ (Msg::Douyin(_) | Msg::DouyinRefresh | Msg::DouyinLogout | Msg::DouyinImport(_)) => {
                 self.douyin_msg(m)
             }
+            #[cfg(feature = "unofficial-chat")]
             m @ (Msg::Youtube(_) | Msg::YoutubeRefresh) => self.youtube_msg(m),
             m @ (Msg::Twitch(_)
             | Msg::TwitchLogin
@@ -1901,6 +1982,12 @@ impl App {
             | Msg::CometRelay(_)
             | Msg::BlivechatAuthCode(_)
             | Msg::CometResetToken) => self.blivechat_msg(m),
+            m @ (Msg::Workshop(_)
+            | Msg::WorkshopBrowse(_)
+            | Msg::WorkshopOpen(_)
+            | Msg::WorkshopUnsubscribe(_)
+            | Msg::WorkshopDownload(_)) => self.workshop_msg(m),
+            #[cfg(feature = "updates")]
             m @ (Msg::Update(_)
             | Msg::CheckUpdate
             | Msg::DownloadUpdate
@@ -1972,11 +2059,13 @@ impl App {
     fn chat_message(&mut self, message: Arc<ChatMessage>) {
         let bilibili = message.platform == crate::chat::Platform::Bilibili;
         let epoch = match message.platform {
-            crate::chat::Platform::Bilibili => self.bilibili.epoch(),
-            crate::chat::Platform::Douyin => self.douyin.epoch(),
             crate::chat::Platform::Blivechat => self.blivechat.epoch(),
-            crate::chat::Platform::Youtube => self.youtube.epoch(),
             crate::chat::Platform::Twitch => self.twitch.epoch(),
+            // Sources this build leaves out never post.
+            platform => match self.unofficial_epoch(platform) {
+                Some(epoch) => epoch,
+                None => return,
+            },
         };
         if message.epoch != 0 && message.epoch != epoch {
             return;

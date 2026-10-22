@@ -368,7 +368,7 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
                 } else if m.admin {
                     labels.push(ui.now_t("chat-moderator"));
                 }
-                if m.guard != nanatype_bilibili::Guard::None {
+                if m.guard != nanatype_chat::Guard::None {
                     labels.push(ui.now_t(crate::chat::guard_key(m.guard)));
                 }
                 if m.medal_level > 0 && !m.medal_name.is_empty() {
@@ -567,19 +567,12 @@ fn header(ui: Ui) -> AnyView {
 }
 fn header_layout(ui: Ui, narrow: bool) -> AnyView {
     let dot = widget(crate::ui::kit::dot_frame()).bind(move |s: &mut Stack| {
-        let douyin = match ui.douyin.get().connection {
-            nanatype_douyin::ConnectionState::Connected { .. } => Link::Connected,
-            nanatype_douyin::ConnectionState::Connecting => Link::Connecting,
-            nanatype_douyin::ConnectionState::Error(_) => Link::Error,
-            _ => Link::Off,
-        };
-        let link = combined_link(&[
-            ui.status.with(|x| x.bilibili_link),
-            douyin,
+        let mut links = super::sources::links(ui);
+        links.extend([
             ui.status.with(|x| x.blivechat_link),
-            super::youtube::link(&ui.youtube.get().connection),
             super::twitch::link(&ui.twitch.get().connection),
         ]);
+        let link = combined_link(&links);
         *s = crate::ui::kit::dot_frame().surface(link.tone().role());
     });
     let status = widget(
@@ -589,34 +582,19 @@ fn header_layout(ui: Ui, narrow: bool) -> AnyView {
             .truncating(),
     )
     .bind(move |t: &mut Text| {
-        let mut v = ui.status.with(|s| s.bilibili.clone());
-        if ui.settings.with(|s| s.integrations.douyin.enabled) {
-            v = format!(
-                "{v} · {}: {}",
-                ui.now_t("settings-douyin"),
-                super::douyin::connection(ui)
-            );
-        }
-        if ui.settings.with(|s| s.integrations.youtube.enabled) {
-            v = format!(
-                "{v} · {}: {}",
-                ui.now_t("settings-youtube"),
-                super::youtube::connection(ui)
-            );
-        }
+        let mut parts = super::sources::status_parts(ui);
         if ui.settings.with(|s| s.integrations.twitch.enabled) {
-            v = format!(
-                "{v} · {}: {}",
+            parts.push(format!(
+                "{}: {}",
                 ui.now_t("settings-twitch"),
                 super::twitch::connection(ui)
-            );
+            ));
         }
         if ui.settings.with(|s| s.integrations.blivechat.enabled) {
             let label = ui.now_t("settings-blivechat");
-            v = ui
-                .status
-                .with(|s| format!("{v} · {label}: {}", s.blivechat));
+            parts.push(ui.status.with(|s| format!("{label}: {}", s.blivechat)));
         }
+        let v = parts.join(" · ");
         if t.value != v {
             t.value = v;
         }
@@ -751,11 +729,8 @@ fn empty(ui: Ui) -> AnyView {
         )
         .bind(move |t: &mut Text| {
             let configured = ui.settings.with(|s| {
-                let b = &s.integrations.bilibili;
-                (b.enabled && !b.room.is_empty())
-                    || (s.integrations.douyin.enabled && !s.integrations.douyin.room.is_empty())
+                super::sources::configured(s)
                     || s.integrations.blivechat.enabled
-                    || (s.integrations.youtube.enabled && !s.integrations.youtube.target.is_empty())
                     || (s.integrations.twitch.enabled && !s.integrations.twitch.channel.is_empty())
             });
             let key = if configured {
@@ -866,7 +841,7 @@ pub fn chat_window(ui: Ui) -> impl IntoView {
 mod tests {
     use super::*;
     use crate::chat::ChatKind;
-    use nanatype_bilibili::Guard;
+    use nanatype_chat::Guard;
     use nanatype_model::{ChatUser, Document};
 
     fn message(seq: u64, kind: ChatKind) -> Arc<ChatMessage> {

@@ -970,16 +970,7 @@ impl RuntimeProgram for Host {
                     self.app.close_chat();
                 }
                 Some(WindowKind::Settings) | None => {
-                    if matches!(
-                        self.app.ui.bilibili.get_untracked().account,
-                        nanatype_bilibili::AccountState::Qr { .. }
-                    ) {
-                        self.app.bilibili.cancel_login();
-                    }
-                    self.app
-                        .ui
-                        .bilibili
-                        .update(|s| std::sync::Arc::make_mut(s).confirm = false);
+                    self.app.unofficial_settings_closed();
                     return RuntimeProgramUpdate {
                         window_commands: vec![WindowCommand::Close(id)],
                         ..RuntimeProgramUpdate::default()

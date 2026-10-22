@@ -8,6 +8,7 @@ use crate::skin_theme;
 use crate::ui::Ui;
 use nana_ui::RuntimeProgramContext;
 use nanatype_audio::{AudioEngine, AudioHandle};
+#[cfg(feature = "unofficial-chat")]
 use nanatype_bilibili::BilibiliHandle;
 use nanatype_bridge::BridgeHandle;
 use nanatype_i18n::Locale;
@@ -21,15 +22,20 @@ pub(super) struct Workers {
     pub audio: AudioHandle,
     pub bridge: BridgeHandle,
     pub chat_assets: ChatAssets,
+    #[cfg(feature = "unofficial-chat")]
     pub bilibili: BilibiliHandle,
     pub hotkeys: Hotkeys,
+    #[cfg(feature = "unofficial-chat")]
     pub douyin: nanatype_douyin::DouyinHandle,
+    #[cfg(feature = "unofficial-chat")]
     pub youtube: nanatype_youtube::YoutubeHandle,
     pub twitch: nanatype_twitch::TwitchHandle,
     pub blivechat: nanatype_blive::BliveHandle,
     pub comet_relay: nanatype_blive::RelayHandle,
+    pub steam: nanatype_steam::SteamHandle,
     pub sticker_manager: crate::stickers::Manager,
     pub telegram: crate::stickers::telegram::Service,
+    #[cfg(feature = "updates")]
     pub updater: crate::services::updater::Updater,
 }
 
@@ -37,6 +43,7 @@ impl Workers {
     pub fn start(
         paths: &Paths,
         settings: &Settings,
+        steam: Option<nanatype_steam::Steam>,
         post: impl Fn(Msg) + Clone + Send + Sync + 'static,
     ) -> Self {
         Self {
@@ -48,15 +55,18 @@ impl Workers {
                 forward(&post, |m| Msg::Chat(Arc::new(m))),
                 forward(&post, Msg::ChatAssetReady),
             ),
+            #[cfg(feature = "unofficial-chat")]
             bilibili: BilibiliHandle::new(paths.config.clone(), forward(&post, Msg::Bilibili)),
             hotkeys: Hotkeys::start(
                 forward(&post, Msg::Hotkey),
                 forward(&post, Msg::HotkeyStatus),
             ),
+            #[cfg(feature = "unofficial-chat")]
             douyin: nanatype_douyin::DouyinHandle::new(
                 paths.config.clone(),
                 forward(&post, Msg::Douyin),
             ),
+            #[cfg(feature = "unofficial-chat")]
             youtube: nanatype_youtube::YoutubeHandle::new(forward(&post, Msg::Youtube)),
             twitch: nanatype_twitch::TwitchHandle::new(
                 paths.config.clone(),
@@ -64,6 +74,7 @@ impl Workers {
             ),
             blivechat: nanatype_blive::BliveHandle::new(forward(&post, Msg::Blivechat)),
             comet_relay: nanatype_blive::RelayHandle::new(forward(&post, Msg::CometRelay)),
+            steam: nanatype_steam::SteamHandle::start(steam, forward(&post, Msg::Workshop)),
             sticker_manager: crate::stickers::Manager::new(
                 &paths.data,
                 forward(&post, Msg::Stickers),
@@ -72,6 +83,7 @@ impl Workers {
                 paths.data.clone(),
                 forward(&post, Msg::TelegramEvent),
             ),
+            #[cfg(feature = "updates")]
             updater: crate::services::updater::Updater::new(
                 paths.cache.join("updates"),
                 forward(&post, Msg::Update),

@@ -12,6 +12,7 @@ pkgedit-intro = Changes stay in a draft until you export a .ntpkg and import it.
 pkgedit-kind-skin = Skin only
 pkgedit-kind-resources = Resources only
 pkgedit-kind-lua = Lua only
+pkgedit-kind-sounds = Sound pack only
 pkgedit-kind-mixed = Mixed
 pkgedit-id-placeholder = Package ID, e.g. my.package
 pkgedit-new = New

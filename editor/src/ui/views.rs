@@ -109,6 +109,7 @@ fn kind_key(kind: ProjectKind) -> &'static str {
         ProjectKind::Skin => "pkgedit-kind-skin",
         ProjectKind::Resources => "pkgedit-kind-resources",
         ProjectKind::Lua => "pkgedit-kind-lua",
+        ProjectKind::Sounds => "pkgedit-kind-sounds",
         ProjectKind::Mixed => "pkgedit-kind-mixed",
     }
 }
@@ -1243,6 +1244,7 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
             capability_box(PackageCapability::Skin, "packages-kind-skin"),
             capability_box(PackageCapability::Resources, "packages-kind-resources"),
             capability_box(PackageCapability::Lua, "packages-kind-function"),
+            capability_box(PackageCapability::Sounds, "packages-kind-sounds"),
         )),
         hint(ui.now_t("pkgedit-dependencies-hint")),
         widget(

@@ -1,0 +1,45 @@
+# nana-packager configuration for the Steam depots. A template: the package
+# scripts (`scripts/package.ps1 -Steam`, `scripts/package-macos.sh --steam`)
+# fill in @ROOT@ (the repository) and the Steam ids, then package with the
+# result at target/steam/nana-package.toml. The ids come from the
+# environment or the gitignored .cargo/config.toml [env] (docs/steam.md).
+#
+# The Steam backend writes no portable marker, so the Steam build keeps its
+# settings and packages in the same per-user folders as the GitHub release.
+schema_version = 1
+
+[application]            # must match the identity marker in the binary
+id = "dev.sena-nana.nanatype"
+name = "NanaType"
+version = "@VERSION@"
+vendor = "sena-nana"
+
+[executable]
+file_name = "NanaType"
+
+[distribution]
+backend = "steam"
+
+[distribution.steam]
+app_id = @APP_ID@
+depots = { @DEPOTS@ }
+
+[platform.windows]
+root_exceptions = [
+    { source = "@ROOT@/target/dxc/dxcompiler.dll", reason = "DX12 shader compiler: NanaUI loads it from the executable directory (startup about 2x faster than FXC)" },
+    { source = "@ROOT@/target/steam/steam_api64.dll", reason = "Steamworks loads steam_api64.dll from the executable directory" },
+    { source = "@ROOT@/target/licenses/THIRD_PARTY_LICENSES.txt", reason = "Complete redistribution licences in a readable text file beside the application" },
+]
+
+[platform.macos]
+minimum_system_version = "13.0"
+info_plist_extra = "@ROOT@/packaging/Info.extra.plist"
+
+[runtime]
+# Syphon output loads the framework from Contents/Frameworks; the executable
+# is relinked to load libsteam_api.dylib from there too.
+bin = [
+    { source = "@ROOT@/packaging/macos/Syphon.framework", platforms = ["macos"] },
+    { source = "@ROOT@/target/steam/libsteam_api.dylib", platforms = ["macos"] },
+]
+resources = [{ source = "@ROOT@/target/licenses/THIRD_PARTY_LICENSES.txt", platforms = ["macos"] }]

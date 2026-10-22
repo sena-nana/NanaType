@@ -1,3 +1,5 @@
+#![cfg(feature = "updates")]
+
 mod common;
 
 use nanatype::app::update::State;

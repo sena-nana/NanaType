@@ -14,12 +14,30 @@ path = "src/lib.rs"
 name = "nanatype"
 path = "src/main.rs"
 
+# Screenshot tools that stage every chat source and the update states.
+[[example]]
+name = "snapshots"
+required-features = ["unofficial-chat", "updates"]
+
+[[example]]
+name = "chat_parity"
+required-features = ["unofficial-chat"]
+
 [features]
-default = ["builtin-fonts"]
+default = ["builtin-fonts", "updates", "unofficial-chat"]
 # Embed crates/theme/fonts/ for the built-in skins (docs/fonts.md). Build
 # with `--no-default-features` to leave them out: those skins then fall
 # back to installed fonts.
 builtin-fonts = ["nanatype-frame/builtin-fonts"]
+# The GitHub Releases update check (docs/updates.md). Steam builds update
+# through SteamPipe instead.
+updates = ["dep:nanatype-update"]
+# Chat read through reverse-engineered web interfaces: Bilibili web login and
+# danmaku, Douyin and YouTube. Steam builds leave them out (docs/steam.md).
+unofficial-chat = ["dep:nanatype-bilibili", "dep:nanatype-douyin", "dep:nanatype-youtube"]
+# The Steam build: launches through Steam and reads Workshop subscriptions.
+# Build it with --no-default-features --features builtin-fonts,steam.
+steam = ["nanatype-steam/steamworks"]
 
 [dependencies]
 nanatype-model.workspace = true
@@ -30,16 +48,18 @@ nanatype-i18n = { workspace = true, features = ["app"] }
 nanatype-settings.workspace = true
 nanatype-audio.workspace = true
 nanatype-bridge.workspace = true
-nanatype-bilibili.workspace = true
+nanatype-bilibili = { workspace = true, optional = true }
+nanatype-chat.workspace = true
 nanatype-blive.workspace = true
-nanatype-douyin.workspace = true
-nanatype-youtube.workspace = true
+nanatype-douyin = { workspace = true, optional = true }
+nanatype-youtube = { workspace = true, optional = true }
 nanatype-twitch.workspace = true
 nanatype-core.workspace = true
 nanatype-p2p.workspace = true
 nanatype-plugins.workspace = true
 nanatype-secrets.workspace = true
-nanatype-update.workspace = true
+nanatype-update = { workspace = true, optional = true }
+nanatype-steam.workspace = true
 nanatype-frame.workspace = true
 getrandom = "0.4"
 # Spout and Syphon output of the broadcast windows.

@@ -11,7 +11,8 @@ use nana_ui::runtime::{SegmentedControl, SegmentedOptionChosen};
 /// Bilibili QR sign-in left behind.
 fn tabs(ui: Ui) -> AnyView {
     let options: Vec<AnyView> = Platform::ALL
-        .into_iter()
+        .iter()
+        .copied()
         .map(|platform| {
             segmented_option(ui.now_t(platform.label_key()))
                 .selected(move || ui.platform_tab.get() == platform)
@@ -63,13 +64,7 @@ pub(super) fn platforms(ui: Ui) -> AnyView {
             tabs(ui),
             dynamic(
                 move || ui.platform_tab.get(),
-                move |platform| match platform {
-                    Platform::Bilibili => crate::ui::bilibili::settings_page(ui),
-                    Platform::Douyin => crate::ui::douyin::settings_page(ui),
-                    Platform::Youtube => crate::ui::youtube::settings_page(ui),
-                    Platform::Twitch => crate::ui::twitch::settings_page(ui),
-                    Platform::Blivechat => crate::ui::blivechat::settings_page(ui),
-                },
+                move |platform| crate::ui::sources::platform_page(ui, *platform),
             ),
             panel(ui),
         ))

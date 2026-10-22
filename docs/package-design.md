@@ -19,7 +19,7 @@
 | `format` | 包格式，当前为 `1` |
 | `schema` | 皮肤配置结构版本，当前为 `3` |
 | `id`、`version`、`min_app` | 包 ID（小写字母、数字及 `._-`，≤64 字符）、精确三段版本、最低应用版本 |
-| `capabilities` | `skin`、`resources`、`lua` 的组合，1–3 项 |
+| `capabilities` | `skin`、`resources`、`lua`、`sounds` 的组合，1–4 项 |
 | `name`、`description`、`tags`、`preview` | 展示信息，名称与说明按语言区域提供 |
 | `author`、`license`、`created_at`、`licensed_to` | 作者、许可证、制作日期（`YYYY-MM-DD`，可省略）、授权对象；缺失时界面显示“未提供”，不推断 |
 | `base` | 可选，继承另一皮肤配置，须同时声明为依赖 |
@@ -29,7 +29,7 @@
 | `[lua]` | `entry`（UTF-8 Lua 源码入口）与 `reads`（脚本可读的数据列表，默认空） |
 | `[data.<id>]` | 声明式数据资源，见下文 |
 
-能力与内容必须一致：`skin` 当且仅当包内有 `skin.toml`；`lua` 当且仅当存在 `[lua]` 且入口文件存在；`resources` 要求包含清单、签名文件、样式和入口之外的文件，或至少一项 `[data]`。`[data]` 可出现在任何能力组合中，例如仅供 Shader 使用数据的皮肤包无需声明 `lua`。
+能力与内容必须一致：`skin` 当且仅当包内有 `skin.toml`；`sounds` 当且仅当包内有 `sounds.toml`（[音效包](skins.md#音效包)）；`lua` 当且仅当存在 `[lua]` 且入口文件存在；`resources` 要求包含清单、签名文件、样式和入口之外的文件，或至少一项 `[data]`。`[data]` 可出现在任何能力组合中，例如仅供 Shader 使用数据的皮肤包无需声明 `lua`。
 
 ```toml
 format = 1

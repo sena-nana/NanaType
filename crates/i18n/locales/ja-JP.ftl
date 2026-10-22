@@ -43,6 +43,7 @@ packages-none = パッケージはまだありません。インポートして�
 packages-kind-skin = スキン
 packages-kind-resources = 共有素材
 packages-kind-function = 機能プラグイン
+packages-kind-sounds = サウンドパック
 
 # Package provenance and explicit script consent
 package-author = 作者
