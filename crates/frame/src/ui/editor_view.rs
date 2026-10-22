@@ -260,6 +260,10 @@ pub fn editor_area<M: Send + 'static>(
                 }
             })
             .bind(move |a: &mut TextArea| {
+                let completions = ui.source_completions.get();
+                if a.completions != completions {
+                    a.completions = completions;
+                }
                 let source = ui.source.get();
                 if a.state.value.as_str() != source.text {
                     a.state.replace_value(source.text);

@@ -527,6 +527,18 @@ cheat-newline = 改行
 cheat-recall = 前 / 次の台詞
 cheat-hide = 入力ウィンドウを隠す
 cheat-complete = @ で視聴者、/ でマーカーを補完
+complete-arg-ms = ミリ秒
+complete-arg-amp = 振幅
+complete-arg-name = 名前
+complete-arg-volume = 音量
+complete-arg-intensity = 強さ
+complete-portrait = 表情を送らずに立ち絵を切り替える
+complete-about-shake = ダイアログ全体を揺らす
+complete-wait = { $ms } ミリ秒止めて続ける
+complete-pause-auto = 止めて { $ms } ミリ秒後に自動で続ける
+complete-shake = 振幅 { $amp } で { $ms } ミリ秒揺らす
+complete-volume = 音量 { $vol } で効果音を鳴らす
+complete-intensity = 強さ { $x } で表情を切り替える
 
 ## wave3-settings
 settings-group-input = 入力

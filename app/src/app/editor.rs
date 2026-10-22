@@ -183,6 +183,20 @@ impl App {
         {
             self.ui.completion.set(view);
         }
+        let source = self.source_completions();
+        if self.ui.source_completions.with_untracked(|c| *c != source) {
+            self.ui.source_completions.set(source);
+        }
+    }
+
+    fn source_completions(&self) -> std::sync::Arc<[nana_ui::runtime::TextCompletion]> {
+        match &self.completer.open {
+            Some(open) if self.ui.source_mode.get_untracked() => self
+                .ui
+                .source
+                .with_untracked(|src| open.text_completions(&src.text)),
+            _ => std::sync::Arc::from([]),
+        }
     }
 
     fn complete(&mut self, action: Complete) {
@@ -205,9 +219,11 @@ impl App {
                     return;
                 };
                 let range = open.token.range;
-                // The rich editor reports the new text later; the list must
-                // not reopen on the token it just replaced.
-                self.completer.dismissed = Some(range.start);
+                if matches!(item.insert, completion::Insert::Inline(_)) {
+                    // The rich editor reports the new text later; the list
+                    // must not reopen on the token it just replaced.
+                    self.completer.dismissed = Some(range.start);
+                }
                 if self.ui.source_mode.get_untracked() {
                     let mut src = self.ui.source.get_untracked();
                     if src.text.get(range.clone()).is_none() {
@@ -219,7 +235,19 @@ impl App {
                     self.rich_commands
                         .push(RichEditCommand::Select(range).into());
                 }
-                self.insert_inline(item.insert);
+                match item.insert {
+                    completion::Insert::Inline(inline) => self.insert_inline(inline),
+                    // A command's name: the list goes on to its arguments.
+                    completion::Insert::Text(text) => {
+                        self.focus_editor = true;
+                        if self.ui.source_mode.get_untracked() {
+                            self.markup(MarkupEdit::Insert(text));
+                        } else {
+                            self.rich_commands
+                                .push(RichEditCommand::InsertText(text).into());
+                        }
+                    }
+                }
             }
         }
         self.publish_completion();

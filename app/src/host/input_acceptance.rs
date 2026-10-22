@@ -1846,6 +1846,7 @@ fn open_mentions(f: &Fixture) {
     f.ui.completion
         .set(Some(Arc::new(crate::completion::CompletionView {
             trigger: crate::completion::Trigger::Mention,
+            start: 3,
             items: items.into(),
             selected: 0,
         })));
@@ -1854,72 +1855,215 @@ fn open_mentions(f: &Fixture) {
 #[test]
 fn an_open_completion_list_takes_tab_enter_arrows_and_escape_first() {
     use crate::msg::Complete;
-    for source in [false, true] {
-        let mut f = Fixture::new(source, false, "");
-        f.focus();
-        f.event(InputPayload::Text(nana_ui_platform::CommittedText::new(
-            "hi @",
-        )));
-        assert_eq!(f.text(), "hi @");
-        if source {
-            let src = f.ui.source.get_untracked();
-            assert_eq!(src.selection, (4, 4));
-        } else {
-            // The caret reaches the app, which completes from it.
-            assert!(
-                f.pending
-                    .iter()
-                    .any(|m| matches!(m, Msg::EditorSelection(s) if *s == (4..4))),
-                "caret not reported"
-            );
-        }
-        let token = crate::completion::token(&f.text(), 4).unwrap();
-        assert_eq!(token.trigger, crate::completion::Trigger::Mention);
-        assert_eq!(token.range, 3..4);
-        open_mentions(&f);
-        f.session.flush().unwrap();
-        f.messages.lock().unwrap().clear();
-        for (name, shift, expected) in [
-            ("Tab", false, Complete::Accept(None)),
-            ("Enter", false, Complete::Accept(None)),
-            ("ArrowDown", false, Complete::Move(1)),
-            ("ArrowUp", false, Complete::Move(-1)),
-            ("Tab", true, Complete::Move(-1)),
-            ("Escape", false, Complete::Dismiss),
-        ] {
-            f.key(
-                name,
-                InputModifiers {
-                    shift,
-                    ..Default::default()
-                },
-            );
-            let got = f.messages.lock().unwrap().pop();
-            assert!(
-                matches!(got, Some(Msg::Complete(c)) if c == expected),
-                "{name} shift={shift}"
-            );
-        }
-        // None of them reached the editor.
-        assert_eq!(f.text(), "hi @");
-        if source {
-            // The markup field reports no caret moves: leaving the token
-            // closes the list, and the caret still moves.
-            f.key("ArrowLeft", Default::default());
-            assert!(matches!(
-                f.messages.lock().unwrap().pop(),
-                Some(Msg::Complete(Complete::Dismiss))
-            ));
-            assert_eq!(f.selection(), (3, 3));
-        }
-        // Closed, the keys are the input window's own again.
-        f.ui.completion.set(None);
-        f.key("Escape", Default::default());
-        assert!(matches!(
-            f.messages.lock().unwrap().pop(),
-            Some(Msg::HideInput)
-        ));
+    let mut f = Fixture::new(false, false, "");
+    f.focus();
+    f.event(InputPayload::Text(nana_ui_platform::CommittedText::new(
+        "hi @",
+    )));
+    assert_eq!(f.text(), "hi @");
+    // The caret reaches the app, which completes from it.
+    assert!(
+        f.pending
+            .iter()
+            .any(|m| matches!(m, Msg::EditorSelection(s) if *s == (4..4))),
+        "caret not reported"
+    );
+    let token = crate::completion::token(&f.text(), 4).unwrap();
+    assert_eq!(token.trigger, crate::completion::Trigger::Mention);
+    assert_eq!(token.range, 3..4);
+    open_mentions(&f);
+    f.session.flush().unwrap();
+    f.messages.lock().unwrap().clear();
+    for (name, shift, expected) in [
+        ("Tab", false, Complete::Accept(None)),
+        ("Enter", false, Complete::Accept(None)),
+        ("ArrowDown", false, Complete::Move(1)),
+        ("ArrowUp", false, Complete::Move(-1)),
+        ("Tab", true, Complete::Move(-1)),
+        ("Escape", false, Complete::Dismiss),
+    ] {
+        f.key(
+            name,
+            InputModifiers {
+                shift,
+                ..Default::default()
+            },
+        );
+        let got = f.messages.lock().unwrap().pop();
+        assert!(
+            matches!(got, Some(Msg::Complete(c)) if c == expected),
+            "{name} shift={shift}"
+        );
     }
+    // None of them reached the editor.
+    assert_eq!(f.text(), "hi @");
+    // Closed, the keys are the input window's own again.
+    f.ui.completion.set(None);
+    f.key("Escape", Default::default());
+    assert!(matches!(
+        f.messages.lock().unwrap().pop(),
+        Some(Msg::HideInput)
+    ));
+}
+
+/// The list as the app opens it for the text before the caret.
+fn open_commands(f: &Fixture, caret: usize) -> crate::completion::Completion {
+    let text = f.ui.source.get_untracked().text;
+    let text = if f.ui.source_mode.get_untracked() {
+        text
+    } else {
+        f.text()
+    };
+    let token = crate::completion::token(&text, caret).unwrap();
+    let items = crate::completion::commands(
+        &f.ui.skin.get_untracked(),
+        &token.needle,
+        nanatype_i18n::Locale::ZhCn,
+    );
+    let open = crate::completion::Completion {
+        token,
+        items: items.into(),
+        selected: 0,
+    };
+    let completer = crate::completion::Completer {
+        open: Some(open.clone()),
+        ..Default::default()
+    };
+    f.ui.completion.set(completer.view());
+    if f.ui.source_mode.get_untracked() {
+        f.ui.source_completions.set(open.text_completions(&text));
+    }
+    open
+}
+
+/// Saves the input window when `NANATYPE_COMPLETION_CAPTURE` names a folder.
+fn capture(f: &mut Fixture, name: &str) {
+    if let Ok(dir) = std::env::var("NANATYPE_COMPLETION_CAPTURE") {
+        std::fs::create_dir_all(&dir).unwrap();
+        f.session
+            .screenshot_png(std::path::Path::new(&dir).join(format!("{name}.png")))
+            .unwrap();
+    }
+}
+
+#[test]
+fn the_rich_list_hangs_under_the_word_it_completes() {
+    let mut f = Fixture::new(false, false, "");
+    f.focus();
+    f.event(InputPayload::Text(nana_ui_platform::CommittedText::new(
+        "今天 /",
+    )));
+    open_commands(&f, f.text().len());
+    f.session.flush().unwrap();
+    let editor = f.editor.stable_id();
+    let place = |f: &Fixture| {
+        let anchor = crate::ui::input::completion::anchor(
+            f.ui,
+            f.session.document().context().world(),
+            editor,
+        )
+        .expect("placed");
+        anchor.at
+    };
+    let at = place(&f);
+    f.ui.completion_at.set(Some(at));
+    f.session.flush().unwrap();
+    // Laid out with the list: the place settles.
+    let settled =
+        crate::ui::input::completion::anchor(f.ui, f.session.document().context().world(), editor)
+            .unwrap();
+    assert!(settled.settled, "{settled:?}");
+    let world = f.session.document().context().world();
+    let list = world
+        .layout_box(f.ui.completion_node.get_untracked().unwrap())
+        .unwrap();
+    assert!(list.height > 0.0, "list not shown");
+    // Under the editor's first line, past the text before `/`.
+    let bounds = world.layout_box(editor).unwrap();
+    assert!(
+        at[1] > bounds.y && at[1] < bounds.y + bounds.height / 2.0,
+        "{at:?}"
+    );
+    assert!(at[0] > bounds.x, "{at:?}");
+    // Typing on moves it along with the word.
+    f.event(InputPayload::Text(nana_ui_platform::CommittedText::new(
+        "wait 800",
+    )));
+    open_commands(&f, f.text().len());
+    f.session.flush().unwrap();
+    let further = place(&f);
+    assert!(further[0] > at[0], "{further:?} vs {at:?}");
+    f.ui.completion_at.set(Some(further));
+    f.session.flush().unwrap();
+    capture(&mut f, "rich");
+}
+
+/// Types `text` as the host does: the app answers the edit (and opens
+/// its list) before the frame is laid out.
+fn type_and_complete(f: &mut Fixture, text: &str) {
+    f.input.advance(Duration::from_millis(16));
+    f.input
+        .route_shaped(
+            f.session.document_mut().context_mut(),
+            InputPayload::Text(nana_ui_platform::CommittedText::new(text)),
+            Some(&mut f.shaper),
+        )
+        .unwrap();
+    f.pump();
+    let caret = f.ui.source.get_untracked().selection.1;
+    open_commands(f, caret);
+    f.session.flush().unwrap();
+}
+
+#[test]
+fn the_markup_source_fills_in_from_its_own_popup() {
+    let mut f = Fixture::new(true, false, "");
+    f.focus();
+    type_and_complete(&mut f, "今天 /wa");
+    assert_eq!(f.ui.source.get_untracked().text, "今天 /wa");
+    let doc = f.id();
+    assert!(
+        f.session
+            .document()
+            .context()
+            .focused_text_completion_active(doc),
+        "popup not open"
+    );
+    // The app's list stays hidden; the field shows its own.
+    assert!(f.ui.completion_at.get_untracked().is_none());
+    capture(&mut f, "source");
+    f.messages.lock().unwrap().clear();
+    // Enter fills in instead of sending, and the binding never fires.
+    f.key("Enter", Default::default());
+    assert!(
+        f.messages.lock().unwrap().is_empty(),
+        "a binding took the key"
+    );
+    assert_eq!(f.text(), "今天 [wait=500]");
+    assert_eq!(f.ui.source.get_untracked().text, "今天 [wait=500]");
+
+    // Esc closes the field's popup and leaves the window shown; the host
+    // then sees it closed and closes the app's list too.
+    type_and_complete(&mut f, " /");
+    let source = f.source.stable_id();
+    let world = |f: &Fixture| {
+        crate::ui::input::completion::source_dismissed(
+            f.ui,
+            f.session.document().context().world(),
+            source,
+        )
+    };
+    assert!(!world(&f));
+    f.key("Escape", Default::default());
+    assert!(
+        !f.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|m| matches!(m, Msg::HideInput)),
+        "Esc hid the window"
+    );
+    assert!(world(&f), "dismissal not seen");
 }
 
 #[test]
@@ -1958,4 +2102,29 @@ fn accepting_replaces_the_token_with_a_mention() {
     );
     assert!(src.text.starts_with("hi [at="), "{}", src.text);
     assert!(!src.text.contains("@Al"));
+}
+
+#[test]
+fn zz_probe_caret_geometry() {
+    for source in [false, true] {
+        let mut f = Fixture::new(source, false, "");
+        f.focus();
+        f.event(InputPayload::Text(nana_ui_platform::CommittedText::new(
+            "今天 /wa",
+        )));
+        let world = f.session.document().context().world();
+        let id = f.node();
+        let lb = world.layout_box(id);
+        let pb = world.presentation_input_bounds(id);
+        let so = world.scroll_offset(id);
+        let tl = world.text_layout(id).map(|(_, l)| {
+            let n = f.text().len();
+            (
+                l.is_vertical(),
+                nana_ui::runtime::rich_editor_caret_box(l, n),
+                nana_ui::runtime::rich_editor_caret_box(l, 0),
+            )
+        });
+        eprintln!("source={source} layout={lb:?} pres={pb:?} scroll={so:?} caret={tl:?}");
+    }
 }

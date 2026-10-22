@@ -114,6 +114,8 @@ pub struct Stage {
     pub sel_attrs: Signal<nana_ui::runtime::RichSelectionAttrs>,
     /// The editor shows markup source instead of the rich text.
     pub source_mode: Signal<bool>,
+    /// What the markup source offers to complete at its caret.
+    pub source_completions: Signal<Arc<[nana_ui::runtime::TextCompletion]>>,
     /// Asset reference → `file://` URL, for documents' atoms.
     pub asset_urls: Signal<Arc<HashMap<String, String>>>,
     /// Portrait variant → `file://` URL for the active skin.
@@ -186,6 +188,7 @@ impl Stage {
             editor_transaction: signal(false),
             sel_attrs: signal(nana_ui::runtime::RichSelectionAttrs::default()),
             source_mode: signal(false),
+            source_completions: signal(Arc::from([])),
             asset_urls: signal(Arc::new(HashMap::new())),
             portraits: signal(Arc::new(HashMap::new())),
             reduced_motion: signal(false),

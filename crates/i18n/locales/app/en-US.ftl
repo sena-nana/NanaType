@@ -533,6 +533,18 @@ cheat-newline = New line
 cheat-recall = Recall a sent line
 cheat-hide = Hide the input window
 cheat-complete = Complete a viewer after @ or a marker after /
+complete-arg-ms = ms
+complete-arg-amp = amplitude
+complete-arg-name = name
+complete-arg-volume = volume
+complete-arg-intensity = intensity
+complete-portrait = Switch the portrait without broadcasting
+complete-about-shake = Shake the whole dialogue box
+complete-wait = Wait { $ms } ms, then go on
+complete-pause-auto = Stop, then go on after { $ms } ms
+complete-shake = Shake the box by { $amp } for { $ms } ms
+complete-volume = Play the sound at volume { $vol }
+complete-intensity = Switch the expression at intensity { $x }
 
 ## wave3-settings
 settings-group-input = Input

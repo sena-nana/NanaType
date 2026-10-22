@@ -527,6 +527,18 @@ cheat-newline = 换行
 cheat-recall = 上一句 / 下一句
 cheat-hide = 隐藏输入窗
 cheat-complete = 输入 @ 或 / 后补全观众或标记
+complete-arg-ms = 毫秒
+complete-arg-amp = 幅度
+complete-arg-name = 名称
+complete-arg-volume = 音量
+complete-arg-intensity = 强度
+complete-portrait = 切换立绘，不广播表情
+complete-about-shake = 震动整个对话框
+complete-wait = 停顿 { $ms } 毫秒后继续
+complete-pause-auto = 停住，{ $ms } 毫秒后自动继续
+complete-shake = 以 { $amp } 的幅度震屏 { $ms } 毫秒
+complete-volume = 以 { $vol } 的音量播放音效
+complete-intensity = 以 { $x } 的强度切换表情
 
 ## wave3-settings
 settings-group-input = 输入

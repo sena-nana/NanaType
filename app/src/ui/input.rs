@@ -50,7 +50,7 @@ const SHEET_KEYS_W: f32 = 136.0;
 /// The quoted viewer's avatar on the reply bar.
 const REPLY_AVATAR: f32 = 18.0;
 
-mod completion;
+pub mod completion;
 mod stickers;
 mod workspace;
 
@@ -1632,23 +1632,25 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
         if ui.input_width.get_untracked() != event.width {
             ui.input_width.set(event.width);
         }
+        if ui.input_height.get_untracked() != event.height {
+            ui.input_height.set(event.height);
+        }
     })
     .children((
         workspace::split(
             ui,
             widget(Stack::fill_column(0.0).with_layout(|l| {
                 l.min_width = Some(LengthSpec::Px(0.0));
-                l.position = PositionSpec::Relative;
             }))
             .children((
                 toolbar(ui),
                 crate::ui::kit::rule(),
                 preview,
                 super::plugins::mounted(ui, nanatype_plugins::Mount::Input),
-                completion::popup(ui),
             )),
         ),
         workspace::footer(ui, invitation, relay),
+        completion::popup(ui),
         super::feedback::toast_stack(toasts, crate::windows::INPUT_ACTIONS_H + 4.0, 2),
     ));
     with_refs(view, (editor, source, toasts))

@@ -204,6 +204,12 @@ pub struct Ui {
     pub chat_target: Signal<Option<u64>>,
     /// The `@` / `/` list open over the editor.
     pub completion: Signal<Option<Arc<crate::completion::CompletionView>>>,
+    /// Where the list shows in the input window (left, top), placed by the
+    /// host from the editor's layout; none until it has been.
+    pub completion_at: Signal<Option<[f32; 2]>>,
+    pub(crate) completion_node: NodeRef,
+    /// Actual input client height, beside `input_width`.
+    pub input_height: Signal<f32>,
     /// The skin library shows cards (`true`) or the list; kept while the
     /// user visits other pages.
     pub skins_grid: Signal<bool>,
@@ -273,6 +279,9 @@ impl Ui {
             chat_width: signal(400.0),
             chat_target: signal(None),
             completion: signal(None),
+            completion_at: signal(None),
+            completion_node: node_ref(),
+            input_height: signal(crate::windows::INPUT_SIZE.1),
             skins_grid: signal(true),
         }
     }

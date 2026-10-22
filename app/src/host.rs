@@ -40,6 +40,10 @@ pub struct Host {
     editor: Option<Entity<RichTextEditor>>,
     source: Option<Entity<nana_ui::runtime::TextArea>>,
     editor_menu: Option<Entity<nana_ui::runtime::OverlayHost>>,
+    /// The `@` / `/` list was placed from a stale layout: lay out once
+    /// more. Retries are bounded, should the texts never agree.
+    completion_unsettled: bool,
+    completion_retries: u8,
     /// Skin and reduced-motion the editor's effect preview was built for.
     editor_fx: Option<(usize, bool, usize)>,
     /// The typewriter's scroll through long text.
@@ -138,6 +142,9 @@ fn frame_policy(
 fn default_language(tag: &str) -> Option<nana_ui::runtime::LanguageTag> {
     nana_ui::runtime::LanguageTag::new(tag)
 }
+
+/// Frames the `@` / `/` list may be laid out again to settle its place.
+const COMPLETION_RETRIES: u8 = 3;
 
 /// How close IME text must follow a click to count as the same keystroke.
 const KEYSTROKE_DEDUP: Duration = Duration::from_millis(40);
@@ -462,6 +469,36 @@ impl Host {
         Ok(())
     }
 
+    /// Hang the rich editor's `@` / `/` list under the word it completes,
+    /// read from the editor's last layout; and close the app's list when
+    /// the markup source's own popup was closed.
+    fn anchor_completion(&mut self) {
+        let ui = self.app.ui;
+        if let (Some(doc), Some(source)) = (self.docs.get(&WindowKind::Input.id()), self.source)
+            && input::completion::source_dismissed(ui, doc.context().world(), source.stable_id())
+        {
+            self.app.post(Msg::Complete(crate::msg::Complete::Dismiss));
+        }
+        let anchor = self.completion_anchor();
+        // Placed from a stale layout: lay out once more and place again.
+        if anchor.is_some_and(|a| !a.settled) {
+            self.completion_retries = self.completion_retries.saturating_sub(1);
+            self.completion_unsettled = self.completion_retries > 0;
+        } else {
+            self.completion_retries = COMPLETION_RETRIES;
+            self.completion_unsettled = false;
+        }
+        let at = anchor.map(|a| a.at);
+        if ui.completion_at.get_untracked() != at {
+            ui.completion_at.set(at);
+        }
+    }
+
+    fn completion_anchor(&self) -> Option<input::completion::Anchor> {
+        let world = self.docs.get(&WindowKind::Input.id())?.context().world();
+        input::completion::anchor(self.app.ui, world, self.editor?.stable_id())
+    }
+
     /// Read the typewriter's last layout: scroll along with the typing, or
     /// tell the core where a full box turns the page.
     fn follow_track(&mut self, now: u64, remote: bool) {
@@ -762,8 +799,15 @@ fn input_key(
             // than leave it on a token the caret has left.
             return Some((Msg::Complete(crate::msg::Complete::Dismiss), false));
         }
-        if let Some(message) = completion_key(key) {
-            return Some((message, true));
+        match completion_key(key) {
+            // The markup field's own popup closes too.
+            Some(message @ Msg::Complete(crate::msg::Complete::Dismiss)) if source => {
+                return Some((message, false));
+            }
+            // It chooses and fills in itself, ahead of the bindings.
+            Some(_) if source => return None,
+            Some(message) => return Some((message, true)),
+            None => {}
         }
     }
     input_shortcut(key, source, keys).map(|m| (m, true))
@@ -861,6 +905,8 @@ impl RuntimeProgram for Host {
             editor: None,
             source: None,
             editor_menu: None,
+            completion_unsettled: false,
+            completion_retries: COMPLETION_RETRIES,
             editor_fx: None,
             follow: overflow::Follow::default(),
             peer_follow: overflow::Follow::default(),
@@ -1304,6 +1350,9 @@ impl RuntimeProgram for Host {
     }
 
     fn frame_demand(&self, id: WindowId) -> FrameDemand {
+        if WindowKind::from_id(id) == Some(WindowKind::Input) && self.completion_unsettled {
+            return FrameDemand::At(Instant::now());
+        }
         let demand = frame_policy(
             self.app.ui,
             WindowKind::from_id(id),
@@ -1347,6 +1396,7 @@ impl RuntimeProgram for Host {
             context.dispatch(Msg::AssetsChanged);
         }
         match WindowKind::from_id(id) {
+            Some(WindowKind::Input) => self.anchor_completion(),
             Some(WindowKind::Display) => self.follow_track(now, false),
             Some(WindowKind::PeerDisplay) if self.app.peer.handle.is_some() => {
                 self.follow_track(now, true)
@@ -1456,23 +1506,36 @@ mod redraw_tests {
             Some((Msg::Complete(c), consumed)) => Some((c, consumed)),
             _ => None,
         };
+        // Rich: the app's list takes them.
+        assert_eq!(
+            complete(&key("Enter", plain), false),
+            Some((Complete::Accept(None), true))
+        );
+        assert_eq!(
+            complete(&key("Tab", plain), false),
+            Some((Complete::Accept(None), true))
+        );
+        assert_eq!(
+            complete(&key("Escape", plain), false),
+            Some((Complete::Dismiss, true))
+        );
+        assert_eq!(
+            complete(&key("ArrowDown", plain), false),
+            Some((Complete::Move(1), true))
+        );
+        // Markup source: its own popup takes them, past the bindings (no
+        // Send on Enter); Esc closes the app's list too.
+        for name in ["Enter", "Tab", "ArrowDown", "ArrowUp"] {
+            assert!(
+                input_key(&key(name, plain), true, true, &keys).is_none(),
+                "{name}"
+            );
+        }
+        assert_eq!(
+            complete(&key("Escape", plain), true),
+            Some((Complete::Dismiss, false))
+        );
         for source in [false, true] {
-            assert_eq!(
-                complete(&key("Enter", plain), source),
-                Some((Complete::Accept(None), true))
-            );
-            assert_eq!(
-                complete(&key("Tab", plain), source),
-                Some((Complete::Accept(None), true))
-            );
-            assert_eq!(
-                complete(&key("Escape", plain), source),
-                Some((Complete::Dismiss, true))
-            );
-            assert_eq!(
-                complete(&key("ArrowDown", plain), source),
-                Some((Complete::Move(1), true))
-            );
             // Chords stay the bindings': Ctrl+↑ still recalls.
             assert!(matches!(
                 input_key(&key("ArrowUp", ctrl), source, true, &keys),

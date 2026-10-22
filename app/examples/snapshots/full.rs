@@ -11,6 +11,7 @@ pub fn capture(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
         return;
     }
     overlays(scene, out);
+    completion(scene, out, iw, ih);
     settings_pages(scene, out);
     empty_input(scene, out, iw, ih);
     links(scene, out);
@@ -447,6 +448,107 @@ fn settings_pages(scene: &Scene, out: &std::path::Path) {
 }
 
 /// The input window with nothing typed.
+/// The `@` / `/` list open over the input window: the commands with their
+/// kinds, a command's arguments, and the chatters.
+fn completion(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
+    use nanatype::completion::{self, CompletionView, Trigger};
+    let ui = scene.ui;
+    let theme = &scene.theme;
+    let before_draft = ui.draft.get_untracked();
+    let chat = ui.chat.get_untracked();
+    // Sound effects to list, for a skin that ships none.
+    let mut skin = (*scene.skin).clone();
+    if skin.sounds.se.is_empty() {
+        for name in ["applause", "laugh", "pop"] {
+            skin.sounds.se.insert(name.into(), format!("{name}.ogg"));
+        }
+    }
+    let cases = [
+        ("input-complete-commands", "今天 /", Trigger::Command, ""),
+        ("input-complete-se", "今天 /se ", Trigger::Command, "se "),
+        (
+            "input-complete-se-typed",
+            "今天 /se la 0.5",
+            Trigger::Command,
+            "se la 0.5",
+        ),
+        (
+            "input-complete-wait",
+            "今天 /wait ",
+            Trigger::Command,
+            "wait ",
+        ),
+        ("input-complete-users", "谢谢 @", Trigger::Mention, ""),
+        (
+            "input-complete-long",
+            "第一行\n第二行写得长一点，看看列表跟着哪里\n最后一行 /",
+            Trigger::Command,
+            "",
+        ),
+    ];
+    let before_settings = ui.settings.get_untracked();
+    let mut preview = (*before_settings).clone();
+    preview.general.input_skin_preview = true;
+    let preview = Arc::new(preview);
+    // The same list over the scaled skin preview.
+    let previewed = [("input-complete-preview", "今天 /", Trigger::Command, "")];
+    for (i, (name, draft, trigger, needle)) in cases.into_iter().chain(previewed).enumerate() {
+        ui.settings.set(if i < cases.len() {
+            before_settings.clone()
+        } else {
+            preview.clone()
+        });
+        let items = match trigger {
+            Trigger::Command => completion::commands(&skin, needle, scene.locale),
+            Trigger::Mention => completion::users(
+                chat.iter().rev().map(|m| (m.platform, &m.user)),
+                needle,
+                scene.locale,
+            ),
+        };
+        ui.draft.set(Arc::new(Document::plain(draft)));
+        ui.completion.set(Some(Arc::new(CompletionView {
+            trigger,
+            start: draft.rfind([' ', '/', '@']).map_or(0, |i| i + 1),
+            items: items.into(),
+            selected: 0,
+        })));
+        if let Ok(views) = std::env::var("NANATYPE_SNAPSHOT_VIEWS")
+            && !views.split(',').any(|view| view.trim() == name)
+        {
+            continue;
+        }
+        // Placed as the host places it, from the editor's laid-out text: a
+        // second pass once the list knows its own size.
+        let id = DocumentId::new(1).unwrap();
+        let mut doc = RuntimeDocument::new(id);
+        let _ = doc.context_mut().set_theme_tokens(theme.clone());
+        let (_, (editor, _, _)) = doc
+            .context_mut()
+            .mount_view_root(id, move || input::input_window(ui))
+            .unwrap();
+        let mut session = RuntimeAgentSession::new_scaled(doc, iw, ih, 1.0).unwrap();
+        session.flush().unwrap();
+        for _ in 0..2 {
+            let at = input::completion::anchor(
+                ui,
+                session.document().context().world(),
+                editor.stable_id(),
+            );
+            ui.completion_at.set(at.map(|a| a.at));
+            session.flush().unwrap();
+        }
+        match session.screenshot_png(out.join(format!("{name}.png"))) {
+            Ok(stats) => println!("{name}: {stats:?}"),
+            Err(e) => panic!("{name}: {e:?}"),
+        }
+    }
+    ui.settings.set(before_settings);
+    ui.completion.set(None);
+    ui.completion_at.set(None);
+    ui.draft.set(before_draft);
+}
+
 fn empty_input(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
     let ui = scene.ui;
     let theme = &scene.theme;
