@@ -144,8 +144,9 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
         ],
         1 => vec![
             row(ui, "onboard-skin", None, skin_select(ui)),
-            // The live preview of the skin just chosen.
-            skin_preview(ui, signal(None)),
+            // The live preview of the skin just chosen, inset like the row
+            // above it.
+            block(skin_preview(ui, signal(None))),
         ],
         2 => vec![
             widget(
