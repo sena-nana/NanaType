@@ -772,7 +772,6 @@ tb-current-value = 現在：{ $value }
 
 # Skin preview editor
 skin-edit-font = 本文フォント
-skin-edit-font-presets = フォント候補
 skin-edit-size = 本文サイズ
 skin-edit-line = 行の高さ
 skin-edit-color = 文字色

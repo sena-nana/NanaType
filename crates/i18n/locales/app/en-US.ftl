@@ -778,7 +778,6 @@ tb-current-value = Current: { $value }
 
 # Skin preview editor
 skin-edit-font = Body font
-skin-edit-font-presets = Font presets
 skin-edit-size = Body size
 skin-edit-line = Line height
 skin-edit-color = Text color

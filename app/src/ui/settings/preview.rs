@@ -1,4 +1,5 @@
 //! Isolated, unsaved skin editing. Only Save dispatches an application message.
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use nana_ui::ControlSize;
@@ -6,14 +7,16 @@ use nana_ui::runtime::view::{
     AnyView, IntoView, Signal, dynamic, on_mount, segmented_option, signal, widget,
 };
 use nana_ui::runtime::{
-    Activate, Button, IconButton, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged,
-    SelectOption, SizeChanged, Stack, TextArea, TextChanged, TextInput, TextInputState,
+    Activate, Button, ColorChanged, ColorField, Icon, IconButton, NumberChanged, NumberInput,
+    RangeChanged, RangeField, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged,
+    SelectOption, SizeChanged, Stack, Text, TextArea, TextChanged, TextInput, TextInputState,
 };
-use nana_ui_core::{AlignSpec, LengthSpec};
+use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
+use nanatype_model::Rgba8;
 use nanatype_settings::Settings;
 use nanatype_theme::Skin;
 
-use super::controls::{hint, label};
+use super::controls::{Type, hint, label};
 use crate::msg::Msg;
 use crate::ui::Ui;
 use crate::ui::kit::{self, gap};
@@ -52,6 +55,14 @@ const SAMPLE_H: f32 = 100.0;
 /// least it narrows to before they stack.
 const COLUMN_W: f32 = 300.0;
 const COLUMN_MIN_W: f32 = 280.0;
+/// Two fields share a row, `HALF_W` percent each.
+const HALF_W: f32 = 48.0;
+/// The body size (px) and line height (× size) the profile accepts.
+const SIZE_RANGE: (f64, f64) = (8.0, 200.0);
+const LINE_RANGE: (f64, f64) = (1.0, 3.0);
+const LINE_STEP: f64 = 0.05;
+/// The line height's value beside its slider.
+const READOUT_W: f32 = 56.0;
 
 /// How a preview asks the program for its stage: views cannot post program
 /// messages outside an event, so the program installs this once.
@@ -77,52 +88,49 @@ pub(super) fn select(previewing: Signal<Option<String>>, row: &crate::ui::SkinRo
     }
 }
 
+/// Width and height: typed, since they run into the thousands.
 #[derive(Clone, Copy)]
 enum Field {
-    Font,
-    Size,
-    Line,
-    Color,
     Width,
     Height,
 }
 impl Field {
     fn value(self, p: &mut Pane) -> &mut String {
         match self {
-            Self::Font => &mut p.font,
-            Self::Size => &mut p.size,
-            Self::Line => &mut p.line_height,
-            Self::Color => &mut p.color,
             Self::Width => &mut p.width,
             Self::Height => &mut p.height,
         }
     }
     fn key(self) -> &'static str {
         match self {
-            Self::Font => "skin-edit-font",
-            Self::Size => "skin-edit-size",
-            Self::Line => "skin-edit-line",
-            Self::Color => "skin-edit-color",
             Self::Width => "skin-edit-width",
             Self::Height => "skin-edit-height",
         }
     }
 }
 
-fn field(ui: Ui, id: &str, history: bool, field: Field, placeholder: String) -> AnyView {
-    let read_id = id.to_owned();
-    let write_id = id.to_owned();
-    let read = move || field.value(draft(ui, &read_id).pane_mut(history)).clone();
+/// A caption over `control`, `width` wide.
+fn captioned(ui: Ui, key: &str, width: LengthSpec, control: impl IntoView) -> AnyView {
     widget(
         Stack::column(0.0)
             .gap_step(gap::step::TIGHT)
-            .width(LengthSpec::Percent(48.0))
+            .width(width)
             .with_layout(|l| {
                 l.min_width = Some(LengthSpec::Px(0.0));
             }),
     )
-    .children((
-        hint(ui.now_t(field.key())),
+    .children((hint(ui.now_t(key)), control))
+    .into_any()
+}
+
+fn field(ui: Ui, id: &str, history: bool, field: Field, placeholder: String) -> AnyView {
+    let read_id = id.to_owned();
+    let write_id = id.to_owned();
+    let read = move || field.value(draft(ui, &read_id).pane_mut(history)).clone();
+    captioned(
+        ui,
+        field.key(),
+        LengthSpec::Percent(HALF_W),
         widget(
             kit::text_input(read())
                 .placeholder(placeholder)
@@ -140,8 +148,237 @@ fn field(ui: Ui, id: &str, history: bool, field: Field, placeholder: String) -> 
                 *field.value(d.pane_mut(history)) = e.value.to_string()
             });
         }),
-    ))
-    .into_any()
+    )
+}
+
+/// `value` as a draft field: empty when it is the skin's own `default`, so
+/// the field keeps following the skin.
+fn unless_default(value: f32, default: f32) -> String {
+    if (value - default).abs() < 1e-4 {
+        String::new()
+    } else {
+        value.to_string()
+    }
+}
+
+/// The body size: a number field, the skin's size while the draft has none.
+fn size_field(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
+    let read_id = id.to_owned();
+    let write_id = id.to_owned();
+    let read = move || {
+        draft(ui, &read_id)
+            .pane(history)
+            .size
+            .trim()
+            .parse::<f32>()
+            .unwrap_or(default)
+    };
+    // The value last shown, so only outside changes (reset, discard)
+    // replace what is being typed.
+    let shown = Arc::new(AtomicU32::new(read().to_bits()));
+    captioned(
+        ui,
+        "skin-edit-size",
+        LengthSpec::Percent(HALF_W),
+        widget(
+            kit::number_input(f64::from(read()))
+                .range(SIZE_RANGE.0, SIZE_RANGE.1)
+                .step(1.0)
+                .label(ui.now_t("skin-edit-size"))
+                .size(ControlSize::Small),
+        )
+        .key("skin-edit-size")
+        .bind(move |input: &mut NumberInput| {
+            let v = read();
+            if shown.swap(v.to_bits(), Ordering::Relaxed) != v.to_bits() {
+                input.assign(f64::from(v));
+            }
+        })
+        .on(move |e: &NumberChanged| {
+            change(ui, &write_id, |d| {
+                d.pane_mut(history).size = unless_default(e.value as f32, default)
+            });
+        }),
+    )
+}
+
+/// The line height: a slider with its value beside it.
+fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
+    let read_id = id.to_owned();
+    let write_id = id.to_owned();
+    let (min, max) = LINE_RANGE;
+    let value = move || {
+        draft(ui, &read_id)
+            .pane(history)
+            .line_height
+            .trim()
+            .parse::<f64>()
+            .unwrap_or(f64::from(default))
+            .clamp(min, max)
+    };
+    let readout = value.clone();
+    captioned(
+        ui,
+        "skin-edit-line",
+        LengthSpec::Fill,
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
+                .width(LengthSpec::Fill)
+                .align(AlignSpec::Center),
+        )
+        .children((
+            widget(Stack::row(0.0).grow(1.0).shrink(1.0)).children(
+                widget(
+                    RangeField::new(value(), min, max, LINE_STEP)
+                        .show_value(false)
+                        .show_label(false),
+                )
+                .key("skin-edit-line")
+                .bind(move |r: &mut RangeField| {
+                    let v = value();
+                    if (r.value - v).abs() > f64::EPSILON {
+                        r.value = v;
+                    }
+                })
+                .on(move |e: &RangeChanged| {
+                    let v = ((e.value / LINE_STEP).round() * LINE_STEP).clamp(min, max);
+                    change(ui, &write_id, |d| {
+                        d.pane_mut(history).line_height = unless_default(v as f32, default)
+                    });
+                }),
+            ),
+            widget(
+                Text::new(String::new())
+                    .style({
+                        let mut st = Type::Small.style();
+                        let l = Arc::make_mut(&mut st.layout);
+                        l.width = Some(LengthSpec::Px(READOUT_W));
+                        l.white_space_nowrap = true;
+                        crate::ui::tnum(l);
+                        st
+                    })
+                    .color(SemanticColorRole::Muted),
+            )
+            .bind(move |t: &mut Text| {
+                let s = format!("{:.2} ×", readout());
+                if t.value != s {
+                    t.value = s;
+                }
+            }),
+        )),
+    )
+}
+
+/// The text colour: a picker, the skin's colour while the draft has none.
+fn color_field(ui: Ui, id: &str, history: bool, default: Rgba8) -> AnyView {
+    let read_id = id.to_owned();
+    let write_id = id.to_owned();
+    let rgba = move || {
+        draft(ui, &read_id)
+            .pane(history)
+            .color
+            .trim()
+            .parse::<Rgba8>()
+            .unwrap_or(default)
+    };
+    captioned(
+        ui,
+        "skin-edit-color",
+        LengthSpec::Percent(HALF_W),
+        widget(
+            ColorField::new(crate::ui::c(rgba()))
+                .label(ui.now_t("skin-edit-color"))
+                .size(ControlSize::Small),
+        )
+        .key("skin-edit-color")
+        .bind(move |f: &mut ColorField| {
+            let want = crate::ui::c(rgba());
+            if f.value != want && !f.opened {
+                *f = f.clone().value(want);
+            }
+        })
+        .on(move |e: &ColorChanged| {
+            let [r, g, b, _] = e.value;
+            let to = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let c = Rgba8::rgba(to(r), to(g), to(b), 255); // design-tokens: data
+            change(ui, &write_id, |d| {
+                d.pane_mut(history).color = if c == default {
+                    String::new()
+                } else {
+                    c.to_hex()
+                }
+            });
+        }),
+    )
+}
+
+/// The body font: the skin's own, the built-in fonts and common system ones.
+fn font_select(ui: Ui, id: &str, history: bool) -> AnyView {
+    let mut fonts = vec![SelectOption::new("", ui.now_t("common-skin-default"))];
+    let mut families: Vec<String> = nanatype_theme::BuiltinFonts::embedded()
+        .fonts()
+        .iter()
+        .filter_map(|f| f.family())
+        .collect();
+    families.extend(
+        [
+            "Microsoft YaHei UI",
+            "SimSun",
+            "Yu Gothic UI",
+            "Meiryo UI",
+            "PingFang SC",
+            "Noto Sans SC",
+            "Noto Sans JP",
+            "Arial",
+            "Consolas",
+        ]
+        .map(str::to_owned),
+    );
+    families.sort();
+    families.dedup();
+    fonts.extend(
+        families
+            .into_iter()
+            .map(|f| SelectOption::new(f.clone(), f)),
+    );
+    let read_id = id.to_owned();
+    let write_id = id.to_owned();
+    captioned(
+        ui,
+        "skin-edit-font",
+        LengthSpec::Fill,
+        widget(
+            Select::new(Some(String::new()))
+                .options(fonts)
+                .label(ui.now_t("skin-edit-font"))
+                .size(ControlSize::Small),
+        )
+        .key("skin-edit-font")
+        .bind(move |s: &mut Select| {
+            let font: Arc<str> = draft(ui, &read_id).pane(history).font.trim().into();
+            // A family saved before the list offered it still shows.
+            if !s.options.iter().any(|o| o.value == font) {
+                s.options
+                    .push(SelectOption::new(font.to_string(), font.to_string()));
+            }
+            if s.value.as_ref() != Some(&font) {
+                s.value = Some(font);
+            }
+        })
+        .on(move |e: &SelectChanged| {
+            change(ui, &write_id, |d| {
+                d.pane_mut(history).font = e.value.to_string()
+            });
+        }),
+    )
+}
+
+/// A small icon action labelled, and tooltipped, by `key`.
+fn action(ui: Ui, icon: Icon, key: &str) -> IconButton {
+    IconButton::new(icon, ui.now_t(key))
+        .size(ControlSize::Small)
+        .with_tooltip(ui.now_t(key))
 }
 
 /// The sample text under the stage: its caption with a reset at the far
@@ -180,20 +417,17 @@ fn sample_editor(ui: Ui, id: &str, is_history: bool) -> AnyView {
         .children((
             hint(ui.now_t("skin-edit-test-text")),
             kit::spacer(),
-            widget(
-                IconButton::new(ti::RESTORE, ui.now_t("skin-edit-sample-reset"))
-                    .size(ControlSize::Small)
-                    .with_tooltip(ui.now_t("skin-edit-sample-reset")),
-            )
-            .on(move |_: &Activate| {
-                change(ui, &sample_reset_id, |d| {
-                    d.pane_mut(is_history).text = ui.now_t(if is_history {
-                        "skin-edit-history-sample"
-                    } else {
-                        "skin-edit-sample"
-                    });
-                })
-            }),
+            widget(action(ui, ti::ROTATE_CLOCKWISE, "skin-edit-sample-reset")).on(
+                move |_: &Activate| {
+                    change(ui, &sample_reset_id, |d| {
+                        d.pane_mut(is_history).text = ui.now_t(if is_history {
+                            "skin-edit-history-sample"
+                        } else {
+                            "skin-edit-sample"
+                        });
+                    })
+                },
+            ),
         )),
         sample,
     ))
@@ -202,69 +436,18 @@ fn sample_editor(ui: Ui, id: &str, is_history: bool) -> AnyView {
 
 fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: bool) -> AnyView {
     let text = if is_history {
-        &base.history.text
+        base.history.text.clone()
     } else {
-        &base.dialogue.text
+        base.dialogue.text.clone()
     };
     let dimensions = default_size(&base, is_history);
-    let default = ui.now_t("common-skin-default");
-    let fields = [
-        (Field::Font, default.clone()),
-        (Field::Size, format!("{} px", text.size)),
-        (Field::Line, format!("{} ×", text.line_height)),
-        (Field::Color, text.color.to_hex()),
+    let typed = [
         (Field::Width, dimensions[0].to_string()),
         (Field::Height, dimensions[1].to_string()),
     ]
     .into_iter()
     .map(|(field_, placeholder)| field(ui, id, is_history, field_, placeholder))
     .collect::<Vec<_>>();
-    let mut fonts = vec![SelectOption::new("", default)];
-    let mut families: Vec<String> = nanatype_theme::BuiltinFonts::embedded()
-        .fonts()
-        .iter()
-        .filter_map(|f| f.family())
-        .collect();
-    families.extend(
-        [
-            "Microsoft YaHei UI",
-            "SimSun",
-            "Yu Gothic UI",
-            "Meiryo UI",
-            "PingFang SC",
-            "Noto Sans SC",
-            "Noto Sans JP",
-            "Arial",
-            "Consolas",
-        ]
-        .map(str::to_owned),
-    );
-    families.sort();
-    families.dedup();
-    fonts.extend(
-        families
-            .into_iter()
-            .map(|f| SelectOption::new(f.clone(), f)),
-    );
-    let font_id = id.to_owned();
-    let font_choices = widget(
-        Stack::column(0.0)
-            .gap_step(gap::step::TIGHT)
-            .width(LengthSpec::Fill),
-    )
-    .children((
-        hint(ui.now_t("skin-edit-font-presets")),
-        widget(
-            Select::new(Some(String::new()))
-                .options(fonts)
-                .size(ControlSize::Small),
-        )
-        .on(move |e: &SelectChanged| {
-            change(ui, &font_id, |d| {
-                d.pane_mut(is_history).font = e.value.to_string()
-            });
-        }),
-    ));
     let reset_id = id.to_owned();
     let discard_id = id.to_owned();
     let save_id = id.to_owned();
@@ -320,14 +503,25 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
     )
     .children((
         params,
+        font_select(ui, id, is_history),
         widget(
             Stack::row(0.0)
                 .gap_step(gap::step::CONTROL)
                 .wrap(true)
                 .width(LengthSpec::Fill),
         )
-        .children(fields),
-        font_choices,
+        .children((
+            size_field(ui, id, is_history, text.size),
+            color_field(ui, id, is_history, text.color),
+        )),
+        line_slider(ui, id, is_history, text.line_height),
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
+                .wrap(true)
+                .width(LengthSpec::Fill),
+        )
+        .children(typed),
         // Where the draft stands on the left, what can be done with it on
         // the right.
         widget(
@@ -346,27 +540,28 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
                     .with_layout(|l| l.flex_shrink = Some(0.0)),
             )
             .children((
-                widget(Button::new(ui.now_t("skin-edit-reset")).size(ControlSize::Small)).on(
-                    move |_: &Activate| {
-                        change(ui, &reset_id, |d| {
-                            let text = d.pane(is_history).text.clone();
-                            *d.pane_mut(is_history) = Pane {
-                                text,
-                                ..Default::default()
-                            };
-                            d.params = Default::default();
-                        })
-                    },
-                ),
-                widget(Button::new(ui.now_t("skin-edit-discard")).size(ControlSize::Small)).on(
+                widget(action(ui, ti::RESTORE, "skin-edit-reset")).on(move |_: &Activate| {
+                    change(ui, &reset_id, |d| {
+                        let text = d.pane(is_history).text.clone();
+                        *d.pane_mut(is_history) = Pane {
+                            text,
+                            ..Default::default()
+                        };
+                        d.params = Default::default();
+                    })
+                }),
+                widget(action(ui, ti::ARROW_BACK_UP, "skin-edit-discard")).on(
                     move |_: &Activate| {
                         ui.skin_drafts.update(|m| {
                             m.remove(&discard_id);
                         });
                     },
                 ),
-                widget(crate::ui::kit::cta(
-                    Button::new(ui.now_t("skin-edit-save")).size(ControlSize::Small),
+                // The one primary action keeps its word beside the icon.
+                widget(kit::cta(
+                    Button::new(ui.now_t("skin-edit-save"))
+                        .icon(ti::DEVICE_FLOPPY)
+                        .size(ControlSize::Small),
                 ))
                 .key("skin-edit-save")
                 .bind(move |b: &mut Button| {
@@ -474,20 +669,27 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
                     // Shown in place rather than swapped by `dynamic`, whose
                     // full-width branch pushed the effects button onto a
                     // line of its own.
-                    widget(Button::new(ui.now_t("common-apply")).size(ControlSize::Small))
+                    widget(action(ui, ti::CHECK, "common-apply"))
                         .key("apply-preview")
                         .visible(move || ui.settings.with(|s| s.skin.id != apply_read))
                         .on_cx(move |_, _: &Activate, cx| {
                             let id = apply_id.clone();
                             cx.dispatch_program_all(super::controls::edit(move |s| s.skin.id = id));
                         }),
-                    widget(Button::new(ui.now_t("skins-play-effects")).size(ControlSize::Small))
-                        .bind(move |b: &mut Button| {
-                            b.label = ui.now_t(if ui.shader_preview.get() {
-                                "skins-stop-effects"
+                    widget(action(ui, ti::PLAYER_PLAY, "skins-play-effects"))
+                        .key("play-effects")
+                        .bind(move |b: &mut IconButton| {
+                            let (icon, key) = if ui.shader_preview.get() {
+                                (ti::PLAYER_STOP, "skins-stop-effects")
                             } else {
-                                "skins-play-effects"
-                            });
+                                (ti::PLAYER_PLAY, "skins-play-effects")
+                            };
+                            let label: Arc<str> = ui.now_t(key).into();
+                            b.icon = icon;
+                            if let Some(t) = b.tooltip.as_mut() {
+                                t.label = label.clone();
+                            }
+                            b.label = label;
                         })
                         .on_cx(move |_, _: &Activate, cx| {
                             if ui.shader_preview.get_untracked() {
@@ -637,8 +839,18 @@ mod tests {
             })
             .expect("body size field");
         session.click_node(input.id).unwrap();
+        session.key_press("End", "End", Default::default()).unwrap();
+        for _ in 0..4 {
+            session
+                .key_press("Backspace", "Backspace", Default::default())
+                .unwrap();
+        }
         session.type_text("42").unwrap();
-        session.flush().unwrap();
+        // A number field commits on Enter, not per keystroke.
+        assert_eq!(draft(ui, id).display.size, "");
+        session
+            .key_press("Enter", "Enter", Default::default())
+            .unwrap();
         assert_eq!(draft(ui, id).display.size, "42");
         assert_eq!(ui.settings.get_untracked(), active);
         assert_eq!(ui.source.get_untracked(), source);
@@ -695,6 +907,81 @@ mod tests {
         change(ui, id, |d| d.history.size = "72".into());
         click(&mut session, &ui.now_t("skin-edit-discard"));
         assert!(!ui.skin_drafts.with_untracked(|m| m.contains_key(id)));
+    }
+
+    fn commit_size(session: &mut RuntimeAgentSession, text: &str) {
+        session.flush().unwrap();
+        let input = session
+            .accessibility_dump()
+            .into_iter()
+            .find(|n| {
+                n.agent_path
+                    .as_deref()
+                    .is_some_and(|id| id.contains("skin-edit-size"))
+            })
+            .expect("body size field");
+        session.click_node(input.id).unwrap();
+        session.key_press("End", "End", Default::default()).unwrap();
+        for _ in 0..4 {
+            session
+                .key_press("Backspace", "Backspace", Default::default())
+                .unwrap();
+        }
+        session.type_text(text).unwrap();
+        session
+            .key_press("Enter", "Enter", Default::default())
+            .unwrap();
+    }
+
+    #[test]
+    fn one_font_picker_and_typed_values_equal_to_the_skin_follow_it() {
+        let (ui, base) = fixture();
+        let id = "nanatype.halo";
+        let doc_id = DocumentId::new(7).unwrap();
+        let mut doc = RuntimeDocument::new(doc_id);
+        let render_base = base.clone();
+        doc.context_mut()
+            .mount_view_root(doc_id, move || controls(ui, id, render_base, false, false))
+            .unwrap();
+        let mut session = RuntimeAgentSession::new(doc, 700, 1400).unwrap();
+        session.flush().unwrap();
+        let nodes = session.accessibility_dump();
+        let fonts: Vec<_> = nodes
+            .iter()
+            .filter(|n| {
+                n.agent_path
+                    .as_deref()
+                    .is_some_and(|p| p.rsplit('/').next() == Some("skin-edit-font"))
+            })
+            .collect();
+        assert_eq!(fonts.len(), 1, "{fonts:?}");
+        // The text buttons are icon buttons now, still named by their text.
+        for key in ["skin-edit-reset", "skin-edit-discard", "skin-edit-save"] {
+            assert!(
+                nodes
+                    .iter()
+                    .any(|n| n.role == "button"
+                        && n.label.as_deref() == Some(ui.now_t(key).as_str())),
+                "{key}"
+            );
+        }
+
+        commit_size(&mut session, "40");
+        assert_eq!(draft(ui, id).display.size, "40");
+        let default = base.dialogue.text.size;
+        commit_size(&mut session, &default.to_string());
+        assert_eq!(draft(ui, id).display.size, "");
+
+        // The font list keeps a family typed before it was offered.
+        change(ui, id, |d| d.display.font = "Some Old Family".into());
+        session.flush().unwrap();
+        assert!(
+            session
+                .accessibility_dump()
+                .iter()
+                .any(|n| n.label.as_deref() == Some("Some Old Family")
+                    || n.value.as_deref() == Some("Some Old Family")),
+        );
     }
 
     /// A standalone skin with one param of each kind and a preset.
