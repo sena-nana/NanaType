@@ -159,13 +159,11 @@ pub fn cta(button: Button) -> Button {
     st.foreground = Some(SemanticColorRole::AccentText);
     st.background = None;
     st.border = None;
-    // The painter darkens the fill itself on hover and press, and
-    // `draw_default` would lay the button's own state fills over it.
-    st.interaction.hovered.background = None;
-    st.interaction.pressed.background = None;
-    st.interaction.focused.background = None;
-    st.interaction.focused.foreground = Some(SemanticColorRole::AccentText);
-    st.interaction.focused.foreground_secondary = None;
+    // The painter darkens the fill on hover and press itself; the button's
+    // own state paints would cover it.
+    st.interaction.hovered = SemanticPaint::default();
+    st.interaction.pressed = SemanticPaint::default();
+    st.interaction.focused = SemanticPaint::default();
     st.interaction.disabled.background = Some(SemanticColorRole::AccentSoft);
     st.painter = Some(CtaPainter.into());
     button.style(st)

@@ -183,6 +183,16 @@ pub struct UpdateSettings {
     pub last_check: Option<u64>,
 }
 
+/// Logging (docs/logging.md). Read once at launch, before the window opens.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DiagnosticsSettings {
+    /// Keep every recorded event in the session log, not only warnings.
+    pub verbose: bool,
+    /// The newest crash snapshot already pointed out, in Unix seconds.
+    pub crash_seen: u64,
+}
+
 /// The recordings played for keys pressed in the input window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1081,6 +1091,7 @@ pub struct Settings {
     pub integrations: Integrations,
     pub assets: AssetSettings,
     pub update: UpdateSettings,
+    pub diagnostics: DiagnosticsSettings,
     /// Fields from a newer build, preserved verbatim.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, Value>,
@@ -1103,6 +1114,7 @@ impl Default for Settings {
             integrations: Integrations::default(),
             assets: AssetSettings::default(),
             update: UpdateSettings::default(),
+            diagnostics: DiagnosticsSettings::default(),
             unknown: BTreeMap::new(),
         }
     }

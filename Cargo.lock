@@ -4508,6 +4508,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "nanatype-diag"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nana-diagnostics",
+]
+
+[[package]]
 name = "nanatype-douyin"
 version = "0.1.0"
 dependencies = [

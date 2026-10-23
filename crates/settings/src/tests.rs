@@ -879,3 +879,26 @@ fn third_party_chat_values_are_repaired() {
     assert_eq!(b.room_id, "42");
     assert_eq!(b.comet_token, "abcd");
 }
+
+#[test]
+fn diagnostics_default_off_round_trip_and_peek_without_touching_the_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    assert_eq!(peek_diagnostics(&path), DiagnosticsSettings::default());
+
+    let mut settings = Settings::default();
+    assert!(!settings.diagnostics.verbose);
+    settings.diagnostics.verbose = true;
+    settings.diagnostics.crash_seen = 42;
+    save_json(&path, &settings).unwrap();
+    let peeked = peek_diagnostics(&path);
+    assert!(peeked.verbose);
+    assert_eq!(peeked.crash_seen, 42);
+
+    // Older files have no section; a broken file stays where it is.
+    fs::write(&path, r#"{"schema":3,"general":{}}"#).unwrap();
+    assert_eq!(peek_diagnostics(&path), DiagnosticsSettings::default());
+    fs::write(&path, "{not json").unwrap();
+    assert_eq!(peek_diagnostics(&path), DiagnosticsSettings::default());
+    assert_eq!(fs::read_to_string(&path).unwrap(), "{not json");
+}

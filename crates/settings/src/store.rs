@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::migrate::{MigrateError, migrate};
-use crate::schema::Settings;
+use crate::schema::{DiagnosticsSettings, Settings};
 
 #[derive(Debug)]
 pub enum LoadNote {
@@ -105,6 +105,21 @@ pub fn load_json<T: DeserializeOwned + Default>(path: &Path) -> Loaded<T> {
             note: quarantine(path, e.to_string()),
         },
     }
+}
+
+/// The logging settings in `path`, read without migrating, quarantining or
+/// writing anything: the logs start before the settings are loaded properly.
+pub fn peek_diagnostics(path: &Path) -> DiagnosticsSettings {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default)]
+    struct Peek {
+        diagnostics: DiagnosticsSettings,
+    }
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<Peek>(&text).ok())
+        .unwrap_or_default()
+        .diagnostics
 }
 
 /// Load settings from `path`, falling back to `legacy` (the v0 location) on

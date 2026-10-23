@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/diag",
     "crates/model",
     "crates/markup",
     "crates/playback",
@@ -34,6 +35,7 @@ license = "MIT"
 rust-version = "1.98"
 
 [workspace.dependencies]
+nanatype-diag = { path = "crates/diag" }
 nanatype-model = { path = "crates/model" }
 nanatype-markup = { path = "crates/markup" }
 nanatype-playback = { path = "crates/playback" }
@@ -59,6 +61,8 @@ nanatype-frame = { path = "crates/frame" }
 nana-ui-platform = { git = "https://github.com/sena-nana/NanaUI", rev = "861332a617273b08e06214cb29812aa2d81b1808", default-features = false }
 nana-ui-core = { git = "https://github.com/sena-nana/NanaUI", rev = "861332a617273b08e06214cb29812aa2d81b1808", default-features = false }
 nana-text = { git = "https://github.com/sena-nana/NanaUI", rev = "861332a617273b08e06214cb29812aa2d81b1808" }
+# The same source as nana-ui's, so both see one diagnostics runtime.
+nana-diagnostics = { git = "https://github.com/sena-nana/NanaUI", rev = "861332a617273b08e06214cb29812aa2d81b1808" }
 nana-ui-devtools = { git = "https://github.com/sena-nana/NanaUI", rev = "861332a617273b08e06214cb29812aa2d81b1808" }
 nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "861332a617273b08e06214cb29812aa2d81b1808", default-features = false, features = [
     "hosted",

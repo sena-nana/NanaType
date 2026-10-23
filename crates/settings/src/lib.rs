@@ -17,4 +17,6 @@ pub use geometry::{
 };
 pub use migrate::{MigrateError, migrate};
 pub use schema::*;
-pub use store::{LoadNote, Loaded, load_json, load_settings, save_json, write_atomic};
+pub use store::{
+    LoadNote, Loaded, load_json, load_settings, peek_diagnostics, save_json, write_atomic,
+};
