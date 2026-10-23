@@ -21,6 +21,10 @@ const ACCOUNT_FACE: f32 = 28.0;
 const SEND_POPOVER_W: f32 = 230.0;
 /// The send mark's box (width, height) beside the status line.
 const SEND_MARK: (f32, f32) = (8.0, 14.0);
+/// The account's face on its settings line.
+const ACCOUNT_AVATAR: f32 = 36.0;
+/// The sign-in QR code's side.
+const QR_SIZE: f32 = 224.0;
 /// The room form: its field and its buttons on one line.
 const ROOM_FORM_W: f32 = 360.0;
 
@@ -296,13 +300,15 @@ pub fn confirm_dialog(ui: Ui) -> AnyView {
     .into_any()
 }
 
+/// Where the name and face come from while the account supplies them: a
+/// note and the way to the account, on one line.
 pub fn identity_hint(ui: Ui) -> AnyView {
-    widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
+    widget(Stack::column(0.0))
         .visible(move || {
             ui.settings.with(|s| s.integrations.bilibili.sync_profile)
                 && matches!(ui.bilibili.get().account, AccountState::Ready(_))
         })
-        .children((
+        .children(kit::line(
             hint(ui.now_t("bili-identity-hint")),
             button(ui, "bili-manage", || {
                 Msg::SettingsPlatform(crate::chat::Platform::Bilibili)
@@ -310,65 +316,64 @@ pub fn identity_hint(ui: Ui) -> AnyView {
         ))
         .into_any()
 }
+/// The signed-in account (or the way to sign in) as one line: face, name
+/// and detail on the left, what can be done on the right; a QR code to
+/// scan unfolds under it.
 fn account_card(ui: Ui) -> AnyView {
     dynamic(
         move || (ui.bilibili.get().account.clone(), ui.locale.get()),
         move |(account, _)| {
-            let mut body = vec![
-                widget(
-                    Stack::row(0.0)
-                        .gap_step(gap::step::GROUP)
-                        .align(AlignSpec::Center),
-                )
-                .children((
-                    avatar(ui, 48.0),
-                    widget(Text::new(account_label(ui, account)).style(Type::Title.style())),
-                ))
-                .into_any(),
-            ];
-            match account {
-                AccountState::Ready(p) => {
-                    body.push(hint(format!("UID {}", p.uid)));
-                    body.push(
-                        widget(Stack::row(0.0).gap_step(gap::step::CONTROL))
-                            .children((
-                                button(ui, "bili-refresh", || Msg::BilibiliRefresh),
-                                button(ui, "bili-logout", || Msg::BilibiliLogout),
-                            ))
-                            .into_any(),
-                    );
-                }
-                AccountState::Qr { url, status } => {
-                    if *status != QrStatus::Expired
-                        && let Ok(code) = QrCode::encode(url.as_bytes(), 224.0)
-                    {
-                        body.push(widget(code.label(ui.now_t("bili-login"))).into_any());
-                    }
-                    body.push(
-                        widget(Stack::row(0.0).gap_step(gap::step::CONTROL))
-                            .children((
-                                button(ui, "bili-qr-refresh", || Msg::BilibiliLogin),
-                                button(ui, "common-cancel", || Msg::BilibiliCancelLogin),
-                            ))
-                            .into_any(),
-                    );
-                }
-                AccountState::Restoring => {}
-                AccountState::Failed(message) => {
-                    body.push(hint(message.clone()));
-                    body.push(button(ui, "bili-login", || Msg::BilibiliLogin));
-                    body.push(button(ui, "bili-refresh", || Msg::BilibiliRefresh));
-                    body.push(button(ui, "bili-logout", || Msg::BilibiliLogout));
-                }
-                _ => body.push(button(ui, "bili-login", || Msg::BilibiliLogin)),
-            }
-            widget(
-                Stack::column(0.0)
-                    .gap_step(gap::step::GROUP)
-                    .padding_step(inset::step::CARD, inset::step::CARD),
+            let (detail, buttons, qr) = match account {
+                AccountState::Ready(p) => (
+                    Some(format!("UID {}", p.uid)),
+                    vec![
+                        button(ui, "bili-refresh", || Msg::BilibiliRefresh),
+                        button(ui, "bili-logout", || Msg::BilibiliLogout),
+                    ],
+                    None,
+                ),
+                AccountState::Qr { url, status } => (
+                    None,
+                    vec![
+                        button(ui, "bili-qr-refresh", || Msg::BilibiliLogin),
+                        button(ui, "common-cancel", || Msg::BilibiliCancelLogin),
+                    ],
+                    (*status != QrStatus::Expired)
+                        .then(|| QrCode::encode(url.as_bytes(), QR_SIZE).ok())
+                        .flatten()
+                        .map(|code| kit::block(widget(code.label(ui.now_t("bili-login"))))),
+                ),
+                AccountState::Restoring => (None, Vec::new(), None),
+                AccountState::Failed(message) => (
+                    Some(message.clone()),
+                    vec![
+                        button(ui, "bili-login", || Msg::BilibiliLogin),
+                        button(ui, "bili-refresh", || Msg::BilibiliRefresh),
+                        button(ui, "bili-logout", || Msg::BilibiliLogout),
+                    ],
+                    None,
+                ),
+                _ => (
+                    None,
+                    vec![button(ui, "bili-login", || Msg::BilibiliLogin)],
+                    None,
+                ),
+            };
+            let who = widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::CONTROL)
+                    .align(AlignSpec::Center),
             )
-            .children(body)
-            .into_any()
+            .children((
+                avatar(ui, ACCOUNT_AVATAR),
+                widget(kit::grow_column(gap::HAIR)).children((
+                    widget(Text::new(account_label(ui, account)).style(Type::Strong.one_line())),
+                    detail.map(hint),
+                )),
+            ));
+            widget(Stack::column(0.0))
+                .children((kit::line(who, buttons), qr))
+                .into_any()
         },
     )
     .into_any()
@@ -521,13 +526,15 @@ pub fn settings_page(ui: Ui) -> AnyView {
                         ui,
                         "bili-receive",
                         None,
-                        switch(
-                            ui,
-                            |s| s.integrations.bilibili.enabled,
-                            |s, v| s.integrations.bilibili.enabled = v,
-                        ),
+                        kit::hstack((
+                            super::settings::controls::bilibili_badge(ui),
+                            switch(
+                                ui,
+                                |s| s.integrations.bilibili.enabled,
+                                |s, v| s.integrations.bilibili.enabled = v,
+                            ),
+                        )),
                     ),
-                    super::settings::controls::bilibili_badge(ui),
                 ],
             ),
             section(

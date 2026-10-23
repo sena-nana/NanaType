@@ -101,39 +101,49 @@ pub(super) fn playback(ui: Ui) -> AnyView {
     };
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
-            section(
+            // Pace and pauses only mean something while lines are typed out.
+            section_with(
                 ui,
                 "",
                 vec![
-                    toggle_row!(ui, "playback-typing", playback.typing),
-                    row(
+                    (toggle_row!(ui, "playback-typing", playback.typing), None),
+                    when_on(
                         ui,
-                        "playback-speed",
-                        None,
-                        slider(
-                            ui,
-                            (0.25, 3.0, 0.05),
-                            "×",
-                            |s| f64::from(1.0 / s.playback.speed_scale.max(0.01)),
-                            |s, v| s.playback.speed_scale = (1.0 / v.max(0.01)) as f32,
-                        ),
+                        |s| s.playback.typing,
+                        vec![
+                            row(
+                                ui,
+                                "playback-speed",
+                                None,
+                                slider(
+                                    ui,
+                                    (0.25, 3.0, 0.05),
+                                    "×",
+                                    |s| f64::from(1.0 / s.playback.speed_scale.max(0.01)),
+                                    |s, v| s.playback.speed_scale = (1.0 / v.max(0.01)) as f32,
+                                ),
+                            ),
+                            toggle_row!(ui, "playback-punct", playback.punctuation_pauses),
+                        ],
                     ),
-                    toggle_row!(ui, "playback-punct", playback.punctuation_pauses),
-                    row(
-                        ui,
-                        "playback-entrance",
-                        None,
-                        select(
+                    (
+                        row(
                             ui,
-                            entrance_opts,
-                            |s| {
-                                s.playback
-                                    .entrance
-                                    .map(|e| e.key().to_owned())
-                                    .unwrap_or_else(|| "skin".into())
-                            },
-                            |s, v| s.playback.entrance = EntranceKind::from_key(v),
+                            "playback-entrance",
+                            None,
+                            select(
+                                ui,
+                                entrance_opts,
+                                |s| {
+                                    s.playback
+                                        .entrance
+                                        .map(|e| e.key().to_owned())
+                                        .unwrap_or_else(|| "skin".into())
+                                },
+                                |s, v| s.playback.entrance = EntranceKind::from_key(v),
+                            ),
                         ),
+                        None,
                     ),
                 ],
             ),
@@ -280,89 +290,121 @@ pub(super) fn playback(ui: Ui) -> AnyView {
                     ),
                 ],
             ),
-            section(
+            // The sounds every line makes first; then typing and keystroke
+            // sounds, whose own settings fold away with their switches.
+            section_with(
                 ui,
                 "playback-audio",
                 vec![
-                    toggle_row!(ui, "playback-sound", sound.typing),
-                    row(ui, "sound-pack", Some("sound-pack-hint"), sound_pack(ui)),
-                    row(
-                        ui,
-                        "playback-volume",
-                        None,
-                        percent(
+                    (
+                        row(
                             ui,
-                            |s| f64::from(s.sound.master),
-                            |s, v| s.sound.master = v as f32,
-                        ),
-                    ),
-                    row(
-                        ui,
-                        "playback-volume-typing",
-                        None,
-                        percent(
-                            ui,
-                            |s| f64::from(s.sound.typing_volume),
-                            |s, v| s.sound.typing_volume = v as f32,
-                        ),
-                    ),
-                    row(
-                        ui,
-                        "playback-volume-effects",
-                        None,
-                        percent(
-                            ui,
-                            |s| f64::from(s.sound.effects_volume),
-                            |s, v| s.sound.effects_volume = v as f32,
-                        ),
-                    ),
-                    toggle_row!(ui, "playback-keystroke", sound.keystroke),
-                    row(
-                        ui,
-                        "playback-keystroke-scheme",
-                        None,
-                        select(
-                            ui,
-                            select_keys(
+                            "playback-volume",
+                            None,
+                            percent(
                                 ui,
-                                &[
-                                    ("mechanical", "playback-keystroke-scheme-mechanical"),
-                                    ("bubble", "playback-keystroke-scheme-bubble"),
-                                ],
+                                |s| f64::from(s.sound.master),
+                                |s, v| s.sound.master = v as f32,
                             ),
-                            |s| match s.sound.keystroke_scheme {
-                                KeystrokeScheme::Mechanical => "mechanical".into(),
-                                KeystrokeScheme::Bubble => "bubble".into(),
-                            },
-                            |s, v| {
-                                s.sound.keystroke_scheme = if v == "bubble" {
-                                    KeystrokeScheme::Bubble
-                                } else {
-                                    KeystrokeScheme::Mechanical
-                                }
-                            },
                         ),
-                    ),
-                    row(
-                        ui,
-                        "playback-volume-keystroke",
                         None,
-                        percent(
-                            ui,
-                            |s| f64::from(s.sound.keystroke_volume),
-                            |s, v| s.sound.keystroke_volume = v as f32,
-                        ),
                     ),
-                    row(
-                        ui,
-                        "playback-device",
-                        None,
-                        select(
+                    (
+                        row(
                             ui,
-                            devices,
-                            |s| s.sound.device.clone().unwrap_or_else(|| "default".into()),
-                            |s, v| s.sound.device = (v != "default").then(|| v.to_owned()),
+                            "playback-device",
+                            None,
+                            select(
+                                ui,
+                                devices,
+                                |s| s.sound.device.clone().unwrap_or_else(|| "default".into()),
+                                |s, v| s.sound.device = (v != "default").then(|| v.to_owned()),
+                            ),
                         ),
+                        None,
+                    ),
+                    (
+                        row_tip(ui, "sound-pack", "sound-pack-hint", sound_pack(ui)),
+                        None,
+                    ),
+                    (
+                        row(
+                            ui,
+                            "playback-volume-effects",
+                            None,
+                            percent(
+                                ui,
+                                |s| f64::from(s.sound.effects_volume),
+                                |s, v| s.sound.effects_volume = v as f32,
+                            ),
+                        ),
+                        None,
+                    ),
+                    (toggle_row!(ui, "playback-sound", sound.typing), None),
+                    when_on(
+                        ui,
+                        |s| s.sound.typing,
+                        vec![row(
+                            ui,
+                            "playback-volume-typing",
+                            None,
+                            percent(
+                                ui,
+                                |s| f64::from(s.sound.typing_volume),
+                                |s, v| s.sound.typing_volume = v as f32,
+                            ),
+                        )],
+                    ),
+                    (
+                        row_tip(
+                            ui,
+                            "playback-keystroke",
+                            "playback-keystroke-hint",
+                            switch(ui, |s| s.sound.keystroke, |s, v| s.sound.keystroke = v),
+                        ),
+                        None,
+                    ),
+                    when_on(
+                        ui,
+                        |s| s.sound.keystroke,
+                        vec![
+                            row(
+                                ui,
+                                "playback-keystroke-scheme",
+                                None,
+                                segmented(
+                                    ui,
+                                    select_keys(
+                                        ui,
+                                        &[
+                                            ("mechanical", "playback-keystroke-scheme-mechanical"),
+                                            ("bubble", "playback-keystroke-scheme-bubble"),
+                                        ],
+                                    ),
+                                    |s| match s.sound.keystroke_scheme {
+                                        KeystrokeScheme::Mechanical => "mechanical".into(),
+                                        KeystrokeScheme::Bubble => "bubble".into(),
+                                    },
+                                    |s, v| {
+                                        s.sound.keystroke_scheme = if v == "bubble" {
+                                            KeystrokeScheme::Bubble
+                                        } else {
+                                            KeystrokeScheme::Mechanical
+                                        }
+                                    },
+                                ),
+                            ),
+                            row(
+                                ui,
+                                "playback-volume-keystroke",
+                                None,
+                                percent(
+                                    ui,
+                                    |s| f64::from(s.sound.keystroke_volume),
+                                    |s, v| s.sound.keystroke_volume = v as f32,
+                                ),
+                            ),
+                        ],
                     ),
                 ],
             ),

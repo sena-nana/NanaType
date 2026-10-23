@@ -347,7 +347,6 @@ int-vts-reset-off = リセットしない
 int-osc = OSC
 int-osc-hint = VNyan・Warudo・VSeeFace などへ送信
 int-osc-host = 送信先
-int-osc-port = ポート
 int-osc-prefix = アドレスの接頭辞
 int-ws = WebSocket 配信
 int-ws-hint = セリフと表情をローカルポートで配信
@@ -435,6 +434,7 @@ update-error-download = ダウンロードに失敗したか、公開された�
 update-error-other = アップデートに失敗しました
 about-logs = ログフォルダー
 about-data = データフォルダー
+about-folders = ローカルフォルダー
 about-repository = 公式リポジトリ
 about-bilibili = 公式 bilibili
 about-disclaimer = 第三者に関する声明
@@ -465,7 +465,6 @@ onboard-done = はじめる
 
 ## 共通
 common-apply = 適用
-common-reset = リセット
 common-copied = コピーしました
 common-ms = { $ms } ミリ秒
 common-skin-default = スキンに従う
@@ -493,6 +492,7 @@ chat-filter-text = コメント
 chat-filter-super-chat = スーパーチャット
 chat-filter-gift = ギフト
 chat-filter-member = メンバー加入
+chat-filter-kinds = 表示する種類
 chat-empty = コメントを待っています…
 chat-not-configured = 配信ルームにまだ接続していません
 chat-gift = { $gift } ×{ $count } を贈りました
@@ -581,7 +581,6 @@ windows-lock-locked-short = ロック
 windows-lock-tip = 操作可能：ドラッグで移動、ホイールで拡大縮小。ロック：クリックが下に透過します
 windows-vertical-text-tip = 文字の向きだけを変え、スキンのレイアウトは変えません
 windows-background-tip = クロマキーはアルファのないキャプチャ向けに緑で塗りつぶします
-history-window-link = ウィンドウとキャプチャ
 
 ## wave4-onboarding
 about-setup-guide = セットアップガイド
@@ -592,7 +591,6 @@ skins-fallback-font = 代替フォント
 
 ## wave5-fonts-licences
 about-fonts = オープンソースフォント
-about-fonts-hint = 内蔵スキンに同梱しているフォントと、そのライセンス全文
 about-fonts-author = 作者：{ $author }
 about-fonts-version = バージョン：{ $version }
 about-fonts-license-other = ライセンスは下記のとおり
@@ -839,7 +837,6 @@ int-blive-room-id = ルーム番号
 int-blive-room-placeholder = ルーム番号を入力
 int-blive-connect = 接続
 int-blive-host = blivechat のアドレス
-int-blive-port = ポート
 int-comet-section = 彗星号
 int-comet-address = 接続アドレス
 int-comet-address-hint = 彗星号プラグインの設定に貼り付けます

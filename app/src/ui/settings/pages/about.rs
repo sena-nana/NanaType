@@ -170,26 +170,25 @@ fn megabytes(bytes: u64) -> String {
     format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
 }
 
-/// The log and data folders, and the first-run guide again.
+/// The log and data folders on one row, and the first-run guide again.
 fn local(ui: Ui) -> Vec<AnyView> {
     let paths = crate::paths::Paths::resolve();
     let (logs, data) = (paths.logs.clone(), paths.data.clone());
+    let folder = |key: &str, path: std::path::PathBuf| {
+        widget(
+            Button::new(ui.now_t(key))
+                .icon(ti::FOLDER_OPEN)
+                .size(ControlSize::Small),
+        )
+        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::OpenFolder(path.clone())))
+        .into_any()
+    };
     vec![
         row(
             ui,
-            "about-logs",
+            "about-folders",
             None,
-            icon_action(ui, "about-open", ti::FOLDER_OPEN, move || {
-                Msg::OpenFolder(logs.clone())
-            }),
-        ),
-        row(
-            ui,
-            "about-data",
-            None,
-            icon_action(ui, "about-open", ti::FOLDER_OPEN, move || {
-                Msg::OpenFolder(data.clone())
-            }),
+            controls(vec![folder("about-logs", logs), folder("about-data", data)]),
         ),
         // The first-run guide again, from its first step, on General.
         row(
@@ -212,9 +211,10 @@ fn local(ui: Ui) -> Vec<AnyView> {
 }
 
 /// That NanaType is unaffiliated, and where the built-in Echo-Live skins'
-/// designs come from.
+/// designs come from; the long wording of each unfolds under its row.
 fn notices(ui: Ui) -> Vec<(AnyView, Shown)> {
     let open = signal(false);
+    let echo_open = signal(false);
     vec![
         (
             row(
@@ -231,7 +231,7 @@ fn notices(ui: Ui) -> Vec<(AnyView, Shown)> {
         (
             row_text(
                 "Echo-Live · Sheep-realms".to_owned(),
-                Some(ui.now_t("about-design-echo")),
+                None,
                 controls(vec![
                     link_icon(
                         ui,
@@ -245,10 +245,14 @@ fn notices(ui: Ui) -> Vec<(AnyView, Shown)> {
                         ti::LICENSE,
                         "https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md",
                     ),
+                    fold_toggle(ui, echo_open),
                 ]),
             ),
             None,
         ),
+        shown_if(block(hint(ui.now_t("about-design-echo"))), move || {
+            echo_open.get()
+        }),
     ]
 }
 
@@ -307,29 +311,18 @@ fn licences(ui: Ui) -> Vec<(AnyView, Shown)> {
             buttons.push(link_icon(ui, "about-source-mirror", ti::BOOK, mirror));
         }
         buttons.push(fold_toggle(ui, open));
-        rows.push((
-            row_text(
-                name.to_owned(),
-                Some(ui.now_t(description)),
-                controls(buttons),
-            ),
-            None,
-        ));
-        rows.push(shown_if(licence_panel(licence_lines(licence)), move || {
-            open.get()
-        }));
+        rows.push((row_text(name.to_owned(), None, controls(buttons)), None));
+        // What was taken and on what terms, then the licence itself.
+        let mut text = vec![
+            hint(ui.now_t(description)),
+            widget(Stack::column(0.0).height(LengthSpec::Px(gap::CONTROL))).into_any(),
+        ];
+        text.extend(licence_lines(licence));
+        rows.push(shown_if(licence_panel(text), move || open.get()));
     }
     if !nanatype_theme::BuiltinFonts::embedded().fonts().is_empty() {
         let open = signal(false);
-        rows.push((
-            row(
-                ui,
-                "about-fonts",
-                Some("about-fonts-hint"),
-                fold_toggle(ui, open),
-            ),
-            None,
-        ));
+        rows.push((row(ui, "about-fonts", None, fold_toggle(ui, open)), None));
         rows.push(shown_if(font_licence_panel(ui), move || open.get()));
     }
     rows

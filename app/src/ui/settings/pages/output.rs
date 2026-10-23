@@ -40,7 +40,8 @@ pub(super) fn step(n: u8, body: impl IntoView) -> AnyView {
 }
 
 /// Getting the display into OBS: enable output before selecting its live sender
-/// name, other capture methods folded under one line, and a sample line.
+/// name, other capture methods folded under one line. (The sample line is
+/// the page header's.)
 pub(super) fn obs_guide(ui: Ui) -> AnyView {
     let body = |key: &str| {
         widget(
@@ -150,16 +151,14 @@ pub(super) fn obs_guide(ui: Ui) -> AnyView {
             .gap_step(nana_ui_core::SpacingStep::Lg)
             .padding_step(inset::step::CARD, inset::step::ROW_Y),
     )
-    .children((
-        steps,
-        other,
-        widget(Stack::row(0.0)).children(primary(ui, "output-sample", || Msg::PlaySample)),
-    ))
+    .children((steps, other))
     .into_any()
 }
 
 pub(super) fn output(ui: Ui) -> AnyView {
-    let spout = |kind: WindowKind, title: &'static str| {
+    // One card for every window's sender: a window's row leads, and its
+    // sender's details fold away with its switch.
+    let spout = |kind: WindowKind, title: &'static str| -> [(AnyView, Shown); 2] {
         let link: fn(&crate::ui::Status) -> &LinkState = match kind {
             WindowKind::Display => |s| &s.spout_display,
             WindowKind::PeerDisplay => |s| &s.spout_peer_display,
@@ -175,101 +174,118 @@ pub(super) fn output(ui: Ui) -> AnyView {
             WindowKind::PeerDisplay => |s| &mut s.output.peer_display,
             _ => |s| &mut s.output.history,
         };
-        toggled_section(
-            ui,
-            title,
-            row(
+        [
+            (
+                row(
+                    ui,
+                    title,
+                    None,
+                    crate::ui::kit::hstack((
+                        link_badge(ui, link),
+                        switch(
+                            ui,
+                            move |s| read(s).enabled,
+                            move |s, v| write(s).enabled = v,
+                        ),
+                    )),
+                ),
+                None,
+            ),
+            when_on(
+                ui,
+                move |s| read(s).enabled,
+                vec![
+                    row(
+                        ui,
+                        "output-spout-name",
+                        None,
+                        widget(Stack::row(0.0).gap_step(gap::step::TIGHT))
+                            .children((
+                                text(
+                                    ui,
+                                    String::new(),
+                                    field::MD,
+                                    move |s| read(s).name.clone(),
+                                    move |s, v| write(s).name = v,
+                                ),
+                                widget(
+                                    IconButton::new(ti::COPY, ui.now_t("output-spout-copy"))
+                                        .size(ControlSize::Small)
+                                        .with_tooltip(ui.now_t("output-spout-copy")),
+                                )
+                                .on_cx(
+                                    move |_, _: &Activate, cx| {
+                                        // Read when clicked: the name may have been edited since the
+                                        // page was built.
+                                        let current =
+                                            read(&ui.settings.get_untracked()).name.clone();
+                                        cx.dispatch_program_all(Msg::CopyText(current))
+                                    },
+                                ),
+                            ))
+                            .into_any(),
+                    ),
+                    row(
+                        ui,
+                        "output-spout-size",
+                        None,
+                        select(
+                            ui,
+                            vec![
+                                ("window".into(), ui.now_t("output-spout-size-window")),
+                                ("1280x720".into(), "1280 × 720".into()),
+                                ("1920x1080".into(), "1920 × 1080".into()),
+                                ("2560x1440".into(), "2560 × 1440".into()),
+                                ("3840x2160".into(), "3840 × 2160".into()),
+                            ],
+                            move |s| {
+                                read(s)
+                                    .size
+                                    .map(|[w, h]| format!("{w}x{h}"))
+                                    .unwrap_or_else(|| "window".into())
+                            },
+                            move |s, v| {
+                                let size = v
+                                    .split_once('x')
+                                    .and_then(|(w, h)| Some([w.parse().ok()?, h.parse().ok()?]));
+                                write(s).size = size;
+                            },
+                        ),
+                    ),
+                    row_tip(
+                        ui,
+                        "output-spout-straight",
+                        "output-spout-straight-hint",
+                        switch(
+                            ui,
+                            move |s| read(s).straight_alpha,
+                            move |s, v| write(s).straight_alpha = v,
+                        ),
+                    ),
+                ],
+            ),
+        ]
+    };
+    let senders = [
+        spout(WindowKind::Display, "output-display"),
+        spout(WindowKind::PeerDisplay, "output-peer-display"),
+        spout(WindowKind::History, "output-history"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
+        .children((
+            section(ui, "output-obs-title", vec![obs_guide(ui)]),
+            section_with(
                 ui,
                 if cfg!(target_os = "macos") {
                     "output-syphon"
                 } else {
                     "output-spout"
                 },
-                None,
-                crate::ui::kit::hstack((
-                    link_badge(ui, link),
-                    switch(
-                        ui,
-                        move |s| read(s).enabled,
-                        move |s, v| write(s).enabled = v,
-                    ),
-                )),
+                senders,
             ),
-            move |s| read(s).enabled,
-            vec![
-                row(
-                    ui,
-                    "output-spout-name",
-                    None,
-                    widget(Stack::row(0.0).gap_step(gap::step::TIGHT))
-                        .children((
-                            text(
-                                ui,
-                                String::new(),
-                                field::MD,
-                                move |s| read(s).name.clone(),
-                                move |s, v| write(s).name = v,
-                            ),
-                            widget(
-                                IconButton::new(ti::COPY, ui.now_t("output-spout-copy"))
-                                    .size(ControlSize::Small)
-                                    .with_tooltip(ui.now_t("output-spout-copy")),
-                            )
-                            .on_cx(move |_, _: &Activate, cx| {
-                                // Read when clicked: the name may have been edited since the
-                                // page was built.
-                                let current = read(&ui.settings.get_untracked()).name.clone();
-                                cx.dispatch_program_all(Msg::CopyText(current))
-                            }),
-                        ))
-                        .into_any(),
-                ),
-                row(
-                    ui,
-                    "output-spout-size",
-                    None,
-                    select(
-                        ui,
-                        vec![
-                            ("window".into(), ui.now_t("output-spout-size-window")),
-                            ("1280x720".into(), "1280 × 720".into()),
-                            ("1920x1080".into(), "1920 × 1080".into()),
-                            ("2560x1440".into(), "2560 × 1440".into()),
-                            ("3840x2160".into(), "3840 × 2160".into()),
-                        ],
-                        move |s| {
-                            read(s)
-                                .size
-                                .map(|[w, h]| format!("{w}x{h}"))
-                                .unwrap_or_else(|| "window".into())
-                        },
-                        move |s, v| {
-                            let size = v
-                                .split_once('x')
-                                .and_then(|(w, h)| Some([w.parse().ok()?, h.parse().ok()?]));
-                            write(s).size = size;
-                        },
-                    ),
-                ),
-                row_tip(
-                    ui,
-                    "output-spout-straight",
-                    "output-spout-straight-hint",
-                    switch(
-                        ui,
-                        move |s| read(s).straight_alpha,
-                        move |s, v| write(s).straight_alpha = v,
-                    ),
-                ),
-            ],
-        )
-    };
-    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
-        .children((
-            section(ui, "output-obs-title", vec![obs_guide(ui)]),
-            spout(WindowKind::Display, "output-display"),
-            spout(WindowKind::PeerDisplay, "output-peer-display"),
-            spout(WindowKind::History, "output-history"),
         ))
         .into_any()
 }

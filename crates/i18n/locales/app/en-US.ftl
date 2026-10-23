@@ -350,7 +350,6 @@ int-vts-reset-off = Never
 int-osc = OSC
 int-osc-hint = Send to VNyan, Warudo, VSeeFace and others
 int-osc-host = Host
-int-osc-port = Port
 int-osc-prefix = Address prefix
 int-ws = WebSocket broadcast
 int-ws-hint = Broadcast lines and expressions on a local port
@@ -441,6 +440,7 @@ update-error-download = The download failed or did not match the published check
 update-error-other = Update failed
 about-logs = Logs folder
 about-data = Data folder
+about-folders = Local folders
 about-repository = Official repository
 about-bilibili = Official Bilibili
 about-disclaimer = Third-party notice
@@ -471,7 +471,6 @@ onboard-done = Get started
 
 ## Common
 common-apply = Apply
-common-reset = Reset
 common-copied = Copied
 common-ms = { $ms } ms
 common-skin-default = Skin default
@@ -499,6 +498,7 @@ chat-filter-text = Comments
 chat-filter-super-chat = Super Chats
 chat-filter-gift = Gifts
 chat-filter-member = Memberships
+chat-filter-kinds = Message types
 chat-empty = Waiting for chat…
 chat-not-configured = No live room connected yet
 chat-gift = sent { $gift } ×{ $count }
@@ -587,7 +587,6 @@ windows-lock-locked-short = Locked
 windows-lock-tip = Interactive: drag to move, scroll to scale. Locked: clicks pass through
 windows-vertical-text-tip = Changes the writing direction only, not the skin layout
 windows-background-tip = Chroma key fills the window green for captures without alpha
-history-window-link = Window & capture
 
 ## wave4-onboarding
 about-setup-guide = Setup guide
@@ -598,7 +597,6 @@ skins-fallback-font = Fallback font
 
 ## wave5-fonts-licences
 about-fonts = Open-source fonts
-about-fonts-hint = Fonts bundled for the built-in skins, with their full licences
 about-fonts-author = By { $author }
 about-fonts-version = Version: { $version }
 about-fonts-license-other = Licence below
@@ -845,7 +843,6 @@ int-blive-room-id = Room number
 int-blive-room-placeholder = Enter a room number
 int-blive-connect = Connect
 int-blive-host = blivechat host
-int-blive-port = Port
 int-comet-section = 彗星号 (Comet)
 int-comet-address = Address
 int-comet-address-hint = Paste it into the 彗星号 plugin's settings

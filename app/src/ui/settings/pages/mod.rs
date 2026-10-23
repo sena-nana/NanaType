@@ -117,6 +117,19 @@ pub fn actions(ui: Ui, page: Page) -> Option<AnyView> {
         Page::Platforms => Some(button(ui, "chat-open-panel", || {
             Msg::ShowWindow(WindowKind::Chat)
         })),
+        Page::Output => Some(button(ui, "output-sample", || Msg::PlaySample)),
+        Page::History => Some(
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .align(AlignSpec::Center),
+            )
+            .children((
+                history::page_link(ui, Page::Windows),
+                history::page_link(ui, Page::Output),
+            ))
+            .into_any(),
+        ),
         _ => None,
     }
 }

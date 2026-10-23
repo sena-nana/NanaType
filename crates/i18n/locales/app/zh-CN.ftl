@@ -347,7 +347,6 @@ int-vts-reset-off = 不复位
 int-osc = OSC
 int-osc-hint = 发送到 VNyan、Warudo、VSeeFace 等
 int-osc-host = 目标地址
-int-osc-port = 端口
 int-osc-prefix = 地址前缀
 int-ws = WebSocket 广播
 int-ws-hint = 在本机端口广播台词与表情事件
@@ -435,6 +434,7 @@ update-error-download = 下载失败，或文件与发布的校验值不一致
 update-error-other = 更新出错
 about-logs = 日志文件夹
 about-data = 数据文件夹
+about-folders = 本地文件夹
 about-repository = 官方仓库
 about-bilibili = 官方 B 站
 about-disclaimer = 第三方声明
@@ -465,7 +465,6 @@ onboard-done = 开始使用
 
 ## 通用
 common-apply = 应用
-common-reset = 重置
 common-copied = 已复制
 common-ms = { $ms } 毫秒
 common-skin-default = 跟随皮肤
@@ -493,6 +492,7 @@ chat-filter-text = 弹幕
 chat-filter-super-chat = 醒目留言
 chat-filter-gift = 礼物
 chat-filter-member = 上舰
+chat-filter-kinds = 显示类型
 chat-empty = 等待弹幕…
 chat-not-configured = 还没有连接直播间
 chat-gift = 赠送 { $gift } ×{ $count }
@@ -581,7 +581,6 @@ windows-lock-locked-short = 锁定
 windows-lock-tip = 可交互：拖动移动，滚轮缩放。锁定：鼠标穿透到下层窗口
 windows-vertical-text-tip = 只改变文字方向，不改变皮肤布局
 windows-background-tip = 色键用绿色填满窗口，供不支持透明的捕获方式抠像
-history-window-link = 窗口与捕获
 
 ## wave4-onboarding
 about-setup-guide = 新手引导
@@ -592,7 +591,6 @@ skins-fallback-font = 替代字体
 
 ## wave5-fonts-licences
 about-fonts = 开源字体
-about-fonts-hint = 内置皮肤随附的字体，以及它们的许可全文
 about-fonts-author = 作者：{ $author }
 about-fonts-version = 版本：{ $version }
 about-fonts-license-other = 许可见下文
@@ -839,7 +837,6 @@ int-blive-room-id = 房间号
 int-blive-room-placeholder = 输入房间号
 int-blive-connect = 连接
 int-blive-host = blivechat 地址
-int-blive-port = 端口
 int-comet-section = 彗星号
 int-comet-address = 连接地址
 int-comet-address-hint = 粘贴到彗星号插件的设置里

@@ -41,14 +41,36 @@ fn panel(ui: Ui) -> AnyView {
                 None,
                 crate::ui::settings::chat_panel_style(ui),
             ),
-            toggle_row!(ui, "chat-filter-text", integrations.bilibili.panel.text),
-            toggle_row!(
+            row(
                 ui,
-                "chat-filter-super-chat",
-                integrations.bilibili.panel.super_chat
+                "chat-filter-kinds",
+                None,
+                chip_toggles(
+                    ui,
+                    &[
+                        (
+                            "chat-filter-text",
+                            |s| s.integrations.bilibili.panel.text,
+                            |s, v| s.integrations.bilibili.panel.text = v,
+                        ),
+                        (
+                            "chat-filter-super-chat",
+                            |s| s.integrations.bilibili.panel.super_chat,
+                            |s, v| s.integrations.bilibili.panel.super_chat = v,
+                        ),
+                        (
+                            "chat-filter-gift",
+                            |s| s.integrations.bilibili.panel.gift,
+                            |s, v| s.integrations.bilibili.panel.gift = v,
+                        ),
+                        (
+                            "chat-filter-member",
+                            |s| s.integrations.bilibili.panel.member,
+                            |s, v| s.integrations.bilibili.panel.member = v,
+                        ),
+                    ],
+                ),
             ),
-            toggle_row!(ui, "chat-filter-gift", integrations.bilibili.panel.gift),
-            toggle_row!(ui, "chat-filter-member", integrations.bilibili.panel.member),
             toggle_row!(
                 ui,
                 "int-bilibili-quote-display",

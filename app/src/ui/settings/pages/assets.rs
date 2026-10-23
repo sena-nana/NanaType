@@ -12,6 +12,38 @@ pub(super) fn remove_button(ui: Ui, armed: Signal<bool>) -> AnyView {
     .into_any()
 }
 
+/// "Add folder…", which picks a sticker folder.
+fn add_folder(ui: Ui) -> AnyView {
+    button(ui, "assets-add-folder", || {
+        Msg::PickFile(FileTarget::StickerFolder)
+    })
+}
+
+/// "Add phrase", which appends an empty quick phrase.
+fn add_phrase(ui: Ui) -> AnyView {
+    button(ui, "assets-phrase-add", || {
+        edit(|s| {
+            s.assets.phrases.push(QuickPhrase {
+                label: String::new(),
+                markup: String::new(),
+                send: false,
+                hotkey: None,
+            })
+        })
+    })
+}
+
+/// `rows` with `add` at the end of the last line, or the empty state with
+/// `add` beside it when there are none.
+fn list_or_empty(ui: Ui, rows: Vec<AnyView>, empty_key: &str, add: AnyView) -> AnyView {
+    if rows.is_empty() {
+        return empty_row(ui, empty_key, add);
+    }
+    widget(Stack::column(0.0))
+        .children((divided(rows), divider(), kit::line((), add)))
+        .into_any()
+}
+
 pub(super) fn assets(ui: Ui) -> AnyView {
     let dirs = dynamic(
         move || (ui.sticker_packs.get(), ui.locale.get()),
@@ -127,15 +159,12 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                     )
                 })
                 .collect();
-            widget(Stack::column(0.0)).children(rows).into_any()
+            list_or_empty(ui, rows, "empty-stickers", add_folder(ui))
         },
     );
     let phrases = dynamic(
         move || ui.settings.with(|s| s.assets.phrases.len()),
         move |n| {
-            if *n == 0 {
-                return crate::ui::kit::empty_state::<Msg>(ui.now_t("empty-phrases"), None);
-            }
             let rows: Vec<AnyView> = (0..*n)
                 .map(|i| {
                     let p = ui.settings.with_untracked(|s| s.assets.phrases[i].clone());
@@ -233,51 +262,14 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                         .into_any()
                 })
                 .collect();
-            widget(Stack::column(0.0))
-                .children(divided(rows))
-                .into_any()
+            list_or_empty(ui, rows, "empty-phrases", add_phrase(ui))
         },
     );
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
-            section(
-                ui,
-                "assets-stickers",
-                vec![
-                    dirs.into_any(),
-                    widget(
-                        Stack::row(0.0)
-                            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
-                    )
-                    .children(button(ui, "assets-add-folder", || {
-                        Msg::PickFile(FileTarget::StickerFolder)
-                    }))
-                    .into_any(),
-                ],
-            ),
+            section(ui, "assets-stickers", vec![dirs.into_any()]),
             crate::ui::settings::telegram::panel(ui),
-            section(
-                ui,
-                "assets-phrases",
-                vec![
-                    phrases.into_any(),
-                    widget(
-                        Stack::row(0.0)
-                            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
-                    )
-                    .children(button(ui, "assets-phrase-add", || {
-                        edit(|s| {
-                            s.assets.phrases.push(QuickPhrase {
-                                label: String::new(),
-                                markup: String::new(),
-                                send: false,
-                                hotkey: None,
-                            })
-                        })
-                    }))
-                    .into_any(),
-                ],
-            ),
+            section(ui, "assets-phrases", vec![phrases.into_any()]),
         ))
         .into_any()
 }

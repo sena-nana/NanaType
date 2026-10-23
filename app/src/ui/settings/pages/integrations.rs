@@ -302,22 +302,16 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                         ui,
                         "int-osc-host",
                         None,
-                        code_text(
+                        address(
                             ui,
-                            "127.0.0.1".into(),
-                            field::SM,
-                            |s| s.integrations.osc.host.clone(),
-                            |s, v| s.integrations.osc.host = v,
-                        ),
-                    ),
-                    row(
-                        ui,
-                        "int-osc-port",
-                        None,
-                        port(
-                            ui,
-                            |s| s.integrations.osc.port,
-                            |s, v| s.integrations.osc.port = v,
+                            (
+                                |s| s.integrations.osc.host.clone(),
+                                |s, v| s.integrations.osc.host = v,
+                            ),
+                            (
+                                |s| s.integrations.osc.port,
+                                |s, v| s.integrations.osc.port = v,
+                            ),
                         ),
                     ),
                     row(

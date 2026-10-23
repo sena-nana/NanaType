@@ -5,12 +5,12 @@ use std::sync::{Arc, LazyLock};
 
 use nana_ui::runtime::view::{AnyView, IntoView, segmented_option, widget};
 use nana_ui::runtime::{
-    ColorChanged, ColorField, IconButton, NumberChanged, RangeChanged, RangeField,
+    Activate, Chip, ColorChanged, ColorField, IconButton, NumberChanged, RangeChanged, RangeField,
     SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption, Stack,
     StatusBadge, Switch, Text, TextChanged, ToggleChanged,
 };
 use nana_ui::{ButtonKind, ControlSize, StatusTone};
-use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
+use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec, SemanticColorRole};
 use nanatype_i18n::Locale;
 use nanatype_model::Rgba8;
 use nanatype_settings::Settings;
@@ -191,7 +191,9 @@ fn breathing_badge(
             }
             b.tone = tone;
         });
+    // An idle link says nothing: its switch already shows it is off.
     widget(Stack::row(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
+        .visible(move || describe().1 != StatusTone::Neutral)
         .bind(move |s: &mut Stack| {
             let connecting = connecting();
             let opacity = if connecting && !ui.reduced_motion.get() {
@@ -248,6 +250,64 @@ pub fn row_live_hint(
     control: AnyView,
 ) -> AnyView {
     crate::ui::kit::row_hint_fn(ui.now_t(label_key), hint, control)
+}
+
+/// A setting flag shown as a chip: its label key, then how it is read and
+/// written.
+pub type Flag = (&'static str, fn(&Settings) -> bool, fn(&mut Settings, bool));
+
+/// Several on/off settings as one row of chips, each selected while its flag
+/// is on, rather than a switch row apiece.
+pub fn chip_toggles(ui: Ui, flags: &[Flag]) -> AnyView {
+    let chips: Vec<AnyView> = flags
+        .iter()
+        .map(|&(key, get, set)| {
+            widget(
+                Chip::new(ui.now_t(key))
+                    .selected(get(&ui.settings.get_untracked()))
+                    .size(ControlSize::Small),
+            )
+            .bind(move |c: &mut Chip| c.selected = ui.settings.with(|s| get(s)))
+            .on_cx(move |_, _: &Activate, cx| {
+                let v = !ui.settings.with_untracked(|s| get(s));
+                cx.dispatch_program_all(edit(move |s| set(s, v)));
+            })
+            .into_any()
+        })
+        .collect();
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .wrap(true)
+            .align(AlignSpec::Center)
+            .justify(JustifySpec::End),
+    )
+    .children(chips)
+    .into_any()
+}
+
+/// How a setting of type `T` is read and written.
+pub type Bound<T> = (fn(&Settings) -> T, fn(&mut Settings, T));
+
+/// A host and its port on one line: `host : port`.
+pub fn address(ui: Ui, host: Bound<String>, port_of: Bound<u16>) -> AnyView {
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        code_text(ui, "127.0.0.1".into(), field::SM, host.0, host.1),
+        widget(Type::Caption.text(":")),
+        port(ui, port_of.0, port_of.1),
+    ))
+    .into_any()
+}
+
+/// A card's empty list as one row: what is missing on the left, the button
+/// that adds it on the right.
+pub fn empty_row(ui: Ui, text_key: &str, action: AnyView) -> AnyView {
+    kit::line(hint(ui.now_t(text_key)), action)
 }
 
 /// A small button that sends `msg`.

@@ -261,7 +261,7 @@ fn settings_body_scroll_reaches_and_operates_bottom_controls() {
     for locale in Locale::ALL {
         for (page, key) in [
             (Page::General, "general-check-updates"),
-            (Page::Output, "output-history"),
+            (Page::History, "history-show-quote"),
         ] {
             let mut f = Fixture::new(locale, false, page);
             assert!(
@@ -283,11 +283,12 @@ fn settings_body_scroll_reaches_and_operates_bottom_controls() {
             f.click(&toggle);
             f.apply_edits();
             let s = f.ui.settings.get_untracked();
-            // The lowest switch on General is the (default-on) update check.
+            // The lowest switches on General and History are the
+            // (default-on) update check and reply quotes.
             assert!(if page == Page::General {
                 !s.general.check_updates
             } else {
-                s.output.history.enabled
+                !s.history.show_quote
             });
             f.scroll(650.0, 3000.0);
             let heading = f.find("text", page.label_key()).bounds;

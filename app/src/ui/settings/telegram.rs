@@ -1,5 +1,5 @@
-use super::controls::{block, row, row_text, row_tip, section, text};
-use crate::ui::kit::{self, Type, field, gap};
+use super::controls::{block, row, row_text, row_tip, section_with, shown_if, text};
+use crate::ui::kit::{self, Type, field};
 use crate::{
     msg::Msg,
     stickers::telegram::{Command, Phase},
@@ -25,7 +25,14 @@ fn action(ui: Ui, key: &str, command: impl Fn() -> Command + Send + 'static) -> 
         .into_any()
 }
 
-fn field(ui: Ui, key: &str, value: Signal<String>, secure: bool) -> AnyView {
+/// A login or search field, with what acts on it beside it.
+fn field(
+    ui: Ui,
+    key: &str,
+    value: Signal<String>,
+    secure: bool,
+    actions: impl IntoView,
+) -> AnyView {
     let input = widget(kit::text_input("").secure(secure).size(ControlSize::Small))
         .key(format!("{key}-input"))
         .bind(move |input: &mut TextInput| {
@@ -40,10 +47,48 @@ fn field(ui: Ui, key: &str, value: Signal<String>, secure: bool) -> AnyView {
         ui,
         key,
         None,
-        widget(Stack::row(0.0).width(LengthSpec::Px(field::LG)))
-            .children(input)
-            .into_any(),
+        kit::hstack((
+            widget(Stack::row(0.0).width(LengthSpec::Px(field::MD))).children(input),
+            actions,
+        )),
     )
+}
+
+/// Whether the session is in `phase`, tracked.
+fn at(ui: Ui, phase: Phase) -> impl Fn() -> bool + Send + 'static {
+    move || ui.telegram.get().phase == phase
+}
+
+/// What the session is doing, worded.
+fn status_text(ui: Ui) -> AnyView {
+    widget(Type::Caption.text(""))
+        .key("telegram-status")
+        .bind(move |t: &mut Text| {
+            let state = ui.telegram.get();
+            t.value = if let Some(error) = &state.error {
+                ui.tr("stickers-failed", &[("message", error.clone().into())])
+            } else if let Some((done, total)) = state.progress {
+                ui.tr(
+                    "stickers-downloading",
+                    &[
+                        ("done", (done as u64).into()),
+                        ("total", (total as u64).into()),
+                    ],
+                )
+            } else {
+                ui.now_t(if state.busy {
+                    "telegram-working"
+                } else {
+                    match state.phase {
+                        Phase::Offline => "telegram-offline",
+                        Phase::Code => "telegram-code-sent",
+                        Phase::Password => "telegram-password-required",
+                        Phase::Ready => "telegram-ready",
+                    }
+                })
+            };
+        })
+        .into_any()
 }
 
 pub(super) fn panel(ui: Ui) -> AnyView {
@@ -52,184 +97,166 @@ pub(super) fn panel(ui: Ui) -> AnyView {
     let code = signal(String::new());
     let password = signal(String::new());
     let query = signal(String::new());
-    section(
+    let connect = action(ui, "telegram-connect", move || {
+        let settings = ui.settings.get_untracked();
+        let hash = api_hash.get_untracked();
+        api_hash.set(String::new());
+        let number = phone.get_untracked();
+        phone.set(String::new());
+        Command::Connect {
+            api_id: settings.assets.telegram.api_id,
+            api_hash: hash,
+            phone: number,
+            proxy: settings.assets.telegram.proxy.clone(),
+        }
+    });
+    let cancel = widget(Button::new(ui.now_t("common-cancel")).size(ControlSize::Small))
+        .visible(move || {
+            let state = ui.telegram.get();
+            state.busy && state.progress.is_some()
+        })
+        .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::Telegram(Command::Cancel)));
+    let logout = widget(Button::new(ui.now_t("telegram-logout")).size(ControlSize::Small))
+        .visible(move || {
+            let state = ui.telegram.get();
+            state.phase != Phase::Offline || state.error.is_some()
+        })
+        .bind(move |b: &mut Button| b.disabled = ui.telegram.get().busy)
+        .key("telegram-logout")
+        .on_cx(move |_, _: &Activate, cx| {
+            for secret in [api_hash, phone, code, password] {
+                secret.set(String::new());
+            }
+            cx.dispatch_program_all(Msg::Telegram(Command::Logout))
+        });
+    let results = dynamic(
+        move || ui.telegram.get().results.clone(),
+        move |packs| {
+            let rows: Vec<_> = packs
+                .iter()
+                .map(|pack| {
+                    let name = pack.name.clone();
+                    row_text(
+                        pack.title.clone(),
+                        Some(format!(
+                            "{} · {}",
+                            pack.name,
+                            ui.tr("telegram-count", &[("count", (pack.count as u64).into())])
+                        )),
+                        action(ui, "stickers-download", move || {
+                            Command::Download(name.clone())
+                        }),
+                    )
+                })
+                .collect();
+            widget(Stack::column(0.0)).children(rows).into_any()
+        },
+    );
+    let no_results = move || {
+        let state = ui.telegram.get();
+        state.searched && state.results.is_empty() && !state.busy && state.error.is_none()
+    };
+    section_with(
         ui,
         "telegram-stickers",
         vec![
-            row_tip(
-                ui,
-                "telegram-api-id",
-                "telegram-hint",
-                text(
+            (
+                row_tip(
                     ui,
-                    String::new(),
-                    field::LG,
-                    |s| {
-                        if s.assets.telegram.api_id > 0 {
-                            s.assets.telegram.api_id.to_string()
-                        } else {
-                            String::new()
-                        }
-                    },
-                    |s, value| s.assets.telegram.api_id = value.parse().unwrap_or(0),
+                    "telegram-api-id",
+                    "telegram-hint",
+                    text(
+                        ui,
+                        String::new(),
+                        field::MD,
+                        |s| {
+                            if s.assets.telegram.api_id > 0 {
+                                s.assets.telegram.api_id.to_string()
+                            } else {
+                                String::new()
+                            }
+                        },
+                        |s, value| s.assets.telegram.api_id = value.parse().unwrap_or(0),
+                    ),
                 ),
+                None,
             ),
-            widget(Stack::column(0.0))
-                .visible(move || ui.telegram.get().phase == Phase::Offline)
-                .children((
-                    field(ui, "telegram-api-hash", api_hash, true),
-                    field(ui, "telegram-phone", phone, true),
-                ))
-                .into_any(),
-            row_tip(
-                ui,
-                "telegram-proxy",
-                "telegram-proxy-hint",
-                text(
+            shown_if(
+                field(ui, "telegram-api-hash", api_hash, true, ()),
+                at(ui, Phase::Offline),
+            ),
+            shown_if(
+                field(ui, "telegram-phone", phone, true, ()),
+                at(ui, Phase::Offline),
+            ),
+            (
+                row_tip(
                     ui,
-                    "socks5://127.0.0.1:7890".into(),
-                    field::LG,
-                    |s| s.assets.telegram.proxy.clone(),
-                    |s, value| s.assets.telegram.proxy = value,
+                    "telegram-proxy",
+                    "telegram-proxy-hint",
+                    text(
+                        ui,
+                        "socks5://127.0.0.1:7890".into(),
+                        field::MD,
+                        |s| s.assets.telegram.proxy.clone(),
+                        |s, value| s.assets.telegram.proxy = value,
+                    ),
                 ),
+                None,
             ),
-            block(action(ui, "telegram-connect", move || {
-                let settings = ui.settings.get_untracked();
-                let hash = api_hash.get_untracked();
-                api_hash.set(String::new());
-                let number = phone.get_untracked();
-                phone.set(String::new());
-                Command::Connect {
-                    api_id: settings.assets.telegram.api_id,
-                    api_hash: hash,
-                    phone: number,
-                    proxy: settings.assets.telegram.proxy.clone(),
-                }
-            })),
-            widget(Stack::column(0.0))
-                .visible(move || ui.telegram.get().phase == Phase::Code)
-                .children((
-                    field(ui, "telegram-code", code, true),
-                    block(action(ui, "telegram-verify", move || {
+            shown_if(
+                field(
+                    ui,
+                    "telegram-code",
+                    code,
+                    true,
+                    action(ui, "telegram-verify", move || {
                         let value = code.get_untracked();
                         code.set(String::new());
                         Command::Code(value)
-                    })),
-                ))
-                .into_any(),
-            widget(Stack::column(0.0))
-                .visible(move || ui.telegram.get().phase == Phase::Password)
-                .children((
-                    field(ui, "telegram-password", password, true),
-                    block(action(ui, "telegram-verify", move || {
+                    }),
+                ),
+                at(ui, Phase::Code),
+            ),
+            shown_if(
+                field(
+                    ui,
+                    "telegram-password",
+                    password,
+                    true,
+                    action(ui, "telegram-verify", move || {
                         let value = password.get_untracked();
                         password.set(String::new());
                         Command::Password(value)
-                    })),
-                ))
-                .into_any(),
-            block(widget(Type::Caption.text("")).key("telegram-status").bind(
-                move |t: &mut Text| {
-                    let state = ui.telegram.get();
-                    t.value = if let Some(error) = &state.error {
-                        ui.tr("stickers-failed", &[("message", error.clone().into())])
-                    } else if let Some((done, total)) = state.progress {
-                        ui.tr(
-                            "stickers-downloading",
-                            &[
-                                ("done", (done as u64).into()),
-                                ("total", (total as u64).into()),
-                            ],
-                        )
-                    } else {
-                        ui.now_t(if state.busy {
-                            "telegram-working"
-                        } else {
-                            match state.phase {
-                                Phase::Offline => "telegram-offline",
-                                Phase::Code => "telegram-code-sent",
-                                Phase::Password => "telegram-password-required",
-                                Phase::Ready => "telegram-ready",
-                            }
-                        })
-                    };
-                },
-            )),
-            widget(Stack::column(0.0))
-                .visible(move || ui.telegram.get().phase == Phase::Ready)
-                .children((
-                    field(ui, "telegram-query", query, false),
-                    block(
-                        widget(Stack::row(0.0).gap_step(gap::step::CONTROL).wrap(true)).children((
-                            action(ui, "telegram-search", move || {
-                                Command::Search(query.get_untracked())
-                            }),
-                            action(ui, "telegram-download", move || {
-                                Command::Download(query.get_untracked())
-                            }),
-                        )),
-                    ),
-                    dynamic(
-                        move || ui.telegram.get().results.clone(),
-                        move |packs| {
-                            let rows: Vec<_> = packs
-                                .iter()
-                                .map(|pack| {
-                                    let name = pack.name.clone();
-                                    row_text(
-                                        pack.title.clone(),
-                                        Some(format!(
-                                            "{} · {}",
-                                            pack.name,
-                                            ui.tr(
-                                                "telegram-count",
-                                                &[("count", (pack.count as u64).into())]
-                                            )
-                                        )),
-                                        action(ui, "stickers-download", move || {
-                                            Command::Download(name.clone())
-                                        }),
-                                    )
-                                })
-                                .collect();
-                            widget(Stack::column(0.0)).children(rows).into_any()
-                        },
-                    ),
-                    widget(Type::Caption.text(ui.now_t("telegram-no-results"))).visible(
-                        move || {
-                            let state = ui.telegram.get();
-                            state.searched
-                                && state.results.is_empty()
-                                && !state.busy
-                                && state.error.is_none()
-                        },
-                    ),
-                ))
-                .into_any(),
-            block(
-                widget(Button::new(ui.now_t("common-cancel")).size(ControlSize::Small))
-                    .visible(move || {
-                        let state = ui.telegram.get();
-                        state.busy && state.progress.is_some()
-                    })
-                    .on_cx(|_, _: &Activate, cx| {
-                        cx.dispatch_program_all(Msg::Telegram(Command::Cancel))
                     }),
+                ),
+                at(ui, Phase::Password),
             ),
-            block(
-                widget(Button::new(ui.now_t("telegram-logout")).size(ControlSize::Small))
-                    .visible(move || {
-                        let state = ui.telegram.get();
-                        state.phase != Phase::Offline || state.error.is_some()
-                    })
-                    .bind(move |b: &mut Button| b.disabled = ui.telegram.get().busy)
-                    .key("telegram-logout")
-                    .on_cx(move |_, _: &Activate, cx| {
-                        for secret in [api_hash, phone, code, password] {
-                            secret.set(String::new());
-                        }
-                        cx.dispatch_program_all(Msg::Telegram(Command::Logout))
-                    }),
+            // Where the session stands, and what can be done about it.
+            (kit::line(status_text(ui), (connect, cancel, logout)), None),
+            shown_if(
+                field(
+                    ui,
+                    "telegram-query",
+                    query,
+                    false,
+                    (
+                        action(ui, "telegram-search", move || {
+                            Command::Search(query.get_untracked())
+                        }),
+                        action(ui, "telegram-download", move || {
+                            Command::Download(query.get_untracked())
+                        }),
+                    ),
+                ),
+                at(ui, Phase::Ready),
+            ),
+            shown_if(results.into_any(), move || {
+                at(ui, Phase::Ready)() && !ui.telegram.get().results.is_empty()
+            }),
+            shown_if(
+                block(widget(Type::Caption.text(ui.now_t("telegram-no-results")))),
+                move || at(ui, Phase::Ready)() && no_results(),
             ),
         ],
     )

@@ -2,8 +2,8 @@
 use super::{
     Ui,
     settings::controls::{
-        blivechat_badge, block, button, code_text, confirm, edit, port, primary, row, section,
-        segmented, select_keys, switch, toggled_section,
+        address, blivechat_badge, block, button, confirm, edit, primary, row, section, segmented,
+        select_keys, switch, toggled_section,
     },
 };
 use crate::msg::Msg;
@@ -125,22 +125,16 @@ fn server_section(ui: Ui) -> AnyView {
             ui,
             "int-blive-host",
             None,
-            code_text(
+            address(
                 ui,
-                "127.0.0.1".into(),
-                crate::ui::kit::field::SM,
-                |s| s.integrations.blivechat.host.clone(),
-                |s, v| s.integrations.blivechat.host = v,
-            ),
-        ),
-        row(
-            ui,
-            "int-blive-port",
-            None,
-            port(
-                ui,
-                |s| s.integrations.blivechat.port,
-                |s, v| s.integrations.blivechat.port = v,
+                (
+                    |s| s.integrations.blivechat.host.clone(),
+                    |s, v| s.integrations.blivechat.host = v,
+                ),
+                (
+                    |s| s.integrations.blivechat.port,
+                    |s, v| s.integrations.blivechat.port = v,
+                ),
             ),
         ),
     ]);

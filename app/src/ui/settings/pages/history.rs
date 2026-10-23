@@ -134,14 +134,36 @@ pub(super) fn history(ui: Ui) -> AnyView {
                         ui,
                         |s| s.history.chat.enabled,
                         vec![
-                            toggle_row!(ui, "chat-filter-text", history.chat.filter.text),
-                            toggle_row!(
+                            row(
                                 ui,
-                                "chat-filter-super-chat",
-                                history.chat.filter.super_chat
+                                "chat-filter-kinds",
+                                None,
+                                chip_toggles(
+                                    ui,
+                                    &[
+                                        (
+                                            "chat-filter-text",
+                                            |s| s.history.chat.filter.text,
+                                            |s, v| s.history.chat.filter.text = v,
+                                        ),
+                                        (
+                                            "chat-filter-super-chat",
+                                            |s| s.history.chat.filter.super_chat,
+                                            |s, v| s.history.chat.filter.super_chat = v,
+                                        ),
+                                        (
+                                            "chat-filter-gift",
+                                            |s| s.history.chat.filter.gift,
+                                            |s, v| s.history.chat.filter.gift = v,
+                                        ),
+                                        (
+                                            "chat-filter-member",
+                                            |s| s.history.chat.filter.member,
+                                            |s, v| s.history.chat.filter.member = v,
+                                        ),
+                                    ],
+                                ),
                             ),
-                            toggle_row!(ui, "chat-filter-gift", history.chat.filter.gift),
-                            toggle_row!(ui, "chat-filter-member", history.chat.filter.member),
                             row(
                                 ui,
                                 "chat-min-gift",
@@ -164,28 +186,12 @@ pub(super) fn history(ui: Ui) -> AnyView {
                     ),
                 ],
             ),
-            // Where the window itself and its capture are set.
-            section(
-                ui,
-                "",
-                vec![row(
-                    ui,
-                    "history-window-link",
-                    None,
-                    widget(
-                        Stack::row(0.0)
-                            .gap_step(gap::step::TIGHT)
-                            .align(AlignSpec::Center),
-                    )
-                    .children((page_link(ui, Page::Windows), page_link(ui, Page::Output)))
-                    .into_any(),
-                )],
-            ),
         ))
         .into_any()
 }
 
-/// "Windows →": a quiet button that opens another settings page.
+/// "Windows →": a quiet button that opens another settings page (the page
+/// header's, where the window itself and its capture are set).
 pub(super) fn page_link(ui: Ui, page: Page) -> AnyView {
     widget(
         Button::new(format!("{} →", ui.now_t(page.label_key())))
