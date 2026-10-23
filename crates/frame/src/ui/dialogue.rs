@@ -1071,7 +1071,17 @@ fn box_view(ui: Stage, ctx: BoxCtx, content: AnyView) -> impl IntoView {
 
     // An empty box is fully transparent, so a movable window would be
     // invisible until its first line: outline it while it can be dragged.
-    let placeholder = drag_window.then(|| empty_placeholder(ui));
+    let placeholder = drag_window.then(|| {
+        empty_placeholder(
+            ui,
+            "dialogue-empty-placeholder",
+            "display-placeholder",
+            move || {
+                let view = drawn(ui);
+                box_presence(ui, &view, ui.now.get(), ui.reduced_motion.get()).0
+            },
+        )
+    });
     outer.children((
         placeholder,
         frame.children((
@@ -1098,9 +1108,14 @@ fn box_presence(ui: Stage, view: &DisplayView, now: u64, reduced: bool) -> (f32,
     (if view.empty { 0.0 } else { fade * shown }, rise)
 }
 
-/// A dashed outline of the window, shown as the box fades out, so an
-/// unlocked display can be found and moved before anything is said.
-fn empty_placeholder(ui: Stage) -> AnyView {
+/// A dashed outline of the window, shown as its content (`presence`, 0..1)
+/// fades out, so an unlocked overlay can be found and moved while empty.
+pub(super) fn empty_placeholder(
+    ui: Stage,
+    key: &'static str,
+    hint: &'static str,
+    presence: impl Fn() -> f32 + Send + Sync + 'static,
+) -> AnyView {
     let mut st = NodeStyle::default();
     {
         let l = Arc::make_mut(&mut st.layout);
@@ -1119,15 +1134,11 @@ fn empty_placeholder(ui: Stage) -> AnyView {
         border: 1.5px dashed rgba(255, 255, 255, 0.6);
         border-radius: 10px;
     })
-    .bind(move |s: &mut Stack| {
-        let view = drawn(ui);
-        let (box_opacity, _) = box_presence(ui, &view, ui.now.get(), ui.reduced_motion.get());
-        restyle(s, |l| l.opacity = Some(1.0 - box_opacity));
-    })
-    .key("dialogue-empty-placeholder")
+    .bind(move |s: &mut Stack| restyle(s, |l| l.opacity = Some(1.0 - presence())))
+    .key(key)
     .children(
-        widget(Text::new(ui.now_t("display-placeholder")).style(st)).bind(move |t: &mut Text| {
-            let value = I18N.t_in(ui.locale.get(), "display-placeholder");
+        widget(Text::new(ui.now_t(hint)).style(st)).bind(move |t: &mut Text| {
+            let value = I18N.t_in(ui.locale.get(), hint);
             if t.value != value {
                 t.value = value;
             }

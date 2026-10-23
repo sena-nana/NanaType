@@ -22,6 +22,7 @@ windows-input = Input
 windows-display = Display
 windows-history = History
 display-placeholder = Lines appear here · this outline hides once the window is locked
+history-placeholder = Chat history appears here · this outline hides once the window is locked
 
 ## Common
 common-cancel = Cancel

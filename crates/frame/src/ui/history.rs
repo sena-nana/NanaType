@@ -646,12 +646,10 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
             .width(LengthSpec::Fill),
     )
     .bind(move |s: &mut Stack| {
-        let Some(after) = fade_after else {
+        if fade_after.is_none() {
             return;
-        };
-        let age = crate::clock::unix_of(ui.history_now.get()).saturating_sub(at);
-        let start = u64::from(after) * 1000;
-        let opacity = 1.0 - (age.saturating_sub(start) as f32 / ROW_FADE_MS as f32).clamp(0.0, 1.0);
+        }
+        let opacity = row_opacity(ui, at, fade_after);
         let mut taken = std::mem::replace(s, Stack::row(0.0));
         taken = taken.with_layout(|l| l.opacity = Some(opacity));
         *s = taken;
@@ -815,6 +813,9 @@ pub fn history_window_with(
             pb = pb.min(4.0);
         }
         let panel_surface = Surface::history_panel(&skin);
+        let unlocked = ui
+            .settings
+            .with_untracked(|x| x.overlays.history.lock != nanatype_settings::Lock::Locked);
         let decor = |layer: DecorLayer| -> Vec<AnyView> {
             h.decor
                 .iter()
@@ -863,16 +864,24 @@ pub fn history_window_with(
             ui.history_width.set_if_changed(e.width);
             ui.history_height.set_if_changed(e.height);
         })
-        .children(
+        .children((
+            // An empty log is invisible without a panel: outline the window
+            // while it can be dragged, as the display window does.
+            unlocked.then(|| {
+                dialogue::empty_placeholder(
+                    ui,
+                    "history-empty-placeholder",
+                    "history-placeholder",
+                    move || log_presence(ui),
+                )
+            }),
             widget(
                 Surface::optional_stack(panel_surface.as_ref(), Stack::fill_column(0.0))
                     .with_layout(move |l| {
                         l.position = PositionSpec::Relative;
                         // Window move/scale gestures take priority over scrolling
                         // the list, including in the default interactive mode.
-                        if ui.settings.with_untracked(|x| {
-                            x.overlays.history.lock != nanatype_settings::Lock::Locked
-                        }) {
+                        if unlocked {
                             l.pointer_events = Some(PointerEventsSpec::None);
                         }
                     }),
@@ -908,8 +917,28 @@ pub fn history_window_with(
                 above,
                 overlay(),
             )),
-        )
+        ))
     })
+}
+
+/// How visible the log is: the newest shown row's opacity, which `fade_after_s`
+/// fades like every row; 0 when no row is shown.
+fn log_presence(ui: Stage) -> f32 {
+    let selection = selection(ui);
+    let fade_after = ui.settings.with(|s| s.history.fade_after_s);
+    ui.history
+        .with(|rows| selected_rows(rows, selection).next().map(|r| r.item.at))
+        .map_or(0.0, |at| row_opacity(ui, at, fade_after))
+}
+
+/// A row said at `at` (unix ms), faded out `fade_after_s` seconds later.
+fn row_opacity(ui: Stage, at: u64, fade_after_s: Option<u32>) -> f32 {
+    let Some(after) = fade_after_s else {
+        return 1.0;
+    };
+    let age = crate::clock::unix_of(ui.history_now.get()).saturating_sub(at);
+    let start = u64::from(after) * 1000;
+    1.0 - (age.saturating_sub(start) as f32 / ROW_FADE_MS as f32).clamp(0.0, 1.0)
 }
 
 /// The header bar across the top of the panel.

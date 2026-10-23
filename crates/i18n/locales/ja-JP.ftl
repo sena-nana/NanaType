@@ -22,6 +22,7 @@ windows-input = 入力ウィンドウ
 windows-display = 表示ウィンドウ
 windows-history = 履歴
 display-placeholder = セリフはここに表示されます · ウィンドウをロックするとこの枠は消えます
+history-placeholder = 履歴はここに表示されます · ウィンドウをロックするとこの枠は消えます
 
 ## 共通
 common-cancel = キャンセル
