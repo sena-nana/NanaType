@@ -176,6 +176,8 @@ impl Fixture {
         {
             self.ui.input_sidebar_width.set(width);
         }
+        let doc = self.session.document();
+        input::sync_composing(self.ui, doc.context(), doc.document());
         self.pump();
         self.session.flush().unwrap();
     }
@@ -438,6 +440,10 @@ fn empty_draft_hint_never_overlaps_ime_preedit() {
     };
     assert!(hint_visible(&f));
     f.focus();
+    assert!(
+        hint_visible(&f),
+        "a focused empty draft still shows the hint"
+    );
     f.event(InputPayload::Composition(CompositionInput::Start));
     f.event(InputPayload::Composition(CompositionInput::Update {
         text: "nihao".into(),
@@ -456,10 +462,7 @@ fn empty_draft_hint_never_overlaps_ime_preedit() {
     assert!(!hint_visible(&f));
     f.action(TextEditAction::Undo);
     assert_eq!(f.text(), "");
-    assert!(
-        !hint_visible(&f),
-        "typing focus still owns the empty editor"
-    );
+    assert!(hint_visible(&f), "the hint returns once the draft is empty");
 }
 
 #[test]

@@ -1236,6 +1236,9 @@ impl RuntimeProgram for Host {
         }
         if WindowKind::from_id(id) == Some(WindowKind::Input) {
             self.keystroke_sound(&input.event.payload);
+            if let Some(doc) = self.docs.get(&id) {
+                input::sync_composing(self.app.ui, doc.context(), doc.document());
+            }
         }
         let InputPayload::Key(key) = &input.event.payload else {
             return Ok(RuntimeProgramUpdate::default());

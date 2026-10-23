@@ -1,7 +1,7 @@
 # Strings both NanaType and NanaType Editor show (nanatype-frame).
 
 ## 编辑器
-editor-placeholder = 在这里输入台词…
+editor-placeholder = 在这里输入台词… 输入 @ 提及观众，输入 / 插入标记与动效
 editor-source-placeholder = 使用 [b]标记[/b] 编辑，例如 [shake]哇！[/shake][wait=500]
 marker-wait = 停 { $ms }ms
 marker-pause = 等待

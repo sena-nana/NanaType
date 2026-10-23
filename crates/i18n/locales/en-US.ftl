@@ -1,7 +1,7 @@
 # Strings both NanaType and NanaType Editor show (nanatype-frame).
 
 ## Editor
-editor-placeholder = Type your line here…
+editor-placeholder = Type your line here… @ for a viewer, / for a marker or effect
 editor-source-placeholder = Edit with [b]markup[/b], e.g. [shake]Whoa![/shake][wait=500]
 marker-wait = wait { $ms }ms
 marker-pause = continue

@@ -4,8 +4,7 @@
 
 use std::sync::Arc;
 
-use nana_ui::runtime::view::Signal;
-use nana_ui::runtime::view::{AnyView, EntityRef, IntoView, entity_ref, signal, widget};
+use nana_ui::runtime::view::{AnyView, EntityRef, IntoView, entity_ref, widget};
 use nana_ui::runtime::{RichTextEditor, RichTextEditorEvent, Stack, Text, TextArea, TextChanged};
 use nana_ui_core::{LengthSpec, OverflowSpec, PointerEventsSpec, PositionSpec, SemanticColorRole};
 use nanatype_i18n::{Arg, Locale};
@@ -62,9 +61,7 @@ pub fn marker_label(m: &Marker, locale: Locale) -> String {
 /// The input editor as a still sample for a skin preview: it takes neither
 /// focus nor input, so it can never edit or send a draft.
 pub fn preview_editor(ui: Stage) -> AnyView {
-    editor_area(ui, entity_ref(), entity_ref(), signal(false), true, |_| {
-        None::<()>
-    })
+    editor_area(ui, entity_ref(), entity_ref(), true, |_| None::<()>)
 }
 
 /// The draft inside the dialogue box: the rich editor, or the markup source.
@@ -74,7 +71,6 @@ pub fn editor_area<M: Send + 'static>(
     ui: Stage,
     editor: EntityRef<RichTextEditor>,
     source: EntityRef<TextArea>,
-    focused: Signal<bool>,
     inert: bool,
     send: impl Fn(EditorEvent) -> Option<M> + Clone + Send + Sync + 'static,
 ) -> AnyView {
@@ -124,6 +120,7 @@ pub fn editor_area<M: Send + 'static>(
         let l = Arc::make_mut(&mut st.layout);
         l.position = PositionSpec::Absolute;
         l.offset_left = Some(LengthSpec::Px(0.0));
+        l.offset_right = Some(LengthSpec::Px(0.0));
         l.offset_top = Some(LengthSpec::Px(0.0));
         l.color = None;
         l.pointer_events = Some(PointerEventsSpec::None);
@@ -225,9 +222,9 @@ pub fn editor_area<M: Send + 'static>(
                     }
                 })
                 // IME preedit does not enter the draft until committed. Hide
-                // the empty hint while editing so it cannot overlap preedit.
+                // the empty hint while composing so it cannot overlap preedit.
                 .key("input-empty-hint")
-                .visible(move || !focused.get() && ui.draft.with(|d| d.is_blank())),
+                .visible(move || !ui.composing.get() && ui.draft.with(|d| d.is_blank())),
         )),
         widget(Stack::fill_column(0.0).with_layout(|l| {
             l.flex_grow = Some(1.0);

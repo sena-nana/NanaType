@@ -1454,10 +1454,9 @@ fn editor_area(
     ui: Ui,
     editor: EntityRef<RichTextEditor>,
     source: EntityRef<TextArea>,
-    focused: Signal<bool>,
     inert: bool,
 ) -> AnyView {
-    editor_view::editor_area(*ui, editor, source, focused, inert, |event| {
+    editor_view::editor_area(*ui, editor, source, inert, |event| {
         Some(match event {
             EditorEvent::Context {
                 source,
@@ -1616,7 +1615,7 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
                     dialogue_box(
                         *ui,
                         Source::Draft,
-                        Some(editor_area(ui, editor, source, focused, false)),
+                        Some(editor_area(ui, editor, source, false)),
                     ),
                     focus_ring(focused),
                 )),
@@ -1665,6 +1664,19 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
 /// Read the split model after native pointer/keyboard routing, before layout.
 pub(crate) fn changed_sidebar_width(ui: Ui, cx: &nana_ui::runtime::AppContext) -> Option<f32> {
     workspace::changed_width(ui, cx)
+}
+
+/// Mirror the editor's IME composition after routing: preedit never reaches
+/// the draft, so the empty-draft hint needs this to step aside for it.
+pub(crate) fn sync_composing(
+    ui: Ui,
+    cx: &nana_ui::runtime::AppContext,
+    doc: nana_ui::runtime::DocumentId,
+) {
+    let composing = cx.editor_composing(doc);
+    if ui.composing.get_untracked() != composing {
+        ui.composing.set(composing);
+    }
 }
 
 /// Selection-only navigation in NanaUI's plain TextArea emits no TextChanged.

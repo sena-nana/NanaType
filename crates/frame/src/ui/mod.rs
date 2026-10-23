@@ -110,6 +110,8 @@ pub struct Stage {
     pub editor_value: Signal<nana_ui_core::RichText>,
     /// Suppress the native text-only intermediate of a rich-fragment insertion.
     pub editor_transaction: Signal<bool>,
+    /// An IME composition is open in the draft; its preedit is not in `draft`.
+    pub composing: Signal<bool>,
     /// Attributes at the editor's selection (toolbar pressed states).
     pub sel_attrs: Signal<nana_ui::runtime::RichSelectionAttrs>,
     /// The editor shows markup source instead of the rich text.
@@ -186,6 +188,7 @@ impl Stage {
             source: signal(Source::default()),
             editor_value: signal(nana_ui_core::RichText::new("")),
             editor_transaction: signal(false),
+            composing: signal(false),
             sel_attrs: signal(nana_ui::runtime::RichSelectionAttrs::default()),
             source_mode: signal(false),
             source_completions: signal(Arc::from([])),
