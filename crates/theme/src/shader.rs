@@ -19,6 +19,17 @@ pub const MAX_SHADER_SLOTS: usize = 64;
 pub const SHADER_WRAPPER: &str = include_str!("shader_host.wgsl");
 pub const MAX_SHADER_BYTES: usize = 64 * 1024;
 pub const MAX_SHADER_NODES: usize = 4096;
+/// Operand chains such as `a+a+…+a` stay shallow: platform shader compilers
+/// walk expression trees recursively and a deep one exhausts their stack.
+pub const MAX_EXPRESSION_DEPTH: usize = 64;
+/// Nested `if`/`switch`/`{}` levels inside one function.
+pub const MAX_BLOCK_DEPTH: usize = 32;
+/// Operators, calls and commas between two `;`/`{`/`}`. Naga lowers and
+/// validates expressions recursively, so this bounds its stack use before the
+/// source reaches it; the IR depth limit then applies to the lowered tree.
+pub const MAX_STATEMENT_OPERATORS: usize = 256;
+/// Naga runs on its own thread with this stack (see `guarded`).
+const VALIDATOR_STACK: usize = 32 << 20;
 pub const MAX_SHADER_CACHE_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -111,11 +122,16 @@ pub struct ShaderTexture {
     pub size: [u32; 2],
     pub bytes: Arc<[u8]>,
 }
+/// Built only by this crate's validators, so every program a renderer sees
+/// has passed the sandbox.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct ShaderProgram {
     pub hash: String,
     pub source: Arc<str>,
     pub textures: Vec<ShaderTexture>,
+    /// Expanded per-pixel cost of the entry point, for runtime budgets.
+    pub cost: u32,
 }
 
 /// All bindings and helper bodies belong to the host. Authors may only call
@@ -147,9 +163,18 @@ fn particles(uv: vec2<f32>, phase: f32, seed: f32) -> f32 {
 }
 "#;
 
-fn forbidden_directive(source: &str) -> bool {
+/// Lexical pre-check of the author's source (comments are skipped). It only
+/// gives early, readable errors; the IR checks below remain authoritative.
+fn precheck(source: &str) -> Result<(), String> {
     let b = source.as_bytes();
+    if let Some(c) = b
+        .iter()
+        .find(|c| c.is_ascii_control() && !matches!(**c, b'\t' | b'\n' | b'\r'))
+    {
+        return Err(format!("control character 0x{c:02x} is not allowed"));
+    }
     let mut i = 0;
+    let mut operators = 0;
     while i < b.len() {
         if b[i..].starts_with(b"//") {
             while i < b.len() && b[i] != b'\n' {
@@ -175,17 +200,124 @@ fn forbidden_directive(source: &str) -> bool {
             while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
                 i += 1;
             }
+            let token = &source[start..i];
+            // WGSL directives are module-scoped and can weaken diagnostics.
+            if matches!(token, "enable" | "requires" | "diagnostic" | "override") {
+                return Err(
+                    "WGSL extensions, overrides and diagnostic directives are not allowed".into(),
+                );
+            }
             if matches!(
-                &b[start..i],
-                b"enable" | b"requires" | b"diagnostic" | b"override"
-            ) {
-                return true;
+                token,
+                "compute"
+                    | "workgroup_size"
+                    | "workgroup"
+                    | "storage"
+                    | "ptr"
+                    | "textureStore"
+                    | "workgroupBarrier"
+                    | "storageBarrier"
+                    | "textureBarrier"
+                    | "workgroupUniformLoad"
+                    | "arrayLength"
+            ) || ["atomic", "texture_storage_", "subgroup"]
+                .iter()
+                .any(|p| token.starts_with(p))
+            {
+                return Err(format!(
+                    "`{token}`: compute, storage, pointer, atomic and barrier features are not allowed"
+                ));
+            }
+            if ["fx_", "nm_", "__"].iter().any(|p| token.starts_with(p)) {
+                return Err(format!(
+                    "`{token}`: fx_, nm_ and __ names are reserved for the host"
+                ));
             }
         } else {
+            if matches!(b[i], b';' | b'{' | b'}') {
+                operators = 0;
+            } else if b"+-*/%&|^<>!~(,".contains(&b[i]) {
+                operators += 1;
+                if operators > MAX_STATEMENT_OPERATORS {
+                    return Err(format!(
+                        "a statement has more than {MAX_STATEMENT_OPERATORS} operators; split it with `let`"
+                    ));
+                }
+            }
             i += 1;
         }
     }
-    false
+    Ok(())
+}
+
+/// Runs a naga pass on its own thread with a known stack, so that neither a
+/// parser/validator panic nor the caller's small stack can take down more
+/// than this one shader.
+fn guarded<T: Send>(f: impl FnOnce() -> Result<T, String> + Send) -> Result<T, String> {
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .name("wgsl-validator".into())
+            .stack_size(VALIDATOR_STACK)
+            .spawn_scoped(scope, f)
+            .map_err(|e| e.to_string())?
+            .join()
+            .unwrap_or_else(|_| Err("WGSL validator failed".into()))
+    })
+}
+
+/// Longest operand chain in a function whose expressions passed the
+/// whitelist. Naga handles only point backwards, so one forward pass works.
+fn expression_depth(f: &naga::Function) -> usize {
+    let mut depth = vec![0usize; f.expressions.len()];
+    let mut max = 0;
+    for (h, e) in f.expressions.iter() {
+        let mut d = 0;
+        let mut see = |o: naga::Handle<naga::Expression>| d = d.max(depth[o.index()]);
+        match e {
+            E::Compose { components, .. } => components.iter().copied().for_each(&mut see),
+            E::Access { base, index } => {
+                see(*base);
+                see(*index);
+            }
+            E::AccessIndex { base, .. } => see(*base),
+            E::Splat { value, .. } => see(*value),
+            E::Swizzle { vector, .. } => see(*vector),
+            E::Load { pointer } => see(*pointer),
+            E::Unary { expr, .. } | E::As { expr, .. } => see(*expr),
+            E::Relational { argument, .. } => see(*argument),
+            E::Binary { left, right, .. } => {
+                see(*left);
+                see(*right);
+            }
+            E::Select {
+                condition,
+                accept,
+                reject,
+            } => {
+                see(*condition);
+                see(*accept);
+                see(*reject);
+            }
+            E::Math {
+                arg,
+                arg1,
+                arg2,
+                arg3,
+                ..
+            } => {
+                see(*arg);
+                [arg1, arg2, arg3]
+                    .into_iter()
+                    .flatten()
+                    .copied()
+                    .for_each(&mut see);
+            }
+            _ => {}
+        }
+        depth[h.index()] = d + 1;
+        max = max.max(d + 1);
+    }
+    max
 }
 
 /// Host helpers a contract's prelude defines, with the cost a call counts.
@@ -208,23 +340,28 @@ fn block_cost(
     block: &naga::Block,
     module: &naga::Module,
     depth: usize,
+    nesting: usize,
     helpers: Helpers,
     limit: usize,
 ) -> Result<usize, String> {
+    if nesting > MAX_BLOCK_DEPTH {
+        return Err(format!("blocks nest deeper than {MAX_BLOCK_DEPTH} levels"));
+    }
+    let inner = nesting + 1;
     let mut cost = 0usize;
     for stmt in block.iter() {
         cost += 1;
         cost += match stmt {
             S::Emit(_) | S::Return { .. } | S::Store { .. } | S::Break => 0,
-            S::Block(b) => block_cost(b, module, depth, helpers, limit)?,
+            S::Block(b) => block_cost(b, module, depth, inner, helpers, limit)?,
             S::If { accept, reject, .. } => {
-                block_cost(accept, module, depth, helpers, limit)?
-                    + block_cost(reject, module, depth, helpers, limit)?
+                block_cost(accept, module, depth, inner, helpers, limit)?
+                    + block_cost(reject, module, depth, inner, helpers, limit)?
             }
             S::Switch { cases, .. } => {
                 let mut n = 0;
                 for c in cases {
-                    n += block_cost(&c.body, module, depth, helpers, limit)?;
+                    n += block_cost(&c.body, module, depth, inner, helpers, limit)?;
                 }
                 n
             }
@@ -285,38 +422,65 @@ fn function_cost(
             return Err("only local arithmetic and host sampling helpers are allowed".into());
         }
     }
-    let n = f.expressions.len() + block_cost(&f.body, m, depth, helpers, limit)?;
+    let n = f.expressions.len() + block_cost(&f.body, m, depth, 0, helpers, limit)?;
     if n > limit {
         return Err("expanded shader exceeds 4096 nodes".into());
     }
     Ok(n)
 }
 
-/// Shared sandbox for the effect and material fragment contracts.
+type HostGlobal = (
+    Option<String>,
+    naga::AddressSpace,
+    Option<naga::ResourceBinding>,
+);
+
+/// The globals a prelude declares: the only ones a contract's module may have.
+fn host_globals(prelude: &str) -> Result<Vec<HostGlobal>, String> {
+    let module = naga::front::wgsl::parse_str(prelude).map_err(|e| e.emit_to_string(prelude))?;
+    Ok(module
+        .global_variables
+        .iter()
+        .map(|(_, v)| (v.name.clone(), v.space, v.binding))
+        .collect())
+}
+
+/// Shared sandbox for the effect and material fragment contracts. Returns the
+/// module, the combined source and the entry's expanded cost.
 pub(crate) fn validate_fragment(
     source: &str,
     prelude: &str,
     entry: &str,
     input: &str,
-    bindings: usize,
     helpers: Helpers,
-) -> Result<(naga::Module, String), String> {
+) -> Result<(naga::Module, String, usize), String> {
     if source.len() > MAX_SHADER_BYTES {
         return Err("shader exceeds 64 KiB".into());
     }
-    // WGSL directives are module-scoped and can weaken diagnostics. Reject
-    // them as tokens (comments are harmless); IR checks remain authoritative.
-    if forbidden_directive(source) {
-        return Err("WGSL extensions, overrides and diagnostic directives are not allowed".into());
-    }
+    precheck(source)?;
+    guarded(|| validate_module(source, prelude, entry, input, helpers))
+}
+
+fn validate_module(
+    source: &str,
+    prelude: &str,
+    entry: &str,
+    input: &str,
+    helpers: Helpers,
+) -> Result<(naga::Module, String, usize), String> {
     // Keep the author's source first so WGSL line/column diagnostics map
     // directly to the packaged file. WGSL module declarations allow forwards.
     let combined = format!("{source}\n{prelude}");
     let module =
         naga::front::wgsl::parse_str(&combined).map_err(|e| e.emit_to_string(&combined))?;
+    let host = host_globals(prelude)?;
     if !module.entry_points.is_empty()
-        || module.global_variables.len() != bindings
         || !module.overrides.is_empty()
+        || module.global_variables.len() != host.len()
+        || module
+            .global_variables
+            .iter()
+            .any(|(_, v)| !host.contains(&(v.name.clone(), v.space, v.binding)))
     {
         return Err("custom entry points, globals, overrides and bindings are not allowed".into());
     }
@@ -363,7 +527,7 @@ pub(crate) fn validate_fragment(
     )
     .validate(&module)
     .map_err(|e| e.emit_to_string(&combined))?;
-    let (_, fragment) = module
+    let (entry_handle, fragment) = module
         .functions
         .iter()
         .find(|(_, f)| f.name.as_deref() == Some(entry))
@@ -385,8 +549,18 @@ pub(crate) fn validate_fragment(
     if !valid_arg || !valid_result {
         return Err(format!("expected fn {entry}(input: {input}) -> vec4<f32>"));
     }
-    for (_, f) in module.functions.iter() {
-        function_cost(f, &module, 1, helpers, MAX_SHADER_NODES)?;
+    let mut cost = 0;
+    for (handle, f) in module.functions.iter() {
+        let n = function_cost(f, &module, 1, helpers, MAX_SHADER_NODES)?;
+        if handle == entry_handle {
+            cost = n;
+        }
+        let helper = helpers.iter().any(|(n, _)| f.name.as_deref() == Some(*n));
+        if !helper && expression_depth(f) > MAX_EXPRESSION_DEPTH {
+            return Err(format!(
+                "an expression nests deeper than {MAX_EXPRESSION_DEPTH} operations; split it with `let`"
+            ));
+        }
         if f.local_variables
             .iter()
             .map(|(_, v)| layouts[v.ty].size as usize)
@@ -396,37 +570,49 @@ pub(crate) fn validate_fragment(
             return Err("shader locals exceed 16 KiB".into());
         }
     }
-    Ok((module, combined))
+    Ok((module, combined, cost))
 }
 
 pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
-    let (module, combined) = validate_fragment(
+    let (_, combined, cost) = validate_fragment(
         source,
         SHADER_PRELUDE,
         "effect",
         "EffectInput",
-        4,
         EFFECT_HELPERS,
     )?;
-    if module
-        .functions
-        .iter()
-        .any(|(_, f)| f.name.as_ref().is_some_and(|n| n.starts_with("fx_")))
-    {
-        return Err("fx_ names are reserved for the host".into());
-    }
     let complete = format!("{combined}\n{SHADER_WRAPPER}");
-    let full = naga::front::wgsl::parse_str(&complete).map_err(|e| e.emit_to_string(&complete))?;
-    naga::valid::Validator::new(
-        naga::valid::ValidationFlags::all(),
-        naga::valid::Capabilities::empty(),
-    )
-    .validate(&full)
-    .map_err(|e| e.emit_to_string(&complete))?;
+    guarded(|| {
+        let full =
+            naga::front::wgsl::parse_str(&complete).map_err(|e| e.emit_to_string(&complete))?;
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::empty(),
+        )
+        .validate(&full)
+        .map_err(|e| e.emit_to_string(&complete))?;
+        // Only the host's two render stages: never compute, task or mesh.
+        let mut stages: Vec<_> = full
+            .entry_points
+            .iter()
+            .map(|e| (e.name.as_str(), e.stage))
+            .collect();
+        stages.sort_by_key(|(name, _)| *name);
+        if stages
+            != [
+                ("fx_fragment", naga::ShaderStage::Fragment),
+                ("fx_vertex", naga::ShaderStage::Vertex),
+            ]
+        {
+            return Err("only the host's vertex and fragment stages may run".into());
+        }
+        Ok(())
+    })?;
     Ok(ShaderProgram {
         hash: blake3::hash(combined.as_bytes()).to_hex().to_string(),
         source: combined.into(),
         textures: vec![],
+        cost: cost as u32,
     })
 }
 
@@ -480,29 +666,43 @@ fn check_bindings(
     Ok(())
 }
 
-/// IR nodes and the expanded cost (every call counts the callee again) that
-/// the 4096-node limits measure, without enforcing them: for authors sizing
-/// an effect. Parses but does not validate.
-pub fn shader_cost(source: &str) -> Result<(usize, usize), String> {
-    let combined = format!("{source}\n{SHADER_PRELUDE}");
-    let module =
-        naga::front::wgsl::parse_str(&combined).map_err(|e| e.emit_to_string(&combined))?;
-    let ir = module.types.len()
-        + module.global_expressions.len()
-        + module
+/// IR nodes, the expanded cost (every call counts the callee again) and the
+/// deepest expression that the sandbox limits measure, without enforcing
+/// them: for authors sizing an effect. Parses but does not validate.
+pub fn shader_cost(source: &str) -> Result<(usize, usize, usize), String> {
+    guarded(|| {
+        let combined = format!("{source}\n{SHADER_PRELUDE}");
+        let module =
+            naga::front::wgsl::parse_str(&combined).map_err(|e| e.emit_to_string(&combined))?;
+        let ir = module.types.len()
+            + module.global_expressions.len()
+            + module
+                .functions
+                .iter()
+                .map(|(_, f)| f.expressions.len())
+                .sum::<usize>();
+        let (_, entry) = module
             .functions
             .iter()
-            .map(|(_, f)| f.expressions.len())
-            .sum::<usize>();
-    let (_, entry) = module
-        .functions
-        .iter()
-        .find(|(_, f)| f.name.as_deref() == Some("effect"))
-        .ok_or("missing fn effect")?;
-    Ok((
-        ir,
-        function_cost(entry, &module, 1, EFFECT_HELPERS, usize::MAX)?,
-    ))
+            .find(|(_, f)| f.name.as_deref() == Some("effect"))
+            .ok_or("missing fn effect")?;
+        let depth = module
+            .functions
+            .iter()
+            .filter(|(_, f)| {
+                !EFFECT_HELPERS
+                    .iter()
+                    .any(|(n, _)| f.name.as_deref() == Some(*n))
+            })
+            .map(|(_, f)| expression_depth(f))
+            .max()
+            .unwrap_or(0);
+        Ok((
+            ir,
+            function_cost(entry, &module, 1, EFFECT_HELPERS, usize::MAX)?,
+            depth,
+        ))
+    })
 }
 
 pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec<SkinDiagnostic>) {
@@ -798,5 +998,89 @@ mod tests {
         source += "fn effect(i:EffectInput)->vec4<f32>{return f8(i);}";
         assert!(validate_shader(&source).unwrap_err().contains("depth"));
         assert!(validate_shader(&" ".repeat(MAX_SHADER_BYTES + 1)).is_err());
+    }
+    #[test]
+    fn deep_expressions_and_blocks_are_rejected_before_any_gpu_compiler() {
+        // Past the lexical cap naga never sees it; under it, the IR depth.
+        for (terms, expected) in [(8_000, "operators"), (200, "deeper than")] {
+            let chain = vec!["i.uv.x"; terms].join("+");
+            let err = validate_shader(&format!(
+                "fn effect(i:EffectInput)->vec4<f32>{{return vec4({chain});}}"
+            ))
+            .unwrap_err();
+            assert!(err.contains(expected), "{terms}: {err}");
+        }
+        let calls = format!("{}i.uv.x{}", "abs(".repeat(200), ")".repeat(200));
+        assert!(
+            validate_shader(&format!(
+                "fn effect(i:EffectInput)->vec4<f32>{{return vec4({calls});}}"
+            ))
+            .is_err()
+        );
+        let short = vec!["i.uv.x"; 40].join(" + ");
+        let program = validate_shader(&format!(
+            "fn effect(i:EffectInput)->vec4<f32>{{return vec4({short});}}"
+        ))
+        .unwrap();
+        assert!(program.cost > 40, "{}", program.cost);
+        let mut nested = "return vec4(1.);".to_owned();
+        for _ in 0..MAX_BLOCK_DEPTH + 2 {
+            nested = format!("if i.uv.x > 0. {{ {nested} }}");
+        }
+        let err = validate_shader(&format!(
+            "fn effect(i:EffectInput)->vec4<f32>{{{nested} return vec4(0.);}}"
+        ))
+        .unwrap_err();
+        assert!(err.contains("nest"), "{err}");
+    }
+    #[test]
+    fn compute_storage_pointers_and_host_names_are_rejected() {
+        const E: &str = "fn effect(i:EffectInput)->vec4<f32>{return vec4(0.);}";
+        for source in [
+            format!("@compute @workgroup_size(1) fn c(){{}} {E}"),
+            format!("var<workgroup> w: f32; {E}"),
+            format!("@group(0) @binding(9) var<storage, read_write> s: array<f32>; {E}"),
+            format!("fn f(p: ptr<function, f32>) -> f32 {{ return *p; }} {E}"),
+            format!("var<private> a: atomic<u32>; {E}"),
+            "fn effect(i:EffectInput)->vec4<f32>{workgroupBarrier(); return vec4(0.);}".into(),
+            "fn effect(i:EffectInput)->vec4<f32>{textureStore(fx_texture0, vec2(0), vec4(0.)); return vec4(0.);}".into(),
+            format!("fn fx_x() -> f32 {{ return 0.; }} {E}"),
+            format!("fn __x() -> f32 {{ return 0.; }} {E}"),
+            format!("fn nm_x() -> f32 {{ return 0.; }} {E}"),
+            format!("{E}\0"),
+            format!("{E}\x1b"),
+        ] {
+            assert!(validate_shader(&source).is_err(), "accepted {source:?}");
+        }
+        for source in [
+            "fn fx_x() -> f32 { return 0.; } fn material(i: MaterialInput) -> vec4<f32> { return vec4(fx_x()); }",
+            "fn material(i: MaterialInput) -> vec4<f32> { return nm_parameters[0]; }",
+            "fn material(i: MaterialInput) -> vec4<f32> { return vec4(f32(arrayLength(&nm_parameters))); }",
+            "@compute @workgroup_size(1) fn c(){} fn material(i: MaterialInput) -> vec4<f32> { return vec4(0.); }",
+        ] {
+            assert!(
+                crate::validate_material(source).is_err(),
+                "accepted {source:?}"
+            );
+        }
+        assert!(
+            crate::validate_material(
+                "fn material(i: MaterialInput) -> vec4<f32> { return material_param(0u); }"
+            )
+            .is_ok()
+        );
+        // Comments and identifiers that merely contain a banned word are fine.
+        assert!(
+            validate_shader(&format!(
+                "// compute storage ptr\nfn storage_tint(c: vec4<f32>) -> vec4<f32> {{ return c; }} {}",
+                "fn effect(i:EffectInput)->vec4<f32>{return storage_tint(i.accent);}"
+            ))
+            .is_ok()
+        );
+    }
+    #[test]
+    fn validator_panics_reject_one_shader() {
+        let err = guarded::<()>(|| panic!("naga bug")).unwrap_err();
+        assert!(err.contains("validator failed"), "{err}");
     }
 }

@@ -6,18 +6,20 @@ use nana_ui::runtime::{
     ComponentView, CustomRenderNode, GpuView, MutationQueue, NodeKind, StableNodeId, UiWorld,
 };
 use nana_ui::{
-    DeviceGeneration, GpuTextureFormat, SceneGpuNode, SceneGpuPassContext, SceneGpuPrepareContext,
-    SceneGpuRenderContext, SceneGpuRenderer, SceneGpuRendererRegistry, ScenePass,
-    ScenePresentationProfile, wgpu,
+    DeviceGeneration, GpuContext, GpuTextureFormat, SceneGpuNode, SceneGpuPassContext,
+    SceneGpuPrepareContext, SceneGpuRenderContext, SceneGpuRenderer, SceneGpuRendererRegistry,
+    ScenePass, ScenePresentationProfile, wgpu,
 };
 use nana_ui_core::{LengthSpec, PointerEventsSpec, PositionSpec};
 use nanatype_theme::{MAX_SHADER_CACHE_BYTES, ShaderProgram, ShaderSpec, ShaderTarget, Skin};
 use std::{
     collections::{HashMap, HashSet},
+    path::PathBuf,
     sync::{
         Arc, LazyLock, Mutex, OnceLock, Weak,
         atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
+    time::{Duration, Instant},
 };
 
 const RENDERER: &str = "nanatype.skin-shader-v1";
@@ -25,6 +27,16 @@ static NEXT: AtomicU64 = AtomicU64::new(1);
 static MATERIALS: LazyLock<Mutex<HashMap<u64, Weak<Material>>>> = LazyLock::new(Default::default);
 static NOTICES: LazyLock<Mutex<Vec<String>>> = LazyLock::new(Default::default);
 static DISABLED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
+/// Programs frozen for going over the GPU budget: drawn as if motion were off.
+static THROTTLED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
+static GUARD: LazyLock<Mutex<super::shader_guard::Guard>> = LazyLock::new(Default::default);
+/// What all skin programs together may cost in one second: per-pixel cost
+/// (`ShaderProgram::cost`) times covered pixels, summed over every draw.
+/// About 1.6× the heaviest built-in (3608) over a 3840×2160 canvas at 60 fps.
+const COST_BUDGET: u64 = 3_000_000_000_000;
+const BUDGET_WINDOW: Duration = Duration::from_secs(1);
+/// Programs drawn this close to a device's last draw share its loss.
+const LOSS_WINDOW: Duration = Duration::from_secs(2);
 static COMPILED: AtomicU64 = AtomicU64::new(0);
 static COMPILING: AtomicUsize = AtomicUsize::new(0);
 /// Compiles turned away while both compiler slots were busy; the draw retries
@@ -40,12 +52,55 @@ fn runnable(skin: &Skin, id: &str) -> bool {
     skin.shaders
         .get(id)
         .is_some_and(|s| s.intensity > 0. && s.animated)
-        && skin.shader_programs.get(id).is_some_and(|p| {
-            !DISABLED
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .contains(&p.hash)
-        })
+        && skin
+            .shader_programs
+            .get(id)
+            .is_some_and(|p| !stopped(&p.hash))
+}
+/// Disabled, or frozen for going over the GPU budget.
+fn stopped(hash: &str) -> bool {
+    DISABLED
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains(hash)
+        || throttled(hash)
+}
+fn throttled(hash: &str) -> bool {
+    THROTTLED
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains(hash)
+}
+fn short(hash: &str) -> &str {
+    hash.get(..12).unwrap_or(hash)
+}
+
+/// Start the crash guard with its record at `path`. Programs that were on
+/// trial when the last run ended are disabled, with a notice.
+pub fn init_guard(path: PathBuf) {
+    let (guard, crashed) = super::shader_guard::Guard::open(path);
+    let mut state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
+    for hash in guard.blocked() {
+        let why = crashed
+            .contains(hash)
+            .then_some("it was running when NanaType or the GPU driver stopped");
+        state.disable(hash, why);
+    }
+    *GUARD.lock().unwrap_or_else(|e| e.into_inner()) = guard;
+}
+/// A clean exit: no program on trial crashed the process.
+pub fn close_guard() {
+    GUARD.lock().unwrap_or_else(|e| e.into_inner()).close();
+}
+/// The operator turned advanced effects back on: retry every disabled,
+/// frozen or crash-blocked program.
+pub fn retry_disabled() {
+    GUARD.lock().unwrap_or_else(|e| e.into_inner()).reset();
+    THROTTLED.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    DISABLED.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    let mut state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
+    state.failed.clear();
+    state.reported.clear();
 }
 pub fn take_notices() -> Vec<String> {
     std::mem::take(&mut *NOTICES.lock().unwrap_or_else(|e| e.into_inner()))
@@ -102,10 +157,7 @@ pub fn preview_animating(ui: Stage) -> bool {
                 m.source == Source::Preview
                     && m.spec.animated
                     && m.spec.intensity > 0.
-                    && !DISABLED
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .contains(&m.program.hash)
+                    && !stopped(&m.program.hash)
             })
 }
 
@@ -195,6 +247,7 @@ fn warming(ui: Stage, source: Source) -> bool {
 
 fn playing(m: &Material) -> bool {
     m.spec.animated
+        && !throttled(&m.program.hash)
         && enabled(m.ui)
         && (m.source != Source::Preview || m.ui.shader_preview.get_untracked())
 }
@@ -335,9 +388,42 @@ struct Prepared {
     slots: wgpu::Buffer,
     bytes: usize,
 }
+#[derive(Default, Clone, Copy)]
+struct Spend {
+    cost: u64,
+    animated: bool,
+}
+#[derive(Debug, PartialEq)]
+enum Verdict {
+    Freeze,
+    Disable,
+}
+/// When one window's draws together went over `budget`: the program that
+/// spent most, frozen if it was playing and disabled if it already was not.
+fn budget_verdict(spent: &HashMap<String, Spend>, budget: u64) -> Option<(&str, Verdict)> {
+    let total = spent.values().fold(0u64, |t, s| t.saturating_add(s.cost));
+    if total <= budget {
+        return None;
+    }
+    let (hash, s) = spent.iter().max_by_key(|(hash, s)| (s.cost, *hash))?;
+    Some((
+        hash,
+        if s.animated {
+            Verdict::Freeze
+        } else {
+            Verdict::Disable
+        },
+    ))
+}
 #[derive(Default)]
 struct State {
     generations: Vec<DeviceGeneration>,
+    /// Each generation's context, to tell a lost device from an added one.
+    devices: Vec<GpuContext>,
+    /// When each program last drew on each device.
+    last_drawn: HashMap<(DeviceGeneration, String), Instant>,
+    window: Option<Instant>,
+    spent: HashMap<String, Spend>,
     pipelines: HashMap<PipelineKey, Pending>,
     masks: HashMap<MaskKey, Prepared>,
     scales: super::effect_uniforms::Scales,
@@ -539,6 +625,79 @@ fn compile(
 }
 
 impl State {
+    /// Stop drawing `hash` for the rest of the run. Two strikes, like a
+    /// twice-failed compile, so it survives a device change. `why` is shown
+    /// to the operator; `None` disables quietly.
+    fn disable(&mut self, hash: &str, why: Option<&str>) {
+        let failed = self.failed.entry(hash.to_owned()).or_default();
+        *failed = (*failed).max(2);
+        let new = DISABLED
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(hash.to_owned());
+        if let Some(why) = why.filter(|_| new) {
+            nanatype_diag::report!(crate::diag::SHADER_DISABLED; "{}: {why}", short(hash));
+            notice(format!("Skin shader {} disabled: {why}", short(hash)));
+        }
+    }
+
+    /// Count one draw against the GPU budget. At the end of each window the
+    /// heaviest program is frozen, or disabled if it already was frozen.
+    fn spend(&mut self, hash: &str, cost: u64, animated: bool, now: Instant) {
+        if self
+            .window
+            .is_none_or(|start| now.duration_since(start) >= BUDGET_WINDOW)
+        {
+            let verdict = budget_verdict(&self.spent, COST_BUDGET).map(|(h, v)| (h.to_owned(), v));
+            match verdict {
+                Some((hash, Verdict::Freeze)) => {
+                    THROTTLED
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .insert(hash.clone());
+                    let why = "over the GPU budget, now frozen";
+                    nanatype_diag::report!(crate::diag::SHADER_DISABLED; "{}: {why}", short(&hash));
+                    notice(format!("Skin shader {} {why}", short(&hash)));
+                }
+                Some((hash, Verdict::Disable)) => {
+                    self.disable(&hash, Some("over the GPU budget even when frozen"));
+                }
+                None => {}
+            }
+            self.spent.clear();
+            self.window = Some(now);
+        }
+        let s = self.spent.entry(hash.to_owned()).or_default();
+        s.cost = s.cost.saturating_add(cost);
+        s.animated |= animated;
+    }
+
+    /// A device was lost: programs drawn in its last moments get a strike.
+    /// The second strike disables one, so a program that resets the GPU runs
+    /// on at most two devices.
+    fn attribute_loss(&mut self, generation: DeviceGeneration) {
+        let drawn: Vec<(String, Instant)> = self
+            .last_drawn
+            .iter()
+            .filter(|((g, _), _)| *g == generation)
+            .map(|((_, h), at)| (h.clone(), *at))
+            .collect();
+        self.last_drawn.retain(|(g, _), _| *g != generation);
+        let Some(latest) = drawn.iter().map(|(_, at)| *at).max() else {
+            return;
+        };
+        for (hash, at) in drawn {
+            if latest.duration_since(at) > LOSS_WINDOW {
+                continue;
+            }
+            let failed = self.failed.entry(hash.clone()).or_default();
+            *failed += 1;
+            if *failed >= 2 {
+                self.disable(&hash, Some("the GPU device was lost twice while it ran"));
+            }
+        }
+    }
+
     fn prepare(
         &mut self,
         material: &Arc<Material>,
@@ -547,12 +706,26 @@ impl State {
     ) -> Option<&mut Prepared> {
         let generation = c.gpu.generation();
         if !self.generations.contains(&generation) {
+            // The host replaces a lost device with a new one; an added device
+            // (another adapter) is not a loss and charges nothing.
+            let lost: Vec<_> = self
+                .devices
+                .iter()
+                .filter(|d| d.is_lost())
+                .map(GpuContext::generation)
+                .collect();
+            for g in lost {
+                self.attribute_loss(g);
+            }
             self.generations.push(generation);
+            self.devices.push(c.gpu.clone());
             if self.generations.len() > 4 {
                 let retired = self.generations.remove(0);
+                self.devices.remove(0);
                 self.pipelines.retain(|(g, _, _, _), _| *g != retired);
                 self.masks.retain(|(g, _, _, _, _, _), _| *g != retired);
                 self.scales.retain(|(g, _, _)| *g != retired);
+                self.last_drawn.retain(|(g, _), _| *g != retired);
             }
             DISABLED
                 .lock()
@@ -681,8 +854,11 @@ impl State {
             let device = c.gpu.wgpu().device().clone();
             let program = material.program.clone();
             let format = c.target_format;
+            // Platform shader compilers recurse over the program; the sandbox
+            // bounds its depth and this stack leaves room beyond that.
             let spawned = std::thread::Builder::new()
                 .name("skin-shader-compiler".into())
+                .stack_size(16 << 20)
                 .spawn(move || {
                     let _slot = slot;
                     let p = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -949,6 +1125,9 @@ impl SceneGpuRenderer for Renderer {
             return true;
         }
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if state.failed.get(&m.program.hash).copied().unwrap_or(0) >= 2 {
+            return true;
+        }
         let registered_scale = state.scales.get(c.gpu.generation(), m.id, c.dest_size);
         let logical = *m.logical_size.lock().unwrap_or_else(|e| e.into_inner());
         let scale = if logical[0] > 0.0 && logical[1] > 0.0 {
@@ -966,6 +1145,14 @@ impl SceneGpuRenderer for Renderer {
             return true;
         };
         m.warming.store(false, Ordering::Relaxed);
+        let instant = Instant::now();
+        if !GUARD
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .draw(&m.program.hash, instant)
+        {
+            return true;
+        }
         let now = if animated { crate::clock::now_ms() } else { 0 };
         let events = if !animated {
             [2., 2., 1., 0.]
@@ -1029,6 +1216,14 @@ impl SceneGpuRenderer for Renderer {
         raw.set_pipeline(&pipeline.pipeline);
         raw.set_bind_group(0, &binding.group, &[]);
         raw.draw(0..6, 0..1);
+        let hash = m.program.hash.clone();
+        let cost = u64::from(m.program.cost.max(1))
+            * u64::from(c.bounds.width)
+            * u64::from(c.bounds.height);
+        state
+            .last_drawn
+            .insert((c.gpu.generation(), hash.clone()), instant);
+        state.spend(&hash, cost, animated, instant);
         true
     }
 }
@@ -1036,6 +1231,37 @@ impl SceneGpuRenderer for Renderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn the_heaviest_program_is_frozen_then_disabled_over_budget() {
+        let spend = |cost, animated| Spend { cost, animated };
+        let mut spent = HashMap::from([
+            ("light".to_owned(), spend(10, true)),
+            ("heavy".to_owned(), spend(80, true)),
+        ]);
+        assert_eq!(budget_verdict(&spent, 100), None);
+        spent.insert("light".into(), spend(30, true));
+        assert_eq!(
+            budget_verdict(&spent, 100),
+            Some(("heavy", Verdict::Freeze))
+        );
+        spent.insert("heavy".into(), spend(80, false));
+        assert_eq!(
+            budget_verdict(&spent, 100),
+            Some(("heavy", Verdict::Disable))
+        );
+        spent.insert("huge".into(), spend(u64::MAX, true));
+        assert_eq!(budget_verdict(&spent, 100), Some(("huge", Verdict::Freeze)));
+        // Every built-in, at its cost over a 3840×2160 canvas at 60 fps,
+        // stays inside the budget.
+        let registry = nanatype_theme::SkinRegistry::new(None, "0.1.0");
+        for entry in registry.entries() {
+            let skin = registry.load(&entry.id).unwrap().skin;
+            for program in skin.shader_programs.values() {
+                let frame = u64::from(program.cost) * 3840 * 2160 * 60;
+                assert!(frame < COST_BUDGET, "{}: {}", entry.id, program.cost);
+            }
+        }
+    }
     fn ui() -> Stage {
         let skin = nanatype_theme::SkinRegistry::new(None, "0.1.0")
             .load("nanatype.tidal")

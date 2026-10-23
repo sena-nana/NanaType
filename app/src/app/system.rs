@@ -139,6 +139,7 @@ impl App {
 
     pub(super) fn quit(&mut self) {
         self.quitting = true;
+        crate::ui::shader_effects::close_guard();
         self.save_geometry();
         self.persist.flush(Duration::from_secs(2));
         nanatype_diag::marker("quit");

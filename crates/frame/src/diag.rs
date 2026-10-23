@@ -20,6 +20,12 @@ pub static TOAST_FAILED: EventDescriptor =
     EventDescriptor::new(APP, 103, "app.toast_failed", Severity::Warn, &[]);
 pub static WORKER_UNAVAILABLE: EventDescriptor =
     EventDescriptor::new(APP, 104, "app.worker_unavailable", Severity::Error, &[]);
+pub static SHADER_GUARD_FAILED: EventDescriptor =
+    EventDescriptor::new(APP, 105, "app.shader_guard_failed", Severity::Warn, &[]);
+/// A skin shader stopped at runtime: over the GPU budget, on lost devices,
+/// or blocked by the crash guard.
+pub static SHADER_DISABLED: EventDescriptor =
+    EventDescriptor::new(APP, 106, "app.shader_disabled", Severity::Warn, &[]);
 pub static BACKGROUND_UNAVAILABLE: EventDescriptor = EventDescriptor::new(
     PLUGINS,
     100,
@@ -97,5 +103,7 @@ pub static EVENTS: &[&EventDescriptor] = &[
     &MEDIA_BASE_MISMATCH,
     &TOAST_FAILED,
     &WORKER_UNAVAILABLE,
+    &SHADER_GUARD_FAILED,
+    &SHADER_DISABLED,
     &BACKGROUND_UNAVAILABLE,
 ];

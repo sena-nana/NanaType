@@ -4585,6 +4585,7 @@ dependencies = [
  "raw-window-handle",
  "serde",
  "serde_json",
+ "tempfile",
  "tiny-skia",
  "ttf-parser",
  "unicode-segmentation",

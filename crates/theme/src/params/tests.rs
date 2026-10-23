@@ -389,8 +389,11 @@ fn shader_param_helper_is_host_owned() {
         validate_material("fn material(i: MaterialInput) -> vec4<f32> { return param(0u); }")
             .is_err()
     );
-    let (ir, expanded) = shader_cost(SHADER).unwrap();
-    assert!(ir > 0 && expanded >= 8, "{ir} {expanded}");
+    let (ir, expanded, depth) = shader_cost(SHADER).unwrap();
+    assert!(
+        ir > 0 && expanded >= 8 && depth > 0,
+        "{ir} {expanded} {depth}"
+    );
 }
 
 #[test]

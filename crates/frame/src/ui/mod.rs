@@ -21,6 +21,7 @@ pub mod preview;
 pub mod quote;
 pub mod rich;
 pub mod shader_effects;
+mod shader_guard;
 pub mod surface;
 pub mod sweep;
 pub mod text_light;

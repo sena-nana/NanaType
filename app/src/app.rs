@@ -207,6 +207,9 @@ impl App {
     pub fn new(ctx: &RuntimeProgramContext<Msg>) -> Self {
         let paths = Paths::resolve();
         paths.ensure();
+        // Before any skin shader draws: blocks programs that were on trial
+        // when the last run ended.
+        crate::ui::shader_effects::init_guard(paths.config.join("shader-guard.json"));
         // Before any window draws a picture: NanaUI reads local pictures
         // only under this base, and the rest are mirrored into it.
         crate::services::media::init(&paths.data);
@@ -1221,6 +1224,9 @@ impl App {
             self.focus_editor = true;
         }
         share_input_keys(&s.hotkeys.input);
+        if !prev.skin.advanced_effects && s.skin.advanced_effects {
+            crate::ui::shader_effects::retry_disabled();
+        }
         self.sync_reduced_motion();
         if chrome_changed {
             self.refresh_theme();
@@ -2771,6 +2777,7 @@ fn without_local_paths(doc: &Document) -> Document {
 /// gone by now, so geometry is not re-read here.)
 impl Drop for App {
     fn drop(&mut self) {
+        crate::ui::shader_effects::close_guard();
         if !self.quitting {
             self.persist.flush(Duration::from_secs(2));
             nanatype_diag::marker("exit without quit");

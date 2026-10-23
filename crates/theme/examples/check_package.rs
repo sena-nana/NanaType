@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use nanatype_theme::{
-    DirFiles, Severity, ShaderSpec, SkinFiles, SkinOrigin, ZipFiles, load, read_manifest,
-    shader_cost,
+    DirFiles, MAX_EXPRESSION_DEPTH, Severity, ShaderSpec, SkinFiles, SkinOrigin, ZipFiles, load,
+    read_manifest, shader_cost,
 };
 
 fn main() {
@@ -62,8 +62,9 @@ fn main() {
             continue;
         };
         match shader_cost(&String::from_utf8_lossy(&bytes)) {
-            Ok((ir, expanded)) => println!(
-                "shader `{id}`: {ir} IR nodes, {expanded} expanded (limit 4096 each), {} slots",
+            Ok((ir, expanded, depth)) => println!(
+                "shader `{id}`: {ir} IR nodes, {expanded} expanded (limit 4096 each), \
+                 expression depth {depth} (limit {MAX_EXPRESSION_DEPTH}), {} slots",
                 spec.bindings.len()
             ),
             Err(e) => println!("shader `{id}`: {e}"),

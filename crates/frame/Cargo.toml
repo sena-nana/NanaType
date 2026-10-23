@@ -44,4 +44,5 @@ objc2-app-kit = "0.3"
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Time"] }
 
 [dev-dependencies]
+tempfile = "3"
 nana-ui-devtools = { workspace = true, features = ["runtime-agent"] }
