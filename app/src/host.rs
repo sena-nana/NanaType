@@ -1069,6 +1069,20 @@ impl RuntimeProgram for Host {
                     ) {
                         self.app.tint_captions();
                     }
+                    // Broadcast windows have no caption, but macOS still
+                    // gives a frameless window its traffic lights.
+                    if matches!(
+                        kind,
+                        WindowKind::Display | WindowKind::PeerDisplay | WindowKind::History
+                    ) {
+                        self.app
+                            .commands
+                            .push(WindowCommand::SetNativeWindowControlsVisible {
+                                id,
+                                visible: false,
+                                duration: std::time::Duration::ZERO,
+                            });
+                    }
                     self.app.windows.record_geometry(kind, geometry);
                     if kind == WindowKind::Input {
                         crate::debug_log("input window ready");

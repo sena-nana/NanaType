@@ -301,26 +301,36 @@ pub(crate) fn show(
                 return;
             }
         };
-        let position = Some(
-            tray_icon::menu::dpi::LogicalPosition::new(
-                f64::from(position.0),
-                f64::from(position.1),
-            )
-            .into(),
-        );
+        #[cfg_attr(not(any(windows, target_os = "macos")), allow(unused_variables))]
+        let at = |x: f32, y: f64| {
+            Some(tray_icon::menu::dpi::LogicalPosition::new(f64::from(x), y).into())
+        };
         match handle.as_raw() {
             #[cfg(windows)]
             raw_window_handle::RawWindowHandle::Win32(window) => {
                 // SAFETY: the service borrows a live HWND on its owning thread.
                 unsafe {
-                    menu.show_context_menu_for_hwnd(window.hwnd.get(), position);
+                    menu.show_context_menu_for_hwnd(
+                        window.hwnd.get(),
+                        at(position.0, f64::from(position.1)),
+                    );
                 }
             }
             #[cfg(target_os = "macos")]
             raw_window_handle::RawWindowHandle::AppKit(window) => {
                 // SAFETY: the service borrows a live content NSView on the main thread.
+                let view = unsafe { window.ns_view.cast::<objc2_app_kit::NSView>().as_ref() };
+                // muda measures Y from the bottom as for an unflipped view, but
+                // winit's content view is flipped: undo that flip or the menu
+                // opens mirrored about the window's middle.
+                let y = if view.isFlipped() {
+                    view.frame().size.height - f64::from(position.1)
+                } else {
+                    f64::from(position.1)
+                };
+                // SAFETY: as above.
                 unsafe {
-                    menu.show_context_menu_for_nsview(window.ns_view.as_ptr(), position);
+                    menu.show_context_menu_for_nsview(window.ns_view.as_ptr(), at(position.0, y));
                 }
             }
             _ => {}
