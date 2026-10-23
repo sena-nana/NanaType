@@ -54,4 +54,3 @@ pub fn apply_locale(cx: &mut nana_ui::runtime::AppContext, locale: nanatype_i18n
         nanatype_diag::report!(diag::LOCALE_STRINGS_FAILED; "framework strings: {e}");
     }
 }
-

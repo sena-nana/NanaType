@@ -5,6 +5,7 @@
 //! manifest bytes. The public key is compiled in, so the manifest and the
 //! files can travel through any mirror: a mirror that alters either is caught
 //! by the signature or the digest, and the next source is tried.
+pub mod diag;
 mod error;
 mod fetch;
 mod manifest;

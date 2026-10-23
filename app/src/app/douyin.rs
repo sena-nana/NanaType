@@ -24,19 +24,43 @@ impl App {
             return;
         }
         match session.event {
-            Event::Chat { room, event } => self._chat_assets.douyin(session.epoch, room, event),
-            Event::Account(account) => self
-                .ui
-                .douyin
-                .update(|state| std::sync::Arc::make_mut(state).account = account),
-            Event::Connection(connection) => self
-                .ui
-                .douyin
-                .update(|state| std::sync::Arc::make_mut(state).connection = connection),
-            Event::Warning(code) => self
-                .ui
-                .douyin
-                .update(|state| std::sync::Arc::make_mut(state).warning = Some(code.into())),
+            Event::Chat { room, event } => {
+                crate::diag::DOUYIN_LIVE.chat();
+                self._chat_assets.douyin(session.epoch, room, event)
+            }
+            Event::Account(account) => {
+                use crate::diag::Account;
+                let code = match &account {
+                    AccountState::SignedOut => Account::SignedOut,
+                    AccountState::Unverified => Account::Pending,
+                    AccountState::Ready { .. } => Account::Ready,
+                    AccountState::Expired => Account::Expired,
+                };
+                crate::diag::DOUYIN_LIVE.account(code, None);
+                self.ui
+                    .douyin
+                    .update(|state| std::sync::Arc::make_mut(state).account = account)
+            }
+            Event::Connection(connection) => {
+                use crate::diag::Conn;
+                let (code, error) = match &connection {
+                    ConnectionState::Off => (Conn::Off, None),
+                    ConnectionState::Connecting => (Conn::Connecting, None),
+                    ConnectionState::Connected { .. } => (Conn::Connected, None),
+                    ConnectionState::Disconnected => (Conn::Disconnected, None),
+                    ConnectionState::Error(e) => (Conn::Error, Some(e.as_str())),
+                };
+                crate::diag::DOUYIN_LIVE.connection(code, error);
+                self.ui
+                    .douyin
+                    .update(|state| std::sync::Arc::make_mut(state).connection = connection)
+            }
+            Event::Warning(code) => {
+                crate::diag::DOUYIN_LIVE.warning(code);
+                self.ui
+                    .douyin
+                    .update(|state| std::sync::Arc::make_mut(state).warning = Some(code.into()))
+            }
         }
     }
     pub(super) fn douyin_logout(&mut self) {

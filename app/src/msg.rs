@@ -306,6 +306,9 @@ pub enum Msg {
     ExportSkin(String),
     DuplicateSkin(String),
     OpenFolder(std::path::PathBuf),
+    /// Package recent logs for a bug report (About page).
+    ExportDiagnostics,
+    DiagnosticsExported(Result<std::path::PathBuf, String>),
     /// Open a web page in the default browser.
     OpenUrl(&'static str),
     CopyText(String),

@@ -21,12 +21,29 @@ impl App {
             return;
         }
         match session.event {
-            Event::Chat { video, event } => self._chat_assets.youtube(session.epoch, video, event),
+            Event::Chat { video, event } => {
+                crate::diag::YOUTUBE_LIVE.chat();
+                self._chat_assets.youtube(session.epoch, video, event)
+            }
             Event::Deleted { video, id } => self.live_deleted(Platform::Youtube, &video, &id),
-            Event::Connection(connection) => self
-                .ui
-                .youtube
-                .update(|state| Arc::make_mut(state).connection = connection),
+            Event::Connection(connection) => {
+                use crate::diag::Conn;
+                let (code, error) = match &connection {
+                    ConnectionState::Off => (Conn::Off, None),
+                    ConnectionState::Resolving
+                    | ConnectionState::Waiting
+                    | ConnectionState::Connecting => (Conn::Connecting, None),
+                    ConnectionState::Connected { .. } => (Conn::Connected, None),
+                    ConnectionState::Ended | ConnectionState::Disconnected => {
+                        (Conn::Disconnected, None)
+                    }
+                    ConnectionState::Error(e) => (Conn::Error, Some(e.as_str())),
+                };
+                crate::diag::YOUTUBE_LIVE.connection(code, error);
+                self.ui
+                    .youtube
+                    .update(|state| Arc::make_mut(state).connection = connection)
+            }
         }
     }
     pub(super) fn youtube_configure(&mut self) {

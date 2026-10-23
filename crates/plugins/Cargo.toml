@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "Capability-free Lua/Wasm plugins and bounded UI protocol"
 
 [dependencies]
+nanatype-diag.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 wasmtime = { version = "=49.0.0", default-features = false, features = ["runtime", "std"] }

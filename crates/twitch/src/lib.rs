@@ -2,6 +2,7 @@
 //! signs in with the OAuth device flow and posts through Helix.
 mod api;
 mod credentials;
+pub mod diag;
 mod handle;
 mod irc;
 mod socket;

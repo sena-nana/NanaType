@@ -1,8 +1,10 @@
 //! NanaType's own events (docs/logging.md). Typed fields carry codes and
 //! counts; messages go through `nanatype_diag::report!`, which redacts them.
 
-use nanatype_diag::domains::{APP, BILIBILI, CHAT, OUTPUT, STEAM, STICKERS};
-use nanatype_diag::{EventDescriptor, FieldDescriptor, Severity};
+use nanatype_diag::domains::{
+    APP, AUDIO, BILIBILI, CHAT, DOUYIN, OUTPUT, STEAM, STICKERS, TWITCH, YOUTUBE,
+};
+use nanatype_diag::{EventDescriptor, FieldDescriptor, Metric, Severity};
 
 use crate::windows::WindowKind;
 
@@ -12,7 +14,10 @@ pub static SETTINGS_LOADED: EventDescriptor = EventDescriptor::new(
     "app.settings_loaded",
     Severity::Info,
     // 0 fresh, 1 loaded, 2 migrated, 3 quarantined, 4 newer build.
-    &[FieldDescriptor::u64("note"), FieldDescriptor::u64("from_schema")],
+    &[
+        FieldDescriptor::u64("note"),
+        FieldDescriptor::u64("from_schema"),
+    ],
 );
 pub static SETTINGS_QUARANTINED: EventDescriptor =
     EventDescriptor::new(APP, 2, "app.settings_quarantined", Severity::Error, &[]);
@@ -76,6 +81,23 @@ pub static BRIDGE_ERROR: EventDescriptor = EventDescriptor::new(
     &[FieldDescriptor::u64("sink")],
 );
 
+/// The output device opened; its name is not recorded.
+pub static AUDIO_RUNNING: EventDescriptor = EventDescriptor::new(
+    AUDIO,
+    1,
+    "audio.running",
+    Severity::Info,
+    &[FieldDescriptor::u64("rate")],
+);
+pub static AUDIO_FAILED: EventDescriptor = EventDescriptor::new(
+    AUDIO,
+    2,
+    "audio.failed",
+    Severity::Warn,
+    // 0 could not open, 1 lost while playing.
+    &[FieldDescriptor::bool("lost")],
+);
+
 pub static STEAM_UNAVAILABLE: EventDescriptor =
     EventDescriptor::new(STEAM, 1, "steam.unavailable", Severity::Info, &[]);
 
@@ -97,12 +119,172 @@ pub static BLIVECHAT_SECRET_FAILED: EventDescriptor = EventDescriptor::new(
     // 0 load, 1 store.
     &[FieldDescriptor::u64("op")],
 );
-pub static BLIVECHAT_ERROR: EventDescriptor =
-    EventDescriptor::new(BILIBILI, 101, "bilibili.blivechat_error", Severity::Warn, &[]);
-pub static BLIVECHAT_FATAL: EventDescriptor =
-    EventDescriptor::new(BILIBILI, 102, "bilibili.blivechat_fatal", Severity::Error, &[]);
-pub static COMET_RELAY_ERROR: EventDescriptor =
-    EventDescriptor::new(BILIBILI, 103, "bilibili.comet_relay_error", Severity::Warn, &[]);
+pub static BLIVECHAT_ERROR: EventDescriptor = EventDescriptor::new(
+    BILIBILI,
+    101,
+    "bilibili.blivechat_error",
+    Severity::Warn,
+    &[],
+);
+pub static BLIVECHAT_FATAL: EventDescriptor = EventDescriptor::new(
+    BILIBILI,
+    102,
+    "bilibili.blivechat_fatal",
+    Severity::Error,
+    &[],
+);
+pub static COMET_RELAY_ERROR: EventDescriptor = EventDescriptor::new(
+    BILIBILI,
+    103,
+    "bilibili.comet_relay_error",
+    Severity::Warn,
+    &[],
+);
+
+/// One live platform's connection and account, in its own domain. States
+/// are codes (see [`Conn`] and [`Account`]); a room, channel, account name or
+/// chat line is never recorded.
+pub struct Live {
+    pub connection: EventDescriptor,
+    pub connection_error: EventDescriptor,
+    pub account: EventDescriptor,
+    pub account_failed: EventDescriptor,
+    pub warning: EventDescriptor,
+    pub delivery_failed: EventDescriptor,
+    /// Chat events received.
+    pub chat: Metric,
+}
+
+const STATE: &[FieldDescriptor] = &[FieldDescriptor::u64("state")];
+
+macro_rules! live {
+    ($name:ident, $domain:expr, $prefix:literal) => {
+        pub static $name: Live = Live {
+            connection: EventDescriptor::new(
+                $domain,
+                1,
+                concat!($prefix, ".connection"),
+                Severity::Info,
+                STATE,
+            ),
+            connection_error: EventDescriptor::new(
+                $domain,
+                2,
+                concat!($prefix, ".connection_error"),
+                Severity::Warn,
+                &[],
+            ),
+            account: EventDescriptor::new(
+                $domain,
+                3,
+                concat!($prefix, ".account"),
+                Severity::Info,
+                STATE,
+            ),
+            account_failed: EventDescriptor::new(
+                $domain,
+                4,
+                concat!($prefix, ".account_failed"),
+                Severity::Warn,
+                &[],
+            ),
+            warning: EventDescriptor::new(
+                $domain,
+                5,
+                concat!($prefix, ".warning"),
+                Severity::Warn,
+                &[],
+            ),
+            delivery_failed: EventDescriptor::new(
+                $domain,
+                6,
+                concat!($prefix, ".delivery_failed"),
+                Severity::Warn,
+                // 0 failed, 1 uncertain.
+                STATE,
+            ),
+            chat: Metric::counter($domain, 50, concat!($prefix, ".chat_events"), "count"),
+        };
+    };
+}
+
+live!(BILIBILI_LIVE, BILIBILI, "bilibili");
+live!(DOUYIN_LIVE, DOUYIN, "douyin");
+live!(YOUTUBE_LIVE, YOUTUBE, "youtube");
+live!(TWITCH_LIVE, TWITCH, "twitch");
+
+/// Connection states shared by every platform.
+#[derive(Clone, Copy)]
+pub enum Conn {
+    Off = 0,
+    /// Resolving, waiting for a broadcast or connecting.
+    Connecting = 1,
+    Connected = 2,
+    /// Disconnected or the broadcast ended; the platform may retry.
+    Disconnected = 3,
+    Error = 4,
+    NeedsLogin = 5,
+}
+
+/// Account states shared by every platform.
+#[derive(Clone, Copy)]
+pub enum Account {
+    Restoring = 0,
+    SignedOut = 1,
+    /// A QR code or device code is waiting, or a cookie is unverified.
+    Pending = 2,
+    Ready = 3,
+    Expired = 4,
+    Failed = 5,
+}
+
+impl Live {
+    pub fn connection(&'static self, state: Conn, error: Option<&str>) {
+        nanatype_diag::event!(self.connection, state = state as u64);
+        if let Some(error) = error {
+            nanatype_diag::report!(self.connection_error; "{error}");
+        }
+    }
+
+    pub fn account(&'static self, state: Account, error: Option<&str>) {
+        nanatype_diag::event!(self.account, state = state as u64);
+        if let Some(error) = error {
+            nanatype_diag::report!(self.account_failed; "{error}");
+        }
+    }
+
+    pub fn warning(&'static self, code: &str) {
+        nanatype_diag::report!(self.warning; "{code}");
+    }
+
+    pub fn delivery_failed(&'static self, uncertain: bool) {
+        nanatype_diag::event!(self.delivery_failed, state = u64::from(uncertain));
+    }
+
+    pub fn chat(&'static self) {
+        nanatype_diag::metric!(self.chat);
+    }
+
+    fn events(&'static self) -> [&'static EventDescriptor; 6] {
+        [
+            &self.connection,
+            &self.connection_error,
+            &self.account,
+            &self.account_failed,
+            &self.warning,
+            &self.delivery_failed,
+        ]
+    }
+}
+
+/// Every event NanaType declares, for the catalog test.
+pub fn all_events() -> Vec<&'static EventDescriptor> {
+    let mut all = EVENTS.to_vec();
+    for live in [&BILIBILI_LIVE, &DOUYIN_LIVE, &YOUTUBE_LIVE, &TWITCH_LIVE] {
+        all.extend(live.events());
+    }
+    all
+}
 
 pub static EVENTS: &[&EventDescriptor] = &[
     &SETTINGS_LOADED,
@@ -117,6 +299,8 @@ pub static EVENTS: &[&EventDescriptor] = &[
     &SPOUT_FAILED,
     &WINDOW_OUTPUT,
     &BRIDGE_ERROR,
+    &AUDIO_RUNNING,
+    &AUDIO_FAILED,
     &STEAM_UNAVAILABLE,
     &STICKER_PREVIEW_FAILED,
     &STICKER_FRAME_REBUILD,

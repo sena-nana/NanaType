@@ -285,6 +285,15 @@ impl App {
         self.sync_bilibili_speaker();
     }
     fn bilibili_connection(&mut self, connection: ConnectionState) {
+        use crate::diag::Conn;
+        let (state, error) = match &connection {
+            ConnectionState::Off => (Conn::Off, None),
+            ConnectionState::NeedsLogin => (Conn::NeedsLogin, None),
+            ConnectionState::Connecting => (Conn::Connecting, None),
+            ConnectionState::Connected(_) => (Conn::Connected, None),
+            ConnectionState::Error(e) => (Conn::Error, Some(e.as_str())),
+        };
+        crate::diag::BILIBILI_LIVE.connection(state, error);
         if !matches!(connection, ConnectionState::Connected(_)) {
             self.bilibili_disable_send();
         }
@@ -378,6 +387,18 @@ impl App {
         }
         match session.event {
             Event::Account(account) => {
+                {
+                    use crate::diag::Account;
+                    let (state, error) = match &account {
+                        AccountState::Restoring => (Account::Restoring, None),
+                        AccountState::SignedOut => (Account::SignedOut, None),
+                        AccountState::Qr { .. } => (Account::Pending, None),
+                        AccountState::Ready(_) => (Account::Ready, None),
+                        AccountState::Expired => (Account::Expired, None),
+                        AccountState::Failed(e) => (Account::Failed, Some(e.as_str())),
+                    };
+                    crate::diag::BILIBILI_LIVE.account(state, error);
+                }
                 if let AccountState::Ready(profile) = &account {
                     let asset = crate::services::chat_assets::cache_profile_avatar(
                         self.paths.blobs(),
@@ -405,6 +426,7 @@ impl App {
                 self.bilibili_connection(connection);
             }
             Event::Chat { room, event } => {
+                crate::diag::BILIBILI_LIVE.chat();
                 if let nanatype_bilibili::ChatEvent::DeleteSuperChats { ids } = &event {
                     let keys = self.bili_echoes.delete_super_chats(room, ids);
                     self.run(Cmd::RemoveHistoryRows(keys));
@@ -444,6 +466,8 @@ impl App {
                     delivery.state,
                     DeliveryState::Failed | DeliveryState::Uncertain
                 ) {
+                    crate::diag::BILIBILI_LIVE
+                        .delivery_failed(delivery.state == DeliveryState::Uncertain);
                     self.notice(
                         format!(
                             "{}: {}",

@@ -164,6 +164,18 @@ impl App {
         }
         match session.event {
             Event::Account(account) => {
+                {
+                    use crate::diag::Account;
+                    let (state, error) = match &account {
+                        AccountState::Restoring => (Account::Restoring, None),
+                        AccountState::SignedOut => (Account::SignedOut, None),
+                        AccountState::Pending { .. } => (Account::Pending, None),
+                        AccountState::Ready(_) => (Account::Ready, None),
+                        AccountState::Expired => (Account::Expired, None),
+                        AccountState::Failed(e) => (Account::Failed, Some(e.as_str())),
+                    };
+                    crate::diag::TWITCH_LIVE.account(state, error);
+                }
                 if let AccountState::Ready(profile) = &account {
                     let asset = crate::services::chat_assets::cache_profile_avatar(
                         self.paths.blobs(),
@@ -181,12 +193,20 @@ impl App {
                 self.twitch_state(|s| s.account = account);
             }
             Event::Connection(connection) => {
+                let (state, error) = match &connection {
+                    ConnectionState::Off => (crate::diag::Conn::Off, None),
+                    ConnectionState::Connecting => (crate::diag::Conn::Connecting, None),
+                    ConnectionState::Connected(_) => (crate::diag::Conn::Connected, None),
+                    ConnectionState::Error(e) => (crate::diag::Conn::Error, Some(e.as_str())),
+                };
+                crate::diag::TWITCH_LIVE.connection(state, error);
                 if !matches!(connection, ConnectionState::Connected(_)) {
                     self.twitch_disable_send();
                 }
                 self.twitch_state(|s| s.connection = connection);
             }
             Event::Chat { channel, event } => {
+                crate::diag::TWITCH_LIVE.chat();
                 self._chat_assets.twitch(session.epoch, channel, event)
             }
             Event::Deleted { channel, id } => self.live_deleted(Platform::Twitch, &channel, &id),
@@ -215,6 +235,8 @@ impl App {
                     delivery.state,
                     DeliveryState::Failed | DeliveryState::Uncertain
                 ) {
+                    crate::diag::TWITCH_LIVE
+                        .delivery_failed(delivery.state == DeliveryState::Uncertain);
                     self.notice(
                         format!(
                             "{}: {}",
@@ -226,6 +248,7 @@ impl App {
                 }
             }
             Event::Warning(code) => {
+                crate::diag::TWITCH_LIVE.warning(&code);
                 let text = crate::ui::twitch::diagnostic(self.ui, &code);
                 self.notice(text, true)
             }

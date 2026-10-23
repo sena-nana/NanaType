@@ -95,6 +95,8 @@ shiguredo_libvpx = "=2026.2.0-canary.3"
 url = "2"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 pollster = "1"
+# The diagnostics package (docs/logging.md); the same build theme uses.
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

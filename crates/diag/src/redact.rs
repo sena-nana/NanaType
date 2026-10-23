@@ -181,7 +181,10 @@ fn value_start(bytes: &[u8], mut i: usize) -> Option<usize> {
 fn value_end(bytes: &[u8], start: usize) -> usize {
     bytes[start..]
         .iter()
-        .position(|b| b.is_ascii_whitespace() || matches!(b, b';' | b'&' | b',' | b'"' | b'\'' | b'}' | b']' | b')'))
+        .position(|b| {
+            b.is_ascii_whitespace()
+                || matches!(b, b';' | b'&' | b',' | b'"' | b'\'' | b'}' | b']' | b')')
+        })
         .map_or(bytes.len(), |p| start + p)
 }
 
@@ -226,14 +229,23 @@ mod tests {
             "Cookie: ***; bili_jct=***; other=1"
         );
         assert_eq!(text("PASS oauth:abcdef"), "PASS oauth:***");
-        assert_eq!(text("Authorization: Bearer eyJhbGci.x.y"), "Authorization: Bearer ***");
-        assert_eq!(text(r#"{"access_token": "t0k", "n": 2}"#), r#"{"access_token": "***", "n": 2}"#);
+        assert_eq!(
+            text("Authorization: Bearer eyJhbGci.x.y"),
+            "Authorization: Bearer ***"
+        );
+        assert_eq!(
+            text(r#"{"access_token": "t0k", "n": 2}"#),
+            r#"{"access_token": "***", "n": 2}"#
+        );
         assert_eq!(text("refresh_token=r&x=1"), "refresh_token=***&x=1");
     }
 
     #[test]
     fn keys_match_only_whole_words() {
-        assert_eq!(text("monkey=3 tokens: 4 keyboard"), "monkey=3 tokens: 4 keyboard");
+        assert_eq!(
+            text("monkey=3 tokens: 4 keyboard"),
+            "monkey=3 tokens: 4 keyboard"
+        );
         assert_eq!(text("decode: ok"), "decode: ok");
         assert_eq!(text("status code: 403"), "status code: 403");
         assert_eq!(text("名前 token=甲乙 ok"), "名前 token=*** ok");
@@ -248,7 +260,10 @@ mod tests {
         let home = home.to_string_lossy();
         if home.len() > 1 {
             let path = format!("{home}/Library/x.json");
-            assert_eq!(text(&format!("open {path}: denied")), "open ~/Library/x.json: denied");
+            assert_eq!(
+                text(&format!("open {path}: denied")),
+                "open ~/Library/x.json: denied"
+            );
         }
     }
 

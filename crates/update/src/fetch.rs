@@ -104,6 +104,15 @@ impl Client {
         let mut failures: Vec<(usize, Error)> = Vec::new();
         let mut deadline = Instant::now() + CHECK_TIMEOUT + GRACE;
         while let Ok((i, result, took)) = rx.recv_deadline(deadline) {
+            nanatype_diag::event!(
+                crate::diag::SOURCE_CHECKED,
+                source = i,
+                ok = result.is_ok(),
+                ms = took.as_millis() as u64,
+            );
+            if let Err(error) = &result {
+                nanatype_diag::report!(crate::diag::SOURCE_FAILED, source = i; "{error}");
+            }
             match result {
                 Ok(manifest) => {
                     if answered.is_empty() {
@@ -152,7 +161,7 @@ impl Client {
         let partial = dir.join(format!("{}.part", asset.name));
         let url = self.asset_url(manifest, asset);
         let mut failures = Vec::new();
-        for source in sources {
+        for (index, source) in sources.iter().enumerate() {
             if cancel.load(Ordering::Relaxed) {
                 break;
             }
@@ -166,6 +175,11 @@ impl Client {
             }) {
                 Ok(()) => {
                     std::fs::rename(&partial, &path)?;
+                    nanatype_diag::event!(
+                        crate::diag::DOWNLOADED,
+                        source = index,
+                        bytes = asset.size
+                    );
                     return Ok(path);
                 }
                 Err(e) => {
@@ -173,6 +187,7 @@ impl Client {
                     if e == Error::Cancelled {
                         return Err(e);
                     }
+                    nanatype_diag::report!(crate::diag::DOWNLOAD_FAILED, source = index; "{e}");
                     failures.push(format!("{}: {e}", source.label()));
                 }
             }
@@ -288,6 +303,6 @@ fn get_small(agent: &ureq::Agent, url: &str) -> Result<Vec<u8>, Error> {
 }
 
 fn version_order(a: &Manifest, b: &Manifest) -> std::cmp::Ordering {
-    let parse = |m: &Manifest| semver::Version::parse(&m.version).ok();
+    let parse = |m: &Manifest| crate::version::parse(&m.version);
     parse(a).cmp(&parse(b))
 }

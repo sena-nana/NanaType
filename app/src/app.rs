@@ -189,7 +189,11 @@ fn record_settings_load(note: &nanatype_settings::LoadNote) {
         }
         LoadNote::TooNew { schema } => (4, u64::from(*schema)),
     };
-    nanatype_diag::event!(crate::diag::SETTINGS_LOADED, note = code, from_schema = from);
+    nanatype_diag::event!(
+        crate::diag::SETTINGS_LOADED,
+        note = code,
+        from_schema = from
+    );
 }
 
 /// How long an error stays in the tray tooltip.
@@ -419,6 +423,7 @@ impl App {
         self.request_displays();
         #[cfg(feature = "updates")]
         self.check_update_on_start();
+        self.notice_unseen_crash();
         if !self.settings.general.onboarding_done {
             self.open_settings();
         }
@@ -2064,6 +2069,8 @@ impl App {
             Msg::InputHwnd(hwnd) => self.hotkeys.set_input_window(hwnd),
             Msg::PickFile(target) => self.pick(target),
             Msg::OpenFolder(path) => crate::services::reveal(&path),
+            Msg::ExportDiagnostics => self.export_diagnostics(),
+            Msg::DiagnosticsExported(result) => self.diagnostics_exported(result),
             Msg::OpenUrl(url) => crate::services::open_url(url),
             Msg::CopyText(text) => self.copy_text(text),
             Msg::PlaySample => self.play_sample(),

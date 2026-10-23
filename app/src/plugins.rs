@@ -369,6 +369,10 @@ impl Manager {
             WorkerResponse::Update { update, .. } => update.validate().map(|_| Some(update)),
             WorkerResponse::Error { message } => Err(message.clone()),
             WorkerResponse::Ready => Ok(None),
+            WorkerResponse::Log { lines, dropped } => {
+                nanatype_frame::diag::plugin_log(id, lines, *dropped);
+                Ok(None)
+            }
         };
         match result {
             Ok(Some(update)) => {

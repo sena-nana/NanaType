@@ -2,6 +2,7 @@
 #![deny(unsafe_code)]
 #[cfg(windows)]
 mod app_container;
+pub mod diag;
 mod os_sandbox;
 mod process;
 mod protocol;

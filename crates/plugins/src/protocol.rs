@@ -16,6 +16,32 @@ pub const MAX_DATA_RESULT_BYTES: usize = 64 * 1024;
 pub const MAX_DATA_EVENT_BYTES: usize = 120 * 1024;
 /// Serialized bytes of one request's query.
 pub const MAX_DATA_QUERY_BYTES: usize = 1024;
+/// `nana.log` lines one dispatch may carry; later ones are only counted.
+pub const MAX_LOG_LINES: usize = 16;
+/// Bytes of one `nana.log` message.
+pub const MAX_LOG_BYTES: usize = 512;
+
+/// A line a script wrote with `nana.log`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PluginLog {
+    /// 0 debug, 1 info, 2 warn, 3 error.
+    pub level: u8,
+    pub message: String,
+}
+
+pub fn validate_logs(logs: &[PluginLog]) -> Result<(), String> {
+    if logs.len() > MAX_LOG_LINES {
+        return Err(format!("at most {MAX_LOG_LINES} log lines per update"));
+    }
+    if logs
+        .iter()
+        .any(|l| l.level > 3 || l.message.len() > MAX_LOG_BYTES)
+    {
+        return Err("invalid log line".into());
+    }
+    Ok(())
+}
 
 /// A script's request for a declared data resource. Tokens are chosen by the
 /// script; answers arrive later as a `data` event.
@@ -337,10 +363,24 @@ pub enum WorkerResponse {
         update: PluginUpdate,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         requests: Vec<DataRequest>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        logs: Vec<PluginLog>,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        dropped_logs: u32,
     },
     Error {
         message: String,
     },
+    /// `nana.log` lines, posted by the supervisor as soon as they arrive:
+    /// views are throttled and superseded, logs are not.
+    Log {
+        lines: Vec<PluginLog>,
+        dropped: u32,
+    },
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 pub fn read_message<T: serde::de::DeserializeOwned>(

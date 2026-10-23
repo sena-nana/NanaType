@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "Twitch live chat over IRC and sending through the Helix API"
 
 [dependencies]
+nanatype-diag.workspace = true
 nanatype-model.workspace = true
 nanatype-secrets.workspace = true
 serde_json.workspace = true

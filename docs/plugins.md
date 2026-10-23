@@ -49,6 +49,12 @@ return {
 
 宿主按启用同意时的内容快照应答，导入时已按声明格式完整校验。每次分发最多 8 个请求，每个宿主事件最多 4 轮连锁请求，单个结果 64 KiB、每轮合计 120 KiB（包含错误回复），`lines`／`slice` 每次最多 1024 行；超过预算返回错误而不是截断，大数据须分块查询。下一个宿主事件到来时，未应答的请求作废。数据格式、约束与预算的完整说明见[统一包整体设计](package-design.md)。
 
+### 日志
+
+`nana.log(level, message)` 把一行写进 NanaType 的会话日志，`level` 为 `'debug'`、`'info'`、`'warn'` 或 `'error'`，其他值是脚本错误。`message` 经 `tostring` 转换，超过 512 字节时在字符边界截断，须为 UTF-8。每次分发最多保留 16 行，超出的只计数；宿主再按每个插件每秒 10 行限速，被丢弃的行数随下一条记录写入。`debug`、`info` 只在用户打开“详细日志”时记录，`warn`、`error` 始终记录。
+
+日志以 `[插件 ID] 消息` 写入，并像应用自己的日志一样脱敏：URL 去掉查询串，Cookie、令牌一类的值换成 `***`，主目录换成 `~`。用户导出的诊断包会包含这些行，因此不要写入聊天内容、账号或其他个人信息。NanaType Editor 的调试器显示全部级别。日志的整体设计见[日志](logging.md)。
+
 完整可安装示例位于 `docs/examples/counter-plugin/`，打包好的 [counter-plugin.ntpkg](examples/counter-plugin.ntpkg) 可在“插件与资源包”导入并启用。它统计已播放台词，提供画布进度条和重置按钮。`docs/examples/phrase-plugin/`（[phrase-plugin.ntpkg](examples/phrase-plugin.ntpkg)）演示声明 JSON 数据并逐句按值查询。修改源码后用 `python scripts/assets/package-example-plugins.py` 重新生成压缩包。
 
 ## 安全与生命周期

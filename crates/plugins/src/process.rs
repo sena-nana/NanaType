@@ -4,11 +4,12 @@ use crate::{
     read_message, write_message,
 };
 use std::{
+    collections::VecDeque,
     io::{Read, Write},
     path::Path,
     process::{Child, Command, Stdio},
     sync::{Arc, Mutex, mpsc},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 /// At most one view update per plugin reaches the UI in this interval (~30/s).
@@ -44,6 +45,8 @@ struct Launched {
     pid: u32,
     input: Box<dyn Write + Send>,
     output: Box<dyn Read + Send>,
+    /// None for an AppContainer worker, whose stderr is not inherited.
+    errors: Option<Box<dyn Read + Send>>,
     #[cfg(windows)]
     job: crate::os_sandbox::Job,
 }
@@ -61,6 +64,7 @@ fn launch(executable: &Path) -> std::io::Result<Launched> {
             child: Box::new(child),
             input: Box::new(input),
             output: Box::new(output),
+            errors: None,
             job,
         });
     }
@@ -70,7 +74,7 @@ fn launch(executable: &Path) -> std::io::Result<Launched> {
         .env_clear()
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -92,10 +96,53 @@ fn launch(executable: &Path) -> std::io::Result<Launched> {
         pid: child.id(),
         input: Box::new(child.stdin.take().unwrap()),
         output: Box::new(child.stdout.take().unwrap()),
+        errors: Some(Box::new(child.stderr.take().unwrap())),
         child: Box::new(child),
         #[cfg(windows)]
         job,
     })
+}
+
+/// The last bytes a worker wrote to stderr (a panic, a sandbox failure),
+/// kept for the log entry of a worker that fails.
+#[derive(Clone, Default)]
+struct StderrTail {
+    bytes: Arc<Mutex<VecDeque<u8>>>,
+    /// Signalled when the pipe closes: the tail is then complete.
+    closed: Arc<Mutex<Option<mpsc::Receiver<()>>>>,
+}
+
+const STDERR_TAIL_BYTES: usize = 8 * 1024;
+
+impl StderrTail {
+    fn follow(&self, mut errors: Box<dyn Read + Send>) -> std::io::Result<()> {
+        let bytes = self.bytes.clone();
+        let (done, closed) = mpsc::channel();
+        *self.closed.lock().unwrap_or_else(|e| e.into_inner()) = Some(closed);
+        std::thread::Builder::new()
+            .name("plugin-stderr".into())
+            .spawn(move || {
+                let mut chunk = [0u8; 1024];
+                while let Ok(n @ 1..) = errors.read(&mut chunk) {
+                    let mut tail = bytes.lock().unwrap_or_else(|e| e.into_inner());
+                    tail.extend(&chunk[..n]);
+                    let excess = tail.len().saturating_sub(STDERR_TAIL_BYTES);
+                    tail.drain(..excess);
+                }
+                let _ = done.send(());
+            })?;
+        Ok(())
+    }
+
+    /// The tail once the worker closed stderr, or after a short wait.
+    fn text(&self) -> String {
+        if let Some(closed) = self.closed.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            let _ = closed.recv_timeout(Duration::from_millis(200));
+        }
+        let tail = self.bytes.lock().unwrap_or_else(|e| e.into_inner());
+        let (a, b) = tail.as_slices();
+        String::from_utf8_lossy(&[a, b].concat()).trim().to_owned()
+    }
 }
 
 impl PluginProcess {
@@ -112,9 +159,15 @@ impl PluginProcess {
             pid,
             mut input,
             mut output,
+            errors,
             #[cfg(windows)]
             job,
         } = launch(executable)?;
+        let stderr = StderrTail::default();
+        if let Some(errors) = errors {
+            stderr.follow(errors)?;
+        }
+        let launched = Instant::now();
         let child = Arc::new(Mutex::new(child));
         let worker = child.clone();
         // Also reap the process if either supervisor thread fails to start.
@@ -134,11 +187,21 @@ impl PluginProcess {
             .name("plugin-supervisor".into())
             .spawn(move || {
                 let _child = ChildGuard(worker);
+                let mut started = false;
                 let run = || -> std::io::Result<()> {
                     write_message(&mut input, &WorkerRequest::Init { source })?;
                     match responses.recv_timeout(Duration::from_secs(15)) {
-                        Ok(WorkerResponse::Ready) => {}
+                        Ok(WorkerResponse::Ready) => {
+                            started = true;
+                            nanatype_diag::event!(
+                                crate::diag::WORKER_READY,
+                                startup_ms = launched.elapsed().as_millis() as u64
+                            );
+                        }
                         Ok(response) => {
+                            if let WorkerResponse::Error { message } = &response {
+                                nanatype_diag::report!(crate::diag::SCRIPT_ERROR; "{message}");
+                            }
                             post(response);
                             return Ok(());
                         }
@@ -155,11 +218,25 @@ impl PluginProcess {
                         let mut response = responses
                             .recv_timeout(Duration::from_millis(200))
                             .map_err(|_| std::io::Error::other("plugin response timed out"))?;
-                        let requests = match &mut response {
-                            WorkerResponse::Update { requests, .. } => std::mem::take(requests),
-                            _ => Vec::new(),
+                        let (requests, lines, dropped) = match &mut response {
+                            WorkerResponse::Update {
+                                requests,
+                                logs,
+                                dropped_logs,
+                                ..
+                            } => (
+                                std::mem::take(requests),
+                                std::mem::take(logs),
+                                std::mem::take(dropped_logs),
+                            ),
+                            _ => (Vec::new(), Vec::new(), 0),
                         };
-                        if matches!(response, WorkerResponse::Error { .. }) {
+                        if !lines.is_empty() || dropped > 0 {
+                            crate::validate_logs(&lines).map_err(std::io::Error::other)?;
+                            post(WorkerResponse::Log { lines, dropped });
+                        }
+                        if let WorkerResponse::Error { message } = &response {
+                            nanatype_diag::report!(crate::diag::SCRIPT_ERROR; "{message}");
                             post(response);
                             break;
                         }
@@ -209,6 +286,20 @@ impl PluginProcess {
                     Ok(())
                 };
                 if let Err(error) = run() {
+                    let stage = u64::from(started);
+                    match stderr.text() {
+                        tail if tail.is_empty() => nanatype_diag::report!(
+                            crate::diag::WORKER_FAILED,
+                            stage = stage;
+                            "{error}"
+                        ),
+                        tail => nanatype_diag::report!(
+                            crate::diag::WORKER_FAILED,
+                            stage = stage;
+                            "{error}; stderr: {}",
+                            last_lines(&tail)
+                        ),
+                    }
                     post(WorkerResponse::Error {
                         message: error.to_string(),
                     });
@@ -241,6 +332,20 @@ impl PluginProcess {
                 mpsc::TrySendError::Disconnected(_) => EventError::Stopped,
             })
     }
+}
+
+/// The end of a stderr tail: what fits in one log message, from a line start.
+fn last_lines(tail: &str) -> &str {
+    const KEEP: usize = 400;
+    if tail.len() <= KEEP {
+        return tail;
+    }
+    let mut start = tail.len() - KEEP;
+    while !tail.is_char_boundary(start) {
+        start += 1;
+    }
+    let cut = &tail[start..];
+    cut.find('\n').map_or(cut, |i| &cut[i + 1..])
 }
 
 /// Why an event was not queued. Only `Stopped` means the worker is gone;
@@ -320,6 +425,8 @@ pub fn run_worker() {
                 .map(|d| WorkerResponse::Update {
                     update: d.update,
                     requests: d.requests,
+                    logs: d.logs,
+                    dropped_logs: d.dropped_logs,
                 }),
             WorkerRequest::Data { results } => vm
                 .as_mut()
@@ -328,6 +435,8 @@ pub fn run_worker() {
                 .map(|d| WorkerResponse::Update {
                     update: d.update,
                     requests: d.requests,
+                    logs: d.logs,
+                    dropped_logs: d.dropped_logs,
                 }),
             _ => Err(wasmtime::format_err!("invalid worker state")),
         };
@@ -338,5 +447,20 @@ pub fn run_worker() {
         if write_message(&mut output, &response).is_err() || failed {
             break;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::last_lines;
+
+    #[test]
+    fn a_long_stderr_tail_keeps_whole_last_lines() {
+        assert_eq!(last_lines("short"), "short");
+        let tail = format!(
+            "{}\nthread 'main' panicked at x.rs:1\nboom",
+            "a".repeat(500)
+        );
+        assert_eq!(last_lines(&tail), "thread 'main' panicked at x.rs:1\nboom");
     }
 }

@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "Two-person NanaType sessions over encrypted iroh connections"
 
 [dependencies]
+nanatype-diag.workspace = true
 nanatype-model.workspace = true
 nanatype-core.workspace = true
 serde.workspace = true

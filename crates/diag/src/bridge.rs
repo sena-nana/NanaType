@@ -24,7 +24,15 @@ pub static EXTERNAL_ERROR: EventDescriptor =
 const SUPPRESSED: &[FieldDescriptor] = &[FieldDescriptor::u64("suppressed")];
 
 /// Crates held to Error.
-const ERROR_ONLY: &[&str] = &["hyper", "hyper_util", "reqwest", "ureq", "rustls", "h2", "tungstenite"];
+const ERROR_ONLY: &[&str] = &[
+    "hyper",
+    "hyper_util",
+    "reqwest",
+    "ureq",
+    "rustls",
+    "h2",
+    "tungstenite",
+];
 
 /// One record per crate per interval.
 const INTERVAL: Duration = Duration::from_secs(1);
@@ -41,7 +49,11 @@ struct Bridge {
 /// Become the process's `log` logger. Later calls (a second builder, tests)
 /// keep the first logger.
 pub(crate) fn install(verbose: bool) {
-    let level = if verbose { LevelFilter::Info } else { LevelFilter::Warn };
+    let level = if verbose {
+        LevelFilter::Info
+    } else {
+        LevelFilter::Warn
+    };
     if log::set_boxed_logger(Box::new(Bridge { level })).is_ok() {
         log::set_max_level(level);
     }
@@ -62,9 +74,9 @@ fn max_level(crate_name: &str, level: LevelFilter) -> LevelFilter {
 
 fn slot(crate_name: &str) -> usize {
     // FNV-1a: stable and cheap; the budget only needs a spread.
-    let hash = crate_name
-        .bytes()
-        .fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3));
+    let hash = crate_name.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    });
     (hash % SLOTS as u64) as usize
 }
 
@@ -131,7 +143,9 @@ mod tests {
 
     #[test]
     fn bridge_filters_by_level_and_crate() {
-        let bridge = Bridge { level: LevelFilter::Warn };
+        let bridge = Bridge {
+            level: LevelFilter::Warn,
+        };
         let meta = |level, target| Metadata::builder().level(level).target(target).build();
         assert!(bridge.enabled(&meta(Level::Warn, "wgpu_hal::vulkan")));
         assert!(!bridge.enabled(&meta(Level::Info, "wgpu_hal::vulkan")));

@@ -4436,6 +4436,7 @@ dependencies = [
  "url",
  "webm-iterable",
  "windows 0.62.2",
+ "zip",
 ]
 
 [[package]]
@@ -4626,6 +4627,7 @@ dependencies = [
  "blake3",
  "iroh",
  "nanatype-core",
+ "nanatype-diag",
  "nanatype-model",
  "rand 0.10.3",
  "serde",
@@ -4646,6 +4648,7 @@ dependencies = [
 name = "nanatype-plugins"
 version = "0.1.0"
 dependencies = [
+ "nanatype-diag",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4712,6 +4715,7 @@ version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
  "getrandom 0.4.3",
+ "nanatype-diag",
  "nanatype-model",
  "nanatype-secrets",
  "serde_json",
@@ -4727,6 +4731,7 @@ dependencies = [
  "crossbeam-channel",
  "ed25519-dalek",
  "getrandom 0.4.3",
+ "nanatype-diag",
  "semver",
  "serde",
  "serde_json",

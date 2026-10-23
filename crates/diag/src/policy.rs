@@ -24,7 +24,11 @@ pub fn config(verbose: bool) -> DiagnosticsConfig {
     VERBOSE.store(verbose, Ordering::Relaxed);
     crate::bridge::install(verbose);
     DiagnosticsConfig {
-        min_severity: if trace { Severity::Trace } else { Severity::Debug },
+        min_severity: if trace {
+            Severity::Trace
+        } else {
+            Severity::Debug
+        },
         persist: if verbose || cfg!(debug_assertions) {
             PersistMode::All
         } else {

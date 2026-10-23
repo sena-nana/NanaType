@@ -313,3 +313,30 @@ fn heavy_canvases_repaint_less_often_than_light_views() {
         gaps[1]
     );
 }
+
+#[test]
+fn log_lines_are_posted_before_the_view_they_came_with() {
+    let (sender, receiver) = mpsc::channel();
+    let source = "return {on_event=function() nana.log('warn', 'low on data') end,view=function() return {views={{slot='panel',root={kind='text',id='t',text='x'}}}} end}";
+    let _worker = PluginProcess::spawn(
+        Path::new(env!("CARGO_BIN_EXE_nanatype-plugin-worker")),
+        source.into(),
+        serde_json::json!({"type": "init"}),
+        no_data(),
+        move |response| {
+            let _ = sender.send(response);
+        },
+    )
+    .unwrap();
+    let WorkerResponse::Log { lines, dropped } =
+        receiver.recv_timeout(Duration::from_secs(20)).unwrap()
+    else {
+        panic!("expected log lines first");
+    };
+    assert_eq!(dropped, 0);
+    assert_eq!((lines[0].level, lines[0].message.as_str()), (2, "low on data"));
+    assert!(matches!(
+        receiver.recv_timeout(Duration::from_secs(20)).unwrap(),
+        WorkerResponse::Update { ref logs, .. } if logs.is_empty()
+    ));
+}

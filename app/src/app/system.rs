@@ -1,5 +1,5 @@
 use super::App;
-use crate::msg::Shortcut;
+use crate::msg::{Msg, Shortcut};
 use crate::services::sounds;
 use nanatype_audio::AudioStatus;
 use nanatype_core::Cmd;
@@ -54,7 +54,69 @@ impl App {
         }
     }
 
+    /// Package the logs off the UI thread; the result comes back as
+    /// [`Msg::DiagnosticsExported`].
+    pub(super) fn export_diagnostics(&mut self) {
+        let paths = self.paths.clone();
+        let locale = self.ui.locale.get_untracked();
+        let summary = crate::services::diagnostics::summary(&self.settings, locale.tag());
+        let ctx = self.ctx.clone();
+        let spawned = std::thread::Builder::new()
+            .name("nanatype-diagnostics".into())
+            .spawn(move || {
+                let result = crate::services::diagnostics::export(&paths, &summary);
+                ctx.dispatch(Msg::DiagnosticsExported(result));
+            });
+        match spawned {
+            Ok(_) => {
+                let text = self.ui.now_t("diagnostics-exporting");
+                self.notice(text, false);
+            }
+            Err(e) => self.diagnostics_exported(Err(e.to_string())),
+        }
+    }
+
+    pub(super) fn diagnostics_exported(&mut self, result: Result<std::path::PathBuf, String>) {
+        match result {
+            Ok(archive) => {
+                let name = archive
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let text = self.ui.tr("diagnostics-exported", &[("file", name.into())]);
+                self.notice(text, false);
+                crate::services::reveal(&self.paths.logs);
+            }
+            Err(e) => {
+                let text = self
+                    .ui
+                    .tr("diagnostics-export-failed", &[("message", e.into())]);
+                self.notice(text, true);
+            }
+        }
+    }
+
+    /// Point out, once, that the last run crashed and a package can be sent.
+    pub(super) fn notice_unseen_crash(&mut self) {
+        if let Some(at) = crate::services::diagnostics::unseen_crash(&self.settings) {
+            let text = self.ui.now_t("diagnostics-crash-notice");
+            self.notice(text, true);
+            self.edit(move |s| s.diagnostics.crash_seen = at);
+        }
+    }
+
     pub(super) fn audio_status(&mut self, status: AudioStatus) {
+        match &status {
+            AudioStatus::Running { rate, .. } => {
+                nanatype_diag::event!(crate::diag::AUDIO_RUNNING, rate = *rate)
+            }
+            AudioStatus::Lost(e) => {
+                nanatype_diag::report!(crate::diag::AUDIO_FAILED, lost = true; "{e}")
+            }
+            AudioStatus::Failed(e) => {
+                nanatype_diag::report!(crate::diag::AUDIO_FAILED, lost = false; "{e}")
+            }
+        }
         let text = match &status {
             AudioStatus::Running { device, rate } => format!("{device} · {rate} Hz"),
             AudioStatus::Lost(e) | AudioStatus::Failed(e) => {

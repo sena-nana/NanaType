@@ -333,8 +333,20 @@ async fn run(
             .map_err(|e| e.to_string())?])));
     }
     let endpoint = builder.bind().await.map_err(|e| e.to_string())?;
+    nanatype_diag::event!(
+        crate::diag::ENDPOINT_BOUND,
+        local_only = config.local_only,
+        custom_relay = config.relay.is_some(),
+    );
     if !config.local_only {
-        let _ = tokio::time::timeout(Duration::from_secs(5), endpoint.online()).await;
+        let started = std::time::Instant::now();
+        match tokio::time::timeout(Duration::from_secs(5), endpoint.online()).await {
+            Ok(_) => nanatype_diag::event!(
+                crate::diag::ONLINE,
+                ms = started.elapsed().as_millis() as u64
+            ),
+            Err(_) => nanatype_diag::event!(crate::diag::ONLINE_TIMEOUT),
+        }
     }
     let local = endpoint.id().to_string();
     let hosting = invite.is_none();
@@ -708,7 +720,7 @@ async fn serve_assets(conn: Connection, offers: Offers) {
             break;
         };
         // Bounded single transfer per peer; independent of the control stream.
-        let _ = tokio::time::timeout(Duration::from_secs(15), async {
+        let transfer = tokio::time::timeout(Duration::from_secs(15), async {
             let hash: String = read(&mut recv).await?;
             if !protocol::valid_hash(&hash) {
                 return Err("Invalid asset hash".to_string());
@@ -737,6 +749,15 @@ async fn serve_assets(conn: Connection, offers: Offers) {
             Ok::<_, String>(())
         })
         .await;
+        match transfer {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => nanatype_diag::report!(
+                crate::diag::ASSET_TRANSFER_FAILED,
+                timed_out = false;
+                "{error}"
+            ),
+            Err(_) => nanatype_diag::event!(crate::diag::ASSET_TRANSFER_FAILED, timed_out = true),
+        }
     }
 }
 

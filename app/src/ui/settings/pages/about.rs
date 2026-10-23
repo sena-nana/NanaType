@@ -190,6 +190,13 @@ fn local(ui: Ui) -> Vec<AnyView> {
             None,
             controls(vec![folder("about-logs", logs), folder("about-data", data)]),
         ),
+        toggle_row!(ui, "about-verbose-logs", diagnostics.verbose),
+        row(
+            ui,
+            "about-diagnostics",
+            Some("about-diagnostics-hint"),
+            button(ui, "about-export", || Msg::ExportDiagnostics),
+        ),
         // The first-run guide again, from its first step, on General.
         row(
             ui,

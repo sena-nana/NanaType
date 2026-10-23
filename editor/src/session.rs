@@ -763,6 +763,20 @@ impl Session {
                 Err(error) => self.debug_failed(error),
             },
             WorkerResponse::Error { message } => self.debug_failed(message.clone()),
+            // What the script wrote with `nana.log`, every level: this is the
+            // author's own console.
+            WorkerResponse::Log { lines, dropped } => {
+                for line in lines {
+                    let level = ["debug", "info", "warn", "error"]
+                        .get(usize::from(line.level))
+                        .unwrap_or(&"error");
+                    self.debugger.log(format!("▸ {level}: {}", line.message));
+                }
+                if *dropped > 0 {
+                    self.debugger
+                        .log(format!("▸ {dropped} more line(s) over the budget"));
+                }
+            }
         }
     }
     fn debug_failed(&mut self, message: String) {

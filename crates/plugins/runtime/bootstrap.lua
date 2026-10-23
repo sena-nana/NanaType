@@ -18,6 +18,8 @@ function __nana_dispatch(event)
   local update = plugin.view and plugin.view() or {}
   local requests = __nana_data.outbox
   __nana_data.outbox = {}
-  return {update = update, requests = requests}
+  local logs, dropped = __nana_log.lines, __nana_log.dropped
+  __nana_log.lines, __nana_log.dropped = {}, 0
+  return {update = update, requests = requests, logs = logs, dropped_logs = dropped}
 end
 return ''

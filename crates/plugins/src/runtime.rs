@@ -1,7 +1,7 @@
 //! Only the application's pinned interpreter is instantiated, never plugin Wasm.
 use crate::{
     DataReply, DataRequest, MAX_DATA_EVENT_BYTES, MAX_DATA_REQUESTS, MAX_DATA_RESULT_BYTES,
-    MAX_MESSAGE_BYTES, MAX_SCRIPT_BYTES, PluginUpdate,
+    MAX_MESSAGE_BYTES, MAX_SCRIPT_BYTES, PluginLog, PluginUpdate,
 };
 use std::{collections::BTreeSet, sync::OnceLock};
 use wasmtime::{
@@ -64,7 +64,7 @@ impl Api {
 
 /// Keys whose tables are always arrays, even when empty.
 const ARRAY_KEYS: &[&str] = &[
-    "requests", "views", "commands", "children", "draw", "points", "rect", "color",
+    "requests", "logs", "views", "commands", "children", "draw", "points", "rect", "color",
 ];
 /// Values one result may contain; the protocol's own limits are far lower.
 const MAX_RESULT_VALUES: usize = 200_000;
@@ -79,13 +79,18 @@ pub struct LuaSandbox {
     pending: BTreeSet<u32>,
 }
 
-/// What one dispatch produced: the view and any data requests.
+/// What one dispatch produced: the view, any data requests and `nana.log` lines.
 #[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Dispatch {
     pub update: PluginUpdate,
     #[serde(default)]
     pub requests: Vec<DataRequest>,
+    #[serde(default)]
+    pub logs: Vec<PluginLog>,
+    /// Lines past the per-dispatch budget.
+    #[serde(default)]
+    pub dropped_logs: u32,
 }
 
 fn engine() -> Result<&'static (Engine, Module)> {
@@ -413,6 +418,7 @@ impl LuaSandbox {
         let dispatch: Dispatch = serde_json::from_value(value?)?;
         dispatch.update.validate().map_err(|e| format_err!(e))?;
         crate::validate_requests(&dispatch.requests).map_err(|e| format_err!(e))?;
+        crate::validate_logs(&dispatch.logs).map_err(|e| format_err!(e))?;
         self.pending
             .extend(dispatch.requests.iter().map(|r| r.token));
         if self.pending.len() > MAX_DATA_REQUESTS {

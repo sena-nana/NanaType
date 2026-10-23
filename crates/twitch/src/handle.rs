@@ -484,7 +484,9 @@ impl Worker {
     }
     fn expire(&mut self, e: u64) {
         self.forget();
-        let _ = self.store.clear();
+        if let Err(error) = self.store.clear() {
+            nanatype_diag::report!(crate::diag::CREDENTIALS_CLEAR_FAILED; "{error}");
+        }
         self.emit(e, Event::Account(AccountState::Expired));
     }
     fn revalidate(&mut self) {
@@ -500,7 +502,10 @@ impl Worker {
             Ok((tokens, _)) => self.tokens = Some(tokens),
             Err(ApiError::Unauthorized) => self.expire(e),
             // Offline for a moment; try again at the next check.
-            Err(_) => self.next_validate = Instant::now() + Duration::from_secs(300),
+            Err(error) => {
+                nanatype_diag::report!(crate::diag::REVALIDATE_DEFERRED; "{error}");
+                self.next_validate = Instant::now() + Duration::from_secs(300);
+            }
         }
     }
     fn connect(&mut self, e: u64, link: u64) {
@@ -577,7 +582,7 @@ impl Worker {
                 self.emit(e, Event::Account(AccountState::Failed(message)));
             }
             // A dropped poll is retried at the next interval.
-            Err(_) => {}
+            Err(error) => nanatype_diag::report!(crate::diag::TOKEN_POLL_FAILED; "{error}"),
         }
     }
     fn paused(&self) -> bool {

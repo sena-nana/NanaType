@@ -1,4 +1,5 @@
 pub mod chat_assets;
+pub mod diagnostics;
 pub mod hotkeys;
 pub mod overlay_menu;
 pub mod persist;

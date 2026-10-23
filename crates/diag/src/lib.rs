@@ -9,13 +9,15 @@
 //! - [`bridge`]: `log` / `tracing` output of dependencies (wgpu, iroh, ureq,
 //!   winit...) as rate-limited faults;
 //! - [`config`]: severity and persistence from the "Detailed logs" setting
-//!   and `NANATYPE_DEBUG`.
+//!   and `NANATYPE_DEBUG`;
+//! - [`package`]: the diagnostics package a user attaches to a bug report.
 //!
 //! Each crate declares its own events in a `diag` module and lists them in
 //! an `EVENTS` slice for the catalog test (`app/tests/diag_catalog.rs`).
 
 pub mod bridge;
 pub mod domains;
+pub mod package;
 mod policy;
 pub mod redact;
 

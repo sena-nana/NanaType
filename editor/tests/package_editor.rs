@@ -313,6 +313,8 @@ fn scripts_run_only_in_the_isolated_debugger_and_report_located_errors() {
         &WorkerResponse::Update {
             update,
             requests: vec![],
+            logs: vec![],
+            dropped_logs: 0,
         },
     );
     session.debug_result(generation, &late);

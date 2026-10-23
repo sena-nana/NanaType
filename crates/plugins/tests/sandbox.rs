@@ -281,3 +281,41 @@ fn reading_results_runs_no_plugin_code_and_accepts_only_data() {
         assert!(vm.event(&json!({})).is_err(), "{bad}");
     }
 }
+
+#[test]
+fn log_lines_are_bounded_per_dispatch_and_cut_on_a_character_boundary() {
+    let mut vm = LuaSandbox::new(
+        r#"
+      return {
+        on_event=function(e)
+          nana.log('info', 'started')
+          nana.log('warn', 7)
+          nana.log('error', string.rep('a', 511) .. '字字')
+          for i = 1, 20 do nana.log('debug', i) end
+        end,
+        view=function() return {} end,
+      }
+    "#,
+    )
+    .unwrap();
+    let first = vm.dispatch(&json!({"type": "init"})).unwrap();
+    assert_eq!(first.logs.len(), nanatype_plugins::MAX_LOG_LINES);
+    assert_eq!(first.dropped_logs, 23 - nanatype_plugins::MAX_LOG_LINES as u32);
+    assert_eq!((first.logs[0].level, first.logs[0].message.as_str()), (1, "started"));
+    assert_eq!((first.logs[1].level, first.logs[1].message.as_str()), (2, "7"));
+    assert_eq!(first.logs[2].message, "a".repeat(511));
+    // Lines belong to the dispatch that wrote them.
+    let second = vm.dispatch(&json!({"type": "tick"})).unwrap();
+    assert_eq!(second.logs.len(), nanatype_plugins::MAX_LOG_LINES);
+    assert_eq!(second.dropped_logs, first.dropped_logs);
+}
+
+#[test]
+fn an_unknown_log_level_is_a_script_error() {
+    let mut vm = LuaSandbox::new(
+        "return {on_event=function() nana.log('loud', 'x') end, view=function() return {} end}",
+    )
+    .unwrap();
+    let error = vm.dispatch(&json!({"type": "init"})).unwrap_err();
+    assert!(format!("{error:#}").contains("log level"), "{error:#}");
+}
