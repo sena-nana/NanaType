@@ -307,20 +307,22 @@ pub fn desired(kind: WindowKind, skin: &Skin, s: &Settings, input_summoned: bool
         visible,
         passthrough: kind != WindowKind::Input && lock == Lock::Locked,
         on_top: o.is_some_and(|o| o.always_on_top),
-        resizable: matches!(kind, WindowKind::Input | WindowKind::Chat)
-            || matches!(
-                kind,
-                WindowKind::History | WindowKind::Display | WindowKind::PeerDisplay
-            ) && lock != Lock::Locked,
+        resizable: matches!(
+            kind,
+            WindowKind::Input | WindowKind::Settings | WindowKind::Chat
+        ) || matches!(
+            kind,
+            WindowKind::History | WindowKind::Display | WindowKind::PeerDisplay
+        ) && lock != Lock::Locked,
         size: size_of(kind, skin, s),
     }
 }
 
 /// Whether an already-open window should be forced back to `desired`'s size.
-/// Ordinary input/chat windows and unlocked broadcast windows keep the user's size.
+/// Ordinary windows and unlocked broadcast windows keep the user's size.
 pub fn pins_size(kind: WindowKind, resizable: bool) -> bool {
     match kind {
-        WindowKind::Input | WindowKind::Chat => false,
+        WindowKind::Input | WindowKind::Settings | WindowKind::Chat => false,
         WindowKind::Display | WindowKind::PeerDisplay | WindowKind::History if resizable => false,
         _ => true,
     }
@@ -618,6 +620,11 @@ mod tests {
         resized.skin.overrides.region = Some([1400.0, 600.0]);
         assert_eq!(size_of(WindowKind::Input, &skin, &resized), INPUT_SIZE);
         assert!(desired(WindowKind::Input, &skin, &resized, false).resizable);
+        for kind in [WindowKind::Settings, WindowKind::Chat] {
+            let d = desired(kind, &skin, &resized, false);
+            assert!(d.resizable && super::descriptor(kind, kind.key(), &skin, &resized).resizable);
+            assert!(!pins_size(kind, d.resizable));
+        }
     }
 
     #[test]
