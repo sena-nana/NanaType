@@ -2,8 +2,8 @@
 //! (cards and keycaps are NanaUI's own painters). It reads the installed
 //! theme while painting, so a light/dark switch restyles it in place.
 
-use nana_ui::runtime::{Gradient, PaintContext, PaintPath, PaintShadow, Painter};
-use nana_ui_core::{RadiusTier, SemanticColorRole, ThemeAppearance};
+use nana_ui::runtime::{Gradient, PaintContext, PaintPath, Painter};
+use nana_ui_core::{RadiusTier, SemanticColorRole};
 use nanatype_model::Rgba8;
 
 use crate::skin_theme::{contrast, mix, on, rgba};
@@ -28,8 +28,8 @@ fn accent_light(accent: [f32; 4]) -> [f32; 4] {
 }
 
 /// The view's one primary action: a solid accent fill lightening to the
-/// right (accent → accent.light at 90°) on an accent-tinted
-/// `0 3px 8px accent@33%` shadow, its label in the on-accent colour.
+/// right (accent → accent.light at 90°), flat like the cards around it, its
+/// label in the on-accent colour.
 pub struct CtaPainter;
 
 impl Painter for CtaPainter {
@@ -49,17 +49,6 @@ impl Painter for CtaPainter {
             SemanticColorRole::Accent
         };
         let accent = cx.color(role);
-        let dark = cx.theme_appearance() == ThemeAppearance::Dark;
-        cx.shadow(
-            &path,
-            PaintShadow::Custom {
-                color: alpha(accent, if dark { 0.25 } else { 0.33 }).into(),
-                offset: [0.0, 3.0],
-                blur: if dark { 10.0 } else { 8.0 },
-                spread: 0.0,
-                inset: false,
-            },
-        );
         let fill = Gradient::linear([rect.x, rect.y], [rect.x + rect.width, rect.y])
             .stop(0.0, accent)
             .stop(1.0, accent_light(accent));
@@ -70,6 +59,6 @@ impl Painter for CtaPainter {
     }
 
     fn paint_key(&self) -> u64 {
-        1
+        2
     }
 }
