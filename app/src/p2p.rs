@@ -36,9 +36,9 @@ pub struct Session {
     pub room: Option<Arc<Room>>,
     pub room_received: Option<std::time::Instant>,
     pub remote_revision: Option<(String, u64, Option<LineId>)>,
+    /// Lines sent during this session; earlier ones stay private.
     pub lines: HashSet<LineId>,
     pub revision: u64,
-    pub sequence: u64,
 }
 
 impl App {
@@ -175,24 +175,23 @@ impl App {
         false
     }
 
+    /// Mark a line as part of the session. Nothing is sent here: the partner
+    /// sees it through the published display and history, when they show it.
     pub(crate) fn peer_submitted(&mut self, event: &CoreEvent) {
-        let CoreEvent::LineSubmitted(line) = event else {
-            return;
-        };
-        if self.peer.handle.is_none() || !self.peer.lines.insert(line.id) {
-            return;
+        if let CoreEvent::LineSubmitted(line) = event
+            && self.peer.handle.is_some()
+        {
+            self.peer.lines.insert(line.id);
         }
-        self.peer.sequence += 1;
-        let resources =
-            self.peer_resources(&serde_json::json!({"line": line, "avatar": line.speaker.avatar}));
-        if let Some(handle) = &self.peer.handle {
-            handle.submit(
-                self.peer.sequence,
-                line.clone(),
-                line.speaker.avatar.clone(),
-                resources,
-            );
-        }
+    }
+
+    /// The display as this participant's own window draws it, and as the
+    /// partner receives it.
+    pub(crate) fn shared_display(&self) -> DisplayView {
+        session_display(
+            self.core.display(),
+            self.peer.handle.is_some().then_some(&self.peer.lines),
+        )
     }
 
     pub(crate) fn peer_publish(&mut self) {
@@ -200,27 +199,8 @@ impl App {
             return;
         }
         self.peer.revision += 1;
-        let mut rows: Vec<_> = self
-            .core
-            .history()
-            .iter()
-            .rev()
-            .filter(|row| {
-                row.item
-                    .line
-                    .is_some_and(|id| self.peer.lines.contains(&id))
-            })
-            .take(nanatype_p2p::HISTORY_LIMIT)
-            .cloned()
-            .collect();
-        rows.reverse();
-        let mut display = self.core.display().clone();
-        if display
-            .line
-            .is_some_and(|id| !self.peer.lines.contains(&id))
-        {
-            display = empty();
-        }
+        let rows = session_rows(self.core.history(), &self.peer.lines);
+        let display = self.shared_display();
         let portrait = &self.skin.dialogue.portrait;
         let mut portraits = Vec::new();
         if let Some(image) = &portrait.image {
@@ -314,18 +294,15 @@ impl App {
             }
         }
         for entry in &room.entries {
-            let owner = &entry.id.participant;
+            let owner = &entry.participant;
             let track = room.tracks.get(owner);
             // Visibility and reveal follow the owner's history policy.
-            let source_row = by_line.get(&(owner.as_str(), entry.line.id)).copied();
+            let source_row = by_line.get(&(owner.as_str(), entry.line)).copied();
             if let Some(row) = source_row {
                 let mut row = row.clone();
                 row.key = entry.order;
-                row.item.line = Some(room.render_id(owner, entry.line.id));
+                row.item.line = Some(room.render_id(owner, entry.line));
                 row.item.source = SourceId(format!("peer:{owner}"));
-                if owner != &self.peer.local {
-                    row.item.avatar = entry.avatar.clone();
-                }
                 if owner != &self.peer.local
                     && let Some(track) = track
                 {
@@ -394,9 +371,125 @@ impl App {
     }
 }
 
+/// Hide a line from before the session; mirror drafts (no line yet) and the
+/// session's own lines show as they are.
+pub(crate) fn session_display(
+    display: &DisplayView,
+    lines: Option<&HashSet<LineId>>,
+) -> DisplayView {
+    match (display.line, lines) {
+        (Some(id), Some(lines)) if !lines.contains(&id) => DisplayView {
+            revision: display.revision,
+            ..DisplayView::empty(display.entrance)
+        },
+        _ => display.clone(),
+    }
+}
+
+/// The newest rows of this session's lines, as the own history window has them.
+pub(crate) fn session_rows<'a>(
+    history: impl IntoIterator<Item = &'a HistoryRow, IntoIter: DoubleEndedIterator>,
+    lines: &HashSet<LineId>,
+) -> Vec<HistoryRow> {
+    let mut rows: Vec<_> = history
+        .into_iter()
+        .rev()
+        .filter(|row| row.item.line.is_some_and(|id| lines.contains(&id)))
+        .take(nanatype_p2p::HISTORY_LIMIT)
+        .cloned()
+        .collect();
+    rows.reverse();
+    rows
+}
+
 fn empty() -> DisplayView {
     DisplayView::empty(nanatype_model::Entrance {
         kind: nanatype_model::EntranceKind::None,
         ms: 0,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nanatype_core::Core;
+    use nanatype_playback::QueuePolicy;
+    use nanatype_settings::{InputMode, Settings};
+
+    fn core(mode: InputMode) -> Core {
+        let mut settings = Settings::default();
+        settings.general.input_mode = mode;
+        settings.playback.queue = QueuePolicy::Queue;
+        let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
+            .load("nanatype.halo")
+            .unwrap()
+            .skin;
+        Core::new(settings, skin)
+    }
+
+    /// Type and send, recording the line the way the session does.
+    fn send(core: &mut Core, lines: &mut HashSet<LineId>, text: &str, now: u64) {
+        core.handle(Cmd::DraftChanged(nanatype_markup::parse(text).doc), now);
+        for event in core.handle(Cmd::Send, now).events {
+            if let CoreEvent::LineSubmitted(line) = event {
+                lines.insert(line.id);
+            }
+        }
+    }
+
+    /// What the partner receives: the same view the own windows draw.
+    fn published(core: &Core, lines: &HashSet<LineId>) -> (String, Vec<String>) {
+        let display = session_display(core.display(), Some(lines));
+        let rows = session_rows(core.history(), lines);
+        (
+            display.doc.plain_text(),
+            rows.iter().map(|row| row.doc.plain_text()).collect(),
+        )
+    }
+
+    #[test]
+    fn compose_lines_reach_the_partner_only_when_they_show() {
+        let mut core = core(InputMode::Compose);
+        let mut lines = HashSet::new();
+        send(&mut core, &mut lines, "first", 0);
+        send(&mut core, &mut lines, "second", 10);
+        assert_eq!(core.queued(), 1);
+        assert_eq!(
+            published(&core, &lines),
+            ("first".into(), vec!["first".into()])
+        );
+        // Still typing "first": the queued line is not shown yet.
+        core.handle(Cmd::Skip, 20);
+        assert_eq!(
+            published(&core, &lines),
+            ("first".into(), vec!["first".into()])
+        );
+        core.handle(Cmd::Continue, 20_000);
+        assert_eq!(
+            published(&core, &lines),
+            ("second".into(), vec!["first".into(), "second".into()])
+        );
+    }
+
+    #[test]
+    fn mirror_drafts_reach_the_partner_while_typing() {
+        let mut core = core(InputMode::Mirror);
+        let lines = HashSet::new();
+        core.handle(Cmd::DraftChanged(nanatype_markup::parse("hel").doc), 0);
+        let display = session_display(core.display(), Some(&lines));
+        assert_eq!(display.line, None);
+        assert!(!display.empty);
+        assert_eq!(published(&core, &lines), ("hel".into(), Vec::new()));
+    }
+
+    #[test]
+    fn lines_from_before_the_session_stay_private() {
+        let mut core = core(InputMode::Compose);
+        send(&mut core, &mut HashSet::new(), "private", 0);
+        let lines = HashSet::new();
+        let display = session_display(core.display(), Some(&lines));
+        assert!(display.empty);
+        assert_eq!(display.revision, core.display().revision);
+        assert_eq!(published(&core, &lines), (String::new(), Vec::new()));
+    }
 }

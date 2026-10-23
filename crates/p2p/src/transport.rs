@@ -7,7 +7,6 @@ use iroh::{
     Endpoint, RelayMap, RelayMode,
     endpoint::{Connection, RecvStream, SendStream, presets},
 };
-use nanatype_model::Line;
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::{RwLock, mpsc, watch};
 
@@ -66,12 +65,6 @@ struct Publication {
 }
 enum Command {
     Leave,
-    Submit {
-        sequence: u64,
-        line: Line,
-        avatar: Option<String>,
-        resources: Resources,
-    },
     #[cfg(test)]
     Disconnect,
 }
@@ -126,23 +119,6 @@ impl PeerHandle {
             resources,
             published_at: Instant::now(),
         })));
-    }
-
-    pub fn submit(
-        &self,
-        sequence: u64,
-        line: Line,
-        avatar: Option<String>,
-        resources: Resources,
-    ) -> bool {
-        self.tx
-            .send(Command::Submit {
-                sequence,
-                line,
-                avatar,
-                resources,
-            })
-            .is_ok()
     }
 
     #[cfg(test)]
@@ -360,7 +336,6 @@ async fn run(
     let mut anchors = BTreeMap::new();
     let offers: Offers = Arc::new(RwLock::new(BTreeMap::new()));
     let mut pinned: Option<String> = None;
-    let mut pending: Vec<Frame> = Vec::new();
     let mut connected_once = false;
     emit(Event::Started {
         host: hosting,
@@ -463,22 +438,6 @@ async fn run(
             rtt_ms: 0,
         }));
         broadcast(&room, &anchors, &emit);
-        // Resend unacknowledged submissions. Host-side sequence checks make this idempotent.
-        if !hosting {
-            let accepted = *room.accepted.get(&local).unwrap_or(&0);
-            pending.retain(|f| matches!(f, Frame::Submit { sequence, .. } if *sequence > accepted));
-            let mut resend_failed = false;
-            for frame in &pending {
-                if write(&mut send, frame).await.is_err() {
-                    resend_failed = true;
-                    break;
-                }
-            }
-            if resend_failed {
-                conn.close(0u8.into(), b"retry");
-                continue;
-            }
-        }
         let (in_tx, mut in_rx) = mpsc::channel(32);
         let reader = tokio::spawn(async move {
             let mut window = Instant::now();
@@ -524,16 +483,16 @@ async fn run(
                         let frame = frame.ok_or("Connection reader ended")??;
                         last_seen = Instant::now();
                         let remote = conn.remote_id().to_string();
-                        let mut dirty = false;
                         match frame {
                             Frame::Leave => return Ok(true),
-                            Frame::Submit { sequence, line, avatar } if hosting => {
-                                dirty = room.submit(&remote, sequence, line, avatar);
-                            },
                             Frame::Track(track) if hosting => {
                                 if room.update(&remote, track)? {
-                                    anchors.insert(remote, Instant::now());
-                                    broadcast(&room, &anchors, &emit);
+                                    anchors.insert(remote.clone(), Instant::now());
+                                    let indexed = room.index(&remote);
+                                    let snapshot = broadcast(&room, &anchors, &emit);
+                                    if indexed {
+                                        write(&mut send, &Frame::Room(snapshot)).await?;
+                                    }
                                 }
                             },
                             Frame::PeerTrack { participant, track } if !hosting && participant == room.host => {
@@ -545,17 +504,11 @@ async fn run(
                             Frame::Room(snapshot) if !hosting => {
                                 validate_room(&snapshot, &invite.session, &room.host, &local)?;
                                 install_room(&mut room, &mut anchors, snapshot);
-                                let accepted = *room.accepted.get(&local).unwrap_or(&0);
-                                pending.retain(|f| matches!(f, Frame::Submit { sequence, .. } if *sequence > accepted));
                                 broadcast(&room, &anchors, &emit);
                             },
                             Frame::Ping(id) => write(&mut send, &Frame::Pong(id)).await?,
                             Frame::Pong(id) => emit(Event::Status(Status::Connected { route: route(&conn), rtt_ms: (ping_start.elapsed().as_millis() as u64).saturating_sub(id) })),
                             _ => return Err("Unexpected session message".into()),
-                        }
-                        if dirty {
-                            let snapshot = broadcast(&room, &anchors, &emit);
-                            write(&mut send, &Frame::Room(snapshot)).await?;
                         }
                     },
                     command = commands.recv() => match command.unwrap_or(Command::Leave) {
@@ -564,17 +517,6 @@ async fn run(
                             let _ = send.finish();
                             let _ = tokio::time::timeout(Duration::from_millis(250), conn.closed()).await;
                             return Ok(true);
-                        },
-                        Command::Submit { sequence, line, avatar, resources } => {
-                            let frame = prepare(&Frame::Submit { sequence, line, avatar }, &resources, &offers).await?;
-                            if hosting {
-                                if let Frame::Submit { sequence, line, avatar } = frame { room.submit(&local, sequence, line, avatar); }
-                                let snapshot = broadcast(&room, &anchors, &emit);
-                                write(&mut send, &Frame::Room(snapshot)).await?;
-                            } else {
-                                pending.push(frame.clone());
-                                write(&mut send, &frame).await?;
-                            }
                         },
                         #[cfg(test)]
                         Command::Disconnect => return Err("Test disconnect".into()),
@@ -593,8 +535,14 @@ async fn run(
                                 if hosting {
                                     if room.update(&local, track.clone())? {
                                         anchors.insert(local.clone(), Instant::now());
-                                        broadcast(&room, &anchors, &emit);
-                                        write(&mut send, &Frame::PeerTrack { participant: local.clone(), track }).await?;
+                                        let indexed = room.index(&local);
+                                        let snapshot = broadcast(&room, &anchors, &emit);
+                                        // A grown order travels with the room, which carries this track too.
+                                        if indexed {
+                                            write(&mut send, &Frame::Room(snapshot)).await?;
+                                        } else {
+                                            write(&mut send, &Frame::PeerTrack { participant: local.clone(), track }).await?;
+                                        }
                                     }
                                 } else {
                                     if room.update(&local, track.clone())? {
@@ -647,17 +595,15 @@ fn validate_room(room: &Room, session: &str, host: &str, local: &str) -> Result<
     if room.tracks.keys().any(|id| id != host && id != local) {
         return Err("Unknown participant".into());
     }
-    if room.accepted.len() > 2
-        || room.retired_before.len() > 2
+    if room.retired_before.len() > 2
         || room
-            .accepted
+            .retired_before
             .keys()
-            .chain(room.retired_before.keys())
             .any(|id| id != host && id != local)
-        || room.entries.iter().any(|entry| {
-            entry.id.session != session
-                || (entry.id.participant != host && entry.id.participant != local)
-        })
+        || room
+            .entries
+            .iter()
+            .any(|entry| entry.participant != host && entry.participant != local)
         || room
             .entries
             .windows(2)
@@ -799,8 +745,9 @@ async fn fetch_asset(conn: &Connection, hash: &str, cache: &std::path::Path) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::tests::track_with;
     use nanatype_core::DisplayView;
-    use nanatype_model::{Document, Entrance, EntranceKind, Speaker};
+    use nanatype_model::{Entrance, EntranceKind};
     use std::sync::mpsc as channel;
 
     #[track_caller]
@@ -865,18 +812,8 @@ mod tests {
         next(&guest_rx, |e| {
             matches!(e, Event::Status(Status::Connected { .. }))
         });
-        let line = Line::new(
-            Document::new(),
-            Speaker {
-                avatar: None,
-                name: "Host".into(),
-                portrait: None,
-            },
-        );
-        host.publish(track(1), BTreeMap::new());
-        guest.publish(track(1), BTreeMap::new());
-        assert!(host.submit(1, line.clone(), None, BTreeMap::new()));
-        assert!(guest.submit(1, line.clone(), None, BTreeMap::new()));
+        host.publish(track_with(1, &[1]), BTreeMap::new());
+        guest.publish(track_with(1, &[1]), BTreeMap::new());
         let has_two = |e: &Event| matches!(e, Event::Room { room, .. } if room.entries.len() == 2 && room.tracks.len() == 2);
         let Event::Room { room: a, .. } = next(&host_rx, has_two) else {
             unreachable!()
@@ -884,10 +821,7 @@ mod tests {
         let Event::Room { room: b, .. } = next(&guest_rx, has_two) else {
             unreachable!()
         };
-        assert_eq!(
-            a.entries.iter().map(|e| &e.id).collect::<Vec<_>>(),
-            b.entries.iter().map(|e| &e.id).collect::<Vec<_>>()
-        );
+        assert_eq!(a.entries, b.entries);
         guest.disconnect();
         next(&guest_rx, |e| {
             matches!(e, Event::Status(Status::Reconnecting))
@@ -895,13 +829,18 @@ mod tests {
         next(&guest_rx, |e| {
             matches!(e, Event::Status(Status::Connected { .. }))
         });
-        // Replayed submissions cannot duplicate committed history.
-        guest.submit(1, line.clone(), None, BTreeMap::new());
-        guest.submit(2, line, None, BTreeMap::new());
-        next(
-            &host_rx,
-            |e| matches!(e, Event::Room { room, .. } if room.entries.len() == 3),
-        );
+        // The republished track cannot duplicate ordered history; a new row is
+        // ordered once on both ends.
+        guest.publish(track_with(2, &[1, 2]), BTreeMap::new());
+        let has_three =
+            |e: &Event| matches!(e, Event::Room { room, .. } if room.entries.len() == 3);
+        let Event::Room { room: a, .. } = next(&host_rx, has_three) else {
+            unreachable!()
+        };
+        let Event::Room { room: b, .. } = next(&guest_rx, has_three) else {
+            unreachable!()
+        };
+        assert_eq!(a.entries, b.entries);
         drop(guest);
         next(&host_rx, |e| matches!(e, Event::Status(Status::Ended)));
         drop(host);

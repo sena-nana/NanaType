@@ -3,15 +3,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use iroh::EndpointAddr;
 use nanatype_core::{DisplayView, HistoryRow, Reveal};
-use nanatype_model::{Line, LineId};
+use nanatype_model::LineId;
 use serde::{Deserialize, Serialize};
 
-pub const ALPN: &[u8] = b"nanatype/session/1";
-pub const VERSION: u32 = 1;
+pub const ALPN: &[u8] = b"nanatype/session/2";
+pub const VERSION: u32 = 2;
 pub const MAX_FRAME: usize = 8 * 1024 * 1024;
 pub const MAX_ASSET: usize = 16 * 1024 * 1024;
 pub const MAX_ENTRIES: usize = 1000;
-/// Serialized budget of one participant's track, and of one submitted line.
+/// Serialized budget of one participant's track.
 /// Two tracks plus history must fit in a room frame.
 pub const MAX_TRACK: usize = MAX_FRAME / 4;
 
@@ -57,19 +57,14 @@ impl Invite {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct MessageId {
-    pub session: String,
-    pub participant: String,
-    pub sequence: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A row's place in the shared history. The content stays in its owner's
+/// track: a line is ordered only once it is in the owner's own history, so
+/// the partner sees it exactly when the owner's history window does.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
-    pub id: MessageId,
+    pub participant: String,
+    pub line: LineId,
     pub order: u64,
-    pub line: Line,
-    pub avatar: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,9 +130,7 @@ pub struct Room {
     pub entries: Vec<Entry>,
     pub tracks: BTreeMap<String, TrackSnapshot>,
     pub next_order: u64,
-    /// Highest accepted submission per participant, retained after pruning.
-    pub accepted: BTreeMap<String, u64>,
-    /// Local line IDs are monotonic; pruned rows must not return in a mirror update.
+    /// Local line IDs are monotonic; pruned rows must not return in a track update.
     #[serde(default)]
     pub retired_before: BTreeMap<String, u64>,
 }
@@ -151,40 +144,8 @@ impl Room {
             entries: Vec::new(),
             tracks: BTreeMap::new(),
             next_order: 1,
-            accepted: BTreeMap::new(),
             retired_before: BTreeMap::new(),
         }
-    }
-
-    pub fn submit(
-        &mut self,
-        participant: &str,
-        sequence: u64,
-        mut line: Line,
-        avatar: Option<String>,
-    ) -> bool {
-        if sequence <= *self.accepted.get(participant).unwrap_or(&0) {
-            return false;
-        }
-        line.doc.normalize();
-        if json_len(&line) > MAX_TRACK {
-            return false;
-        }
-        self.accepted.insert(participant.into(), sequence);
-        let id = MessageId {
-            session: self.session.clone(),
-            participant: participant.into(),
-            sequence,
-        };
-        self.entries.push(Entry {
-            id,
-            order: self.next_order,
-            line,
-            avatar,
-        });
-        self.next_order += 1;
-        self.compact();
-        true
     }
 
     pub fn update(&mut self, participant: &str, mut track: TrackSnapshot) -> Result<bool, String> {
@@ -205,6 +166,40 @@ impl Room {
         Ok(true)
     }
 
+    /// Host only: order the owner's rows the first time they appear in its
+    /// history. Returns whether the shared order grew.
+    pub fn index(&mut self, participant: &str) -> bool {
+        let Some(track) = self.tracks.get(participant) else {
+            return false;
+        };
+        let retired = self.retired_before.get(participant).copied().unwrap_or(0);
+        let mut known: BTreeSet<LineId> = self
+            .entries
+            .iter()
+            .filter(|entry| entry.participant == participant)
+            .map(|entry| entry.line)
+            .collect();
+        let fresh: Vec<LineId> = track
+            .rows
+            .iter()
+            .filter_map(|row| row.item.line)
+            .filter(|line| line.0 > retired && known.insert(*line))
+            .collect();
+        if fresh.is_empty() {
+            return false;
+        }
+        for line in fresh {
+            self.entries.push(Entry {
+                participant: participant.into(),
+                line,
+                order: self.next_order,
+            });
+            self.next_order += 1;
+        }
+        self.compact();
+        true
+    }
+
     fn compact(&mut self) {
         // Leave room for the frame wrapper and both live display documents.
         // The size is tracked incrementally: re-serializing the room per
@@ -219,10 +214,10 @@ impl Room {
             size = size.saturating_sub(json_len(entry) + 1);
             let retired = self
                 .retired_before
-                .entry(entry.id.participant.clone())
+                .entry(entry.participant.clone())
                 .or_default();
-            *retired = (*retired).max(entry.line.id.0);
-            if let Some(track) = self.tracks.get_mut(&entry.id.participant) {
+            *retired = (*retired).max(entry.line.0);
+            if let Some(track) = self.tracks.get_mut(&entry.participant) {
                 track.rows.retain(|row| {
                     let keep = row.item.line.is_none_or(|line| line.0 > *retired);
                     if !keep {
@@ -241,7 +236,7 @@ impl Room {
         let entry = self
             .entries
             .iter()
-            .find(|e| e.id.participant == participant && e.line.id == line);
+            .find(|e| e.participant == participant && e.line == line);
         if let Some(entry) = entry {
             return LineId(entry.order | (1 << 63));
         }
@@ -332,6 +327,16 @@ pub fn rebase_display(view: &mut DisplayView, remote_now: u64, now: u64) {
         exit.at_ms = now;
     }
     rebase_reveal(&mut view.reveal, remote_now, now);
+    if let Some(times) = &mut view.mirror_reveal_ms {
+        // Zero is the already-shown sentinel; real stamps move onto our clock.
+        *times = times
+            .iter()
+            .map(|at| match at {
+                0 => 0,
+                at => at.saturating_add(now).saturating_sub(remote_now).max(1),
+            })
+            .collect();
+    }
     if let Some((at, ms)) = &mut view.fade {
         let elapsed = remote_now.saturating_sub(*at);
         if elapsed >= u64::from(*ms) {
@@ -367,11 +372,6 @@ pub(crate) enum Frame {
         secret: String,
     },
     Welcome(Room),
-    Submit {
-        sequence: u64,
-        line: Line,
-        avatar: Option<String>,
-    },
     Track(TrackSnapshot),
     PeerTrack {
         participant: String,
@@ -384,9 +384,50 @@ pub(crate) enum Frame {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    use nanatype_model::{Document, Speaker};
+    use nanatype_model::{Document, HistoryItem, SourceId, SourceKind};
+
+    pub(crate) fn track_with(revision: u64, lines: &[u64]) -> TrackSnapshot {
+        TrackSnapshot {
+            revision,
+            captured_ms: 1,
+            age_ms: 0,
+            name: "partner".into(),
+            display: DisplayView::empty(nanatype_model::Entrance {
+                kind: nanatype_model::EntranceKind::None,
+                ms: 0,
+            }),
+            rows: lines
+                .iter()
+                .map(|line| HistoryRow {
+                    key: *line,
+                    item: HistoryItem {
+                        source: SourceId::local(),
+                        kind: SourceKind::Typewriter,
+                        line: Some(LineId(*line)),
+                        author: "partner".into(),
+                        avatar: None,
+                        doc: Document::plain("hi"),
+                        at: 0,
+                        uid: None,
+                        reply: None,
+                    },
+                    doc: Document::plain("hi").into(),
+                    reveal: None,
+                })
+                .collect(),
+            portraits: Vec::new(),
+        }
+    }
+
+    fn order(room: &Room) -> Vec<(&str, u64, u64)> {
+        room.entries
+            .iter()
+            .map(|e| (e.participant.as_str(), e.line.0, e.order))
+            .collect()
+    }
+
     #[test]
     fn resource_discovery_includes_nested_media_but_excludes_text() {
         let value = serde_json::json!({
@@ -403,16 +444,46 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_submission_is_not_reinserted_after_pruning() {
+    fn rows_are_ordered_once_when_they_first_reach_the_owners_history() {
         let mut room = Room::new("s".into(), "a".into());
-        let line = Line::new(Document::new(), Speaker::default());
-        for n in 1..=1002 {
-            assert!(room.submit("a", n, line.clone(), None));
-        }
-        assert_eq!(room.entries.len(), MAX_ENTRIES);
-        assert!(!room.submit("a", 1, line, None));
-        assert_eq!(room.entries[0].order, 3);
+        // A line still queued or typing is not in the owner's history yet.
+        room.update("a", track_with(1, &[])).unwrap();
+        assert!(!room.index("a"));
+        room.update("a", track_with(2, &[1])).unwrap();
+        assert!(room.index("a"));
+        room.update("b", track_with(1, &[1])).unwrap();
+        assert!(room.index("b"));
+        room.update("a", track_with(3, &[1, 2])).unwrap();
+        assert!(room.index("a"));
+        // Republishing the same history never duplicates it.
+        room.update("a", track_with(4, &[1, 2])).unwrap();
+        assert!(!room.index("a"));
+        assert_eq!(order(&room), [("a", 1, 1), ("b", 1, 2), ("a", 2, 3)]);
     }
+
+    #[test]
+    fn pruned_rows_are_not_reordered_by_a_later_track() {
+        let mut room = Room::new("s".into(), "a".into());
+        let lines: Vec<u64> = (1..=MAX_ENTRIES as u64 + 2).collect();
+        room.update("a", track_with(1, &lines[..MAX_ENTRIES]))
+            .unwrap();
+        room.index("a");
+        room.update("a", track_with(2, &lines[2..])).unwrap();
+        room.index("a");
+        assert_eq!(room.entries.len(), MAX_ENTRIES);
+        assert_eq!(room.entries[0].line, LineId(3));
+        // A stale history still holding retired line 2 cannot bring it back.
+        room.update("a", track_with(3, &lines[1..=MAX_ENTRIES]))
+            .unwrap();
+        assert!(!room.index("a"));
+        assert!(
+            room.tracks["a"]
+                .rows
+                .iter()
+                .all(|r| r.item.line > Some(LineId(2)))
+        );
+    }
+
     #[test]
     fn untrusted_reveal_indices_are_bounded_by_the_document() {
         let mut display = DisplayView::empty(nanatype_model::Entrance {
@@ -443,20 +514,34 @@ mod tests {
         assert_eq!(track.display.reveal.hidden_from, 3);
     }
     #[test]
-    fn oversized_submissions_are_refused() {
-        let mut room = Room::new("s".into(), "a".into());
-        let mut line = Line::new(Document::new(), Speaker::default());
-        line.speaker.name = "x".repeat(MAX_TRACK + 1);
-        assert!(!room.submit("b", 1, line, None));
-        assert!(room.entries.is_empty());
-    }
-    #[test]
     fn owners_with_the_same_local_line_id_get_distinct_render_ids() {
         let mut room = Room::new("s".into(), "a".into());
-        let line = Line::new(Document::new(), Speaker::default());
-        room.submit("a", 1, line.clone(), None);
-        room.submit("b", 1, line.clone(), None);
-        assert_ne!(room.render_id("a", line.id), room.render_id("b", line.id));
+        room.update("a", track_with(1, &[1])).unwrap();
+        room.update("b", track_with(1, &[1])).unwrap();
+        room.index("a");
+        room.index("b");
+        assert_ne!(
+            room.render_id("a", LineId(1)),
+            room.render_id("b", LineId(1))
+        );
+        // A line not yet in history (still typing) has a stable, distinct id.
+        assert_ne!(
+            room.render_id("a", LineId(2)),
+            room.render_id("b", LineId(2))
+        );
+    }
+    #[test]
+    fn mirror_stamps_move_onto_the_receivers_clock() {
+        let mut view = DisplayView::empty(nanatype_model::Entrance {
+            kind: nanatype_model::EntranceKind::None,
+            ms: 0,
+        });
+        view.mirror_reveal_ms = Some(std::sync::Arc::from([0u64, 1000, 1040]));
+        rebase_display(&mut view, 1100, 10);
+        assert_eq!(view.mirror_reveal_ms.as_deref(), Some(&[0u64, 1, 1][..]));
+        view.mirror_reveal_ms = Some(std::sync::Arc::from([1200u64]));
+        rebase_display(&mut view, 1100, 5000);
+        assert_eq!(view.mirror_reveal_ms.as_deref(), Some(&[5100u64][..]));
     }
     #[test]
     fn rebasing_a_retirement_keeps_a_finite_local_deadline_and_frozen_prefix() {

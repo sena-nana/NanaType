@@ -1445,15 +1445,7 @@ impl App {
             self.summoned = false;
         }
         if fx.display_changed {
-            let mut display = self.core.display().clone();
-            if self.peer.handle.is_some()
-                && display
-                    .line
-                    .is_some_and(|id| !self.peer.lines.contains(&id))
-            {
-                display.empty = true;
-            }
-            self.ui.display.set(Arc::new(display));
+            self.ui.display.set(Arc::new(self.shared_display()));
             self.ui.now.set(clock::now_ms());
         }
         if fx.history_changed && self.peer.handle.is_none() {
