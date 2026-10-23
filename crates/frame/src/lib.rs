@@ -43,6 +43,17 @@ pub fn locale_of(s: &nanatype_settings::Settings) -> nanatype_i18n::Locale {
         .unwrap_or_else(nanatype_i18n::Locale::system)
 }
 
+/// Put a window's document in `locale`: the language its text shapes in, so
+/// Han characters take that language's glyph forms, and what NanaUI's own
+/// controls say. Both are set before a window's views are built and again
+/// on a switch; NanaUI rewrites the controls already built.
+pub fn apply_locale(cx: &mut nana_ui::runtime::AppContext, locale: nanatype_i18n::Locale) {
+    cx.set_default_language(nana_ui::runtime::LanguageTag::new(locale.tag()));
+    if let Err(e) = cx.set_framework_strings(nanatype_i18n::framework_strings(locale)) {
+        debug_log(&format!("framework strings: {e}"));
+    }
+}
+
 /// Append a line to the file named by `NANATYPE_DEBUG` (development aid).
 pub fn debug_log(line: &str) {
     use std::io::Write;

@@ -52,6 +52,18 @@ use nanatype_model::{AssetRef, ChatUser, Document};
 use nanatype_settings::Settings;
 use nanatype_theme::SkinRegistry;
 
+/// The locale this run captures in.
+static LOCALE: std::sync::OnceLock<Locale> = std::sync::OnceLock::new();
+
+/// A window's document in the run's locale, as the app gives each window
+/// its language: Han glyph forms and what NanaUI's own controls say.
+fn document(id: DocumentId) -> RuntimeDocument {
+    let mut doc = RuntimeDocument::new(id);
+    let locale = LOCALE.get().copied().unwrap_or_default();
+    nanatype_frame::apply_locale(doc.context_mut(), locale);
+    doc
+}
+
 fn shot(
     name: &str,
     out: &std::path::Path,
@@ -75,7 +87,7 @@ fn shot(
     assert!(w > 0, "snapshot width must be positive");
     nanatype::clock::capture_at(at.saturating_sub(1000), || {
         let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
+        let mut doc = document(id);
         let _ = doc.context_mut().set_theme_tokens(theme);
         mount(&mut doc, id);
         let scale = std::env::var("NANATYPE_SNAPSHOT_SCALE")
@@ -139,6 +151,7 @@ fn main() {
         .next()
         .and_then(|l| Locale::from_tag(&l))
         .unwrap_or(Locale::ZhCn);
+    LOCALE.set(locale).expect("set once");
     tray_strip(&out);
     // Installed skins live in the data folder, like the app's.
     let skins = out.join("data").join("skins");

@@ -41,7 +41,7 @@ pub fn audit(ui: Ui, out: &std::path::Path, w: u32, h: u32, theme: Arc<nana_ui::
         .unwrap_or(1.);
     let make_session = |width, height, view: fn(Ui) -> AnyView| {
         let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
+        let mut doc = crate::document(id);
         doc.context_mut().set_theme_tokens(theme.clone()).unwrap();
         nanatype::clock::capture_at(base, || {
             doc.context_mut()

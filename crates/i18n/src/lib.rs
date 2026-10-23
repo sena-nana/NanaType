@@ -7,13 +7,15 @@
 //! zh-CN is the source of truth: tests require every other locale to define
 //! exactly its keys with the same variables. Lookups fall back from the active
 //! locale to en-US to the key itself, so a missing string is visible rather
-//! than blank.
+//! than blank. `locales/framework/` translates what NanaUI's own controls say
+//! ([`framework_strings`]).
 
 #![forbid(unsafe_code)]
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::{Arc, OnceLock};
 
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::{FluentArgs, FluentResource, FluentValue};
@@ -76,22 +78,29 @@ impl Locale {
         sources
     }
 
-    /// Pick the best supported locale for a BCP-47 tag such as `zh-Hans-SG`.
-    pub fn negotiate(tag: &str) -> Self {
-        let lower = tag.replace('_', "-").to_ascii_lowercase();
-        let lang = lower.split('-').next().unwrap_or("");
-        match lang {
-            "zh" => Self::ZhCn,
-            "ja" => Self::JaJp,
-            _ => Self::EnUs,
-        }
+    /// The supported locale for a user who reads `preferred` (BCP-47 tags,
+    /// most preferred first), English when none is. A language in the script
+    /// they read wins over one in another script: `zh-TW` then `en` is
+    /// English, `zh-TW` alone Simplified Chinese.
+    pub fn negotiate<T: AsRef<str>>(preferred: &[T]) -> Self {
+        nana_ui_platform::negotiate_language(preferred, &Self::ALL.map(Self::tag))
+            .and_then(Self::from_tag)
+            .unwrap_or(Self::EnUs)
     }
 
-    /// The operating system's preferred language.
+    /// The operating system's preferred languages, negotiated.
     pub fn system() -> Self {
-        sys_locale::get_locale()
-            .map(|tag| Self::negotiate(&tag))
-            .unwrap_or(Self::EnUs)
+        Self::negotiate(&nana_ui_platform::preferred_languages())
+    }
+
+    /// NanaUI's own strings in this locale: Chinese as NanaUI ships them,
+    /// `locales/framework/` over them otherwise.
+    fn framework_source(self) -> Option<&'static str> {
+        match self {
+            Self::ZhCn => None,
+            Self::EnUs => Some(include_str!("../locales/framework/en-US.ftl")),
+            Self::JaJp => Some(include_str!("../locales/framework/ja-JP.ftl")),
+        }
     }
 }
 
@@ -145,10 +154,14 @@ impl fmt::Debug for I18n {
 }
 
 fn bundle(locale: Locale) -> FluentBundle<FluentResource> {
+    bundle_of(locale, locale.sources())
+}
+
+fn bundle_of(locale: Locale, sources: Vec<&'static str>) -> FluentBundle<FluentResource> {
     let id: LanguageIdentifier = locale.tag().parse().expect("static locale tags parse");
     let mut bundle = FluentBundle::new_concurrent(vec![id]);
     bundle.set_use_isolating(false);
-    for source in locale.sources() {
+    for source in sources {
         let resource = FluentResource::try_new(source.to_owned())
             .unwrap_or_else(|(_, errors)| panic!("{locale}.ftl does not parse: {errors:?}"));
         bundle
@@ -228,55 +241,107 @@ impl I18n {
     }
 }
 
-/// Message ids and their variables in a locale source, for completeness tests.
-pub fn catalog(locale: Locale) -> Vec<(String, Vec<String>)> {
-    use fluent_syntax::ast::{Entry, Expression, InlineExpression, Pattern, PatternElement};
-    use fluent_syntax::parser::parse;
+/// The Fluent id of NanaUI's string `key`: `toast.close` is
+/// `framework-toast-close`.
+pub fn framework_id(key: &str) -> String {
+    format!("framework-{}", key.replace(['.', '_'], "-"))
+}
 
-    fn vars(pattern: &Pattern<&str>, out: &mut Vec<String>) {
-        for element in &pattern.elements {
-            if let PatternElement::Placeable { expression } = element {
-                expr(expression, out);
-            }
+/// What NanaUI's own controls say in `locale` (a toast's close button, an
+/// unlabelled color field, a menu's search line), for every window document
+/// in that language. A string the locale lacks falls back to en-US, then to
+/// NanaUI's Chinese. NanaUI fills `{name}` in its templates itself, so a
+/// Fluent variable is written back as that.
+pub fn framework_strings(locale: Locale) -> Arc<nana_ui_core::FrameworkStrings> {
+    static TABLES: [OnceLock<Arc<nana_ui_core::FrameworkStrings>>; 3] =
+        [OnceLock::new(), OnceLock::new(), OnceLock::new()];
+    let index = Locale::ALL.iter().position(|l| *l == locale).unwrap_or(0);
+    Arc::clone(TABLES[index].get_or_init(|| {
+        let mut strings = nana_ui_core::FrameworkStrings::default();
+        if locale.framework_source().is_none() {
+            return Arc::new(strings);
         }
-    }
+        let bundles: Vec<_> = [locale, Locale::EnUs]
+            .into_iter()
+            .filter_map(|l| {
+                l.framework_source()
+                    .map(|source| bundle_of(l, vec![source]))
+            })
+            .collect();
+        for key in nana_ui_core::FrameworkStrings::KEYS {
+            let id = framework_id(key);
+            let Some((bundle, pattern)) = bundles.iter().find_map(|bundle| {
+                let pattern = bundle.get_message(&id)?.value()?;
+                Some((bundle, pattern))
+            }) else {
+                continue;
+            };
+            let mut args = FluentArgs::new();
+            for name in pattern_vars(pattern) {
+                args.set(name.clone(), FluentValue::from(format!("{{{name}}}")));
+            }
+            let mut errors = Vec::new();
+            let text = bundle.format_pattern(pattern, Some(&args), &mut errors);
+            strings.set(key, text.into_owned());
+        }
+        Arc::new(strings)
+    }))
+}
+
+/// The variables a pattern reads, selectors included, sorted.
+fn pattern_vars(pattern: &fluent_syntax::ast::Pattern<&str>) -> Vec<String> {
+    use fluent_syntax::ast::{Expression, InlineExpression, Pattern, PatternElement};
+
     fn inline(e: &InlineExpression<&str>, out: &mut Vec<String>) {
         if let InlineExpression::VariableReference { id } = e {
             out.push(id.name.to_owned());
         }
     }
-    fn expr(e: &Expression<&str>, out: &mut Vec<String>) {
-        match e {
-            Expression::Inline(i) => inline(i, out),
-            Expression::Select { selector, variants } => {
-                inline(selector, out);
-                for v in variants {
-                    vars(&v.value, out);
+    fn vars(pattern: &Pattern<&str>, out: &mut Vec<String>) {
+        for element in &pattern.elements {
+            if let PatternElement::Placeable { expression } = element {
+                match expression {
+                    Expression::Inline(i) => inline(i, out),
+                    Expression::Select { selector, variants } => {
+                        inline(selector, out);
+                        for v in variants {
+                            vars(&v.value, out);
+                        }
+                    }
                 }
             }
         }
     }
 
-    let sources = locale.sources();
+    let mut out = Vec::new();
+    vars(pattern, &mut out);
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Message ids and their variables in a locale source, for completeness tests.
+pub fn catalog(locale: Locale) -> Vec<(String, Vec<String>)> {
+    catalog_of(locale.sources())
+}
+
+fn catalog_of(sources: Vec<&'static str>) -> Vec<(String, Vec<String>)> {
+    use fluent_syntax::ast::Entry;
+    use fluent_syntax::parser::parse;
+
     let resources = sources
         .iter()
         .map(|source| parse(*source).expect("locale parses"));
     let mut out = Vec::new();
     for entry in resources.flat_map(|resource| resource.body) {
         if let Entry::Message(message) = entry {
-            let mut v = Vec::new();
-            if let Some(value) = &message.value {
-                vars(value, &mut v);
-            }
             for attr in &message.attributes {
-                let mut av = Vec::new();
-                vars(&attr.value, &mut av);
-                av.sort();
-                av.dedup();
-                out.push((format!("{}.{}", message.id.name, attr.id.name), av));
+                out.push((
+                    format!("{}.{}", message.id.name, attr.id.name),
+                    pattern_vars(&attr.value),
+                ));
             }
-            v.sort();
-            v.dedup();
+            let v = message.value.as_ref().map(pattern_vars).unwrap_or_default();
             out.push((message.id.name.to_owned(), v));
         }
     }
@@ -347,10 +412,69 @@ mod tests {
     }
 
     #[test]
-    fn negotiation_maps_regional_tags() {
-        assert_eq!(Locale::negotiate("zh-Hans-SG"), Locale::ZhCn);
-        assert_eq!(Locale::negotiate("zh_TW"), Locale::ZhCn);
-        assert_eq!(Locale::negotiate("ja"), Locale::JaJp);
-        assert_eq!(Locale::negotiate("de-DE"), Locale::EnUs);
+    fn negotiation_reads_every_preferred_language() {
+        assert_eq!(Locale::negotiate(&["zh-Hans-SG"]), Locale::ZhCn);
+        assert_eq!(Locale::negotiate(&["ja"]), Locale::JaJp);
+        assert_eq!(Locale::negotiate(&["de-DE"]), Locale::EnUs);
+        assert_eq!(Locale::negotiate::<&str>(&[]), Locale::EnUs);
+        // Traditional Chinese readers get Simplified only when they read
+        // nothing else NanaType ships.
+        assert_eq!(Locale::negotiate(&["zh_TW"]), Locale::ZhCn);
+        assert_eq!(Locale::negotiate(&["zh-TW", "en"]), Locale::EnUs);
+        assert_eq!(Locale::negotiate(&["zh-Hant-HK", "ja-JP"]), Locale::JaJp);
+        // A language past the first one counts.
+        assert_eq!(Locale::negotiate(&["de-DE", "ja-JP"]), Locale::JaJp);
+    }
+
+    /// Each framework file names exactly NanaUI's keys, with the arguments
+    /// NanaUI's own template fills.
+    #[test]
+    fn framework_files_cover_nanaui_strings() {
+        use nana_ui_core::FrameworkStrings;
+        fn braces(template: &str) -> Vec<String> {
+            let mut out: Vec<String> = template
+                .split('{')
+                .skip(1)
+                .filter_map(|rest| rest.split_once('}').map(|(name, _)| name.to_owned()))
+                .collect();
+            out.sort();
+            out.dedup();
+            out
+        }
+        let chinese = FrameworkStrings::default();
+        let mut expected: Vec<(String, Vec<String>)> = FrameworkStrings::KEYS
+            .iter()
+            .map(|key| (framework_id(key), braces(chinese.get(key).unwrap())))
+            .collect();
+        expected.sort();
+        for locale in [Locale::EnUs, Locale::JaJp] {
+            let source = locale.framework_source().expect("translated");
+            assert_eq!(
+                catalog_of(vec![source]),
+                expected,
+                "{locale} framework strings"
+            );
+        }
+        assert!(Locale::ZhCn.framework_source().is_none());
+    }
+
+    #[test]
+    fn framework_strings_keep_nanaui_templates() {
+        let zh = framework_strings(Locale::ZhCn);
+        assert_eq!(*zh, nana_ui_core::FrameworkStrings::default());
+        let en = framework_strings(Locale::EnUs);
+        assert_eq!(&*en.toast_close, "Dismiss notification");
+        assert_eq!(&*en.toast_percent, "{percent}%");
+        assert_eq!(&*en.diff_accept_line, "Accept line {hunk}.{line}");
+        let ja = framework_strings(Locale::JaJp);
+        assert_eq!(&*ja.toast_close, "通知を閉じる");
+        assert_eq!(&*ja.calendar_month, "{month}月");
+        // Every string is translated, none left in NanaUI's Chinese except
+        // where the languages write it alike.
+        let same: Vec<_> = nana_ui_core::FrameworkStrings::KEYS
+            .iter()
+            .filter(|key| en.get(key) == zh.get(key))
+            .collect();
+        assert_eq!(same, [&"toast.percent"]);
     }
 }

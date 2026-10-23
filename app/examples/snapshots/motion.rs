@@ -43,7 +43,7 @@ pub fn capture(
     let id = DocumentId::new(1).unwrap();
     ui.now.set(start);
     let mut session = clock::capture_at(start - period, || {
-        let mut doc = RuntimeDocument::new(id);
+        let mut doc = crate::document(id);
         doc.context_mut().set_theme_tokens(theme).unwrap();
         doc.context_mut()
             .mount_view_root(id, move || {

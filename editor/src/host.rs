@@ -32,15 +32,13 @@ impl Host {
         let ui = self.app.ui;
         let context = doc.context_mut();
         let _ = context.set_theme_tokens(self.app.theme.clone());
+        nanatype_frame::apply_locale(context, ui.locale.get_untracked());
         let (_, toasts) = context
             .mount_view_root(id, move || {
                 let stack = entity_ref::<ToastStack>();
                 with_refs(crate::ui::window::editor_window(ui, stack), stack)
             })
             .map_err(|e: FrameworkError| e.to_string())?;
-        context.set_default_language(nana_ui::runtime::LanguageTag::new(
-            ui.locale.get_untracked().tag(),
-        ));
         self.toasts = Some(toasts);
         self.doc = Some(doc);
         Ok(())

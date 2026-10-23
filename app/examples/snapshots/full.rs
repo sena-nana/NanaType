@@ -524,7 +524,7 @@ fn completion(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
         // Placed as the host places it, from the editor's laid-out text: a
         // second pass once the list knows its own size.
         let id = DocumentId::new(1).unwrap();
-        let mut doc = RuntimeDocument::new(id);
+        let mut doc = crate::document(id);
         let _ = doc.context_mut().set_theme_tokens(theme.clone());
         let (_, (editor, _, _)) = doc
             .context_mut()

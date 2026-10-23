@@ -17,7 +17,7 @@ pub fn audit(ui: Ui, out: &std::path::Path, w: u32, h: u32, theme: Arc<nana_ui::
     ui.now.set(120_000);
     ui.reduced_motion.set(false);
     let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
+    let mut doc = crate::document(id);
     doc.context_mut().set_theme_tokens(theme).unwrap();
     doc.context_mut()
         .mount_view_root(id, move || dialogue::display_window(ui))

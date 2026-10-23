@@ -29,14 +29,16 @@ pub struct SessionBuilder {
     id: u64,
     dark: Option<bool>,
     scale: f32,
+    locale: Option<nanatype_i18n::Locale>,
 }
 
-/// Document 1, without theme tokens, at scale 1.
+/// Document 1, without theme tokens, at scale 1, in NanaUI's own language.
 pub fn session() -> SessionBuilder {
     SessionBuilder {
         id: 1,
         dark: None,
         scale: 1.0,
+        locale: None,
     }
 }
 
@@ -54,6 +56,12 @@ impl SessionBuilder {
 
     pub fn scale(mut self, scale: f32) -> Self {
         self.scale = scale;
+        self
+    }
+
+    /// Puts the document in `locale` as the app does each window's.
+    pub fn locale(mut self, locale: nanatype_i18n::Locale) -> Self {
+        self.locale = Some(locale);
         self
     }
 
@@ -97,6 +105,9 @@ impl SessionBuilder {
             doc.context_mut()
                 .set_theme_tokens(nanatype::ui::kit::theme::compile(dark))
                 .unwrap();
+        }
+        if let Some(locale) = self.locale {
+            nanatype_frame::apply_locale(doc.context_mut(), locale);
         }
         let output = doc.context_mut().mount_view_root(id, view).unwrap();
         (doc, output)

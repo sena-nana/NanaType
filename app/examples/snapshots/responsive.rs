@@ -29,7 +29,7 @@ pub fn audit(
         (skin.dialogue.region[1] + 2. * skin.dialogue.overscan) as u32,
     ];
     let id = DocumentId::new(1).unwrap();
-    let mut doc = RuntimeDocument::new(id);
+    let mut doc = crate::document(id);
     doc.context_mut().set_theme_tokens(theme.clone()).unwrap();
     doc.context_mut()
         .mount_view_root(id, move || dialogue::display_window(ui))

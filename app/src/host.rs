@@ -56,7 +56,7 @@ pub struct Host {
     stickers: crate::stickers::playback::Playback,
     /// Language and forced reduced motion each document was last given;
     /// re-sent only when they change (or to a new window), not per message.
-    doc_env: HashMap<WindowId, (&'static str, bool)>,
+    doc_env: HashMap<WindowId, (nanatype_i18n::Locale, bool)>,
     /// The last keystroke click, and whether a key press (rather than IME
     /// text) played it.
     last_keystroke: Option<(Instant, bool)>,
@@ -135,12 +135,6 @@ fn frame_policy(
             })
         },
     }
-}
-
-/// The tag every document shapes its text in by default, so Han characters
-/// take the active language's glyph shapes instead of the font's first guess.
-fn default_language(tag: &str) -> Option<nana_ui::runtime::LanguageTag> {
-    nana_ui::runtime::LanguageTag::new(tag)
 }
 
 /// Frames the `@` / `/` list may be laid out again to settle its place.
@@ -295,18 +289,18 @@ impl Host {
             self.app.notice(message, true);
         }
         self.drive_editor();
-        let language = self.app.ui.locale.get_untracked().tag();
+        let locale = self.app.ui.locale.get_untracked();
         // The app's reduce-motion setting wins over the system's in every
         // window's runtime, so view transitions and toasts land at once too.
         let forced = self.app.settings.playback.reduced_motion;
         self.doc_env.retain(|id, _| self.docs.contains_key(id));
         for (id, doc) in &mut self.docs {
-            if self.doc_env.get(id) == Some(&(language, forced)) {
+            if self.doc_env.get(id) == Some(&(locale, forced)) {
                 continue;
             }
-            self.doc_env.insert(*id, (language, forced));
+            self.doc_env.insert(*id, (locale, forced));
             let cx = doc.context_mut();
-            cx.set_default_language(default_language(language));
+            nanatype_frame::apply_locale(cx, locale);
             if forced {
                 cx.set_reduced_motion(true);
             } else {
@@ -402,6 +396,7 @@ impl Host {
         let ui = self.app.ui;
         let context = doc.context_mut();
         let _ = context.set_theme_tokens(self.app.theme.clone());
+        nanatype_frame::apply_locale(context, ui.locale.get_untracked());
         let err = |e: FrameworkError| e.to_string();
         match kind {
             WindowKind::Display => {
@@ -462,8 +457,6 @@ impl Host {
                 self.toasts.insert(id, stack);
             }
         }
-        doc.context_mut()
-            .set_default_language(default_language(self.app.ui.locale.get_untracked().tag()));
         self.doc_env.remove(&id);
         self.docs.insert(id, doc);
         Ok(())

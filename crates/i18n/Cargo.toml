@@ -15,4 +15,5 @@ editor = []
 fluent-bundle = "0.16"
 fluent-syntax = "0.12"
 unic-langid = "0.9"
-sys-locale = "0.3"
+nana-ui-core.workspace = true
+nana-ui-platform.workspace = true
