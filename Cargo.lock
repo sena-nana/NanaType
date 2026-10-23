@@ -4580,6 +4580,7 @@ dependencies = [
  "nanatype-plugins",
  "nanatype-settings",
  "nanatype-theme",
+ "objc2-app-kit 0.3.2",
  "pollster",
  "raw-window-handle",
  "serde",

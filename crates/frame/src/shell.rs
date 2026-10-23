@@ -24,7 +24,8 @@ pub fn open_url(url: &str) {
 
 /// Paint a window's system title bar with `theme`'s background and text,
 /// in dark mode when the background is dark (Windows 11; Windows 10 takes
-/// only the dark mode). Other systems keep their own title bar.
+/// only the dark mode). macOS takes the background and the dark mode, which
+/// also picks the title's ink. Other systems keep their own title bar.
 pub fn tint_caption(handle: &nana_ui::WindowHandle, theme: &nana_ui::CompiledTheme) {
     let p = theme.palette();
     let rgb = |c: nana_ui_core::SemanticColor| {
@@ -39,9 +40,54 @@ pub fn tint_caption(handle: &nana_ui::WindowHandle, theme: &nana_ui::CompiledThe
         if let raw_window_handle::RawWindowHandle::Win32(w) = h.as_raw() {
             caption_colors(w.hwnd.get(), bg, text, dark);
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        if let raw_window_handle::RawWindowHandle::AppKit(w) = h.as_raw() {
+            // SAFETY: the platform hands over its live content NSView on the
+            // main thread.
+            let view = unsafe { w.ns_view.cast::<objc2_app_kit::NSView>().as_ref() };
+            // AppKit takes the title's ink from the dark mode.
+            let _ = text;
+            caption_colors(view, bg, dark);
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
         let _ = (h, bg, text, dark);
     }));
+}
+
+#[cfg(target_os = "macos")]
+fn caption_colors(view: &objc2_app_kit::NSView, bg: [u8; 3], dark: bool) {
+    use objc2_app_kit::{
+        NSAppearance, NSAppearanceCustomization, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
+        NSColor,
+    };
+    let Some(window) = view.window() else {
+        return;
+    };
+    let channel = |v: u8| f64::from(v) / 255.0;
+    // A transparent title bar shows the window's background behind it.
+    window.setTitlebarAppearsTransparent(true);
+    window.setBackgroundColor(Some(&NSColor::colorWithSRGBRed_green_blue_alpha(
+        channel(bg[0]),
+        channel(bg[1]),
+        channel(bg[2]),
+        1.0,
+    )));
+    // The frame view draws the title and the traffic lights. The window's
+    // own appearance stays unset: winit reports the system's light and dark
+    // changes only while nothing overrides it.
+    // SAFETY: the content view's superview is the window's frame view, an
+    // ordinary NSView that the window keeps alive.
+    if let Some(frame) = unsafe { view.superview() } {
+        // SAFETY: AppKit exports both names as constant NSStrings.
+        let name = unsafe {
+            if dark {
+                NSAppearanceNameDarkAqua
+            } else {
+                NSAppearanceNameAqua
+            }
+        };
+        frame.setAppearance(NSAppearance::appearanceNamed(name).as_deref());
+    }
 }
 
 #[cfg(windows)]
