@@ -53,7 +53,7 @@ impl Watch {
         let mut watcher = match watcher {
             Ok(w) => w,
             Err(e) => {
-                crate::debug_log(&format!("hot reload unavailable: {e}"));
+                nanatype_diag::report!(crate::diag::WATCH_UNAVAILABLE; "{e}");
                 return Self {
                     _watcher: None,
                     paths,
@@ -62,7 +62,7 @@ impl Watch {
         };
         for p in &paths {
             if let Err(e) = watcher.watch(p, RecursiveMode::Recursive) {
-                crate::debug_log(&format!("not watching {}: {e}", p.display()));
+                nanatype_diag::report!(crate::diag::WATCH_UNAVAILABLE; "{}: {e}", p.display());
             }
         }
         thread::Builder::new()

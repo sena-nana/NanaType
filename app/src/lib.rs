@@ -22,6 +22,7 @@ pub mod app;
 pub mod assets;
 pub mod chat;
 pub mod completion;
+pub mod diag;
 pub mod distribution;
 pub mod host;
 pub mod msg;
@@ -36,11 +37,11 @@ pub mod ui;
 pub mod windows;
 pub mod workshop;
 
-pub use nanatype_frame::{clock, debug_log, localtime, paths, skin_fonts, skin_theme};
+pub use nanatype_frame::{clock, localtime, paths, skin_fonts, skin_theme};
 
 use std::process::ExitCode;
 
-use nana_ui::{DiagnosticsConfig, NanaApplication};
+use nana_ui::NanaApplication;
 
 use crate::services::instance::{self, Product};
 use crate::windows::WindowKind;
@@ -50,17 +51,14 @@ pub fn run() -> ExitCode {
     if nanatype_frame::worker_entry() {
         return ExitCode::SUCCESS;
     }
-    debug_log("main start");
     // Started outside Steam, a Steam release relaunches through it; the copy
     // Steam starts must find the single-instance lock free.
     if std::env::var_os(nana_ui::SELF_CHECK_ENV).is_none()
         && nanatype_steam::restart_through_steam()
     {
-        debug_log("relaunching through Steam");
         return ExitCode::SUCCESS;
     }
     if !instance::claim(Product::APP) {
-        debug_log("secondary instance; exiting");
         return ExitCode::SUCCESS;
     }
     services::steam::connect();
@@ -82,13 +80,14 @@ pub fn run() -> ExitCode {
         .expect("built-in skin")
         .skin;
     let primary = windows::descriptor(WindowKind::Input, "NanaType", &skin, &defaults);
+    // The session log starts with the runtime, before settings load.
+    let logging = nanatype_settings::peek_diagnostics(&paths::Paths::of_app().settings());
     match NanaApplication::builder(identity)
-        .diagnostics(DiagnosticsConfig::default())
+        .diagnostics(nanatype_diag::config(logging.verbose))
         .run::<host::Host>(primary)
     {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            debug_log(&format!("run failed: {error}"));
             eprintln!("NanaType: {error}");
             ExitCode::FAILURE
         }

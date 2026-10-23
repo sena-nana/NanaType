@@ -158,7 +158,7 @@ pub fn background<M: Send + 'static>(
     work: impl FnOnce() -> M + Send + 'static,
 ) {
     if let Err(error) = try_background(name, ctx, work) {
-        crate::debug_log(&format!("{name} unavailable: {error}"));
+        nanatype_diag::report!(crate::diag::BACKGROUND_UNAVAILABLE; "{name}: {error}");
     }
 }
 

@@ -21,6 +21,7 @@ builtin-fonts = ["nanatype-frame/builtin-fonts"]
 
 [dependencies]
 nanatype-frame.workspace = true
+nanatype-diag.workspace = true
 nanatype-model.workspace = true
 nanatype-markup.workspace = true
 nanatype-theme = { workspace = true, features = ["editor"] }

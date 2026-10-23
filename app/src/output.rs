@@ -602,7 +602,7 @@ impl Spout {
                 self.sender_recovered(kind);
                 continue;
             };
-            crate::debug_log(&format!("spout {kind:?}: {detail}"));
+            nanatype_diag::report!(crate::diag::SPOUT_FAILED, window = crate::diag::window(kind); "{detail}");
             self.sender_failed(kind, out, generation, key, now);
             let state = crate::ui::link_text::spout_send(locale, key);
             if self.status.get(&kind) != Some(&state) {

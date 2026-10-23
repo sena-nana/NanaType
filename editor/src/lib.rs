@@ -9,6 +9,7 @@
 #![recursion_limit = "512"]
 
 pub mod app;
+pub mod diag;
 pub mod host;
 pub mod msg;
 pub mod session;
@@ -17,7 +18,7 @@ pub mod ui;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use nana_ui::{DiagnosticsConfig, NanaApplication};
+use nana_ui::NanaApplication;
 use nanatype_frame::instance::{self, Product};
 use nanatype_frame::paths::Paths;
 
@@ -77,8 +78,11 @@ pub fn run() -> ExitCode {
     primary.focus_on_show = true;
     primary.role = nana_ui_platform::WindowRole::Main;
     primary.icon = icon();
+    // One "Detailed logs" switch, in NanaType's settings, covers both programs.
+    let launch = Launch::from_args(std::env::args().skip(1));
+    let logging = nanatype_settings::peek_diagnostics(&launch.paths().settings());
     match NanaApplication::builder(identity)
-        .diagnostics(DiagnosticsConfig::default())
+        .diagnostics(nanatype_diag::config(logging.verbose))
         .run::<host::Host>(primary)
     {
         Ok(()) => ExitCode::SUCCESS,

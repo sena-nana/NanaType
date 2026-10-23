@@ -33,8 +33,9 @@ impl Persist {
     }
 
     pub fn json<T: serde::Serialize>(&self, path: PathBuf, value: &T) {
-        if let Ok(bytes) = serde_json::to_vec_pretty(value) {
-            let _ = self.tx.send(Job::Write(path, bytes));
+        match serde_json::to_vec_pretty(value) {
+            Ok(bytes) => drop(self.tx.send(Job::Write(path, bytes))),
+            Err(e) => nanatype_diag::report!(crate::diag::PERSIST_FAILED; "{}: {e}", path.display()),
         }
     }
 

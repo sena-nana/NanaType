@@ -513,10 +513,13 @@ impl WindowManager {
             }
             let visible = d.visible && (slot.placed || !monitors_known);
             if prev.as_ref().map(|p| p.visible) != Some(visible) {
-                crate::debug_log(&format!(
-                    "{kind:?} set_visible({visible}) placed={} monitors={monitors_known}",
-                    slot.placed
-                ));
+                nanatype_diag::event!(
+                    crate::diag::WINDOW_VISIBILITY,
+                    window = crate::diag::window(*kind),
+                    visible = visible,
+                    placed = slot.placed,
+                    monitors_known = monitors_known,
+                );
                 drop(handle.set_visible(visible));
             }
             slot.applied = Some(Desired {

@@ -182,7 +182,7 @@ impl Media {
             .and_then(|()| fs::rename(&partial, &target));
         if let Err(e) = written {
             let _ = fs::remove_file(&partial);
-            crate::debug_log(&format!("media cache {name}: {e}"));
+            nanatype_diag::report!(crate::diag::MEDIA_CACHE_FAILED; "{name}: {e}");
             return None;
         }
         state.used.insert(name.to_owned());
@@ -262,17 +262,18 @@ pub fn init(data: &Path) -> Option<&'static Media> {
     let media = match Media::new(data, Limits::default()) {
         Ok(media) => media,
         Err(e) => {
-            crate::debug_log(&format!("media mirror in {}: {e}", data.display()));
+            nanatype_diag::report!(crate::diag::MEDIA_CACHE_FAILED; "mirror in {}: {e}", data.display());
             return None;
         }
     };
     nana_ui::set_background_image_url_base(media.base());
     if effective_base().as_deref() != Some(media.base().as_path()) {
-        crate::debug_log(&format!(
+        nanatype_diag::report!(
+            crate::diag::MEDIA_BASE_MISMATCH;
             "NanaUI image base is {:?}, not {}; pictures may not load",
             effective_base(),
             media.base().display()
-        ));
+        );
     }
     Some(MEDIA.get_or_init(|| media))
 }

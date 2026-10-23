@@ -15,9 +15,6 @@ pub fn connect() {
         return;
     }
     let boot = nanatype_steam::bootstrap();
-    if let Bootstrap::Unavailable(why) = &boot {
-        crate::debug_log(&format!("steam unavailable: {why}"));
-    }
     *BOOT.lock().unwrap() = Some(boot);
 }
 
@@ -25,7 +22,11 @@ pub fn connect() {
 pub fn take() -> (Option<Steam>, Availability) {
     match BOOT.lock().unwrap().take() {
         Some(Bootstrap::Ready(steam)) => (Some(steam), Availability::Ready),
-        Some(Bootstrap::Unavailable(why)) => (None, Availability::Unavailable(why)),
+        Some(Bootstrap::Unavailable(why)) => {
+            // Logged here: `connect` runs before the session log exists.
+            nanatype_diag::report!(crate::diag::STEAM_UNAVAILABLE; "{why}");
+            (None, Availability::Unavailable(why))
+        }
         // A debug Steam build that was not asked to start Steam.
         _ if crate::distribution::STEAM => (
             None,

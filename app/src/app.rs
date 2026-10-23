@@ -176,6 +176,22 @@ pub struct App {
     tray_error: Option<(u64, String)>,
 }
 
+/// The settings file's state as the session log's first app event.
+fn record_settings_load(note: &nanatype_settings::LoadNote) {
+    use nanatype_settings::LoadNote;
+    let (code, from) = match note {
+        LoadNote::Fresh => (0u64, 0u64),
+        LoadNote::Loaded => (1, 0),
+        LoadNote::Migrated { from } => (2, u64::from(*from)),
+        LoadNote::Quarantined { reason, .. } => {
+            nanatype_diag::report!(crate::diag::SETTINGS_QUARANTINED; "{reason}");
+            (3, 0)
+        }
+        LoadNote::TooNew { schema } => (4, u64::from(*schema)),
+    };
+    nanatype_diag::event!(crate::diag::SETTINGS_LOADED, note = code, from_schema = from);
+}
+
 /// How long an error stays in the tray tooltip.
 const TRAY_ERROR_SECS: u64 = 30;
 
@@ -191,6 +207,7 @@ impl App {
         let legacy = Paths::legacy_settings();
         let loaded_settings =
             nanatype_settings::load_settings(&paths.settings(), legacy.as_deref());
+        record_settings_load(&loaded_settings.note);
         let mut settings = loaded_settings.value;
         settings.sanitize();
         let geometry: GeometryStore = nanatype_settings::load_json(&paths.geometry()).value;
@@ -232,6 +249,8 @@ impl App {
             &settings.skin.id,
         ));
         let locale = locale_of(&settings);
+        nanatype_diag::marker("start");
+        crate::diag::session_info(&settings, locale.tag());
         let system_dark = matches!(
             ctx.system_appearance(),
             Some(nana_ui_platform::SystemAppearance::Dark)
@@ -415,6 +434,9 @@ impl App {
     }
 
     pub fn notice(&mut self, text: String, error: bool) {
+        if error {
+            nanatype_diag::report!(crate::diag::ERROR_NOTICE; "{text}");
+        }
         let id = self.next_notice;
         self.next_notice += 1;
         let mut status = (*self.ui.status.get_untracked()).clone();
@@ -527,7 +549,7 @@ impl App {
             let displays = match service.displays().wait() {
                 Ok(displays) => displays,
                 Err(e) => {
-                    crate::debug_log(&format!("displays unavailable: {e:?}"));
+                    nanatype_diag::report!(crate::diag::DISPLAYS_UNAVAILABLE; "{e:?}");
                     return;
                 }
             };
@@ -2071,7 +2093,12 @@ impl App {
             });
         };
         if let BridgeStatus::Error(sink, fault) = &status {
-            crate::debug_log(&format!("bridge {sink:?}: {fault}"));
+            let code = match sink {
+                Sink::Vts => 0u64,
+                Sink::Osc => 1,
+                Sink::WebSocket => 2,
+            };
+            nanatype_diag::report!(crate::diag::BRIDGE_ERROR, sink = code; "{fault}");
         }
         let locale = self.ui.locale.get_untracked();
         if let Some((sink, state)) = crate::ui::link_text::bridge(locale, &status) {
@@ -2738,6 +2765,8 @@ impl Drop for App {
     fn drop(&mut self) {
         if !self.quitting {
             self.persist.flush(Duration::from_secs(2));
+            nanatype_diag::marker("exit without quit");
+            nanatype_diag::flush_for_exit();
         }
     }
 }

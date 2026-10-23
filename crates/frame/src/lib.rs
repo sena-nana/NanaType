@@ -11,6 +11,7 @@
 pub mod assets;
 pub mod canvas;
 pub mod clock;
+pub mod diag;
 pub mod instance;
 pub mod localtime;
 pub mod media;
@@ -50,19 +51,7 @@ pub fn locale_of(s: &nanatype_settings::Settings) -> nanatype_i18n::Locale {
 pub fn apply_locale(cx: &mut nana_ui::runtime::AppContext, locale: nanatype_i18n::Locale) {
     cx.set_default_language(nana_ui::runtime::LanguageTag::new(locale.tag()));
     if let Err(e) = cx.set_framework_strings(nanatype_i18n::framework_strings(locale)) {
-        debug_log(&format!("framework strings: {e}"));
+        nanatype_diag::report!(diag::LOCALE_STRINGS_FAILED; "framework strings: {e}");
     }
 }
 
-/// Append a line to the file named by `NANATYPE_DEBUG` (development aid).
-pub fn debug_log(line: &str) {
-    use std::io::Write;
-    if let Some(path) = std::env::var_os("NANATYPE_DEBUG")
-        && let Ok(mut f) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-    {
-        let _ = writeln!(f, "{:>7} {line}", clock::now_ms());
-    }
-}

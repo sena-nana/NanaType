@@ -61,6 +61,7 @@ nanatype-secrets.workspace = true
 nanatype-update = { workspace = true, optional = true }
 nanatype-steam.workspace = true
 nanatype-frame.workspace = true
+nanatype-diag.workspace = true
 getrandom = "0.4"
 # Spout and Syphon output of the broadcast windows.
 nana-ui = { workspace = true, features = ["native-export"] }

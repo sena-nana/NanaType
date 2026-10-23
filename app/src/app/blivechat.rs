@@ -42,7 +42,7 @@ impl AuthCode {
                     .and_then(|b| String::from_utf8(b).ok())
                     .filter(|c| !c.trim().is_empty()),
                 Err(e) => {
-                    crate::debug_log(&format!("blivechat auth code: {e}"));
+                    nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 0u64; "{e}");
                     None
                 }
             })
@@ -86,14 +86,14 @@ impl App {
             Msg::Blivechat(event) => self.blivechat_event(event),
             Msg::CometRelay(status) => {
                 if let RelayStatus::Error(fault) = &status {
-                    crate::debug_log(&format!("comet relay: {fault}"));
+                    nanatype_diag::report!(crate::diag::COMET_RELAY_ERROR; "{fault}");
                 }
                 self.blive_state(|s| s.relay = status);
                 self.blivechat_status_line();
             }
             Msg::BlivechatAuthCode(code) => {
                 if let Err(e) = self.blivechat_auth.set(&code) {
-                    crate::debug_log(&format!("blivechat auth code not stored: {e}"));
+                    nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 1u64; "{e}");
                     let text = crate::ui::I18N
                         .t_in(self.ui.locale.get_untracked(), "int-blive-auth-not-stored");
                     self.notice(text, true);
@@ -125,10 +125,10 @@ impl App {
             BliveUpdate::Status(status) => {
                 match &status {
                     BliveStatus::Error(fault) => {
-                        crate::debug_log(&format!("blivechat: {fault}"));
+                        nanatype_diag::report!(crate::diag::BLIVECHAT_ERROR; "{fault}");
                     }
                     BliveStatus::Fatal(kind, message) => {
-                        crate::debug_log(&format!("blivechat fatal {kind:?}: {message}"));
+                        nanatype_diag::report!(crate::diag::BLIVECHAT_FATAL; "{kind:?}: {message}");
                     }
                     _ => {}
                 }

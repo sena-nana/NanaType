@@ -103,7 +103,7 @@ impl Playback {
                 let (preview, failed) = match read(&cache.dir.join("thumbnail.png")) {
                     Ok(p) => (p, false),
                     Err(e) => {
-                        crate::debug_log(&format!("sticker preview: {e}"));
+                        nanatype_diag::report!(crate::diag::STICKER_PREVIEW_FAILED; "{e}");
                         self.rebuild = true;
                         (image::RgbaImage::new(1, 1), true)
                     }
@@ -190,7 +190,7 @@ impl Playback {
                     p
                 }
                 _ => {
-                    crate::debug_log("sticker cached frame missing or corrupt; rebuilding");
+                    nanatype_diag::event!(crate::diag::STICKER_FRAME_REBUILD);
                     playing.failed = true;
                     self.rebuild = true;
                     continue;
@@ -205,13 +205,13 @@ impl Playback {
                         playing.bytes = bytes;
                     }
                     Err(e) => {
-                        crate::debug_log(&e);
+                        nanatype_diag::report!(crate::diag::STICKER_UPLOAD_FAILED; "{e}");
                         playing.failed = true;
                         continue;
                     }
                 }
             } else if let Err(e) = upload(gpu, &playing.gpu, &image) {
-                crate::debug_log(&e);
+                nanatype_diag::report!(crate::diag::STICKER_UPLOAD_FAILED; "{e}");
                 playing.failed = true;
                 continue;
             }

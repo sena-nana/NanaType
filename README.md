@@ -219,7 +219,7 @@ scripts/package-macos.sh --steam
 
 | 变量 | 作用 |
 | --- | --- |
-| `NANATYPE_DEBUG=<文件>` | 把窗口与输出事件追加写入该文件 |
+| `NANATYPE_DEBUG=1` | 会话日志记录到 Trace 级并全部落盘（同「详细日志」再加 Trace），见 [日志](docs/logging.md) |
 | `NANATYPE_DEMO=1` | 启动 1.5 秒后播放示例台词（调试构建） |
 | `NANATYPE_DEMO_MARKUP=<标记文本>` | 覆盖自动播放的示例台词（需 `NANATYPE_DEMO`） |
 | `NANATYPE_EXIT_AFTER=<毫秒>` | 到时正常退出（用于测量启动、刷出日志） |

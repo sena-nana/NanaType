@@ -79,5 +79,7 @@ impl App {
         self.quitting = true;
         self.save_geometry();
         self.persist.flush(Duration::from_secs(2));
+        nanatype_diag::marker("quit");
+        nanatype_diag::flush_for_exit();
     }
 }

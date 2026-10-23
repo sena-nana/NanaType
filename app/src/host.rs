@@ -258,7 +258,7 @@ impl Host {
             let _ = cx.remove_view(menu);
         }
         if let Err(error) = cx.edit_text_action(document, target, action, &mut EditorClipboard) {
-            crate::debug_log(&format!("editor action: {error}"));
+            nanatype_diag::report!(crate::diag::EDIT_FAILED, kind = 0u64; "{error}");
         }
     }
 
@@ -651,13 +651,13 @@ fn sync_editor(
             value.text,
             nana_ui::runtime::TextSelection::new(value.selection.0, value.selection.1),
         ) {
-            crate::debug_log(&format!("source edit: {error}"));
+            nanatype_diag::report!(crate::diag::EDIT_FAILED, kind = 1u64; "{error}");
         }
     }
     if focus {
         // Visibility bindings must run before focusing the newly shown field.
         if let Err(error) = cx.flush_reactive() {
-            crate::debug_log(&format!("editor bindings: {error}"));
+            nanatype_diag::report!(crate::diag::EDIT_FAILED, kind = 2u64; "{error}");
         }
         let target = if ui.source_mode.get_untracked() {
             source.map(|s| s.stable_id())
@@ -677,7 +677,7 @@ fn sync_editor(
             crate::app::EditorCommand::Delete => delete_rich_selection(cx, ui, editor),
         };
         if let Err(error) = result {
-            crate::debug_log(&format!("rich edit: {error}"));
+            nanatype_diag::report!(crate::diag::EDIT_FAILED, kind = 3u64; "{error}");
         }
     }
 }
@@ -1078,7 +1078,10 @@ impl RuntimeProgram for Host {
                     }
                     self.app.windows.record_geometry(kind, geometry);
                     if kind == WindowKind::Input {
-                        crate::debug_log("input window ready");
+                        nanatype_diag::event!(
+                            crate::diag::INPUT_READY,
+                            since_launch_ms = crate::clock::now_ms()
+                        );
                         self.open_overlays();
                         let post = self.app.ctx.clone();
                         std::thread::spawn(move || {
@@ -1345,7 +1348,7 @@ impl RuntimeProgram for Host {
             perf.frame(id, true, self.docs.get(&id));
         }
         if let Some((key, detail)) = self.app.spout.frame(kind, out, frame, context.gpu()) {
-            crate::debug_log(&format!("spout {kind:?}: {detail}"));
+            nanatype_diag::report!(crate::diag::SPOUT_FAILED, window = crate::diag::window(kind); "{detail}");
             let locale = self.app.ui.locale.get_untracked();
             let state = crate::ui::link_text::spout_send(locale, key);
             if self.app.spout.status.get(&kind) != Some(&state) {
@@ -1373,7 +1376,7 @@ impl RuntimeProgram for Host {
         context: &RuntimeProgramContext<Msg>,
     ) {
         if let Some(kind) = WindowKind::from_id(id) {
-            crate::debug_log(&format!("output {kind:?}: {status:?}"));
+            nanatype_diag::report!(crate::diag::WINDOW_OUTPUT, window = crate::diag::window(kind); "{status:?}");
             let locale = self.app.ui.locale.get_untracked();
             let previous = self.app.ui.status.get_untracked();
             if crate::output::resolve(kind, &self.app.settings, self.app.peer.handle.is_some())

@@ -129,7 +129,7 @@ fn worker() -> &'static mpsc::SyncSender<Job> {
                 }
             });
         if let Err(error) = spawned {
-            crate::debug_log(&format!("layout material worker unavailable: {error}"));
+            nanatype_diag::report!(crate::diag::WORKER_UNAVAILABLE; "layout-material: {error}");
         }
         send
     })

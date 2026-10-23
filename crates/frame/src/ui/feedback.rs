@@ -62,7 +62,7 @@ impl ToastRequest {
             )
         });
         if let Err(e) = &pushed {
-            crate::debug_log(&format!("toast: {e}"));
+            nanatype_diag::report!(crate::diag::TOAST_FAILED; "{e}");
         }
         pushed.is_ok()
     }

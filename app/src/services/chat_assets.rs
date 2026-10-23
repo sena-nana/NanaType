@@ -179,10 +179,7 @@ impl ChatAssets {
                         }
                         match result {
                             Ok(()) => ready(job.asset()),
-                            Err(_) => crate::debug_log(&format!(
-                                "chat picture {}: download failed",
-                                job.name
-                            )),
+                            Err(_) => nanatype_diag::event!(crate::diag::CHAT_PICTURE_FAILED),
                         }
                     }
                 })

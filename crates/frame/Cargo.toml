@@ -19,6 +19,7 @@ nanatype-i18n.workspace = true
 nanatype-settings.workspace = true
 nanatype-core.workspace = true
 nanatype-plugins.workspace = true
+nanatype-diag.workspace = true
 nana-ui.workspace = true
 nana-ui-core.workspace = true
 nana-ui-platform.workspace = true

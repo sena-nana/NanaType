@@ -48,6 +48,12 @@ impl App {
         let mut settings = nanatype_settings::load_settings(&paths.settings(), None).value;
         settings.sanitize();
         let locale = nanatype_frame::locale_of(&settings);
+        nanatype_diag::marker("start");
+        nanatype_diag::set_session_info(
+            "os",
+            format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
+        );
+        nanatype_diag::set_session_info("locale", locale.tag());
         let registry = SkinRegistry::new(Some(paths.packages()), env!("CARGO_PKG_VERSION"));
         let (loaded, _) = registry.load_scanned_or_default(&settings.skin.id);
         let system_dark = matches!(
@@ -133,6 +139,9 @@ impl App {
     }
 
     pub fn notice(&mut self, text: String, error: bool) {
+        if error {
+            nanatype_diag::report!(crate::diag::ERROR_NOTICE; "{text}");
+        }
         self.toasts.push(ToastRequest::notice(text, error));
     }
 
