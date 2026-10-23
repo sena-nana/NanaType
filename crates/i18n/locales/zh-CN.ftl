@@ -33,6 +33,7 @@ history-role-viewer = 观众
 
 # Skin preview editor
 skin-edit-invalid = 请输入有效数值和十六进制颜色。留空表示皮肤默认值。
+skin-preview-loading = 正在加载预览…
 skin-edit-sample = 你好，NanaType！这是一段用于检查字号与自动换行的测试文字。Hello, world! 0123456789
     第二行：调整宽高、字体和行距，查看实际排版效果。
 skin-edit-history-sample = 大家好！欢迎来到今天的直播。Hello, NanaType!

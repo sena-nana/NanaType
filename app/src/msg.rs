@@ -360,6 +360,11 @@ pub enum Msg {
         id: String,
         play: bool,
     },
+    /// A skin preview finished preparing in the background.
+    SkinPreviewReady {
+        ticket: u64,
+        result: Result<Box<crate::ui::PreparedPreview>, String>,
+    },
     SaveSkinPersonalization {
         id: String,
         profile: nanatype_settings::SkinPersonalization,

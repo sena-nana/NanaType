@@ -1,9 +1,9 @@
 //! Isolated, unsaved skin editing. Only Save dispatches an application message.
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use nana_ui::ControlSize;
 use nana_ui::runtime::view::{
-    AnyView, IntoView, Signal, dynamic, segmented_option, signal, widget,
+    AnyView, IntoView, Signal, dynamic, on_mount, segmented_option, signal, widget,
 };
 use nana_ui::runtime::{
     Activate, Button, IconButton, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged,
@@ -19,7 +19,8 @@ use crate::ui::Ui;
 use crate::ui::kit::{self, gap};
 use nana_ui::icons_tabler as ti;
 pub use nanatype_frame::ui::preview::{
-    Draft, InvalidProfile, Pane, Surface, default_size, sample, stage,
+    Draft, InvalidProfile, Pane, StageAssets, Surface, default_size, sample, stage,
+    stage_placeholder, stage_view,
 };
 
 /// The overscan of skin `id` as the catalogue loaded it.
@@ -52,25 +53,28 @@ const SAMPLE_H: f32 = 100.0;
 const COLUMN_W: f32 = 300.0;
 const COLUMN_MIN_W: f32 = 280.0;
 
-/// Both skin catalogue layouts prepare the same isolated preview on selection.
-pub(super) fn select(
-    ui: Ui,
-    previewing: Signal<Option<String>>,
-    row: &crate::ui::SkinRow,
-) -> Option<Msg> {
-    if row.error.is_some() {
-        return None;
+/// How a preview asks the program for its stage: views cannot post program
+/// messages outside an event, so the program installs this once.
+static REQUEST: OnceLock<Box<dyn Fn(String, bool) + Send + Sync>> = OnceLock::new();
+
+/// Install how the preview asks for skin `id`'s stage (and whether its
+/// effects play): the program prepares it off the UI thread.
+pub fn set_requester(request: impl Fn(String, bool) + Send + Sync + 'static) {
+    let _ = REQUEST.set(Box::new(request));
+}
+
+fn request(id: String, play: bool) {
+    if let Some(request) = REQUEST.get() {
+        request(id, play);
     }
-    previewing.set(Some(row.id.clone()));
-    let play = ui.shader_preview.get_untracked();
-    let static_materials = row
-        .skin
-        .as_ref()
-        .is_some_and(|s| !s.materials.is_empty() || s.shaders.values().any(|s| s.static_fallback));
-    (play || static_materials).then(|| Msg::PrepareSkinPreview {
-        id: row.id.clone(),
-        play,
-    })
+}
+
+/// Both skin catalogue layouts preview a skin on selection; the preview
+/// asks for its stage once it shows (see [`view`]).
+pub(super) fn select(previewing: Signal<Option<String>>, row: &crate::ui::SkinRow) {
+    if row.error.is_none() {
+        previewing.set(Some(row.id.clone()));
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -269,6 +273,7 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
     let save_base = base.clone();
     let params = super::skin_params::view(ui, id, base.clone());
     let status_id = id.to_owned();
+    let pick_id = id.to_owned();
     let status = dynamic(
         move || {
             (
@@ -287,6 +292,13 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
                 "skin-edit-draft-hint"
             });
             let font = &d.pane(is_history).font;
+            // A built-in font the draft names is registered by the sample;
+            // register it here too, whichever of them runs first.
+            ui.skin_preview.with_untracked(|p| {
+                if let Some(p) = p.as_ref().filter(|p| p.id == pick_id) {
+                    p.assets.pick_family(font);
+                }
+            });
             let missing = if font.trim().is_empty() {
                 fallback_font
             } else {
@@ -385,9 +397,11 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
                 ui.skin_preview_history.get(),
                 ui.locale.get(),
                 ui.skins.with(|s| Arc::as_ptr(s) as usize),
+                ui.skin_preview
+                    .with(|p| p.as_ref().map(|p| Arc::as_ptr(p) as usize)),
             )
         },
-        move |(id, history_mode, _, _)| {
+        move |(id, history_mode, locale, _, _)| {
             let id = id.clone();
             let history_mode = *history_mode;
             let row = ui
@@ -396,19 +410,36 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
             let Some(row) = row.filter(|r| r.skin.is_some() && r.error.is_none()) else {
                 return hint(ui.now_t("skin-edit-unavailable"));
             };
-            let folder = row.folder.clone();
-            let (sample, base) = stage(
-                *ui,
-                (*row.skin.unwrap()).clone(),
-                move |file| {
-                    folder
-                        .as_ref()
-                        .and_then(|dir| std::fs::read(dir.join(file)).ok())
-                },
-                row.image_urls.clone(),
-                Surface::of(history_mode),
-                width,
-            );
+            let surface = Surface::of(history_mode);
+            // The page shows at once; the stage follows when prepared off
+            // the UI thread (fonts, theming, effects).
+            let prepared = ui
+                .skin_preview
+                .with_untracked(|p| p.clone().filter(|p| p.shows(&row, locale.tag())));
+            let (sample, controls) = match prepared {
+                Some(p) => (
+                    stage_view(
+                        *ui,
+                        p.assets.clone(),
+                        row.image_urls.clone(),
+                        surface,
+                        width,
+                    ),
+                    Some(controls(
+                        ui,
+                        &id,
+                        p.assets.base.clone(),
+                        history_mode,
+                        row.fallback_font,
+                    )),
+                ),
+                None => {
+                    let ask = id.clone();
+                    on_mount(move |_| request(ask, ui.shader_preview.get_untracked()));
+                    let skin = row.skin.as_ref().expect("checked above");
+                    (stage_placeholder(*ui, skin, surface, width), None)
+                }
+            };
             let apply_id = id.clone();
             let apply_read = id.clone();
             let play_id = id.clone();
@@ -505,13 +536,7 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
                             .with_layout(|l| l.min_width = Some(LengthSpec::Px(COLUMN_MIN_W))),
                     )
                     .key("skin-preview-controls-column")
-                    .children(controls(
-                        ui,
-                        &id,
-                        base,
-                        history_mode,
-                        row.fallback_font,
-                    )),
+                    .children(controls),
                 )),
             ))
             .into_any()
@@ -837,10 +862,56 @@ align = { param = "align" }
         );
     }
 
+    fn node_keys(session: &mut RuntimeAgentSession) -> Vec<String> {
+        session.flush().unwrap();
+        session
+            .accessibility_dump()
+            .into_iter()
+            .filter_map(|n| n.agent_path)
+            .filter_map(|p| p.rsplit('/').next().map(str::to_owned))
+            .collect()
+    }
+
+    #[test]
+    fn the_page_shows_before_its_stage_and_a_repeated_selection_keeps_it() {
+        let (ui, _) = fixture();
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let id = "nanatype.sakura";
+        let doc_id = DocumentId::new(6).unwrap();
+        let mut doc = RuntimeDocument::new(doc_id);
+        let previewing = signal(Some(id.to_owned()));
+        doc.context_mut()
+            .mount_view_root(doc_id, move || view(ui, previewing))
+            .unwrap();
+        let mut session = RuntimeAgentSession::new(doc, 720, 1400).unwrap();
+        let keys = node_keys(&mut session);
+        assert!(keys.iter().any(|k| k == "skin-preview-loading"), "{keys:?}");
+        assert!(!keys.iter().any(|k| k == "skin-preview-box"));
+        assert!(keys.iter().any(|k| k == "apply-preview"));
+
+        crate::ui::prepare_skin_preview(ui, &registry, id, false).unwrap();
+        let keys = node_keys(&mut session);
+        assert!(keys.iter().any(|k| k == "skin-preview-box"), "{keys:?}");
+        assert!(!keys.iter().any(|k| k == "skin-preview-loading"));
+        let stage = ui.skin_preview.get_untracked().unwrap();
+        let rows = ui.skins.get_untracked();
+        // Selecting it again, or playing its effects, keeps the stage and
+        // the catalogue as they are.
+        crate::ui::prepare_skin_preview(ui, &registry, id, false).unwrap();
+        crate::ui::prepare_skin_preview(ui, &registry, id, true).unwrap();
+        assert!(Arc::ptr_eq(
+            &ui.skin_preview.get_untracked().unwrap(),
+            &stage
+        ));
+        assert!(Arc::ptr_eq(&ui.skins.get_untracked(), &rows));
+    }
+
     #[test]
     fn tall_and_maximum_previews_scale_the_entire_logical_canvas() {
         let (ui, _) = fixture();
         let id = "nanatype.halo";
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        crate::ui::prepare_skin_preview(ui, &registry, id, false).unwrap();
         let doc_id = DocumentId::new(4).unwrap();
         let mut doc = RuntimeDocument::new(doc_id);
         doc.context_mut()

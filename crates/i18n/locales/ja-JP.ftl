@@ -33,6 +33,7 @@ history-role-viewer = 視聴者
 
 # Skin preview editor
 skin-edit-invalid = 有効な数値と16進数の色を入力してください。空欄はスキンの既定値です。
+skin-preview-loading = プレビューを読み込み中…
 skin-edit-sample = こんにちは、NanaType！文字サイズと折り返しのテストです。Hello, world! 0123456789
     2行目：幅や高さ、フォント、行間を調整できます。
 skin-edit-history-sample = こんにちは！今日の配信へようこそ。Hello, NanaType!

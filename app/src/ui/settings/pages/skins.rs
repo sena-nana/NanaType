@@ -387,7 +387,6 @@ pub(super) fn skin_list_row(
                     })
                     .auto_height(true),
             ),
-            ui,
             previewing,
             skin,
             previewed,
@@ -523,18 +522,13 @@ pub(super) fn unshrinking(view: impl IntoView) -> AnyView {
 /// previewing the skin when activated.
 pub(super) fn previewable(
     item: El<ListItem>,
-    ui: Ui,
     previewing: Signal<Option<String>>,
     skin: &SkinRow,
     previewed: impl Fn() -> bool + Send + 'static,
 ) -> El<ListItem> {
     let pick = skin.clone();
     item.bind(move |i: &mut ListItem| i.selected = previewed())
-        .on_cx(move |_, _: &Activate, cx| {
-            if let Some(message) = crate::ui::settings::preview::select(ui, previewing, &pick) {
-                cx.dispatch_program_all(message);
-            }
-        })
+        .on(move |_: &Activate| crate::ui::settings::preview::select(previewing, &pick))
 }
 
 /// One skin in the grid: a thumbnail of its box over its name and tags.
@@ -635,7 +629,6 @@ pub(super) fn skin_card(
                 })
                 .auto_height(true),
         ),
-        ui,
         previewing,
         skin,
         previewed,

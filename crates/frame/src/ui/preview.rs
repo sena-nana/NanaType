@@ -1,7 +1,8 @@
 //! Isolated, scaled samples of a skin through the real dialogue, history and
 //! input renderers. Samples use private signals: no live draft, history or
 //! source is written.
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, LazyLock, Mutex, Weak};
 
 use nana_ui::runtime::Stack;
 use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, widget};
@@ -400,47 +401,197 @@ pub fn sample(
     Some((view, [w, h]))
 }
 
-/// An isolated, scaled sample of `raw` through the real dialogue and history
-/// renderers. Fonts come from `read_font`; nothing touches production state.
-pub fn stage(
+/// A font registered for the skin previews. Previews that use the same font
+/// share its registration; dropping the last one withdraws it.
+pub struct PreviewFont {
+    _scope: nana_ui::HostFontScope,
+    family: Option<String>,
+}
+
+/// Preview fonts still held, by what they were registered from: a
+/// `builtin:` reference, or a skin's font file with a hash of its bytes.
+type FontKey = (String, u64);
+static PREVIEW_FONTS: LazyLock<Mutex<HashMap<FontKey, Weak<PreviewFont>>>> =
+    LazyLock::new(Default::default);
+
+/// The registration of `key`, registering `bytes` only when no preview holds
+/// it: every registration restarts the text layout of every window.
+fn preview_font(key: FontKey, bytes: impl FnOnce() -> Option<Vec<u8>>) -> Option<Arc<PreviewFont>> {
+    let mut fonts = PREVIEW_FONTS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(font) = fonts.get(&key).and_then(Weak::upgrade) {
+        return Some(font);
+    }
+    let mut scope = nana_ui::HostFontScope::new();
+    let family = scope.add_bytes(bytes()?).ok()?.families().first().cloned();
+    let font = Arc::new(PreviewFont {
+        _scope: scope,
+        family,
+    });
+    fonts.retain(|_, f| f.strong_count() > 0);
+    fonts.insert(key, Arc::downgrade(&font));
+    Some(font)
+}
+
+/// What a skin preview needs before it can draw: the skin with its own fonts
+/// registered and its font roles resolved. Building it reads and registers
+/// font files, so a product builds it off the UI thread.
+pub struct StageAssets {
+    pub base: Arc<Skin>,
+    fonts: Vec<Arc<PreviewFont>>,
+    /// Built-in fonts a draft named by family, registered when first named.
+    picked: Mutex<Vec<Arc<PreviewFont>>>,
+}
+
+impl StageAssets {
+    /// `raw` with its fonts registered, read with `read_font` unless built
+    /// in, and prepared for the UI `language`.
+    pub fn prepare(
+        mut raw: Skin,
+        read_font: impl Fn(&str) -> Option<Vec<u8>>,
+        language: &str,
+    ) -> Self {
+        let mut fonts = Vec::new();
+        let mut register = |role: &nanatype_theme::FontSpec| {
+            let file = role.file.as_deref()?;
+            let font = if nanatype_theme::is_builtin_font(file) {
+                preview_font((file.to_owned(), 0), || {
+                    nanatype_theme::builtin_font(file).map(<[u8]>::to_vec)
+                })
+            } else {
+                let bytes = read_font(file)?;
+                let mut hash = std::hash::DefaultHasher::new();
+                std::hash::Hash::hash(&bytes, &mut hash);
+                let key = (file.to_owned(), std::hash::Hasher::finish(&hash));
+                preview_font(key, move || Some(bytes))
+            }?;
+            let family = font.family.clone();
+            fonts.push(font);
+            family
+        };
+        let families = [&raw.fonts.body, &raw.fonts.name, &raw.fonts.accent].map(&mut register);
+        if let Some(role) = &mut raw.fonts.latin
+            && let Some(family) = register(role)
+        {
+            role.families.insert(0, family);
+        }
+        let base = Arc::new(crate::skin_theme::prepare(
+            &raw,
+            &Default::default(),
+            &families,
+            language,
+        ));
+        Self {
+            base,
+            fonts,
+            picked: Mutex::default(),
+        }
+    }
+
+    /// Register the built-in font whose family `family` names, so a draft
+    /// that picks it shows it. Other families are the system's.
+    pub fn pick_family(&self, family: &str) {
+        let family = family.trim();
+        let named = |f: &Arc<PreviewFont>| {
+            f.family
+                .as_deref()
+                .is_some_and(|g| g.eq_ignore_ascii_case(family))
+        };
+        let mut picked = self.picked.lock().unwrap_or_else(|e| e.into_inner());
+        if family.is_empty() || self.fonts.iter().chain(picked.iter()).any(named) {
+            return;
+        }
+        let Some(font) = nanatype_theme::BuiltinFonts::embedded()
+            .fonts()
+            .iter()
+            .find(|f| f.family().is_some_and(|g| g.eq_ignore_ascii_case(family)))
+        else {
+            return;
+        };
+        let bytes = font.bytes;
+        if let Some(font) = preview_font((format!("builtin:{}", font.path), 0), || {
+            Some(bytes.to_vec())
+        }) {
+            picked.push(font);
+        }
+    }
+}
+
+/// How far a `w` × `h` sample shrinks to fit `available` px: tall previews
+/// as well as wide ones, without altering their layout.
+fn fit(available: f32, [w, h]: [f32; 2]) -> f32 {
+    ((available - 24.0).max(1.0) / w).min(340.0 / h).min(1.0)
+}
+
+/// The stage around `content`: the checkerboard and, under it, the
+/// sample's size and scale.
+fn framed(dark: bool, content: AnyView, [w, h]: [f32; 2], scale: f32) -> AnyView {
+    widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
+        .children((
+            widget(
+                Stack::column(0.0)
+                    .padding_step(inset::step::PANEL, inset::step::PANEL)
+                    .with_layout(move |l| {
+                        l.paint.background_image =
+                            Some(BackgroundImage::url(super::kit::checker_url(dark)));
+                    }),
+            )
+            .children(content),
+            hint(format!(
+                "{} × {} px · {:.0}%",
+                w.round(),
+                h.round(),
+                scale * 100.0
+            )),
+        ))
+        .into_any()
+}
+
+/// The stage while its [`StageAssets`] are prepared: the frame at the size
+/// the sample will take, so nothing moves when it lands.
+pub fn stage_placeholder(ui: Stage, skin: &Skin, surface: Surface, width: Signal<f32>) -> AnyView {
+    let history_mode = surface == Surface::History;
+    let size = draft(ui, &skin.meta.id, Some(skin.dialogue.overscan))
+        .profile(skin)
+        .ok()
+        .and_then(|p| {
+            if history_mode {
+                p.history.size
+            } else {
+                p.display.size
+            }
+        })
+        .unwrap_or_else(|| default_size(skin, history_mode));
+    dynamic(
+        move || (width.get(), ui.chrome_dark.get()),
+        move |(available, dark)| {
+            let scale = fit(*available, size);
+            let content = widget(
+                Stack::column(0.0)
+                    .width(LengthSpec::Px(size[0] * scale))
+                    .height(LengthSpec::Px(size[1] * scale))
+                    .align(nana_ui_core::AlignSpec::Center)
+                    .justify(nana_ui_core::JustifySpec::Center),
+            )
+            .key("skin-preview-loading")
+            .children(hint(ui.now_t("skin-preview-loading")));
+            framed(*dark, content.into_any(), size, scale)
+        },
+    )
+    .into_any()
+}
+
+/// An isolated, scaled sample of the prepared skin through the real dialogue
+/// and history renderers. Nothing touches production state.
+pub fn stage_view(
     ui: Stage,
-    mut raw: Skin,
-    read_font: impl Fn(&str) -> Option<Vec<u8>>,
+    assets: Arc<StageAssets>,
     urls: Arc<std::collections::HashMap<String, String>>,
     surface: Surface,
     width: Signal<f32>,
-) -> (AnyView, Arc<Skin>) {
-    let mut scope = nana_ui::HostFontScope::new();
-    for font in nanatype_theme::BuiltinFonts::embedded().fonts() {
-        let _ = scope.add_bytes(font.bytes);
-    }
-    let mut register = |role: &nanatype_theme::FontSpec| {
-        let bytes = role.file.as_deref().and_then(|file| {
-            if nanatype_theme::is_builtin_font(file) {
-                nanatype_theme::builtin_font(file).map(|b| b.to_vec())
-            } else {
-                read_font(file)
-            }
-        });
-        scope.add_bytes(bytes?).ok()?.families().first().cloned()
-    };
-    let families = [&raw.fonts.body, &raw.fonts.name, &raw.fonts.accent].map(&mut register);
-    if let Some(role) = &mut raw.fonts.latin
-        && let Some(family) = register(role)
-    {
-        role.families.insert(0, family);
-    }
-    let scope = Arc::new(scope);
-    let base = Arc::new(crate::skin_theme::prepare(
-        &raw,
-        &Default::default(),
-        &families,
-        ui.locale.get_untracked().tag(),
-    ));
-    let sample_id = raw.meta.id.clone();
-    let sample_overscan = base.dialogue.overscan;
-    let sample_base = base.clone();
-    let view = dynamic(
+) -> AnyView {
+    let sample_id = assets.base.meta.id.clone();
+    let sample_overscan = assets.base.dialogue.overscan;
+    dynamic(
         move || {
             (
                 draft(ui, &sample_id, Some(sample_overscan)),
@@ -451,20 +602,14 @@ pub fn stage(
             )
         },
         move |(draft, available, dark, _, _)| {
-            let _keep_fonts = &scope;
-            let Some((view, [w, h])) = sample(
-                ui,
-                &sample_base,
-                &sample_base.meta.id,
-                draft,
-                surface,
-                urls.clone(),
-            ) else {
+            assets.pick_family(&draft.pane(surface == Surface::History).font);
+            let base = &assets.base;
+            let Some((view, [w, h])) =
+                sample(ui, base, &base.meta.id, draft, surface, urls.clone())
+            else {
                 return hint(ui.now_t("skin-edit-invalid"));
             };
-            // Limit tall previews as well as wide ones, without altering their layout.
-            let dark = *dark;
-            let scale = ((available - 24.0).max(1.0) / w).min(340.0 / h).min(1.0);
+            let scale = fit(*available, [w, h]);
             let stage = widget(
                 Stack::column(0.0)
                     .width(LengthSpec::Px(w * scale))
@@ -496,27 +641,73 @@ pub fn stage(
                 .key("skin-preview-canvas")
                 .children(view),
             );
-            widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
-                .children((
-                    widget(
-                        Stack::column(0.0)
-                            .padding_step(inset::step::PANEL, inset::step::PANEL)
-                            .with_layout(move |l| {
-                                l.paint.background_image =
-                                    Some(BackgroundImage::url(super::kit::checker_url(dark)));
-                            }),
-                    )
-                    .children(stage),
-                    hint(format!(
-                        "{} × {} px · {:.0}%",
-                        w.round(),
-                        h.round(),
-                        scale * 100.0
-                    )),
-                ))
-                .into_any()
+            framed(*dark, stage.into_any(), [w, h], scale)
         },
     )
-    .into_any();
-    (view, base)
+    .into_any()
+}
+
+/// [`StageAssets::prepare`] and [`stage_view`] in one go, on this thread.
+pub fn stage(
+    ui: Stage,
+    raw: Skin,
+    read_font: impl Fn(&str) -> Option<Vec<u8>>,
+    urls: Arc<std::collections::HashMap<String, String>>,
+    surface: Surface,
+    width: Signal<f32>,
+) -> (AnyView, Arc<Skin>) {
+    let assets = Arc::new(StageAssets::prepare(
+        raw,
+        read_font,
+        ui.locale.get_untracked().tag(),
+    ));
+    let base = assets.base.clone();
+    (stage_view(ui, assets, urls, surface, width), base)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn skin(id: &str) -> Skin {
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        (*registry.load(id).unwrap().skin).clone()
+    }
+
+    #[test]
+    fn previews_register_only_the_fonts_they_use_once_and_share_them() {
+        let mut halo = skin("nanatype.halo");
+        for role in [
+            &mut halo.fonts.body,
+            &mut halo.fonts.name,
+            &mut halo.fonts.accent,
+        ] {
+            role.file = Some("fonts/body.ttf".into());
+        }
+        let read =
+            |file: &str| (file == "fonts/body.ttf").then(|| nana_ui::UI_FONT_REGULAR.to_vec());
+        let a = StageAssets::prepare(halo.clone(), read, "zh-CN");
+        let b = StageAssets::prepare(halo, read, "zh-CN");
+        // Body, name and accent name the same file: one registration, which
+        // a second preview of the skin reuses.
+        assert_eq!(a.fonts.len(), 3);
+        assert!(a.fonts.iter().all(|f| Arc::ptr_eq(f, &a.fonts[0])));
+        assert!(Arc::ptr_eq(&a.fonts[0], &b.fonts[0]));
+        let own = a.fonts[0].family.clone().unwrap();
+        assert_eq!(a.base.fonts.body.families.first(), Some(&own));
+        // Nothing else registers until a draft names a built-in family.
+        a.pick_family(&own);
+        a.pick_family("Arial");
+        assert!(a.picked.lock().unwrap().is_empty());
+        if let Some(other) = nanatype_theme::BuiltinFonts::embedded()
+            .fonts()
+            .iter()
+            .filter_map(|f| f.family())
+            .find(|f| !f.eq_ignore_ascii_case(&own))
+        {
+            a.pick_family(&other);
+            a.pick_family(&other.to_uppercase());
+            assert_eq!(a.picked.lock().unwrap().len(), 1);
+        }
+    }
 }

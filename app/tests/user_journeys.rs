@@ -22,6 +22,7 @@ use nanatype_settings::Settings;
 struct Fixture {
     ui: Ui,
     session: RuntimeAgentSession,
+    registry: nanatype_theme::SkinRegistry,
 }
 
 impl Fixture {
@@ -37,7 +38,20 @@ impl Fixture {
         let session = common::session()
             .themed(false)
             .mount(720, 480, move || settings::settings_window(ui));
-        Self { ui, session }
+        let mut f = Self {
+            ui,
+            session,
+            registry,
+        };
+        let active = f.ui.settings.get_untracked().skin.id.clone();
+        f.prepare(&active);
+        f
+    }
+
+    /// What the program does when the preview asks for skin `id`'s stage.
+    fn prepare(&mut self, id: &str) {
+        nanatype::ui::prepare_skin_preview(self.ui, &self.registry, id, false).unwrap();
+        self.session.flush().unwrap();
     }
 
     fn find(&self, role: &str, key: &str) -> AccessibilityDumpNode {
@@ -386,6 +400,7 @@ fn builtin_skins_can_be_previewed_and_applied_in_a_narrow_window() {
                     item.bounds.y + item.bounds.height / 2.0,
                 )
                 .unwrap();
+            f.prepare(&row.id);
             f.preview(720, skin);
             let apply = f.reach(650.0, 480.0, |f| f.keyed("apply-preview"));
             assert!(apply.bounds.x >= 196.0 && apply.bounds.x + apply.bounds.width <= 720.0);

@@ -56,20 +56,27 @@ impl App {
                     Err(error) => self.notice(error, true),
                 },
             },
-            Msg::PrepareSkinPreview { id, play } => {
-                if let Err(errors) =
-                    crate::ui::prepare_skin_preview(self.ui, &self.registry, &id, play)
-                {
-                    self.notice(
-                        errors
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect::<Vec<_>>()
-                            .join("\n"),
-                        true,
-                    );
+            Msg::PrepareSkinPreview { id, play } => self.prepare_skin_preview(id, play),
+            Msg::SkinPreviewReady { ticket, result } => match result {
+                _ if ticket != self.skin_preview_ticket => {
+                    if let Ok(prepared) = result {
+                        prepared.discard(self.ui);
+                    }
                 }
-            }
+                Ok(prepared) => {
+                    if let Err(errors) = crate::ui::apply_skin_preview(self.ui, *prepared) {
+                        self.notice(
+                            errors
+                                .iter()
+                                .map(ToString::to_string)
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                            true,
+                        );
+                    }
+                }
+                Err(error) => self.notice(error, true),
+            },
             Msg::SaveSkinPersonalization { id, mut profile } => {
                 if profile.valid() && self.registry.entries().iter().any(|r| r.id == id) {
                     // Keep only values the skin's params accept and that
@@ -106,6 +113,28 @@ impl App {
                 }
             }
             _ => unreachable!("not a skin message"),
+        }
+    }
+
+    /// Load, register the fonts of and theme skin `id`'s preview off the UI
+    /// thread; only the newest request is shown.
+    fn prepare_skin_preview(&mut self, id: String, play: bool) {
+        self.skin_preview_ticket += 1;
+        let ticket = self.skin_preview_ticket;
+        let job = crate::ui::PreviewJob::new(self.ui, &id, play);
+        let registry = self.registry.clone();
+        let ctx = self.ctx.clone();
+        if let Err(error) = std::thread::Builder::new()
+            .name("skin-preview".into())
+            .spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    Box::new(job.run(&registry))
+                }))
+                .map_err(|_| "Skin preview worker failed".to_owned());
+                ctx.dispatch(Msg::SkinPreviewReady { ticket, result });
+            })
+        {
+            self.notice(error.to_string(), true);
         }
     }
 

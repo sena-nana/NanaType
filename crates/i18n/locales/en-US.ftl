@@ -33,6 +33,7 @@ history-role-viewer = Viewer
 
 # Skin preview editor
 skin-edit-invalid = Enter valid numbers and a hex color. Leave fields empty for skin defaults.
+skin-preview-loading = Loading preview…
 skin-edit-sample = Hello, NanaType! Test wrapping, font size and spacing. 你好，世界！0123456789
     Second line: resize the window to inspect the actual layout.
 skin-edit-history-sample = Hello, NanaType! Welcome to the stream.

@@ -167,6 +167,8 @@ pub struct App {
     skin_latin_family: Option<String>,
     skin_watch: Option<crate::services::watch::Watch>,
     skin_reload: crate::services::watch::ReloadGate,
+    /// The newest skin preview asked for; older ones are dropped when ready.
+    skin_preview_ticket: u64,
     skin_reload_scan: bool,
     prepared_skin_urls: Option<HashMap<String, String>>,
     sticker_watch: Option<crate::services::watch::Watch>,
@@ -224,6 +226,11 @@ impl App {
         crate::ui::pipeline::set_waker({
             let post = post.clone();
             move || post(Msg::LayoutMaterialsReady)
+        });
+        // The skin preview's stage is prepared off the UI thread too.
+        crate::ui::settings::preview::set_requester({
+            let post = post.clone();
+            move |id, play| post(Msg::PrepareSkinPreview { id, play })
         });
         let persist = Persist::start({
             let post = post.clone();
@@ -343,6 +350,7 @@ impl App {
             skin_latin_family: None,
             skin_watch: None,
             skin_reload: Default::default(),
+            skin_preview_ticket: 0,
             skin_reload_scan: false,
             prepared_skin_urls: None,
             sticker_watch: None,
@@ -2004,6 +2012,7 @@ impl App {
             | Msg::LayoutMaterialsReady
             | Msg::SkinScanReady { .. }
             | Msg::PrepareSkinPreview { .. }
+            | Msg::SkinPreviewReady { .. }
             | Msg::SaveSkinPersonalization { .. }
             | Msg::SoundsLoaded { .. }) => self.skin_msg(m),
             m @ (Msg::Chat(_)

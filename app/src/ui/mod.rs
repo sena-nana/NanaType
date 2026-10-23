@@ -178,6 +178,9 @@ pub struct Ui {
     pub page: Signal<settings::Page>,
     pub status: Signal<Arc<Status>>,
     pub skins: Signal<Arc<Vec<SkinRow>>>,
+    /// The skin preview's prepared stage, kept while the page is away so
+    /// coming back shows it at once.
+    pub skin_preview: Signal<Option<Arc<SkinPreview>>>,
     pub sound_packs: Signal<Arc<Vec<SoundPackRow>>>,
     /// Steam Workshop subscriptions; empty and hidden outside the Steam build.
     pub workshop: Signal<Arc<crate::workshop::View>>,
@@ -263,6 +266,7 @@ impl Ui {
             page,
             status: signal(Arc::new(Status::default())),
             skins: signal(Arc::new(Vec::new())),
+            skin_preview: signal(None),
             sound_packs: signal(Arc::new(Vec::new())),
             workshop: signal(Arc::new(crate::workshop::View::default())),
             stickers: signal(Arc::new(Vec::new())),
@@ -405,66 +409,193 @@ pub fn sound_pack_rows(
 
 /// Prepare only the playing preview, preserving the active skin and the
 /// other catalogue models. A row change rebuilds this one preview once.
+/// The skin preview's prepared stage, and what it was prepared from: a
+/// newer catalogue model or another language asks for a new one.
+pub struct SkinPreview {
+    pub id: String,
+    pub source: Arc<Skin>,
+    pub language: String,
+    pub assets: Arc<preview::StageAssets>,
+}
+
+impl SkinPreview {
+    /// Whether this is the stage of `row` in `language`.
+    pub fn shows(&self, row: &SkinRow, language: &str) -> bool {
+        self.id == row.id
+            && self.language == language
+            && row
+                .skin
+                .as_ref()
+                .is_some_and(|s| Arc::ptr_eq(s, &self.source))
+    }
+}
+
+/// A skin preview to prepare: what the UI thread knows, for the loading,
+/// font registration and theming [`PreviewJob::run`] does on any thread.
+pub struct PreviewJob {
+    id: String,
+    play: bool,
+    effects: bool,
+    materials: bool,
+    row: Option<SkinRow>,
+    language: String,
+}
+
+/// The fully loaded skin, with its preview images when not built in.
+type LoadedPreview = (Arc<Skin>, Option<HashMap<String, String>>);
+
+/// A prepared skin preview, for [`apply_skin_preview`] on the UI thread.
+pub struct PreparedPreview {
+    id: String,
+    animate: bool,
+    loaded: Option<LoadedPreview>,
+    errors: Vec<nanatype_theme::SkinDiagnostic>,
+    preview: Option<SkinPreview>,
+}
+
+impl PreviewJob {
+    pub fn new(ui: Ui, id: &str, play: bool) -> Self {
+        Self {
+            id: id.to_owned(),
+            play,
+            effects: shader_effects::enabled(*ui),
+            materials: materials::enabled(*ui),
+            row: ui
+                .skins
+                .with_untracked(|rows| rows.iter().find(|r| r.id == id).cloned()),
+            language: ui.locale.get_untracked().tag().to_owned(),
+        }
+    }
+
+    pub fn run(self, registry: &nanatype_theme::SkinRegistry) -> PreparedPreview {
+        let id = self.id.as_str();
+        let catalogued = registry.entry(id).and_then(|e| e.skin.as_ref());
+        // Only effects, static shader fallbacks and materials need the
+        // fully loaded skin; everything else draws from the catalogue.
+        let load = self.effects
+            || catalogued.is_some_and(|s| s.shaders.values().any(|s| s.static_fallback))
+            || (self.materials && catalogued.is_some_and(|s| !s.materials.is_empty()));
+        let row_skin = self.row.as_ref().and_then(|r| r.skin.clone());
+        let builtin = self.row.as_ref().is_none_or(|r| r.builtin);
+        let (loaded, errors, animate) = match load.then(|| registry.load(id)) {
+            None => (None, Vec::new(), false),
+            Some(Err(errors)) => (None, errors, false),
+            Some(Ok(loaded)) => {
+                let skin = &loaded.skin;
+                let animate = self.play
+                    && self.effects
+                    && (skin
+                        .dialogue
+                        .shader_effects
+                        .iter()
+                        .any(|e| skin.shaders.get(&e.shader).is_some_and(|s| s.animated))
+                        || skin.dialogue.reveal.light.is_some()
+                        || skin.entrance_needs_text_layout()
+                        || skin.dialogue.reveal.scramble.is_some()
+                        || skin.dialogue.decor.iter().any(|d| d.shader.is_some()));
+                let urls =
+                    (!builtin).then(|| crate::assets::skin_preview_urls(skin, &*loaded.files));
+                (Some((loaded.skin.clone(), urls)), Vec::new(), animate)
+            }
+        };
+        let source = loaded.as_ref().map(|(s, _)| s.clone()).or(row_skin);
+        let folder = self.row.and_then(|r| r.folder);
+        let preview = source.map(|source| SkinPreview {
+            assets: Arc::new(preview::StageAssets::prepare(
+                (*source).clone(),
+                |file| {
+                    folder
+                        .as_ref()
+                        .and_then(|dir| std::fs::read(dir.join(file)).ok())
+                },
+                &self.language,
+            )),
+            id: self.id.clone(),
+            source,
+            language: self.language,
+        });
+        PreparedPreview {
+            id: self.id,
+            animate,
+            loaded,
+            errors,
+            preview,
+        }
+    }
+}
+
+impl PreparedPreview {
+    /// Let go of a preview that was asked for again before it was ready.
+    pub fn discard(self, ui: Ui) {
+        if let Some((_, Some(urls))) = self.loaded {
+            retire_skin_urls(ui, urls.into_values());
+        }
+    }
+}
+
+/// Show `prepared`: the loaded skin in its catalogue row, its stage, and
+/// whether its effects play. Returns the errors loading it reported.
+pub fn apply_skin_preview(
+    ui: Ui,
+    prepared: PreparedPreview,
+) -> Result<(), Vec<nanatype_theme::SkinDiagnostic>> {
+    let id = prepared.id.as_str();
+    if let Some((skin, urls)) = prepared.loaded {
+        // A built-in skin loads to the same model each time: leave the
+        // catalogue, and the library drawn from it, alone.
+        let changed = urls.is_some()
+            || ui.skins.with_untracked(|rows| {
+                rows.iter()
+                    .find(|r| r.id == id)
+                    .is_some_and(|r| !r.skin.as_ref().is_some_and(|s| Arc::ptr_eq(s, &skin)))
+            });
+        if changed {
+            let previous = ui.skins.with_untracked(|rows| {
+                rows.iter()
+                    .find(|r| r.id == id)
+                    .map(|r| r.image_urls.values().cloned().collect::<Vec<_>>())
+                    .unwrap_or_default()
+            });
+            ui.skins.update(|rows| {
+                if let Some(row) = Arc::make_mut(rows).iter_mut().find(|r| r.id == id) {
+                    if let Some(urls) = urls {
+                        row.image_urls = Arc::new(urls);
+                    }
+                    row.skin = Some(skin);
+                }
+            });
+            retire_skin_urls(ui, previous);
+        }
+    }
+    ui.shader_preview.set(prepared.animate);
+    if let Some(preview) = prepared.preview {
+        // Keep the stage on screen when it already shows this skin.
+        let current = ui.skin_preview.with_untracked(|p| {
+            p.as_ref().is_some_and(|p| {
+                p.id == preview.id
+                    && p.language == preview.language
+                    && Arc::ptr_eq(&p.source, &preview.source)
+            })
+        });
+        if !current {
+            ui.skin_preview.set(Some(Arc::new(preview)));
+        }
+    }
+    if prepared.errors.is_empty() {
+        Ok(())
+    } else {
+        Err(prepared.errors)
+    }
+}
+
+/// Prepare skin `id`'s preview on this thread; see [`PreviewJob`].
 pub fn prepare_skin_preview(
     ui: Ui,
     registry: &nanatype_theme::SkinRegistry,
     id: &str,
     play: bool,
 ) -> Result<(), Vec<nanatype_theme::SkinDiagnostic>> {
-    if !shader_effects::enabled(*ui)
-        && !registry
-            .entry(id)
-            .and_then(|e| e.skin.as_ref())
-            .is_some_and(|s| s.shaders.values().any(|s| s.static_fallback))
-        && !(materials::enabled(*ui)
-            && registry
-                .entry(id)
-                .and_then(|e| e.skin.as_ref())
-                .is_some_and(|s| !s.materials.is_empty()))
-    {
-        ui.shader_preview.set(false);
-        return Ok(());
-    }
-    let loaded = registry
-        .load(id)
-        .inspect_err(|_| ui.shader_preview.set(false))?;
-    let animate = play
-        && shader_effects::enabled(*ui)
-        && (loaded.skin.dialogue.shader_effects.iter().any(|e| {
-            loaded
-                .skin
-                .shaders
-                .get(&e.shader)
-                .is_some_and(|s| s.animated)
-        }) || loaded.skin.dialogue.reveal.light.is_some()
-            || loaded.skin.entrance_needs_text_layout()
-            || loaded.skin.dialogue.reveal.scramble.is_some()
-            || loaded
-                .skin
-                .dialogue
-                .decor
-                .iter()
-                .any(|d| d.shader.is_some()));
-    let previous = ui.skins.with_untracked(|rows| {
-        rows.iter()
-            .find(|r| r.id == id)
-            .map(|r| r.image_urls.values().cloned().collect::<Vec<_>>())
-            .unwrap_or_default()
-    });
-    ui.skins.update(|rows| {
-        if let Some(row) = Arc::make_mut(rows).iter_mut().find(|r| r.id == id) {
-            if !row.builtin {
-                row.image_urls = Arc::new(crate::assets::skin_preview_urls(
-                    &loaded.skin,
-                    &*loaded.files,
-                ));
-            }
-            row.skin = Some(loaded.skin);
-        }
-    });
-    retire_skin_urls(ui, previous);
-    ui.shader_preview.set(animate);
-    Ok(())
+    apply_skin_preview(ui, PreviewJob::new(ui, id, play).run(registry))
 }
 
 pub fn retire_skin_urls(ui: Ui, previous: impl IntoIterator<Item = String>) {
