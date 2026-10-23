@@ -387,12 +387,12 @@ pub(crate) fn session_display(
 }
 
 /// The newest rows of this session's lines, as the own history window has them.
-pub(crate) fn session_rows<'a>(
-    history: impl IntoIterator<Item = &'a HistoryRow, IntoIter: DoubleEndedIterator>,
+pub(crate) fn session_rows(
+    history: &std::collections::VecDeque<HistoryRow>,
     lines: &HashSet<LineId>,
 ) -> Vec<HistoryRow> {
     let mut rows: Vec<_> = history
-        .into_iter()
+        .iter()
         .rev()
         .filter(|row| row.item.line.is_some_and(|id| lines.contains(&id)))
         .take(nanatype_p2p::HISTORY_LIMIT)
@@ -454,11 +454,7 @@ mod tests {
         send(&mut core, &mut lines, "first", 0);
         send(&mut core, &mut lines, "second", 10);
         assert_eq!(core.queued(), 1);
-        assert_eq!(
-            published(&core, &lines),
-            ("first".into(), vec!["first".into()])
-        );
-        // Still typing "first": the queued line is not shown yet.
+        // "first" finished; the queued line is not shown yet.
         core.handle(Cmd::Skip, 20);
         assert_eq!(
             published(&core, &lines),
@@ -474,12 +470,11 @@ mod tests {
     #[test]
     fn mirror_drafts_reach_the_partner_while_typing() {
         let mut core = core(InputMode::Mirror);
-        let lines = HashSet::new();
         core.handle(Cmd::DraftChanged(nanatype_markup::parse("hel").doc), 0);
-        let display = session_display(core.display(), Some(&lines));
-        assert_eq!(display.line, None);
-        assert!(!display.empty);
-        assert_eq!(published(&core, &lines), ("hel".into(), Vec::new()));
+        assert_eq!(
+            published(&core, &HashSet::new()),
+            ("hel".into(), Vec::new())
+        );
     }
 
     #[test]

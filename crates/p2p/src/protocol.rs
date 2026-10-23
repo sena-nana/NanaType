@@ -179,25 +179,22 @@ impl Room {
             .filter(|entry| entry.participant == participant)
             .map(|entry| entry.line)
             .collect();
-        let fresh: Vec<LineId> = track
-            .rows
-            .iter()
-            .filter_map(|row| row.item.line)
-            .filter(|line| line.0 > retired && known.insert(*line))
-            .collect();
-        if fresh.is_empty() {
-            return false;
+        let before = self.entries.len();
+        for line in track.rows.iter().filter_map(|row| row.item.line) {
+            if line.0 > retired && known.insert(line) {
+                self.entries.push(Entry {
+                    participant: participant.into(),
+                    line,
+                    order: self.next_order,
+                });
+                self.next_order += 1;
+            }
         }
-        for line in fresh {
-            self.entries.push(Entry {
-                participant: participant.into(),
-                line,
-                order: self.next_order,
-            });
-            self.next_order += 1;
+        let grew = self.entries.len() > before;
+        if grew {
+            self.compact();
         }
-        self.compact();
-        true
+        grew
     }
 
     fn compact(&mut self) {
