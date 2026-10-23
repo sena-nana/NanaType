@@ -33,7 +33,7 @@ pub fn mounted(ui: Ui, slot: Mount) -> AnyView {
 pub fn actions(ui: Ui) -> AnyView {
     kit::hstack((
         kit::button(ui.now_t("packages-refresh"), || Msg::RefreshPackages),
-        kit::cta_button(ui.now_t("packages-import"), || {
+        super::settings::controls::primary(ui, "packages-import", || {
             Msg::PickFile(FileTarget::ImportSkin)
         }),
     ))
@@ -467,15 +467,18 @@ pub fn activation(ui: Ui) -> AnyView {
                         })
                         .on(move |e: &ToggleChanged| ui.plugin_source_trusted.set(e.checked)),
                     widget(Stack::row(0.0).gap_step(gap::step::CONTROL).wrap(true)).children((
-                        widget(kit::cta(Button::new(ui.now_t("packages-consent-confirm"))))
-                            .key("plugin-consent-confirm")
-                            .bind(move |button: &mut Button| {
-                                button.disabled = !ui.plugin_source_trusted.get()
-                                    || ui.plugin_activation_busy.get()
-                            })
-                            .on_cx(|_, _: &Activate, cx| {
-                                cx.dispatch_program_all(Msg::ConfirmPluginActivation)
-                            }),
+                        widget(
+                            Button::new(ui.now_t("packages-consent-confirm"))
+                                .kind(ButtonKind::Primary),
+                        )
+                        .key("plugin-consent-confirm")
+                        .bind(move |button: &mut Button| {
+                            button.disabled =
+                                !ui.plugin_source_trusted.get() || ui.plugin_activation_busy.get()
+                        })
+                        .on_cx(|_, _: &Activate, cx| {
+                            cx.dispatch_program_all(Msg::ConfirmPluginActivation)
+                        }),
                         activation_cancel(ui),
                     )),
                 ))

@@ -75,9 +75,11 @@ pub(super) fn obs_guide(ui: Ui) -> AnyView {
             1,
             (
                 body("output-obs-step-enable"),
-                widget(crate::ui::kit::cta(
-                    Button::new(ui.now_t("output-obs-enable")).size(ControlSize::Small),
-                ))
+                widget(
+                    Button::new(ui.now_t("output-obs-enable"))
+                        .size(ControlSize::Small)
+                        .kind(ButtonKind::Primary),
+                )
                 .bind(move |b: &mut Button| {
                     let enabled = ui.settings.with(|s| s.output.display.enabled);
                     b.label = ui.now_t(if enabled {

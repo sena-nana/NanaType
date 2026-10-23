@@ -224,7 +224,7 @@ pub fn launcher(ui: Ui) -> AnyView {
                     .key("package-editor-id")
                     .on(move |e: &TextChanged| id.set(e.value.to_string())),
                 ),
-                widget(crate::ui::kit::cta(button(ui, "pkgedit-new")))
+                widget(button(ui, "pkgedit-new").kind(ButtonKind::Primary))
                     .key("package-editor-new")
                     .bind(move |b: &mut Button| {
                         b.disabled = id.with(|i| i.trim().is_empty());
@@ -384,7 +384,7 @@ fn header(ui: Ui) -> AnyView {
                                 .key("package-editor-close")
                                 .on_cx(send(|| Action::Close)),
                             widget(if dirty {
-                                crate::ui::kit::cta(button(ui, "pkgedit-save"))
+                                button(ui, "pkgedit-save").kind(ButtonKind::Primary)
                             } else {
                                 button(ui, "pkgedit-save")
                             })
@@ -439,7 +439,7 @@ fn close_prompt(ui: Ui) -> AnyView {
                 widget(
                     readable(ui.now_t("pkgedit-close-unsaved")).color(SemanticColorRole::Warning),
                 ),
-                widget(crate::ui::kit::cta(button(ui, "pkgedit-close-save")))
+                widget(button(ui, "pkgedit-close-save").kind(ButtonKind::Primary))
                     .key("package-editor-close-save")
                     .on_cx(send(|| Action::ConfirmClose { save: true })),
                 widget(button(ui, "pkgedit-close-discard").kind(ButtonKind::Danger))
@@ -1194,7 +1194,7 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
             })
         })
     };
-    let apply = widget(crate::ui::kit::cta(button(ui, "pkgedit-apply")))
+    let apply = widget(button(ui, "pkgedit-apply").kind(ButtonKind::Primary))
         .key("package-editor-apply")
         .bind(move |b: &mut Button| b.disabled = !editable)
         .on_cx(move |_, _: &Activate, cx| {
@@ -1327,7 +1327,7 @@ fn form_buttons(
             .wrap(true),
     )
     .children((
-        widget(crate::ui::kit::cta(button(ui, "pkgedit-apply")))
+        widget(button(ui, "pkgedit-apply").kind(ButtonKind::Primary))
             .key(format!("{key}-apply"))
             .on_cx(apply),
         widget(button(ui, "common-cancel"))
@@ -1940,7 +1940,7 @@ fn signing(ui: Ui) -> AnyView {
                         hint(ui.now_t("pkgedit-protect")),
                         widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs)).children(rows),
                         natural(
-                            widget(crate::ui::kit::cta(button(ui, "pkgedit-sign")))
+                            widget(button(ui, "pkgedit-sign").kind(ButtonKind::Primary))
                                 .key("package-editor-sign")
                                 .bind(move |b: &mut Button| b.disabled = !can_sign)
                                 .on_cx(send(move || Action::Sign(protected.get_untracked()))),
@@ -2100,7 +2100,7 @@ fn debug(ui: Ui) -> AnyView {
                         .wrap(true),
                 )
                 .children((
-                    widget(crate::ui::kit::cta(button(ui, "pkgedit-debug-start")))
+                    widget(button(ui, "pkgedit-debug-start").kind(ButtonKind::Primary))
                         .key("package-editor-debug-start")
                         .bind(move |b: &mut Button| b.disabled = !debug.trusted)
                         .on_cx(send(|| Action::DebugStart)),

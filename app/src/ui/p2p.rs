@@ -1,6 +1,6 @@
-use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
 use nana_ui::runtime::{Activate, Button, Stack, Text, TextChanged, TextInput};
+use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{AlignSpec, LengthSpec};
 use nanatype_p2p::Status;
 
@@ -205,9 +205,11 @@ pub(crate) fn card_with_fields(
                                 .on(move |e: &TextChanged| relay.set(e.value.to_string())),
                             ),
                             widget(action(stacked)).children(
-                                widget(crate::ui::kit::cta(
-                                    Button::new(ui.now_t("peer-create")).size(ControlSize::Small),
-                                ))
+                                widget(
+                                    Button::new(ui.now_t("peer-create"))
+                                        .size(ControlSize::Small)
+                                        .kind(ButtonKind::Primary),
+                                )
                                 .on_cx(
                                     move |_, _: &Activate, cx| {
                                         cx.dispatch_program_all(Msg::PeerStart {

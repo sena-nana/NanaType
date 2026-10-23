@@ -59,9 +59,11 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
         .on(move |_: &Activate| step.set(step.get_untracked().saturating_sub(1))),
         widget(Stack::row(0.0).grow(1.0)),
         // Next, and on the last step "Get started".
-        widget(crate::ui::kit::cta(
-            Button::new(ui.now_t("onboard-next")).size(ControlSize::Small),
-        ))
+        widget(
+            Button::new(ui.now_t("onboard-next"))
+                .size(ControlSize::Small)
+                .kind(ButtonKind::Primary),
+        )
         .bind(move |b: &mut Button| {
             let last = step.get() + 1 >= ONBOARD_STEPS;
             let label = ui.now_t(if last { "onboard-done" } else { "onboard-next" });

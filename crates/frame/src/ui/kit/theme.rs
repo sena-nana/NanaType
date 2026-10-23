@@ -37,7 +37,7 @@ fn metrics() -> ThemeMetrics {
 
 /// The lifted-surface shadow menus and popovers share: a soft
 /// `0 8px 24px text@16%` on a light chrome, `0 10px 30px -12px #00000080`
-/// on a dark one. Cards in a page are flat (see [`super::paint::CardPainter`]).
+/// on a dark one. Cards in a page are flat.
 fn effects(dark: bool) -> EffectTokens {
     let (base, surface) = if dark {
         let shadow = ShadowToken {

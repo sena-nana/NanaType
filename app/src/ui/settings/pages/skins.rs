@@ -215,9 +215,11 @@ pub(super) fn apply_button(
     id: String,
     shown: impl Fn() -> bool + Send + 'static,
 ) -> AnyView {
-    widget(crate::ui::kit::cta(
-        Button::new(ui.now_t("common-apply")).size(ControlSize::Small),
-    ))
+    widget(
+        Button::new(ui.now_t("common-apply"))
+            .size(ControlSize::Small)
+            .kind(ButtonKind::Primary),
+    )
     .visible(shown)
     .on_cx(move |_, _: &Activate, cx| {
         let id = id.clone();

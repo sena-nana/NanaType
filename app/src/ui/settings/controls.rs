@@ -5,9 +5,9 @@ use std::sync::{Arc, LazyLock};
 
 use nana_ui::runtime::view::{AnyView, IntoView, segmented_option, widget};
 use nana_ui::runtime::{
-    Activate, Chip, ColorChanged, ColorField, IconButton, NumberChanged, RangeChanged, RangeField,
-    SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption, Stack,
-    StatusBadge, Switch, Text, TextChanged, ToggleChanged,
+    Activate, Button, Chip, ColorChanged, ColorField, IconButton, NumberChanged, RangeChanged,
+    RangeField, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption,
+    Stack, StatusBadge, Switch, Text, TextChanged, ToggleChanged,
 };
 use nana_ui::{ButtonKind, ControlSize, StatusTone};
 use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec, SemanticColorRole};
@@ -315,9 +315,15 @@ pub fn button(ui: Ui, key: &str, msg: impl Fn() -> Msg + Send + 'static) -> AnyV
     crate::ui::kit::button(ui.now_t(key), msg)
 }
 
-/// The view's call to action: [`button`] as [`crate::ui::kit::cta`].
+/// The view's call to action: [`button`] in the primary kind.
 pub fn primary(ui: Ui, key: &str, msg: impl Fn() -> Msg + Send + 'static) -> AnyView {
-    crate::ui::kit::cta_button(ui.now_t(key), msg)
+    widget(
+        Button::new(ui.now_t(key))
+            .kind(ButtonKind::Primary)
+            .size(ControlSize::Small),
+    )
+    .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
+    .into_any()
 }
 
 pub fn edit(f: impl FnOnce(&mut Settings) + Send + 'static) -> Msg {

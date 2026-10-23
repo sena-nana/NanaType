@@ -1,7 +1,7 @@
 //! Application chrome is built from the design system in `app/src/ui/kit`:
-//! views name a role (`Type::Label`, `gap::CONTROL`, `RadiusTier::Sm`,
-//! `kit::cta`) rather than a number, so two windows that mean the same thing
-//! cannot drift apart. This scans the chrome views for the literals that
+//! views name a role (`Type::Label`, `gap::CONTROL`, `RadiusTier::Sm`)
+//! rather than a number, so two windows that mean the same thing cannot
+//! drift apart. This scans the chrome views for the literals that
 //! would bypass it.
 //!
 //! Skin-drawn content (the dialogue box, the history, quotes, effects) is
@@ -60,7 +60,6 @@ const TOKEN_ARGS: &[&str] = &[
 const FORBIDDEN: &[&str] = &[
     "radius_px(",
     "border_radius = Some(",
-    "ButtonKind::Primary",
     "Rgba8::rgb(",
     "Rgba8::rgba(",
     "box_shadows",
@@ -249,7 +248,6 @@ fn the_scan_catches_what_it_should() {
         "Popover::new().width(320.0)",
         "            320.0,",
         "color: [0.5, 0.55, 0.62, 0.28],",
-        "Button::new(x).kind(ButtonKind::Primary)",
     ] {
         assert_eq!(violations(bad).len(), 1, "{bad}");
     }

@@ -342,9 +342,11 @@ fn color_panel(ui: Ui, open: Signal<bool>) -> AnyView {
         rows,
         widget(ColorField::new([0.9, 0.3, 0.4, 1.0]).label(ui.now_t("tb-color"))) // design-tokens: data
             .on(move |e: &ColorChanged| picked.set(e.value)),
-        widget(Stack::row(0.0).gap_step(gap::step::TIGHT)).children((widget(crate::ui::kit::cta(
-            Button::new(ui.now_t("common-apply")).size(ControlSize::Small),
-        ))
+        widget(Stack::row(0.0).gap_step(gap::step::TIGHT)).children((widget(
+            Button::new(ui.now_t("common-apply"))
+                .size(ControlSize::Small)
+                .kind(ButtonKind::Primary),
+        )
         .on_cx(move |_, _: &Activate, cx| {
             let [r, g, b, a] = picked.get_untracked();
             let to = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -580,9 +582,11 @@ fn ruby_panel(ui: Ui, open: Signal<bool>) -> AnyView {
                 }
             }),
         widget(Stack::row(0.0).gap_step(gap::step::TIGHT)).children((
-            widget(crate::ui::kit::cta(
-                Button::new(ui.now_t("tb-ruby-apply")).size(ControlSize::Small),
-            ))
+            widget(
+                Button::new(ui.now_t("tb-ruby-apply"))
+                    .size(ControlSize::Small)
+                    .kind(ButtonKind::Primary),
+            )
             .on_cx(move |_, _: &Activate, cx| {
                 let r = reading.get_untracked();
                 if !r.trim().is_empty() {

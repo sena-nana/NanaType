@@ -1,5 +1,5 @@
 //! Small parts every window shares: tags, badges, status dots, callouts,
-//! empty states, the call-to-action button, text fields and the
+//! empty states, text fields and the
 //! transparency checker.
 
 use std::sync::Arc;
@@ -15,7 +15,6 @@ use nana_ui_core::{
     AlignSpec, JustifySpec, LengthSpec, RadiusTier, SemanticColorMix, SemanticColorRole,
 };
 
-use super::paint::CtaPainter;
 use super::tokens::{DOT, Tone, Type, gap, inset};
 
 /// A quiet tag: a subtle chip with a soft hairline at the control radius,
@@ -150,38 +149,9 @@ pub fn empty_state<M: Send + 'static>(
     }
 }
 
-/// `button` as the view's call to action: [`CtaPainter`] over a solid accent
-/// fill, its label in the on-accent colour. One per view.
-pub fn cta(button: Button) -> Button {
-    let mut st = button.style.clone();
-    // The painter draws the fill, so the node has none of its own (a
-    // disabled button shows the plain primary tint instead).
-    st.foreground = Some(SemanticColorRole::AccentText);
-    st.background = None;
-    st.border = None;
-    // The painter darkens the fill on hover and press itself; the button's
-    // own state paints would cover it.
-    st.interaction.hovered = SemanticPaint::default();
-    st.interaction.pressed = SemanticPaint::default();
-    st.interaction.focused = SemanticPaint::default();
-    st.interaction.disabled.background = Some(SemanticColorRole::AccentSoft);
-    st.painter = Some(CtaPainter.into());
-    button.style(st)
-}
-
 /// A small button that sends `msg`.
 pub fn button<M: Send + 'static>(label: String, msg: impl Fn() -> M + Send + 'static) -> AnyView {
     widget(Button::new(label).size(ControlSize::Small))
-        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
-        .into_any()
-}
-
-/// A small call-to-action button that sends `msg`.
-pub fn cta_button<M: Send + 'static>(
-    label: String,
-    msg: impl Fn() -> M + Send + 'static,
-) -> AnyView {
-    widget(cta(Button::new(label).size(ControlSize::Small)))
         .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
         .into_any()
 }

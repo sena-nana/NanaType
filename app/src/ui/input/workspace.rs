@@ -696,9 +696,11 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) 
                 ),
                 tool(ui, ti::SETTINGS, "window-settings", || Msg::OpenSettings),
                 super::super::sources::account_button(ui),
-                widget(crate::ui::kit::cta(
-                    Button::new(ui.now_t("tb-send")).icon(ti::SEND),
-                ))
+                widget(
+                    Button::new(ui.now_t("tb-send"))
+                        .icon(ti::SEND)
+                        .kind(ButtonKind::Primary),
+                )
                 .on_cx(move |_, _: &Activate, cx| {
                     super::super::motion::press(cx, ui.reduced_motion.get_untracked());
                     cx.dispatch_program_all(Msg::Core(Cmd::Send));

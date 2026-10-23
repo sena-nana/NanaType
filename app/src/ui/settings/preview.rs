@@ -2,7 +2,6 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 
-use nana_ui::ControlSize;
 use nana_ui::runtime::view::{
     AnyView, IntoView, Signal, dynamic, on_mount, segmented_option, signal, widget,
 };
@@ -11,6 +10,7 @@ use nana_ui::runtime::{
     RangeChanged, RangeField, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged,
     SelectOption, SizeChanged, Stack, Text, TextArea, TextChanged, TextInput, TextInputState,
 };
+use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_model::Rgba8;
 use nanatype_settings::Settings;
@@ -557,12 +557,12 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
                         });
                     },
                 ),
-                // The one primary action keeps its word beside the icon.
-                widget(kit::cta(
+                widget(
                     Button::new(ui.now_t("skin-edit-save"))
                         .icon(ti::DEVICE_FLOPPY)
-                        .size(ControlSize::Small),
-                ))
+                        .size(ControlSize::Small)
+                        .kind(ButtonKind::Primary),
+                )
                 .key("skin-edit-save")
                 .bind(move |b: &mut Button| {
                     b.disabled = draft(ui, &valid_id).profile(&valid_base).is_err()
