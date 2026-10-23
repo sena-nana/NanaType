@@ -151,11 +151,10 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                             },
                         ),
                     ),
-                    row(
-                        ui,
-                        "skins-override-reset",
-                        None,
-                        button(ui, "common-reset", || {
+                    // The button says what it does; the row needs no label.
+                    crate::ui::kit::line(
+                        (),
+                        button(ui, "skins-override-reset", || {
                             edit(|s| s.skin.overrides = Default::default())
                         }),
                     ),

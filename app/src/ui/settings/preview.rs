@@ -6,8 +6,8 @@ use nana_ui::runtime::view::{
     AnyView, IntoView, Signal, dynamic, segmented_option, signal, widget,
 };
 use nana_ui::runtime::{
-    Activate, Button, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption,
-    SizeChanged, Stack, TextArea, TextChanged, TextInput, TextInputState,
+    Activate, Button, IconButton, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged,
+    SelectOption, SizeChanged, Stack, TextArea, TextChanged, TextInput, TextInputState,
 };
 use nana_ui_core::{AlignSpec, LengthSpec};
 use nanatype_settings::Settings;
@@ -17,6 +17,7 @@ use super::controls::{hint, label};
 use crate::msg::Msg;
 use crate::ui::Ui;
 use crate::ui::kit::{self, gap};
+use nana_ui::icons_tabler as ti;
 pub use nanatype_frame::ui::preview::{
     Draft, InvalidProfile, Pane, Surface, default_size, sample, stage,
 };
@@ -139,6 +140,62 @@ fn field(ui: Ui, id: &str, history: bool, field: Field, placeholder: String) -> 
     .into_any()
 }
 
+/// The sample text under the stage: its caption with a reset at the far
+/// end, then the text itself.
+fn sample_editor(ui: Ui, id: &str, is_history: bool) -> AnyView {
+    let sample_id = id.to_owned();
+    let write_sample_id = id.to_owned();
+    let sample =
+        widget(kit::text_area(draft(ui, id).pane(is_history).text.clone()).height(SAMPLE_H))
+            .key("skin-edit-sample-text")
+            .bind(move |area: &mut TextArea| {
+                let text = draft(ui, &sample_id).pane(is_history).text.clone();
+                if area.state.value.as_str() != text {
+                    area.state = TextInputState::new(text);
+                }
+            })
+            .on(move |e: &TextChanged| {
+                change(ui, &write_sample_id, |d| {
+                    d.pane_mut(is_history).text = e.value.to_string()
+                });
+            });
+    let sample_reset_id = id.to_owned();
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::TIGHT)
+            .width(LengthSpec::Fill),
+    )
+    .children((
+        // The sample's caption, with its reset at the far end.
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
+                .align(AlignSpec::Center)
+                .width(LengthSpec::Fill),
+        )
+        .children((
+            hint(ui.now_t("skin-edit-test-text")),
+            kit::spacer(),
+            widget(
+                IconButton::new(ti::RESTORE, ui.now_t("skin-edit-sample-reset"))
+                    .size(ControlSize::Small)
+                    .with_tooltip(ui.now_t("skin-edit-sample-reset")),
+            )
+            .on(move |_: &Activate| {
+                change(ui, &sample_reset_id, |d| {
+                    d.pane_mut(is_history).text = ui.now_t(if is_history {
+                        "skin-edit-history-sample"
+                    } else {
+                        "skin-edit-sample"
+                    });
+                })
+            }),
+        )),
+        sample,
+    ))
+    .into_any()
+}
+
 fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: bool) -> AnyView {
     let text = if is_history {
         &base.history.text
@@ -204,23 +261,6 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
             });
         }),
     ));
-    let sample_id = id.to_owned();
-    let write_sample_id = id.to_owned();
-    let sample =
-        widget(kit::text_area(draft(ui, id).pane(is_history).text.clone()).height(SAMPLE_H))
-            .key("skin-edit-sample-text")
-            .bind(move |area: &mut TextArea| {
-                let text = draft(ui, &sample_id).pane(is_history).text.clone();
-                if area.state.value.as_str() != text {
-                    area.state = TextInputState::new(text);
-                }
-            })
-            .on(move |e: &TextChanged| {
-                change(ui, &write_sample_id, |d| {
-                    d.pane_mut(is_history).text = e.value.to_string()
-                });
-            });
-    let sample_reset_id = id.to_owned();
     let reset_id = id.to_owned();
     let discard_id = id.to_owned();
     let save_id = id.to_owned();
@@ -276,55 +316,59 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
         )
         .children(fields),
         font_choices,
-        label(ui.now_t("skin-edit-test-text")),
-        sample,
-        widget(Button::new(ui.now_t("skin-edit-sample-reset")).size(ControlSize::Small)).on(
-            move |_: &Activate| {
-                change(ui, &sample_reset_id, |d| {
-                    d.pane_mut(is_history).text = ui.now_t(if is_history {
-                        "skin-edit-history-sample"
-                    } else {
-                        "skin-edit-sample"
-                    });
+        // Where the draft stands on the left, what can be done with it on
+        // the right.
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
+                .align(AlignSpec::Center)
+                .width(LengthSpec::Fill)
+                .wrap(true),
+        )
+        .children((
+            widget(kit::grow_column(gap::HAIR)).children(status),
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::CONTROL)
+                    .align(AlignSpec::Center)
+                    .with_layout(|l| l.flex_shrink = Some(0.0)),
+            )
+            .children((
+                widget(Button::new(ui.now_t("skin-edit-reset")).size(ControlSize::Small)).on(
+                    move |_: &Activate| {
+                        change(ui, &reset_id, |d| {
+                            let text = d.pane(is_history).text.clone();
+                            *d.pane_mut(is_history) = Pane {
+                                text,
+                                ..Default::default()
+                            };
+                            d.params = Default::default();
+                        })
+                    },
+                ),
+                widget(Button::new(ui.now_t("skin-edit-discard")).size(ControlSize::Small)).on(
+                    move |_: &Activate| {
+                        ui.skin_drafts.update(|m| {
+                            m.remove(&discard_id);
+                        });
+                    },
+                ),
+                widget(crate::ui::kit::cta(
+                    Button::new(ui.now_t("skin-edit-save")).size(ControlSize::Small),
+                ))
+                .key("skin-edit-save")
+                .bind(move |b: &mut Button| {
+                    b.disabled = draft(ui, &valid_id).profile(&valid_base).is_err()
                 })
-            },
-        ),
-        status,
-        widget(Stack::row(0.0).gap_step(gap::step::CONTROL).wrap(true)).children((
-            widget(Button::new(ui.now_t("skin-edit-reset")).size(ControlSize::Small)).on(
-                move |_: &Activate| {
-                    change(ui, &reset_id, |d| {
-                        let text = d.pane(is_history).text.clone();
-                        *d.pane_mut(is_history) = Pane {
-                            text,
-                            ..Default::default()
-                        };
-                        d.params = Default::default();
-                    })
-                },
-            ),
-            widget(Button::new(ui.now_t("skin-edit-discard")).size(ControlSize::Small)).on(
-                move |_: &Activate| {
-                    ui.skin_drafts.update(|m| {
-                        m.remove(&discard_id);
-                    });
-                },
-            ),
-            widget(crate::ui::kit::cta(
-                Button::new(ui.now_t("skin-edit-save")).size(ControlSize::Small),
-            ))
-            .key("skin-edit-save")
-            .bind(move |b: &mut Button| {
-                b.disabled = draft(ui, &valid_id).profile(&valid_base).is_err()
-            })
-            .on_cx(move |_, _: &Activate, cx| {
-                if let Ok(profile) = draft(ui, &save_id).profile(&save_base) {
-                    cx.dispatch_program_all(Msg::SaveSkinPersonalization {
-                        id: save_id.clone(),
-                        profile,
-                    });
-                }
-            }),
+                .on_cx(move |_, _: &Activate, cx| {
+                    if let Ok(profile) = draft(ui, &save_id).profile(&save_base) {
+                        cx.dispatch_program_all(Msg::SaveSkinPersonalization {
+                            id: save_id.clone(),
+                            profile,
+                        });
+                    }
+                }),
+            )),
         )),
     ))
     .into_any()
@@ -375,11 +419,13 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
             )
             .key("skin-preview")
             .children((
+                // The skin and which surface it shows on the left; applying
+                // it and playing its effects at the far end.
                 widget(
                     Stack::row(0.0)
                         .gap_step(gap::step::CONTROL)
-                        .wrap(true)
-                        .align(AlignSpec::Center),
+                        .align(AlignSpec::Center)
+                        .width(LengthSpec::Fill),
                 )
                 .children((
                     label(row.name),
@@ -393,26 +439,17 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
                             .selected(move || ui.skin_preview_history.get())
                             .on(move |_: &SegmentedOptionChosen| ui.skin_preview_history.set(true)),
                     )),
-                    dynamic(
-                        move || ui.settings.with(|s| s.skin.id == apply_read),
-                        move |active| {
+                    kit::spacer(),
+                    // Shown in place rather than swapped by `dynamic`, whose
+                    // full-width branch pushed the effects button onto a
+                    // line of its own.
+                    widget(Button::new(ui.now_t("common-apply")).size(ControlSize::Small))
+                        .key("apply-preview")
+                        .visible(move || ui.settings.with(|s| s.skin.id != apply_read))
+                        .on_cx(move |_, _: &Activate, cx| {
                             let id = apply_id.clone();
-                            (!*active).then(|| {
-                                widget(
-                                    Button::new(ui.now_t("common-apply")).size(ControlSize::Small),
-                                )
-                                .key("apply-preview")
-                                .on_cx(
-                                    move |_, _: &Activate, cx| {
-                                        let id = id.clone();
-                                        cx.dispatch_program_all(super::controls::edit(move |s| {
-                                            s.skin.id = id
-                                        }));
-                                    },
-                                )
-                            })
-                        },
-                    ),
+                            cx.dispatch_program_all(super::controls::edit(move |s| s.skin.id = id));
+                        }),
                     widget(Button::new(ui.now_t("skins-play-effects")).size(ControlSize::Small))
                         .bind(move |b: &mut Button| {
                             b.label = ui.now_t(if ui.shader_preview.get() {
@@ -432,7 +469,7 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
                             }
                         }),
                 )),
-                hint(row.description),
+                (!row.description.is_empty()).then(|| hint(row.description)),
                 widget(
                     Stack::row(0.0)
                         .gap_step(gap::step::GROUP)
@@ -452,7 +489,14 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
                     .on(move |e: &SizeChanged| {
                         width.set_if_changed(e.width);
                     })
-                    .children(sample),
+                    .children(
+                        widget(
+                            Stack::column(0.0)
+                                .gap_step(gap::step::GROUP)
+                                .width(LengthSpec::Fill),
+                        )
+                        .children((sample, sample_editor(ui, &id, history_mode))),
+                    ),
                     widget(
                         Stack::column(0.0)
                             .width(LengthSpec::Px(COLUMN_W))

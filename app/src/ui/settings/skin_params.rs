@@ -417,8 +417,17 @@ pub fn view(ui: Ui, id: &str, skin: Arc<Skin>) -> Option<AnyView> {
     let skin_id: Arc<str> = id.into();
     let lang = locale(ui);
     let mut parts: Vec<AnyView> = vec![
-        label(ui.now_t("skin-params-title")),
-        hint(ui.now_t("skin-params-hint")),
+        // What the params are for stays a tooltip on their title.
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::HAIR)
+                .align(AlignSpec::Center),
+        )
+        .children((
+            label(ui.now_t("skin-params-title")),
+            super::controls::info_tip(ui, "skin-params-hint"),
+        ))
+        .into_any(),
     ];
     if !skin.presets.is_empty() {
         parts.push(presets(ui, skin_id.clone(), skin.clone()));
