@@ -33,7 +33,7 @@ use nanatype_theme::{
 use super::overflow;
 use super::rich::{Env, Look, RevealPlan, effect_table, to_rich};
 use super::surface::{self, Surface, affine, calc, len};
-use super::{Stage, c, restyle};
+use super::{I18N, Stage, c, restyle};
 
 /// Base text look a document is drawn with (skin dialogue text or history text).
 #[derive(Clone, PartialEq)]
@@ -931,14 +931,7 @@ fn box_view(ui: Stage, ctx: BoxCtx, content: AnyView) -> impl IntoView {
             let view = drawn(ui);
             let now = ui.now.get();
             let reduced = ui.reduced_motion.get();
-            let fade = view
-                .fade
-                .map(|(at, ms)| {
-                    1.0 - (now.saturating_sub(at) as f32 / ms.max(1) as f32).clamp(0.0, 1.0)
-                })
-                .unwrap_or(1.0);
-            let (shown, rise) = stage(ui.track_slot).presence(now, reduced);
-            let opacity = if view.empty { 0.0 } else { fade * shown };
+            let (opacity, rise) = box_presence(ui, &view, now, reduced);
             let (dx, dy) = match view.shake {
                 Some(sh) if now < sh.at_ms + u64::from(sh.ms) && !reduced => {
                     let left = 1.0 - (now - sh.at_ms) as f32 / sh.ms.max(1) as f32;
@@ -1076,16 +1069,71 @@ fn box_view(ui: Stage, ctx: BoxCtx, content: AnyView) -> impl IntoView {
     };
     let the_box = the_box.children((input_skin_layer(ui, &ctx, sweep_layer), shaders, text));
 
-    outer.children(frame.children((
-        input_skin_layer(ui, &ctx, |ui, ctx| {
-            skin_surroundings(ui, ctx, DecorLayer::Below)
+    // An empty box is fully transparent, so a movable window would be
+    // invisible until its first line: outline it while it can be dragged.
+    let placeholder = drag_window.then(|| empty_placeholder(ui));
+    outer.children((
+        placeholder,
+        frame.children((
+            input_skin_layer(ui, &ctx, |ui, ctx| {
+                skin_surroundings(ui, ctx, DecorLayer::Below)
+            }),
+            shaders_below,
+            the_box,
+            input_skin_layer(ui, &ctx, |ui, ctx| {
+                skin_surroundings(ui, ctx, DecorLayer::Above)
+            }),
+        )),
+    ))
+}
+
+/// The display box's opacity and entrance rise at `now`: hidden while empty,
+/// then its entrance, exit and `[fade]`.
+fn box_presence(ui: Stage, view: &DisplayView, now: u64, reduced: bool) -> (f32, f32) {
+    let fade = view
+        .fade
+        .map(|(at, ms)| 1.0 - (now.saturating_sub(at) as f32 / ms.max(1) as f32).clamp(0.0, 1.0))
+        .unwrap_or(1.0);
+    let (shown, rise) = stage(ui.track_slot).presence(now, reduced);
+    (if view.empty { 0.0 } else { fade * shown }, rise)
+}
+
+/// A dashed outline of the window, shown as the box fades out, so an
+/// unlocked display can be found and moved before anything is said.
+fn empty_placeholder(ui: Stage) -> AnyView {
+    let mut st = NodeStyle::default();
+    {
+        let l = Arc::make_mut(&mut st.layout);
+        l.font_size = Some(14.0);
+        l.color = Some(c(Rgba8::rgba(255, 255, 255, 220)));
+        l.white_space_nowrap = true;
+    }
+    widget(Stack::column(0.).with_layout(|l| {
+        overlay(l);
+        l.background = Some(c(Rgba8::rgba(24, 24, 28, 140)));
+    }))
+    .css(nana_ui::runtime::view::css! {
+        inset: 6px;
+        align-items: center;
+        justify-content: center;
+        border: 1.5px dashed rgba(255, 255, 255, 0.6);
+        border-radius: 10px;
+    })
+    .bind(move |s: &mut Stack| {
+        let view = drawn(ui);
+        let (box_opacity, _) = box_presence(ui, &view, ui.now.get(), ui.reduced_motion.get());
+        restyle(s, |l| l.opacity = Some(1.0 - box_opacity));
+    })
+    .key("dialogue-empty-placeholder")
+    .children(
+        widget(Text::new(ui.now_t("display-placeholder")).style(st)).bind(move |t: &mut Text| {
+            let value = I18N.t_in(ui.locale.get(), "display-placeholder");
+            if t.value != value {
+                t.value = value;
+            }
         }),
-        shaders_below,
-        the_box,
-        input_skin_layer(ui, &ctx, |ui, ctx| {
-            skin_surroundings(ui, ctx, DecorLayer::Above)
-        }),
-    )))
+    )
+    .into_any()
 }
 
 /// Custom GPU paint always precedes the text, even for ornaments whose
