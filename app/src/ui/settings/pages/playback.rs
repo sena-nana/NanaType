@@ -38,8 +38,11 @@ fn sound_pack(ui: Ui) -> AnyView {
         },
     )
     .into_any();
+    // The picker keeps a select's width: a `dynamic` alone fills the row.
     controls(vec![
-        picker,
+        widget(Stack::row(0.0).width(LengthSpec::Px(field::MD)))
+            .children(picker)
+            .into_any(),
         icon_action(ui, "sound-pack-import", ti::FILE_IMPORT, || {
             Msg::PickFile(FileTarget::ImportSkin)
         }),

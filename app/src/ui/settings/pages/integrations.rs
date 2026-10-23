@@ -140,17 +140,16 @@ pub(super) fn vts_mapping(ui: Ui) -> AnyView {
             }
             if markers.is_empty() {
                 return if *connected {
-                    crate::ui::kit::empty_state(
-                        ui.now_t("empty-vts-hotkeys"),
-                        Some((ui.now_t("int-vts-refresh"), Box::new(|| Msg::VtsRefresh))),
+                    empty_row(
+                        ui,
+                        "empty-vts-hotkeys",
+                        button(ui, "int-vts-refresh", || Msg::VtsRefresh),
                     )
                 } else {
-                    crate::ui::kit::empty_state(
-                        ui.now_t("int-vts-map-empty"),
-                        Some((
-                            ui.now_t("int-vts-authorize"),
-                            Box::new(|| Msg::VtsAuthorize),
-                        )),
+                    empty_row(
+                        ui,
+                        "int-vts-map-empty",
+                        button(ui, "int-vts-authorize", || Msg::VtsAuthorize),
                     )
                 };
             }

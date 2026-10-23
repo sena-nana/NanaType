@@ -1,9 +1,9 @@
 //! Twitch: the channel to read, the device-code sign-in and sending.
 use super::Ui;
 use super::danmaku::Link;
-use super::settings::controls::{button, hint, row, row_live_hint, section, switch, text};
+use super::settings::controls::{block, button, hint, row, row_live_hint, section, switch, text};
 use crate::msg::Msg;
-use crate::ui::kit::{Type, gap, inset};
+use crate::ui::kit::{Type, gap, inset, line};
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{
     ConfirmDialog, ConfirmIntent, DialogCloseRequested, Stack, Switch, Text, ToggleChanged,
@@ -47,11 +47,8 @@ pub fn diagnostic(ui: Ui, code: &str) -> String {
     };
     ui.now_t(key)
 }
-fn buttons(views: Vec<AnyView>) -> AnyView {
-    widget(Stack::row(0.0).gap_step(gap::step::CONTROL))
-        .children(views)
-        .into_any()
-}
+/// The account as one line: who (or what is happening) on the left, what
+/// can be done on the right; a sign-in code unfolds under it.
 fn account_card(ui: Ui) -> AnyView {
     dynamic(
         move || (ui.twitch.get().account.clone(), ui.locale.get()),
@@ -64,45 +61,53 @@ fn account_card(ui: Ui) -> AnyView {
                 AccountState::Failed(_) => ui.now_t("tw-login-failed"),
                 AccountState::SignedOut => ui.now_t("tw-signed-out"),
             };
-            let mut body = vec![widget(Text::new(title).style(Type::Title.style())).into_any()];
-            match account {
-                AccountState::Ready(p) => {
-                    body.push(hint(format!("@{}", p.login)));
-                    body.push(buttons(vec![
+            let (detail, actions, code) = match account {
+                AccountState::Ready(p) => (
+                    Some(format!("@{}", p.login)),
+                    vec![
                         button(ui, "tw-refresh", || Msg::TwitchRefresh),
                         button(ui, "tw-logout", || Msg::TwitchLogout),
-                    ]));
-                }
-                AccountState::Pending { code, .. } => {
-                    body.push(hint(ui.now_t("tw-pending-hint")));
-                    body.push(
-                        widget(Text::new(code.clone()).style(Type::PageTitle.style())).into_any(),
-                    );
-                    body.push(buttons(vec![
+                    ],
+                    None,
+                ),
+                AccountState::Pending { code, .. } => (
+                    None,
+                    vec![
                         button(ui, "tw-open-activation", || Msg::TwitchOpenActivation),
                         button(ui, "common-cancel", || Msg::TwitchCancelLogin),
-                    ]));
-                }
-                AccountState::Restoring => {}
-                AccountState::Failed(message) => {
-                    body.push(hint(diagnostic(ui, message)));
-                    body.push(buttons(vec![
+                    ],
+                    Some(block((
+                        hint(ui.now_t("tw-pending-hint")),
+                        widget(Text::new(code.clone()).style(Type::PageTitle.mono())),
+                    ))),
+                ),
+                AccountState::Restoring => (None, Vec::new(), None),
+                AccountState::Failed(message) => (
+                    Some(diagnostic(ui, message)),
+                    vec![
                         button(ui, "tw-login", || Msg::TwitchLogin),
                         button(ui, "tw-refresh", || Msg::TwitchRefresh),
-                    ]));
-                }
-                _ => {
-                    body.push(hint(ui.now_t("tw-login-hint")));
-                    body.push(button(ui, "tw-login", || Msg::TwitchLogin));
-                }
-            }
-            widget(
-                Stack::column(0.0)
-                    .gap_step(gap::step::GROUP)
-                    .padding_step(inset::step::CARD, inset::step::CARD),
-            )
-            .children(body)
-            .into_any()
+                    ],
+                    None,
+                ),
+                _ => (
+                    Some(ui.now_t("tw-login-hint")),
+                    vec![button(ui, "tw-login", || Msg::TwitchLogin)],
+                    None,
+                ),
+            };
+            widget(Stack::column(0.0))
+                .children((
+                    line(
+                        (
+                            widget(Text::new(title).style(Type::Strong.one_line())),
+                            detail.map(hint),
+                        ),
+                        actions,
+                    ),
+                    code,
+                ))
+                .into_any()
         },
     )
     .into_any()

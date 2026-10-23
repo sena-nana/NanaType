@@ -314,14 +314,13 @@ fn phrase_rows(ui: Ui) -> AnyView {
             })
         },
         move |labels| {
+            let edit_phrases = || {
+                button(ui, "hotkeys-edit-phrases", || {
+                    Msg::SettingsPage(Page::Assets)
+                })
+            };
             if labels.is_empty() {
-                return crate::ui::kit::empty_state::<Msg>(
-                    ui.now_t("hotkeys-phrases-empty"),
-                    Some((
-                        ui.now_t("hotkeys-edit-phrases"),
-                        Box::new(|| Msg::SettingsPage(Page::Assets)),
-                    )),
-                );
+                return empty_row(ui, "hotkeys-phrases-empty", edit_phrases());
             }
             let rows: Vec<AnyView> = (0..labels.len())
                 .map(|i| {
@@ -333,7 +332,11 @@ fn phrase_rows(ui: Ui) -> AnyView {
                 })
                 .collect();
             widget(Stack::column(0.0))
-                .children(divided(rows))
+                .children((
+                    divided(rows),
+                    divider(),
+                    crate::ui::kit::line((), edit_phrases()),
+                ))
                 .into_any()
         },
     )
@@ -358,21 +361,7 @@ pub(super) fn hotkeys(ui: Ui) -> AnyView {
         .children((
             section(ui, "hotkeys-global", global),
             section(ui, "hotkeys-local", local),
-            section(
-                ui,
-                "hotkeys-phrases",
-                vec![
-                    phrase_rows(ui),
-                    widget(
-                        Stack::row(0.0)
-                            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
-                    )
-                    .children(button(ui, "hotkeys-edit-phrases", || {
-                        Msg::SettingsPage(Page::Assets)
-                    }))
-                    .into_any(),
-                ],
-            ),
+            section(ui, "hotkeys-phrases", vec![phrase_rows(ui)]),
         ))
         .into_any()
 }
