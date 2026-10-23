@@ -426,8 +426,9 @@ fn budget_verdict(spent: &HashMap<String, Spend>, budget: u64) -> Option<(&str, 
 #[derive(Default)]
 struct State {
     generations: Vec<DeviceGeneration>,
-    /// Each generation's context, to tell a lost device from an added one.
-    devices: Vec<GpuContext>,
+    /// Each generation's context, to tell a lost device from an added one;
+    /// `None` for a device only materials have drawn on.
+    devices: Vec<Option<GpuContext>>,
     /// When each program last drew on each device.
     last_drawn: HashMap<(DeviceGeneration, String), Instant>,
     window: Option<Instant>,
@@ -450,6 +451,69 @@ impl std::fmt::Debug for Renderer {
 static SHARED: LazyLock<Arc<Renderer>> = LazyLock::new(|| Arc::new(Renderer::default()));
 pub fn register(registry: &mut SceneGpuRendererRegistry) {
     registry.insert(RENDERER, SHARED.clone());
+    nana_ui::set_material_policy(Some(Arc::new(MaterialGate)));
+}
+
+/// Skin materials NanaUI draws, by [`nana_ui_core::MaterialProgram::key`]:
+/// their program hash and per-pixel cost.
+static MATERIAL_PROGRAMS: LazyLock<Mutex<HashMap<u64, (String, u32)>>> =
+    LazyLock::new(Default::default);
+
+/// Put the material program keyed `key` under the effects' protection.
+pub(super) fn guard_material(key: u64, program: &nanatype_theme::ShaderProgram) {
+    MATERIAL_PROGRAMS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(key, (program.hash.clone(), program.cost));
+}
+
+/// NanaUI asks before it compiles or draws a skin material and reports what
+/// each draw shaded: materials share the effects' GPU budget, crash guard and
+/// device-loss strikes (on devices an effect has drawn on, the only ones
+/// whose loss NanaType can see). One over budget is disabled at once, since a static
+/// material has nothing to freeze. Programs NanaType did not register (the
+/// framework's own) always run.
+struct MaterialGate;
+impl MaterialGate {
+    fn program(key: u64) -> Option<(String, u32)> {
+        MATERIAL_PROGRAMS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&key)
+            .cloned()
+    }
+}
+impl nana_ui::MaterialPolicy for MaterialGate {
+    fn admit(&self, generation: Option<DeviceGeneration>, program: u64) -> bool {
+        let Some((hash, _)) = Self::program(program) else {
+            return true;
+        };
+        let mut state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(generation) = generation {
+            state.observe(generation, None);
+        }
+        state.failed.get(&hash).copied().unwrap_or(0) < 2
+            && GUARD
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .draw(&hash, Instant::now())
+    }
+    fn charge(&self, generation: Option<DeviceGeneration>, program: u64, pixels: u64) {
+        let Some((hash, cost)) = Self::program(program) else {
+            return;
+        };
+        let now = Instant::now();
+        let mut state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(generation) = generation {
+            state.last_drawn.insert((generation, hash.clone()), now);
+        }
+        state.spend(
+            &hash,
+            u64::from(cost.max(1)).saturating_mul(pixels),
+            false,
+            now,
+        );
+    }
 }
 
 /// Release dead view bindings even when the next theme is entirely static.
@@ -656,7 +720,8 @@ impl State {
             .window
             .is_none_or(|start| now.duration_since(start) >= BUDGET_WINDOW)
         {
-            let verdict = budget_verdict(&self.spent, COST_BUDGET.load(Ordering::Relaxed)).map(|(h, v)| (h.to_owned(), v));
+            let verdict = budget_verdict(&self.spent, COST_BUDGET.load(Ordering::Relaxed))
+                .map(|(h, v)| (h.to_owned(), v));
             match verdict {
                 // The draw that froze it was still charged as playing.
                 Some((hash, Verdict::Freeze)) if !throttled(&hash) => {
@@ -668,8 +733,14 @@ impl State {
                     nanatype_diag::report!(crate::diag::SHADER_DISABLED; "{}: {why}", short(&hash));
                     notice(format!("Skin shader {} {why}", short(&hash)));
                 }
+                // Frozen effects, and materials, which never animate.
                 Some((hash, _)) => {
-                    self.disable(&hash, Some("over the GPU budget even when frozen"));
+                    let why = if throttled(&hash) {
+                        "over the GPU budget even when frozen"
+                    } else {
+                        "over the GPU budget"
+                    };
+                    self.disable(&hash, Some(why));
                 }
                 None => {}
             }
@@ -713,6 +784,44 @@ impl State {
         }
     }
 
+    /// Note the device a program is about to draw on. The host replaces a
+    /// lost device with a new one, so a new generation charges what drew on
+    /// each lost one; an added device (another adapter) charges nothing. A
+    /// device only materials drew on has no context to ask and is never taken
+    /// for lost: painters make new generations without any loss.
+    fn observe(&mut self, generation: DeviceGeneration, gpu: Option<&GpuContext>) {
+        if let Some(i) = self.generations.iter().position(|g| *g == generation) {
+            if self.devices[i].is_none() {
+                self.devices[i] = gpu.cloned();
+            }
+            return;
+        }
+        let lost: Vec<_> = self
+            .generations
+            .iter()
+            .zip(&self.devices)
+            .filter(|(_, d)| d.as_ref().is_some_and(GpuContext::is_lost))
+            .map(|(g, _)| *g)
+            .collect();
+        for g in lost {
+            self.attribute_loss(g);
+        }
+        self.generations.push(generation);
+        self.devices.push(gpu.cloned());
+        if self.generations.len() > 4 {
+            let retired = self.generations.remove(0);
+            self.devices.remove(0);
+            self.pipelines.retain(|(g, _, _, _), _| *g != retired);
+            self.masks.retain(|(g, _, _, _, _, _), _| *g != retired);
+            self.scales.retain(|(g, _, _)| *g != retired);
+            self.last_drawn.retain(|(g, _), _| *g != retired);
+        }
+        DISABLED
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|hash| self.failed.get(hash).copied().unwrap_or(0) >= 2);
+    }
+
     fn prepare(
         &mut self,
         material: &Arc<Material>,
@@ -720,33 +829,7 @@ impl State {
         scale: f32,
     ) -> Option<&mut Prepared> {
         let generation = c.gpu.generation();
-        if !self.generations.contains(&generation) {
-            // The host replaces a lost device with a new one; an added device
-            // (another adapter) is not a loss and charges nothing.
-            let lost: Vec<_> = self
-                .devices
-                .iter()
-                .filter(|d| d.is_lost())
-                .map(GpuContext::generation)
-                .collect();
-            for g in lost {
-                self.attribute_loss(g);
-            }
-            self.generations.push(generation);
-            self.devices.push(c.gpu.clone());
-            if self.generations.len() > 4 {
-                let retired = self.generations.remove(0);
-                self.devices.remove(0);
-                self.pipelines.retain(|(g, _, _, _), _| *g != retired);
-                self.masks.retain(|(g, _, _, _, _, _), _| *g != retired);
-                self.scales.retain(|(g, _, _)| *g != retired);
-                self.last_drawn.retain(|(g, _), _| *g != retired);
-            }
-            DISABLED
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .retain(|hash| self.failed.get(hash).copied().unwrap_or(0) >= 2);
-        }
+        self.observe(generation, Some(c.gpu));
         let bounds = [c.bounds.width, c.bounds.height];
         if bounds.contains(&0)
             || bounds
@@ -1296,9 +1379,18 @@ mod tests {
         let registry = nanatype_theme::SkinRegistry::new(None, "0.1.0");
         for entry in registry.entries() {
             let skin = registry.load(&entry.id).unwrap().skin;
-            for program in skin.shader_programs.values() {
+            for program in skin
+                .shader_programs
+                .values()
+                .chain(skin.material_programs.values())
+            {
                 let frame = u64::from(program.cost) * 3840 * 2160 * 60;
-                assert!(frame < DEFAULT_COST_BUDGET, "{}: {}", entry.id, program.cost);
+                assert!(
+                    frame < DEFAULT_COST_BUDGET,
+                    "{}: {}",
+                    entry.id,
+                    program.cost
+                );
             }
         }
     }

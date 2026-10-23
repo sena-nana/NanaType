@@ -51,6 +51,7 @@ pub fn resolve(skin: &Skin, name: Option<&str>) -> Option<MaterialRef> {
     let material = MaterialRef::new(MaterialProgram::new(program.source.clone()))
         .with_parameters(Arc::from(params))
         .with_textures(textures);
+    super::shader_effects::guard_material(material.program().key(), program);
     instances.retain(|_, m| m.strong_count() > 0);
     instances.insert(key, material.downgrade());
     Some(material)

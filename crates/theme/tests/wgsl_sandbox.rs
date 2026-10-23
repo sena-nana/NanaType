@@ -113,7 +113,10 @@ fn effect_attacks() -> Vec<(&'static str, String, &'static str)> {
         ),
         (
             "deep expression",
-            effect(&format!("let x = i.uv.x; return vec4({});", vec!["x"; 200].join("+"))),
+            effect(&format!(
+                "let x = i.uv.x; return vec4({});",
+                vec!["x"; 200].join("+")
+            )),
             "deeper than",
         ),
         (
@@ -334,7 +337,10 @@ fn every_material_attack_is_rejected() {
         ("loop", material("loop {} return vec4(0.);"), "loops"),
         (
             "deep expression",
-            material(&format!("let x = i.uv.x; return vec4({});", vec!["x"; 200].join("+"))),
+            material(&format!(
+                "let x = i.uv.x; return vec4({});",
+                vec!["x"; 200].join("+")
+            )),
             "deeper than",
         ),
     ] {

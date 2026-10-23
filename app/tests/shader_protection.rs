@@ -1,6 +1,7 @@
 //! Runtime protection of skin shaders on the real GPU proxy: a program over
 //! the GPU budget is frozen, then disabled; one that was on trial when the
-//! last run ended stays blocked; turning effects back on retries both.
+//! last run ended stays blocked; turning effects back on retries both. Skin
+//! materials, which NanaUI draws, fall back to native paint the same way.
 
 mod common;
 
@@ -10,9 +11,11 @@ use nana_ui_core::{LengthSpec, PositionSpec};
 use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
 use nanatype::{
     clock,
-    ui::{Ui, dialogue::Source, shader_effects, surface::Surface, sweep},
+    ui::{Ui, dialogue::Source, materials, shader_effects, surface::Surface, sweep},
 };
-use nanatype_theme::{ShaderEffect, ShaderSpec, ShaderTarget, Skin, validate_shader};
+use nanatype_theme::{
+    MaterialSpec, ShaderEffect, ShaderSpec, ShaderTarget, Skin, validate_material, validate_shader,
+};
 use std::{sync::Arc, time::Duration};
 
 /// A skin with one animated program that paints `rgb` opaquely, with a
@@ -73,6 +76,47 @@ fn mount(skin: &Arc<Skin>) -> (Ui, RuntimeAgentSession) {
         let _ = session.screenshot_rgba().unwrap();
     });
     (ui, session)
+}
+
+/// A skin whose material `m` paints `rgb` opaquely.
+fn material_skin(rgb: &str) -> Arc<Skin> {
+    let mut skin = Skin::default();
+    let source =
+        format!("fn material(i: MaterialInput) -> vec4<f32> {{ return vec4({rgb}, 1.); }}");
+    let program = validate_material(&source).unwrap();
+    skin.material_programs.insert("m".into(), Arc::new(program));
+    skin.materials.insert(
+        "m".into(),
+        MaterialSpec {
+            source,
+            ..Default::default()
+        },
+    );
+    Arc::new(skin)
+}
+
+/// A blue box under the skin's material `m`.
+fn mount_material(skin: &Skin) -> RuntimeAgentSession {
+    let material = materials::resolve(skin, Some("m"));
+    let mut session = common::session().mount(120, 80, move || {
+        widget(
+            Stack::column(0.)
+                .width(LengthSpec::Px(120.))
+                .height(LengthSpec::Px(80.))
+                .with_layout(|l| {
+                    l.background = Some([0., 0., 1., 1.]);
+                    l.paint.background_material = material.clone();
+                }),
+        )
+    });
+    // Installs the material policy too.
+    session.set_gpu_renderers(sweep::renderers());
+    session.set_clear(Some([0.; 4]));
+    session
+}
+
+fn native(pixel: [u8; 4]) -> bool {
+    pixel[2] > 240 && pixel[0] < 10 && pixel[1] < 10
 }
 
 /// The centre pixel of a fresh frame.
@@ -170,5 +214,54 @@ fn over_budget_and_crashed_programs_stop_drawing_until_effects_are_retried() {
         shader_effects::init_guard(record);
         assert!(centre(&mut session)[1] > 240);
         assert!(shader_effects::take_notices().is_empty());
+        drop(session);
+
+        // A material over the budget has nothing to freeze: it is disabled.
+        // A fresh window, without the effects' spending.
+        next_window();
+        let skin = material_skin("1., 0., 0.");
+        let previous = shader_effects::set_cost_budget(1);
+        let mut session = mount_material(&skin);
+        assert!(centre(&mut session)[0] > 240, "the material never drew");
+        shader_effects::take_notices();
+        next_window();
+        let _ = session.screenshot_rgba().unwrap();
+        assert!(
+            notices_mention("disabled: over the GPU budget"),
+            "over budget but not disabled"
+        );
+        let pixel = centre(&mut session);
+        assert!(native(pixel), "a disabled material still draws: {pixel:?}");
+        shader_effects::set_cost_budget(previous);
+        shader_effects::retry_disabled();
+        assert!(
+            centre(&mut session)[0] > 240,
+            "retrying did not restore the material"
+        );
+        drop(session);
+
+        // A material on trial when the process died stays blocked.
+        let dir = tempfile::tempdir().unwrap();
+        let record = dir.path().join("shader-guard.json");
+        let read = || std::fs::read_to_string(&record).unwrap_or_default();
+        shader_effects::init_guard(record.clone());
+        let skin = material_skin("0., 1., 0.");
+        let hash = skin.material_programs["m"].hash.clone();
+        let mut session = mount_material(&skin);
+        assert!(centre(&mut session)[1] > 240, "the material never drew");
+        assert!(read().contains(&hash), "first draws were not written down");
+        shader_effects::init_guard(record.clone());
+        assert!(notices_mention("was running when"));
+        let pixel = centre(&mut session);
+        assert!(
+            native(pixel),
+            "a crash-blocked material still draws: {pixel:?}"
+        );
+        shader_effects::retry_disabled();
+        assert!(
+            centre(&mut session)[1] > 240,
+            "retrying did not unblock the material"
+        );
+        shader_effects::close_guard();
     });
 }
