@@ -187,15 +187,21 @@ fn skin_preview_toggle(ui: Ui) -> AnyView {
 
 /// A menu trigger's face: the bare glyph, centred in the box left after the
 /// trigger's own `space::LG` padding, so the hit target stays [`TARGET`].
+/// That box is narrower than the glyph, and an overflowing row aligns to its
+/// start, so the face is glyph-wide and reaches into the padding by half the
+/// overflow on each side.
 fn trigger_face(icon: nana_ui::runtime::Icon) -> AnyView {
     let inner = TARGET - 2.0 * space::LG;
+    let reach = -(GLYPH - inner) / 2.0;
     widget(
         Stack::row(0.0)
             .align(AlignSpec::Center)
             .justify(JustifySpec::Center)
-            .with_layout(|l| {
-                l.width = Some(LengthSpec::Px(inner));
-                l.min_width = Some(LengthSpec::Px(inner));
+            .with_layout(move |l| {
+                l.width = Some(LengthSpec::Px(GLYPH));
+                l.min_width = Some(LengthSpec::Px(GLYPH));
+                l.margin_left = Some(LengthSpec::Px(reach));
+                l.margin_right = Some(LengthSpec::Px(reach));
                 l.height = Some(LengthSpec::Px(GLYPH));
                 l.flex_shrink = Some(0.0);
                 l.overflow_x = OverflowSpec::Visible;
@@ -1745,6 +1751,39 @@ mod tests {
                                     && bounds.x + bounds.width <= width as f32 + 1.0 / scale,
                                 "toolbar control clipped: {locale:?}, width={width}: {node:?}"
                             );
+                        }
+                        if locale == Locale::ZhCn && mode == InputMode::Compose {
+                            // Symmetric glyphs on menu triggers: their ink is
+                            // centred in the trigger, as an icon button's is.
+                            let (size, rgba) = session.screenshot_rgba().unwrap();
+                            let px = |x: u32, y: u32| {
+                                let i = ((y * size.width + x) * 4) as usize;
+                                rgba[i..i + 3].iter().map(|&c| u32::from(c)).sum::<u32>() / 3
+                            };
+                            for key in ["tb-phrases", "tb-cheatsheet"] {
+                                let label = ui.now_t(key);
+                                let Some(node) = nodes
+                                    .iter()
+                                    .find(|node| node.label.as_deref() == Some(label.as_str()))
+                                else {
+                                    continue;
+                                };
+                                let b = &node.bounds;
+                                let to_px = |v: f32| (v * scale).round() as u32;
+                                let (x0, x1) = (to_px(b.x), to_px(b.x + b.width));
+                                let (y0, y1) = (to_px(b.y), to_px(b.y + b.height));
+                                let bg = px(x0, y0);
+                                let ink: Vec<u32> = (x0..x1)
+                                    .filter(|&x| (y0..y1).any(|y| px(x, y).abs_diff(bg) > 40))
+                                    .collect();
+                                let (first, last) = (ink[0], ink[ink.len() - 1] + 1);
+                                let ink_center = (first + last) as f32 / 2.0 / scale;
+                                assert!(
+                                    (ink_center - (b.x + b.width / 2.0)).abs() <= 1.0,
+                                    "{key} glyph off-centre: width={width}, {scale}x: \
+                                     ink centre {ink_center}, {node:?}"
+                                );
+                            }
                         }
                         if locale == Locale::ZhCn
                             && mode == InputMode::Compose
