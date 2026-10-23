@@ -4,7 +4,7 @@ use super::{
     settings::controls::{hint, row, section, switch},
 };
 use crate::msg::Msg;
-use crate::ui::kit::{Tone, Type, gap, icon, inset};
+use crate::ui::kit::{self, Tone, Type, gap, icon, inset};
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
 use nana_ui::runtime::{
@@ -406,7 +406,7 @@ fn room_control(ui: Ui) -> AnyView {
     .children((
         widget(Stack::row(0.0).width(LengthSpec::Px(crate::ui::kit::field::SM))).children(
             widget(
-                TextInput::new(pending.get_untracked())
+                kit::text_input(pending.get_untracked())
                     .placeholder(ui.now_t("bili-room-placeholder"))
                     .size(ControlSize::Small),
             )
@@ -415,7 +415,7 @@ fn room_control(ui: Ui) -> AnyView {
                 if room != applied.get_untracked() {
                     applied.set(room.clone());
                     pending.set(room.clone());
-                    input.state = TextInput::new(room).state;
+                    input.state = nana_ui::runtime::TextInputState::new(room);
                 }
             })
             .on(move |e: &TextChanged| pending.set(e.value.to_string()))

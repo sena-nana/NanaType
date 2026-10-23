@@ -5,9 +5,9 @@ use std::sync::{Arc, LazyLock};
 
 use nana_ui::runtime::view::{AnyView, IntoView, segmented_option, widget};
 use nana_ui::runtime::{
-    ColorChanged, ColorField, IconButton, NumberChanged, NumberInput, RangeChanged, RangeField,
+    ColorChanged, ColorField, IconButton, NumberChanged, RangeChanged, RangeField,
     SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption, Stack,
-    StatusBadge, Switch, Text, TextChanged, TextInput, ToggleChanged,
+    StatusBadge, Switch, Text, TextChanged, ToggleChanged,
 };
 use nana_ui::{ButtonKind, ControlSize, StatusTone};
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
@@ -22,6 +22,8 @@ pub static ICON_PNG_B64: LazyLock<String> =
     LazyLock::new(|| base64(include_bytes!("../../../assets/tray-64.png")));
 
 pub use nanatype_frame::ui::controls::{base64, confirm, hint, label};
+
+use crate::ui::kit;
 
 pub use crate::ui::kit::{
     Shown, Type, block, divided, divider, field, gap, icon, inset, row_text, shown_if,
@@ -482,7 +484,7 @@ pub fn number(
     )
     .children(
         widget({
-            let mut n = NumberInput::new(get(&ui.settings.get_untracked()))
+            let mut n = kit::number_input(get(&ui.settings.get_untracked()))
                 .range(range.0, range.1)
                 .size(ControlSize::Small);
             crate::ui::tnum(Arc::make_mut(&mut n.style.layout));
@@ -506,7 +508,7 @@ pub fn port(ui: Ui, get: fn(&Settings) -> u16, set: fn(&mut Settings, u16)) -> A
     )
     .children(
         widget({
-            let mut input = TextInput::new(get(&ui.settings.get_untracked()).to_string())
+            let mut input = kit::text_input(get(&ui.settings.get_untracked()).to_string())
                 .size(ControlSize::Small);
             crate::ui::mono(Arc::make_mut(&mut input.style.layout));
             input
@@ -563,7 +565,7 @@ fn text_field(
     )
     .children(
         widget({
-            let mut input = TextInput::new(get(&ui.settings.get_untracked()))
+            let mut input = kit::text_input(get(&ui.settings.get_untracked()))
                 .placeholder(placeholder)
                 .size(ControlSize::Small);
             if code {

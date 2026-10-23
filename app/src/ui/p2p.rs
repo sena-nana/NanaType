@@ -6,7 +6,7 @@ use nanatype_p2p::Status;
 
 use super::Ui;
 use crate::msg::Msg;
-use crate::ui::kit::{Tone, Type, gap};
+use crate::ui::kit::{self, Tone, Type, gap};
 
 /// A form row's button beside its field.
 const ACTION_W: f32 = 100.0;
@@ -165,7 +165,7 @@ pub(crate) fn card_with_fields(
                         widget(form_row()).children((
                             widget(field(stacked)).children(
                                 widget(
-                                    TextInput::new(invitation.get_untracked())
+                                    kit::text_input(invitation.get_untracked())
                                         .placeholder(ui.now_t("peer-invitation"))
                                         .size(ControlSize::Small),
                                 )
@@ -191,7 +191,7 @@ pub(crate) fn card_with_fields(
                         widget(form_row()).children((
                             widget(field(stacked)).children(
                                 widget(
-                                    TextInput::new(relay.get_untracked())
+                                    kit::text_input(relay.get_untracked())
                                         .placeholder(ui.now_t("peer-relay-placeholder"))
                                         .size(ControlSize::Small),
                                 )

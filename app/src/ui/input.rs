@@ -10,17 +10,16 @@ use nana_ui::runtime::view::{
     widget, with_refs,
 };
 use nana_ui::runtime::{
-    ActionMenu, ActionMenuItem, Activate, Button, ColorChanged, ColorField, Divider,
-    FocusWithinChanged, IconButton, IconGlyph, NodeStyle, NumberChanged, NumberInput, Popover,
-    PopoverClosed, PopoverToggled, RichAttrMask, RichSelectionAttrs, RichTextEditor, ScrollAxes,
-    ScrollView, ScrollViewportChanged, SegmentedControl, SizeChanged, Stack, Text, TextArea,
-    TextChanged, TextInput, TextSubmitted,
+    ActionMenu, ActionMenuItem, Activate, Button, ColorChanged, ColorField, Divider, IconButton,
+    IconGlyph, NodeStyle, NumberChanged, NumberInput, Popover, PopoverClosed, PopoverToggled,
+    RichAttrMask, RichSelectionAttrs, RichTextEditor, ScrollAxes, ScrollView,
+    ScrollViewportChanged, SegmentedControl, SizeChanged, Stack, Text, TextArea, TextChanged,
+    TextSubmitted,
 };
 use nana_ui::theme::space;
 use nana_ui::{ButtonKind, ControlSize, PopoverPlacement};
 use nana_ui_core::{
-    AlignSpec, JustifySpec, LengthSpec, OverflowSpec, PointerEventsSpec, PositionSpec,
-    SemanticColorRole, SquareSize,
+    AlignSpec, JustifySpec, LengthSpec, OverflowSpec, PositionSpec, SemanticColorRole, SquareSize,
 };
 use nanatype_core::Cmd;
 use nanatype_model::{
@@ -33,7 +32,7 @@ use super::dialogue::{Source, dialogue_box};
 use super::rich::{ChipKind, MarkerLook};
 use super::{I18N, Ui, c};
 use crate::msg::{FileTarget, MarkupEdit, Msg, Tool};
-use crate::ui::kit::{Tone, Type, gap, icon, inset};
+use crate::ui::kit::{self, Tone, Type, gap, icon, inset};
 use crate::windows::TOOLBAR_H;
 
 /// A colour swatch in the colour and outline panels.
@@ -42,8 +41,6 @@ const SWATCH: f32 = 26.0;
 const PICTURE_SWATCH: f32 = 52.0;
 /// The kind's stripe on a marker chip in the cheat sheet.
 const CHIP_STRIPE: f32 = 3.0;
-/// How far inside the draft's box its focus ring sits.
-const FOCUS_INSET: f32 = 2.0;
 /// The cheat sheet's lead column: a marker chip, or a chord of keycaps.
 const SHEET_MARKERS_W: f32 = 116.0;
 const SHEET_KEYS_W: f32 = 136.0;
@@ -501,7 +498,7 @@ fn font_panel(ui: Ui, open: Signal<bool>) -> AnyView {
             .children((
                 widget(Text::new(typography_current(ui, &current))).key("font-current"),
                 choices,
-                widget(TextInput::new(initial).placeholder(ui.now_t("tb-font-family")))
+                widget(kit::text_input(initial).placeholder(ui.now_t("tb-font-family")))
                     .key("font-family")
                     .on(move |e: &TextChanged| family.set(e.value.to_string()))
                     .on_cx(move |_, _: &TextSubmitted, cx| {
@@ -567,7 +564,7 @@ fn ruby_panel(ui: Ui, open: Signal<bool>) -> AnyView {
             .padding_step(gap::step::TIGHT, gap::step::TIGHT),
     )
     .children((
-        widget(TextInput::new("").placeholder(ui.now_t("tb-ruby-placeholder")))
+        widget(kit::text_input("").placeholder(ui.now_t("tb-ruby-placeholder")))
             .on(move |e: &TextChanged| reading.set(e.value.to_string()))
             .on_cx(move |_, _: &TextSubmitted, cx| {
                 let r = reading.get_untracked();
@@ -627,7 +624,7 @@ fn expression_panel(ui: Ui, open: Signal<bool>) -> AnyView {
     )
     .children((
         widget(Stack::row(0.0).gap_step(gap::step::TIGHT).wrap(true)).children(variants),
-        widget(TextInput::new("").placeholder(ui.now_t("tb-expression-placeholder")))
+        widget(kit::text_input("").placeholder(ui.now_t("tb-expression-placeholder")))
             .on(move |e: &TextChanged| name.set(e.value.to_string()))
             .on_cx(move |_, _: &TextSubmitted, cx| {
                 let n = name.get_untracked();
@@ -1479,35 +1476,12 @@ fn editor_area(
     })
 }
 
-/// While the draft has focus, a 2px ring in the focus accent at 40% just
-/// inside the box's region, outside the skin's own border: the input window
-/// shows where typing goes, and the display (which has no ring) stays clean.
-fn focus_ring(focused: Signal<bool>) -> AnyView {
-    widget(
-        Stack::column(0.0)
-            .outline(SemanticColorRole::FocusBorder, 2.0)
-            .radius(nana_ui_core::RadiusTier::Sm)
-            .with_layout(|l| {
-                l.position = PositionSpec::Absolute;
-                l.offset_left = Some(LengthSpec::Px(FOCUS_INSET));
-                l.offset_top = Some(LengthSpec::Px(FOCUS_INSET));
-                l.offset_right = Some(LengthSpec::Px(FOCUS_INSET));
-                l.offset_bottom = Some(LengthSpec::Px(FOCUS_INSET));
-                l.opacity = Some(0.4);
-                l.pointer_events = Some(PointerEventsSpec::None);
-            }),
-    )
-    .visible(move || focused.get())
-    .into_any()
-}
-
 /// The input window. Returns the editor and the source field for key
 /// handling, and the stack the host shows toasts in.
 pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, ToastsRef)> {
     let editor = entity_ref::<RichTextEditor>();
     let source = entity_ref::<TextArea>();
     let toasts = entity_ref::<nana_ui::runtime::ToastStack>();
-    let focused = signal(false);
     let viewport = signal((0.0_f32, 0.0_f32));
     let is_preview = move || ui.settings.with(|s| s.general.input_skin_preview);
     let canvas_size = move || {
@@ -1606,18 +1580,10 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
                         y: LengthSpec::Px(0.0),
                     });
                 })
-                .on(move |e: &FocusWithinChanged| {
-                    if focused.get_untracked() != e.focused {
-                        focused.set(e.focused);
-                    }
-                })
-                .children((
-                    dialogue_box(
-                        *ui,
-                        Source::Draft,
-                        Some(editor_area(ui, editor, source, false)),
-                    ),
-                    focus_ring(focused),
+                .children(dialogue_box(
+                    *ui,
+                    Source::Draft,
+                    Some(editor_area(ui, editor, source, false)),
                 )),
             ),
         ),

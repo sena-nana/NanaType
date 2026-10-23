@@ -450,7 +450,7 @@ pub fn activation(ui: Ui) -> AnyView {
                     widget(Button::new(ui.now_t("packages-review-source")))
                         .on(move |_: &Activate| show_source.set(true)),
                     widget(
-                        nana_ui::runtime::TextArea::new(source)
+                        kit::text_area(source)
                             .read_only(true)
                             .height(SOURCE_PREVIEW_H),
                     )

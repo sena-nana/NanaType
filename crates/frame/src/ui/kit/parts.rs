@@ -1,12 +1,14 @@
 //! Small parts every window shares: tags, badges, status dots, callouts,
-//! empty states, the call-to-action button and the transparency checker.
+//! empty states, the call-to-action button, text fields and the
+//! transparency checker.
 
 use std::sync::Arc;
 
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, widget};
 use nana_ui::runtime::{
-    Activate, Button, EmptyState, Icon, IconGlyph, NodeStyle, Stack, StatusBadge, Text,
+    Activate, Button, EmptyState, Icon, IconGlyph, NodeStyle, NumberInput, SemanticPaint, Stack,
+    StatusBadge, Text, TextArea, TextInput,
 };
 use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{
@@ -177,6 +179,37 @@ pub fn cta_button<M: Send + 'static>(
     widget(cta(Button::new(label).size(ControlSize::Small)))
         .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
         .into_any()
+}
+
+/// What a text field the caret is in paints: NanaUI's focus fill (its
+/// resting background deepened a step toward the text) under the hover
+/// border, one step firmer than at rest. Never the accent edge: the fill
+/// already says where the next key goes.
+pub const FIELD_FOCUS: SemanticPaint = SemanticPaint {
+    border: Some(SemanticColorRole::BorderStrong),
+    ..SemanticPaint::FOCUS_FIELD
+};
+
+/// A one-line text field holding `value`, focused with [`FIELD_FOCUS`].
+/// Its own style stays NanaUI's, so an invalid field still turns red.
+pub fn text_input(value: impl Into<String>) -> TextInput {
+    let mut input = TextInput::new(value);
+    input.style.interaction.focused = FIELD_FOCUS;
+    input
+}
+
+/// A multi-line text field holding `value`, focused with [`FIELD_FOCUS`].
+pub fn text_area(value: impl Into<String>) -> TextArea {
+    let mut area = TextArea::new(value);
+    area.style.interaction.focused = FIELD_FOCUS;
+    area
+}
+
+/// A number field holding `value`, focused with [`FIELD_FOCUS`].
+pub fn number_input(value: f64) -> NumberInput {
+    let mut input = NumberInput::new(value);
+    input.style.interaction.focused = FIELD_FOCUS;
+    input
 }
 
 /// A row of items `gap::CONTROL` apart, centred.

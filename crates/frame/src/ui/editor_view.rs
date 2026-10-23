@@ -11,7 +11,7 @@ use nanatype_i18n::{Arg, Locale};
 use nanatype_model::{Marker, VtsAction};
 
 use super::dialogue::Base;
-use super::{I18N, Stage};
+use super::{I18N, Stage, kit};
 
 /// What the user did in the draft, for the product to turn into a message.
 #[derive(Debug, Clone)]
@@ -233,7 +233,8 @@ pub fn editor_area<M: Send + 'static>(
         .visible(move || ui.source_mode.get())
         .children(
             widget({
-                let mut area = TextArea::new("").placeholder(ui.now_t("editor-source-placeholder"));
+                let mut area =
+                    kit::text_area("").placeholder(ui.now_t("editor-source-placeholder"));
                 area.disabled = inert;
                 let l = Arc::make_mut(&mut area.style.layout);
                 l.width = Some(LengthSpec::Fill);

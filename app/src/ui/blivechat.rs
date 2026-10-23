@@ -7,7 +7,7 @@ use super::{
     },
 };
 use crate::msg::Msg;
-use crate::ui::kit::{Type, gap};
+use crate::ui::kit::{self, Type, gap};
 use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
 use nana_ui::runtime::{Activate, Button, Stack, Text, TextChanged, TextInput, TextSubmitted};
@@ -166,7 +166,7 @@ fn room_field(ui: Ui) -> AnyView {
     .children((
         widget(Stack::row(0.0).width(LengthSpec::Px(crate::ui::kit::field::SM))).children(
             widget(
-                TextInput::new(draft.get_untracked())
+                kit::text_input(draft.get_untracked())
                     .placeholder(ui.now_t("int-blive-room-placeholder"))
                     .size(ControlSize::Small),
             )
@@ -196,7 +196,7 @@ fn auth_field(ui: Ui) -> AnyView {
     .children((
         widget(Stack::row(0.0).width(LengthSpec::Px(crate::ui::kit::field::SM))).children(
             widget(
-                TextInput::new("")
+                kit::text_input("")
                     .secure(true)
                     .placeholder(ui.now_t("int-blive-auth-placeholder"))
                     .size(ControlSize::Small),

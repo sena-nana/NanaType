@@ -170,8 +170,8 @@ fn speaker_hints_remain_readable_in_all_locales_and_window_sizes() {
 }
 
 /// The empty speaker field, in the first-run guide and on the page: a click
-/// focuses it with a caret and the focus fill and border; typing and Backspace
-/// edit the setting.
+/// focuses it with a caret, the focus fill and a firmer neutral border (never
+/// the accent edge); typing and Backspace edit the setting.
 #[test]
 fn the_empty_speaker_field_takes_a_click_typing_and_backspace() {
     let palette = nanatype::ui::kit::theme::palette(false);
@@ -192,7 +192,8 @@ fn the_empty_speaker_field_takes_a_click_typing_and_backspace() {
             panic!("{key}: the focused field has no geometry");
         };
         assert!(caret.is_some_and(|c| c.height > 0.0), "{key}: no caret");
-        assert_eq!(border, Some(palette.focus_border.as_rgba_array()));
+        assert_eq!(border, Some(palette.border_strong.as_rgba_array()));
+        assert_ne!(border, Some(palette.focus_border.as_rgba_array()));
         assert!(background.is_some_and(|b| b != palette.background.as_rgba_array()));
         f.session.type_text("ab").unwrap();
         f.session

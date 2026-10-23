@@ -3,7 +3,7 @@ use super::settings::controls::{
     block, button, info_tip, row, row_live_hint, section, section_with, shown_if, switch, text,
 };
 use crate::msg::Msg;
-use crate::ui::kit::{gap, hstack, line};
+use crate::ui::kit::{self, gap, hstack, line};
 use nana_ui::{
     ControlSize,
     runtime::view::{AnyView, IntoView, widget},
@@ -55,7 +55,7 @@ pub fn settings_page(ui: Ui) -> AnyView {
             .unwrap_or_default();
     });
     let cookie = widget(
-        TextInput::new("")
+        kit::text_input("")
             .secure(true)
             .placeholder(ui.now_t("dy-cookie-placeholder"))
             .size(ControlSize::Small),

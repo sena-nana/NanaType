@@ -196,6 +196,47 @@ fn chrome_views_use_the_design_tokens() {
     );
 }
 
+/// Constructors that would give a text field NanaUI's accent focus edge
+/// instead of `kit::FIELD_FOCUS`.
+const BARE_FIELDS: &[&str] = &["TextInput::new(", "TextArea::new(", "NumberInput::new("];
+
+/// Every typing field, in the app, the editor and the shared frame, comes
+/// from `kit::text_input` / `text_area` / `number_input`, so focus shows as
+/// a deeper fill and a firmer neutral border, never the accent.
+#[test]
+fn text_fields_take_the_quiet_focus() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut files = Vec::new();
+    for dir in ["app/src", "editor/src", "crates/frame/src"] {
+        sources(&root.join(dir), &mut files);
+    }
+    files.sort();
+    let mut report = String::new();
+    for path in files {
+        let rel = path
+            .strip_prefix(&root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if rel.contains("/ui/kit/") {
+            continue;
+        }
+        let code = std::fs::read_to_string(&path).unwrap();
+        for (n, line) in code.lines().enumerate() {
+            if line.starts_with("#[cfg(test)]") {
+                break;
+            }
+            if BARE_FIELDS.iter().any(|c| line.contains(c)) {
+                report.push_str(&format!("\n{rel}:{}: {}", n + 1, line.trim()));
+            }
+        }
+    }
+    assert!(
+        report.is_empty(),
+        "build text fields with kit::text_input / text_area / number_input:{report}"
+    );
+}
+
 #[test]
 fn the_scan_catches_what_it_should() {
     for bad in [

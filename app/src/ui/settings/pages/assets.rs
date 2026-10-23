@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::kit;
 
 /// A trash button that arms a [`confirm`].
 pub(super) fn remove_button(ui: Ui, armed: Signal<bool>) -> AnyView {
@@ -150,7 +151,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                     .children((
                         widget(Stack::row(0.0).width(LengthSpec::Px(field::MD))).children(
                             widget(
-                                TextInput::new(p.label.clone())
+                                kit::text_input(p.label.clone())
                                     .size(ControlSize::Small)
                                     .placeholder(ui.now_t("assets-phrase-label")),
                             )
@@ -206,7 +207,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                     )
                     .children(
                         widget(
-                            TextInput::new(p.markup.clone())
+                            kit::text_input(p.markup.clone())
                                 .size(ControlSize::Small)
                                 .placeholder(ui.now_t("assets-phrase-markup")),
                         )

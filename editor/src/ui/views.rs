@@ -4,15 +4,15 @@ use crate::msg::{FileTarget, Msg};
 use crate::session::{Action, EditorView, Tab};
 use crate::ui::Ui;
 use crate::ui::controls::{confirm, hint, label};
-use crate::ui::kit::{Tone, Type, field, gap, inset};
+use crate::ui::kit::{self, Tone, Type, field, gap, inset};
 use nana_ui::runtime::view::{
     AnyView, IntoView, Signal, dynamic, segmented_option, signal, widget,
 };
 use nana_ui::runtime::{
     Activate, Button, Checkbox, CodeEditing, ScrollAxes, ScrollView, SegmentedControl,
     SegmentedOptionChosen, Select, SelectChanged, SelectOption, SizeChanged, Stack, Text, TextArea,
-    TextChanged, TextDiagnosticSeverity, TextDiagnosticSpan, TextInput, TextMatchSpan,
-    TextSelection, ToggleChanged, TreeSelectionChanged, TreeView, ViewContext,
+    TextChanged, TextDiagnosticSeverity, TextDiagnosticSpan, TextMatchSpan, TextSelection,
+    ToggleChanged, TreeSelectionChanged, TreeView, ViewContext,
 };
 use nana_ui::theme::space;
 use nana_ui::{ButtonKind, ControlSize, icons_tabler as ti};
@@ -217,7 +217,7 @@ pub fn launcher(ui: Ui) -> AnyView {
                 input_box(
                     field::MD,
                     widget(
-                        TextInput::new("")
+                        kit::text_input("")
                             .placeholder(ui.now_t("pkgedit-id-placeholder"))
                             .size(ControlSize::Small),
                     )
@@ -800,7 +800,7 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
         input_box(
             field::MD,
             widget(
-                TextInput::new("")
+                kit::text_input("")
                     .placeholder(ui.now_t("pkgedit-search"))
                     .size(ControlSize::Small),
             )
@@ -862,7 +862,7 @@ fn source(ui: Ui, (query, current): Search) -> AnyView {
                 return file_info(ui, &view);
             };
             let text = view.text.clone().unwrap_or_default();
-            let mut area = TextArea::new(text.to_string())
+            let mut area = kit::text_area(text.to_string())
                 .line_numbers(true)
                 .read_only(!editable)
                 .label(path.clone());
@@ -1151,7 +1151,7 @@ fn field(ui: Ui, key: &str, value: Signal<String>, placeholder: &str) -> AnyView
         ui.now_t(key),
         field::MD,
         widget(
-            TextInput::new(value.get_untracked())
+            kit::text_input(value.get_untracked())
                 .placeholder(placeholder.to_owned())
                 .size(ControlSize::Small),
         )
@@ -1248,7 +1248,7 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
         )),
         hint(ui.now_t("pkgedit-dependencies-hint")),
         widget(
-            TextArea::new(dependencies.get_untracked())
+            kit::text_area(dependencies.get_untracked())
                 .placeholder("nanatype.halo@1.0.0")
                 .height(FORM_TEXT_H),
         )
@@ -1531,7 +1531,7 @@ fn data_form(
             )),
             hint(ui.now_t("pkgedit-data-constraints-hint")),
             widget(
-                TextArea::new(constraints.get_untracked())
+                kit::text_area(constraints.get_untracked())
                     .placeholder("{\"type\": \"object\", \"required\": [\"items\"]}")
                     .label(ui.now_t("pkgedit-data-constraints"))
                     .height(NOTE_H),
@@ -1734,7 +1734,7 @@ fn pipeline_form(
                         input.clone(),
                         field::MD,
                         widget(
-                            TextInput::new(value)
+                            kit::text_input(value)
                                 .placeholder("strokes")
                                 .size(ControlSize::Small),
                         )
@@ -1828,7 +1828,7 @@ fn pipeline_form(
             ports,
             hint(ui.now_t("pkgedit-pipeline-params")),
             widget(
-                TextArea::new(params.get_untracked())
+                kit::text_area(params.get_untracked())
                     .placeholder("name = 1.0")
                     .label(ui.now_t("pkgedit-pipeline-params"))
                     .height(NOTE_H),
@@ -1889,7 +1889,7 @@ fn signing(ui: Ui) -> AnyView {
             let derive = widget(Stack::row(0.0).gap_step(nana_ui_core::SpacingStep::Md).wrap(true).align(AlignSpec::Center)).children((
                 input_box(
                     field::MD,
-                    widget(TextInput::new(derive_id.get_untracked()).size(ControlSize::Small))
+                    widget(kit::text_input(derive_id.get_untracked()).size(ControlSize::Small))
                         .key("package-editor-derive-id")
                         .on(move |e: &TextChanged| derive_id.set(e.value.to_string())),
                 ),
@@ -2128,7 +2128,7 @@ fn debug(ui: Ui) -> AnyView {
                 .children((
                     input_box(
                         field::LG,
-                        widget(TextInput::new(custom.get_untracked()).size(ControlSize::Small))
+                        widget(kit::text_input(custom.get_untracked()).size(ControlSize::Small))
                             .key("package-editor-debug-custom")
                             .on(move |e: &TextChanged| custom.set(e.value.to_string())),
                     ),

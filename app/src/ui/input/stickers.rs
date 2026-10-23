@@ -1,6 +1,6 @@
 //! Sticker grid, bottom series tabs, and the shared folder-drop target.
 use super::*;
-use crate::ui::kit::{Type, gap};
+use crate::ui::kit::{self, Type, gap};
 use nana_ui::runtime::{FileDropEvent, TabOption, Tabs, TabsEvent};
 
 /// The strip of pack tabs under the sticker grid.
@@ -211,7 +211,7 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
         ))
         .into_any()
     });
-    let mut search = TextInput::new("").placeholder(ui.now_t("tb-sticker-search"));
+    let mut search = kit::text_input("").placeholder(ui.now_t("tb-sticker-search"));
     let layout = Arc::make_mut(&mut search.style.layout);
     layout.width = Some(LengthSpec::Fill);
     layout.min_width = Some(LengthSpec::Px(0.0));

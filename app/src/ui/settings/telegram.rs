@@ -1,5 +1,5 @@
 use super::controls::{block, row, row_text, row_tip, section, text};
-use crate::ui::kit::{Type, field, gap};
+use crate::ui::kit::{self, Type, field, gap};
 use crate::{
     msg::Msg,
     stickers::telegram::{Command, Phase},
@@ -26,7 +26,7 @@ fn action(ui: Ui, key: &str, command: impl Fn() -> Command + Send + 'static) -> 
 }
 
 fn field(ui: Ui, key: &str, value: Signal<String>, secure: bool) -> AnyView {
-    let input = widget(TextInput::new("").secure(secure).size(ControlSize::Small))
+    let input = widget(kit::text_input("").secure(secure).size(ControlSize::Small))
         .key(format!("{key}-input"))
         .bind(move |input: &mut TextInput| {
             let value = value.get();

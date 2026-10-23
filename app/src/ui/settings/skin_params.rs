@@ -17,6 +17,7 @@ use nanatype_theme::{ParamError, ParamSpec, ParamType, Resolved, Skin, localized
 use super::controls::{Type, field, gap, hint, label};
 use super::preview::{change, draft};
 use crate::ui::Ui;
+use crate::ui::kit;
 
 const READOUT_W: f32 = 56.0;
 /// Enums with this many short options or fewer show as a segmented control.
@@ -159,7 +160,7 @@ fn typed_field(p: Param, width: LengthSpec, shown: fn(Option<Resolved>) -> Strin
     let key = format!("skin-param-{}", p.id);
     widget(Stack::row(0.0).width(width))
         .children(
-            widget(TextInput::new(read()).size(ControlSize::Small))
+            widget(kit::text_input(read()).size(ControlSize::Small))
                 .key(key)
                 .bind(move |input: &mut TextInput| {
                     let text = read();

@@ -16,7 +16,7 @@ use nanatype_theme::Skin;
 use super::controls::{hint, label};
 use crate::msg::Msg;
 use crate::ui::Ui;
-use crate::ui::kit::gap;
+use crate::ui::kit::{self, gap};
 pub use nanatype_frame::ui::preview::{
     Draft, InvalidProfile, Pane, Surface, default_size, sample, stage,
 };
@@ -119,7 +119,7 @@ fn field(ui: Ui, id: &str, history: bool, field: Field, placeholder: String) -> 
     .children((
         hint(ui.now_t(field.key())),
         widget(
-            TextInput::new(read())
+            kit::text_input(read())
                 .placeholder(placeholder)
                 .size(ControlSize::Small),
         )
@@ -207,7 +207,7 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
     let sample_id = id.to_owned();
     let write_sample_id = id.to_owned();
     let sample =
-        widget(TextArea::new(draft(ui, id).pane(is_history).text.clone()).height(SAMPLE_H))
+        widget(kit::text_area(draft(ui, id).pane(is_history).text.clone()).height(SAMPLE_H))
             .key("skin-edit-sample-text")
             .bind(move |area: &mut TextArea| {
                 let text = draft(ui, &sample_id).pane(is_history).text.clone();

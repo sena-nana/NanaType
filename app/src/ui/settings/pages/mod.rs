@@ -52,7 +52,7 @@ use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, widget}
 use nana_ui::runtime::{
     ActionMenu, ActionMenuItem, Activate, Button, Chip, IconButton, IconGlyph, ListItem,
     PopoverClosed, PopoverToggled, ScrollAxes, ScrollView, Select, SelectChanged, SelectOption,
-    Stack, StatusBadge, Switch, Text, TextChanged, TextInput, ToggleChanged,
+    Stack, StatusBadge, Switch, Text, TextChanged, ToggleChanged,
 };
 use nana_ui::theme::space;
 use nana_ui::{ButtonKind, ControlSize, StatusTone};
