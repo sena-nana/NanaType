@@ -33,7 +33,8 @@ static GUARD: LazyLock<Mutex<super::shader_guard::Guard>> = LazyLock::new(Defaul
 /// What all skin programs together may cost in one second: per-pixel cost
 /// (`ShaderProgram::cost`) times covered pixels, summed over every draw.
 /// About 1.6× the heaviest built-in (3608) over a 3840×2160 canvas at 60 fps.
-const COST_BUDGET: u64 = 3_000_000_000_000;
+const DEFAULT_COST_BUDGET: u64 = 3_000_000_000_000;
+static COST_BUDGET: AtomicU64 = AtomicU64::new(DEFAULT_COST_BUDGET);
 const BUDGET_WINDOW: Duration = Duration::from_secs(1);
 /// Programs drawn this close to a device's last draw share its loss.
 const LOSS_WINDOW: Duration = Duration::from_secs(2);
@@ -73,6 +74,13 @@ fn throttled(hash: &str) -> bool {
 }
 fn short(hash: &str) -> &str {
     hash.get(..12).unwrap_or(hash)
+}
+
+/// Replace the GPU budget (for tests that drive programs over it); returns
+/// the previous one.
+#[doc(hidden)]
+pub fn set_cost_budget(budget: u64) -> u64 {
+    COST_BUDGET.swap(budget, Ordering::Relaxed)
 }
 
 /// Start the crash guard with its record at `path`. Programs that were on
@@ -648,9 +656,10 @@ impl State {
             .window
             .is_none_or(|start| now.duration_since(start) >= BUDGET_WINDOW)
         {
-            let verdict = budget_verdict(&self.spent, COST_BUDGET).map(|(h, v)| (h.to_owned(), v));
+            let verdict = budget_verdict(&self.spent, COST_BUDGET.load(Ordering::Relaxed)).map(|(h, v)| (h.to_owned(), v));
             match verdict {
-                Some((hash, Verdict::Freeze)) => {
+                // The draw that froze it was still charged as playing.
+                Some((hash, Verdict::Freeze)) if !throttled(&hash) => {
                     THROTTLED
                         .lock()
                         .unwrap_or_else(|e| e.into_inner())
@@ -659,7 +668,7 @@ impl State {
                     nanatype_diag::report!(crate::diag::SHADER_DISABLED; "{}: {why}", short(&hash));
                     notice(format!("Skin shader {} {why}", short(&hash)));
                 }
-                Some((hash, Verdict::Disable)) => {
+                Some((hash, _)) => {
                     self.disable(&hash, Some("over the GPU budget even when frozen"));
                 }
                 None => {}
@@ -683,6 +692,12 @@ impl State {
             .map(|((_, h), at)| (h.clone(), *at))
             .collect();
         self.last_drawn.retain(|(g, _), _| *g != generation);
+        self.strike(drawn);
+    }
+
+    /// One strike for each program drawn within [`LOSS_WINDOW`] of the lost
+    /// device's last draw.
+    fn strike(&mut self, drawn: Vec<(String, Instant)>) {
         let Some(latest) = drawn.iter().map(|(_, at)| *at).max() else {
             return;
         };
@@ -1232,6 +1247,31 @@ impl SceneGpuRenderer for Renderer {
 mod tests {
     use super::*;
     #[test]
+    fn a_program_drawn_on_two_lost_devices_is_disabled() {
+        let mut state = State::default();
+        let t = Instant::now();
+        let lost_once = |at| {
+            vec![
+                ("loss-culprit".to_owned(), at + LOSS_WINDOW * 2),
+                // Last drawn long before the loss: not a suspect.
+                ("loss-bystander".to_owned(), at),
+            ]
+        };
+        state.strike(lost_once(t));
+        assert_eq!(state.failed.get("loss-culprit"), Some(&1));
+        assert_eq!(state.failed.get("loss-bystander"), None);
+        assert!(!stopped("loss-culprit"), "one loss is not proof");
+        state.strike(lost_once(t));
+        assert!(stopped("loss-culprit") && !stopped("loss-bystander"));
+        assert!(
+            take_notices()
+                .iter()
+                .any(|n| n.contains("loss-culpri") && n.contains("lost twice")),
+        );
+        // No draws on the lost device: nobody is charged.
+        state.strike(vec![]);
+    }
+    #[test]
     fn the_heaviest_program_is_frozen_then_disabled_over_budget() {
         let spend = |cost, animated| Spend { cost, animated };
         let mut spent = HashMap::from([
@@ -1258,7 +1298,7 @@ mod tests {
             let skin = registry.load(&entry.id).unwrap().skin;
             for program in skin.shader_programs.values() {
                 let frame = u64::from(program.cost) * 3840 * 2160 * 60;
-                assert!(frame < COST_BUDGET, "{}: {}", entry.id, program.cost);
+                assert!(frame < DEFAULT_COST_BUDGET, "{}: {}", entry.id, program.cost);
             }
         }
     }

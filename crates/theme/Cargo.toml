@@ -43,6 +43,7 @@ toml = { version = "1.1", default-features = false, features = ["parse", "serde"
 
 [dev-dependencies]
 tempfile = "3"
+proptest.workspace = true
 # Noto Sans SC (OFL-1.1), already in every build through NanaUI: the test
 # font for the `builtin:` font table.
 nana-ui-core = { workspace = true, features = ["bundled-font-regular"] }

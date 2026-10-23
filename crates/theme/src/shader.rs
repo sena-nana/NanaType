@@ -24,9 +24,11 @@ pub const MAX_SHADER_NODES: usize = 4096;
 pub const MAX_EXPRESSION_DEPTH: usize = 64;
 /// Nested `if`/`switch`/`{}` levels inside one function.
 pub const MAX_BLOCK_DEPTH: usize = 32;
-/// Operators, calls and commas between two `;`/`{`/`}`. Naga lowers and
-/// validates expressions recursively, so this bounds its stack use before the
-/// source reaches it; the IR depth limit then applies to the lowered tree.
+/// Operators, calls, commas, member accesses and indexing between two
+/// `;`/`{`/`}`. Naga parses and lowers expressions recursively (a postfix
+/// chain such as `a.b.b.b…` or `a[0][0]…` included), so this bounds its stack
+/// use before the source reaches it; the IR depth limit then applies to the
+/// lowered tree.
 pub const MAX_STATEMENT_OPERATORS: usize = 256;
 /// Naga runs on its own thread with this stack (see `guarded`).
 const VALIDATOR_STACK: usize = 32 << 20;
@@ -236,7 +238,10 @@ fn precheck(source: &str) -> Result<(), String> {
         } else {
             if matches!(b[i], b';' | b'{' | b'}') {
                 operators = 0;
-            } else if b"+-*/%&|^<>!~(,".contains(&b[i]) {
+            } else if b"+-*/%&|^<>!~(,[".contains(&b[i])
+                // Member access, not the point of a number literal.
+                || (b[i] == b'.' && b.get(i + 1).is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_'))
+            {
                 operators += 1;
                 if operators > MAX_STATEMENT_OPERATORS {
                     return Err(format!(
@@ -1003,9 +1008,9 @@ mod tests {
     fn deep_expressions_and_blocks_are_rejected_before_any_gpu_compiler() {
         // Past the lexical cap naga never sees it; under it, the IR depth.
         for (terms, expected) in [(8_000, "operators"), (200, "deeper than")] {
-            let chain = vec!["i.uv.x"; terms].join("+");
+            let chain = vec!["x"; terms].join("+");
             let err = validate_shader(&format!(
-                "fn effect(i:EffectInput)->vec4<f32>{{return vec4({chain});}}"
+                "fn effect(i:EffectInput)->vec4<f32>{{let x=i.uv.x; return vec4({chain});}}"
             ))
             .unwrap_err();
             assert!(err.contains(expected), "{terms}: {err}");
