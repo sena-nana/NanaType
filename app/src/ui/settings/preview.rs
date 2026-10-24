@@ -1168,7 +1168,7 @@ align = { param = "align" }
         let mut doc = RuntimeDocument::new(doc_id);
         let previewing = signal(Some(id.to_owned()));
         doc.context_mut()
-            .mount_view_root(doc_id, move || view(ui, previewing))
+            .mount_view_root(doc_id, move || view(ui, previewing, false))
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 720, 1400).unwrap();
         let keys = node_keys(&mut session);
@@ -1202,7 +1202,7 @@ align = { param = "align" }
         let doc_id = DocumentId::new(4).unwrap();
         let mut doc = RuntimeDocument::new(doc_id);
         doc.context_mut()
-            .mount_view_root(doc_id, move || view(ui, signal(None)))
+            .mount_view_root(doc_id, move || view(ui, signal(None), false))
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 720, 1400).unwrap();
         for history in [false, true] {
