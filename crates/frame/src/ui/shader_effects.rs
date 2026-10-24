@@ -173,8 +173,9 @@ pub fn preview_animating(ui: Stage) -> bool {
                     && !stopped(&m.program.hash)
             })
 }
-/// Whether the input window's skin preview has programs that move, so the
-/// input window needs frames.
+/// Whether the input window's skin preview has programs that move or still
+/// compile, so the window needs frames. Its box holds them only while the
+/// preview is on.
 pub fn input_animating(ui: Stage) -> bool {
     if !NOTICES.lock().unwrap_or_else(|e| e.into_inner()).is_empty() {
         return true;
@@ -185,6 +186,7 @@ pub fn input_animating(ui: Stage) -> bool {
     if !enabled(ui) || !ui.settings.with_untracked(|s| s.general.input_skin_preview) {
         return false;
     }
+    // Never read a signal under the registry lock (see `warming`).
     let materials: Vec<_> = MATERIALS
         .lock()
         .unwrap_or_else(|e| e.into_inner())

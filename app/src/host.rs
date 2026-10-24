@@ -1414,8 +1414,22 @@ impl RuntimeProgram for Host {
     }
 
     fn frame_demand(&self, id: WindowId) -> FrameDemand {
-        if WindowKind::from_id(id) == Some(WindowKind::Input) && self.completion_unsettled {
-            return FrameDemand::At(Instant::now());
+        if WindowKind::from_id(id) == Some(WindowKind::Input) {
+            if self.completion_unsettled {
+                return FrameDemand::At(Instant::now());
+            }
+            // The skin preview's programs read the wall clock: frames only.
+            let ui = *self.app.ui;
+            if self.app.input_visible()
+                && (crate::ui::shader_effects::input_animating(ui)
+                    || crate::ui::sweep::input_animating(ui))
+            {
+                let fps = ui
+                    .settings
+                    .with_untracked(|s| s.skin.frame_rate)
+                    .clamp(30, 60);
+                return FrameDemand::Continuous(NonZeroU32::new(fps).expect("non-zero"));
+            }
         }
         let demand = frame_policy(
             self.app.ui,
