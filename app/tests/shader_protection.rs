@@ -160,8 +160,21 @@ fn over_budget_and_crashed_programs_stop_drawing_until_effects_are_retried() {
             "the frozen fallback stopped drawing"
         );
 
+        // Frozen, it is shaded once into a rest frame and then copied, which
+        // spends nothing: a window of copies settles no verdict.
         next_window();
         let _ = session.screenshot_rgba().unwrap();
+        assert!(
+            !notices_mention("even when frozen"),
+            "copying a rest frame was charged"
+        );
+        assert!(centre(&mut session)[0] > 240, "the rest frame is missing");
+
+        // The next shaded draw settles the window its rest frame was shaded
+        // in: still over budget, so it is disabled.
+        let rest = shader_effects::set_rest_frames(false);
+        let _ = session.screenshot_rgba().unwrap();
+        shader_effects::set_rest_frames(rest);
         assert!(
             notices_mention("even when frozen"),
             "frozen and over budget but not disabled"

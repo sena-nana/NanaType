@@ -120,8 +120,13 @@ fn notice(message: String) {
         .push(message);
 }
 
+/// Skin backgrounds may move: skin motion is on and the system does not ask
+/// for reduced motion. Off, each program is drawn once at rest and reused.
+pub fn motion(ui: Stage) -> bool {
+    !ui.reduced_motion.get_untracked() && ui.settings.with_untracked(|s| s.skin.motion)
+}
 pub fn enabled(ui: Stage) -> bool {
-    !ui.reduced_motion.get_untracked() && ui.settings.with_untracked(|s| s.skin.advanced_effects)
+    motion(ui) && ui.settings.with_untracked(|s| s.skin.advanced_effects)
 }
 pub fn animating(ui: Stage) -> bool {
     // A renderer can discover a compiler failure after Host::finish. Keep one
@@ -220,7 +225,9 @@ fn pack_slots(
 /// `owns_continue`, compiled, and is playing rather than frozen or off.
 pub fn owns_continue(ui: Stage, source: Source, skin: &Skin) -> bool {
     let playing = !ui.reduced_motion.get()
-        && ui.settings.with(|s| s.skin.advanced_effects)
+        && ui
+            .settings
+            .with(|s| s.skin.advanced_effects && s.skin.motion)
         && (source != Source::Preview || ui.shader_preview.get());
     playing
         && skin.dialogue.shader_effects.iter().any(|e| {
@@ -395,6 +402,203 @@ struct Prepared {
     /// The material's param slots, written once when prepared.
     slots: wgpu::Buffer,
     bytes: usize,
+    /// Frames drawn at rest, newest last, copied instead of shading again.
+    frozen: Vec<Frozen>,
+}
+impl Prepared {
+    fn held(&self) -> usize {
+        self.bytes
+            + self.uniforms.bytes()
+            + self
+                .frozen
+                .iter()
+                .map(|f| f.bytes + f.blits.bytes())
+                .sum::<usize>()
+    }
+}
+/// Rest frames kept per prepared material: one per output size in use.
+const FROZEN_PER_MASK: usize = 4;
+/// What a rest frame's pixels depend on beyond its material: bounds size,
+/// DPI scale and the sub-pixel origin of the drawn quad.
+type FrozenKey = [u32; 5];
+/// One rest frame: the program drawn once, frozen, at full opacity into a
+/// texture of the destination's format. Node opacity is applied when copied.
+struct Frozen {
+    key: FrozenKey,
+    view: wgpu::TextureView,
+    bytes: usize,
+    blits: super::effect_uniforms::Uniforms,
+}
+/// Where a rest frame sits: the quad the program covers, snapped outward to
+/// whole destination pixels so the copy is texel-exact.
+struct Shot {
+    key: FrozenKey,
+    /// Top-left of the texture in destination pixels.
+    at: [f32; 2],
+    /// The quad's origin inside the texture (the sub-pixel remainder).
+    origin: [f32; 2],
+    size: [u32; 2],
+}
+/// The rotated quad the program covers: `(cos, sin, width, height)`.
+fn quad(m: &Material, width: f32, height: f32) -> (f32, f32, f32, f32) {
+    let (sin, cos) = m.surface.rotate_deg.to_radians().sin_cos();
+    (
+        cos,
+        sin,
+        cos.abs() * width + sin.abs() * height,
+        sin.abs() * width + cos.abs() * height,
+    )
+}
+fn shot(m: &Material, c: &SceneGpuPassContext<'_>, scale: f32) -> Shot {
+    let width = c.bounds.width as f32;
+    let height = c.bounds.height as f32;
+    let (_, _, draw_width, draw_height) = quad(m, width, height);
+    let x = c.bounds.x as f32 + (width - draw_width) * 0.5;
+    let y = c.bounds.y as f32 + (height - draw_height) * 0.5;
+    let at = [x.floor(), y.floor()];
+    let origin = [x - at[0], y - at[1]];
+    Shot {
+        key: [
+            c.bounds.width,
+            c.bounds.height,
+            scale.to_bits(),
+            origin[0].to_bits(),
+            origin[1].to_bits(),
+        ],
+        at,
+        origin,
+        size: [
+            ((origin[0] + draw_width).ceil() as u32).max(1),
+            ((origin[1] + draw_height).ceil() as u32).max(1),
+        ],
+    }
+}
+/// The program's uniforms for a quad whose top-left sits at `origin` of a
+/// `dest`-sized target.
+#[allow(clippy::too_many_arguments)]
+fn effect_uniforms(
+    m: &Material,
+    dest: [f32; 2],
+    origin: [f32; 2],
+    width: f32,
+    height: f32,
+    scale: f32,
+    opacity: f32,
+    now: u64,
+    events: [f32; 4],
+) -> [u8; 176] {
+    let (cos, sin, draw_width, draw_height) = quad(m, width, height);
+    let mut values = [0f32; 44];
+    values[..4].copy_from_slice(&[dest[0], dest[1], origin[0], origin[1]]);
+    values[4..8].copy_from_slice(&[
+        width / scale,
+        height / scale,
+        (now as f64 / 1000. / f64::from(m.spec.period_s)).fract() as f32,
+        0.731,
+    ]);
+    values[8..12].copy_from_slice(&events);
+    for (i, c) in m.palette.iter().enumerate() {
+        values[12 + i * 4..16 + i * 4].copy_from_slice(c);
+    }
+    values[28..28 + m.spec.params.len()].copy_from_slice(&m.spec.params);
+    values[36..40].copy_from_slice(&[draw_width, draw_height, opacity * m.spec.intensity, 0.]);
+    values[40..44].copy_from_slice(&[cos, sin, width, height]);
+    let mut bytes = [0u8; 176];
+    for (v, b) in values.iter().zip(bytes.as_chunks_mut::<4>().0) {
+        b.copy_from_slice(&v.to_ne_bytes());
+    }
+    bytes
+}
+/// Events of a program at rest: settled, fully revealed, no continue mark.
+const REST_EVENTS: [f32; 4] = [2., 2., 1., 0.];
+static REST_FRAMES: AtomicBool = AtomicBool::new(true);
+/// Turn rest frames off (shade frozen programs on every draw, for tests that
+/// compare the two); returns the previous setting.
+#[doc(hidden)]
+pub fn set_rest_frames(on: bool) -> bool {
+    REST_FRAMES.swap(on, Ordering::Relaxed)
+}
+/// Copies rest frames into the destination.
+struct Blit {
+    pipeline: wgpu::RenderPipeline,
+    layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+}
+fn blit_pipeline(device: &wgpu::Device, format: GpuTextureFormat) -> Blit {
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("skin rest frame"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: std::num::NonZeroU64::new(32),
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                count: None,
+            },
+        ],
+    });
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("skin rest frame"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shader_rest.wgsl").into()),
+    });
+    let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("skin rest frame"),
+        bind_group_layouts: &[Some(&layout)],
+        immediate_size: 0,
+    });
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("skin rest frame"),
+        layout: Some(&pl),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("rest_vertex"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("rest_fragment"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: format.wgpu(),
+                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: Default::default(),
+        depth_stencil: None,
+        multisample: Default::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("skin rest frame"),
+        ..Default::default()
+    });
+    Blit {
+        pipeline,
+        layout,
+        sampler,
+    }
 }
 #[derive(Default, Clone, Copy)]
 struct Spend {
@@ -435,6 +639,7 @@ struct State {
     spent: HashMap<String, Spend>,
     pipelines: HashMap<PipelineKey, Pending>,
     masks: HashMap<MaskKey, Prepared>,
+    blits: HashMap<(DeviceGeneration, GpuTextureFormat), Arc<Blit>>,
     scales: super::effect_uniforms::Scales,
     failed: HashMap<String, u8>,
     reported: HashSet<PipelineKey>,
@@ -536,6 +741,8 @@ pub struct CacheStats {
     /// Compiles deferred because both compiler slots were busy.
     pub refused: u64,
     pub uniform_allocations: u64,
+    /// Rest frames held for programs drawn frozen.
+    pub frozen: usize,
 }
 pub fn cache_stats() -> CacheStats {
     let state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -547,16 +754,13 @@ pub fn cache_stats() -> CacheStats {
             .values()
             .map(|p| p.texture_bytes)
             .sum::<usize>()
-            + state
-                .masks
-                .values()
-                .map(|m| m.bytes + m.uniforms.bytes())
-                .sum::<usize>(),
+            + state.masks.values().map(|m| m.held()).sum::<usize>(),
         uniforms: state.masks.values().map(|m| m.uniforms.len()).sum(),
         scales: state.scales.len(),
         compilations: COMPILED.load(Ordering::Relaxed),
         refused: REFUSED.load(Ordering::Relaxed),
         uniform_allocations: super::effect_uniforms::allocations(),
+        frozen: state.masks.values().map(|m| m.frozen.len()).sum(),
         pending: state
             .pipelines
             .values()
@@ -697,6 +901,22 @@ fn compile(
 }
 
 impl State {
+    /// GPU memory the effects hold: programs' textures and every mask with
+    /// its bindings and rest frames.
+    fn held(&self) -> usize {
+        self.pipelines
+            .values()
+            .map(|p| p.texture_bytes)
+            .sum::<usize>()
+            + self.masks.values().map(Prepared::held).sum::<usize>()
+    }
+    fn blit(&mut self, gpu: &GpuContext, format: GpuTextureFormat) -> Arc<Blit> {
+        self.blits
+            .entry((gpu.generation(), format))
+            .or_insert_with(|| Arc::new(blit_pipeline(gpu.wgpu().device(), format)))
+            .clone()
+    }
+
     /// Stop drawing `hash` for the rest of the run. Two strikes, like a
     /// twice-failed compile, so it survives a device change. `why` is shown
     /// to the operator; `None` disables quietly.
@@ -813,6 +1033,7 @@ impl State {
             self.devices.remove(0);
             self.pipelines.retain(|(g, _, _, _), _| *g != retired);
             self.masks.retain(|(g, _, _, _, _, _), _| *g != retired);
+            self.blits.retain(|(g, _), _| *g != retired);
             self.scales.retain(|(g, _, _)| *g != retired);
             self.last_drawn.retain(|(g, _), _| *g != retired);
         }
@@ -1003,11 +1224,7 @@ impl State {
             .map(|p| p.texture_bytes)
             .sum::<usize>();
         if self.masks.len() >= 32
-            || self
-                .masks
-                .values()
-                .map(|m| m.bytes + m.uniforms.bytes())
-                .sum::<usize>()
+            || self.masks.values().map(|m| m.held()).sum::<usize>()
                 + texture_used
                 + mask_bytes
                 + 8 * 176
@@ -1017,11 +1234,7 @@ impl State {
             self.masks
                 .retain(|(_, _, _, id, _, _), _| *id != material.id);
             if self.masks.len() >= 32
-                || self
-                    .masks
-                    .values()
-                    .map(|m| m.bytes + m.uniforms.bytes())
-                    .sum::<usize>()
+                || self.masks.values().map(|m| m.held()).sum::<usize>()
                     + texture_used
                     + mask_bytes
                     + 8 * 176
@@ -1121,6 +1334,7 @@ impl State {
                 pipeline: pipeline.clone(),
                 slots,
                 bytes: mask_bytes + SLOT_BYTES,
+                frozen: Vec::new(),
             },
         );
         self.masks.get_mut(&key)
@@ -1197,8 +1411,9 @@ impl SceneGpuRenderer for Renderer {
             dest_size: c.dest_size,
             gpu_work: c.gpu_work,
         };
+        self.bake(node, &p, c.wgpu_encoder());
         c.with_pass("skin shader", |pass| {
-            self.draw_in_pass(node, pass, p);
+            self.draw(node, pass, p, false);
         });
     }
     fn draw_in_pass(
@@ -1207,34 +1422,82 @@ impl SceneGpuRenderer for Renderer {
         pass: &mut ScenePass<'_, '_>,
         c: SceneGpuPassContext<'_>,
     ) -> bool {
-        let Some(m) = node.custom.resource.parse::<u64>().ok().and_then(|id| {
-            MATERIALS
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .get(&id)
-                .and_then(Weak::upgrade)
-        }) else {
+        self.draw(node, pass, c, true)
+    }
+}
+
+fn material_of(node: &SceneGpuNode) -> Option<Arc<Material>> {
+    let id = node.custom.resource.parse::<u64>().ok()?;
+    MATERIALS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&id)
+        .and_then(Weak::upgrade)
+}
+/// Whether `m` draws anything: frozen programs only with a static fallback,
+/// and the display only while it shows a line.
+fn draws(m: &Material, animated: bool) -> bool {
+    (animated || m.spec.static_fallback)
+        && !(m.source == Source::Display && m.ui.display.with_untracked(|v| v.empty))
+}
+/// The paint-only scale of `m` in this output.
+fn scale_of(state: &mut State, m: &Material, c: &SceneGpuPassContext<'_>) -> f32 {
+    let registered = state.scales.get(c.gpu.generation(), m.id, c.dest_size);
+    let logical = *m.logical_size.lock().unwrap_or_else(|e| e.into_inner());
+    if logical[0] > 0.0 && logical[1] > 0.0 {
+        (c.bounds.width as f32 / logical[0])
+            .min(c.bounds.height as f32 / logical[1])
+            .max(0.0001)
+    } else {
+        registered
+    }
+}
+/// Bytes a rest frame for `shot` takes, if it fits beside what the other
+/// materials hold. `others` excludes this material's own rest frames, which
+/// a new one may replace.
+fn rest_bytes(c: &SceneGpuPassContext<'_>, shot: &Shot, others: usize) -> Option<usize> {
+    let max = 8192.min(c.gpu.wgpu().device().limits().max_texture_dimension_2d);
+    if shot.size.iter().any(|x| *x > max) {
+        return None;
+    }
+    let texel = c.target_format.wgpu().block_copy_size(None).unwrap_or(8) as usize;
+    let bytes = shot.size[0] as usize * shot.size[1] as usize * texel;
+    (others + bytes <= MAX_SHADER_CACHE_BYTES).then_some(bytes)
+}
+fn own_rest_bytes(prepared: &Prepared) -> usize {
+    prepared
+        .frozen
+        .iter()
+        .map(|f| f.bytes + f.blits.bytes())
+        .sum()
+}
+
+impl Renderer {
+    /// Draw `node` into `pass`. A frozen program is shaded once into a rest
+    /// frame and copied from then on; with no rest frame yet and `defer`,
+    /// return `false` so the painter calls `render`, which bakes one first.
+    fn draw(
+        &self,
+        node: &SceneGpuNode,
+        pass: &mut ScenePass<'_, '_>,
+        c: SceneGpuPassContext<'_>,
+        defer: bool,
+    ) -> bool {
+        let Some(m) = material_of(node) else {
             return true;
         };
         let animated = playing(&m);
-        if (!animated && !m.spec.static_fallback)
-            || (m.source == Source::Display && m.ui.display.with_untracked(|v| v.empty))
-        {
+        if !draws(&m, animated) {
             return true;
         }
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if state.failed.get(&m.program.hash).copied().unwrap_or(0) >= 2 {
             return true;
         }
-        let registered_scale = state.scales.get(c.gpu.generation(), m.id, c.dest_size);
-        let logical = *m.logical_size.lock().unwrap_or_else(|e| e.into_inner());
-        let scale = if logical[0] > 0.0 && logical[1] > 0.0 {
-            (c.bounds.width as f32 / logical[0])
-                .min(c.bounds.height as f32 / logical[1])
-                .max(0.0001)
-        } else {
-            registered_scale
-        };
+        let scale = scale_of(&mut state, &m, &c);
+        let held = state.held();
+        let blit = (!animated && REST_FRAMES.load(Ordering::Relaxed))
+            .then(|| state.blit(c.gpu, c.target_format));
         let Some(prepared) = state.prepare(&m, &c, scale) else {
             m.warming.store(
                 m.spec.static_fallback && COMPILING.load(Ordering::Relaxed) > 0,
@@ -1243,6 +1506,22 @@ impl SceneGpuRenderer for Renderer {
             return true;
         };
         m.warming.store(false, Ordering::Relaxed);
+        if let Some(blit) = blit {
+            let shot = shot(&m, &c, scale);
+            if let Some(i) = prepared.frozen.iter().position(|f| f.key == shot.key) {
+                let mut frozen = prepared.frozen.remove(i);
+                copy_rest(&mut frozen, &blit, pass, &c, &shot, scale, node.opacity);
+                prepared.frozen.push(frozen);
+                return true;
+            }
+            let others = held.saturating_sub(own_rest_bytes(prepared));
+            if defer && rest_bytes(&c, &shot, others).is_some() {
+                return false;
+            }
+        } else if !prepared.frozen.is_empty() {
+            // Playing again (or rest frames are off): they are stale memory.
+            prepared.frozen.clear();
+        }
         let instant = Instant::now();
         if !GUARD
             .lock()
@@ -1253,46 +1532,29 @@ impl SceneGpuRenderer for Renderer {
         }
         let now = if animated { crate::clock::now_ms() } else { 0 };
         let events = if !animated {
-            [2., 2., 1., 0.]
+            REST_EVENTS
         } else if m.source == Source::Preview {
             [2., 2., 1., 1.]
         } else {
             event_values(m.ui, now)
         };
-        let (sin, cos) = m.surface.rotate_deg.to_radians().sin_cos();
         let width = c.bounds.width as f32;
         let height = c.bounds.height as f32;
-        let draw_width = cos.abs() * width + sin.abs() * height;
-        let draw_height = sin.abs() * width + cos.abs() * height;
-        let mut values = [0f32; 44];
-        values[..4].copy_from_slice(&[
-            c.dest_size[0] as f32,
-            c.dest_size[1] as f32,
-            c.bounds.x as f32 + (width - draw_width) * 0.5,
-            c.bounds.y as f32 + (height - draw_height) * 0.5,
-        ]);
-        values[4..8].copy_from_slice(&[
-            c.bounds.width as f32 / scale,
-            c.bounds.height as f32 / scale,
-            (now as f64 / 1000. / f64::from(m.spec.period_s)).fract() as f32,
-            0.731,
-        ]);
-        values[8..12].copy_from_slice(&events);
-        for (i, c) in m.palette.iter().enumerate() {
-            values[12 + i * 4..16 + i * 4].copy_from_slice(c);
-        }
-        values[28..28 + m.spec.params.len()].copy_from_slice(&m.spec.params);
-        values[36..40].copy_from_slice(&[
-            draw_width,
-            draw_height,
-            node.opacity * m.spec.intensity,
-            0.,
-        ]);
-        values[40..44].copy_from_slice(&[cos, sin, width, height]);
-        let mut bytes = [0u8; 176];
-        for (v, b) in values.iter().zip(bytes.as_chunks_mut::<4>().0) {
-            b.copy_from_slice(&v.to_ne_bytes());
-        }
+        let (_, _, draw_width, draw_height) = quad(&m, width, height);
+        let bytes = effect_uniforms(
+            &m,
+            [c.dest_size[0] as f32, c.dest_size[1] as f32],
+            [
+                c.bounds.x as f32 + (width - draw_width) * 0.5,
+                c.bounds.y as f32 + (height - draw_height) * 0.5,
+            ],
+            width,
+            height,
+            scale,
+            node.opacity,
+            now,
+            events,
+        );
         let gpu = c.gpu.wgpu();
         let _submission = gpu.lock_submission();
         let pipeline = &prepared.pipeline;
@@ -1324,6 +1586,180 @@ impl SceneGpuRenderer for Renderer {
         state.spend(&hash, cost, animated, instant);
         true
     }
+
+    /// Shade a frozen program once into a rest frame, recorded on `encoder`
+    /// ahead of the pass that copies it. Charged like one ordinary draw.
+    fn bake(
+        &self,
+        node: &SceneGpuNode,
+        c: &SceneGpuPassContext<'_>,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let Some(m) = material_of(node) else {
+            return;
+        };
+        if playing(&m) || !draws(&m, false) || !REST_FRAMES.load(Ordering::Relaxed) {
+            return;
+        }
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if state.failed.get(&m.program.hash).copied().unwrap_or(0) >= 2 {
+            return;
+        }
+        let scale = scale_of(&mut state, &m, c);
+        let held = state.held();
+        let shot = shot(&m, c, scale);
+        let Some(prepared) = state.prepare(&m, c, scale) else {
+            return;
+        };
+        if prepared.frozen.iter().any(|f| f.key == shot.key) {
+            return;
+        }
+        let own = own_rest_bytes(prepared);
+        let Some(bytes) = rest_bytes(c, &shot, held.saturating_sub(own)) else {
+            return;
+        };
+        if held + bytes > MAX_SHADER_CACHE_BYTES {
+            // Older sizes of this material make room for the one in use.
+            prepared.frozen.clear();
+        }
+        let instant = Instant::now();
+        if !GUARD
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .draw(&m.program.hash, instant)
+        {
+            return;
+        }
+        let gpu = c.gpu.wgpu();
+        let device = gpu.device();
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("skin rest frame"),
+            size: wgpu::Extent3d {
+                width: shot.size[0],
+                height: shot.size[1],
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: c.target_format.wgpu(),
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&Default::default());
+        // Full opacity: the copy applies the node's.
+        let uniforms = effect_uniforms(
+            &m,
+            [shot.size[0] as f32, shot.size[1] as f32],
+            shot.origin,
+            c.bounds.width as f32,
+            c.bounds.height as f32,
+            scale,
+            1.,
+            0,
+            REST_EVENTS,
+        );
+        let mut once = super::effect_uniforms::Uniforms::default();
+        {
+            let _submission = gpu.lock_submission();
+            let binding = once.binding(
+                c.gpu,
+                &prepared.pipeline.layout,
+                &prepared.textures,
+                &prepared.pipeline.sampler,
+                [0; 5],
+                uniforms.len(),
+                Some(&prepared.slots),
+            );
+            gpu.queue().write_buffer(&binding.buffer, 0, &uniforms);
+            let mut raw = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("skin rest frame"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            raw.set_pipeline(&prepared.pipeline.pipeline);
+            raw.set_bind_group(0, &binding.group, &[]);
+            raw.draw(0..6, 0..1);
+        }
+        if let Some(w) = c.gpu_work {
+            w.record_realloc();
+            w.record_upload(uniforms.len());
+            w.record_draw_call();
+        }
+        if prepared.frozen.len() >= FROZEN_PER_MASK {
+            prepared.frozen.remove(0);
+        }
+        prepared.frozen.push(Frozen {
+            key: shot.key,
+            view,
+            bytes,
+            blits: Default::default(),
+        });
+        let hash = m.program.hash.clone();
+        let cost =
+            u64::from(m.program.cost.max(1)) * u64::from(shot.size[0]) * u64::from(shot.size[1]);
+        state
+            .last_drawn
+            .insert((c.gpu.generation(), hash.clone()), instant);
+        state.spend(&hash, cost, false, instant);
+    }
+}
+
+/// Copy a rest frame into `pass` at the node's opacity.
+fn copy_rest(
+    frozen: &mut Frozen,
+    blit: &Blit,
+    pass: &mut ScenePass<'_, '_>,
+    c: &SceneGpuPassContext<'_>,
+    shot: &Shot,
+    scale: f32,
+    opacity: f32,
+) {
+    let values = [
+        c.dest_size[0] as f32,
+        c.dest_size[1] as f32,
+        shot.at[0],
+        shot.at[1],
+        shot.size[0] as f32,
+        shot.size[1] as f32,
+        opacity,
+        0.,
+    ];
+    let mut bytes = [0u8; 32];
+    for (v, b) in values.iter().zip(bytes.as_chunks_mut::<4>().0) {
+        b.copy_from_slice(&v.to_ne_bytes());
+    }
+    let gpu = c.gpu.wgpu();
+    let _submission = gpu.lock_submission();
+    let binding = frozen.blits.binding(
+        c.gpu,
+        &blit.layout,
+        std::slice::from_ref(&frozen.view),
+        &blit.sampler,
+        super::effect_uniforms::output_key(c, scale),
+        bytes.len(),
+        None,
+    );
+    gpu.queue().write_buffer(&binding.buffer, 0, &bytes);
+    if let Some(w) = c.gpu_work {
+        w.record_upload(bytes.len());
+        w.record_draw_call();
+    }
+    let raw = pass.wgpu();
+    raw.set_pipeline(&blit.pipeline);
+    raw.set_bind_group(0, &binding.group, &[]);
+    raw.draw(0..6, 0..1);
 }
 
 #[cfg(test)]
@@ -1509,6 +1945,22 @@ mod tests {
             .update(|s| Arc::make_mut(s).skin.advanced_effects = false);
         assert!(!animating(ui));
         assert!(!preview_animating(ui));
+    }
+    #[test]
+    fn skin_motion_off_freezes_programs_and_the_continue_mark() {
+        let ui = ui();
+        ui.display.update(|v| Arc::make_mut(v).empty = false);
+        let mut skin = (*ui.skin.get_untracked()).clone();
+        for s in skin.shaders.values_mut() {
+            s.owns_continue = true;
+        }
+        assert!(animating(ui) && owns_continue(ui, Source::Display, &skin));
+        ui.settings.update(|s| Arc::make_mut(s).skin.motion = false);
+        assert!(!motion(ui) && !enabled(ui) && !animating(ui));
+        assert!(!owns_continue(ui, Source::Display, &skin));
+        assert!(!super::super::sweep::animating(ui));
+        // Static materials are not motion.
+        assert!(super::super::materials::enabled(ui));
     }
     #[test]
     fn printed_classics_have_no_animation_frame_schedule() {

@@ -468,6 +468,9 @@ impl SkinOverrides {
 #[serde(default)]
 pub struct SkinSettings {
     pub advanced_effects: bool,
+    /// Skin backgrounds move. Off, each is drawn once at rest and that frame
+    /// is reused.
+    pub motion: bool,
     /// Frames per second for the display window's animation, typing
     /// included: 30 or 60.
     pub frame_rate: u32,
@@ -485,6 +488,7 @@ impl Default for SkinSettings {
     fn default() -> Self {
         Self {
             advanced_effects: true,
+            motion: true,
             frame_rate: SKIN_FRAME_RATES[0],
             id: DEFAULT_SKIN.into(),
             overrides: SkinOverrides::default(),

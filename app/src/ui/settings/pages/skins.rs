@@ -165,6 +165,7 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                 "skins-interface",
                 vec![
                     toggle_row!(ui, "skins-advanced-effects", skin.advanced_effects),
+                    toggle_row!(ui, "skins-motion", skin.motion),
                     row(
                         ui,
                         "skins-frame-rate",

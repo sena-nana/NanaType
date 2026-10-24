@@ -1297,7 +1297,12 @@ fn sweep_layer(ui: Stage, ctx: &BoxCtx) -> AnyView {
         let surface = ctx.box_surface();
         let spec = ctx.skin.dialogue.sweep.clone();
         dynamic(
-            move || source == Source::Display && !ui.reduced_motion.get() && !drawn(ui).empty,
+            move || {
+                source == Source::Display
+                    && !ui.reduced_motion.get()
+                    && ui.settings.with(|s| s.skin.motion)
+                    && !drawn(ui).empty
+            },
             move |animated| super::sweep::view(surface.clone(), spec.clone(), *animated),
         )
         .css(nana_ui::runtime::view::css! { position: absolute; inset: 0; pointer-events: none; })

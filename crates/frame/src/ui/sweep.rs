@@ -23,7 +23,7 @@ pub(super) fn effective(spec: &SweepSpec) -> bool {
 }
 
 pub fn animating(ui: super::Stage) -> bool {
-    !ui.reduced_motion.get_untracked()
+    super::shader_effects::motion(ui)
         && !ui.display.with_untracked(|d| d.empty)
         && ui.skin.with_untracked(|s| effective(&s.dialogue.sweep))
 }
