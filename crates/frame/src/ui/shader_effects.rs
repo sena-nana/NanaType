@@ -168,6 +168,24 @@ pub fn preview_animating(ui: Stage) -> bool {
                     && !stopped(&m.program.hash)
             })
 }
+/// Whether the input window's skin preview has programs that move or still
+/// compile, so the window needs frames. Its box holds them only while the
+/// preview is on.
+pub fn input_animating(ui: Stage) -> bool {
+    // Never read a signal under the registry lock (see `warming`).
+    let materials: Vec<_> = MATERIALS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .values()
+        .filter_map(Weak::upgrade)
+        .collect();
+    materials.into_iter().any(|m| {
+        m.source == Source::Draft
+            && m.ui.draft == ui.draft
+            && ((playing(&m) && !stopped(&m.program.hash))
+                || (m.spec.static_fallback && m.warming.load(Ordering::Relaxed)))
+    })
+}
 
 struct Material {
     warming: AtomicBool,
@@ -1254,7 +1272,8 @@ impl SceneGpuRenderer for Renderer {
         let now = if animated { crate::clock::now_ms() } else { 0 };
         let events = if !animated {
             [2., 2., 1., 0.]
-        } else if m.source == Source::Preview {
+        } else if m.source != Source::Display {
+            // Samples and the input box hold a shown line; no typing events.
             [2., 2., 1., 1.]
         } else {
             event_values(m.ui, now)

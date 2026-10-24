@@ -28,6 +28,13 @@ pub fn animating(ui: super::Stage) -> bool {
         && ui.skin.with_untracked(|s| effective(&s.dialogue.sweep))
 }
 
+/// The input window's skin preview sweeps its box.
+pub fn input_animating(ui: super::Stage) -> bool {
+    !ui.reduced_motion.get_untracked()
+        && ui.settings.with_untracked(|s| s.general.input_skin_preview)
+        && ui.skin.with_untracked(|s| effective(&s.dialogue.sweep))
+}
+
 const RENDERER: &str = "nanatype.dialogue-sweep";
 static MATERIALS: LazyLock<super::effects::Registry<Material>> = LazyLock::new(Default::default);
 
