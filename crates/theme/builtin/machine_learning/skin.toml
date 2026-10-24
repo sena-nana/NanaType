@@ -177,10 +177,10 @@ scale = 0.72
 text_color = "#cfc7ff"
 
 [shaders.network]
-animated = false
+animated = true
 intensity = 1.0
 params = []
-period_s = 8.0
+period_s = 24.0
 source = "artwork.wgsl"
 static_fallback = true
 textures = []
