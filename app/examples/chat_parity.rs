@@ -317,7 +317,12 @@ impl Rig {
                     .remove_toast(self.toast, toast)
                     .unwrap();
             }
-            _ => panic!("unexpected capture action"),
+            Msg::EditorSelection(_) | Msg::EditorContext { .. } | Msg::EditorAction { .. } => {}
+            Msg::LayoutMaterialsReady => self.ui.layout_epoch.update(|e| *e += 1),
+            Msg::Complete(_) | Msg::EditorCommand(_) | Msg::InputHwnd(_) => {}
+            Msg::ToggleSource => self.ui.source_mode.update(|on| *on = !*on),
+            Msg::PrepareSkinPreview { .. } | Msg::SkinPreviewReady { .. } => {}
+            other => panic!("unexpected capture action: {}", msg_kind(&other)),
         }
     }
     fn pump(&mut self, now: u64) {
@@ -754,6 +759,22 @@ impl Rig {
                 }
             }
         }
+    }
+}
+
+fn msg_kind(message: &Msg) -> &'static str {
+    match message {
+        Msg::EditorSelection(_) => "EditorSelection",
+        Msg::EditorContext { .. } => "EditorContext",
+        Msg::EditorAction { .. } => "EditorAction",
+        Msg::LayoutMaterialsReady => "LayoutMaterialsReady",
+        Msg::Complete(_) => "Complete",
+        Msg::EditorCommand(_) => "EditorCommand",
+        Msg::ToggleSource => "ToggleSource",
+        Msg::InputHwnd(_) => "InputHwnd",
+        Msg::PrepareSkinPreview { .. } => "PrepareSkinPreview",
+        Msg::SkinPreviewReady { .. } => "SkinPreviewReady",
+        _ => "other",
     }
 }
 

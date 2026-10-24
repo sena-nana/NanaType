@@ -375,6 +375,18 @@ fn skin_preview_fits_first_run_and_settings_through_resizes() {
 }
 
 #[test]
+fn onboarding_skin_step_enables_the_live_preview_clock() {
+    let f = Fixture::new(Locale::ZhCn, true, Page::General);
+    assert!(!f.ui.live_preview.get());
+    f.ui.onboard_step.set(1);
+    assert!(f.ui.live_preview.get());
+    f.ui.onboard_step.set(2);
+    assert!(!f.ui.live_preview.get());
+    f.ui.page.set(Page::Skins);
+    assert!(f.ui.live_preview.get());
+}
+
+#[test]
 fn builtin_skins_can_be_previewed_and_applied_in_a_narrow_window() {
     for locale in Locale::ALL {
         let mut f = Fixture::new(locale, false, Page::Skins);

@@ -230,9 +230,16 @@ impl Ui {
         let input_dock = nanatype_settings::InputDockLayout::default();
         let peer = signal(Arc::new(crate::p2p::SessionUi::default()));
         let page = signal(settings::Page::General);
+        let onboard_step = signal(0u8);
         let mut stage = Stage::new(settings, skin, locale);
         stage.peer_active = computed(move || peer.with(|p| p.active));
-        stage.live_preview = computed(move || page.get() == settings::Page::Skins);
+        let stage_settings = stage.settings;
+        stage.live_preview = computed(move || {
+            page.get() == settings::Page::Skins
+                || (page.get() == settings::Page::General
+                    && !stage_settings.with(|s| s.general.onboarding_done)
+                    && onboard_step.get() == 1)
+        });
         Self {
             stage,
             packages: signal(Arc::new(Vec::new())),
@@ -276,7 +283,7 @@ impl Ui {
             hotkeys: signal(Arc::new(HashMap::new())),
             system_reduced_motion: signal(false),
             input_shown: signal(true),
-            onboard_step: signal(0),
+            onboard_step,
             settings_pulse_ms: signal(0),
             chat: signal(Arc::new(Vec::new())),
             reply: signal(None),

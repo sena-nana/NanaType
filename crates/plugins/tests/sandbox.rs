@@ -300,9 +300,18 @@ fn log_lines_are_bounded_per_dispatch_and_cut_on_a_character_boundary() {
     .unwrap();
     let first = vm.dispatch(&json!({"type": "init"})).unwrap();
     assert_eq!(first.logs.len(), nanatype_plugins::MAX_LOG_LINES);
-    assert_eq!(first.dropped_logs, 23 - nanatype_plugins::MAX_LOG_LINES as u32);
-    assert_eq!((first.logs[0].level, first.logs[0].message.as_str()), (1, "started"));
-    assert_eq!((first.logs[1].level, first.logs[1].message.as_str()), (2, "7"));
+    assert_eq!(
+        first.dropped_logs,
+        23 - nanatype_plugins::MAX_LOG_LINES as u32
+    );
+    assert_eq!(
+        (first.logs[0].level, first.logs[0].message.as_str()),
+        (1, "started")
+    );
+    assert_eq!(
+        (first.logs[1].level, first.logs[1].message.as_str()),
+        (2, "7")
+    );
     assert_eq!(first.logs[2].message, "a".repeat(511));
     // Lines belong to the dispatch that wrote them.
     let second = vm.dispatch(&json!({"type": "tick"})).unwrap();

@@ -13,6 +13,7 @@ pub(super) const ONBOARD_STEPS: u8 = 4;
 pub(super) fn onboarding(ui: Ui) -> AnyView {
     let step = ui.onboard_step;
     let finish = move || {
+        ui.shader_preview.set(false);
         step.set(0);
         edit(|s| s.general.onboarding_done = true)
     };
@@ -56,7 +57,12 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
                 .size(ControlSize::Small),
         )
         .visible(move || step.get() > 0)
-        .on(move |_: &Activate| step.set(step.get_untracked().saturating_sub(1))),
+        .on(move |_: &Activate| {
+            if step.get_untracked() == 1 {
+                ui.shader_preview.set(false);
+            }
+            step.set(step.get_untracked().saturating_sub(1));
+        }),
         widget(Stack::row(0.0).grow(1.0)),
         // Next, and on the last step "Get started".
         widget(
@@ -77,6 +83,9 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
             if n + 1 >= ONBOARD_STEPS {
                 cx.dispatch_program_all(finish());
             } else {
+                if n == 1 {
+                    ui.shader_preview.set(false);
+                }
                 step.set(n + 1);
             }
         }),
@@ -148,7 +157,7 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
             row(ui, "onboard-skin", None, skin_select(ui)),
             // The live preview of the skin just chosen, inset like the row
             // above it.
-            block(skin_preview(ui, signal(None))),
+            block(skin_preview(ui, signal(None), true)),
         ],
         2 => vec![
             widget(

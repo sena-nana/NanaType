@@ -581,7 +581,7 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
     .into_any()
 }
 
-pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
+pub fn view(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyView {
     let width = signal(0.0_f32);
     dynamic(
         move || {
@@ -611,6 +611,8 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
             let prepared = ui
                 .skin_preview
                 .with_untracked(|p| p.clone().filter(|p| p.shows(&row, locale.tag())));
+            let ask = id.clone();
+            on_mount(move |_| request(ask, autoplay || ui.shader_preview.get_untracked()));
             let (sample, controls) = match prepared {
                 Some(p) => (
                     stage_view(
@@ -629,8 +631,6 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
                     )),
                 ),
                 None => {
-                    let ask = id.clone();
-                    on_mount(move |_| request(ask, ui.shader_preview.get_untracked()));
                     let skin = row.skin.as_ref().expect("checked above");
                     (stage_placeholder(*ui, skin, surface, width), None)
                 }

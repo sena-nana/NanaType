@@ -256,7 +256,7 @@ pub enum Timing {
 
 /// `doc` as one rich text node in `window`, with its reveal and effects.
 pub fn document(ui: Stage, doc: &Document, base: &Base, timing: Timing) -> AnyView {
-    document_on(ui, doc, base, timing, None)
+    document_on(ui, doc, base, timing, None, Source::Display)
 }
 
 /// [`document`] for the typewriter's page `follow`: the node is recorded in
@@ -267,6 +267,7 @@ fn document_on(
     base: &Base,
     timing: Timing,
     follow: Option<overflow::PageKey>,
+    source: Source,
 ) -> AnyView {
     let urls = ui.asset_urls.get_untracked();
     let look = base.look();
@@ -313,7 +314,7 @@ fn document_on(
     if base.scramble.is_some()
         && !base.light_preview
         && let Some(plan) = &mut reveal
-        && let Some(times) = &drawn_untracked(ui).mirror_reveal_ms
+        && let Some(times) = &drawn_untracked_for(ui, source).mirror_reveal_ms
     {
         let mut unit = 0;
         for (i, g) in rich.text().graphemes(true).enumerate() {
@@ -384,7 +385,7 @@ fn document_on(
             plan.schedule(
                 std::time::Duration::ZERO,
                 if (base.masks.exit.is_some() || base.light_exit.is_some()) && !base.light_preview {
-                    drawn_untracked(ui)
+                    drawn_untracked_for(ui, source)
                         .text_exit
                         .map_or_else(crate::clock::now_ms, |e| e.at_ms)
                 } else {
@@ -597,7 +598,9 @@ impl BoxCtx {
             skin: super::materials::render_skin(ui, ui.skin.get_untracked()),
             urls: ui.asset_urls.get_untracked(),
             source,
-            preview_name: String::new(),
+            preview_name: (source == Source::Preview)
+                .then(|| ui.preview_name.get_untracked())
+                .unwrap_or_default(),
         }
     }
 
@@ -667,10 +670,16 @@ pub fn dialogue_box(ui: Stage, source: Source, editor: Option<AnyView>) -> AnyVi
             ),
             ui.locale.get(),
             ui.portraits.with(|p| Arc::as_ptr(p) as usize),
+            (source == Source::Preview).then(|| ui.preview_display.with(|v| v.revision)),
+            ui.shader_preview.get(),
         )
     };
     dynamic(key, move |_| {
-        box_view(ui, BoxCtx::active(ui, source), content(ui).into_any())
+        box_view(
+            ui,
+            BoxCtx::active(ui, source),
+            content(ui, source).into_any(),
+        )
     })
     .into_any()
 }
@@ -756,35 +765,60 @@ fn stage(slot: usize) -> std::sync::MutexGuard<'static, Track> {
 
 /// The typewriter's view as drawn (see [`Track`]), tracked.
 fn drawn(ui: Stage) -> Arc<DisplayView> {
-    let view = ui.display.get();
-    stage(ui.track_slot).see(view, crate::clock::now_ms(), ui.track_slot)
+    drawn_for(ui, Source::Display)
 }
 
 fn drawn_untracked(ui: Stage) -> Arc<DisplayView> {
-    let view = ui.display.get_untracked();
-    stage(ui.track_slot).see(view, crate::clock::now_ms(), ui.track_slot)
+    drawn_untracked_for(ui, Source::Display)
+}
+
+fn drawn_for(ui: Stage, source: Source) -> Arc<DisplayView> {
+    match source {
+        Source::Preview => ui.preview_display.get(),
+        Source::Display | Source::Draft => {
+            let view = ui.display.get();
+            stage(ui.track_slot).see(view, crate::clock::now_ms(), ui.track_slot)
+        }
+    }
+}
+
+fn drawn_untracked_for(ui: Stage, source: Source) -> Arc<DisplayView> {
+    match source {
+        Source::Preview => ui.preview_display.get_untracked(),
+        Source::Display | Source::Draft => {
+            let view = ui.display.get_untracked();
+            stage(ui.track_slot).see(view, crate::clock::now_ms(), ui.track_slot)
+        }
+    }
 }
 
 /// A still box showing `doc` in `ctx.skin`, for the skin picker.
-pub fn preview_box(ui: Stage, mut ctx: BoxCtx, doc: &Document) -> AnyView {
-    ctx.skin = super::materials::render_skin(ui, ctx.skin);
-    if (ctx.skin.dialogue.reveal.light.is_some()
-        || ctx.skin.dialogue.reveal.scramble.is_some()
-        || ctx.skin.entrance_needs_text_layout())
-        && ui.shader_preview.get_untracked()
+pub fn preview_box(ui: Stage, ctx: BoxCtx, doc: &Document) -> AnyView {
+    let skin = super::materials::render_skin(ui, ctx.skin.clone());
+    ui.skin.set(skin.clone());
+    ui.preview_name.set(ctx.preview_name.clone());
+
+    let now = crate::clock::now_ms();
+    let units = doc.unit_count() as u32;
+    let animate_text = ui.shader_preview.get_untracked()
         && !ui.reduced_motion.get_untracked()
         && super::materials::enabled(ui)
-    {
-        let now = crate::clock::now_ms();
-        let spec = &ctx.skin.dialogue.reveal;
-        let entrance = Entrance {
-            kind: spec.entrance.kind,
-            ms: spec.entrance.ms,
-        };
-        let units = doc.unit_count() as u32;
-        let mut base = Base::dialogue(&ctx.skin, entrance, false);
-        base.light_preview = true;
-        let reveal = Reveal {
+        && (skin.dialogue.reveal.light.is_some()
+            || skin.dialogue.reveal.scramble.is_some()
+            || skin.entrance_needs_text_layout());
+    let entrance = if animate_text {
+        Entrance {
+            kind: skin.dialogue.reveal.entrance.kind,
+            ms: skin.dialogue.reveal.entrance.ms,
+        }
+    } else {
+        Entrance {
+            kind: EntranceKind::None,
+            ms: 0,
+        }
+    };
+    let reveal = if animate_text {
+        Reveal {
             visible_from: 0,
             shown: 0,
             hidden_from: units,
@@ -793,33 +827,18 @@ pub fn preview_box(ui: Stage, mut ctx: BoxCtx, doc: &Document) -> AnyView {
                 start: 0,
                 reveal_ms: (0..units).map(|i| i * 65).collect::<Vec<_>>().into(),
             }),
-        };
-        let delay = u64::from(units) * 65 + u64::from(entrance.ms) + 800;
-        if let Some(exit) = &spec.exit {
-            base.masks.exit = skin_mask(
-                &ctx.skin,
-                exit.material.as_deref(),
-                exit.scope,
-                u64::from(exit.ms),
-            );
-            if let Some(mask) = &mut base.masks.exit {
-                mask.start = std::time::Duration::from_millis(delay);
-            }
-            base.light_exit = Some((now + delay, exit.ms));
         }
-        if let Some(scramble) = &spec.scramble {
-            base.light_exit = Some((now + delay, scramble.exit_ms));
-        }
-        let text = document(ui, doc, &base, Timing::Reveal(reveal));
-        return box_view(ui, ctx, text).into_any();
-    }
-    let entrance = Entrance {
-        kind: EntranceKind::None,
-        ms: 0,
+    } else {
+        Reveal::full(units)
     };
-    let base = Base::dialogue(&ctx.skin, entrance, ui.reduced_motion.get_untracked());
-    let text = document(ui, doc, &base, Timing::Static);
-    box_view(ui, ctx, text).into_any()
+    let mut display = DisplayView::empty(entrance);
+    display.revision = 1;
+    display.doc = Arc::new(doc.clone());
+    display.speaker.name = ctx.preview_name.clone();
+    display.reveal = reveal;
+    display.empty = false;
+    ui.preview_display.set(Arc::new(display));
+    dialogue_box(ui, Source::Preview, None)
 }
 
 /// An absolutely placed overlay that never takes the pointer.
@@ -1439,17 +1458,18 @@ fn text_port(ui: Stage, source: Source, content: AnyView) -> AnyView {
 }
 
 /// The typewriter's text, rebuilt when the display view changes.
-fn content(ui: Stage) -> impl IntoView {
+fn content(ui: Stage, source: Source) -> impl IntoView {
     dynamic(
-        move || drawn(ui).revision,
+        move || drawn_for(ui, source).revision,
         move |_| {
             let skin = ui.skin.get_untracked();
             let reduced = ui.reduced_motion.get_untracked();
-            let view = drawn_untracked(ui);
+            let view = drawn_untracked_for(ui, source);
             if view.empty {
                 return widget(Stack::column(0.0)).into_any();
             }
             let mut base = Base::dialogue(&skin, view.entrance, reduced);
+            base.light_preview = source == Source::Preview;
             if let Some(exit) = view.text_exit {
                 base.light_exit = Some((exit.at_ms, exit.ms));
                 let elapsed = crate::clock::now_ms().saturating_sub(exit.at_ms);
@@ -1468,7 +1488,7 @@ fn content(ui: Stage) -> impl IntoView {
             // Clipped text has nothing to follow.
             let follow = (ui.track_slot == 1 || skin.dialogue.overflow != Overflow::Clip)
                 .then(|| overflow::PageKey::of(&view));
-            document_on(ui, &doc, &base, Timing::Reveal(reveal), follow)
+            document_on(ui, &doc, &base, Timing::Reveal(reveal), follow, source)
         },
     )
 }

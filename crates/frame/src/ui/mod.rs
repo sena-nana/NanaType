@@ -85,6 +85,12 @@ pub struct Stage {
     /// Resolved application appearance, independent of the selected skin.
     pub chrome_dark: Signal<bool>,
     pub display: Signal<Arc<DisplayView>>,
+    /// A private display snapshot used by isolated skin previews. It keeps
+    /// the preview on the same dialogue renderer without touching the live
+    /// typewriter state.
+    pub preview_display: Signal<Arc<DisplayView>>,
+    /// Speaker label used by the isolated display preview.
+    pub preview_name: Signal<String>,
     pub peer_display: Signal<Arc<DisplayView>>,
     /// A remote participant's track is shown (it hides their latest line
     /// from the history like the local one).
@@ -160,6 +166,7 @@ impl Stage {
             avatar: settings.general.avatar.clone(),
             portrait: None,
         };
+        let preview_name = settings.general.speaker_name.clone();
         Self {
             speaker: signal(speaker),
             chrome_dark: signal(crate::skin_theme::dark_mode(settings.skin.chrome, false)),
@@ -170,6 +177,8 @@ impl Stage {
             history_height: signal(0.0),
             skin: signal(skin),
             display: signal(Arc::new(DisplayView::empty(entrance))),
+            preview_display: signal(Arc::new(DisplayView::empty(entrance))),
+            preview_name: signal(preview_name),
             peer_display: signal(Arc::new(DisplayView::empty(entrance))),
             peer_active: computed(|| false),
             peer_text_node: node_ref(),
