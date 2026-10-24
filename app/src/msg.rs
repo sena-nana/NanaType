@@ -447,6 +447,13 @@ pub enum Msg {
     BlivechatAuthCode(String),
     /// Make a new 彗星号 address; pages using the old one are refused.
     CometResetToken,
+    /// The obs-websocket connection reported.
+    Obs(nanatype_obs::ObsEvent),
+    /// Keep this obs-websocket password in the system's secret store; empty
+    /// forgets it.
+    ObsPassword(String),
+    /// Give this window's OBS source a bounding box at its drawn size.
+    ObsFitBounds(crate::windows::WindowKind),
     /// Quote the message when `reply` is true; otherwise insert its author
     /// label at the caret.
     ChatMention {

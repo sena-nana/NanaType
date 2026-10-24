@@ -52,7 +52,7 @@ pub fn section_titled(title: Option<String>, rows: Vec<(AnyView, Shown)>) -> Any
             None => group_row(view),
         })
         .collect();
-    nana_ui::runtime::view::settings_group(title, rows)
+    nana_ui::runtime::view::settings_group(title, rows).into_any()
 }
 
 /// The inset hairline between two rows of a card.

@@ -102,6 +102,7 @@ pub fn links_pulsing(ui: Ui) -> bool {
                 &s.spout_display,
                 &s.spout_peer_display,
                 &s.spout_history,
+                &s.obs,
             ]
             .into_iter()
             .any(|l| *l == LinkState::Connecting)
@@ -363,6 +364,51 @@ pub fn select(
                     .size(ControlSize::Small),
             )
             .bind(move |s: &mut Select| {
+                let v: Arc<str> = ui.settings.with(|x| get(x)).into();
+                if s.value.as_ref() != Some(&v) {
+                    s.value = Some(v);
+                }
+            })
+            .on_cx(move |_, e: &SelectChanged, cx| {
+                let v = e.value.to_string();
+                cx.dispatch_program_all(edit(move |s| set(s, &v)));
+            }),
+        )
+        .into_any()
+}
+
+/// [`select`] whose options are re-read as the signals they read change
+/// (a list another program gives).
+pub fn live_select(
+    ui: Ui,
+    options: impl Fn() -> Vec<(String, String)> + Send + Sync + Copy + 'static,
+    get: impl Fn(&Settings) -> String + Send + Sync + Copy + 'static,
+    set: impl Fn(&mut Settings, &str) + Send + Sync + Copy + 'static,
+) -> AnyView {
+    let build = move || -> Vec<SelectOption> {
+        options()
+            .into_iter()
+            .map(|(v, l)| SelectOption::new(v, l))
+            .collect()
+    };
+    let same = |a: &[SelectOption], b: &[SelectOption]| {
+        a.len() == b.len()
+            && a.iter()
+                .zip(b)
+                .all(|(a, b)| a.value == b.value && a.label == b.label)
+    };
+    widget(Stack::row(0.0).width(LengthSpec::Px(field::MD)))
+        .children(
+            widget(
+                Select::new(Some(get(&ui.settings.get_untracked())))
+                    .options(build())
+                    .size(ControlSize::Small),
+            )
+            .bind(move |s: &mut Select| {
+                let opts = build();
+                if !same(&s.options, &opts) {
+                    s.options = opts;
+                }
                 let v: Arc<str> = ui.settings.with(|x| get(x)).into();
                 if s.value.as_ref() != Some(&v) {
                     s.value = Some(v);

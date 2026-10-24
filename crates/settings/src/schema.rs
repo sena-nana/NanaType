@@ -805,15 +805,73 @@ impl InputKey {
     }
 }
 
+/// An output's longest side: no output is larger than 1080p, either way round.
+pub const OUTPUT_MAX_LONG: u32 = 1920;
+/// An output's shortest side.
+pub const OUTPUT_MAX_SHORT: u32 = 1080;
+/// The smallest side an output has.
+pub const OUTPUT_MIN: u32 = 16;
+
+/// `width × height` scaled down, keeping its aspect, until it fits 1080p
+/// either way round, in whole pixels of at least [`OUTPUT_MIN`]. `None` for
+/// a size that is not a size (under half a pixel, not finite).
+pub fn fit_output_size(width: f64, height: f64) -> Option<[u32; 2]> {
+    if !(width.is_finite() && height.is_finite() && width >= 0.5 && height >= 0.5) {
+        return None;
+    }
+    let (long, short) = (width.max(height), width.min(height));
+    let scale = (f64::from(OUTPUT_MAX_LONG) / long)
+        .min(f64::from(OUTPUT_MAX_SHORT) / short)
+        .min(1.0);
+    let side = |v: f64| ((v * scale).round() as u32).clamp(OUTPUT_MIN, OUTPUT_MAX_LONG);
+    Some([side(width), side(height)])
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SpoutOutput {
     pub enabled: bool,
     pub name: String,
-    /// Fixed sender size; `None` follows the window.
+    /// Fixed sender size; `None` follows the window. Also what is sent while
+    /// the OBS source below cannot be read.
     pub size: Option<[u32; 2]>,
     /// Straight alpha for receivers without a premultiplied mode.
     pub straight_alpha: bool,
+    /// The OBS source (in the program scene) whose bounding box sets the
+    /// size while OBS is linked; empty for none.
+    pub obs_source: String,
+    /// The size that box gives now, already fitted to 1080p. Runtime only:
+    /// never saved, and `None` whenever OBS cannot say.
+    #[serde(skip)]
+    pub obs_size: Option<[u32; 2]>,
+}
+
+impl SpoutOutput {
+    /// The size to send: OBS's bounding box when known, else the fixed
+    /// size; `None` follows the window.
+    pub fn extent(&self) -> Option<[u32; 2]> {
+        self.obs_size.or(self.size)
+    }
+}
+
+/// The obs-websocket server (OBS › Tools › WebSocket Server Settings). Its
+/// password is kept in the system's secret store, never here.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ObsLink {
+    pub enabled: bool,
+    pub host: String,
+    pub port: u16,
+}
+
+impl Default for ObsLink {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            host: "127.0.0.1".into(),
+            port: 4455,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -822,6 +880,7 @@ pub struct OutputSettings {
     pub display: SpoutOutput,
     pub peer_display: SpoutOutput,
     pub history: SpoutOutput,
+    pub obs: ObsLink,
 }
 
 impl Default for OutputSettings {
@@ -830,21 +889,19 @@ impl Default for OutputSettings {
             display: SpoutOutput {
                 enabled: false,
                 name: "NanaType Display".into(),
-                size: None,
-                straight_alpha: false,
+                ..SpoutOutput::default()
             },
             peer_display: SpoutOutput {
                 enabled: false,
                 name: "NanaType Partner".into(),
-                size: None,
-                straight_alpha: false,
+                ..SpoutOutput::default()
             },
             history: SpoutOutput {
                 enabled: false,
                 name: "NanaType History".into(),
-                size: None,
-                straight_alpha: false,
+                ..SpoutOutput::default()
             },
+            obs: ObsLink::default(),
         }
     }
 }
@@ -1194,10 +1251,15 @@ impl Settings {
             &mut self.output.history,
         ] {
             out.name = out.name.trim().chars().take(255).collect();
-            if let Some([w, h]) = out.size.as_mut() {
-                *w = (*w).clamp(16, 8192);
-                *h = (*h).clamp(16, 8192);
+            out.obs_source = out.obs_source.chars().take(255).collect();
+            if let Some([w, h]) = out.size {
+                out.size = fit_output_size(f64::from(w.max(1)), f64::from(h.max(1)));
             }
+        }
+        let obs = &mut self.output.obs;
+        obs.host = obs.host.trim().chars().take(255).collect();
+        if obs.port == 0 {
+            obs.port = ObsLink::default().port;
         }
         if self.skin.id.is_empty() {
             self.skin.id = DEFAULT_SKIN.into();

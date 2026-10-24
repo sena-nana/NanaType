@@ -77,6 +77,8 @@ pub struct Status {
     pub spout_display: LinkState,
     pub spout_peer_display: LinkState,
     pub spout_history: LinkState,
+    /// The obs-websocket link.
+    pub obs: LinkState,
     pub notices: Vec<Notice>,
     pub queued: usize,
     pub audio_devices: Vec<String>,
@@ -157,6 +159,8 @@ pub struct Ui {
     pub youtube: Signal<Arc<crate::app::youtube::State>>,
     pub twitch: Signal<Arc<crate::app::twitch::State>>,
     pub blivechat: Signal<Arc<crate::app::blivechat::State>>,
+    /// The OBS link and its program scene.
+    pub obs: Signal<Arc<crate::app::obs::State>>,
     #[cfg(feature = "updates")]
     pub update: Signal<Arc<crate::app::update::State>>,
     /// Kept only in memory and cleared after import; never serialized with settings.
@@ -256,6 +260,7 @@ impl Ui {
             youtube: signal(Arc::new(crate::app::youtube::State::default())),
             twitch: signal(Arc::new(crate::app::twitch::State::default())),
             blivechat: signal(Arc::new(crate::app::blivechat::State::default())),
+            obs: signal(Arc::new(crate::app::obs::State::default())),
             #[cfg(feature = "updates")]
             update: signal(Arc::new(crate::app::update::State::default())),
             #[cfg(feature = "unofficial-chat")]

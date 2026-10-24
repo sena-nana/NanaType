@@ -123,7 +123,7 @@ impl<'a> ResolvedOutput<'a> {
 
     pub(crate) fn config(self) -> Option<WindowOutputConfig> {
         let out = self.output()?;
-        let extent = match out.size {
+        let extent = match out.extent() {
             Some([width, height]) => WindowOutputExtent::Fixed { width, height },
             None => WindowOutputExtent::MatchWindow,
         };
@@ -299,7 +299,7 @@ fn can_pause(kind: WindowKind, previous: &SpoutOutput, s: &Settings, peer_active
     !out.enabled
         && (kind != WindowKind::PeerDisplay || peer_active)
         && out.name == previous.name
-        && out.size == previous.size
+        && out.extent() == previous.extent()
         && out.straight_alpha == previous.straight_alpha
         && !KINDS
             .into_iter()
@@ -581,7 +581,7 @@ impl Spout {
         for (kind, out) in pending.into_iter().flatten() {
             let failure = match self.ensure_sender(kind, out, generation, luid) {
                 Err(e) => Some((spout_error_key(&e), e.to_string())),
-                Ok(sender) => out.size.and_then(|[width, height]| {
+                Ok(sender) => out.extent().and_then(|[width, height]| {
                     #[cfg(debug_assertions)]
                     let start = std::time::Instant::now();
                     let prepared = sender.sender.prepare(width, height);

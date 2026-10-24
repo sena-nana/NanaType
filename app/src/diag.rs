@@ -111,6 +111,18 @@ pub static STICKER_UPLOAD_FAILED: EventDescriptor =
 pub static CHAT_PICTURE_FAILED: EventDescriptor =
     EventDescriptor::new(CHAT, 1, "chat.picture_failed", Severity::Debug, &[]);
 
+/// The obs-websocket link failed, dropped or had a request refused.
+pub static OBS_ERROR: EventDescriptor =
+    EventDescriptor::new(OUTPUT, 4, "output.obs_error", Severity::Warn, &[]);
+pub static OBS_SECRET_FAILED: EventDescriptor = EventDescriptor::new(
+    OUTPUT,
+    5,
+    "output.obs_secret_failed",
+    Severity::Warn,
+    // 0 load, 1 store.
+    &[FieldDescriptor::u64("op")],
+);
+
 pub static BLIVECHAT_SECRET_FAILED: EventDescriptor = EventDescriptor::new(
     BILIBILI,
     100,
@@ -299,6 +311,8 @@ pub static EVENTS: &[&EventDescriptor] = &[
     &SPOUT_FAILED,
     &WINDOW_OUTPUT,
     &BRIDGE_ERROR,
+    &OBS_ERROR,
+    &OBS_SECRET_FAILED,
     &AUDIO_RUNNING,
     &AUDIO_FAILED,
     &STEAM_UNAVAILABLE,

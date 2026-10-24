@@ -1,0 +1,15 @@
+[package]
+name = "nanatype-obs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "NanaType's obs-websocket v5 client: the bounding box OBS gives each capture source"
+
+[dependencies]
+nanatype-model.workspace = true
+serde_json.workspace = true
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+crossbeam-channel = "0.5"
+sha2 = "0.10"
+base64 = "0.22"

@@ -58,6 +58,7 @@ nanatype-core.workspace = true
 nanatype-p2p.workspace = true
 nanatype-plugins.workspace = true
 nanatype-secrets.workspace = true
+nanatype-obs.workspace = true
 nanatype-update = { workspace = true, optional = true }
 nanatype-steam.workspace = true
 nanatype-frame.workspace = true

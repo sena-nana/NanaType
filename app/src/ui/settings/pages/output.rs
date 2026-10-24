@@ -1,5 +1,7 @@
 use super::*;
 
+use nana_ui::runtime::{TextInput, TextSubmitted};
+
 /// A step number's circle.
 const STEP_DOT: f32 = 22.0;
 
@@ -157,6 +159,238 @@ pub(super) fn obs_guide(ui: Ui) -> AnyView {
     .into_any()
 }
 
+/// How an output's settings are read and written.
+type Read = fn(&Settings) -> &nanatype_settings::SpoutOutput;
+type Write = fn(&mut Settings) -> &mut nanatype_settings::SpoutOutput;
+
+/// `w × h`, as the size select spells it.
+fn size_text([w, h]: [u32; 2]) -> String {
+    format!("{w} × {h}")
+}
+
+/// The fixed sizes on offer, all within 1080p, and the saved one when it is
+/// none of them (a hand-edited or older file).
+fn size_options(ui: Ui, read: Read) -> Vec<(String, String)> {
+    let mut options = vec![("window".to_owned(), ui.now_t("output-spout-size-window"))];
+    let mut presets = vec![[1280, 720], [1920, 1080]];
+    if let Some(size) = ui.settings.with(|s| read(s).size)
+        && !presets.contains(&size)
+    {
+        presets.push(size);
+    }
+    options.extend(
+        presets
+            .into_iter()
+            .map(|[w, h]| (format!("{w}x{h}"), size_text([w, h]))),
+    );
+    options
+}
+
+/// The OBS source choices: none, then the program scene's inputs (capture
+/// sources first), then the saved source when this scene lacks it.
+fn source_options(ui: Ui, read: Read) -> Vec<(String, String)> {
+    let locale = ui.locale.get();
+    let saved = ui.settings.with(|s| read(s).obs_source.clone());
+    let mut options = vec![(String::new(), I18N.t_in(locale, "obs-source-none"))];
+    ui.obs.with(|state| {
+        if let Some(scene) = state.scene.as_deref() {
+            for item in crate::app::obs::candidates(scene) {
+                options.push((item.source.clone(), item.source.clone()));
+            }
+        }
+    });
+    if !saved.is_empty() && !options.iter().any(|(v, _)| *v == saved) {
+        let label = I18N.tr_in(
+            locale,
+            "obs-source-absent",
+            &[("name", saved.clone().into())],
+        );
+        options.push((saved, label));
+    }
+    options
+}
+
+/// What sets the output's size now, as the source row's hint.
+fn sizing_hint(ui: Ui, read: Read) -> Option<String> {
+    use crate::app::obs::Sizing;
+    let locale = ui.locale.get();
+    let state = ui.obs.get();
+    let sizing = ui
+        .settings
+        .with(|s| crate::app::obs::sizing(s, &state, read(s)));
+    let scene_arg = |scene: String| [("scene", scene.into())];
+    Some(match sizing {
+        Sizing::Manual => I18N.t_in(locale, "obs-size-pick"),
+        Sizing::Offline => I18N.t_in(locale, "obs-size-offline"),
+        Sizing::Missing { scene } => I18N.tr_in(locale, "obs-size-missing", &scene_arg(scene)),
+        Sizing::NoBounds { scene } => I18N.tr_in(locale, "obs-size-no-bounds", &scene_arg(scene)),
+        Sizing::Following { bounds, size } => {
+            let boxed = [bounds[0].round() as u32, bounds[1].round() as u32];
+            if boxed == size {
+                I18N.tr_in(
+                    locale,
+                    "obs-size-following",
+                    &[("size", size_text(size).into())],
+                )
+            } else {
+                I18N.tr_in(
+                    locale,
+                    "obs-size-clamped",
+                    &[
+                        ("box", size_text(boxed).into()),
+                        ("size", size_text(size).into()),
+                    ],
+                )
+            }
+        }
+    })
+}
+
+/// Which OBS source this output is, and where its size comes from; a
+/// source without a bounding box gets a notice card below the row, with a
+/// button that turns one on.
+fn obs_source_row(ui: Ui, kind: WindowKind, read: Read, write: Write) -> AnyView {
+    let no_bounds = move || {
+        let state = ui.obs.get();
+        ui.settings.with(|s| {
+            matches!(
+                crate::app::obs::sizing(s, &state, read(s)),
+                crate::app::obs::Sizing::NoBounds { .. }
+            )
+        })
+    };
+    let row = row_live_hint(
+        ui,
+        "obs-source",
+        move || sizing_hint(ui, read),
+        live_select(
+            ui,
+            move || source_options(ui, read),
+            move |s| read(s).obs_source.clone(),
+            move |s, v| write(s).obs_source = v.to_owned(),
+        ),
+    );
+    let notice = widget(
+        Stack::column(0.0)
+            .padding_step(inset::step::CARD, inset::step::ROW_Y)
+            .with_layout(|l| l.padding_top = Some(LengthSpec::Px(0.0))),
+    )
+    .visible(no_bounds)
+    .children(
+        // One line beside a taller button: centred, not top-aligned.
+        nana_ui::runtime::view::callout(
+            ti::ALERT_TRIANGLE,
+            StatusTone::Warning,
+            ui.now_t("obs-bounds-notice"),
+        )
+        .trailing(primary(ui, "obs-fit-bounds", move || {
+            Msg::ObsFitBounds(kind)
+        }))
+        .css(nana_ui::runtime::view::css! { align-items: center; }),
+    );
+    widget(Stack::column(0.0))
+        .children((row, notice))
+        .into_any()
+}
+
+/// A row with the card's hairline above it, for a column built by hand.
+fn below_divider(row: AnyView) -> AnyView {
+    widget(Stack::column(0.0))
+        .children((divider(), row))
+        .into_any()
+}
+
+/// The obs-websocket password: kept in the system's secret store, never in
+/// the settings file; once saved it shows as saved, with a way to forget it.
+fn obs_password_field(ui: Ui) -> AnyView {
+    let draft = signal(String::new());
+    let save = move || {
+        let password = draft.get_untracked();
+        draft.set(String::new());
+        Msg::ObsPassword(password)
+    };
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center)
+            .wrap(true),
+    )
+    .children((
+        widget(Stack::row(0.0).width(LengthSpec::Px(field::SM))).children(
+            widget(
+                crate::ui::kit::text_input("")
+                    .secure(true)
+                    .placeholder(ui.now_t("obs-password-placeholder"))
+                    .size(ControlSize::Small),
+            )
+            .bind(move |input: &mut TextInput| {
+                let text = draft.get();
+                if input.state.value.as_ref() != text.as_str() {
+                    input.state.value = text.into();
+                }
+            })
+            .on(move |e: &TextChanged| draft.set(e.value.chars().take(256).collect()))
+            .on_cx(move |_, _: &TextSubmitted, cx| cx.dispatch_program_all(save())),
+        ),
+        primary(ui, "obs-password-save", save),
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::TIGHT)
+                .align(AlignSpec::Center),
+        )
+        .visible(move || ui.obs.get().password_saved)
+        .children((
+            widget(
+                Text::new(ui.now_t("obs-password-saved"))
+                    .style(Type::Small.style())
+                    .color(SemanticColorRole::Muted),
+            ),
+            button(ui, "obs-password-clear", || Msg::ObsPassword(String::new())),
+        )),
+    ))
+    .into_any()
+}
+
+/// The obs-websocket link: on, where, and the password.
+fn obs_link(ui: Ui) -> AnyView {
+    toggled_section(
+        ui,
+        "",
+        row(
+            ui,
+            "obs-link",
+            Some("obs-link-hint"),
+            crate::ui::kit::hstack((
+                link_badge(ui, |s| &s.obs),
+                switch(
+                    ui,
+                    |s| s.output.obs.enabled,
+                    |s, v| s.output.obs.enabled = v,
+                ),
+            )),
+        ),
+        |s| s.output.obs.enabled,
+        vec![
+            row(
+                ui,
+                "obs-address",
+                None,
+                address(
+                    ui,
+                    (|s| s.output.obs.host.clone(), |s, v| s.output.obs.host = v),
+                    (|s| s.output.obs.port, |s, v| s.output.obs.port = v),
+                ),
+            ),
+            row(
+                ui,
+                "obs-password",
+                Some("obs-password-hint"),
+                obs_password_field(ui),
+            ),
+        ],
+    )
+}
+
 pub(super) fn output(ui: Ui) -> AnyView {
     // One card for every window's sender: a window's row leads, and its
     // sender's details fold away with its switch.
@@ -166,16 +400,91 @@ pub(super) fn output(ui: Ui) -> AnyView {
             WindowKind::PeerDisplay => |s| &s.spout_peer_display,
             _ => |s| &s.spout_history,
         };
-        let read: fn(&Settings) -> &nanatype_settings::SpoutOutput = match kind {
+        let read: Read = match kind {
             WindowKind::Display => |s| &s.output.display,
             WindowKind::PeerDisplay => |s| &s.output.peer_display,
             _ => |s| &s.output.history,
         };
-        let write: fn(&mut Settings) -> &mut nanatype_settings::SpoutOutput = match kind {
+        let write: Write = match kind {
             WindowKind::Display => |s| &mut s.output.display,
             WindowKind::PeerDisplay => |s| &mut s.output.peer_display,
             _ => |s| &mut s.output.history,
         };
+        // The sender's name is fixed: shown only so the user knows which one
+        // to pick in OBS, with a copy button.
+        let name = row(
+            ui,
+            "output-spout-name",
+            Some(if cfg!(target_os = "macos") {
+                "output-spout-name-hint-syphon"
+            } else {
+                "output-spout-name-hint"
+            }),
+            widget(crate::ui::kit::tag_frame())
+                .children((
+                    widget(
+                        Text::new(read(&ui.settings.get_untracked()).name.clone())
+                            .style(Type::Small.mono()),
+                    )
+                    .bind(move |t: &mut Text| {
+                        let name = ui.settings.with(|s| read(s).name.clone());
+                        if t.value != name {
+                            t.value = name;
+                        }
+                    }),
+                    widget(
+                        IconButton::new(ti::COPY, ui.now_t("output-spout-copy"))
+                            .size(ControlSize::Small)
+                            .with_tooltip(ui.now_t("output-spout-copy")),
+                    )
+                    .on_cx(move |_, _: &Activate, cx| {
+                        let current = read(&ui.settings.get_untracked()).name.clone();
+                        cx.dispatch_program_all(Msg::CopyText(current))
+                    }),
+                ))
+                .into_any(),
+        );
+        // Only while OBS is linked; it carries its own hairline so a hidden
+        // row leaves none behind.
+        let source = widget(Stack::column(0.0))
+            .visible(move || ui.settings.with(|s| s.output.obs.enabled))
+            .children(below_divider(obs_source_row(ui, kind, read, write)))
+            .into_any();
+        let size = row_live_hint(
+            ui,
+            "output-spout-size",
+            move || {
+                ui.settings
+                    .with(|s| s.output.obs.enabled && !read(s).obs_source.is_empty())
+                    .then(|| I18N.t_in(ui.locale.get(), "output-spout-size-fallback"))
+            },
+            live_select(
+                ui,
+                move || size_options(ui, read),
+                move |s| {
+                    read(s)
+                        .size
+                        .map(|[w, h]| format!("{w}x{h}"))
+                        .unwrap_or_else(|| "window".into())
+                },
+                move |s, v| {
+                    let size = v
+                        .split_once('x')
+                        .and_then(|(w, h)| Some([w.parse().ok()?, h.parse().ok()?]));
+                    write(s).size = size;
+                },
+            ),
+        );
+        let straight = row_tip(
+            ui,
+            "output-spout-straight",
+            "output-spout-straight-hint",
+            switch(
+                ui,
+                move |s| read(s).straight_alpha,
+                move |s, v| write(s).straight_alpha = v,
+            ),
+        );
         [
             (
                 row(
@@ -193,78 +502,11 @@ pub(super) fn output(ui: Ui) -> AnyView {
                 ),
                 None,
             ),
-            when_on(
-                ui,
-                move |s| read(s).enabled,
-                vec![
-                    row(
-                        ui,
-                        "output-spout-name",
-                        None,
-                        widget(Stack::row(0.0).gap_step(gap::step::TIGHT))
-                            .children((
-                                text(
-                                    ui,
-                                    String::new(),
-                                    field::MD,
-                                    move |s| read(s).name.clone(),
-                                    move |s, v| write(s).name = v,
-                                ),
-                                widget(
-                                    IconButton::new(ti::COPY, ui.now_t("output-spout-copy"))
-                                        .size(ControlSize::Small)
-                                        .with_tooltip(ui.now_t("output-spout-copy")),
-                                )
-                                .on_cx(
-                                    move |_, _: &Activate, cx| {
-                                        // Read when clicked: the name may have been edited since the
-                                        // page was built.
-                                        let current =
-                                            read(&ui.settings.get_untracked()).name.clone();
-                                        cx.dispatch_program_all(Msg::CopyText(current))
-                                    },
-                                ),
-                            ))
-                            .into_any(),
-                    ),
-                    row(
-                        ui,
-                        "output-spout-size",
-                        None,
-                        select(
-                            ui,
-                            vec![
-                                ("window".into(), ui.now_t("output-spout-size-window")),
-                                ("1280x720".into(), "1280 × 720".into()),
-                                ("1920x1080".into(), "1920 × 1080".into()),
-                                ("2560x1440".into(), "2560 × 1440".into()),
-                                ("3840x2160".into(), "3840 × 2160".into()),
-                            ],
-                            move |s| {
-                                read(s)
-                                    .size
-                                    .map(|[w, h]| format!("{w}x{h}"))
-                                    .unwrap_or_else(|| "window".into())
-                            },
-                            move |s, v| {
-                                let size = v
-                                    .split_once('x')
-                                    .and_then(|(w, h)| Some([w.parse().ok()?, h.parse().ok()?]));
-                                write(s).size = size;
-                            },
-                        ),
-                    ),
-                    row_tip(
-                        ui,
-                        "output-spout-straight",
-                        "output-spout-straight-hint",
-                        switch(
-                            ui,
-                            move |s| read(s).straight_alpha,
-                            move |s, v| write(s).straight_alpha = v,
-                        ),
-                    ),
-                ],
+            shown_if(
+                widget(Stack::column(0.0))
+                    .children((name, source, below_divider(size), below_divider(straight)))
+                    .into_any(),
+                move || ui.settings.with(|s| read(s).enabled),
             ),
         ]
     };
@@ -279,6 +521,7 @@ pub(super) fn output(ui: Ui) -> AnyView {
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
             section(ui, "output-obs-title", vec![obs_guide(ui)]),
+            obs_link(ui),
             section_with(
                 ui,
                 if cfg!(target_os = "macos") {

@@ -701,12 +701,60 @@ fn partner_settings_round_trip_and_sanitize() {
     s.overlays.peer_display.lock = Lock::Interactive;
     assert!(s.sanitize());
     assert_eq!(s.output.peer_display.name, "Partner");
-    assert_eq!(s.output.peer_display.size, Some([16, 8192]));
+    assert_eq!(s.output.peer_display.size, Some([16, 1920]));
     assert_eq!(s.overlays.peer_display.size, Some([160.0, 8192.0]));
     let loaded: Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
     assert_eq!(loaded, s);
     assert!(!s.output.display.enabled);
     assert_eq!(s.overlays.display.size, None);
+}
+
+#[test]
+fn output_sizes_fit_1080p_either_way_round() {
+    assert_eq!(fit_output_size(960.0, 320.0), Some([960, 320]));
+    assert_eq!(fit_output_size(3840.0, 2160.0), Some([1920, 1080]));
+    assert_eq!(fit_output_size(2560.0, 1440.0), Some([1920, 1080]));
+    // Portrait keeps 1080 across and 1920 down.
+    assert_eq!(fit_output_size(1200.0, 2400.0), Some([960, 1920]));
+    // Wider than 16:9 is held by the long side, taller boxes by the short.
+    assert_eq!(fit_output_size(3840.0, 960.0), Some([1920, 480]));
+    assert_eq!(fit_output_size(1600.0, 1600.0), Some([1080, 1080]));
+    assert_eq!(fit_output_size(959.6, 320.4), Some([960, 320]));
+    assert_eq!(fit_output_size(4.0, 4.0), Some([16, 16]));
+    for bad in [
+        (0.0, 10.0),
+        (10.0, -1.0),
+        (f64::NAN, 10.0),
+        (f64::INFINITY, 10.0),
+    ] {
+        assert_eq!(fit_output_size(bad.0, bad.1), None);
+    }
+}
+
+#[test]
+fn obs_link_round_trips_without_the_runtime_size() {
+    let old: Settings = serde_json::from_str(r#"{"schema":3}"#).unwrap();
+    assert_eq!(old.output.obs, ObsLink::default());
+    assert_eq!(
+        (old.output.obs.host.as_str(), old.output.obs.port),
+        ("127.0.0.1", 4455)
+    );
+    assert!(old.output.history.obs_source.is_empty());
+    let mut s = Settings::default();
+    s.output.obs.enabled = true;
+    s.output.history.obs_source = "NanaType History".into();
+    s.output.history.size = Some([3840, 2160]);
+    s.output.history.obs_size = Some([800, 600]);
+    assert_eq!(s.output.history.extent(), Some([800, 600]));
+    s.sanitize();
+    assert_eq!(s.output.history.size, Some([1920, 1080]));
+    let json = serde_json::to_string(&s).unwrap();
+    assert!(!json.contains("obs_size"));
+    let loaded: Settings = serde_json::from_str(&json).unwrap();
+    assert_eq!(loaded.output.history.obs_size, None);
+    assert_eq!(loaded.output.history.extent(), Some([1920, 1080]));
+    assert_eq!(loaded.output.history.obs_source, "NanaType History");
+    assert!(loaded.output.obs.enabled);
 }
 
 #[test]

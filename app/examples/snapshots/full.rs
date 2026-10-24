@@ -641,6 +641,60 @@ fn links(scene: &Scene, out: &std::path::Path) {
         );
     }
 
+    // OBS linked: the display follows a box past 1080p, the history's
+    // source has no box yet, the partner's source is not in the scene.
+    let mut on = (*ui.settings.get_untracked()).clone();
+    on.output.obs.enabled = true;
+    on.output.peer_display.enabled = true;
+    on.output.display.obs_source = "NanaType Display".into();
+    on.output.history.obs_source = "NanaType History".into();
+    on.output.peer_display.obs_source = "Partner".into();
+    on.output.history.size = Some([1280, 720]);
+    let obs = |name: &str, bounds: Option<[f64; 2]>| nanatype_obs::ObsItem {
+        id: 1,
+        source: name.into(),
+        kind: "spout_capture".into(),
+        group: false,
+        transform: nanatype_obs::Transform {
+            size: [960.0, 320.0],
+            bounds,
+        },
+    };
+    let state = nanatype::app::obs::State {
+        status: nanatype_obs::ObsStatus::Connected,
+        scene: Some(Arc::new(nanatype_obs::ObsScene {
+            name: "直播".into(),
+            items: vec![
+                obs("NanaType Display", Some([2560.0, 854.0])),
+                obs("NanaType History", None),
+            ],
+        })),
+        password_saved: true,
+    };
+    let mut status = (*ui.status.get_untracked()).clone();
+    status.obs = LinkState::Connected(nanatype::ui::I18N.tr_in(
+        locale,
+        "obs-status-connected",
+        &[("scene", "直播".into())],
+    ));
+    ui.obs.set(Arc::new(state));
+    ui.settings.set(Arc::new(on));
+    ui.status.set(Arc::new(status));
+    ui.page.set(settings::Page::Output);
+    shot(
+        "settings-Output-obs",
+        out,
+        920,
+        1500,
+        theme.clone(),
+        |doc, id| {
+            doc.context_mut()
+                .mount_view_root(id, move || settings::settings_window(ui))
+                .unwrap();
+        },
+    );
+    ui.obs.set(Arc::new(nanatype::app::obs::State::default()));
+
     // VTube Studio authorised with a model's hotkeys listed (one mapped by
     // hand), and quick phrases with a hotkey.
     let mut on = (*ui.settings.get_untracked()).clone();

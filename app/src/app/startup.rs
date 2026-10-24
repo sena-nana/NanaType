@@ -32,6 +32,7 @@ pub(super) struct Workers {
     pub twitch: nanatype_twitch::TwitchHandle,
     pub blivechat: nanatype_blive::BliveHandle,
     pub comet_relay: nanatype_blive::RelayHandle,
+    pub obs: nanatype_obs::ObsHandle,
     pub steam: nanatype_steam::SteamHandle,
     pub sticker_manager: crate::stickers::Manager,
     pub telegram: crate::stickers::telegram::Service,
@@ -74,6 +75,7 @@ impl Workers {
             ),
             blivechat: nanatype_blive::BliveHandle::new(forward(&post, Msg::Blivechat)),
             comet_relay: nanatype_blive::RelayHandle::new(forward(&post, Msg::CometRelay)),
+            obs: nanatype_obs::ObsHandle::new(forward(&post, Msg::Obs)),
             steam: nanatype_steam::SteamHandle::start(steam, forward(&post, Msg::Workshop)),
             sticker_manager: crate::stickers::Manager::new(
                 &paths.data,

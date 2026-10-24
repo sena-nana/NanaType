@@ -7,6 +7,7 @@ mod chat;
 pub mod douyin;
 mod editor;
 mod live;
+pub mod obs;
 mod packages;
 mod skins;
 mod startup;
@@ -123,6 +124,9 @@ pub struct App {
     /// Third-party chat: the blivechat client and the 彗星号 relay it can join.
     pub blivechat: nanatype_blive::BliveHandle,
     pub comet_relay: nanatype_blive::RelayHandle,
+    /// OBS's program scene, sizing the Spout/Syphon outputs.
+    pub obs: nanatype_obs::ObsHandle,
+    obs_password: obs::Password,
     /// Steam: Workshop subscriptions (inert outside the Steam build).
     steam: nanatype_steam::SteamHandle,
     workshop: crate::workshop::Workshop,
@@ -282,6 +286,7 @@ impl App {
             clock::now_ms(),
         );
         let blivechat_auth = blivechat::AuthCode::new(&paths.config);
+        let obs_password = obs::Password::new(&paths.config);
         let mut app = Self {
             plugins: Default::default(),
             plugin_activation: Default::default(),
@@ -317,6 +322,8 @@ impl App {
             twitch: workers.twitch,
             blivechat: workers.blivechat,
             comet_relay: workers.comet_relay,
+            obs: workers.obs,
+            obs_password,
             steam: workers.steam,
             workshop,
             blivechat_auth,
@@ -1065,6 +1072,7 @@ impl App {
         self.unofficial_configure(&i);
         self.twitch_configure();
         self.blivechat_configure();
+        self.obs_configure();
         self.edit_status(|s| {
             if !i.vts.enabled {
                 s.vts = LinkState::Off;
@@ -2050,6 +2058,7 @@ impl App {
             | Msg::CometRelay(_)
             | Msg::BlivechatAuthCode(_)
             | Msg::CometResetToken) => self.blivechat_msg(m),
+            m @ (Msg::Obs(_) | Msg::ObsPassword(_) | Msg::ObsFitBounds(_)) => self.obs_msg(m),
             m @ (Msg::Workshop(_)
             | Msg::WorkshopBrowse(_)
             | Msg::WorkshopOpen(_)
