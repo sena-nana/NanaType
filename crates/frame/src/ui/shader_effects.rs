@@ -173,6 +173,32 @@ pub fn preview_animating(ui: Stage) -> bool {
                     && !stopped(&m.program.hash)
             })
 }
+/// Whether the input window's skin preview has programs that move, so the
+/// input window needs frames.
+pub fn input_animating(ui: Stage) -> bool {
+    if !NOTICES.lock().unwrap_or_else(|e| e.into_inner()).is_empty() {
+        return true;
+    }
+    if warming(ui, Source::Draft) {
+        return true;
+    }
+    if !enabled(ui) || !ui.settings.with_untracked(|s| s.general.input_skin_preview) {
+        return false;
+    }
+    let materials: Vec<_> = MATERIALS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .values()
+        .filter_map(Weak::upgrade)
+        .collect();
+    materials.into_iter().any(|m| {
+        m.source == Source::Draft
+            && m.ui.draft == ui.draft
+            && m.spec.animated
+            && m.spec.intensity > 0.
+            && !stopped(&m.program.hash)
+    })
+}
 
 struct Material {
     warming: AtomicBool,
@@ -254,6 +280,8 @@ fn warming(ui: Stage, source: Source) -> bool {
             && if source == Source::Preview {
                 // A sample shares the clock of the UI it previews for.
                 m.ui.now == ui.now && ui.live_preview.get()
+            } else if source == Source::Draft {
+                m.ui.draft == ui.draft
             } else {
                 m.ui.display == ui.display && !ui.display.with_untracked(|d| d.empty)
             }
@@ -1533,7 +1561,8 @@ impl Renderer {
         let now = if animated { crate::clock::now_ms() } else { 0 };
         let events = if !animated {
             REST_EVENTS
-        } else if m.source == Source::Preview {
+        } else if m.source != Source::Display {
+            // Samples and the input box hold a shown line; no typing events.
             [2., 2., 1., 1.]
         } else {
             event_values(m.ui, now)

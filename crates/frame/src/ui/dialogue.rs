@@ -606,17 +606,15 @@ impl BoxCtx {
     }
 
     fn box_surface(&self) -> Surface {
-        if self.source != Source::Draft
-            && self.skin.dialogue.shader_effects.iter().any(|e| {
-                e.target == nanatype_theme::ShaderTarget::Artwork
-                    && self
-                        .skin
-                        .shaders
-                        .get(&e.shader)
-                        .is_some_and(|s| s.static_fallback)
-                    && self.skin.shader_programs.contains_key(&e.shader)
-            })
-        {
+        if self.skin.dialogue.shader_effects.iter().any(|e| {
+            e.target == nanatype_theme::ShaderTarget::Artwork
+                && self
+                    .skin
+                    .shaders
+                    .get(&e.shader)
+                    .is_some_and(|s| s.static_fallback)
+                && self.skin.shader_programs.contains_key(&e.shader)
+        }) {
             // The same authored canvas supplies the still and moving silhouette.
             // Do not paint a stretched raster or a second generic frame under it.
             let native = Surface::dialogue_box(&self.skin, None);
@@ -959,18 +957,16 @@ fn box_view(ui: Stage, ctx: BoxCtx, content: AnyView) -> impl IntoView {
             (Surface::default(), [0.0; 4])
         } else if source == Source::Draft {
             let skin = ui.skin.get();
-            let urls = ui.asset_urls.get();
-            (
-                Surface::dialogue_box(
-                    &skin,
-                    skin.dialogue
-                        .box_
-                        .frame
-                        .as_ref()
-                        .and_then(|f| urls.get(&format!("skin:{}", f.image)).cloned()),
-                ),
-                skin.dialogue.padding,
-            )
+            let padding = skin.dialogue.padding;
+            // The same box as the display, so an artwork shader is not
+            // painted over a stretched still of itself.
+            let ctx = BoxCtx {
+                skin,
+                urls: ui.asset_urls.get(),
+                source,
+                preview_name: String::new(),
+            };
+            (ctx.box_surface(), padding)
         } else {
             let resolved = padding_ctx.resolved(ui);
             (resolved.box_surface(), resolved.skin.dialogue.padding)
@@ -1150,9 +1146,6 @@ pub(super) fn empty_placeholder(
 /// Custom GPU paint always precedes the text, even for ornaments whose
 /// static artwork is drawn above the box.
 fn shader_layers(ui: Stage, ctx: &BoxCtx, surface: &Surface, layer: DecorLayer) -> Vec<AnyView> {
-    if ctx.source == Source::Draft {
-        return Vec::new();
-    }
     let mut layers = Vec::new();
     for effect in ctx
         .skin
@@ -1216,10 +1209,11 @@ fn shader_layers(ui: Stage, ctx: &BoxCtx, surface: &Surface, layer: DecorLayer) 
                 // coordinates; NanaUI's custom GPU context exposes only AABBs.
                 l.opacity = Some(dec.opacity);
             }))
-            .visible(move || {
-                source == Source::Preview
-                    || dec.when != DecorWhen::Speaker
-                    || !drawn(ui).speaker.name.trim().is_empty()
+            .visible(move || match source {
+                Source::Preview => true,
+                _ if dec.when != DecorWhen::Speaker => true,
+                Source::Display => !drawn(ui).speaker.name.trim().is_empty(),
+                Source::Draft => ui.speaker.with(|s| !s.name.trim().is_empty()),
             })
             .children(v)
             .into_any(),
@@ -1229,15 +1223,34 @@ fn shader_layers(ui: Stage, ctx: &BoxCtx, surface: &Surface, layer: DecorLayer) 
 }
 
 fn responsive_shaders(ui: Stage, ctx: &BoxCtx, layer: DecorLayer) -> AnyView {
+    // The input window's box follows its skin and the preview switch.
+    if ctx.source == Source::Draft {
+        return match layer {
+            DecorLayer::Above => {
+                input_skin_layer(ui, ctx, |ui, ctx| shader_art(ui, ctx, DecorLayer::Above))
+            }
+            DecorLayer::Below => {
+                input_skin_layer(ui, ctx, |ui, ctx| shader_art(ui, ctx, DecorLayer::Below))
+            }
+        };
+    }
     let ctx = ctx.clone();
-    dynamic(move || ui.display_size.get(), move |_| {
-        let ctx = ctx.resolved(ui);
-        let layers = shader_layers(ui, &ctx, &ctx.box_surface(), layer);
-        let art: Vec<_> = ctx.skin.dialogue.decor.iter()
-            .filter(|d| ctx.source != Source::Draft && d.layer == layer && d.shader.is_some() && decor_shown(d, ctx.source))
-            .map(|d| decor_view(ui, &ctx, d)).collect();
-        (art, layers).into_any()
-    }).css(nana_ui::runtime::view::css! { position: absolute; inset: 0; pointer-events: none; overflow: visible; }).into_any()
+    dynamic(move || ui.display_size.get(), move |_| shader_art(ui, &ctx.resolved(ui), layer))
+        .css(nana_ui::runtime::view::css! { position: absolute; inset: 0; pointer-events: none; overflow: visible; }).into_any()
+}
+
+/// The skin's GPU programs on one layer, with the ornaments they paint.
+fn shader_art(ui: Stage, ctx: &BoxCtx, layer: DecorLayer) -> AnyView {
+    let layers = shader_layers(ui, ctx, &ctx.box_surface(), layer);
+    let art: Vec<_> = ctx
+        .skin
+        .dialogue
+        .decor
+        .iter()
+        .filter(|d| d.layer == layer && d.shader.is_some() && decor_shown(d, ctx.source))
+        .map(|d| decor_view(ui, ctx, d))
+        .collect();
+    (art, layers).into_any()
 }
 
 /// Rebuild only skin layers when the draft's skin or resolved images change.
@@ -1298,10 +1311,14 @@ fn sweep_layer(ui: Stage, ctx: &BoxCtx) -> AnyView {
         let spec = ctx.skin.dialogue.sweep.clone();
         dynamic(
             move || {
-                source == Source::Display
-                    && !ui.reduced_motion.get()
+                !ui.reduced_motion.get()
                     && ui.settings.with(|s| s.skin.motion)
-                    && !drawn(ui).empty
+                    && match source {
+                        Source::Display => !drawn(ui).empty,
+                        // Built only while the input window's skin preview is on.
+                        Source::Draft => true,
+                        Source::Preview => false,
+                    }
             },
             move |animated| super::sweep::view(surface.clone(), spec.clone(), *animated),
         )
@@ -1645,12 +1662,19 @@ fn decor_view(ui: Stage, ctx: &BoxCtx, dec: &DecorSpec) -> AnyView {
     dynamic(
         move || {
             let view = ui.display.get();
+            // The input box is built only while its skin preview is on.
+            let live = match source {
+                Source::Display => !view.empty,
+                Source::Preview => ui.shader_preview.get(),
+                Source::Draft => true,
+            };
             motion_enabled
-                && (source == Source::Display || source == Source::Preview && ui.shader_preview.get())
+                && live
                 && ui.settings.with(|s| s.skin.advanced_effects)
                 && !ui.reduced_motion.get()
-                && (source == Source::Preview || !view.empty)
-                && (!speaker_only || !view.speaker.name.trim().is_empty())
+                && (source == Source::Draft
+                    || !speaker_only
+                    || !view.speaker.name.trim().is_empty())
         },
         move |animate| {
             let speaker = speaker_only.then(|| has_speaker(ui, &ctx));
@@ -1761,7 +1785,7 @@ fn decor_views(ui: Stage, ctx: &BoxCtx, layer: DecorLayer) -> Vec<AnyView> {
         .decor
         .iter()
         .filter(|d| d.layer == layer && decor_shown(d, ctx.source))
-        .filter(|d| ctx.source == Source::Draft || d.shader.is_none() || layer == DecorLayer::Below)
+        .filter(|d| d.shader.is_none() || layer == DecorLayer::Below)
         .map(|d| decor_view(ui, ctx, d))
         .collect()
 }

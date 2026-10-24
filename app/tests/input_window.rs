@@ -18,6 +18,28 @@ fn preview_settings() -> Settings {
 }
 
 #[test]
+fn the_input_skin_preview_plays_the_skins_animated_programs() {
+    let ui = Ui::new(
+        Arc::new(preview_settings()),
+        common::skin("nanatype.forest"),
+        Locale::ZhCn,
+    );
+    let mut session = common::session().mount(1200, 640, move || input::input_window(ui));
+    session.set_gpu_renderers(nanatype::ui::sweep::renderers());
+    for _ in 0..3 {
+        session.flush().unwrap();
+    }
+    assert!(nanatype::ui::shader_effects::input_animating(*ui));
+    // Turning the preview off drops the box's programs and their frames.
+    ui.settings
+        .update(|s| Arc::make_mut(s).general.input_skin_preview = false);
+    for _ in 0..3 {
+        session.flush().unwrap();
+    }
+    assert!(!nanatype::ui::shader_effects::input_animating(*ui));
+}
+
+#[test]
 fn plain_text_fills_the_editor_column_across_skin_sidebar_size_and_source_changes() {
     let registry = common::registry();
     for (skin_id, dark, scale) in [("nanatype.halo", false, 1.0), ("nanatype.night", true, 2.0)] {

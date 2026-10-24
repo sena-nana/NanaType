@@ -129,6 +129,20 @@ fn frame_policy(
                 if preview { skin_fps } else { 30 },
             )
         }
+        Some(WindowKind::Input) => {
+            // The skin preview's programs draw from the wall clock; only
+            // frames are needed, not an application clock.
+            let moving = crate::ui::shader_effects::input_animating(*ui)
+                || crate::ui::sweep::input_animating(*ui);
+            return FramePolicy {
+                demand: if moving {
+                    FrameDemand::Continuous(NonZeroU32::new(skin_fps).expect("non-zero"))
+                } else {
+                    FrameDemand::OnDemand
+                },
+                ..FramePolicy::default()
+            };
+        }
         _ => return FramePolicy::default(),
     };
     FramePolicy {
@@ -1412,6 +1426,16 @@ impl RuntimeProgram for Host {
             &self.pager,
         )
         .demand;
+        // A hidden input window does not play its skin preview.
+        let demand = match demand {
+            FrameDemand::Continuous(_)
+                if WindowKind::from_id(id) == Some(WindowKind::Input)
+                    && !self.app.input_visible() =>
+            {
+                FrameDemand::OnDemand
+            }
+            demand => demand,
+        };
         match (
             demand,
             self.stickers.next_at(
