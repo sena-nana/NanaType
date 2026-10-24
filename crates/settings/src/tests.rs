@@ -479,10 +479,13 @@ fn sanitize_clamps_hand_edited_values() {
     s.playback.speed_scale = f32::NAN;
     s.sound.master = 7.0;
     s.history.visible_items = 99_999;
+    s.skin.frame_rate = 144;
     assert!(s.sanitize());
     assert_eq!(s.playback.speed_scale, 1.0);
     assert_eq!(s.sound.master, 1.0);
     assert_eq!(s.history.visible_items, s.history.max_items);
+    assert_eq!(s.skin.frame_rate, 30);
+    s.skin.frame_rate = 60;
     assert!(!s.sanitize());
 }
 

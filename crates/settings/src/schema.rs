@@ -13,6 +13,8 @@ use serde_json::Value;
 
 pub const SETTINGS_SCHEMA: u32 = 3;
 pub const DEFAULT_SKIN: &str = "nanatype.halo";
+/// Skin loop rates the settings offer; the first is the default.
+pub const SKIN_FRAME_RATES: [u32; 2] = [30, 60];
 /// Raised whenever scripts gain data or host interfaces: 1 granted events and
 /// views, 2 adds declared data reads. Older approvals must be reviewed again.
 pub const PLUGIN_CONSENT_POLICY: u32 = 2;
@@ -466,6 +468,9 @@ impl SkinOverrides {
 #[serde(default)]
 pub struct SkinSettings {
     pub advanced_effects: bool,
+    /// Frames per second for the display window's animation, typing
+    /// included: 30 or 60.
+    pub frame_rate: u32,
     pub id: String,
     pub overrides: SkinOverrides,
     /// An entry replaces legacy body overrides; None fields mean skin defaults.
@@ -480,6 +485,7 @@ impl Default for SkinSettings {
     fn default() -> Self {
         Self {
             advanced_effects: true,
+            frame_rate: SKIN_FRAME_RATES[0],
             id: DEFAULT_SKIN.into(),
             overrides: SkinOverrides::default(),
             personalizations: BTreeMap::new(),
@@ -1158,6 +1164,9 @@ impl Settings {
         let h = &mut self.history;
         h.max_items = h.max_items.clamp(1, 5000);
         h.visible_items = h.visible_items.clamp(1, h.max_items);
+        if !SKIN_FRAME_RATES.contains(&self.skin.frame_rate) {
+            self.skin.frame_rate = SKIN_FRAME_RATES[0];
+        }
         if let Some(size) = self.skin.overrides.text_size.as_mut() {
             *size = finite_or(*size, 28.0).clamp(8.0, 200.0);
         }

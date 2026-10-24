@@ -89,6 +89,10 @@ fn frame_policy(
     peer_follow: &overflow::Follow,
     pager: &overflow::Pager,
 ) -> FramePolicy {
+    let skin_fps = ui
+        .settings
+        .with_untracked(|s| s.skin.frame_rate)
+        .clamp(30, 60);
     let (clock, tick_clock, render_only, next_at, fps) = match kind {
         Some(WindowKind::Display | WindowKind::PeerDisplay) => {
             let remote = kind == Some(WindowKind::PeerDisplay);
@@ -108,20 +112,23 @@ fn frame_policy(
                 typing,
                 movement || crate::ui::shader_effects::animating(*track),
                 follow.next_line_at(),
-                if typing || movement { 60 } else { 30 },
+                skin_fps,
             )
         }
         Some(WindowKind::History) => {
             let fade = history::fade_schedule(*ui, now);
             (ui.history_now, fade.animating, false, fade.next_at, 60)
         }
-        Some(WindowKind::Settings) => (
-            ui.settings_pulse_ms,
-            settings::links_pulsing(ui),
-            crate::ui::preview::animating(*ui, now),
-            None,
-            30,
-        ),
+        Some(WindowKind::Settings) => {
+            let preview = crate::ui::preview::animating(*ui, now);
+            (
+                ui.settings_pulse_ms,
+                settings::links_pulsing(ui),
+                preview,
+                None,
+                if preview { skin_fps } else { 30 },
+            )
+        }
         _ => return FramePolicy::default(),
     };
     FramePolicy {

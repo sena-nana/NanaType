@@ -165,6 +165,26 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                 "skins-interface",
                 vec![
                     toggle_row!(ui, "skins-advanced-effects", skin.advanced_effects),
+                    row(
+                        ui,
+                        "skins-frame-rate",
+                        None,
+                        select(
+                            ui,
+                            select_keys(
+                                ui,
+                                &[("30", "skins-frame-rate-30"), ("60", "skins-frame-rate-60")],
+                            ),
+                            |s| s.skin.frame_rate.to_string().into(),
+                            |s, v| {
+                                if let Ok(fps) = v.parse::<u32>()
+                                    && nanatype_settings::SKIN_FRAME_RATES.contains(&fps)
+                                {
+                                    s.skin.frame_rate = fps;
+                                }
+                            },
+                        ),
+                    ),
                     toggle_row!(ui, "skins-hot-reload", skin.hot_reload),
                 ],
             ),
