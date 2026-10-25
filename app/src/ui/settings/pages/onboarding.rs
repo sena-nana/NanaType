@@ -6,6 +6,13 @@ const CARET: (f32, f32) = (2.0, 12.0);
 /// How many steps the first-run guide has.
 pub(super) const ONBOARD_STEPS: u8 = 4;
 
+/// The skin step draws its selector first. The preview follows once the
+/// entrance has had its time, so the entrance does not build it.
+fn hold_skin_preview(ui: Ui, cx: &mut nana_ui::runtime::ViewContext<'_, Button>) {
+    ui.onboard_skin_shown.set(false);
+    cx.dispatch_program_all(Msg::HoldOnboardPreview);
+}
+
 /// The first-run guide: one card marked by a 3px accent bar, four steps
 /// (language and name, a skin with its live preview, the input mode, the
 /// hotkeys and OBS) with Back / Next and a step indicator. Skip or the last
@@ -57,11 +64,15 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
                 .size(ControlSize::Small),
         )
         .visible(move || step.get() > 0)
-        .on(move |_: &Activate| {
-            if step.get_untracked() == 1 {
+        .on_cx(move |_, _: &Activate, cx| {
+            let n = step.get_untracked();
+            if n == 1 {
                 ui.shader_preview.set(false);
             }
-            step.set(step.get_untracked().saturating_sub(1));
+            if n == 2 {
+                hold_skin_preview(ui, cx);
+            }
+            step.set(n.saturating_sub(1));
         }),
         widget(Stack::row(0.0).grow(1.0)),
         // Next, and on the last step "Get started".
@@ -85,6 +96,9 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
             } else {
                 if n == 1 {
                     ui.shader_preview.set(false);
+                }
+                if n == 0 {
+                    hold_skin_preview(ui, cx);
                 }
                 step.set(n + 1);
             }
@@ -155,9 +169,18 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
         ],
         1 => vec![
             row(ui, "onboard-skin", None, skin_select(ui)),
-            // The live preview of the skin just chosen, inset like the row
-            // above it.
-            block(skin_preview(ui, signal(None), true)),
+            // Held through the entrance, so that frame does not build the preview.
+            dynamic(
+                move || ui.onboard_skin_shown.get(),
+                move |shown| {
+                    if *shown {
+                        block(skin_preview(ui, signal(None), true))
+                    } else {
+                        block(hint(ui.now_t("skin-preview-loading")))
+                    }
+                },
+            )
+            .into_any(),
         ],
         2 => vec![
             widget(

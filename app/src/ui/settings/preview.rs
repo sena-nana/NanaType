@@ -1,6 +1,7 @@
 //! Isolated, unsaved skin editing. Only Save dispatches an application message.
+use std::cell::RefCell;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, OnceLock};
 
 use nana_ui::runtime::view::{
     AnyView, IntoView, Signal, dynamic, on_mount, segmented_option, signal, widget,
@@ -64,20 +65,29 @@ const LINE_STEP: f64 = 0.05;
 /// The line height's value beside its slider.
 const READOUT_W: f32 = 56.0;
 
-/// How a preview asks the program for its stage: views cannot post program
-/// messages outside an event, so the program installs this once.
-static REQUEST: OnceLock<Box<dyn Fn(String, bool) + Send + Sync>> = OnceLock::new();
-
-/// Install how the preview asks for skin `id`'s stage (and whether its
-/// effects play): the program prepares it off the UI thread.
-pub fn set_requester(request: impl Fn(String, bool) + Send + Sync + 'static) {
-    let _ = REQUEST.set(Box::new(request));
+// Prepares asked for while a frame was built. The settings window sends
+// them after that frame is presented: registering a skin's fonts takes the
+// process-wide text engine, and the frame still being laid out needs it too.
+thread_local! {
+    static DEFERRED: RefCell<Vec<(String, bool)>> = const { RefCell::new(Vec::new()) };
 }
 
-fn request(id: String, play: bool) {
-    if let Some(request) = REQUEST.get() {
-        request(id, play);
-    }
+/// Remember a prepare for after the current frame. A repeat for the same
+/// skin keeps the latest `play`.
+fn defer_request(id: String, play: bool) {
+    DEFERRED.with(|pending| {
+        let mut pending = pending.borrow_mut();
+        if let Some(slot) = pending.iter_mut().find(|(asked, _)| *asked == id) {
+            slot.1 = play;
+        } else {
+            pending.push((id, play));
+        }
+    });
+}
+
+/// Prepares recorded since the last presented settings frame, oldest first.
+pub fn take_deferred_requests() -> Vec<(String, bool)> {
+    DEFERRED.with(|pending| std::mem::take(&mut *pending.borrow_mut()))
 }
 
 /// Both skin catalogue layouts preview a skin on selection; the preview
@@ -606,13 +616,18 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyVi
                 return hint(ui.now_t("skin-edit-unavailable"));
             };
             let surface = Surface::of(history_mode);
-            // The page shows at once; the stage follows when prepared off
-            // the UI thread (fonts, theming, effects).
+            // The page shows at once, on the placeholder until a stage is
+            // ready. Building the dialogue and its controls waits for that,
+            // which arrives after this frame has been presented.
             let prepared = ui
                 .skin_preview
                 .with_untracked(|p| p.clone().filter(|p| p.shows(&row, locale.tag())));
+            // This mount is the same flush that is about to lay the step out,
+            // and the prepare registers fonts on the text engine that layout
+            // needs. The settings window sends it once this frame has been
+            // presented.
             let ask = id.clone();
-            on_mount(move |_| request(ask, autoplay || ui.shader_preview.get_untracked()));
+            on_mount(move |_| defer_request(ask, autoplay || ui.shader_preview.get_untracked()));
             let (sample, controls) = match prepared {
                 Some(p) => (
                     stage_view(
@@ -1175,6 +1190,10 @@ align = { param = "align" }
         assert!(keys.iter().any(|k| k == "skin-preview-loading"), "{keys:?}");
         assert!(!keys.iter().any(|k| k == "skin-preview-box"));
         assert!(keys.iter().any(|k| k == "apply-preview"));
+        assert!(ui.skin_preview.get_untracked().is_none());
+        // Mount records the prepare; nothing loads until the presented frame
+        // sends it. The dialogue is still absent.
+        assert_eq!(take_deferred_requests(), vec![(id.to_owned(), false)]);
 
         crate::ui::prepare_skin_preview(ui, &registry, id, false).unwrap();
         let keys = node_keys(&mut session);

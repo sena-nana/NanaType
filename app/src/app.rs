@@ -105,6 +105,9 @@ pub struct App {
     telegram: crate::stickers::telegram::Service,
     pub windows: WindowManager,
     pub scheduler: Scheduler,
+    /// The onboarding skin preview waiting out its step's entrance.
+    /// A newer hold replaces it, and the old reveal does nothing.
+    onboard_preview_gen: u64,
     pub audio: AudioHandle,
     pub bank: Bank,
     /// The chosen sound pack, layered over the skin's sounds.
@@ -234,11 +237,6 @@ impl App {
             let post = post.clone();
             move || post(Msg::LayoutMaterialsReady)
         });
-        // The skin preview's stage is prepared off the UI thread too.
-        crate::ui::settings::preview::set_requester({
-            let post = post.clone();
-            move |id, play| post(Msg::PrepareSkinPreview { id, play })
-        });
         let persist = Persist::start({
             let post = post.clone();
             move |e| {
@@ -307,6 +305,7 @@ impl App {
                 w
             },
             scheduler: workers.scheduler,
+            onboard_preview_gen: 0,
             audio: workers.audio,
             bank: Vec::new(),
             sound_pack: None,
@@ -2011,6 +2010,23 @@ impl App {
             | Msg::SettingsPlatform(_)
             | Msg::SecondInstance
             | Msg::Displays(_)) => self.window_msg(m),
+            Msg::HoldOnboardPreview => {
+                self.onboard_preview_gen = self.onboard_preview_gen.wrapping_add(1);
+                let generation = self.onboard_preview_gen;
+                // The entrance and this delay start together. The step draws
+                // the selector while it fades in; the preview mounts after.
+                self.scheduler.post_after(
+                    Duration::from_millis(crate::ui::motion::ENTER_MS),
+                    Msg::RevealOnboardPreview { generation },
+                );
+            }
+            Msg::RevealOnboardPreview { generation }
+                if generation == self.onboard_preview_gen
+                    && self.ui.onboard_step.get_untracked() == 1 =>
+            {
+                self.ui.onboard_skin_shown.set(true);
+            }
+            Msg::RevealOnboardPreview { .. } => {}
             m @ (Msg::DeleteSkin(_)
             | Msg::ExportSkin(_)
             | Msg::DuplicateSkin(_)

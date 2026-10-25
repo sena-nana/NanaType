@@ -355,6 +355,13 @@ pub enum Msg {
         ticket: u64,
         result: Result<Box<crate::services::watch::PreparedSkins>, String>,
     },
+    /// The skin step's entrance has started; mount its preview when that
+    /// entrance is over. A newer hold drops the one it replaces.
+    HoldOnboardPreview,
+    /// Mount the skin step's preview, unless a newer hold replaced `generation`.
+    RevealOnboardPreview {
+        generation: u64,
+    },
     /// Prepare only the selected preview; static selection must not start motion.
     PrepareSkinPreview {
         id: String,

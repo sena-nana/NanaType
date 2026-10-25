@@ -375,6 +375,33 @@ fn skin_preview_fits_first_run_and_settings_through_resizes() {
 }
 
 #[test]
+fn onboarding_skin_step_enters_before_it_mounts_the_preview() {
+    let mut f = Fixture::new(Locale::ZhCn, true, Page::General);
+    f.ui.onboard_skin_shown.set(false);
+    f.ui.onboard_step.set(1);
+    f.session.flush().unwrap();
+    let paths = |f: &Fixture| {
+        f.session
+            .accessibility_dump()
+            .into_iter()
+            .filter_map(|n| n.agent_path)
+            .collect::<Vec<_>>()
+    };
+    let held = paths(&f);
+    assert!(
+        held.iter().all(|p| !p.ends_with("skin-preview")),
+        "{held:?}"
+    );
+    f.ui.onboard_skin_shown.set(true);
+    f.session.flush().unwrap();
+    let shown = paths(&f);
+    assert!(
+        shown.iter().any(|p| p.ends_with("skin-preview")),
+        "{shown:?}"
+    );
+}
+
+#[test]
 fn onboarding_skin_step_enables_the_live_preview_clock() {
     let f = Fixture::new(Locale::ZhCn, true, Page::General);
     assert!(!f.ui.live_preview.get());

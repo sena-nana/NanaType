@@ -1339,11 +1339,19 @@ impl RuntimeProgram for Host {
     fn window_frame_presented(
         &mut self,
         id: WindowId,
-        _: &RuntimeProgramContext<Msg>,
+        context: &RuntimeProgramContext<Msg>,
     ) -> RuntimeProgramUpdate {
         crate::ui::collect_effect_garbage();
         if let Some(perf) = &mut self.perf {
             perf.frame(id, false, self.docs.get(&id));
+        }
+        // The skin step (and the skins page) asked while this frame was
+        // built. Sending now keeps font registration off the layout that
+        // just presented it, so the step is on screen before the stage loads.
+        if WindowKind::from_id(id) == Some(WindowKind::Settings) {
+            for (skin, play) in settings::preview::take_deferred_requests() {
+                context.dispatch(Msg::PrepareSkinPreview { id: skin, play });
+            }
         }
         RuntimeProgramUpdate::default()
     }

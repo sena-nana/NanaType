@@ -200,6 +200,9 @@ pub struct Ui {
     /// The first-run guide's step, 0-based; kept while the user visits other
     /// pages (its "Connect OBS" goes to Output).
     pub onboard_step: Signal<u8>,
+    /// The skin step mounts its live preview. Navigation holds it for the
+    /// step's entrance; opening the step directly shows it at once.
+    pub onboard_skin_shown: Signal<bool>,
     pub settings_pulse_ms: Signal<u64>,
     /// Live chat, oldest first (capped).
     pub chat: Signal<Arc<Vec<Arc<crate::chat::ChatMessage>>>>,
@@ -289,6 +292,7 @@ impl Ui {
             system_reduced_motion: signal(false),
             input_shown: signal(true),
             onboard_step,
+            onboard_skin_shown: signal(true),
             settings_pulse_ms: signal(0),
             chat: signal(Arc::new(Vec::new())),
             reply: signal(None),
