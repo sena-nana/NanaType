@@ -28,11 +28,13 @@ impl App {
     /// system refused is also reported as a notice.
     pub(super) fn apply_performance(&mut self, prev: Option<&PerformanceSettings>) {
         let wanted = self.settings.performance.clone();
+        let mut status = (*self.ui.status.get_untracked()).clone();
         let performance = Performance {
             gpu_high: nanatype_scheduling::apply_gpu(wanted.gpu_high),
             cpu: nanatype_scheduling::apply(wanted.cpu_high, wanted.cpu_performance_cores),
+            gpu: nanatype_scheduling::gpu_choice(),
+            gpu_running: status.performance.gpu_running.take(),
         };
-        let mut status = (*self.ui.status.get_untracked()).clone();
         status.performance = performance.clone();
         self.ui.status.set(Arc::new(status));
         let Some(prev) = prev else {
@@ -56,6 +58,21 @@ impl App {
         for text in problems {
             self.notice(text, true);
         }
+    }
+
+    /// Names the renderer's GPU for the Output page, once. Returns whether
+    /// it was new.
+    pub(crate) fn note_gpu(&self, gpu: &nana_ui::GpuContext) -> bool {
+        if self
+            .ui
+            .status
+            .with_untracked(|s| s.performance.gpu_running.is_some())
+        {
+            return false;
+        }
+        let name = gpu.wgpu().adapter_info().name.clone();
+        self.edit_status(|s| s.performance.gpu_running = Some(name));
+        true
     }
 
     pub(super) fn copy_text(&mut self, text: String) {

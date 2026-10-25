@@ -58,6 +58,11 @@ pub fn run() -> ExitCode {
     {
         return ExitCode::SUCCESS;
     }
+    // The renderer picks its GPU from the environment once, at startup; the
+    // single-instance listener is the first thread that could race the write.
+    let saved = nanatype_settings::peek_performance(&paths::Paths::of_app().settings());
+    // SAFETY: no other thread runs yet.
+    unsafe { nanatype_scheduling::choose_adapter(saved.gpu_adapter.as_deref()) };
     if !instance::claim(Product::APP) {
         return ExitCode::SUCCESS;
     }

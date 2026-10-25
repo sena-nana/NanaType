@@ -40,6 +40,8 @@ OBS 插件仍有 100 ms 发现轮询，完全回收后需重新创建设备和�
 
 三项默认关闭，设置保存在 `performance` 中，重启后自动重新应用。
 
+同一区块的 **运行 GPU** 选择渲染所用的显卡（默认“自动”）。Spout 共享纹理时，NanaType 与 OBS 在同一块显卡上开销最小。GPU 设备只在启动时创建，所以改动要重启后生效：启动时把所选名称写入 `WGPU_ADAPTER_NAME`，所选显卡已不存在时退回自动选择；外部已设置 `WGPU_ADAPTER_NAME` 时以外部为准。显卡按名称匹配，同名的两块显卡无法区分。
+
 ## 调试样例
 
 `cargo build -p nanatype --locked --example native_outputs` 构建直接委托真实 `Host` 的调试入口（仅 Windows debug / DX12），使用正式 Spout sender 并在监测线程观测共享围栏。运行前把 `NANATYPE_NATIVE_PROBE` 指向全新隔离目录；它不读取常用安装目录，观察器不进入发布版。

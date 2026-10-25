@@ -92,6 +92,10 @@ pub struct Performance {
     /// The raised GPU priority is in effect.
     pub gpu_high: bool,
     pub cpu: nanatype_scheduling::Status,
+    /// The GPUs on offer and the choice startup handed the renderer.
+    pub gpu: nanatype_scheduling::GpuChoice,
+    /// The GPU the renderer is on, once it has a device.
+    pub gpu_running: Option<String>,
 }
 
 /// Why a CPU preference is not in effect, in the UI's language.

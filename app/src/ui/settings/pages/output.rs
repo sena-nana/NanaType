@@ -644,9 +644,10 @@ pub(super) fn output(ui: Ui) -> AnyView {
         .into_any()
 }
 
-/// Scheduling preferences, each hint saying why it is not in effect when the
-/// system refused it.
+/// The GPU to render on, then the scheduling preferences, each hint saying
+/// why it is not in effect when the system refused it.
 fn performance(ui: Ui) -> Vec<AnyView> {
+    let adapter = gpu_adapter(ui);
     let gpu = row_live_hint(
         ui,
         "output-gpu-high",
@@ -700,7 +701,62 @@ fn performance(ui: Ui) -> Vec<AnyView> {
             |s, v| s.performance.cpu_performance_cores = v,
         ),
     );
-    vec![gpu, cpu, affinity]
+    vec![adapter, gpu, cpu, affinity]
+}
+
+/// The GPU choice. The device is created at startup, so the hint says when a
+/// choice waits for a restart, or names the GPU in use.
+fn gpu_adapter(ui: Ui) -> AnyView {
+    let status = ui.status.get_untracked();
+    let choice = &status.performance.gpu;
+    let mut options = vec![("auto".to_owned(), ui.now_t("output-gpu-adapter-auto"))];
+    options.extend(
+        choice
+            .adapters
+            .iter()
+            .map(|name| (name.clone(), name.clone())),
+    );
+    // A GPU chosen before it was removed stays listed, so the select shows it.
+    if let Some(saved) = ui.settings.get_untracked().performance.gpu_adapter.clone()
+        && !choice.adapters.contains(&saved)
+    {
+        options.push((saved.clone(), saved));
+    }
+    row_live_hint(
+        ui,
+        "output-gpu-adapter",
+        move || {
+            let saved = ui.settings.with(|s| s.performance.gpu_adapter.clone());
+            let (choice, running) = ui
+                .status
+                .with(|s| (s.performance.gpu.clone(), s.performance.gpu_running.clone()));
+            let name = running.unwrap_or_else(|| "…".into());
+            let args = [("name", name.into())];
+            Some(if choice.external {
+                ui.tr("output-gpu-adapter-env", &args)
+            } else if saved
+                .as_ref()
+                .is_some_and(|saved| !choice.adapters.contains(saved))
+            {
+                ui.tr("output-gpu-adapter-missing", &args)
+            } else if saved != choice.applied {
+                ui.tr("output-gpu-adapter-restart", &[])
+            } else {
+                ui.tr("output-gpu-adapter-hint", &args)
+            })
+        },
+        select(
+            ui,
+            options,
+            |s| {
+                s.performance
+                    .gpu_adapter
+                    .clone()
+                    .unwrap_or_else(|| "auto".into())
+            },
+            |s, v| s.performance.gpu_adapter = (v != "auto").then(|| v.to_owned()),
+        ),
+    )
 }
 
 #[cfg(test)]

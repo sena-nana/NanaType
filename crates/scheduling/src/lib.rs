@@ -1,5 +1,7 @@
 //! Scheduling preferences for the work a frame waits on.
 //!
+//! [`choose_adapter`] hands the GPU chosen in settings to the renderer.
+//!
 //! [`apply_gpu`] raises the whole process's GPU scheduling priority, so the
 //! display and its Spout sender still draw while a game fills the GPU.
 //!
@@ -11,10 +13,12 @@
 //! (chat, downloads, decoding, file work) keeps the system's scheduling, so it
 //! does not compete with a game or encoder for the fastest cores.
 
+mod adapter;
 mod gpu;
 
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
+pub use adapter::{GpuChoice, choose_adapter, gpu_choice};
 pub use gpu::apply_gpu;
 
 /// Why a CPU preference is not in effect.

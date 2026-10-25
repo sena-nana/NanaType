@@ -195,7 +195,8 @@ pub struct DiagnosticsSettings {
     pub crash_seen: u64,
 }
 
-/// Scheduling preferences while a game or encoder competes (Windows only).
+/// GPU choice and scheduling preferences while a game or encoder competes
+/// (Windows only).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PerformanceSettings {
@@ -205,6 +206,9 @@ pub struct PerformanceSettings {
     pub cpu_high: bool,
     /// Keep those threads on the performance cores.
     pub cpu_performance_cores: bool,
+    /// The GPU to render on, by the name the renderer reports; `None` lets
+    /// the renderer choose. Read once, at startup.
+    pub gpu_adapter: Option<String>,
 }
 
 /// The recordings played for keys pressed in the input window.

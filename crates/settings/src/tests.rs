@@ -966,6 +966,7 @@ fn performance_defaults_off_and_round_trips() {
             gpu_high: true,
             cpu_high: true,
             cpu_performance_cores: true,
+            gpu_adapter: Some("GPU B".into()),
         },
         ..Settings::default()
     };
@@ -973,4 +974,22 @@ fn performance_defaults_off_and_round_trips() {
     let back: Settings = serde_json::from_str(&json).unwrap();
     assert_eq!(back.performance, settings.performance);
     assert!(back.unknown.is_empty());
+}
+
+#[test]
+fn performance_peeks_the_gpu_choice_before_startup() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    assert_eq!(peek_performance(&path), PerformanceSettings::default());
+
+    let mut settings = Settings::default();
+    settings.performance.gpu_adapter = Some("GPU B".into());
+    save_json(&path, &settings).unwrap();
+    assert_eq!(
+        peek_performance(&path).gpu_adapter.as_deref(),
+        Some("GPU B")
+    );
+
+    fs::write(&path, "{not json").unwrap();
+    assert_eq!(peek_performance(&path), PerformanceSettings::default());
 }

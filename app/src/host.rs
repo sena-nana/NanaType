@@ -307,6 +307,9 @@ impl Host {
     /// before its next try, and the settings page says why.
     #[cfg(windows)]
     fn prepare_outputs(&mut self, context: &RuntimeProgramContext<Msg>) {
+        if self.app.note_gpu(context.gpu()) {
+            context.dispatch(Msg::UiChanged);
+        }
         let locale = self.app.ui.locale.get_untracked();
         self.app.spout.prepare(
             &self.app.settings,

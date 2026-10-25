@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::migrate::{MigrateError, migrate};
-use crate::schema::{DiagnosticsSettings, Settings};
+use crate::schema::{DiagnosticsSettings, PerformanceSettings, Settings};
 
 #[derive(Debug)]
 pub enum LoadNote {
@@ -120,6 +120,22 @@ pub fn peek_diagnostics(path: &Path) -> DiagnosticsSettings {
         .and_then(|text| serde_json::from_str::<Peek>(&text).ok())
         .unwrap_or_default()
         .diagnostics
+}
+
+/// The performance section alone, read before the runtime starts: the GPU
+/// it chooses has to be known before the device is created. Like
+/// [`peek_diagnostics`], an unreadable file reads as the defaults.
+pub fn peek_performance(path: &Path) -> PerformanceSettings {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default)]
+    struct Peek {
+        performance: PerformanceSettings,
+    }
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<Peek>(&text).ok())
+        .unwrap_or_default()
+        .performance
 }
 
 /// Load settings from `path`, falling back to `legacy` (the v0 location) on
