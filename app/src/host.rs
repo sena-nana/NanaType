@@ -125,7 +125,7 @@ fn frame_policy(
                 ui.settings_pulse_ms,
                 settings::links_pulsing(ui),
                 preview,
-                crate::ui::preview::history_playback_deadline(*ui, now),
+                crate::ui::preview::playback_deadline(*ui, now),
                 if preview { skin_fps } else { 30 },
             )
         }
@@ -1498,7 +1498,9 @@ impl RuntimeProgram for Host {
                 self.follow_track(now, true)
             }
             Some(WindowKind::Settings) => {
-                crate::ui::preview::tick_history_playback(*self.app.ui, now);
+                let ui = *self.app.ui;
+                crate::ui::preview::tick_history_playback(ui, now);
+                crate::ui::preview::tick_sample_playback(ui, now);
             }
             _ => {}
         }

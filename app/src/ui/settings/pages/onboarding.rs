@@ -174,7 +174,7 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
                 move || ui.onboard_skin_shown.get(),
                 move |shown| {
                     if *shown {
-                        block(skin_preview(ui, signal(None), true))
+                        block(skin_preview(ui, signal(None)))
                     } else {
                         block(hint(ui.now_t("skin-preview-loading")))
                     }

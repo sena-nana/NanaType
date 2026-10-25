@@ -4,11 +4,13 @@
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, Weak};
 
-use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, watch_effect, widget};
-use nana_ui::runtime::{Activate, ListItem, ListItemRole, Stack};
+use nana_ui::runtime::view::{
+    AnyView, IntoView, RaisedSurfacePainter, Signal, dynamic, watch_effect, widget,
+};
+use nana_ui::runtime::{Stack, Text};
 use nana_ui_core::{
     AlignSpec, BackgroundImage, LengthSpec, OverflowSpec, PointerEventsSpec, PositionSpec,
-    RadiusTier, SemanticColorRole, TransformOrigin,
+    RadiusTier, TransformOrigin,
 };
 use nanatype_model::{ChatRef, ChatUser, HistoryItem, Rgba8, SourceId, SourceKind};
 use nanatype_settings::{Settings, SkinPersonalization, SurfacePersonalization};
@@ -351,6 +353,10 @@ fn sample_stage(
     preview.reduced_motion = ui.reduced_motion;
     preview.now = ui.now;
     preview.preview_playback = ui.preview_playback;
+    // The sample line lives on this signal, so the settings window can
+    // restart it. The private stage would otherwise keep a clock nobody ticks.
+    preview.preview_display = ui.preview_display;
+    preview.preview_text_exit_ms = ui.preview_text_exit_ms;
     preview.shader_preview = ui.shader_preview;
     preview.live_preview = ui.live_preview;
     Some(SampleStage {
@@ -544,6 +550,97 @@ pub fn history_playback_deadline(ui: Stage, now: u64) -> Option<u64> {
     } else {
         at.saturating_add(HISTORY_PLAYBACK_STEP_MS)
     })
+}
+
+/// How long the finished sample line stays before it leaves.
+const SAMPLE_HOLD_MS: u64 = 1_600;
+
+fn sample_shown_until(view: &nanatype_core::DisplayView) -> Option<u64> {
+    let seg = view.reveal.segment.as_ref()?;
+    let last = u64::from(seg.reveal_ms.last().copied().unwrap_or(0));
+    Some(
+        seg.origin_ms
+            .saturating_add(last)
+            .saturating_add(u64::from(view.entrance.ms))
+            .saturating_add(SAMPLE_HOLD_MS),
+    )
+}
+
+fn sample_playing(ui: Stage) -> Option<Arc<nanatype_core::DisplayView>> {
+    if !history_looping(ui) || !ui.shader_preview.get_untracked() {
+        return None;
+    }
+    let view = ui.preview_display.get_untracked();
+    view.reveal.segment.is_some().then_some(view)
+}
+
+fn phase_end(view: &nanatype_core::DisplayView, now: u64) -> u64 {
+    if let Some(exit) = view.text_exit {
+        return exit.at_ms.saturating_add(u64::from(exit.ms));
+    }
+    if view.empty {
+        return now;
+    }
+    sample_shown_until(view).unwrap_or(now)
+}
+
+fn revise(ui: Stage, mut next: nanatype_core::DisplayView) {
+    next.revision = next.revision.wrapping_add(1);
+    ui.preview_display.set(Arc::new(next));
+}
+
+/// Play the sample line, then its disappearance, then start again.
+/// Clearing the line between passes drops the previous text node, so the
+/// next typewriter does not keep glyphs that have already appeared.
+/// Returns when the next change is due.
+pub fn tick_sample_playback(ui: Stage, now: u64) -> Option<u64> {
+    let view = sample_playing(ui)?;
+    let end = phase_end(&view, now);
+    if !view.empty && now < end {
+        return Some(end);
+    }
+    let mut next = (*view).clone();
+    if view.empty {
+        next.empty = false;
+        next.text_exit = None;
+        next.line = Some(super::dialogue::fresh_preview_line());
+        if let Some(seg) = next.reveal.segment.as_mut() {
+            seg.origin_ms = now;
+        }
+        revise(ui, next);
+        return sample_shown_until(&ui.preview_display.get_untracked());
+    }
+    let exit_ms = ui.preview_text_exit_ms.get_untracked();
+    if view.text_exit.is_some() || exit_ms == 0 {
+        next.text_exit = None;
+        next.empty = true;
+        revise(ui, next);
+        return Some(now);
+    }
+    next.text_exit = Some(nanatype_core::TextExit {
+        at_ms: now,
+        ms: exit_ms,
+    });
+    revise(ui, next);
+    Some(now.saturating_add(u64::from(exit_ms)))
+}
+
+/// When the sample line next changes phase, without advancing.
+pub fn sample_playback_deadline(ui: Stage, now: u64) -> Option<u64> {
+    let view = sample_playing(ui)?;
+    let end = phase_end(&view, now);
+    Some(if view.empty || now >= end { now } else { end })
+}
+
+/// The earlier of the history step and the sample-line replay.
+pub fn playback_deadline(ui: Stage, now: u64) -> Option<u64> {
+    match (
+        history_playback_deadline(ui, now),
+        sample_playback_deadline(ui, now),
+    ) {
+        (Some(history), Some(sample)) => Some(history.min(sample)),
+        (history, sample) => history.or(sample),
+    }
 }
 
 /// Messages revealed at `step`. The last phase of a cycle holds the whole
@@ -782,26 +879,134 @@ fn fit(available: f32, [w, h]: [f32; 2]) -> f32 {
     ((available - 24.0).max(1.0) / w).min(340.0 / h).min(1.0)
 }
 
+/// Scale that makes a sample `w` px wide fill the preview column.
+fn fill_width(available: f32, w: f32) -> f32 {
+    (available - 24.0).max(1.0) / w.max(1.0)
+}
+
 fn size_caption([w, h]: [f32; 2], scale: f32) -> String {
     format!("{} × {} px · {:.0}%", w.round(), h.round(), scale * 100.0)
+}
+
+/// Resolution and scale. It sits in the flow above its render, so the sample
+/// can move down instead of being covered.
+fn metrics_badge(key: &'static str, caption: String) -> AnyView {
+    let mut style = super::kit::Type::Micro.style();
+    let layout = Arc::make_mut(&mut style.layout);
+    layout.white_space_nowrap = true;
+    super::tnum(layout);
+    widget(
+        Stack::row(0.0)
+            .padding_step(inset::step::CHIP_X, inset::step::CHIP_Y)
+            .radius(RadiusTier::Sm)
+            .painter(RaisedSurfacePainter(RadiusTier::Sm))
+            .with_layout(|l| {
+                l.pointer_events = Some(PointerEventsSpec::None);
+            }),
+    )
+    .key(key)
+    .children(widget(Text::new(caption).style(style)))
+    .into_any()
+}
+
+/// One render on the checkerboard, with its resolution and scale above it.
+fn labeled_preview(
+    dark: bool,
+    metrics_key: &'static str,
+    caption: String,
+    stage: impl IntoView,
+) -> AnyView {
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Start)
+            .with_layout(move |l| {
+                l.padding_left = Some(LengthSpec::Px(inset::PANEL));
+                l.padding_right = Some(LengthSpec::Px(inset::PANEL));
+                l.padding_bottom = Some(LengthSpec::Px(inset::PANEL));
+                // Higher than the old inset over the sample, and clear of it.
+                l.padding_top = Some(LengthSpec::Px(gap::TIGHT));
+                l.paint.background_image =
+                    Some(BackgroundImage::url(super::kit::checker_url(dark)));
+            }),
+    )
+    .children((metrics_badge(metrics_key, caption), stage))
+    .into_any()
+}
+
+/// The checkerboard behind one render.
+fn checkerboard(dark: bool, content: impl IntoView) -> AnyView {
+    widget(
+        Stack::column(0.0)
+            .padding_step(inset::step::PANEL, inset::step::PANEL)
+            .with_layout(move |l| {
+                l.paint.background_image =
+                    Some(BackgroundImage::url(super::kit::checker_url(dark)));
+            }),
+    )
+    .children(content)
+    .into_any()
 }
 
 /// The stage around `content`: the checkerboard and, under it, `caption`.
 fn framed(dark: bool, content: AnyView, caption: String) -> AnyView {
     widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
-        .children((
-            widget(
-                Stack::column(0.0)
-                    .padding_step(inset::step::PANEL, inset::step::PANEL)
-                    .with_layout(move |l| {
-                        l.paint.background_image =
-                            Some(BackgroundImage::url(super::kit::checker_url(dark)));
-                    }),
-            )
-            .children(content),
-            hint(caption),
-        ))
+        .children((checkerboard(dark, content), hint(caption)))
         .into_any()
+}
+
+/// A render at `scale`, with its resolution and scale at the top-left.
+fn scaled_stage(
+    box_key: &'static str,
+    canvas_key: &'static str,
+    content_key: &'static str,
+    view: AnyView,
+    size: [f32; 2],
+    scale: f32,
+) -> AnyView {
+    let [w, h] = size;
+    widget(
+        Stack::column(0.0)
+            .width(LengthSpec::Px(w * scale))
+            .height(LengthSpec::Px(h * scale))
+            .with_layout(|l| {
+                l.position = PositionSpec::Relative;
+                l.overflow_x = OverflowSpec::Hidden;
+                l.overflow_y = OverflowSpec::Hidden;
+            }),
+    )
+    .key(box_key)
+    .children((widget(
+        Stack::column(0.0)
+            .width(LengthSpec::Px(w))
+            .height(LengthSpec::Px(h))
+            .with_layout(move |l| {
+                l.position = PositionSpec::Absolute;
+                l.offset_left = Some(LengthSpec::Px(0.0));
+                l.offset_top = Some(LengthSpec::Px(0.0));
+                l.pointer_events = Some(PointerEventsSpec::None);
+                l.transform = Some(super::surface::affine(0.0, 0.0, 0.0, scale));
+                l.transform_origin = Some(TransformOrigin {
+                    x: LengthSpec::Px(0.0),
+                    y: LengthSpec::Px(0.0),
+                });
+            }),
+    )
+    .key(canvas_key)
+    .children(
+        widget(
+            Stack::column(0.0)
+                .width(LengthSpec::Px(w))
+                .height(LengthSpec::Px(h))
+                .with_layout(|l| {
+                    l.overflow_x = OverflowSpec::Hidden;
+                    l.overflow_y = OverflowSpec::Hidden;
+                }),
+        )
+        .key(content_key)
+        .children(view),
+    ),))
+    .into_any()
 }
 
 /// The stage while its [`StageAssets`] are prepared: the frame at the size
@@ -925,103 +1130,6 @@ pub fn stage_view(
     .into_any()
 }
 
-fn placed(key: &'static str, size: [f32; 2], top: f32, view: AnyView) -> AnyView {
-    widget(
-        Stack::column(0.0)
-            .width(LengthSpec::Px(size[0]))
-            .height(LengthSpec::Px(size[1]))
-            .with_layout(move |l| {
-                l.position = PositionSpec::Absolute;
-                l.offset_left = Some(LengthSpec::Px(0.0));
-                l.offset_top = Some(LengthSpec::Px(top));
-                l.overflow_x = OverflowSpec::Hidden;
-                l.overflow_y = OverflowSpec::Hidden;
-                l.pointer_events = Some(PointerEventsSpec::None);
-            }),
-    )
-    .key(key)
-    .children(view)
-    .into_any()
-}
-
-/// No fill, so the checkerboard stays visible. The accent border marks the
-/// window whose fields are open.
-fn pick_style(height: f32) -> nana_ui::runtime::NodeStyle {
-    let mut style = ListItem::new("")
-        .style
-        .outline(SemanticColorRole::BorderSoft, 1.0)
-        .radius(RadiusTier::Sm);
-    style.control_padding_x = None;
-    style.control_height = None;
-    let layout = Arc::make_mut(&mut style.layout);
-    layout.width = Some(LengthSpec::Fill);
-    layout.height = Some(LengthSpec::Px(height));
-    layout.min_width = Some(LengthSpec::Px(0.0));
-    layout.min_height = Some(LengthSpec::Px(height));
-    layout.max_height = Some(LengthSpec::Px(height));
-    layout.padding_left = Some(LengthSpec::Px(0.0));
-    layout.padding_right = Some(LengthSpec::Px(0.0));
-    layout.padding_top = Some(LengthSpec::Px(0.0));
-    layout.padding_bottom = Some(LengthSpec::Px(0.0));
-    for paint in [
-        &mut style.interaction.hovered,
-        &mut style.interaction.pressed,
-        &mut style.interaction.selected,
-        &mut style.interaction.selected_hovered,
-        &mut style.interaction.selected_pressed,
-    ] {
-        paint.background = None;
-    }
-    style.interaction.selected.border = Some(SemanticColorRole::Accent);
-    style.interaction.selected_hovered.border = Some(SemanticColorRole::Accent);
-    style.interaction.selected_pressed.border = Some(SemanticColorRole::Accent);
-    style
-}
-
-/// A transparent button over one window. The window ignores the pointer.
-fn surface_hit(ui: Stage, history: bool, selected: Signal<bool>, height: f32) -> AnyView {
-    let name = if history {
-        "windows-history"
-    } else {
-        "windows-display"
-    };
-    let pick = if history {
-        "skin-preview-pick-history"
-    } else {
-        "skin-preview-pick-display"
-    };
-    widget(
-        ListItem::new(ui.now_t(name))
-            .role(ListItemRole::Button)
-            .style(pick_style(height))
-            .auto_height(true),
-    )
-    .key(pick)
-    .bind(move |item: &mut ListItem| {
-        item.selected = selected.get() == history;
-    })
-    .on(move |_: &Activate| {
-        selected.set_if_changed(history);
-    })
-    .content(widget(
-        Stack::column(0.0)
-            .width(LengthSpec::Fill)
-            .height(LengthSpec::Px(height)),
-    ))
-    .into_any()
-}
-
-fn pair_caption(display: [f32; 2], history: [f32; 2], scale: f32) -> String {
-    format!(
-        "{} × {} px · {} × {} px · {:.0}%",
-        display[0].round(),
-        display[1].round(),
-        history[0].round(),
-        history[1].round(),
-        scale * 100.0
-    )
-}
-
 fn pane_size(ui: Stage, skin: &Skin, history: bool) -> [f32; 2] {
     draft(ui, &skin.meta.id, Some(skin.dialogue.overscan))
         .profile(skin)
@@ -1036,14 +1144,13 @@ fn pane_size(ui: Stage, skin: &Skin, history: bool) -> [f32; 2] {
         .unwrap_or_else(|| default_size(skin, history))
 }
 
-/// Both windows on one checkerboard, from one prepared skin, at one scale.
-/// Clicking a window selects it through `history_selected`.
+/// Display and history from one prepared skin, each on its own checkerboard.
+/// The display fits the column; history scales to the column's width.
 pub fn stage_pair(
     ui: Stage,
     assets: Arc<StageAssets>,
     urls: Arc<HashMap<String, String>>,
     width: Signal<f32>,
-    history_selected: Signal<bool>,
 ) -> AnyView {
     let sample_id = assets.base.meta.id.clone();
     let sample_overscan = assets.base.dialogue.overscan;
@@ -1065,74 +1172,42 @@ pub fn stage_pair(
             else {
                 return hint(ui.now_t("skin-edit-invalid"));
             };
-            let span = pair_extent(display_size, history_size);
-            let scale = fit(*available, span);
-            let canvas = widget(
+            let display_scale = fit(*available, display_size);
+            let history_scale = fill_width(*available, history_size[0]);
+            widget(
                 Stack::column(0.0)
-                    .width(LengthSpec::Px(span[0]))
-                    .height(LengthSpec::Px(span[1]))
-                    .with_layout(move |l| {
-                        l.position = PositionSpec::Absolute;
-                        l.offset_left = Some(LengthSpec::Px(0.0));
-                        l.offset_top = Some(LengthSpec::Px(0.0));
-                        l.pointer_events = Some(PointerEventsSpec::None);
-                        l.transform = Some(super::surface::affine(0.0, 0.0, 0.0, scale));
-                        l.transform_origin = Some(TransformOrigin {
-                            x: LengthSpec::Px(0.0),
-                            y: LengthSpec::Px(0.0),
-                        });
-                    }),
+                    .gap_step(gap::step::GROUP)
+                    .width(LengthSpec::Fill),
             )
-            .key("skin-preview-canvas")
             .children((
-                placed("skin-preview-display", display_size, 0.0, display),
-                placed(
-                    "skin-preview-history",
-                    history_size,
-                    display_size[1] + PAIR_GAP,
-                    history_view,
-                ),
-            ));
-            let stage = widget(
-                Stack::column(0.0)
-                    .width(LengthSpec::Px(span[0] * scale))
-                    .height(LengthSpec::Px(span[1] * scale))
-                    .with_layout(|l| {
-                        l.position = PositionSpec::Relative;
-                        l.overflow_x = OverflowSpec::Hidden;
-                        l.overflow_y = OverflowSpec::Hidden;
-                    }),
-            )
-            .key("skin-preview-box")
-            .children((
-                canvas,
-                widget(
-                    Stack::column(0.0)
-                        .width(LengthSpec::Px(span[0] * scale))
-                        .height(LengthSpec::Px(span[1] * scale))
-                        .with_layout(|l| {
-                            l.position = PositionSpec::Absolute;
-                            l.offset_left = Some(LengthSpec::Px(0.0));
-                            l.offset_top = Some(LengthSpec::Px(0.0));
-                        }),
-                )
-                .children((
-                    surface_hit(ui, false, history_selected, display_size[1] * scale),
-                    widget(
-                        Stack::column(0.0)
-                            .height(LengthSpec::Px(PAIR_GAP * scale))
-                            .with_layout(|l| {
-                                l.pointer_events = Some(PointerEventsSpec::None);
-                            }),
+                labeled_preview(
+                    *dark,
+                    "skin-preview-display-metrics",
+                    size_caption(display_size, display_scale),
+                    scaled_stage(
+                        "skin-preview-display-box",
+                        "skin-preview-canvas",
+                        "skin-preview-display",
+                        display,
+                        display_size,
+                        display_scale,
                     ),
-                    surface_hit(ui, true, history_selected, history_size[1] * scale),
-                )),
-            ));
-            framed(
-                *dark,
-                stage.into_any(),
-                pair_caption(display_size, history_size, scale),
-            )
+                ),
+                labeled_preview(
+                    *dark,
+                    "skin-preview-history-metrics",
+                    size_caption(history_size, history_scale),
+                    scaled_stage(
+                        "skin-preview-history-box",
+                        "skin-preview-history-canvas",
+                        "skin-preview-history",
+                        history_view,
+                        history_size,
+                        history_scale,
+                    ),
+                ),
+            ))
+            .into_any()
         },
     )
     .into_any()
@@ -1142,25 +1217,54 @@ pub fn stage_pair(
 pub fn stage_pair_placeholder(ui: Stage, skin: &Skin, width: Signal<f32>) -> AnyView {
     let display = pane_size(ui, skin, false);
     let history = pane_size(ui, skin, true);
-    let span = pair_extent(display, history);
     dynamic(
         move || (width.get(), ui.chrome_dark.get()),
         move |(available, dark)| {
-            let scale = fit(*available, span);
-            let content = widget(
+            let display_scale = fit(*available, display);
+            let history_scale = fill_width(*available, history[0]);
+            let loading = widget(
                 Stack::column(0.0)
-                    .width(LengthSpec::Px(span[0] * scale))
-                    .height(LengthSpec::Px(span[1] * scale))
+                    .width(LengthSpec::Px(display[0] * display_scale))
+                    .height(LengthSpec::Px(display[1] * display_scale))
                     .align(AlignSpec::Center)
                     .justify(nana_ui_core::JustifySpec::Center),
             )
             .key("skin-preview-loading")
             .children(hint(ui.now_t("skin-preview-loading")));
-            framed(
-                *dark,
-                content.into_any(),
-                pair_caption(display, history, scale),
+            let history_box = widget(
+                Stack::column(0.0)
+                    .width(LengthSpec::Px(history[0] * history_scale))
+                    .height(LengthSpec::Px(history[1] * history_scale))
+                    .with_layout(|l| l.position = PositionSpec::Relative),
             )
+            .key("skin-preview-history-box");
+            widget(
+                Stack::column(0.0)
+                    .gap_step(gap::step::GROUP)
+                    .width(LengthSpec::Fill),
+            )
+            .children((
+                labeled_preview(
+                    *dark,
+                    "skin-preview-display-metrics",
+                    size_caption(display, display_scale),
+                    widget(
+                        Stack::column(0.0)
+                            .width(LengthSpec::Px(display[0] * display_scale))
+                            .height(LengthSpec::Px(display[1] * display_scale))
+                            .with_layout(|l| l.position = PositionSpec::Relative),
+                    )
+                    .key("skin-preview-display-box")
+                    .children(loading),
+                ),
+                labeled_preview(
+                    *dark,
+                    "skin-preview-history-metrics",
+                    size_caption(history, history_scale),
+                    history_box,
+                ),
+            ))
+            .into_any()
         },
     )
     .into_any()
@@ -1254,5 +1358,82 @@ mod tests {
         let again = playback_rows(&script, n + 1);
         assert_eq!(again.len(), 1);
         assert_ne!(again[0].key, playback_rows(&script, 0)[0].key);
+    }
+
+    #[test]
+    fn sample_line_replays_after_it_finishes_and_stays_still_without_effects() {
+        let mut ui = Stage::new(
+            Arc::new(nanatype_settings::Settings::default()),
+            Arc::new(Skin::default()),
+            nanatype_i18n::Locale::ZhCn,
+        );
+        ui.live_preview = nana_ui::runtime::view::computed(|| true);
+        ui.shader_preview.set(true);
+        let origin = 1_000u64;
+        let mut view = nanatype_core::DisplayView::empty(nanatype_model::Entrance {
+            kind: nanatype_model::EntranceKind::None,
+            ms: 0,
+        });
+        view.empty = false;
+        view.reveal = nanatype_core::Reveal {
+            visible_from: 0,
+            shown: 0,
+            hidden_from: 3,
+            segment: Some(nanatype_core::SegmentReveal {
+                origin_ms: origin,
+                start: 0,
+                reveal_ms: Arc::from([0u32, 65, 130]),
+            }),
+        };
+        ui.preview_display.set(Arc::new(view));
+        let end = origin + 130 + SAMPLE_HOLD_MS;
+        assert_eq!(tick_sample_playback(ui, end - 1), Some(end));
+        assert_eq!(
+            ui.preview_display
+                .get_untracked()
+                .reveal
+                .segment
+                .as_ref()
+                .unwrap()
+                .origin_ms,
+            origin
+        );
+        // No disappearance on this skin: the line still clears before the
+        // next pass, so the previous glyphs are not the ones that type again.
+        assert_eq!(tick_sample_playback(ui, end), Some(end));
+        assert!(ui.preview_display.get_untracked().empty);
+        assert_eq!(
+            tick_sample_playback(ui, end),
+            Some(end + 130 + SAMPLE_HOLD_MS)
+        );
+        let next = ui.preview_display.get_untracked();
+        assert!(!next.empty);
+        assert!(next.text_exit.is_none());
+        assert_eq!(next.reveal.segment.as_ref().unwrap().origin_ms, end);
+        assert!(next.line.is_some());
+
+        ui.preview_text_exit_ms.set(700);
+        let mut again = (*ui.preview_display.get_untracked()).clone();
+        again.text_exit = None;
+        again.empty = false;
+        again.reveal.segment.as_mut().unwrap().origin_ms = origin;
+        ui.preview_display.set(Arc::new(again));
+        assert_eq!(tick_sample_playback(ui, end), Some(end + 700));
+        let leaving = ui.preview_display.get_untracked();
+        assert!(!leaving.empty);
+        assert_eq!(
+            leaving.text_exit,
+            Some(nanatype_core::TextExit {
+                at_ms: end,
+                ms: 700
+            })
+        );
+        assert_eq!(leaving.reveal.segment.as_ref().unwrap().origin_ms, origin);
+        assert_eq!(tick_sample_playback(ui, end + 700), Some(end + 700));
+        assert!(ui.preview_display.get_untracked().empty);
+        assert!(ui.preview_display.get_untracked().text_exit.is_none());
+
+        ui.shader_preview.set(false);
+        assert!(tick_sample_playback(ui, end + 10_000).is_none());
     }
 }

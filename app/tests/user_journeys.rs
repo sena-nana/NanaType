@@ -149,24 +149,24 @@ impl Fixture {
 
     fn preview(&self, width: u32, skin: &nanatype_theme::Skin) -> f32 {
         let container = self.keyed("skin-preview").bounds;
-        let sample = self.keyed("skin-preview-box").bounds;
+        let column = self.keyed("skin-preview-stage-column").bounds;
+        let display = self.keyed("skin-preview-display-box").bounds;
+        let history = self.keyed("skin-preview-history-box").bounds;
         assert!(container.x >= 196.0 && container.x + container.width <= width as f32 + 0.5);
-        assert!(sample.width > 200.0 && sample.x > container.x);
+        assert!(display.x > container.x && history.x > container.x);
         assert!(
-            sample.x + sample.width < container.x + container.width,
+            history.x + history.width <= column.x + column.width + 0.5,
             "clipped preview"
         );
-        let span = nanatype::ui::settings::preview::pair_extent(
-            nanatype::ui::settings::preview::default_size(skin, false),
-            nanatype::ui::settings::preview::default_size(skin, true),
-        );
-        let (w, h) = (span[0], span[1]);
+        let content = (column.width - 24.0).max(1.0);
         assert!(
-            (sample.height / sample.width - h / w).abs() < 0.01,
-            "distorted preview"
+            (history.width - content).abs() < 1.5,
+            "history does not fill the column: {history:?} content {content}"
         );
-        assert!(sample.width <= w + 0.5, "upscaled preview");
-        sample.width
+        let logical = nanatype::ui::settings::preview::default_size(skin, false);
+        assert!(display.width <= logical[0] + 0.5, "upscaled display");
+        assert!(display.width <= content + 0.5);
+        history.width
     }
 }
 

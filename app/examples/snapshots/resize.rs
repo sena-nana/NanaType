@@ -75,23 +75,9 @@ pub fn audit(
         );
     }
     ui.page.set(settings::Page::Skins);
-    for history_mode in [false, true] {
-        ui.skin_preview_history.set(history_mode);
-        shot(
-            if history_mode {
-                "preview-history"
-            } else {
-                "preview-display"
-            },
-            out,
-            920,
-            1700,
-            theme.clone(),
-            |doc, id| {
-                doc.context_mut()
-                    .mount_view_root(id, move || settings::settings_window(ui))
-                    .unwrap();
-            },
-        );
-    }
+    shot("preview", out, 920, 1700, theme.clone(), |doc, id| {
+        doc.context_mut()
+            .mount_view_root(id, move || settings::settings_window(ui))
+            .unwrap();
+    });
 }

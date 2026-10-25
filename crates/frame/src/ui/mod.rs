@@ -89,6 +89,9 @@ pub struct Stage {
     /// the preview on the same dialogue renderer without touching the live
     /// typewriter state.
     pub preview_display: Signal<Arc<DisplayView>>,
+    /// How long the preview sample's text exit runs, in milliseconds. Zero
+    /// means the line clears without a disappearance.
+    pub preview_text_exit_ms: Signal<u16>,
     /// Speaker label used by the isolated display preview.
     pub preview_name: Signal<String>,
     pub peer_display: Signal<Arc<DisplayView>>,
@@ -181,6 +184,7 @@ impl Stage {
             skin: signal(skin),
             display: signal(Arc::new(DisplayView::empty(entrance))),
             preview_display: signal(Arc::new(DisplayView::empty(entrance))),
+            preview_text_exit_ms: signal(0),
             preview_name: signal(preview_name),
             peer_display: signal(Arc::new(DisplayView::empty(entrance))),
             peer_active: computed(|| false),

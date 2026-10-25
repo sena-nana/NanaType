@@ -1378,11 +1378,18 @@ struct EventState {
     line_at: u64,
     speaker_at: u64,
 }
-static EVENTS: LazyLock<Mutex<HashMap<usize, EventState>>> = LazyLock::new(Default::default);
-fn event_values(ui: Stage, now: u64) -> [f32; 4] {
-    let v = ui.display.get_untracked();
+static EVENTS: LazyLock<Mutex<HashMap<(u8, usize), EventState>>> = LazyLock::new(Default::default);
+
+/// Line age, speaker age, reveal progress and the continue flag.
+/// Preview reads its sample and keeps a separate age from the live line.
+fn event_values(ui: Stage, source: Source, now: u64) -> [f32; 4] {
+    let v = if source == Source::Preview {
+        ui.preview_display.get_untracked()
+    } else {
+        ui.display.get_untracked()
+    };
     let mut states = EVENTS.lock().unwrap_or_else(|e| e.into_inner());
-    let s = states.entry(ui.track_slot).or_default();
+    let s = states.entry((source as u8, ui.track_slot)).or_default();
     if s.line != v.line {
         s.line = v.line;
         s.line_at = now;
@@ -1563,11 +1570,11 @@ impl Renderer {
         let now = if animated { crate::clock::now_ms() } else { 0 };
         let events = if !animated {
             REST_EVENTS
-        } else if m.source != Source::Display {
-            // Samples and the input box hold a shown line; no typing events.
+        } else if m.source == Source::Draft {
+            // The input box holds a shown line; no typing events.
             [2., 2., 1., 1.]
         } else {
-            event_values(m.ui, now)
+            event_values(m.ui, m.source, now)
         };
         let width = c.bounds.width as f32;
         let height = c.bounds.height as f32;
@@ -1881,23 +1888,55 @@ mod tests {
             v.line = Some(nanatype_model::LineId(100));
             v.speaker.name = "A".into();
         });
-        assert_eq!(&event_values(ui, 1000)[..2], &[0., 0.]);
-        assert_eq!(&event_values(ui, 1500)[..2], &[0.5, 0.5]);
-        assert_eq!(event_values(ui, 1500), event_values(ui, 1500));
+        assert_eq!(&event_values(ui, Source::Display, 1000)[..2], &[0., 0.]);
+        assert_eq!(&event_values(ui, Source::Display, 1500)[..2], &[0.5, 0.5]);
+        assert_eq!(
+            event_values(ui, Source::Display, 1500),
+            event_values(ui, Source::Display, 1500)
+        );
         ui.display.update(|v| {
             let v = Arc::make_mut(v);
             v.line = Some(nanatype_model::LineId(101));
             v.continue_indicator = true;
         });
-        assert_eq!(event_values(ui, 2000), [0., 1., 0., 1.]);
+        assert_eq!(event_values(ui, Source::Display, 2000), [0., 1., 0., 1.]);
         ui.peer_display.update(|v| {
             let v = Arc::make_mut(v);
             v.empty = false;
             v.line = Some(nanatype_model::LineId(900));
             v.speaker.name = "B".into();
         });
-        assert_eq!(&event_values(ui.remote(), 2000)[..2], &[0., 0.]);
-        assert_eq!(&event_values(ui, 2500)[..2], &[0.5, 1.5]);
+        assert_eq!(
+            &event_values(ui.remote(), Source::Display, 2000)[..2],
+            &[0., 0.]
+        );
+        assert_eq!(&event_values(ui, Source::Display, 2500)[..2], &[0.5, 1.5]);
+    }
+    #[test]
+    fn preview_events_follow_the_sample_segment_like_a_live_line() {
+        let ui = ui();
+        ui.preview_display.update(|v| {
+            let v = Arc::make_mut(v);
+            v.empty = false;
+            v.line = Some(nanatype_model::LineId(7));
+            v.speaker.name = "奈奈".into();
+            v.reveal.hidden_from = 2;
+            v.reveal.segment = Some(nanatype_core::SegmentReveal {
+                origin_ms: 1_000,
+                start: 0,
+                reveal_ms: Arc::from([0u32, 500]),
+            });
+        });
+        let first = event_values(ui, Source::Preview, 1_000);
+        assert_eq!(first[0], 0.);
+        assert_eq!(first[2], 0.5);
+        let later = event_values(ui, Source::Preview, 1_500);
+        assert_eq!(later[0], 0.5);
+        assert_eq!(later[2], 1.);
+        ui.preview_display.update(|v| {
+            Arc::make_mut(v).line = Some(nanatype_model::LineId(8));
+        });
+        assert_eq!(event_values(ui, Source::Preview, 1_800)[0], 0.);
     }
     #[test]
     fn slots_pack_params_as_vec4s_in_the_palette_colour_space() {

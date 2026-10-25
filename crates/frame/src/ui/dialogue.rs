@@ -384,7 +384,8 @@ fn document_on(
         let schedule = reveal.map(|plan| {
             plan.schedule(
                 std::time::Duration::ZERO,
-                if (base.masks.exit.is_some() || base.light_exit.is_some()) && !base.light_preview {
+                // An exit keeps the glyphs that are already on screen.
+                if base.masks.exit.is_some() || base.light_exit.is_some() {
                     drawn_untracked_for(ui, source)
                         .text_exit
                         .map_or_else(crate::clock::now_ms, |e| e.at_ms)
@@ -792,6 +793,26 @@ fn drawn_untracked_for(ui: Stage, source: Source) -> Arc<DisplayView> {
     }
 }
 
+/// How long this skin's text takes to leave. Scramble retires itself; an
+/// exit material does too. Anything else just clears.
+fn text_exit_ms(skin: &Skin) -> u16 {
+    if let Some(scramble) = &skin.dialogue.reveal.scramble {
+        return scramble.exit_ms;
+    }
+    skin.dialogue
+        .reveal
+        .exit
+        .as_ref()
+        .filter(|exit| exit.ms > 0)
+        .filter(|exit| {
+            exit.material
+                .as_ref()
+                .is_some_and(|name| skin.material_programs.contains_key(name))
+        })
+        .map(|exit| exit.ms)
+        .unwrap_or(0)
+}
+
 /// A still box showing `doc` in `ctx.skin`, for the skin picker.
 pub fn preview_box(ui: Stage, ctx: BoxCtx, doc: &Document) -> AnyView {
     let skin = super::materials::render_skin(ui, ctx.skin.clone());
@@ -833,10 +854,12 @@ pub fn preview_box(ui: Stage, ctx: BoxCtx, doc: &Document) -> AnyView {
     };
     let mut display = DisplayView::empty(entrance);
     display.revision = 1;
+    display.line = Some(fresh_preview_line());
     display.doc = Arc::new(doc.clone());
     display.speaker.name = ctx.preview_name.clone();
     display.reveal = reveal;
     display.empty = false;
+    ui.preview_text_exit_ms.set(text_exit_ms(&skin));
     ui.preview_display.set(Arc::new(display));
     dialogue_box(ui, Source::Preview, None)
 }
@@ -1457,6 +1480,12 @@ fn text_port(ui: Stage, source: Source, content: AnyView) -> AnyView {
     port.node_ref(ui.text_port).children(scroller).into_any()
 }
 
+/// One id per preview pass, so shader line-age restarts with the sample.
+pub(crate) fn fresh_preview_line() -> nanatype_model::LineId {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    nanatype_model::LineId(NEXT.fetch_add(1, Ordering::Relaxed))
+}
+
 /// The typewriter's text, rebuilt when the display view changes.
 fn content(ui: Stage, source: Source) -> impl IntoView {
     dynamic(
@@ -1472,6 +1501,9 @@ fn content(ui: Stage, source: Source) -> impl IntoView {
             base.light_preview = source == Source::Preview;
             if let Some(exit) = view.text_exit {
                 base.light_exit = Some((exit.at_ms, exit.ms));
+                // Retirement is the disappearance. Replaying the entrance
+                // on the same mount would put the old glyphs back.
+                base.masks.entrance = None;
                 let elapsed = crate::clock::now_ms().saturating_sub(exit.at_ms);
                 if let Some(spec) = &skin.dialogue.reveal.exit {
                     // Rebase the remaining duration when the presentation is mounted.

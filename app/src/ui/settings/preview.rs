@@ -15,7 +15,7 @@ use nanatype_model::Rgba8;
 use nanatype_settings::Settings;
 use nanatype_theme::Skin;
 
-use super::controls::{Type, hint};
+use super::controls::{Type, hint, section};
 use crate::msg::Msg;
 use crate::ui::Ui;
 use crate::ui::kit::{self, gap};
@@ -129,6 +129,10 @@ fn captioned(ui: Ui, key: &str, width: LengthSpec, control: impl IntoView) -> An
     .into_any()
 }
 
+fn surface_key(base: &str, history: bool) -> String {
+    format!("{base}-{}", if history { "history" } else { "display" })
+}
+
 fn field(ui: Ui, id: &str, history: bool, field: Field, placeholder: String) -> AnyView {
     let read_id = id.to_owned();
     let write_id = id.to_owned();
@@ -142,7 +146,7 @@ fn field(ui: Ui, id: &str, history: bool, field: Field, placeholder: String) -> 
                 .placeholder(placeholder)
                 .size(ControlSize::Small),
         )
-        .key(field.key())
+        .key(surface_key(field.key(), history))
         .bind(move |input: &mut TextInput| {
             let text = read();
             if input.state.value.as_str() != text {
@@ -193,7 +197,7 @@ fn size_field(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
                 .label(ui.now_t("skin-edit-size"))
                 .size(ControlSize::Small),
         )
-        .key("skin-edit-size")
+        .key(surface_key("skin-edit-size", history))
         .bind(move |input: &mut NumberInput| {
             let v = read();
             if shown.swap(v.to_bits(), Ordering::Relaxed) != v.to_bits() {
@@ -240,7 +244,7 @@ fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
                         .show_value(false)
                         .show_label(false),
                 )
-                .key("skin-edit-line")
+                .key(surface_key("skin-edit-line", history))
                 .bind(move |r: &mut RangeField| {
                     let v = value();
                     if (r.value - v).abs() > f64::EPSILON {
@@ -297,7 +301,7 @@ fn color_field(ui: Ui, id: &str, history: bool, default: Rgba8) -> AnyView {
                 .label(ui.now_t("skin-edit-color"))
                 .size(ControlSize::Small),
         )
-        .key("skin-edit-color")
+        .key(surface_key("skin-edit-color", history))
         .bind(move |f: &mut ColorField| {
             let want = crate::ui::c(rgba());
             if f.value != want && !f.opened {
@@ -360,7 +364,7 @@ fn font_select(ui: Ui, id: &str, history: bool) -> AnyView {
                 .label(ui.now_t("skin-edit-font"))
                 .size(ControlSize::Small),
         )
-        .key("skin-edit-font")
+        .key(surface_key("skin-edit-font", history))
         .bind(move |s: &mut Select| {
             let font: Arc<str> = draft(ui, &read_id).pane(history).font.trim().into();
             // A family saved before the list offered it still shows.
@@ -387,20 +391,61 @@ fn action(ui: Ui, icon: Icon, key: &str) -> IconButton {
         .with_tooltip(ui.now_t(key))
 }
 
-fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: bool) -> AnyView {
-    let text = if is_history {
+/// Font, size, colour, line height and window size for one surface.
+fn pane_fields(ui: Ui, id: &str, base: &Skin, history: bool) -> AnyView {
+    let text = if history {
         base.history.text.clone()
     } else {
         base.dialogue.text.clone()
     };
-    let dimensions = default_size(&base, is_history);
+    let dimensions = default_size(base, history);
     let typed = [
         (Field::Width, dimensions[0].to_string()),
         (Field::Height, dimensions[1].to_string()),
     ]
     .into_iter()
-    .map(|(field_, placeholder)| field(ui, id, is_history, field_, placeholder))
+    .map(|(field_, placeholder)| field(ui, id, history, field_, placeholder))
     .collect::<Vec<_>>();
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::CONTROL)
+            .width(LengthSpec::Fill),
+    )
+    .children((
+        font_select(ui, id, history),
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
+                .wrap(true)
+                .width(LengthSpec::Fill),
+        )
+        .children((
+            size_field(ui, id, history, text.size),
+            color_field(ui, id, history, text.color),
+        )),
+        line_slider(ui, id, history, text.line_height),
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
+                .wrap(true)
+                .width(LengthSpec::Fill),
+        )
+        .children(typed),
+    ))
+    .into_any()
+}
+
+fn font_missing(font: &str, fallback_font: bool) -> bool {
+    if font.trim().is_empty() {
+        fallback_font
+    } else {
+        !nana_ui::shaped_face_families(font, "Aa字")
+            .iter()
+            .any(|f| f.eq_ignore_ascii_case(font.trim()))
+    }
+}
+
+fn controls(ui: Ui, id: &str, base: Arc<Skin>, fallback_font: bool) -> AnyView {
     let reset_id = id.to_owned();
     let discard_id = id.to_owned();
     let save_id = id.to_owned();
@@ -408,6 +453,16 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
     let valid_base = base.clone();
     let save_base = base.clone();
     let params = super::skin_params::view(ui, id, base.clone());
+    let display = section(
+        ui,
+        "windows-display",
+        vec![kit::block(pane_fields(ui, id, &base, false))],
+    );
+    let history = section(
+        ui,
+        "windows-history",
+        vec![kit::block(pane_fields(ui, id, &base, true))],
+    );
     let status_id = id.to_owned();
     let pick_id = id.to_owned();
     let status = dynamic(
@@ -427,22 +482,18 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
             } else {
                 "skin-edit-draft-hint"
             });
-            let font = &d.pane(is_history).font;
             // A built-in font the draft names is registered by the sample;
             // register it here too, whichever of them runs first.
-            ui.skin_preview.with_untracked(|p| {
-                if let Some(p) = p.as_ref().filter(|p| p.id == pick_id) {
-                    p.assets.pick_family(font);
-                }
-            });
-            let missing = if font.trim().is_empty() {
-                fallback_font
-            } else {
-                !nana_ui::shaped_face_families(font, "Aa字")
-                    .iter()
-                    .any(|f| f.eq_ignore_ascii_case(font.trim()))
-            };
-            if missing {
+            for font in [&d.display.font, &d.history.font] {
+                ui.skin_preview.with_untracked(|p| {
+                    if let Some(p) = p.as_ref().filter(|p| p.id == pick_id) {
+                        p.assets.pick_family(font);
+                    }
+                });
+            }
+            if font_missing(&d.display.font, fallback_font)
+                || font_missing(&d.history.font, fallback_font)
+            {
                 note = format!("{}\n{note}", ui.now_t("skin-edit-font-missing"));
             }
             hint(note)
@@ -456,27 +507,10 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
     )
     .children((
         params,
-        font_select(ui, id, is_history),
-        widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::CONTROL)
-                .wrap(true)
-                .width(LengthSpec::Fill),
-        )
-        .children((
-            size_field(ui, id, is_history, text.size),
-            color_field(ui, id, is_history, text.color),
-        )),
-        line_slider(ui, id, is_history, text.line_height),
-        widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::CONTROL)
-                .wrap(true)
-                .width(LengthSpec::Fill),
-        )
-        .children(typed),
+        display,
+        history,
         // Where the draft stands on the left, what can be done with it on
-        // the right.
+        // the right. Reset restores both surfaces.
         widget(
             Stack::row(0.0)
                 .gap_step(gap::step::CONTROL)
@@ -495,7 +529,8 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
             .children((
                 widget(action(ui, ti::RESTORE, "skin-edit-reset")).on(move |_: &Activate| {
                     change(ui, &reset_id, |d| {
-                        *d.pane_mut(is_history) = Pane::default();
+                        d.display = Pane::default();
+                        d.history = Pane::default();
                         d.params = Default::default();
                     })
                 }),
@@ -530,7 +565,7 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
     .into_any()
 }
 
-pub fn view(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyView {
+pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
     let width = signal(0.0_f32);
     dynamic(
         move || {
@@ -563,35 +598,21 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyVi
             // needs. The settings window sends it once this frame has been
             // presented.
             let ask = id.clone();
-            on_mount(move |_| defer_request(ask, autoplay || ui.shader_preview.get_untracked()));
-            // One stage draws both windows. Choosing which one the fields
-            // edit does not build it again.
+            // Effects start with the preview. Reduced motion and a skin with
+            // nothing animated still leave the sample still.
+            on_mount(move |_| defer_request(ask, true));
+            // One prepare draws both windows. The fields for each stay mounted.
             let sample = match prepared.as_ref() {
-                Some(p) => stage_pair(
-                    *ui,
-                    p.assets.clone(),
-                    row.image_urls.clone(),
-                    width,
-                    ui.skin_preview_history,
-                ),
+                Some(p) => stage_pair(*ui, p.assets.clone(), row.image_urls.clone(), width),
                 None => {
                     let skin = row.skin.as_ref().expect("checked above");
                     stage_pair_placeholder(*ui, skin, width)
                 }
             };
-            let controls = prepared.map(|p| {
-                let base = p.assets.base.clone();
-                let controls_id = id.clone();
-                let fallback = row.fallback_font;
-                dynamic(
-                    move || ui.skin_preview_history.get(),
-                    move |history| controls(ui, &controls_id, base.clone(), *history, fallback),
-                )
-                .into_any()
-            });
+            let controls =
+                prepared.map(|p| controls(ui, &id, p.assets.base.clone(), row.fallback_font));
             let apply_id = id.clone();
             let apply_read = id.clone();
-            let play_id = id.clone();
             widget(
                 Stack::column(0.0)
                     .gap_step(gap::step::GROUP)
@@ -599,8 +620,6 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyVi
             )
             .key("skin-preview")
             .children((
-                // Applying the skin and playing its effects. Which surface
-                // the fields edit is the preview that was clicked.
                 widget(
                     Stack::row(0.0)
                         .gap_step(gap::step::CONTROL)
@@ -609,40 +628,12 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyVi
                 )
                 .children((
                     kit::spacer(),
-                    // Shown in place rather than swapped by `dynamic`, whose
-                    // full-width branch pushed the effects button onto a
-                    // line of its own.
                     widget(action(ui, ti::CHECK, "common-apply"))
                         .key("apply-preview")
                         .visible(move || ui.settings.with(|s| s.skin.id != apply_read))
                         .on_cx(move |_, _: &Activate, cx| {
                             let id = apply_id.clone();
                             cx.dispatch_program_all(super::controls::edit(move |s| s.skin.id = id));
-                        }),
-                    widget(action(ui, ti::PLAYER_PLAY, "skins-play-effects"))
-                        .key("play-effects")
-                        .bind(move |b: &mut IconButton| {
-                            let (icon, key) = if ui.shader_preview.get() {
-                                (ti::PLAYER_STOP, "skins-stop-effects")
-                            } else {
-                                (ti::PLAYER_PLAY, "skins-play-effects")
-                            };
-                            let label: Arc<str> = ui.now_t(key).into();
-                            b.icon = icon;
-                            if let Some(t) = b.tooltip.as_mut() {
-                                t.label = label.clone();
-                            }
-                            b.label = label;
-                        })
-                        .on_cx(move |_, _: &Activate, cx| {
-                            if ui.shader_preview.get_untracked() {
-                                ui.shader_preview.set(false);
-                            } else {
-                                cx.dispatch_program_all(Msg::PrepareSkinPreview {
-                                    id: play_id.clone(),
-                                    play: true,
-                                });
-                            }
                         }),
                 )),
                 widget(
@@ -767,7 +758,7 @@ mod tests {
         let mut doc = RuntimeDocument::new(doc_id);
         let render_base = base.clone();
         doc.context_mut()
-            .mount_view_root(doc_id, move || controls(ui, id, render_base, false, false))
+            .mount_view_root(doc_id, move || controls(ui, id, render_base, false))
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 700, 1400).unwrap();
         session.flush().unwrap();
@@ -777,7 +768,7 @@ mod tests {
             .find(|n| {
                 n.agent_path
                     .as_deref()
-                    .is_some_and(|id| id.contains("skin-edit-size"))
+                    .is_some_and(|id| id.ends_with("skin-edit-size-display"))
             })
             .expect("body size field");
         session.click_node(input.id).unwrap();
@@ -842,26 +833,21 @@ mod tests {
         assert_eq!(profile.display.text_size, Some(42.0));
         assert_eq!(ui.settings.get_untracked(), active);
         click(&mut session, &ui.now_t("skin-edit-reset"));
-        assert_eq!(
-            draft(ui, id).profile(&base).unwrap().display,
-            SurfacePersonalization::default()
-        );
+        let restored = draft(ui, id).profile(&base).unwrap();
+        assert_eq!(restored.display, SurfacePersonalization::default());
+        assert_eq!(restored.history, SurfacePersonalization::default());
         change(ui, id, |d| d.history.size = "72".into());
         click(&mut session, &ui.now_t("skin-edit-discard"));
         assert!(!ui.skin_drafts.with_untracked(|m| m.contains_key(id)));
     }
 
-    fn commit_size(session: &mut RuntimeAgentSession, text: &str) {
+    fn commit_size(session: &mut RuntimeAgentSession, key: &str, text: &str) {
         session.flush().unwrap();
         let input = session
             .accessibility_dump()
             .into_iter()
-            .find(|n| {
-                n.agent_path
-                    .as_deref()
-                    .is_some_and(|id| id.contains("skin-edit-size"))
-            })
-            .expect("body size field");
+            .find(|n| n.agent_path.as_deref().is_some_and(|id| id.ends_with(key)))
+            .unwrap_or_else(|| panic!("missing {key}"));
         session.click_node(input.id).unwrap();
         session.key_press("End", "End", Default::default()).unwrap();
         for _ in 0..4 {
@@ -876,14 +862,14 @@ mod tests {
     }
 
     #[test]
-    fn one_font_picker_and_typed_values_equal_to_the_skin_follow_it() {
+    fn each_surface_has_its_own_font_picker_and_typed_values_follow_the_skin() {
         let (ui, base) = fixture();
         let id = "nanatype.halo";
         let doc_id = DocumentId::new(7).unwrap();
         let mut doc = RuntimeDocument::new(doc_id);
         let render_base = base.clone();
         doc.context_mut()
-            .mount_view_root(doc_id, move || controls(ui, id, render_base, false, false))
+            .mount_view_root(doc_id, move || controls(ui, id, render_base, false))
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 700, 1400).unwrap();
         session.flush().unwrap();
@@ -891,12 +877,22 @@ mod tests {
         let fonts: Vec<_> = nodes
             .iter()
             .filter(|n| {
-                n.agent_path
-                    .as_deref()
-                    .is_some_and(|p| p.rsplit('/').next() == Some("skin-edit-font"))
+                n.agent_path.as_deref().is_some_and(|p| {
+                    p.rsplit('/')
+                        .next()
+                        .is_some_and(|k| k.starts_with("skin-edit-font-"))
+                })
             })
             .collect();
-        assert_eq!(fonts.len(), 1, "{fonts:?}");
+        assert_eq!(fonts.len(), 2, "{fonts:?}");
+        for key in ["windows-display", "windows-history"] {
+            assert!(
+                nodes
+                    .iter()
+                    .any(|n| n.label.as_deref() == Some(ui.now_t(key).as_str())),
+                "{key}"
+            );
+        }
         // The text buttons are icon buttons now, still named by their text.
         for key in ["skin-edit-reset", "skin-edit-discard", "skin-edit-save"] {
             assert!(
@@ -908,10 +904,10 @@ mod tests {
             );
         }
 
-        commit_size(&mut session, "40");
+        commit_size(&mut session, "skin-edit-size-display", "40");
         assert_eq!(draft(ui, id).display.size, "40");
         let default = base.dialogue.text.size;
-        commit_size(&mut session, &default.to_string());
+        commit_size(&mut session, "skin-edit-size-display", &default.to_string());
         assert_eq!(draft(ui, id).display.size, "");
 
         // The font list keeps a family typed before it was offered.
@@ -983,7 +979,7 @@ align = { param = "align" }
         let mut doc = RuntimeDocument::new(doc_id);
         let render_base = base.clone();
         doc.context_mut()
-            .mount_view_root(doc_id, move || controls(ui, id, render_base, false, false))
+            .mount_view_root(doc_id, move || controls(ui, id, render_base, false))
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 700, 1800).unwrap();
         session.flush().unwrap();
@@ -1110,27 +1106,43 @@ align = { param = "align" }
         let mut doc = RuntimeDocument::new(doc_id);
         let previewing = signal(Some(id.to_owned()));
         doc.context_mut()
-            .mount_view_root(doc_id, move || view(ui, previewing, false))
+            .mount_view_root(doc_id, move || view(ui, previewing))
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 720, 1400).unwrap();
         let keys = node_keys(&mut session);
         assert!(keys.iter().any(|k| k == "skin-preview-loading"), "{keys:?}");
-        assert!(!keys.iter().any(|k| k == "skin-preview-box"));
+        assert!(
+            !keys.iter().any(|k| k == "skin-preview-display"),
+            "{keys:?}"
+        );
+        assert!(
+            !keys.iter().any(|k| k == "skin-preview-history"),
+            "{keys:?}"
+        );
         assert!(keys.iter().any(|k| k == "apply-preview"));
+        assert!(!keys.iter().any(|k| k == "play-effects"), "{keys:?}");
         assert!(ui.skin_preview.get_untracked().is_none());
         // Mount records the prepare; nothing loads until the presented frame
-        // sends it. The dialogue is still absent.
-        assert_eq!(take_deferred_requests(), vec![(id.to_owned(), false)]);
+        // sends it. The dialogue is still absent. Effects are requested so
+        // the sample can play without a button.
+        assert_eq!(take_deferred_requests(), vec![(id.to_owned(), true)]);
 
         crate::ui::prepare_skin_preview(ui, &registry, id, false).unwrap();
         let keys = node_keys(&mut session);
-        assert!(keys.iter().any(|k| k == "skin-preview-box"), "{keys:?}");
+        assert!(
+            keys.iter().any(|k| k == "skin-preview-display-box"),
+            "{keys:?}"
+        );
+        assert!(
+            keys.iter().any(|k| k == "skin-preview-history-box"),
+            "{keys:?}"
+        );
         assert!(keys.iter().any(|k| k == "skin-preview-display"), "{keys:?}");
         assert!(keys.iter().any(|k| k == "skin-preview-history"), "{keys:?}");
         assert!(!keys.iter().any(|k| k == "skin-preview-loading"));
         let stage = ui.skin_preview.get_untracked().unwrap();
         let rows = ui.skins.get_untracked();
-        // Selecting it again, or playing its effects, keeps the stage and
+        // Selecting it again, with or without effects, keeps the stage and
         // the catalogue as they are.
         crate::ui::prepare_skin_preview(ui, &registry, id, false).unwrap();
         crate::ui::prepare_skin_preview(ui, &registry, id, true).unwrap();
@@ -1150,11 +1162,11 @@ align = { param = "align" }
         let doc_id = DocumentId::new(4).unwrap();
         let mut doc = RuntimeDocument::new(doc_id);
         doc.context_mut()
-            .mount_view_root(doc_id, move || view(ui, signal(None), false))
+            .mount_view_root(doc_id, move || view(ui, signal(None)))
             .unwrap();
+        let skin = registry.load(id).unwrap().skin;
         let mut session = RuntimeAgentSession::new(doc, 720, 1400).unwrap();
         for history in [false, true] {
-            ui.skin_preview_history.set(history);
             for [w, h] in [
                 [300.0, 1200.0],
                 [800.0, 2400.0],
@@ -1164,14 +1176,15 @@ align = { param = "align" }
                 [300.0, 240.0],
             ] {
                 change(ui, id, |d| {
-                    let pane = if history {
-                        &mut d.history
+                    let (pane, other) = if history {
+                        (&mut d.history, &mut d.display)
                     } else {
-                        &mut d.display
+                        (&mut d.display, &mut d.history)
                     };
                     pane.width = w.to_string();
                     pane.height = h.to_string();
                     pane.size = "200".into();
+                    *other = Pane::default();
                 });
                 session.flush().unwrap();
                 let nodes = session.accessibility_dump();
@@ -1188,58 +1201,100 @@ align = { param = "align" }
                         .clone()
                 };
                 let column = bounds("skin-preview-stage-column");
-                let stage = bounds("skin-preview-box");
-                let canvas = bounds("skin-preview-canvas");
-                let display = bounds("skin-preview-display");
-                let history_box = bounds("skin-preview-history");
-                let known = if history { &history_box } else { &display };
-                let scale = known.width / w;
-                assert!(
-                    (known.height - h * scale).abs() < 1.0,
-                    "{history} {w}x{h}: scale {scale} {known:?}"
-                );
-                let gap = nanatype_frame::ui::preview::PAIR_GAP * scale;
-                assert!(
-                    (stage.width - display.width.max(history_box.width)).abs() < 1.0,
-                    "{history} {w}x{h}: {stage:?} {display:?} {history_box:?}"
-                );
-                assert!(
-                    (stage.height - (display.height + history_box.height + gap)).abs() < 1.5,
-                    "{history} {w}x{h}: {stage:?} gap {gap}"
-                );
-                let logical = [stage.width / scale, stage.height / scale];
-                let expected = ((column.width - 24.0).max(1.0) / logical[0])
-                    .min(340.0 / logical[1])
+                let content_w = (column.width - 24.0).max(1.0);
+                let display_logical = if history {
+                    default_size(&skin, false)
+                } else {
+                    [w, h]
+                };
+                let history_logical = if history {
+                    [w, h]
+                } else {
+                    default_size(&skin, true)
+                };
+                let display_expected = (content_w / display_logical[0])
+                    .min(340.0 / display_logical[1])
                     .min(1.0);
-                assert!(
-                    (scale - expected).abs() < 0.02,
-                    "{history} {w}x{h}: scale {scale} expected {expected}"
-                );
-                for actual in [&stage, &canvas] {
+                let history_expected = content_w / history_logical[0].max(1.0);
+                let cases = [
+                    (
+                        "display",
+                        bounds("skin-preview-display-box"),
+                        bounds("skin-preview-canvas"),
+                        bounds("skin-preview-display"),
+                        display_logical,
+                        display_expected,
+                        "skin-preview-display-metrics",
+                    ),
+                    (
+                        "history",
+                        bounds("skin-preview-history-box"),
+                        bounds("skin-preview-history-canvas"),
+                        bounds("skin-preview-history"),
+                        history_logical,
+                        history_expected,
+                        "skin-preview-history-metrics",
+                    ),
+                ];
+                for (name, stage, canvas, content, logical, expected, metrics) in cases {
+                    let scale = content.width / logical[0];
                     assert!(
-                        actual.x >= column.x && actual.x + actual.width <= column.x + column.width,
-                        "{history} {w}x{h}: {actual:?}"
+                        (content.height - logical[1] * scale).abs() < 1.0,
+                        "{history} {name} {w}x{h}: scale {scale} {content:?}"
+                    );
+                    assert!(
+                        (scale - expected).abs() < 0.02,
+                        "{history} {name} {w}x{h}: scale {scale} expected {expected}"
+                    );
+                    for actual in [&stage, &canvas, &content] {
+                        assert!(
+                            actual.x >= column.x
+                                && actual.x + actual.width <= column.x + column.width + 0.5,
+                            "{history} {name} {w}x{h}: {actual:?}"
+                        );
+                    }
+                    assert!((stage.x - canvas.x).abs() < 0.5 && (stage.y - canvas.y).abs() < 0.5);
+                    let label = bounds(metrics);
+                    assert!(
+                        label.y + label.height <= canvas.y + 1.0,
+                        "{history} {name} metrics cover the render: {label:?} {canvas:?}"
+                    );
+                    assert!(
+                        (stage.width - canvas.width).abs() < 0.5
+                            && (stage.height - canvas.height).abs() < 0.5
+                    );
+                    assert!(
+                        nodes.iter().any(|n| n
+                            .agent_path
+                            .as_deref()
+                            .is_some_and(|p| p.ends_with(metrics))),
+                        "{history} {name} missing {metrics}"
+                    );
+                    let caption = format!(
+                        "{} × {} px · {:.0}%",
+                        logical[0].round(),
+                        logical[1].round(),
+                        expected * 100.0
+                    );
+                    assert!(
+                        nodes.iter().any(|n| {
+                            n.label.as_deref() == Some(caption.as_str())
+                                || n.value.as_deref() == Some(caption.as_str())
+                        }),
+                        "{history} {name} missing {caption}"
                     );
                 }
-                assert!((stage.x - canvas.x).abs() < 0.5);
-                assert!((stage.y - canvas.y).abs() < 0.5);
-                assert!((stage.width - canvas.width).abs() < 0.5);
-                assert!((stage.height - canvas.height).abs() < 0.5);
-                let pane = draft(ui, id);
-                assert_eq!(
-                    if history {
-                        pane.history.size
-                    } else {
-                        pane.display.size
-                    },
-                    "200"
+                assert!(
+                    (bounds("skin-preview-history-box").width - content_w).abs() < 1.5,
+                    "history does not fill the column"
                 );
+                assert!(bounds("skin-preview-display-box").width <= display_logical[0] + 0.5);
             }
         }
     }
 
     #[test]
-    fn clicking_a_preview_edits_that_surface_and_leaves_the_other() {
+    fn both_surfaces_edit_their_own_pane_without_switching() {
         let (ui, _) = fixture();
         let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
         let id = "nanatype.halo";
@@ -1247,33 +1302,42 @@ align = { param = "align" }
         let doc_id = DocumentId::new(8).unwrap();
         let mut doc = RuntimeDocument::new(doc_id);
         doc.context_mut()
-            .mount_view_root(doc_id, move || view(ui, signal(None), false))
+            .mount_view_root(doc_id, move || view(ui, signal(None)))
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 900, 2400).unwrap();
         session.flush().unwrap();
-        let picked = |session: &mut RuntimeAgentSession, name: &str| {
-            session
-                .accessibility_dump()
-                .into_iter()
-                .find(|n| n.role == "button" && n.label.as_deref() == Some(name))
-                .unwrap_or_else(|| panic!("missing {name}"))
-                .selected
-        };
-        assert_eq!(
-            picked(&mut session, &ui.now_t("windows-display")),
-            Some(true)
-        );
-        assert_eq!(picked(&mut session, &ui.now_t("windows-history")), None);
-        click(&mut session, &ui.now_t("windows-history"));
-        assert!(ui.skin_preview_history.get_untracked());
         let dump = session.accessibility_dump();
+        let display = ui.now_t("windows-display");
+        let history_label = ui.now_t("windows-history");
         assert!(
             dump.iter().all(|n| {
+                n.role != "button"
+                    || !matches!(
+                        n.label.as_deref(),
+                        Some(label) if label == display || label == history_label
+                    )
+            }),
+            "the surfaces are not a switch"
+        );
+        for key in [
+            "skin-edit-size-display",
+            "skin-edit-size-history",
+            "skin-edit-font-display",
+            "skin-edit-font-history",
+        ] {
+            assert!(
+                dump.iter()
+                    .any(|n| n.agent_path.as_deref().is_some_and(|p| p.ends_with(key))),
+                "{key}"
+            );
+        }
+        assert!(
+            dump.iter().any(|n| {
                 n.agent_path
                     .as_deref()
-                    .is_none_or(|p| !p.ends_with("skin-edit-sample-text"))
+                    .is_some_and(|p| p.ends_with("skin-preview-display"))
             }),
-            "the sample text editor is gone"
+            "display render is shown"
         );
         let has = |key: &str| {
             let label = ui.now_t(key);
@@ -1290,13 +1354,11 @@ align = { param = "align" }
         ] {
             assert!(has(key), "{key} is shown");
         }
-        commit_size(&mut session, "42");
+        commit_size(&mut session, "skin-edit-size-history", "42");
         let edited = draft(ui, id);
         assert_eq!(edited.history.size, "42");
         assert_eq!(edited.display.size, "");
-        click(&mut session, &ui.now_t("windows-display"));
-        assert!(!ui.skin_preview_history.get_untracked());
-        commit_size(&mut session, "36");
+        commit_size(&mut session, "skin-edit-size-display", "36");
         let edited = draft(ui, id);
         assert_eq!(edited.display.size, "36");
         assert_eq!(edited.history.size, "42");

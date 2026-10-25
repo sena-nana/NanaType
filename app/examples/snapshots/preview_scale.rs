@@ -21,21 +21,17 @@ pub fn audit(ui: Ui, out: &std::path::Path, theme: Arc<nana_ui::CompiledTheme>) 
         ui.skin_drafts.update(|drafts| {
             drafts.insert(id.clone(), draft);
         });
-        for history in [false, true] {
-            ui.skin_preview_history.set(history);
-            let mode = if history { "history" } else { "display" };
-            shot(
-                &format!("preview-{mode}-{name}"),
-                out,
-                920,
-                1000,
-                theme.clone(),
-                |doc, id| {
-                    doc.context_mut()
-                        .mount_view_root(id, move || settings::settings_window(ui))
-                        .unwrap();
-                },
-            );
-        }
+        shot(
+            &format!("preview-{name}"),
+            out,
+            920,
+            1000,
+            theme.clone(),
+            |doc, id| {
+                doc.context_mut()
+                    .mount_view_root(id, move || settings::settings_window(ui))
+                    .unwrap();
+            },
+        );
     }
 }

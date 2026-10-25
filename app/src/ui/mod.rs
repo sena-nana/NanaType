@@ -166,7 +166,6 @@ pub struct Ui {
     /// Kept only in memory and cleared after import; never serialized with settings.
     #[cfg(feature = "unofficial-chat")]
     pub douyin_cookie: Signal<String>,
-    pub skin_preview_history: Signal<bool>,
     /// The platform the live-platforms settings page shows.
     pub platform_tab: Signal<crate::chat::Platform>,
     /// Actual input client width, published by its layout (also in headless views).
@@ -268,7 +267,6 @@ impl Ui {
             update: signal(Arc::new(crate::app::update::State::default())),
             #[cfg(feature = "unofficial-chat")]
             douyin_cookie: signal(String::new()),
-            skin_preview_history: signal(false),
             input_width: signal(crate::windows::INPUT_SIZE.0),
             input_sidebar_width: signal(nanatype_settings::INPUT_SIDEBAR_DEFAULT),
             input_dock_regions: signal(input_dock.regions),

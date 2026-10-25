@@ -59,7 +59,7 @@ pub(super) fn skins(ui: Ui) -> AnyView {
             section(
                 ui,
                 "skins-preview",
-                vec![block(skin_preview(ui, previewing, false))],
+                vec![block(skin_preview(ui, previewing))],
             ),
             section(
                 ui,
@@ -845,6 +845,6 @@ pub(super) fn skin_filters(ui: Ui, filter: Signal<Option<String>>, grid: Signal<
 
 /// A live sample of the previewed skin (the active one by default) with the
 /// user's personalisation, scaled to fit the page.
-pub(super) fn skin_preview(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyView {
-    crate::ui::settings::preview::view(ui, previewing, autoplay)
+pub(super) fn skin_preview(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
+    crate::ui::settings::preview::view(ui, previewing)
 }
