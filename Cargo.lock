@@ -3757,6 +3757,7 @@ dependencies = [
  "nanatype-p2p",
  "nanatype-playback",
  "nanatype-plugins",
+ "nanatype-scheduling",
  "nanatype-secrets",
  "nanatype-settings",
  "nanatype-steam",
@@ -4019,6 +4020,13 @@ dependencies = [
  "tempfile",
  "wasmtime",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "nanatype-scheduling"
+version = "0.1.0"
+dependencies = [
+ "windows",
 ]
 
 [[package]]

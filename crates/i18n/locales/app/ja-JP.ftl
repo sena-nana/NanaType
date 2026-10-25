@@ -335,6 +335,24 @@ output-sample-line = [b]こんにちは！[/b]NanaType の[wave]サンプルセ�
 output-obs-title = OBS に接続する
 output-obs-window = 「ウィンドウキャプチャ」（方式：Windows 10 1903 以降）も使えます。表示ウィンドウの背景は透明です。
 output-obs-mac = 「macOS 画面キャプチャ」で表示ウィンドウを選ぶこともできます。
+output-performance = パフォーマンス
+output-gpu-high = GPU の優先度を上げる
+output-gpu-high-hint = ゲームが GPU を使い切っていても、表示ウィンドウと Spout 出力の描画を優先
+output-cpu-high = CPU の優先度を上げる
+output-cpu-high-hint = NanaType の描画とタイマーのスレッドをシステムに優先させる
+output-cpu-affinity = CPU アフィニティ
+output-cpu-affinity-hint = 描画とタイマーのスレッドで高性能コアを優先して使う
+output-not-in-effect = 適用されていません
+output-not-in-effect-because = 適用されていません：{ $error }
+perf-error-gpu = GPU の優先度を上げられません
+perf-error-priority = CPU の優先度を変更できません：{ $detail }
+perf-error-affinity = CPU のアフィニティを変更できません：{ $detail }
+perf-error-topology = CPU のコア情報を読み取れません
+perf-error-topology-detail = CPU のコア情報を読み取れません：{ $detail }
+perf-error-topology-incomplete = CPU のコア情報が不完全です
+perf-no-hybrid = 設定は不要です：P コアと E コアは検出されませんでした
+perf-no-performance-cores = 設定は不要です：使える P コアは検出されませんでした
+perf-unsupported = このプラットフォームでは CPU スケジューリングの設定に対応していません
 
 ## 連携
 int-vts = VTube Studio

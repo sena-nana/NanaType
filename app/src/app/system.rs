@@ -1,9 +1,11 @@
 use super::App;
 use crate::msg::{Msg, Shortcut};
 use crate::services::sounds;
+use crate::ui::{Performance, problem_text};
 use nanatype_audio::AudioStatus;
 use nanatype_core::Cmd;
-use nanatype_settings::Hotkey;
+use nanatype_settings::{Hotkey, PerformanceSettings};
+use std::sync::Arc;
 use std::time::Duration;
 
 impl App {
@@ -18,6 +20,41 @@ impl App {
             // A chord can belong to one action only.
             self.edit(move |s| action.bind(s, Some(hotkey)));
             self.apply_services();
+        }
+    }
+
+    /// Applies the scheduling preferences and keeps what they achieved for
+    /// the Output page. A preference that changed from `prev` and that the
+    /// system refused is also reported as a notice.
+    pub(super) fn apply_performance(&mut self, prev: Option<&PerformanceSettings>) {
+        let wanted = self.settings.performance.clone();
+        let performance = Performance {
+            gpu_high: nanatype_scheduling::apply_gpu(wanted.gpu_high),
+            cpu: nanatype_scheduling::apply(wanted.cpu_high, wanted.cpu_performance_cores),
+        };
+        let mut status = (*self.ui.status.get_untracked()).clone();
+        status.performance = performance.clone();
+        self.ui.status.set(Arc::new(status));
+        let Some(prev) = prev else {
+            return;
+        };
+        let mut problems = Vec::new();
+        if wanted.gpu_high && !prev.gpu_high && !performance.gpu_high {
+            problems.push(self.ui.now_t("perf-error-gpu"));
+        }
+        if wanted.cpu_high != prev.cpu_high
+            && let Some(problem) = &performance.cpu.priority_error
+        {
+            problems.push(problem_text(self.ui, problem));
+        }
+        if wanted.cpu_performance_cores != prev.cpu_performance_cores
+            && let Some(problem) = &performance.cpu.affinity_error
+            && !problem.not_needed()
+        {
+            problems.push(problem_text(self.ui, problem));
+        }
+        for text in problems {
+            self.notice(text, true);
         }
     }
 

@@ -64,7 +64,11 @@ impl Scheduler {
         let (tx, rx) = unbounded();
         thread::Builder::new()
             .name("nanatype-timer".into())
-            .spawn(move || run(rx, post))
+            .spawn(move || {
+                // Its wakes pace every reveal the windows draw.
+                let _critical = nanatype_scheduling::latency_critical();
+                run(rx, post)
+            })
             .expect("spawn timer thread");
         Self { tx }
     }

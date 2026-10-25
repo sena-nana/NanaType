@@ -953,3 +953,24 @@ fn diagnostics_default_off_round_trip_and_peek_without_touching_the_file() {
     assert_eq!(peek_diagnostics(&path), DiagnosticsSettings::default());
     assert_eq!(fs::read_to_string(&path).unwrap(), "{not json");
 }
+
+#[test]
+fn performance_defaults_off_and_round_trips() {
+    // Older files have no section: every preference starts off.
+    let settings: Settings = serde_json::from_str(r#"{"schema":3,"general":{}}"#).unwrap();
+    assert_eq!(settings.performance, PerformanceSettings::default());
+    assert!(!settings.performance.gpu_high);
+
+    let settings = Settings {
+        performance: PerformanceSettings {
+            gpu_high: true,
+            cpu_high: true,
+            cpu_performance_cores: true,
+        },
+        ..Settings::default()
+    };
+    let json = serde_json::to_string(&settings).unwrap();
+    let back: Settings = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.performance, settings.performance);
+    assert!(back.unknown.is_empty());
+}

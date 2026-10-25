@@ -4,6 +4,8 @@ use super::*;
 
 use nana_ui::runtime::{NumberChanged, NumberInput, TextInput, TextSubmitted};
 
+use crate::ui::problem_text;
+
 /// A step number's circle.
 const STEP_DOT: f32 = 22.0;
 
@@ -636,8 +638,69 @@ pub(super) fn output(ui: Ui) -> AnyView {
                 },
                 senders,
             ),
+            // GPU and CPU scheduling are Windows controls.
+            cfg!(windows).then(|| section(ui, "output-performance", performance(ui))),
         ))
         .into_any()
+}
+
+/// Scheduling preferences, each hint saying why it is not in effect when the
+/// system refused it.
+fn performance(ui: Ui) -> Vec<AnyView> {
+    let gpu = row_live_hint(
+        ui,
+        "output-gpu-high",
+        move || {
+            let refused = ui.settings.with(|s| s.performance.gpu_high)
+                && !ui.status.with(|s| s.performance.gpu_high);
+            Some(if refused {
+                ui.tr("output-not-in-effect", &[])
+            } else {
+                ui.tr("output-gpu-high-hint", &[])
+            })
+        },
+        switch(
+            ui,
+            |s| s.performance.gpu_high,
+            |s, v| s.performance.gpu_high = v,
+        ),
+    );
+    let cpu = row_live_hint(
+        ui,
+        "output-cpu-high",
+        move || {
+            let error = ui.status.with(|s| s.performance.cpu.priority_error.clone());
+            Some(match error {
+                Some(error) => {
+                    let error = problem_text(ui, &error);
+                    ui.tr("output-not-in-effect-because", &[("error", error.into())])
+                }
+                None => ui.tr("output-cpu-high-hint", &[]),
+            })
+        },
+        switch(
+            ui,
+            |s| s.performance.cpu_high,
+            |s, v| s.performance.cpu_high = v,
+        ),
+    );
+    let affinity = row_live_hint(
+        ui,
+        "output-cpu-affinity",
+        move || {
+            let error = ui.status.with(|s| s.performance.cpu.affinity_error.clone());
+            Some(match error {
+                Some(error) => problem_text(ui, &error),
+                None => ui.tr("output-cpu-affinity-hint", &[]),
+            })
+        },
+        switch(
+            ui,
+            |s| s.performance.cpu_performance_cores,
+            |s, v| s.performance.cpu_performance_cores = v,
+        ),
+    );
+    vec![gpu, cpu, affinity]
 }
 
 #[cfg(test)]

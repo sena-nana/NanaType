@@ -195,6 +195,18 @@ pub struct DiagnosticsSettings {
     pub crash_seen: u64,
 }
 
+/// Scheduling preferences while a game or encoder competes (Windows only).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PerformanceSettings {
+    /// Raise the process's GPU scheduling priority.
+    pub gpu_high: bool,
+    /// Raise the CPU priority of the threads a frame waits on.
+    pub cpu_high: bool,
+    /// Keep those threads on the performance cores.
+    pub cpu_performance_cores: bool,
+}
+
 /// The recordings played for keys pressed in the input window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1159,6 +1171,7 @@ pub struct Settings {
     pub assets: AssetSettings,
     pub update: UpdateSettings,
     pub diagnostics: DiagnosticsSettings,
+    pub performance: PerformanceSettings,
     /// Fields from a newer build, preserved verbatim.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, Value>,
@@ -1182,6 +1195,7 @@ impl Default for Settings {
             assets: AssetSettings::default(),
             update: UpdateSettings::default(),
             diagnostics: DiagnosticsSettings::default(),
+            performance: PerformanceSettings::default(),
             unknown: BTreeMap::new(),
         }
     }

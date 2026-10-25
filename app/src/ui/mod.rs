@@ -83,6 +83,31 @@ pub struct Status {
     pub notices: Vec<Notice>,
     pub queued: usize,
     pub audio_devices: Vec<String>,
+    pub performance: Performance,
+}
+
+/// What the scheduling preferences achieved, for the Output page's hints.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Performance {
+    /// The raised GPU priority is in effect.
+    pub gpu_high: bool,
+    pub cpu: nanatype_scheduling::Status,
+}
+
+/// Why a CPU preference is not in effect, in the UI's language.
+pub fn problem_text(ui: Ui, problem: &nanatype_scheduling::Problem) -> String {
+    use nanatype_scheduling::Problem;
+    let detail = |key, detail: &str| ui.tr(key, &[("detail", detail.into())]);
+    match problem {
+        Problem::Priority(error) => detail("perf-error-priority", error),
+        Problem::Affinity(error) => detail("perf-error-affinity", error),
+        Problem::Topology(Some(error)) => detail("perf-error-topology-detail", error),
+        Problem::Topology(None) => ui.tr("perf-error-topology", &[]),
+        Problem::TopologyIncomplete => ui.tr("perf-error-topology-incomplete", &[]),
+        Problem::NoHybrid => ui.tr("perf-no-hybrid", &[]),
+        Problem::NoPerformanceCores => ui.tr("perf-no-performance-cores", &[]),
+        Problem::Unsupported => ui.tr("perf-unsupported", &[]),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

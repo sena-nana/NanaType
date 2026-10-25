@@ -183,6 +183,9 @@ pub struct App {
     pub toasts: Vec<ToastRequest>,
     /// The latest notice, while it is an error: the tray tooltip shows it.
     tray_error: Option<(u64, String)>,
+    /// Keeps this, the UI thread, under the CPU preference: it draws every
+    /// window and sends it to Spout. Made and dropped on this thread.
+    _critical: nanatype_scheduling::Critical,
 }
 
 /// The settings file's state as the session log's first app event.
@@ -365,8 +368,10 @@ impl App {
             sticker_watch: None,
             toasts: Vec::new(),
             tray_error: None,
+            _critical: nanatype_scheduling::latency_critical(),
             settings,
         };
+        app.apply_performance(None);
         app.startup_notices(loaded_settings.note, fallback.is_some(), locale);
         match Tray::build(post) {
             Ok(tray) => app.tray = Some(tray),
@@ -1227,6 +1232,7 @@ impl App {
         let device_changed = prev.sound.device != s.sound.device;
         let pack_changed = prev.sound.pack != s.sound.pack;
         let autostart_changed = prev.general.launch_at_login != s.general.launch_at_login;
+        let performance_changed = prev.performance != s.performance;
         if prev.general.input_skin_preview != s.general.input_skin_preview {
             self.focus_editor = true;
         }
@@ -1286,6 +1292,9 @@ impl App {
             && let Err(e) = crate::services::set_autostart(self.settings.general.launch_at_login)
         {
             self.notice(e, true);
+        }
+        if performance_changed {
+            self.apply_performance(Some(&prev.performance));
         }
         self.audio_levels();
         self.apply_services();

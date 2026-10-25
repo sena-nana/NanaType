@@ -338,6 +338,24 @@ output-sample-line = [b]Hello![/b] This is a NanaType [wave]sample line[/wave].[
 output-obs-title = Set up OBS
 output-obs-window = You can also use “Window Capture” (method: Windows 10 1903 and up); the display window background is transparent.
 output-obs-mac = Or use “macOS Screen Capture” and pick the display window.
+output-performance = Performance
+output-gpu-high = Raise GPU priority
+output-gpu-high-hint = Keep drawing the display and Spout output first while a game fills the GPU
+output-cpu-high = Raise CPU priority
+output-cpu-high-hint = Let the system put NanaType's drawing and timer threads first
+output-cpu-affinity = CPU affinity
+output-cpu-affinity-hint = Keep the drawing and timer threads on performance cores
+output-not-in-effect = Not in effect
+output-not-in-effect-because = Not in effect: { $error }
+perf-error-gpu = Can't raise the GPU priority
+perf-error-priority = Can't change the CPU priority: { $detail }
+perf-error-affinity = Can't change the CPU affinity: { $detail }
+perf-error-topology = Can't read the CPU core information
+perf-error-topology-detail = Can't read the CPU core information: { $detail }
+perf-error-topology-incomplete = The CPU core information is incomplete
+perf-no-hybrid = Not needed: no performance and efficiency cores detected
+perf-no-performance-cores = Not needed: no usable performance cores detected
+perf-unsupported = CPU scheduling settings aren't supported on this platform
 
 ## Integrations
 int-vts = VTube Studio

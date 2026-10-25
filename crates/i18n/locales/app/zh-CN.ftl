@@ -335,6 +335,24 @@ output-sample-line = [b]你好！[/b]这是 NanaType 的[wave]示例台词[/wave
 output-obs-title = 在 OBS 中接入
 output-obs-window = 也可以使用「窗口捕获」（捕获方式选 Windows 10 (1903 及以上)），展示框窗口背景为透明。
 output-obs-mac = 也可以使用「macOS 屏幕捕获」并选择展示框窗口。
+output-performance = 性能
+output-gpu-high = 提高 GPU 优先级
+output-gpu-high-hint = 游戏占满显卡时，仍优先渲染展示框和 Spout 输出
+output-cpu-high = 提高 CPU 优先级
+output-cpu-high-hint = 让系统优先处理 NanaType 的渲染和计时线程
+output-cpu-affinity = CPU 亲和性
+output-cpu-affinity-hint = 让渲染和计时线程优先使用性能核
+output-not-in-effect = 未生效
+output-not-in-effect-because = 未生效：{ $error }
+perf-error-gpu = 无法提高 GPU 优先级
+perf-error-priority = 无法更改 CPU 优先级：{ $detail }
+perf-error-affinity = 无法更改 CPU 亲和性：{ $detail }
+perf-error-topology = 无法读取 CPU 核心信息
+perf-error-topology-detail = 无法读取 CPU 核心信息：{ $detail }
+perf-error-topology-incomplete = CPU 核心信息不完整
+perf-no-hybrid = 无需设置：未检测到性能核和能效核
+perf-no-performance-cores = 无需设置：未检测到可用的性能核
+perf-unsupported = 当前平台不支持 CPU 调度设置
 
 ## 联动
 int-vts = VTube Studio
