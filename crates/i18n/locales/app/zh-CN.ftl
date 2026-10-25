@@ -674,6 +674,8 @@ peer-invite-idle = 邀请好友加入这个房间
 peer-invite-waiting = 等待对方接受邀请
 peer-invite-accepted = { $name } 已接受邀请
 peer-invite-accepted-many = 已有 { $n } 人接受邀请
+# Between the names of the other people in the room.
+peer-name-separator = 、
 peer-invite-accepted-unnamed = 对方已接受邀请
 peer-room-full = 房间已满（最多 8 人）
 peer-invitation = 粘贴对方的联机邀请

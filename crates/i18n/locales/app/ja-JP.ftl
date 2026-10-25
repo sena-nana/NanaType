@@ -674,6 +674,8 @@ peer-invite-idle = フレンドをこの部屋に招待
 peer-invite-waiting = 相手の承諾を待っています
 peer-invite-accepted = { $name } が招待を承諾しました
 peer-invite-accepted-many = { $n } 人が招待を承諾しました
+# Between the names of the other people in the room.
+peer-name-separator = 、
 peer-invite-accepted-unnamed = 相手が招待を承諾しました
 peer-room-full = 部屋はいっぱいです（最大 8 人）
 peer-invitation = 相手の招待を貼り付け

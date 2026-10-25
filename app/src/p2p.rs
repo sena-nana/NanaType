@@ -257,7 +257,18 @@ impl App {
                 self.peer.room_received = Some(std::time::Instant::now());
                 self.peer_render();
             }
-            Event::AssetReady(_) => {
+            Event::AssetReady(hash) => {
+                // The still preview may already be resolved under this key.
+                // Drop it so the full picture replaces it.
+                let key = AssetRef::Blob(format!("p2p-{hash}")).to_string();
+                if self.ui.asset_urls.with_untracked(|urls| urls.contains_key(&key)) {
+                    let mut urls = (*self.ui.asset_urls.get_untracked()).clone();
+                    urls.remove(&key);
+                    self.ui.asset_urls.set(Arc::new(urls));
+                }
+                // A box reads picture URLs once per document: draw it again
+                // even though the sender's revision did not move.
+                self.peer.remote_revision.clear();
                 self.peer_render();
             }
         }
@@ -433,7 +444,7 @@ impl App {
                 lane.portraits.set(Arc::new(Default::default()));
             }
         }
-        let remote_name = names.join("、");
+        let remote_name = names.join(&self.ui.now_t("peer-name-separator"));
         if self.ui.peer_seats.get_untracked() != seated.len() {
             self.ui.peer_seats.set(seated.len());
         }

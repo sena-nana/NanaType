@@ -680,6 +680,8 @@ peer-invite-idle = Invite a friend into this room
 peer-invite-waiting = Waiting for them to accept
 peer-invite-accepted = { $name } accepted the invite
 peer-invite-accepted-many = { $n } people accepted the invite
+# Between the names of the other people in the room.
+peer-name-separator = { ", " }
 peer-invite-accepted-unnamed = They accepted the invite
 peer-room-full = The room is full (8 people)
 peer-invitation = Paste your partner's invitation
