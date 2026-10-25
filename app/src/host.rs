@@ -1439,6 +1439,17 @@ impl RuntimeProgram for Host {
                 context.dispatch(Msg::UiChanged);
             }
         }
+        #[cfg(windows)]
+        if let Some(published) = self.app.spout.take_published() {
+            if let Some(perf) = &mut self.perf {
+                perf.spout(id, published.sent, published.ms);
+            }
+            // The receiver held Spout's lock: an unchanged scene would leave
+            // it on the frame before this one.
+            if !published.sent {
+                frame.request_resend();
+            }
+        }
         self.spout_status_changed(context);
         if paused.is_some()
             && self

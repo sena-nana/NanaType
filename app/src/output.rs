@@ -331,6 +331,20 @@ pub struct Spout {
     pub status: HashMap<WindowKind, LinkState>,
     /// `status` changed outside [`Spout::sync`] and the page has not heard.
     status_dirty: bool,
+    /// What the last [`Spout::frame`] did with its frame, until taken.
+    #[cfg(windows)]
+    published: Option<Published>,
+}
+
+/// One frame handed to a Spout sender.
+#[cfg(windows)]
+#[derive(Debug, Clone, Copy)]
+pub struct Published {
+    /// Spout took the copy. When false the receiver held the access lock and
+    /// the frame was dropped, so it has to be sent again.
+    pub sent: bool,
+    /// Wall time of the send on the UI thread, lock wait included.
+    pub ms: f64,
 }
 
 fn t(locale: Locale, key: &str) -> String {
@@ -674,6 +688,12 @@ impl Spout {
         Ok(self.senders.get_mut(&kind).expect("sender inserted"))
     }
 
+    /// What the last [`Spout::frame`] did, once.
+    #[cfg(windows)]
+    pub fn take_published(&mut self) -> Option<Published> {
+        self.published.take()
+    }
+
     /// Hand a frame to the window's Spout sender. When sending failed,
     /// returns what to say ([`SPOUT_ERROR_KEYS`]) and the sender's own
     /// (English) words for the log.
@@ -746,6 +766,7 @@ impl Spout {
                 release_value: token.release_value(),
             };
             token.accept_release();
+            let start = std::time::Instant::now();
             // SAFETY: the handles stay open while `token`'s pool lives, which
             // outlasts this call; the sender signals release itself.
             let result = unsafe {
@@ -771,7 +792,11 @@ impl Spout {
             if paused_failed {
                 self.senders.remove(&kind);
             }
-            if result.is_ok() {
+            if let Ok(report) = &result {
+                self.published = Some(Published {
+                    sent: report.status == nanalive_spout::SpoutPublishStatus::Sent,
+                    ms: start.elapsed().as_secs_f64() * 1000.0,
+                });
                 self.sender_recovered(kind);
             }
             result.err().map(|e| (spout_error_key(&e), e.to_string()))
