@@ -140,16 +140,37 @@ pub fn animating(ui: Stage) -> bool {
     enabled(ui)
         && !ui.display.with_untracked(|d| d.empty)
         && ui.skin.with_untracked(|s| {
-            let resolved =
-                nanatype_theme::responsive_dialogue(s, super::dialogue::canvas_size(ui, s));
-            let s = &resolved;
-            s.dialogue
-                .shader_effects
-                .iter()
-                .map(|e| &e.shader)
-                .chain(s.dialogue.decor.iter().filter_map(|d| d.shader.as_ref()))
-                .any(|id| runnable(s, id))
+            let size = super::dialogue::canvas_size(ui, s);
+            display_shaders(s, size, |ids| ids.iter().any(|id| runnable(s, id)))
         })
+}
+type ResolvedShaders = (Weak<Skin>, [u32; 2], Vec<String>);
+thread_local! {
+    /// The shaders of the display's dialogue as resolved for its size, for
+    /// one skin. Resolving clones the whole skin, and frame scheduling asks
+    /// several times per window per loop turn. A layout changes only the
+    /// dialogue, so `runnable` can still read the skin's own programs.
+    static DISPLAY_SHADERS: std::cell::RefCell<Option<ResolvedShaders>> =
+        const { std::cell::RefCell::new(None) };
+}
+fn display_shaders<R>(skin: &Arc<Skin>, size: [f32; 2], f: impl FnOnce(&[String]) -> R) -> R {
+    let key = size.map(f32::to_bits);
+    DISPLAY_SHADERS.with_borrow_mut(|cache| {
+        let fresh = cache.as_ref().is_some_and(|(cached, at, _)| {
+            *at == key && cached.upgrade().is_some_and(|c| Arc::ptr_eq(&c, skin))
+        });
+        if !fresh {
+            let d = nanatype_theme::responsive_dialogue(skin, size).dialogue;
+            let ids = d
+                .shader_effects
+                .into_iter()
+                .map(|e| e.shader)
+                .chain(d.decor.into_iter().filter_map(|d| d.shader))
+                .collect();
+            *cache = Some((Arc::downgrade(skin), key, ids));
+        }
+        f(&cache.as_ref().expect("just filled").2)
+    })
 }
 pub fn preview_animating(ui: Stage) -> bool {
     if !NOTICES.lock().unwrap_or_else(|e| e.into_inner()).is_empty() {
