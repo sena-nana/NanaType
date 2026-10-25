@@ -3,13 +3,11 @@ use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use nana_ui::runtime::view::{
-    AnyView, IntoView, Signal, dynamic, on_mount, segmented_option, signal, widget,
-};
+use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, on_mount, signal, widget};
 use nana_ui::runtime::{
     Activate, Button, ColorChanged, ColorField, Icon, IconButton, NumberChanged, NumberInput,
-    RangeChanged, RangeField, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged,
-    SelectOption, SizeChanged, Stack, Text, TextArea, TextChanged, TextInput, TextInputState,
+    RangeChanged, RangeField, Select, SelectChanged, SelectOption, SizeChanged, Stack, Text,
+    TextChanged, TextInput, TextInputState,
 };
 use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
@@ -17,14 +15,14 @@ use nanatype_model::Rgba8;
 use nanatype_settings::Settings;
 use nanatype_theme::Skin;
 
-use super::controls::{Type, hint, label};
+use super::controls::{Type, hint};
 use crate::msg::Msg;
 use crate::ui::Ui;
 use crate::ui::kit::{self, gap};
 use nana_ui::icons_tabler as ti;
 pub use nanatype_frame::ui::preview::{
-    Draft, InvalidProfile, Pane, StageAssets, Surface, default_size, sample, stage,
-    stage_placeholder, stage_view,
+    Draft, InvalidProfile, Pane, StageAssets, Surface, default_size, pair_extent, sample, stage,
+    stage_pair, stage_pair_placeholder, stage_placeholder, stage_view,
 };
 
 /// The overscan of skin `id` as the catalogue loaded it.
@@ -50,8 +48,6 @@ pub(super) fn change(ui: Ui, id: &str, f: impl FnOnce(&mut Draft)) {
     nanatype_frame::ui::preview::change(*ui, id, overscan(ui, id), f)
 }
 
-/// The sample text field.
-const SAMPLE_H: f32 = 100.0;
 /// The stage and the fields side by side: each column's basis and the
 /// least it narrows to before they stack.
 const COLUMN_W: f32 = 300.0;
@@ -391,59 +387,6 @@ fn action(ui: Ui, icon: Icon, key: &str) -> IconButton {
         .with_tooltip(ui.now_t(key))
 }
 
-/// The sample text under the stage: its caption with a reset at the far
-/// end, then the text itself.
-fn sample_editor(ui: Ui, id: &str, is_history: bool) -> AnyView {
-    let sample_id = id.to_owned();
-    let write_sample_id = id.to_owned();
-    let sample =
-        widget(kit::text_area(draft(ui, id).pane(is_history).text.clone()).height(SAMPLE_H))
-            .key("skin-edit-sample-text")
-            .bind(move |area: &mut TextArea| {
-                let text = draft(ui, &sample_id).pane(is_history).text.clone();
-                if area.state.value.as_str() != text {
-                    area.state = TextInputState::new(text);
-                }
-            })
-            .on(move |e: &TextChanged| {
-                change(ui, &write_sample_id, |d| {
-                    d.pane_mut(is_history).text = e.value.to_string()
-                });
-            });
-    let sample_reset_id = id.to_owned();
-    widget(
-        Stack::column(0.0)
-            .gap_step(gap::step::TIGHT)
-            .width(LengthSpec::Fill),
-    )
-    .children((
-        // The sample's caption, with its reset at the far end.
-        widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::CONTROL)
-                .align(AlignSpec::Center)
-                .width(LengthSpec::Fill),
-        )
-        .children((
-            hint(ui.now_t("skin-edit-test-text")),
-            kit::spacer(),
-            widget(action(ui, ti::ROTATE_CLOCKWISE, "skin-edit-sample-reset")).on(
-                move |_: &Activate| {
-                    change(ui, &sample_reset_id, |d| {
-                        d.pane_mut(is_history).text = ui.now_t(if is_history {
-                            "skin-edit-history-sample"
-                        } else {
-                            "skin-edit-sample"
-                        });
-                    })
-                },
-            ),
-        )),
-        sample,
-    ))
-    .into_any()
-}
-
 fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: bool) -> AnyView {
     let text = if is_history {
         base.history.text.clone()
@@ -552,11 +495,7 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, is_history: bool, fallback_font: 
             .children((
                 widget(action(ui, ti::RESTORE, "skin-edit-reset")).on(move |_: &Activate| {
                     change(ui, &reset_id, |d| {
-                        let text = d.pane(is_history).text.clone();
-                        *d.pane_mut(is_history) = Pane {
-                            text,
-                            ..Default::default()
-                        };
+                        *d.pane_mut(is_history) = Pane::default();
                         d.params = Default::default();
                     })
                 }),
@@ -599,23 +538,20 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyVi
                 previewing
                     .get()
                     .unwrap_or_else(|| ui.settings.with(|s| s.skin.id.clone())),
-                ui.skin_preview_history.get(),
                 ui.locale.get(),
                 ui.skins.with(|s| Arc::as_ptr(s) as usize),
                 ui.skin_preview
                     .with(|p| p.as_ref().map(|p| Arc::as_ptr(p) as usize)),
             )
         },
-        move |(id, history_mode, locale, _, _)| {
+        move |(id, locale, _, _)| {
             let id = id.clone();
-            let history_mode = *history_mode;
             let row = ui
                 .skins
                 .with_untracked(|rows| rows.iter().find(|r| r.id == id).cloned());
             let Some(row) = row.filter(|r| r.skin.is_some() && r.error.is_none()) else {
                 return hint(ui.now_t("skin-edit-unavailable"));
             };
-            let surface = Surface::of(history_mode);
             // The page shows at once, on the placeholder until a stage is
             // ready. Building the dialogue and its controls waits for that,
             // which arrives after this frame has been presented.
@@ -628,28 +564,31 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyVi
             // presented.
             let ask = id.clone();
             on_mount(move |_| defer_request(ask, autoplay || ui.shader_preview.get_untracked()));
-            let (sample, controls) = match prepared {
-                Some(p) => (
-                    stage_view(
-                        *ui,
-                        p.assets.clone(),
-                        row.image_urls.clone(),
-                        surface,
-                        width,
-                    ),
-                    Some(controls(
-                        ui,
-                        &id,
-                        p.assets.base.clone(),
-                        history_mode,
-                        row.fallback_font,
-                    )),
+            // One stage draws both windows. Choosing which one the fields
+            // edit does not build it again.
+            let sample = match prepared.as_ref() {
+                Some(p) => stage_pair(
+                    *ui,
+                    p.assets.clone(),
+                    row.image_urls.clone(),
+                    width,
+                    ui.skin_preview_history,
                 ),
                 None => {
                     let skin = row.skin.as_ref().expect("checked above");
-                    (stage_placeholder(*ui, skin, surface, width), None)
+                    stage_pair_placeholder(*ui, skin, width)
                 }
             };
+            let controls = prepared.map(|p| {
+                let base = p.assets.base.clone();
+                let controls_id = id.clone();
+                let fallback = row.fallback_font;
+                dynamic(
+                    move || ui.skin_preview_history.get(),
+                    move |history| controls(ui, &controls_id, base.clone(), *history, fallback),
+                )
+                .into_any()
+            });
             let apply_id = id.clone();
             let apply_read = id.clone();
             let play_id = id.clone();
@@ -660,8 +599,8 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyVi
             )
             .key("skin-preview")
             .children((
-                // The skin and which surface it shows on the left; applying
-                // it and playing its effects at the far end.
+                // Applying the skin and playing its effects. Which surface
+                // the fields edit is the preview that was clicked.
                 widget(
                     Stack::row(0.0)
                         .gap_step(gap::step::CONTROL)
@@ -669,17 +608,6 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyVi
                         .width(LengthSpec::Fill),
                 )
                 .children((
-                    label(row.name),
-                    widget(SegmentedControl::new().size(ControlSize::Small)).children((
-                        segmented_option(ui.now_t("windows-display"))
-                            .selected(move || !ui.skin_preview_history.get())
-                            .on(move |_: &SegmentedOptionChosen| {
-                                ui.skin_preview_history.set(false)
-                            }),
-                        segmented_option(ui.now_t("windows-history"))
-                            .selected(move || ui.skin_preview_history.get())
-                            .on(move |_: &SegmentedOptionChosen| ui.skin_preview_history.set(true)),
-                    )),
                     kit::spacer(),
                     // Shown in place rather than swapped by `dynamic`, whose
                     // full-width branch pushed the effects button onto a
@@ -742,7 +670,7 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyVi
                                 .gap_step(gap::step::GROUP)
                                 .width(LengthSpec::Fill),
                         )
-                        .children((sample, sample_editor(ui, &id, history_mode))),
+                        .children(sample),
                     ),
                     widget(
                         Stack::column(0.0)
@@ -1197,6 +1125,8 @@ align = { param = "align" }
         crate::ui::prepare_skin_preview(ui, &registry, id, false).unwrap();
         let keys = node_keys(&mut session);
         assert!(keys.iter().any(|k| k == "skin-preview-box"), "{keys:?}");
+        assert!(keys.iter().any(|k| k == "skin-preview-display"), "{keys:?}");
+        assert!(keys.iter().any(|k| k == "skin-preview-history"), "{keys:?}");
         assert!(!keys.iter().any(|k| k == "skin-preview-loading"));
         let stage = ui.skin_preview.get_untracked().unwrap();
         let rows = ui.skins.get_untracked();
@@ -1260,22 +1190,41 @@ align = { param = "align" }
                 let column = bounds("skin-preview-stage-column");
                 let stage = bounds("skin-preview-box");
                 let canvas = bounds("skin-preview-canvas");
-                let scale = ((column.width - 24.0) / w).min(340.0 / h).min(1.0);
+                let display = bounds("skin-preview-display");
+                let history_box = bounds("skin-preview-history");
+                let known = if history { &history_box } else { &display };
+                let scale = known.width / w;
+                assert!(
+                    (known.height - h * scale).abs() < 1.0,
+                    "{history} {w}x{h}: scale {scale} {known:?}"
+                );
+                let gap = nanatype_frame::ui::preview::PAIR_GAP * scale;
+                assert!(
+                    (stage.width - display.width.max(history_box.width)).abs() < 1.0,
+                    "{history} {w}x{h}: {stage:?} {display:?} {history_box:?}"
+                );
+                assert!(
+                    (stage.height - (display.height + history_box.height + gap)).abs() < 1.5,
+                    "{history} {w}x{h}: {stage:?} gap {gap}"
+                );
+                let logical = [stage.width / scale, stage.height / scale];
+                let expected = ((column.width - 24.0).max(1.0) / logical[0])
+                    .min(340.0 / logical[1])
+                    .min(1.0);
+                assert!(
+                    (scale - expected).abs() < 0.02,
+                    "{history} {w}x{h}: scale {scale} expected {expected}"
+                );
                 for actual in [&stage, &canvas] {
                     assert!(
-                        (actual.width - w * scale).abs() < 0.5,
+                        actual.x >= column.x && actual.x + actual.width <= column.x + column.width,
                         "{history} {w}x{h}: {actual:?}"
-                    );
-                    assert!(
-                        (actual.height - h * scale).abs() < 0.5,
-                        "{history} {w}x{h}: {actual:?}"
-                    );
-                    assert!(
-                        actual.x >= column.x && actual.x + actual.width <= column.x + column.width
                     );
                 }
                 assert!((stage.x - canvas.x).abs() < 0.5);
                 assert!((stage.y - canvas.y).abs() < 0.5);
+                assert!((stage.width - canvas.width).abs() < 0.5);
+                assert!((stage.height - canvas.height).abs() < 0.5);
                 let pane = draft(ui, id);
                 assert_eq!(
                     if history {
@@ -1287,6 +1236,70 @@ align = { param = "align" }
                 );
             }
         }
+    }
+
+    #[test]
+    fn clicking_a_preview_edits_that_surface_and_leaves_the_other() {
+        let (ui, _) = fixture();
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let id = "nanatype.halo";
+        crate::ui::prepare_skin_preview(ui, &registry, id, false).unwrap();
+        let doc_id = DocumentId::new(8).unwrap();
+        let mut doc = RuntimeDocument::new(doc_id);
+        doc.context_mut()
+            .mount_view_root(doc_id, move || view(ui, signal(None), false))
+            .unwrap();
+        let mut session = RuntimeAgentSession::new(doc, 900, 2400).unwrap();
+        session.flush().unwrap();
+        let picked = |session: &mut RuntimeAgentSession, name: &str| {
+            session
+                .accessibility_dump()
+                .into_iter()
+                .find(|n| n.role == "button" && n.label.as_deref() == Some(name))
+                .unwrap_or_else(|| panic!("missing {name}"))
+                .selected
+        };
+        assert_eq!(
+            picked(&mut session, &ui.now_t("windows-display")),
+            Some(true)
+        );
+        assert_eq!(picked(&mut session, &ui.now_t("windows-history")), None);
+        click(&mut session, &ui.now_t("windows-history"));
+        assert!(ui.skin_preview_history.get_untracked());
+        let dump = session.accessibility_dump();
+        assert!(
+            dump.iter().all(|n| {
+                n.agent_path
+                    .as_deref()
+                    .is_none_or(|p| !p.ends_with("skin-edit-sample-text"))
+            }),
+            "the sample text editor is gone"
+        );
+        let has = |key: &str| {
+            let label = ui.now_t(key);
+            dump.iter()
+                .any(|n| n.label.as_deref() == Some(label.as_str()))
+        };
+        for key in [
+            "skin-edit-long-name",
+            "skin-edit-history-viewer-name",
+            "skin-edit-history-fan-name",
+            "skin-edit-history-captain-name",
+            "history-role-host",
+            "history-role-viewer",
+        ] {
+            assert!(has(key), "{key} is shown");
+        }
+        commit_size(&mut session, "42");
+        let edited = draft(ui, id);
+        assert_eq!(edited.history.size, "42");
+        assert_eq!(edited.display.size, "");
+        click(&mut session, &ui.now_t("windows-display"));
+        assert!(!ui.skin_preview_history.get_untracked());
+        commit_size(&mut session, "36");
+        let edited = draft(ui, id);
+        assert_eq!(edited.display.size, "36");
+        assert_eq!(edited.history.size, "42");
     }
 
     #[test]

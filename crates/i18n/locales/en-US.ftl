@@ -36,9 +36,20 @@ skin-edit-invalid = Enter valid numbers and a hex color. Leave fields empty for 
 skin-preview-loading = Loading preview…
 skin-edit-sample = Hello, NanaType! Test wrapping, font size and spacing. 你好，世界！0123456789
     Second line: resize the window to inspect the actual layout.
-skin-edit-history-sample = Hello, NanaType! Welcome to the stream.
-    A longer history message to check wrapping, names and timestamps in a narrow window. 你好！0123456789
-    Third message: customize the font, color and line height separately.
+# History preview, oldest first: host, grouped follow-up, long host line,
+# viewer, grouped viewer line, long name, host quoting the viewer, gift, membership.
+skin-edit-history-host = Hello! Welcome to the stream.
+skin-edit-history-host-more = Tune the [b]font, color and line height[/b] on their own, including a [color=#c45c26]colored[/color] word. [ruby=nana]Nana[/ruby] [at=1001 name="Acher"] [emote=wave alt="wave"]
+skin-edit-history-long = A longer host message for wrapping, names and timestamps in a narrow window. 你好！0123456789
+skin-edit-history-viewer-name = Mio
+skin-edit-history-viewer = Hi! This skin looks great today.
+skin-edit-history-viewer-more = A second message in a row stays grouped with the first.
+skin-edit-history-long-body = A long name still leaves room for the message, the time and wrapping. 0123456789
+skin-edit-history-reply = Got it — this reply quotes that viewer message.
+skin-edit-history-fan-name = Hoshi
+skin-edit-history-gift = Sent Hearts ×10
+skin-edit-history-captain-name = Captain Ren
+skin-edit-history-member = Became a member
 skin-edit-long-name = A long speaker name for narrow windows
 packages-refresh = Reload
 packages-installed = Installed

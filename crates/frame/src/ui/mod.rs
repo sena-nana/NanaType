@@ -106,6 +106,9 @@ pub struct Stage {
     pub track_slot: usize,
     /// Animation clock (ms); advanced every frame while something moves.
     pub now: Signal<u64>,
+    /// History-sample playback: messages revealed, and the wall time of the
+    /// latest step. A zero time means playback has not started.
+    pub preview_playback: Signal<(u64, u64)>,
     pub peer_now: Signal<u64>,
     pub history_now: Signal<u64>,
     pub history: Signal<Arc<Vec<HistoryRow>>>,
@@ -190,6 +193,7 @@ impl Stage {
             peer_local_line: signal(None),
             track_slot: 0,
             now: signal(crate::clock::now_ms()),
+            preview_playback: signal((0, 0)),
             peer_now: signal(crate::clock::now_ms()),
             history_now: signal(crate::clock::now_ms()),
             history,

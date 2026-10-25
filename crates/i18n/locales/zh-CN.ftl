@@ -36,9 +36,20 @@ skin-edit-invalid = 请输入有效数值和十六进制颜色。留空表示皮
 skin-preview-loading = 正在加载预览…
 skin-edit-sample = 你好，NanaType！这是一段用于检查字号与自动换行的测试文字。Hello, world! 0123456789
     第二行：调整宽高、字体和行距，查看实际排版效果。
-skin-edit-history-sample = 大家好！欢迎来到今天的直播。Hello, NanaType!
-    这是一条较长的历史消息，用于检查窄窗口中的换行、姓名与时间排版。0123456789
-    第三条消息：字体、颜色与行距都可以分别调整。
+# History preview, oldest first: host, grouped follow-up, long host line,
+# viewer, grouped viewer line, long name, host quoting the viewer, gift, membership.
+skin-edit-history-host = 大家好！欢迎来到今天的直播。
+skin-edit-history-host-more = [b]字体、颜色与行距[/b]都可以分别调整，例如[color=#c45c26]强调[/color]。[ruby=なな]奈奈[/ruby] [at=1001 name="阿澈"] [emote=wave alt="挥手"]
+skin-edit-history-long = 这是一条较长的主播消息，用来检查窄窗口中的换行、姓名与时间排版。Hello, NanaType! 0123456789
+skin-edit-history-viewer-name = 小明
+skin-edit-history-viewer = 主播好，今天的皮肤好好看！
+skin-edit-history-viewer-more = 连续发送的第二条会和上一条排在一起。
+skin-edit-history-long-body = 长姓名旁边仍要留出正文、时间和换行的位置。0123456789
+skin-edit-history-reply = 收到，这条回复会带上刚才那条观众消息。
+skin-edit-history-fan-name = 小星
+skin-edit-history-gift = 送出 小心心 ×10
+skin-edit-history-captain-name = 舰长阿兰
+skin-edit-history-member = 开通了舰长
 skin-edit-long-name = 用于检查窄窗换行的长姓名 NanaType
 packages-refresh = 重新加载
 packages-installed = 已安装

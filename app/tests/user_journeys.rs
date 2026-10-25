@@ -156,11 +156,11 @@ impl Fixture {
             sample.x + sample.width < container.x + container.width,
             "clipped preview"
         );
-        let d = &skin.dialogue;
-        let (w, h) = (
-            d.region[0] + 2.0 * d.overscan,
-            d.region[1] + 2.0 * d.overscan,
+        let span = nanatype::ui::settings::preview::pair_extent(
+            nanatype::ui::settings::preview::default_size(skin, false),
+            nanatype::ui::settings::preview::default_size(skin, true),
         );
+        let (w, h) = (span[0], span[1]);
         assert!(
             (sample.height / sample.width - h / w).abs() < 0.01,
             "distorted preview"

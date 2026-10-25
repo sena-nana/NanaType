@@ -247,6 +247,11 @@ impl RuntimeProgram for Host {
     fn frame_demand(&self, _: WindowId) -> FrameDemand {
         if self.previewing {
             FrameDemand::Continuous(NonZeroU32::new(30).expect("non-zero"))
+        } else if let Some(at) = crate::ui::preview::history_playback_deadline(
+            *self.app.ui,
+            nanatype_frame::clock::now_ms(),
+        ) {
+            FrameDemand::At(nanatype_frame::clock::instant(at))
         } else {
             FrameDemand::OnDemand
         }
@@ -254,6 +259,7 @@ impl RuntimeProgram for Host {
 
     fn prepare_window_frame(&mut self, _: WindowId, _: &RuntimeProgramContext<Msg>) {
         let now = nanatype_frame::clock::now_ms();
+        crate::ui::preview::tick_history_playback(*self.app.ui, now);
         self.previewing = crate::ui::preview::animating(*self.app.ui, now);
         if self.previewing {
             self.app.ui.now.set_if_changed(now);

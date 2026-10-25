@@ -36,9 +36,20 @@ skin-edit-invalid = 有効な数値と16進数の色を入力してください�
 skin-preview-loading = プレビューを読み込み中…
 skin-edit-sample = こんにちは、NanaType！文字サイズと折り返しのテストです。Hello, world! 0123456789
     2行目：幅や高さ、フォント、行間を調整できます。
-skin-edit-history-sample = こんにちは！今日の配信へようこそ。Hello, NanaType!
-    狭いウィンドウでの折り返し、名前、時刻の配置を確認するための長いメッセージです。0123456789
-    3つ目のメッセージ：文字色と行間も個別に調整できます。
+# History preview, oldest first: host, grouped follow-up, long host line,
+# viewer, grouped viewer line, long name, host quoting the viewer, gift, membership.
+skin-edit-history-host = こんにちは！今日の配信へようこそ。
+skin-edit-history-host-more = [b]フォント、色、行間[/b]は別々に調整できます。たとえば[color=#c45c26]強調[/color]。[ruby=なな]ナナ[/ruby] [at=1001 name="アキラ"] [emote=wave alt="手を振る"]
+skin-edit-history-long = 狭いウィンドウでの折り返し、名前、時刻を確認するための長いメッセージです。Hello! 0123456789
+skin-edit-history-viewer-name = ミオ
+skin-edit-history-viewer = 配信者さん、今日のスキンがきれい！
+skin-edit-history-viewer-more = 続けて送ったメッセージは上の行とまとまります。
+skin-edit-history-long-body = 長い名前の横にも本文、時刻、折り返しの余白が要ります。0123456789
+skin-edit-history-reply = 了解。この返信は先ほどの視聴者メッセージを引用します。
+skin-edit-history-fan-name = ホシ
+skin-edit-history-gift = ハート ×10 を贈りました
+skin-edit-history-captain-name = 艦長アラン
+skin-edit-history-member = 艦長に加入しました
 skin-edit-long-name = 狭いウィンドウを確認する長い名前 NanaType
 packages-refresh = 再読み込み
 packages-installed = インストール済み
