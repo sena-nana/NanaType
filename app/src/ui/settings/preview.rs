@@ -717,7 +717,6 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>, autoplay: bool) -> AnyVi
                             }
                         }),
                 )),
-                (!row.description.is_empty()).then(|| hint(row.description)),
                 widget(
                     Stack::row(0.0)
                         .gap_step(gap::step::GROUP)
