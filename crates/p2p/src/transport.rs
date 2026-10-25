@@ -288,6 +288,11 @@ fn decode_frame(bytes: &[u8], max: usize) -> Result<Frame, String> {
 const MAX_HELLO: usize = 8 * 1024;
 /// Sustained frames per second accepted from a peer; more are delayed.
 const MAX_FRAMES_PER_SECOND: u32 = 40;
+/// Unauthenticated pipes the host reads a hello from at once. More are closed.
+const MAX_HANDSHAKES: usize = 4;
+/// A SteamID that fails this many handshakes in a row is refused for a while.
+const FAILED_HANDSHAKES: u32 = 3;
+const HANDSHAKE_BACKOFF: Duration = Duration::from_secs(30);
 
 /// Network references can only address content in the session image cache.
 fn sanitize_assets(value: &mut serde_json::Value) {
@@ -1082,6 +1087,17 @@ async fn host_session(
     let mut links: BTreeMap<String, Link> = BTreeMap::new();
     let mut next_generation = 1u64;
     let mut connected_once = false;
+    // Hellos are read off the loop: anyone who owns the app can connect, and
+    // a pipe that never speaks must not hold up the people already seated.
+    let gate = Arc::new(Gate {
+        session: invite.session.clone(),
+        secret: invite.secret.clone(),
+        password: password.to_owned(),
+        local: local.to_owned(),
+    });
+    let handshakes = Arc::new(tokio::sync::Semaphore::new(MAX_HANDSHAKES));
+    let (hello_tx, mut hello_rx) = mpsc::channel::<Result<Pipe, String>>(MAX_HANDSHAKES);
+    let mut failures: BTreeMap<String, (u32, Instant)> = BTreeMap::new();
     emit(Event::Status(Status::Waiting));
     let accept = open_pipe(carrier, None, Instant::now() + Duration::from_secs(20));
     tokio::pin!(accept);
@@ -1097,22 +1113,24 @@ async fn host_session(
             result = &mut accept => {
                 match result {
                     Ok(pipe) => {
-                        admit(
-                            pipe,
-                            invite,
-                            password,
-                            local,
-                            offers,
-                            room,
-                            anchors,
-                            &mut links,
-                            &mut next_generation,
-                            &mut connected_once,
-                            &notes_tx,
-                            emit,
-                            &config.cache,
-                        )
-                        .await;
+                        failures.retain(|_, (_, at)| at.elapsed() < HANDSHAKE_BACKOFF);
+                        let refused = failures
+                            .get(&pipe.remote_id)
+                            .is_some_and(|(count, _)| *count >= FAILED_HANDSHAKES);
+                        match handshakes.clone().try_acquire_owned() {
+                            Ok(permit) if !refused => {
+                                let gate = gate.clone();
+                                let hello_tx = hello_tx.clone();
+                                tokio::spawn(async move {
+                                    let result = handshake(pipe, &gate).await;
+                                    drop(permit);
+                                    let _ = hello_tx.send(result).await;
+                                });
+                            }
+                            _ => {
+                                let _ = pipe.send.send(Outbound::Close);
+                            }
+                        }
                     }
                     Err(error) => {
                         if error != "Connection timed out" && error != "Connection cancelled" {
@@ -1126,6 +1144,32 @@ async fn host_session(
                     Instant::now() + Duration::from_secs(20),
                 ));
             }
+            Some(hello) = hello_rx.recv() => match hello {
+                Ok(pipe) => {
+                    failures.remove(&pipe.remote_id);
+                    admit(
+                        pipe,
+                        local,
+                        offers,
+                        room,
+                        anchors,
+                        &mut links,
+                        &mut next_generation,
+                        &mut connected_once,
+                        &notes_tx,
+                        emit,
+                        &config.cache,
+                    )
+                    .await;
+                }
+                Err(remote) => {
+                    if !remote.is_empty() {
+                        let failed = failures.entry(remote).or_insert((0, Instant::now()));
+                        failed.0 = failed.0.saturating_add(1);
+                        failed.1 = Instant::now();
+                    }
+                }
+            },
             note = notes_rx.recv() => {
                 let Some((id, generation, message)) = note else {
                     return Ok(());
@@ -1188,24 +1232,17 @@ async fn host_session(
                             let failed = links.get(&id).is_some_and(|link| {
                                 send_frame(&link.send, &Frame::Pong(nonce)).is_err()
                             });
-                            if failed && let Some(link) = links.remove(&id) {
-                                retire(link);
+                            if failed {
+                                release(&mut links, room, anchors, offers, &config.cache, emit, &[id]).await;
                                 emit(Event::Status(presence(&links, &room.guests, connected_once)));
                             }
                         }
                         Ok(Frame::Pong(_)) => {
                             emit(Event::Status(presence(&links, &room.guests, connected_once)));
                         }
-                        Ok(_) => {
-                            if let Some(link) = links.remove(&id) {
-                                retire(link);
-                            }
-                            emit(Event::Status(presence(&links, &room.guests, connected_once)));
-                        }
-                        Err(_) => {
-                            if let Some(link) = links.remove(&id) {
-                                retire(link);
-                            }
+                        // A peer that breaks the protocol gives its seat back.
+                        Ok(_) | Err(_) => {
+                            release(&mut links, room, anchors, offers, &config.cache, emit, &[id]).await;
                             emit(Event::Status(presence(&links, &room.guests, connected_once)));
                         }
                     },
@@ -1220,8 +1257,9 @@ async fn host_session(
                         } else {
                             false
                         };
-                        if failed && let Some(link) = links.remove(&id) {
-                            retire(link);
+                        if failed {
+                            release(&mut links, room, anchors, offers, &config.cache, emit, &[id]).await;
+                            emit(Event::Status(presence(&links, &room.guests, connected_once)));
                         }
                     }
                     Inbound::Asset { hash, bytes } => {
@@ -1394,10 +1432,40 @@ fn end_links(links: &mut BTreeMap<String, Link>) {
     }
 }
 
+/// What an unauthenticated pipe's hello is checked against.
+struct Gate {
+    session: String,
+    secret: String,
+    password: String,
+    local: String,
+}
+
+/// Read and check the hello of a pipe nobody has vouched for yet. A refusal
+/// carries the remote SteamID so repeated failures can be refused early.
+async fn handshake(mut pipe: Pipe, gate: &Gate) -> Result<Pipe, String> {
+    let remote = pipe.remote_id.clone();
+    let hello = tokio::time::timeout(
+        Duration::from_secs(5),
+        read_frame(&mut pipe.recv, MAX_HELLO),
+    )
+    .await;
+    let accepted = matches!(
+        &hello,
+        Ok(Ok(Frame::Hello { v, session, secret }))
+            if *v == VERSION
+                && *session == gate.session
+                && credential_matches(secret, &gate.secret, &gate.password)
+    );
+    if !accepted || remote.is_empty() || remote == gate.local {
+        let _ = pipe.send.send(Outbound::Close);
+        return Err(remote);
+    }
+    Ok(pipe)
+}
+
+/// Seat a pipe whose hello was accepted.
 async fn admit(
-    mut pipe: Pipe,
-    invite: &Invite,
-    password: &str,
+    pipe: Pipe,
     local: &str,
     offers: &Offers,
     room: &mut Room,
@@ -1409,30 +1477,7 @@ async fn admit(
     emit: &Emit,
     cache: &Path,
 ) {
-    let hello = tokio::time::timeout(
-        Duration::from_secs(5),
-        read_frame(&mut pipe.recv, MAX_HELLO),
-    )
-    .await;
-    let Ok(Ok(frame)) = hello else {
-        let _ = pipe.send.send(Outbound::Close);
-        return;
-    };
-    let Frame::Hello { v, session, secret } = frame else {
-        let _ = pipe.send.send(Outbound::Close);
-        return;
-    };
-    if v != VERSION
-        || session != invite.session
-        || !credential_matches(&secret, &invite.secret, password)
-    {
-        let _ = pipe.send.send(Outbound::Close);
-        return;
-    }
-    if pipe.remote_id.is_empty() || pipe.remote_id == local {
-        let _ = pipe.send.send(Outbound::Close);
-        return;
-    }
+    debug_assert!(!pipe.remote_id.is_empty() && pipe.remote_id != local);
     let known = room.guests.iter().any(|id| id == &pipe.remote_id);
     if !known && room.guests.len() + 1 >= MAX_MEMBERS {
         let _ = send_frame(&pipe.send, &Frame::Full);
@@ -1684,12 +1729,14 @@ async fn exchange(
                         if let Some(publication) = latest {
                             let mut track = prepare(&publication.track, &publication.resources, offers, cache).await?;
                             track.age_ms = publication.published_at.elapsed().as_millis() as u64;
-                            if room.update(local, track.clone())? {
+                            // A track over budget is not sent: the host would refuse it too,
+                            // and dropping the pipe would only reconnect into the same track.
+                            let accepted = room.update(local, track.clone());
+                            if matches!(accepted, Ok(true)) {
                                 anchors.insert(local.to_owned(), Instant::now());
                                 broadcast(room, anchors, emit);
-                                let previews = pending_previews(offers, cache, &picture_hashes(&track), sent_previews).await;
-                                send_frame(&send, &Frame::Track { track, previews })?;
-                            } else {
+                            }
+                            if accepted.is_ok() {
                                 let previews = pending_previews(offers, cache, &picture_hashes(&track), sent_previews).await;
                                 send_frame(&send, &Frame::Track { track, previews })?;
                             }
@@ -1808,7 +1855,7 @@ fn validate_room(room: &Room, session: &str, host: &str, local: &str) -> Result<
         || room.guests.iter().any(|id| id.is_empty() || id == host)
         || !room.guests.iter().any(|id| id == local)
         || room.entries.len() > protocol::MAX_ENTRIES
-        || room.tracks.len() > 32
+        || room.tracks.len() > protocol::MAX_TRACKS
     {
         return Err("Invalid room snapshot".into());
     }
@@ -1819,7 +1866,7 @@ fn validate_room(room: &Room, session: &str, host: &str, local: &str) -> Result<
     {
         return Err("Unknown participant".into());
     }
-    if room.retired_before.len() > 32
+    if room.retired_before.len() > protocol::MAX_TRACKS
         || room
             .retired_before
             .keys()
@@ -1843,13 +1890,14 @@ fn validate_room(room: &Room, session: &str, host: &str, local: &str) -> Result<
 
 fn install_room(room: &mut Room, anchors: &mut BTreeMap<String, Instant>, mut snapshot: Room) {
     // A journal acknowledgement may arrive before the host sees the latest
-    // local mirror. Keep newer tracks and their elapsed playback time.
+    // local mirror. Keep newer tracks and their elapsed playback time. A
+    // track the host dropped for someone who left stays dropped.
     for (owner, track) in &room.tracks {
-        if snapshot
-            .tracks
-            .get(owner)
-            .is_none_or(|incoming| incoming.revision < track.revision)
-        {
+        let newer = match snapshot.tracks.get(owner) {
+            Some(incoming) => incoming.revision < track.revision,
+            None => member(&snapshot, owner),
+        };
+        if newer {
             let mut track = track.clone();
             track.age_ms = track.age_ms.saturating_add(
                 anchors
@@ -2079,6 +2127,89 @@ mod tests {
         assert_eq!(host_room.entries, guest_room.entries);
         assert!(host_room.guests.iter().any(|id| id == "2"));
         assert!(!host_room.guests.iter().any(|id| id == "3"));
+        drop(guest);
+        drop(host);
+    }
+
+    #[test]
+    fn someone_leaving_before_their_first_line_keeps_the_others_seated() {
+        let hub = Hub::new();
+        let (host_tx, host_rx) = channel::channel();
+        let host = PeerHandle::start(config("quiet-host"), None, "", hub.carrier(1), move |e| {
+            let _ = host_tx.send(e);
+        })
+        .unwrap();
+        let Event::Started { invitation, .. } =
+            next(&host_rx, |e| matches!(e, Event::Started { .. }))
+        else {
+            unreachable!()
+        };
+        let (guest, guest_rx) = join(&hub, &invitation, 2);
+        let (quiet, quiet_rx) = join(&hub, &invitation, 3);
+        next(&guest_rx, |e| {
+            matches!(e, Event::Status(Status::Connected { .. }))
+        });
+        next(&quiet_rx, |e| {
+            matches!(e, Event::Status(Status::Connected { .. }))
+        });
+        // The app publishes on start, so a guest has a track before any line.
+        guest.publish(track_with(1, &[]), BTreeMap::new());
+        quiet.publish(track_with(1, &[]), BTreeMap::new());
+        next(
+            &guest_rx,
+            |e| matches!(e, Event::Room { room, .. } if room.tracks.contains_key("3")),
+        );
+        drop(quiet);
+        next(
+            &guest_rx,
+            |e| matches!(e, Event::Room { room, .. } if room.guests.len() == 1 && !room.tracks.contains_key("3")),
+        );
+        // Still seated: a new line reaches both ends.
+        guest.publish(track_with(2, &[1]), BTreeMap::new());
+        next(
+            &host_rx,
+            |e| matches!(e, Event::Room { room, .. } if room.entries.len() == 1),
+        );
+        next(
+            &guest_rx,
+            |e| matches!(e, Event::Room { room, .. } if room.entries.len() == 1),
+        );
+        while let Ok(event) = guest_rx.try_recv() {
+            assert!(!matches!(event, Event::Status(Status::Reconnecting)));
+        }
+        drop(guest);
+        drop(host);
+    }
+
+    #[test]
+    fn a_silent_connection_does_not_hold_up_the_next_guest() {
+        let hub = Hub::new();
+        let (host_tx, host_rx) = channel::channel();
+        let host = PeerHandle::start(config("silent-host"), None, "", hub.carrier(1), move |e| {
+            let _ = host_tx.send(e);
+        })
+        .unwrap();
+        let Event::Started { invitation, .. } =
+            next(&host_rx, |e| matches!(e, Event::Started { .. }))
+        else {
+            unreachable!()
+        };
+        // Any owner of the app can open a session pipe and never say hello.
+        let silent = hub
+            .carrier(66)
+            .connect(Some(1), Arc::new(AtomicBool::new(false)))
+            .unwrap();
+        let started = Instant::now();
+        let (guest, guest_rx) = join(&hub, &invitation, 2);
+        next(&guest_rx, |e| {
+            matches!(e, Event::Status(Status::Connected { .. }))
+        });
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "the guest waited behind the silent pipe: {:?}",
+            started.elapsed()
+        );
+        drop(silent);
         drop(guest);
         drop(host);
     }

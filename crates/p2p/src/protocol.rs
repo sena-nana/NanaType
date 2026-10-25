@@ -18,6 +18,9 @@ pub const MAX_MEMBERS: usize = 8;
 /// Serialized budget of one participant's track.
 /// Every member's track, plus the shared history, has to fit in one room frame.
 pub const MAX_TRACK: usize = MAX_FRAME / (MAX_MEMBERS * 2);
+/// Tracks a room may carry: the seated people, plus people who left while
+/// their lines are still in the shared history.
+pub const MAX_TRACKS: usize = 32;
 
 fn json_len<T: Serialize>(value: &T) -> usize {
     serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
@@ -213,9 +216,57 @@ impl Room {
         Ok(())
     }
 
-    /// Free a seat. Their track stays, so lines they already sent remain.
+    /// Free a seat. Their track stays while lines they already sent remain in
+    /// the shared history; with none left, they are forgotten.
     pub fn unseat(&mut self, id: &str) {
         self.guests.retain(|guest| guest != id);
+        self.forget_departed();
+    }
+
+    fn seated(&self, id: &str) -> bool {
+        id == self.host || self.guests.iter().any(|guest| guest == id)
+    }
+
+    /// A guest may only see tracks of seated people or of people whose lines
+    /// are still ordered. Drop everyone else, and when too many people have
+    /// left, drop the history of whoever spoke least recently.
+    fn forget_departed(&mut self) {
+        loop {
+            let ordered: BTreeSet<&str> = self
+                .entries
+                .iter()
+                .map(|entry| entry.participant.as_str())
+                .collect();
+            let gone: Vec<String> = self
+                .tracks
+                .keys()
+                .chain(self.retired_before.keys())
+                .filter(|id| !self.seated(id) && !ordered.contains(id.as_str()))
+                .cloned()
+                .collect();
+            for id in &gone {
+                self.tracks.remove(id);
+                self.retired_before.remove(id);
+            }
+            if self.tracks.len() <= MAX_TRACKS && self.retired_before.len() <= MAX_TRACKS {
+                return;
+            }
+            // Entries are in order, so the last mention is the latest one.
+            let mut last: BTreeMap<&str, u64> = BTreeMap::new();
+            for entry in &self.entries {
+                if !self.seated(&entry.participant) {
+                    last.insert(&entry.participant, entry.order);
+                }
+            }
+            let Some(oldest) = last
+                .into_iter()
+                .min_by_key(|(_, order)| *order)
+                .map(|(id, _)| id.to_owned())
+            else {
+                return;
+            };
+            self.entries.retain(|entry| entry.participant != oldest);
+        }
     }
 
     pub fn update(&mut self, participant: &str, mut track: TrackSnapshot) -> Result<bool, String> {
@@ -268,7 +319,7 @@ impl Room {
     }
 
     fn compact(&mut self) {
-        // Leave room for the frame wrapper and both live display documents.
+        // Leave room for the frame wrapper and the live display documents.
         // The size is tracked incrementally: re-serializing the room per
         // dropped entry made a large room quadratic to compact.
         let budget = MAX_FRAME * 3 / 4;
@@ -296,6 +347,9 @@ impl Room {
             drop += 1;
         }
         self.entries.drain(..drop);
+        if drop > 0 {
+            self.forget_departed();
+        }
     }
 
     /// Receiver-local IDs cannot collide with local process IDs or each other.
@@ -760,6 +814,42 @@ pub(crate) mod tests {
         assert!(room.update("b", track).unwrap());
         assert_eq!(room.tracks.len(), 2);
         assert_eq!(room.tracks["a"].revision, 4);
+    }
+
+    #[test]
+    fn someone_who_leaves_without_a_line_is_forgotten() {
+        let mut room = Room::new("session".into(), "1".into());
+        room.seat("2").unwrap();
+        room.seat("3").unwrap();
+        room.update("2", track_with(1, &[])).unwrap();
+        room.update("3", track_with(1, &[1])).unwrap();
+        room.index("3");
+        room.unseat("2");
+        room.unseat("3");
+        assert!(!room.tracks.contains_key("2"));
+        // Their line is still in the history, so their track stays.
+        assert!(room.tracks.contains_key("3"));
+    }
+
+    #[test]
+    fn departed_people_never_exceed_the_track_cap() {
+        let mut room = Room::new("session".into(), "1".into());
+        for id in 2..(MAX_TRACKS as u64 + 10) {
+            let id = id.to_string();
+            room.seat(&id).unwrap();
+            room.update(&id, track_with(1, &[1])).unwrap();
+            room.index(&id);
+            room.unseat(&id);
+        }
+        assert!(room.tracks.len() <= MAX_TRACKS);
+        // The people who spoke most recently are the ones kept.
+        assert!(room.tracks.contains_key(&(MAX_TRACKS as u64 + 9).to_string()));
+        assert!(!room.tracks.contains_key("2"));
+        assert!(
+            room.entries
+                .iter()
+                .all(|entry| room.tracks.contains_key(&entry.participant))
+        );
     }
 
     #[test]

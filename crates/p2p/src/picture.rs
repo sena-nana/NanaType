@@ -18,7 +18,8 @@ use image::{
 
 use crate::protocol::MAX_ASSET;
 
-/// One Steam Networking Sockets message. Full pictures are kept inside it.
+/// Budget of one full picture: one Steam message of bytes. With the chunk
+/// header and hash it travels as two messages.
 pub const WIRE_ASSET: usize = 512 * 1024;
 pub const PREVIEW_MAX: usize = 24 * 1024;
 
