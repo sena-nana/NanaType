@@ -258,6 +258,7 @@ impl RuntimeProgram for Host {
 
     fn prepare_window_frame(&mut self, _: WindowId, _: &RuntimeProgramContext<Msg>) {
         let now = nanatype_frame::clock::now_ms();
+        nanatype_frame::clock::begin_frame(now);
         let ui = *self.app.ui;
         crate::ui::preview::tick_history_playback(ui, now);
         crate::ui::preview::tick_sample_playback(ui, now);

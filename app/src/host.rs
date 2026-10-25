@@ -1482,6 +1482,9 @@ impl RuntimeProgram for Host {
             perf.begin(id);
         }
         let now = clock::now_ms();
+        // Glyph offsets and the preview origin share this reading. The
+        // compositor clock is fixed before the flush that builds the text.
+        clock::begin_frame(now);
         self.stickers.prepare(
             id,
             context.gpu(),

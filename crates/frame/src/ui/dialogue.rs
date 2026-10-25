@@ -379,18 +379,21 @@ fn document_on(
         .style(text_style)
         .width(LengthSpec::Fill);
     if reveal.is_some() || has_effects(doc) {
-        // The schedule's start is taken by the framework as the frame the
-        // node first shows, which is "now" for the offsets computed here.
+        // The framework stamps `reveal.start` with the compositor clock taken
+        // before this flush. Offsets use this frame's anchor, the same instant
+        // the preview origin and the effect clocks use. Sampling `now_ms`
+        // again while the text is built would be later, and the glyphs would
+        // show ahead of the light, scramble and shaders. An exit keeps the
+        // glyphs that are already on screen.
         let schedule = reveal.map(|plan| {
             plan.schedule(
                 std::time::Duration::ZERO,
-                // An exit keeps the glyphs that are already on screen.
                 if base.masks.exit.is_some() || base.light_exit.is_some() {
                     drawn_untracked_for(ui, source)
                         .text_exit
-                        .map_or_else(crate::clock::now_ms, |e| e.at_ms)
+                        .map_or_else(crate::clock::frame_ms, |e| e.at_ms)
                 } else {
-                    crate::clock::now_ms()
+                    crate::clock::frame_ms()
                 },
                 base.reduced_motion,
             )

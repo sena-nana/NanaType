@@ -1819,6 +1819,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn reveal_offsets_follow_the_frame_anchor_not_a_later_sample() {
+        let origin = 5_000u64;
+        let plan = RevealPlan {
+            at_ms: vec![Some(origin), Some(origin + 65), Some(origin + 130)],
+            intro: Entrance {
+                kind: EntranceKind::None,
+                ms: 0,
+            },
+        };
+        let anchored = plan.schedule(Duration::ZERO, origin, false);
+        let expect: Vec<f32> = [0u64, 65, 130]
+            .into_iter()
+            .map(|delay| delay as f32 / 1000.)
+            .collect();
+        assert_eq!(anchored.at_s.as_ref(), expect.as_slice());
+        let late = plan.schedule(Duration::ZERO, origin + 120, false);
+        assert!(
+            late.at_s[0] < 0.,
+            "a later sample shows the first glyph before its effect: {}",
+            late.at_s[0]
+        );
+    }
+
     fn builtin(id: &str) -> nanatype_theme::Skin {
         let reg = nanatype_theme::SkinRegistry::new(None, "test");
         (*reg
