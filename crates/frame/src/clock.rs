@@ -54,10 +54,18 @@ pub fn begin_frame(ms: u64) {
     FRAME.set(Some(ms));
 }
 
+/// An anchor older than this belongs to an earlier frame: a view built
+/// between frames (an event, or a window that sat idle) reads [`now_ms`].
+const FRAME_STALE_MS: u64 = 250;
+
 /// This frame's anchor, or [`now_ms`] when the host has not started a frame
-/// (offscreen tests and tools).
+/// recently (offscreen tests and tools, or text built outside a frame).
 pub fn frame_ms() -> u64 {
-    FRAME.get().unwrap_or_else(now_ms)
+    let now = now_ms();
+    FRAME
+        .get()
+        .filter(|&at| at <= now && now - at <= FRAME_STALE_MS)
+        .unwrap_or(now)
 }
 
 pub fn instant(ms: u64) -> Instant {
@@ -78,12 +86,22 @@ mod tests {
     #[test]
     fn frame_anchor_holds_until_the_next_frame() {
         let _restore = Restore(FRAME.get());
-        begin_frame(50);
-        assert_eq!(frame_ms(), 50);
-        let _later = now_ms();
-        assert_eq!(frame_ms(), 50);
-        begin_frame(80);
-        assert_eq!(frame_ms(), 80);
+        capture_at(1_000, || {
+            begin_frame(950);
+            assert_eq!(frame_ms(), 950);
+            begin_frame(980);
+            assert_eq!(frame_ms(), 980);
+        });
+    }
+
+    #[test]
+    fn an_anchor_from_an_earlier_frame_is_not_reused() {
+        let _restore = Restore(FRAME.get());
+        begin_frame(1_000);
+        // The window sat idle; a line arriving now must not start in the past.
+        capture_at(60_000, || assert_eq!(frame_ms(), 60_000));
+        // Nor can an anchor lie ahead of the clock.
+        capture_at(500, || assert_eq!(frame_ms(), 500));
     }
 
     #[test]
