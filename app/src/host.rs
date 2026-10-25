@@ -60,6 +60,8 @@ pub struct Host {
     /// The last keystroke click, and whether a key press (rather than IME
     /// text) played it.
     last_keystroke: Option<(Instant, bool)>,
+    /// The scene host's animation clock, to bring documents up to now.
+    animation_clock: Option<nana_ui::RuntimeAnimationClock>,
 }
 
 /// Application-clock work is separate from rendering-only work (GPU sweep,
@@ -1006,6 +1008,7 @@ impl RuntimeProgram for Host {
             stickers: Default::default(),
             doc_env: HashMap::new(),
             last_keystroke: None,
+            animation_clock: None,
         };
         // The primary window exists before `initialize_window` is ever
         // called, so its document is built here.
@@ -1522,7 +1525,20 @@ impl RuntimeProgram for Host {
         }
     }
 
+    fn sync_animation_clock(&mut self, epoch: Instant) {
+        self.animation_clock = Some(nana_ui::RuntimeAnimationClock::new(epoch));
+    }
+
     fn prepare_window_frame(&mut self, id: WindowId, context: &RuntimeProgramContext<Msg>) {
+        // A transition a commit starts (a history row's enter, a list's
+        // move) is stamped with the document's own clock, which only input
+        // and due animations advance. A window that sat idle would start it
+        // in the past, and its first frame would show it already over: bring
+        // the clock up to now before this frame's flush builds the change.
+        // (Upstream, the scene host should do this before every flush.)
+        if let (Some(clock), Some(doc)) = (self.animation_clock, self.docs.get_mut(&id)) {
+            clock.wake(doc.context_mut(), Instant::now());
+        }
         #[cfg(windows)]
         self.prepare_outputs(context);
         if let Some(perf) = &mut self.perf {

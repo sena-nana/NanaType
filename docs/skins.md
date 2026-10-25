@@ -117,6 +117,8 @@ coin = "sounds/coin.ogg"
 
 `history.group_speakers` 控制相邻同一说话人的消息是否共用姓名栏；`history.padding` 是无面板时的左、上、右、下内边距，`history.margin` 是上、右、下、左外边距；`history.row_padding` 是每行的水平留白，`history.column_inset` 是正文列旁额外预留的宽度。头像尺寸与 `history.text.size` 由皮肤配置，用户个性化设置正常覆盖，不存在按皮肤 ID 改写的流程。
 
+新消息按 `history.entrance` 入场（`slide_up`、`fade`、`slide_left`；`none` 为直接出现），已在屏幕上的消息用同样的 220ms 缓出滑到新位置：新消息把列表顶上去时整体上移，最早一条因显示条数上限移出时下面的消息补上空位。框架默认 `none`，全部内置皮肤均开启入场。减弱动态时消息直接落位。
+
 ## 清单
 
 ```toml

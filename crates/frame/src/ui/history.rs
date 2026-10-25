@@ -3,10 +3,16 @@
 //! keeps its colours, effects and stickers; with "typing along" sync the
 //! newest row reveals in step with the typewriter.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
-use nana_ui::runtime::view::{AnyView, IntoView, Transition, computed, dynamic, each, widget};
-use nana_ui::runtime::{NodeStyle, ScrollAxes, ScrollView, SizeChanged, Stack, Text};
+use nana_ui::runtime::view::{
+    AnyView, Computed, Implicit, IntoView, Signal, Transition, computed, dynamic, each, signal,
+    widget,
+};
+use nana_ui::runtime::{
+    AnimatableProperty, NodeStyle, PaintTransform, ScrollAxes, ScrollView, SizeChanged, Stack, Text,
+};
 use nana_ui_core::{
     AlignSpec, BackgroundImage, CssGradient, Easing, GradientStop, LengthSpec, LinearGradient,
     OverflowSpec, PointerEventsSpec, PositionSpec,
@@ -35,8 +41,10 @@ pub fn local_time(unix_ms: u64, seconds: bool) -> String {
     }
 }
 
-/// How long a new row takes to settle in.
+/// How long a new row takes to settle in, and the rows above it to move.
 const ROW_ENTER_MS: u64 = 220;
+/// The curve both ride on.
+const ROW_EASE: Easing = Easing::CubicBezier([0.2, 0.8, 0.2, 1.0]);
 const ROW_FADE_MS: u64 = 600;
 const FADE_FRAME_SLACK_MS: u64 = 100;
 
@@ -231,21 +239,146 @@ fn follow_ups(rows: &[HistoryRow], shown: &[u64]) -> Vec<u64> {
         .collect()
 }
 
-fn entry_view(ui: Stage, key: u64, first: bool, follows: bool) -> AnyView {
+fn entry_view(ui: Stage, key: u64, first: bool, follows: bool, slide: Option<Slide>) -> AnyView {
     let gap = if first {
         0.0
     } else {
         ui.skin.with_untracked(|s| row_gap(s, follows))
     };
-    widget(
+    // The gap is padding, so the row's measured height includes it.
+    let row = widget(
         Stack::column(0.0)
             .width(LengthSpec::Fill)
             .with_layout(move |l| {
-                l.margin_top = Some(LengthSpec::Px(gap));
+                l.padding_top = Some(LengthSpec::Px(gap));
             }),
     )
-    .children(message_view(ui, key, follows))
-    .into_any()
+    .children(message_view(ui, key, follows));
+    match slide {
+        Some(slide) => {
+            slide.built(key, gap);
+            row.on(move |e: &SizeChanged| slide.row_laid_out(key, e.height))
+                .into_any()
+        }
+        None => row.into_any(),
+    }
+}
+
+/// What the log showed after its last layout, to tell how far the rows
+/// already on screen moved.
+#[derive(Default)]
+struct SlideState {
+    /// Each row's laid-out height, its gap included.
+    heights: HashMap<u64, f32>,
+    /// The gap each row was last built with.
+    gaps: HashMap<u64, f32>,
+    /// The rows, and their gaps, as last laid out.
+    order: Vec<u64>,
+    laid_gaps: HashMap<u64, f32>,
+    /// The list's height, the viewport's and the scroll offset they made.
+    content: f32,
+    viewport: f32,
+    offset: Option<f32>,
+}
+
+/// Rows already on screen glide to their new place instead of jumping
+/// there. `follow_end` scrolls to a new row at once, and the list's own
+/// FLIP sees no scroll; so the list's outer layer jumps back by each move
+/// and its inner layer eases the same distance back out. Each layout event
+/// adds only its own part of the move, so they may arrive in any order.
+#[derive(Clone)]
+struct Slide {
+    state: Arc<Mutex<SlideState>>,
+    /// The sum of all moves so far: the outer layer sits this far down, the
+    /// inner layer eases to as far up.
+    travel: Signal<f32>,
+    items: Computed<Vec<u64>>,
+}
+
+fn rise(dy: f32) -> PaintTransform {
+    PaintTransform {
+        a: 1.0,
+        b: 0.0,
+        c: 0.0,
+        d: 1.0,
+        e: 0.0,
+        f: dy,
+    }
+}
+
+impl Slide {
+    fn new(items: Computed<Vec<u64>>) -> Self {
+        Self {
+            state: Arc::default(),
+            travel: signal(0.0),
+            items,
+        }
+    }
+
+    fn built(&self, key: u64, gap: f32) {
+        self.state.lock().unwrap().gaps.insert(key, gap);
+    }
+
+    fn row_laid_out(&self, key: u64, height: f32) {
+        self.state.lock().unwrap().heights.insert(key, height);
+        self.settle();
+    }
+
+    fn content_laid_out(&self, height: f32) {
+        self.state.lock().unwrap().content = height;
+        self.settle();
+    }
+
+    fn viewport_laid_out(&self, height: f32) {
+        self.state.lock().unwrap().viewport = height;
+        self.settle();
+    }
+
+    fn settle(&self) {
+        let order = nana_ui::runtime::view::untrack(|| self.items.with(Vec::clone));
+        let moved = self.state.lock().unwrap().moved(order);
+        if moved.abs() > 0.01 {
+            self.travel.update(|t| *t += moved);
+        }
+    }
+}
+
+impl SlideState {
+    /// How far the rows still shown moved down on screen since the last
+    /// call, which now lays out `order`.
+    fn moved(&mut self, order: Vec<u64>) -> f32 {
+        if self.content <= 0.0 || self.viewport <= 0.0 {
+            return 0.0;
+        }
+        // `follow_end` keeps the list scrolled to its end.
+        let offset = (self.content - self.viewport).max(0.0);
+        let Some(was) = self.offset.replace(offset) else {
+            self.remember(order);
+            return 0.0;
+        };
+        // The first row still shown rose by the rows dropped above it and by
+        // the gap it no longer has.
+        let first = order
+            .iter()
+            .find_map(|key| Some((*key, self.order.iter().position(|k| k == key)?)));
+        let moved = first.map(|(key, at)| {
+            let dropped: f32 = self.order[..at]
+                .iter()
+                .map(|k| self.heights.get(k).copied().unwrap_or(0.0))
+                .sum();
+            let gap = |gaps: &HashMap<u64, f32>| gaps.get(&key).copied().unwrap_or(0.0);
+            dropped + gap(&self.laid_gaps) - gap(&self.gaps) + offset - was
+        });
+        self.remember(order);
+        moved.unwrap_or(0.0)
+    }
+
+    fn remember(&mut self, order: Vec<u64>) {
+        self.heights.retain(|k, _| order.contains(k));
+        self.gaps.retain(|k, _| order.contains(k));
+        self.laid_gaps.clone_from(&self.gaps);
+        self.order = order;
+    }
 }
 
 /// The log's row `key`, read without tracking.
@@ -786,11 +919,15 @@ pub fn history_window_with(
             HistoryEntrance::SlideLeft => Some(Transition::slide(-24.0, 0.0, ms)),
             HistoryEntrance::Fade => Some(Transition::fade(ms)),
         }
-        .map(|t| t.ease(Easing::CubicBezier([0.2, 0.8, 0.2, 1.0])));
+        // A dropped row goes at once: the rows below glide into its place.
+        .map(|t| t.ease(ROW_EASE).without_leave());
+        let slide = transition.is_some().then(|| Slide::new(items));
+        let row_slide = slide.clone();
         let list = each(
             items,
             |k: &u64| *k,
             move |k: u64| {
+                let slide = row_slide.clone();
                 dynamic(
                     move || {
                         (
@@ -798,13 +935,26 @@ pub fn history_window_with(
                             follows.with(|f| f.contains(&k)),
                         )
                     },
-                    move |(first, f)| entry_view(ui, k, *first, *f),
+                    move |(first, f)| entry_view(ui, k, *first, *f, slide.clone()),
                 )
             },
         );
         let list = match transition {
             Some(t) => list.transition(t),
             None => list,
+        };
+        let list = match &slide {
+            Some(slide) => {
+                let travel = slide.travel;
+                widget(Stack::column(0.0).width(LengthSpec::Fill))
+                    .bind(move |s: &mut Stack| {
+                        s.layout_mut().transform = Some(rise(-travel.get()));
+                    })
+                    .animate([Implicit::new(AnimatableProperty::Transform, ms).ease(ROW_EASE)])
+                    .children(list)
+                    .into_any()
+            }
+            None => list.into_any(),
         };
         let h = &skin.history;
         let height = viewport_height(ui, &skin, &ui.settings.get_untracked());
@@ -897,17 +1047,17 @@ pub fn history_window_with(
                 // Takes the panel's height left under the title (and no
                 // more), so the list scrolls inside it instead of running
                 // past the window's foot.
-                widget(
-                    ScrollView::new(ScrollAxes::Vertical)
-                        .follow_end(true)
-                        .with_layout(|l| {
-                            l.flex_grow = Some(1.0);
-                            l.flex_shrink = Some(1.0);
-                            l.min_height = Some(LengthSpec::Px(0.0));
-                        }),
-                )
-                .children(
-                    widget(Stack::column(0.0).with_layout(move |l| {
+                {
+                    let scroll = widget(
+                        ScrollView::new(ScrollAxes::Vertical)
+                            .follow_end(true)
+                            .with_layout(|l| {
+                                l.flex_grow = Some(1.0);
+                                l.flex_shrink = Some(1.0);
+                                l.min_height = Some(LengthSpec::Px(0.0));
+                            }),
+                    );
+                    let content = widget(Stack::column(0.0).with_layout(move |l| {
                         l.padding_left = Some(LengthSpec::Px(pl));
                         l.padding_top = Some(LengthSpec::Px(pt));
                         l.padding_right = Some(LengthSpec::Px(pr));
@@ -916,9 +1066,25 @@ pub fn history_window_with(
                         // follow_end still scrolls overflowing logs to the newest row.
                         l.min_height = Some(LengthSpec::Percent(100.0));
                         l.justify_content = nana_ui_core::JustifySpec::Start;
-                    }))
-                    .children(list),
-                ),
+                    }));
+                    match slide {
+                        Some(slide) => {
+                            let (viewport, travel) = (slide.clone(), slide.travel);
+                            scroll
+                                .on(move |e: &SizeChanged| viewport.viewport_laid_out(e.height))
+                                .children(
+                                    content
+                                        .bind(move |s: &mut Stack| {
+                                            s.layout_mut().transform = Some(rise(travel.get()));
+                                        })
+                                        .on(move |e: &SizeChanged| slide.content_laid_out(e.height))
+                                        .children(list),
+                                )
+                                .into_any()
+                        }
+                        None => scroll.children(content.children(list)).into_any(),
+                    }
+                },
                 above,
                 overlay(),
             )),
@@ -1201,6 +1367,174 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A log of opaque red bubbles, `w`×`h`, with rows `1..=rows`.
+    fn motion_log(
+        w: u32,
+        h: u32,
+        rows: u64,
+        visible: u32,
+    ) -> (Stage, nana_ui_devtools::agent::RuntimeAgentSession) {
+        use nana_ui::runtime::{DocumentId, RuntimeDocument};
+        use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
+        let mut skin = Skin::default();
+        skin.history.entrance = HistoryEntrance::SlideUp;
+        skin.history.bubble_color = Rgba8::rgb(220, 30, 30);
+        skin.history.group_speakers = false;
+        let mut settings = nanatype_settings::Settings::default();
+        settings.history.show_avatar = false;
+        settings.history.show_name = false;
+        settings.history.show_time = false;
+        settings.history.fade_after_s = None;
+        settings.history.visible_items = visible;
+        settings.history.hide_latest = nanatype_settings::HideLatest::Never;
+        let ui = Stage::new(
+            Arc::new(settings),
+            Arc::new(skin),
+            nanatype_i18n::Locale::ZhCn,
+        );
+        ui.history.set(Arc::new((1..=rows).map(text_row).collect()));
+        let id = DocumentId::new(1).unwrap();
+        let mut doc = RuntimeDocument::new(id);
+        crate::clock::capture_at(0, || {
+            doc.context_mut()
+                .mount_view_root(id, move || history_window(ui))
+                .unwrap()
+        });
+        let mut session = RuntimeAgentSession::new(doc, w, h).unwrap();
+        session.set_clear(Some([0.0; 4]));
+        crate::clock::capture_at(0, || session.flush().unwrap());
+        (ui, session)
+    }
+
+    fn text_row(key: u64) -> HistoryRow {
+        let mut item = item("Nana", SourceKind::Typewriter, key);
+        item.doc = Document::plain("第一行文字\n第二行文字");
+        HistoryRow {
+            key,
+            doc: Arc::new(item.doc.clone()),
+            item,
+            reveal: None,
+        }
+    }
+
+    /// The bubbles crossing the column at x = 30, top to bottom: their
+    /// vertical extent and whether they are fully opaque.
+    fn bubbles(
+        session: &mut nana_ui_devtools::agent::RuntimeAgentSession,
+        at: u64,
+    ) -> Vec<(usize, usize, bool)> {
+        let t = std::time::Duration::from_millis(at);
+        session.document_mut().context_mut().advance_animations(t);
+        session.document_mut().sync_presentation_clock(t);
+        let (size, pixels) = crate::clock::capture_at(at, || session.screenshot_rgba().unwrap());
+        let alpha = |y: usize| pixels[(y * size.width as usize + 30) * 4 + 3];
+        let mut runs = Vec::new();
+        let mut start = None;
+        for y in 0..=size.height as usize {
+            let inked = y < size.height as usize && alpha(y) > 8;
+            match (inked, start) {
+                (true, None) => start = Some(y),
+                (false, Some(s)) => {
+                    runs.push((s, y, alpha((s + y) / 2) == 255));
+                    start = None;
+                }
+                _ => {}
+            }
+        }
+        runs
+    }
+
+    /// Append the next row at `at` ms, as a program message would.
+    fn push_row(
+        ui: Stage,
+        session: &mut nana_ui_devtools::agent::RuntimeAgentSession,
+        key: u64,
+        at: u64,
+    ) {
+        let t = std::time::Duration::from_millis(at);
+        session.document_mut().context_mut().advance_animations(t);
+        ui.history
+            .update(|rows| Arc::make_mut(rows).push(text_row(key)));
+        crate::clock::capture_at(at, || session.flush().unwrap());
+    }
+
+    #[test]
+    fn a_new_row_rises_and_fades_in() {
+        let (ui, mut session) = motion_log(300, 480, 1, 30);
+        let before = bubbles(&mut session, 5_000);
+        assert_eq!(before.len(), 1, "{before:?}");
+        push_row(ui, &mut session, 2, 5_000);
+        let mid = bubbles(&mut session, 5_060);
+        let done = bubbles(&mut session, 5_600);
+        assert_eq!(done.len(), 2, "{done:?}");
+        assert!(done[1].2, "the new row settles opaque: {done:?}");
+        let entering = mid.last().unwrap();
+        assert!(!entering.2, "the new row is still fading in: {mid:?}");
+        assert!(
+            entering.0 > done[1].0,
+            "the new row rises into place: {mid:?} -> {done:?}"
+        );
+    }
+
+    #[test]
+    fn rows_slide_up_when_a_new_row_overflows_the_log() {
+        let (ui, mut session) = motion_log(300, 200, 3, 30);
+        let before = bubbles(&mut session, 5_000);
+        push_row(ui, &mut session, 4, 5_000);
+        let mid = bubbles(&mut session, 5_060);
+        let done = bubbles(&mut session, 5_600);
+        // The row that was newest: last opaque bubble before, and the one
+        // above the new row once settled.
+        let was = before.iter().rev().find(|b| b.2).unwrap().1;
+        let settled = done[done.len() - 2].1;
+        let moving = mid.iter().rev().find(|b| b.2).unwrap().1;
+        assert!(settled < was, "the log scrolled: {before:?} -> {done:?}");
+        assert!(
+            settled < moving && moving < was,
+            "the old rows slide up rather than jump: {was} -> {moving} -> {settled}"
+        );
+        // Rows scrolled off the top are still drawn while the list slides.
+        // The log overflows, so its top row is cut at the viewport's edge.
+        assert_eq!(
+            mid[0].0, done[0].0,
+            "the top of the log stays inked: {mid:?} / {done:?}"
+        );
+    }
+
+    #[test]
+    fn rows_close_the_gap_when_the_oldest_row_drops_out() {
+        let (ui, mut session) = motion_log(300, 480, 2, 2);
+        let before = bubbles(&mut session, 5_000);
+        assert_eq!(before.len(), 2, "{before:?}");
+        push_row(ui, &mut session, 3, 5_000);
+        let mid = bubbles(&mut session, 5_060);
+        let done = bubbles(&mut session, 5_600);
+        assert_eq!(done.len(), 2, "{done:?}");
+        // Row 2 moves from the second place to the first.
+        let (from, to) = (before[1].0, done[0].0);
+        let moving = mid.iter().find(|b| b.2).unwrap().0;
+        // Part of the way: not a jump to the end, nor just the lost gap.
+        let progress = (from - moving) as f32 / (from - to) as f32;
+        assert!(
+            (0.3..0.97).contains(&progress),
+            "row 2 slides up into the gap: {from} -> {moving} -> {to}"
+        );
+    }
+
+    #[test]
+    fn resizing_the_window_does_not_slide_the_log() {
+        use nana_ui_devtools::agent::AgentSession;
+        let (_, mut session) = motion_log(300, 200, 4, 30);
+        bubbles(&mut session, 5_000);
+        session.set_viewport(300, 260, 1.0).unwrap();
+        let t = std::time::Duration::from_millis(5_000);
+        session.document_mut().context_mut().advance_animations(t);
+        crate::clock::capture_at(5_000, || session.flush().unwrap());
+        let mid = bubbles(&mut session, 5_060);
+        let done = bubbles(&mut session, 5_600);
+        assert_eq!(mid, done, "a resize lands at once");
     }
 
     #[test]

@@ -231,6 +231,7 @@ bubble_border_width = 1.0
 bubble_color = "#0d0a05e6"
 bubble_contour = "terminal"
 bubble_radius = 2.0
+entrance = "slide_up"
 name_color = "#ffb000"
 name_size = 17.0
 name_weight = 400

@@ -440,6 +440,7 @@ text_color = "text"
 
 [history]
 bubble_padding = [0.0, 1.0]
+entrance = "slide_up"
 gap = 9.0
 height = 480.0
 hide_latest = true

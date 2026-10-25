@@ -249,7 +249,10 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
         skin.history.bubble_border,
         Some(skin.dialogue.box_.border_color)
     );
-    assert_eq!(skin.history.entrance, nanatype_theme::HistoryEntrance::None);
+    assert_eq!(
+        skin.history.entrance,
+        nanatype_theme::HistoryEntrance::SlideUp
+    );
     for size in [[300., 240.], [280., 600.], [160., 600.], [400., 401.]] {
         let resolved = nanatype_theme::responsive_dialogue(&skin, size);
         assert_eq!(

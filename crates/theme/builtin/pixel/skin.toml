@@ -224,6 +224,7 @@ bubble_border = "#0f380f"
 bubble_border_width = 3.0
 bubble_color = "#9bbc0f"
 bubble_contour = "pixel"
+entrance = "slide_up"
 name_color = "#0f380f"
 name_size = 24.0
 name_weight = 400
