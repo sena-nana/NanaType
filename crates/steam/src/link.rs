@@ -2,6 +2,7 @@
 //! the session secret still decides who may stay, because any owner of the
 //! app can call `ConnectP2P`.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -15,7 +16,7 @@ use steamworks::networking_types::{
     AppNetConnectionEnd, ListenSocketEvent, NetConnectionEnd, NetworkingConfigEntry,
     NetworkingConfigValue, NetworkingConnectionState, NetworkingIdentity, SendFlags,
 };
-use steamworks::{Client, SteamId};
+use steamworks::{Client, SteamError, SteamId};
 use tokio::sync::{mpsc, watch};
 
 /// Virtual port shared by every NanaType session.
@@ -25,6 +26,10 @@ const ASSET_PORT: i32 = 1;
 /// Hole-punch on every ICE candidate, and keep SDR when that fails.
 /// `k_nSteamNetworkingConfig_P2P_Transport_ICE_Enable_All`.
 const ICE_ALL: i32 = 0x7fff_ffff;
+/// Steam's 512 KiB default refuses a second near-full chunk while the first is
+/// still queued. 16 MiB holds a whole session frame (8 MiB at most) plus two
+/// pictures (512 KiB each) before the pump has to hold chunks back.
+const SEND_BUFFER: i32 = 16 * 1024 * 1024;
 const RELAYED: i32 = steamworks::sys::k_nSteamNetworkConnectionInfoFlags_Relayed as i32;
 
 struct Request {
@@ -290,10 +295,10 @@ fn poll_accepts(
 }
 
 fn ice() -> Vec<NetworkingConfigEntry> {
-    vec![NetworkingConfigEntry::new_int32(
-        NetworkingConfigValue::P2PTransportICEEnable,
-        ICE_ALL,
-    )]
+    vec![
+        NetworkingConfigEntry::new_int32(NetworkingConfigValue::P2PTransportICEEnable, ICE_ALL),
+        NetworkingConfigEntry::new_int32(NetworkingConfigValue::SendBufferSize, SEND_BUFFER),
+    ]
 }
 
 fn attach(
@@ -339,15 +344,28 @@ fn pump(
     let mut asm = Assembler::new();
     let mut next_id = 1u32;
     let mut last_route = Instant::now() - Duration::from_secs(2);
+    // Chunks Steam refused because its send buffer was full, oldest first.
+    // Nothing new is chunked until they are all handed over, so each lane
+    // keeps its order and a Close still follows everything queued before it.
+    let mut pending: VecDeque<(i32, Vec<u8>)> = VecDeque::new();
     loop {
         if closed(&conn) {
             break;
         }
         let mut stop = false;
-        while !stop {
+        loop {
+            match flush(&utils, &sockets, &conn, &mut pending) {
+                Ok(true) => {}
+                Ok(false) => break,
+                Err(_) => {
+                    stop = true;
+                    break;
+                }
+            }
             match outbound.try_recv() {
                 Ok(Outbound::Close) | Err(mpsc::error::TryRecvError::Disconnected) => {
                     stop = true;
+                    break;
                 }
                 Err(mpsc::error::TryRecvError::Empty) => break,
                 Ok(msg) => {
@@ -356,15 +374,12 @@ fn pump(
                         match chunks(next_id, &packet) {
                             Ok(parts) => {
                                 next_id = next_id.wrapping_add(1);
-                                for part in parts {
-                                    if send_message(&utils, &sockets, &conn, channel, part).is_err()
-                                    {
-                                        stop = true;
-                                        break;
-                                    }
-                                }
+                                pending.extend(parts.into_iter().map(|part| (channel, part)));
                             }
-                            Err(_) => stop = true,
+                            Err(_) => {
+                                stop = true;
+                                break;
+                            }
                         }
                     }
                 }
@@ -431,27 +446,49 @@ fn as_inbound(packet: Packet) -> Inbound {
     }
 }
 
+/// Hands queued chunks to Steam in order. `Ok(true)` once the queue is empty,
+/// `Ok(false)` when Steam's send buffer is full and the rest must wait for a
+/// later pass; any other refusal ends the connection.
+fn flush(
+    utils: &steamworks::networking_utils::NetworkingUtils,
+    sockets: &steamworks::networking_sockets::NetworkingSockets,
+    conn: &steamworks::networking_sockets::NetConnection,
+    pending: &mut VecDeque<(i32, Vec<u8>)>,
+) -> Result<bool, String> {
+    while let Some((channel, bytes)) = pending.front() {
+        match send_message(utils, sockets, conn, *channel, bytes.clone()) {
+            Ok(()) => {
+                pending.pop_front();
+            }
+            Err(SteamError::LimitExceeded) => return Ok(false),
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Ok(true)
+}
+
+/// Steam takes ownership of the bytes even when it refuses them, which is why
+/// [`flush`] passes a copy and keeps the original until the send succeeds.
 fn send_message(
     utils: &steamworks::networking_utils::NetworkingUtils,
     sockets: &steamworks::networking_sockets::NetworkingSockets,
     conn: &steamworks::networking_sockets::NetConnection,
     channel: i32,
     bytes: Vec<u8>,
-) -> Result<(), String> {
+) -> Result<(), SteamError> {
     let mut message = utils.allocate_message(0);
     message.set_connection(conn);
     message.set_send_flags(SendFlags::RELIABLE_NO_NAGLE);
     message.set_channel(channel);
     message
         .set_data(bytes)
-        .map_err(|_| "Could not send".to_string())?;
+        .map_err(|_| SteamError::InvalidParameter)?;
     sockets
         .send_messages(std::iter::once(message))
         .into_iter()
         .next()
-        .ok_or("Could not send".to_string())?
+        .ok_or(SteamError::Generic)?
         .map(|_| ())
-        .map_err(|error| error.to_string())
 }
 
 fn state(
