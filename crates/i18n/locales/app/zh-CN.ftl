@@ -653,8 +653,8 @@ chat-queued = 已排队 · { $count } 条
 chat-room-owner = 房主
 chat-moderator = 房管
 
-# Two-person sessions
-peer-title = 双人联机
+# Sessions of up to eight people
+peer-title = 联机
 peer-expand = 展开
 peer-collapse = 收起
 peer-off = 未联机
@@ -664,12 +664,24 @@ peer-reconnecting = 正在重连…
 peer-direct = 直连
 peer-relay = 中继
 peer-error = 联机失败
+peer-steam-required = 联机需要 Steam 正在运行
 peer-create = 创建联机
 peer-join = 加入
 peer-leave = 离开联机
 peer-copy = 复制邀请
+peer-invite = 邀请好友
+peer-invite-idle = 邀请好友加入这个房间
+peer-invite-waiting = 等待对方接受邀请
+peer-invite-accepted = { $name } 已接受邀请
+peer-invite-accepted-many = 已有 { $n } 人接受邀请
+peer-invite-accepted-unnamed = 对方已接受邀请
+peer-room-full = 房间已满（最多 8 人）
 peer-invitation = 粘贴对方的联机邀请
-peer-relay-placeholder = 自定义中继 URL（可选）
+peer-password = 房间密码（可选）
+peer-password-needed = 请输入房间密码后再加入
+peer-password-invalid = 房间密码不能超过 64 个字，也不能包含换行
+peer-invite-unavailable = 无法打开 Steam 邀请。请确认 Steam 浮层已开启
+peer-invite-invalid = 没能加入这个 Steam 邀请
 peer-paused = 等待联机恢复后再发送或控制播放；可以继续编辑草稿。
 
 # Independent partner output

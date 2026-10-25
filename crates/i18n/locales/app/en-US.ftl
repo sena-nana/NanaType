@@ -659,8 +659,8 @@ chat-queued = Queued · { $count }
 chat-room-owner = Room owner
 chat-moderator = Moderator
 
-# Two-person sessions
-peer-title = Two-person session
+# Sessions of up to eight people
+peer-title = Session
 peer-expand = Expand
 peer-collapse = Collapse
 peer-off = Offline
@@ -670,12 +670,24 @@ peer-reconnecting = Reconnecting…
 peer-direct = Direct
 peer-relay = Relay
 peer-error = Connection failed
+peer-steam-required = Sessions need Steam to be running
 peer-create = Create session
 peer-join = Join
 peer-leave = Leave
 peer-copy = Copy invitation
+peer-invite = Invite friend
+peer-invite-idle = Invite a friend into this room
+peer-invite-waiting = Waiting for them to accept
+peer-invite-accepted = { $name } accepted the invite
+peer-invite-accepted-many = { $n } people accepted the invite
+peer-invite-accepted-unnamed = They accepted the invite
+peer-room-full = The room is full (8 people)
 peer-invitation = Paste your partner's invitation
-peer-relay-placeholder = Custom relay URL (optional)
+peer-password = Room password (optional)
+peer-password-needed = Enter the room password to join
+peer-password-invalid = A room password can be at most 64 characters and cannot contain line breaks
+peer-invite-unavailable = Couldn't open the Steam invite. Turn on the Steam overlay
+peer-invite-invalid = Couldn't join that Steam invite
 peer-paused = Wait for the session to reconnect before sending or controlling playback. You can keep editing.
 
 # Independent partner output

@@ -759,9 +759,11 @@ impl Track {
     }
 }
 
-static STAGES: [Mutex<Track>; 2] = [Mutex::new(Track::new()), Mutex::new(Track::new())];
+static STAGES: [Mutex<Track>; super::TRACK_SLOTS] =
+    [const { Mutex::new(Track::new()) }; super::TRACK_SLOTS];
 /// Until when (ms) the box is entering or leaving, for frame requests.
-static MOVING_UNTIL: [AtomicU64; 2] = [AtomicU64::new(0), AtomicU64::new(0)];
+static MOVING_UNTIL: [AtomicU64; super::TRACK_SLOTS] =
+    [const { AtomicU64::new(0) }; super::TRACK_SLOTS];
 
 fn stage(slot: usize) -> std::sync::MutexGuard<'static, Track> {
     STAGES[slot].lock().unwrap_or_else(|e| e.into_inner())
@@ -1521,7 +1523,7 @@ fn content(ui: Stage, source: Source) -> impl IntoView {
             }
             let (doc, reveal) = view.page();
             // Clipped text has nothing to follow.
-            let follow = (ui.track_slot == 1 || skin.dialogue.overflow != Overflow::Clip)
+            let follow = (ui.track_slot > 0 || skin.dialogue.overflow != Overflow::Clip)
                 .then(|| overflow::PageKey::of(&view));
             document_on(ui, &doc, &base, Timing::Reveal(reveal), follow, source)
         },

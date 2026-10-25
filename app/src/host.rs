@@ -48,7 +48,7 @@ pub struct Host {
     editor_fx: Option<(usize, bool, usize)>,
     /// The typewriter's scroll through long text.
     follow: overflow::Follow,
-    peer_follow: overflow::Follow,
+    peer_follows: [overflow::Follow; crate::ui::REMOTE_LANES],
     /// The typewriter's automatic page breaks.
     pager: overflow::Pager,
     /// The toast stack of each control window (settings, input, chat).
@@ -86,7 +86,7 @@ fn frame_policy(
     kind: Option<WindowKind>,
     now: u64,
     follow: &overflow::Follow,
-    peer_follow: &overflow::Follow,
+    peer_follows: &[overflow::Follow],
     pager: &overflow::Pager,
 ) -> FramePolicy {
     let skin_fps = ui
@@ -99,21 +99,39 @@ fn frame_policy(
             if remote && !ui.peer.get_untracked().active {
                 return FramePolicy::default();
             }
-            let track = if remote { ui.remote() } else { ui };
-            let follow = if remote { peer_follow } else { follow };
-            let typing = dialogue::display_animating(*track, now);
-            let movement = crate::ui::sweep::animating(*track)
-                || crate::ui::text_light::animating(*track, now)
-                || crate::ui::text_scramble::animating(*track, now)
-                || follow.wants_frame()
-                || (!remote && pager.wants_frame());
-            (
-                track.now,
-                typing,
-                movement || crate::ui::shader_effects::animating(*track),
-                follow.next_line_at(),
-                skin_fps,
-            )
+            let count = if remote {
+                crate::ui::remote_bands(ui.peer_seats.get_untracked())
+            } else {
+                1
+            };
+            let tracks: Vec<Ui> = if remote {
+                (0..count).map(|index| ui.lane(index)).collect()
+            } else {
+                vec![ui]
+            };
+            let follows = if remote { &peer_follows[..count] } else { &[] };
+            let typing = tracks
+                .iter()
+                .any(|track| dialogue::display_animating(**track, now));
+            let movement = tracks.iter().any(|track| {
+                crate::ui::sweep::animating(**track)
+                    || crate::ui::text_light::animating(**track, now)
+                    || crate::ui::text_scramble::animating(**track, now)
+                    || crate::ui::shader_effects::animating(**track)
+            }) || if remote {
+                follows.iter().any(|follow| follow.wants_frame())
+            } else {
+                follow.wants_frame() || pager.wants_frame()
+            };
+            let next_at = if remote {
+                follows
+                    .iter()
+                    .filter_map(|follow| follow.next_line_at())
+                    .min()
+            } else {
+                follow.next_line_at()
+            };
+            (tracks[0].now, typing, movement, next_at, skin_fps)
         }
         Some(WindowKind::History) => {
             let fade = history::fade_schedule(*ui, now);
@@ -513,14 +531,15 @@ impl Host {
         input::completion::anchor(self.app.ui, world, self.editor?.stable_id())
     }
 
-    /// Read the typewriter's last layout: scroll along with the typing, or
-    /// tell the core where a full box turns the page.
-    fn follow_track(&mut self, now: u64, remote: bool) {
-        let ui = if remote {
-            self.app.ui.remote()
-        } else {
-            self.app.ui
-        };
+    fn apply_follow(
+        app: &mut App,
+        docs: &HashMap<WindowId, RuntimeDocument>,
+        now: u64,
+        ui: Ui,
+        remote: bool,
+        follower: &mut overflow::Follow,
+        pager: Option<&mut overflow::Pager>,
+    ) {
         let view = ui.display.get_untracked();
         // Retirement freezes the visible viewport as well as the glyph clock.
         if view.text_exit.is_some() {
@@ -529,9 +548,9 @@ impl Host {
         let mut mode = if remote {
             Overflow::Scroll
         } else {
-            self.app.skin.dialogue.overflow
+            app.skin.dialogue.overflow
         };
-        let mirror = self.app.settings.general.input_mode == nanatype_settings::InputMode::Mirror;
+        let mirror = app.settings.general.input_mode == nanatype_settings::InputMode::Mirror;
         if mode == Overflow::Page && (mirror || view.line.is_none()) {
             // Nothing to page while the text follows the editor.
             mode = Overflow::Scroll;
@@ -539,11 +558,9 @@ impl Host {
         let key = (!view.empty && mode != Overflow::Clip).then(|| PageKey::of(&view));
         let page = overflow::published_on(ui.track_slot).filter(|p| Some(p.key) == key);
         let measure = page.as_ref().and_then(|page| {
-            let world = self.docs.get(&ui.display_kind().id())?.context().world();
+            let world = docs.get(&ui.display_kind().id())?.context().world();
             let (_, layout) = world.text_layout(ui.text_node.get_untracked()?)?;
-            let vertical = ui
-                .canvas()
-                .vertical_text(&self.app.settings, &self.app.skin);
+            let vertical = ui.canvas().vertical_text(&app.settings, &app.skin);
             if layout.is_vertical() != vertical {
                 return None;
             }
@@ -564,24 +581,54 @@ impl Host {
             })
         });
         let reduced = ui.reduced_motion.get_untracked();
-        let (follow, pager) = match mode {
+        let (page_key, break_key) = match mode {
             Overflow::Page => (None, key),
             _ => (key, None),
         };
-        let follower = if remote {
-            &mut self.peer_follow
-        } else {
-            &mut self.follow
-        };
-        let y = follower.frame(follow, measure.as_ref(), now, reduced);
+        let y = follower.frame(page_key, measure.as_ref(), now, reduced);
         if !remote
-            && let Some(breaks) = self.pager.frame(pager, measure.as_ref())
+            && let Some(pager) = pager
+            && let Some(breaks) = pager.frame(break_key, measure.as_ref())
             && let Some(line) = view.line
         {
-            self.app.post(Msg::Core(Cmd::PageBreaks { line, breaks }));
+            app.post(Msg::Core(Cmd::PageBreaks { line, breaks }));
         }
         if ui.text_scroll.get_untracked() != y {
             ui.text_scroll.set(y);
+        }
+    }
+
+    /// Read the typewriter's last layout: scroll along with the typing, or
+    /// tell the core where a full box turns the page.
+    fn follow_track(&mut self, now: u64, remote: bool) {
+        if !remote {
+            let ui = self.app.ui;
+            Self::apply_follow(
+                &mut self.app,
+                &self.docs,
+                now,
+                ui,
+                false,
+                &mut self.follow,
+                Some(&mut self.pager),
+            );
+            return;
+        }
+        let count = crate::ui::remote_bands(self.app.ui.peer_seats.get_untracked());
+        for index in 0..count {
+            let ui = self.app.ui.lane(index);
+            Self::apply_follow(
+                &mut self.app,
+                &self.docs,
+                now,
+                ui,
+                true,
+                &mut self.peer_follows[index],
+                None,
+            );
+        }
+        for follow in &mut self.peer_follows[count..] {
+            *follow = overflow::Follow::default();
         }
     }
 
@@ -953,7 +1000,7 @@ impl RuntimeProgram for Host {
             completion_retries: COMPLETION_RETRIES,
             editor_fx: None,
             follow: overflow::Follow::default(),
-            peer_follow: overflow::Follow::default(),
+            peer_follows: std::array::from_fn(|_| overflow::Follow::default()),
             pager: overflow::Pager::default(),
             toasts: HashMap::new(),
             stickers: Default::default(),
@@ -1444,7 +1491,7 @@ impl RuntimeProgram for Host {
             WindowKind::from_id(id),
             clock::now_ms(),
             &self.follow,
-            &self.peer_follow,
+            &self.peer_follows,
             &self.pager,
         )
         .demand;
@@ -1512,7 +1559,7 @@ impl RuntimeProgram for Host {
             WindowKind::from_id(id),
             now,
             &self.follow,
-            &self.peer_follow,
+            &self.peer_follows,
             &self.pager,
         );
         let changed = self.docs.get(&id).is_some_and(|doc| {
@@ -1712,7 +1759,16 @@ mod redraw_tests {
         let follow = overflow::Follow::default();
         let pager = overflow::Pager::default();
         let now = 1_000_000_000;
-        let policy = |kind| frame_policy(ui, Some(kind), now, &follow, &follow, &pager);
+        let policy = |kind| {
+            frame_policy(
+                ui,
+                Some(kind),
+                now,
+                &follow,
+                std::slice::from_ref(&follow),
+                &pager,
+            )
+        };
         let local = policy(WindowKind::Display);
         assert!(matches!(local.demand, FrameDemand::Continuous(_)));
         assert!(!local.tick_clock);
@@ -1758,7 +1814,7 @@ mod redraw_tests {
             Some(WindowKind::Display),
             now,
             &follow,
-            &peer_follow,
+            std::slice::from_ref(&peer_follow),
             &pager,
         );
         assert!(policy.tick_clock && matches!(policy.demand, FrameDemand::Continuous(_)));
@@ -1769,7 +1825,7 @@ mod redraw_tests {
                 Some(WindowKind::Display),
                 now,
                 &follow,
-                &peer_follow,
+                std::slice::from_ref(&peer_follow),
                 &pager
             )
             .demand,
@@ -1814,7 +1870,7 @@ mod redraw_tests {
             Some(WindowKind::Display),
             now,
             &follow,
-            &peer_follow,
+            std::slice::from_ref(&peer_follow),
             &pager,
         );
         assert!(!policy.tick_clock);
@@ -1825,7 +1881,7 @@ mod redraw_tests {
             Some(WindowKind::Display),
             now,
             &follow,
-            &peer_follow,
+            std::slice::from_ref(&peer_follow),
             &pager,
         );
         assert!(matches!(policy.demand, FrameDemand::Continuous(_)) && !policy.tick_clock);

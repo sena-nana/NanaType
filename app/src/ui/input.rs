@@ -1598,8 +1598,7 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
             ),
         ),
     );
-    let invitation = signal(String::new());
-    let relay = signal(String::new());
+    let password = signal(String::new());
     let view = widget(
         Stack::fill_column(0.0)
             .surface(SemanticColorRole::Background)
@@ -1631,7 +1630,7 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
                 super::plugins::mounted(ui, nanatype_plugins::Mount::Input),
             )),
         ),
-        workspace::footer(ui, invitation, relay),
+        workspace::footer(ui, ui.peer_invitation, password),
         completion::popup(ui),
         super::feedback::toast_stack(toasts, crate::windows::INPUT_ACTIONS_H + 4.0, 2),
     ));

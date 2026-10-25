@@ -252,8 +252,10 @@ pub enum Msg {
     },
     PeerStart {
         invitation: Option<String>,
-        relay: String,
+        password: String,
     },
+    /// Open the Steam overlay and invite friends into the room being hosted.
+    PeerInviteFriends,
     PeerLeave,
     PeerPanel(bool),
     PeerEvent(u64, nanatype_p2p::Event),

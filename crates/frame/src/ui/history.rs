@@ -674,7 +674,7 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
 #[derive(Clone, Copy)]
 struct Selection {
     visible: usize,
-    hidden: [Option<LineId>; 2],
+    hidden: [Option<LineId>; super::TRACK_SLOTS],
 }
 
 fn selection(ui: Stage) -> Selection {
@@ -682,13 +682,18 @@ fn selection(ui: Stage) -> Selection {
         .settings
         .with(|s| (s.history.visible_items as usize, s.history.hide_latest));
     let hide = hide.resolve(ui.skin.with(|s| s.history.hide_latest));
-    let hidden = if !hide {
-        [None; 2]
-    } else if ui.peer_active.get() {
-        [ui.peer_local_line.get(), ui.peer_display.with(|d| d.line)]
-    } else {
-        [ui.display.with(|d| d.line), None]
-    };
+    let mut hidden = [None; super::TRACK_SLOTS];
+    if hide {
+        if ui.peer_active.get() {
+            hidden[0] = ui.peer_local_line.get();
+            let count = super::remote_bands(ui.peer_seats.get());
+            for (slot, lane) in ui.peer_lanes.iter().take(count).enumerate() {
+                hidden[slot + 1] = lane.display.with(|d| d.line);
+            }
+        } else {
+            hidden[0] = ui.display.with(|d| d.line);
+        }
+    }
     Selection { visible, hidden }
 }
 
@@ -1054,13 +1059,19 @@ mod tests {
             keys.reverse();
             keys
         };
-        assert_eq!(keys(30, [None; 2]), [1, 2, 3]);
+        let hide = |first, second| {
+            let mut hidden = [None; crate::ui::TRACK_SLOTS];
+            hidden[0] = first;
+            hidden[1] = second;
+            hidden
+        };
+        assert_eq!(keys(30, hide(None, None)), [1, 2, 3]);
         // Only the line still on the box is left out; external rows stay.
-        assert_eq!(keys(30, [Some(LineId(11)), None]), [1, 2]);
+        assert_eq!(keys(30, hide(Some(LineId(11)), None)), [1, 2]);
         // The cap counts the rows that show.
-        assert_eq!(keys(1, [Some(LineId(11)), None]), [2]);
-        assert_eq!(keys(30, [Some(LineId(10)), Some(LineId(11))]), [2]);
-        assert!(keys(0, [None; 2]).is_empty());
+        assert_eq!(keys(1, hide(Some(LineId(11)), None)), [2]);
+        assert_eq!(keys(30, hide(Some(LineId(10)), Some(LineId(11)))), [2]);
+        assert!(keys(0, hide(None, None)).is_empty());
     }
 
     fn row(key: u64, at: u64) -> HistoryRow {

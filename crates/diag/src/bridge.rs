@@ -1,5 +1,5 @@
 //! Dependencies' `log` output, and `tracing` output through tracing's `log`
-//! feature (iroh, winit, grammers), recorded as faults in the `external`
+//! feature (winit, grammers), recorded as faults in the `external`
 //! domain: `<crate>: <message>`, redacted and rate-limited per crate.
 //!
 //! Warn and up normally, Info and up with detailed logs. HTTP and TLS stacks

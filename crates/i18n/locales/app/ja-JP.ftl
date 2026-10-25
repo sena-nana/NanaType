@@ -653,8 +653,8 @@ chat-queued = 待機中 · { $count } 件
 chat-room-owner = 配信者
 chat-moderator = モデレーター
 
-# Two-person sessions
-peer-title = 2人で接続
+# Sessions of up to eight people
+peer-title = 接続
 peer-expand = 開く
 peer-collapse = 閉じる
 peer-off = 未接続
@@ -664,12 +664,24 @@ peer-reconnecting = 再接続中…
 peer-direct = 直接接続
 peer-relay = リレー
 peer-error = 接続失敗
+peer-steam-required = 接続には起動中の Steam が必要です
 peer-create = 接続を作成
 peer-join = 参加
 peer-leave = 退出
 peer-copy = 招待をコピー
+peer-invite = フレンドを招待
+peer-invite-idle = フレンドをこの部屋に招待
+peer-invite-waiting = 相手の承諾を待っています
+peer-invite-accepted = { $name } が招待を承諾しました
+peer-invite-accepted-many = { $n } 人が招待を承諾しました
+peer-invite-accepted-unnamed = 相手が招待を承諾しました
+peer-room-full = 部屋はいっぱいです（最大 8 人）
 peer-invitation = 相手の招待を貼り付け
-peer-relay-placeholder = カスタムリレー URL（任意）
+peer-password = 部屋のパスワード（任意）
+peer-password-needed = 参加するには部屋のパスワードを入力してください
+peer-password-invalid = 部屋のパスワードは 64 文字以内で、改行は使えません
+peer-invite-unavailable = Steam の招待を開けません。Steam オーバーレイを有効にしてください
+peer-invite-invalid = この Steam 招待には参加できません
 peer-paused = 再接続後に送信・再生操作できます。下書きは続けて編集できます。
 
 # Independent partner output

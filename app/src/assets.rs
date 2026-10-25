@@ -83,8 +83,14 @@ impl AssetLibrary {
                 .filter(|p| p.is_file())
                 .map(|p| (p, None)),
             AssetRef::Blob(hash) => {
-                let path = self.blob_dir.join(format!("{hash}.png"));
-                path.is_file().then(|| (path, Some(self.blob_dir.clone())))
+                let path = hash
+                    .strip_prefix("p2p-")
+                    .and_then(|id| nanatype_p2p::session_picture(&self.blob_dir, id))
+                    .or_else(|| {
+                        let path = self.blob_dir.join(format!("{hash}.png"));
+                        path.is_file().then_some(path)
+                    })?;
+                Some((path, Some(self.blob_dir.clone())))
             }
             AssetRef::Library { lib, name } => self
                 .stickers

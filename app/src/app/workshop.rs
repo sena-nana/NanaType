@@ -6,6 +6,19 @@ use crate::msg::Msg;
 use nanatype_steam::Event;
 
 impl App {
+    /// The Steam pipe for a session. Absent when Steam is not connected.
+    pub(crate) fn peer_carrier(&self) -> Option<nanatype_p2p::Carrier> {
+        self.steam.session_carrier()
+    }
+
+    pub(crate) fn peer_open_invite(&self, invitation: &str) -> bool {
+        self.steam.invite_friends(invitation)
+    }
+
+    pub(crate) fn peer_close_lobby(&self) {
+        self.steam.close_session_lobby()
+    }
+
     pub(super) fn workshop_msg(&mut self, msg: Msg) {
         match msg {
             Msg::Workshop(Event::Items(items)) => {
@@ -18,6 +31,12 @@ impl App {
                 self.workshop.set_details(details);
                 self.publish_workshop();
             }
+            Msg::Workshop(Event::InviteFailed) => {
+                self.notice(self.ui.now_t("peer-invite-unavailable"), true);
+            }
+            Msg::Workshop(Event::InviteOpened) => self.peer_invite_opened(),
+            Msg::Workshop(Event::InviteAccepted { name }) => self.peer_invite_accepted(name),
+            Msg::Workshop(Event::SessionInvite(invitation)) => self.peer_steam_invite(invitation),
             Msg::Workshop(Event::Unsubscribed { item, result }) => match result {
                 Ok(()) => self.unsubscribed(item),
                 Err(message) => {

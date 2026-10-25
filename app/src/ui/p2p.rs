@@ -1,11 +1,12 @@
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
 use nana_ui::runtime::{Activate, Button, Stack, Text, TextChanged, TextInput};
 use nana_ui::{ButtonKind, ControlSize};
-use nana_ui_core::{AlignSpec, LengthSpec};
+use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec, PositionSpec, SemanticColorRole};
 use nanatype_p2p::Status;
 
 use super::Ui;
 use crate::msg::Msg;
+use crate::p2p::{InvitePhase, SessionUi};
 use crate::ui::kit::{self, Tone, Type, gap};
 
 /// A form row's button beside its field.
@@ -45,14 +46,14 @@ fn action(stacked: bool) -> Stack {
 
 pub fn card(ui: Ui) -> AnyView {
     let invitation = signal(String::new());
-    let relay = signal(String::new());
-    card_with_fields(ui, invitation, relay, false)
+    let password = signal(String::new());
+    card_with_fields(ui, invitation, password, false)
 }
 
 pub(crate) fn card_with_fields(
     ui: Ui,
     invitation: nana_ui::runtime::view::Signal<String>,
-    relay: nana_ui::runtime::view::Signal<String>,
+    password: nana_ui::runtime::view::Signal<String>,
     stacked: bool,
 ) -> AnyView {
     dynamic(
@@ -71,21 +72,36 @@ pub(crate) fn card_with_fields(
                 }
             };
             let status = match &state.status {
+                Status::Starting | Status::Waiting if state.host => invite_caption(ui, &state),
                 Status::Starting => ui.now_t("peer-connecting"),
                 Status::Waiting => ui.now_t("peer-waiting"),
                 Status::Reconnecting => ui.now_t("peer-reconnecting"),
-                Status::Connected { route, rtt_ms } => format!(
-                    "{} · {} · {} ms",
-                    state.name,
-                    ui.now_t(match route.as_str() {
+                Status::Connected { route, rtt_ms } => {
+                    let route = ui.now_t(match route.as_str() {
                         "relay" => "peer-relay",
                         "direct" => "peer-direct",
                         _ => "peer-connecting",
-                    }),
-                    rtt_ms
-                ),
+                    });
+                    if state.members >= 2 {
+                        format!(
+                            "{}/{} · {} · {route} · {rtt_ms} ms",
+                            state.members,
+                            nanatype_p2p::MAX_MEMBERS,
+                            state.name
+                        )
+                    } else {
+                        format!("{} · {route} · {rtt_ms} ms", state.name)
+                    }
+                }
                 Status::Ended => ui.now_t("peer-off"),
-                Status::Error(error) => format!("{}: {error}", ui.now_t("peer-error")),
+                Status::Error(error) => {
+                    let detail = if error == "Room is full" {
+                        ui.now_t("peer-room-full")
+                    } else {
+                        error.clone()
+                    };
+                    format!("{}: {detail}", ui.now_t("peer-error"))
+                }
             };
             let tone = match &state.status {
                 Status::Connected { .. } => Tone::Success,
@@ -142,6 +158,13 @@ pub(crate) fn card_with_fields(
                         .with_layout(|l| l.flex_wrap = nana_ui_core::FlexWrap::Wrap),
                 )
                 .children((
+                    (state.host && !code.is_empty()).then(|| {
+                        widget(Button::new(ui.now_t("peer-invite")).size(ControlSize::Small)).on_cx(
+                            move |_, _: &Activate, cx| {
+                                cx.dispatch_program_all(Msg::PeerInviteFriends)
+                            },
+                        )
+                    }),
                     (!code.is_empty()).then(|| {
                         widget(Button::new(ui.now_t("peer-copy")).size(ControlSize::Small)).on_cx(
                             move |_, _: &Activate, cx| {
@@ -183,7 +206,7 @@ pub(crate) fn card_with_fields(
                                     .on_cx(move |_, _: &Activate, cx| {
                                         cx.dispatch_program_all(Msg::PeerStart {
                                             invitation: Some(invitation.get_untracked()),
-                                            relay: relay.get_untracked(),
+                                            password: password.get_untracked(),
                                         })
                                     }),
                             ),
@@ -191,18 +214,21 @@ pub(crate) fn card_with_fields(
                         widget(form_row()).children((
                             widget(field(stacked)).children(
                                 widget(
-                                    kit::text_input(relay.get_untracked())
-                                        .placeholder(ui.now_t("peer-relay-placeholder"))
+                                    kit::text_input(password.get_untracked())
+                                        .secure(true)
+                                        .placeholder(ui.now_t("peer-password"))
                                         .size(ControlSize::Small),
                                 )
-                                .key("peer-relay-input")
+                                .key("peer-password-input")
                                 .bind(move |input: &mut TextInput| {
-                                    let value = relay.get();
+                                    let value = password.get();
                                     if input.state.value.as_str() != value {
                                         input.state.replace_value(value);
                                     }
                                 })
-                                .on(move |e: &TextChanged| relay.set(e.value.to_string())),
+                                .on(move |e: &TextChanged| {
+                                    password.set(e.value.chars().take(64).collect())
+                                }),
                             ),
                             widget(action(stacked)).children(
                                 widget(
@@ -214,7 +240,7 @@ pub(crate) fn card_with_fields(
                                     move |_, _: &Activate, cx| {
                                         cx.dispatch_program_all(Msg::PeerStart {
                                             invitation: None,
-                                            relay: relay.get_untracked(),
+                                            password: password.get_untracked(),
                                         })
                                     },
                                 ),
@@ -233,6 +259,106 @@ pub(crate) fn card_with_fields(
                     }),
             )
             .children((header, body))
+            .into_any()
+        },
+    )
+    .into_any()
+}
+
+/// What the host sees while a friend has not connected yet.
+pub(crate) fn invite_caption(ui: Ui, state: &SessionUi) -> String {
+    match state.invite {
+        InvitePhase::Idle => ui.now_t("peer-invite-idle"),
+        InvitePhase::Waiting => ui.now_t("peer-invite-waiting"),
+        InvitePhase::Accepted if state.invite_names.is_empty() => {
+            ui.now_t("peer-invite-accepted-unnamed")
+        }
+        InvitePhase::Accepted if state.invite_names.len() == 1 => ui.tr(
+            "peer-invite-accepted",
+            &[("name", state.invite_names[0].as_str().into())],
+        ),
+        InvitePhase::Accepted => ui.tr(
+            "peer-invite-accepted-many",
+            &[("n", state.invite_names.len().into())],
+        ),
+    }
+}
+
+/// Invite controls on the partner window, only while that window has no line.
+pub(crate) fn waiting_room(ui: Ui) -> AnyView {
+    dynamic(
+        move || {
+            let state = ui.peer.get();
+            let empty = ui.peer_seats.get() == 0 && ui.peer_display.with(|view| view.empty);
+            (state, empty, ui.locale.get())
+        },
+        move |(state, empty, _)| {
+            let show = state.active && *empty && !matches!(state.status, Status::Connected { .. });
+            if !show {
+                return widget(Stack::column(0.0)).into_any();
+            }
+            let host = state.host;
+            let caption = match &state.status {
+                Status::Error(error) => {
+                    let detail = if error == "Room is full" {
+                        ui.now_t("peer-room-full")
+                    } else {
+                        error.clone()
+                    };
+                    format!("{}: {detail}", ui.now_t("peer-error"))
+                }
+                Status::Reconnecting => ui.now_t("peer-reconnecting"),
+                _ if host => invite_caption(ui, &state),
+                _ => ui.now_t("peer-connecting"),
+            };
+            let invitation = state.invitation.clone();
+            let card = widget(
+                Stack::column(0.0)
+                    .gap_step(gap::step::CONTROL)
+                    .padding(nana_ui::theme::space::SM)
+                    .width(LengthSpec::Px(300.0))
+                    .align(AlignSpec::Center)
+                    .surface(SemanticColorRole::Background),
+            )
+            .children((
+                widget(Text::new(caption).style(Type::Label.style())),
+                (host && !invitation.is_empty()).then(|| {
+                    let code = invitation.clone();
+                    widget(
+                        Stack::row(0.0)
+                            .gap_step(gap::step::CONTROL)
+                            .justify(JustifySpec::Center),
+                    )
+                    .children((
+                        widget(
+                            Button::new(ui.now_t("peer-invite"))
+                                .kind(ButtonKind::Primary)
+                                .size(ControlSize::Small),
+                        )
+                        .on_cx(move |_, _: &Activate, cx| {
+                            cx.dispatch_program_all(Msg::PeerInviteFriends)
+                        }),
+                        widget(Button::new(ui.now_t("peer-copy")).size(ControlSize::Small)).on_cx(
+                            move |_, _: &Activate, cx| {
+                                cx.dispatch_program_all(Msg::CopyText(code.clone()))
+                            },
+                        ),
+                    ))
+                }),
+            ));
+            widget(
+                Stack::column(0.0)
+                    .align(AlignSpec::Center)
+                    .justify(JustifySpec::Center)
+                    .with_layout(|layout| {
+                        layout.position = PositionSpec::Absolute;
+                        layout.offset_left = Some(LengthSpec::Px(0.0));
+                        layout.offset_top = Some(LengthSpec::Px(0.0));
+                        layout.offset_right = Some(LengthSpec::Px(0.0));
+                        layout.offset_bottom = Some(LengthSpec::Px(0.0));
+                    }),
+            )
+            .children(card)
             .into_any()
         },
     )

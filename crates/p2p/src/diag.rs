@@ -9,12 +9,9 @@ pub static ENDPOINT_BOUND: EventDescriptor = EventDescriptor::new(
     1,
     "p2p.endpoint_bound",
     Severity::Info,
-    &[
-        FieldDescriptor::bool("local_only"),
-        FieldDescriptor::bool("custom_relay"),
-    ],
+    &[FieldDescriptor::bool("hosting")],
 );
-/// No relay answered within the wait; direct paths may still work.
+/// Kept so its id is not reused. Relay discovery now belongs to Steam.
 pub static ONLINE_TIMEOUT: EventDescriptor =
     EventDescriptor::new(P2P, 2, "p2p.online_timeout", Severity::Warn, &[]);
 pub static ONLINE: EventDescriptor = EventDescriptor::new(

@@ -2088,7 +2088,11 @@ impl App {
             | Msg::InstallUpdate
             | Msg::SkipUpdate
             | Msg::OpenUpdateNotes) => self.update_msg(m),
-            Msg::PeerStart { invitation, relay } => self.peer_start(invitation, relay),
+            Msg::PeerStart {
+                invitation,
+                password,
+            } => self.peer_start(invitation, password),
+            Msg::PeerInviteFriends => self.peer_invite_friends(),
             Msg::PeerLeave => self.peer_leave(),
             Msg::PeerPanel(expanded) => self.ui.peer_panel.set(expanded),
             Msg::PeerEvent(generation, event) => self.peer_event(generation, event),

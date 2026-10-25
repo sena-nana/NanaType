@@ -170,6 +170,7 @@ fn p2p(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
             route: "direct".into(),
             rtt_ms: 28,
         },
+        ..Default::default()
     }));
     shot("p2p-input", out, iw, ih, theme.clone(), |doc, id| {
         doc.context_mut()

@@ -85,6 +85,7 @@ fn card_actions_fit_and_preserve_the_draft_in_each_locale() {
                     route: "direct".into(),
                     rtt_ms: 42,
                 },
+                ..SessionUi::default()
             }));
             assert!(
                 matches!(click(&mut session, &ui.now_t("peer-copy"), width as f32), Msg::CopyText(code) if code == "private-invitation")

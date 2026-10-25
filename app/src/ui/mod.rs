@@ -22,9 +22,10 @@ pub mod twitch;
 pub mod youtube;
 
 pub use nanatype_frame::ui::{
-    I18N, MONO, Source, Stage, avatar, c, collect_effect_garbage, controls, editor_view, feedback,
-    kit, materials, mono, motion, overflow, pipeline, plugin_view, preview, quote, restyle, rich,
-    shader_effects, surface, sweep, text_light, text_scramble, tnum,
+    I18N, MONO, REMOTE_LANES, Source, Stage, avatar, c, collect_effect_garbage, controls,
+    editor_view, feedback, kit, materials, mono, motion, overflow, pipeline, plugin_view, preview,
+    quote, remote_bands, restyle, rich, shader_effects, surface, sweep, text_light, text_scramble,
+    tnum,
 };
 
 use std::collections::HashMap;
@@ -176,6 +177,10 @@ pub struct Ui {
     pub(crate) input_split: NodeRef,
     pub peer: Signal<Arc<crate::p2p::SessionUi>>,
     pub peer_panel: Signal<bool>,
+    /// The invitation field. A Steam friend invite fills it from outside the card.
+    pub peer_invitation: Signal<String>,
+    /// The management popover. A Steam invite opens it so the password can be typed.
+    pub peer_popover: Signal<bool>,
     pub diagnostics: Signal<Arc<Vec<String>>>,
     /// Skin previews animate only on the Skins page.
     pub page: Signal<settings::Page>,
@@ -275,6 +280,8 @@ impl Ui {
             peer,
             platform_tab: signal(crate::chat::Platform::ALL[0]),
             peer_panel: signal(true),
+            peer_invitation: signal(String::new()),
+            peer_popover: signal(false),
             diagnostics: signal(Arc::new(Vec::new())),
             page,
             status: signal(Arc::new(Status::default())),
@@ -306,19 +313,24 @@ impl Ui {
 
     /// The broadcast window this track's display draws in.
     pub fn display_kind(self) -> crate::windows::WindowKind {
-        if self.track_slot == 1 {
+        if self.track_slot > 0 {
             crate::windows::WindowKind::PeerDisplay
         } else {
             crate::windows::WindowKind::Display
         }
     }
 
-    /// The remote participant's track (see [`Stage::remote`]).
-    pub fn remote(self) -> Self {
+    /// Remote person `index` in seat order.
+    pub fn lane(self, index: usize) -> Self {
         Self {
-            stage: self.stage.remote(),
+            stage: self.stage.lane(index),
             ..self
         }
+    }
+
+    /// The first remote person's track (see [`Stage::remote`]).
+    pub fn remote(self) -> Self {
+        self.lane(0)
     }
 }
 

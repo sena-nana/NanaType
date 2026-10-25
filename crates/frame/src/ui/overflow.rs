@@ -53,7 +53,8 @@ pub struct PageText {
     pub glyphs: Vec<Glyph>,
 }
 
-static PUBLISHED: [Mutex<Option<Arc<PageText>>>; 2] = [Mutex::new(None), Mutex::new(None)];
+static PUBLISHED: [Mutex<Option<Arc<PageText>>>; super::TRACK_SLOTS] =
+    [const { Mutex::new(None) }; super::TRACK_SLOTS];
 
 /// Record the page the typewriter just built.
 pub fn publish_on(track: usize, page: PageText) {

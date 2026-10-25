@@ -8,6 +8,18 @@ use nanatype_p2p::{Config, Event, PeerHandle, Resources, Room, Status, TrackSnap
 
 use crate::{app::App, clock, msg::Msg};
 
+/// Whether a Steam friend has accepted the room invite.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InvitePhase {
+    /// The invite dialog has not been opened.
+    #[default]
+    Idle,
+    /// The dialog is open, and nobody has joined the lobby yet.
+    Waiting,
+    /// A friend joined the lobby. This stays set after they leave it to connect.
+    Accepted,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SessionUi {
     pub active: bool,
@@ -15,6 +27,11 @@ pub struct SessionUi {
     pub invitation: String,
     pub name: String,
     pub status: Status,
+    pub invite: InvitePhase,
+    /// Persona names of friends who accepted, when Steam has them.
+    pub invite_names: Vec<String>,
+    /// People in the room, including the local user. Zero before the first snapshot.
+    pub members: usize,
 }
 impl Default for SessionUi {
     fn default() -> Self {
@@ -24,6 +41,9 @@ impl Default for SessionUi {
             invitation: String::new(),
             name: String::new(),
             status: Status::Ended,
+            invite: InvitePhase::Idle,
+            invite_names: Vec::new(),
+            members: 0,
         }
     }
 }
@@ -35,26 +55,44 @@ pub struct Session {
     pub local: String,
     pub room: Option<Arc<Room>>,
     pub room_received: Option<std::time::Instant>,
-    pub remote_revision: Option<(String, u64, Option<LineId>)>,
+    pub remote_revision: Vec<(String, u64, Option<LineId>)>,
     /// Lines sent during this session; earlier ones stay private.
     pub lines: HashSet<LineId>,
     pub revision: u64,
+    /// Steam invite for a friend the host selected. Empty for a guest.
+    pub admit: String,
 }
 
 impl App {
-    pub(crate) fn peer_start(&mut self, invitation: Option<String>, relay: String) {
+    pub(crate) fn peer_start(&mut self, invitation: Option<String>, password: String) {
         if self.peer.handle.is_some() {
             return;
         }
+        let password = match nanatype_p2p::room_password(&password) {
+            Ok(password) => password,
+            Err(_) => {
+                self.notice(self.ui.now_t("peer-password-invalid"), true);
+                return;
+            }
+        };
+        if let Some(text) = invitation.as_deref()
+            && nanatype_p2p::Invite::decode(text).is_ok_and(|invite| invite.locked)
+            && password.is_empty()
+        {
+            self.notice(self.ui.now_t("peer-password-needed"), true);
+            return;
+        }
+        let Some(carrier) = self.peer_carrier() else {
+            self.notice(self.ui.now_t("peer-steam-required"), true);
+            return;
+        };
         self.peer.generation += 1;
         let generation = self.peer.generation;
         let ctx = self.ctx.clone();
         let config = Config {
             cache: self.paths.blobs(),
-            relay: (!relay.trim().is_empty()).then(|| relay.trim().to_owned()),
-            local_only: false,
         };
-        match PeerHandle::start(config, invitation, move |event| {
+        match PeerHandle::start(config, invitation, password, carrier, move |event| {
             ctx.dispatch(Msg::PeerEvent(generation, event))
         }) {
             Ok(handle) => {
@@ -91,15 +129,87 @@ impl App {
         }
     }
 
+    pub(crate) fn peer_invite_friends(&mut self) {
+        let state = self.ui.peer.get_untracked();
+        if !state.host || state.invitation.is_empty() {
+            return;
+        }
+        let admit = self.peer.admit.clone();
+        if admit.is_empty() {
+            return;
+        }
+        if !self.peer_open_invite(&admit) {
+            self.notice(self.ui.now_t("peer-invite-unavailable"), true);
+        }
+    }
+
+    pub(crate) fn peer_invite_opened(&mut self) {
+        self.note_invite(InvitePhase::Waiting, String::new());
+    }
+
+    pub(crate) fn peer_invite_accepted(&mut self, name: String) {
+        let name = name.trim();
+        let name = if name.is_empty() || name == "[unknown]" {
+            String::new()
+        } else {
+            name.chars().take(64).collect()
+        };
+        self.note_invite(InvitePhase::Accepted, name);
+    }
+
+    fn note_invite(&mut self, phase: InvitePhase, name: String) {
+        if self.peer.handle.is_none() {
+            return;
+        }
+        let mut state = (*self.ui.peer.get_untracked()).clone();
+        // A second dialog must not hide a friend who already accepted.
+        if phase == InvitePhase::Waiting && state.invite == InvitePhase::Accepted {
+            return;
+        }
+        state.invite = phase;
+        if phase == InvitePhase::Accepted
+            && !name.is_empty()
+            && !state.invite_names.iter().any(|have| have == &name)
+            && state.invite_names.len() + 1 < nanatype_p2p::MAX_MEMBERS
+        {
+            state.invite_names.push(name);
+        }
+        self.ui.peer.set(Arc::new(state));
+    }
+
+    /// A Steam friend invite joins directly. The session secret is already in
+    /// it, so the room password is not asked.
+    pub(crate) fn peer_steam_invite(&mut self, invitation: Result<String, ()>) {
+        if self.peer.handle.is_some() {
+            return;
+        }
+        let Ok(invitation) = invitation else {
+            self.notice(self.ui.now_t("peer-invite-invalid"), true);
+            return;
+        };
+        if nanatype_p2p::Invite::decode(&invitation).is_ok_and(|invite| invite.locked) {
+            self.ui.peer_panel.set(true);
+            self.ui.peer_popover.set(true);
+            self.ui.peer_invitation.set(invitation);
+            self.notice(self.ui.now_t("peer-password-needed"), true);
+            return;
+        }
+        self.peer_start(Some(invitation), String::new());
+    }
+
     pub(crate) fn peer_leave(&mut self) {
+        self.peer_close_lobby();
         self.peer = Session {
             generation: self.peer.generation + 1,
             ..Session::default()
         };
         self.ui.peer.set(Arc::new(SessionUi::default()));
-        self.ui.peer_display.set(Arc::new(empty()));
+        self.ui.peer_seats.set(0);
+        for lane in self.ui.peer_lanes {
+            lane.display.set(Arc::new(empty()));
+            lane.portraits.set(Arc::new(Default::default()));
+        }
         self.ui.display.set(Arc::new(self.core.display().clone()));
-        self.ui.peer_portraits.set(Arc::new(Default::default()));
         self.ui.peer_local_line.set(None);
         self.ui
             .history
@@ -116,8 +226,10 @@ impl App {
                 host,
                 local_id,
                 invitation,
+                admit,
             } => {
                 self.peer.local = local_id;
+                self.peer.admit = admit;
                 let mut state = (*self.ui.peer.get_untracked()).clone();
                 state.host = host;
                 state.invitation = invitation;
@@ -253,28 +365,77 @@ impl App {
             .peer
             .room_received
             .map_or(0, |at| at.elapsed().as_millis() as u64);
+        let members = room.guests.len().saturating_add(1);
         let mut rows = Vec::new();
-        let mut remote_view = empty();
-        let mut remote_name = String::new();
-        let mut remote_revision = None;
-        for (id, track) in &room.tracks {
-            if id == &self.peer.local {
-                continue;
+        // Seat order: the host, then guests. The local person stays on their own display.
+        let mut seated = Vec::new();
+        if room.host != self.peer.local {
+            seated.push(room.host.clone());
+        }
+        seated.extend(
+            room.guests
+                .iter()
+                .filter(|id| *id != &self.peer.local)
+                .cloned(),
+        );
+        seated.truncate(crate::ui::REMOTE_LANES);
+        let mut remote_revision = Vec::new();
+        let mut names = Vec::new();
+        for (index, id) in seated.iter().enumerate() {
+            let lane = self.ui.peer_lanes[index];
+            let track = room.tracks.get(id);
+            let mut remote_view = track
+                .map(|track| track.display.clone())
+                .unwrap_or_else(empty);
+            let revision = track.map(|track| track.revision).unwrap_or(0);
+            if let Some(track) = track {
+                nanatype_p2p::rebase_display(
+                    &mut remote_view,
+                    track
+                        .captured_ms
+                        .saturating_add(track.age_ms)
+                        .saturating_add(elapsed),
+                    now,
+                );
+                if !track.name.is_empty() {
+                    names.push(track.name.clone());
+                }
             }
-            remote_name = track.name.clone();
-            remote_view = track.display.clone();
-            nanatype_p2p::rebase_display(
-                &mut remote_view,
-                track
-                    .captured_ms
-                    .saturating_add(track.age_ms)
-                    .saturating_add(elapsed),
-                now,
-            );
             remote_view.line = remote_view.line.map(|line| room.render_id(id, line));
-            remote_revision = Some((id.clone(), track.revision, remote_view.line));
-            // Re-render resource completion or resync even at the same sender revision.
-            remote_view.revision = self.ui.peer_display.get_untracked().revision + 1;
+            let stamp = (id.clone(), revision, remote_view.line);
+            if self.peer.remote_revision.get(index) != Some(&stamp) {
+                remote_view.revision = lane.display.get_untracked().revision + 1;
+                lane.display.set(Arc::new(remote_view));
+            }
+            let portraits = track
+                .map(|track| {
+                    track
+                        .portraits
+                        .iter()
+                        .filter_map(|portrait| {
+                            self.assets
+                                .url(&portrait.asset, Some(&self.loaded))
+                                .map(|url| (portrait.variant.clone(), url))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            if *lane.portraits.get_untracked() != portraits {
+                lane.portraits.set(Arc::new(portraits));
+            }
+            remote_revision.push(stamp);
+        }
+        for lane in self.ui.peer_lanes.iter().skip(seated.len()) {
+            if !lane.display.get_untracked().empty {
+                lane.display.set(Arc::new(empty()));
+            }
+            if !lane.portraits.get_untracked().is_empty() {
+                lane.portraits.set(Arc::new(Default::default()));
+            }
+        }
+        let remote_name = names.join("、");
+        if self.ui.peer_seats.get_untracked() != seated.len() {
+            self.ui.peer_seats.set(seated.len());
         }
         // Index every owner's rows once instead of scanning per entry.
         let mut by_line: std::collections::HashMap<(&str, LineId), &HistoryRow> = self
@@ -318,10 +479,7 @@ impl App {
                 rows.push(row);
             }
         }
-        if self.peer.remote_revision != remote_revision {
-            self.ui.peer_display.set(Arc::new(remote_view));
-            self.peer.remote_revision = remote_revision;
-        }
+        self.peer.remote_revision = remote_revision;
         self.ui.peer_local_line.set(
             self.core
                 .display()
@@ -334,17 +492,27 @@ impl App {
         if self.ui.history.with_untracked(|history| **history != rows) {
             self.ui.history.set(Arc::new(rows));
         }
-        if self.ui.peer.get_untracked().name != remote_name {
-            let mut state = (*self.ui.peer.get_untracked()).clone();
+        let shown = self.ui.peer.get_untracked();
+        if shown.name != remote_name || shown.members != members {
+            let mut state = (*shown).clone();
             state.name = remote_name;
+            state.members = members;
             self.ui.peer.set(Arc::new(state));
         }
         self.refresh_peer_urls();
     }
 
     fn refresh_peer_urls(&mut self) {
+        let seats = crate::ui::remote_bands(self.ui.peer_seats.get_untracked());
+        let displays: Vec<_> = self
+            .ui
+            .peer_lanes
+            .iter()
+            .take(seats)
+            .map(|lane| lane.display.get_untracked())
+            .collect();
         let value = serde_json::json!({
-            "display": &*self.ui.peer_display.get_untracked(),
+            "displays": displays,
             "history": &*self.ui.history.get_untracked(),
         });
         self.ensure_urls(
@@ -352,22 +520,6 @@ impl App {
                 .into_iter()
                 .filter_map(|reference| reference.parse().ok()),
         );
-        if let Some(room) = &self.peer.room {
-            let portraits: std::collections::HashMap<_, _> = room
-                .tracks
-                .iter()
-                .filter(|(id, _)| *id != &self.peer.local)
-                .flat_map(|(_, track)| track.portraits.iter())
-                .filter_map(|portrait| {
-                    self.assets
-                        .url(&portrait.asset, Some(&self.loaded))
-                        .map(|url| (portrait.variant.clone(), url))
-                })
-                .collect();
-            if *self.ui.peer_portraits.get_untracked() != portraits {
-                self.ui.peer_portraits.set(Arc::new(portraits));
-            }
-        }
     }
 }
 

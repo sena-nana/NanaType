@@ -644,7 +644,7 @@ fn modes(ui: Ui, mode: InputMode) -> AnyView {
         .into_any()
 }
 
-pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) -> AnyView {
+pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String>) -> AnyView {
     dynamic(
         move || {
             (
@@ -685,13 +685,13 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, relay: Signal<String>) 
                     ti::USERS,
                     ui.now_t("input-management"),
                     crate::ui::kit::popover::LG,
-                    signal(false),
+                    ui.peer_popover,
                     widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
                         l.height = Some(LengthSpec::Px(MANAGEMENT_H));
                         l.min_height = Some(LengthSpec::Px(0.0));
                     }))
                     .children(super::super::p2p::card_with_fields(
-                        ui, invitation, relay, true,
+                        ui, invitation, password, true,
                     )),
                 ),
                 tool(ui, ti::SETTINGS, "window-settings", || Msg::OpenSettings),

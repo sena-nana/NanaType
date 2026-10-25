@@ -26,6 +26,7 @@ fn render_at(ui: Ui, remote: bool, path: &Path) -> image::RgbaImage {
                 nana_ui::runtime::view::IntoView::into_any(dialogue::display_window(ui))
             }
         });
+    session.set_gpu_renderers(nanatype::ui::sweep::renderers());
     session.screenshot_png(path).unwrap();
     image::open(path).unwrap().into_rgba8()
 }
@@ -42,7 +43,7 @@ fn separate_scenes_keep_self_and_partner_content_when_roles_change() {
     let settings = Settings::default();
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
     let mut own = Core::new(settings.clone(), skin.clone());
-    let mut partner = Core::new(settings, skin);
+    let mut partner = Core::new(settings, skin.clone());
     own.handle(
         Cmd::SendMarkup("[color=#d00050]SELF SELF SELF[/color]".into()),
         0,
@@ -84,6 +85,25 @@ fn separate_scenes_keep_self_and_partner_content_when_roles_change() {
             "self leaked into partner source"
         );
     }
+    let mut second = Core::new(Settings::default(), skin);
+    second.handle(
+        Cmd::SendMarkup("[color=#20a040]SECOND SECOND[/color]".into()),
+        0,
+    );
+    second.handle(Cmd::Skip, 1);
+    ui.peer_lanes[1]
+        .display
+        .set(Arc::new(second.display().clone()));
+    ui.peer_seats.set(2);
+    let both = render(ui, true, &out.join("two-partners.png"));
+    assert!(pixels(&both, [0, 128, 208]) > 40, "first partner missing");
+    assert!(pixels(&both, [32, 160, 64]) > 40, "second partner missing");
+    assert_eq!(
+        pixels(&both, [208, 0, 80]),
+        0,
+        "self leaked into the shared partner window"
+    );
+    ui.peer_seats.set(0);
     ui.peer.set(Arc::new(SessionUi::default()));
     let inactive = render(ui, true, &out.join("inactive.png"));
     assert_eq!(

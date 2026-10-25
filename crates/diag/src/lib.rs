@@ -6,7 +6,7 @@
 //!   never collide;
 //! - [`redact`]: the only way free text reaches a record. Typed fields carry
 //!   counts, codes and durations; a fault message goes through `redact` first;
-//! - [`bridge`]: `log` / `tracing` output of dependencies (wgpu, iroh, ureq,
+//! - [`bridge`]: `log` / `tracing` output of dependencies (wgpu, ureq,
 //!   winit...) as rate-limited faults;
 //! - [`config`]: severity and persistence from the "Detailed logs" setting
 //!   and `NANATYPE_DEBUG`;

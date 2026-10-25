@@ -1,19 +1,23 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use iroh::EndpointAddr;
 use nanatype_core::{DisplayView, HistoryRow, Reveal};
 use nanatype_model::LineId;
 use serde::{Deserialize, Serialize};
 
-pub const ALPN: &[u8] = b"nanatype/session/2";
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 5;
+/// A room password, in characters. Empty means the invite itself is enough.
+pub const PASSWORD_MAX: usize = 64;
 pub const MAX_FRAME: usize = 8 * 1024 * 1024;
+/// Source files larger than this are not read. The bytes on the wire are a
+/// downsampled picture capped at one Steam message, not this source budget.
 pub const MAX_ASSET: usize = 16 * 1024 * 1024;
 pub const MAX_ENTRIES: usize = 1000;
+/// Host plus guests. The Steam lobby uses the same cap.
+pub const MAX_MEMBERS: usize = 8;
 /// Serialized budget of one participant's track.
-/// Two tracks plus history must fit in a room frame.
-pub const MAX_TRACK: usize = MAX_FRAME / 4;
+/// Every member's track, plus the shared history, has to fit in one room frame.
+pub const MAX_TRACK: usize = MAX_FRAME / (MAX_MEMBERS * 2);
 
 fn json_len<T: Serialize>(value: &T) -> usize {
     serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
@@ -23,8 +27,27 @@ fn json_len<T: Serialize>(value: &T) -> usize {
 pub struct Invite {
     pub v: u32,
     pub session: String,
+    /// Authorizes the guest when the room has no password. Empty in an invite
+    /// that is handed out: a password is checked in the handshake and is never
+    /// written into the invite or a Steam lobby.
+    #[serde(default)]
     pub secret: String,
-    pub addr: EndpointAddr,
+    /// Host SteamID. The guest dials this identity. Any owner of the app can
+    /// attempt that connection, so the secret or the room password still has
+    /// to match.
+    pub steam: u64,
+    /// The guest must present the room password. `secret` is then empty.
+    #[serde(default)]
+    pub locked: bool,
+}
+
+/// Trim a room password. Empty is a room that does not ask for one.
+pub fn room_password(text: &str) -> Result<String, String> {
+    let password = text.trim();
+    if password.chars().count() > PASSWORD_MAX || password.chars().any(|c| c.is_control()) {
+        return Err("Invalid room password".into());
+    }
+    Ok(password.to_string())
 }
 
 impl Invite {
@@ -50,10 +73,36 @@ impl Invite {
         if invite.v != VERSION {
             return Err("Incompatible session protocol".into());
         }
-        if invite.session.len() != 64 || invite.secret.len() != 64 {
+        if invite.session.len() != 64 || invite.steam == 0 {
+            return Err("Invalid session credentials".into());
+        }
+        let secret_ok = if invite.locked {
+            invite.secret.is_empty()
+        } else {
+            invite.secret.len() == 64
+        };
+        if !secret_ok {
             return Err("Invalid session credentials".into());
         }
         Ok(invite)
+    }
+
+    /// The invite pasted to someone who was not selected. A room password is
+    /// never in it, so they still have to type one.
+    pub fn shared(&self) -> Self {
+        let mut invite = self.clone();
+        if invite.locked {
+            invite.secret.clear();
+        }
+        invite
+    }
+
+    /// The invite handed to someone the host invited. It carries the session
+    /// secret, so the room password is not asked again.
+    pub fn admitted(&self) -> Self {
+        let mut invite = self.clone();
+        invite.locked = false;
+        invite
     }
 }
 
@@ -126,7 +175,8 @@ impl TrackSnapshot {
 pub struct Room {
     pub session: String,
     pub host: String,
-    pub guest: Option<String>,
+    /// SteamIDs seated besides the host, in join order. At most `MAX_MEMBERS - 1`.
+    pub guests: Vec<String>,
     pub entries: Vec<Entry>,
     pub tracks: BTreeMap<String, TrackSnapshot>,
     pub next_order: u64,
@@ -140,12 +190,32 @@ impl Room {
         Self {
             session,
             host,
-            guest: None,
+            guests: Vec::new(),
             entries: Vec::new(),
             tracks: BTreeMap::new(),
             next_order: 1,
             retired_before: BTreeMap::new(),
         }
+    }
+
+    /// Reserve a guest seat. Someone already seated (a reconnect) is unchanged.
+    pub fn seat(&mut self, id: &str) -> Result<(), String> {
+        if id.is_empty() || id == self.host {
+            return Err("Invalid participant".into());
+        }
+        if self.guests.iter().any(|guest| guest == id) {
+            return Ok(());
+        }
+        if self.guests.len() + 1 >= MAX_MEMBERS {
+            return Err("Room is full".into());
+        }
+        self.guests.push(id.to_string());
+        Ok(())
+    }
+
+    /// Free a seat. Their track stays, so lines they already sent remain.
+    pub fn unseat(&mut self, id: &str) {
+        self.guests.retain(|guest| guest != id);
     }
 
     pub fn update(&mut self, participant: &str, mut track: TrackSnapshot) -> Result<bool, String> {
@@ -289,6 +359,31 @@ pub fn valid_hash(hash: &str) -> bool {
             .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
+/// The full session picture for `hash`, when it has arrived.
+///
+/// Files are `p2p-{hash}.webp`, `.gif`, or a legacy `.png`. A still preview
+/// uses `p2p-{hash}.preview.webp` and is not a full picture.
+pub fn session_full_picture(dir: &std::path::Path, hash: &str) -> Option<std::path::PathBuf> {
+    if !valid_hash(hash) {
+        return None;
+    }
+    for ext in ["webp", "gif", "png"] {
+        let path = dir.join(format!("p2p-{hash}.{ext}"));
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+/// Full picture, or the still preview that arrived with the track.
+pub fn session_picture(dir: &std::path::Path, hash: &str) -> Option<std::path::PathBuf> {
+    session_full_picture(dir, hash).or_else(|| {
+        let preview = dir.join(format!("p2p-{hash}.preview.webp"));
+        preview.is_file().then_some(preview)
+    })
+}
+
 fn rebase_reveal(reveal: &mut Reveal, remote_now: u64, now: u64) {
     if let Some(seg) = &mut reveal.segment {
         // Preserve elapsed reveal even when the receiver only just launched.
@@ -368,16 +463,32 @@ pub(crate) enum Frame {
         session: String,
         secret: String,
     },
-    Welcome(Room),
-    Track(TrackSnapshot),
+    Welcome {
+        room: Room,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        previews: BTreeMap<String, String>,
+    },
+    Track {
+        track: TrackSnapshot,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        previews: BTreeMap<String, String>,
+    },
     PeerTrack {
         participant: String,
         track: TrackSnapshot,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        previews: BTreeMap<String, String>,
     },
-    Room(Room),
+    Room {
+        room: Room,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        previews: BTreeMap<String, String>,
+    },
     Ping(u64),
     Pong(u64),
     Leave,
+    /// The room already has `MAX_MEMBERS` people.
+    Full,
 }
 
 #[cfg(test)]
@@ -584,6 +695,36 @@ pub(crate) mod tests {
         assert_eq!(reveal.unit_at(2), Some(60));
     }
     #[test]
+    fn a_password_stays_out_of_the_shared_invite() {
+        let invite = Invite {
+            v: VERSION,
+            session: "ab".repeat(32),
+            secret: "nana-room".into(),
+            steam: 1,
+            locked: true,
+        };
+        let shared = Invite::decode(&invite.shared().encode()).unwrap();
+        assert!(shared.locked && shared.secret.is_empty() && shared.steam == 1);
+        let open = Invite {
+            locked: false,
+            secret: "cd".repeat(32),
+            ..invite.clone()
+        };
+        assert_eq!(Invite::decode(&open.encode()).unwrap().secret.len(), 64);
+        let admitted = invite.admitted();
+        assert!(!admitted.locked && admitted.secret == "nana-room");
+        let leaked = Invite {
+            locked: true,
+            secret: "cd".repeat(32),
+            ..invite
+        };
+        assert!(Invite::decode(&leaked.encode()).is_err());
+        assert_eq!(room_password("  nana  ").unwrap(), "nana");
+        assert!(room_password(&"x".repeat(PASSWORD_MAX + 1)).is_err());
+        assert!(room_password("a\nb").is_err());
+    }
+
+    #[test]
     fn rejects_invalid_and_newer_invitations() {
         assert!(Invite::decode("hello").is_err());
         assert!(Invite::decode(&format!("nanatype1:{}", "a".repeat(17000))).is_err());
@@ -619,5 +760,26 @@ pub(crate) mod tests {
         assert!(room.update("b", track).unwrap());
         assert_eq!(room.tracks.len(), 2);
         assert_eq!(room.tracks["a"].revision, 4);
+    }
+
+    #[test]
+    fn a_room_seats_seven_guests_and_no_more() {
+        let mut room = Room::new("session".into(), "1".into());
+        for id in 2..=8 {
+            room.seat(&id.to_string()).unwrap();
+        }
+        assert_eq!(room.guests.len(), MAX_MEMBERS - 1);
+        assert_eq!(room.seat("9").unwrap_err(), "Room is full");
+        assert!(room.seat("1").is_err());
+        room.unseat("2");
+        room.seat("9").unwrap();
+        assert!(room.guests.iter().any(|id| id == "9"));
+        assert!(!room.guests.iter().any(|id| id == "2"));
+        // Reconnecting does not take a second seat.
+        room.seat("9").unwrap();
+        assert_eq!(
+            room.guests.iter().filter(|id| id.as_str() == "9").count(),
+            1
+        );
     }
 }

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Two-person NanaType sessions over encrypted iroh connections"
+description = "Two-person NanaType sessions carried by Steam Networking Sockets"
 
 [dependencies]
 nanatype-diag.workspace = true
@@ -12,8 +12,10 @@ nanatype-model.workspace = true
 nanatype-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-iroh = { version = "=1.3.0", default-features = false, features = ["tls-ring"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time", "macros", "io-util", "fs"] }
 base64.workspace = true
 blake3.workspace = true
+flate2 = { workspace = true, default-features = false, features = ["zlib-rs"] }
+image = { workspace = true, features = ["png", "jpeg", "gif", "webp", "bmp"] }
 rand = "0.10"
+webp = "0.3"
