@@ -23,26 +23,26 @@ nanatype-playback.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 unicode-segmentation.workspace = true
-flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
-toml = { version = "1.1", default-features = false, features = ["parse", "serde", "display"] }
+flate2 = { workspace = true, default-features = false, features = ["zlib-rs"] }
+toml = { workspace = true, features = ["parse", "serde", "display"] }
 # The package editor edits manifests in place, keeping comments and key order.
 toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"], optional = true }
 # Skin export uses standard Deflate levels, without the optional Zopfli encoder.
-zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
-imagesize = "0.15"
-ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
+zip.workspace = true
+imagesize.workspace = true
+ttf-parser = { workspace = true, features = ["std"] }
 naga = { version = "=30.0.1", features = ["wgsl-in"] }
-blake3 = "1"
-ed25519-dalek = "3"
-getrandom = "0.4"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+blake3.workspace = true
+ed25519-dalek.workspace = true
+getrandom.workspace = true
+image = { workspace = true, features = ["png", "jpeg", "gif", "webp"] }
 
 [build-dependencies]
 serde_json.workspace = true
-toml = { version = "1.1", default-features = false, features = ["parse", "serde"] }
+toml = { workspace = true, features = ["parse", "serde"] }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true
 proptest.workspace = true
 # Noto Sans SC (OFL-1.1), already in every build through NanaUI: the test
 # font for the `builtin:` font table.

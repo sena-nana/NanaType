@@ -13,4 +13,4 @@ steamworks = ["dep:steamworks"]
 
 [dependencies]
 steamworks = { version = "=0.13.1", optional = true }
-crossbeam-channel = "0.5"
+crossbeam-channel.workspace = true

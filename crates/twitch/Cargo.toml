@@ -11,8 +11,8 @@ nanatype-diag.workspace = true
 nanatype-model.workspace = true
 nanatype-secrets.workspace = true
 serde_json.workspace = true
-crossbeam-channel = "0.5"
-ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
-tungstenite = { version = "0.30", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
-url = "2"
-getrandom = "0.4"
+crossbeam-channel.workspace = true
+ureq.workspace = true
+tungstenite = { workspace = true, features = ["handshake", "rustls-tls-webpki-roots"] }
+url.workspace = true
+getrandom.workspace = true

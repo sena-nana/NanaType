@@ -10,12 +10,12 @@ description = "NanaType update checks: signed GitHub Release manifests, mirrors 
 nanatype-diag.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
-ed25519-dalek = "3"
-sha2 = "0.10"
+ureq.workspace = true
+ed25519-dalek.workspace = true
+sha2.workspace = true
 semver = "1"
-crossbeam-channel = "0.5"
+crossbeam-channel.workspace = true
 
 [dev-dependencies]
-getrandom = "0.4"
-tempfile = "3"
+getrandom.workspace = true
+tempfile.workspace = true

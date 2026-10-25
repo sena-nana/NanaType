@@ -10,5 +10,5 @@ description = "NanaType live chat: a blivechat client and a blivechat-compatible
 nanatype-model.workspace = true
 nanatype-chat.workspace = true
 serde_json.workspace = true
-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
-crossbeam-channel = "0.5"
+tungstenite = { workspace = true, features = ["handshake"] }
+crossbeam-channel.workspace = true

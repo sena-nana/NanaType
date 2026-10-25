@@ -13,7 +13,7 @@ nanatype-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 iroh = { version = "=1.3.0", default-features = false, features = ["tls-ring"] }
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "io-util", "fs"] }
-base64 = "0.22"
-blake3 = "1"
+tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time", "macros", "io-util", "fs"] }
+base64.workspace = true
+blake3.workspace = true
 rand = "0.10"

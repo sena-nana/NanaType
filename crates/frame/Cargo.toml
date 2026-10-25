@@ -27,22 +27,22 @@ nana-text.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 unicode-segmentation.workspace = true
-ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
-imagesize = "0.15"
-tiny-skia = "0.12"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
-blake3 = "1"
-pollster = "1"
+ttf-parser = { workspace = true, features = ["std"] }
+imagesize.workspace = true
+tiny-skia.workspace = true
+image = { workspace = true, features = ["png", "jpeg", "gif", "webp", "bmp"] }
+blake3.workspace = true
+pollster.workspace = true
 
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
-raw-window-handle = "0.6"
+raw-window-handle.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2-app-kit = "0.3"
+objc2-app-kit.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Time"] }
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Time"] }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true
 nana-ui-devtools = { workspace = true, features = ["runtime-agent"] }

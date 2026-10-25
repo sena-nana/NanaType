@@ -9,4 +9,4 @@ description = "NanaType sound: decoding, a small mixer and sample-timed scheduli
 [dependencies]
 cpal = "0.18"
 symphonia = { version = "0.5", default-features = false, features = ["wav", "pcm", "ogg", "vorbis", "flac", "mp3"] }
-crossbeam-channel = "0.5"
+crossbeam-channel.workspace = true

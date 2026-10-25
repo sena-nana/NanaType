@@ -9,6 +9,6 @@ description = "YouTube live chat read through the public web client's InnerTube 
 [dependencies]
 nanatype-model.workspace = true
 serde_json.workspace = true
-crossbeam-channel = "0.5"
-ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
-url = "2"
+crossbeam-channel.workspace = true
+ureq.workspace = true
+url.workspace = true

@@ -63,54 +63,54 @@ nanatype-update = { workspace = true, optional = true }
 nanatype-steam.workspace = true
 nanatype-frame.workspace = true
 nanatype-diag.workspace = true
-getrandom = "0.4"
+getrandom.workspace = true
 # Spout and Syphon output of the broadcast windows.
 nana-ui = { workspace = true, features = ["native-export"] }
 nana-text.workspace = true
-ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
+ttf-parser = { workspace = true, features = ["std"] }
 nana-ui-platform.workspace = true
 nana-ui-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 unicode-segmentation.workspace = true
 arboard = "3"
-raw-window-handle = "0.6"
-imagesize = "0.15"
-tiny-skia = "0.12"
+raw-window-handle.workspace = true
+imagesize.workspace = true
+tiny-skia.workspace = true
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
-crossbeam-channel = "0.5"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
+crossbeam-channel.workspace = true
+image = { workspace = true, features = ["png", "jpeg", "gif", "webp", "bmp"] }
 tray-icon = { version = "0.26", default-features = false, features = ["ksni"] }
-ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
-blake3 = "1"
+ureq.workspace = true
+blake3.workspace = true
 gif = "0.14"
-flate2 = "1"
+flate2.workspace = true
 # Downloads use iter_download and our own cache writer, not its filesystem helpers.
 grammers-client = { version = "=0.11.0", default-features = false, features = ["proxy"] }
 grammers-session = { version = "=0.11.0", default-features = false, features = ["serde"] }
-tokio = { version = "1", features = ["rt", "sync", "time", "net"] }
+tokio = { workspace = true, features = ["rt", "sync", "time", "net"] }
 rasterlottie = { version = "=0.2.4", default-features = false }
 webm-iterable = "0.7.1"
 # Includes the upstream MSVC prebuilt/source-build fixes.
-shiguredo_libvpx = "=2026.2.0-canary.3"
-url = "2"
+shiguredo_libvpx.workspace = true
+url.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
-pollster = "1"
+pollster.workspace = true
 # The diagnostics package (docs/logging.md); the same build theme uses.
-zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-app-kit = "0.3"
+objc2-app-kit.workspace = true
 objc2-foundation = "0.3"
 
 # Upstream ships prebuilt Apple Silicon archives; Intel Macs build from source.
 [target.'cfg(all(target_os = "macos", target_arch = "x86_64"))'.dependencies]
-shiguredo_libvpx = { version = "=2026.2.0-canary.3", features = ["source-build"] }
+shiguredo_libvpx = { workspace = true, features = ["source-build"] }
 
 [target.'cfg(windows)'.dependencies]
-nanalive-spout = { git = "https://github.com/sena-nana/nanalive-spout", rev = "e20da1d718165ec19de5b174ec06e2954d697119", default-features = false, features = ["gpu-dx11-shared"] }
-windows = { version = "0.62", features = [
+nanalive-spout = { git = "https://github.com/sena-nana/nanalive-spout", rev = "9963359c6068c7954bc7301968b527514250270e", default-features = false, features = ["gpu-dx11-shared"] }
+windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
@@ -126,11 +126,11 @@ windows = { version = "0.62", features = [
 ] }
 
 [target.'cfg(windows)'.build-dependencies]
-embed-resource = "3"
+embed-resource.workspace = true
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true
 nana-ui-devtools = { workspace = true, features = ["runtime-agent"] }
 
 [target.'cfg(windows)'.dev-dependencies]
-windows = { version = "0.62", features = ["Win32_System_Com", "Win32_System_Ole"] }
+windows = { workspace = true, features = ["Win32_System_Com", "Win32_System_Ole"] }

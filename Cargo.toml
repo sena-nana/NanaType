@@ -80,6 +80,35 @@ serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 unicode-segmentation = "1"
 proptest = { version = "1", default-features = false, features = ["std"] }
+# Repeated third-party crates. The version lives here; features that differ
+# between crates stay on the member that needs them.
+base64 = "0.22"
+blake3 = "1"
+crossbeam-channel = "0.5"
+ed25519-dalek = "3"
+embed-resource = "3"
+flate2 = "1.1"
+getrandom = "0.4"
+image = { version = "0.25", default-features = false }
+imagesize = "0.15"
+md-5 = "0.10"
+objc2-app-kit = "0.3"
+pollster = "1"
+raw-window-handle = "0.6"
+sha2 = "0.10"
+shiguredo_libvpx = "=2026.2.0-canary.3"
+tempfile = "3"
+tiny-skia = "0.12"
+tokio = "1"
+toml = { version = "1.1", default-features = false }
+ttf-parser = { version = "0.25", default-features = false }
+tungstenite = { version = "0.30", default-features = false }
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
+url = "2"
+wasmtime = { version = "=49.0.0", default-features = false }
+windows = "0.62"
+windows-sys = "0.61"
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 # Keep full debugger support for workspace code, but avoid generating third-party
 # type/variable information. Dependency backtraces still include source lines.

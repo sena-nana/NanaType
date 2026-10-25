@@ -11,14 +11,14 @@ nanatype-secrets.workspace = true
 nanatype-model.workspace = true
 nanatype-chat.workspace = true
 serde.workspace = true
-ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
-md-5 = "0.10"
+ureq.workspace = true
+md-5.workspace = true
 brotli = "8"
-flate2 = "1"
+flate2.workspace = true
 serde_json.workspace = true
-tungstenite = { version = "0.30", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
-crossbeam-channel = "0.5"
+tungstenite = { workspace = true, features = ["handshake", "rustls-tls-webpki-roots"] }
+crossbeam-channel.workspace = true
 
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true
