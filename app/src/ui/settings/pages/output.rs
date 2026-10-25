@@ -1,6 +1,8 @@
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use super::*;
 
-use nana_ui::runtime::{TextInput, TextSubmitted};
+use nana_ui::runtime::{NumberChanged, NumberInput, TextInput, TextSubmitted};
 
 /// A step number's circle.
 const STEP_DOT: f32 = 22.0;
@@ -163,27 +165,145 @@ pub(super) fn obs_guide(ui: Ui) -> AnyView {
 type Read = fn(&Settings) -> &nanatype_settings::SpoutOutput;
 type Write = fn(&mut Settings) -> &mut nanatype_settings::SpoutOutput;
 
-/// `w × h`, as the size select spells it.
+/// `w × h`, as the size hints spell it.
 fn size_text([w, h]: [u32; 2]) -> String {
     format!("{w} × {h}")
 }
 
-/// The fixed sizes on offer, all within 1080p, and the saved one when it is
-/// none of them (a hand-edited or older file).
-fn size_options(ui: Ui, read: Read) -> Vec<(String, String)> {
-    let mut options = vec![("window".to_owned(), ui.now_t("output-spout-size-window"))];
-    let mut presets = vec![[1280, 720], [1920, 1080]];
-    if let Some(size) = ui.settings.with(|s| read(s).size)
-        && !presets.contains(&size)
-    {
-        presets.push(size);
+/// The preset that follows the window (`SpoutOutput.size` stays `None`).
+const FOLLOW_WINDOW: &str = "window";
+/// Shown in the fields, and kept as the other side, while following the window.
+const SIZE_BASE: [u32; 2] = [1280, 720];
+
+/// Presets that already fit 1080p. Larger ones would be scaled down on save.
+const SIZE_PRESETS: [([u32; 2], &str); 6] = [
+    ([1280, 720], "16:9 · 720p"),
+    ([1920, 1080], "16:9 · 1080p"),
+    ([720, 1280], "9:16 · 720p"),
+    ([1080, 1920], "9:16 · 1080p"),
+    ([1080, 1080], "1:1 · 1080p"),
+    ([1440, 1080], "4:3 · 1080p"),
+];
+
+fn preset_key([width, height]: [u32; 2]) -> String {
+    format!("{width}x{height}")
+}
+
+fn shown_size(saved: Option<[u32; 2]>) -> [u32; 2] {
+    saved.unwrap_or(SIZE_BASE)
+}
+
+/// The fixed size after editing `axis` (0 width, 1 height). The other side
+/// stays as shown, and the pair is fitted into 1080p. A value that is not a
+/// size leaves the shown pair unchanged.
+fn commit_side(saved: Option<[u32; 2]>, axis: usize, value: f64) -> [u32; 2] {
+    let shown = shown_size(saved);
+    let mut size = shown;
+    if let Some(side) = size.get_mut(axis) {
+        let next = value.round();
+        if next.is_finite() && next >= 0.0 {
+            *side = next as u32;
+        }
     }
+    nanatype_settings::fit_output_size(f64::from(size[0]), f64::from(size[1])).unwrap_or(shown)
+}
+
+/// `"window"` follows the window. A known preset stores that size.
+fn chosen_size(value: &str) -> Option<Option<[u32; 2]>> {
+    if value == FOLLOW_WINDOW {
+        return Some(None);
+    }
+    let (width, height) = value.split_once('x')?;
+    let size = [width.parse::<u32>().ok()?, height.parse::<u32>().ok()?];
+    SIZE_PRESETS
+        .iter()
+        .any(|(preset, _)| *preset == size)
+        .then_some(Some(size))
+}
+
+/// Follow-window, a matching preset, or empty when the size is custom.
+fn preset_choice(saved: Option<[u32; 2]>) -> String {
+    match saved {
+        None => FOLLOW_WINDOW.to_owned(),
+        Some(size) if SIZE_PRESETS.iter().any(|(preset, _)| *preset == size) => preset_key(size),
+        Some(_) => String::new(),
+    }
+}
+
+fn size_options(ui: Ui) -> Vec<(String, String)> {
+    let mut options = vec![(
+        FOLLOW_WINDOW.to_owned(),
+        I18N.t_in(ui.locale.get(), "output-spout-size-window"),
+    )];
     options.extend(
-        presets
-            .into_iter()
-            .map(|[w, h]| (format!("{w}x{h}"), size_text([w, h]))),
+        SIZE_PRESETS
+            .iter()
+            .map(|(size, name)| (preset_key(*size), (*name).to_owned())),
     );
     options
+}
+
+/// One side. An outside change replaces the field; a draft being typed stays.
+fn side_field(ui: Ui, axis: usize, label_key: &'static str, read: Read, write: Write) -> AnyView {
+    let initial = shown_size(ui.settings.with_untracked(|s| read(s).size))[axis];
+    let shown = Arc::new(AtomicU32::new(initial));
+    widget(
+        Stack::row(0.0)
+            .width(LengthSpec::Px(field::XS))
+            .with_layout(|l| l.flex_shrink = Some(0.0)),
+    )
+    .children(
+        widget({
+            let mut input = crate::ui::kit::number_input(f64::from(initial))
+                .range(
+                    f64::from(nanatype_settings::OUTPUT_MIN),
+                    f64::from(nanatype_settings::OUTPUT_MAX_LONG),
+                )
+                .label(ui.now_t(label_key))
+                .size(ControlSize::Small);
+            crate::ui::tnum(Arc::make_mut(&mut input.style.layout));
+            input
+        })
+        .bind(move |input: &mut NumberInput| {
+            let value = shown_size(ui.settings.with(|s| read(s).size))[axis];
+            if shown.swap(value, Ordering::Relaxed) != value {
+                input.assign(f64::from(value));
+            }
+        })
+        .on_cx(move |_, e: &NumberChanged, cx| {
+            let value = e.value;
+            cx.dispatch_program_all(edit(move |s| {
+                write(s).size = Some(commit_side(read(s).size, axis, value));
+            }));
+        }),
+    )
+    .into_any()
+}
+
+/// Width × height, then the presets.
+fn size_editor(ui: Ui, read: Read, write: Write) -> AnyView {
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center)
+            .wrap(true),
+    )
+    .children((
+        side_field(ui, 0, "output-size-width", read, write),
+        widget(Type::Caption.text("×")),
+        side_field(ui, 1, "output-size-height", read, write),
+        live_select(
+            ui,
+            move || size_options(ui),
+            move |s| preset_choice(read(s).size),
+            move |s, value| {
+                if let Some(size) = chosen_size(value) {
+                    write(s).size = size;
+                }
+            },
+        ),
+    ))
+    .into_any()
 }
 
 /// The OBS source choices: none, then the program scene's inputs (capture
@@ -458,22 +578,7 @@ pub(super) fn output(ui: Ui) -> AnyView {
                     .with(|s| s.output.obs.enabled && !read(s).obs_source.is_empty())
                     .then(|| I18N.t_in(ui.locale.get(), "output-spout-size-fallback"))
             },
-            live_select(
-                ui,
-                move || size_options(ui, read),
-                move |s| {
-                    read(s)
-                        .size
-                        .map(|[w, h]| format!("{w}x{h}"))
-                        .unwrap_or_else(|| "window".into())
-                },
-                move |s, v| {
-                    let size = v
-                        .split_once('x')
-                        .and_then(|(w, h)| Some([w.parse().ok()?, h.parse().ok()?]));
-                    write(s).size = size;
-                },
-            ),
+            size_editor(ui, read, write),
         );
         let straight = row_tip(
             ui,
@@ -533,4 +638,42 @@ pub(super) fn output(ui: Ui) -> AnyView {
             ),
         ))
         .into_any()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SIZE_PRESETS, chosen_size, commit_side};
+
+    #[test]
+    fn editing_a_side_while_following_the_window_starts_from_the_base() {
+        assert_eq!(commit_side(None, 1, 480.0), [1280, 480]);
+        assert_eq!(commit_side(Some([1920, 1080]), 0, 1600.0), [1600, 1080]);
+    }
+
+    #[test]
+    fn editing_a_side_fits_the_pair_into_1080p() {
+        assert_eq!(commit_side(Some([1920, 1080]), 1, 1920.0), [1080, 1080]);
+    }
+
+    #[test]
+    fn a_side_that_is_not_a_size_keeps_the_shown_pair() {
+        assert_eq!(commit_side(Some([1280, 720]), 1, 0.0), [1280, 720]);
+    }
+
+    #[test]
+    fn choosing_the_window_clears_the_size_and_a_preset_stores_it() {
+        assert_eq!(chosen_size("window"), Some(None));
+        assert_eq!(chosen_size("1080x1920"), Some(Some([1080, 1920])));
+        assert_eq!(chosen_size("3840x2160"), None);
+    }
+
+    #[test]
+    fn presets_already_fit_1080p() {
+        for ([width, height], _) in SIZE_PRESETS {
+            assert_eq!(
+                nanatype_settings::fit_output_size(f64::from(width), f64::from(height)),
+                Some([width, height])
+            );
+        }
+    }
 }
