@@ -101,9 +101,11 @@ pollster.workspace = true
 zip.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+nanalive-syphon = { git = "https://github.com/sena-nana/nanalive-spout", rev = "9963359c6068c7954bc7301968b527514250270e" }
 objc2 = "0.6"
 objc2-app-kit.workspace = true
 objc2-foundation = "0.3"
+objc2-metal = { version = "0.3.2", default-features = false, features = ["std", "MTLCommandBuffer", "MTLCommandQueue"] }
 
 # Upstream ships prebuilt Apple Silicon archives; Intel Macs build from source.
 [target.'cfg(all(target_os = "macos", target_arch = "x86_64"))'.dependencies]

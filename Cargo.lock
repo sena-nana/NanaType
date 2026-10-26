@@ -3720,6 +3720,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nanalive-syphon"
+version = "0.1.0"
+source = "git+https://github.com/sena-nana/nanalive-spout?rev=9963359c6068c7954bc7301968b527514250270e#9963359c6068c7954bc7301968b527514250270e"
+dependencies = [
+ "cc",
+ "objc2 0.6.4",
+ "objc2-metal 0.3.2",
+]
+
+[[package]]
 name = "nanatype"
 version = "0.1.0"
 dependencies = [
@@ -3741,6 +3751,7 @@ dependencies = [
  "nana-ui-devtools",
  "nana-ui-platform",
  "nanalive-spout",
+ "nanalive-syphon",
  "nanatype-audio",
  "nanatype-bilibili",
  "nanatype-blive",
@@ -3769,6 +3780,7 @@ dependencies = [
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
+ "objc2-metal 0.3.2",
  "pollster",
  "rasterlottie",
  "raw-window-handle",

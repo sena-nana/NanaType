@@ -329,7 +329,7 @@ output-spout-straight-hint = Turn on if the receiver has no premultiplied alpha 
 output-status-active = Sending
 output-status-unavailable = Unavailable: { $reason }
 output-spout-unsupported = Spout2 is Windows-only; use window capture
-output-syphon-missing = Syphon.framework was not found
+output-syphon-start = Could not start the Syphon server
 output-syphon-publish = Could not publish the frame
 output-sample = Play a sample line
 output-sample-line = [b]Hello![/b] This is a NanaType [wave]sample line[/wave].[wait=300][shake]Can you see it?[/shake]

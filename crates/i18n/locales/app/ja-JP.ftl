@@ -326,7 +326,7 @@ output-spout-straight-hint = 受信側が乗算済みアルファに対応して
 output-status-active = 送信中
 output-status-unavailable = 使用不可：{ $reason }
 output-spout-unsupported = Spout2 は Windows 専用です。ウィンドウキャプチャをご利用ください
-output-syphon-missing = Syphon.framework が見つかりません
+output-syphon-start = Syphon センダーを起動できませんでした
 output-syphon-publish = フレームを公開できませんでした
 output-sample = サンプルを再生
 output-sample-line = [b]こんにちは！[/b]NanaType の[wave]サンプルセリフ[/wave]です。[wait=300][shake]見えていますか？[/shake]

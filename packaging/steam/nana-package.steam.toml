@@ -36,10 +36,8 @@ minimum_system_version = "13.0"
 info_plist_extra = "@ROOT@/packaging/Info.extra.plist"
 
 [runtime]
-# Syphon output loads the framework from Contents/Frameworks; the executable
-# is relinked to load libsteam_api.dylib from there too.
+# The executable is relinked to load libsteam_api.dylib from Contents/Frameworks.
 bin = [
-    { source = "@ROOT@/packaging/macos/Syphon.framework", platforms = ["macos"] },
     { source = "@ROOT@/target/steam/libsteam_api.dylib", platforms = ["macos"] },
 ]
 resources = [{ source = "@ROOT@/target/licenses/THIRD_PARTY_LICENSES.txt", platforms = ["macos"] }]

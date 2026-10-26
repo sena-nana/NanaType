@@ -6,7 +6,7 @@
 The macOS counterpart of scripts/package-licenses.ps1 plus the crate part of
 scripts/third-party-notices.ps1 -Texts: the same sections in the same form,
 with the Rust crates that <target-triple> links (from `cargo metadata
---offline`) and Syphon's licence, which only the macOS bundle ships. The
+--offline`), including the statically linked Syphon server's notices. The
 package (default `nanatype`) picks the product: NanaType Editor leaves out
 what only NanaType ships (live chat sources, libvpx, Syphon); `nanatype-steam`
 is NanaType's Steam edition, built without the unofficial chat sources
@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-LICENCE_FILE = re.compile(r"^(LICEN[CS]E|COPYING|COPYRIGHT|NOTICE|UNLICENSE)")
+LICENCE_FILE = re.compile(r"^(LICEN[CS]E|COPYING|COPYRIGHT|NOTICE|UNLICENSE|THIRD_PARTY_NOTICES)")
 
 
 def read(path: Path) -> str:
@@ -150,8 +150,6 @@ def main() -> None:
             ("crates/douyin/LICENSE-DOUYINLIVE", "DouyinLive-MIT.txt"),
         ):
             add(name, read(ROOT / source), "packaging")
-    if package != "nanatype-editor":
-        add("Syphon.LICENSE.txt", read(ROOT / "packaging/macos/Syphon.LICENSE.txt"), "packaging")
     crates = "nanatype" if steam else package
     add("rust-crates.txt", rust_crates(target, crates, product, steam), "packaging")
 

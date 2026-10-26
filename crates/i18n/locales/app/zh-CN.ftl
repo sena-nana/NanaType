@@ -326,7 +326,7 @@ output-spout-straight-hint = 接收端不支持预乘 Alpha 时开启
 output-status-active = 正在发送
 output-status-unavailable = 不可用：{ $reason }
 output-spout-unsupported = Spout2 仅支持 Windows，请使用窗口捕获
-output-syphon-missing = 未找到 Syphon.framework
+output-syphon-start = Syphon 发送端无法启动
 output-syphon-publish = 发布画面失败
 output-sample = 播放示例台词
 output-sample-line = [b]你好！[/b]这是 NanaType 的[wave]示例台词[/wave]。[wait=300][shake]看得到吗？[/shake]

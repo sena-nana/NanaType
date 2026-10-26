@@ -199,7 +199,7 @@ scripts/package-macos.sh
 scripts/package-macos.sh --product editor
 ```
 
-Syphon.framework 放在 `Contents/Frameworks`，完整许可文本在 `Contents/Resources/THIRD_PARTY_LICENSES.txt`（由 `scripts/macos-licenses.py` 按 macOS 目标的依赖生成）。
+Syphon 使用 nanalive-spout 仓库的 `nanalive-syphon` 静态编译进程序，无需附带 `Syphon.framework`；首次构建需要 Xcode Command Line Tools。完整许可文本（含 Syphon Metal 服务端声明）在 `Contents/Resources/THIRD_PARTY_LICENSES.txt`，由 `scripts/macos-licenses.py` 按 macOS 目标的依赖生成。
 
 推送 `vX.Y.Z` 标签时，`.github/workflows/release.yml` 在 Windows 和 macOS 上运行这两个脚本，生成签名的更新清单并创建草稿 Release，见 [检查更新](docs/updates.md)。
 

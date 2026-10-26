@@ -214,7 +214,7 @@ NANATYPE_GPU_CASES=plugin_heavy cargo run -p nanatype --release --example gpu_pe
 
 Apple M4、macOS 27.0.1、`dist` 构建，未签名。`scripts/package-macos.sh` 构建、收集许可文本、用 `nana-packager`（NanaUI 9272a29 起）打包、`validate --run`，再生成 zip 与 dmg：
 
-- **包结构**：`NanaType.app` 90 MB，zip 37 MB，dmg 41 MB（含指向“应用程序”的链接；`hdiutil verify` 通过，挂载后包内文件与符号链接完整，`validate` 通过）。Syphon.framework 以原样的符号链接放在 `Contents/Frameworks`（应用按 `../Frameworks/Syphon.framework/Syphon` 加载，`dlopen` 实测可加载）；22 节完整许可文本在 `Contents/Resources/THIRD_PARTY_LICENSES.txt`，其中 Rust crate 按 macOS 目标的依赖生成，另含 Syphon 的许可。
+- **包结构（当时的构建）**：`NanaType.app` 90 MB，zip 37 MB，dmg 41 MB（含指向“应用程序”的链接；`hdiutil verify` 通过，挂载后包内文件与符号链接完整，`validate` 通过）。当时 Syphon.framework 以原样的符号链接放在 `Contents/Frameworks`（应用按 `../Frameworks/Syphon.framework/Syphon` 加载，`dlopen` 实测可加载）；22 节完整许可文本在 `Contents/Resources/THIRD_PARTY_LICENSES.txt`，其中 Rust crate 按 macOS 目标的依赖生成，另含 Syphon 的许可。2026-10-26 起改用 `nanalive-syphon` 静态编译，当前包不再附带该 framework；上述体积属于旧构建。
 - **validate**：布局、清单逐文件哈希、二进制身份、Info.plist（`plutil -lint`）、依赖可发现、无更新器、异目录启动自检均通过；未签名两项警告；原生启动画面、首帧交接、安装器往返与 StaticAppPlan 不执行。
 - **Info.plist**：此前打包器把 `Info.extra.plist` 的完整 plist 文档原样插进生成的字典，产出 macOS 无法解析的 Info.plist，`LSUIElement`（菜单栏应用、无 Dock 图标）因此从未生效，`validate` 也没有发现。打包器现在取完整文档的顶层字典，`validate` 在 macOS 上检查 Info.plist。
 - **运行**：以临时 `HOME`（全新配置，不碰本机用户数据）启动打包后的应用：进程常驻，打开叠加窗口与主窗口，菜单栏截图中出现 NanaType 托盘图标（`tray-icon` 0.26），收到 SIGTERM 后正常退出。

@@ -79,7 +79,7 @@ exe="$root/target/$profile/$binary"
 if [ "$steam" = 1 ]; then
     # libsteam_api.dylib names itself @loader_path/, i.e. beside the
     # executable, where a bundle may not carry it: ship it in
-    # Contents/Frameworks with Syphon and relink a copy of the executable.
+    # Contents/Frameworks and relink a copy of the executable.
     sdk=${STEAM_SDK_LOCATION:-$(cargo metadata --format-version 1 --offline --locked |
         python3 -c 'import json,sys,os; m=json.load(sys.stdin); print(next(os.path.dirname(p["manifest_path"]) for p in m["packages"] if p["name"] == "steamworks-sys") + "/lib/steam")')}
     mkdir -p target/steam
@@ -113,7 +113,7 @@ if [ "$steam" = 1 ]; then
     exit 0
 fi
 
-# ditto keeps the framework's symlinks.
+# ditto preserves the app bundle's metadata and symlinks.
 name="$prefix-$version-macos-$(uname -m)"
 ditto -c -k --keepParent "$app" "$out/$name.zip"
 # A disk image to drag the app into Applications from.

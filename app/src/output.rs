@@ -35,7 +35,7 @@ pub const SPOUT_ERROR_KEYS: [&str; 6] = [
 ];
 
 /// Syphon failures. Kept beside the Spout keys so every locale is checked.
-pub const SYPHON_ERROR_KEYS: [&str; 2] = ["output-syphon-missing", "output-syphon-publish"];
+pub const SYPHON_ERROR_KEYS: [&str; 2] = ["output-syphon-start", "output-syphon-publish"];
 
 #[cfg(windows)]
 fn spout_error_key(e: &nanalive_spout::SpoutOutputError) -> &'static str {
