@@ -62,6 +62,7 @@ impl App {
 
     /// Names the renderer's GPU for the Output page, once. Returns whether
     /// it was new.
+    #[cfg(windows)]
     pub(crate) fn note_gpu(&self, gpu: &nana_ui::GpuContext) -> bool {
         if self
             .ui

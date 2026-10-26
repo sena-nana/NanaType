@@ -57,6 +57,11 @@ pub(crate) struct Encoded {
     pub preview: Vec<u8>,
 }
 
+struct Decoded {
+    still: RgbaImage,
+    animation: Option<Vec<(RgbaImage, u32)>>,
+}
+
 pub(crate) fn wire_kind(bytes: &[u8]) -> Option<Kind> {
     if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
         Some(Kind::Webp)
@@ -110,7 +115,7 @@ pub(crate) fn encode_picture(bytes: &[u8], role: Role) -> Result<Encoded, String
     if bytes.len() > MAX_ASSET {
         return Err("image exceeds source limit".into());
     }
-    let (still, animation) = decode(bytes)?;
+    let Decoded { still, animation } = decode(bytes)?;
     let preview = preview_webp(&still)?;
     let (payload, extension) = match animation {
         Some(frames) => match encode_gif(&frames, role.edge().min(ANIM_EDGE)) {
@@ -131,12 +136,15 @@ pub(crate) fn encode_picture(bytes: &[u8], role: Role) -> Result<Encoded, String
     })
 }
 
-fn decode(bytes: &[u8]) -> Result<(RgbaImage, Option<Vec<(RgbaImage, u32)>>), String> {
+fn decode(bytes: &[u8]) -> Result<Decoded, String> {
     let format = image::guess_format(bytes).map_err(|e| e.to_string())?;
     match format {
         ImageFormat::Gif => decode_animation(GifSource::Gif, bytes),
         ImageFormat::WebP => decode_animation(GifSource::WebP, bytes),
-        _ => Ok((decode_still(bytes)?, None)),
+        _ => Ok(Decoded {
+            still: decode_still(bytes)?,
+            animation: None,
+        }),
     }
 }
 
@@ -145,10 +153,7 @@ enum GifSource {
     WebP,
 }
 
-fn decode_animation(
-    source: GifSource,
-    bytes: &[u8],
-) -> Result<(RgbaImage, Option<Vec<(RgbaImage, u32)>>), String> {
+fn decode_animation(source: GifSource, bytes: &[u8]) -> Result<Decoded, String> {
     let cursor = Cursor::new(bytes);
     let mut collected = Vec::new();
     let mut extra = false;
@@ -170,7 +175,10 @@ fn decode_animation(
             let decoder =
                 image::codecs::webp::WebPDecoder::new(cursor).map_err(|e| e.to_string())?;
             if !decoder.has_animation() {
-                return Ok((decode_still(bytes)?, None));
+                return Ok(Decoded {
+                    still: decode_still(bytes)?,
+                    animation: None,
+                });
             }
             guard(decoder.dimensions())?;
             for frame in decoder.into_frames() {
@@ -188,9 +196,15 @@ fn decode_animation(
         return Err("image has no frames".into());
     };
     if extra || collected.len() < 2 {
-        return Ok((first.clone(), None));
+        return Ok(Decoded {
+            still: first.clone(),
+            animation: None,
+        });
     }
-    Ok((first.clone(), Some(collected)))
+    Ok(Decoded {
+        still: first.clone(),
+        animation: Some(collected),
+    })
 }
 
 fn push_frame(

@@ -39,6 +39,7 @@ impl Recorder {
     }
     /// A frame handed to Spout: whether it was taken, and how long it held
     /// the UI thread.
+    #[cfg(windows)]
     pub fn spout(&mut self, id: WindowId, sent: bool, ms: f64) {
         if self.started.elapsed().as_millis() < 2000 {
             return;

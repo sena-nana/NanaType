@@ -843,7 +843,10 @@ pub(crate) mod tests {
         }
         assert!(room.tracks.len() <= MAX_TRACKS);
         // The people who spoke most recently are the ones kept.
-        assert!(room.tracks.contains_key(&(MAX_TRACKS as u64 + 9).to_string()));
+        assert!(
+            room.tracks
+                .contains_key(&(MAX_TRACKS as u64 + 9).to_string())
+        );
         assert!(!room.tracks.contains_key("2"));
         assert!(
             room.entries

@@ -72,7 +72,7 @@ pub(crate) fn card_with_fields(
                 }
             };
             let status = match &state.status {
-                Status::Starting | Status::Waiting if state.host => invite_caption(ui, &state),
+                Status::Starting | Status::Waiting if state.host => invite_caption(ui, state),
                 Status::Starting => ui.now_t("peer-connecting"),
                 Status::Waiting => ui.now_t("peer-waiting"),
                 Status::Reconnecting => ui.now_t("peer-reconnecting"),
@@ -308,7 +308,7 @@ pub(crate) fn waiting_room(ui: Ui) -> AnyView {
                     format!("{}: {detail}", ui.now_t("peer-error"))
                 }
                 Status::Reconnecting => ui.now_t("peer-reconnecting"),
-                _ if host => invite_caption(ui, &state),
+                _ if host => invite_caption(ui, state),
                 _ => ui.now_t("peer-connecting"),
             };
             let invitation = state.invitation.clone();

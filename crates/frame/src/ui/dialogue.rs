@@ -602,9 +602,11 @@ impl BoxCtx {
             skin: super::materials::render_skin(ui, ui.skin.get_untracked()),
             urls: ui.asset_urls.get_untracked(),
             source,
-            preview_name: (source == Source::Preview)
-                .then(|| ui.preview_name.get_untracked())
-                .unwrap_or_default(),
+            preview_name: if source == Source::Preview {
+                ui.preview_name.get_untracked()
+            } else {
+                Default::default()
+            },
         }
     }
 

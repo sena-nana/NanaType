@@ -261,7 +261,11 @@ impl App {
                 // The still preview may already be resolved under this key.
                 // Drop it so the full picture replaces it.
                 let key = AssetRef::Blob(format!("p2p-{hash}")).to_string();
-                if self.ui.asset_urls.with_untracked(|urls| urls.contains_key(&key)) {
+                if self
+                    .ui
+                    .asset_urls
+                    .with_untracked(|urls| urls.contains_key(&key))
+                {
                     let mut urls = (*self.ui.asset_urls.get_untracked()).clone();
                     urls.remove(&key);
                     self.ui.asset_urls.set(Arc::new(urls));

@@ -80,6 +80,32 @@ enum Command {
     Disconnect,
 }
 
+/// Input channels kept across guest reconnects and shared by both room roles.
+struct Controls {
+    commands: mpsc::UnboundedReceiver<Command>,
+    changes: watch::Receiver<Option<Arc<Publication>>>,
+    stopped: watch::Receiver<bool>,
+}
+
+/// Fixed session resources used by handshakes and message exchange.
+#[derive(Clone, Copy)]
+struct SessionContext<'a> {
+    carrier: &'a Carrier,
+    invite: &'a Invite,
+    local: &'a str,
+    cache: &'a Path,
+    offers: &'a Offers,
+    emit: &'a Emit,
+}
+
+/// Host connection state updated when an authenticated guest takes a seat.
+struct Admission<'a> {
+    links: &'a mut BTreeMap<String, Link>,
+    next_generation: &'a mut u64,
+    connected_once: &'a mut bool,
+    notes: &'a mpsc::Sender<(String, u64, Inbound)>,
+}
+
 pub struct PeerHandle {
     tx: mpsc::UnboundedSender<Command>,
     latest: watch::Sender<Option<Arc<Publication>>>,
@@ -123,9 +149,11 @@ impl PeerHandle {
                         carrier,
                         invite,
                         password,
-                        rx,
-                        changes,
-                        stopped,
+                        Controls {
+                            commands: rx,
+                            changes,
+                            stopped,
+                        },
                         emit.clone(),
                     )
                     .await
@@ -705,9 +733,7 @@ async fn run(
     carrier: Carrier,
     invite: Option<Invite>,
     password: String,
-    mut commands: mpsc::UnboundedReceiver<Command>,
-    mut changes: watch::Receiver<Option<Arc<Publication>>>,
-    mut stopped: watch::Receiver<bool>,
+    mut controls: Controls,
     emit: Emit,
 ) -> Result<(), String> {
     emit(Event::Status(Status::Starting));
@@ -768,20 +794,21 @@ async fn run(
     });
 
     let seated = Arc::new(RwLock::new(BTreeSet::new()));
+    let session = SessionContext {
+        carrier: &carrier,
+        invite: &invite,
+        local: &local,
+        cache: &config.cache,
+        offers: &offers,
+        emit: &emit,
+    };
     if hosting {
         return host_session(
-            &carrier,
-            &invite,
+            session,
             &room_password,
-            &local,
-            &config,
-            &offers,
             &mut room,
             &mut anchors,
-            &mut commands,
-            &mut changes,
-            &mut stopped,
-            &emit,
+            &mut controls,
         )
         .await;
     }
@@ -790,12 +817,12 @@ async fn run(
         carrier.clone(),
         offers.clone(),
         seated.clone(),
-        stopped.clone(),
+        controls.stopped.clone(),
     ));
     let _serve = Abort(serve);
 
     loop {
-        if *stopped.borrow() {
+        if *controls.stopped.borrow() {
             return Ok(());
         }
         emit(Event::Status(if connected_once {
@@ -806,21 +833,11 @@ async fn run(
         let mut sent_previews = BTreeSet::new();
         let deadline = Instant::now() + Duration::from_secs(20);
         let pipe = {
-            let attempt = connect_attempt(
-                &carrier,
-                &invite,
-                &local,
-                &config.cache,
-                &mut room,
-                &mut anchors,
-                &seated,
-                &emit,
-                deadline,
-            );
+            let attempt = connect_attempt(session, &mut room, &mut anchors, &seated, deadline);
             tokio::pin!(attempt);
             tokio::select! {
                 result = &mut attempt => result,
-                _ = stopped.changed() => return Ok(()),
+                _ = controls.stopped.changed() => return Ok(()),
             }
         };
         let pipe = match pipe {
@@ -838,20 +855,13 @@ async fn run(
         emit(Event::Status(Status::Connected { route, rtt_ms }));
         broadcast(&room, &anchors, &emit);
         let ended = exchange(
-            &carrier,
-            &local,
-            &invite,
+            session,
             pipe,
             &mut room,
             &mut anchors,
-            &offers,
-            &config.cache,
             &seated,
             &mut sent_previews,
-            &mut commands,
-            &mut changes,
-            &mut stopped,
-            &emit,
+            &mut controls,
         )
         .await;
         match ended {
@@ -1070,19 +1080,25 @@ async fn release(
 /// The host keeps every guest pipe. One person leaving or dropping frees that
 /// seat and keeps their track. The host leaving ends the room.
 async fn host_session(
-    carrier: &Carrier,
-    invite: &Invite,
+    session: SessionContext<'_>,
     password: &str,
-    local: &str,
-    config: &Config,
-    offers: &Offers,
     room: &mut Room,
     anchors: &mut BTreeMap<String, Instant>,
-    commands: &mut mpsc::UnboundedReceiver<Command>,
-    changes: &mut watch::Receiver<Option<Arc<Publication>>>,
-    stopped: &mut watch::Receiver<bool>,
-    emit: &Emit,
+    controls: &mut Controls,
 ) -> Result<(), String> {
+    let SessionContext {
+        carrier,
+        invite,
+        local,
+        cache,
+        offers,
+        emit,
+    } = session;
+    let Controls {
+        commands,
+        changes,
+        stopped,
+    } = controls;
     let (notes_tx, mut notes_rx) = mpsc::channel::<(String, u64, Inbound)>(64);
     let mut links: BTreeMap<String, Link> = BTreeMap::new();
     let mut next_generation = 1u64;
@@ -1149,16 +1165,15 @@ async fn host_session(
                     failures.remove(&pipe.remote_id);
                     admit(
                         pipe,
-                        local,
-                        offers,
+                        session,
                         room,
                         anchors,
-                        &mut links,
-                        &mut next_generation,
-                        &mut connected_once,
-                        &notes_tx,
-                        emit,
-                        &config.cache,
+                        Admission {
+                            links: &mut links,
+                            next_generation: &mut next_generation,
+                            connected_once: &mut connected_once,
+                            notes: &notes_tx,
+                        },
                     )
                     .await;
                 }
@@ -1187,7 +1202,7 @@ async fn host_session(
                             room,
                             anchors,
                             offers,
-                            &config.cache,
+                            cache,
                             emit,
                             &[id],
                         )
@@ -1201,7 +1216,7 @@ async fn host_session(
                                 room,
                                 anchors,
                                 offers,
-                                &config.cache,
+                                cache,
                                 emit,
                                 &[id],
                             )
@@ -1209,7 +1224,7 @@ async fn host_session(
                             emit(Event::Status(presence(&links, &room.guests, connected_once)));
                         }
                         Ok(Frame::Track { track, previews }) => {
-                            store_previews(&config.cache, previews, emit).await;
+                            store_previews(cache, previews, emit).await;
                             let forwarded = track.clone();
                             match room.update(&id, track) {
                                 Ok(true) => {
@@ -1217,11 +1232,11 @@ async fn host_session(
                                     let indexed = room.index(&id);
                                     if indexed {
                                         let snapshot = broadcast(room, anchors, emit);
-                                        let dead = fan_room(&mut links, &snapshot, offers, &config.cache).await;
-                                        release(&mut links, room, anchors, offers, &config.cache, emit, &dead).await;
+                                        let dead = fan_room(&mut links, &snapshot, offers, cache).await;
+                                        release(&mut links, room, anchors, offers, cache, emit, &dead).await;
                                     } else {
-                                        let dead = fan_peer(&mut links, &id, &id, &forwarded, offers, &config.cache).await;
-                                        release(&mut links, room, anchors, offers, &config.cache, emit, &dead).await;
+                                        let dead = fan_peer(&mut links, &id, &id, &forwarded, offers, cache).await;
+                                        release(&mut links, room, anchors, offers, cache, emit, &dead).await;
                                     }
                                 }
                                 Ok(false) => {}
@@ -1233,7 +1248,7 @@ async fn host_session(
                                 send_frame(&link.send, &Frame::Pong(nonce)).is_err()
                             });
                             if failed {
-                                release(&mut links, room, anchors, offers, &config.cache, emit, &[id]).await;
+                                release(&mut links, room, anchors, offers, cache, emit, &[id]).await;
                                 emit(Event::Status(presence(&links, &room.guests, connected_once)));
                             }
                         }
@@ -1242,12 +1257,12 @@ async fn host_session(
                         }
                         // A peer that breaks the protocol gives its seat back.
                         Ok(_) | Err(_) => {
-                            release(&mut links, room, anchors, offers, &config.cache, emit, &[id]).await;
+                            release(&mut links, room, anchors, offers, cache, emit, &[id]).await;
                             emit(Event::Status(presence(&links, &room.guests, connected_once)));
                         }
                     },
                     Inbound::Want(hash) => {
-                        let failed = if let Some(bytes) = stored_asset(offers, &config.cache, &hash).await {
+                        let failed = if let Some(bytes) = stored_asset(offers, cache, &hash).await {
                             links.get(&id).is_some_and(|link| {
                                 link.send.send(Outbound::Asset { hash, bytes }).is_err()
                             })
@@ -1258,7 +1273,7 @@ async fn host_session(
                             false
                         };
                         if failed {
-                            release(&mut links, room, anchors, offers, &config.cache, emit, &[id]).await;
+                            release(&mut links, room, anchors, offers, cache, emit, &[id]).await;
                             emit(Event::Status(presence(&links, &room.guests, connected_once)));
                         }
                     }
@@ -1266,7 +1281,7 @@ async fn host_session(
                         if let Some(link) = links.get_mut(&id) {
                             link.inflight.remove(&hash);
                         }
-                        if store_asset(&config.cache, &hash, &bytes).await.is_ok() {
+                        if store_asset(cache, &hash, &bytes).await.is_ok() {
                             emit(Event::AssetReady(hash.clone()));
                             let dead = fulfill_wants(&mut links, &hash, &bytes);
                             if !dead.is_empty() {
@@ -1275,7 +1290,7 @@ async fn host_session(
                                     room,
                                     anchors,
                                     offers,
-                                    &config.cache,
+                                    cache,
                                     emit,
                                     &dead,
                                 )
@@ -1334,7 +1349,7 @@ async fn host_session(
                             &publication.track,
                             &publication.resources,
                             offers,
-                            &config.cache,
+                            cache,
                         )
                         .await
                     {
@@ -1345,9 +1360,9 @@ async fn host_session(
                             let indexed = room.index(local);
                             if indexed {
                                 let snapshot = broadcast(room, anchors, emit);
-                                dead.extend(fan_room(&mut links, &snapshot, offers, &config.cache).await);
+                                dead.extend(fan_room(&mut links, &snapshot, offers, cache).await);
                             } else {
-                                dead.extend(fan_peer(&mut links, "", local, &forwarded, offers, &config.cache).await);
+                                dead.extend(fan_peer(&mut links, "", local, &forwarded, offers, cache).await);
                             }
                         }
                     }
@@ -1358,7 +1373,7 @@ async fn host_session(
                     link.inflight.retain(|_, at| at.elapsed() < Duration::from_secs(15));
                 }
                 for hash in &hashes {
-                    let have = protocol::session_full_picture(&config.cache, hash).is_some();
+                    let have = protocol::session_full_picture(cache, hash).is_some();
                     if have || offers_now.contains_key(hash) {
                         continue;
                     }
@@ -1384,7 +1399,7 @@ async fn host_session(
                         room,
                         anchors,
                         offers,
-                        &config.cache,
+                        cache,
                         emit,
                         &dead,
                     )
@@ -1466,17 +1481,24 @@ async fn handshake(mut pipe: Pipe, gate: &Gate) -> Result<Pipe, String> {
 /// Seat a pipe whose hello was accepted.
 async fn admit(
     pipe: Pipe,
-    local: &str,
-    offers: &Offers,
+    session: SessionContext<'_>,
     room: &mut Room,
     anchors: &mut BTreeMap<String, Instant>,
-    links: &mut BTreeMap<String, Link>,
-    next_generation: &mut u64,
-    connected_once: &mut bool,
-    notes: &mpsc::Sender<(String, u64, Inbound)>,
-    emit: &Emit,
-    cache: &Path,
+    admission: Admission<'_>,
 ) {
+    let SessionContext {
+        local,
+        offers,
+        emit,
+        cache,
+        ..
+    } = session;
+    let Admission {
+        links,
+        next_generation,
+        connected_once,
+        notes,
+    } = admission;
     debug_assert!(!pipe.remote_id.is_empty() && pipe.remote_id != local);
     let known = room.guests.iter().any(|id| id == &pipe.remote_id);
     if !known && room.guests.len() + 1 >= MAX_MEMBERS {
@@ -1525,20 +1547,17 @@ async fn admit(
 }
 
 async fn connect_attempt(
-    carrier: &Carrier,
-    invite: &Invite,
-    local: &str,
-    cache: &Path,
+    session: SessionContext<'_>,
     room: &mut Room,
     anchors: &mut BTreeMap<String, Instant>,
     seated: &RwLock<BTreeSet<String>>,
-    emit: &Emit,
     deadline: Instant,
 ) -> Result<Pipe, String> {
+    let SessionContext {
+        carrier, invite, ..
+    } = session;
     let mut pipe = open_pipe(carrier, Some(invite.steam), deadline).await?;
-    if let Err(error) =
-        greet_guest(&mut pipe, invite, local, cache, room, anchors, seated, emit).await
-    {
+    if let Err(error) = greet_guest(&mut pipe, session, room, anchors, seated).await {
         let _ = pipe.send.send(Outbound::Close);
         return Err(error);
     }
@@ -1547,14 +1566,18 @@ async fn connect_attempt(
 
 async fn greet_guest(
     pipe: &mut Pipe,
-    invite: &Invite,
-    local: &str,
-    cache: &Path,
+    session: SessionContext<'_>,
     room: &mut Room,
     anchors: &mut BTreeMap<String, Instant>,
     seated: &RwLock<BTreeSet<String>>,
-    emit: &Emit,
 ) -> Result<(), String> {
+    let SessionContext {
+        invite,
+        local,
+        cache,
+        emit,
+        ..
+    } = session;
     send_frame(
         &pipe.send,
         &Frame::Hello {
@@ -1586,21 +1609,27 @@ async fn greet_guest(
 }
 
 async fn exchange(
-    carrier: &Carrier,
-    local: &str,
-    invite: &Invite,
+    session: SessionContext<'_>,
     pipe: Pipe,
     room: &mut Room,
     anchors: &mut BTreeMap<String, Instant>,
-    offers: &Offers,
-    cache: &Path,
     seated: &RwLock<BTreeSet<String>>,
     sent_previews: &mut BTreeSet<String>,
-    commands: &mut mpsc::UnboundedReceiver<Command>,
-    changes: &mut watch::Receiver<Option<Arc<Publication>>>,
-    stopped: &mut watch::Receiver<bool>,
-    emit: &Emit,
+    controls: &mut Controls,
 ) -> Result<bool, String> {
+    let SessionContext {
+        carrier,
+        invite,
+        local,
+        cache,
+        offers,
+        emit,
+    } = session;
+    let Controls {
+        commands,
+        changes,
+        stopped,
+    } = controls;
     let Pipe {
         send,
         mut recv,

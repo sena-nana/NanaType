@@ -14,7 +14,7 @@ serde.workspace = true
 ureq.workspace = true
 md-5.workspace = true
 brotli = "8"
-flate2.workspace = true
+flate2 = { workspace = true, default-features = true }
 serde_json.workspace = true
 tungstenite = { workspace = true, features = ["handshake", "rustls-tls-webpki-roots"] }
 crossbeam-channel.workspace = true

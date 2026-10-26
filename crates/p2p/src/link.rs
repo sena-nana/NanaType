@@ -60,8 +60,10 @@ pub struct Pipe {
 #[derive(Clone)]
 pub struct Carrier {
     pub local_id: String,
-    open: Arc<dyn Fn(i32, Option<u64>, Arc<AtomicBool>) -> Result<Pipe, String> + Send + Sync>,
+    open: Arc<OpenPipe>,
 }
+
+type OpenPipe = dyn Fn(i32, Option<u64>, Arc<AtomicBool>) -> Result<Pipe, String> + Send + Sync;
 
 impl Carrier {
     pub fn new(

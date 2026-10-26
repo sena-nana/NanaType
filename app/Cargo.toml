@@ -85,7 +85,7 @@ tray-icon = { version = "0.26", default-features = false, features = ["ksni"] }
 ureq.workspace = true
 blake3.workspace = true
 gif = "0.14"
-flate2.workspace = true
+flate2 = { workspace = true, default-features = true }
 # Downloads use iter_download and our own cache writer, not its filesystem helpers.
 grammers-client = { version = "=0.11.0", default-features = false, features = ["proxy"] }
 grammers-session = { version = "=0.11.0", default-features = false, features = ["serde"] }
