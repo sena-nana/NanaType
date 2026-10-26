@@ -103,7 +103,7 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
         );
         if enabled && !reduced {
             assert!(
-                text_light::cache_counts().0 > 0,
+                text_light::cache_counts_for(*ui).0 > 0,
                 "{case}: light geometry was not captured"
             );
         }
@@ -233,7 +233,10 @@ fn sonnet_scrolling_reuses_glyph_masks_and_layout_during_retirement() {
     core.handle(Cmd::ClearDisplay, 101_100);
     ui.display.set(Arc::new(core.display().clone()));
     frame(&mut session, ui, 101_200, 1199, "scroll-exit", CAPTURES);
-    let masks = text_light::cache_counts();
+    // Other Sonnet tests render concurrently through the shared GPU renderer.
+    // Only this display's masks must remain unchanged by scrolling.
+    let masks = text_light::cache_counts_for(*ui);
+    assert!(masks.0 > 0, "retiring text must have cached glyph masks");
     let generation = session.document().context().world().layout_generation();
     ui.text_scroll.set(140.);
     frame(&mut session, ui, 101_260, 1259, "scroll-shifted", CAPTURES);
@@ -242,7 +245,7 @@ fn sonnet_scrolling_reuses_glyph_masks_and_layout_during_retirement() {
         generation
     );
     assert_eq!(
-        text_light::cache_counts(),
+        text_light::cache_counts_for(*ui),
         masks,
         "scroll only changes the sampled viewport"
     );

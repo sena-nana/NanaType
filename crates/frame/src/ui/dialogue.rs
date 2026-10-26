@@ -1508,9 +1508,13 @@ fn content(ui: Stage, source: Source) -> impl IntoView {
             base.light_preview = source == Source::Preview;
             if let Some(exit) = view.text_exit {
                 base.light_exit = Some((exit.at_ms, exit.ms));
-                // Retirement is the disappearance. Replaying the entrance
-                // on the same mount would put the old glyphs back.
-                base.masks.entrance = None;
+                // Layout-dependent masks encode partially drawn glyphs. Keep
+                // that ink frozen while it leaves; dropping the mask would
+                // replace unfinished strokes with the whole glyph. Other
+                // entrances must not replay on the retirement mount.
+                if base.layout_material.is_none() {
+                    base.masks.entrance = None;
+                }
                 let elapsed = crate::clock::now_ms().saturating_sub(exit.at_ms);
                 if let Some(spec) = &skin.dialogue.reveal.exit {
                     // Rebase the remaining duration when the presentation is mounted.

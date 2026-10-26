@@ -407,6 +407,19 @@ pub fn cache_counts() -> (usize, usize) {
     (s.masks.len(), s.masks.values().map(|p| p.bytes).sum())
 }
 
+/// Masks belonging to one stage, independent of other stages' renders.
+pub fn cache_counts_for(ui: Stage) -> (usize, usize) {
+    let s = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
+    s.masks
+        .values()
+        .filter(|p| {
+            p.light
+                .upgrade()
+                .is_some_and(|l| l.ui.display == ui.display)
+        })
+        .fold((0, 0), |(count, bytes), p| (count + 1, bytes + p.bytes))
+}
+
 type PipelineKey = (DeviceGeneration, GpuTextureFormat, ScenePresentationProfile);
 type MaskKey = (PipelineKey, u64, u64, [u32; 2], u32);
 #[derive(Debug)]

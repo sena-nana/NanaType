@@ -38,6 +38,8 @@ impl SessionBuilder {
                 .unwrap();
         }
         doc.context_mut().mount_view_root(id, view).unwrap();
-        RuntimeAgentSession::new(doc, width, height).unwrap()
+        let mut session = RuntimeAgentSession::new(doc, width, height).unwrap();
+        session.set_gpu_renderers(nanatype_frame::ui::sweep::renderers());
+        session
     }
 }

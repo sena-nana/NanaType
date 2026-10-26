@@ -16,6 +16,8 @@ const HEADER_H: f32 = 32.0;
 const COLLAPSED_H: f32 = 36.0;
 /// The unfolded card, so its form does not jump as the status changes.
 const EXPANDED_MIN_H: f32 = 150.0;
+/// Invitation controls centered in the otherwise empty partner window.
+const WAITING_CARD_W: f32 = 300.0;
 
 fn field(stacked: bool) -> Stack {
     Stack::column(0.0)
@@ -316,7 +318,7 @@ pub(crate) fn waiting_room(ui: Ui) -> AnyView {
                 Stack::column(0.0)
                     .gap_step(gap::step::CONTROL)
                     .padding(nana_ui::theme::space::SM)
-                    .width(LengthSpec::Px(300.0))
+                    .width(LengthSpec::Px(WAITING_CARD_W))
                     .align(AlignSpec::Center)
                     .surface(SemanticColorRole::Background),
             )
