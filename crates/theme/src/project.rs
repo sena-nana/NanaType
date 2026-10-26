@@ -293,8 +293,17 @@ impl PackageProject {
     }
     /// The files as a zip, unchecked (drafts may be unfinished).
     pub fn write_zip(&self, dest: &Path) -> Result<(), FileError> {
-        let file = std::fs::File::create(dest).map_err(error)?;
-        let mut zip = zip::ZipWriter::new(file);
+        self.write_zip_comment(dest, "")
+    }
+
+    pub(crate) fn write_zip_comment(&self, dest: &Path, comment: &str) -> Result<(), FileError> {
+        let parent = dest
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let mut staging = tempfile::NamedTempFile::new_in(parent).map_err(error)?;
+        let mut zip = zip::ZipWriter::new(staging.as_file_mut());
+        zip.set_comment(comment).map_err(error)?;
         for (path, bytes) in &self.files {
             zip.start_file(
                 path,
@@ -305,6 +314,8 @@ impl PackageProject {
             zip.write_all(bytes).map_err(error)?;
         }
         zip.finish().map_err(error)?;
+        staging.as_file().sync_all().map_err(error)?;
+        staging.persist(dest).map_err(error)?;
         Ok(())
     }
 }

@@ -25,6 +25,7 @@ root_exceptions = [
 
 [platform.macos]
 minimum_system_version = "13.0"
+document_types = [{ name = "NanaType Package", extensions = ["ntpkg"], role = "Editor" }]
 
 [runtime]
 # Windows ships the same file beside the executable (root_exceptions above);

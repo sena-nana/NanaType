@@ -131,6 +131,13 @@ fn fixed_module(engine: &Engine) -> Result<Module> {
 
 impl LuaSandbox {
     pub fn new(source: &str) -> Result<Self> {
+        Self::create(source, true)
+    }
+    /// Compile with the pinned interpreter without executing the supplied chunk.
+    pub fn check_source(source: &str) -> Result<()> {
+        Self::create(source, false).map(|_| ())
+    }
+    fn create(source: &str, execute: bool) -> Result<Self> {
         if source.len() > MAX_SCRIPT_BYTES || source.as_bytes().first() == Some(&0x1b) {
             bail!("only bounded Lua source is accepted");
         }
@@ -265,7 +272,11 @@ impl LuaSandbox {
         vm.eval("io=nil; os=nil; package=nil; debug=nil; require=nil; dofile=nil; loadfile=nil; load=nil; print=nil; warn=nil; collectgarbage=nil; string.dump=nil; return ''")?;
         vm.eval(&format!("{PRELUDE}\nreturn ''"))?;
         let script = format!("local plugin=(function()\n{source}\nend)()\n{BOOTSTRAP}");
-        vm.eval(&script)?;
+        if execute {
+            vm.eval(&script)?;
+        } else {
+            vm.load(source)?;
+        }
         Ok(vm)
     }
     fn allocate(&mut self, bytes: &[u8], zero: bool) -> Result<i32> {
@@ -294,7 +305,7 @@ impl LuaSandbox {
         Ok(())
     }
     /// Load and run `source`, leaving its single result on the Lua stack.
-    fn call(&mut self, source: &str) -> Result<()> {
+    fn load(&mut self, source: &str) -> Result<()> {
         self.store.set_fuel(FUEL)?;
         self.store.set_epoch_deadline(25);
         self.instance
@@ -317,6 +328,10 @@ impl LuaSandbox {
             let detail = self.error_detail()?;
             bail!("invalid Lua source: {detail}");
         }
+        Ok(())
+    }
+    fn call(&mut self, source: &str) -> Result<()> {
+        self.load(source)?;
         let status = self
             .instance
             .get_typed_func::<(i32, i32, i32, i32, i32, i32), i32>(&mut self.store, "lua_pcallk")?

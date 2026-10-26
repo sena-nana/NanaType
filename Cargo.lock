@@ -3924,6 +3924,7 @@ dependencies = [
  "nana-ui-core",
  "nana-ui-devtools",
  "nana-ui-platform",
+ "nanatype-audio",
  "nanatype-diag",
  "nanatype-frame",
  "nanatype-i18n",
@@ -3933,8 +3934,14 @@ dependencies = [
  "nanatype-secrets",
  "nanatype-settings",
  "nanatype-theme",
+ "notify",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "serde",
  "serde_json",
  "tempfile",
+ "zip",
 ]
 
 [[package]]

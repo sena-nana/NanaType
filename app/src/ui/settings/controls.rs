@@ -21,7 +21,7 @@ use crate::ui::{I18N, LinkState, Status, Ui};
 pub static ICON_PNG_B64: LazyLock<String> =
     LazyLock::new(|| base64(include_bytes!("../../../assets/tray-64.png")));
 
-pub use nanatype_frame::ui::controls::{base64, confirm, hint, label};
+pub use nanatype_frame::ui::controls::{base64, confirm, hint};
 
 use crate::ui::kit;
 

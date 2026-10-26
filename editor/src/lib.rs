@@ -9,9 +9,16 @@
 #![recursion_limit = "512"]
 
 pub mod app;
+pub mod asset;
+pub mod canvas;
 pub mod diag;
+pub mod directory;
+mod history;
 pub mod host;
 pub mod msg;
+#[cfg(target_os = "macos")]
+mod open_documents;
+pub mod recovery;
 pub mod session;
 pub mod ui;
 
@@ -59,7 +66,8 @@ pub fn run() -> ExitCode {
     if nanatype_frame::worker_entry() {
         return ExitCode::SUCCESS;
     }
-    if !instance::claim(Product::EDITOR) {
+    let launch = Launch::from_args(std::env::args().skip(1));
+    if !instance::claim_with_open(Product::EDITOR, launch.open.as_deref()) {
         return ExitCode::SUCCESS;
     }
     nanatype_frame::clock::now_ms();

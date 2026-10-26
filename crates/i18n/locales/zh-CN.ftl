@@ -72,3 +72,17 @@ package-data-source = 来源
 package-data-license = 许可
 package-data-protected = 受签名保护
 package-data-unprotected = 未受签名保护
+
+
+# Shared skin parameter controls
+skin-params-title = 皮肤参数
+skin-params-hint = 由皮肤提供的外观选项，对整套皮肤生效
+skin-params-default = 默认
+skin-params-invalid-number = 请输入数字
+skin-params-out-of-range = 需在 { $min }–{ $max } 之间
+skin-params-invalid-color = 颜色需写成 #RRGGBB
+skin-params-invalid-option = 不是可选的值
+skin-params-text-too-long = 最多 { $max } 个字
+skin-params-text-empty = 不能为空
+skin-params-text-control = 不能包含换行或控制字符
+skin-params-contrast = { $foreground }与{ $background }的对比度为 { $ratio }:1，建议不低于 { $min }:1

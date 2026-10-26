@@ -727,6 +727,24 @@ fn click_key(agent: &mut RuntimeAgentSession, key: &str) {
     let node = keyed(&agent.accessibility_dump(), key)
         .unwrap_or_else(|| panic!("missing {key}"))
         .clone();
+    // Forms can exceed the viewport. Focus first so the real scroll container reveals the field.
+    let document = agent.document().document();
+    agent
+        .document_mut()
+        .context_mut()
+        .apply_accessibility_action(
+            document,
+            nana_ui::runtime::AccessibilityActionRequest {
+                target: nana_ui::runtime::StableNodeId::new(node.id).unwrap(),
+                action: nana_ui::runtime::AccessibilityAction::Focus,
+            },
+        )
+        .unwrap();
+    agent.flush().unwrap();
+    let node = keyed(&agent.accessibility_dump(), key).unwrap().clone();
+    if node.focused && node.role != "button" {
+        return;
+    }
     // Text areas take focus from a pointer press, not an accessibility click.
     if !agent.click_node(node.id).unwrap() {
         let b = node.bounds;

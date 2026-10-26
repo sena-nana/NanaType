@@ -130,3 +130,161 @@ pkgedit-open-failed = プロジェクトを開けませんでした
 pkgedit-exported = 書き出しました
 pkgedit-export-failed = 書き出しに失敗しました
 pkgedit-debug-locate = エラー箇所へ移動
+
+pkgedit-undo = 元に戻す
+
+pkgedit-redo = やり直す
+
+pkgedit-discard-form = フォームの変更を破棄
+
+pkgedit-recovery = 復元データがあります
+
+pkgedit-recover = 復元
+
+pkgedit-width = 幅
+
+pkgedit-height = 高さ
+
+pkgedit-simulate = NanaType の個人設定を再現
+
+pkgedit-landscape = 横向き
+
+pkgedit-portrait = 縦向き
+
+pkgedit-narrow = 狭いウィンドウ
+
+pkgedit-default-size = 既定サイズ
+
+pkgedit-static = 静止・停止
+
+pkgedit-play = 再生
+
+pkgedit-reduced = 動きを減らす
+
+pkgedit-effects-off = 高度な効果をオフ
+
+pkgedit-replay = 再再生
+
+pkgedit-fit = 全体を表示
+
+pkgedit-checker = 透明グリッド
+
+pkgedit-white = 白い背景
+
+pkgedit-dark = 暗い背景
+
+pkgedit-speaker = サンプル話者
+
+pkgedit-preview-stale = 現在の内容は検証未完了です。最後の有効なプレビューを表示します。
+
+pkgedit-preview-size-error = 論理サイズ：幅 160–8192、高さ 96–8192
+
+pkgedit-operation-stale = プロジェクトが変更されました。操作を再適用してください。
+
+pkgedit-tab-properties = プロパティ
+
+pkgedit-property-select = 宣言グループを選択
+
+pkgedit-up = 上へ
+
+pkgedit-add-property-hint = 名前と TOML 値で追加。グループはインラインテーブル、リストは配列。
+
+pkgedit-property-name = フィールド名
+
+pkgedit-add = 追加
+
+pkgedit-local = ローカル上書き
+
+pkgedit-inherited = 継承・既定値
+
+pkgedit-inherit = 継承に戻す
+
+pkgedit-unbind = パラメーターの関連付けを解除
+
+pkgedit-bound-warning = 値はパラメーターに関連付けられています。置換前に解除してください。
+
+pkgedit-accept-disk = ディスクの内容を採用
+
+pkgedit-add-decor = 装飾を追加
+
+pkgedit-base = 基本スキン
+
+pkgedit-canvas-edit = キャンバス編集を有効にする
+
+pkgedit-canvas-help = 選択してドラッグで移動、右下のハンドルで装飾を拡縮。矢印キーで移動、Shift で大きく移動、Esc でキャンセル。
+
+pkgedit-cover = カバー画像のパス
+
+pkgedit-description = 説明
+
+pkgedit-disk-conflict = ディスクとの競合
+
+pkgedit-duplicate = 要素を複製
+
+pkgedit-event-sequence = テストイベント列（JSON 配列、最大 32 件）
+
+pkgedit-file-target = 作成・移動先のパッケージ内パス
+
+pkgedit-keep-local = ローカルの変更を保持
+
+pkgedit-layer-down = 一つ下のレイヤーへ
+
+pkgedit-layer-up = 一つ上のレイヤーへ
+
+pkgedit-layout-base = 基本レイアウト
+
+pkgedit-layout-rule = ブレークポイントルール
+
+pkgedit-log-filter = ログを絞り込み
+
+pkgedit-min-app = アプリの最低バージョン
+
+pkgedit-name = 名前
+
+pkgedit-new-file = テキストファイルを作成
+
+pkgedit-open-directory = プロジェクトフォルダーを開く…
+
+pkgedit-origin-directory = フォルダープロジェクト
+
+pkgedit-reference-auto = 宣言内の参照・自動更新
+
+pkgedit-reference-manual = プログラム内の参照・手動確認が必要
+
+pkgedit-rename = 名前変更・移動
+
+pkgedit-rename-question = ファイルパスと以下の参照を変更しますか。プログラム内の参照は手動で確認してください。
+
+pkgedit-replace = ファイルを置換…
+
+pkgedit-replace-all = すべて置換
+
+pkgedit-replace-one = 現在の一致を置換
+
+pkgedit-replacement = 置換後の文字列
+
+pkgedit-save-copy = ローカルのコピーを別名保存…
+
+pkgedit-search-previous = 前へ
+
+pkgedit-tags = タグ（コンマ区切り）
+
+pkgedit-unused-asset = 認識された参照はありません
+
+pkgedit-tab-sounds = 効果音
+
+pkgedit-add-responsive = 縦横レイアウトを作成
+
+pkgedit-template = テンプレートを入力
+
+pkgedit-property-exists = 未宣言のフィールド名を入力してください
+
+pkgedit-reload-directory = フォルダープロジェクトを再読み込み
+
+pkgedit-source-too-large = ソースが編集上限（1 MiB）を超えています。
+
+pkgedit-layout-matched = 適用順序（後のレイヤーが上書き）
+
+pkgedit-bind = パラメーターに関連付け
+
+pkgedit-pending-forms = 先に未適用のフォーム変更を適用または破棄してください。

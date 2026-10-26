@@ -30,6 +30,7 @@ use nanatype_theme::{
     tail_geometry,
 };
 
+use super::editor_geometry::Capture;
 use super::overflow;
 use super::rich::{Env, Look, RevealPlan, effect_table, to_rich};
 use super::surface::{self, Surface, affine, calc, len};
@@ -1296,8 +1297,16 @@ fn shader_art(ui: Stage, ctx: &BoxCtx, layer: DecorLayer) -> AnyView {
         .dialogue
         .decor
         .iter()
-        .filter(|d| d.layer == layer && d.shader.is_some() && decor_shown(d, ctx.source))
-        .map(|d| decor_view(ui, ctx, d))
+        .enumerate()
+        .filter(|(_, d)| d.layer == layer && d.shader.is_some() && decor_shown(d, ctx.source))
+        .map(|(index, d)| {
+            decor_view(
+                ui,
+                ctx,
+                d,
+                ctx.skin.decor_indices.get(index).copied().unwrap_or(index),
+            )
+        })
         .collect();
     (art, layers).into_any()
 }
@@ -1660,6 +1669,7 @@ fn nameplate(ui: Stage, ctx: &BoxCtx) -> impl IntoView + use<> {
                     }),
             )
             .key("dialogue-nameplate")
+            .editor_part(ui, "nameplate")
             .children(widget(Text::new("").style(st)).bind(move |t: &mut Text| {
                 let n = name();
                 if t.value != n {
@@ -1688,8 +1698,9 @@ fn portrait(ui: Stage, ctx: &BoxCtx) -> impl IntoView + use<> {
             }),
     )
     .key("dialogue-portrait")
+    .editor_part(ui, "portrait")
     .visible(move || {
-        source != Source::Preview
+        (source != Source::Preview || ui.editor_nodes.is_some())
             && ui.skin.with(|s| s.dialogue.portrait.visible)
             && !(source == Source::Display && drawn(ui).empty)
     })
@@ -1716,7 +1727,7 @@ fn portrait(ui: Stage, ctx: &BoxCtx) -> impl IntoView + use<> {
     })
 }
 
-fn decor_view(ui: Stage, ctx: &BoxCtx, dec: &DecorSpec) -> AnyView {
+fn decor_view(ui: Stage, ctx: &BoxCtx, dec: &DecorSpec, index: usize) -> AnyView {
     let ctx = ctx.clone();
     let dec = dec.clone();
     let source = ctx.source;
@@ -1747,6 +1758,7 @@ fn decor_view(ui: Stage, ctx: &BoxCtx, dec: &DecorSpec) -> AnyView {
                 speaker,
                 dec.image.as_ref().and_then(|path| ctx.url(path)),
                 *animate,
+                Some((ui, index)),
             )
         },
     )
@@ -1769,7 +1781,7 @@ pub(super) fn decor<F>(
 where
     F: Fn() -> bool + Send + 'static,
 {
-    decor_on(skin, dec, visible, image_url, false)
+    decor_on(skin, dec, visible, image_url, false, None)
 }
 
 fn decor_on<F>(
@@ -1778,6 +1790,7 @@ fn decor_on<F>(
     visible: Option<F>,
     image_url: Option<String>,
     animate: bool,
+    edit: Option<(Stage, usize)>,
 ) -> AnyView
 where
     F: Fn() -> bool + Send + 'static,
@@ -1811,6 +1824,7 @@ where
                 }
             }),
     );
+    let mut motion_ref = None;
     if let Some(visible) = visible {
         el = el.visible(visible);
     }
@@ -1823,6 +1837,14 @@ where
             (affine(0.0, dy, rotate, 1.0), opacity * alpha)
         });
         el = el.node_ref(node);
+        motion_ref = Some(node);
+    }
+    if let Some((ui, index)) = edit {
+        if let Some(node) = motion_ref {
+            super::editor_geometry::track(ui, format!("decor.{index}"), node);
+        } else {
+            el = el.editor_part(ui, format!("decor.{index}"));
+        }
     }
     if dec.text.is_empty() {
         return el.into_any();
@@ -1847,9 +1869,17 @@ fn decor_views(ui: Stage, ctx: &BoxCtx, layer: DecorLayer) -> Vec<AnyView> {
         .dialogue
         .decor
         .iter()
-        .filter(|d| d.layer == layer && decor_shown(d, ctx.source))
-        .filter(|d| d.shader.is_none() || layer == DecorLayer::Below)
-        .map(|d| decor_view(ui, ctx, d))
+        .enumerate()
+        .filter(|(_, d)| d.layer == layer && decor_shown(d, ctx.source))
+        .filter(|(_, d)| d.shader.is_none() || layer == DecorLayer::Below)
+        .map(|(index, d)| {
+            decor_view(
+                ui,
+                ctx,
+                d,
+                ctx.skin.decor_indices.get(index).copied().unwrap_or(index),
+            )
+        })
         .collect()
 }
 
@@ -1968,7 +1998,9 @@ fn continue_indicator_on(ui: Stage, ctx: &BoxCtx, animate: bool) -> impl IntoVie
                     }
                 });
             }
-            el.key("dialogue-continue-image").into_any()
+            el.key("dialogue-continue-image")
+                .editor_part(ui, "continue")
+                .into_any()
         }
         None => {
             let mut st = NodeStyle::default();
@@ -1980,6 +2012,7 @@ fn continue_indicator_on(ui: Stage, ctx: &BoxCtx, animate: bool) -> impl IntoVie
             }
             widget(Text::new(cs.glyph.clone()).decorative().style(st))
                 .key("dialogue-continue-glyph")
+                .editor_part(ui, "continue")
                 .into_any()
         }
     };

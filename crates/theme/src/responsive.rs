@@ -76,7 +76,7 @@ pub fn dialogue_is_portrait(skin: &Skin, [w, h]: [f32; 2]) -> bool {
 }
 
 /// Size is the actual client area, before the settings preview's paint transform.
-pub fn responsive_dialogue(skin: &Skin, [w, h]: [f32; 2]) -> Skin {
+pub fn layout_dialogue(skin: &Skin, [w, h]: [f32; 2]) -> Skin {
     let mut result = skin.clone();
     let Some(spec) = &skin.dialogue.responsive else {
         return result;
@@ -96,6 +96,22 @@ pub fn responsive_dialogue(skin: &Skin, [w, h]: [f32; 2]) -> Skin {
             rule.layout.apply_to(d);
         }
     }
+    result
+}
+
+pub fn responsive_dialogue(skin: &Skin, [w, h]: [f32; 2]) -> Skin {
+    let mut result = layout_dialogue(skin, [w, h]);
+    if skin.dialogue.responsive.is_none() {
+        return result;
+    }
+    let d = &mut result.dialogue;
+    result.decor_indices = d
+        .decor
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| v.min_window.is_none_or(|[mw, mh]| w >= mw && h >= mh))
+        .map(|(i, _)| i)
+        .collect();
     // Nine-slice corners shrink uniformly only when their opposing cuts cannot fit.
     if let Some(frame) = &mut d.box_.frame {
         let [t, r, b, l] = frame.slice.map(|v| v as f32);

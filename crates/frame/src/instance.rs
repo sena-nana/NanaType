@@ -8,6 +8,7 @@
 
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::thread;
 use std::time::Duration;
@@ -72,6 +73,98 @@ pub fn serve(product: Product, show: impl Fn() + Send + 'static) {
     if let Some(listener) = LISTENER.get().and_then(|l| l.try_clone().ok()) {
         listen(product, listener, show);
     }
+}
+
+/// Editor launches can hand the primary process an absolute package/directory path.
+pub fn claim_with_open(product: Product, path: Option<&Path>) -> bool {
+    let Some(path) = path else {
+        return claim(product);
+    };
+    let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, product.port()));
+    if let Ok(listener) = TcpListener::bind(addr) {
+        LISTENER.set(listener).ok();
+        return true;
+    }
+    let path = path
+        .canonicalize()
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default().join(path));
+    if knock_open(product, &addr, &path) {
+        return false;
+    }
+    claim(product)
+}
+fn knock_open(product: Product, addr: &SocketAddr, path: &Path) -> bool {
+    let Ok(bytes) = serde_json::to_vec(path) else {
+        return false;
+    };
+    if bytes.len() > 4096 {
+        return false;
+    }
+    let Ok(mut stream) = TcpStream::connect_timeout(addr, Duration::from_millis(500)) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(1)));
+    let greeting = product.hello().replace(":show:", ":open:");
+    if stream
+        .write_all(greeting.as_bytes())
+        .and_then(|_| stream.write_all(&(bytes.len() as u32).to_le_bytes()))
+        .and_then(|_| stream.write_all(&bytes))
+        .is_err()
+    {
+        return false;
+    }
+    let ready = product.ready();
+    let mut reply = vec![0; ready.len()];
+    stream.read_exact(&mut reply).is_ok() && reply == ready.as_bytes()
+}
+pub fn serve_with_open(product: Product, show: impl Fn(Option<PathBuf>) + Send + 'static) {
+    let Some(listener) = LISTENER.get().and_then(|l| l.try_clone().ok()) else {
+        return;
+    };
+    listen_open(product, listener, show);
+}
+fn listen_open(
+    product: Product,
+    listener: TcpListener,
+    show: impl Fn(Option<PathBuf>) + Send + 'static,
+) {
+    thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
+            let mut hello = vec![0; product.hello().len()];
+            if stream.read_exact(&mut hello).is_err() {
+                continue;
+            }
+            let path = if hello == product.hello().as_bytes() {
+                None
+            } else if hello == product.hello().replace(":show:", ":open:").as_bytes() {
+                let mut length = [0; 4];
+                if stream.read_exact(&mut length).is_err() {
+                    continue;
+                }
+                let length = u32::from_le_bytes(length) as usize;
+                if length > 4096 {
+                    continue;
+                }
+                let mut bytes = vec![0; length];
+                if stream.read_exact(&mut bytes).is_err() {
+                    continue;
+                }
+                let Ok(path) = serde_json::from_slice::<PathBuf>(&bytes) else {
+                    continue;
+                };
+                if !path.is_absolute() {
+                    continue;
+                }
+                Some(path)
+            } else {
+                continue;
+            };
+            show(path);
+            let _ = stream.write_all(product.ready().as_bytes());
+        }
+    });
 }
 
 /// Who is launching: the account's home folder, which differs per user and
@@ -140,6 +233,21 @@ fn listen(product: Product, listener: TcpListener, show: impl Fn() + Send + 'sta
 mod tests {
     use super::*;
     use std::sync::mpsc;
+
+    #[test]
+    fn later_launch_forwards_an_absolute_unicode_path() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = mpsc::channel();
+        listen_open(Product::EDITOR, listener, move |path| {
+            tx.send(path).unwrap()
+        });
+        let path = std::env::temp_dir().join("工程 日本語.ntpkg");
+        assert!(knock_open(Product::EDITOR, &addr, &path));
+        assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Some(path));
+        assert!(knock(Product::EDITOR, &addr));
+        assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), None);
+    }
 
     #[test]
     fn a_foreign_listener_is_not_mistaken_for_an_instance() {

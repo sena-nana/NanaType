@@ -57,7 +57,7 @@ pub fn editor_window(ui: Ui, toasts: EntityRef<ToastStack>) -> impl IntoView {
             .surface(SemanticColorRole::Background)
             .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
     )
-    .children(body);
+    .children((body, super::canvas_controls::overlay(ui)));
     super::feedback::with_toasts(root, toasts)
 }
 

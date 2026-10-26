@@ -398,6 +398,44 @@ impl Drop for ChildGuard {
     }
 }
 
+/// Blocking, bounded compile-only transport. Hosts invoke this on a background thread.
+pub fn check_source_in_worker(executable: &Path, source: String) -> Result<(), String> {
+    if source.len() > crate::MAX_SCRIPT_BYTES {
+        return Err("Lua source exceeds budget".into());
+    }
+    let Launched {
+        child,
+        mut input,
+        mut output,
+        errors,
+        #[cfg(windows)]
+            job: _job,
+        ..
+    } = launch(executable).map_err(|e| e.to_string())?;
+    let _guard = ChildGuard(Arc::new(Mutex::new(child)));
+    let stderr = StderrTail::default();
+    if let Some(errors) = errors {
+        stderr.follow(errors).map_err(|e| e.to_string())?;
+    }
+    write_message(&mut input, &WorkerRequest::Check { source }).map_err(|e| e.to_string())?;
+    let (tx, rx) = mpsc::sync_channel(1);
+    std::thread::Builder::new()
+        .name("lua-compile-response".into())
+        .spawn(move || {
+            let _ = tx.send(read_message::<WorkerResponse>(&mut output));
+        })
+        .map_err(|e| e.to_string())?;
+    match rx
+        .recv_timeout(Duration::from_secs(15))
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?
+    {
+        WorkerResponse::Ready => Ok(()),
+        WorkerResponse::Error { message } => Err(message),
+        _ => Err("unexpected compile response".into()),
+    }
+}
+
 /// The argument a host starts its worker executable with.
 pub const WORKER_ARG: &str = "--plugin-worker";
 
@@ -412,6 +450,9 @@ pub fn run_worker() {
     let mut vm = None;
     while let Ok(request) = read_message::<WorkerRequest>(&mut input) {
         let result = match request {
+            WorkerRequest::Check { source } if vm.is_none() => {
+                crate::LuaSandbox::check_source(&source).map(|_| WorkerResponse::Ready)
+            }
             WorkerRequest::Init { source } if vm.is_none() => {
                 crate::LuaSandbox::new(&source).map(|new| {
                     vm = Some(new);

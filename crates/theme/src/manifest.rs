@@ -1547,6 +1547,9 @@ impl Default for EffectDefaults {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Skin {
+    /// Original declaration indices after responsive visibility filtering.
+    #[serde(skip)]
+    pub decor_indices: Vec<usize>,
     /// Declarative host processing feeding material inputs.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub pipelines: BTreeMap<String, crate::PipelineSpec>,

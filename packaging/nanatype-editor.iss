@@ -32,6 +32,7 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
+ChangesAssociations=yes
 
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
@@ -44,6 +45,13 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; THIRD_PARTY_LICENSES.txt is already part of the validated package payload.
+
+[Registry]
+; Offer Open With without changing the user's chosen default application.
+Root: HKCU; Subkey: "Software\Classes\.ntpkg\OpenWithProgids"; ValueType: string; ValueName: "NanaTypeEditor.Package"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\NanaTypeEditor.Package"; ValueType: string; ValueData: "NanaType Package"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\NanaTypeEditor.Package\DefaultIcon"; ValueType: string; ValueData: "{app}\NanaTypeEditor.exe,0"
+Root: HKCU; Subkey: "Software\Classes\NanaTypeEditor.Package\shell\open\command"; ValueType: string; ValueData: """{app}\NanaTypeEditor.exe"" ""%1"""
 
 [Icons]
 Name: "{group}\NanaType Editor"; Filename: "{app}\NanaTypeEditor.exe"

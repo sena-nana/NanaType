@@ -8,6 +8,11 @@ use crate::{
     ZipFiles, clean_path, load::MANIFEST, verify_integrity,
 };
 use serde::{Deserialize, Serialize};
+mod authoring;
+pub use crate::load::authored_layout;
+pub use authoring::*;
+mod resources;
+pub use resources::*;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
@@ -303,6 +308,20 @@ pub fn inventory_reusing(
     previous: &[FileInfo],
     changed: &str,
 ) -> Vec<FileInfo> {
+    inventory_inner(project, previous, changed, true)
+}
+
+/// UI inventory: resource digests are supplied by background validation.
+pub fn inventory_unhashed(project: &PackageProject, previous: &[FileInfo]) -> Vec<FileInfo> {
+    inventory_inner(project, previous, "", false)
+}
+
+fn inventory_inner(
+    project: &PackageProject,
+    previous: &[FileInfo],
+    changed: &str,
+    hash_missing: bool,
+) -> Vec<FileInfo> {
     let known: BTreeMap<&str, &FileInfo> = previous
         .iter()
         .filter(|f| f.path != changed)
@@ -345,13 +364,26 @@ pub fn inventory_reusing(
                 .get(path.as_str())
                 .filter(|f| f.bytes == bytes.len() as u64)
                 .map_or_else(
-                    || blake3::hash(bytes).to_hex().to_string(),
+                    || {
+                        if hash_missing {
+                            blake3::hash(bytes).to_hex().to_string()
+                        } else {
+                            String::new()
+                        }
+                    },
                     |f| f.hash.clone(),
                 );
             FileInfo {
                 bytes: bytes.len() as u64,
                 hash,
-                editable: project.can_edit(path) && kind.text(),
+                editable: dependency.is_none()
+                    && path != INTEGRITY_FILE
+                    && kind.text()
+                    && match &seal {
+                        Ok(None) => true,
+                        Ok(Some(s)) => s.editable.contains(path),
+                        Err(_) => false,
+                    },
                 path: path.clone(),
                 kind,
                 format,
@@ -554,6 +586,48 @@ pub fn locate(project: &PackageProject, diagnostic: &SkinDiagnostic) -> SourceDi
         crate::Severity::Error => Level::Error,
         crate::Severity::Warning => Level::Warning,
     };
+    if let Some((group, id)) = diagnostic.field.split_once('.')
+        && matches!(group, "shaders" | "materials")
+        && let Some(table) = project
+            .files
+            .get(MANIFEST)
+            .and_then(|b| std::str::from_utf8(b).ok())
+            .and_then(|t| parse_document(t).ok())
+        && let Some(source) = table
+            .get(group)
+            .and_then(|v| v.get(id.split('.').next().unwrap_or(id)))
+            .and_then(|v| v.get("source"))
+            .and_then(PropertyValue::as_str)
+    {
+        let path = source
+            .strip_prefix("pkg:")
+            .and_then(|p| p.split_once('/'))
+            .map(|(id, p)| format!("dependencies/{id}/{p}"))
+            .unwrap_or_else(|| source.to_owned());
+        if let Some(text) = project
+            .files
+            .get(&path)
+            .and_then(|b| std::str::from_utf8(b).ok())
+            && let Some((line, column)) = diagnostic.message.lines().find_map(|l| {
+                let (_, p) = l.split_once("wgsl:")?;
+                let mut p = p.split(':');
+                Some((
+                    p.next()?.parse::<usize>().ok()?,
+                    p.next()?.trim().parse::<usize>().ok()?,
+                ))
+            })
+            && line > 0
+            && line <= text.lines().count().max(1)
+        {
+            let offset = text
+                .split_inclusive('\n')
+                .take(line - 1)
+                .map(str::len)
+                .sum::<usize>()
+                + column.saturating_sub(1);
+            return located(&path, text, offset, 1, level, diagnostic.message.clone());
+        }
+    }
     let mut field = diagnostic.field.clone();
     // Early package budget errors name a file; locate its data declaration.
     if field == PACKAGE_MANIFEST
@@ -612,6 +686,32 @@ pub fn locate(project: &PackageProject, diagnostic: &SkinDiagnostic) -> SourceDi
 }
 
 /// Re-indent JSON with two spaces, keeping key order and every token as written.
+pub fn find_matches(text: &str, needle: &str) -> Vec<(usize, usize)> {
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    let mut lower = String::new();
+    let mut offsets = Vec::new();
+    for (start, c) in text.char_indices() {
+        let end = start + c.len_utf8();
+        for c in c.to_lowercase() {
+            let before = lower.len();
+            lower.push(c);
+            offsets.extend(std::iter::repeat_n((start, end), lower.len() - before));
+        }
+    }
+    let needle = needle.to_lowercase();
+    let mut result = Vec::new();
+    for (i, m) in lower.match_indices(&needle).take(10_000) {
+        let (start, _) = offsets[i];
+        let (_, end) = offsets[i + m.len() - 1];
+        if result.last() != Some(&(start, end - start)) {
+            result.push((start, end - start));
+        }
+    }
+    result
+}
+
 pub fn format_json(text: &str) -> Result<String, String> {
     serde_json::from_str::<serde::de::IgnoredAny>(text).map_err(|e| e.to_string())?;
     let mut out = String::with_capacity(text.len());
@@ -726,6 +826,12 @@ pub fn format_toml(text: &str) -> Result<String, String> {
 /// The `package.toml` fields the metadata form edits.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Metadata {
+    pub name: crate::Localized,
+    pub description: crate::Localized,
+    pub min_app: String,
+    pub base: String,
+    pub preview: String,
+    pub tags: Vec<String>,
     pub version: String,
     pub author: String,
     pub created_at: String,
@@ -734,9 +840,43 @@ pub struct Metadata {
     pub capabilities: Vec<PackageCapability>,
     pub dependencies: BTreeMap<String, String>,
 }
+
+/// Parse every dependency row; malformed or duplicate rows must never disappear.
+pub fn parse_dependencies(text: &str) -> Result<BTreeMap<String, String>, String> {
+    let mut result = BTreeMap::new();
+    for (index, line) in text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let fail = |detail: &str| format!("{}: {detail} ({line})", index + 1);
+        let (id, version) = line
+            .split_once('@')
+            .ok_or_else(|| fail("expected package.id@exact.version"))?;
+        let (id, version) = (id.trim(), version.trim());
+        if !crate::package::valid_id(id) || version.is_empty() || version.contains('@') {
+            return Err(fail("invalid package ID or exact version"));
+        }
+        // Reuse the manifest's version and dependency validation.
+        let probe = format!(
+            "format=1\nschema=3\nid='editor.dependencies'\nversion='1.0.0'\ncapabilities=['skin']\n[dependencies]\n{id:?}={version:?}\n"
+        );
+        PackageManifest::parse(&probe).map_err(|e| fail(&e.to_string()))?;
+        if result.insert(id.to_owned(), version.to_owned()).is_some() {
+            return Err(fail("duplicate package ID"));
+        }
+    }
+    Ok(result)
+}
 impl Metadata {
     pub fn of(manifest: &PackageManifest) -> Self {
         Self {
+            name: manifest.meta.name.clone(),
+            description: manifest.meta.description.clone(),
+            min_app: manifest.meta.min_app.clone(),
+            base: manifest.meta.base.clone().unwrap_or_default(),
+            preview: manifest.meta.preview.clone().unwrap_or_default(),
+            tags: manifest.meta.tags.clone(),
             version: manifest.meta.version.clone(),
             author: manifest.meta.author.clone(),
             created_at: manifest.created_at.clone(),
@@ -774,9 +914,37 @@ pub fn apply_metadata(project: &mut PackageProject, metadata: &Metadata) -> Resu
         if value.is_empty() && matches!(key, "created_at" | "licensed_to") {
             doc.remove(key);
         } else {
-            doc[key] = toml_edit::value(value);
+            let mut next = toml_edit::Value::from(value);
+            if let Some(previous) = doc.get(key).and_then(toml_edit::Item::as_value) {
+                *next.decor_mut() = previous.decor().clone();
+            }
+            doc[key] = toml_edit::Item::Value(next);
         }
     };
+    string(&mut doc, "min_app", &metadata.min_app);
+    for (key, value) in [("base", &metadata.base), ("preview", &metadata.preview)] {
+        if value.trim().is_empty() {
+            doc.remove(key);
+        } else {
+            string(&mut doc, key, value.trim());
+        }
+    }
+    for (key, values) in [
+        ("name", &metadata.name),
+        ("description", &metadata.description),
+    ] {
+        if !doc.contains_key(key) {
+            doc[key] = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+        for (locale, value) in values {
+            doc[key][locale] = toml_edit::value(value.as_str());
+        }
+    }
+    let mut tags = toml_edit::Array::new();
+    for tag in &metadata.tags {
+        tags.push(tag.as_str());
+    }
+    doc["tags"] = toml_edit::value(tags);
     string(&mut doc, "version", &metadata.version);
     string(&mut doc, "author", &metadata.author);
     string(&mut doc, "created_at", &metadata.created_at);
@@ -797,11 +965,27 @@ pub fn apply_metadata(project: &mut PackageProject, metadata: &Metadata) -> Resu
     if metadata.dependencies.is_empty() {
         doc.remove("dependencies");
     } else {
-        let mut table = toml_edit::Table::new();
-        for (id, version) in &metadata.dependencies {
-            table[id.as_str()] = toml_edit::value(version.as_str());
+        if !doc.contains_key("dependencies") {
+            doc["dependencies"] = toml_edit::Item::Table(toml_edit::Table::new());
         }
-        doc["dependencies"] = toml_edit::Item::Table(table);
+        let table = doc["dependencies"]
+            .as_table_like_mut()
+            .ok_or_else(|| error("dependencies must be a table"))?;
+        let removed = table
+            .iter()
+            .map(|(k, _)| k.to_owned())
+            .filter(|k| !metadata.dependencies.contains_key(k))
+            .collect::<Vec<_>>();
+        for key in removed {
+            table.remove(&key);
+        }
+        for (id, version) in &metadata.dependencies {
+            let mut value = toml_edit::Value::from(version.as_str());
+            if let Some(old) = table.get(id).and_then(toml_edit::Item::as_value) {
+                *value.decor_mut() = old.decor().clone();
+            }
+            table.insert(id, toml_edit::Item::Value(value));
+        }
     }
     let lua = metadata.capabilities.contains(&PackageCapability::Lua);
     let mut next = project.clone();
@@ -884,6 +1068,7 @@ pub fn read_archive(path: &Path) -> Result<PackageProject, FileError> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DraftOrigin {
+    Directory { path: PathBuf },
     New,
     Installed { id: String },
     Archive { path: PathBuf },
@@ -908,7 +1093,7 @@ fn valid_draft_id(id: &str) -> bool {
         && !id.starts_with('.')
 }
 
-/// Save atomically to `<dir>/<id>.ntdraft` plus its `.json` description.
+/// Atomically save bytes and metadata together in `<dir>/<id>.ntdraft`.
 pub fn save_draft(dir: &Path, info: &DraftInfo, project: &PackageProject) -> Result<(), FileError> {
     if !valid_draft_id(&info.id) {
         return Err(error("invalid draft ID"));
@@ -916,13 +1101,8 @@ pub fn save_draft(dir: &Path, info: &DraftInfo, project: &PackageProject) -> Res
     project.check_budget()?;
     std::fs::create_dir_all(dir).map_err(error)?;
     let archive = dir.join(format!("{}.ntdraft", info.id));
-    let staging = dir.join(format!(".{}.ntdraft.tmp", info.id));
-    project.write_zip(&staging)?;
-    std::fs::rename(&staging, &archive).map_err(error)?;
-    let meta = dir.join(format!("{}.json", info.id));
-    let staging = dir.join(format!(".{}.json.tmp", info.id));
-    std::fs::write(&staging, serde_json::to_vec_pretty(info).map_err(error)?).map_err(error)?;
-    std::fs::rename(&staging, &meta).map_err(error)
+    // Metadata and bytes commit together. Older drafts with sidecar JSON remain readable.
+    project.write_zip_comment(&archive, &serde_json::to_string(info).map_err(error)?)
 }
 
 /// Saved drafts, newest first. Unreadable entries are skipped.
@@ -931,10 +1111,10 @@ pub fn list_drafts(dir: &Path) -> Vec<DraftInfo> {
         .into_iter()
         .flatten()
         .flatten()
-        .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+        .filter(|e| e.path().extension().is_some_and(|x| x == "ntdraft"))
         .filter_map(|e| {
-            let bytes = std::fs::read(e.path()).ok()?;
-            let info: DraftInfo = serde_json::from_slice(&bytes).ok()?;
+            let id = e.path().file_stem()?.to_str()?.to_owned();
+            let info = read_draft_info(dir, &id).ok()?;
             (valid_draft_id(&info.id) && dir.join(format!("{}.ntdraft", info.id)).is_file())
                 .then_some(info)
         })
@@ -947,10 +1127,23 @@ pub fn load_draft(dir: &Path, id: &str) -> Result<(DraftInfo, PackageProject), F
     if !valid_draft_id(id) {
         return Err(error("invalid draft ID"));
     }
-    let info: DraftInfo =
-        serde_json::from_slice(&std::fs::read(dir.join(format!("{id}.json"))).map_err(error)?)
-            .map_err(error)?;
+    let info = read_draft_info(dir, id)?;
     Ok((info, read_archive(&dir.join(format!("{id}.ntdraft")))?))
+}
+
+fn read_draft_info(dir: &Path, id: &str) -> Result<DraftInfo, FileError> {
+    let file = std::fs::File::open(dir.join(format!("{id}.ntdraft"))).map_err(error)?;
+    let zip = zip::ZipArchive::new(file).map_err(error)?;
+    let info: DraftInfo = if zip.comment().is_empty() {
+        serde_json::from_slice(&std::fs::read(dir.join(format!("{id}.json"))).map_err(error)?)
+    } else {
+        serde_json::from_slice(zip.comment())
+    }
+    .map_err(error)?;
+    if info.id != id {
+        return Err(error("draft identity differs from filename"));
+    }
+    Ok(info)
 }
 
 /// Delete a draft and its description. Installed packages are untouched.

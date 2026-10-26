@@ -12,12 +12,17 @@ use crate::session::Action;
 pub enum FileTarget {
     /// A `.ntpkg` to open as a project.
     EditPackage,
+    OpenDirectory,
     /// Where to export the open project.
     ExportProject,
     /// A file to import into the open project.
     ImportProjectAsset,
+    ReplaceProjectAsset,
+    SaveConflict,
 }
 
+// The dominant payload is an editor action; keep keystrokes allocation-free.
+#[allow(clippy::large_enum_variant)]
 pub enum Msg {
     /// The package editor itself (`crate::session`).
     PackageEditor(Action),

@@ -829,17 +829,17 @@ skin-edit-draft-hint = プレビューのみ（未保存）
 skin-edit-unavailable = このスキンは現在プレビューできません。
 skin-edit-save = 保存
 skin-edit-saved = 保存済み
-skin-params-title = スキンのオプション
-skin-params-hint = このスキンが用意した外観の設定です。スキン全体に適用されます。
-skin-params-default = デフォルト
-skin-params-invalid-number = 数値を入力してください
-skin-params-out-of-range = { $min }～{ $max } の範囲で指定してください
-skin-params-invalid-color = #RRGGBB 形式で指定してください
-skin-params-invalid-option = 選択肢にない値です
-skin-params-text-too-long = { $max } 文字以内で入力してください
-skin-params-text-empty = 空にはできません
-skin-params-text-control = 改行や制御文字は使えません
-skin-params-contrast = { $foreground } と { $background } のコントラスト比は { $ratio }:1 です。{ $min }:1 以上を推奨します
+
+
+
+
+
+
+
+
+
+
+
 settings-packages = プラグインとパッケージ
 packages-import = パッケージを読み込む
 packages-dependencies = 依存関係

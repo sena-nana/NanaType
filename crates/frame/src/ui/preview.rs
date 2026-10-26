@@ -17,6 +17,7 @@ use nanatype_settings::{Settings, SkinPersonalization, SurfacePersonalization};
 use nanatype_theme::Skin;
 
 use super::controls::hint;
+use super::editor_geometry::Capture;
 use super::kit::{gap, inset};
 use super::{Stage, dialogue, history};
 
@@ -329,7 +330,11 @@ fn sample_stage(
     // The input window draws its box from the display profile, with the
     // skin preview on and the sample speaker in the name plate.
     settings.general.input_skin_preview = true;
-    settings.general.speaker_name = ui.now_t("skins-preview-name");
+    settings.general.speaker_name = if ui.editor_nodes.is_some() {
+        ui.preview_name.get_untracked()
+    } else {
+        ui.now_t("skins-preview-name")
+    };
     settings
         .skin
         .personalizations
@@ -349,7 +354,17 @@ fn sample_stage(
     let display = crate::canvas::size_of(crate::canvas::Canvas::Display, &skin, &settings);
     let history = crate::canvas::size_of(crate::canvas::Canvas::History, &skin, &settings);
     let mut preview = Stage::new(settings, skin.clone(), ui.locale.get_untracked());
+    preview.editor_nodes = ui.editor_nodes;
     preview.asset_urls.set(urls.clone());
+    if ui.editor_nodes.is_some() {
+        let mut portraits = HashMap::new();
+        if let Some(path) = &skin.dialogue.portrait.image
+            && let Some(url) = urls.get(&format!("skin:{path}"))
+        {
+            portraits.insert("default".into(), url.clone());
+        }
+        preview.portraits.set(Arc::new(portraits));
+    }
     preview.reduced_motion = ui.reduced_motion;
     preview.now = ui.now;
     preview.preview_playback = ui.preview_playback;
@@ -366,11 +381,6 @@ fn sample_stage(
         display: [display.0, display.1],
         history: [history.0, history.1],
     })
-}
-
-/// The designed display sample. Previews show this, not text the user typed.
-fn designed_display(ui: Stage) -> String {
-    ui.now_t("skin-edit-sample")
 }
 
 fn history_row(
@@ -692,7 +702,11 @@ fn display_view(ready: &SampleStage, ui: Stage, text: &str) -> AnyView {
         skin: ready.skin.clone(),
         urls: ready.urls.clone(),
         source: dialogue::Source::Preview,
-        preview_name: ui.now_t("skins-preview-name"),
+        preview_name: if ui.editor_nodes.is_some() {
+            ui.preview_name.get_untracked()
+        } else {
+            ui.now_t("skins-preview-name")
+        },
     };
     dialogue::preview_box(ready.preview, ctx, &nanatype_markup::parse(text).doc)
 }
@@ -708,7 +722,13 @@ pub fn sample(
 ) -> Option<(AnyView, [f32; 2])> {
     let ready = sample_stage(ui, base, id, draft, urls)?;
     let (view, size) = if surface == Surface::History {
-        play_history(ready.preview, Arc::new(designed_history(ui)));
+        let mut rows = designed_history(ui);
+        if let Some(row) = rows.first_mut() {
+            let doc = nanatype_markup::parse(&draft.history.text).doc;
+            row.item.doc = doc.clone();
+            row.doc = Arc::new(doc);
+        }
+        play_history(ready.preview, Arc::new(rows));
         (
             history::history_window(ready.preview).into_any(),
             ready.history,
@@ -717,7 +737,7 @@ pub fn sample(
         ready
             .preview
             .draft
-            .set(Arc::new(nanatype_markup::parse(&designed_display(ui)).doc));
+            .set(Arc::new(nanatype_markup::parse(&draft.display.text).doc));
         let [w, h] = ready.display;
         (
             widget(
@@ -735,10 +755,7 @@ pub fn sample(
             ready.display,
         )
     } else {
-        (
-            display_view(&ready, ui, &designed_display(ui)),
-            ready.display,
-        )
+        (display_view(&ready, ui, &draft.display.text), ready.display)
     };
     Some((view, size))
 }
@@ -753,7 +770,7 @@ fn sample_both(
 ) -> Option<(AnyView, AnyView, [f32; 2], [f32; 2])> {
     let ready = sample_stage(ui, base, id, draft, urls)?;
     play_history(ready.preview, Arc::new(designed_history(ui)));
-    let display = display_view(&ready, ui, &designed_display(ui));
+    let display = display_view(&ready, ui, &draft.display.text);
     let history = history::history_window(ready.preview).into_any();
     Some((display, history, ready.display, ready.history))
 }
@@ -762,7 +779,7 @@ fn sample_both(
 /// share its registration; dropping the last one withdraws it.
 pub struct PreviewFont {
     _scope: nana_ui::HostFontScope,
-    family: Option<String>,
+    pub family: Option<String>,
 }
 
 /// Preview fonts still held, by what they were registered from: a
@@ -773,7 +790,10 @@ static PREVIEW_FONTS: LazyLock<Mutex<HashMap<FontKey, Weak<PreviewFont>>>> =
 
 /// The registration of `key`, registering `bytes` only when no preview holds
 /// it: every registration restarts the text layout of every window.
-fn preview_font(key: FontKey, bytes: impl FnOnce() -> Option<Vec<u8>>) -> Option<Arc<PreviewFont>> {
+pub fn preview_font(
+    key: FontKey,
+    bytes: impl FnOnce() -> Option<Vec<u8>>,
+) -> Option<Arc<PreviewFont>> {
     let mut fonts = PREVIEW_FONTS.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(font) = fonts.get(&key).and_then(Weak::upgrade) {
         return Some(font);
@@ -841,6 +861,23 @@ impl StageAssets {
             base,
             fonts,
             picked: Mutex::default(),
+        }
+    }
+
+    /// Canvas gestures change dialogue geometry while retaining prepared font
+    /// registrations. Resource reads and font hashing are unnecessary per move.
+    pub fn with_dialogue(&self, dialogue: nanatype_theme::Dialogue) -> Self {
+        let mut base = (*self.base).clone();
+        base.dialogue = dialogue;
+        Self {
+            base: Arc::new(base),
+            fonts: self.fonts.clone(),
+            picked: Mutex::new(
+                self.picked
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone(),
+            ),
         }
     }
 
@@ -1042,6 +1079,7 @@ pub fn stage_placeholder(
                     .justify(nana_ui_core::JustifySpec::Center),
             )
             .key(key)
+            .editor_part(ui, "canvas")
             .children(hint(ui.now_t("skin-preview-loading")));
             framed(*dark, content.into_any(), size_caption(size, scale))
         },
@@ -1072,6 +1110,24 @@ pub fn stage_view(
     width: Signal<f32>,
     key: &'static str,
 ) -> AnyView {
+    stage_view_options(ui, assets, urls, surface, width, key, None)
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Viewport {
+    pub zoom: Option<f32>,
+    pub background: u8,
+}
+
+pub fn stage_view_options(
+    ui: Stage,
+    assets: Arc<StageAssets>,
+    urls: Arc<HashMap<String, String>>,
+    surface: Surface,
+    width: Signal<f32>,
+    key: &'static str,
+    options: Option<Signal<Viewport>>,
+) -> AnyView {
     let sample_id = assets.base.meta.id.clone();
     let sample_overscan = assets.base.dialogue.overscan;
     dynamic(
@@ -1082,9 +1138,11 @@ pub fn stage_view(
                 ui.chrome_dark.get(),
                 ui.shader_preview.get(),
                 ui.settings.with(|s| s.skin.overrides.clone()),
+                options.map(|o| o.get()).unwrap_or_default(),
+                ui.preview_name.get(),
             )
         },
-        move |(draft, available, dark, _, _)| {
+        move |(draft, available, dark, _, _, options, _)| {
             assets.pick_family(&draft.pane(surface == Surface::History).font);
             let base = &assets.base;
             let Some((view, [w, h])) =
@@ -1092,7 +1150,7 @@ pub fn stage_view(
             else {
                 return hint(ui.now_t("skin-edit-invalid"));
             };
-            let scale = fit(*available, [w, h]);
+            let scale = options.zoom.unwrap_or_else(|| fit(*available, [w, h]));
             let stage = widget(
                 Stack::column(0.0)
                     .width(LengthSpec::Px(w * scale))
@@ -1104,6 +1162,7 @@ pub fn stage_view(
                     }),
             )
             .key(key)
+            .editor_part(ui, "canvas")
             .children(
                 widget(
                     Stack::column(0.0)
@@ -1124,7 +1183,27 @@ pub fn stage_view(
                 .key(canvas_key(key))
                 .children(view),
             );
-            framed(*dark, stage.into_any(), size_caption([w, h], scale))
+            let stage = stage.into_any();
+            if options.background == 0 {
+                framed(*dark, stage, size_caption([w, h], scale))
+            } else {
+                let color = if options.background == 1 {
+                    [1., 1., 1., 1.]
+                } else {
+                    [0.08, 0.08, 0.08, 1.]
+                };
+                widget(Stack::column(0.).gap_step(gap::step::CONTROL))
+                    .children((
+                        widget(
+                            Stack::column(0.)
+                                .padding_xy(12., 12.)
+                                .with_layout(move |l| l.background = Some(color)),
+                        )
+                        .children(stage),
+                        hint(size_caption([w, h], scale)),
+                    ))
+                    .into_any()
+            }
         },
     )
     .into_any()

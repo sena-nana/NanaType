@@ -133,3 +133,161 @@ pkgedit-open-failed = Could not open the project
 pkgedit-exported = Exported
 pkgedit-export-failed = Export failed
 pkgedit-debug-locate = Go to
+
+pkgedit-undo = Undo
+
+pkgedit-redo = Redo
+
+pkgedit-discard-form = Discard form changes
+
+pkgedit-recovery = Recovery available
+
+pkgedit-recover = Recover
+
+pkgedit-width = Width
+
+pkgedit-height = Height
+
+pkgedit-simulate = Simulate NanaType personalization
+
+pkgedit-landscape = Landscape
+
+pkgedit-portrait = Portrait
+
+pkgedit-narrow = Narrow
+
+pkgedit-default-size = Default size
+
+pkgedit-static = Still / stop
+
+pkgedit-play = Play
+
+pkgedit-reduced = Reduced motion
+
+pkgedit-effects-off = Advanced effects off
+
+pkgedit-replay = Replay
+
+pkgedit-fit = Fit
+
+pkgedit-checker = Transparency grid
+
+pkgedit-white = White background
+
+pkgedit-dark = Dark background
+
+pkgedit-speaker = Sample speaker
+
+pkgedit-preview-stale = Current content has not passed validation. Showing the last valid preview.
+
+pkgedit-preview-size-error = Enter logical dimensions: width 160–8192, height 96–8192
+
+pkgedit-operation-stale = The project changed. Apply the operation again.
+
+pkgedit-tab-properties = Properties
+
+pkgedit-property-select = Select a declaration group
+
+pkgedit-up = Up
+
+pkgedit-add-property-hint = Add a field by name and TOML value; use inline tables for groups and arrays for lists.
+
+pkgedit-property-name = Field name
+
+pkgedit-add = Add
+
+pkgedit-local = Local override
+
+pkgedit-inherited = Inherited or default
+
+pkgedit-inherit = Restore inheritance
+
+pkgedit-unbind = Explicitly unlink parameter
+
+pkgedit-bound-warning = This value is parameter-bound. Explicitly unlink it before replacing it.
+
+pkgedit-accept-disk = Accept disk version
+
+pkgedit-add-decor = Add decoration
+
+pkgedit-base = Base skin
+
+pkgedit-canvas-edit = Enable canvas editing
+
+pkgedit-canvas-help = Select and drag to move; resize decorations from the bottom-right handle. Arrow keys move, Shift increases the step, Escape cancels.
+
+pkgedit-cover = Cover path
+
+pkgedit-description = Description
+
+pkgedit-disk-conflict = Disk conflict
+
+pkgedit-duplicate = Duplicate element
+
+pkgedit-event-sequence = Test event sequence (JSON array, up to 32)
+
+pkgedit-file-target = Package path to create or move to
+
+pkgedit-keep-local = Keep local changes
+
+pkgedit-layer-down = Move down a layer
+
+pkgedit-layer-up = Move up a layer
+
+pkgedit-layout-base = Base layout
+
+pkgedit-layout-rule = Breakpoint rule
+
+pkgedit-log-filter = Filter logs
+
+pkgedit-min-app = Minimum app version
+
+pkgedit-name = Name
+
+pkgedit-new-file = New text file
+
+pkgedit-open-directory = Open project directory…
+
+pkgedit-origin-directory = Directory project
+
+pkgedit-reference-auto = Manifest reference; updated automatically
+
+pkgedit-reference-manual = Program reference; check manually
+
+pkgedit-rename = Rename / move
+
+pkgedit-rename-question = Change the file path and the references below? Check program references manually.
+
+pkgedit-replace = Replace file…
+
+pkgedit-replace-all = Replace all
+
+pkgedit-replace-one = Replace current match
+
+pkgedit-replacement = Replace with
+
+pkgedit-save-copy = Save local copy…
+
+pkgedit-search-previous = Previous
+
+pkgedit-tags = Tags (comma-separated)
+
+pkgedit-unused-asset = No recognized references
+
+pkgedit-tab-sounds = Sounds
+
+pkgedit-add-responsive = Create responsive layouts
+
+pkgedit-template = Use template
+
+pkgedit-property-exists = Enter a field name that is not already declared
+
+pkgedit-reload-directory = Reload directory project
+
+pkgedit-source-too-large = Source exceeds the editing limit (1 MiB).
+
+pkgedit-layout-matched = Matching layers; later layers override earlier ones
+
+pkgedit-bind = Bind parameter
+
+pkgedit-pending-forms = Apply or discard the pending form changes first.

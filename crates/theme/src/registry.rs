@@ -770,6 +770,8 @@ impl SkinRegistry {
                         Arc::new(resolved)
                     };
                     Ok(LoadedSkin {
+                        #[cfg(feature = "editor")]
+                        authored: Arc::new(read_manifest(&*files).unwrap_or_default()),
                         skin,
                         files,
                         origin: SkinOrigin::Builtin,

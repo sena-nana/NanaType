@@ -72,3 +72,17 @@ package-data-source = 出典
 package-data-license = ライセンス
 package-data-protected = 署名の保護対象
 package-data-unprotected = 署名の保護対象外
+
+
+# Shared skin parameter controls
+skin-params-title = スキンのオプション
+skin-params-hint = このスキンが用意した外観の設定です。スキン全体に適用されます。
+skin-params-default = デフォルト
+skin-params-invalid-number = 数値を入力してください
+skin-params-out-of-range = { $min }～{ $max } の範囲で指定してください
+skin-params-invalid-color = #RRGGBB 形式で指定してください
+skin-params-invalid-option = 選択肢にない値です
+skin-params-text-too-long = { $max } 文字以内で入力してください
+skin-params-text-empty = 空にはできません
+skin-params-text-control = 改行や制御文字は使えません
+skin-params-contrast = { $foreground } と { $background } のコントラスト比は { $ratio }:1 です。{ $min }:1 以上を推奨します

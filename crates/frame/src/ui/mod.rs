@@ -5,6 +5,7 @@
 pub mod avatar;
 pub mod controls;
 pub mod dialogue;
+pub mod editor_geometry;
 pub mod editor_view;
 mod effect_uniforms;
 mod effects;
@@ -15,6 +16,7 @@ pub mod kit;
 pub mod materials;
 pub mod motion;
 pub mod overflow;
+pub mod param_controls;
 pub mod pipeline;
 pub mod plugin_view;
 pub mod preview;
@@ -99,6 +101,7 @@ pub struct PeerLane {
 /// per sample, so a preview never writes the live draft, history or display.
 #[derive(Clone, Copy)]
 pub struct Stage {
+    pub editor_nodes: Option<editor_geometry::Nodes>,
     pub speaker: Signal<nanatype_model::Speaker>,
     pub locale: Signal<Locale>,
     pub settings: Signal<Arc<Settings>>,
@@ -212,6 +215,7 @@ impl Stage {
         });
         let peer_display = peer_lanes[0].display;
         Self {
+            editor_nodes: None,
             speaker: signal(speaker),
             chrome_dark: signal(crate::skin_theme::dark_mode(settings.skin.chrome, false)),
             locale: signal(locale),

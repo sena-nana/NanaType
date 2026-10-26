@@ -116,6 +116,8 @@ impl SkinFiles for LayeredFiles {
 
 #[derive(Debug, Clone)]
 pub struct LoadedSkin {
+    #[cfg(feature = "editor")]
+    pub authored: Arc<Table>,
     pub skin: Arc<Skin>,
     pub files: Arc<dyn SkinFiles>,
     pub origin: SkinOrigin,
@@ -310,6 +312,65 @@ pub fn standalone_manifest(skin: &Skin) -> Result<Table, toml::ser::Error> {
     Ok(table)
 }
 
+/// Authoring counterpart of responsive resolution, before parameter substitution
+/// and pixel fitting. Copies retain bindings, unknown fields and array siblings.
+#[cfg(feature = "editor")]
+pub fn authored_layout(table: &Table, [w, h]: [f32; 2]) -> Table {
+    let mut table = table.clone();
+    expand_responsive(&mut table, &mut Vec::new());
+    let Some(dialogue) = table.get_mut("dialogue").and_then(Value::as_table_mut) else {
+        return table;
+    };
+    let Some(responsive) = dialogue
+        .get("responsive")
+        .and_then(Value::as_table)
+        .cloned()
+    else {
+        return table;
+    };
+    let portrait = h > w;
+    let apply = |dialogue: &mut Table, layout: &Table| {
+        for key in [
+            "padding",
+            "box",
+            "nameplate",
+            "portrait",
+            "continue",
+            "decor",
+            "shader_effects",
+        ] {
+            if let Some(value) = layout.get(key) {
+                dialogue.insert(key.into(), value.clone());
+            }
+        }
+    };
+    if let Some(layout) = responsive
+        .get(if portrait { "portrait" } else { "landscape" })
+        .and_then(Value::as_table)
+    {
+        apply(dialogue, layout);
+    }
+    let number = |v: Option<&Value>| {
+        v.and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
+            .unwrap_or(8192.) as f32
+    };
+    if let Some(rules) = responsive.get("rules").and_then(Value::as_array) {
+        for rule in rules.iter().filter_map(Value::as_table) {
+            if w <= number(rule.get("max_width"))
+                && h <= number(rule.get("max_height"))
+                && rule
+                    .get("portrait")
+                    .and_then(Value::as_bool)
+                    .is_none_or(|v| v == portrait)
+                && let Some(layout) = rule.get("layout").and_then(Value::as_table)
+            {
+                apply(dialogue, layout);
+            }
+        }
+    }
+    table
+}
+
 fn base_id(table: &Table) -> Option<String> {
     table
         .get("meta")
@@ -442,6 +503,8 @@ fn load_impl(
         }
     }
 
+    #[cfg(feature = "editor")]
+    let authored = Arc::new(merged.clone());
     expand_responsive(&mut merged, &mut diagnostics);
     let sites = crate::params::compile(&mut merged, &DEFAULT_TABLE, &mut diagnostics);
     if diagnostics.iter().any(|d| d.severity == Severity::Error) {
@@ -497,6 +560,8 @@ fn load_impl(
         return Err(diagnostics);
     }
     Ok(LoadedSkin {
+        #[cfg(feature = "editor")]
+        authored,
         skin: Arc::new(skin),
         files,
         origin,

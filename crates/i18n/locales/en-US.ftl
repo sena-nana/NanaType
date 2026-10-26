@@ -72,3 +72,17 @@ package-data-source = Source
 package-data-license = License
 package-data-protected = covered by the signature
 package-data-unprotected = not covered by a signature
+
+
+# Shared skin parameter controls
+skin-params-title = Skin options
+skin-params-hint = Appearance options this skin provides. They apply to the whole skin.
+skin-params-default = Default
+skin-params-invalid-number = Enter a number
+skin-params-out-of-range = Must be { $min }–{ $max }
+skin-params-invalid-color = Use a #RRGGBB colour
+skin-params-invalid-option = Not one of the choices
+skin-params-text-too-long = At most { $max } characters
+skin-params-text-empty = Can't be empty
+skin-params-text-control = Can't contain line breaks or control characters
+skin-params-contrast = { $foreground } on { $background } is { $ratio }:1; aim for at least { $min }:1

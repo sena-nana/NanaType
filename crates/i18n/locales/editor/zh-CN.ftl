@@ -130,3 +130,161 @@ pkgedit-open-failed = 无法打开工程
 pkgedit-exported = 已导出
 pkgedit-export-failed = 导出失败
 pkgedit-debug-locate = 跳到出错位置
+
+pkgedit-undo = 撤销
+
+pkgedit-redo = 重做
+
+pkgedit-discard-form = 放弃表单修改
+
+pkgedit-recovery = 发现恢复快照
+
+pkgedit-recover = 恢复
+
+pkgedit-width = 宽度
+
+pkgedit-height = 高度
+
+pkgedit-simulate = 模拟 NanaType 个人配置
+
+pkgedit-landscape = 横版
+
+pkgedit-portrait = 竖版
+
+pkgedit-narrow = 窄窗
+
+pkgedit-default-size = 默认尺寸
+
+pkgedit-static = 静态／停止
+
+pkgedit-play = 播放
+
+pkgedit-reduced = 减少动态
+
+pkgedit-effects-off = 关闭高级效果
+
+pkgedit-replay = 重播
+
+pkgedit-fit = 适应窗口
+
+pkgedit-checker = 透明棋盘
+
+pkgedit-white = 白色背景
+
+pkgedit-dark = 深色背景
+
+pkgedit-speaker = 示例说话人
+
+pkgedit-preview-stale = 当前内容尚未通过校验，显示上一有效预览
+
+pkgedit-preview-size-error = 请输入有效逻辑尺寸：宽 160–8192，高 96–8192
+
+pkgedit-operation-stale = 工程已发生变化，请重新应用本次操作
+
+pkgedit-tab-properties = 属性
+
+pkgedit-property-select = 请选择声明分组
+
+pkgedit-up = 返回上一级
+
+pkgedit-add-property-hint = 添加字段：名称与 TOML 值；分组可用内联表，列表使用数组
+
+pkgedit-property-name = 字段名
+
+pkgedit-add = 添加
+
+pkgedit-local = 本地覆盖
+
+pkgedit-inherited = 继承或默认
+
+pkgedit-inherit = 恢复继承
+
+pkgedit-unbind = 明确解除参数绑定
+
+pkgedit-bound-warning = 此值绑定了参数；替换前需要明确解除绑定
+
+pkgedit-accept-disk = 接受磁盘版本
+
+pkgedit-add-decor = 添加装饰
+
+pkgedit-base = 基础皮肤
+
+pkgedit-canvas-edit = 启用画布编辑
+
+pkgedit-canvas-help = 选择元素后拖动移动，右下角缩放装饰。方向键移动，Shift 加速，Esc 取消。
+
+pkgedit-cover = 封面路径
+
+pkgedit-description = 描述
+
+pkgedit-disk-conflict = 磁盘冲突
+
+pkgedit-duplicate = 复制元素
+
+pkgedit-event-sequence = 测试事件序列（JSON 数组，最多 32 项）
+
+pkgedit-file-target = 新建／移动到的包内路径
+
+pkgedit-keep-local = 保留本地修改
+
+pkgedit-layer-down = 下移一层
+
+pkgedit-layer-up = 上移一层
+
+pkgedit-layout-base = 基础布局
+
+pkgedit-layout-rule = 断点规则
+
+pkgedit-log-filter = 筛选日志
+
+pkgedit-min-app = 最低应用版本
+
+pkgedit-name = 名称
+
+pkgedit-new-file = 新建文本文件
+
+pkgedit-open-directory = 打开工程目录…
+
+pkgedit-origin-directory = 目录工程
+
+pkgedit-reference-auto = 清单引用，可自动修改
+
+pkgedit-reference-manual = 程序引用，需要人工确认
+
+pkgedit-rename = 重命名／移动
+
+pkgedit-rename-question = 确认修改文件路径及以下引用；程序中的引用需要自行检查。
+
+pkgedit-replace = 替换文件…
+
+pkgedit-replace-all = 全部替换
+
+pkgedit-replace-one = 替换当前匹配
+
+pkgedit-replacement = 替换为
+
+pkgedit-save-copy = 另存本地副本…
+
+pkgedit-search-previous = 上一个
+
+pkgedit-tags = 标签（逗号分隔）
+
+pkgedit-unused-asset = 没有已识别的引用
+
+pkgedit-tab-sounds = 音效
+
+pkgedit-add-responsive = 创建横竖版布局
+
+pkgedit-template = 填入模板
+
+pkgedit-property-exists = 请输入一个尚未声明的字段名
+
+pkgedit-reload-directory = 重新加载磁盘工程
+
+pkgedit-source-too-large = 源码超过可编辑大小限制（1 MiB）。
+
+pkgedit-layout-matched = 当前命中顺序，后层覆盖前层
+
+pkgedit-bind = 绑定参数
+
+pkgedit-pending-forms = 请先应用或放弃尚未提交的表单输入。

@@ -5,14 +5,12 @@ use crate::session::{Action, EditorView, Tab};
 use crate::ui::Ui;
 use crate::ui::controls::{confirm, hint, label};
 use crate::ui::kit::{self, Tone, Type, field, gap, inset};
-use nana_ui::runtime::view::{
-    AnyView, IntoView, Signal, dynamic, segmented_option, signal, widget,
-};
+use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, watch_effect, widget};
 use nana_ui::runtime::{
-    Activate, Button, Checkbox, CodeEditing, ScrollAxes, ScrollView, SegmentedControl,
-    SegmentedOptionChosen, Select, SelectChanged, SelectOption, SizeChanged, Stack, Text, TextArea,
-    TextChanged, TextDiagnosticSeverity, TextDiagnosticSpan, TextMatchSpan, TextSelection,
-    ToggleChanged, TreeSelectionChanged, TreeView, ViewContext,
+    Activate, Button, Checkbox, CodeEditing, ScrollAxes, ScrollView, Select, SelectChanged,
+    SelectOption, SizeChanged, Stack, Text, TextArea, TextChanged, TextDiagnosticSeverity,
+    TextDiagnosticSpan, TextMatchSpan, TextSelection, ToggleChanged, TreeSelectionChanged,
+    TreeView, ViewContext,
 };
 use nana_ui::theme::space;
 use nana_ui::{ButtonKind, ControlSize, icons_tabler as ti};
@@ -44,6 +42,47 @@ fn send(
     action: impl Fn() -> Action + Send + 'static,
 ) -> impl FnMut(&mut Button, &Activate, &mut ViewContext<'_, Button>) + Send + 'static {
     move |_, _, cx| cx.dispatch_program_all(Msg::PackageEditor(action()))
+}
+
+/// Update a field changed through a picker/template without resetting live typing.
+pub(super) fn sync_text(state: &mut nana_ui::runtime::TextInputState, value: String) {
+    if state.value.as_str() != value {
+        *state = nana_ui::runtime::TextInputState::new(value);
+    }
+}
+
+/// A form value belongs to the session, including invalid text and hidden panels.
+pub(super) fn buffer<T>(ui: Ui, key: impl Into<String>, initial: T) -> Signal<T>
+where
+    T: Clone + PartialEq + serde::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static,
+{
+    let key = key.into();
+    let view = view_of(ui);
+    let session = view.as_ref().map_or(0, |v| v.session);
+    let restored = view
+        .and_then(|v| v.forms.get(&key).cloned())
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_else(|| initial.clone());
+    let value = signal(restored.clone());
+    let mut previous = restored;
+    watch_effect(move || {
+        let current = value.get();
+        if current != previous {
+            previous = current.clone();
+            if let Some(post) = ui.post.get_untracked() {
+                post(Action::Buffer {
+                    session,
+                    key: key.clone(),
+                    value: if current == initial {
+                        None
+                    } else {
+                        serde_json::to_value(current).ok()
+                    },
+                });
+            }
+        }
+    });
+    value
 }
 
 /// `YYYY-MM-DD HH:MM` in local time.
@@ -124,6 +163,7 @@ fn scrolled(content: AnyView) -> AnyView {
         l.width = Some(LengthSpec::Fill);
     });
     widget(scroll)
+        .key("editor-panel-scroll")
         .children(widget(Stack::column(0.).padding_xy(0., space::XS)).children(content))
         .into_any()
 }
@@ -237,6 +277,41 @@ pub fn launcher(ui: Ui) -> AnyView {
                     cx.dispatch_program_all(Msg::PickFile(FileTarget::EditPackage))
                 }),
             )),
+            dynamic(
+                move || ui.recoveries.get(),
+                move |rows| {
+                    widget(Stack::column(0.).gap_step(gap::step::CONTROL))
+                        .children(
+                            rows.iter()
+                                .map(|r| {
+                                    let id = r.id.clone();
+                                    let discard = id.clone();
+                                    widget(Stack::row(0.).wrap(true))
+                                        .children((
+                                            widget(readable(format!(
+                                                "{} · {}",
+                                                ui.now_t("pkgedit-recovery"),
+                                                r.package
+                                            ))),
+                                            widget(button(ui, "pkgedit-recover")).on_cx(send(
+                                                move || Action::RestoreRecovery(id.clone()),
+                                            )),
+                                            widget(button(ui, "pkgedit-discard")).on_cx(send(
+                                                move || Action::DiscardRecovery(discard.clone()),
+                                            )),
+                                        ))
+                                        .into_any()
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                        .into_any()
+                },
+            ),
+            widget(button(ui, "pkgedit-open-directory"))
+                .key("editor-open-directory")
+                .on_cx(|_, _: &Activate, cx| {
+                    cx.dispatch_program_all(Msg::PickFile(FileTarget::OpenDirectory))
+                }),
             label(ui.now_t("pkgedit-drafts")),
             drafts,
         ))
@@ -266,8 +341,36 @@ pub fn package_actions(ui: Ui, id: &str, builtin: bool) -> AnyView {
 pub fn editor(ui: Ui) -> AnyView {
     widget(Stack::fill_column(0.0).with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))))
         .key("package-editor")
+        .on(move |e: &SizeChanged| {
+            ui.workspace_width.set_if_changed(e.width);
+        })
         .children((
             header(ui),
+            super::conflicts::view(ui),
+            widget(
+                Stack::row(0.)
+                    .gap_step(gap::step::CONTROL)
+                    .wrap(true)
+                    .padding_xy(inset::PAGE, 0.),
+            )
+            .children((
+                widget(button(ui, "pkgedit-undo"))
+                    .key("package-editor-undo")
+                    .bind(move |b: &mut Button| {
+                        b.disabled = !ui
+                            .package_editor
+                            .with(|v| v.as_ref().is_some_and(|v| v.undo))
+                    })
+                    .on_cx(send(|| Action::Undo)),
+                widget(button(ui, "pkgedit-redo"))
+                    .key("package-editor-redo")
+                    .bind(move |b: &mut Button| {
+                        b.disabled = !ui
+                            .package_editor
+                            .with(|v| v.as_ref().is_some_and(|v| v.redo))
+                    })
+                    .on_cx(send(|| Action::Redo)),
+            )),
             widget(
                 Stack::fill_column(0.0)
                     .gap_step(gap::step::CONTROL)
@@ -281,6 +384,11 @@ pub fn editor(ui: Ui) -> AnyView {
 
 fn origin_text(ui: Ui, view: &EditorView) -> String {
     let origin = match &view.origin {
+        DraftOrigin::Directory { path } => format!(
+            "{}: {}",
+            ui.now_t("pkgedit-origin-directory"),
+            path.display()
+        ),
         DraftOrigin::New => ui.now_t("pkgedit-origin-new"),
         DraftOrigin::Installed { id } => format!("{}: {id}", ui.now_t("pkgedit-origin-installed")),
         DraftOrigin::Archive { path } => {
@@ -331,12 +439,13 @@ fn header(ui: Ui) -> AnyView {
                         origin_text(ui, v),
                         status_text(ui, v),
                         v.dirty,
+                        v.can_revert,
                     )
                 })
             })
         },
         move |state| {
-            let Some((package, kind, origin, status, dirty)) = state.clone() else {
+            let Some((package, kind, origin, status, dirty, can_revert)) = state.clone() else {
                 return widget(Stack::column(0.)).into_any();
             };
             let state = if dirty { Tone::Warning } else { Tone::Success };
@@ -373,7 +482,7 @@ fn header(ui: Ui) -> AnyView {
                         )
                         .children((
                             dirty.then(|| {
-                                widget(button(ui, "pkgedit-revert"))
+                                widget(button(ui, "pkgedit-revert").disabled(!can_revert))
                                     .key("package-editor-revert")
                                     .on_cx(send(|| Action::Revert))
                             }),
@@ -453,8 +562,10 @@ fn close_prompt(ui: Ui) -> AnyView {
     .into_any()
 }
 
-const TABS: [(Tab, &str); 5] = [
+const TABS: [(Tab, &str); 7] = [
     (Tab::Files, "pkgedit-tab-files"),
+    (Tab::Properties, "pkgedit-tab-properties"),
+    (Tab::Sounds, "pkgedit-tab-sounds"),
     (Tab::Package, "pkgedit-tab-package"),
     (Tab::Signing, "pkgedit-tab-signing"),
     (Tab::Preview, "pkgedit-tab-preview"),
@@ -463,25 +574,59 @@ const TABS: [(Tab, &str); 5] = [
 
 /// A wrapping row of tab buttons, so every tab stays reachable at 300px.
 fn tabs(ui: Ui) -> AnyView {
-    let buttons = TABS
-        .into_iter()
-        .map(|(tab, key)| {
-            widget(button(ui, key))
-                .key(format!("package-editor-tab:{key}"))
-                .bind(move |b: &mut Button| {
-                    let kind = if ui.package_editor_tab.get() == tab {
-                        ButtonKind::Selected
-                    } else {
-                        ButtonKind::Ghost
-                    };
-                    if b.kind != kind {
-                        b.kind = kind;
-                    }
-                })
-                .on(move |_: &Activate| ui.package_editor_tab.set(tab))
-                .into_any()
-        })
-        .collect::<Vec<_>>();
+    let buttons =
+        TABS.into_iter()
+            .map(|(tab, key)| {
+                widget(button(ui, key))
+                    .key(format!("package-editor-tab:{key}"))
+                    .visible(move || {
+                        ui.package_editor.with(|v| {
+                            v.as_ref().is_some_and(|v| match tab {
+                                Tab::Preview => v.metadata.as_ref().is_some_and(|m| {
+                                    m.capabilities.contains(&PackageCapability::Skin)
+                                }),
+                                Tab::Sounds => v.metadata.as_ref().is_some_and(|m| {
+                                    m.capabilities.contains(&PackageCapability::Skin)
+                                        || m.capabilities.contains(&PackageCapability::Sounds)
+                                }),
+                                Tab::Debug => v.metadata.as_ref().is_some_and(|m| {
+                                    m.capabilities.contains(&PackageCapability::Lua)
+                                }),
+                                _ => true,
+                            })
+                        })
+                    })
+                    .bind(move |b: &mut Button| {
+                        let kind = if ui.package_editor_tab.get() == tab {
+                            ButtonKind::Selected
+                        } else {
+                            ButtonKind::Ghost
+                        };
+                        if b.kind != kind {
+                            b.kind = kind;
+                        }
+                    })
+                    .on(move |_: &Activate| {
+                        if tab == Tab::Sounds {
+                            let standalone = ui.package_editor.with_untracked(|v| {
+                                v.as_ref()
+                                    .is_some_and(|v| v.documents.contains_key("sounds.toml"))
+                            });
+                            ui.properties_file.set(
+                                if standalone {
+                                    "sounds.toml"
+                                } else {
+                                    "skin.toml"
+                                }
+                                .into(),
+                            );
+                            ui.properties_path.set(vec!["sounds".into()]);
+                        }
+                        ui.package_editor_tab.set(tab);
+                    })
+                    .into_any()
+            })
+            .collect::<Vec<_>>();
     widget(
         Stack::row(0.0)
             .gap_step(nana_ui_core::SpacingStep::Xs)
@@ -493,17 +638,78 @@ fn tabs(ui: Ui) -> AnyView {
 }
 
 fn body(ui: Ui) -> AnyView {
-    dynamic(
-        move || ui.package_editor_tab.get(),
-        move |tab| match tab {
-            Tab::Files => files(ui),
-            Tab::Package => scrolled(package(ui)),
-            Tab::Signing => scrolled(signing(ui)),
-            Tab::Preview => scrolled(preview(ui)),
-            Tab::Debug => scrolled(debug(ui)),
-        },
+    let left = widget(Stack::fill_column(0.).with_layout(|l| {
+        l.width = Some(LengthSpec::Px(0.));
+        l.flex_grow = Some(1.);
+        l.min_width = Some(LengthSpec::Px(0.));
+    }))
+    .visible(move || ui.package_editor_tab.get() != Tab::Preview)
+    .children(
+        dynamic(
+            move || ui.package_editor_tab.get(),
+            move |tab| match tab {
+                Tab::Files => files(ui),
+                Tab::Sounds => (scrolled(super::properties::view(ui)), problems(ui)).into_any(),
+                Tab::Properties => (scrolled(super::properties::view(ui)), problems(ui)).into_any(),
+                Tab::Package => (scrolled(package(ui)), problems(ui)).into_any(),
+                Tab::Signing => (scrolled(signing(ui)), problems(ui)).into_any(),
+                Tab::Debug => (scrolled(debug(ui)), problems(ui)).into_any(),
+                Tab::Preview => widget(Stack::column(0.)).into_any(),
+            },
+        )
+        .grow(),
+    );
+    let right = widget(Stack::fill_column(0.))
+        .bind(move |s: &mut Stack| {
+            let split =
+                ui.workspace_width.get() >= 1100. && ui.package_editor_tab.get() != Tab::Preview;
+            *s = Stack::fill_column(0.).with_layout(|l| {
+                l.width = Some(if split {
+                    LengthSpec::Px(440.)
+                } else {
+                    LengthSpec::Fill
+                });
+                l.flex_grow = Some(if split { 0. } else { 1. });
+                l.flex_shrink = Some(1.);
+                l.min_width = Some(LengthSpec::Px(0.));
+            });
+        })
+        .visible(move || {
+            ui.package_editor_tab.get() == Tab::Preview
+                || (ui.workspace_width.get() >= 1100.
+                    && ui
+                        .package_editor
+                        .with(|v| v.as_ref().is_some_and(|v| v.report.skin.is_some())))
+        })
+        .children(
+            dynamic(
+                move || {
+                    ui.package_editor_tab.get() == Tab::Preview || ui.workspace_width.get() >= 1100.
+                },
+                move |visible| {
+                    if *visible {
+                        scrolled(preview(ui))
+                    } else {
+                        widget(Stack::column(0.)).into_any()
+                    }
+                },
+            )
+            .grow(),
+        );
+    widget(
+        Stack::row(0.)
+            .align(AlignSpec::Stretch)
+            .gap_step(gap::step::GROUP)
+            .grow(1.)
+            .shrink(1.)
+            .width(LengthSpec::Fill)
+            .height(LengthSpec::Fill)
+            .with_layout(|l| {
+                l.min_height = Some(LengthSpec::Px(0.));
+            }),
     )
-    .grow()
+    .key("editor-workspace-body")
+    .children((left, right))
     .into_any()
 }
 
@@ -573,11 +779,11 @@ const NARROW: f32 = 560.;
 
 fn files(ui: Ui) -> AnyView {
     let narrow = signal(false);
-    let search: Search = (signal(String::new()), signal(0usize));
+    let search: Search = (ui.search_query, ui.search_index);
     widget(Stack::fill_column(0.))
         .key("package-editor-files")
         .on(move |e: &SizeChanged| {
-            let n = e.width < NARROW;
+            let n = e.width < NARROW && ui.workspace_width.get_untracked() < 1100.;
             if narrow.get_untracked() != n {
                 narrow.set(n);
             }
@@ -616,6 +822,7 @@ fn files(ui: Ui) -> AnyView {
                                 }),
                             remove_button(ui),
                         )),
+                        super::assets::operations(ui),
                         widget(ScrollView::new(ScrollAxes::Vertical).with_layout(move |l| {
                             if narrow {
                                 l.max_height = Some(LengthSpec::Px(STACKED_TREE_H));
@@ -666,8 +873,10 @@ fn file_tree(ui: Ui) -> AnyView {
             ui.package_editor.with(|v| {
                 v.as_ref().map(|v| {
                     (
-                        Arc::as_ptr(&v.files) as usize,
-                        v.files.len(),
+                        v.files
+                            .iter()
+                            .map(|f| (f.path.clone(), f.kind, f.protected, f.dependency.is_some()))
+                            .collect::<Vec<_>>(),
                         v.selected.clone(),
                     )
                 })
@@ -716,7 +925,21 @@ fn remove_button(ui: Ui) -> AnyView {
             };
             confirm(
                 *ui,
-                ui.now_t("pkgedit-remove-question"),
+                format!(
+                    "{}\n{}",
+                    ui.now_t("pkgedit-remove-question"),
+                    ui.package_editor.with_untracked(|v| v
+                        .as_ref()
+                        .map(|v| v
+                            .report
+                            .references
+                            .iter()
+                            .filter(|r| r.target == path)
+                            .map(|r| format!("{}: {}", r.file, r.path.join(".")))
+                            .collect::<Vec<_>>()
+                            .join("\n"))
+                        .unwrap_or_default())
+                ),
                 ui.now_t("pkgedit-remove"),
                 move |armed| {
                     widget(button(ui, "pkgedit-remove"))
@@ -733,22 +956,7 @@ fn remove_button(ui: Ui) -> AnyView {
 
 /// Byte ranges of every case-insensitive (ASCII) match of `needle`.
 fn matches(text: &str, needle: &str) -> Vec<(usize, usize)> {
-    if needle.is_empty() {
-        return Vec::new();
-    }
-    let hay = text.to_lowercase();
-    let needle = needle.to_lowercase();
-    if hay.len() != text.len() {
-        // Lowercasing changed byte lengths; fall back to exact matching.
-        return text
-            .match_indices(&*needle)
-            .map(|(i, m)| (i, m.len()))
-            .collect();
-    }
-    hay.match_indices(&*needle)
-        .map(|(i, m)| (i, m.len()))
-        .take(10_000)
-        .collect()
+    nanatype_theme::editor::find_matches(text, needle)
 }
 
 fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
@@ -830,12 +1038,51 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
                     t.value = value;
                 }
             }),
+        widget(button(ui, "pkgedit-search-previous")).on(move |_: &Activate| {
+            let n = ui.package_editor.with_untracked(|v| {
+                v.as_ref()
+                    .and_then(|v| v.text.as_ref())
+                    .map(|t| matches(t, &query.get_untracked()).len())
+                    .unwrap_or(0)
+            });
+            current.update(|c| *c = if n == 0 { 0 } else { (*c + n - 1) % n });
+        }),
         widget(button(ui, "pkgedit-search-next"))
             .key("package-editor-search-next")
             .on(move |_: &Activate| current.update(|c| *c += 1)),
     ));
     widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs))
-        .children((path_line, search))
+        .children((
+            path_line,
+            search,
+            widget(Stack::row(0.).wrap(true).gap_step(gap::step::CONTROL)).children((
+                input_box(
+                    field::MD,
+                    widget(
+                        kit::text_input(ui.search_replacement.get_untracked())
+                            .placeholder(ui.now_t("pkgedit-replacement"))
+                            .size(ControlSize::Small),
+                    )
+                    .on(move |e: &TextChanged| ui.search_replacement.set(e.value.to_string())),
+                ),
+                widget(button(ui, "pkgedit-replace-one")).on_cx(send(move || {
+                    Action::ReplaceText {
+                        needle: query.get_untracked(),
+                        replacement: ui.search_replacement.get_untracked(),
+                        index: current.get_untracked(),
+                        all: false,
+                    }
+                })),
+                widget(button(ui, "pkgedit-replace-all")).on_cx(send(move || {
+                    Action::ReplaceText {
+                        needle: query.get_untracked(),
+                        replacement: ui.search_replacement.get_untracked(),
+                        index: 0,
+                        all: true,
+                    }
+                })),
+            )),
+        ))
         .into_any()
 }
 
@@ -866,6 +1113,12 @@ fn source(ui: Ui, (query, current): Search) -> AnyView {
                 .line_numbers(true)
                 .read_only(!editable)
                 .label(path.clone());
+            if let Some(saved) = ui.source_views.with_untracked(|m| m.get(&path).cloned()) {
+                if saved.state.value.as_str() == text.as_ref() {
+                    area.state = saved.state;
+                }
+                area.scroll_offset = saved.scroll_offset;
+            }
             let ext = view
                 .files
                 .iter()
@@ -898,6 +1151,7 @@ fn source(ui: Ui, (query, current): Search) -> AnyView {
             // The search step last moved to; typing must not move the caret.
             let applied_search = std::cell::RefCell::new((String::new(), 0usize));
             widget(area)
+                .node_ref(ui.source_node)
                 .key(node_key("package-editor-source", &path))
                 .bind(move |a: &mut TextArea| {
                     let (diagnostics, jump, text) = ui.package_editor.with(|v| {
@@ -907,7 +1161,12 @@ fn source(ui: Ui, (query, current): Search) -> AnyView {
                         let spans = v
                             .syntax
                             .iter()
-                            .chain(v.report.diagnostics.iter().filter(|d| d.path == span_path))
+                            .chain(
+                                v.report
+                                    .diagnostics
+                                    .iter()
+                                    .filter(|d| !v.validating && d.path == span_path),
+                            )
                             .map(|d| {
                                 TextDiagnosticSpan::new(d.offset, d.len, severity(d.level))
                                     .with_message(d.message.clone())
@@ -976,7 +1235,14 @@ fn file_info(ui: Ui, view: &EditorView) -> AnyView {
     let mut lines = vec![
         format!("{}: {}", ui.now_t("pkgedit-file-format"), file.format),
         format!("{}: {} B", ui.now_t("pkgedit-file-size"), file.bytes),
-        format!("BLAKE3: {}", file.hash),
+        format!(
+            "BLAKE3: {}",
+            if file.hash.is_empty() {
+                "…"
+            } else {
+                &file.hash
+            }
+        ),
         ui.now_t(if file.protected {
             "package-data-protected"
         } else {
@@ -1013,6 +1279,7 @@ fn file_info(ui: Ui, view: &EditorView) -> AnyView {
     .children((
         label(ui.now_t("pkgedit-binary")),
         widget(readable(lines.join("\n"))),
+        super::assets::preview(ui),
     ))
     .into_any()
 }
@@ -1146,6 +1413,13 @@ fn labelled(caption: String, width: f32, control: impl IntoView) -> AnyView {
     .into_any()
 }
 
+fn form_editable(ui: Ui, file: &str) -> bool {
+    ui.package_editor.with_untracked(|v| {
+        v.as_ref()
+            .is_some_and(|v| v.files.iter().any(|f| f.path == file && f.editable))
+    })
+}
+
 fn field(ui: Ui, key: &str, value: Signal<String>, placeholder: &str) -> AnyView {
     labelled(
         ui.now_t(key),
@@ -1153,6 +1427,14 @@ fn field(ui: Ui, key: &str, value: Signal<String>, placeholder: &str) -> AnyView
         widget(
             kit::text_input(value.get_untracked())
                 .placeholder(placeholder.to_owned())
+                .read_only(!form_editable(
+                    ui,
+                    if key.contains("pipeline") {
+                        MANIFEST
+                    } else {
+                        PACKAGE_MANIFEST
+                    },
+                ))
                 .size(ControlSize::Small),
         )
         .key(format!("package-editor-field:{key}"))
@@ -1165,13 +1447,45 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
         .files
         .iter()
         .any(|f| f.path == PACKAGE_MANIFEST && f.editable);
-    let version = signal(metadata.version.clone());
-    let author = signal(metadata.author.clone());
-    let created = signal(metadata.created_at.clone());
-    let licensed_to = signal(metadata.licensed_to.clone());
-    let license = signal(metadata.license.clone());
-    let capabilities = signal(metadata.capabilities.clone());
-    let dependencies = signal(
+    let name = buffer(ui, "metadata.name", metadata.name.clone());
+    let description = buffer(ui, "metadata.description", metadata.description.clone());
+    let min_app = buffer(ui, "metadata.min_app", metadata.min_app.clone());
+    let base = buffer(ui, "metadata.base", metadata.base.clone());
+    let preview = buffer(ui, "metadata.preview", metadata.preview.clone());
+    let tags = buffer(ui, "metadata.tags", metadata.tags.join(", "));
+    let localized = [("pkgedit-name", name), ("pkgedit-description", description)]
+        .into_iter()
+        .flat_map(|(key, values)| {
+            ["zh-CN", "en-US", "ja-JP"].into_iter().map(move |locale| {
+                labelled(
+                    format!("{} · {locale}", ui.now_t(key)),
+                    field::MD,
+                    widget(
+                        kit::text_input(
+                            values.with_untracked(|v| v.get(locale).cloned().unwrap_or_default()),
+                        )
+                        .read_only(!editable)
+                        .size(ControlSize::Small),
+                    )
+                    .key(format!("editor-meta-{key}-{locale}"))
+                    .on(move |e: &TextChanged| {
+                        values.update(|v| {
+                            v.insert(locale.into(), e.value.to_string());
+                        })
+                    }),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    let version = buffer(ui, "metadata.version", metadata.version.clone());
+    let author = buffer(ui, "metadata.author", metadata.author.clone());
+    let created = buffer(ui, "metadata.created", metadata.created_at.clone());
+    let licensed_to = buffer(ui, "metadata.licensed_to", metadata.licensed_to.clone());
+    let license = buffer(ui, "metadata.license", metadata.license.clone());
+    let capabilities = buffer(ui, "metadata.capabilities", metadata.capabilities.clone());
+    let dependencies = buffer(
+        ui,
+        "metadata.dependencies",
         metadata
             .dependencies
             .iter()
@@ -1180,11 +1494,15 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
             .join("\n"),
     );
     let capability_box = |cap: PackageCapability, key: &'static str| {
-        widget(Checkbox::new(
-            ui.now_t(key),
-            metadata.capabilities.contains(&cap),
-        ))
+        widget(
+            Checkbox::new(
+                ui.now_t(key),
+                capabilities.with_untracked(|c| c.contains(&cap)),
+            )
+            .disabled(!editable),
+        )
         .key(format!("package-editor-cap:{key}"))
+        .bind(move |c: &mut Checkbox| c.checked = capabilities.with(|c| c.contains(&cap)))
         .on(move |e: &ToggleChanged| {
             capabilities.update(|c| {
                 c.retain(|x| *x != cap);
@@ -1198,13 +1516,27 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
         .key("package-editor-apply")
         .bind(move |b: &mut Button| b.disabled = !editable)
         .on_cx(move |_, _: &Activate, cx| {
-            let deps = dependencies
-                .get_untracked()
-                .lines()
-                .filter_map(|l| l.trim().split_once('@'))
-                .map(|(id, v)| (id.trim().to_owned(), v.trim().to_owned()))
-                .collect();
+            let deps =
+                match nanatype_theme::editor::parse_dependencies(&dependencies.get_untracked()) {
+                    Ok(deps) => deps,
+                    Err(e) => {
+                        cx.dispatch_program_all(notice(ui, "pkgedit-dependencies-hint", e));
+                        return;
+                    }
+                };
             cx.dispatch_program_all(Msg::PackageEditor(Action::ApplyMetadata(Metadata {
+                name: name.get_untracked(),
+                description: description.get_untracked(),
+                min_app: min_app.get_untracked(),
+                base: base.get_untracked(),
+                preview: preview.get_untracked(),
+                tags: tags
+                    .get_untracked()
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                    .map(str::to_owned)
+                    .collect(),
                 version: version.get_untracked().trim().to_owned(),
                 author: author.get_untracked(),
                 created_at: created.get_untracked().trim().to_owned(),
@@ -1234,6 +1566,15 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
             field(ui, "package-licensed-to", licensed_to, ""),
             field(ui, "package-license", license, "MIT"),
         )),
+        (
+            widget(Stack::row(0.).gap_step(gap::step::CONTROL).wrap(true)).children(localized),
+            widget(Stack::row(0.).gap_step(gap::step::CONTROL).wrap(true)).children((
+                field(ui, "pkgedit-min-app", min_app, "0.1.0"),
+                field(ui, "pkgedit-base", base, "nanatype.halo"),
+                field(ui, "pkgedit-cover", preview, "images/cover.png"),
+                field(ui, "pkgedit-tags", tags, "minimal, cute"),
+            )),
+        ),
         hint(ui.now_t("pkgedit-capabilities")),
         widget(
             Stack::row(0.0)
@@ -1249,16 +1590,79 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
         hint(ui.now_t("pkgedit-dependencies-hint")),
         widget(
             kit::text_area(dependencies.get_untracked())
+                .read_only(!editable)
                 .placeholder("nanatype.halo@1.0.0")
                 .height(FORM_TEXT_H),
         )
         .key("package-editor-dependencies")
+        .bind(move |a: &mut TextArea| sync_text(&mut a.state, dependencies.get()))
         .on(move |e: &TextChanged| dependencies.set(e.value.to_string())),
-        natural(apply),
-        label(ui.now_t("pkgedit-data")),
-        data_section(ui, view, editable),
-        label(ui.now_t("pkgedit-pipelines")),
-        pipeline_section(ui, view),
+        dynamic(
+            move || ui.packages.get(),
+            move |packages| {
+                widget(
+                    Select::new(None::<String>)
+                        .size(ControlSize::Small)
+                        .options(
+                            packages
+                                .iter()
+                                .map(|p| {
+                                    let value = format!(
+                                        "{}@{}",
+                                        p.manifest.meta.id, p.manifest.meta.version
+                                    );
+                                    SelectOption::new(value.clone(), value)
+                                })
+                                .collect::<Vec<_>>(),
+                        ),
+                )
+                .key("editor-dependency-picker")
+                .bind(move |s: &mut Select| s.disabled = !editable)
+                .on(move |e: &SelectChanged| {
+                    let value = e.value.to_string();
+                    let id = value.split('@').next().unwrap_or("");
+                    dependencies.update(|text| {
+                        let mut rows = text.lines().map(str::to_owned).collect::<Vec<_>>();
+                        if let Some(row) = rows
+                            .iter_mut()
+                            .find(|r| r.split('@').next().map(str::trim) == Some(id))
+                        {
+                            *row = value.clone();
+                        } else {
+                            rows.push(value.clone());
+                        }
+                        *text = rows.join("\n");
+                    });
+                })
+                .into_any()
+            },
+        ),
+        dynamic(
+            move || dependencies.get(),
+            move |text| match nanatype_theme::editor::parse_dependencies(text) {
+                Ok(_) => widget(Stack::column(0.)).into_any(),
+                Err(e) => widget(readable(e).color(SemanticColorRole::Danger))
+                    .key("package-editor-dependencies-error")
+                    .into_any(),
+            },
+        ),
+        (
+            natural(apply),
+            natural(
+                widget(button(ui, "pkgedit-discard-form"))
+                    .on_cx(send(|| Action::DiscardForms("metadata.".into()))),
+            ),
+        ),
+        (
+            (
+                label(ui.now_t("pkgedit-data")),
+                data_section(ui, view, editable),
+            ),
+            (
+                label(ui.now_t("pkgedit-pipelines")),
+                pipeline_section(ui, view),
+            ),
+        ),
     ))
     .into_any()
 }
@@ -1332,7 +1736,19 @@ fn form_buttons(
             .on_cx(apply),
         widget(button(ui, "common-cancel"))
             .key(format!("{key}-cancel"))
-            .on(move |_: &Activate| editing.set(None)),
+            .on_cx({
+                let prefix = if key.contains("pipeline") {
+                    "pipeline."
+                } else {
+                    "data."
+                };
+                move |_, _: &Activate, cx| {
+                    editing.set(None);
+                    cx.dispatch_program_all(Msg::PackageEditor(Action::DiscardForms(
+                        prefix.into(),
+                    )));
+                }
+            }),
     ))
     .into_any()
 }
@@ -1363,7 +1779,7 @@ const FORMATS: [DataFormat; 3] = [DataFormat::Text, DataFormat::Json, DataFormat
 
 /// `[data.<id>]` rows and their form; read-only while package.toml is.
 fn data_section(ui: Ui, view: &EditorView, editable: bool) -> AnyView {
-    let editing: Editing = signal(None);
+    let editing: Editing = buffer(ui, "data.editing", None);
     let rows = view
         .data
         .iter()
@@ -1441,24 +1857,47 @@ fn data_form(
     declared: &BTreeMap<String, DataSpec>,
     editing: Editing,
 ) -> AnyView {
+    let scope = format!("data.{}.", previous.as_deref().unwrap_or("@new"));
     let current = previous.as_ref().and_then(|id| declared.get(id)).cloned();
-    let id = signal(previous.clone().unwrap_or_default());
-    let path = signal(current.as_ref().map(|c| c.path.clone()).unwrap_or_default());
-    let format = signal(current.as_ref().map_or(DataFormat::Text, |c| c.format));
-    let version = signal(current.as_ref().map_or(1, |c| c.format_version).to_string());
-    let source = signal(
+    let id = buffer(
+        ui,
+        format!("{scope}id"),
+        previous.clone().unwrap_or_default(),
+    );
+    let path = buffer(
+        ui,
+        format!("{scope}path"),
+        current.as_ref().map(|c| c.path.clone()).unwrap_or_default(),
+    );
+    let format = buffer(
+        ui,
+        format!("{scope}format"),
+        current.as_ref().map_or(DataFormat::Text, |c| c.format),
+    );
+    let version = buffer(
+        ui,
+        format!("{scope}version"),
+        current.as_ref().map_or(1, |c| c.format_version).to_string(),
+    );
+    let source = buffer(
+        ui,
+        format!("{scope}source"),
         current
             .as_ref()
             .map(|c| c.source.clone())
             .unwrap_or_default(),
     );
-    let license = signal(
+    let license = buffer(
+        ui,
+        format!("{scope}license"),
         current
             .as_ref()
             .map(|c| c.license.clone())
             .unwrap_or_default(),
     );
-    let constraints = signal(
+    let constraints = buffer(
+        ui,
+        format!("{scope}constraints"),
         current
             .as_ref()
             .and_then(|c| c.constraints.as_ref())
@@ -1532,6 +1971,7 @@ fn data_form(
             hint(ui.now_t("pkgedit-data-constraints-hint")),
             widget(
                 kit::text_area(constraints.get_untracked())
+                    .read_only(!form_editable(ui, PACKAGE_MANIFEST))
                     .placeholder("{\"type\": \"object\", \"required\": [\"items\"]}")
                     .label(ui.now_t("pkgedit-data-constraints"))
                     .height(NOTE_H),
@@ -1578,7 +2018,7 @@ fn processor_key(name: &str, version: u32) -> String {
 fn pipeline_section(ui: Ui, view: &EditorView) -> AnyView {
     let skin = view.files.iter().find(|f| f.path == MANIFEST);
     let editable = skin.is_some_and(|f| f.editable);
-    let editing: Editing = signal(None);
+    let editing: Editing = buffer(ui, "pipeline.editing", None);
     let rows = view
         .pipelines
         .iter()
@@ -1672,14 +2112,25 @@ fn pipeline_form(
     specs: &BTreeMap<String, PipelineSpec>,
     editing: Editing,
 ) -> AnyView {
+    let scope = format!("pipeline.{}.", previous.as_deref().unwrap_or("@new"));
     let current = previous.as_ref().and_then(|n| specs.get(n)).cloned();
     let first = &nanatype_theme::PROCESSORS[0];
-    let name = signal(previous.clone().unwrap_or_default());
-    let processor = signal(current.as_ref().map_or_else(
-        || (first.name.to_owned(), first.version),
-        |c| (c.processor.clone(), c.version),
-    ));
-    let inputs = signal(
+    let name = buffer(
+        ui,
+        format!("{scope}name"),
+        previous.clone().unwrap_or_default(),
+    );
+    let processor = buffer(
+        ui,
+        format!("{scope}processor"),
+        current.as_ref().map_or_else(
+            || (first.name.to_owned(), first.version),
+            |c| (c.processor.clone(), c.version),
+        ),
+    );
+    let inputs = buffer(
+        ui,
+        format!("{scope}inputs"),
         current
             .as_ref()
             .map(|c| {
@@ -1690,7 +2141,9 @@ fn pipeline_form(
             })
             .unwrap_or_default(),
     );
-    let params = signal(
+    let params = buffer(
+        ui,
+        format!("{scope}params"),
         current
             .as_ref()
             .map(|c| {
@@ -1829,6 +2282,7 @@ fn pipeline_form(
             hint(ui.now_t("pkgedit-pipeline-params")),
             widget(
                 kit::text_area(params.get_untracked())
+                    .read_only(!form_editable(ui, MANIFEST))
                     .placeholder("name = 1.0")
                     .label(ui.now_t("pkgedit-pipeline-params"))
                     .height(NOTE_H),
@@ -1968,69 +2422,13 @@ fn signing(ui: Ui) -> AnyView {
 // ---- preview -------------------------------------------------------------------
 
 fn preview(ui: Ui) -> AnyView {
-    use crate::ui::preview::Surface;
-    let width = signal(560.0_f32);
-    let choice = move |surface: Surface, key: &str| {
-        segmented_option(ui.now_t(key))
-            .selected(move || ui.package_editor_surface.get() == surface)
-            .on(move |_: &SegmentedOptionChosen| ui.package_editor_surface.set(surface))
-    };
-    dynamic(
-        move || {
-            (
-                ui.package_editor
-                    .with(|v| v.as_ref().map(|v| Arc::as_ptr(&v.report) as usize)),
-                ui.package_editor_surface.get(),
-                ui.locale.get(),
-            )
-        },
-        move |(_, surface, _)| {
-            let Some(view) = view_of(ui) else {
-                return widget(Stack::column(0.)).into_any();
-            };
-            let (Some(skin), Some(files)) = (view.report.skin.clone(), view.report.files.clone())
-            else {
-                return hint(ui.now_t(if view.validating {
-                    "pkgedit-validating"
-                } else {
-                    "pkgedit-preview-none"
-                }));
-            };
-            let (stage, _) = crate::ui::preview::stage(
-                *ui,
-                (*skin).clone(),
-                move |file| files.read(file).ok(),
-                view.report.urls.clone(),
-                *surface,
-                width,
-            );
-            widget(
-                Stack::column(0.0)
-                    .gap_step(nana_ui_core::SpacingStep::Md)
-                    .width(LengthSpec::Fill),
-            )
-            .key("package-editor-preview")
-            .on(move |e: &nana_ui::runtime::SizeChanged| width.set(e.width))
-            .children((
-                widget(SegmentedControl::new().size(ControlSize::Small))
-                    .key("package-editor-preview-surface")
-                    .children((
-                        choice(Surface::Display, "windows-display"),
-                        choice(Surface::History, "windows-history"),
-                        choice(Surface::Input, "windows-input"),
-                    )),
-                stage,
-            ))
-            .into_any()
-        },
-    )
-    .into_any()
+    super::preview_panel::view(ui)
 }
 
 // ---- isolated Lua debugging --------------------------------------------------
 
 fn debug(ui: Ui) -> AnyView {
-    let custom = signal(String::from("{\"type\": \"command\", \"id\": \"reset\"}"));
+    let custom = ui.debug_custom;
     dynamic(
         move || {
             ui.package_editor.with(|v| {
@@ -2176,17 +2574,74 @@ fn debug(ui: Ui) -> AnyView {
                             }),
                         ))
                 }),
-                label(ui.now_t("pkgedit-debug-output")),
-                widget(
-                    Stack::column(0.)
-                        .padding_step(nana_ui_core::SpacingStep::Md, nana_ui_core::SpacingStep::Md)
-                        .surface(SemanticColorRole::Subtle)
-                        .radius(RadiusTier::Sm),
-                )
-                .key("package-editor-debug-output")
-                .children(output),
-                label(ui.now_t("pkgedit-debug-log")),
-                widget(readable(debug.log.join("\n"))).key("package-editor-debug-log"),
+                (
+                    label(ui.now_t("pkgedit-debug-output")),
+                    widget(
+                        Stack::column(0.)
+                            .padding_step(
+                                nana_ui_core::SpacingStep::Md,
+                                nana_ui_core::SpacingStep::Md,
+                            )
+                            .surface(SemanticColorRole::Subtle)
+                            .radius(RadiusTier::Sm),
+                    )
+                    .key("package-editor-debug-output")
+                    .children((
+                        output,
+                        debug
+                            .update
+                            .as_ref()
+                            .and_then(|u| serde_json::to_string_pretty(u).ok())
+                            .map(|s| widget(readable(s))),
+                    )),
+                ),
+                (
+                    label(ui.now_t("pkgedit-debug-log")),
+                    widget(
+                        kit::text_input(ui.debug_filter.get_untracked())
+                            .placeholder(ui.now_t("pkgedit-log-filter"))
+                            .size(ControlSize::Small),
+                    )
+                    .on(move |e: &TextChanged| ui.debug_filter.set(e.value.to_string())),
+                    dynamic(
+                        move || ui.debug_filter.get(),
+                        move |filter| {
+                            widget(readable(
+                                debug
+                                    .log
+                                    .iter()
+                                    .filter(|line| {
+                                        line.to_lowercase().contains(&filter.to_lowercase())
+                                    })
+                                    .cloned()
+                                    .collect::<Vec<_>>()
+                                    .join("\n"),
+                            ))
+                            .key("package-editor-debug-log")
+                            .into_any()
+                        },
+                    ),
+                ),
+                (
+                    hint(ui.now_t("pkgedit-event-sequence")),
+                    widget(kit::text_area(ui.debug_sequence.get_untracked()).height(88.))
+                        .on(move |e: &TextChanged| ui.debug_sequence.set(e.value.to_string())),
+                    widget(button(ui, "pkgedit-replay"))
+                        .disabled(!debug.running || debug.replaying || debug.update.is_none())
+                        .on_cx(move |_, _: &Activate, cx| {
+                            match serde_json::from_str::<Vec<serde_json::Value>>(
+                                &ui.debug_sequence.get_untracked(),
+                            ) {
+                                Ok(events) => cx.dispatch_program_all(Msg::PackageEditor(
+                                    Action::DebugSequence(events),
+                                )),
+                                Err(e) => cx.dispatch_program_all(Msg::Notice {
+                                    text: e.to_string(),
+                                    error: true,
+                                }),
+                            }
+                        }),
+                ),
             ))
             .into_any()
         },

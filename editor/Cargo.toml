@@ -21,6 +21,7 @@ builtin-fonts = ["nanatype-frame/builtin-fonts"]
 
 [dependencies]
 nanatype-frame.workspace = true
+nanatype-audio.workspace = true
 nanatype-diag.workspace = true
 nanatype-model.workspace = true
 nanatype-markup.workspace = true
@@ -33,12 +34,20 @@ nana-ui.workspace = true
 nana-ui-core.workspace = true
 nana-ui-platform.workspace = true
 serde_json.workspace = true
+serde.workspace = true
+zip.workspace = true
+tempfile.workspace = true
 image = { workspace = true, features = ["png"] }
 blake3.workspace = true
+notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSObject", "NSURL", "NSString"] }
+objc2-app-kit.workspace = true
 
 [target.'cfg(windows)'.build-dependencies]
 embed-resource.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 nana-ui-devtools = { workspace = true, features = ["runtime-agent"] }
