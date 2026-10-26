@@ -9,7 +9,7 @@ param(
     [switch]$Steam
 )
 # packaging\licenses files only NanaType ships.
-$appOnly = @("LiliaBilibili-MIT.txt", "libvpx-BSD.txt", "KeySounds-CC0.txt", "KeySounds-Bubble-CC-BY-3.0.txt")
+$appOnly = @("LiliaBilibili-MIT.txt", "libvpx-BSD.txt", "KeySounds-CC0.txt", "KeySounds-Bubble-CC-BY-3.0.txt", "WhisperCpp-MIT.txt", "WhisperModel-MIT.txt", "WebRTC-VAD-BSD.txt")
 # ...and those the Steam edition leaves out with the Bilibili web source.
 $unofficialOnly = @("LiliaBilibili-MIT.txt")
 $ErrorActionPreference = "Stop"

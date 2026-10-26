@@ -694,6 +694,25 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                         ui, invitation, password, true,
                     )),
                 ),
+                pressed_tool(
+                    ti::MICROPHONE,
+                    ui.now_t("settings-speech"),
+                    move || ui.speech.with(|s| s.phase.active()),
+                    || Msg::SpeechToggle,
+                ),
+                popover(
+                    ti::CHEVRON_DOWN,
+                    ui.now_t("settings-speech"),
+                    crate::ui::kit::popover::LG,
+                    signal(false),
+                    widget(Stack::column(0.0).gap_step(gap::step::CONTROL)).children((
+                        crate::ui::speech::mode(ui),
+                        crate::ui::speech::actions(ui),
+                        crate::ui::settings::controls::button(ui, "speech-settings", || {
+                            Msg::SettingsPage(crate::ui::settings::Page::Speech)
+                        }),
+                    )),
+                ),
                 tool(ui, ti::SETTINGS, "window-settings", || Msg::OpenSettings),
                 super::super::sources::account_button(ui),
                 widget(

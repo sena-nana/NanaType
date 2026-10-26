@@ -1630,6 +1630,7 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
                 super::plugins::mounted(ui, nanatype_plugins::Mount::Input),
             )),
         ),
+        super::speech::status(ui),
         workspace::footer(ui, ui.peer_invitation, password),
         completion::popup(ui),
         super::feedback::toast_stack(toasts, crate::windows::INPUT_ACTIONS_H + 4.0, 2),

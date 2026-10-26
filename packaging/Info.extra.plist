@@ -5,5 +5,9 @@
     <!-- A tray (menu bar) app: no Dock icon. -->
     <key>LSUIElement</key>
     <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>NanaType uses your microphone to turn speech into editable dialogue.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>NanaType uses system speech recognition to transcribe your dialogue. Some languages may use Apple's speech service.</string>
 </dict>
 </plist>

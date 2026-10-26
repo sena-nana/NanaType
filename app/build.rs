@@ -12,6 +12,20 @@ const PRODUCT: Product = Product {
 
 fn main() {
     let build = build_id(&PRODUCT);
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        // cargo run has no .app bundle. TCC still requires the usage strings
+        // in the executable's Info.plist when requesting microphone/speech access.
+        println!("cargo:rerun-if-changed=../packaging/Info.extra.plist");
+        let plist = include_str!("../packaging/Info.extra.plist").replace("<dict>",
+            "<dict><key>CFBundleIdentifier</key><string>dev.sena-nana.nanatype</string><key>CFBundleName</key><string>NanaType</string>");
+        let path = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap())
+            .join("speech-info.plist");
+        std::fs::write(&path, plist).expect("write development Info.plist");
+        println!(
+            "cargo:rustc-link-arg-bin=nanatype=-Wl,-sectcreate,__TEXT,__info_plist,{}",
+            path.display()
+        );
+    }
     if !targets_windows() {
         return;
     }

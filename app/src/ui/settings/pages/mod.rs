@@ -26,6 +26,7 @@ mod platforms;
 mod playback;
 mod skin_grid;
 mod skins;
+mod speech;
 mod windows;
 mod workshop;
 
@@ -78,6 +79,7 @@ use crate::windows::WindowKind;
 pub fn page(ui: Ui, page: Page) -> AnyView {
     let body = match page {
         Page::General => general(ui),
+        Page::Speech => speech::settings(ui),
         Page::Playback => playback(ui),
         Page::Skins => skins(ui),
         Page::Packages => crate::ui::plugins::settings(ui),

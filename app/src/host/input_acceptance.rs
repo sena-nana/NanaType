@@ -72,6 +72,9 @@ impl Fixture {
             // Same classifier and pre-editor callback phase as Host::mount.
             let keys = test_keys(ctrl_enter);
             let policy = move |key: &KeyInput| {
+                if fence_speech_key(ui, key) {
+                    observed.lock().unwrap().push(Msg::SpeechEdit);
+                }
                 let completing = ui.completion.with_untracked(Option::is_some);
                 match input_key(key, source_mode, completing, &keys) {
                     Some((msg, consumed)) => {
@@ -163,6 +166,11 @@ impl Fixture {
         }
     }
     fn event(&mut self, payload: InputPayload) {
+        let doc = self.session.document();
+        let focused = doc.context().world().focused(doc.document()) == Some(self.node());
+        if fence_speech_composition(self.ui, &payload, focused) {
+            self.pending.push(Msg::SpeechEdit);
+        }
         self.input.advance(Duration::from_millis(16));
         self.input
             .route_shaped(
@@ -2190,5 +2198,70 @@ fn zz_probe_caret_geometry() {
             )
         });
         eprintln!("source={source} layout={lb:?} pres={pb:?} scroll={so:?} caret={tl:?}");
+    }
+}
+
+#[test]
+fn speech_edit_classifier_catches_mutations_but_leaves_navigation_and_send_alone() {
+    let key =
+        |logical, modifiers| KeyInput::named("Unidentified", logical, KeyState::Pressed, modifiers);
+    for logical in ["x", "中", "Backspace", "Delete"] {
+        assert!(
+            speech_edit_key(&key(logical, Default::default())),
+            "{logical}"
+        );
+    }
+    for logical in [
+        "ArrowLeft",
+        "ArrowRight",
+        "ArrowUp",
+        "Home",
+        "End",
+        "Escape",
+        "Enter",
+    ] {
+        assert!(
+            !speech_edit_key(&key(logical, Default::default())),
+            "{logical}"
+        );
+    }
+    for logical in ["x", "v", "z", "y", "b", "i", "u"] {
+        assert!(speech_edit_key(&key(logical, CTRL)), "{logical}");
+    }
+    for logical in ["c", "a", "ArrowLeft"] {
+        assert!(!speech_edit_key(&key(logical, CTRL)), "{logical}");
+    }
+}
+
+#[test]
+fn speech_fence_is_set_during_real_editor_routing_before_any_text_commit() {
+    for source in [false, true] {
+        for composition in [false, true] {
+            let mut f = Fixture::new(source, false, "语音草稿");
+            f.focus();
+            f.ui.speech.set(Arc::new(crate::app::speech::State {
+                phase: nanatype_speech::controller::Phase::Countdown,
+                remaining: 1,
+                ..Default::default()
+            }));
+            f.key("ArrowLeft", Default::default());
+            assert!(!f.ui.speech_edit_pending.get_untracked());
+            if composition {
+                f.event(InputPayload::Composition(CompositionInput::Start));
+                // Start arrives before preedit text; the fence must already exist.
+                assert_eq!(f.text(), "语音草稿");
+            } else {
+                f.key("a", Default::default());
+            }
+            assert!(f.ui.speech_edit_pending.get_untracked());
+            assert!(
+                f.pending.iter().any(|m| matches!(m, Msg::SpeechEdit))
+                    || f.messages
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .any(|m| matches!(m, Msg::SpeechEdit))
+            );
+        }
     }
 }

@@ -17,6 +17,7 @@ pub mod p2p;
 pub mod plugins;
 pub mod settings;
 pub mod sources;
+pub(crate) mod speech;
 pub mod twitch;
 #[cfg(feature = "unofficial-chat")]
 pub mod youtube;
@@ -174,6 +175,9 @@ pub const META_LABEL: &str = if cfg!(target_os = "macos") {
 /// renderer's part is the [`Stage`] it derefs to.
 #[derive(Clone, Copy)]
 pub struct Ui {
+    pub speech: Signal<Arc<crate::app::speech::State>>,
+    /// Set synchronously in the editor routing phase, before queued messages/timers.
+    pub speech_edit_pending: Signal<bool>,
     pub stage: Stage,
     pub packages: Signal<Arc<Vec<crate::plugins::PackageRow>>>,
     pub plugin_errors: Signal<Arc<HashMap<String, String>>>,
@@ -288,6 +292,8 @@ impl Ui {
             plugin_source_trusted: signal(false),
             plugin_activation_busy: signal(false),
             plugin_activation_error: signal(None),
+            speech: signal(Arc::new(crate::app::speech::State::default())),
+            speech_edit_pending: signal(false),
             #[cfg(feature = "unofficial-chat")]
             bilibili: signal(Arc::new(crate::app::bilibili::State::default())),
             #[cfg(feature = "unofficial-chat")]

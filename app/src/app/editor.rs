@@ -9,6 +9,18 @@ use nanatype_model::{Document, Inline};
 impl App {
     /// The input editor: markup, tools, paste and phrases.
     pub(super) fn editor_msg(&mut self, msg: Msg) {
+        if matches!(
+            &msg,
+            Msg::EditorCommand(_)
+                | Msg::EditorChanged(_)
+                | Msg::EditorPaste
+                | Msg::InsertPhrase(_)
+                | Msg::InsertNewline
+                | Msg::PasteImage { .. }
+                | Msg::Complete(Complete::Accept(_))
+        ) {
+            self.speech_user_edit();
+        }
         if let Msg::Complete(action) = msg {
             self.complete(action);
             return;

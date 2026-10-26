@@ -193,6 +193,7 @@ impl App {
     }
 
     pub(super) fn quit(&mut self) {
+        self.speech.service.stop();
         self.quitting = true;
         crate::ui::shader_effects::close_guard();
         self.save_geometry();

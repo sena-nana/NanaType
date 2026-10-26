@@ -9,6 +9,7 @@ members = [
     "crates/i18n",
     "crates/settings",
     "crates/audio",
+    "crates/speech",
     "crates/bridge",
     "crates/chat",
     "crates/bilibili",
@@ -46,6 +47,7 @@ nanatype-theme = { path = "crates/theme", default-features = false }
 nanatype-i18n = { path = "crates/i18n" }
 nanatype-settings = { path = "crates/settings" }
 nanatype-audio = { path = "crates/audio" }
+nanatype-speech = { path = "crates/speech" }
 nanatype-bridge = { path = "crates/bridge" }
 nanatype-chat = { path = "crates/chat" }
 nanatype-bilibili = { path = "crates/bilibili" }

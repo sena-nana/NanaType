@@ -51,6 +51,7 @@ pub(super) fn chat_panel_style(ui: Ui) -> AnyView {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Page {
     General,
+    Speech,
     Playback,
     Skins,
     Packages,
@@ -65,8 +66,9 @@ pub enum Page {
 }
 
 impl Page {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::General,
+        Self::Speech,
         Self::Playback,
         Self::Skins,
         Self::Packages,
@@ -83,6 +85,7 @@ impl Page {
     pub fn label_key(self) -> &'static str {
         match self {
             Self::General => "settings-general",
+            Self::Speech => "settings-speech",
             Self::Playback => "settings-playback",
             Self::Skins => "settings-skins",
             Self::Packages => "settings-packages",
@@ -100,6 +103,7 @@ impl Page {
     fn icon(self) -> nana_ui::runtime::Icon {
         match self {
             Self::General => ti::ADJUSTMENTS,
+            Self::Speech => ti::MICROPHONE,
             Self::Playback => ti::PLAYER_PLAY,
             Self::Skins => ti::PALETTE,
             Self::Packages => ti::PLUG_CONNECTED,
@@ -120,7 +124,7 @@ impl Page {
 const GROUPS: &[(&str, &[Page])] = &[
     (
         "settings-group-input",
-        &[Page::General, Page::Playback, Page::Hotkeys],
+        &[Page::General, Page::Speech, Page::Playback, Page::Hotkeys],
     ),
     (
         "settings-group-look",

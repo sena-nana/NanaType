@@ -197,9 +197,22 @@ pub enum FileTarget {
     ImportSkin,
     ExportSkin,
     StickerFolder,
+    SpeechModel,
 }
 
 pub enum Msg {
+    SpeechToggle,
+    SpeechResume,
+    SpeechEdit,
+    SpeechEvent(u64, nanatype_speech::Event),
+    SpeechTick(u64, u64),
+    SpeechRefresh,
+    SpeechInventory(nanatype_speech::Inventory),
+    SpeechModelDownload,
+    SpeechModelCancel,
+    SpeechModelDelete,
+    SpeechModelProgress(u8),
+    SpeechModelDone(Result<(), String>),
     RequestPluginActivation(String),
     ConfirmPluginActivation,
     CancelPluginActivation,

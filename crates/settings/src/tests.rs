@@ -993,3 +993,27 @@ fn performance_peeks_the_gpu_choice_before_startup() {
     fs::write(&path, "{not json").unwrap();
     assert_eq!(peek_performance(&path), PerformanceSettings::default());
 }
+
+#[test]
+fn speech_defaults_migrate_and_activation_is_not_persisted() {
+    let mut settings: Settings = serde_json::from_str("{}").unwrap();
+    assert_eq!(settings.speech.mode, SpeechMode::Manual);
+    assert_eq!(settings.speech.backend, SpeechBackend::Auto);
+    assert_eq!(settings.speech.silence_seconds, 3);
+    settings.speech.silence_seconds = 999;
+    settings.speech.language = Some("invalid/path".into());
+    settings.sanitize();
+    assert_eq!(settings.speech.silence_seconds, 10);
+    assert_eq!(settings.speech.language, None);
+    settings.speech.silence_seconds = 0;
+    settings.sanitize();
+    assert_eq!(settings.speech.silence_seconds, 1);
+    let value = serde_json::to_value(&settings).unwrap();
+    assert!(value["speech"].get("active").is_none());
+    settings.speech.mode = SpeechMode::Auto;
+    settings.speech.language = Some("ja-JP".into());
+    assert_eq!(
+        serde_json::from_value::<Settings>(serde_json::to_value(&settings).unwrap()).unwrap(),
+        settings
+    );
+}

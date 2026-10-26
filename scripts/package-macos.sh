@@ -69,6 +69,9 @@ if [ "$steam" = 1 ]; then
 fi
 
 if [ "$build" = 1 ]; then
+    # The recognizer must not specialize to the packaging host's CPU.
+    GGML_NATIVE=OFF
+    export GGML_NATIVE
     # A local build.incremental=true must not affect the release artifact.
     # shellcheck disable=SC2086 # $features is a list of arguments.
     NANATYPE_REQUIRE_RESOURCES=1 CARGO_INCREMENTAL=0 \

@@ -92,7 +92,8 @@ APP_ONLY = {
     "nanatype": set(),
     "nanatype-steam": {"LiliaBilibili-MIT.txt"},
     "nanatype-editor": {"LiliaBilibili-MIT.txt", "libvpx-BSD.txt", "KeySounds-CC0.txt",
-                        "KeySounds-Bubble-CC-BY-3.0.txt"},
+                        "KeySounds-Bubble-CC-BY-3.0.txt", "WhisperCpp-MIT.txt", "WhisperModel-MIT.txt",
+                        "WebRTC-VAD-BSD.txt"},
 }
 
 

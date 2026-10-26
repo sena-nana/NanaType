@@ -41,13 +41,13 @@ fi
 
 forbid nanatype-editor "NanaType itself" "$(echo "$editor" | grep -x 'nanatype' || true)"
 forbid nanatype-editor "NanaType's live, output or session crates" \
-    "$(echo "$editor" | grep -xE 'nanatype-(audio|bilibili|blive|bridge|douyin|p2p|steam|twitch|youtube|update)' || true)"
+    "$(echo "$editor" | grep -xE 'nanatype-(audio|speech|bilibili|blive|bridge|douyin|p2p|steam|twitch|youtube|update)' || true)"
 forbid nanatype-editor "NanaType's strings (nanatype-i18n/app)" \
     "$(features nanatype-editor nanatype-i18n | grep -F 'feature "app"' || true)"
 forbid nanatype-editor "native window export (Spout/Syphon)" \
     "$(features nanatype-editor nana-ui | grep -F 'feature "native-export"' || true)"
 forbid nanatype-editor "NanaType's chat, sticker and output libraries" \
-    "$(echo "$editor" | grep -xE 'grammers-client|shiguredo_libvpx|tray-icon|rasterlottie|nanalive-spout|nanalive-syphon' || true)"
+    "$(echo "$editor" | grep -xE 'grammers-client|shiguredo_libvpx|tray-icon|rasterlottie|nanalive-spout|nanalive-syphon|whisper-rs|whisper-rs-sys|webrtc-vad' || true)"
 
 if [ "$fail" = 0 ]; then
     echo "Product split holds: NanaType $(echo "$app" | wc -l | tr -d ' ') crates, its Steam edition $(echo "$steam" | wc -l | tr -d ' '), NanaType Editor $(echo "$editor" | wc -l | tr -d ' ') crates."

@@ -47,6 +47,7 @@ nanatype-theme.workspace = true
 nanatype-i18n = { workspace = true, features = ["app"] }
 nanatype-settings.workspace = true
 nanatype-audio.workspace = true
+nanatype-speech.workspace = true
 nanatype-bridge.workspace = true
 nanatype-bilibili = { workspace = true, optional = true }
 nanatype-chat.workspace = true

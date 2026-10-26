@@ -174,6 +174,48 @@ pub enum InputMode {
     Mirror,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeechBackend {
+    #[default]
+    Auto,
+    System,
+    Local,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeechMode {
+    #[default]
+    Manual,
+    Auto,
+}
+
+/// Preferences only: microphone activation is deliberately never persisted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SpeechSettings {
+    pub backend: SpeechBackend,
+    pub mode: SpeechMode,
+    /// None follows the default input device.
+    pub device: Option<String>,
+    /// None follows the interface language; "auto" uses local language detection.
+    pub language: Option<String>,
+    pub silence_seconds: u32,
+}
+
+impl Default for SpeechSettings {
+    fn default() -> Self {
+        Self {
+            backend: SpeechBackend::Auto,
+            mode: SpeechMode::Manual,
+            device: None,
+            language: None,
+            silence_seconds: 3,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateSettings {
@@ -1166,6 +1208,7 @@ pub struct Settings {
     pub general: General,
     pub playback: PlaybackSettings,
     pub sound: SoundSettings,
+    pub speech: SpeechSettings,
     pub skin: SkinSettings,
     pub overlays: Overlays,
     pub history: HistorySettings,
@@ -1190,6 +1233,7 @@ impl Default for Settings {
             general: General::default(),
             playback: PlaybackSettings::default(),
             sound: SoundSettings::default(),
+            speech: SpeechSettings::default(),
             skin: SkinSettings::default(),
             overlays: Overlays::default(),
             history: HistorySettings::default(),
@@ -1209,6 +1253,14 @@ impl Settings {
     /// Clamp values a hand-edited file could break. Returns whether anything changed.
     pub fn sanitize(&mut self) -> bool {
         let before = self.clone();
+        self.speech.silence_seconds = self.speech.silence_seconds.clamp(1, 10);
+        if self.speech.language.as_ref().is_some_and(|v| {
+            v.is_empty()
+                || v.len() > 64
+                || !v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        }) {
+            self.speech.language = None;
+        }
         let mut plugins = std::collections::BTreeSet::new();
         self.enabled_plugins.retain(|id| {
             !id.is_empty()

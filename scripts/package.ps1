@@ -54,6 +54,11 @@ $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select
 if (-not $env:NANATYPE_BUILD_ID) { $env:NANATYPE_BUILD_ID = (git rev-parse --short HEAD) }
 if (-not $SkipBuild) {
     $env:NANATYPE_REQUIRE_RESOURCES = "1"
+    # Keep the embedded recognizer portable across supported x64 PCs. The
+    # upstream default specializes to the build machine's CPU.
+    foreach ($flag in @("GGML_NATIVE", "GGML_SSE42", "GGML_AVX", "GGML_AVX2", "GGML_BMI2", "GGML_FMA", "GGML_F16C")) {
+        [Environment]::SetEnvironmentVariable($flag, "OFF", "Process")
+    }
     # Static C runtime: the package must not need the VC++ redistributable.
     $env:RUSTFLAGS = "-C target-feature=+crt-static"
     # A local build.incremental=true must not affect the release artifact.

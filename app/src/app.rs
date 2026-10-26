@@ -10,6 +10,7 @@ mod live;
 pub mod obs;
 mod packages;
 mod skins;
+pub mod speech;
 mod startup;
 mod stickers;
 mod system;
@@ -105,6 +106,7 @@ pub struct App {
     telegram: crate::stickers::telegram::Service,
     pub windows: WindowManager,
     pub scheduler: Scheduler,
+    pub speech: speech::Speech,
     /// The onboarding skin preview waiting out its step's entrance.
     /// A newer hold replaces it, and the old reveal does nothing.
     onboard_preview_gen: u64,
@@ -289,6 +291,7 @@ impl App {
         let blivechat_auth = blivechat::AuthCode::new(&paths.config);
         let obs_password = obs::Password::new(&paths.config);
         let mut app = Self {
+            speech: speech::Speech::new(paths.data.join("speech"), post.clone()),
             plugins: Default::default(),
             plugin_activation: Default::default(),
             assets: AssetLibrary::new(paths.blobs()),
@@ -371,6 +374,7 @@ impl App {
             _critical: nanatype_scheduling::latency_critical(),
             settings,
         };
+        app.publish_speech();
         app.apply_performance(None);
         app.startup_notices(loaded_settings.note, fallback.is_some(), locale);
         match Tray::build(post) {
@@ -516,7 +520,7 @@ impl App {
             })
             .unwrap_or_else(|| s.skin.id.clone());
         let locked = s.overlays.display.lock == nanatype_settings::Lock::Locked;
-        let tooltip = crate::services::tray::tooltip(
+        let mut tooltip = crate::services::tray::tooltip(
             &I18N,
             locale,
             s.general.input_mode,
@@ -524,6 +528,10 @@ impl App {
             locked,
             self.tray_error.as_ref().map(|(_, e)| e.as_str()),
         );
+        if self.speech.controller.active() {
+            tooltip.push_str(" · ");
+            tooltip.push_str(&self.speech.state.status(self.ui));
+        }
         let meta = if cfg!(target_os = "macos") {
             "⌘"
         } else {
@@ -533,6 +541,7 @@ impl App {
             &I18N,
             crate::services::tray::TrayState {
                 locale,
+                speech_active: self.speech.controller.active(),
                 input: windows::desired(WindowKind::Input, &self.skin, s, self.summoned).visible,
                 display: s.overlays.display.visible,
                 history: s.overlays.history.visible,
@@ -1318,6 +1327,11 @@ impl App {
         if let Some(tray) = &self.tray {
             tray.sync(&self.settings);
         }
+        if prev.speech != self.settings.speech
+            || (locale_changed && self.settings.speech.language.is_none())
+        {
+            self.speech_user_edit();
+        }
         self.save_settings();
     }
 
@@ -1370,7 +1384,17 @@ impl App {
     // ---- the session ------------------------------------------------------
 
     pub fn run(&mut self, cmd: Cmd) {
+        self.run_command(cmd, false);
+    }
+
+    fn run_command(&mut self, cmd: Cmd, automatic: bool) {
+        if matches!(cmd, Cmd::Recall(_) | Cmd::SendMarkup(_)) {
+            self.speech_user_edit();
+        }
         if self.peer_blocked(&cmd) {
+            if matches!(cmd, Cmd::Send) {
+                self.speech_user_edit();
+            }
             return;
         }
         let is_send = matches!(cmd, Cmd::Send);
@@ -1378,13 +1402,20 @@ impl App {
         let fx = match chat::handle_command(&mut self.core, cmd, synchronizing, clock::now_ms()) {
             Ok(fx) => fx,
             Err(()) => {
+                if is_send {
+                    self.speech_user_edit();
+                }
                 self.notice(self.ui.now_t("bili-images-unavailable"), true);
                 return;
             }
         };
         let sent = is_send && fx.replace_draft.as_ref().is_some_and(Document::is_blank);
         self.apply_effects(fx);
+        if is_send && !sent {
+            self.speech_user_edit();
+        }
         if sent {
+            self.speech_sent(automatic);
             self.ui.chat_target.set(None);
             let count = self.core.queued();
             let feedback = if count > 0 {
@@ -1662,6 +1693,7 @@ impl App {
 
     /// A toolbar action: an editor command, or a markup edit in source mode.
     fn tool(&mut self, tool: crate::msg::Tool) {
+        self.speech_user_edit();
         if self.synchronizing() && matches!(tool, crate::msg::Tool::Insert(Inline::Atom(_))) {
             self.notice(self.ui.now_t("bili-images-unavailable"), true);
             return;
@@ -1788,6 +1820,7 @@ impl App {
     }
 
     fn markup(&mut self, edit: MarkupEdit) {
+        self.speech_user_edit();
         self.source_edit_undoable |= !matches!(&edit, MarkupEdit::Typed { .. });
         let mut src = self.ui.source.get_untracked();
         let before = src.text.clone();
@@ -1835,6 +1868,9 @@ impl App {
         );
         let skin_filter = FileFilter::new("NanaType package", ["ntpkg", "zip"]);
         let request = match target {
+            FileTarget::SpeechModel => FileDialogRequest::new(id, FileDialogKind::OpenFile)
+                .title(t("speech-model-import"))
+                .filters([FileFilter::new("Whisper base Q5_1", ["bin"])]),
             FileTarget::Avatar => FileDialogRequest::new(id, FileDialogKind::OpenFile)
                 .title(t("general-avatar-pick"))
                 .filters([images]),
@@ -1873,6 +1909,7 @@ impl App {
             return;
         };
         match target {
+            FileTarget::SpeechModel => self.install_speech_model(Some(path)),
             FileTarget::Avatar => {
                 let p = path.display().to_string();
                 self.edit(|s| s.general.avatar = Some(p));
@@ -1970,7 +2007,22 @@ impl App {
     }
 
     pub fn update(&mut self, msg: Msg) {
+        if matches!(msg, Msg::SettingsPage(crate::ui::settings::Page::Speech)) {
+            self.speech_inventory();
+        }
         match msg {
+            m @ (Msg::SpeechToggle
+            | Msg::SpeechResume
+            | Msg::SpeechEdit
+            | Msg::SpeechEvent(..)
+            | Msg::SpeechTick(..)
+            | Msg::SpeechInventory(_)
+            | Msg::SpeechRefresh
+            | Msg::SpeechModelDownload
+            | Msg::SpeechModelCancel
+            | Msg::SpeechModelDelete
+            | Msg::SpeechModelProgress(..)
+            | Msg::SpeechModelDone(..)) => self.speech_msg(m),
             m @ (Msg::RequestPluginActivation(_)
             | Msg::CancelPluginActivation
             | Msg::ConfirmPluginActivation
@@ -2105,7 +2157,12 @@ impl App {
             Msg::PeerLeave => self.peer_leave(),
             Msg::PeerPanel(expanded) => self.ui.peer_panel.set(expanded),
             Msg::PeerEvent(generation, event) => self.peer_event(generation, event),
-            Msg::Core(cmd) => self.run(cmd),
+            Msg::Core(cmd) => {
+                if matches!(cmd, Cmd::DraftChanged(_)) {
+                    self.speech_user_edit();
+                }
+                self.run(cmd);
+            }
             Msg::Edit(f) => self.edit(f),
             Msg::Hotkey(action) => self.hotkey(action),
             Msg::RecordHotkey(action) => self.record_hotkey(action),

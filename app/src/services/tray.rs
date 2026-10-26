@@ -27,6 +27,7 @@ const ID_MIRROR: &str = "nt.mode.mirror";
 const ID_SETTINGS: &str = "nt.settings";
 const ID_OBS: &str = "nt.obs";
 const ID_QUIT: &str = "nt.quit";
+const ID_SPEECH: &str = "nt.speech";
 const SKIN_PREFIX: &str = "nt.skin:";
 
 /// Windows keeps 128 UTF-16 units of a tooltip, terminator included.
@@ -35,6 +36,7 @@ const TOOLTIP_MAX: usize = 120;
 /// What the menu's labels and the tooltip were last built from.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrayState {
+    pub speech_active: bool,
     pub locale: Locale,
     pub input: bool,
     pub display: bool,
@@ -59,6 +61,7 @@ pub struct Badge {
 }
 
 pub struct Tray {
+    speech: MenuItem,
     icon: TrayIcon,
     /// The plain tray image the badges are drawn over.
     base: image::RgbaImage,
@@ -284,6 +287,7 @@ fn menu_message(id: &str) -> Option<Msg> {
         ID_SETTINGS => Msg::OpenSettings,
         ID_OBS => Msg::SettingsPage(crate::ui::settings::Page::Output),
         ID_QUIT => Msg::Quit,
+        ID_SPEECH => Msg::SpeechToggle,
         other => {
             let skin = other.strip_prefix(SKIN_PREFIX)?.to_owned();
             Msg::Edit(Box::new(move |s: &mut Settings| s.skin.id = skin))
@@ -321,6 +325,7 @@ impl Tray {
         let settings = item(ID_SETTINGS);
         let obs = item(ID_OBS);
         let quit = item(ID_QUIT);
+        let speech = item(ID_SPEECH);
         let menu = Menu::new();
         menu.append_items(&[
             &input,
@@ -331,6 +336,7 @@ impl Tray {
             &PredefinedMenuItem::separator(),
             &continue_,
             &sample,
+            &speech,
             &PredefinedMenuItem::separator(),
             &mode,
             &skins_menu,
@@ -361,6 +367,7 @@ impl Tray {
             }
         }));
         Ok(Self {
+            speech,
             icon,
             base,
             drawn: Cell::new(Badge::default()),
@@ -416,6 +423,13 @@ impl Tray {
         let t = |k: &str| i18n.t_in(state.locale, k);
         let changed = |f: fn(&TrayState) -> bool| old.is_none_or(|o| f(o) != f(&state));
         let label = |on: bool, show: &str, hide: &str| t(if on { hide } else { show });
+        if changed(|s| s.speech_active) {
+            self.speech.set_text(t(if state.speech_active {
+                "speech-stop"
+            } else {
+                "speech-start"
+            }));
+        }
         if changed(|s| s.input) {
             self.input.set_text(label(
                 state.input,

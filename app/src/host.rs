@@ -274,6 +274,12 @@ impl Host {
         if source != self.app.ui.source_mode.get_untracked() {
             return;
         }
+        if !matches!(
+            action,
+            nana_ui::runtime::TextEditAction::Copy | nana_ui::runtime::TextEditAction::SelectAll
+        ) {
+            self.app.speech_user_edit();
+        }
         let Some(target) = self.editor_target(source) else {
             return;
         };
@@ -868,6 +874,9 @@ fn key_policy(
     source: bool,
 ) -> impl FnMut(&nana_ui::KeyInput) -> bool + Send + 'static {
     move |key| {
+        if fence_speech_key(ui, key) {
+            post.dispatch(Msg::SpeechEdit);
+        }
         let completing = ui.completion.with_untracked(Option::is_some);
         let action = {
             let keys = INPUT_KEYS.read().unwrap_or_else(|e| e.into_inner());
@@ -879,6 +888,56 @@ fn key_policy(
         post.dispatch(message);
         consumed
     }
+}
+
+fn fence_speech_key(ui: Ui, key: &nana_ui::KeyInput) -> bool {
+    let edit = ui.speech.with_untracked(|s| s.phase.active()) && speech_edit_key(key);
+    if edit {
+        ui.speech_edit_pending.set(true);
+    }
+    edit
+}
+fn fence_speech_composition(ui: Ui, payload: &InputPayload, draft_focused: bool) -> bool {
+    let edit = draft_focused
+        && ui.speech.with_untracked(|s| s.phase.active())
+        && matches!(
+            payload,
+            InputPayload::Composition(
+                nana_ui_platform::CompositionInput::Start
+                    | nana_ui_platform::CompositionInput::Update { .. }
+                    | nana_ui_platform::CompositionInput::Commit(_)
+                    | nana_ui_platform::CompositionInput::DeleteSurrounding { .. }
+            )
+        );
+    if edit {
+        ui.speech_edit_pending.set(true);
+    }
+    edit
+}
+
+/// Navigation/copy must not interrupt dictation. This runs before editor mutation.
+fn speech_edit_key(key: &nana_ui::KeyInput) -> bool {
+    if key.state != KeyState::Pressed {
+        return false;
+    }
+    let chord = chord_of(key);
+    let keys = INPUT_KEYS.read().unwrap_or_else(|e| e.into_inner());
+    if let Some(action) = keys.matching(&chord) {
+        return !matches!(action, InputKey::Send | InputKey::Hide);
+    }
+    if matches!(
+        chord.key.as_str(),
+        "Backspace" | "Delete" | "Enter" | "NumpadEnter"
+    ) {
+        return true;
+    }
+    if key.modifiers.control || key.modifiers.meta {
+        return matches!(
+            chord.key.as_str(),
+            "KeyX" | "KeyV" | "KeyZ" | "KeyY" | "KeyB" | "KeyI" | "KeyU"
+        );
+    }
+    key.logical.0.chars().count() == 1
 }
 
 /// What a key in the input editor does before the editor's own editing: a
@@ -1319,6 +1378,15 @@ impl RuntimeProgram for Host {
             return Ok(self.finish());
         }
         if WindowKind::from_id(id) == Some(WindowKind::Input) {
+            let draft_focused = self.docs.get(&id).is_some_and(|doc| {
+                let focused = doc.context().world().focused(doc.document());
+                focused.is_some()
+                    && (focused == self.editor.map(|e| e.stable_id())
+                        || focused == self.source.map(|e| e.stable_id()))
+            });
+            if fence_speech_composition(self.app.ui, &input.event.payload, draft_focused) {
+                self.app.speech_user_edit();
+            }
             self.keystroke_sound(&input.event.payload);
             if let Some(doc) = self.docs.get(&id) {
                 input::sync_composing(self.app.ui, doc.context(), doc.document());

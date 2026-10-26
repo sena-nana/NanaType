@@ -14,6 +14,7 @@ below identify those sections:
 | `NotoSansSC-OFL.txt` | NanaUI's interface font |
 | `KeySounds-CC0.txt`, `KeySounds-Bubble-CC-BY-3.0.txt` | The input window's keystroke sounds (mechanical keyboard, CC0 1.0; bubbles, CC BY 3.0), with their provenance |
 | `rust-crates.txt` | Every Rust crate's own licence files, written at packaging time |
+| `WhisperCpp-MIT.txt`, `WhisperModel-MIT.txt`, `WebRTC-VAD-BSD.txt` | Offline speech inference, optional Whisper model and WebRTC/libfvad voice activity detection |
 | `libvpx-BSD.txt` | libvpx VP9 decoder, distributed through shiguredo_libvpx |
 | `dxc\` | The DirectX Shader Compiler's licence files, when the package was built from an official DXC release (see below) |
 
@@ -200,7 +201,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 606 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 516 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -220,9 +221,8 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - adler2 2.0.1 — <https://github.com/oyvindln/adler2>
 
-### Apache-2.0 (14)
+### Apache-2.0 (12)
 
-- backon 1.6.0 — <https://github.com/Xuanwo/backon>
 - calendrical_calculations 0.2.4 — <https://github.com/unicode-org/icu4x>
 - codespan-reporting 0.13.1 — <https://github.com/brendanzab/codespan>
 - cpal 0.18.2 — <https://github.com/RustAudio/cpal>
@@ -231,7 +231,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - prost-derive 0.14.4 — <https://github.com/tokio-rs/prost>
 - shiguredo_libvpx 2026.2.0-canary.3 — <https://github.com/shiguredo/libvpx-rs>
 - spirv 0.4.0+sdk-1.4.341.0 — <https://github.com/gfx-rs/rspirv>
-- sync_wrapper 1.0.2 — <https://github.com/Actyx/sync_wrapper>
 - unicode-linebreak 0.1.5 — <https://github.com/axelf4/unicode-linebreak>
 - winit 0.31.0-beta.2 — <https://github.com/rust-windowing/winit>
 - winit-core 0.31.0-beta.2 — <https://github.com/rust-windowing/winit>
@@ -255,11 +254,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - moxcms 0.8.1 — <https://github.com/awxkee/moxcms>
 - pxfm 0.1.30 — <https://github.com/awxkee/pxfm>
 
-### Apache-2.0 OR BSD-3-Clause OR MIT (2)
-
-- num_enum 0.7.6 — <https://github.com/illicitonion/num_enum>
-- num_enum_derive 0.7.6 — <https://github.com/illicitonion/num_enum>
-
 ### Apache-2.0 OR BSL-1.0 (1)
 
 - ryu 1.0.23 — <https://github.com/dtolnay/ryu>
@@ -272,35 +266,28 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - self_cell 1.3.0 — <https://github.com/Voultapher/self_cell>
 
-### Apache-2.0 OR ISC OR MIT (2)
+### Apache-2.0 OR ISC OR MIT (1)
 
-- hyper-rustls 0.27.10 — <https://github.com/rustls/hyper-rustls>
 - rustls 0.23.45 — <https://github.com/rustls/rustls>
 
-### Apache-2.0 OR MIT (369)
+### Apache-2.0 OR MIT (310)
 
 - accesskit 0.25.1 — <https://github.com/AccessKit/accesskit>
 - accesskit_consumer 0.39.1 — <https://github.com/AccessKit/accesskit>
 - accesskit_windows 0.35.1 — <https://github.com/AccessKit/accesskit>
 - addr2line 0.26.1 — <https://github.com/gimli-rs/addr2line>
-- aead 0.5.2 — <https://github.com/RustCrypto/traits>
 - aead 0.6.1 — <https://github.com/RustCrypto/traits>
-- aes 0.8.4 — <https://github.com/RustCrypto/block-ciphers>
 - aes 0.9.3 — <https://github.com/RustCrypto/block-ciphers>
-- aes-gcm 0.10.3 — <https://github.com/RustCrypto/AEADs>
 - allocator-api2 0.2.21 — <https://github.com/zakarumych/allocator-api2>
 - anyhow 1.0.104 — <https://github.com/dtolnay/anyhow>
 - arbitrary 1.5.0 — <https://github.com/rust-fuzz/arbitrary>
-- arboard 3.6.1 — <https://github.com/1Password/arboard>
-- arc-swap 1.9.2 — <https://github.com/vorner/arc-swap>
+- arboard 3.7.0 — <https://github.com/1Password/arboard>
 - arrayvec 0.7.8 — <https://github.com/bluss/arrayvec>
 - ash 0.38.0+1.3.281 — <https://github.com/ash-rs/ash>
 - async-trait 0.1.92 — <https://github.com/dtolnay/async-trait>
-- atomic-waker 1.1.2 — <https://github.com/smol-rs/atomic-waker>
 - base16ct 1.0.0 — <https://github.com/RustCrypto/formats>
 - base64 0.22.1 — <https://github.com/marshallpierce/rust-base64>
 - base64 0.23.1 — <https://github.com/marshallpierce/rust-base64>
-- base64ct 1.8.3 — <https://github.com/RustCrypto/formats>
 - bit-set 0.10.0 — <https://github.com/contain-rs/bit-set>
 - bit-set 0.8.0 — <https://github.com/contain-rs/bit-set>
 - bit-vec 0.8.0 — <https://github.com/contain-rs/bit-vec>
@@ -316,7 +303,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - chacha20 0.10.2 — <https://github.com/RustCrypto/stream-ciphers>
 - chacha20poly1305 0.11.0 — <https://github.com/RustCrypto/AEADs>
 - chrono 0.4.45 — <https://github.com/chronotope/chrono>
-- cipher 0.4.4 — <https://github.com/RustCrypto/traits>
 - cipher 0.5.2 — <https://github.com/RustCrypto/traits>
 - cmov 0.5.4 — <https://github.com/RustCrypto/utils>
 - cobs 0.3.0 — <https://github.com/jamesmunns/cobs.rs>
@@ -336,7 +322,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - crypto-common 0.2.2 — <https://github.com/RustCrypto/traits>
 - crypto-primes 0.7.2 — <https://github.com/entropyxyz/crypto-primes>
 - ctr 0.10.1 — <https://github.com/RustCrypto/block-modes>
-- ctr 0.9.2 — <https://github.com/RustCrypto/block-modes>
 - ctutils 0.4.3 — <https://github.com/RustCrypto/utils>
 - curve25519-dalek-derive 0.1.1 — <https://github.com/dalek-cryptography/curve25519-dalek>
 - dasp_sample 0.11.0 — <https://github.com/rustaudio/sample>
@@ -344,9 +329,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - defmt 1.2.0 — <https://github.com/knurling-rs/defmt>
 - defmt-macros 1.2.0 — <https://github.com/knurling-rs/defmt>
 - defmt-parser 1.1.0 — <https://github.com/knurling-rs/defmt>
-- der 0.8.2 — <https://github.com/RustCrypto/formats>
 - deranged 0.5.9 — <https://github.com/jhpratt/deranged>
-- diatomic-waker 0.2.3 — <https://github.com/asynchronics/diatomic-waker>
 - digest 0.10.7 — <https://github.com/RustCrypto/traits>
 - digest 0.11.3 — <https://github.com/RustCrypto/traits>
 - displaydoc 0.2.7 — <https://github.com/yaahc/displaydoc>
@@ -356,11 +339,9 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - either 1.19.0 — <https://github.com/rayon-rs/either>
 - embedded-io 0.4.0 — <https://github.com/embassy-rs/embedded-io>
 - embedded-io 0.6.1 — <https://github.com/rust-embedded/embedded-hal>
-- enum-assoc 1.4.1 — <https://github.com/Eolu/enum-assoc>
 - equivalent 1.0.2 — <https://github.com/indexmap-rs/equivalent>
 - etagere 0.3.0 — <https://github.com/nical/etagere>
 - euclid 0.22.14 — <https://github.com/servo/euclid>
-- fastrand 2.5.0 — <https://github.com/smol-rs/fastrand>
 - fdeflate 0.3.7 — <https://github.com/image-rs/fdeflate>
 - flate2 1.1.10 — <https://github.com/rust-lang/flate2-rs>
 - fluent-bundle 0.16.0 — <https://github.com/projectfluent/fluent-rs>
@@ -374,14 +355,12 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - futures-core 0.3.34 — <https://github.com/rust-lang/futures-rs>
 - futures-executor 0.3.34 — <https://github.com/rust-lang/futures-rs>
 - futures-io 0.3.34 — <https://github.com/rust-lang/futures-rs>
-- futures-lite 2.6.1 — <https://github.com/smol-rs/futures-lite>
 - futures-macro 0.3.34 — <https://github.com/rust-lang/futures-rs>
 - futures-sink 0.3.34 — <https://github.com/rust-lang/futures-rs>
 - futures-task 0.3.34 — <https://github.com/rust-lang/futures-rs>
 - futures-util 0.3.34 — <https://github.com/rust-lang/futures-rs>
 - getrandom 0.2.17 — <https://github.com/rust-random/getrandom>
 - getrandom 0.4.3 — <https://github.com/rust-random/getrandom>
-- ghash 0.5.1 — <https://github.com/RustCrypto/universal-hashes>
 - gif 0.14.2 — <https://github.com/image-rs/image-gif>
 - gimli 0.33.0 — <https://github.com/gimli-rs/gimli>
 - glass_pumpkin 2.0.0 — <https://github.com/LF-Decentralized-Trust-labs/agora-glass_pumpkin>
@@ -396,7 +375,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - hashbrown 0.12.3 — <https://github.com/rust-lang/hashbrown>
 - hashbrown 0.16.1 — <https://github.com/rust-lang/hashbrown>
 - hashbrown 0.17.1 — <https://github.com/rust-lang/hashbrown>
-- heck 0.5.0 — <https://github.com/withoutboats/heck>
 - hex 0.4.3 — <https://github.com/KokaKiwi/rust-hex>
 - hickory-net 0.26.3 — <https://github.com/hickory-dns/hickory-dns>
 - hickory-proto 0.26.3 — <https://github.com/hickory-dns/hickory-dns>
@@ -404,29 +382,20 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - hmac 0.13.0 — <https://github.com/RustCrypto/MACs>
 - http 1.5.0 — <https://github.com/hyperium/http>
 - httparse 1.10.1 — <https://github.com/seanmonstar/httparse>
-- httpdate 1.0.3 — <https://github.com/pyfisch/httpdate>
 - hybrid-array 0.4.15 — <https://github.com/RustCrypto/hybrid-array>
 - i_overlay 9.0.0 — <https://github.com/iShape-Rust/iOverlay>
 - ident_case 1.0.1 — <https://github.com/TedDriggs/ident_case>
-- identity-hash 0.1.0 — <https://github.com/offsetting/identity-hash>
 - idna 1.1.0 — <https://github.com/servo/rust-url>
 - idna_adapter 1.2.2 — <https://github.com/hsivonen/idna_adapter>
 - image 0.25.10 — <https://github.com/image-rs/image>
 - image-webp 0.2.4 — <https://github.com/image-rs/image-webp>
 - indexmap 1.9.3 — <https://github.com/bluss/indexmap>
 - indexmap 2.14.2 — <https://github.com/indexmap-rs/indexmap>
-- inout 0.1.4 — <https://github.com/RustCrypto/utils>
 - inout 0.2.2 — <https://github.com/RustCrypto/utils>
 - intl-memoizer 0.5.3 — <https://github.com/projectfluent/fluent-rs>
 - intl_pluralrules 7.0.2 — <https://github.com/zbraniecki/pluralrules>
 - ipconfig 0.3.4 — <https://github.com/liranringel/ipconfig>
 - ipnet 2.12.2 — <https://github.com/krisprice/ipnet>
-- iroh 1.3.0 — <https://github.com/n0-computer/iroh>
-- iroh-base 1.3.0 — <https://github.com/n0-computer/iroh>
-- iroh-dns 1.3.0 — <https://github.com/n0-computer/iroh>
-- iroh-metrics 1.0.2 — <https://github.com/n0-computer/iroh-metrics>
-- iroh-metrics-derive 1.0.1 — <https://github.com/n0-computer/iroh-metrics>
-- iroh-relay 1.3.0 — <https://github.com/n0-computer/iroh>
 - itertools 0.14.0 — <https://github.com/rust-itertools/itertools>
 - itoa 1.0.18 — <https://github.com/dtolnay/itoa>
 - keyboard-types 0.8.3 — <https://github.com/rust-windowing/keyboard-types>
@@ -449,11 +418,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - minimal-lexical 0.2.1 — <https://github.com/Alexhuszagh/minimal-lexical>
 - muda 0.21.2 — <https://github.com/tauri-apps/muda>
 - multiversion_no_op 1.0.0 — <https://github.com/hsivonen/multiversion_no_op>
-- n0-dns-resolver 0.1.0 — <https://github.com/n0-computer/iroh>
-- n0-error 1.0.1 — <https://github.com/n0-computer/n0-error>
-- n0-error-macros 1.0.1 — <https://github.com/n0-computer/n0-error>
-- n0-future 0.3.2 — <https://github.com/n0-computer/n0-future>
-- n0-watcher 1.0.0 — <https://github.com/n0-computer/n0-watcher>
 - naga 30.0.1 — <https://github.com/gfx-rs/wgpu>
 - naga-types 30.0.1 — <https://github.com/gfx-rs/wgpu>
 - nana-app-icon 0.1.0 — <https://github.com/sena-nana/NanaUI>
@@ -475,39 +439,29 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - nana-ui-view-macros 0.1.0 — <https://github.com/sena-nana/NanaUI>
 - nana-ui-view-schema 0.1.0 — <https://github.com/sena-nana/NanaUI>
 - nana-window 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- netwatch 0.19.3 — <https://github.com/n0-computer/net-tools>
-- noq 1.3.0 — <https://github.com/n0-computer/noq>
-- noq-proto 1.3.0 — <https://github.com/n0-computer/noq>
-- noq-udp 1.3.0 — <https://github.com/n0-computer/noq>
 - notify-types 2.1.0 — <https://github.com/notify-rs/notify>
 - num-bigint 0.5.1 — <https://github.com/rust-num/num-bigint>
+- num-complex 0.4.6 — <https://github.com/rust-num/num-complex>
 - num-conv 0.2.2 — <https://github.com/jhpratt/num-conv>
 - num-integer 0.1.47 — <https://github.com/rust-num/num-integer>
 - num-traits 0.2.19 — <https://github.com/rust-num/num-traits>
 - object 0.40.0 — <https://github.com/gimli-rs/object>
 - once_cell 1.21.4 — <https://github.com/matklad/once_cell>
-- opaque-debug 0.3.1 — <https://github.com/RustCrypto/utils>
-- parking 2.2.1 — <https://github.com/smol-rs/parking>
 - parking_lot 0.12.5 — <https://github.com/Amanieu/parking_lot>
 - parking_lot_core 0.9.12 — <https://github.com/Amanieu/parking_lot>
 - pbkdf2 0.13.0 — <https://github.com/RustCrypto/password-hashes>
-- pem-rfc7468 1.0.0 — <https://github.com/RustCrypto/formats>
 - percent-encoding 2.3.2 — <https://github.com/servo/rust-url>
-- pin-project 1.1.13 — <https://github.com/taiki-e/pin-project>
-- pin-project-internal 1.1.13 — <https://github.com/taiki-e/pin-project>
 - pin-project-lite 0.2.17 — <https://github.com/taiki-e/pin-project-lite>
-- pkcs8 0.11.0 — <https://github.com/RustCrypto/formats>
 - png 0.18.1 — <https://github.com/image-rs/image-png>
 - pollster 1.0.1 — <https://github.com/zesterer/pollster>
 - poly1305 0.9.1 — <https://github.com/RustCrypto/universal-hashes>
 - polycool 0.4.0 — <https://github.com/linebender/kurbo>
-- polyval 0.6.2 — <https://github.com/RustCrypto/universal-hashes>
 - portable-atomic 1.15.0 — <https://github.com/taiki-e/portable-atomic>
 - postcard 1.1.3 — <https://github.com/jamesmunns/postcard>
-- postcard-derive 0.2.2 — <https://github.com/jamesmunns/postcard>
 - powerfmt 0.2.1 — <https://github.com/jhpratt/powerfmt>
 - prefix-trie 0.8.4 — <https://github.com/tiborschneider/prefix-trie>
 - presser 0.3.1 — <https://github.com/EmbarkStudios/presser>
+- primal-check 0.3.4 — <https://github.com/huonw/primal>
 - proc-macro-crate 3.5.0 — <https://github.com/bkchr/proc-macro-crate>
 - proc-macro2 1.0.107 — <https://github.com/dtolnay/proc-macro2>
 - profiling 1.0.18 — <https://github.com/aclysma/profiling>
@@ -516,7 +470,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - quote 1.0.47 — <https://github.com/dtolnay/quote>
 - rand 0.10.3 — <https://github.com/rust-random/rand>
 - rand_core 0.10.1 — <https://github.com/rust-random/rand_core>
-- rand_pcg 0.10.2 — <https://github.com/rust-random/rngs>
 - range-alloc 0.1.5 — <https://github.com/gfx-rs/range-alloc>
 - rasterlottie 0.2.4 — <https://github.com/neodyland/rasterlottie>
 - read-fonts 0.41.0 — <https://github.com/googlefonts/fontations>
@@ -525,7 +478,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - regex-automata 0.4.18 — <https://github.com/rust-lang/regex>
 - regex-syntax 0.8.11 — <https://github.com/rust-lang/regex>
 - renderdoc-sys 1.1.0 — <https://github.com/ebkalderon/renderdoc-rs>
-- reqwest 0.13.5 — <https://github.com/seanmonstar/reqwest>
 - resolv-conf 0.7.6 — <https://github.com/hickory-dns/resolv-conf>
 - resvg 0.48.1 — <https://github.com/linebender/resvg>
 - rosc 0.10.1 — <https://github.com/klingtnet/rosc>
@@ -533,13 +485,11 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - rustc-demangle 0.1.28 — <https://github.com/rust-lang/rustc-demangle>
 - rustc-hash 1.1.0 — <https://github.com/rust-lang-nursery/rustc-hash>
 - rustc-hash 2.1.3 — <https://github.com/rust-lang/rustc-hash>
+- rustfft 6.4.1 — <https://github.com/ejmahler/RustFFT>
 - rustls-pki-types 1.15.1 — <https://github.com/rustls/pki-types>
-- rustls-platform-verifier 0.7.1 — <https://github.com/rustls/rustls-platform-verifier>
-- rustversion 1.0.23 — <https://github.com/dtolnay/rustversion>
 - scopeguard 1.2.0 — <https://github.com/bluss/scopeguard>
 - semver 1.0.28 — <https://github.com/dtolnay/semver>
 - serde 1.0.229 — <https://github.com/serde-rs/serde>
-- serde_bytes 0.11.19 — <https://github.com/serde-rs/bytes>
 - serde_core 1.0.229 — <https://github.com/serde-rs/serde>
 - serde_derive 1.0.229 — <https://github.com/serde-rs/serde>
 - serde_json 1.0.151 — <https://github.com/serde-rs/json>
@@ -559,10 +509,9 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - smallvec 1.16.1 — <https://github.com/servo/rust-smallvec>
 - smol_str 0.3.6 — <https://github.com/rust-lang/rust-analyzer/tree/master/lib/smol_str>
 - socket2 0.6.5 — <https://github.com/rust-lang/socket2>
-- sorted-index-buffer 0.2.1 — <https://github.com/n0-computer/iroh>
-- spki 0.8.1 — <https://github.com/RustCrypto/formats>
 - stable_deref_trait 1.2.1 — <https://github.com/storyyeller/stable_deref_trait>
 - static_assertions 1.1.0 — <https://github.com/nvzqz/static-assertions-rs>
+- strength_reduce 0.2.4 — <http://github.com/ejmahler/strength_reduce>
 - svgtypes 0.16.1 — <https://github.com/linebender/svgtypes>
 - swash 0.2.10 — <https://github.com/dfrg/swash>
 - syn 1.0.109 — <https://github.com/dtolnay/syn>
@@ -577,12 +526,12 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - time 0.3.55 — <https://github.com/time-rs/time>
 - time-core 0.1.9 — <https://github.com/time-rs/time>
 - time-macros 0.2.32 — <https://github.com/time-rs/time>
-- tokio-rustls 0.26.6 — <https://github.com/rustls/tokio-rustls>
 - toml 1.1.7+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_datetime 1.1.2+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_edit 0.25.15+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_parser 1.1.4+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_writer 1.1.3+spec-1.1.0 — <https://github.com/toml-rs/toml>
+- transpose 0.2.3 — <https://github.com/ejmahler/transpose>
 - tray-icon 0.26.1 — <https://github.com/tauri-apps/tray-icon>
 - ttf-parser 0.25.1 — <https://github.com/harfbuzz/ttf-parser>
 - tungstenite 0.30.0 — <https://github.com/snapview/tungstenite-rs>
@@ -597,8 +546,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - unicode-segmentation 1.13.3 — <https://github.com/unicode-rs/unicode-segmentation>
 - unicode-vo 0.1.0 — <https://github.com/RazrFalcon/unicode-vo>
 - unicode-width 0.2.2 — <https://github.com/unicode-rs/unicode-width>
-- unicode-xid 0.2.6 — <https://github.com/unicode-rs/unicode-xid>
-- universal-hash 0.5.1 — <https://github.com/RustCrypto/traits>
 - universal-hash 0.6.1 — <https://github.com/RustCrypto/traits>
 - ureq 3.4.2 — <https://github.com/algesten/ureq>
 - ureq-proto 0.6.4 — <https://github.com/algesten/ureq-proto>
@@ -607,6 +554,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - utf8-zero 0.8.1 — <https://github.com/algesten/utf8-zero>
 - utf8_iter 1.0.4 — <https://github.com/hsivonen/utf8_iter>
 - uuid 1.26.1 — <https://github.com/uuid-rs/uuid>
+- webp 0.3.1 — <https://github.com/jaredforth/webp>
 - weezl 0.1.12 — <https://github.com/image-rs/weezl>
 - wgpu 30.0.1 — <https://github.com/gfx-rs/wgpu>
 - wgpu-core 30.0.1 — <https://github.com/gfx-rs/wgpu>
@@ -617,45 +565,30 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - widestring 1.2.1 — <https://github.com/VoidStarKat/widestring-rs>
 - winapi 0.3.9 — <https://github.com/retep998/winapi-rs>
 - window-vibrancy 0.8.1 — <https://github.com/tauri-apps/tauri-plugin-vibrancy>
-- windows 0.61.3 — <https://github.com/microsoft/windows-rs>
 - windows 0.62.2 — <https://github.com/microsoft/windows-rs>
-- windows-collections 0.2.0 — <https://github.com/microsoft/windows-rs>
 - windows-collections 0.3.2 — <https://github.com/microsoft/windows-rs>
-- windows-core 0.61.2 — <https://github.com/microsoft/windows-rs>
 - windows-core 0.62.2 — <https://github.com/microsoft/windows-rs>
-- windows-future 0.2.1 — <https://github.com/microsoft/windows-rs>
 - windows-future 0.3.2 — <https://github.com/microsoft/windows-rs>
 - windows-implement 0.60.2 — <https://github.com/microsoft/windows-rs>
 - windows-interface 0.59.3 — <https://github.com/microsoft/windows-rs>
-- windows-link 0.1.3 — <https://github.com/microsoft/windows-rs>
 - windows-link 0.2.1 — <https://github.com/microsoft/windows-rs>
-- windows-numerics 0.2.0 — <https://github.com/microsoft/windows-rs>
 - windows-numerics 0.3.1 — <https://github.com/microsoft/windows-rs>
 - windows-registry 0.6.1 — <https://github.com/microsoft/windows-rs>
-- windows-result 0.3.4 — <https://github.com/microsoft/windows-rs>
 - windows-result 0.4.1 — <https://github.com/microsoft/windows-rs>
-- windows-strings 0.4.2 — <https://github.com/microsoft/windows-rs>
 - windows-strings 0.5.1 — <https://github.com/microsoft/windows-rs>
-- windows-sys 0.60.2 — <https://github.com/microsoft/windows-rs>
 - windows-sys 0.61.2 — <https://github.com/microsoft/windows-rs>
-- windows-targets 0.53.5 — <https://github.com/microsoft/windows-rs>
-- windows-threading 0.1.0 — <https://github.com/microsoft/windows-rs>
 - windows-threading 0.2.1 — <https://github.com/microsoft/windows-rs>
 - windows-version 0.1.7 — <https://github.com/microsoft/windows-rs>
-- windows_x86_64_msvc 0.53.1 — <https://github.com/microsoft/windows-rs>
-- wmi 0.18.4 — <https://github.com/ohadravid/wmi-rs>
 - yazi 0.2.1 — <https://github.com/dfrg/yazi>
 - zeno 0.3.3 — <https://github.com/dfrg/zeno>
 - zeroize 1.9.0 — <https://github.com/RustCrypto/utils>
-- zeroize_derive 1.5.0 — <https://github.com/RustCrypto/utils>
 
-### Apache-2.0 OR MIT OR Zlib (12)
+### Apache-2.0 OR MIT OR Zlib (11)
 
 - bytemuck 1.25.2 — <https://github.com/Lokathor/bytemuck>
 - bytemuck_derive 1.12.1 — <https://github.com/Lokathor/bytemuck>
 - cursor-icon 1.2.0 — <https://github.com/rust-windowing/cursor-icon>
 - glow 0.17.0 — <https://github.com/grovesNL/glow>
-- lru-slab 0.1.3 — <https://github.com/Ralith/lru-slab>
 - miniz_oxide 0.8.9 — <https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide>
 - miniz_oxide 0.9.1 — <https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide>
 - raw-window-handle 0.6.2 — <https://github.com/rust-windowing/raw-window-handle>
@@ -698,20 +631,18 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - wasmparser 0.258.3 — <https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser>
 - wasmprinter 0.258.3 — <https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmprinter>
 
-### BSD-2-Clause (4)
+### BSD-2-Clause (3)
 
 - arrayref 0.3.9 — <https://github.com/droundy/arrayref>
 - nanalive-spout 0.1.1 — <https://github.com/sena-nana/nanalive-spout>
 - nanalive-spout-sys 0.1.1 — <https://github.com/sena-nana/nanalive-spout>
-- spez 0.1.2 — <https://github.com/m-ou-se/spez>
 
-### BSD-3-Clause (8)
+### BSD-3-Clause (7)
 
 - alloc-no-stdlib 2.0.4 — <https://github.com/dropbox/rust-alloc-no-stdlib>
 - alloc-stdlib 0.2.4 — <https://github.com/dropbox/rust-alloc-no-stdlib>
 - curve25519-dalek 5.0.0 — <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/curve25519-dalek>
 - ed25519-dalek 3.0.0 — <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek>
-- sha1_smol 1.0.1 — <https://github.com/mitsuhiko/sha1-smol>
 - subtle 2.6.1 — <https://github.com/dalek-cryptography/subtle>
 - tiny-skia 0.12.0 — <https://github.com/linebender/tiny-skia>
 - tiny-skia-path 0.12.0 — <https://github.com/linebender/tiny-skia/tree/master/path>
@@ -731,7 +662,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 ### CC0-1.0 (1)
 
-- notify 8.2.0 — <https://github.com/notify-rs/notify>
+- notify 8.2.1 — <https://github.com/notify-rs/notify>
 
 ### CC0-1.0 OR Apache-2.0 OR Apache-2.0 WITH LLVM-exception (1)
 
@@ -748,21 +679,15 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - rustls-webpki 0.103.15 — <https://github.com/rustls/webpki>
 - untrusted 0.9.0 — <https://github.com/briansmith/untrusted>
 
-### MIT (84)
+### MIT (59)
 
 - bytes 1.12.1 — <https://github.com/tokio-rs/bytes>
 - color_quant 1.1.0 — <https://github.com/image-rs/color_quant>
-- convert_case 0.10.0 — <https://github.com/rutrum/convert-case>
-- cordyceps 0.3.5 — <https://github.com/hawkw/mycelium>
 - core_maths 0.1.1 — <https://github.com/robertbastian/core_maths>
 - darling 0.24.1 — <https://github.com/TedDriggs/darling>
 - darling_core 0.24.1 — <https://github.com/TedDriggs/darling>
 - darling_macro 0.24.1 — <https://github.com/TedDriggs/darling>
 - data-encoding 2.11.1 — <https://github.com/ia0/data-encoding>
-- data-encoding-macro 0.1.21 — <https://github.com/ia0/data-encoding>
-- data-encoding-macro-internal 0.1.19 — <https://github.com/ia0/data-encoding>
-- derive_more 2.1.1 — <https://github.com/JelteF/derive_more>
-- derive_more-impl 2.1.1 — <https://github.com/JelteF/derive_more>
 - ebml-iterable 0.7.1 — <https://github.com/austinleroy/ebml-iterable>
 - ebml-iterable-specification 0.4.0 — <https://github.com/austinleroy/ebml-iterable>
 - ebml-iterable-specification-derive 0.4.0 — <https://github.com/austinleroy/ebml-iterable>
@@ -772,61 +697,42 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - float-cmp 0.9.0 — <https://github.com/mikedilger/float-cmp>
 - float_next_after 1.0.0 — <https://gitlab.com/bronsonbdevost/next_afterf>
 - fontdb 0.24.0 — <https://github.com/RazrFalcon/fontdb>
-- futures-buffered 0.2.13 — <https://github.com/conradludgate/futures-buffered>
 - generic-array 0.14.7 — <https://github.com/fizyk20/generic-array>
 - harfrust 0.12.0 — <https://github.com/harfbuzz/harfrust>
-- http-body 1.1.0 — <https://github.com/hyperium/http-body>
-- http-body-util 0.1.5 — <https://github.com/hyperium/http-body>
-- hyper 1.12.0 — <https://github.com/hyperium/hyper>
-- hyper-util 0.1.21 — <https://github.com/hyperium/hyper-util>
 - i_float 5.0.0 — <https://github.com/iShape-Rust/iFloat>
 - i_key_sort 0.11.0 — <https://github.com/iShape-Rust/iKeySort>
 - i_shape 5.0.0 — <https://github.com/iShape-Rust/i_shape>
 - i_tree 0.19.0 — <https://github.com/iShape-Rust/iTree>
 - imagesize 0.15.0 — <https://github.com/Roughsketch/imagesize>
 - libm 0.2.16 — <https://github.com/rust-lang/compiler-builtins>
-- lru 0.18.5 — <https://github.com/jeromefroe/lru-rs>
-- mac-addr 0.3.0 — <https://github.com/shellrow/mac-addr>
+- libwebp-sys 0.9.6 — <https://github.com/NoXF/libwebp-sys>
 - mime_guess 2.0.5 — <https://github.com/abonander/mime_guess>
 - mio 1.2.4 — <https://github.com/tokio-rs/mio>
 - nana-icons-tabler 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- netdev 0.45.1 — <https://github.com/shellrow/netdev>
 - nom 7.1.3 — <https://github.com/Geal/nom>
 - ordered-float 5.5.0 — <https://github.com/reem/rust-ordered-float>
 - os_info 3.15.0 — <https://github.com/stanislav-tkach/os_info>
-- papaya 0.2.5 — <https://github.com/ibraheemdev/papaya>
 - pico-args 0.5.0 — <https://github.com/RazrFalcon/pico-args>
+- realfft 3.5.0 — <https://github.com/HEnquist/realfft>
 - rgb 0.8.53 — <https://github.com/kornelski/rust-rgb>
+- rubato 0.16.2 — <https://github.com/HEnquist/rubato>
 - ruzstd 0.9.0 — <https://github.com/KillingSpark/zstd-rs>
 - schemars 0.9.0 — <https://github.com/GREsau/schemars>
 - schemars 1.2.3 — <https://github.com/GREsau/schemars>
-- seize 0.5.1 — <https://github.com/ibraheemdev/seize>
 - simd-adler32 0.3.10 — <https://github.com/mcountryman/simd-adler32>
-- simple-dns 0.12.0 — <https://github.com/balliegojr/simple-dns>
 - slab 0.4.12 — <https://github.com/tokio-rs/slab>
-- spin 0.10.1 — <https://github.com/mvdnes/spin-rs>
 - strict-num 0.1.1 — <https://github.com/RazrFalcon/strict-num>
 - strsim 0.11.1 — <https://github.com/rapidfuzz/strsim-rs>
-- strum 0.28.0 — <https://github.com/Peternator7/strum>
-- strum_macros 0.28.0 — <https://github.com/Peternator7/strum>
 - synstructure 0.13.2 — <https://github.com/mystor/synstructure>
 - tiff 0.11.3 — <https://github.com/image-rs/image-tiff>
 - tokio 1.53.3 — <https://github.com/tokio-rs/tokio>
 - tokio-macros 2.7.2 — <https://github.com/tokio-rs/tokio>
 - tokio-socks 0.5.3 — <https://github.com/sticnarf/tokio-socks>
-- tokio-stream 0.1.19 — <https://github.com/tokio-rs/tokio>
-- tokio-util 0.7.20 — <https://github.com/tokio-rs/tokio>
-- tokio-websockets 0.13.3 — <https://github.com/Gelbpunkt/tokio-websockets>
-- tower 0.5.3 — <https://github.com/tower-rs/tower>
-- tower-http 0.6.11 — <https://github.com/tower-rs/tower-http>
-- tower-layer 0.3.3 — <https://github.com/tower-rs/tower>
-- tower-service 0.3.3 — <https://github.com/tower-rs/tower>
 - tracing 0.1.44 — <https://github.com/tokio-rs/tracing>
 - tracing-attributes 0.1.31 — <https://github.com/tokio-rs/tracing>
 - tracing-core 0.1.36 — <https://github.com/tokio-rs/tracing>
-- try-lock 0.2.5 — <https://github.com/seanmonstar/try-lock>
-- want 0.3.2 — <https://github.com/seanmonstar/want>
 - webm-iterable 0.7.1 — <https://github.com/austinleroy/webm-iterable>
+- webrtc-vad 0.4.0 — <https://github.com/kaegi/webrtc-vad>
 - webview2-com 0.39.1 — <https://github.com/wravery/webview2-rs>
 - webview2-com-macros 0.8.1 — <https://github.com/wravery/webview2-rs>
 - webview2-com-sys 0.39.1 — <https://github.com/wravery/webview2-rs>
@@ -899,6 +805,11 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - zerotrie 0.2.5 — <https://github.com/unicode-org/icu4x>
 - zerovec 0.11.8 — <https://github.com/unicode-org/icu4x>
 - zerovec-derive 0.11.6 — <https://github.com/unicode-org/icu4x>
+
+### Unlicense (2)
+
+- whisper-rs 0.16.0 — <https://codeberg.org/tazz4843/whisper-rs>
+- whisper-rs-sys 0.15.0 — <https://codeberg.org/tazz4843/whisper-rs>
 
 ### Zlib (3)
 
