@@ -230,6 +230,7 @@ scale = 0.72
 text_color = "#ffc2e6"
 
 [shaders.artwork]
+active = ["line:0.6"]
 animated = true
 intensity = 1.0
 params = []
@@ -239,6 +240,7 @@ static_fallback = false
 textures = []
 
 [shaders.compact_print]
+active = ["line:0.6"]
 animated = true
 intensity = 1.0
 params = [2.0]
@@ -257,6 +259,7 @@ static_fallback = true
 textures = []
 
 [shaders.responsive_print]
+active = ["line:0.6"]
 animated = true
 intensity = 1.0
 params = [1.0]

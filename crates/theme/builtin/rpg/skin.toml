@@ -322,7 +322,9 @@ scale = 1.0
 text_color = "#ffffff"
 
 [shaders.artwork]
+active = ["waiting"]
 animated = true
+cadence = 0.5
 intensity = 1.0
 params = []
 period_s = 16.0
@@ -331,7 +333,9 @@ static_fallback = false
 textures = []
 
 [shaders.compact_print]
+active = ["waiting"]
 animated = true
+cadence = 0.5
 intensity = 1.0
 params = [2.0, 1.0]
 period_s = 16.0
@@ -349,7 +353,9 @@ static_fallback = true
 textures = []
 
 [shaders.responsive_print]
+active = ["waiting"]
 animated = true
+cadence = 0.5
 intensity = 1.0
 params = [1.0]
 period_s = 16.0

@@ -54,6 +54,7 @@ color = { param = "ink" }
 size = { param = "size" }
 align = { param = "align" }
 [shaders.art]
+animated = false
 source = "art.wgsl"
 bindings = [["round", "tail", 3, "align"], "fur"]
 [[dialogue.shader_effects]]

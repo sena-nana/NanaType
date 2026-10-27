@@ -21,7 +21,7 @@ static VALIDATED: LazyLock<Mutex<BTreeMap<String, Weak<ShaderProgram>>>> =
     LazyLock::new(Default::default);
 
 pub fn validate_material(source: &str) -> Result<ShaderProgram, String> {
-    let (_, full, cost) = crate::shader::validate_fragment(
+    let (module, full, cost) = crate::shader::validate_fragment(
         source,
         nana_ui_core::MATERIAL_ABI,
         "material",
@@ -33,6 +33,7 @@ pub fn validate_material(source: &str) -> Result<ShaderProgram, String> {
         source: source.into(),
         textures: vec![],
         cost: cost as u32,
+        inputs: crate::shader::input_fields(&module, "MaterialInput"),
     })
 }
 

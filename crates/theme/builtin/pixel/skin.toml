@@ -285,6 +285,7 @@ text_color = "#0f380f"
 
 [shaders.artwork]
 animated = true
+cadence = 0.75
 intensity = 1.0
 params = []
 period_s = 16.0
@@ -294,6 +295,7 @@ textures = []
 
 [shaders.compact_print]
 animated = true
+cadence = 0.75
 intensity = 1.0
 params = [2.0]
 period_s = 16.0
@@ -312,6 +314,7 @@ textures = []
 
 [shaders.responsive_print]
 animated = true
+cadence = 0.75
 intensity = 1.0
 params = [1.0]
 period_s = 16.0

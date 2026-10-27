@@ -11,7 +11,9 @@ use nana_ui::{
     ScenePass, ScenePresentationProfile, wgpu,
 };
 use nana_ui_core::{LengthSpec, PointerEventsSpec, PositionSpec};
-use nanatype_theme::{MAX_SHADER_CACHE_BYTES, ShaderProgram, ShaderSpec, ShaderTarget, Skin};
+use nanatype_theme::{
+    MAX_SHADER_CACHE_BYTES, ShaderActive, ShaderProgram, ShaderSpec, ShaderTarget, Skin,
+};
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
@@ -129,20 +131,98 @@ pub fn enabled(ui: Stage) -> bool {
     motion(ui) && ui.settings.with_untracked(|s| s.skin.advanced_effects)
 }
 pub fn animating(ui: Stage) -> bool {
+    wake(ui) != Wake::Idle
+}
+/// When a program's picture next changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wake {
+    /// It holds still until something else redraws it.
+    Idle,
+    /// The next step of a stepped animation, in session milliseconds.
+    At(u64),
+    Continuous,
+}
+impl Wake {
+    /// The sooner of two.
+    pub fn or(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Continuous, _) | (_, Self::Continuous) => Self::Continuous,
+            (Self::At(a), Self::At(b)) => Self::At(a.min(b)),
+            (Self::At(at), Self::Idle) | (Self::Idle, Self::At(at)) => Self::At(at),
+            (Self::Idle, Self::Idle) => Self::Idle,
+        }
+    }
+}
+/// Whether `spec` moves whatever the line does.
+fn always(spec: &ShaderSpec) -> bool {
+    spec.active.is_empty() || spec.active.contains(&ShaderActive::Always)
+}
+/// Whether `spec` declares itself moving for `events` (see [`event_values`]).
+fn active(spec: &ShaderSpec, events: [f32; 4]) -> bool {
+    always(spec)
+        || spec.active.iter().any(|a| match *a {
+            ShaderActive::Always => true,
+            ShaderActive::Typing => events[2] < 1.,
+            ShaderActive::Waiting => events[3] > 0.5,
+            ShaderActive::Line(s) => events[0] < s,
+            ShaderActive::Speaker(s) => events[1] < s,
+        })
+}
+/// The frame a moving `spec` needs after `now`.
+fn next_frame(spec: &ShaderSpec, now: u64) -> Wake {
+    if spec.cadence > 0. {
+        let steps = (now as f64 * f64::from(spec.cadence) / 1000.).floor();
+        Wake::At(((steps + 1.) * 1000. / f64::from(spec.cadence)).ceil() as u64)
+    } else {
+        Wake::Continuous
+    }
+}
+/// The loop clock `spec` shows at `now`: held at the start of its step,
+/// rounded up so a program reads the step it is in, not the one before.
+fn stepped(spec: &ShaderSpec, now: u64) -> u64 {
+    if spec.cadence > 0. {
+        let steps = (now as f64 * f64::from(spec.cadence) / 1000.).floor();
+        (steps * 1000. / f64::from(spec.cadence)).ceil() as u64
+    } else {
+        now
+    }
+}
+/// When the display's programs next change.
+pub fn wake(ui: Stage) -> Wake {
     // A renderer can discover a compiler failure after Host::finish. Keep one
     // callback alive so its notice reaches the operator before the track sleeps.
     if !NOTICES.lock().unwrap_or_else(|e| e.into_inner()).is_empty() {
-        return true;
+        return Wake::Continuous;
     }
     if warming(ui, Source::Display) {
-        return true;
+        return Wake::Continuous;
     }
-    enabled(ui)
-        && !ui.display.with_untracked(|d| d.empty)
-        && ui.skin.with_untracked(|s| {
-            let size = super::dialogue::canvas_size(ui, s);
-            display_shaders(s, size, |ids| ids.iter().any(|id| runnable(s, id)))
+    if !enabled(ui) || ui.display.with_untracked(|d| d.empty) {
+        return Wake::Idle;
+    }
+    let now = crate::clock::now_ms();
+    ui.skin.with_untracked(|s| {
+        let size = super::dialogue::canvas_size(ui, s);
+        display_shaders(s, size, |ids| {
+            let mut events = None;
+            ids.iter()
+                .filter(|id| runnable(s, id))
+                .fold(Wake::Idle, |wake, id| {
+                    let spec = &s.shaders[id];
+                    // Line state only for programs that wait on it.
+                    let moving = always(spec)
+                        || active(
+                            spec,
+                            *events.get_or_insert_with(|| event_values(ui, Source::Display, now)),
+                        );
+                    if moving {
+                        wake.or(next_frame(spec, now))
+                    } else {
+                        wake
+                    }
+                })
         })
+    })
 }
 type ResolvedShaders = (Weak<Skin>, [u32; 2], Vec<String>);
 thread_local! {
@@ -198,14 +278,18 @@ pub fn preview_animating(ui: Stage) -> bool {
 /// compile, so the window needs frames. Its box holds them only while the
 /// preview is on.
 pub fn input_animating(ui: Stage) -> bool {
+    input_wake(ui) != Wake::Idle
+}
+/// When the input window's skin preview next changes.
+pub fn input_wake(ui: Stage) -> Wake {
     if !NOTICES.lock().unwrap_or_else(|e| e.into_inner()).is_empty() {
-        return true;
+        return Wake::Continuous;
     }
     if warming(ui, Source::Draft) {
-        return true;
+        return Wake::Continuous;
     }
     if !enabled(ui) || !ui.settings.with_untracked(|s| s.general.input_skin_preview) {
-        return false;
+        return Wake::Idle;
     }
     // Never read a signal under the registry lock (see `warming`).
     let materials: Vec<_> = MATERIALS
@@ -214,13 +298,18 @@ pub fn input_animating(ui: Stage) -> bool {
         .values()
         .filter_map(Weak::upgrade)
         .collect();
-    materials.into_iter().any(|m| {
-        m.source == Source::Draft
-            && m.ui.draft == ui.draft
-            && m.spec.animated
-            && m.spec.intensity > 0.
-            && !stopped(&m.program.hash)
-    })
+    let now = crate::clock::now_ms();
+    materials
+        .into_iter()
+        .filter(|m| {
+            m.source == Source::Draft
+                && m.ui.draft == ui.draft
+                && m.spec.animated
+                && m.spec.intensity > 0.
+                && !stopped(&m.program.hash)
+                && active(&m.spec, DRAFT_EVENTS)
+        })
+        .fold(Wake::Idle, |wake, m| wake.or(next_frame(&m.spec, now)))
 }
 
 struct Material {
@@ -562,6 +651,8 @@ fn effect_uniforms(
 }
 /// Events of a program at rest: settled, fully revealed, no continue mark.
 const REST_EVENTS: [f32; 4] = [2., 2., 1., 0.];
+/// The input box holds a shown line; no typing events.
+const DRAFT_EVENTS: [f32; 4] = [2., 2., 1., 1.];
 static REST_FRAMES: AtomicBool = AtomicBool::new(true);
 /// Turn rest frames off (shade frozen programs on every draw, for tests that
 /// compare the two); returns the previous setting.
@@ -1592,8 +1683,7 @@ impl Renderer {
         let events = if !animated {
             REST_EVENTS
         } else if m.source == Source::Draft {
-            // The input box holds a shown line; no typing events.
-            [2., 2., 1., 1.]
+            DRAFT_EVENTS
         } else {
             event_values(m.ui, m.source, now)
         };
@@ -1611,7 +1701,7 @@ impl Renderer {
             height,
             scale,
             node.opacity,
-            now,
+            stepped(&m.spec, now),
             events,
         );
         let gpu = c.gpu.wgpu();
@@ -2024,6 +2114,63 @@ mod tests {
         assert!(!owns_continue(ui, Source::Display, &skin));
     }
     #[test]
+    fn declared_programs_wake_only_while_they_move() {
+        let ui = ui();
+        // A lane of its own: line state is shared by every Ui on a slot.
+        let lane = ui.lane(5);
+        let mut skin = (*ui.skin.get_untracked()).clone();
+        for s in skin.shaders.values_mut() {
+            s.active = vec![ShaderActive::Line(0.6)];
+        }
+        ui.skin.set(Arc::new(skin.clone()));
+        lane.display.update(|v| {
+            let v = Arc::make_mut(v);
+            v.empty = false;
+            v.line = Some(nanatype_model::LineId(7));
+        });
+        let at = |ms| crate::clock::capture_at(ms, || wake(lane));
+        assert_eq!(at(10_000), Wake::Continuous);
+        assert_eq!(at(10_500), Wake::Continuous);
+        assert_eq!(at(10_700), Wake::Idle);
+        lane.display
+            .update(|v| Arc::make_mut(v).line = Some(nanatype_model::LineId(8)));
+        assert_eq!(at(11_000), Wake::Continuous);
+        // A stepped program wakes for its next step only.
+        for s in skin.shaders.values_mut() {
+            s.active.clear();
+            s.cadence = 2.;
+        }
+        ui.skin.set(Arc::new(skin));
+        assert_eq!(at(11_100), Wake::At(11_500));
+        assert_eq!(at(11_500), Wake::At(12_000));
+        assert_eq!(Wake::At(3).or(Wake::At(2)), Wake::At(2));
+        assert_eq!(Wake::Idle.or(Wake::At(2)), Wake::At(2));
+        assert_eq!(Wake::At(2).or(Wake::Continuous), Wake::Continuous);
+    }
+    #[test]
+    fn stepped_clocks_hold_until_the_wake() {
+        let spec = ShaderSpec {
+            cadence: 0.75,
+            ..Default::default()
+        };
+        assert_eq!(stepped(&spec, 1333), 0);
+        assert_eq!(stepped(&spec, 1334), 1334);
+        // Three cells, one per step: the shown cell is the step's own.
+        let cell = |ms: u64| ((ms as f64 / 16_000. * 4.).fract() * 3.).floor() as u32;
+        for k in 0..24u64 {
+            let start = (k as f64 * 4_000. / 3.).ceil() as u64;
+            assert_eq!(cell(stepped(&spec, start)), (k % 3) as u32, "step {k}");
+        }
+        for now in [0, 1, 1333, 1334, 2666, 2667, 40_000] {
+            let Wake::At(next) = next_frame(&spec, now) else {
+                panic!("stepped programs wake at a time");
+            };
+            assert_eq!(stepped(&spec, next - 1), stepped(&spec, now), "{now}");
+            assert!(stepped(&spec, next) > stepped(&spec, now), "{now}");
+        }
+        assert_eq!(next_frame(&ShaderSpec::default(), 5), Wake::Continuous);
+    }
+    #[test]
     fn only_enabled_nonempty_display_tracks_request_frames() {
         let ui = ui();
         assert!(!animating(ui));
@@ -2082,6 +2229,46 @@ mod tests {
         }
     }
 
+    #[test]
+    fn event_and_stepped_classics_never_loop_at_the_frame_rate() {
+        let ui = ui();
+        let lane = ui.lane(6);
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        lane.display.update(|v| {
+            let v = Arc::make_mut(v);
+            v.empty = false;
+            v.line = Some(nanatype_model::LineId(1));
+        });
+        let at = |ms| crate::clock::capture_at(ms, || wake(lane));
+        let sizes = [[952., 252.], [300., 1200.], [300., 240.], [160., 96.]];
+        ui.skin.set(registry.load("nanatype.night").unwrap().skin);
+        lane.display_size.set(sizes[0]);
+        // The tube stutters as the line lights up, then burns steady.
+        assert_eq!(at(60_000), Wake::Continuous);
+        for size in sizes {
+            lane.display_size.set(size);
+            assert_eq!(at(61_000), Wake::Idle, "night {size:?}");
+        }
+        for (name, waiting, steps) in [
+            ("rpg", false, false),
+            ("rpg", true, true),
+            ("terminal", false, true),
+            ("pixel", false, true),
+        ] {
+            ui.skin
+                .set(registry.load(&format!("nanatype.{name}")).unwrap().skin);
+            lane.display
+                .update(|v| Arc::make_mut(v).continue_indicator = waiting);
+            for size in sizes {
+                lane.display_size.set(size);
+                let wake = at(62_000);
+                assert_ne!(wake, Wake::Continuous, "{name} {size:?}");
+                if size == sizes[0] {
+                    assert_eq!(matches!(wake, Wake::At(_)), steps, "{name}");
+                }
+            }
+        }
+    }
     #[test]
     fn frozen_authored_artwork_does_not_request_an_animation_loop() {
         let ui = ui();

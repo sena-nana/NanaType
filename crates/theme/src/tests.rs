@@ -657,6 +657,80 @@ fn shader_manifests_fail_closed_on_schema_resources_and_limits() {
 }
 
 #[test]
+fn shaders_declare_when_they_move() {
+    let tmp = tempfile::tempdir().unwrap();
+    let still = b"fn effect(i:EffectInput)->vec4<f32>{return vec4(i.line_age);}".to_vec();
+    let good = "[meta]\nschema=3\nid='active-test'\n[shaders.test]\nsource='effect.wgsl'\n[[dialogue.shader_effects]]\nshader='test'\n";
+    let with = |fields: &str| good.replace("source=", &format!("{fields}\nsource="));
+    for bad in [
+        "active=['sometimes']",
+        "active=['line']",
+        "active=['line:0']",
+        "active=['speaker:61']",
+        "cadence=0.05",
+        "cadence=61",
+        "cadence=nan",
+    ] {
+        write_skin(tmp.path(), &with(bad), &[("effect.wgsl", still.clone())]);
+        assert!(load_dir(tmp.path()).is_err(), "accepted {bad}");
+    }
+    // Moving only on events, but declared always: told to say when.
+    write_skin(tmp.path(), good, &[("effect.wgsl", still.clone())]);
+    let loaded = load_dir(tmp.path()).unwrap();
+    assert_eq!(
+        loaded
+            .warnings
+            .iter()
+            .map(|w| w.field.as_str())
+            .collect::<Vec<_>>(),
+        ["shaders.test.active"]
+    );
+    write_skin(
+        tmp.path(),
+        &with("active=['line:0.6','waiting']\ncadence=2"),
+        &[("effect.wgsl", still)],
+    );
+    let loaded = load_dir(tmp.path()).unwrap();
+    assert!(loaded.warnings.is_empty());
+    let spec = &loaded.skin.shaders["test"];
+    assert_eq!(
+        spec.active,
+        [ShaderActive::Line(0.6), ShaderActive::Waiting]
+    );
+    assert_eq!(spec.cadence, 2.);
+    // Both survive the canonical manifest.
+    let table = standalone_manifest(&loaded.skin).unwrap();
+    let shader = &table["shaders"]["test"];
+    assert_eq!(
+        shader["active"].as_array().unwrap(),
+        &[toml::Value::from("line:0.6"), toml::Value::from("waiting")]
+    );
+    assert_eq!(shader["cadence"].as_float(), Some(2.));
+    // A program that reads the clock, even through a helper, is not warned.
+    let helper = b"fn wave(i:EffectInput)->f32{return sin(i.phase);}\nfn effect(i:EffectInput)->vec4<f32>{return vec4(wave(i));}".to_vec();
+    write_skin(tmp.path(), good, &[("effect.wgsl", helper)]);
+    assert!(load_dir(tmp.path()).unwrap().warnings.is_empty());
+}
+
+#[test]
+fn shader_inputs_record_the_fields_a_program_reads() {
+    let reads = |body: &str| validate_shader(body).unwrap().inputs;
+    assert_eq!(
+        reads("fn effect(i:EffectInput)->vec4<f32>{return vec4(i.uv, i.phase, 1.);}"),
+        0b101
+    );
+    assert_eq!(
+        reads("fn effect(i:EffectInput)->vec4<f32>{return vec4(0.);}"),
+        0
+    );
+    // A local copy could be read anywhere.
+    assert_eq!(
+        reads("fn effect(i:EffectInput)->vec4<f32>{var j=i;return vec4(j.seed);}"),
+        u32::MAX
+    );
+}
+
+#[test]
 fn decoration_images_validate_packaged_paths_and_bytes() {
     let tmp = tempfile::tempdir().unwrap();
     let manifest = "[meta]\nid='image-decor'\n[[dialogue.decor]]\nimage='stroke.png'\n[[history.decor]]\nimage='stroke.png'\n";

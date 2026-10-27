@@ -52,6 +52,65 @@ pub struct ShaderSpec {
     /// host's `dialogue.continue` shows whenever the program is frozen or off.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub owns_continue: bool,
+    /// When an animated program's pixels may change; empty means always.
+    /// Outside every listed condition its output must not depend on time,
+    /// and the host requests no frames for it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub active: Vec<ShaderActive>,
+    /// Changes per second of a stepped animation; 0 is continuous. The clock
+    /// advances in these steps and the host wakes only at the next one.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub cadence: f32,
+}
+fn is_zero(v: &f32) -> bool {
+    *v == 0.
+}
+
+/// One `active` condition: `always`, `typing` (the line is still revealing),
+/// `waiting` (it waits for the reader), `line:<s>` / `speaker:<s>` (seconds
+/// after a new line or speaker).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub enum ShaderActive {
+    Always,
+    Typing,
+    Waiting,
+    Line(f32),
+    Speaker(f32),
+}
+impl TryFrom<String> for ShaderActive {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, String> {
+        let seconds = |v: &str| {
+            v.parse::<f32>()
+                .ok()
+                .filter(|v| v.is_finite() && *v > 0. && *v <= 60.)
+                .ok_or_else(|| format!("`{s}`: seconds must be 0..60"))
+        };
+        Ok(match s.split_once(':') {
+            None if s == "always" => Self::Always,
+            None if s == "typing" => Self::Typing,
+            None if s == "waiting" => Self::Waiting,
+            Some(("line", v)) => Self::Line(seconds(v)?),
+            Some(("speaker", v)) => Self::Speaker(seconds(v)?),
+            _ => {
+                return Err(format!(
+                    "`{s}`: expected always, typing, waiting, line:<s> or speaker:<s>"
+                ));
+            }
+        })
+    }
+}
+impl From<ShaderActive> for String {
+    fn from(a: ShaderActive) -> Self {
+        match a {
+            ShaderActive::Always => "always".into(),
+            ShaderActive::Typing => "typing".into(),
+            ShaderActive::Waiting => "waiting".into(),
+            ShaderActive::Line(s) => format!("line:{s}"),
+            ShaderActive::Speaker(s) => format!("speaker:{s}"),
+        }
+    }
 }
 
 /// One `bindings` entry. A param fills `x` (numbers, bools as 0/1, enums as
@@ -100,6 +159,8 @@ impl Default for ShaderSpec {
             animated: true,
             bindings: vec![],
             owns_continue: false,
+            active: vec![],
+            cadence: 0.,
         }
     }
 }
@@ -134,6 +195,9 @@ pub struct ShaderProgram {
     pub textures: Vec<ShaderTexture>,
     /// Expanded per-pixel cost of the entry point, for runtime budgets.
     pub cost: u32,
+    /// Bit `n` is set when the program may read field `n` of its input
+    /// struct (all bits when it cannot tell).
+    pub inputs: u32,
 }
 
 /// All bindings and helper bodies belong to the host. Authors may only call
@@ -579,7 +643,7 @@ fn validate_module(
 }
 
 pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
-    let (_, combined, cost) = validate_fragment(
+    let (module, combined, cost) = validate_fragment(
         source,
         SHADER_PRELUDE,
         "effect",
@@ -618,7 +682,33 @@ pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
         source: combined.into(),
         textures: vec![],
         cost: cost as u32,
+        inputs: input_fields(&module, "EffectInput"),
     })
+}
+/// `EffectInput::phase`, the loop clock.
+pub const INPUT_PHASE: u32 = 1 << 2;
+/// `line_age`, `speaker_age`, `reveal` and `waiting`.
+pub const INPUT_EVENTS: u32 = 0b1111 << 4;
+
+/// The fields of `input` any function reads directly from an argument. A
+/// copy into a local variable could be read anywhere: then every field.
+pub(crate) fn input_fields(module: &naga::Module, input: &str) -> u32 {
+    let is_input = |ty: naga::Handle<naga::Type>| module.types[ty].name.as_deref() == Some(input);
+    let mut read = 0;
+    for (_, f) in module.functions.iter() {
+        if f.local_variables.iter().any(|(_, v)| is_input(v.ty)) {
+            return u32::MAX;
+        }
+        for (_, e) in f.expressions.iter() {
+            if let E::AccessIndex { base, index } = *e
+                && let E::FunctionArgument(a) = f.expressions[base]
+                && is_input(f.arguments[a as usize].ty)
+            {
+                read |= 1u32.checked_shl(index).unwrap_or(0);
+            }
+        }
+    }
+    read
 }
 
 fn check_bindings(
@@ -783,6 +873,9 @@ pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec
             {
                 return Err("period_s must be 0.5..3600 and intensity 0..1".into());
             }
+            if !(spec.cadence == 0. || (0.1..=60.).contains(&spec.cadence)) {
+                return Err("cadence must be 0 (continuous) or 0.1..60".into());
+            }
             if spec.params.len() > 8
                 || spec.params.iter().any(|v| !v.is_finite())
                 || spec.textures.len() > 2
@@ -925,6 +1018,25 @@ pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec
                 severity: Severity::Warning,
                 field: format!("shaders.{id}.owns_continue"),
                 message: "only an artwork shader can own the continue indicator".into(),
+            });
+        }
+        let always = spec.active.is_empty() || spec.active.contains(&ShaderActive::Always);
+        let inputs = programs.get(id).map_or(u32::MAX, |p| p.inputs);
+        if spec.animated && inputs & (INPUT_PHASE | INPUT_EVENTS) == 0 {
+            out.push(SkinDiagnostic {
+                severity: Severity::Warning,
+                field: format!("shaders.{id}.animated"),
+                message: "reads neither `phase` nor an event, so it never moves; \
+                          set `animated = false`"
+                    .into(),
+            });
+        } else if spec.animated && always && inputs & INPUT_PHASE == 0 {
+            out.push(SkinDiagnostic {
+                severity: Severity::Warning,
+                field: format!("shaders.{id}.active"),
+                message: "never reads `phase`, so it moves only on events; list them in `active` \
+                          (typing, waiting, line:<s>, speaker:<s>) to stop redrawing the rest"
+                    .into(),
             });
         }
     }

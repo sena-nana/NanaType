@@ -27,6 +27,7 @@ use crate::msg::Tool;
 use crate::msg::{Msg, Shortcut, input_message};
 use crate::services::sounds::Keystroke;
 use crate::ui::overflow::{self, Measure, PageKey};
+use crate::ui::shader_effects::Wake;
 use crate::ui::{Ui, dialogue, history, input, settings};
 use crate::windows::WindowKind;
 
@@ -115,16 +116,20 @@ fn frame_policy(
             let typing = tracks
                 .iter()
                 .any(|track| dialogue::display_animating(**track, now));
-            let movement = tracks.iter().any(|track| {
-                crate::ui::sweep::animating(**track)
-                    || crate::ui::text_light::animating(**track, now)
-                    || crate::ui::text_scramble::animating(**track, now)
-                    || crate::ui::shader_effects::animating(**track)
-            }) || if remote {
-                follows.iter().any(|follow| follow.wants_frame())
-            } else {
-                follow.wants_frame() || pager.wants_frame()
-            };
+            let shaders = tracks.iter().fold(Wake::Idle, |wake, track| {
+                wake.or(crate::ui::shader_effects::wake(**track))
+            });
+            let movement = shaders == Wake::Continuous
+                || tracks.iter().any(|track| {
+                    crate::ui::sweep::animating(**track)
+                        || crate::ui::text_light::animating(**track, now)
+                        || crate::ui::text_scramble::animating(**track, now)
+                })
+                || if remote {
+                    follows.iter().any(|follow| follow.wants_frame())
+                } else {
+                    follow.wants_frame() || pager.wants_frame()
+                };
             let next_at = if remote {
                 follows
                     .iter()
@@ -132,6 +137,11 @@ fn frame_policy(
                     .min()
             } else {
                 follow.next_line_at()
+            };
+            // A stepped program wakes only for its next step.
+            let next_at = match shaders {
+                Wake::At(step) => Some(next_at.map_or(step, |at| at.min(step))),
+                _ => next_at,
             };
             (tracks[0].now, typing, movement, next_at, skin_fps)
         }
@@ -152,11 +162,12 @@ fn frame_policy(
         Some(WindowKind::Input) => {
             // The skin preview's programs draw from the wall clock; only
             // frames are needed, not an application clock.
-            let moving = crate::ui::shader_effects::input_animating(*ui)
-                || crate::ui::sweep::input_animating(*ui);
+            let wake = crate::ui::shader_effects::input_wake(*ui);
             return FramePolicy {
-                demand: if moving {
+                demand: if wake == Wake::Continuous || crate::ui::sweep::input_animating(*ui) {
                     FrameDemand::Continuous(NonZeroU32::new(skin_fps).expect("non-zero"))
+                } else if let Wake::At(at) = wake {
+                    FrameDemand::At(clock::instant(at))
                 } else {
                     FrameDemand::OnDemand
                 },
@@ -1527,22 +1538,8 @@ impl RuntimeProgram for Host {
     }
 
     fn frame_demand(&self, id: WindowId) -> FrameDemand {
-        if WindowKind::from_id(id) == Some(WindowKind::Input) {
-            if self.completion_unsettled {
-                return FrameDemand::At(Instant::now());
-            }
-            // The skin preview's programs read the wall clock: frames only.
-            let ui = *self.app.ui;
-            if self.app.input_visible()
-                && (crate::ui::shader_effects::input_animating(ui)
-                    || crate::ui::sweep::input_animating(ui))
-            {
-                let fps = ui
-                    .settings
-                    .with_untracked(|s| s.skin.frame_rate)
-                    .clamp(30, 60);
-                return FrameDemand::Continuous(NonZeroU32::new(fps).expect("non-zero"));
-            }
+        if WindowKind::from_id(id) == Some(WindowKind::Input) && self.completion_unsettled {
+            return FrameDemand::At(Instant::now());
         }
         let demand = frame_policy(
             self.app.ui,
@@ -1555,7 +1552,7 @@ impl RuntimeProgram for Host {
         .demand;
         // A hidden input window does not play its skin preview.
         let demand = match demand {
-            FrameDemand::Continuous(_)
+            FrameDemand::Continuous(_) | FrameDemand::At(_)
                 if WindowKind::from_id(id) == Some(WindowKind::Input)
                     && !self.app.input_visible() =>
             {
@@ -1862,6 +1859,36 @@ mod redraw_tests {
             policy(WindowKind::Display).demand,
             FrameDemand::OnDemand
         ));
+    }
+
+    #[test]
+    fn stepped_skin_programs_wake_the_display_once_per_step() {
+        let skin = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"))
+            .load("nanatype.pixel")
+            .unwrap()
+            .skin;
+        let ui = crate::ui::Ui::new(
+            Arc::new(nanatype_settings::Settings::default()),
+            skin,
+            nanatype_i18n::Locale::ZhCn,
+        );
+        ui.display.update(|view| Arc::make_mut(view).empty = false);
+        let follow = overflow::Follow::default();
+        let pager = overflow::Pager::default();
+        // Three cells at 0.75 changes a second: the next starts at 10 666.7 ms.
+        let now = 10_000;
+        let policy = clock::capture_at(now, || {
+            frame_policy(
+                ui,
+                Some(WindowKind::Display),
+                now,
+                &follow,
+                std::slice::from_ref(&follow),
+                &pager,
+            )
+        });
+        assert!(!policy.tick_clock);
+        assert!(matches!(policy.demand, FrameDemand::At(at) if at == clock::instant(10_667)));
     }
 
     #[test]
