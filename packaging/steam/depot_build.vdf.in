@@ -1,0 +1,23 @@
+// SteamPipe depot build script template, one per platform depot; the upload
+// scripts write target/steampipe/depot_build_<depot>.vdf from it.
+// Placeholders, between @ signs:
+//   DEPOT_ID      NANATYPE_STEAM_DEPOT_WINDOWS or NANATYPE_STEAM_DEPOT_MACOS
+//   CONTENT_ROOT  absolute path of the depot root: dist/app/NanaType
+//                 (NanaType.exe and runtime/) on Windows, dist/app (NanaType.app) on macOS
+// Used instead of the dist/steam/depot_build_<depot>.vdf that nana-packager
+// writes, which has no exclusions.
+"DepotBuild"
+{
+	"DepotID" "@DEPOT_ID@"
+	"ContentRoot" "@CONTENT_ROOT@"
+	"FileMapping"
+	{
+		"LocalPath" "*"
+		"DepotPath" "."
+		"recursive" "1"
+	}
+	// '*' also matches folders, so these apply at any depth.
+	"FileExclusion" "*steam_appid.txt"
+	"FileExclusion" "*.pdb"
+	"FileExclusion" "*.DS_Store"
+}

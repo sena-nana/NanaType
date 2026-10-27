@@ -1,0 +1,26 @@
+// SteamPipe app build script template for NanaType's Steam edition.
+// scripts/steam-upload.ps1 and scripts/steam-upload.sh fill it in and write
+// target/steampipe/app_build_<app>.vdf (gitignored); the ids come from the
+// environment or .cargo/config.toml [env], as for packaging (docs/steam.md).
+// Placeholders, between @ signs:
+//   APP_ID        NANATYPE_STEAM_APP_ID
+//   DESC          "NanaType <version> (<commit>) <platforms>", shown on the builds page
+//   CONTENT_ROOT  absolute path of dist/app; each depot overrides it
+//   BUILD_OUTPUT  absolute path of target/steampipe/output: logs, manifests, chunk caches
+//   PREVIEW       1 for a dry run (file list and logs only), else 0
+//   DEPOTS        one line per uploaded depot: "<depot>" "depot_build_<depot>.vdf"
+// SetLive stays empty: the default branch can only be set live on the
+// Steamworks builds page.
+"AppBuild"
+{
+	"AppID" "@APP_ID@"
+	"Desc" "@DESC@"
+	"ContentRoot" "@CONTENT_ROOT@"
+	"BuildOutput" "@BUILD_OUTPUT@"
+	"SetLive" ""
+	"Preview" "@PREVIEW@"
+	"Depots"
+	{
+@DEPOTS@
+	}
+}

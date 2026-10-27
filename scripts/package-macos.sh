@@ -111,7 +111,7 @@ app="$out/app/$bundle.app"
 nana-packager validate "$app" --run
 
 if [ "$steam" = 1 ]; then
-    # SteamPipe uploads the depot from dist/steam/depot_build_<depot>.vdf.
+    # scripts/steam-upload.sh uploads the depot with SteamPipe.
     echo "Packaged the Steam depot of $display $version into $out (see $out/steam)"
     exit 0
 fi

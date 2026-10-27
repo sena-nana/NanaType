@@ -67,6 +67,26 @@ scripts/package-macos.sh --steam
 - Windows 把 steamworks-sys 附带的 `steam_api64.dll` 放在 `NanaType.exe` 旁。
 - macOS 的 `libsteam_api.dylib` 放进 `Contents/Frameworks`，并改写可执行文件的加载路径后重新 ad-hoc 签名，因为包内的 `Contents/MacOS` 只允许有可执行文件。
 - 许可文件由 `third-party-notices.ps1 -Steam` 和 `macos-licenses.py … nanatype-steam` 生成，只列 Steam 版实际链接的 crate。
-- 产物在 `dist/app/`，depot 构建脚本和文件清单在 `dist/steam/`（`depot_build_<depot>.vdf`、`nana-steam-build.json`），用 SteamCMD 上传。
+- 产物在 `dist/app/`，nana-packager 另在 `dist/steam/` 写出 depot 构建脚本和文件清单（`depot_build_<depot>.vdf`、`nana-steam-build.json`）；上传用下面的脚本，不用这份 depot 构建脚本（它没有排除规则）。
 
 上传凭据只由 SteamCMD 管理，仓库和脚本都不读取。
+
+## 上传与上线
+
+需要 [SteamCMD](https://partner.steamgames.com/doc/sdk/uploading)（在 PATH 中，或用 `STEAMCMD` 指定，macOS 上通常是 `steamcmd.sh`）、一个有该应用上传权限的 Steam 构建账号，以及与打包相同的 `.cargo/config.toml` ID。
+
+```bash
+pwsh scripts/steam-upload.ps1 -Account <构建账号>
+```
+
+```bash
+sh scripts/steam-upload.sh --account <构建账号>
+```
+
+- 账号也可以用环境变量 `STEAM_BUILD_ACCOUNT` 给出。脚本只把账号名传给 `steamcmd +login <账号> +run_app_build <脚本> +quit`，密码和 Steam 令牌验证码由 SteamCMD 自己询问并缓存登录，脚本不接收也不保存密码。
+- 脚本把 `packaging/steam/app_build.vdf.in`、`depot_build.vdf.in` 填好 ID 和绝对路径后写到 `target/steampipe/`（`app_build_<app>.vdf`、`depot_build_<depot>.vdf`），构建日志、清单和块缓存在 `target/steampipe/output/`，都不进仓库。
+- 内容根目录：Windows depot 是 `dist/app/NanaType`（`NanaType.exe` 所在目录），macOS depot 是 `dist/app`（含 `NanaType.app`）。上传时排除 `steam_appid.txt`、`*.pdb`、`.DS_Store`。
+- 默认只上传本机平台的 depot（两个打包脚本都会清空 `dist/`，一台机器上只有自己平台的产物）。`-Platform windows|macos|all`（`--platform`）可以指定；`-WindowsContent`、`-MacosContent`（`--windows-content`、`--macos-content`）指向另一台机器拷来的产物。要一次上传两个 depot，把 Windows 的 `dist/app/NanaType` 文件夹拷到 Mac 上再用 `--platform all --windows-content <目录>`；不要反过来把 `.app` 拷到 Windows，`.app` 包里的符号链接和元数据会丢。
+- `-Preview`（`--preview`）只生成文件清单和日志，不上传，可用来检查排除规则。
+- 脚本不设置上线分支（`SetLive` 为空）：`default` 分支不能自动上线。上传后在 Steamworks 的 SteamPipe → 构建（`https://partner.steamgames.com/apps/builds/<App ID>`）中找到新构建（说明为 `NanaType <版本> (<提交>) <平台>`），选「default」分支，点「预览更改」核对 depot，再设为上线。
+- 两个平台分开上传时会得到两个构建，每个只含一个 depot。上线前在「预览更改」里确认另一个 depot 不会被移除；最稳妥的是用一个同时包含两个 depot 的构建上线。

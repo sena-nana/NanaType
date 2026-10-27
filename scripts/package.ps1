@@ -141,7 +141,7 @@ nana-packager validate $app --run
 if ($LASTEXITCODE -ne 0) { throw "Package validation failed ($LASTEXITCODE)" }
 
 if ($Steam) {
-    # SteamPipe uploads the depot from dist\steam\depot_build_<depot>.vdf.
+    # scripts/steam-upload.ps1 uploads the depot with SteamPipe.
     Write-Host "Packaged the Steam depot of $display $version into $out (see $(Join-Path $out 'steam'))"
     exit 0
 }
