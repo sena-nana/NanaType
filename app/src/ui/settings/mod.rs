@@ -23,7 +23,7 @@ use crate::msg::Msg;
 use crate::ui::kit::{PAGE_HEADER_H, PAGE_MAX_W, SIDEBAR_W, Type, gap, icon, inset};
 
 /// The panel and settings page use the same persisted style control.
-pub(super) fn chat_panel_style(ui: Ui) -> AnyView {
+pub(crate) fn chat_panel_style(ui: Ui) -> AnyView {
     use controls::{segmented, select_keys};
     use nanatype_settings::ChatPanelStyle;
     segmented(

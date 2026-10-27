@@ -188,7 +188,7 @@ fn chat_materializes_the_viewport_and_keeps_scrolling_available() {
     }
     ui.history
         .set(Arc::new(core.history().iter().cloned().collect()));
-    let mut session = common::session().mount(400, 600, move || danmaku::chat_window(ui));
+    let mut session = common::session().mount(400, 600, move || danmaku::chat_panel(ui));
     session.flush().unwrap();
     let mounted = session.document().context().world().len();
     assert!(

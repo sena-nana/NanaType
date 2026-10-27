@@ -545,26 +545,12 @@ fn sidebar_geometry_is_backward_compatible_and_survives_a_disk_roundtrip() {
 }
 
 #[test]
-fn input_dock_regions_and_active_tab_survive_disk_roundtrip() {
+fn input_dock_tab_and_chat_placement_survive_disk_roundtrip() {
     let layout = InputDockLayout {
-        regions: vec![
-            InputDockRegion {
-                id: 9,
-                kind: InputDockRegionKind::Stickers,
-                number: 3,
-            },
-            InputDockRegion {
-                id: 2,
-                kind: InputDockRegionKind::Phrases,
-                number: 1,
-            },
-            InputDockRegion {
-                id: 0,
-                kind: InputDockRegionKind::Commands,
-                number: 1,
-            },
-        ],
-        selected: 2,
+        tab: InputDockTab::Phrases,
+        chat_pinned: true,
+        chat_height: 180.0,
+        collapsed: true,
     };
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("geometry.json");
@@ -576,45 +562,78 @@ fn input_dock_regions_and_active_tab_survive_disk_roundtrip() {
         h: 480.0,
     };
     let mut geometry = GeometryStore {
-        input_sidebar_width: Some(185.0),
-        input_dock: Some(layout.clone()),
+        input_sidebar_width: Some(285.0),
+        input_dock: Some(layout),
         ..Default::default()
     };
     geometry.remember(&monitors, "input", frame);
     save_json(&path, &geometry).unwrap();
     let restored: GeometryStore = load_json(&path).value;
-    assert_eq!(restored.input_sidebar_width, Some(185.0));
+    assert_eq!(restored.input_sidebar_width, Some(285.0));
     assert_eq!(restored.restore(&monitors, "input"), Some(frame));
     assert_eq!(restored.input_dock.unwrap().normalized(), layout);
 }
 
 #[test]
-fn input_dock_repairs_unsupported_regions_duplicates_and_missing_selection() {
-    let layout: InputDockLayout = serde_json::from_str(
+fn input_dock_reads_the_old_region_list_and_repairs_unknown_values() {
+    // The multi-region dock of earlier versions reads as the default layout.
+    let old: InputDockLayout = serde_json::from_str(
         r#"{
-        "regions": [
-            {"id":5,"kind":"phrases","number":0},
-            {"id":5,"kind":"commands","number":1},
-            {"id":9,"kind":"future_region","number":1},
-            {"id":0,"kind":"commands","number":1}
-        ],
-        "selected":9
+        "regions": [{"id":5,"kind":"phrases","number":1}],
+        "selected":5
     }"#,
     )
     .unwrap();
-    let restored = layout.normalized();
-    assert_eq!(
-        restored.regions.iter().map(|r| r.id).collect::<Vec<_>>(),
-        vec![5, 0]
-    );
-    assert_eq!(restored.regions[0].kind, InputDockRegionKind::Phrases);
-    assert_eq!(restored.regions[0].number, 1);
-    assert_eq!(restored.selected, 5);
-    let empty = InputDockLayout {
-        regions: vec![],
-        selected: 99,
+    assert_eq!(old.normalized(), InputDockLayout::default());
+    let odd: InputDockLayout =
+        serde_json::from_str(r#"{"tab":"future_panel","chat_pinned":true,"chat_height":-4}"#)
+            .unwrap();
+    let odd = odd.normalized();
+    assert_eq!(odd.tab, InputDockTab::Controls);
+    assert!(odd.chat_pinned);
+    assert_eq!(odd.chat_height, INPUT_CHAT_MIN);
+    // Pinned chat is never also the lower panel.
+    let both = InputDockLayout {
+        tab: InputDockTab::Chat,
+        chat_pinned: true,
+        ..Default::default()
     };
-    assert_eq!(empty.normalized(), InputDockLayout::default());
+    assert_eq!(both.normalized().tab, InputDockTab::Controls);
+}
+
+#[test]
+fn the_sidebar_rail_opens_panels_folds_and_moves_chat() {
+    use InputDockTab::*;
+    let open = InputDockLayout::default();
+    // Another panel opens; the open one folds the sidebar; any icon unfolds.
+    let stickers = open.rail(Stickers);
+    assert!(stickers.showing(Stickers) && !stickers.showing(Controls));
+    let folded = stickers.rail(Stickers);
+    assert!(folded.collapsed && !folded.showing(Stickers));
+    assert!(folded.rail(Phrases).showing(Phrases));
+    // Unpinned chat is a panel like the others.
+    let chat = open.rail(Chat);
+    assert!(chat.chat_visible() && chat.showing(Chat) && !chat.showing(Controls));
+    // Pinning keeps chat on screen above the last insert panel.
+    let pinned = chat.toggle_pin();
+    assert!(pinned.chat_pinned && pinned.showing(Controls) && pinned.chat_visible());
+    // Unpinning gives chat the whole sidebar.
+    let unpinned = pinned.toggle_pin();
+    assert!(!unpinned.chat_pinned && unpinned.showing(Chat));
+    // Pinned chat's rail icon puts it away and leaves the insert panel.
+    let hidden = pinned.rail(Chat);
+    assert!(!hidden.chat_visible() && hidden.showing(Controls));
+    // A folded sidebar with pinned chat unfolds without losing the pin.
+    let refolded = InputDockLayout {
+        collapsed: true,
+        ..pinned
+    }
+    .rail(Chat);
+    assert!(refolded.chat_pinned && refolded.showing(Controls));
+    // The tray shows chat by pinning it, and hides it either way.
+    assert!(open.toggle_chat().chat_pinned);
+    assert!(!pinned.toggle_chat().chat_visible());
+    assert!(!chat.toggle_chat().chat_visible());
 }
 
 #[test]

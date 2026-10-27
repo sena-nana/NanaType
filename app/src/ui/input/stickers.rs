@@ -1,23 +1,50 @@
-//! Sticker grid, bottom series tabs, and the shared folder-drop target.
+//! The sidebar's stickers: search, pack tabs, the grid, and a folder-drop
+//! target that imports packs.
 use super::*;
 use crate::ui::kit::{self, Type, gap};
 use nana_ui::runtime::{FileDropEvent, TabOption, Tabs, TabsEvent};
 
-/// The strip of pack tabs under the sticker grid.
+/// The strip of pack tabs over the sticker grid.
 const PACK_STRIP_H: f32 = 36.0;
 
-pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Option<u64>) -> AnyView {
+/// The tile after the stickers that opens a picture from disk.
+fn image_tile(ui: Ui) -> AnyView {
+    let mut st = NodeStyle::default();
+    {
+        let l = Arc::make_mut(&mut st.layout);
+        l.width = Some(LengthSpec::Px(PICTURE_SWATCH));
+        l.height = Some(LengthSpec::Px(PICTURE_SWATCH));
+        l.border_width = Some(1.0);
+        l.border_style = Some(nana_ui_core::BorderStyle::Dashed);
+        l.padding_left = Some(LengthSpec::Px(0.0));
+        l.padding_right = Some(LengthSpec::Px(0.0));
+    }
+    st.radius = Some(nana_ui_core::RadiusTier::Sm);
+    st.border = Some(SemanticColorRole::BorderStrong);
+    st.foreground = Some(SemanticColorRole::Muted);
+    widget(
+        Button::new("")
+            .accessible_name(ui.now_t("tb-image"))
+            .icon(ti::PHOTO_PLUS)
+            .kind(ButtonKind::Text)
+            .style(st),
+    )
+    .key("input-dock-sticker-image")
+    .bind(move |b: &mut Button| b.disabled = crate::ui::sources::plain_text_only(ui))
+    .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::PickFile(FileTarget::InsertImage)))
+    .into_any()
+}
+
+pub(super) fn panel(ui: Ui) -> AnyView {
     let query = signal(String::new());
     let selected = signal(String::new());
     let hovered = signal(false);
     let target = entity_ref::<Stack>();
-    if region.is_some() {
-        nana_ui::runtime::view::on_mount(move |cx| {
-            if let Some(target) = target.get() {
-                let _ = cx.set_drop_target(target, nana_ui_core::DropAccepts::files());
-            }
-        });
-    }
+    nana_ui::runtime::view::on_mount(move |cx| {
+        if let Some(target) = target.get() {
+            let _ = cx.set_drop_target(target, nana_ui_core::DropAccepts::files());
+        }
+    });
     let grid = dynamic(
         move || {
             (
@@ -50,9 +77,6 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
                             .size(ControlSize::Small),
                     )
                     .on_cx(move |_, _: &Activate, cx| {
-                        if let Some(open) = close_on_insert {
-                            open.set(false);
-                        }
                         cx.dispatch_program_all(Msg::SettingsPage(
                             crate::ui::settings::Page::Assets,
                         ))
@@ -96,9 +120,6 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
                         b.disabled = crate::ui::sources::plain_text_only(ui)
                     })
                     .on_cx(move |_, _: &Activate, cx| {
-                        if let Some(open) = close_on_insert {
-                            open.set(false);
-                        }
                         if let Some(asset) = asset.clone() {
                             cx.dispatch_program_all(act(Tool::Insert(Inline::Atom(Atom {
                                 kind: AtomKind::Sticker,
@@ -111,6 +132,7 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
                     })
                     .into_any()
                 })
+                .chain(std::iter::once(image_tile(ui)))
                 .collect();
             widget(
                 Stack::row(0.0)
@@ -122,95 +144,64 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
             .into_any()
         },
     );
-    let grid = if let Some(id) = region {
-        widget(
-            ScrollView::new(ScrollAxes::Vertical)
-                .scrollbars(nana_ui_core::ScrollbarVisibility::Always)
-                .with_layout(|l| {
-                    l.width = Some(LengthSpec::Fill);
-                    l.height = Some(LengthSpec::Px(0.0));
-                    l.min_height = Some(LengthSpec::Px(0.0));
-                    l.flex_grow = Some(1.0);
-                    l.flex_shrink = Some(1.0);
-                }),
-        )
-        .key(if id == 1 {
-            "input-dock-stickers-scroll".into()
-        } else {
-            format!("input-dock-region-{id}-scroll")
-        })
-        .children(grid)
-        .into_any()
-    } else {
-        grid.into_any()
-    };
-    let footer = region.map(|id| {
-        widget(
-            Stack::column(0.0)
-                .gap_step(gap::step::CONTROL)
-                .width(LengthSpec::Fill)
-                .with_layout(|l| l.flex_shrink = Some(0.0)),
-        )
-        .key(if id == 1 {
-            "input-dock-sticker-footer".into()
-        } else {
-            format!("input-dock-region-{id}-sticker-footer")
-        })
-        .children((
-            // Only while it has something to say: a drop under way, an
-            // import, a failure, or how to add the first pack.
-            widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
-                .visible(move || status(ui, hovered.get()).is_some())
-                .children((
-                    widget(
-                        Text::new("")
-                            .style(Type::Micro.style())
-                            .color(SemanticColorRole::Muted),
-                    )
-                    .bind(move |text: &mut Text| {
-                        text.value = status(ui, hovered.get()).unwrap_or_default();
-                    }),
-                    widget(Divider::horizontal()),
-                )),
-            widget(ScrollView::new(ScrollAxes::Horizontal).with_layout(|l| {
+    let grid = widget(
+        ScrollView::new(ScrollAxes::Vertical)
+            .scrollbars(nana_ui_core::ScrollbarVisibility::Always)
+            .with_layout(|l| {
                 l.width = Some(LengthSpec::Fill);
-                l.height = Some(LengthSpec::Px(PACK_STRIP_H));
-                l.min_width = Some(LengthSpec::Px(0.0));
-            }))
-            .children(
-                widget(
-                    Tabs::new("")
-                        .accepts_external_drop(false)
-                        .label(ui.now_t("tb-sticker-series")),
-                )
-                .key(if id == 1 {
-                    "input-dock-sticker-series".into()
-                } else {
-                    format!("input-dock-region-{id}-sticker-series")
-                })
-                .bind(move |tabs: &mut Tabs| {
-                    let rows = ui.stickers.get();
-                    let series = series(&rows);
-                    tabs.options = std::iter::once(
-                        TabOption::new("", ui.now_t("tb-sticker-all")).draggable(false),
-                    )
+                l.height = Some(LengthSpec::Px(0.0));
+                l.min_height = Some(LengthSpec::Px(0.0));
+                l.flex_grow = Some(1.0);
+                l.flex_shrink = Some(1.0);
+            }),
+    )
+    .key("input-dock-stickers-scroll")
+    .children(grid);
+    // Only while it has something to say: a drop under way, an import, a
+    // failure, or how to add the first pack.
+    let note = widget(
+        Text::new("")
+            .style(Type::Micro.style())
+            .color(SemanticColorRole::Muted),
+    )
+    .key("input-dock-sticker-status")
+    .visible(move || status(ui, hovered.get()).is_some())
+    .bind(move |text: &mut Text| {
+        text.value = status(ui, hovered.get()).unwrap_or_default();
+    });
+    let packs = widget(ScrollView::new(ScrollAxes::Horizontal).with_layout(|l| {
+        l.width = Some(LengthSpec::Fill);
+        l.height = Some(LengthSpec::Px(PACK_STRIP_H));
+        l.min_width = Some(LengthSpec::Px(0.0));
+        l.flex_shrink = Some(0.0);
+    }))
+    .visible(move || ui.stickers.with(|rows| !rows.is_empty()))
+    .children(
+        widget(
+            Tabs::new("")
+                .accepts_external_drop(false)
+                .label(ui.now_t("tb-sticker-series")),
+        )
+        .key("input-dock-sticker-series")
+        .bind(move |tabs: &mut Tabs| {
+            let rows = ui.stickers.get();
+            let series = series(&rows);
+            tabs.options =
+                std::iter::once(TabOption::new("", ui.now_t("tb-sticker-all")).draggable(false))
                     .chain(
                         series
                             .into_iter()
                             .map(|(lib, title)| TabOption::new(lib, title).draggable(false)),
                     )
                     .collect();
-                    tabs.selected = Some(effective_series(&selected.get(), &rows).into());
-                })
-                .on(move |e: &TabsEvent| {
-                    if let TabsEvent::Select(lib) = e {
-                        selected.set(lib.to_string());
-                    }
-                }),
-            ),
-        ))
-        .into_any()
-    });
+            tabs.selected = Some(effective_series(&selected.get(), &rows).into());
+        })
+        .on(move |e: &TabsEvent| {
+            if let TabsEvent::Select(lib) = e {
+                selected.set(lib.to_string());
+            }
+        }),
+    );
     let mut search = kit::text_input("").placeholder(ui.now_t("tb-sticker-search"));
     let layout = Arc::make_mut(&mut search.style.layout);
     layout.width = Some(LengthSpec::Fill);
@@ -218,15 +209,12 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
     widget(
         Stack::column(0.0)
             .gap_step(gap::step::CONTROL)
-            .padding_step(gap::step::TIGHT, gap::step::TIGHT)
-            .with_layout(move |l| {
+            .with_layout(|l| {
                 l.width = Some(LengthSpec::Fill);
                 l.min_width = Some(LengthSpec::Px(0.0));
-                if region.is_some() {
-                    l.height = Some(LengthSpec::Px(0.0));
-                    l.min_height = Some(LengthSpec::Px(0.0));
-                    l.flex_grow = Some(1.0);
-                }
+                l.height = Some(LengthSpec::Px(0.0));
+                l.min_height = Some(LengthSpec::Px(0.0));
+                l.flex_grow = Some(1.0);
             }),
     )
     .entity_ref(target)
@@ -235,24 +223,17 @@ pub(super) fn panel(ui: Ui, close_on_insert: Option<Signal<bool>>, region: Optio
         FileDropEvent::Left => hovered.set(false),
         FileDropEvent::Dropped { paths, .. } => {
             hovered.set(false);
-            if region.is_some() {
-                selected.set(String::new());
-                cx.dispatch_program_all(Msg::StickerImportFolders(paths.to_vec()));
-            }
+            selected.set(String::new());
+            cx.dispatch_program_all(Msg::StickerImportFolders(paths.to_vec()));
         }
     })
     .children((
         widget(search)
-            .key(if close_on_insert.is_some() {
-                "input-sticker-search".into()
-            } else if region == Some(1) {
-                "input-dock-sticker-search".into()
-            } else {
-                format!("input-dock-region-{}-sticker-search", region.unwrap_or(1))
-            })
+            .key("input-dock-sticker-search")
             .on(move |e: &TextChanged| query.set(e.value.to_string())),
+        packs,
         grid,
-        footer,
+        note,
     ))
     .into_any()
 }

@@ -76,7 +76,7 @@ fn douyin(scene: &Scene, out: &std::path::Path) {
     ui.chat.set(Arc::new(mixed));
     shot("dy-chat", out, 620, 700, theme.clone(), |doc, id| {
         doc.context_mut()
-            .mount_view_root(id, move || danmaku::chat_window(ui))
+            .mount_view_root(id, move || danmaku::chat_panel(ui))
             .unwrap();
     });
     ui.chat.set(before_dy_chat);
@@ -278,22 +278,24 @@ fn overlays(scene: &Scene, out: &std::path::Path) {
                 .unwrap();
         },
     );
-    // The toolbar's sticker panel, listing the sticker folder.
-    shot("input-stickers", out, 380, 200, theme.clone(), |doc, id| {
-        doc.context_mut()
-            .mount_view_root(id, move || {
-                nana_ui::runtime::view::widget(
-                    nana_ui::runtime::Stack::column(0.0)
-                        .padding(8.0)
-                        .surface(nana_ui_core::SemanticColorRole::Surface),
-                )
-                .children(input::sticker_panel(
-                    ui,
-                    nana_ui::runtime::view::signal(true),
-                ))
-            })
-            .unwrap();
-    });
+    // The sidebar's sticker and control panels.
+    for (name, panel) in [
+        ("input-stickers", input::sticker_panel as fn(_) -> _),
+        ("input-controls", input::controls_panel),
+    ] {
+        shot(name, out, 320, 560, theme.clone(), |doc, id| {
+            doc.context_mut()
+                .mount_view_root(id, move || {
+                    nana_ui::runtime::view::widget(
+                        nana_ui::runtime::Stack::fill_column(0.0)
+                            .padding(8.0)
+                            .surface(nana_ui_core::SemanticColorRole::Subtle),
+                    )
+                    .children(panel(ui))
+                })
+                .unwrap();
+        });
+    }
     shot(
         "history",
         out,
@@ -337,7 +339,7 @@ fn overlays(scene: &Scene, out: &std::path::Path) {
     ui.display.set(on_screen);
     shot("chat", out, 400, 640, theme.clone(), |doc, id| {
         doc.context_mut()
-            .mount_view_root(id, move || danmaku::chat_window(ui))
+            .mount_view_root(id, move || danmaku::chat_panel(ui))
             .unwrap();
     });
     let mut card_settings = (*ui.settings.get_untracked()).clone();
@@ -345,7 +347,7 @@ fn overlays(scene: &Scene, out: &std::path::Path) {
     ui.settings.set(Arc::new(card_settings));
     shot("chat-cards", out, 400, 640, theme.clone(), |doc, id| {
         doc.context_mut()
-            .mount_view_root(id, move || danmaku::chat_window(ui))
+            .mount_view_root(id, move || danmaku::chat_panel(ui))
             .unwrap();
     });
 }

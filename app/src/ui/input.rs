@@ -48,6 +48,7 @@ const SHEET_KEYS_W: f32 = 136.0;
 const REPLY_AVATAR: f32 = 18.0;
 
 pub mod completion;
+mod controls;
 mod stickers;
 mod workspace;
 
@@ -56,10 +57,6 @@ pub use nanatype_frame::ui::editor_view::{marker_label, preview_editor};
 
 fn act(tool: Tool) -> Msg {
     Msg::Tool(tool)
-}
-
-fn marker(m: Marker) -> Msg {
-    Msg::Tool(Tool::Insert(Inline::Marker(m)))
 }
 
 /// Toolbar glyphs: one size for every tool, centred in a 28px target.
@@ -147,7 +144,7 @@ fn is_strike(a: &RichSelectionAttrs) -> bool {
 }
 
 /// A toolbar button shown pressed while `on` holds, sending `msg()`.
-fn pressed_tool(
+pub(super) fn pressed_tool(
     icon: nana_ui::runtime::Icon,
     label: String,
     on: impl Fn() -> bool + Send + 'static,
@@ -213,8 +210,19 @@ fn trigger_face(icon: nana_ui::runtime::Icon) -> AnyView {
 }
 
 /// A popover whose open state the app keeps, so items can close it.
-fn popover(
+pub(super) fn popover(
     icon: nana_ui::runtime::Icon,
+    label: String,
+    width: f32,
+    open: Signal<bool>,
+    body: impl IntoView,
+) -> AnyView {
+    popover_with(trigger_face(icon), label, width, open, body)
+}
+
+/// [`popover`] behind its own face.
+fn popover_with(
+    face: AnyView,
     label: String,
     width: f32,
     open: Signal<bool>,
@@ -227,7 +235,7 @@ fn popover(
             .width(width)
             .bare_trigger(true),
     )
-    .trigger(trigger_face(icon))
+    .trigger(face)
     .bind(move |p: &mut Popover| p.open = open.get())
     .on(move |e: &PopoverToggled| open.set(e.open))
     .on(move |_: &PopoverClosed| open.set(false))
@@ -605,54 +613,14 @@ fn ruby_panel(ui: Ui, open: Signal<bool>) -> AnyView {
     .into_any()
 }
 
-fn expression_panel(ui: Ui, open: Signal<bool>) -> AnyView {
-    let name = signal(String::new());
-    let skin = ui.skin.get_untracked();
-    let variants: Vec<AnyView> = skin
-        .dialogue
-        .portrait
-        .variants
-        .keys()
-        .map(|v| {
-            let v = v.clone();
-            let label = v.clone();
-            widget(Button::new(label).size(ControlSize::Small))
-                .on_cx(move |_, _: &Activate, cx| {
-                    open.set(false);
-                    cx.dispatch_program_all(marker(Marker::Expression {
-                        name: v.clone(),
-                        intensity: None,
-                    }));
-                })
-                .into_any()
-        })
-        .collect();
-    widget(
-        Stack::column(0.0)
-            .gap_step(gap::step::CONTROL)
-            .padding_step(gap::step::TIGHT, gap::step::TIGHT),
-    )
-    .children((
-        widget(Stack::row(0.0).gap_step(gap::step::TIGHT).wrap(true)).children(variants),
-        widget(kit::text_input("").placeholder(ui.now_t("tb-expression-placeholder")))
-            .on(move |e: &TextChanged| name.set(e.value.to_string()))
-            .on_cx(move |_, _: &TextSubmitted, cx| {
-                let n = name.get_untracked();
-                if !n.trim().is_empty() {
-                    open.set(false);
-                    cx.dispatch_program_all(marker(Marker::Expression {
-                        name: n.trim().to_owned(),
-                        intensity: None,
-                    }));
-                }
-            }),
-    ))
-    .into_any()
+/// The sidebar's sticker panel.
+pub fn sticker_panel(ui: Ui) -> AnyView {
+    stickers::panel(ui)
 }
 
-/// The toolbar's sticker picker; `open` is its popover's state.
-pub fn sticker_panel(ui: Ui, open: Signal<bool>) -> AnyView {
-    stickers::panel(ui, Some(open), None)
+/// The sidebar's control palette.
+pub fn controls_panel(ui: Ui) -> AnyView {
+    controls::panel(ui)
 }
 
 /// A small caption over a group in a toolbar panel.
@@ -917,182 +885,84 @@ pub fn cheat_sheet(ui: Ui) -> AnyView {
     .into_any()
 }
 
-/// A hairline between two groups of toolbar tools, 16px tall.
-/// Input windows narrower than this fold their low-frequency tools into "…".
-const COMPACT_BELOW: f32 = 820.0;
+/// The colour tool's face: the glyph over a bar in the selection's colour.
+fn color_face(ui: Ui) -> AnyView {
+    const BAR_H: f32 = 3.0;
+    let inner = TARGET - 2.0 * space::LG;
+    let reach = -(GLYPH - inner) / 2.0;
+    widget(
+        Stack::column(0.0)
+            .align(AlignSpec::Center)
+            .justify(JustifySpec::Center)
+            .with_layout(move |l| {
+                l.width = Some(LengthSpec::Px(GLYPH));
+                l.min_width = Some(LengthSpec::Px(GLYPH));
+                l.margin_left = Some(LengthSpec::Px(reach));
+                l.margin_right = Some(LengthSpec::Px(reach));
+                l.height = Some(LengthSpec::Px(GLYPH));
+                l.flex_shrink = Some(0.0);
+                l.overflow_x = OverflowSpec::Visible;
+                l.overflow_y = OverflowSpec::Visible;
+            }),
+    )
+    .children((
+        widget(
+            IconGlyph::new(ti::LETTER_A)
+                .size(GLYPH - BAR_H)
+                .decorative(),
+        ),
+        widget(Stack::row(0.0).radius(nana_ui_core::RadiusTier::Xs)).bind(move |s: &mut Stack| {
+            let attrs = ui.sel_attrs.get();
+            let colors = crate::ui::kit::theme::palette(ui.chrome_dark.get());
+            let color = if attrs.mixed.contains(RichAttrMask::COLOR) {
+                colors.faint.as_rgba_array()
+            } else {
+                match attrs.style.paint.color {
+                    Some(nana_ui_core::PaintColor::Srgb { rgba }) => rgba,
+                    _ => colors.text.as_rgba_array(),
+                }
+            };
+            let l = s.layout_mut();
+            l.width = Some(LengthSpec::Px(GLYPH - 2.0));
+            l.height = Some(LengthSpec::Px(BAR_H));
+            l.flex_shrink = Some(0.0);
+            l.background = Some(color);
+        }),
+    ))
+    .into_any()
+}
 
+/// Input windows narrower than this fold typography and outline tools into "…".
+const COMPACT_BELOW: f32 = 560.0;
+
+/// How the text looks: weight and lines, then colour, size, font and
+/// alignment, then outline, ruby and clearing. Pacing, effects and anything
+/// inserted live in the sidebar.
 fn toolbar(ui: Ui) -> AnyView {
     let available_width = signal(920.0_f32);
     let key = move || {
         (
             ui.locale.get(),
             ui.chrome_dark.get(),
-            available_width.get(),
+            available_width.get() < COMPACT_BELOW,
             ui.skin.with(|s| Arc::as_ptr(s) as usize),
-            ui.settings.with(|s| {
-                (
-                    s.general.input_mode,
-                    s.hotkeys.input.clone(),
-                    s.assets.phrases.len(),
-                )
-            }),
+            ui.settings.with(|s| s.hotkeys.input.clone()),
         )
     };
-    dynamic(key, move |_| {
+    dynamic(key, move |(_, _, compact, _, _)| {
+        let compact = *compact;
         let [
             color_open,
             size_open,
             font_open,
             align_open,
             ruby_open,
-            fx_open,
-            pace_open,
-            insert_open,
-            sticker_open,
-            expr_open,
-            phrase_open,
             stroke_open,
             help_open,
+            more_open,
         ] = std::array::from_fn(|_| signal(false));
         let t = |k: &str| ui.now_t(k);
-        let skin = ui.skin.get_untracked();
-        let settings = ui.settings.get_untracked();
-        let effects: Vec<AnyView> = [
-            (ContinuousKind::Shake, "tb-effect-shake"),
-            (ContinuousKind::Wave, "tb-effect-wave"),
-            (ContinuousKind::Jump, "tb-effect-jump"),
-            (ContinuousKind::Rainbow, "tb-effect-rainbow"),
-            (ContinuousKind::Pulse, "tb-effect-pulse"),
-            (ContinuousKind::Flicker, "tb-effect-flicker"),
-        ]
-        .into_iter()
-        .map(|(kind, key)| {
-            item(t(key), fx_open, move || {
-                act(Tool::Effect(Continuous::new(kind)))
-            })
-        })
-        .chain([
-            item(t("tb-emphasis"), fx_open, || {
-                act(Tool::Emphasis(Emphasis::default()))
-            }),
-            widget(Divider::horizontal()).into_any(),
-            item(t("tb-entrance-fade"), fx_open, || {
-                act(Tool::Entrance(EntranceKind::Fade, None))
-            }),
-            item(t("tb-entrance-pop"), fx_open, || {
-                act(Tool::Entrance(EntranceKind::Pop, None))
-            }),
-            item(t("tb-entrance-slide"), fx_open, || {
-                act(Tool::Entrance(EntranceKind::SlideUp, None))
-            }),
-        ])
-        .collect();
-        let pacing: Vec<AnyView> = [250u32, 500, 1000]
-            .into_iter()
-            .map(|ms| {
-                let label = I18N.tr_in(
-                    ui.locale.get_untracked(),
-                    "tb-wait-ms",
-                    &[("ms", ms.into())],
-                );
-                item(label, pace_open, move || marker(Marker::Wait { ms }))
-            })
-            .chain([
-                widget(Divider::horizontal()).into_any(),
-                item(t("tb-speed-slow"), pace_open, || {
-                    act(Tool::Pace(Pace::Scale(2.0)))
-                }),
-                item(t("tb-speed-fast"), pace_open, || {
-                    act(Tool::Pace(Pace::Scale(0.5)))
-                }),
-                item(t("tb-speed-instant"), pace_open, || {
-                    act(Tool::Pace(Pace::Instant))
-                }),
-                item(t("tb-speed-reset"), pace_open, || {
-                    act(Tool::Pace(Pace::Inherit))
-                }),
-                widget(Divider::horizontal()).into_any(),
-                item(t("tb-pause"), pace_open, || {
-                    marker(Marker::Pause { auto_ms: None })
-                }),
-                item(t("tb-pause-auto"), pace_open, || {
-                    marker(Marker::Pause {
-                        auto_ms: Some(1500),
-                    })
-                }),
-                item(t("tb-page"), pace_open, || marker(Marker::Page)),
-            ])
-            .collect();
-        let shake = skin.effects.screen_shake_px;
-        let mut inserts: Vec<AnyView> = vec![
-            widget(ActionMenuItem::new(t("tb-image")))
-                .bind(move |item: &mut ActionMenuItem| {
-                    item.disabled = super::sources::plain_text_only(ui)
-                })
-                .on_cx(move |_, _: &Activate, cx| {
-                    insert_open.set(false);
-                    cx.dispatch_program_all(Msg::PickFile(FileTarget::InsertImage));
-                })
-                .into_any(),
-            item(t("tb-screenshake"), insert_open, move || {
-                marker(Marker::ScreenShake {
-                    amp: shake,
-                    ms: 300,
-                })
-            }),
-        ];
-        let se: Vec<String> = skin.sounds.se.keys().cloned().collect();
-        if !se.is_empty() {
-            inserts.push(widget(Divider::horizontal()).into_any());
-            for name in se {
-                let label = format!("{} · {}", t("tb-sound"), name);
-                inserts.push(item(label, insert_open, move || {
-                    marker(Marker::Sound {
-                        sound: name.clone(),
-                        gain: 1.0,
-                    })
-                }));
-            }
-        }
-        let phrases: Vec<AnyView> = if settings.assets.phrases.is_empty() {
-            // The menu's empty state: ✦ and one line, then the way to add some.
-            vec![
-                widget(
-                    ActionMenuItem::new(t("empty-phrases"))
-                        .leading(ti::SPARKLES)
-                        .disabled(true),
-                )
-                .into_any(),
-                item(t("empty-open-assets"), phrase_open, || {
-                    Msg::SettingsPage(super::settings::Page::Assets)
-                }),
-            ]
-        } else {
-            settings
-                .assets
-                .phrases
-                .iter()
-                .enumerate()
-                .map(|(i, p)| item(p.label.clone(), phrase_open, move || Msg::InsertPhrase(i)))
-                .collect()
-        };
-        // Below this width the low-frequency tools fold into a "…" menu so
-        // Send and the mode switch always stay on screen.
-        let input_width = available_width.get_untracked();
-        let compact = input_width < COMPACT_BELOW;
-        let narrow = input_width < 640.0;
-        let [more_open] = std::array::from_fn(|_| signal(false));
-        let open_item = |label: String, target: Signal<bool>| -> AnyView {
-            widget(ActionMenuItem::new(label))
-                .on_cx(move |_, _: &Activate, _| {
-                    more_open.set(false);
-                    target.set(true);
-                })
-                .into_any()
-        };
         let divider = crate::ui::kit::vrule;
-        // Text styling, then colour and size, then the outline and ruby,
-        // then what plays (effects, pacing) and what goes in.
         let mut bar: Vec<AnyView> = vec![
             toggle(
                 ui,
@@ -1127,8 +997,10 @@ fn toolbar(ui: Ui) -> AnyView {
                 is_strike,
             ),
             divider(),
-            popover(
-                ti::PALETTE,
+        ];
+        let typography = vec![
+            popover_with(
+                color_face(ui),
                 t("tb-color"),
                 crate::ui::kit::popover::MD,
                 color_open,
@@ -1156,114 +1028,49 @@ fn toolbar(ui: Ui) -> AnyView {
                 alignment_panel(ui, align_open),
             ),
         ];
-        let stroke = popover(
-            ti::BORDER_OUTER,
-            t("tb-stroke"),
-            crate::ui::kit::popover::MD,
-            stroke_open,
-            stroke_panel(ui, stroke_open),
-        );
-        let ruby = popover(
-            ti::LANGUAGE_HIRAGANA,
-            t("tb-ruby"),
-            crate::ui::kit::popover::MD,
-            ruby_open,
-            ruby_panel(ui, ruby_open),
-        );
-        let sticker = popover(
-            ti::STICKER,
-            t("tb-sticker"),
-            crate::ui::kit::popover::XL,
-            sticker_open,
-            sticker_panel(ui, sticker_open),
-        );
-        let expression = popover(
-            ti::MOOD_SMILE,
-            t("tb-expression"),
-            crate::ui::kit::popover::LG,
-            expr_open,
-            expression_panel(ui, expr_open),
-        );
-        let help = popover(
-            ti::HELP,
-            t("tb-cheatsheet"),
-            crate::ui::kit::popover::SHEET,
-            help_open,
-            cheat_sheet(ui),
-        );
-        let effects_menu = menu(ti::SPARKLES, t("tb-effects"), fx_open, effects);
-        let pacing_menu = menu(ti::HOURGLASS, t("tb-pacing"), pace_open, pacing);
-        // The popovers of folded tools stay mounted, invisible and out of the
-        // flow, so the "…" menu can open them in place.
-        let mut hidden: Vec<AnyView> = Vec::new();
-        if narrow {
-            hidden.extend(bar.drain(1..));
-        }
+        let outline = vec![
+            popover(
+                ti::BORDER_OUTER,
+                t("tb-stroke"),
+                crate::ui::kit::popover::MD,
+                stroke_open,
+                stroke_panel(ui, stroke_open),
+            ),
+            popover(
+                ti::LANGUAGE_HIRAGANA,
+                t("tb-ruby"),
+                crate::ui::kit::popover::MD,
+                ruby_open,
+                ruby_panel(ui, ruby_open),
+            ),
+        ];
+        let clear = || {
+            tool(ui, ti::CLEAR_FORMATTING, "tb-clear-format", || {
+                act(Tool::ClearFormat)
+            })
+        };
         if compact {
-            // Clearing formats folds too, so the menus fit beside Send in
-            // every language.
-            if narrow {
-                hidden.extend([effects_menu, pacing_menu]);
-            } else {
-                bar.extend([divider(), effects_menu, pacing_menu]);
-            }
-            let mut items: Vec<AnyView> = vec![
-                widget(ActionMenuItem::new(t("tb-clear-format")))
-                    .on_cx(move |_, _: &Activate, cx| {
+            // The popovers of folded tools stay mounted, invisible and out of
+            // the flow, so the "…" menu can open them in place.
+            let open_item = |label: String, target: Signal<bool>| -> AnyView {
+                widget(ActionMenuItem::new(label))
+                    .on_cx(move |_, _: &Activate, _| {
                         more_open.set(false);
-                        cx.dispatch_program_all(act(Tool::ClearFormat));
+                        target.set(true);
                     })
-                    .into_any(),
+                    .into_any()
+            };
+            let items = vec![
+                open_item(t("tb-color"), color_open),
+                open_item(t("tb-size"), size_open),
+                open_item(t("tb-font"), font_open),
+                open_item(t("tb-align"), align_open),
+                widget(Divider::horizontal()).into_any(),
                 open_item(t("tb-stroke"), stroke_open),
                 open_item(t("tb-ruby"), ruby_open),
-                open_item(t("tb-sticker"), sticker_open),
-                open_item(t("tb-expression"), expr_open),
-                widget(ActionMenuItem::new(t("tb-source")))
-                    .on_cx(move |_, _: &Activate, cx| {
-                        more_open.set(false);
-                        cx.dispatch_program_all(Msg::ToggleSource);
-                    })
-                    .into_any(),
-                widget(Divider::horizontal()).into_any(),
+                item(t("tb-clear-format"), more_open, || act(Tool::ClearFormat)),
             ];
-            if narrow {
-                for (key, tool) in [
-                    ("tb-bold", Tool::Bold),
-                    ("tb-italic", Tool::Italic),
-                    ("tb-underline", Tool::Underline),
-                    ("tb-strike", Tool::Strike),
-                ] {
-                    items.push(item(t(key), more_open, move || act(tool.clone())));
-                }
-                items.extend([
-                    open_item(t("tb-color"), color_open),
-                    open_item(t("tb-size"), size_open),
-                    open_item(t("tb-font"), font_open),
-                    open_item(t("tb-align"), align_open),
-                    open_item(t("tb-effects"), fx_open),
-                    open_item(t("tb-pacing"), pace_open),
-                    open_item(t("tb-cheatsheet"), help_open),
-                ]);
-            }
-            items.extend(inserts);
             bar.push(menu(ti::DOTS, t("tb-more"), more_open, items));
-            if narrow {
-                hidden.push(help);
-            } else {
-                bar.push(help);
-            }
-            hidden.extend([stroke, ruby, sticker, expression]);
-        } else {
-            bar.extend([stroke, ruby, divider()]);
-            bar.extend([effects_menu, pacing_menu, sticker, expression]);
-            bar.push(menu(ti::TEXT_PLUS, t("tb-insert"), insert_open, inserts));
-            bar.push(tool(ui, ti::CLEAR_FORMATTING, "tb-clear-format", || {
-                act(Tool::ClearFormat)
-            }));
-            bar.push(help);
-        }
-        bar.push(widget(Stack::spacer()).into_any());
-        if !hidden.is_empty() {
             bar.push(
                 widget(Stack::row(0.0).with_layout(|l| {
                     l.width = Some(LengthSpec::Px(0.0));
@@ -1272,13 +1079,27 @@ fn toolbar(ui: Ui) -> AnyView {
                     l.overflow_x = OverflowSpec::Hidden;
                     l.overflow_y = OverflowSpec::Hidden;
                 }))
-                .children(hidden)
+                .children((typography, outline))
                 .into_any(),
             );
+        } else {
+            bar.extend(typography);
+            bar.push(divider());
+            bar.extend(outline);
+            bar.push(clear());
         }
-        bar.push(menu(ti::MESSAGE, t("tb-phrases"), phrase_open, phrases));
-        bar.push(skin_preview_toggle(ui));
-        bar.push(source_toggle(ui));
+        bar.extend([
+            widget(Stack::spacer()).into_any(),
+            skin_preview_toggle(ui),
+            source_toggle(ui),
+            popover(
+                ti::HELP,
+                t("tb-cheatsheet"),
+                crate::ui::kit::popover::SHEET,
+                help_open,
+                cheat_sheet(ui),
+            ),
+        ]);
         widget(
             Stack::bar(0.0)
                 .gap_step(gap::step::HAIR)
@@ -1642,6 +1463,17 @@ pub(crate) fn changed_sidebar_width(ui: Ui, cx: &nana_ui::runtime::AppContext) -
     workspace::changed_width(ui, cx)
 }
 
+/// The folded sidebar's width: its rail alone.
+#[cfg(test)]
+pub(crate) fn workspace_rail_width() -> f32 {
+    workspace::RAIL_W
+}
+
+/// Read pinned chat's split the same way, after routing.
+pub(crate) fn changed_chat_height(ui: Ui, cx: &nana_ui::runtime::AppContext) -> Option<f32> {
+    workspace::changed_chat_height(ui, cx)
+}
+
 /// Mirror the editor's IME composition after routing: preedit never reaches
 /// the draft, so the empty-draft hint needs this to step aside for it.
 pub(crate) fn sync_composing(
@@ -1694,7 +1526,7 @@ mod tests {
             .unwrap()
             .skin;
         for locale in [Locale::ZhCn, Locale::EnUs, Locale::JaJp] {
-            for width in [720, 796, 920, 1100, 1200] {
+            for width in [480, 560, 720, 920, 1200] {
                 for mode in [InputMode::Compose, InputMode::Mirror] {
                     for scale in [1.0, 1.5, 2.0] {
                         let mut settings = Settings::default();
@@ -1719,19 +1551,30 @@ mod tests {
                         )
                         .unwrap();
                         let nodes = session.accessibility_dump();
-                        let controls = [
-                            "tb-bold",
-                            "tb-italic",
-                            "tb-color",
-                            "tb-size",
-                            "tb-font",
-                            "tb-align",
-                            "tb-effects",
-                            "tb-pacing",
-                            "tb-phrases",
-                            "tb-source",
-                        ]
-                        .map(|key| {
+                        let expected: &[&str] = if (width as f32) < COMPACT_BELOW {
+                            &[
+                                "tb-bold",
+                                "tb-strike",
+                                "tb-more",
+                                "tb-source",
+                                "tb-cheatsheet",
+                            ]
+                        } else {
+                            &[
+                                "tb-bold",
+                                "tb-italic",
+                                "tb-color",
+                                "tb-size",
+                                "tb-font",
+                                "tb-align",
+                                "tb-stroke",
+                                "tb-ruby",
+                                "tb-clear-format",
+                                "tb-source",
+                                "tb-cheatsheet",
+                            ]
+                        };
+                        let controls = expected.iter().map(|key| {
                             let label = ui.now_t(key);
                             nodes
                                 .iter()
@@ -1764,7 +1607,10 @@ mod tests {
                                 let i = ((y * size.width + x) * 4) as usize;
                                 rgba[i..i + 3].iter().map(|&c| u32::from(c)).sum::<u32>() / 3
                             };
-                            for key in ["tb-phrases", "tb-cheatsheet"] {
+                            for key in ["tb-more", "tb-color", "tb-cheatsheet"]
+                                .into_iter()
+                                .filter(|k| expected.contains(k))
+                            {
                                 let label = ui.now_t(key);
                                 let Some(node) = nodes
                                     .iter()
@@ -1774,8 +1620,8 @@ mod tests {
                                 };
                                 let b = &node.bounds;
                                 let to_px = |v: f32| (v * scale).round() as u32;
-                                let (x0, x1) = (to_px(b.x), to_px(b.x + b.width));
-                                let (y0, y1) = (to_px(b.y), to_px(b.y + b.height));
+                                let (x0, x1) = (to_px(b.x), to_px(b.x + b.width).min(size.width));
+                                let (y0, y1) = (to_px(b.y), to_px(b.y + b.height).min(size.height));
                                 let bg = px(x0, y0);
                                 let ink: Vec<u32> = (x0..x1)
                                     .filter(|&x| (y0..y1).any(|y| px(x, y).abs_diff(bg) > 40))

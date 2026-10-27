@@ -1036,7 +1036,7 @@ fn sidebar_drag_and_small_windows_preserve_the_saved_width_and_editor() {
             f.pointer(PointerPhase::Up, x + dx, y);
         };
         drag(&mut f, -180.0);
-        assert_eq!(f.ui.input_sidebar_width.get_untracked(), 480.0);
+        assert_eq!(f.ui.input_sidebar_width.get_untracked(), 500.0);
         let stored = nanatype_settings::GeometryStore {
             input_sidebar_width: Some(f.ui.input_sidebar_width.get_untracked()),
             ..Default::default()
@@ -1045,9 +1045,9 @@ fn sidebar_drag_and_small_windows_preserve_the_saved_width_and_editor() {
             serde_json::from_str(&serde_json::to_string(&stored).unwrap()).unwrap();
         assert_eq!(
             nanatype_settings::input_sidebar_width(restored.input_sidebar_width),
-            480.0
+            500.0
         );
-        for (w, expected) in [(720, 392.0), (920, 480.0), (1200, 480.0)] {
+        for (w, expected) in [(720, 392.0), (920, 500.0), (1200, 500.0)] {
             f.session.set_viewport(w, 480, 1.0).unwrap();
             f.session.flush().unwrap();
             assert_eq!(
@@ -1059,7 +1059,7 @@ fn sidebar_drag_and_small_windows_preserve_the_saved_width_and_editor() {
                 expected
             );
             assert!(input::changed_sidebar_width(f.ui, f.session.document().context()).is_none());
-            assert_eq!(f.ui.input_sidebar_width.get_untracked(), 480.0);
+            assert_eq!(f.ui.input_sidebar_width.get_untracked(), 500.0);
             assert_eq!(f.selection(), selection);
             assert_eq!((f.bounds().width, f.bounds().height), size);
         }
@@ -1075,6 +1075,21 @@ fn sidebar_drag_and_small_windows_preserve_the_saved_width_and_editor() {
             f.ui.input_sidebar_width.get_untracked(),
             nanatype_settings::INPUT_SIDEBAR_MIN + 8.0
         );
+        // Folding holds the pane at the rail and keeps the dragged width.
+        let size = |f: &Fixture| {
+            f.session
+                .document()
+                .context()
+                .read(pane, |p| p.model.size())
+                .unwrap()
+        };
+        f.ui.input_dock.update(|d| d.collapsed = true);
+        f.session.flush().unwrap();
+        assert_eq!(size(&f), input::workspace_rail_width());
+        assert!(input::changed_sidebar_width(f.ui, f.session.document().context()).is_none());
+        f.ui.input_dock.update(|d| d.collapsed = false);
+        f.session.flush().unwrap();
+        assert_eq!(size(&f), nanatype_settings::INPUT_SIDEBAR_MIN + 8.0);
         f.action(TextEditAction::Undo);
         assert_eq!(f.text(), "侧栏调整");
     }
@@ -1160,48 +1175,40 @@ fn resizing_and_dock_tabs_preserve_both_editors_selection_and_undo_history() {
             assert_eq!(f.node(), editor);
             assert_eq!(f.text(), text);
             assert_eq!(f.selection(), selection);
-            for tab in [
-                "input-dock-commands",
-                "input-dock-stickers",
-                "input-dock-stickers",
+            // Switch panels, show chat, and fold the sidebar on the open
+            // panel's icon; the next size unfolds it again.
+            for key in [
+                "input-dock-rail-stickers",
+                "input-dock-rail-chat",
+                "input-dock-rail-controls",
+                "input-dock-rail-controls",
             ] {
-                let strip = f
+                let b = f
                     .session
                     .accessibility_dump()
                     .into_iter()
-                    .find(|n| {
-                        n.agent_path
-                            .as_deref()
-                            .is_some_and(|p| p.ends_with("input-dock-tabs"))
-                    })
-                    .unwrap();
-                let strip = Entity::<nana_ui::runtime::Tabs>::from_stable_id(
-                    nana_ui::runtime::StableNodeId::new(strip.id).unwrap(),
-                );
-                let value = if tab == "input-dock-commands" {
-                    "commands"
-                } else {
-                    "stickers"
-                };
-                let trigger = f
-                    .session
-                    .document()
-                    .context()
-                    .read(strip, |t| t.option_node(value).unwrap())
-                    .unwrap();
-                let b = f
-                    .session
-                    .document()
-                    .context()
-                    .world()
-                    .layout_box(trigger)
-                    .unwrap();
+                    .find(|n| n.agent_path.as_deref().is_some_and(|p| p.ends_with(key)))
+                    .unwrap_or_else(|| panic!("missing {key}"))
+                    .bounds;
                 f.click(b.x + b.width / 2.0, b.y + b.height / 2.0);
                 assert_eq!(f.node(), editor);
                 assert_eq!(f.text(), text);
                 assert_eq!(f.selection(), selection);
                 assert_eq!((f.bounds().width, f.bounds().height), size);
             }
+            // Folded on the open panel's icon: only the rail is left.
+            assert!(f.ui.input_dock.with_untracked(|d| d.collapsed));
+            let pane = Entity::<nana_ui::runtime::SplitPane>::from_stable_id(
+                f.ui.input_split.get_untracked().unwrap(),
+            );
+            assert_eq!(
+                f.session
+                    .document()
+                    .context()
+                    .read(pane, |p| p.model.size())
+                    .unwrap(),
+                input::workspace_rail_width()
+            );
         }
         let base_skin = f.ui.skin.get_untracked();
         for (width, height, font_size) in [(160.0, 96.0, 48.0), (1200.0, 120.0, 16.0)] {

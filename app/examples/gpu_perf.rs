@@ -100,7 +100,7 @@ fn session(registry: &SkinRegistry, name: &'static str, track: usize) -> (Ui, Ru
                 if name == "plugin_heavy" {
                     nanatype::ui::plugins::mounted(ui, nanatype_plugins::Mount::Panel).into_any()
                 } else if name == "chat_1000" {
-                    danmaku::chat_window(ui).into_any()
+                    danmaku::chat_panel(ui).into_any()
                 } else if track == 2 {
                     history::history_window(ui).into_any()
                 } else if track == 1 {

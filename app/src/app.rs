@@ -545,7 +545,7 @@ impl App {
                 input: windows::desired(WindowKind::Input, &self.skin, s, self.summoned).visible,
                 display: s.overlays.display.visible,
                 history: s.overlays.history.visible,
-                chat: s.integrations.bilibili.panel_open,
+                chat: self.ui.input_dock.with_untracked(|d| d.chat_visible()),
                 locked,
                 continue_key: GlobalAction::Continue.get(s).map(|h| h.label(meta)),
                 tooltip,
@@ -562,7 +562,7 @@ impl App {
 
     /// Tint ordinary windows' system title bars with the application chrome.
     pub fn tint_captions(&self) {
-        for kind in [WindowKind::Input, WindowKind::Settings, WindowKind::Chat] {
+        for kind in [WindowKind::Input, WindowKind::Settings] {
             if let Some(handle) = self.windows.handle(kind) {
                 windows::tint_caption(handle, &self.theme);
             }
@@ -1192,19 +1192,9 @@ impl App {
     }
 
     pub fn save_geometry(&mut self) {
-        let selected = self.ui.input_dock_selected.get_untracked();
-        let dock_changed = self.ui.input_dock_regions.with_untracked(|regions| {
-            self.windows
-                .geometry
-                .input_dock
-                .as_ref()
-                .is_none_or(|saved| saved.selected != selected || saved.regions != *regions)
-        });
-        if dock_changed {
-            self.windows.geometry.input_dock = Some(nanatype_settings::InputDockLayout {
-                regions: self.ui.input_dock_regions.get_untracked(),
-                selected,
-            });
+        let dock = self.ui.input_dock.get_untracked();
+        if self.windows.geometry.input_dock != Some(dock) {
+            self.windows.geometry.input_dock = Some(dock);
             self.windows.geometry_dirty = true;
         }
         if self.windows.geometry_dirty {
@@ -1268,7 +1258,6 @@ impl App {
                 WindowKind::PeerDisplay,
                 WindowKind::History,
                 WindowKind::Settings,
-                WindowKind::Chat,
             ] {
                 self.commands.push(WindowCommand::SetTitle {
                     id: kind.id(),
@@ -2102,7 +2091,10 @@ impl App {
             | Msg::ChatAssetReady(_)
             | Msg::ChatMention { .. }
             | Msg::ClearReply
-            | Msg::ClearChat) => self.chat_msg(m),
+            | Msg::ClearChat
+            | Msg::Dock(_)
+            | Msg::ToggleChat
+            | Msg::ShowChat) => self.chat_msg(m),
             #[cfg(feature = "unofficial-chat")]
             m @ (Msg::Bilibili(_)
             | Msg::BilibiliLogin
@@ -2304,40 +2296,6 @@ impl App {
             false,
         ));
         self.update(Msg::ShowWindow(WindowKind::Input));
-    }
-
-    pub fn open_chat(&mut self) {
-        if !self.settings.integrations.bilibili.panel_open {
-            self.edit(|s| s.integrations.bilibili.panel_open = true);
-        }
-        if self.windows.is_open(WindowKind::Chat) {
-            if let Some(h) = self.windows.handle(WindowKind::Chat) {
-                drop(h.set_visible(true));
-                drop(h.focus());
-            }
-            return;
-        }
-        let title = self.ui.now_t(WindowKind::Chat.title_key());
-        let desc = windows::descriptor(WindowKind::Chat, &title, &self.skin, &self.settings);
-        self.commands.push(WindowCommand::Open {
-            id: WindowKind::Chat.id(),
-            settings: desc,
-        });
-    }
-
-    /// The chat panel's width changed; rows re-wrap past a few pixels.
-    pub fn chat_resized(&mut self, width: f32) {
-        if (self.ui.chat_width.get_untracked() - width).abs() >= 4.0 {
-            self.ui.chat_width.set(width);
-        }
-    }
-
-    pub fn close_chat(&mut self) {
-        if self.settings.integrations.bilibili.panel_open {
-            self.edit(|s| s.integrations.bilibili.panel_open = false);
-        }
-        self.commands
-            .push(WindowCommand::Close(WindowKind::Chat.id()));
     }
 
     fn set_input_visibility(&mut self, visible: bool) {

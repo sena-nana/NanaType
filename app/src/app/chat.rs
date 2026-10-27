@@ -2,6 +2,7 @@ use super::App;
 use crate::msg::Msg;
 use nanatype_core::{Cmd, Core, Effects};
 use nanatype_model::outgoing;
+use nanatype_settings::InputDockLayout;
 use std::sync::Arc;
 
 impl App {
@@ -30,8 +31,31 @@ impl App {
                 self.ui.chat_target.set(None);
                 self.publish_chat();
             }
+            Msg::Dock(layout) => self.dock(layout),
+            Msg::ToggleChat => {
+                let layout = self.ui.input_dock.get_untracked().toggle_chat();
+                self.dock(layout);
+            }
+            Msg::ShowChat => {
+                let layout = self.ui.input_dock.get_untracked();
+                if !layout.chat_visible() {
+                    self.dock(layout.toggle_chat());
+                }
+                self.update(Msg::ShowWindow(crate::windows::WindowKind::Input));
+            }
             _ => unreachable!("not a chat message"),
         }
+    }
+
+    /// Show the sidebar as `layout` (the sidebar may already) and keep it
+    /// for the next start.
+    fn dock(&mut self, layout: InputDockLayout) {
+        let layout = layout.normalized();
+        if self.ui.input_dock.get_untracked() != layout {
+            self.ui.input_dock.set(layout);
+        }
+        self.save_geometry();
+        self.sync_tray();
     }
 }
 

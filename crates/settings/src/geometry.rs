@@ -8,9 +8,13 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-pub const INPUT_SIDEBAR_DEFAULT: f32 = 300.0;
-pub const INPUT_SIDEBAR_MIN: f32 = 160.0;
+pub const INPUT_SIDEBAR_DEFAULT: f32 = 320.0;
+/// Narrow enough for a small window, wide enough to read live chat.
+pub const INPUT_SIDEBAR_MIN: f32 = 240.0;
 pub const INPUT_SIDEBAR_MAX: f32 = 560.0;
+/// The pinned chat's height above the insert panels.
+pub const INPUT_CHAT_DEFAULT: f32 = 220.0;
+pub const INPUT_CHAT_MIN: f32 = 96.0;
 
 pub fn input_sidebar_width(value: Option<f32>) -> f32 {
     value
@@ -19,64 +23,123 @@ pub fn input_sidebar_width(value: Option<f32>) -> f32 {
         .clamp(INPUT_SIDEBAR_MIN, INPUT_SIDEBAR_MAX)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// The input sidebar's panels, in rail order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum InputDockRegionKind {
-    Commands,
+pub enum InputDockTab {
+    /// Pacing, effects, sounds and expressions to insert.
+    #[default]
+    Controls,
     Stickers,
     Phrases,
+    /// Live chat, when it is not pinned above the others.
+    Chat,
     #[serde(other)]
     Unknown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct InputDockRegion {
-    pub id: u64,
-    pub kind: InputDockRegionKind,
-    pub number: u64,
+impl InputDockTab {
+    /// The panels that share the lower area beside pinned chat.
+    pub const INSERTS: [Self; 3] = [Self::Controls, Self::Stickers, Self::Phrases];
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// The input sidebar: which panel shows, whether live chat sits pinned above
+/// it, and whether the sidebar is folded to its rail.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct InputDockLayout {
-    pub regions: Vec<InputDockRegion>,
-    pub selected: u64,
+    pub tab: InputDockTab,
+    pub chat_pinned: bool,
+    pub chat_height: f32,
+    pub collapsed: bool,
 }
 
 impl Default for InputDockLayout {
     fn default() -> Self {
         Self {
-            regions: vec![
-                InputDockRegion {
-                    id: 0,
-                    kind: InputDockRegionKind::Commands,
-                    number: 1,
-                },
-                InputDockRegion {
-                    id: 1,
-                    kind: InputDockRegionKind::Stickers,
-                    number: 1,
-                },
-            ],
-            selected: 0,
+            tab: InputDockTab::Controls,
+            chat_pinned: false,
+            chat_height: INPUT_CHAT_DEFAULT,
+            collapsed: false,
         }
     }
 }
 
 impl InputDockLayout {
-    /// Keep saved order and identities; repair stale or unsupported entries.
+    /// Repair stale or unsupported entries from older or edited files.
     pub fn normalized(mut self) -> Self {
-        let mut ids = std::collections::HashSet::new();
-        self.regions
-            .retain(|r| r.kind != InputDockRegionKind::Unknown && ids.insert(r.id));
-        if self.regions.is_empty() {
-            return Self::default();
+        if self.tab == InputDockTab::Unknown || (self.chat_pinned && self.tab == InputDockTab::Chat)
+        {
+            self.tab = InputDockTab::Controls;
         }
-        for region in &mut self.regions {
-            region.number = region.number.max(1);
+        self.chat_height = if self.chat_height.is_finite() {
+            self.chat_height.max(INPUT_CHAT_MIN)
+        } else {
+            INPUT_CHAT_DEFAULT
+        };
+        self
+    }
+
+    /// Live chat is on screen, pinned or as the open panel.
+    pub fn chat_visible(&self) -> bool {
+        !self.collapsed && (self.chat_pinned || self.tab == InputDockTab::Chat)
+    }
+
+    /// `tab` is the panel on screen (pinned chat is not a panel).
+    pub fn showing(&self, tab: InputDockTab) -> bool {
+        if tab == InputDockTab::Chat {
+            self.chat_visible()
+        } else {
+            !self.collapsed && self.tab == tab
         }
-        if !self.regions.iter().any(|r| r.id == self.selected) {
-            self.selected = self.regions[0].id;
+    }
+
+    /// A rail icon was pressed: open its panel, or fold the sidebar to the
+    /// rail when that panel is already open. Pinned chat's icon unpins it.
+    pub fn rail(mut self, tab: InputDockTab) -> Self {
+        if self.collapsed {
+            self.collapsed = false;
+            if tab != InputDockTab::Chat || !self.chat_pinned {
+                self.tab = tab;
+            }
+        } else if tab == InputDockTab::Chat && self.chat_pinned {
+            self.chat_pinned = false;
+        } else if self.tab == tab {
+            self.collapsed = true;
+        } else {
+            self.tab = tab;
+        }
+        self
+    }
+
+    /// Pinned chat takes the whole sidebar as its own panel; chat in a panel
+    /// is pinned above the insert panels.
+    pub fn toggle_pin(mut self) -> Self {
+        self.collapsed = false;
+        if self.chat_pinned {
+            self.chat_pinned = false;
+            self.tab = InputDockTab::Chat;
+        } else {
+            self.chat_pinned = true;
+            if self.tab == InputDockTab::Chat {
+                self.tab = InputDockTab::Controls;
+            }
+        }
+        self
+    }
+
+    /// Bring chat into view by pinning it, or put it away.
+    pub fn toggle_chat(mut self) -> Self {
+        if !self.chat_visible() {
+            self.chat_pinned = true;
+            self.collapsed = false;
+            if self.tab == InputDockTab::Chat {
+                self.tab = InputDockTab::Controls;
+            }
+        } else if self.chat_pinned {
+            self.chat_pinned = false;
+        } else {
+            self.tab = InputDockTab::Controls;
         }
         self
     }
@@ -110,7 +173,7 @@ pub struct GeometryStore {
     /// Preferred logical width, independent of temporary small-window limits.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input_sidebar_width: Option<f32>,
-    /// Input workspace regions and active tab, shared across monitor layouts.
+    /// The input sidebar's panel and chat placement, shared across monitor layouts.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input_dock: Option<InputDockLayout>,
 }

@@ -334,7 +334,6 @@ pub fn window(kind: WindowKind) -> u64 {
         WindowKind::PeerDisplay => 2,
         WindowKind::History => 3,
         WindowKind::Settings => 4,
-        WindowKind::Chat => 5,
     }
 }
 

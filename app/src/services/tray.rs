@@ -264,7 +264,7 @@ fn menu_message(id: &str) -> Option<Msg> {
         ID_INPUT => toggle_msg(WindowKind::Input),
         ID_DISPLAY => toggle_msg(WindowKind::Display),
         ID_HISTORY => toggle_msg(WindowKind::History),
-        ID_CHAT => toggle_msg(WindowKind::Chat),
+        ID_CHAT => Msg::ToggleChat,
         ID_LOCK => Msg::Edit(Box::new(|s: &mut Settings| {
             let locked = s.overlays.display.lock == Lock::Locked;
             let lock = if locked {

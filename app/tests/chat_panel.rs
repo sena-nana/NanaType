@@ -59,7 +59,7 @@ fn panel(
     ui.chat.set(Arc::new((1..=count).map(message).collect()));
     let mut session = common::session()
         .themed(false)
-        .mount(width, 450, move || danmaku::chat_window(ui));
+        .mount(width, 450, move || danmaku::chat_panel(ui));
     session.flush().unwrap();
     (ui, session)
 }
@@ -124,6 +124,15 @@ fn edit_style(ui: Ui, session: &mut RuntimeAgentSession, style: ChatPanelStyle) 
         ChatPanelStyle::Compact => "chat-style-compact",
         ChatPanelStyle::History => "chat-style-history",
     });
+    // The style sits in the header's filter popover.
+    let filter = ui.now_t("chat-filter");
+    let trigger = session
+        .accessibility_dump()
+        .into_iter()
+        .find(|n| n.label.as_deref() == Some(filter.as_str()))
+        .unwrap();
+    assert!(session.click_node(trigger.id).unwrap());
+    session.flush().unwrap();
     let option = session
         .accessibility_dump()
         .into_iter()

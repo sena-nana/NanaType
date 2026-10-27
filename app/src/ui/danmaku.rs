@@ -16,7 +16,7 @@ use nana_ui::runtime::view::{
 };
 use nana_ui::runtime::{
     Activate, Button, FocusWithinChanged, IconButton, PointerHoverChanged, RichTextView,
-    ScrollAxes, ScrollView, Stack, Text, UserScroll,
+    ScrollAxes, ScrollView, SizeChanged, Stack, Text, UserScroll,
 };
 use nana_ui::theme::space;
 use nana_ui_core::{
@@ -558,14 +558,9 @@ pub fn combined_link(links: &[Link]) -> Link {
         .unwrap_or(Link::Off)
 }
 
+/// One row: the link dot, "Chat" and what each source is doing, then the
+/// filter popover and the pin.
 fn header(ui: Ui) -> AnyView {
-    dynamic(
-        move || ui.chat_width.get() < 560.0,
-        move |narrow| header_layout(ui, *narrow),
-    )
-    .into_any()
-}
-fn header_layout(ui: Ui, narrow: bool) -> AnyView {
     let dot = widget(crate::ui::kit::dot_frame()).bind(move |s: &mut Stack| {
         let mut links = super::sources::links(ui);
         links.extend([
@@ -577,7 +572,7 @@ fn header_layout(ui: Ui, narrow: bool) -> AnyView {
     });
     let status = widget(
         Text::new("")
-            .style(Type::Small.style())
+            .style(Type::Micro.style())
             .color(SemanticColorRole::Muted)
             .truncating(),
     )
@@ -599,116 +594,102 @@ fn header_layout(ui: Ui, narrow: bool) -> AnyView {
             t.value = v;
         }
     });
-    let status = widget(
-        Stack::row(0.0)
+    widget(
+        Stack::bar(0.0)
             .gap_step(gap::step::TIGHT)
+            .height(LengthSpec::Px(crate::ui::kit::CHAT_HEADER_H))
+            .padding_xy(inset::CHIP_X, 0.0)
             .align(AlignSpec::Center)
-            .with_layout(|l| {
-                l.flex_grow = Some(1.0);
-                l.flex_shrink = Some(1.0);
-                l.min_width = Some(LengthSpec::Px(0.0));
-            }),
+            .with_layout(|l| l.flex_shrink = Some(0.0)),
     )
+    .key("input-chat-header")
     .children((
         dot,
+        widget(Text::new(ui.now_t("dock-tab-chat")).style(Type::Strong.style())),
         widget(Stack::row(0.0).with_layout(|l| {
             l.flex_grow = Some(1.0);
             l.flex_shrink = Some(1.0);
+            l.width = Some(LengthSpec::Px(0.0));
             l.min_width = Some(LengthSpec::Px(0.0));
             l.overflow_x = OverflowSpec::Hidden;
         }))
         .children(status),
-    ));
-    let mut controls = vec![
-        filter_toggle(
-            ui,
-            ti::MESSAGE_CIRCLE,
-            "chat-filter-text",
-            |f| f.text,
-            |f, v| f.text = v,
+        super::input::popover(
+            ti::FILTER,
+            ui.now_t("chat-filter"),
+            crate::ui::kit::popover::LG,
+            signal(false),
+            filters(ui),
         ),
-        filter_toggle(
-            ui,
-            ti::COIN,
-            "chat-filter-super-chat",
-            |f| f.super_chat,
-            |f, v| f.super_chat = v,
-        ),
-        filter_toggle(
-            ui,
-            ti::GIFT,
-            "chat-filter-gift",
-            |f| f.gift,
-            |f, v| f.gift = v,
-        ),
-        filter_toggle(
-            ui,
-            ti::CROWN,
-            "chat-filter-member",
-            |f| f.member,
-            |f, v| f.member = v,
-        ),
-        action(ui, ti::TRASH, "chat-clear", || Msg::ClearChat),
-        action(ui, ti::SETTINGS, "window-settings", || {
-            Msg::SettingsPage(super::settings::Page::Platforms)
-        }),
-    ];
-    let bar = if narrow {
-        let utilities = controls.split_off(4);
-        widget(
-            Stack::column(0.0)
-                .gap_step(gap::step::TIGHT)
-                .width(LengthSpec::Fill),
+        super::input::pressed_tool(
+            ti::PINNED,
+            ui.now_t("chat-pin"),
+            move || ui.input_dock.with(|d| d.chat_pinned),
+            move || {
+                // Shown at once; the app keeps it.
+                let next = ui.input_dock.get_untracked().toggle_pin();
+                ui.input_dock.set(next);
+                Msg::Dock(next)
+            },
         )
-        .children((
-            widget(
-                Stack::row(0.0)
-                    .gap_step(gap::step::TIGHT)
-                    .align(AlignSpec::Center)
-                    .width(LengthSpec::Fill),
-            )
-            .children((status.into_any(), utilities))
-            .into_any(),
-            widget(
-                Stack::row(0.0)
-                    .gap_step(gap::step::TIGHT)
-                    .align(AlignSpec::Center)
-                    .width(LengthSpec::Fill),
-            )
-            .children((
-                super::settings::chat_panel_style(ui),
-                widget(Stack::spacer()),
-                widget(Stack::row(0.0)).children(controls),
-            ))
-            .into_any(),
-        ))
-        .into_any()
-    } else {
-        widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::TIGHT)
-                .align(AlignSpec::Center)
-                .width(LengthSpec::Fill),
-        )
-        .children((
-            status.into_any(),
-            controls,
-            super::settings::chat_panel_style(ui),
-        ))
-        .into_any()
-    };
+        .key("input-chat-pin"),
+    ))
+    .into_any()
+}
+
+/// What the list lets through and how it looks, behind the header's filter.
+fn filters(ui: Ui) -> AnyView {
     widget(
         Stack::column(0.0)
-            .height(LengthSpec::Px(if narrow {
-                crate::ui::kit::CHAT_HEADER_NARROW_H
-            } else {
-                crate::ui::kit::CHAT_HEADER_H
-            }))
-            .padding_step(inset::step::BAR_X, gap::step::TIGHT)
-            .with_layout(|l| l.flex_shrink = Some(0.0)),
+            .gap_step(gap::step::CONTROL)
+            .padding_step(gap::step::TIGHT, gap::step::TIGHT),
     )
-    .children(bar)
+    .children((
+        widget(Stack::row(0.0).gap_step(gap::step::TIGHT)).children((
+            filter_toggle(
+                ui,
+                ti::MESSAGE_CIRCLE,
+                "chat-filter-text",
+                |f| f.text,
+                |f, v| f.text = v,
+            ),
+            filter_toggle(
+                ui,
+                ti::COIN,
+                "chat-filter-super-chat",
+                |f| f.super_chat,
+                |f, v| f.super_chat = v,
+            ),
+            filter_toggle(
+                ui,
+                ti::GIFT,
+                "chat-filter-gift",
+                |f| f.gift,
+                |f, v| f.gift = v,
+            ),
+            filter_toggle(
+                ui,
+                ti::CROWN,
+                "chat-filter-member",
+                |f| f.member,
+                |f, v| f.member = v,
+            ),
+            widget(Stack::spacer()),
+            action(ui, ti::TRASH, "chat-clear", || Msg::ClearChat),
+            action(ui, ti::SETTINGS, "window-settings", || {
+                Msg::SettingsPage(super::settings::Page::Platforms)
+            }),
+        )),
+        super::settings::chat_panel_style(ui),
+    ))
     .into_any()
+}
+
+/// Any chat source has somewhere to read from.
+pub fn chat_configured(s: &Settings) -> bool {
+    super::sources::configured(s)
+        || s.integrations.blivechat.enabled
+        || (s.integrations.twitch.enabled && !s.integrations.twitch.channel.is_empty())
 }
 
 /// Shown when nothing is listed.
@@ -728,11 +709,7 @@ fn empty(ui: Ui) -> AnyView {
                 .color(SemanticColorRole::Muted),
         )
         .bind(move |t: &mut Text| {
-            let configured = ui.settings.with(|s| {
-                super::sources::configured(s)
-                    || s.integrations.blivechat.enabled
-                    || (s.integrations.twitch.enabled && !s.integrations.twitch.channel.is_empty())
-            });
+            let configured = ui.settings.with(|s| chat_configured(s));
             let key = if configured {
                 "chat-empty"
             } else {
@@ -755,7 +732,9 @@ pub fn shown(rows: &[Arc<ChatMessage>], filter: &ChatFilter) -> Vec<u64> {
         .collect()
 }
 
-pub fn chat_window(ui: Ui) -> impl IntoView {
+/// Live chat in the input sidebar: the header and the feed, which follows
+/// new messages until the reader scrolls back.
+pub fn chat_panel(ui: Ui) -> AnyView {
     let feed = Arc::new(Mutex::new(Feed::default()));
     let items = computed(move || {
         let filter = ui.settings.with(|s| s.integrations.bilibili.panel.clone());
@@ -809,14 +788,19 @@ pub fn chat_window(ui: Ui) -> impl IntoView {
             .into_any()
         },
     ));
-    widget(
-        Stack::fill_column(0.0)
-            .surface(SemanticColorRole::Background)
-            .with_layout(|l| {
-                l.overflow_x = OverflowSpec::Hidden;
-                l.overflow_y = OverflowSpec::Hidden;
-            }),
-    )
+    widget(Stack::fill_column(0.0).with_layout(|l| {
+        l.min_height = Some(LengthSpec::Px(0.0));
+        l.min_width = Some(LengthSpec::Px(0.0));
+        l.overflow_x = OverflowSpec::Hidden;
+        l.overflow_y = OverflowSpec::Hidden;
+    }))
+    .key("input-chat")
+    .on(move |e: &SizeChanged| {
+        // Rows re-wrap past a few pixels.
+        if (ui.chat_width.get_untracked() - e.width).abs() >= 4.0 {
+            ui.chat_width.set(e.width);
+        }
+    })
     .children((
         header(ui),
         crate::ui::kit::rule(),
@@ -835,6 +819,7 @@ pub fn chat_window(ui: Ui) -> impl IntoView {
         .visible(move || !follow.get())
         .on(move |_: &Activate| follow.set(true)),
     ))
+    .into_any()
 }
 
 #[cfg(test)]

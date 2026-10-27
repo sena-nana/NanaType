@@ -149,30 +149,28 @@ fn click_keyed(session: &mut RuntimeAgentSession, key: &str) {
     for _ in 0..3 {
         session.flush().unwrap();
     }
-    if matches!(key, "input-dock-commands" | "input-dock-stickers") {
-        let tabs = keyed(session, "input-dock-tabs");
-        let entity = nana_ui::runtime::Entity::<nana_ui::runtime::Tabs>::from_stable_id(
-            StableNodeId::new(tabs.id).unwrap(),
-        );
-        let value = if key == "input-dock-stickers" {
-            "stickers"
-        } else {
-            "commands"
-        };
-        let node = session
-            .document()
-            .context()
-            .read(entity, |t| t.option_node(value).unwrap())
-            .unwrap();
-        let node = session
-            .accessibility_dump()
-            .into_iter()
-            .find(|n| n.id == node.get())
-            .unwrap();
-        click_node(session, node);
-    } else {
-        click_node(session, keyed(session, key));
+    click_node(session, keyed(session, key));
+}
+
+fn shown(session: &RuntimeAgentSession, key: &str) -> bool {
+    session.accessibility_dump().iter().any(|n| {
+        n.agent_path
+            .as_deref()
+            .is_some_and(|p| p.rsplit('/').next() == Some(key))
+    })
+}
+
+/// Opens a sidebar panel from the rail, unless it is already open (pressing
+/// the open panel's icon folds the sidebar).
+fn open_panel(session: &mut RuntimeAgentSession, tab: &str) {
+    settle(session);
+    if !shown(session, &format!("input-dock-{tab}-panel")) {
+        click_keyed(session, &format!("input-dock-rail-{tab}"));
     }
+    assert!(
+        shown(session, &format!("input-dock-{tab}-panel")),
+        "{tab} opens"
+    );
 }
 
 fn drag_sidebar(session: &mut RuntimeAgentSession, delta: f32) {
@@ -249,7 +247,7 @@ fn settle(session: &mut RuntimeAgentSession) {
 }
 
 #[test]
-fn a_narrow_sidebar_shows_its_regions_as_icons_inside_the_tab_strip() {
+fn the_rail_reaches_every_panel_at_the_narrowest_sidebar_and_folds_it() {
     let registry = common::registry();
     for locale in Locale::ALL {
         let ui = Ui::new(
@@ -260,19 +258,99 @@ fn a_narrow_sidebar_shows_its_regions_as_icons_inside_the_tab_strip() {
         let (mut session, _) =
             common::session().mount_output(720, 480, move || input::input_window(ui));
         settle(&mut session);
-        // 160 px: no locale's captions fit beside the add button.
-        drag_sidebar(&mut session, 140.0);
-        let strip = keyed(&session, "input-dock-tab-area").bounds;
-        for key in ["input-dock-icon-commands", "input-dock-icon-stickers"] {
-            let icon = keyed(&session, key).bounds;
+        // The open panel's icon folds the sidebar to its rail; the preview
+        // takes the room, and any icon brings the sidebar back.
+        let sidebar = keyed(&session, "input-insertion-dock").bounds;
+        let port = keyed(&session, "input-preview-scroll").bounds;
+        click_keyed(&mut session, "input-dock-rail-controls");
+        let folded = keyed(&session, "input-insertion-dock").bounds;
+        assert!(folded.width < 48.0, "{locale:?}: folded to {folded:?}");
+        assert!(!shown(&session, "input-dock-panels"));
+        assert!(keyed(&session, "input-preview-scroll").bounds.width > port.width + 150.0);
+        click_keyed(&mut session, "input-dock-rail-stickers");
+        assert!(shown(&session, "input-dock-stickers-panel"));
+        assert_eq!(keyed(&session, "input-insertion-dock").bounds, sidebar);
+        drag_sidebar(&mut session, 2000.0);
+        let sidebar = keyed(&session, "input-insertion-dock").bounds;
+        assert!(
+            (sidebar.width - nanatype_settings::INPUT_SIDEBAR_MIN).abs() < 1.0,
+            "{locale:?}: {sidebar:?}"
+        );
+        for tab in ["controls", "stickers", "phrases", "chat"] {
+            let icon = keyed(&session, &format!("input-dock-rail-{tab}")).bounds;
             assert!(
                 icon.width > 0.0
-                    && icon.x >= strip.x - 0.5
-                    && icon.x + icon.width <= strip.x + strip.width + 0.5,
-                "{locale:?}: {key} {icon:?} lies outside the tab strip {strip:?}"
+                    && icon.x >= sidebar.x - 0.5
+                    && icon.x + icon.width <= sidebar.x + sidebar.width + 0.5,
+                "{locale:?}: {tab} {icon:?} lies outside the sidebar {sidebar:?}"
             );
+            open_panel(&mut session, tab);
+            for other in ["controls", "stickers", "phrases", "chat"] {
+                assert_eq!(
+                    shown(&session, &format!("input-dock-{other}-panel")),
+                    other == tab,
+                    "{locale:?}: only {tab} shows"
+                );
+            }
         }
     }
+}
+
+#[test]
+fn pinned_chat_sits_above_the_insert_panels_and_unpins_into_its_own_panel() {
+    let ui = Ui::new(
+        Arc::new(preview_settings()),
+        common::skin("nanatype.halo"),
+        Locale::ZhCn,
+    );
+    ui.input_dock.update(|d| d.chat_pinned = true);
+    let (mut session, (_, (editor, _, _))) =
+        common::session().mount_output(1200, 640, move || input::input_window(ui));
+    settle(&mut session);
+    let before = session
+        .document()
+        .context()
+        .world()
+        .layout_box(editor.stable_id())
+        .unwrap();
+    let chat = keyed(&session, "input-chat").bounds;
+    let controls = keyed(&session, "input-dock-controls-panel").bounds;
+    assert!(
+        chat.y + chat.height <= controls.y + 0.5,
+        "{chat:?} over {controls:?}"
+    );
+    assert!((chat.height - nanatype_settings::INPUT_CHAT_DEFAULT).abs() < 1.0);
+    if let Some(out) = std::env::var_os("NANATYPE_INPUT_WINDOW_CAPTURE_DIR") {
+        std::fs::create_dir_all(&out).unwrap();
+        session
+            .screenshot_png(PathBuf::from(out).join("pinned-chat-1200x640.png"))
+            .unwrap();
+    }
+    // Other insert panels share the area under chat.
+    open_panel(&mut session, "stickers");
+    assert!(shown(&session, "input-chat"));
+    // Unpinned, chat takes the whole sidebar as its own panel.
+    click_keyed(&mut session, "input-chat-pin");
+    assert!(shown(&session, "input-dock-chat-panel"));
+    assert!(!shown(&session, "input-dock-stickers-panel"));
+    let full = keyed(&session, "input-chat").bounds;
+    assert!(full.height > chat.height + 100.0);
+    // Pinned again, it goes back on top of the controls.
+    click_keyed(&mut session, "input-chat-pin");
+    assert!(ui.input_dock.with_untracked(|d| d.chat_pinned));
+    assert!(shown(&session, "input-dock-controls-panel") && shown(&session, "input-chat"));
+    // The pinned chat's rail icon puts it away.
+    click_keyed(&mut session, "input-dock-rail-chat");
+    assert!(!shown(&session, "input-chat"));
+    assert_eq!(
+        session
+            .document()
+            .context()
+            .world()
+            .layout_box(editor.stable_id())
+            .unwrap(),
+        before
+    );
 }
 
 #[test]
@@ -301,7 +379,7 @@ fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
             session
                 .accessibility_dump()
                 .iter()
-                .any(|n| n.label.as_deref() == Some(ui.now_t("dock-tab-commands").as_str())),
+                .any(|n| n.label.as_deref() == Some(ui.now_t("dock-tab-controls").as_str())),
             "dock follows live locale changes"
         );
         ui.locale.set(locale);
@@ -354,7 +432,7 @@ fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
         session
             .key_press("Escape", "Escape", Default::default())
             .unwrap();
-        click_keyed(&mut session, "input-dock-commands");
+        open_panel(&mut session, "controls");
         if let Some(out) = std::env::var_os("NANATYPE_INPUT_WINDOW_CAPTURE_DIR") {
             std::fs::create_dir_all(&out).unwrap();
             session
@@ -379,7 +457,7 @@ fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
                     ))
                 )
         );
-        assert!((keyed(&session, "input-insertion-dock").bounds.width - 300.0).abs() < 1.0);
+        assert!((keyed(&session, "input-insertion-dock").bounds.width - 320.0).abs() < 1.0);
         session.set_viewport(1200, 640, 1.0).unwrap();
         click_label(&mut session, &ui.now_t("input-management"), "menu");
         assert_eq!(
@@ -432,7 +510,7 @@ fn dock_inserts_real_stickers_and_disables_them_during_sync_sending() {
         let mut session = common::session()
             .themed(false)
             .mount(width, 640, move || input::input_window(ui));
-        click_keyed(&mut session, "input-dock-stickers");
+        open_panel(&mut session, "stickers");
         click_label(&mut session, "Hello sticker", "button");
         assert!(
             session
@@ -456,7 +534,7 @@ fn dock_inserts_real_stickers_and_disables_them_during_sync_sending() {
         let mut state = (*ui.bilibili.get_untracked()).clone();
         state.sending = true;
         ui.bilibili.set(Arc::new(state));
-        assert!((keyed(&session, "input-insertion-dock").bounds.width - 300.0).abs() < 1.0);
+        assert!((keyed(&session, "input-insertion-dock").bounds.width - 320.0).abs() < 1.0);
         click_label(&mut session, "Hello sticker", "button");
         assert!(
             !session
@@ -546,25 +624,43 @@ fn dock_tabs_allocate_sidebar_space_retain_content_and_keep_the_canvas_size() {
                                 .unwrap();
                             }
                         };
-                        click_keyed(&mut session, "input-dock-commands");
-                        let commands = keyed(&session, "input-dock-commands-panel").bounds;
+                        open_panel(&mut session, "controls");
+                        let commands = keyed(&session, "input-dock-controls-panel").bounds;
                         let sidebar = keyed(&session, "input-insertion-dock").bounds;
-                        let tabs = keyed(&session, "input-dock-tabs").bounds;
+                        let rail = keyed(&session, "input-dock-rail").bounds;
                         let preview = keyed(&session, "input-preview-scroll").bounds;
-                        assert!((sidebar.width - 300.0).abs() <= 1.0 / scale);
+                        assert!((sidebar.width - 320.0).abs() <= 1.0 / scale);
                         assert!((sidebar.x + sidebar.width - w as f32).abs() <= 1.0 / scale);
                         assert!(preview.x + preview.width <= sidebar.x - 7.0 / scale);
-                        assert!(tabs.y >= 0.0 && tabs.y + tabs.height <= 48.0 + 1.0 / scale);
-                        assert!(tabs.y + tabs.height <= commands.y + 1.0 / scale);
+                        assert!((rail.x + rail.width - w as f32).abs() <= 1.0 / scale);
+                        assert!(commands.x + commands.width <= rail.x + 1.0 / scale);
                         assert!(commands.y + commands.height <= footer.y + 1.0 / scale);
                         assert_eq!(keyed(&session, "input-toolbar").bounds.width, preview.width);
                         assert_preview_fits(&session);
                         capture(&mut session, "commands");
+                        // The open panel's icon folds the sidebar and keeps
+                        // the canvas; the next press restores its width.
+                        click_keyed(&mut session, "input-dock-rail-controls");
+                        assert!(keyed(&session, "input-insertion-dock").bounds.width < 48.0);
+                        assert_eq!(
+                            session
+                                .document()
+                                .context()
+                                .world()
+                                .layout_box(editor.stable_id())
+                                .unwrap()
+                                .width,
+                            before.width
+                        );
+                        assert_preview_fits(&session);
+                        capture(&mut session, "folded");
+                        click_keyed(&mut session, "input-dock-rail-controls");
+                        assert_eq!(keyed(&session, "input-insertion-dock").bounds, sidebar);
                         // Drag through routed pointer events, never direct component writes.
                         drag_sidebar(&mut session, -60.0);
                         let wider = keyed(&session, "input-insertion-dock").bounds;
                         assert!(
-                            (wider.width - 360.0).abs() <= 1.0 / scale,
+                            (wider.width - 380.0).abs() <= 1.0 / scale,
                             "{locale:?} {skin_id} {w} {scale} {wider:?}"
                         );
                         assert!(
@@ -584,19 +680,9 @@ fn dock_tabs_allocate_sidebar_space_retain_content_and_keep_the_canvas_size() {
                         assert_eq!(after.height, before.height);
                         assert_preview_fits(&session);
                         capture(&mut session, "resized");
-                        click_keyed(&mut session, "input-dock-stickers");
-                        assert!(session.accessibility_dump().iter().all(|n| {
-                            !n.agent_path
-                                .as_deref()
-                                .is_some_and(|p| p.ends_with("input-dock-commands-panel"))
-                        }));
+                        open_panel(&mut session, "stickers");
+                        assert!(!shown(&session, "input-dock-controls-panel"));
                         assert_eq!(keyed(&session, "input-insertion-dock").bounds, wider);
-                        click_keyed(&mut session, "input-dock-stickers");
-                        assert_eq!(
-                            keyed(&session, "input-insertion-dock").bounds,
-                            wider,
-                            "active tab must not collapse sidebar"
-                        );
                         let port = keyed(&session, "input-dock-stickers-scroll");
                         session
                             .scroll_by(port.bounds.x + 2.0, port.bounds.y + 4.0, 0.0, -2000.0)
@@ -617,8 +703,8 @@ fn dock_tabs_allocate_sidebar_space_retain_content_and_keep_the_canvas_size() {
                         capture(&mut session, "stickers");
                         let query = keyed(&session, "input-dock-sticker-search");
                         session.set_value(query.id, "Sticker 00").unwrap();
-                        click_keyed(&mut session, "input-dock-commands");
-                        click_keyed(&mut session, "input-dock-stickers");
+                        open_panel(&mut session, "controls");
+                        open_panel(&mut session, "stickers");
                         assert_eq!(
                             keyed(&session, "input-dock-sticker-search")
                                 .value
@@ -629,7 +715,7 @@ fn dock_tabs_allocate_sidebar_space_retain_content_and_keep_the_canvas_size() {
                         // Return to the default width before the next viewport case.
                         drag_sidebar(&mut session, 60.0);
                         assert!(
-                            (keyed(&session, "input-insertion-dock").bounds.width - 300.0).abs()
+                            (keyed(&session, "input-insertion-dock").bounds.width - 320.0).abs()
                                 <= 1.0 / scale
                         );
                     }
@@ -831,14 +917,14 @@ fn fixed_canvas_and_controls_survive_resize_theme_scale_and_peer_panel_changes()
                         let footer = keyed(&session, "input-actions").bounds;
                         let port = keyed(&session, "input-preview-scroll");
                         let rail = keyed(&session, "input-insertion-dock").bounds;
-                        assert!((rail.width - 300.0).abs() <= 1.0 / scale);
+                        assert!((rail.width - 320.0).abs() <= 1.0 / scale);
                         assert!((rail.x + rail.width - w as f32).abs() <= 1.0 / scale);
                         assert!((toolbar.width + rail.width + 8.0 - w as f32).abs() <= 1.0 / scale);
                         assert!(
                             session.accessibility_dump().iter().any(|n| n
                                 .agent_path
                                 .as_deref()
-                                .is_some_and(|p| p.ends_with("input-dock-commands-panel"))),
+                                .is_some_and(|p| p.ends_with("input-dock-controls-panel"))),
                             "sidebar is always visible"
                         );
                         assert!(
@@ -959,7 +1045,7 @@ fn fixed_canvas_and_controls_survive_resize_theme_scale_and_peer_panel_changes()
 }
 
 #[test]
-fn sticker_series_stay_at_bottom_filter_search_and_accept_folder_drops() {
+fn sticker_packs_sit_above_the_grid_filter_search_and_accept_folder_drops() {
     use nana_ui::runtime::{Entity, Tabs};
     use nanatype::msg::Msg;
     let out =
@@ -991,7 +1077,7 @@ fn sticker_series_stay_at_bottom_filter_search_and_accept_folder_drops() {
         let mut session = common::session()
             .themed(dark)
             .mount(width, 640, move || input::input_window(ui));
-        click_keyed(&mut session, "input-dock-stickers");
+        open_panel(&mut session, "stickers");
         let select = |session: &mut RuntimeAgentSession, value: &str| {
             let tabs = Entity::<Tabs>::from_stable_id(
                 StableNodeId::new(keyed(session, "input-dock-sticker-series").id).unwrap(),
@@ -1008,11 +1094,11 @@ fn sticker_series_stay_at_bottom_filter_search_and_accept_folder_drops() {
                 .unwrap();
             click_node(session, node);
         };
-        let footer = keyed(&session, "input-dock-sticker-footer").bounds;
+        let packs = keyed(&session, "input-dock-sticker-series").bounds;
         let port = keyed(&session, "input-dock-stickers-scroll").bounds;
         assert!(
-            port.y + port.height <= footer.y + 0.5,
-            "the footer must be outside the scroller"
+            packs.y + packs.height <= port.y + 0.5,
+            "the pack tabs sit above the scroller"
         );
         select(&mut session, "cats");
         assert!(
@@ -1024,7 +1110,7 @@ fn sticker_series_stay_at_bottom_filter_search_and_accept_folder_drops() {
         session
             .scroll_by(port.x + 4.0, port.y + 4.0, 0.0, -2000.0)
             .unwrap();
-        assert_eq!(keyed(&session, "input-dock-sticker-footer").bounds, footer);
+        assert_eq!(keyed(&session, "input-dock-sticker-series").bounds, packs);
         session
             .scroll_by(port.x + 4.0, port.y + 4.0, 0.0, 2000.0)
             .unwrap();
@@ -1051,8 +1137,8 @@ fn sticker_series_stay_at_bottom_filter_search_and_accept_folder_drops() {
                     )))
                 )))
         );
-        click_keyed(&mut session, "input-dock-commands");
-        click_keyed(&mut session, "input-dock-stickers");
+        open_panel(&mut session, "controls");
+        open_panel(&mut session, "stickers");
         let tabs = Entity::<Tabs>::from_stable_id(
             StableNodeId::new(keyed(&session, "input-dock-sticker-series").id).unwrap(),
         );
@@ -1118,8 +1204,8 @@ fn sticker_series_stay_at_bottom_filter_search_and_accept_folder_drops() {
             .drop_files_xy(std::slice::from_ref(&folder), port.x + 8.0, port.y + 8.0)
             .unwrap();
         assert!(session.document_mut().context_mut().take_program_messages().into_iter().any(|m|m.downcast::<Msg>().is_ok_and(|m|matches!(*m,Msg::StickerImportFolders(ref dirs) if dirs==&vec![folder.clone()]))));
-        click_keyed(&mut session, "input-dock-commands");
-        let port = keyed(&session, "input-dock-commands-scroll").bounds;
+        open_panel(&mut session, "controls");
+        let port = keyed(&session, "input-controls-scroll").bounds;
         session
             .drop_files_xy(std::slice::from_ref(&folder), port.x + 8.0, port.y + 8.0)
             .unwrap();
@@ -1133,27 +1219,7 @@ fn sticker_series_stay_at_bottom_filter_search_and_accept_folder_drops() {
                     .downcast::<Msg>()
                     .is_ok_and(|m| matches!(*m, Msg::StickerImportFolders(_))))
         );
-        if width == 720 {
-            drag_sidebar(&mut session, 140.0);
-        }
-        let header = if width == 720 {
-            keyed(&session, "input-dock-icon-stickers")
-        } else {
-            let tabs = Entity::<Tabs>::from_stable_id(
-                StableNodeId::new(keyed(&session, "input-dock-tabs").id).unwrap(),
-            );
-            let child = session
-                .document()
-                .context()
-                .read(tabs, |t| t.option_node("stickers").unwrap())
-                .unwrap();
-            session
-                .accessibility_dump()
-                .into_iter()
-                .find(|n| n.id == child.get())
-                .unwrap()
-        }
-        .bounds;
+        let header = keyed(&session, "input-dock-rail-stickers").bounds;
         session
             .file_drag_xy(
                 nana_ui_core::FileDragKind::Hover,
@@ -1167,7 +1233,7 @@ fn sticker_series_stay_at_bottom_filter_search_and_accept_folder_drops() {
                 .agent_path
                 .as_deref()
                 .is_some_and(|p| p.ends_with("input-dock-stickers-panel"))),
-            "hovering the sticker tab opens its panel"
+            "hovering the stickers icon opens its panel"
         );
         session
             .drop_files_xy(
@@ -1185,7 +1251,7 @@ fn sticker_series_stay_at_bottom_filter_search_and_accept_folder_drops() {
                 .any(|m| m
                     .downcast::<Msg>()
                     .is_ok_and(|m| matches!(*m, Msg::StickerImportFolders(_)))),
-            "both caption and compact icon tabs accept folder drops"
+            "the stickers icon accepts folder drops"
         );
     }
 }

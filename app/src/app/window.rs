@@ -24,8 +24,6 @@ impl App {
                     self.summoned = !self.summoned;
                 }
                 WindowKind::Settings => self.open_settings(),
-                WindowKind::Chat if self.windows.is_open(WindowKind::Chat) => self.close_chat(),
-                WindowKind::Chat => self.open_chat(),
                 kind => self.edit(|s| {
                     if let Some(o) = kind.overlay_mut(s) {
                         o.visible = !o.visible;
@@ -40,7 +38,6 @@ impl App {
                         .push(WindowCommand::Focus(WindowKind::Input.id()));
                 }
                 WindowKind::Settings => self.open_settings(),
-                WindowKind::Chat => self.open_chat(),
                 kind => self.edit(|s| {
                     if let Some(o) = kind.overlay_mut(s) {
                         o.visible = true;

@@ -11,9 +11,9 @@ mod store;
 mod tests;
 
 pub use geometry::{
-    GeometryStore, INPUT_SIDEBAR_DEFAULT, INPUT_SIDEBAR_MAX, INPUT_SIDEBAR_MIN, InputDockLayout,
-    InputDockRegion, InputDockRegionKind, MonitorInfo, MonitorKey, Placement, SavedFrame,
-    input_sidebar_width, layout_signature, monitor_for,
+    GeometryStore, INPUT_CHAT_DEFAULT, INPUT_CHAT_MIN, INPUT_SIDEBAR_DEFAULT, INPUT_SIDEBAR_MAX,
+    INPUT_SIDEBAR_MIN, InputDockLayout, InputDockTab, MonitorInfo, MonitorKey, Placement,
+    SavedFrame, input_sidebar_width, layout_signature, monitor_for,
 };
 pub use migrate::{MigrateError, migrate};
 pub use schema::*;

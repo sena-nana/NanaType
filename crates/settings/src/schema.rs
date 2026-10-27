@@ -1055,7 +1055,8 @@ pub struct BilibiliSettings {
     pub panel_style: ChatPanelStyle,
     /// Quote the answered message on the dialogue box.
     pub quote_on_display: bool,
-    /// The chat panel was open when the app last quit.
+    /// The old chat window was open when the app last quit. Read once to pin
+    /// chat in the input sidebar on first run of the sidebar; no longer written.
     pub panel_open: bool,
 }
 

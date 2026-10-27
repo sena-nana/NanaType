@@ -252,11 +252,10 @@ pub mod popover {
 /// A toast's width and the most its stack grows to.
 pub const TOAST_W: f32 = 320.0;
 pub const TOAST_MAX_H: f32 = 240.0;
-/// The chat window's header: one row, or two when the window is narrow.
-pub const CHAT_HEADER_H: f32 = 44.0;
+/// The sidebar chat's header row.
+pub const CHAT_HEADER_H: f32 = 36.0;
 /// Two lines of operator status below the input editor.
 pub const INPUT_STATUS_MAX_H: f32 = 40.0;
-pub const CHAT_HEADER_NARROW_H: f32 = 80.0;
 
 /// What a mark says about its subject: drawn as a colour role everywhere
 /// (dots, badges, tags, callouts), so "connected" is the same green in the

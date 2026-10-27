@@ -116,9 +116,7 @@ pub fn actions(ui: Ui, page: Page) -> Option<AnyView> {
             Msg::PickFile(FileTarget::ImportSkin)
         })),
         Page::Packages => Some(crate::ui::plugins::actions(ui)),
-        Page::Platforms => Some(button(ui, "chat-open-panel", || {
-            Msg::ShowWindow(WindowKind::Chat)
-        })),
+        Page::Platforms => Some(button(ui, "chat-open-panel", || Msg::ShowChat)),
         Page::Output => Some(button(ui, "output-sample", || Msg::PlaySample)),
         Page::History => Some(
             widget(

@@ -27,7 +27,7 @@ use crate::msg::Tool;
 use crate::msg::{Msg, Shortcut, input_message};
 use crate::services::sounds::Keystroke;
 use crate::ui::overflow::{self, Measure, PageKey};
-use crate::ui::{Ui, danmaku, dialogue, history, input, settings};
+use crate::ui::{Ui, dialogue, history, input, settings};
 use crate::windows::WindowKind;
 
 mod overlay;
@@ -409,10 +409,9 @@ impl Host {
         let input_visible = self.app.input_visible();
         for request in requests {
             let mut shown = false;
-            for kind in [WindowKind::Settings, WindowKind::Input, WindowKind::Chat] {
+            for kind in [WindowKind::Settings, WindowKind::Input] {
                 let wanted = match kind {
                     WindowKind::Input => input_visible,
-                    WindowKind::Chat => true,
                     _ => request.settings,
                 };
                 let id = kind.id();
@@ -471,22 +470,6 @@ impl Host {
                         let view =
                             crate::ui::feedback::with_toasts(settings::settings_window(ui), stack);
                         with_refs(view, stack)
-                    })
-                    .map_err(err)?;
-                self.toasts.insert(id, stack);
-            }
-            WindowKind::Chat => {
-                let (_, stack) = context
-                    .mount_view_root(doc_id, move || {
-                        let stack = entity_ref::<ToastStack>();
-                        with_refs(
-                            crate::ui::feedback::with_toasts_limit(
-                                danmaku::chat_window(ui),
-                                stack,
-                                1,
-                            ),
-                            stack,
-                        )
                     })
                     .map_err(err)?;
                 self.toasts.insert(id, stack);
@@ -654,10 +637,6 @@ impl Host {
                     settings: desc,
                 });
             }
-        }
-        // The chat panel comes back if it was open at quit.
-        if self.app.settings.integrations.bilibili.panel_open {
-            self.app.open_chat();
         }
     }
 }
@@ -1146,7 +1125,7 @@ impl RuntimeProgram for Host {
 
     fn appearance_backdrop_opacity_for(&self, id: WindowId) -> f32 {
         match WindowKind::from_id(id) {
-            Some(WindowKind::Input | WindowKind::Settings | WindowKind::Chat) => 1.0,
+            Some(WindowKind::Input | WindowKind::Settings) => 1.0,
             _ => 0.0,
         }
     }
@@ -1186,13 +1165,7 @@ impl RuntimeProgram for Host {
                 if let Some(kind) = WindowKind::from_id(id) {
                     let handle = context.window();
                     self.app.windows.ready(kind, handle.clone());
-                    if kind == WindowKind::Chat {
-                        self.app.chat_resized(geometry.logical_size.0);
-                    }
-                    if matches!(
-                        kind,
-                        WindowKind::Input | WindowKind::Settings | WindowKind::Chat
-                    ) {
+                    if matches!(kind, WindowKind::Input | WindowKind::Settings) {
                         self.app.tint_captions();
                     }
                     // Broadcast windows have no caption, but macOS still
@@ -1242,9 +1215,6 @@ impl RuntimeProgram for Host {
                     self.app.windows.record_geometry(kind, geometry);
                     // An unlocked window keeps the size chosen by the user.
                     let (w, h) = geometry.logical_size;
-                    if kind == WindowKind::Chat {
-                        self.app.chat_resized(w);
-                    }
                     let unlocked = kind
                         .overlay(&self.app.settings)
                         .is_some_and(|o| o.lock != nanatype_settings::Lock::Locked);
@@ -1269,9 +1239,6 @@ impl RuntimeProgram for Host {
                 }
             }
             WindowEvent::CloseRequested { id } => match WindowKind::from_id(id) {
-                Some(WindowKind::Chat) => {
-                    self.app.close_chat();
-                }
                 Some(WindowKind::Settings) | None => {
                     self.app.unofficial_settings_closed();
                     return RuntimeProgramUpdate {
@@ -1339,6 +1306,13 @@ impl RuntimeProgram for Host {
             self.app.ui.input_sidebar_width.set(width);
             self.app.windows.geometry.input_sidebar_width = Some(width);
             self.app.windows.geometry_dirty = true;
+            self.app.save_geometry();
+        }
+        if WindowKind::from_id(id) == Some(WindowKind::Input)
+            && let Some(doc) = self.docs.get(&id)
+            && let Some(height) = input::changed_chat_height(self.app.ui, doc.context())
+        {
+            self.app.ui.input_dock.update(|d| d.chat_height = height);
             self.app.save_geometry();
         }
         if let Some(kind) = WindowKind::from_id(id)

@@ -12,7 +12,7 @@ use nanatype_audio::{AudioEngine, AudioHandle};
 use nanatype_bilibili::BilibiliHandle;
 use nanatype_bridge::BridgeHandle;
 use nanatype_i18n::Locale;
-use nanatype_settings::{GeometryStore, Settings};
+use nanatype_settings::{GeometryStore, InputDockLayout, Settings};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -113,9 +113,14 @@ pub(super) fn ui(
     system_dark: bool,
 ) -> Ui {
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), locale);
-    let input_dock = geometry.input_dock.clone().unwrap_or_default().normalized();
-    ui.input_dock_regions.set(input_dock.regions);
-    ui.input_dock_selected.set(input_dock.selected);
+    // First run with this sidebar: pin chat where a source is set up, or
+    // where the old chat window was open.
+    let input_dock = geometry.input_dock.unwrap_or_else(|| InputDockLayout {
+        chat_pinned: crate::ui::danmaku::chat_configured(settings)
+            || settings.integrations.bilibili.panel_open,
+        ..Default::default()
+    });
+    ui.input_dock.set(input_dock.normalized());
     ui.input_sidebar_width
         .set(nanatype_settings::input_sidebar_width(
             geometry.input_sidebar_width,

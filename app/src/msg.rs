@@ -486,6 +486,13 @@ pub enum Msg {
     ClearReply,
     /// Empty the chat panel.
     ClearChat,
+    /// The input sidebar's panel, chat pin or fold changed: show it (the
+    /// sidebar does at once), save it, and update the tray.
+    Dock(nanatype_settings::InputDockLayout),
+    /// Show live chat in the input sidebar, or put it away.
+    ToggleChat,
+    /// Bring the input window forward with live chat in view.
+    ShowChat,
     #[cfg(feature = "updates")]
     /// The update checker reported.
     Update(crate::services::updater::Event),

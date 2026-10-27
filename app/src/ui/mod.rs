@@ -205,9 +205,11 @@ pub struct Ui {
     /// Actual input client width, published by its layout (also in headless views).
     pub input_width: Signal<f32>,
     pub(crate) input_sidebar_width: Signal<f32>,
-    pub(crate) input_dock_regions: Signal<Vec<nanatype_settings::InputDockRegion>>,
-    pub(crate) input_dock_selected: Signal<u64>,
+    /// The sidebar's panel, pinned chat and fold state.
+    pub input_dock: Signal<nanatype_settings::InputDockLayout>,
     pub(crate) input_split: NodeRef,
+    /// The split between pinned chat and the insert panels.
+    pub(crate) input_chat_split: NodeRef,
     pub peer: Signal<Arc<crate::p2p::SessionUi>>,
     pub peer_panel: Signal<bool>,
     /// The invitation field. A Steam friend invite fills it from outside the card.
@@ -245,7 +247,7 @@ pub struct Ui {
     pub chat: Signal<Arc<Vec<Arc<crate::chat::ChatMessage>>>>,
     /// The chat message the next sent line answers.
     pub reply: Signal<Option<ChatRef>>,
-    /// The chat panel's width, so its rows can lay text out to it.
+    /// The sidebar chat's width, so its rows can lay text out to it.
     pub chat_width: Signal<f32>,
     /// Last chat action, retained while editing its reply.
     pub chat_target: Signal<Option<u64>>,
@@ -271,7 +273,6 @@ impl std::ops::Deref for Ui {
 
 impl Ui {
     pub fn new(settings: Arc<Settings>, skin: Arc<Skin>, locale: Locale) -> Self {
-        let input_dock = nanatype_settings::InputDockLayout::default();
         let peer = signal(Arc::new(crate::p2p::SessionUi::default()));
         let page = signal(settings::Page::General);
         let onboard_step = signal(0u8);
@@ -309,9 +310,9 @@ impl Ui {
             douyin_cookie: signal(String::new()),
             input_width: signal(crate::windows::INPUT_SIZE.0),
             input_sidebar_width: signal(nanatype_settings::INPUT_SIDEBAR_DEFAULT),
-            input_dock_regions: signal(input_dock.regions),
-            input_dock_selected: signal(input_dock.selected),
+            input_dock: signal(nanatype_settings::InputDockLayout::default()),
             input_split: node_ref(),
+            input_chat_split: node_ref(),
             peer,
             platform_tab: signal(crate::chat::Platform::ALL[0]),
             peer_panel: signal(true),

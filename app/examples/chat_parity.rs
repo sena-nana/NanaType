@@ -88,7 +88,7 @@ impl Rig {
             .mount_view_root(DocumentId::new(1).unwrap(), move || {
                 let stack = entity_ref::<ToastStack>();
                 with_refs(
-                    ui::feedback::with_toasts_limit(danmaku::chat_window(ui), stack, 1),
+                    ui::feedback::with_toasts_limit(danmaku::chat_panel(ui), stack, 1),
                     stack,
                 )
             })
@@ -201,7 +201,7 @@ impl Rig {
             .unwrap();
         cx.on(toast, move |_, _: &nana_ui::runtime::ToastDismissed, cx| {
             cx.dispatch_program_all(Msg::ToastDismissed(
-                nanatype::windows::WindowKind::Chat,
+                nanatype::windows::WindowKind::Input,
                 toast,
             ));
         })
