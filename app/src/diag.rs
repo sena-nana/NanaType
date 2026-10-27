@@ -55,6 +55,14 @@ pub static WATCH_UNAVAILABLE: EventDescriptor =
     EventDescriptor::new(APP, 8, "app.watch_unavailable", Severity::Warn, &[]);
 pub static PERSIST_FAILED: EventDescriptor =
     EventDescriptor::new(APP, 9, "app.persist_failed", Severity::Error, &[]);
+pub static RETIRED_CLEANUP_FAILED: EventDescriptor = EventDescriptor::new(
+    APP,
+    10,
+    "app.retired_cleanup_failed",
+    Severity::Warn,
+    // 0 Bilibili login, 1 Douyin login.
+    &[FieldDescriptor::u64("what")],
+);
 
 pub static SPOUT_FAILED: EventDescriptor = EventDescriptor::new(
     OUTPUT,
@@ -272,15 +280,14 @@ impl Live {
 /// Every event NanaType declares, for the catalog test.
 pub fn all_events() -> Vec<&'static EventDescriptor> {
     let mut all = EVENTS.to_vec();
-    for live in [&TWITCH_LIVE] {
-        all.extend(live.events());
-    }
+    all.extend(TWITCH_LIVE.events());
     all
 }
 
 pub static EVENTS: &[&EventDescriptor] = &[
     &SETTINGS_LOADED,
     &SETTINGS_QUARANTINED,
+    &RETIRED_CLEANUP_FAILED,
     &ERROR_NOTICE,
     &EDIT_FAILED,
     &INPUT_READY,

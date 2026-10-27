@@ -30,11 +30,6 @@ def read(path: Path) -> str:
 STEAM_FEATURES = ["--no-default-features", "--features", "nanatype/builtin-fonts,nanatype/steam"]
 
 
-def steam_notices(text: str) -> str:
-    """THIRD_PARTY_NOTICES.md for the Steam edition."""
-    return text
-
-
 def rust_crates(target: str, package: str, product: str, steam: bool = False) -> str:
     """Each linked crate's own licence files, identical texts written once."""
     meta = json.loads(subprocess.check_output([
@@ -116,7 +111,7 @@ def main() -> None:
     if steam:
         add("LICENSE", read(ROOT / "packaging/steam/LICENSE"), "project")
         add("LICENSE-MIT", read(ROOT / "LICENSE-MIT"), "project")
-        add("THIRD_PARTY_NOTICES.md", steam_notices(read(ROOT / "THIRD_PARTY_NOTICES.md")), "project")
+        add("THIRD_PARTY_NOTICES.md", read(ROOT / "THIRD_PARTY_NOTICES.md"), "project")
     else:
         for name in ("LICENSE", "LICENSE-MIT", "THIRD_PARTY_NOTICES.md"):
             add(name, read(ROOT / name), "project")

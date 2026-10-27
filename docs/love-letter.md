@@ -78,4 +78,4 @@ cargo test -p nanatype --test love_letter -- --test-threads=1
 
 第二次运行会把实际 GPU 捕获帧写入 `NANATYPE_LOVE_LETTER_CAPTURES` 指定的目录，供人工检查。
 
-导出测试可通过 `NANATYPE_LOVE_LETTER_EXPORT` 指定保留 `.ntpkg` 的路径。全皮肤回归沿用 `snapshots` 与 `chat_parity` 的默认宽度、300px 窄窗及历史记录检查。
+导出测试可通过 `NANATYPE_LOVE_LETTER_EXPORT` 指定保留 `.ntpkg` 的路径。全皮肤回归沿用 `snapshots` 的默认宽度、300px 窄窗及历史记录检查。

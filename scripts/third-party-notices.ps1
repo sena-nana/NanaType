@@ -13,8 +13,8 @@
 #   pwsh scripts/third-party-notices.ps1 -Steam -Texts <dir>
 #                                                   # the Steam edition: its crates, and
 #                                                   # <dir>/THIRD_PARTY_NOTICES.md and LICENSE
-#                                                   # without the unofficial chat sources;
-#                                                   # never writes the repository's files
+#                                                   # for its crate set (Steamworks, no
+#                                                   # updater); never writes the repository's files
 #
 # THIRD_PARTY_NOTICES.md always lists nanatype.exe's crates; NanaType Editor
 # links a subset of them through nanatype-frame.

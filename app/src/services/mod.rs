@@ -3,6 +3,7 @@ pub mod diagnostics;
 pub mod hotkeys;
 pub mod overlay_menu;
 pub mod persist;
+pub mod retired;
 pub mod sounds;
 pub mod steam;
 pub mod tray;

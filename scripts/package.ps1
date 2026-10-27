@@ -18,8 +18,8 @@ Set-Location $root
 if ($Steam -and ($Portable -or $Product -eq "editor")) {
     throw "-Steam packages NanaType's Steam depot; it combines with neither -Portable nor -Product editor"
 }
-# The Steam edition updates through SteamPipe and leaves the unofficial chat
-# sources out; it shares the GitHub release's settings folders.
+# The Steam edition updates through SteamPipe; it shares the GitHub release's
+# settings folders.
 $features = if ($Steam) { @("--no-default-features", "--features", "builtin-fonts,steam") } else { @() }
 
 # A Steam id from the environment, else from the gitignored .cargo/config.toml [env].

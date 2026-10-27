@@ -60,8 +60,8 @@ steam_id() {
 features=""
 licences=$package
 if [ "$steam" = 1 ]; then
-    # The Steam edition updates through SteamPipe and leaves the unofficial
-    # chat sources out; it shares the GitHub release's settings folders.
+    # The Steam edition updates through SteamPipe; it shares the GitHub
+    # release's settings folders.
     app_id=$(steam_id NANATYPE_STEAM_APP_ID)
     depot=$(steam_id NANATYPE_STEAM_DEPOT_MACOS)
     features="--no-default-features --features builtin-fonts,steam"

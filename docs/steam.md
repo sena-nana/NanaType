@@ -6,7 +6,6 @@ Steam 版与 GitHub 发布版共用同一套代码，用 Cargo feature 区分：
 | --- | --- | --- |
 | 构建 | `cargo build -p nanatype` | `cargo build -p nanatype --no-default-features --features builtin-fonts,steam` |
 | 更新 | 检查 GitHub Release（`updates`，见 [检查更新](updates.md)） | 由 SteamPipe 更新，不含更新检查代码 |
-| 弹幕来源 | Twitch、第三方弹幕 | Twitch、第三方弹幕 |
 | 创意工坊 | — | 皮肤页、播放页访问已订阅的皮肤与音效包 |
 
 `steam` 不能与 `updates` 同时开启（`app/src/lib.rs` 的 `compile_error!`）。`scripts/check-product-split.sh` 和 CI 会检查 Steam 版不链接 `nanatype-update`，其他构建也不链接 Steamworks。

@@ -79,12 +79,11 @@ base = "nanatype.halo"           # 可选，只继承配置
 重新生成全部皮肤的展示框／历史记录对照图，并在默认宽度与 300px 窄窗中检查长昵称、多行正文、回复引用和行距：
 
 ```powershell
-cargo build -p nanatype --example snapshots --example chat_parity
+cargo build -p nanatype --example snapshots
 $env:NANATYPE_THEME_SNAPSHOTS_ONLY='1'
 $env:NANATYPE_SNAPSHOT_VIEWS='display,history'
 $env:NANATYPE_SNAPSHOT_TRANSPARENT='1'
 & target/debug/examples/snapshots.exe target/history-style-fixed all zh-CN
-& target/debug/examples/chat_parity.exe target/history-style-layout all zh-CN audit history
 ```
 
 六套新增主题的[原速动效预览](skins-motion.webp)包括水母倾斜游动、叶片弯动、灯笼轻摆、星轨与金边游光、果片后方上升的气泡。文字、名牌和框体位置保持稳定；动幅、周期与逐帧检查方法见[设计说明](skin-art-direction.md#装饰自身的运动)。

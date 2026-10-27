@@ -211,6 +211,7 @@ impl App {
         let loaded_settings =
             nanatype_settings::load_settings(&paths.settings(), legacy.as_deref());
         record_settings_load(&loaded_settings.note);
+        crate::services::retired::start(&loaded_settings.note, paths.config.clone(), paths.blobs());
         let mut settings = loaded_settings.value;
         settings.sanitize();
         let geometry: GeometryStore = nanatype_settings::load_json(&paths.geometry()).value;
