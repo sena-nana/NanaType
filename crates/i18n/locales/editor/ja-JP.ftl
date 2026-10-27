@@ -47,7 +47,6 @@ pkgedit-tab-files = ファイル
 pkgedit-tab-package = パッケージ情報
 pkgedit-tab-signing = 保護と署名
 pkgedit-tab-preview = プレビュー
-pkgedit-tab-debug = Lua デバッグ
 pkgedit-import = 素材を読み込む…
 pkgedit-remove = ファイルを削除
 pkgedit-remove-question = このファイルを下書きから削除しますか？
@@ -181,7 +180,6 @@ pkgedit-preview-size-error = 論理サイズ：幅 160–8192、高さ 96–8192
 
 pkgedit-operation-stale = プロジェクトが変更されました。操作を再適用してください。
 
-pkgedit-tab-properties = プロパティ
 
 pkgedit-property-select = 宣言グループを選択
 
@@ -193,9 +191,7 @@ pkgedit-property-name = フィールド名
 
 pkgedit-add = 追加
 
-pkgedit-local = ローカル上書き
 
-pkgedit-inherited = 継承・既定値
 
 pkgedit-inherit = 継承に戻す
 
@@ -209,9 +205,7 @@ pkgedit-add-decor = 装飾を追加
 
 pkgedit-base = 基本スキン
 
-pkgedit-canvas-edit = キャンバス編集を有効にする
 
-pkgedit-canvas-help = 選択してドラッグで移動、右下のハンドルで装飾を拡縮。矢印キーで移動、Shift で大きく移動、Esc でキャンセル。
 
 pkgedit-cover = カバー画像のパス
 
@@ -288,3 +282,51 @@ pkgedit-layout-matched = 適用順序（後のレイヤーが上書き）
 pkgedit-bind = パラメーターに関連付け
 
 pkgedit-pending-forms = 先に未適用のフォーム変更を適用または破棄してください。
+
+pkgedit-mode-design = デザイン
+pkgedit-mode-data = データとパイプライン
+pkgedit-mode-lua = Lua
+pkgedit-project-menu = プロジェクトメニュー
+pkgedit-toolbar = エディターツールバー
+pkgedit-status = プロジェクトの状態
+pkgedit-split-source = キャンバスの横にソースを表示
+pkgedit-files-preview = ライブプレビューを表示
+pkgedit-drawer-close = パネルを閉じる
+pkgedit-custom-size = カスタムサイズ
+pkgedit-stage-settings = キャンバス設定
+pkgedit-stage-size = プレビューの論理サイズ（幅 × 高さ）
+pkgedit-params-none = このスキンにはパラメーターがありません。
+pkgedit-preview-params = プレビューのパラメーター
+pkgedit-layers = レイヤー
+pkgedit-canvas = キャンバス
+pkgedit-inspector = インスペクター
+pkgedit-add-field = フィールドを追加
+pkgedit-section-source = このテーブルの TOML
+pkgedit-section-reveal = ソースで表示
+pkgedit-section-inline = このテーブルには独自の見出しがありません。含まれるテーブルで編集してください。
+pkgedit-file-operations = 新規・移動・置き換え
+pkgedit-files-none = この種類のファイルはありません。
+pkgedit-lua-sources = Lua ソース
+pkgedit-sound-files = 音声ファイル
+pkgedit-sound-declarations = 効果音の宣言
+pkgedit-layer-dialogue = 会話ボックス
+pkgedit-layer-nameplate = 名札
+pkgedit-layer-portrait = アバター
+pkgedit-layer-continue = 続行マーク
+pkgedit-layer-text = 本文
+pkgedit-layer-decor = 装飾
+pkgedit-layer-history = 履歴
+pkgedit-layer-chrome = クローム
+pkgedit-layer-effects = エフェクト
+pkgedit-layer-fonts = フォント
+pkgedit-layer-materials = マテリアル
+pkgedit-layer-mention = メンション
+pkgedit-layer-params = パラメーター
+pkgedit-layer-param_groups = パラメーターグループ
+pkgedit-layer-presets = プリセット
+pkgedit-layer-shaders = シェーダー
+pkgedit-layer-sounds = 効果音
+pkgedit-layer-responsive = レスポンシブ
+pkgedit-layer-pipelines = パイプライン
+pkgedit-layer-frame = フレーム
+pkgedit-layer-remove = 装飾を削除

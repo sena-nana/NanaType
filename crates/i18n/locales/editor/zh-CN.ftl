@@ -47,7 +47,6 @@ pkgedit-tab-files = 文件
 pkgedit-tab-package = 包信息
 pkgedit-tab-signing = 保护与签名
 pkgedit-tab-preview = 预览
-pkgedit-tab-debug = Lua 调试
 pkgedit-import = 导入素材…
 pkgedit-remove = 移除文件
 pkgedit-remove-question = 从草稿中移除这个文件？
@@ -181,7 +180,6 @@ pkgedit-preview-size-error = 请输入有效逻辑尺寸：宽 160–8192，高 
 
 pkgedit-operation-stale = 工程已发生变化，请重新应用本次操作
 
-pkgedit-tab-properties = 属性
 
 pkgedit-property-select = 请选择声明分组
 
@@ -193,9 +191,7 @@ pkgedit-property-name = 字段名
 
 pkgedit-add = 添加
 
-pkgedit-local = 本地覆盖
 
-pkgedit-inherited = 继承或默认
 
 pkgedit-inherit = 恢复继承
 
@@ -209,9 +205,7 @@ pkgedit-add-decor = 添加装饰
 
 pkgedit-base = 基础皮肤
 
-pkgedit-canvas-edit = 启用画布编辑
 
-pkgedit-canvas-help = 选择元素后拖动移动，右下角缩放装饰。方向键移动，Shift 加速，Esc 取消。
 
 pkgedit-cover = 封面路径
 
@@ -288,3 +282,51 @@ pkgedit-layout-matched = 当前命中顺序，后层覆盖前层
 pkgedit-bind = 绑定参数
 
 pkgedit-pending-forms = 请先应用或放弃尚未提交的表单输入。
+
+pkgedit-mode-design = 设计
+pkgedit-mode-data = 数据与管线
+pkgedit-mode-lua = Lua
+pkgedit-project-menu = 工程菜单
+pkgedit-toolbar = 编辑器工具栏
+pkgedit-status = 工程状态
+pkgedit-split-source = 画布旁显示源码
+pkgedit-files-preview = 显示实时预览
+pkgedit-drawer-close = 收起面板
+pkgedit-custom-size = 自定义尺寸
+pkgedit-stage-settings = 画布设置
+pkgedit-stage-size = 预览逻辑尺寸（宽 × 高）
+pkgedit-params-none = 这个皮肤没有声明参数。
+pkgedit-preview-params = 预览参数
+pkgedit-layers = 图层
+pkgedit-canvas = 画布
+pkgedit-inspector = 属性
+pkgedit-add-field = 新增字段
+pkgedit-section-source = 本节 TOML
+pkgedit-section-reveal = 在源码中定位
+pkgedit-section-inline = 这一节没有单独的表头，在源码中所在的表里修改。
+pkgedit-file-operations = 新建、移动与替换
+pkgedit-files-none = 没有这类文件。
+pkgedit-lua-sources = Lua 源码
+pkgedit-sound-files = 音频文件
+pkgedit-sound-declarations = 音效声明
+pkgedit-layer-dialogue = 对话框
+pkgedit-layer-nameplate = 姓名牌
+pkgedit-layer-portrait = 头像
+pkgedit-layer-continue = 继续标识
+pkgedit-layer-text = 正文
+pkgedit-layer-decor = 装饰
+pkgedit-layer-history = 历史
+pkgedit-layer-chrome = 界面色
+pkgedit-layer-effects = 效果
+pkgedit-layer-fonts = 字体
+pkgedit-layer-materials = 材质
+pkgedit-layer-mention = 提及
+pkgedit-layer-params = 参数
+pkgedit-layer-param_groups = 参数分组
+pkgedit-layer-presets = 预设
+pkgedit-layer-shaders = 着色器
+pkgedit-layer-sounds = 音效
+pkgedit-layer-responsive = 响应式
+pkgedit-layer-pipelines = 管线
+pkgedit-layer-frame = 框体
+pkgedit-layer-remove = 删除装饰

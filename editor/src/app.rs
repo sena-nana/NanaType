@@ -1049,7 +1049,10 @@ impl App {
                     }
                 }
                 self.package_editor.session = Some(*session);
-                self.ui.package_editor_tab.set(pe::Tab::Files);
+                self.ui.mode.set(pe::Mode::Design);
+                self.ui
+                    .side_open
+                    .set(self.ui.workspace_width.get_untracked() >= crate::ui::shell::COMPACT);
                 self.poll_directory(id);
             }
         }

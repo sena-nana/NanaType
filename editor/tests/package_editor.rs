@@ -7,7 +7,7 @@ mod common;
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nanatype_editor::{
     msg::Msg,
-    session::{self as pe, Action, KeyStore, Session, Tab},
+    session::{self as pe, Action, KeyStore, Mode, Session},
     ui::{self, Ui},
 };
 use nanatype_i18n::Locale;
@@ -445,15 +445,21 @@ fn the_editor_fits_narrow_widths_in_every_language_and_works_from_the_keyboard()
     let view = Arc::new(session.view(None, false));
     assert!(view.report.errors() > 0);
     for locale in Locale::ALL {
-        for (width, height) in [(900, 660), (440, 900), (300, 1100)] {
-            for tab in [Tab::Files, Tab::Package, Tab::Signing, Tab::Debug] {
+        for (width, height) in [(960, 600), (1280, 800), (1920, 1080)] {
+            for tab in [
+                Mode::Files,
+                Mode::Package,
+                Mode::Signing,
+                Mode::Lua,
+                Mode::Data,
+            ] {
                 let ui = Ui::new(
                     Arc::new(Settings::default()),
                     Arc::new(Default::default()),
                     locale,
                 );
                 ui.package_editor.set(Some(view.clone()));
-                ui.package_editor_tab.set(tab);
+                ui.mode.set(tab);
                 let mut agent = common::session()
                     .themed(false)
                     .mount(width, height, move || body(ui, height));
@@ -484,7 +490,7 @@ fn the_editor_fits_narrow_widths_in_every_language_and_works_from_the_keyboard()
                             .join(format!("{}-{tab:?}-{width}.png", locale.tag()).to_lowercase()),
                     )
                     .unwrap();
-                if tab == Tab::Files {
+                if tab == Mode::Files {
                     save_from_keyboard(&mut agent);
                 }
             }
@@ -492,7 +498,7 @@ fn the_editor_fits_narrow_widths_in_every_language_and_works_from_the_keyboard()
     }
     // The launcher on the packages page fits too.
     for locale in Locale::ALL {
-        for width in [900, 300] {
+        for width in [960, 1440] {
             let ui = Ui::new(
                 Arc::new(Settings::default()),
                 Arc::new(Default::default()),
@@ -523,12 +529,13 @@ fn the_editor_fits_narrow_widths_in_every_language_and_works_from_the_keyboard()
         Locale::EnUs,
     );
     ui.package_editor.set(Some(view.clone()));
-    let mut agent = common::session().themed(false).mount(900, 660, move || {
+    ui.mode.set(Mode::Files);
+    let mut agent = common::session().themed(false).mount(960, 660, move || {
         ui::window::editor_window(ui, nana_ui::runtime::view::entity_ref())
     });
     agent.flush().unwrap();
     agent
-        .screenshot_png(captures.join("editor-window-900.png"))
+        .screenshot_png(captures.join("editor-window-960.png"))
         .unwrap();
     save_from_keyboard(&mut agent);
     // Typing into the editable source sends the edit for that file.
@@ -567,7 +574,9 @@ fn the_editor_fits_narrow_widths_in_every_language_and_works_from_the_keyboard()
             .any(|n| n.label.as_deref() == Some("1 / 1")),
         "case-insensitive search finds `accent`"
     );
-    // A problem row reveals its location in the source.
+    // A problem row in the drawer reveals its location in the source.
+    ui.drawer.set(ui::Drawer::Problems);
+    agent.flush().unwrap();
     let problem = agent
         .accessibility_dump()
         .into_iter()
@@ -618,7 +627,7 @@ fn protected_sources_show_read_only_and_drafts_never_touch_installed_packages() 
     ui.package_editor.set(Some(view));
     let mut agent = common::session()
         .themed(false)
-        .mount(900, 660, move || body(ui, 660));
+        .mount(960, 660, move || body(ui, 660));
     agent.flush().unwrap();
     let nodes = agent.accessibility_dump();
     let source = nodes
@@ -666,7 +675,7 @@ fn skin_previews_reuse_the_real_renderer_without_touching_the_active_skin() {
         .unwrap()
         .join("target/package-editor");
     std::fs::create_dir_all(&captures).unwrap();
-    for (width, history) in [(900, false), (900, true), (300, false)] {
+    for (width, history) in [(960, false), (960, true), (1440, false)] {
         let ui = Ui::new(
             Arc::new(Settings::default()),
             Arc::new(Default::default()),
@@ -674,7 +683,7 @@ fn skin_previews_reuse_the_real_renderer_without_touching_the_active_skin() {
         );
         let active = ui.skin.get_untracked();
         ui.package_editor.set(Some(view.clone()));
-        ui.package_editor_tab.set(Tab::Preview);
+        ui.mode.set(Mode::Design);
         ui.package_editor_surface
             .set(ui::preview::Surface::of(history));
         let mut agent = common::session()
@@ -853,10 +862,10 @@ fn data_and_pipeline_forms_write_in_place_and_refuse_invalid_edits() {
         Locale::ZhCn,
     );
     ui.package_editor.set(Some(view));
-    ui.package_editor_tab.set(Tab::Package);
+    ui.mode.set(Mode::Data);
     let mut agent = common::session()
         .themed(false)
-        .mount(900, 1400, move || body(ui, 1400));
+        .mount(1280, 1400, move || body(ui, 1400));
     agent.flush().unwrap();
     let nodes = agent.accessibility_dump();
     for key in [
@@ -891,14 +900,14 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
         .join("target/package-editor");
     std::fs::create_dir_all(&captures).unwrap();
     for locale in Locale::ALL {
-        for (width, height) in [(900, 1700), (440, 2300), (300, 2900)] {
+        for (width, height) in [(960, 1700), (1280, 1700), (1920, 1700)] {
             let ui = Ui::new(
                 Arc::new(Settings::default()),
                 Arc::new(Default::default()),
                 locale,
             );
             ui.package_editor.set(Some(view.clone()));
-            ui.package_editor_tab.set(Tab::Package);
+            ui.mode.set(Mode::Data);
             let mut agent = common::session()
                 .themed(false)
                 .mount(width, height, move || body(ui, height));
@@ -955,10 +964,10 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
         Locale::EnUs,
     );
     ui.package_editor.set(Some(view));
-    ui.package_editor_tab.set(Tab::Package);
+    ui.mode.set(Mode::Data);
     let mut agent = common::session()
         .themed(false)
-        .mount(900, 1700, move || body(ui, 1700));
+        .mount(960, 1700, move || body(ui, 1700));
     click_key(&mut agent, "package-editor-data-add");
     for (key, value) in [
         ("package-editor-field:pkgedit-data-id", "words"),
@@ -1036,7 +1045,7 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
     // Declared JSON is formattable even with a text filename.
     ui.package_editor
         .set(Some(Arc::new(session.view(None, false))));
-    ui.package_editor_tab.set(Tab::Files);
+    ui.mode.set(Mode::Files);
     click_key(&mut agent, "package-editor-format");
     assert!(
         messages(&mut agent)
@@ -1062,7 +1071,7 @@ fn the_input_preview_draws_the_draft_skin_without_touching_the_input_window() {
         .join("target/package-editor");
     std::fs::create_dir_all(&captures).unwrap();
     for locale in Locale::ALL {
-        for width in [900, 440, 300] {
+        for width in [960, 1280, 1440] {
             let ui = Ui::new(
                 Arc::new(Settings::default()),
                 Arc::new(Default::default()),
@@ -1076,7 +1085,7 @@ fn the_input_preview_draws_the_draft_skin_without_touching_the_input_window() {
                 ui.editor_value.get_untracked(),
             );
             ui.package_editor.set(Some(view.clone()));
-            ui.package_editor_tab.set(Tab::Preview);
+            ui.mode.set(Mode::Design);
             ui.package_editor_surface.set(ui::preview::Surface::Input);
             let mut agent = common::session()
                 .themed(false)
@@ -1155,7 +1164,7 @@ fn launcher_lists_installed_packages_to_edit_or_copy() {
     )));
     assert!(!rows.is_empty());
     for locale in Locale::ALL {
-        for width in [900, 440] {
+        for width in [960, 1440] {
             let ui = Ui::new(
                 Arc::new(Settings::default()),
                 Arc::new(Default::default()),

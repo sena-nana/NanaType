@@ -246,6 +246,9 @@ impl RuntimeProgram for Host {
                 m.insert(path.clone(), area);
             });
         }
+        if let Some(doc) = &self.doc {
+            crate::ui::shell::sync_widths(ui, doc.context());
+        }
         if let Some(action) = crate::canvas::input(ui, &input.event.payload, &mut self.canvas_drag)
         {
             self.app.update(Msg::PackageEditor(action));

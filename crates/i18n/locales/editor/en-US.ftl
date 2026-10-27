@@ -50,7 +50,6 @@ pkgedit-tab-files = Files
 pkgedit-tab-package = Package
 pkgedit-tab-signing = Protection & signing
 pkgedit-tab-preview = Preview
-pkgedit-tab-debug = Lua debugger
 pkgedit-import = Import asset…
 pkgedit-remove = Remove file
 pkgedit-remove-question = Remove this file from the draft?
@@ -184,7 +183,6 @@ pkgedit-preview-size-error = Enter logical dimensions: width 160–8192, height 
 
 pkgedit-operation-stale = The project changed. Apply the operation again.
 
-pkgedit-tab-properties = Properties
 
 pkgedit-property-select = Select a declaration group
 
@@ -196,9 +194,7 @@ pkgedit-property-name = Field name
 
 pkgedit-add = Add
 
-pkgedit-local = Local override
 
-pkgedit-inherited = Inherited or default
 
 pkgedit-inherit = Restore inheritance
 
@@ -212,9 +208,7 @@ pkgedit-add-decor = Add decoration
 
 pkgedit-base = Base skin
 
-pkgedit-canvas-edit = Enable canvas editing
 
-pkgedit-canvas-help = Select and drag to move; resize decorations from the bottom-right handle. Arrow keys move, Shift increases the step, Escape cancels.
 
 pkgedit-cover = Cover path
 
@@ -291,3 +285,51 @@ pkgedit-layout-matched = Matching layers; later layers override earlier ones
 pkgedit-bind = Bind parameter
 
 pkgedit-pending-forms = Apply or discard the pending form changes first.
+
+pkgedit-mode-design = Design
+pkgedit-mode-data = Data and pipelines
+pkgedit-mode-lua = Lua
+pkgedit-project-menu = Project menu
+pkgedit-toolbar = Editor toolbar
+pkgedit-status = Project status
+pkgedit-split-source = Show source beside the canvas
+pkgedit-files-preview = Show live preview
+pkgedit-drawer-close = Close panel
+pkgedit-custom-size = Custom size
+pkgedit-stage-settings = Canvas settings
+pkgedit-stage-size = Preview size in logical pixels (width × height)
+pkgedit-params-none = This skin declares no parameters.
+pkgedit-preview-params = Preview parameters
+pkgedit-layers = Layers
+pkgedit-canvas = Canvas
+pkgedit-inspector = Inspector
+pkgedit-add-field = Add field
+pkgedit-section-source = This table's TOML
+pkgedit-section-reveal = Show in source
+pkgedit-section-inline = This table has no header of its own; edit it in the table that contains it.
+pkgedit-file-operations = New, move and replace
+pkgedit-files-none = No files of this kind.
+pkgedit-lua-sources = Lua sources
+pkgedit-sound-files = Audio files
+pkgedit-sound-declarations = Sound declarations
+pkgedit-layer-dialogue = Dialogue
+pkgedit-layer-nameplate = Name tag
+pkgedit-layer-portrait = Portrait
+pkgedit-layer-continue = Continue mark
+pkgedit-layer-text = Text
+pkgedit-layer-decor = Decorations
+pkgedit-layer-history = History
+pkgedit-layer-chrome = Chrome
+pkgedit-layer-effects = Effects
+pkgedit-layer-fonts = Fonts
+pkgedit-layer-materials = Materials
+pkgedit-layer-mention = Mentions
+pkgedit-layer-params = Parameters
+pkgedit-layer-param_groups = Parameter groups
+pkgedit-layer-presets = Presets
+pkgedit-layer-shaders = Shaders
+pkgedit-layer-sounds = Sounds
+pkgedit-layer-responsive = Responsive
+pkgedit-layer-pipelines = Pipelines
+pkgedit-layer-frame = Frame
+pkgedit-layer-remove = Remove decoration

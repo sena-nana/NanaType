@@ -4,7 +4,7 @@ use nana_ui::runtime::view::{IntoView, widget};
 use nana_ui_core::LengthSpec;
 use nanatype_editor::{
     canvas,
-    session::{self, Action, Tab},
+    session::{self, Action, Mode},
     ui::{self, Ui},
 };
 use nanatype_i18n::Locale;
@@ -27,8 +27,7 @@ fn canvas_geometry_comes_from_the_real_renderer_and_drag_commits_once() {
         Locale::ZhCn,
     );
     ui.package_editor.set(Some(view.clone()));
-    ui.package_editor_tab.set(Tab::Preview);
-    ui.canvas_enabled.set(true);
+    ui.mode.set(Mode::Design);
     let mut agent = common::session().themed(false).mount(1440, 1100, move || {
         widget(Stack::column(0.).height(LengthSpec::Px(1100.)))
             .children((ui::views::editor(ui), ui::canvas_controls::overlay(ui)))
@@ -254,8 +253,8 @@ fn authoring_panels_fit_each_language_and_keep_preview_overrides_private() {
         .join("target/package-editor");
     std::fs::create_dir_all(&captures).unwrap();
     for locale in Locale::ALL {
-        for width in [300, 440, 900, 1099, 1100, 1440] {
-            for tab in [Tab::Files, Tab::Properties, Tab::Sounds, Tab::Preview] {
+        for width in [960, 1280, 1440, 1920] {
+            for tab in [Mode::Files, Mode::Design, Mode::Sounds, Mode::Lua] {
                 let ui = Ui::new(
                     Arc::new(Settings::default()),
                     Arc::new(Default::default()),
@@ -263,9 +262,9 @@ fn authoring_panels_fit_each_language_and_keep_preview_overrides_private() {
                 );
                 let settings = ui.settings.get_untracked();
                 ui.package_editor.set(Some(view.clone()));
-                ui.package_editor_tab.set(tab);
+                ui.mode.set(tab);
                 ui.preview_size.set(["300".into(), "600".into()]);
-                if tab == Tab::Sounds {
+                if tab == Mode::Sounds {
                     ui.properties_file.set("skin.toml".into());
                     ui.properties_path.set(vec!["sounds".into()]);
                 }
@@ -274,15 +273,20 @@ fn authoring_panels_fit_each_language_and_keep_preview_overrides_private() {
                         .children(ui::views::editor(ui))
                 });
                 agent.flush().unwrap();
+                agent
+                    .screenshot_png(captures.join(format!(
+                        "authoring-{}-{tab:?}-{width}.png",
+                        locale.tag().to_lowercase()
+                    )))
+                    .unwrap();
                 assert_eq!(ui.workspace_width.get_untracked(), width as f32);
-                if tab != Tab::Preview {
-                    assert_eq!(
+                if matches!(tab, Mode::Design | Mode::Files) {
+                    assert!(
                         agent.accessibility_dump().iter().any(|n| n
                             .agent_path
                             .as_deref()
                             .is_some_and(|p| p.ends_with("package-editor-preview"))),
-                        width >= 1100,
-                        "workspace breakpoint {width}"
+                        "{tab:?} keeps the stage in view at {width}"
                     );
                 }
                 let body = agent
@@ -323,12 +327,6 @@ fn authoring_panels_fit_each_language_and_keep_preview_overrides_private() {
                         "{locale} {width} {tab:?}: {node:?}"
                     );
                 }
-                agent
-                    .screenshot_png(captures.join(format!(
-                        "authoring-{}-{tab:?}-{width}.png",
-                        locale.tag().to_lowercase()
-                    )))
-                    .unwrap();
             }
         }
     }
@@ -400,13 +398,21 @@ fn buffered_boolean_controls_match_pending_values_after_tab_switches() {
         Locale::ZhCn,
     );
     ui.package_editor.set(Some(Arc::new(s.view(None, false))));
-    ui.package_editor_tab.set(Tab::Properties);
+    ui.mode.set(Mode::Design);
     ui.properties_path
         .set(vec!["dialogue".into(), "nameplate".into()]);
-    let mut agent = common::session().themed(false).mount(900, 1100, move || {
+    let mut agent = common::session().themed(false).mount(1440, 1100, move || {
         widget(Stack::column(0.).height(LengthSpec::Px(1100.))).children(ui::views::editor(ui))
     });
     agent.flush().unwrap();
+    let captures = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("target/package-editor");
+    std::fs::create_dir_all(&captures).unwrap();
+    agent
+        .screenshot_png(captures.join("inspector-1440.png"))
+        .unwrap();
     let checked = |agent: &nana_ui_devtools::agent::RuntimeAgentSession, suffix: &str| {
         agent
             .accessibility_dump()
@@ -422,13 +428,13 @@ fn buffered_boolean_controls_match_pending_values_after_tab_switches() {
         ),
         Some(false)
     );
-    ui.package_editor_tab.set(Tab::Package);
+    ui.mode.set(Mode::Package);
     agent.flush().unwrap();
     assert_eq!(
         checked(&agent, "package-editor-cap:packages-kind-sounds"),
         Some(true)
     );
-    ui.package_editor_tab.set(Tab::Properties);
+    ui.mode.set(Mode::Design);
     agent.flush().unwrap();
     assert_eq!(
         checked(
@@ -465,10 +471,10 @@ fn a_parameter_binding_can_be_created_from_a_constant_in_the_property_panel() {
         Locale::ZhCn,
     );
     ui.package_editor.set(Some(Arc::new(s.view(None, false))));
-    ui.package_editor_tab.set(Tab::Properties);
+    ui.mode.set(Mode::Design);
     ui.properties_path
         .set(vec!["dialogue".into(), "text".into()]);
-    let mut agent = common::session().themed(false).mount(900, 1100, move || {
+    let mut agent = common::session().themed(false).mount(1280, 1100, move || {
         widget(Stack::column(0.).height(LengthSpec::Px(1100.))).children(ui::views::editor(ui))
     });
     agent.flush().unwrap();
@@ -525,4 +531,72 @@ fn a_parameter_binding_can_be_created_from_a_constant_in_the_property_panel() {
     assert_eq!(session::validate(&registry, &s.project).errors(), 0);
     let source = std::str::from_utf8(&s.project.files["skin.toml"]).unwrap();
     assert!(source.contains("param") && source.contains("paint"));
+}
+
+#[test]
+fn a_layer_selects_its_part_its_properties_and_its_source() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = SkinRegistry::new(Some(dir.path().join("packages")), "1.0.0");
+    let mut s = session::create(editor::ProjectKind::Skin, "editor.layers").unwrap();
+    let source = "[dialogue]\n[dialogue.nameplate]\nsize = 20\n";
+    s.edit("skin.toml", source).unwrap();
+    let (ticket, project) = s.validation_due().unwrap();
+    s.validated(ticket, Arc::new(session::validate(&registry, &project)));
+    let ui = Ui::new(
+        Arc::new(Settings::default()),
+        Arc::new(Default::default()),
+        Locale::EnUs,
+    );
+    ui.package_editor.set(Some(Arc::new(s.view(None, false))));
+    ui.mode.set(Mode::Design);
+    ui.split_source.set(true);
+    let mut agent = common::session().themed(false).mount(1440, 1000, move || {
+        widget(Stack::column(0.).height(LengthSpec::Px(1000.))).children(ui::views::editor(ui))
+    });
+    agent.flush().unwrap();
+    // A part picked on the canvas selects its layer too.
+    ui.canvas_selection.set(Some("portrait".into()));
+    agent.flush().unwrap();
+    assert_eq!(
+        ui.properties_path.get_untracked(),
+        vec!["dialogue".to_owned(), "portrait".to_owned()]
+    );
+    assert!(
+        ui.canvas_enabled.get_untracked(),
+        "the design canvas takes gestures"
+    );
+    let reveal = ui::modes::design::select(ui, vec!["dialogue".into(), "nameplate".into()]);
+    agent.flush().unwrap();
+    assert_eq!(
+        ui.properties_path.get_untracked(),
+        vec!["dialogue".to_owned(), "nameplate".to_owned()]
+    );
+    assert_eq!(
+        ui.canvas_selection.get_untracked().as_deref(),
+        Some("nameplate")
+    );
+    let offset = source.find("[dialogue.nameplate]").unwrap();
+    assert!(
+        matches!(
+            reveal,
+            Some(nanatype_editor::msg::Msg::PackageEditor(Action::Reveal(ref d)))
+                if d.path == "skin.toml" && d.offset == offset
+        ),
+        "the split source scrolls to the layer's table"
+    );
+    assert!(
+        agent.accessibility_dump().iter().any(|n| n
+            .agent_path
+            .as_deref()
+            .is_some_and(|p| p.ends_with("editor-section-text"))),
+        "the inspector edits the table's own block"
+    );
+    let captures = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("target/package-editor");
+    std::fs::create_dir_all(&captures).unwrap();
+    agent
+        .screenshot_png(captures.join("design-split-1440.png"))
+        .unwrap();
 }

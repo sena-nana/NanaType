@@ -7,8 +7,8 @@ use nanatype_theme::editor::{
     self, DraftInfo, DraftOrigin, FileInfo, Level, Metadata, ProjectKind, SourceDiagnostic,
 };
 use nanatype_theme::{
-    DataSpec, PACKAGE_MANIFEST, PackageProject, PipelineSpec, SealIdentity, SealStatus, Skin,
-    SkinFiles, SkinRegistry,
+    DataSpec, PACKAGE_MANIFEST, PackageCapability, PackageProject, PipelineSpec, SealIdentity,
+    SealStatus, Skin, SkinFiles, SkinRegistry,
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -74,16 +74,56 @@ impl KeyStore for MemoryKeys {
     }
 }
 
+/// The workspace the activity rail shows. A mode the package lacks the
+/// capability for falls back to [`Mode::Files`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Tab {
+pub enum Mode {
+    /// Layers, the live canvas and the inspector.
     #[default]
+    Design,
     Files,
-    Properties,
     Sounds,
+    /// Data declarations and pipelines.
+    Data,
+    Lua,
     Package,
     Signing,
-    Preview,
-    Debug,
+}
+
+impl Mode {
+    pub const ALL: [Mode; 7] = [
+        Mode::Design,
+        Mode::Files,
+        Mode::Sounds,
+        Mode::Data,
+        Mode::Lua,
+        Mode::Package,
+        Mode::Signing,
+    ];
+
+    /// Whether the open package has anything for this mode to edit.
+    pub fn available(self, view: &EditorView) -> bool {
+        let has = |c| {
+            view.metadata
+                .as_ref()
+                .is_some_and(|m| m.capabilities.contains(&c))
+        };
+        match self {
+            Mode::Design => has(PackageCapability::Skin),
+            Mode::Sounds => has(PackageCapability::Skin) || has(PackageCapability::Sounds),
+            Mode::Lua => has(PackageCapability::Lua),
+            Mode::Files | Mode::Data | Mode::Package | Mode::Signing => true,
+        }
+    }
+
+    /// `self`, or Files when the package cannot use it.
+    pub fn effective(self, view: &EditorView) -> Mode {
+        if self.available(view) {
+            self
+        } else {
+            Mode::Files
+        }
+    }
 }
 
 /// The result of one background validation: located diagnostics and, for a

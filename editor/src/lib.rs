@@ -79,8 +79,9 @@ pub fn run() -> ExitCode {
         version: env!("CARGO_PKG_VERSION"),
         vendor: "sena-nana",
     );
-    let mut primary = nana_ui::WindowDescriptor::new("NanaType Editor").initial_size(1100.0, 760.0);
-    primary.minimum_size = (640.0, 480.0);
+    let mut primary = nana_ui::WindowDescriptor::new("NanaType Editor").initial_size(1440.0, 900.0);
+    let [min_w, min_h] = ui::shell::MIN_SIZE;
+    primary.minimum_size = (f64::from(min_w), f64::from(min_h));
     primary.system_caption = true;
     primary.resizable = true;
     primary.focus_on_show = true;
