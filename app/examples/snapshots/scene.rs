@@ -89,8 +89,6 @@ impl Scene {
         settings.skin.id = skin_id.to_owned();
         settings.history.show_time = true;
         settings.history.chat.enabled = true;
-        settings.integrations.bilibili.enabled = true;
-        settings.integrations.bilibili.room = "21452505".into();
         let dark = std::env::var("NANATYPE_SNAPSHOT_APPEARANCE").is_ok_and(|v| v == "dark");
         settings.skin.chrome = if dark {
             nanatype_settings::ChromeMode::Dark
@@ -138,7 +136,7 @@ impl Scene {
         core.handle(
             Cmd::DraftChanged(
                 parse(
-                    "[at=1001 name=星野ほたる avatar=blob:bili-face-1001] 晚上好！今天也谢谢你来～",
+                    "[at=1001 name=星野ほたる avatar=blob:blive-face-1001] 晚上好！今天也谢谢你来～",
                 )
                 .doc,
             ),
@@ -153,21 +151,11 @@ impl Scene {
         ui.chat
             .set(Arc::new(chat.iter().cloned().map(Arc::new).collect()));
         ui.reply.set(Some(chat[1].quote(locale)));
-        let mut status = (*ui.status.get_untracked()).clone();
-        (status.bilibili, status.bilibili_link) = link_text::bilibili(
-            locale,
-            &ConnectionState::Connected(nanatype_bilibili::Room {
-                id: 21452505,
-                owner: 1,
-                title: String::new(),
-                max_chars: 20,
-            }),
-            "21452505",
-        );
+        let status = (*ui.status.get_untracked()).clone();
         assert_consistent(&settings, &status);
         ui.status.set(Arc::new(status));
 
-        let draft = "[at=1002 name=路过的猫 avatar=blob:bili-face-1002] [b]粗体[/b]和[shake]抖动[/shake]，[wait=500]然后[pause]继续。[sticker=nana/heart][se=coin]";
+        let draft = "[at=1002 name=路过的猫 avatar=blob:blive-face-1002] [b]粗体[/b]和[shake]抖动[/shake]，[wait=500]然后[pause]继续。[sticker=nana/heart][se=coin]";
         let parsed = parse(draft);
         ui.draft.set(Arc::new(parsed.doc.clone()));
         let look = dialogue::Base::editor(&skin).look();

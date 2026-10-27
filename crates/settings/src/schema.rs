@@ -1,4 +1,4 @@
-//! Settings schema v1. Every struct is `#[serde(default)]`, so a file written
+//! Settings schema v4. Every struct is `#[serde(default)]`, so a file written
 //! by an older build loads with new fields at their defaults, and fields this
 //! build does not know are kept in `unknown` and written back unchanged.
 
@@ -11,7 +11,7 @@ use nanatype_playback::QueuePolicy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const SETTINGS_SCHEMA: u32 = 3;
+pub const SETTINGS_SCHEMA: u32 = 4;
 pub const DEFAULT_SKIN: &str = "nanatype.halo";
 /// Skin loop rates the settings offer; the first is the default.
 pub const SKIN_FRAME_RATES: [u32; 2] = [30, 60];
@@ -661,7 +661,7 @@ pub struct HistorySettings {
     pub show_time: bool,
     pub sync: HistorySync,
     pub hide_latest: HideLatest,
-    /// Live chat (Bilibili) rows mixed into the list.
+    /// Live chat rows mixed into the list.
     pub chat: HistoryChat,
     /// Show the chat message a line answers above it.
     pub show_quote: bool,
@@ -1044,11 +1044,7 @@ pub enum ChatPanelStyle {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct BilibiliSettings {
-    pub enabled: bool,
-    /// Empty room selects the authenticated account's own room.
-    pub sync_profile: bool,
-    pub room: String,
+pub struct ChatSettings {
     /// What the chat panel lists.
     pub panel: ChatFilter,
     /// Presentation of the operator's panel, independent of its message filter.
@@ -1060,33 +1056,15 @@ pub struct BilibiliSettings {
     pub panel_open: bool,
 }
 
-impl Default for BilibiliSettings {
+impl Default for ChatSettings {
     fn default() -> Self {
         Self {
-            enabled: true,
-            sync_profile: false,
-            room: String::new(),
             panel: ChatFilter::default(),
             panel_style: ChatPanelStyle::default(),
             quote_on_display: true,
             panel_open: false,
         }
     }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct DouyinSettings {
-    pub enabled: bool,
-    pub room: String,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct YoutubeSettings {
-    pub enabled: bool,
-    /// A video or channel address, an `@handle`, a channel id or a video id.
-    pub target: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1117,8 +1095,7 @@ pub enum BliveRoomKind {
     RoomId,
 }
 
-/// Third-party chat over the blivechat protocol. The key is free again: the
-/// v1 blivechat settings moved to `bilibili` in the step to v2.
+/// Third-party chat over the blivechat protocol.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BlivechatSettings {
@@ -1161,10 +1138,8 @@ pub struct Integrations {
     pub vts: VtsSettings,
     pub osc: OscSettings,
     pub websocket: WsSettings,
-    pub bilibili: BilibiliSettings,
-    pub douyin: DouyinSettings,
+    pub chat: ChatSettings,
     pub blivechat: BlivechatSettings,
-    pub youtube: YoutubeSettings,
     pub twitch: TwitchSettings,
 }
 
@@ -1346,14 +1321,8 @@ impl Settings {
             .chars()
             .take(2048)
             .collect();
-        let d = &mut self.integrations.douyin;
-        d.room = d.room.trim().chars().take(2048).collect();
-        let y = &mut self.integrations.youtube;
-        y.target = y.target.trim().chars().take(2048).collect();
         let t = &mut self.integrations.twitch;
         t.channel = t.channel.trim().chars().take(2048).collect();
-        let b = &mut self.integrations.bilibili;
-        b.room = b.room.trim().to_owned();
         let l = &mut self.integrations.blivechat;
         l.host = l.host.trim().chars().take(253).collect();
         if l.host.is_empty() {

@@ -21,7 +21,7 @@ const WORKERS: usize = 4;
 /// Downloaded viewer and peer pictures unused this long are deleted at start.
 /// Pasted images share the folder but are history content and never pruned.
 const CACHE_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 3600);
-const CACHE_PREFIXES: &[&str] = &["bili-", "blive-", "douyin-", "yt-", "twitch-", "p2p-"];
+const CACHE_PREFIXES: &[&str] = &["blive-", "twitch-", "p2p-"];
 
 /// Remove stale downloaded pictures; a later message downloads them again.
 fn prune_cache(dir: &Path) {
@@ -46,7 +46,7 @@ pub fn cache_profile_avatar(
     if url.is_empty() {
         return None;
     }
-    let name = format!("bili-profile-{uid}-{:016x}", fnv(url));
+    let name = format!("twitch-profile-{uid}-{:016x}", fnv(url));
     let asset = AssetRef::Blob(name.clone());
     let result = asset.clone();
     let url = url.to_owned();
@@ -63,12 +63,8 @@ pub struct ChatAssets {
     tx: Sender<(u64, String, Incoming)>,
 }
 enum Incoming {
-    /// Events in the shared chat shape: Bilibili's own, or through blivechat.
+    /// Events in the shared chat shape, including blivechat's feed.
     Chat(Platform, ChatEvent),
-    #[cfg(feature = "unofficial-chat")]
-    Douyin(nanatype_douyin::ChatEvent),
-    #[cfg(feature = "unofficial-chat")]
-    Youtube(nanatype_youtube::ChatEvent),
     Twitch(nanatype_twitch::ChatEvent),
 }
 
@@ -192,24 +188,6 @@ impl ChatAssets {
                 for (epoch, room, event) in rx {
                     // Live platforms add their pictures while the message is built.
                     let (avatar, mut emotes) = match &event {
-                        #[cfg(feature = "unofficial-chat")]
-                        Incoming::Douyin(event) => (
-                            Job::avatar("douyin", &event.author.uid, &event.author.avatar),
-                            match &event.content {
-                                nanatype_douyin::Content::Emote { url, .. } => {
-                                    vec![Job::emote("douyin", url)]
-                                }
-                                _ => vec![],
-                            },
-                        ),
-                        #[cfg(feature = "unofficial-chat")]
-                        Incoming::Youtube(event) => {
-                            let prefix = Platform::Youtube.cache_prefix();
-                            (
-                                Job::avatar(prefix, &event.author.channel_id, &event.author.avatar),
-                                vec![],
-                            )
-                        }
                         Incoming::Twitch(_) => (None, vec![]),
                         Incoming::Chat(platform, event) => {
                             let prefix = platform.cache_prefix();
@@ -234,13 +212,6 @@ impl ChatAssets {
                         }
                     };
                     let message = match event {
-                        #[cfg(feature = "unofficial-chat")]
-                        Incoming::Douyin(event) => Some(ChatMessage::from_douyin(
-                            event,
-                            avatar.as_ref().map(Job::asset),
-                            emotes.first().map(Job::asset),
-                            next,
-                        )),
                         Incoming::Chat(platform, event) => ChatMessage::from_event(
                             event,
                             avatar.as_ref().map(Job::asset),
@@ -248,13 +219,6 @@ impl ChatAssets {
                             next,
                         )
                         .map(|m| ChatMessage { platform, ..m }),
-                        #[cfg(feature = "unofficial-chat")]
-                        Incoming::Youtube(event) => Some(ChatMessage::from_youtube(
-                            event,
-                            avatar.as_ref().map(Job::asset),
-                            &mut |url| emote(&mut emotes, Platform::Youtube, url),
-                            next,
-                        )),
                         Incoming::Twitch(event) => Some(ChatMessage::from_twitch(
                             event,
                             &mut |url| emote(&mut emotes, Platform::Twitch, url),
@@ -279,14 +243,6 @@ impl ChatAssets {
             .expect("spawn chat ingest");
         Self { tx }
     }
-    #[cfg(feature = "unofficial-chat")]
-    pub fn bilibili(&self, epoch: u64, room: u64, event: ChatEvent) {
-        let _ = self.tx.send((
-            epoch,
-            room.to_string(),
-            Incoming::Chat(Platform::Bilibili, event),
-        ));
-    }
     /// Third-party chat has no room of its own: a 彗星号 feed can mix rooms.
     pub fn blivechat(&self, epoch: u64, event: ChatEvent) {
         let _ = self.tx.send((
@@ -294,14 +250,6 @@ impl ChatAssets {
             String::new(),
             Incoming::Chat(Platform::Blivechat, event),
         ));
-    }
-    #[cfg(feature = "unofficial-chat")]
-    pub fn douyin(&self, epoch: u64, room: String, event: nanatype_douyin::ChatEvent) {
-        let _ = self.tx.send((epoch, room, Incoming::Douyin(event)));
-    }
-    #[cfg(feature = "unofficial-chat")]
-    pub fn youtube(&self, epoch: u64, video: String, event: nanatype_youtube::ChatEvent) {
-        let _ = self.tx.send((epoch, video, Incoming::Youtube(event)));
     }
     pub fn twitch(&self, epoch: u64, channel: String, event: nanatype_twitch::ChatEvent) {
         let _ = self.tx.send((epoch, channel, Incoming::Twitch(event)));
@@ -375,47 +323,6 @@ mod tests {
     use nanatype_chat::Author;
     use std::io::{Read, Write};
     use std::net::TcpListener;
-    #[cfg(feature = "unofficial-chat")]
-    #[test]
-    fn platform_images_and_ingestion_ids_are_isolated() {
-        assert_ne!(
-            Job::avatar("bili", "42", "https://example.test/avatar")
-                .unwrap()
-                .name,
-            Job::avatar("douyin", "42", "https://example.test/avatar")
-                .unwrap()
-                .name
-        );
-        let (tx, rx) = unbounded();
-        let service = ChatAssets::start(
-            scratch("platforms"),
-            move |m| {
-                let _ = tx.send(m);
-            },
-            |_| {},
-        );
-        service.bilibili(7, 42, event(String::new(), 1));
-        service.douyin(
-            7,
-            "42".into(),
-            nanatype_douyin::ChatEvent {
-                id: "1".into(),
-                author: nanatype_douyin::Author {
-                    uid: "42".into(),
-                    name: "viewer".into(),
-                    avatar: String::new(),
-                },
-                content: nanatype_douyin::Content::Text("hi".into()),
-                at: 1,
-            },
-        );
-        let bili = rx.recv_timeout(Duration::from_secs(2)).unwrap();
-        let dy = rx.recv_timeout(Duration::from_secs(2)).unwrap();
-        assert_ne!(bili.seq, dy.seq);
-        assert_ne!(bili.user.uid, dy.user.uid);
-        assert_ne!(bili.platform, dy.platform);
-    }
-
     fn event(url: String, n: u64) -> ChatEvent {
         ChatEvent::Text {
             id: n.to_string(),
@@ -535,7 +442,7 @@ mod tests {
     #[test]
     fn cached_and_recently_failed_images_do_not_use_the_pool() {
         let dir = scratch("cache");
-        let job = Job::avatar("bili", "42", "http://example.invalid/face").unwrap();
+        let job = Job::avatar("blive", "42", "http://example.invalid/face").unwrap();
         let mut state = Requests::default();
         assert!(state.reserve(&job, &dir));
         assert!(!state.reserve(&job, &dir));
@@ -549,7 +456,7 @@ mod tests {
         assert!(state.reserve(&job, &dir));
         state.pending.clear();
         state.failed.clear();
-        std::fs::write(dir.join("bili-face-42.png"), b"cached").unwrap();
+        std::fs::write(dir.join("blive-face-42.png"), b"cached").unwrap();
         assert!(!state.reserve(&job, &dir));
     }
 }

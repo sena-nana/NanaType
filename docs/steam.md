@@ -6,18 +6,14 @@ Steam 版与 GitHub 发布版共用同一套代码，用 Cargo feature 区分：
 | --- | --- | --- |
 | 构建 | `cargo build -p nanatype` | `cargo build -p nanatype --no-default-features --features builtin-fonts,steam` |
 | 更新 | 检查 GitHub Release（`updates`，见 [检查更新](updates.md)） | 由 SteamPipe 更新，不含更新检查代码 |
-| 弹幕来源 | B 站、抖音、YouTube、Twitch、第三方弹幕 | Twitch、第三方弹幕（blivechat 仅身份码模式、彗星号） |
+| 弹幕来源 | Twitch、第三方弹幕 | Twitch、第三方弹幕 |
 | 创意工坊 | — | 皮肤页、播放页访问已订阅的皮肤与音效包 |
 
-`steam` 不能与 `updates`、`unofficial-chat` 同时开启（`app/src/lib.rs` 的 `compile_error!`）。`scripts/check-product-split.sh` 和 CI 会检查 Steam 版不链接 `nanatype-bilibili`、`nanatype-douyin`、`nanatype-youtube`、`nanatype-update`，其他构建也不链接 Steamworks。
+`steam` 不能与 `updates` 同时开启（`app/src/lib.rs` 的 `compile_error!`）。`scripts/check-product-split.sh` 和 CI 会检查 Steam 版不链接 `nanatype-update`，其他构建也不链接 Steamworks。
 
-## 去掉的内容及原因
+## 连接来源
 
-`unofficial-chat` 包含通过逆向网页接口取得弹幕的来源：B 站网页扫码登录与网页弹幕（含 CC BY-NC 4.0 的 bilibili-API-collect 继承材料）、抖音签名接入、YouTube innertube 抓取。Steam 版在编译期去掉它们，二进制里没有这些代码，也不附带它们的许可文件（`packaging/steam/LICENSE` 代替根目录的 `LICENSE`，`THIRD_PARTY_NOTICES.md` 中 `unofficial-chat` 标记之间的段落不随包分发）。
-
-blivechat 以房间号连接时，blivechat 自己读取 B 站网页弹幕，因此 Steam 版只提供开放平台身份码模式（`distribution::blive_room_kind`）；彗星号插件读取的是开放平台事件，保留。
-
-去掉的来源只是不显示、不连接：它们的设置仍留在设置文件里，Steam 版从不改写，换回 GitHub 版时原样可用。
+Twitch 和 blivechat/彗星号在两个版本中都可用。Steam 版不包含 GitHub 更新检查代码；blivechat 的房间号和身份码模式均保留。
 
 ## 与 GitHub 版共享配置
 

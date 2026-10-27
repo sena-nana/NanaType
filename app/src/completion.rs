@@ -719,7 +719,7 @@ mod tests {
             .collect();
         assert_eq!(names, ["Alice", "Malice"]);
         // The same uid on another platform is someone else.
-        let other = [(Platform::Twitch, &a), (Platform::Youtube, &a2)];
+        let other = [(Platform::Twitch, &a), (Platform::Blivechat, &a2)];
         assert_eq!(users(other.into_iter(), "", Locale::EnUs).len(), 2);
     }
 

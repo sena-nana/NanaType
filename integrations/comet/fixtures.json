@@ -1,6 +1,6 @@
 [
   {
-    "name": "B 站舰长弹幕，佩戴勋章",
+    "name": "转发的舰长弹幕，佩戴勋章",
     "comet": {
       "id": "dm-1", "type": "message", "uid": "42", "uname": "观众", "face": "https://i0.hdslb.com/bfs/face/a.jpg",
       "timestamp": 1700000000, "fansMedalWearingStatus": true, "fansMedalName": "奈奈团", "fansMedalLevel": 12,
@@ -22,14 +22,14 @@
     "expect": {"kind": "text", "id": "dm-2", "uid": "7", "admin": true, "emoticon": "https://i0.hdslb.com/emote.png", "medal_level": 0}
   },
   {
-    "name": "抖音主播弹幕：uid 加平台前缀",
+    "name": "转发的主播弹幕：外部 uid",
     "comet": {
-      "id": "dy-1", "type": "message", "uid": "MS4wLjAB", "uname": "主播", "face": "https://p3.douyinpic.com/a.jpeg",
+      "id": "relay-1", "type": "message", "uid": "MS4wLjAB", "uname": "主播", "face": "https://example.test/avatar.jpeg",
       "timestamp": 1700000002, "guardLevel": 0, "isModerator": false, "isAnchor": true, "platform": "dou_yin",
       "dmType": 0, "message": "欢迎"
     },
-    "blivechat": {"cmd": 2, "data": ["https://p3.douyinpic.com/a.jpeg", 1700000002, "主播", 3, "欢迎", 0, 0, 0, 0, 1, 0, "dy-1", "", 0, [], [], "dou_yin:MS4wLjAB", "", false]},
-    "expect": {"kind": "text", "id": "dy-1", "uid": "dou_yin:MS4wLjAB", "owner": true}
+    "blivechat": {"cmd": 2, "data": ["https://example.test/avatar.jpeg", 1700000002, "主播", 3, "欢迎", 0, 0, 0, 0, 1, 0, "relay-1", "", 0, [], [], "relay:MS4wLjAB", "", false]},
+    "expect": {"kind": "text", "id": "relay-1", "uid": "relay:MS4wLjAB", "owner": true}
   },
   {
     "name": "付费礼物",

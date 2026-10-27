@@ -125,7 +125,7 @@ impl App {
         self.twitch.set_sending(state.sending);
         self.ui.twitch.set(Arc::new(state));
         if result.is_err() {
-            self.notice(self.ui.now_t("bili-images-unavailable"), true);
+            self.notice(self.ui.now_t("chat-images-unavailable"), true);
         }
     }
     pub(super) fn twitch_submitted(&mut self, event: &CoreEvent) {
@@ -136,10 +136,10 @@ impl App {
             match outgoing::plain_text(&line.doc) {
                 Ok(text) => {
                     if !self.twitch.send(line.id, text) {
-                        self.notice(self.ui.now_t("bili-queue-full"), true);
+                        self.notice(self.ui.now_t("chat-queue-full"), true);
                     }
                 }
-                Err(_) => self.notice(self.ui.now_t("bili-images-unavailable"), true),
+                Err(_) => self.notice(self.ui.now_t("chat-images-unavailable"), true),
             }
         }
     }

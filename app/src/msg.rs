@@ -416,22 +416,6 @@ pub enum Msg {
     Chat(std::sync::Arc<crate::chat::ChatMessage>),
     /// A referenced picture is now in the local cache. Never adds messages.
     ChatAssetReady(nanatype_model::AssetRef),
-    #[cfg(feature = "unofficial-chat")]
-    /// The Bilibili connection changed.
-    Bilibili(nanatype_bilibili::SessionEvent),
-    #[cfg(feature = "unofficial-chat")]
-    Douyin(nanatype_douyin::SessionEvent),
-    #[cfg(feature = "unofficial-chat")]
-    DouyinRefresh,
-    #[cfg(feature = "unofficial-chat")]
-    DouyinLogout,
-    #[cfg(feature = "unofficial-chat")]
-    DouyinImport(String),
-    #[cfg(feature = "unofficial-chat")]
-    Youtube(nanatype_youtube::SessionEvent),
-    #[cfg(feature = "unofficial-chat")]
-    /// Connect (again) to the configured YouTube stream.
-    YoutubeRefresh,
     Twitch(nanatype_twitch::SessionEvent),
     TwitchLogin,
     TwitchCancelLogin,
@@ -443,24 +427,6 @@ pub enum Msg {
     TwitchSendConfirm(bool),
     TwitchRetry(nanatype_model::LineId),
     TwitchSkipFailed(nanatype_model::LineId),
-    #[cfg(feature = "unofficial-chat")]
-    BilibiliLogin,
-    #[cfg(feature = "unofficial-chat")]
-    BilibiliCancelLogin,
-    #[cfg(feature = "unofficial-chat")]
-    BilibiliRefresh,
-    #[cfg(feature = "unofficial-chat")]
-    BilibiliLogout,
-    #[cfg(feature = "unofficial-chat")]
-    BilibiliOwnRoom,
-    #[cfg(feature = "unofficial-chat")]
-    BilibiliSendToggle,
-    #[cfg(feature = "unofficial-chat")]
-    BilibiliSendConfirm(bool),
-    #[cfg(feature = "unofficial-chat")]
-    BilibiliRetry(nanatype_model::LineId),
-    #[cfg(feature = "unofficial-chat")]
-    BilibiliSkipFailed(nanatype_model::LineId),
     /// The third-party (blivechat protocol) connection reported.
     Blivechat(nanatype_blive::BliveEvent),
     /// The 彗星号 relay reported.

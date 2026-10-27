@@ -488,7 +488,7 @@ diagnostics-crash-notice = NanaType closed unexpectedly last time. You can expor
 about-repository = Official repository
 about-bilibili = Official Bilibili
 about-disclaimer = Third-party notice
-about-disclaimer-body = NanaType is an independent third-party tool. It is not affiliated with, endorsed by or authorised by Bilibili, Douyin or any other platform or its operators. Names and trademarks belong to their respective owners.
+about-disclaimer-body = NanaType is an independent third-party tool and is not affiliated with platform operators. Names and trademarks belong to their respective owners.
 about-custom-skins = Custom skins
 about-custom-skins-body = Contact the developer for a custom skin
 about-contact = Contact the developer
@@ -497,7 +497,7 @@ about-open-link = Open link
 about-expand = Expand
 about-collapse = Collapse
 about-disclaimer-unofficial = Unofficial software
-about-disclaimer-unofficial-hint = Not affiliated with Bilibili, Douyin or other platforms
+about-disclaimer-unofficial-hint = Not affiliated with platform operators
 about-licenses = Open-source licences
 
 ## Onboarding
@@ -527,12 +527,13 @@ err-image = The image could not be read: { $message }
 err-spout = Spout output failed: { $message }
 err-syphon = Syphon output failed: { $message }
 
-# Bilibili
+# Chat panel
 chat-reply = Reply
 chat-at-short = Mention
 chat-style-compact = Compact
 chat-style-history = Bubbles
 chat-panel-style = Chat panel style
+chat-panel = Chat panel
 chat-open-panel = Open chat panel
 chat-replying = Replying to { $name }
 chat-reply-cancel = Cancel reply
@@ -554,7 +555,7 @@ chat-status-retrying = Disconnected, retrying: { $message }
 history-chat = Live chat
 history-chat-show = Show live chat in history
 history-show-quote = Show reply quotes
-int-bilibili-quote-display = Quote replies on the dialogue box
+int-chat-quote-display = Quote replies on the dialogue box
 
 ## wave3-input
 tb-cheatsheet = Markup cheat sheet
@@ -645,9 +646,7 @@ about-fonts-version = Version: { $version }
 about-fonts-license-other = Licence below
 about-design-echo = The Vanilla, Glass, Bubble and Void skins reference designs from sheep-realms/Echo-Live, by Sheep-realms and contributors. NanaType implements and adapts these styles in its local skin format.
 about-design-upstream-license = Upstream licensing
-about-license-project = Original code: MIT. Inherited material keeps its licence. The Bilibili component and combined app also include CC BY-NC 4.0 material, subject to attribution and NonCommercial conditions.
-about-source-api-collect = Original Bilibili protocol documentation by SocialSisterYi and contributors. Adapted live protocol descriptions and WBI material retain CC BY-NC 4.0 attribution and NonCommercial conditions. The original repository is unavailable; a mirror is linked.
-about-source-douyin = WebSocket signing and HTTP a_bogus ported from revision 0e506f3; connection parameters reference the same revision. Copyright (c) 2025 今晚打打.
+about-license-project = Original code: MIT. Third-party dependencies and artwork retain their own licences.
 about-source-key-sounds = The "Mechanical keyboard" keystroke sounds are jim-ph's recordings of a 1986 DOS mechanical keyboard on Freesound, dedicated to the public domain under CC0, as collected by Tickeys.
 about-source-key-sounds-bubble = The "Bubbles" keystroke sounds are recordings by Glaneur de sons on Freesound, licensed under CC BY 3.0, as collected by Tickeys; NanaType ships them unmodified.
 about-source-repository = Source repository
@@ -735,78 +734,6 @@ edit-copy = Copy
 edit-paste = Paste
 edit-select-all = Select all
 
-# Bilibili direct connection and authenticated delivery
-settings-bilibili = Bilibili Live
-bili-account = Bilibili account
-bili-login = Sign in with QR code
-bili-manage = Manage Bilibili Live
-bili-login-needed = Sign in to Bilibili first
-bili-restoring = Checking your session…
-bili-expired = Session expired. Scan to sign in again.
-bili-login-failed = Sign-in unavailable
-bili-qr-waiting = Scan with the Bilibili app
-bili-qr-scanned = Scanned. Confirm on your phone.
-bili-qr-expired = QR code expired
-bili-qr-refresh = Refresh QR code
-bili-refresh = Refresh account
-bili-logout = Sign out
-bili-sync-profile = Use Bilibili name and avatar
-bili-identity-hint = Name and avatar come from your Bilibili account
-bili-room = Target live room
-bili-room-placeholder = Blank uses your own room
-bili-own-room = Use my live room
-bili-connect = Connect
-bili-receive = Receive live chat
-bili-send-section = Typewriter delivery
-bili-send-switch = Send to chat
-bili-send-title = Enable sending to live chat?
-bili-send-warning = Submitted lines will also be sent to this room. Images and stickers are unavailable. Text styling and performances become plain text in chat; long lines are split automatically. Local performances are preserved.
-bili-enable = Enable sending
-bili-images-unavailable = Remove images and stickers and keep readable text before sending to chat.
-bili-panel = Chat panel
-bili-queued = Queued
-bili-sending = Sending
-bili-submitted = Accepted by Bilibili
-bili-failed = Failed
-bili-uncertain = Result unknown; do not resend blindly
-bili-cancelled = Remaining delivery cancelled
-bili-delivery-failed = Chat delivery did not complete
-bili-copy-remaining = Copy unconfirmed text
-bili-retry = Retry unsent parts
-bili-skip-failed = Skip this line and continue
-bili-dedup-unconfirmed = Some messages have no identifier; echo deduplication is unconfirmed
-bili-invalid-room = Enter a positive live room ID, or leave blank to use your own room.
-bili-results = Delivery history
-bili-queue-full = The chat queue is full. This line is shown locally only.
-
-# Douyin live chat
-settings-douyin = Douyin Live
-dy-room = Live room
-dy-room-placeholder = live.douyin.com URL or room ID
-dy-enabled = Receive chat
-dy-connect = Connect / reconnect
-dy-account = Account session
-dy-account-hint = Public rooms need no sign-in; a Cookie is saved only once verified
-dy-logout = Sign out and clear credentials
-dy-import = Verify and import Cookie
-dy-cookie-placeholder = Paste the complete Cookie (optional)
-dy-off = Disconnected
-dy-connecting = Connecting; waiting for live messages
-dy-connected = Connected
-dy-disconnected = Disconnected; click reconnect
-dy-error = Connection failed
-dy-account-ready = Sign-in verified
-dy-account-out = Signed out
-dy-account-unverified = Sign-in not yet verified
-dy-account-expired = Session expired
-dy-invalid-room = Enter a valid Douyin live-room URL or number.
-dy-storage-error = Protected system storage is unavailable. Credentials were not saved.
-dy-clear-error = Could not clear account credentials. Please retry.
-dy-room-offline = This room is offline.
-dy-invalid-frame = Skipped a live message that could not be decoded.
-dy-no-messages = No verifiable live messages were received.
-dy-native-error = Connection failed. Check the network, room status or Cookie, then reconnect.
-dy-diamonds = { $count } Douyin coins
 tb-inherit = Follow skin
 tb-mixed = Mixed
 tb-size-relative = Relative size
@@ -913,25 +840,8 @@ chat-fatal-auth-code = The auth code is not valid; check it and enter it again
 chat-fatal-too-many-retries = Too many retries; try again later
 chat-fatal-too-many-connections = Too many clients connected; try again later
 
-# YouTube live chat
-settings-youtube = YouTube Live
-yt-target = Video or channel
-yt-target-placeholder = https://www.youtube.com/@handle
-yt-enabled = Receive chat
-yt-connect = Connect / reconnect
-yt-off = Disconnected
-yt-resolving = Looking for the channel's live stream
-yt-waiting = Not live yet; checking again every minute
-yt-connecting = Opening the chat
-yt-connected = Connected
-yt-ended = The stream has ended
-yt-disconnected = Disconnected; reconnecting
-yt-error = Connection failed
-yt-invalid-target = Enter a YouTube video or channel address, an @handle or a video id.
-yt-protocol-changed = YouTube's chat page has changed and could not be read. Please update NanaType.
-yt-redirected = YouTube asked for sign-in or consent instead of the chat. Try again later.
-yt-network-error = Could not reach YouTube. Check the network, then reconnect.
-chat-gift-memberships = gifted { $count } memberships
+chat-images-unavailable = Remove images and stickers and keep readable text before sending to chat.
+chat-queue-full = The chat queue is full. This line is shown locally only.
 
 # Twitch live chat
 settings-twitch = Twitch
@@ -966,6 +876,15 @@ tw-send-title = Send lines to Twitch chat?
 tw-send-warning = Every line you send from now on is posted as you to this channel. Images are not sent.
 tw-delivery-failed = Twitch send failed
 tw-submitted = Accepted by Twitch
+tw-queued = Queued
+tw-sending = Sending
+tw-failed = Failed
+tw-uncertain = Result unknown; do not resend blindly
+tw-cancelled = Remaining delivery cancelled
+tw-copy-remaining = Copy unconfirmed text
+tw-retry = Retry unsent parts
+tw-skip-failed = Skip this line and continue
+tw-enable = Enable sending
 
 ## Steam Workshop
 workshop-browse = Browse Workshop

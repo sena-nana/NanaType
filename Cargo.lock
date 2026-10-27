@@ -121,21 +121,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alloc-no-stdlib"
-version = "2.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc7bb162ec39d46ab1ca8c77bf72e890535becd1751bb45f64c597edb4c8c6b3"
-
-[[package]]
-name = "alloc-stdlib"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e76a019e91224d279006ff972f1e984179a6e9feb050adba6ce8274aef23195"
-dependencies = [
- "alloc-no-stdlib",
-]
-
-[[package]]
 name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -604,27 +589,6 @@ checksum = "553c5d846a6ba5150c65e3b1b8ec073bcf1abc20f9b7220de384a4443ea4e20a"
 dependencies = [
  "bytes",
  "cfg_aliases",
-]
-
-[[package]]
-name = "brotli"
-version = "8.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cc91aac060a7a1e25823bdccbfb6af1875b88f17c6daac97894eed8207166b3"
-dependencies = [
- "alloc-no-stdlib",
- "alloc-stdlib",
- "brotli-decompressor",
-]
-
-[[package]]
-name = "brotli-decompressor"
-version = "5.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a32acac15fe1967bc3986b2a6347dffc965602354ea6f450ad07e8bfd253583"
-dependencies = [
- "alloc-no-stdlib",
- "alloc-stdlib",
 ]
 
 [[package]]
@@ -3211,16 +3175,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b"
 
 [[package]]
-name = "md-5"
-version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
-dependencies = [
- "cfg-if",
- "digest 0.10.7",
-]
-
-[[package]]
 name = "md5"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3768,13 +3722,11 @@ dependencies = [
  "nanalive-spout",
  "nanalive-syphon",
  "nanatype-audio",
- "nanatype-bilibili",
  "nanatype-blive",
  "nanatype-bridge",
  "nanatype-chat",
  "nanatype-core",
  "nanatype-diag",
- "nanatype-douyin",
  "nanatype-frame",
  "nanatype-i18n",
  "nanatype-markup",
@@ -3791,7 +3743,6 @@ dependencies = [
  "nanatype-theme",
  "nanatype-twitch",
  "nanatype-update",
- "nanatype-youtube",
  "notify",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
@@ -3823,24 +3774,6 @@ dependencies = [
  "cpal",
  "crossbeam-channel",
  "symphonia",
-]
-
-[[package]]
-name = "nanatype-bilibili"
-version = "0.1.0"
-dependencies = [
- "brotli",
- "crossbeam-channel",
- "flate2",
- "md-5",
- "nanatype-chat",
- "nanatype-model",
- "nanatype-secrets",
- "serde",
- "serde_json",
- "tempfile",
- "tungstenite",
- "ureq",
 ]
 
 [[package]]
@@ -3892,25 +3825,6 @@ version = "0.1.0"
 dependencies = [
  "log",
  "nana-diagnostics",
-]
-
-[[package]]
-name = "nanatype-douyin"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "crossbeam-channel",
- "flate2",
- "getrandom 0.4.3",
- "md-5",
- "nanatype-secrets",
- "prost",
- "serde_json",
- "sm3",
- "tempfile",
- "tungstenite",
- "ureq",
- "url",
 ]
 
 [[package]]
@@ -4164,17 +4078,6 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "ureq",
-]
-
-[[package]]
-name = "nanatype-youtube"
-version = "0.1.0"
-dependencies = [
- "crossbeam-channel",
- "nanatype-model",
- "serde_json",
- "ureq",
- "url",
 ]
 
 [[package]]
@@ -5091,29 +4994,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "prost"
-version = "0.14.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "528ac67416ff8646872a3c02cad9cc4ee5dc9f9540c9b10771855c95cb2e5ae1"
-dependencies = [
- "bytes",
- "prost-derive",
-]
-
-[[package]]
-name = "prost-derive"
-version = "0.14.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
-dependencies = [
- "anyhow",
- "itertools 0.14.0",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "pulley-interpreter"
 version = "49.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5875,15 +5755,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bdd58c3c93c3d278ca835519292445cb4b0d4dc59ccfdf7ceadaab3f8aeb4038"
 dependencies = [
  "version_check",
-]
-
-[[package]]
-name = "sm3"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebb9a3b702d0a7e33bc4d85a14456633d2b165c2ad839c5fd9a8417c1ab15860"
-dependencies = [
- "digest 0.10.7",
 ]
 
 [[package]]

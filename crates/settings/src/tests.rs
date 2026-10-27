@@ -136,34 +136,34 @@ fn legacy_layout_adjust_migrates_to_interactive() {
 }
 
 #[test]
-fn douyin_defaults_off_and_never_serializes_session_credentials() {
-    let mut settings: Settings =
-        serde_json::from_str(r#"{"schema":2,"integrations":{"bilibili":{"room":"42"}}}"#).unwrap();
-    assert!(!settings.integrations.douyin.enabled);
-    settings.sanitize();
-    assert_eq!(settings.integrations.bilibili.room, "42");
-    let value = serde_json::to_value(settings).unwrap();
-    assert!(value["integrations"]["douyin"].get("cookie").is_none());
-}
-
-#[test]
-fn retired_douyin_browser_settings_load_as_native_without_losing_room_or_other_settings() {
-    for backend in ["auto", "browser", "native", "unknown"] {
-        let value = serde_json::json!({"schema":2,"integrations":{
-            "douyin":{"enabled":true,"room":" 694562812381 ","backend":backend,"browser":"C:/old/edge.exe"},
-            "bilibili":{"room":"42"}
-        }});
-        let mut settings: Settings = serde_json::from_value(value).unwrap();
-        settings.sanitize();
-        assert!(settings.integrations.douyin.enabled);
-        assert_eq!(settings.integrations.douyin.room, "694562812381");
-        assert_eq!(settings.integrations.bilibili.room, "42");
-        let saved = serde_json::to_value(settings).unwrap();
-        assert_eq!(
-            saved["integrations"]["douyin"],
-            serde_json::json!({"enabled":true,"room":"694562812381"})
-        );
-    }
+fn retired_direct_chat_settings_are_dropped_but_panel_settings_survive() {
+    let mut value = serde_json::json!({
+        "schema": 3,
+        "integrations": {
+            "bilibili": {
+                "enabled": true,
+                "room": "42",
+                "sync_profile": true,
+                "panel_style": "history",
+                "panel_open": true,
+                "panel": {"gift": false}
+            },
+            "douyin": {"enabled": true, "room": "694562812381"},
+            "youtube": {"enabled": true, "target": "@nana"}
+        }
+    });
+    assert_eq!(migrate(&mut value).unwrap(), 3);
+    let settings: Settings = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(
+        settings.integrations.chat.panel_style,
+        ChatPanelStyle::History
+    );
+    assert!(settings.integrations.chat.panel_open);
+    assert!(!settings.integrations.chat.panel.gift);
+    let saved = serde_json::to_value(settings).unwrap();
+    assert!(saved["integrations"].get("bilibili").is_none());
+    assert!(saved["integrations"].get("douyin").is_none());
+    assert!(saved["integrations"].get("youtube").is_none());
 }
 
 const V0: &str = r#"{
@@ -200,7 +200,7 @@ fn input_skin_preview_defaults_to_plain_text_and_survives_restart() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("settings.json");
     let old: Settings =
-        serde_json::from_str(r#"{"schema":3,"general":{"speaker_name":"奈奈"}}"#).unwrap();
+        serde_json::from_str(r#"{"schema":4,"general":{"speaker_name":"奈奈"}}"#).unwrap();
     assert!(!old.general.input_skin_preview);
     let mut settings = old;
     for preview in [true, false] {
@@ -218,16 +218,16 @@ fn legacy_chat_preferences_migrate_without_service_or_auth_code() {
         assert_eq!(migrate(&mut value).unwrap(), 1);
         let settings: Settings = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(settings.schema, SETTINGS_SCHEMA);
-        assert_eq!(settings.integrations.bilibili.room, expected);
+        assert_eq!(settings.integrations.blivechat.room_id, expected);
         assert_eq!(
-            settings.integrations.bilibili.panel_style,
+            settings.integrations.chat.panel_style,
             ChatPanelStyle::History
         );
-        assert!(settings.integrations.bilibili.panel_open);
-        assert!(!settings.integrations.bilibili.panel.gift);
-        assert!(!settings.integrations.bilibili.sync_profile);
-        assert!(value["integrations"].get("blivechat").is_none());
-        assert!(value["integrations"]["bilibili"].get("host").is_none());
+        assert!(settings.integrations.chat.panel_open);
+        assert!(!settings.integrations.chat.panel.gift);
+        assert!(settings.integrations.blivechat.enabled);
+        assert_eq!(settings.integrations.blivechat.host, "127.0.0.1");
+        assert!(value["integrations"].get("bilibili").is_none());
         assert!(
             !serde_json::to_string(&value)
                 .unwrap()
@@ -239,12 +239,9 @@ fn legacy_chat_preferences_migrate_without_service_or_auth_code() {
 #[test]
 fn chat_panel_style_defaults_and_round_trips_without_a_schema_change() {
     let old: Settings =
-        serde_json::from_str(r#"{"schema":1,"integrations":{"bilibili":{"panel_open":true}}}"#)
+        serde_json::from_str(r#"{"schema":4,"integrations":{"chat":{"panel_open":true}}}"#)
             .unwrap();
-    assert_eq!(
-        old.integrations.bilibili.panel_style,
-        ChatPanelStyle::Compact
-    );
+    assert_eq!(old.integrations.chat.panel_style, ChatPanelStyle::Compact);
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("settings.json");
     for (style, wire) in [
@@ -252,13 +249,13 @@ fn chat_panel_style_defaults_and_round_trips_without_a_schema_change() {
         (ChatPanelStyle::History, "history"),
     ] {
         let mut settings = old.clone();
-        settings.integrations.bilibili.panel_style = style;
+        settings.integrations.chat.panel_style = style;
         save_json(&path, &settings).unwrap();
         let json: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        assert_eq!(json["integrations"]["bilibili"]["panel_style"], wire);
+        assert_eq!(json["integrations"]["chat"]["panel_style"], wire);
         let loaded = load_settings(&path, None).value;
-        assert_eq!(loaded.integrations.bilibili.panel_style, style);
-        assert!(loaded.integrations.bilibili.panel_open);
+        assert_eq!(loaded.integrations.chat.panel_style, style);
+        assert!(loaded.integrations.chat.panel_open);
         assert_eq!(loaded.schema, SETTINGS_SCHEMA);
     }
 }
@@ -400,13 +397,10 @@ fn missing_fields_take_defaults_instead_of_resetting_everything() {
 }
 
 #[test]
-fn files_from_before_bilibili_get_its_defaults() {
+fn files_from_before_chat_settings_get_their_defaults() {
     let json = r#"{"schema": 1, "integrations": {"osc": {"enabled": true}}}"#;
     let s: Settings = serde_json::from_str(json).unwrap();
-    let b = &s.integrations.bilibili;
-    assert!(b.enabled);
-    assert!(!b.sync_profile);
-    assert!(b.room.is_empty());
+    let b = &s.integrations.chat;
     assert!(b.quote_on_display && b.panel.text && b.panel.gift);
     assert!(
         !s.history.chat.enabled,
@@ -420,15 +414,11 @@ fn files_from_before_bilibili_get_its_defaults() {
 }
 
 #[test]
-fn bilibili_values_are_clamped() {
+fn blivechat_values_are_clamped() {
     let mut s = Settings::default();
-    let b = &mut s.integrations.bilibili;
-
-    b.room = " 123 ".into();
+    s.integrations.blivechat.room_id = " 123 ".into();
     assert!(s.sanitize());
-    let b = &s.integrations.bilibili;
-    assert!(!b.sync_profile);
-    assert_eq!(b.room, "123");
+    assert_eq!(s.integrations.blivechat.room_id, "123");
 }
 
 #[test]

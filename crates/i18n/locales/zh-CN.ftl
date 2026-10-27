@@ -27,7 +27,7 @@ history-placeholder = 历史记录会显示在这里 · 锁定窗口后隐藏此
 ## 通用
 common-cancel = 取消
 
-# Bilibili
+# Chat panel
 history-role-host = 主播
 history-role-viewer = 观众
 

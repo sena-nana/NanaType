@@ -1,14 +1,12 @@
 //! What a link's state says, in the viewer's language.
 //!
-//! The VTube Studio, OSC and WebSocket clients, Bilibili and the Spout2
+//! The VTube Studio, OSC and WebSocket clients, chat relays and the Spout2
 //! output report typed states ([`LinkFault`], [`BridgeStatus`],
 //! [`ConnectionState`], [`WindowOutputStatus`]); these turn them into the text
 //! the settings pages and the chat panel show. The app and the snapshots
 //! both go through here, so what a screenshot shows is what users read.
 
 use nana_ui::WindowOutputStatus;
-#[cfg(feature = "unofficial-chat")]
-use nanatype_bilibili::ConnectionState;
 use nanatype_blive::{BliveStatus, FatalKind, RelayStatus};
 use nanatype_bridge::{BridgeStatus, Sink};
 use nanatype_i18n::Locale;
@@ -75,34 +73,6 @@ pub fn bridge(locale: Locale, status: &BridgeStatus) -> Option<(Sink, LinkState)
         ),
         BridgeStatus::VtsToken(_) | BridgeStatus::VtsHotkeys(_) => return None,
     })
-}
-
-/// Bilibili's status line and the chat panel's dot for `status` in `room`.
-#[cfg(feature = "unofficial-chat")]
-pub fn bilibili(locale: Locale, status: &ConnectionState, _room: &str) -> (String, Link) {
-    match status {
-        ConnectionState::Off => (I18N.t_in(locale, "int-status-off"), Link::Off),
-        ConnectionState::NeedsLogin => (I18N.t_in(locale, "bili-login-needed"), Link::Off),
-        ConnectionState::Connecting => {
-            (I18N.t_in(locale, "int-status-connecting"), Link::Connecting)
-        }
-        ConnectionState::Connected(room) => (format!("Bilibili · {}", room.id), Link::Connected),
-        ConnectionState::Error(message) => (
-            I18N.tr_in(
-                locale,
-                "chat-status-retrying",
-                &[(
-                    "message",
-                    if message.is_empty() {
-                        fault(locale, &LinkFault::Closed).into()
-                    } else {
-                        message.clone().into()
-                    },
-                )],
-            ),
-            Link::Error,
-        ),
-    }
 }
 
 /// blivechat's status line and the chat panel's dot for `status` in `room`.
@@ -256,21 +226,6 @@ mod tests {
                 texts.push(t);
             }
 
-            #[cfg(feature = "unofficial-chat")]
-            for state in [
-                ConnectionState::Off,
-                ConnectionState::NeedsLogin,
-                ConnectionState::Connecting,
-                ConnectionState::Connected(nanatype_bilibili::Room {
-                    id: 1,
-                    owner: 1,
-                    title: String::new(),
-                    max_chars: 20,
-                }),
-                ConnectionState::Error(String::new()),
-            ] {
-                texts.push(bilibili(locale, &state, "").0);
-            }
             let fatals = [
                 FatalKind::AuthCode,
                 FatalKind::TooManyRetries,

@@ -68,7 +68,7 @@ nana-nlog text <文件.nlog> --redact-home
 | `0x0101` | `settings.` | 预留 |
 | `0x0102` | `output.` | Spout/Syphon、窗口输出状态、VTS/OSC/WebSocket 桥接 |
 | `0x0103` | `chat.` | 聊天图片等共用部分 |
-| `0x0104`–`0x0107` | `bilibili.` `douyin.` `youtube.` `twitch.` | 连接（1）、连接错误（2）、账号（3）、账号失败（4）、警告（5）、发送失败（6）、收到的聊天事件计数（指标 50）；编号 100 起为各 crate 自己的重试与失败 |
+| `0x0107` | `twitch.` | 连接（1）、连接错误（2）、账号（3）、账号失败（4）、警告（5）、发送失败（6）、收到的聊天事件计数（指标 50） |
 | `0x0108` | `p2p.` | 端点、中继上线、资源传输 |
 | `0x0109` | `plugins.` | worker 就绪耗时、失败（附 stderr 尾部）、脚本错误 |
 | `0x010A` | `plugin_log.` | 插件用 `nana.log` 写的行 |

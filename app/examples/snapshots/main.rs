@@ -43,8 +43,8 @@ use nanatype::chat::{ChatKind, ChatMessage};
 use nanatype::ui::{
     LinkState, Status, StickerRow, Ui, danmaku, dialogue, history, input, link_text, settings,
 };
-use nanatype_bilibili::{ConnectionState, Guard};
 use nanatype_bridge::{BridgeStatus, Sink};
+use nanatype_chat::Guard;
 use nanatype_core::{Cmd, Core};
 use nanatype_i18n::Locale;
 use nanatype_markup::parse;

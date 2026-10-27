@@ -35,12 +35,12 @@ pub(crate) fn chat_panel_style(ui: Ui) -> AnyView {
                 ("history", "chat-style-history"),
             ],
         ),
-        |s| match s.integrations.bilibili.panel_style {
+        |s| match s.integrations.chat.panel_style {
             ChatPanelStyle::Compact => "compact".into(),
             ChatPanelStyle::History => "history".into(),
         },
         |s, v| {
-            s.integrations.bilibili.panel_style = match v {
+            s.integrations.chat.panel_style = match v {
                 "history" => ChatPanelStyle::History,
                 _ => ChatPanelStyle::Compact,
             }

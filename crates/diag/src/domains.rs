@@ -8,10 +8,7 @@ pub const SETTINGS: Domain = Domain(0x0101);
 /// Spout, Syphon, OBS and VTube Studio.
 pub const OUTPUT: Domain = Domain(0x0102);
 pub const CHAT: Domain = Domain(0x0103);
-/// Bilibili web danmaku and blivechat.
-pub const BILIBILI: Domain = Domain(0x0104);
-pub const DOUYIN: Domain = Domain(0x0105);
-pub const YOUTUBE: Domain = Domain(0x0106);
+/// Twitch live chat. The numeric id remains stable for existing logs.
 pub const TWITCH: Domain = Domain(0x0107);
 pub const P2P: Domain = Domain(0x0108);
 pub const PLUGINS: Domain = Domain(0x0109);
@@ -32,9 +29,6 @@ pub const ALL: &[(Domain, &str)] = &[
     (SETTINGS, "settings."),
     (OUTPUT, "output."),
     (CHAT, "chat."),
-    (BILIBILI, "bilibili."),
-    (DOUYIN, "douyin."),
-    (YOUTUBE, "youtube."),
     (TWITCH, "twitch."),
     (P2P, "p2p."),
     (PLUGINS, "plugins."),

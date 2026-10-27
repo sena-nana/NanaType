@@ -55,9 +55,6 @@ impl App {
                 self.update(Msg::SettingsPage(crate::ui::settings::Page::Platforms));
             }
             Msg::SettingsPage(page) => {
-                let on_bilibili = page == crate::ui::settings::Page::Platforms
-                    && self.ui.platform_tab.get_untracked() == crate::chat::Platform::Bilibili;
-                self.unofficial_page_left(on_bilibili);
                 self.ui.page.set(page);
                 self.open_settings();
             }

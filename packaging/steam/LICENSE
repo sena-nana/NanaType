@@ -4,11 +4,8 @@ NanaType licensing (Steam edition)
 Original NanaType code is licensed under the MIT License; see LICENSE-MIT.
 Copyright (c) 2026 Sena.
 
-The Steam edition is built without the Bilibili web, Douyin and YouTube chat
-sources (the `unofficial-chat` feature), so it contains neither the
-CC-BY-NC-4.0 Bilibili protocol material nor the Douyin signing code that
-the GitHub release carries. It links the Steamworks SDK's redistributable
-steam_api library, distributed under the Steamworks SDK Access Agreement.
+The Steam edition links the Steamworks SDK's redistributable steam_api library,
+distributed under the Steamworks SDK Access Agreement.
 
 Other dependencies, fonts and artwork retain their respective licences.
 See THIRD_PARTY_NOTICES.md for sources, scope and licence-file locations.

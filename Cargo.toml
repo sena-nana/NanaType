@@ -12,11 +12,8 @@ members = [
     "crates/speech",
     "crates/bridge",
     "crates/chat",
-    "crates/bilibili",
     "crates/blive",
     "crates/obs",
-    "crates/douyin",
-    "crates/youtube",
     "crates/twitch",
     "crates/core",
     "crates/p2p",
@@ -50,11 +47,8 @@ nanatype-audio = { path = "crates/audio" }
 nanatype-speech = { path = "crates/speech" }
 nanatype-bridge = { path = "crates/bridge" }
 nanatype-chat = { path = "crates/chat" }
-nanatype-bilibili = { path = "crates/bilibili" }
 nanatype-blive = { path = "crates/blive" }
 nanatype-obs = { path = "crates/obs" }
-nanatype-douyin = { path = "crates/douyin" }
-nanatype-youtube = { path = "crates/youtube" }
 nanatype-twitch = { path = "crates/twitch" }
 nanatype-core = { path = "crates/core" }
 nanatype-p2p = { path = "crates/p2p" }

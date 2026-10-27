@@ -27,7 +27,7 @@ history-placeholder = Chat history appears here · this outline hides once the w
 ## Common
 common-cancel = Cancel
 
-# Bilibili
+# Chat panel
 history-role-host = Host
 history-role-viewer = Viewer
 

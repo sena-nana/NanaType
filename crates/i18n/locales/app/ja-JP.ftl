@@ -482,7 +482,7 @@ diagnostics-crash-notice = 前回 NanaType が異常終了しました。「設�
 about-repository = 公式リポジトリ
 about-bilibili = 公式 bilibili
 about-disclaimer = 第三者に関する声明
-about-disclaimer-body = NanaType は独立して開発されたサードパーティ製ツールであり、bilibili、抖音（Douyin）などのプラットフォームおよびその運営者とは一切関係がなく、承認や許可も受けていません。各名称および商標はそれぞれの権利者に帰属します。
+about-disclaimer-body = NanaType は独立して開発されたサードパーティ製ツールであり、プラットフォーム運営者とは関係がありません。各名称および商標はそれぞれの権利者に帰属します。
 about-custom-skins = スキンのカスタマイズ
 about-custom-skins-body = カスタムスキンは開発者にご相談ください
 about-contact = 開発者に連絡
@@ -491,7 +491,7 @@ about-open-link = リンクを開く
 about-expand = 展開
 about-collapse = 折りたたむ
 about-disclaimer-unofficial = 非公式ソフトウェア
-about-disclaimer-unofficial-hint = bilibili、抖音などのプラットフォームとは関係ありません
+about-disclaimer-unofficial-hint = プラットフォーム運営者とは関係ありません
 about-licenses = オープンソースライセンス
 
 ## 初回起動
@@ -521,12 +521,13 @@ err-image = 画像を読み込めません：{ $message }
 err-spout = Spout 出力に失敗しました：{ $message }
 err-syphon = Syphon 出力に失敗しました：{ $message }
 
-# Bilibili
+# Chat panel
 chat-reply = 返信
 chat-at-short = メンション
 chat-style-compact = コンパクト
 chat-style-history = 吹き出し
 chat-panel-style = 操作パネルのスタイル
+chat-panel = コメントパネル
 chat-open-panel = コメントパネルを開く
 chat-replying = { $name } に返信
 chat-reply-cancel = 返信をやめる
@@ -548,7 +549,7 @@ chat-status-retrying = 切断されました。再接続中：{ $message }
 history-chat = コメント
 history-chat-show = 履歴にコメントを表示
 history-show-quote = 返信の引用を表示
-int-bilibili-quote-display = ダイアログに返信の引用を表示
+int-chat-quote-display = ダイアログに返信の引用を表示
 
 ## wave3-input
 tb-cheatsheet = マークアップ早見表
@@ -639,9 +640,7 @@ about-fonts-version = バージョン：{ $version }
 about-fonts-license-other = ライセンスは下記のとおり
 about-design-echo = オリジナル、ガラス、気泡、虚空の4種類のスキンは、Sheep-realms と貢献者による sheep-realms/Echo-Live のデザインを参考にしています。NanaType のスキン形式で実装・調整しています。
 about-design-upstream-license = 原プロジェクトのライセンス
-about-license-project = 独自コードは MIT。継承した資料は元のライセンスを維持します。Bilibili コンポーネントとアプリ全体には CC BY-NC 4.0 の資料も含まれ、表示と非営利条件が適用されます。
-about-source-api-collect = Bilibili 通信仕様の元の出典：SocialSisterYi と貢献者。調整したライブ通信仕様と WBI 資料には CC BY-NC 4.0 の表示と非営利条件を維持します。元のリポジトリは現在利用できないため、ミラーも掲載しています。
-about-source-douyin = リビジョン 0e506f3 の WebSocket 署名と HTTP a_bogus を移植し、接続パラメーターも参照しています。Copyright (c) 2025 今晚打打。
+about-license-project = 独自コードは MIT。依存関係とアートワークは各自のライセンスに従います。
 about-source-key-sounds = 「メカニカルキーボード」のキー音は jim-ph が Freesound で公開した 1986 年製 DOS メカニカルキーボードの録音です。CC0 でパブリックドメインに提供され、Tickeys に収録されています。
 about-source-key-sounds-bubble = 「泡」のキー音は Glaneur de sons が Freesound で公開した録音で、CC BY 3.0 で提供され、Tickeys に収録されています。NanaType は改変せずに同梱しています。
 about-source-repository = 出典リポジトリ
@@ -729,78 +728,6 @@ edit-copy = コピー
 edit-paste = 貼り付け
 edit-select-all = すべて選択
 
-# Bilibili direct connection and authenticated delivery
-settings-bilibili = Bilibili ライブ
-bili-account = Bilibili アカウント
-bili-login = QR コードでログイン
-bili-manage = Bilibili ライブの管理
-bili-login-needed = 先に Bilibili にログインしてください
-bili-restoring = ログイン状態を確認中…
-bili-expired = ログインが失効しました。再度スキャンしてください
-bili-login-failed = ログインを利用できません
-bili-qr-waiting = Bilibili アプリでスキャンしてください
-bili-qr-scanned = スキャン済み。スマートフォンで確認してください
-bili-qr-expired = QR コードの有効期限が切れました
-bili-qr-refresh = QR コードを更新
-bili-refresh = アカウント情報を更新
-bili-logout = ログアウト
-bili-sync-profile = Bilibili の名前とアイコンを使用
-bili-identity-hint = 名前とアイコンは Bilibili アカウントのものです
-bili-room = 接続先の配信ルーム
-bili-room-placeholder = 空欄で自分のルームを使用
-bili-own-room = 自分の配信ルームを使用
-bili-connect = 接続
-bili-receive = コメントを受信
-bili-send-section = セリフの同期送信
-bili-send-switch = コメント同期
-bili-send-title = コメントへの同期送信を有効にしますか？
-bili-send-warning = 確定したセリフをこのルームにも送信します。画像とスタンプは使用できません。装飾や演出はコメントではプレーンテキストになり、長文は自動で分割します。ローカルの演出は保持されます。
-bili-enable = 同期を有効化
-bili-images-unavailable = コメント同期中は画像やスタンプを削除し、読める文字を入力してください。
-bili-panel = コメントパネル
-bili-queued = 送信待ち
-bili-sending = 送信中
-bili-submitted = Bilibili が受け付けました
-bili-failed = 送信失敗
-bili-uncertain = 結果不明。すぐに再送しないでください
-bili-cancelled = 残りの送信をキャンセル
-bili-delivery-failed = コメントの同期を完了できませんでした
-bili-copy-remaining = 送信未確認の文字をコピー
-bili-retry = 未送信部分を再試行
-bili-skip-failed = このセリフをスキップして続行
-bili-dedup-unconfirmed = 一部のメッセージに識別子がなく、重複除去を確認できません
-bili-invalid-room = 正の整数のルーム ID を入力するか、空欄で自分のルームを使用してください。
-bili-results = 送信履歴
-bili-queue-full = 送信待ちが上限に達しました。このセリフはローカルでのみ表示します。
-
-# Douyin live chat
-settings-douyin = 抖音ライブ
-dy-room = 配信ルーム
-dy-room-placeholder = live.douyin.com の URL またはルーム ID
-dy-enabled = コメントを受信
-dy-connect = 接続 / 再接続
-dy-account = ログイン情報
-dy-account-hint = 公開ルームはログイン不要です。Cookie は検証後にのみ保存されます
-dy-logout = ログアウトして認証情報を消去
-dy-import = Cookie を検証して取り込む
-dy-cookie-placeholder = Cookie 全体を貼り付け（任意）
-dy-off = 未接続
-dy-connecting = 接続中・配信メッセージを待機
-dy-connected = 接続済み
-dy-disconnected = 切断されました。再接続してください
-dy-error = 接続失敗
-dy-account-ready = ログイン確認済み
-dy-account-out = 未ログイン
-dy-account-unverified = ログイン状態は未確認
-dy-account-expired = セッション期限切れ
-dy-invalid-room = 有効な抖音ライブ URL またはルーム番号を入力してください。
-dy-storage-error = 保護された保存領域を利用できず、認証情報は保存されませんでした。
-dy-clear-error = 認証情報を消去できませんでした。再試行してください。
-dy-room-offline = このルームは配信していません。
-dy-invalid-frame = 解析できない配信メッセージをスキップしました。
-dy-no-messages = 検証できる配信メッセージを受信できませんでした。
-dy-native-error = 接続に失敗しました。ネットワーク、配信状況、Cookie を確認して再接続してください。
-dy-diamonds = { $count } 抖音コイン
 tb-inherit = スキンに従う
 tb-mixed = 混在
 tb-size-relative = 相対サイズ
@@ -907,25 +834,8 @@ chat-fatal-auth-code = 認証コードが無効です。確認してもう一度
 chat-fatal-too-many-retries = 再試行が多すぎます。しばらくしてから接続します
 chat-fatal-too-many-connections = 接続中のクライアントが多すぎます。しばらくしてから接続します
 
-# YouTube live chat
-settings-youtube = YouTube Live
-yt-target = 動画またはチャンネル
-yt-target-placeholder = https://www.youtube.com/@handle
-yt-enabled = チャットを受信
-yt-connect = 接続 / 再接続
-yt-off = 未接続
-yt-resolving = チャンネルのライブ配信を探しています
-yt-waiting = まだ配信していません。1 分ごとに確認します
-yt-connecting = チャットを開いています
-yt-connected = 接続済み
-yt-ended = 配信は終了しました
-yt-disconnected = 切断されました。再接続しています
-yt-error = 接続に失敗しました
-yt-invalid-target = YouTube の動画またはチャンネルのアドレス、@ハンドル、動画 ID を入力してください。
-yt-protocol-changed = YouTube のチャットページが変更され、読み取れませんでした。NanaType を更新してください。
-yt-redirected = YouTube がチャットの代わりにログインまたは同意を求めました。しばらくしてから再試行してください。
-yt-network-error = YouTube に接続できません。ネットワークを確認してから再接続してください。
-chat-gift-memberships = メンバーシップを { $count } 件ギフト
+chat-images-unavailable = チャット送信中は画像やスタンプを削除し、読める文字を入力してください。
+chat-queue-full = チャットの送信待ちが上限に達しました。このセリフはローカルにのみ表示されます。
 
 # Twitch live chat
 settings-twitch = Twitch
@@ -960,6 +870,15 @@ tw-send-title = セリフを Twitch チャットに送信しますか？
 tw-send-warning = これから送信するセリフはすべて、あなたとしてこのチャンネルに投稿されます。画像は送信されません。
 tw-delivery-failed = Twitch への送信に失敗しました
 tw-submitted = Twitch が受け付けました
+tw-queued = 送信待ち
+tw-sending = 送信中
+tw-failed = 送信失敗
+tw-uncertain = 結果不明。すぐに再送しないでください
+tw-cancelled = 残りの送信をキャンセル
+tw-copy-remaining = 送信未確認の文字をコピー
+tw-retry = 未送信部分を再試行
+tw-skip-failed = このセリフをスキップして続行
+tw-enable = 送信を有効化
 
 ## Steam ワークショップ
 workshop-browse = ワークショップを見る

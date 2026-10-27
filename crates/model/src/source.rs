@@ -1,7 +1,7 @@
 //! Message sources feeding the history list.
 //!
-//! The local typewriter is one source; live-platform chat (Bilibili danmaku
-//! through the authenticated live connection) is another. Both arrive as [`HistoryItem`]s, so the
+//! The local typewriter is one source; live-platform chat is another. Both
+//! arrive as [`HistoryItem`]s, so the
 //! history view does not care where a row came from.
 
 use serde::{Deserialize, Serialize};

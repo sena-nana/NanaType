@@ -3,7 +3,7 @@
 //! Text messages are positional arrays that grew over versions (16 fields in
 //! v1.7, 19 in v1.10); gifts, memberships and Super Chats are objects. Every
 //! field is read leniently, so a newer or older server never drops a message.
-//! The events are the Bilibili crate's own [`ChatEvent`]s, so chat from
+//! The events use the shared [`ChatEvent`] shape, so chat from
 //! blivechat reaches the panel the same way as chat read directly.
 
 use serde_json::{Value, json};
@@ -52,7 +52,7 @@ impl RoomKey {
 }
 
 pub use nanatype_chat::{Author, ChatEvent, Guard};
-// The same lenient field readers as the Bilibili parser: both feed one panel.
+// The same lenient field readers as the relay protocol uses for its panel.
 pub(crate) use nanatype_chat::{int, millis, string, url};
 
 /// Why blivechat gave up on a room (`FATAL_ERROR`).

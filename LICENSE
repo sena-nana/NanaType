@@ -4,17 +4,5 @@ NanaType licensing
 Original NanaType code is licensed under the MIT License; see LICENSE-MIT.
 Copyright (c) 2026 Sena.
 
-Third-party material retains its own licence and attribution:
-
-- Bilibili protocol documentation, adapted protocol comments and WBI
-  material from SocialSisterYi/bilibili-API-collect and its contributors:
-  CC-BY-NC-4.0. See crates/bilibili/LICENSE-API-COLLECT and
-  crates/bilibili/NOTICE.md. The MIT grant does not replace this licence
-  or its NonCommercial condition for that material.
-- Douyin signing adapted from jwwsjlm/douyinLive:
-  MIT, Copyright (c) 2025 今晚打打. See crates/douyin/LICENSE-DOUYINLIVE.
-
-The Bilibili crate and the combined application are declared as
-MIT AND CC-BY-NC-4.0 to retain both sets of obligations for included material.
 Other dependencies, fonts and artwork retain their respective licences.
-See THIRD_PARTY_NOTICES.md for sources, scope and licence-file locations.
+See THIRD_PARTY_NOTICES.md for source and licence-file locations.

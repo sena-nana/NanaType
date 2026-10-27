@@ -8,8 +8,6 @@ below identify those sections:
 | File | What |
 | --- | --- |
 | `LICENSE`, `LICENSE-MIT` | NanaType licensing scope and MIT licence for original code |
-| `Bilibili-API-collect-CC-BY-NC-4.0.txt`, `Bilibili-NOTICE.md` | Original Bilibili protocol documentation source, attribution and inherited material scope |
-| `DouyinLive-MIT.txt` | Douyin signing source, Copyright (c) 2025 今晚打打 |
 | `FusionPixel12pxProportionalSC.LICENSE.txt`, `LXGWWenKai-Regular.LICENSE.txt`, `Tangerine-Bold.LICENSE.txt` | The fonts embedded for the built-in skins (also on the About page under "Open-source fonts"); Tangerine by Toshi Omagari, OFL-1.1 |
 | `NotoSansSC-OFL.txt` | NanaUI's interface font |
 | `KeySounds-CC0.txt`, `KeySounds-Bubble-CC-BY-3.0.txt` | The input window's keystroke sounds (mechanical keyboard, CC0 1.0; bubbles, CC BY 3.0), with their provenance |
@@ -29,46 +27,6 @@ the Syphon Framework's BSD-3-Clause licence, and the Metal server's millumin
 copyright and redistribution terms are included from the crate's
 `THIRD_PARTY_NOTICES.txt` in the `rust-crates.txt` section of
 `Contents/Resources/THIRD_PARTY_LICENSES.txt`.
-
-<!-- unofficial-chat:begin (left out of the Steam edition; see docs/steam.md) -->
-
-## Bilibili protocol code
-
-The Bilibili live protocol documentation and WBI material come from
-[SocialSisterYi/bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect)
-and its contributors, under **CC-BY-NC-4.0**, preserved by the accessible
-[bilibili-plugins mirror](https://github.com/bilibili-plugins/bilibili-api-collect).
-The inherited protocol comments and WBI material are adapted for NanaType;
-they retain the upstream attribution, NonCommercial condition and disclaimer,
-and are not covered by the MIT grant for original code. Full licence:
-`crates/bilibili/LICENSE-API-COLLECT`, shipped as
-`licenses/Bilibili-API-collect-CC-BY-NC-4.0.txt`.
-See [crates/bilibili/NOTICE.md](crates/bilibili/NOTICE.md) (shipped as
-`licenses/Bilibili-NOTICE.md`) for specific documents and the scope of changes.
-The Bilibili crate and combined application declare `MIT AND CC-BY-NC-4.0`.
-
-These interfaces and signing rules are sourced from existing community projects;
-NanaType handles integration, porting and adaptation.
-
-## Douyin native signing
-
-The compact WebSocket signature and HTTP a_bogus byte layout in
-`crates/douyin/src/signing.rs` are adapted into Rust from
-[jwwsjlm/douyinLive](https://github.com/jwwsjlm/douyinLive), commit
-`0e506f3cf935beede946296602af2e52d57ecea2`, specifically
-`internal/webcastsign/native.go` and `sign/ab_sign.go`.
-Copyright (c) 2025 今晚打打, MIT License. The full license ships as
-`licenses/DouyinLive-MIT.txt` (source copy: `crates/douyin/LICENSE-DOUYINLIVE`).
-The corresponding fixed WebSocket test vectors are attributed to
-`internal/webcastsign/native_test.go` at the same revision.
-The native connection parameter values and default push endpoint were also
-checked against `websocket_params.go` and `constants.go` at that revision;
-the Rust HTTP/WebSocket and reconnect implementation is maintained locally.
-
-No dycast source, generated decoder, or extracted platform SDK is bundled.
-Douyin connections, heartbeats, acknowledgements and decoding run in Rust.
-
-<!-- unofficial-chat:end -->
 
 ## Telegram stickers
 
@@ -177,9 +135,7 @@ Licence text: `KeySounds-Bubble-CC-BY-3.0.txt`.
 The Steam edition ships Valve's `steam_api64.dll` (Windows) or
 `libsteam_api.dylib` (macOS) from the Steamworks SDK, through
 [steamworks-rs](https://github.com/Noxime/steamworks-rs) (MIT OR Apache-2.0),
-redistributed under the Steamworks SDK Access Agreement. It is built without
-the Bilibili web, Douyin and YouTube chat sources, so the sections marked for
-them above, and their licence files, are not part of it.
+redistributed under the Steamworks SDK Access Agreement.
 
 ## DirectX Shader Compiler
 
@@ -201,7 +157,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 516 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 508 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -221,14 +177,12 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - adler2 2.0.1 — <https://github.com/oyvindln/adler2>
 
-### Apache-2.0 (12)
+### Apache-2.0 (10)
 
 - calendrical_calculations 0.2.4 — <https://github.com/unicode-org/icu4x>
 - codespan-reporting 0.13.1 — <https://github.com/brendanzab/codespan>
 - cpal 0.18.2 — <https://github.com/RustAudio/cpal>
 - glutin_wgl_sys 0.6.1 — <https://github.com/rust-windowing/glutin>
-- prost 0.14.4 — <https://github.com/tokio-rs/prost>
-- prost-derive 0.14.4 — <https://github.com/tokio-rs/prost>
 - shiguredo_libvpx 2026.2.0-canary.3 — <https://github.com/shiguredo/libvpx-rs>
 - spirv 0.4.0+sdk-1.4.341.0 — <https://github.com/gfx-rs/rspirv>
 - unicode-linebreak 0.1.5 — <https://github.com/axelf4/unicode-linebreak>
@@ -270,7 +224,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - rustls 0.23.45 — <https://github.com/rustls/rustls>
 
-### Apache-2.0 OR MIT (310)
+### Apache-2.0 OR MIT (308)
 
 - accesskit 0.25.1 — <https://github.com/AccessKit/accesskit>
 - accesskit_consumer 0.39.1 — <https://github.com/AccessKit/accesskit>
@@ -411,7 +365,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - lyon_geom 1.0.19 — <https://github.com/nical/lyon>
 - lyon_path 1.0.19 — <https://github.com/nical/lyon>
 - lyon_tessellation 1.0.22 — <https://github.com/nical/lyon>
-- md-5 0.10.6 — <https://github.com/RustCrypto/hashes>
 - md5 0.8.1 — <https://github.com/stainless-steel/md5>
 - memmap2 0.9.11 — <https://github.com/RazrFalcon/memmap2-rs>
 - mime 0.3.17 — <https://github.com/hyperium/mime>
@@ -505,7 +458,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - simplecss 0.2.2 — <https://github.com/linebender/simplecss>
 - siphasher 1.0.3 — <https://github.com/jedisct1/rust-siphash>
 - skrifa 0.44.0 — <https://github.com/googlefonts/fontations>
-- sm3 0.4.2 — <https://github.com/RustCrypto/hashes>
 - smallvec 1.16.1 — <https://github.com/servo/rust-smallvec>
 - smol_str 0.3.6 — <https://github.com/rust-lang/rust-analyzer/tree/master/lib/smol_str>
 - socket2 0.6.5 — <https://github.com/rust-lang/socket2>
@@ -637,23 +589,13 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - nanalive-spout 0.1.1 — <https://github.com/sena-nana/nanalive-spout>
 - nanalive-spout-sys 0.1.1 — <https://github.com/sena-nana/nanalive-spout>
 
-### BSD-3-Clause (7)
+### BSD-3-Clause (5)
 
-- alloc-no-stdlib 2.0.4 — <https://github.com/dropbox/rust-alloc-no-stdlib>
-- alloc-stdlib 0.2.4 — <https://github.com/dropbox/rust-alloc-no-stdlib>
 - curve25519-dalek 5.0.0 — <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/curve25519-dalek>
 - ed25519-dalek 3.0.0 — <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek>
 - subtle 2.6.1 — <https://github.com/dalek-cryptography/subtle>
 - tiny-skia 0.12.0 — <https://github.com/linebender/tiny-skia>
 - tiny-skia-path 0.12.0 — <https://github.com/linebender/tiny-skia/tree/master/path>
-
-### BSD-3-Clause AND MIT (1)
-
-- brotli 8.0.4 — <https://github.com/dropbox/rust-brotli>
-
-### BSD-3-Clause OR MIT (1)
-
-- brotli-decompressor 5.0.3 — <https://github.com/dropbox/rust-brotli-decompressor>
 
 ### BSL-1.0 (2)
 

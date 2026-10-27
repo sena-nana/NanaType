@@ -30,7 +30,7 @@ impl Guard {
 /// Who sent a message.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Author {
-    /// Bilibili UID; empty if the server does not supply sender identity.
+    /// Platform UID; empty if the server does not supply sender identity.
     pub uid: String,
     pub name: String,
     /// `https://` avatar URL; empty when the server gave none.

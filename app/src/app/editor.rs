@@ -67,7 +67,7 @@ impl App {
                     if self.synchronizing()
                         && nanatype_model::outgoing::image_count(&parse(&expanded).doc) > 0
                     {
-                        self.notice(self.ui.now_t("bili-images-unavailable"), true);
+                        self.notice(self.ui.now_t("chat-images-unavailable"), true);
                     } else if p.send {
                         self.run(Cmd::SendMarkup(expanded));
                     } else if self.ui.source_mode.get_untracked() {
@@ -99,7 +99,7 @@ impl App {
                 rgba,
             } if self.synchronizing() => {
                 let _ = (width, height, rgba);
-                self.notice(self.ui.now_t("bili-images-unavailable"), true);
+                self.notice(self.ui.now_t("chat-images-unavailable"), true);
             }
             Msg::PasteImage {
                 width,

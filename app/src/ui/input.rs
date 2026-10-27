@@ -75,11 +75,6 @@ fn tool_button(icon: nana_ui::runtime::Icon, label: String, tip: String) -> Icon
     b
 }
 
-#[cfg(feature = "unofficial-chat")]
-pub(super) fn footer_icon(icon: nana_ui::runtime::Icon, label: String) -> IconButton {
-    tool_button(icon, label.clone(), label)
-}
-
 /// "Bold · Ctrl+B": a tooltip with the tool's shortcut.
 fn with_shortcut(label: String, keys: Option<&str>) -> String {
     match keys {

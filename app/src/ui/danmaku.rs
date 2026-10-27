@@ -1,4 +1,4 @@
-//! The chat panel: live chat from Bilibili and Douyin for the streamer to read and
+//! The chat panel: live chat for the streamer to read and
 //! answer. The operator can choose compact rows or neutral history cards.
 //! Both presentations share hover/focus actions and the same retained feed.
 //!
@@ -125,7 +125,7 @@ fn row_view(ui: Ui, source: RowSource, width: f32) -> AnyView {
         _ => None,
     };
     let content = dynamic(
-        move || ui.settings.with(|s| s.integrations.bilibili.panel_style),
+        move || ui.settings.with(|s| s.integrations.chat.panel_style),
         move |style| {
             let actions = if let RowSource::Chat(seq) = source {
                 Some(row_actions(ui, seq, *style, hovered, focused))
@@ -534,14 +534,14 @@ fn filter_toggle(
             .with_tooltip(ui.now_t(key)),
     )
     .bind(move |b: &mut IconButton| {
-        let on = ui.settings.with(|s| get(&s.integrations.bilibili.panel));
+        let on = ui.settings.with(|s| get(&s.integrations.chat.panel));
         if b.selected != on {
             b.selected = on;
         }
     })
     .on_cx(move |_, _: &Activate, cx| {
         cx.dispatch_program_all(Msg::Edit(Box::new(move |s: &mut Settings| {
-            let f = &mut s.integrations.bilibili.panel;
+            let f = &mut s.integrations.chat.panel;
             let on = get(f);
             set(f, !on);
         })))
@@ -737,7 +737,7 @@ pub fn shown(rows: &[Arc<ChatMessage>], filter: &ChatFilter) -> Vec<u64> {
 pub fn chat_panel(ui: Ui) -> AnyView {
     let feed = Arc::new(Mutex::new(Feed::default()));
     let items = computed(move || {
-        let filter = ui.settings.with(|s| s.integrations.bilibili.panel.clone());
+        let filter = ui.settings.with(|s| s.integrations.chat.panel.clone());
         let chat = ui.chat.get();
         let history = ui.history.get();
         feed.lock().unwrap().update(&chat, &history, &filter)
@@ -831,7 +831,7 @@ mod tests {
 
     fn message(seq: u64, kind: ChatKind) -> Arc<ChatMessage> {
         Arc::new(ChatMessage {
-            platform: crate::chat::Platform::Bilibili,
+            platform: crate::chat::Platform::Blivechat,
             epoch: 0,
             room: String::new(),
             seq,

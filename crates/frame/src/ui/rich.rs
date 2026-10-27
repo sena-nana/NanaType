@@ -1647,7 +1647,7 @@ mod tests {
         round_trip("一[wait=500]二[pause]三[page]四[se=coin][expr=smile][screenshake=4,200]");
         round_trip("第一段\n第二段\n\n第四段");
         round_trip(
-            "你好[at=42 name=观众 avatar=blob:bili-face-42]！[wave][at name=\"无 uid\"][/wave]",
+            "你好[at=42 name=观众 avatar=blob:blive-face-42]！[wave][at name=\"无 uid\"][/wave]",
         );
     }
 
@@ -1728,10 +1728,10 @@ mod tests {
 
     #[test]
     fn a_mention_is_one_label_object_with_its_avatar() {
-        let doc = nanatype_markup::parse("[at=42 name=观众 avatar=blob:bili-face-42]").doc;
+        let doc = nanatype_markup::parse("[at=42 name=观众 avatar=blob:blive-face-42]").doc;
         let mut urls = HashMap::new();
         urls.insert(
-            "blob:bili-face-42".to_owned(),
+            "blob:blive-face-42".to_owned(),
             "file:///f/42.png".to_owned(),
         );
         let look = look();

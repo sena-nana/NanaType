@@ -1434,7 +1434,7 @@ pub fn sample_events(text: &str) -> Vec<(&'static str, serde_json::Value)> {
         ),
         (
             "chat_message",
-            serde_json::json!({"type": "chat_message", "platform": "bilibili", "author": "viewer", "text": text}),
+            serde_json::json!({"type": "chat_message", "platform": "blivechat", "author": "viewer", "text": text}),
         ),
     ]
 }

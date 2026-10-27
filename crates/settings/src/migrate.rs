@@ -31,20 +31,49 @@ pub fn migrate(value: &mut Value) -> Result<u32, MigrateError> {
         if let Some(integrations) = obj.get_mut("integrations").and_then(Value::as_object_mut)
             && let Some(Value::Object(mut legacy)) = integrations.remove("blivechat")
         {
-            if legacy
+            let room_kind = legacy
                 .remove("room_kind")
                 .and_then(|v| v.as_str().map(str::to_owned))
-                .as_deref()
-                != Some("room_id")
-            {
-                legacy.insert("room".into(), Value::String(String::new()));
+                .unwrap_or_else(|| "auth_code".into());
+            let room = legacy
+                .remove("room")
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .unwrap_or_default();
+            let mut chat = Map::new();
+            for key in ["panel", "panel_style", "quote_on_display", "panel_open"] {
+                if let Some(value) = legacy.remove(key) {
+                    chat.insert(key.into(), value);
+                }
             }
-            legacy.remove("host");
-            legacy.remove("port");
-            legacy.insert("sync_profile".into(), Value::Bool(false));
             integrations
-                .entry("bilibili")
-                .or_insert(Value::Object(legacy));
+                .entry("chat")
+                .or_insert_with(|| Value::Object(chat));
+            let mut blive = Map::new();
+            blive.insert(
+                "enabled".into(),
+                legacy.remove("enabled").unwrap_or(json!(false)),
+            );
+            blive.insert("source".into(), json!("server"));
+            blive.insert(
+                "room_kind".into(),
+                json!(if room_kind == "room_id" {
+                    "room_id"
+                } else {
+                    "auth_code"
+                }),
+            );
+            if room_kind == "room_id" {
+                blive.insert("room_id".into(), room.into());
+            }
+            if let Some(host) = legacy.remove("host") {
+                blive.insert("host".into(), host);
+            }
+            if let Some(port) = legacy.remove("port") {
+                blive.insert("port".into(), port);
+            }
+            integrations
+                .entry("blivechat")
+                .or_insert(Value::Object(blive));
         }
         obj.insert("schema".into(), json!(2));
     }
@@ -68,6 +97,23 @@ pub fn migrate(value: &mut Value) -> Result<u32, MigrateError> {
             }
         }
         obj.insert("schema".into(), json!(3));
+    }
+    if from < 4 {
+        if let Some(integrations) = obj.get_mut("integrations").and_then(Value::as_object_mut) {
+            let mut chat = integrations
+                .remove("chat")
+                .and_then(|v| v.as_object().cloned())
+                .unwrap_or_default();
+            if let Some(Value::Object(mut old)) = integrations.remove("bilibili") {
+                for key in ["panel", "panel_style", "quote_on_display", "panel_open"] {
+                    if let Some(value) = old.remove(key) {
+                        chat.entry(key).or_insert(value);
+                    }
+                }
+            }
+            integrations.insert("chat".into(), Value::Object(chat));
+        }
+        obj.insert("schema".into(), json!(4));
     }
     Ok(from)
 }

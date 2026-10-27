@@ -134,12 +134,12 @@ fn deliveries(ui: Ui) -> AnyView {
                     let line = d.line;
                     let remaining = d.remaining();
                     let label = ui.now_t(match d.state {
-                        DeliveryState::Queued => "bili-queued",
-                        DeliveryState::Sending => "bili-sending",
+                        DeliveryState::Queued => "tw-queued",
+                        DeliveryState::Sending => "tw-sending",
                         DeliveryState::Submitted => "tw-submitted",
-                        DeliveryState::Failed => "bili-failed",
-                        DeliveryState::Uncertain => "bili-uncertain",
-                        DeliveryState::Cancelled => "bili-cancelled",
+                        DeliveryState::Failed => "tw-failed",
+                        DeliveryState::Uncertain => "tw-uncertain",
+                        DeliveryState::Cancelled => "tw-cancelled",
                     });
                     let mut row = vec![
                         widget(Text::new(d.chunks.concat()).style(Type::Chat.style())).into_any(),
@@ -149,12 +149,12 @@ fn deliveries(ui: Ui) -> AnyView {
                         row.push(hint(d.detail.clone()));
                     }
                     if matches!(d.state, DeliveryState::Failed | DeliveryState::Uncertain) {
-                        row.push(button(ui, "bili-copy-remaining", move || {
+                        row.push(button(ui, "tw-copy-remaining", move || {
                             Msg::CopyText(remaining.clone())
                         }));
                         if d.blocked {
-                            row.push(button(ui, "bili-retry", move || Msg::TwitchRetry(line)));
-                            row.push(button(ui, "bili-skip-failed", move || {
+                            row.push(button(ui, "tw-retry", move || Msg::TwitchRetry(line)));
+                            row.push(button(ui, "tw-skip-failed", move || {
                                 Msg::TwitchSkipFailed(line)
                             }));
                         }
@@ -180,7 +180,7 @@ fn deliveries(ui: Ui) -> AnyView {
 pub fn confirm_dialog(ui: Ui) -> AnyView {
     widget(
         ConfirmDialog::new(ui.now_t("tw-send-title"), ui.now_t("tw-send-warning"))
-            .confirm_label(ui.now_t("bili-enable"))
+            .confirm_label(ui.now_t("tw-enable"))
             .cancel_label(ui.now_t("common-cancel")),
     )
     .bind(move |dialog: &mut ConfirmDialog| {

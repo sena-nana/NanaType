@@ -1240,7 +1240,6 @@ impl RuntimeProgram for Host {
             }
             WindowEvent::CloseRequested { id } => match WindowKind::from_id(id) {
                 Some(WindowKind::Settings) | None => {
-                    self.app.unofficial_settings_closed();
                     return RuntimeProgramUpdate {
                         window_commands: vec![WindowCommand::Close(id)],
                         ..RuntimeProgramUpdate::default()

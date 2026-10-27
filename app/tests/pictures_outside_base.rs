@@ -85,7 +85,7 @@ fn avatar_sticker_and_skin_frame_are_drawn() {
     let blobs = root.join("cache").join("images");
     let stickers = root.join("stickers").join("cats");
     let skin = data.join("skins").join("test.frame");
-    solid(&blobs.join("bili-face-1001.png"), AVATAR);
+    solid(&blobs.join("blive-face-1001.png"), AVATAR);
     solid(&stickers.join("hello.png"), STICKER);
     solid(&skin.join("frame.png"), FRAME);
 
@@ -100,7 +100,7 @@ fn avatar_sticker_and_skin_frame_are_drawn() {
     let mut lib = AssetLibrary::new(blobs.clone());
     lib.scan(&[stickers.display().to_string()]);
     let avatar = lib
-        .url(&AssetRef::Blob("bili-face-1001".into()), None)
+        .url(&AssetRef::Blob("blive-face-1001".into()), None)
         .expect("avatar url");
     let sticker = lib
         .url(&"lib:cats/hello".parse().unwrap(), None)
@@ -128,7 +128,7 @@ fn avatar_sticker_and_skin_frame_are_drawn() {
         &root,
         "raw",
         vec![
-            nanatype::assets::file_url(&blobs.join("bili-face-1001.png")),
+            nanatype::assets::file_url(&blobs.join("blive-face-1001.png")),
             nanatype::assets::file_url(&stickers.join("hello.png")),
         ],
     );

@@ -1,4 +1,4 @@
-//! The history window: a Bilibili-style column of avatar, name and bubble.
+//! The history window: a live-chat-style column of avatar, name and bubble.
 //! Rows are drawn by the same document builder as the dialogue box, so a line
 //! keeps its colours, effects and stickers; with "typing along" sync the
 //! newest row reveals in step with the typewriter.

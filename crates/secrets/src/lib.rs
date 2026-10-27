@@ -165,7 +165,7 @@ mod tests {
     fn saved_secret_is_encrypted_and_clear_removes_it() {
         let directory = tempfile::tempdir().unwrap();
         let store = SecretStore::new(directory.path(), "fixture");
-        let fixture = b"SESSDATA=fixture-only; bili_jct=test; DedeUserID=7";
+        let fixture = b"session=fixture-only; token=test; user_id=7";
         assert!(store.load().unwrap().is_none());
         store.save(fixture).unwrap();
         let encrypted = std::fs::read(&store.path).unwrap();

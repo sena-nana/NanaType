@@ -11,57 +11,32 @@ use nanatype_settings::ChatFilter;
 
 use crate::ui::I18N;
 
-/// History rows from Bilibili carry this source id.
-pub const SOURCE: &str = "bilibili";
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Platform {
-    Bilibili,
-    Douyin,
     /// A blivechat server or the 彗星号 relay.
     Blivechat,
-    Youtube,
     Twitch,
 }
 impl Platform {
-    /// The sources this build connects to, in settings order. Every variant
-    /// stays so history saved by another build still reads.
-    #[cfg(feature = "unofficial-chat")]
-    pub const ALL: &[Self] = &[
-        Self::Bilibili,
-        Self::Douyin,
-        Self::Youtube,
-        Self::Twitch,
-        Self::Blivechat,
-    ];
-    #[cfg(not(feature = "unofficial-chat"))]
+    /// The sources this build connects to, in settings order.
     pub const ALL: &[Self] = &[Self::Twitch, Self::Blivechat];
     pub fn source(self) -> &'static str {
         match self {
-            Self::Bilibili => SOURCE,
-            Self::Douyin => "douyin",
             Self::Blivechat => "blivechat",
-            Self::Youtube => "youtube",
             Self::Twitch => "twitch",
         }
     }
     /// Downloaded pictures are cached per platform under this prefix.
     pub fn cache_prefix(self) -> &'static str {
         match self {
-            Self::Bilibili => "bili",
-            Self::Douyin => "douyin",
             Self::Blivechat => "blive",
-            Self::Youtube => "yt",
             Self::Twitch => "twitch",
         }
     }
     /// The settings page title, which doubles as the platform's name.
     pub fn label_key(self) -> &'static str {
         match self {
-            Self::Bilibili => "settings-bilibili",
-            Self::Douyin => "settings-douyin",
             Self::Blivechat => "settings-blivechat",
-            Self::Youtube => "settings-youtube",
             Self::Twitch => "settings-twitch",
         }
     }
@@ -80,19 +55,13 @@ pub enum ChatKind {
         /// Gold coins (1000 = ¥1); 0 for free gifts.
         coin: u64,
     },
-    DouyinGift {
-        name: String,
-        num: u64,
-        diamonds: Option<u64>,
-    },
     /// A guard membership (上舰).
     Member {
         num: u32,
         unit: String,
         coin: u64,
     },
-    /// A YouTube Super Chat or Super Sticker, or Twitch Bits; `amount` is
-    /// the platform's own text.
+    /// A paid message such as Twitch Bits; `amount` is the platform's own text.
     Paid {
         amount: String,
         /// ARGB, as the platform colours the card.
@@ -102,7 +71,7 @@ pub enum ChatKind {
     Notice {
         text: String,
     },
-    /// YouTube memberships given to other viewers.
+    /// Memberships given to other viewers.
     GiftMemberships {
         count: u32,
     },
@@ -116,7 +85,7 @@ pub struct ChatMessage {
     pub room: String,
     /// Arrival order; the app's handle for the message.
     pub seq: u64,
-    /// Bilibili's id (Super Chats are taken down by it).
+    /// The platform's message id (Super Chats are taken down by it).
     pub id: String,
     pub kind: ChatKind,
     pub user: ChatUser,
@@ -133,126 +102,6 @@ pub struct ChatMessage {
 }
 
 impl ChatMessage {
-    #[cfg(feature = "unofficial-chat")]
-    pub fn from_douyin(
-        event: nanatype_douyin::ChatEvent,
-        avatar: Option<AssetRef>,
-        emoticon: Option<AssetRef>,
-        seq: u64,
-    ) -> Self {
-        let (kind, doc) = match event.content {
-            nanatype_douyin::Content::Text(text) => (
-                ChatKind::Text,
-                Document::plain(&text.replace(['\r', '\n'], " ")),
-            ),
-            nanatype_douyin::Content::Emote { text, .. } => {
-                let doc = match emoticon {
-                    Some(asset) => Document::from_inlines(vec![Inline::Atom(Atom {
-                        kind: AtomKind::Emote,
-                        asset,
-                        height_em: 2.2,
-                        alt: text,
-                        effects: Default::default(),
-                    })]),
-                    None => Document::plain(&text),
-                };
-                (ChatKind::Text, doc)
-            }
-            nanatype_douyin::Content::Gift {
-                name,
-                count,
-                diamonds,
-            } => (
-                ChatKind::DouyinGift {
-                    name,
-                    num: count,
-                    diamonds,
-                },
-                Document::new(),
-            ),
-        };
-        Self {
-            platform: Platform::Douyin,
-            epoch: 0,
-            room: String::new(),
-            seq,
-            id: if event.id.is_empty() {
-                format!("local-{seq}")
-            } else {
-                event.id
-            },
-            kind,
-            // Namespacing survives markup serialization and reply references without changing old Bilibili ids.
-            user: ChatUser {
-                uid: if event.author.uid.is_empty() {
-                    String::new()
-                } else {
-                    format!("douyin:{}", event.author.uid)
-                },
-                name: event.author.name,
-                avatar,
-            },
-            guard: Guard::None,
-            owner: false,
-            admin: false,
-            medal_level: 0,
-            medal_name: String::new(),
-            doc,
-            at: if event.at == 0 {
-                nanatype_model::unix_millis()
-            } else {
-                event.at
-            },
-        }
-    }
-    #[cfg(feature = "unofficial-chat")]
-    /// Build from a YouTube event; `emote` names (and schedules) the saved
-    /// picture of a URL.
-    pub fn from_youtube(
-        event: nanatype_youtube::ChatEvent,
-        avatar: Option<AssetRef>,
-        emote: &mut dyn FnMut(&str) -> AssetRef,
-        seq: u64,
-    ) -> Self {
-        use nanatype_youtube::Content;
-        let (kind, doc) = match event.content {
-            Content::Text(runs) => (ChatKind::Text, inline_doc(runs, emote)),
-            Content::Paid {
-                amount,
-                color,
-                runs,
-            } => (ChatKind::Paid { amount, color }, inline_doc(runs, emote)),
-            Content::Sticker {
-                amount,
-                color,
-                url,
-                alt,
-            } => (
-                ChatKind::Paid { amount, color },
-                Document::from_inlines(vec![Inline::Atom(Atom {
-                    kind: AtomKind::Emote,
-                    asset: emote(&url),
-                    height_em: 2.2,
-                    alt,
-                    effects: Default::default(),
-                })]),
-            ),
-            Content::Membership { header, runs } => {
-                (ChatKind::Notice { text: header }, inline_doc(runs, emote))
-            }
-            Content::GiftMembership { count } => {
-                (ChatKind::GiftMemberships { count }, Document::new())
-            }
-        };
-        let a = event.author;
-        let user = ChatUser {
-            uid: namespaced("youtube", &a.channel_id),
-            name: a.name,
-            avatar,
-        };
-        Self::live(Platform::Youtube, event.id, seq, kind, user, doc, event.at)
-            .badged(a.owner, a.moderator)
-    }
     /// Build from a Twitch event; Bits read like a paid message.
     pub fn from_twitch(
         event: nanatype_twitch::ChatEvent,
@@ -282,7 +131,7 @@ impl ChatMessage {
         Self::live(Platform::Twitch, event.id, seq, kind, user, doc, event.at)
             .badged(a.broadcaster, a.moderator)
     }
-    /// A message from a platform without Bilibili's guards and medals.
+    /// A message from a platform without platform-specific guards and medals.
     fn live(
         platform: Platform,
         id: String,
@@ -324,7 +173,7 @@ impl ChatMessage {
             ..self
         }
     }
-    /// Build from a Bilibili event; `avatar` and `emoticon` are the saved
+    /// Build from a blivechat event; `avatar` and `emoticon` are the saved
     /// pictures. `None` for events that are not messages.
     pub fn from_event(
         event: ChatEvent,
@@ -416,7 +265,7 @@ impl ChatMessage {
             ..
         } = author;
         Some(Self {
-            platform: Platform::Bilibili,
+            platform: Platform::Blivechat,
             epoch: 0,
             room: String::new(),
             seq,
@@ -447,7 +296,6 @@ impl ChatMessage {
             ChatKind::Text => filter.text,
             ChatKind::SuperChat { .. } => filter.super_chat,
             ChatKind::Gift { coin, .. } => filter.gift && *coin >= u64::from(filter.min_gift_coin),
-            ChatKind::DouyinGift { .. } => filter.gift,
             ChatKind::Member { .. } => filter.member,
             ChatKind::Paid { .. } => filter.super_chat,
             ChatKind::Notice { .. } | ChatKind::GiftMemberships { .. } => filter.member,
@@ -476,24 +324,6 @@ impl ChatMessage {
                 "chat-gift",
                 &[("gift", name.as_str().into()), ("count", (*num).into())],
             ),
-            ChatKind::DouyinGift {
-                name,
-                num,
-                diamonds,
-            } => {
-                let gift = I18N.tr_in(
-                    locale,
-                    "chat-gift",
-                    &[("gift", name.as_str().into()), ("count", (*num).into())],
-                );
-                match diamonds.and_then(|p| p.checked_mul(*num)) {
-                    Some(total) => format!(
-                        "{gift} · {}",
-                        I18N.tr_in(locale, "dy-diamonds", &[("count", total.into())])
-                    ),
-                    None => gift,
-                }
-            }
             ChatKind::Member { num, unit, .. } => I18N.tr_in(
                 locale,
                 "chat-member",
@@ -578,7 +408,7 @@ fn inline_doc(runs: Vec<ChatRun>, emote: &mut dyn FnMut(&str) -> AssetRef) -> Do
     }
 }
 
-/// Platform ids never collide with Bilibili's bare numbers.
+/// Platform ids stay namespaced when a platform supplies them.
 fn namespaced(platform: &str, id: &str) -> String {
     if id.is_empty() {
         String::new()
@@ -607,7 +437,7 @@ pub fn guard_key(guard: Guard) -> &'static str {
     }
 }
 
-/// The colour band of a Super Chat by price, as Bilibili draws it.
+/// The colour band of a Super Chat by price.
 pub fn super_chat_color(price: u64) -> [f32; 4] {
     let rgb = match price {
         2000.. => 0xe62117,
@@ -624,44 +454,6 @@ pub fn super_chat_color(price: u64) -> [f32; 4] {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "unofficial-chat")]
-    #[test]
-    fn douyin_identity_reply_and_gift_units_stay_separate_from_bilibili() {
-        let event = nanatype_douyin::ChatEvent {
-            id: "42".into(),
-            author: nanatype_douyin::Author {
-                uid: "42".into(),
-                name: "viewer".into(),
-                avatar: String::new(),
-            },
-            content: nanatype_douyin::Content::Gift {
-                name: "flower".into(),
-                count: 2,
-                diamonds: Some(3),
-            },
-            at: 1,
-        };
-        let message = super::ChatMessage::from_douyin(event, None, None, 1);
-        assert_eq!(message.user.uid, "douyin:42");
-        let mention =
-            nanatype_model::Document::from_inlines(vec![nanatype_model::Inline::Mention(
-                nanatype_model::Mention::new(message.user.clone()),
-            )]);
-        let restored = nanatype_markup::parse(&nanatype_markup::serialize(&mention)).doc;
-        assert_eq!(restored, mention);
-        assert_eq!(
-            message.quote(nanatype_i18n::Locale::EnUs).user.uid,
-            "douyin:42"
-        );
-        let item = message.history_item(nanatype_i18n::Locale::EnUs);
-        assert_eq!(item.source.0, "douyin");
-        assert!(item.doc.plain_text().contains("6 Douyin coins"));
-        assert!(!item.doc.plain_text().contains('¥'));
-        assert!(message.passes(&nanatype_settings::ChatFilter {
-            min_gift_coin: u32::MAX,
-            ..Default::default()
-        }));
-    }
     use super::*;
 
     fn author() -> Author {
@@ -682,15 +474,15 @@ mod tests {
                 emoticon: None,
                 at_ms: 5,
             },
-            Some(AssetRef::Blob("bili-face-42".into())),
+            Some(AssetRef::Blob("blive-face-42".into())),
             None,
             1,
         )
         .unwrap();
         assert_eq!(m.doc.plain_text(), "晚上 好");
-        assert_eq!(m.user.avatar, Some(AssetRef::Blob("bili-face-42".into())));
+        assert_eq!(m.user.avatar, Some(AssetRef::Blob("blive-face-42".into())));
         let item = m.history_item(Locale::ZhCn);
-        assert_eq!(item.avatar.as_deref(), Some("blob:bili-face-42"));
+        assert_eq!(item.avatar.as_deref(), Some("blob:blive-face-42"));
         assert_eq!(item.kind, SourceKind::Chat);
         assert_eq!(item.uid.as_deref(), Some("42"));
     }
@@ -706,7 +498,7 @@ mod tests {
                 at_ms: 0,
             },
             None,
-            Some(AssetRef::Blob("bili-emote-1".into())),
+            Some(AssetRef::Blob("blive-emote-1".into())),
             7,
         )
         .unwrap();
@@ -719,7 +511,7 @@ mod tests {
     #[test]
     fn filters_keep_kinds_and_cheap_gifts_out() {
         let gift = |coin| ChatMessage {
-            platform: crate::chat::Platform::Bilibili,
+            platform: crate::chat::Platform::Blivechat,
             epoch: 0,
             room: String::new(),
             seq: 1,
@@ -753,64 +545,6 @@ mod tests {
 
     fn emote(url: &str) -> AssetRef {
         AssetRef::Blob(format!("emote-{}", url.len()))
-    }
-
-    #[cfg(feature = "unofficial-chat")]
-    #[test]
-    fn youtube_messages_keep_emoji_inline_and_paid_amounts_as_sent() {
-        use nanatype_youtube::{Author as YtAuthor, ChatEvent as YtEvent, Content, Run};
-        let author = YtAuthor {
-            channel_id: "UCabc".into(),
-            name: "Viewer".into(),
-            moderator: true,
-            ..YtAuthor::default()
-        };
-        let text = ChatMessage::from_youtube(
-            YtEvent {
-                id: "m1".into(),
-                author: author.clone(),
-                content: Content::Text(vec![
-                    Run::Text("hi\n".into()),
-                    Run::Emote {
-                        alt: ":wave:".into(),
-                        url: "https://yt3/e".into(),
-                    },
-                ]),
-                at: 9,
-            },
-            None,
-            &mut emote,
-            1,
-        );
-        assert_eq!(text.platform, Platform::Youtube);
-        assert_eq!(text.user.uid, "youtube:UCabc");
-        assert!(text.admin && !text.owner);
-        assert_eq!(text.doc.plain_text(), "hi :wave:");
-        assert_eq!(text.doc.unit_count(), 4);
-        let paid = ChatMessage::from_youtube(
-            YtEvent {
-                id: "p1".into(),
-                author,
-                content: Content::Paid {
-                    amount: "$5.00".into(),
-                    color: 0xff1e88e5,
-                    runs: vec![Run::Text("go".into())],
-                },
-                at: 9,
-            },
-            None,
-            &mut emote,
-            2,
-        );
-        assert_eq!(paid.plain(Locale::EnUs), "$5.00 go");
-        assert_eq!(paid.source_kind(), SourceKind::Event);
-        assert!(paid_color(&paid.kind).is_some());
-        let no_paid = ChatFilter {
-            super_chat: false,
-            ..ChatFilter::default()
-        };
-        assert!(!paid.passes(&no_paid));
-        assert_eq!(paid.history_item(Locale::EnUs).source.0, "youtube");
     }
 
     #[test]

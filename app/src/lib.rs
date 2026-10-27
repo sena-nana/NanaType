@@ -2,20 +2,16 @@
 //!
 //! Three windows share one session: the input window (toolbar, a live
 //! preview identical to the typewriter, and the editor), the transparent
-//! dialogue box, and the Bilibili-style history. Both overlays can be
-//! captured by OBS through window capture or Spout2. With Bilibili linked, a
+//! dialogue box, and the live-chat history. Both overlays can be
+//! captured by OBS through window capture or Spout2. With chat linked, a
 //! chat panel lists the live chat for the streamer to answer.
 
 #![recursion_limit = "512"]
 
-// A Steam build updates through SteamPipe and ships no reverse-engineered
-// chat; see docs/steam.md for the feature sets.
-#[cfg(all(
-    feature = "steam",
-    any(feature = "updates", feature = "unofficial-chat")
-))]
+// A Steam build updates through SteamPipe; see docs/steam.md for the feature set.
+#[cfg(all(feature = "steam", feature = "updates"))]
 compile_error!(
-    "the `steam` feature excludes `updates` and `unofficial-chat`: build with --no-default-features --features builtin-fonts,steam"
+    "the `steam` feature excludes `updates`: build with --no-default-features --features builtin-fonts,steam"
 );
 
 pub mod app;

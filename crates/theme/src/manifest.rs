@@ -1346,7 +1346,7 @@ impl Default for HistoryTitle {
     }
 }
 
-/// The Bilibili-style list: avatar, name, then a bubble per line.
+/// The live-chat-style list: avatar, name, then a bubble per line.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct History {

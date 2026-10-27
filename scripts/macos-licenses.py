@@ -8,9 +8,7 @@ scripts/third-party-notices.ps1 -Texts: the same sections in the same form,
 with the Rust crates that <target-triple> links (from `cargo metadata
 --offline`), including the statically linked Syphon server's notices. The
 package (default `nanatype`) picks the product: NanaType Editor leaves out
-what only NanaType ships (live chat sources, libvpx, Syphon); `nanatype-steam`
-is NanaType's Steam edition, built without the unofficial chat sources
-(docs/steam.md), with their notices left out.
+what only NanaType ships (live chat sources, libvpx, Syphon).
 """
 
 import json
@@ -33,11 +31,8 @@ STEAM_FEATURES = ["--no-default-features", "--features", "nanatype/builtin-fonts
 
 
 def steam_notices(text: str) -> str:
-    """THIRD_PARTY_NOTICES.md without what the Steam edition does not ship."""
-    text = re.sub(r"(?s)<!-- unofficial-chat:begin.*?<!-- unofficial-chat:end -->\n\n", "", text)
-    return "\n".join(
-        line for line in text.split("\n") if not re.match(r"^\| `(Bilibili-|DouyinLive-)", line)
-    )
+    """THIRD_PARTY_NOTICES.md for the Steam edition."""
+    return text
 
 
 def rust_crates(target: str, package: str, product: str, steam: bool = False) -> str:
@@ -90,8 +85,8 @@ def rust_crates(target: str, package: str, product: str, steam: bool = False) ->
 # packaging/licenses files only NanaType ships, by package.
 APP_ONLY = {
     "nanatype": set(),
-    "nanatype-steam": {"LiliaBilibili-MIT.txt"},
-    "nanatype-editor": {"LiliaBilibili-MIT.txt", "libvpx-BSD.txt", "KeySounds-CC0.txt",
+    "nanatype-steam": set(),
+    "nanatype-editor": {"libvpx-BSD.txt", "KeySounds-CC0.txt",
                         "KeySounds-Bubble-CC-BY-3.0.txt", "WhisperCpp-MIT.txt", "WhisperModel-MIT.txt",
                         "WebRTC-VAD-BSD.txt"},
 }
@@ -143,14 +138,6 @@ def main() -> None:
         name = path.relative_to(ROOT / "packaging/licenses").as_posix()
         if path.is_file() and name not in APP_ONLY[package]:
             add(name, read(path), "packaging")
-    # What third-party-notices.ps1 -Texts stages beside the crate texts.
-    if package == "nanatype":
-        for source, name in (
-            ("crates/bilibili/LICENSE-API-COLLECT", "Bilibili-API-collect-CC-BY-NC-4.0.txt"),
-            ("crates/bilibili/NOTICE.md", "Bilibili-NOTICE.md"),
-            ("crates/douyin/LICENSE-DOUYINLIVE", "DouyinLive-MIT.txt"),
-        ):
-            add(name, read(ROOT / source), "packaging")
     crates = "nanatype" if steam else package
     add("rust-crates.txt", rust_crates(target, crates, product, steam), "packaging")
 

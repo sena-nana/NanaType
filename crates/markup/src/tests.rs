@@ -273,7 +273,7 @@ fn arb_inline() -> impl Strategy<Value = Inline> {
                 user: ChatUser {
                     uid,
                     name,
-                    avatar: avatar.then(|| AssetRef::Blob("bili-face-1".into())),
+                    avatar: avatar.then(|| AssetRef::Blob("blive-face-1".into())),
                 },
                 effects,
             })),
@@ -282,7 +282,7 @@ fn arb_inline() -> impl Strategy<Value = Inline> {
 
 #[test]
 fn mention_parses_with_uid_name_and_avatar() {
-    let parsed = parse(r#"hi [at=1234 name="奈 奈" avatar=blob:bili-face-1234]!"#);
+    let parsed = parse(r#"hi [at=1234 name="奈 奈" avatar=blob:blive-face-1234]!"#);
     assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
     let inlines = &parsed.doc.paragraphs[0].inlines;
     assert_eq!(
@@ -290,7 +290,7 @@ fn mention_parses_with_uid_name_and_avatar() {
         Inline::Mention(Mention::new(ChatUser {
             uid: "1234".into(),
             name: "奈 奈".into(),
-            avatar: Some(AssetRef::Blob("bili-face-1234".into())),
+            avatar: Some(AssetRef::Blob("blive-face-1234".into())),
         }))
     );
     assert_eq!(parsed.doc.unit_count(), 5);

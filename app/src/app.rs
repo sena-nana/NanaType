@@ -1,10 +1,6 @@
 //! Application state and the single update function.
-#[cfg(feature = "unofficial-chat")]
-pub mod bilibili;
 pub mod blivechat;
 mod chat;
-#[cfg(feature = "unofficial-chat")]
-pub mod douyin;
 mod editor;
 mod live;
 pub mod obs;
@@ -15,13 +11,10 @@ mod startup;
 mod stickers;
 mod system;
 pub mod twitch;
-mod unofficial;
 #[cfg(feature = "updates")]
 pub mod update;
 mod window;
 mod workshop;
-#[cfg(feature = "unofficial-chat")]
-pub mod youtube;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -32,8 +25,6 @@ use nana_ui::{CompiledTheme, RuntimeProgramContext, RuntimeProgramUpdate};
 use nana_ui_core::{FileDialogKind, FileDialogRequest, FileFilter};
 use nana_ui_platform::host::WindowCommand;
 use nanatype_audio::{AudioHandle, Bus, Scheduled};
-#[cfg(feature = "unofficial-chat")]
-use nanatype_bilibili::BilibiliHandle;
 use nanatype_bridge::{
     BridgeEvent, BridgeHandle, BridgeStatus, LipSync, OscConfig, Sink, VtsConfig, WsConfig,
 };
@@ -118,13 +109,6 @@ pub struct App {
     sound_pack_missing: Option<String>,
     keys: sounds::Keys,
     pub bridge: BridgeHandle,
-    /// The Bilibili connection and the thread saving its pictures.
-    #[cfg(feature = "unofficial-chat")]
-    pub bilibili: BilibiliHandle,
-    #[cfg(feature = "unofficial-chat")]
-    pub douyin: nanatype_douyin::DouyinHandle,
-    #[cfg(feature = "unofficial-chat")]
-    pub youtube: nanatype_youtube::YoutubeHandle,
     pub twitch: nanatype_twitch::TwitchHandle,
     /// Third-party chat: the blivechat client and the 彗星号 relay it can join.
     pub blivechat: nanatype_blive::BliveHandle,
@@ -143,8 +127,6 @@ pub struct App {
     _chat_assets: ChatAssets,
     /// Live chat, oldest first, capped at the panel's size.
     chat: VecDeque<Arc<ChatMessage>>,
-    #[cfg(feature = "unofficial-chat")]
-    bili_echoes: bilibili::Echoes,
     live_chat: live::LiveChat,
     pub hotkeys: Hotkeys,
     pub tray: Option<Tray>,
@@ -318,12 +300,6 @@ impl App {
             sound_pack_missing: None,
             keys: sounds::Keys::default(),
             bridge: workers.bridge,
-            #[cfg(feature = "unofficial-chat")]
-            bilibili: workers.bilibili,
-            #[cfg(feature = "unofficial-chat")]
-            douyin: workers.douyin,
-            #[cfg(feature = "unofficial-chat")]
-            youtube: workers.youtube,
             twitch: workers.twitch,
             blivechat: workers.blivechat,
             comet_relay: workers.comet_relay,
@@ -338,8 +314,6 @@ impl App {
             pending_update: Default::default(),
             _chat_assets: workers.chat_assets,
             chat: VecDeque::new(),
-            #[cfg(feature = "unofficial-chat")]
-            bili_echoes: Default::default(),
             live_chat: Default::default(),
             hotkeys: workers.hotkeys,
             tray: None,
@@ -461,7 +435,7 @@ impl App {
 
     /// Lines also go to a live chat, which accepts plain text only.
     pub fn synchronizing(&self) -> bool {
-        self.unofficial_sending() || self.ui.twitch.get_untracked().sending
+        self.ui.twitch.get_untracked().sending
     }
 
     pub fn notice(&mut self, text: String, error: bool) {
@@ -1082,7 +1056,6 @@ impl App {
         self.bridge.set_ws(i.websocket.enabled.then_some(WsConfig {
             port: i.websocket.port,
         }));
-        self.unofficial_configure(&i);
         self.twitch_configure();
         self.blivechat_configure();
         self.obs_configure();
@@ -1394,7 +1367,7 @@ impl App {
                 if is_send {
                     self.speech_user_edit();
                 }
-                self.notice(self.ui.now_t("bili-images-unavailable"), true);
+                self.notice(self.ui.now_t("chat-images-unavailable"), true);
                 return;
             }
         };
@@ -1475,7 +1448,6 @@ impl App {
             });
         }
         for event in &fx.events {
-            self.unofficial_submitted(event);
             self.twitch_submitted(event);
             self.peer_submitted(event);
             self.bridge_event(event);
@@ -1593,7 +1565,7 @@ impl App {
             && nanatype_model::outgoing::image_count(&parse(&text).doc)
                 > nanatype_model::outgoing::image_count(self.core.draft())
         {
-            self.notice(self.ui.now_t("bili-images-unavailable"), true);
+            self.notice(self.ui.now_t("chat-images-unavailable"), true);
             return;
         }
 
@@ -1673,7 +1645,7 @@ impl App {
                 > nanatype_model::outgoing::image_count(&previous)
         {
             self.set_source(serialize_line(&previous, &self.core.draft_meta()), true);
-            self.notice(self.ui.now_t("bili-images-unavailable"), true);
+            self.notice(self.ui.now_t("chat-images-unavailable"), true);
             return;
         }
         self.run(Cmd::DraftChanged(doc));
@@ -1684,7 +1656,7 @@ impl App {
     fn tool(&mut self, tool: crate::msg::Tool) {
         self.speech_user_edit();
         if self.synchronizing() && matches!(tool, crate::msg::Tool::Insert(Inline::Atom(_))) {
-            self.notice(self.ui.now_t("bili-images-unavailable"), true);
+            self.notice(self.ui.now_t("chat-images-unavailable"), true);
             return;
         }
         self.focus_editor = true;
@@ -1815,7 +1787,7 @@ impl App {
         let before = src.text.clone();
         if !apply_source_markup_guarded(&mut src, edit, self.synchronizing()) {
             self.ui.source.set(src);
-            self.notice(self.ui.now_t("bili-images-unavailable"), true);
+            self.notice(self.ui.now_t("chat-images-unavailable"), true);
             return;
         }
         self.ui.source.set(src.clone());
@@ -1826,7 +1798,7 @@ impl App {
 
     fn insert_asset(&mut self, asset: AssetRef) {
         if self.synchronizing() {
-            self.notice(self.ui.now_t("bili-images-unavailable"), true);
+            self.notice(self.ui.now_t("chat-images-unavailable"), true);
             return;
         }
         self.tool(crate::msg::Tool::Insert(nanatype_model::Inline::Atom(
@@ -1844,7 +1816,7 @@ impl App {
 
     fn pick(&mut self, target: FileTarget) {
         if target == FileTarget::InsertImage && self.synchronizing() {
-            self.notice(self.ui.now_t("bili-images-unavailable"), true);
+            self.notice(self.ui.now_t("chat-images-unavailable"), true);
             return;
         }
         let id = self.next_dialog;
@@ -2095,24 +2067,6 @@ impl App {
             | Msg::Dock(_)
             | Msg::ToggleChat
             | Msg::ShowChat) => self.chat_msg(m),
-            #[cfg(feature = "unofficial-chat")]
-            m @ (Msg::Bilibili(_)
-            | Msg::BilibiliLogin
-            | Msg::BilibiliCancelLogin
-            | Msg::BilibiliRefresh
-            | Msg::BilibiliLogout
-            | Msg::BilibiliOwnRoom
-            | Msg::BilibiliSendToggle
-            | Msg::BilibiliSendConfirm(_)
-            | Msg::BilibiliRetry(_)
-            | Msg::BilibiliSkipFailed(_)) => self.bilibili_msg(m),
-            #[cfg(feature = "unofficial-chat")]
-            m
-            @ (Msg::Douyin(_) | Msg::DouyinRefresh | Msg::DouyinLogout | Msg::DouyinImport(_)) => {
-                self.douyin_msg(m)
-            }
-            #[cfg(feature = "unofficial-chat")]
-            m @ (Msg::Youtube(_) | Msg::YoutubeRefresh) => self.youtube_msg(m),
             m @ (Msg::Twitch(_)
             | Msg::TwitchLogin
             | Msg::TwitchCancelLogin
@@ -2219,37 +2173,20 @@ impl App {
     // ---- live chat ----------------------------------------------------------
 
     fn chat_message(&mut self, message: Arc<ChatMessage>) {
-        let bilibili = message.platform == crate::chat::Platform::Bilibili;
         let epoch = match message.platform {
             crate::chat::Platform::Blivechat => self.blivechat.epoch(),
             crate::chat::Platform::Twitch => self.twitch.epoch(),
-            // Sources this build leaves out never post.
-            platform => match self.unofficial_epoch(platform) {
-                Some(epoch) => epoch,
-                None => return,
-            },
         };
         if message.epoch != 0 && message.epoch != epoch {
             return;
         }
-        if bilibili && self.bilibili_message_deleted(&message) {
-            return;
-        }
-        let include = if bilibili {
-            self.bilibili_history(&message)
-        } else {
-            !self.live_chat.echo(&message)
-        };
+        let include = !self.live_chat.echo(&message);
         self.ensure_urls(message_assets(&message));
         let history = &self.settings.history.chat;
         if include && history.enabled && message.passes(&history.filter) {
             let locale = self.ui.locale.get_untracked();
             self.run(Cmd::External(message.history_item(locale)));
-            if bilibili {
-                self.bilibili_record_row(&message);
-            } else {
-                self.live_record_row(&message);
-            }
+            self.live_record_row(&message);
         }
         self.chat.push_back(message);
         while self.chat.len() > CHAT_CAP {

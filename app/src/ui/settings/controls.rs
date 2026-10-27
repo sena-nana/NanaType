@@ -106,7 +106,6 @@ pub fn links_pulsing(ui: Ui) -> bool {
             ]
             .into_iter()
             .any(|l| *l == LinkState::Connecting)
-                || s.bilibili_link == crate::ui::danmaku::Link::Connecting
                 || s.blivechat_link == crate::ui::danmaku::Link::Connecting
         })
 }
@@ -134,13 +133,6 @@ pub fn link_badge(ui: Ui, get: fn(&Status) -> &LinkState) -> AnyView {
     breathing_badge(ui, describe, move || {
         ui.status.with(|st| *get(st) == LinkState::Connecting)
     })
-}
-
-/// Bilibili's badge: its own status line and the chat panel's dot state,
-/// drawn like the other links.
-#[cfg(feature = "unofficial-chat")]
-pub fn bilibili_badge(ui: Ui) -> AnyView {
-    chat_badge(ui, |s| (&s.bilibili, s.bilibili_link))
 }
 
 /// Third-party chat's badge (blivechat or 彗星号).

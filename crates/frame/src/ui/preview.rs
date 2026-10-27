@@ -405,7 +405,7 @@ fn history_row(
             source: if kind == SourceKind::Typewriter {
                 SourceId::local()
             } else {
-                SourceId("bilibili".into())
+                SourceId("blivechat".into())
             },
             kind,
             line: None,

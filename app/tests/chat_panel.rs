@@ -16,7 +16,7 @@ use nanatype_settings::{ChatPanelStyle, Settings};
 
 fn message(seq: u64) -> Arc<ChatMessage> {
     Arc::new(ChatMessage {
-        platform: nanatype::chat::Platform::Bilibili,
+        platform: nanatype::chat::Platform::Blivechat,
         epoch: 0,
         room: String::new(),
         seq,
@@ -46,16 +46,13 @@ fn panel(
 ) -> (Ui, RuntimeAgentSession) {
     let skin = common::skin(skin_id);
     let mut settings = Settings::default();
-    settings.integrations.bilibili.panel_style = style;
+    settings.integrations.chat.panel_style = style;
     // History output policies must not hide the operator's feed.
     settings.history.visible_items = 1;
     settings.history.fade_after_s = Some(0);
     settings.history.show_time = true;
     let ui = Ui::new(Arc::new(settings), skin.clone(), locale);
     ui.chat_width.set(width as f32);
-    let mut status = (*ui.status.get_untracked()).clone();
-    status.bilibili = "Bilibili · 21452505".into();
-    ui.status.set(Arc::new(status));
     ui.chat.set(Arc::new((1..=count).map(message).collect()));
     let mut session = common::session()
         .themed(false)
@@ -117,7 +114,7 @@ fn take_mentions(session: &mut RuntimeAgentSession) -> Vec<(u64, bool)> {
 }
 
 fn edit_style(ui: Ui, session: &mut RuntimeAgentSession, style: ChatPanelStyle) {
-    if ui.settings.with(|s| s.integrations.bilibili.panel_style) == style {
+    if ui.settings.with(|s| s.integrations.chat.panel_style) == style {
         return;
     }
     let label = ui.now_t(match style {
@@ -148,10 +145,7 @@ fn edit_style(ui: Ui, session: &mut RuntimeAgentSession, style: ChatPanelStyle) 
             ui.settings.set(Arc::new(settings));
         }
     }
-    assert_eq!(
-        ui.settings.with(|s| s.integrations.bilibili.panel_style),
-        style
-    );
+    assert_eq!(ui.settings.with(|s| s.integrations.chat.panel_style), style);
     session.flush().unwrap();
 }
 

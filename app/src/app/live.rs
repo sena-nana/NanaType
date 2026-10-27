@@ -1,4 +1,4 @@
-//! History rows of chat outside Bilibili, so a moderator's removal reaches
+//! History rows of live chat, so a moderator's removal reaches
 //! them, and the Twitch lines NanaType sent itself, so they are not kept twice.
 use crate::{
     app::App,
@@ -86,10 +86,14 @@ mod tests {
     fn a_confirmed_line_hands_back_the_row_its_echo_made() {
         let mut live = LiveChat::default();
         live.rows.insert((Platform::Twitch, "m1".into()), 7);
-        live.rows.insert((Platform::Youtube, "m1".into()), 8);
+        live.rows.insert((Platform::Blivechat, "m1".into()), 8);
         assert_eq!(live.sent("m1"), Some(7));
         assert_eq!(live.sent("m1"), None);
         assert_eq!(live.sent(""), None);
-        assert_eq!(live.rows.len(), 1, "YouTube ids are a separate namespace");
+        assert_eq!(
+            live.rows.len(),
+            1,
+            "chat ids are kept in platform namespaces"
+        );
     }
 }

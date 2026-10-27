@@ -1398,7 +1398,7 @@ fn reply_quote(ui: Stage) -> AnyView {
                 && skin.dialogue.reply.visible
                 && ui
                     .settings
-                    .with_untracked(|s| s.integrations.bilibili.quote_on_display);
+                    .with_untracked(|s| s.integrations.chat.quote_on_display);
             match view.reply.as_ref().filter(|_| shown) {
                 Some(reply) => super::quote::display_quote_view(
                     ui,
@@ -1424,9 +1424,7 @@ fn reply_quote(ui: Stage) -> AnyView {
             let shown = !view.empty
                 && view.reply.is_some()
                 && skin.dialogue.reply.visible
-                && ui
-                    .settings
-                    .with(|s| s.integrations.bilibili.quote_on_display);
+                && ui.settings.with(|s| s.integrations.chat.quote_on_display);
             let vertical = ui.settings.with(|s| ui.canvas().vertical_text(s, &skin));
             restyle(s, |l| {
                 l.display = Some(if shown {

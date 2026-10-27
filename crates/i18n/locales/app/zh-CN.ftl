@@ -491,7 +491,7 @@ about-open-link = 打开链接
 about-expand = 展开
 about-collapse = 收起
 about-disclaimer-unofficial = 非官方声明
-about-disclaimer-unofficial-hint = 与哔哩哔哩、抖音等平台没有关联
+about-disclaimer-unofficial-hint = 与直播平台运营方没有关联
 about-licenses = 开源许可证
 
 ## 首次启动
@@ -521,12 +521,13 @@ err-image = 图片无法读取：{ $message }
 err-spout = Spout 输出失败：{ $message }
 err-syphon = Syphon 输出失败：{ $message }
 
-# Bilibili
+# Chat panel
 chat-reply = 回复
 chat-at-short = 提及
 chat-style-compact = 紧凑
 chat-style-history = 气泡
 chat-panel-style = 操作面板样式
+chat-panel = 弹幕面板
 chat-open-panel = 打开弹幕面板
 chat-replying = 回复 { $name }
 chat-reply-cancel = 取消回复
@@ -548,7 +549,7 @@ chat-status-retrying = 连接断开，正在重试：{ $message }
 history-chat = 弹幕
 history-chat-show = 在历史记录中显示弹幕
 history-show-quote = 显示回复引用
-int-bilibili-quote-display = 对话框显示回复引用
+int-chat-quote-display = 对话框显示回复引用
 
 ## wave3-input
 tb-cheatsheet = 标记速查
@@ -640,8 +641,6 @@ about-fonts-license-other = 许可见下文
 about-design-echo = Echo-Live 原版、玻璃、气泡、虚空四套皮肤的设计参考自 sheep-realms/Echo-Live，原作者为 Sheep-realms 及项目贡献者。NanaType 使用本地皮肤格式实现和适配这些样式。
 about-design-upstream-license = 原项目授权说明
 about-license-project = 原创代码采用 MIT；继承资料保留原许可。B 站组件及完整应用同时包含 CC BY-NC 4.0 材料，须遵守其署名及非商业条件。
-about-source-api-collect = 原始 B 站协议资料来源：SocialSisterYi 及项目贡献者。继承的直播协议说明与 WBI 材料经过适配，保留 CC BY-NC 4.0 署名及非商业条件。原仓库目前不可用，可访问镜像。
-about-source-douyin = 抖音 WebSocket 签名与 HTTP a_bogus 实现移植自版本 0e506f3，连接参数参考同版本。Copyright (c) 2025 今晚打打。
 about-source-key-sounds = 「机械键盘」按键音来自 jim-ph 在 Freesound 发布的 1986 年 DOS 机械键盘录音，CC0 公共领域贡献，经 Tickeys 收录。
 about-source-key-sounds-bubble = 「气泡」按键音来自 Glaneur de sons 在 Freesound 发布的气泡录音，采用 CC BY 3.0 许可，经 Tickeys 收录，NanaType 未作修改。
 about-source-repository = 来源仓库
@@ -729,78 +728,6 @@ edit-copy = 复制
 edit-paste = 粘贴
 edit-select-all = 全选
 
-# Bilibili direct connection and authenticated delivery
-settings-bilibili = B 站直播
-bili-account = B 站账号
-bili-login = 扫码登录 B 站
-bili-manage = 管理 B 站直播
-bili-login-needed = 请先登录 B 站
-bili-restoring = 正在验证登录状态…
-bili-expired = 登录已失效，请重新扫码
-bili-login-failed = 登录暂不可用
-bili-qr-waiting = 使用哔哩哔哩 App 扫码登录
-bili-qr-scanned = 已扫码，请在手机上确认
-bili-qr-expired = 二维码已过期
-bili-qr-refresh = 刷新二维码
-bili-refresh = 刷新账号资料
-bili-logout = 退出登录
-bili-sync-profile = 使用 B 站昵称和头像
-bili-identity-hint = 昵称和头像来自 B 站账号
-bili-room = 目标直播间
-bili-room-placeholder = 留空使用本人直播间
-bili-own-room = 使用我的直播间
-bili-connect = 连接
-bili-receive = 接收直播间弹幕
-bili-send-section = 台词同步发送
-bili-send-switch = 同步弹幕
-bili-send-title = 开启台词同步发送？
-bili-send-warning = 开启后，提交的台词将同时发送到此直播间。图片和贴图不可用；文字样式与特殊演出在弹幕中转为纯文本，长台词自动分条发送。本地展示保留原有演出。
-bili-enable = 开启同步
-bili-images-unavailable = 同步弹幕时不能使用图片或贴图，请先移除图片并保留可读文字。
-bili-panel = 弹幕面板
-bili-queued = 等待发送
-bili-sending = 正在发送
-bili-submitted = B 站已接受提交
-bili-failed = 发送失败
-bili-uncertain = 发送结果不确定，请勿直接重发
-bili-cancelled = 已取消后续发送
-bili-delivery-failed = 弹幕未能完成同步
-bili-copy-remaining = 复制未确认发送的文字
-bili-retry = 重试未成功部分
-bili-skip-failed = 跳过此条，继续队列
-bili-dedup-unconfirmed = 部分消息未返回标识，无法确认回流去重
-bili-invalid-room = 请输入有效的正整数直播间号，或留空使用本人直播间。
-bili-results = 发送记录
-bili-queue-full = 弹幕队列已满，这条台词仅在本地展示。
-
-# Douyin live chat
-settings-douyin = 抖音直播
-dy-room = 直播间
-dy-room-placeholder = live.douyin.com 网址或房间号
-dy-enabled = 接收弹幕
-dy-connect = 连接 / 重连
-dy-account = 登录会话
-dy-account-hint = 公开直播间无需登录；Cookie 验证成功后才会保存
-dy-logout = 退出并清除凭据
-dy-import = 验证并导入 Cookie
-dy-cookie-placeholder = 粘贴完整 Cookie（可选）
-dy-off = 未连接
-dy-connecting = 正在连接，等待直播间消息
-dy-connected = 已连接
-dy-disconnected = 已断开，请点击重连
-dy-error = 连接失败
-dy-account-ready = 已验证登录
-dy-account-out = 未登录
-dy-account-unverified = 登录状态待确认
-dy-account-expired = 登录已失效
-dy-invalid-room = 请填写有效的抖音直播间网址或房间号。
-dy-storage-error = 系统保护存储不可用，未保存凭据。
-dy-clear-error = 无法清除登录凭据，请重试。
-dy-room-offline = 直播间未开播。
-dy-invalid-frame = 跳过了一条无法解析的直播消息。
-dy-no-messages = 未收到可验证的直播消息。
-dy-native-error = 连接失败，请检查网络、直播间状态或 Cookie 后重连。
-dy-diamonds = { $count } 抖币
 tb-inherit = 跟随皮肤
 tb-mixed = 混合
 tb-size-relative = 相对字号
@@ -907,25 +834,8 @@ chat-fatal-auth-code = 身份码无效，请检查后重新填写
 chat-fatal-too-many-retries = 重试次数过多，稍后再连
 chat-fatal-too-many-connections = 同时连接的客户端过多，稍后再连
 
-# YouTube live chat
-settings-youtube = YouTube 直播
-yt-target = 视频或频道
-yt-target-placeholder = https://www.youtube.com/@handle
-yt-enabled = 接收聊天
-yt-connect = 连接 / 重连
-yt-off = 未连接
-yt-resolving = 正在查找频道的直播
-yt-waiting = 尚未开播，每分钟检查一次
-yt-connecting = 正在打开聊天
-yt-connected = 已连接
-yt-ended = 直播已结束
-yt-disconnected = 连接断开，正在重连
-yt-error = 连接失败
-yt-invalid-target = 请输入 YouTube 视频或频道地址、@handle 或视频 ID。
-yt-protocol-changed = YouTube 聊天页面已变化，无法读取。请更新 NanaType。
-yt-redirected = YouTube 要求登录或同意条款，未返回聊天。请稍后再试。
-yt-network-error = 无法连接 YouTube。请检查网络后重连。
-chat-gift-memberships = 赠送了 { $count } 份会员
+chat-images-unavailable = 发送到聊天时不能使用图片或贴图，请先移除图片并保留可读文字。
+chat-queue-full = 聊天发送队列已满，这条台词仅在本地展示。
 
 # Twitch live chat
 settings-twitch = Twitch
@@ -960,6 +870,15 @@ tw-send-title = 把台词发送到 Twitch 聊天？
 tw-send-warning = 从现在起发送的每句台词都会以你的身份发到这个频道。图片不会发送。
 tw-delivery-failed = Twitch 发送失败
 tw-submitted = Twitch 已接受
+tw-queued = 等待发送
+tw-sending = 正在发送
+tw-failed = 发送失败
+tw-uncertain = 发送结果不确定，请勿直接重发
+tw-cancelled = 已取消后续发送
+tw-copy-remaining = 复制未确认发送的文字
+tw-retry = 重试未成功部分
+tw-skip-failed = 跳过此条，继续队列
+tw-enable = 开启发送
 
 ## 创意工坊
 workshop-browse = 浏览创意工坊

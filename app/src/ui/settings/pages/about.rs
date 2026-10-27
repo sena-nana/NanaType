@@ -274,22 +274,6 @@ fn licences(ui: Ui) -> Vec<(AnyView, Shown)> {
             None,
             crate::distribution::LICENSE_TEXT,
         ),
-        #[cfg(feature = "unofficial-chat")]
-        (
-            "SocialSisterYi/bilibili-API-collect · CC BY-NC 4.0",
-            "about-source-api-collect",
-            "https://github.com/SocialSisterYi/bilibili-API-collect",
-            Some("https://github.com/bilibili-plugins/bilibili-api-collect"),
-            include_str!("../../../../../crates/bilibili/LICENSE-API-COLLECT"),
-        ),
-        #[cfg(feature = "unofficial-chat")]
-        (
-            "jwwsjlm/douyinLive · MIT",
-            "about-source-douyin",
-            "https://github.com/jwwsjlm/douyinLive/tree/0e506f3cf935beede946296602af2e52d57ecea2",
-            None,
-            include_str!("../../../../../crates/douyin/LICENSE-DOUYINLIVE"),
-        ),
         (
             "jim-ph · Vintage Keyboard · CC0-1.0",
             "about-source-key-sounds",

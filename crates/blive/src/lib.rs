@@ -1,8 +1,8 @@
-//! Live chat from Bilibili through a running [blivechat] server.
+//! Live chat through a running [blivechat] server.
 //!
 //! NanaType joins a room on blivechat's own client endpoint
 //! (`ws://host:port/api/chat`), the one its OBS page uses: it needs no token,
-//! and joining is what makes blivechat open its connection to Bilibili. The
+//! and joining is what makes blivechat open its configured live chat connection. The
 //! server speaks the same JSON from v1.7 to v1.10; [`protocol`] reads every
 //! version, filling fields an older server does not send with defaults.
 //!

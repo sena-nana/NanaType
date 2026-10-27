@@ -1,5 +1,5 @@
 //! Why a connection to another program (VTube Studio, an OSC receiver, a
-//! WebSocket client, Bilibili) dropped or could not open.
+//! WebSocket client) dropped or could not open.
 //!
 //! The clients report a [`LinkFault`] rather than a sentence, so the
 //! interface can say it in the viewer's language. [`LinkFault::Other`] and

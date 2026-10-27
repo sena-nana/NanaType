@@ -8,8 +8,6 @@ use crate::skin_theme;
 use crate::ui::Ui;
 use nana_ui::RuntimeProgramContext;
 use nanatype_audio::{AudioEngine, AudioHandle};
-#[cfg(feature = "unofficial-chat")]
-use nanatype_bilibili::BilibiliHandle;
 use nanatype_bridge::BridgeHandle;
 use nanatype_i18n::Locale;
 use nanatype_settings::{GeometryStore, InputDockLayout, Settings};
@@ -22,13 +20,7 @@ pub(super) struct Workers {
     pub audio: AudioHandle,
     pub bridge: BridgeHandle,
     pub chat_assets: ChatAssets,
-    #[cfg(feature = "unofficial-chat")]
-    pub bilibili: BilibiliHandle,
     pub hotkeys: Hotkeys,
-    #[cfg(feature = "unofficial-chat")]
-    pub douyin: nanatype_douyin::DouyinHandle,
-    #[cfg(feature = "unofficial-chat")]
-    pub youtube: nanatype_youtube::YoutubeHandle,
     pub twitch: nanatype_twitch::TwitchHandle,
     pub blivechat: nanatype_blive::BliveHandle,
     pub comet_relay: nanatype_blive::RelayHandle,
@@ -56,19 +48,10 @@ impl Workers {
                 forward(&post, |m| Msg::Chat(Arc::new(m))),
                 forward(&post, Msg::ChatAssetReady),
             ),
-            #[cfg(feature = "unofficial-chat")]
-            bilibili: BilibiliHandle::new(paths.config.clone(), forward(&post, Msg::Bilibili)),
             hotkeys: Hotkeys::start(
                 forward(&post, Msg::Hotkey),
                 forward(&post, Msg::HotkeyStatus),
             ),
-            #[cfg(feature = "unofficial-chat")]
-            douyin: nanatype_douyin::DouyinHandle::new(
-                paths.config.clone(),
-                forward(&post, Msg::Douyin),
-            ),
-            #[cfg(feature = "unofficial-chat")]
-            youtube: nanatype_youtube::YoutubeHandle::new(forward(&post, Msg::Youtube)),
             twitch: nanatype_twitch::TwitchHandle::new(
                 paths.config.clone(),
                 forward(&post, Msg::Twitch),
@@ -117,7 +100,7 @@ pub(super) fn ui(
     // where the old chat window was open.
     let input_dock = geometry.input_dock.unwrap_or_else(|| InputDockLayout {
         chat_pinned: crate::ui::danmaku::chat_configured(settings)
-            || settings.integrations.bilibili.panel_open,
+            || settings.integrations.chat.panel_open,
         ..Default::default()
     });
     ui.input_dock.set(input_dock.normalized());

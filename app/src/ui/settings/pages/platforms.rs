@@ -7,8 +7,7 @@ use crate::chat::Platform;
 use nana_ui::runtime::view::segmented_option;
 use nana_ui::runtime::{SegmentedControl, SegmentedOptionChosen};
 
-/// The platform switch. Choosing goes through the program, which ends a
-/// Bilibili QR sign-in left behind.
+/// The platform switch.
 fn tabs(ui: Ui) -> AnyView {
     let options: Vec<AnyView> = Platform::ALL
         .iter()
@@ -29,11 +28,11 @@ fn tabs(ui: Ui) -> AnyView {
 
 /// How the chat panel reads, whichever platforms feed it: its style, which
 /// kinds of message it lists, and quoting the replied-to message on the box.
-/// (The settings keep their Bilibili-era home.)
+/// (The settings are shared by all chat sources.)
 fn panel(ui: Ui) -> AnyView {
     section(
         ui,
-        "bili-panel",
+        "chat-panel",
         vec![
             row(
                 ui,
@@ -50,31 +49,31 @@ fn panel(ui: Ui) -> AnyView {
                     &[
                         (
                             "chat-filter-text",
-                            |s| s.integrations.bilibili.panel.text,
-                            |s, v| s.integrations.bilibili.panel.text = v,
+                            |s| s.integrations.chat.panel.text,
+                            |s, v| s.integrations.chat.panel.text = v,
                         ),
                         (
                             "chat-filter-super-chat",
-                            |s| s.integrations.bilibili.panel.super_chat,
-                            |s, v| s.integrations.bilibili.panel.super_chat = v,
+                            |s| s.integrations.chat.panel.super_chat,
+                            |s, v| s.integrations.chat.panel.super_chat = v,
                         ),
                         (
                             "chat-filter-gift",
-                            |s| s.integrations.bilibili.panel.gift,
-                            |s, v| s.integrations.bilibili.panel.gift = v,
+                            |s| s.integrations.chat.panel.gift,
+                            |s, v| s.integrations.chat.panel.gift = v,
                         ),
                         (
                             "chat-filter-member",
-                            |s| s.integrations.bilibili.panel.member,
-                            |s, v| s.integrations.bilibili.panel.member = v,
+                            |s| s.integrations.chat.panel.member,
+                            |s, v| s.integrations.chat.panel.member = v,
                         ),
                     ],
                 ),
             ),
             toggle_row!(
                 ui,
-                "int-bilibili-quote-display",
-                integrations.bilibili.quote_on_display
+                "int-chat-quote-display",
+                integrations.chat.quote_on_display
             ),
         ],
     )

@@ -12,8 +12,6 @@ pub const MAX_BYTES: usize = 512;
 /// only at a word start, so `monkey=1` is not `key=1`.
 const SECRET_KEYS: &[&str] = &[
     "sessdata",
-    "bili_jct",
-    "dedeuserid",
     "buvid3",
     "access_token",
     "refresh_token",
@@ -207,8 +205,8 @@ mod tests {
     #[test]
     fn url_keeps_scheme_host_and_path() {
         assert_eq!(
-            url("https://user:pw@api.live.bilibili.com:443/room/v1?id=1&access_token=x#f"),
-            "https://api.live.bilibili.com:443/room/v1"
+            url("https://user:pw@live.example.test:443/room/v1?id=1&access_token=x#f"),
+            "https://live.example.test:443/room/v1"
         );
         assert_eq!(url("example.com/a?b"), "example.com/a");
         assert_eq!(url("wss://h/sub"), "wss://h/sub");
@@ -225,8 +223,8 @@ mod tests {
     #[test]
     fn secret_values_are_masked() {
         assert_eq!(
-            text("Cookie: SESSDATA=abc%2C123; bili_jct=ff00; other=1"),
-            "Cookie: ***; bili_jct=***; other=1"
+            text("Cookie: session=abc%2C123; other=1"),
+            "Cookie: ***; other=1"
         );
         assert_eq!(text("PASS oauth:abcdef"), "PASS oauth:***");
         assert_eq!(

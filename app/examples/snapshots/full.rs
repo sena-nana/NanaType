@@ -4,7 +4,6 @@ use super::*;
 
 /// Every window, page and state, in the order the review reads them.
 pub fn capture(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
-    douyin(scene, out);
     blivechat(scene, out);
     p2p(scene, out, iw, ih);
     if std::env::var_os("NANATYPE_P2P_SNAPSHOTS_ONLY").is_some() {
@@ -15,74 +14,6 @@ pub fn capture(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
     settings_pages(scene, out);
     empty_input(scene, out, iw, ih);
     links(scene, out);
-}
-
-/// The Douyin settings page and Douyin chat mixed into the feed.
-fn douyin(scene: &Scene, out: &std::path::Path) {
-    let ui = scene.ui;
-    let theme = &scene.theme;
-    let before_dy_settings = ui.settings.get_untracked();
-    let before_dy_chat = ui.chat.get_untracked();
-    let before_dy_state = ui.douyin.get_untracked();
-    let before_dy_page = ui.page.get_untracked();
-    let mut dy_settings = (*before_dy_settings).clone();
-    dy_settings.integrations.douyin.enabled = true;
-    dy_settings.integrations.douyin.room = "123456789".into();
-    ui.settings.set(Arc::new(dy_settings));
-    ui.douyin.set(Arc::new(nanatype::app::douyin::State {
-        account: nanatype_douyin::AccountState::SignedOut,
-        connection: nanatype_douyin::ConnectionState::Connected {
-            room: "123456789".into(),
-        },
-        warning: None,
-    }));
-    ui.platform_tab.set(nanatype::chat::Platform::Douyin);
-    ui.page.set(settings::Page::Platforms);
-    shot("dy-settings", out, 920, 1050, theme.clone(), |doc, id| {
-        doc.context_mut()
-            .mount_view_root(id, move || settings::settings_window(ui))
-            .unwrap();
-    });
-    let mut mixed = (*before_dy_chat).clone();
-    for (n, content) in [
-        nanatype_douyin::Content::Text("抖音观众：你好！Hello from Douyin 👋".into()),
-        nanatype_douyin::Content::Gift {
-            name: "小心心".into(),
-            count: 3,
-            diamonds: Some(1),
-        },
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        let mut message = ChatMessage::from_douyin(
-            nanatype_douyin::ChatEvent {
-                id: format!("dy-{n}"),
-                author: nanatype_douyin::Author {
-                    uid: "42".into(),
-                    name: "抖音观众".into(),
-                    avatar: String::new(),
-                },
-                content,
-                at: nanatype_model::unix_millis() + n as u64,
-            },
-            None,
-            None,
-            9000 + n as u64,
-        );
-        message.room = "123456789".into();
-        mixed.push(Arc::new(message));
-    }
-    ui.chat.set(Arc::new(mixed));
-    shot("dy-chat", out, 620, 700, theme.clone(), |doc, id| {
-        doc.context_mut()
-            .mount_view_root(id, move || danmaku::chat_panel(ui))
-            .unwrap();
-    });
-    ui.chat.set(before_dy_chat);
-    ui.settings.set(before_dy_settings);
-    ui.douyin.set(before_dy_state);
-    ui.page.set(before_dy_page);
 }
 
 /// The third-party chat page in both sources: a blivechat server joined by
@@ -343,7 +274,7 @@ fn overlays(scene: &Scene, out: &std::path::Path) {
             .unwrap();
     });
     let mut card_settings = (*ui.settings.get_untracked()).clone();
-    card_settings.integrations.bilibili.panel_style = nanatype_settings::ChatPanelStyle::History;
+    card_settings.integrations.chat.panel_style = nanatype_settings::ChatPanelStyle::History;
     ui.settings.set(Arc::new(card_settings));
     shot("chat-cards", out, 400, 640, theme.clone(), |doc, id| {
         doc.context_mut()
@@ -622,8 +553,6 @@ fn links(scene: &Scene, out: &std::path::Path) {
                 reason: "no GPU".into(),
             },
         ],
-        &ConnectionState::Error("connection refused".into()),
-        &on.integrations.bilibili.room,
     );
     assert_consistent(&on, &status);
     ui.settings.set(Arc::new(on));
@@ -701,7 +630,6 @@ fn links(scene: &Scene, out: &std::path::Path) {
     // VTube Studio authorised with a model's hotkeys listed (one mapped by
     // hand), and quick phrases with a hotkey.
     let mut on = (*ui.settings.get_untracked()).clone();
-    on.integrations.bilibili.enabled = false;
     on.integrations.vts.token = Some("token".into());
     on.integrations
         .vts
@@ -743,8 +671,6 @@ fn links(scene: &Scene, out: &std::path::Path) {
                 native: true,
             },
         ],
-        &ConnectionState::Off,
-        &on.integrations.bilibili.room,
     );
     status.vts_hotkeys = vec![
         ("hk-1".into(), "Smile".into()),

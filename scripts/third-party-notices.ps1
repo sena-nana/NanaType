@@ -155,10 +155,8 @@ $oflText = [System.IO.File]::ReadAllText($oflSource) -replace "`r`n", "`n"
 
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 if ($Steam) {
-    # The Steam edition's notices: without the sections it does not ship,
-    # with its own crate list. The repository's files stay as they are.
-    $steamNotices = [regex]::Replace($updated, "(?s)<!-- unofficial-chat:begin.*?<!-- unofficial-chat:end -->\n\n", "")
-    $steamNotices = ($steamNotices -split "`n" | Where-Object { $_ -notmatch '^\| `(Bilibili-|DouyinLive-)' }) -join "`n"
+    # The Steam edition uses the same project notices and its own crate list.
+    $steamNotices = $updated
     New-Item -ItemType Directory -Force $Texts | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $Texts "THIRD_PARTY_NOTICES.md"), $steamNotices, $utf8)
     Write-Host "Wrote the Steam edition's notices ($($sorted.Count) crates) into $Texts"
@@ -191,9 +189,6 @@ if ($Texts) {
         $interfaceFiles["packaging\steam\LICENSE"] = "LICENSE"
         $interfaceFiles["packaging\licenses\libvpx-BSD.txt"] = "libvpx-BSD.txt"
     } elseif ($Package -eq "nanatype") {
-        $interfaceFiles["crates\bilibili\LICENSE-API-COLLECT"] = "Bilibili-API-collect-CC-BY-NC-4.0.txt"
-        $interfaceFiles["crates\bilibili\NOTICE.md"] = "Bilibili-NOTICE.md"
-        $interfaceFiles["crates\douyin\LICENSE-DOUYINLIVE"] = "DouyinLive-MIT.txt"
         $interfaceFiles["packaging\licenses\libvpx-BSD.txt"] = "libvpx-BSD.txt"
     }
     foreach ($source in $interfaceFiles.Keys) {

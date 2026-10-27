@@ -84,7 +84,7 @@ fn echo_removal_cannot_delete_local_typewriter_rows() {
     let local = core.history().back().unwrap().key;
     core.handle(
         Cmd::External(nanatype_model::HistoryItem {
-            source: nanatype_model::SourceId("bilibili".into()),
+            source: nanatype_model::SourceId("blivechat".into()),
             kind: nanatype_model::SourceKind::Chat,
             line: None,
             author: "viewer".into(),
@@ -357,11 +357,11 @@ fn chat_rows_join_the_history_with_their_uid() {
     let mut core = core_with(|_| {});
     let fx = core.handle(
         Cmd::External(nanatype_model::HistoryItem {
-            source: nanatype_model::SourceId("Bilibili".into()),
+            source: nanatype_model::SourceId("blivechat".into()),
             kind: nanatype_model::SourceKind::Chat,
             line: None,
             author: "观众".into(),
-            avatar: Some("blob:bili-face-42".into()),
+            avatar: Some("blob:blive-face-42".into()),
             doc: Document::plain("草"),
             at: 0,
             uid: Some("42".into()),

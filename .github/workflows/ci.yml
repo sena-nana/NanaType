@@ -44,8 +44,8 @@ jobs:
         run: sh scripts/check-product-split.sh
       - name: Test
         run: cargo test --workspace
-      # The Steam edition's own paths (no unofficial chat, no updater, Workshop
-      # folders); cargo puts the Steamworks library where the tests find it.
+      # The Steam edition's own paths (no updater, Workshop folders); cargo
+      # puts the Steamworks library where the tests find it.
       - name: Test (Steam edition)
         run: cargo test -p nanatype --no-default-features --features builtin-fonts,steam --lib
       # After the build, so every crate is in the local cache (the script
@@ -58,6 +58,3 @@ jobs:
           ./scripts/third-party-notices.ps1 -Check
           ./scripts/third-party-notices.ps1 -Check -Package nanatype-editor -Texts target/licenses-editor
           ./scripts/third-party-notices.ps1 -Steam -Texts target/licenses-steam
-          if (Select-String -Path target/licenses-steam/* -Pattern 'Bilibili-API-collect|DouyinLive' -List) {
-              throw "The Steam edition's notices still name the unofficial chat sources"
-          }

@@ -3,13 +3,9 @@
 //! skin renderer itself lives in `nanatype-frame` and reads the [`Stage`]
 //! inside [`Ui`].
 
-#[cfg(feature = "unofficial-chat")]
-pub mod bilibili;
 pub mod blivechat;
 pub mod danmaku;
 pub mod dialogue;
-#[cfg(feature = "unofficial-chat")]
-pub mod douyin;
 pub mod history;
 pub mod input;
 pub mod link_text;
@@ -19,8 +15,6 @@ pub mod settings;
 pub mod sources;
 pub(crate) mod speech;
 pub mod twitch;
-#[cfg(feature = "unofficial-chat")]
-pub mod youtube;
 
 pub use nanatype_frame::ui::{
     I18N, MONO, REMOTE_LANES, Source, Stage, avatar, c, collect_effect_garbage, controls,
@@ -70,9 +64,6 @@ pub struct Status {
     pub vts_hotkeys: Vec<(String, String)>,
     pub osc: LinkState,
     pub ws: LinkState,
-    /// Bilibili: what the panel and the settings say, and the dot's state.
-    pub bilibili: String,
-    pub bilibili_link: danmaku::Link,
     /// Third-party chat (blivechat or 彗星号), likewise.
     pub blivechat: String,
     pub blivechat_link: danmaku::Link,
@@ -185,12 +176,6 @@ pub struct Ui {
     pub plugin_source_trusted: Signal<bool>,
     pub plugin_activation_busy: Signal<bool>,
     pub plugin_activation_error: Signal<Option<String>>,
-    #[cfg(feature = "unofficial-chat")]
-    pub bilibili: Signal<Arc<crate::app::bilibili::State>>,
-    #[cfg(feature = "unofficial-chat")]
-    pub douyin: Signal<Arc<crate::app::douyin::State>>,
-    #[cfg(feature = "unofficial-chat")]
-    pub youtube: Signal<Arc<crate::app::youtube::State>>,
     pub twitch: Signal<Arc<crate::app::twitch::State>>,
     pub blivechat: Signal<Arc<crate::app::blivechat::State>>,
     /// The OBS link and its program scene.
@@ -198,8 +183,6 @@ pub struct Ui {
     #[cfg(feature = "updates")]
     pub update: Signal<Arc<crate::app::update::State>>,
     /// Kept only in memory and cleared after import; never serialized with settings.
-    #[cfg(feature = "unofficial-chat")]
-    pub douyin_cookie: Signal<String>,
     /// The platform the live-platforms settings page shows.
     pub platform_tab: Signal<crate::chat::Platform>,
     /// Actual input client width, published by its layout (also in headless views).
@@ -295,19 +278,11 @@ impl Ui {
             plugin_activation_error: signal(None),
             speech: signal(Arc::new(crate::app::speech::State::default())),
             speech_edit_pending: signal(false),
-            #[cfg(feature = "unofficial-chat")]
-            bilibili: signal(Arc::new(crate::app::bilibili::State::default())),
-            #[cfg(feature = "unofficial-chat")]
-            douyin: signal(Arc::new(crate::app::douyin::State::default())),
-            #[cfg(feature = "unofficial-chat")]
-            youtube: signal(Arc::new(crate::app::youtube::State::default())),
             twitch: signal(Arc::new(crate::app::twitch::State::default())),
             blivechat: signal(Arc::new(crate::app::blivechat::State::default())),
             obs: signal(Arc::new(crate::app::obs::State::default())),
             #[cfg(feature = "updates")]
             update: signal(Arc::new(crate::app::update::State::default())),
-            #[cfg(feature = "unofficial-chat")]
-            douyin_cookie: signal(String::new()),
             input_width: signal(crate::windows::INPUT_SIZE.0),
             input_sidebar_width: signal(nanatype_settings::INPUT_SIDEBAR_DEFAULT),
             input_dock: signal(nanatype_settings::InputDockLayout::default()),

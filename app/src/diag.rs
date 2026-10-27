@@ -1,9 +1,7 @@
 //! NanaType's own events (docs/logging.md). Typed fields carry codes and
 //! counts; messages go through `nanatype_diag::report!`, which redacts them.
 
-use nanatype_diag::domains::{
-    APP, AUDIO, BILIBILI, CHAT, DOUYIN, OUTPUT, STEAM, STICKERS, TWITCH, YOUTUBE,
-};
+use nanatype_diag::domains::{APP, AUDIO, CHAT, OUTPUT, STEAM, STICKERS, TWITCH};
 use nanatype_diag::{EventDescriptor, FieldDescriptor, Metric, Severity};
 
 use crate::windows::WindowKind;
@@ -124,34 +122,19 @@ pub static OBS_SECRET_FAILED: EventDescriptor = EventDescriptor::new(
 );
 
 pub static BLIVECHAT_SECRET_FAILED: EventDescriptor = EventDescriptor::new(
-    BILIBILI,
+    CHAT,
     100,
-    "bilibili.blivechat_secret_failed",
+    "chat.blivechat_secret_failed",
     Severity::Warn,
     // 0 load, 1 store.
     &[FieldDescriptor::u64("op")],
 );
-pub static BLIVECHAT_ERROR: EventDescriptor = EventDescriptor::new(
-    BILIBILI,
-    101,
-    "bilibili.blivechat_error",
-    Severity::Warn,
-    &[],
-);
-pub static BLIVECHAT_FATAL: EventDescriptor = EventDescriptor::new(
-    BILIBILI,
-    102,
-    "bilibili.blivechat_fatal",
-    Severity::Error,
-    &[],
-);
-pub static COMET_RELAY_ERROR: EventDescriptor = EventDescriptor::new(
-    BILIBILI,
-    103,
-    "bilibili.comet_relay_error",
-    Severity::Warn,
-    &[],
-);
+pub static BLIVECHAT_ERROR: EventDescriptor =
+    EventDescriptor::new(CHAT, 101, "chat.blivechat_error", Severity::Warn, &[]);
+pub static BLIVECHAT_FATAL: EventDescriptor =
+    EventDescriptor::new(CHAT, 102, "chat.blivechat_fatal", Severity::Error, &[]);
+pub static COMET_RELAY_ERROR: EventDescriptor =
+    EventDescriptor::new(CHAT, 103, "chat.comet_relay_error", Severity::Warn, &[]);
 
 /// One live platform's connection and account, in its own domain. States
 /// are codes (see [`Conn`] and [`Account`]); a room, channel, account name or
@@ -220,9 +203,6 @@ macro_rules! live {
     };
 }
 
-live!(BILIBILI_LIVE, BILIBILI, "bilibili");
-live!(DOUYIN_LIVE, DOUYIN, "douyin");
-live!(YOUTUBE_LIVE, YOUTUBE, "youtube");
 live!(TWITCH_LIVE, TWITCH, "twitch");
 
 /// Connection states shared by every platform.
@@ -292,7 +272,7 @@ impl Live {
 /// Every event NanaType declares, for the catalog test.
 pub fn all_events() -> Vec<&'static EventDescriptor> {
     let mut all = EVENTS.to_vec();
-    for live in [&BILIBILI_LIVE, &DOUYIN_LIVE, &YOUTUBE_LIVE, &TWITCH_LIVE] {
+    for live in [&TWITCH_LIVE] {
         all.extend(live.events());
     }
     all
@@ -340,13 +320,10 @@ pub fn window(kind: WindowKind) -> u64 {
 /// The facts every session log starts with. Called once settings are
 /// loaded; nothing here identifies the user.
 pub fn session_info(settings: &nanatype_settings::Settings, locale: &str) {
-    use crate::distribution::{STEAM, UNOFFICIAL_CHAT, UPDATES};
+    use crate::distribution::{STEAM, UPDATES};
     let edition = if STEAM { "steam" } else { "standalone" };
     nanatype_diag::set_session_info("edition", edition);
-    nanatype_diag::set_session_info(
-        "features",
-        format!("updates={UPDATES} unofficial_chat={UNOFFICIAL_CHAT}"),
-    );
+    nanatype_diag::set_session_info("features", format!("updates={UPDATES}"));
     nanatype_diag::set_session_info(
         "os",
         format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),

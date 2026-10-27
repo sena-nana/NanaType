@@ -80,35 +80,33 @@ fn source_choice(ui: Ui) -> AnyView {
 
 fn server_section(ui: Ui) -> AnyView {
     let mut rows = Vec::new();
-    // A room number has blivechat read Bilibili's web danmaku; a build without
-    // the unofficial sources offers only the open platform's auth code.
-    if crate::distribution::UNOFFICIAL_CHAT {
-        rows.push(row(
+    // Room ids and auth codes are both accepted by blivechat; the relay remains
+    // independent of the removed direct platform sources.
+    rows.push(row(
+        ui,
+        "int-blive-room-kind",
+        None,
+        segmented(
             ui,
-            "int-blive-room-kind",
-            None,
-            segmented(
+            select_keys(
                 ui,
-                select_keys(
-                    ui,
-                    &[
-                        ("auth_code", "int-blive-auth-code"),
-                        ("room_id", "int-blive-room-id"),
-                    ],
-                ),
-                |s| match s.integrations.blivechat.room_kind {
-                    BliveRoomKind::AuthCode => "auth_code".into(),
-                    BliveRoomKind::RoomId => "room_id".into(),
-                },
-                |s, v| {
-                    s.integrations.blivechat.room_kind = match v {
-                        "room_id" => BliveRoomKind::RoomId,
-                        _ => BliveRoomKind::AuthCode,
-                    }
-                },
+                &[
+                    ("auth_code", "int-blive-auth-code"),
+                    ("room_id", "int-blive-room-id"),
+                ],
             ),
-        ));
-    }
+            |s| match s.integrations.blivechat.room_kind {
+                BliveRoomKind::AuthCode => "auth_code".into(),
+                BliveRoomKind::RoomId => "room_id".into(),
+            },
+            |s, v| {
+                s.integrations.blivechat.room_kind = match v {
+                    "room_id" => BliveRoomKind::RoomId,
+                    _ => BliveRoomKind::AuthCode,
+                }
+            },
+        ),
+    ));
     rows.extend([
         dynamic(
             move || {

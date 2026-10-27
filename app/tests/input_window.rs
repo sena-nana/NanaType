@@ -493,62 +493,6 @@ fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
     }
 }
 
-#[cfg(feature = "unofficial-chat")]
-#[test]
-fn dock_inserts_real_stickers_and_disables_them_during_sync_sending() {
-    for width in [720, 1200] {
-        let skin = common::skin("nanatype.halo");
-        let ui = Ui::new(Arc::new(preview_settings()), skin, Locale::ZhCn);
-        ui.stickers.set(Arc::new(vec![nanatype::ui::StickerRow {
-            asset: "lib:test/hello".into(),
-            name: "Hello sticker".into(),
-            lib: "test".into(),
-            url: String::new(),
-            height_em: 1.6,
-            pack_title: "test".into(),
-        }]));
-        let mut session = common::session()
-            .themed(false)
-            .mount(width, 640, move || input::input_window(ui));
-        open_panel(&mut session, "stickers");
-        click_label(&mut session, "Hello sticker", "button");
-        assert!(
-            session
-                .document_mut()
-                .context_mut()
-                .take_program_messages()
-                .into_iter()
-                .any(
-                    |m| m.downcast::<nanatype::msg::Msg>().is_ok_and(|m| matches!(
-                        *m,
-                        nanatype::msg::Msg::Tool(nanatype::msg::Tool::Insert(
-                            nanatype_model::Inline::Atom(nanatype_model::Atom {
-                                kind: nanatype_model::AtomKind::Sticker,
-                                asset: nanatype_model::AssetRef::Library { .. },
-                                ..
-                            })
-                        ))
-                    ))
-                )
-        );
-        let mut state = (*ui.bilibili.get_untracked()).clone();
-        state.sending = true;
-        ui.bilibili.set(Arc::new(state));
-        assert!((keyed(&session, "input-insertion-dock").bounds.width - 320.0).abs() < 1.0);
-        click_label(&mut session, "Hello sticker", "button");
-        assert!(
-            !session
-                .document_mut()
-                .context_mut()
-                .take_program_messages()
-                .into_iter()
-                .any(|m| m
-                    .downcast::<nanatype::msg::Msg>()
-                    .is_ok_and(|m| matches!(*m, nanatype::msg::Msg::Tool(_))))
-        );
-    }
-}
-
 #[test]
 fn dock_tabs_allocate_sidebar_space_retain_content_and_keep_the_canvas_size() {
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -959,7 +903,7 @@ fn fixed_canvas_and_controls_survive_resize_theme_scale_and_peer_panel_changes()
                         editor_width = Some(bounds.width);
                         assert_eq!(ui.input_width.get_untracked(), w as f32);
                         let nodes = session.accessibility_dump();
-                        for key in ["window-settings", "tb-send", "bili-account"] {
+                        for key in ["window-settings", "tb-send"] {
                             let label = ui.now_t(key);
                             let node = nodes
                                 .iter()

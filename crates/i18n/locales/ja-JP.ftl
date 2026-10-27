@@ -27,7 +27,7 @@ history-placeholder = 履歴はここに表示されます · ウィンドウを
 ## 共通
 common-cancel = キャンセル
 
-# Bilibili
+# Chat panel
 history-role-host = 配信者
 history-role-viewer = 視聴者
 

@@ -5,13 +5,11 @@ param(
     [string]$Destination,
     [ValidateSet("app", "editor")][string]$Product = "app",
     # The Steam edition: its LICENSE and notices come staged by
-    # third-party-notices.ps1 -Steam, without the unofficial chat sources.
+    # third-party-notices.ps1 -Steam.
     [switch]$Steam
 )
 # packaging\licenses files only NanaType ships.
-$appOnly = @("LiliaBilibili-MIT.txt", "libvpx-BSD.txt", "KeySounds-CC0.txt", "KeySounds-Bubble-CC-BY-3.0.txt", "WhisperCpp-MIT.txt", "WhisperModel-MIT.txt", "WebRTC-VAD-BSD.txt")
-# ...and those the Steam edition leaves out with the Bilibili web source.
-$unofficialOnly = @("LiliaBilibili-MIT.txt")
+$appOnly = @("libvpx-BSD.txt", "KeySounds-CC0.txt", "KeySounds-Bubble-CC-BY-3.0.txt", "WhisperCpp-MIT.txt", "WhisperModel-MIT.txt", "WebRTC-VAD-BSD.txt")
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $Destination) { $Destination = Join-Path $Staged "THIRD_PARTY_LICENSES.txt" }
@@ -59,7 +57,6 @@ foreach ($folder in @((Join-Path $repoRoot "packaging\licenses"), $Staged)) {
     foreach ($file in (Get-ChildItem -LiteralPath $folder -File -Recurse | Sort-Object FullName)) {
         $name = [IO.Path]::GetRelativePath($folder, $file.FullName).Replace('\', '/')
         if ($Product -eq "editor" -and $appOnly -contains $name) { continue }
-        if ($Steam -and $unofficialOnly -contains $name) { continue }
         Add-LicenseSource $name $file.FullName "packaging"
     }
 }

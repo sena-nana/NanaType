@@ -9,7 +9,7 @@ pub fn audit(
     theme: Arc<nana_ui::CompiledTheme>,
 ) {
     if std::env::var_os("NANATYPE_RESPONSIVE_LONG_TEXT").is_some() {
-        let text = format!("[at=1001 name=星野ほたる avatar=blob:bili-face-1001] [sticker=nana/heart]{}", "中文竖排：你好，世界！Hello 2026。[b]字体[/b]与[color=#E8505B]颜色[/color]。[ruby=かんじ]漢字[/ruby]。\n".repeat(12));
+        let text = format!("[at=1001 name=星野ほたる avatar=blob:blive-face-1001] [sticker=nana/heart]{}", "中文竖排：你好，世界！Hello 2026。[b]字体[/b]与[color=#E8505B]颜色[/color]。[ruby=かんじ]漢字[/ruby]。\n".repeat(12));
         let doc = Arc::new(parse(&text).doc);
         ui.display.update(|view| {
             let view = Arc::make_mut(view);

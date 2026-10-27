@@ -216,15 +216,15 @@ pub fn sample_chat(
             let f = |c: u8| (f32::from(c) * shade) as u8;
             image::Rgba([f(r), f(g), f(b), 255])
         });
-        img.save(dir.join(format!("bili-face-{uid}.png"))).unwrap();
-        let asset = AssetRef::Blob(format!("bili-face-{uid}"));
+        img.save(dir.join(format!("blive-face-{uid}.png"))).unwrap();
+        let asset = AssetRef::Blob(format!("blive-face-{uid}"));
         let url = blobs.url(&asset, None).expect("avatar url");
         urls.insert(asset.to_string(), url);
     }
     let message = |seq: u64, who: usize, kind: ChatKind, text: &str| {
         let (uid, name, _, guard) = viewers[who];
         ChatMessage {
-            platform: nanatype::chat::Platform::Bilibili,
+            platform: nanatype::chat::Platform::Blivechat,
             epoch: 0,
             room: String::new(),
             seq,
@@ -233,7 +233,7 @@ pub fn sample_chat(
             user: ChatUser {
                 uid: uid.into(),
                 name: name.into(),
-                avatar: Some(AssetRef::Blob(format!("bili-face-{uid}"))),
+                avatar: Some(AssetRef::Blob(format!("blive-face-{uid}"))),
             },
             guard,
             owner: false,
@@ -337,8 +337,6 @@ pub fn reported(
     locale: Locale,
     bridge: &[BridgeStatus],
     [display, history]: [WindowOutputStatus; 2],
-    bilibili: &ConnectionState,
-    room: &str,
 ) -> Status {
     let mut s = Status::default();
     for report in bridge {
@@ -352,7 +350,6 @@ pub fn reported(
     }
     s.spout_display = link_text::spout(locale, &display).unwrap_or_default();
     s.spout_history = link_text::spout(locale, &history).unwrap_or_default();
-    (s.bilibili, s.bilibili_link) = link_text::bilibili(locale, bilibili, room);
     s
 }
 
@@ -367,11 +364,6 @@ pub fn assert_consistent(settings: &Settings, status: &Status) {
             "WebSocket",
             i.websocket.enabled,
             status.ws != LinkState::Off,
-        ),
-        (
-            "Bilibili",
-            i.bilibili.enabled,
-            status.bilibili_link != danmaku::Link::Off,
         ),
         (
             "blivechat",
