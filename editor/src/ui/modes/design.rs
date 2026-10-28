@@ -56,33 +56,31 @@ pub fn path_of(part: &str) -> Option<Vec<String>> {
 }
 
 fn layer_label(ui: Ui, key: &str) -> String {
-    const NAMED: [&str; 20] = [
-        "dialogue",
-        "nameplate",
-        "portrait",
-        "continue",
-        "text",
-        "decor",
-        "history",
-        "chrome",
-        "effects",
-        "fonts",
-        "materials",
-        "mention",
-        "params",
-        "param_groups",
-        "presets",
-        "shaders",
-        "sounds",
-        "responsive",
-        "pipelines",
-        "frame",
-    ];
-    if NAMED.contains(&key) {
-        format!("{} · {key}", ui.now_t(&format!("pkgedit-layer-{key}")))
-    } else {
-        key.to_owned()
-    }
+    // Keep message ids explicit so the locale audit sees the keys we ship.
+    let message = match key {
+        "dialogue" => "pkgedit-layer-dialogue",
+        "nameplate" => "pkgedit-layer-nameplate",
+        "portrait" => "pkgedit-layer-portrait",
+        "continue" => "pkgedit-layer-continue",
+        "text" => "pkgedit-layer-text",
+        "decor" => "pkgedit-layer-decor",
+        "history" => "pkgedit-layer-history",
+        "chrome" => "pkgedit-layer-chrome",
+        "effects" => "pkgedit-layer-effects",
+        "fonts" => "pkgedit-layer-fonts",
+        "materials" => "pkgedit-layer-materials",
+        "mention" => "pkgedit-layer-mention",
+        "params" => "pkgedit-layer-params",
+        "param_groups" => "pkgedit-layer-param_groups",
+        "presets" => "pkgedit-layer-presets",
+        "shaders" => "pkgedit-layer-shaders",
+        "sounds" => "pkgedit-layer-sounds",
+        "responsive" => "pkgedit-layer-responsive",
+        "pipelines" => "pkgedit-layer-pipelines",
+        "frame" => "pkgedit-layer-frame",
+        _ => return key.to_owned(),
+    };
+    format!("{} · {key}", ui.now_t(message))
 }
 
 fn layer_icon(key: &str) -> nana_ui::runtime::Icon {

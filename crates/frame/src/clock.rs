@@ -105,8 +105,19 @@ mod tests {
     }
 
     #[test]
+    fn frame_ms_follows_the_capture_clock_without_an_anchor() {
+        let _restore = Restore(FRAME.replace(None));
+        for ms in [0, 1_000, 60_000] {
+            capture_at(ms, || assert_eq!(frame_ms(), ms));
+        }
+    }
+
+    #[test]
     fn frame_ms_follows_the_session_clock_without_an_anchor() {
         let _restore = Restore(FRAME.replace(None));
-        assert_eq!(frame_ms(), now_ms());
+        let before = now_ms();
+        let frame = frame_ms();
+        let after = now_ms();
+        assert!((before..=after).contains(&frame));
     }
 }
