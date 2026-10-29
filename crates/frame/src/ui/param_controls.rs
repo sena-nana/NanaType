@@ -123,7 +123,7 @@ fn number(p: Param) -> AnyView {
     widget(
         Stack::row(0.0)
             .gap_step(gap::step::TIGHT)
-            .width(LengthSpec::Fill)
+            .width(LengthSpec::Px(field::DENSE))
             .align(AlignSpec::Center),
     )
     .children((
@@ -299,9 +299,6 @@ fn row(p: Param) -> AnyView {
             },
         )
     };
-    // A slider takes the room its label leaves; other controls keep the
-    // shared narrow width.
-    let slider = p.spec().kind == ParamType::Number;
     let control = match p.spec().kind {
         ParamType::Number => number(p),
         ParamType::Color => color(p),
@@ -317,14 +314,7 @@ fn row(p: Param) -> AnyView {
             .gap_step(gap::step::TIGHT)
             .width(LengthSpec::Fill),
     )
-    .children((
-        if slider {
-            kit::dense_row_fill(name, control)
-        } else {
-            kit::dense_row(name, control)
-        },
-        error,
-    ))
+    .children((kit::dense_row(name, control), error))
     .into_any()
 }
 

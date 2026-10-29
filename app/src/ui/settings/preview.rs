@@ -245,12 +245,12 @@ fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
             .clamp(min, max)
     };
     let readout = value.clone();
-    kit::dense_row_fill(
+    kit::dense_row(
         ui.now_t("skin-edit-line"),
         widget(
             Stack::row(0.0)
                 .gap_step(gap::step::TIGHT)
-                .width(LengthSpec::Fill)
+                .width(LengthSpec::Px(kit::field::DENSE))
                 .align(AlignSpec::Center),
         )
         .children((
