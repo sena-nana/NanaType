@@ -223,8 +223,10 @@ pub fn editor_area<M: Send + 'static>(
                 })
                 // IME preedit does not enter the draft until committed. Hide
                 // the empty hint while composing so it cannot overlap preedit.
+                // Markers and whitespace show in the editor though the line is
+                // blank, so the hint waits for a truly empty draft.
                 .key("input-empty-hint")
-                .visible(move || !ui.composing.get() && ui.draft.with(|d| d.is_blank())),
+                .visible(move || !ui.composing.get() && ui.draft.with(|d| d.is_empty())),
         )),
         widget(Stack::fill_column(0.0).with_layout(|l| {
             l.flex_grow = Some(1.0);

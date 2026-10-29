@@ -96,6 +96,15 @@ fn blank_lines_ignore_markers_and_whitespace() {
 }
 
 #[test]
+fn empty_means_the_editor_shows_nothing() {
+    assert!(Document::default().is_empty());
+    assert!(Document::plain("").is_empty());
+    assert!(!Document::plain(" ").is_empty());
+    assert!(!Document::plain("\n").is_empty());
+    assert!(!Document::from_inlines(vec![Inline::Marker(Marker::Page)]).is_empty());
+}
+
+#[test]
 fn unit_budget_caps_long_lines() {
     let doc = Document::plain(&"a".repeat(MAX_UNITS + 50));
     assert_eq!(doc.unit_count(), MAX_UNITS);

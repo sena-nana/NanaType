@@ -396,6 +396,17 @@ impl Document {
         })
     }
 
+    /// Nothing at all: no text (whitespace included), no objects, no markers
+    /// and no second paragraph. An editor shows nothing for exactly this.
+    pub fn is_empty(&self) -> bool {
+        self.paragraphs.len() <= 1
+            && self.paragraphs.iter().all(|p| {
+                p.inlines
+                    .iter()
+                    .all(|inline| matches!(inline, Inline::Text(run) if run.text.is_empty()))
+            })
+    }
+
     /// Plain text with atoms as their alt text and ruby as its base.
     pub fn plain_text(&self) -> String {
         let mut out = String::new();
