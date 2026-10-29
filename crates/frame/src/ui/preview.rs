@@ -367,6 +367,9 @@ fn sample_stage(
     }
     preview.reduced_motion = ui.reduced_motion;
     preview.now = ui.now;
+    // Background stroke maps announce themselves on the host's epoch; a
+    // private one would leave the sample on the plain fade until it replays.
+    preview.layout_epoch = ui.layout_epoch;
     preview.preview_playback = ui.preview_playback;
     // The sample line lives on this signal, so the settings window can
     // restart it. The private stage would otherwise keep a clock nobody ticks.
@@ -1414,6 +1417,25 @@ mod tests {
             a.pick_family(&other.to_uppercase());
             assert_eq!(a.picked.lock().unwrap().len(), 1);
         }
+    }
+
+    #[test]
+    fn sample_stage_follows_the_host_layout_epoch() {
+        let ui = Stage::new(
+            Arc::new(nanatype_settings::Settings::default()),
+            Arc::new(Skin::default()),
+            nanatype_i18n::Locale::ZhCn,
+        );
+        let ready = sample_stage(
+            ui,
+            &Skin::default(),
+            "nanatype.love_letter",
+            &Draft::default(),
+            Default::default(),
+        )
+        .unwrap();
+        ui.layout_epoch.update(|e| *e += 1);
+        assert_eq!(ready.preview.layout_epoch.get_untracked(), 1);
     }
 
     #[test]
