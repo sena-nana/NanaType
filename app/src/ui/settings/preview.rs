@@ -61,8 +61,8 @@ const LINE_STEP: f64 = 0.05;
 const WINDOW_RANGE: (f64, f64) = (96.0, 8192.0);
 /// The skin's own window size scaled, offered beside it as presets (%).
 const WINDOW_SCALES: [u32; 4] = [75, 125, 150, 200];
-/// The line height's value beside its slider.
-const READOUT_W: f32 = 56.0;
+/// The line height's value beside its slider ("1.45×").
+const READOUT_W: f32 = 36.0;
 
 // Prepares asked for while a frame was built. The settings window sends
 // them after that frame is presented: registering a skin's fonts takes the
@@ -245,18 +245,19 @@ fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
             .clamp(min, max)
     };
     let readout = value.clone();
-    kit::dense_row(
+    kit::dense_row_fill(
         ui.now_t("skin-edit-line"),
         widget(
             Stack::row(0.0)
-                .gap_step(gap::step::CONTROL)
-                .width(LengthSpec::Px(kit::field::DENSE))
+                .gap_step(gap::step::TIGHT)
+                .width(LengthSpec::Fill)
                 .align(AlignSpec::Center),
         )
         .children((
             widget(Stack::row(0.0).grow(1.0).shrink(1.0)).children(
                 widget(
                     RangeField::new(value(), min, max, LINE_STEP)
+                        .size(ControlSize::Small)
                         .show_value(false)
                         .show_label(false),
                 )
@@ -287,7 +288,7 @@ fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
                     .color(SemanticColorRole::Muted),
             )
             .bind(move |t: &mut Text| {
-                let s = format!("{:.2} ×", readout());
+                let s = format!("{:.2}×", readout());
                 if t.value != s {
                     t.value = s;
                 }

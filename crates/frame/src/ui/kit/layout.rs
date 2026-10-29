@@ -168,6 +168,36 @@ pub fn dense_row(label_text: String, control: impl IntoView) -> AnyView {
     .into_any()
 }
 
+/// [`dense_row`] whose control takes the room the label leaves, never
+/// narrower than [`super::field::DENSE`]: a slider gets the row's width.
+pub fn dense_row_fill(label_text: String, control: impl IntoView) -> AnyView {
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::GROUP)
+            .align(AlignSpec::Center)
+            .width(LengthSpec::Fill)
+            .with_layout(|l| {
+                l.padding_top = Some(LengthSpec::Px(gap::HAIR));
+                l.padding_bottom = Some(LengthSpec::Px(gap::HAIR));
+            }),
+    )
+    .children((
+        widget(super::Type::Caption.text(label_text).style({
+            let mut st = super::Type::Caption.one_line();
+            Arc::make_mut(&mut st.layout).flex_grow = Some(0.0);
+            st
+        })),
+        widget(
+            Stack::row(0.0)
+                .align(AlignSpec::Center)
+                .grow(1.0)
+                .with_layout(|l| l.min_width = Some(LengthSpec::Px(super::field::DENSE))),
+        )
+        .children(control),
+    ))
+    .into_any()
+}
+
 /// [`row_text`] whose hint is re-read as the signals it reads change.
 pub fn row_hint_fn(
     label_text: String,
