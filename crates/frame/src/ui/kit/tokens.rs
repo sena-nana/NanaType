@@ -208,6 +208,9 @@ pub mod field {
     pub const MD: f32 = 240.0;
     /// A token, a long value.
     pub const LG: f32 = 320.0;
+    /// Every control of a [`super::dense_row`], so they line up at the
+    /// row's end.
+    pub const DENSE: f32 = 168.0;
 }
 
 /// Icon sizes.

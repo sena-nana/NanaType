@@ -136,6 +136,38 @@ pub fn row_text(label_text: String, hint_text: Option<String>, control: AnyView)
     )
 }
 
+/// A label and its control on one line, packed close: the label is cut
+/// before the control is, and the row never stacks. For a narrow column of
+/// settings, whose controls are [`super::field::DENSE`] wide.
+pub fn dense_row(label_text: String, control: impl IntoView) -> AnyView {
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .align(AlignSpec::Center)
+            .justify(JustifySpec::SpaceBetween)
+            .width(LengthSpec::Fill)
+            .with_layout(|l| {
+                l.padding_top = Some(LengthSpec::Px(gap::HAIR));
+                l.padding_bottom = Some(LengthSpec::Px(gap::HAIR));
+            }),
+    )
+    .children((
+        widget(
+            super::Type::Caption
+                .text(label_text)
+                .style(super::Type::Caption.one_line()),
+        ),
+        widget(
+            Stack::row(0.0)
+                .align(AlignSpec::Center)
+                .justify(JustifySpec::End)
+                .with_layout(|l| l.flex_shrink = Some(0.0)),
+        )
+        .children(control),
+    ))
+    .into_any()
+}
+
 /// [`row_text`] whose hint is re-read as the signals it reads change.
 pub fn row_hint_fn(
     label_text: String,

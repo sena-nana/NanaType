@@ -14,7 +14,7 @@ use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_model::{ParamValue, Rgba8};
 use nanatype_theme::{ParamError, ParamSpec, ParamType, Resolved, Skin, localized};
 
-use super::controls::{hint, label};
+use super::controls::label;
 use super::kit::{Type, field, gap};
 use super::{Stage, kit};
 #[derive(Clone, Copy)]
@@ -123,7 +123,7 @@ fn number(p: Param) -> AnyView {
     widget(
         Stack::row(0.0)
             .gap_step(gap::step::CONTROL)
-            .width(LengthSpec::Fill)
+            .width(LengthSpec::Px(field::DENSE))
             .align(AlignSpec::Center),
     )
     .children((
@@ -261,24 +261,24 @@ fn choice(p: Param) -> AnyView {
             .into_any();
     }
     let read = p.clone();
-    widget(
-        Select::new(Some(chosen(&p)))
-            .options(
-                options
-                    .into_iter()
-                    .map(|(v, l)| SelectOption::new(v, l))
-                    .collect::<Vec<_>>(),
-            )
-            .size(ControlSize::Small),
-    )
-    .bind(move |s: &mut Select| {
-        let v: Arc<str> = chosen(&read).into();
-        if s.value.as_ref() != Some(&v) {
-            s.value = Some(v);
-        }
-    })
-    .on(move |e: &SelectChanged| p.set(ParamValue::Text(e.value.to_string())))
-    .into_any()
+    let mut select = Select::new(Some(chosen(&p)))
+        .options(
+            options
+                .into_iter()
+                .map(|(v, l)| SelectOption::new(v, l))
+                .collect::<Vec<_>>(),
+        )
+        .size(ControlSize::Small);
+    Arc::make_mut(&mut select.style.layout).width = Some(LengthSpec::Px(field::DENSE));
+    widget(select)
+        .bind(move |s: &mut Select| {
+            let v: Arc<str> = chosen(&read).into();
+            if s.value.as_ref() != Some(&v) {
+                s.value = Some(v);
+            }
+        })
+        .on(move |e: &SelectChanged| p.set(ParamValue::Text(e.value.to_string())))
+        .into_any()
 }
 
 /// One labelled param, with the reason its typed text is refused.
@@ -303,7 +303,7 @@ fn row(p: Param) -> AnyView {
         ParamType::Color => color(p),
         ParamType::Bool => toggle(p),
         ParamType::Enum => choice(p),
-        ParamType::Text => typed_field(p, LengthSpec::Fill, |r| match r {
+        ParamType::Text => typed_field(p, LengthSpec::Px(field::DENSE), |r| match r {
             Some(Resolved::Text(t)) => t,
             _ => String::new(),
         }),
@@ -313,19 +313,7 @@ fn row(p: Param) -> AnyView {
             .gap_step(gap::step::TIGHT)
             .width(LengthSpec::Fill),
     )
-    .children((
-        widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::CONTROL)
-                .align(AlignSpec::Center)
-                .width(LengthSpec::Fill),
-        )
-        .children((
-            widget(Stack::row(0.0).width(LengthSpec::Px(field::XS))).children(hint(name)),
-            widget(Stack::row(0.0).grow(1.0).shrink(1.0)).children(control),
-        )),
-        error,
-    ))
+    .children((kit::dense_row(name, control), error))
     .into_any()
 }
 

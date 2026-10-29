@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, on_mount, signal, widget};
 use nana_ui::runtime::{
     Activate, Button, ColorChanged, ColorField, Icon, IconButton, NumberChanged, NumberInput,
-    RangeChanged, RangeField, Select, SelectChanged, SelectOption, SizeChanged, Stack, Text,
-    TextChanged, TextInput, TextInputState,
+    RangeChanged, RangeField, Select, SelectChanged, SelectOption, SizeChanged, SizeField,
+    SizeFieldChanged, SizePreset, Stack, Text,
 };
 use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
@@ -52,12 +52,15 @@ pub(super) fn change(ui: Ui, id: &str, f: impl FnOnce(&mut Draft)) {
 /// least it narrows to before they stack.
 const COLUMN_W: f32 = 300.0;
 const COLUMN_MIN_W: f32 = 280.0;
-/// Two fields share a row, `HALF_W` percent each.
-const HALF_W: f32 = 48.0;
 /// The body size (px) and line height (× size) the profile accepts.
 const SIZE_RANGE: (f64, f64) = (8.0, 200.0);
 const LINE_RANGE: (f64, f64) = (1.0, 3.0);
 const LINE_STEP: f64 = 0.05;
+/// The window sizes a profile accepts, both sides in one field (the width
+/// also needs 160: below it the draft reads as invalid).
+const WINDOW_RANGE: (f64, f64) = (96.0, 8192.0);
+/// The skin's own window size scaled, offered beside it as presets (%).
+const WINDOW_SCALES: [u32; 4] = [75, 125, 150, 200];
 /// The line height's value beside its slider.
 const READOUT_W: f32 = 56.0;
 
@@ -94,71 +97,8 @@ pub(super) fn select(previewing: Signal<Option<String>>, row: &crate::ui::SkinRo
     }
 }
 
-/// Width and height: typed, since they run into the thousands.
-#[derive(Clone, Copy)]
-enum Field {
-    Width,
-    Height,
-}
-impl Field {
-    fn value(self, p: &mut Pane) -> &mut String {
-        match self {
-            Self::Width => &mut p.width,
-            Self::Height => &mut p.height,
-        }
-    }
-    fn key(self) -> &'static str {
-        match self {
-            Self::Width => "skin-edit-width",
-            Self::Height => "skin-edit-height",
-        }
-    }
-}
-
-/// A caption over `control`, `width` wide.
-fn captioned(ui: Ui, key: &str, width: LengthSpec, control: impl IntoView) -> AnyView {
-    widget(
-        Stack::column(0.0)
-            .gap_step(gap::step::TIGHT)
-            .width(width)
-            .with_layout(|l| {
-                l.min_width = Some(LengthSpec::Px(0.0));
-            }),
-    )
-    .children((hint(ui.now_t(key)), control))
-    .into_any()
-}
-
 fn surface_key(base: &str, history: bool) -> String {
     format!("{base}-{}", if history { "history" } else { "display" })
-}
-
-fn field(ui: Ui, id: &str, history: bool, field: Field, placeholder: String) -> AnyView {
-    let read_id = id.to_owned();
-    let write_id = id.to_owned();
-    let read = move || field.value(draft(ui, &read_id).pane_mut(history)).clone();
-    captioned(
-        ui,
-        field.key(),
-        LengthSpec::Percent(HALF_W),
-        widget(
-            kit::text_input(read())
-                .placeholder(placeholder)
-                .size(ControlSize::Small),
-        )
-        .key(surface_key(field.key(), history))
-        .bind(move |input: &mut TextInput| {
-            let text = read();
-            if input.state.value.as_str() != text {
-                input.state = TextInputState::new(text);
-            }
-        })
-        .on(move |e: &TextChanged| {
-            change(ui, &write_id, |d| {
-                *field.value(d.pane_mut(history)) = e.value.to_string()
-            });
-        }),
-    )
 }
 
 /// `value` as a draft field: empty when it is the skin's own `default`, so
@@ -186,29 +126,107 @@ fn size_field(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
     // The value last shown, so only outside changes (reset, discard)
     // replace what is being typed.
     let shown = Arc::new(AtomicU32::new(read().to_bits()));
-    captioned(
-        ui,
-        "skin-edit-size",
-        LengthSpec::Percent(HALF_W),
-        widget(
-            kit::number_input(f64::from(read()))
-                .range(SIZE_RANGE.0, SIZE_RANGE.1)
-                .step(1.0)
-                .label(ui.now_t("skin-edit-size"))
-                .size(ControlSize::Small),
-        )
-        .key(surface_key("skin-edit-size", history))
-        .bind(move |input: &mut NumberInput| {
-            let v = read();
-            if shown.swap(v.to_bits(), Ordering::Relaxed) != v.to_bits() {
-                input.assign(f64::from(v));
-            }
+    let mut input = kit::number_input(f64::from(read()))
+        .range(SIZE_RANGE.0, SIZE_RANGE.1)
+        .step(1.0)
+        .label(ui.now_t("skin-edit-size"))
+        .size(ControlSize::Small);
+    dense_width(Arc::make_mut(&mut input.style.layout));
+    kit::dense_row(
+        ui.now_t("skin-edit-size"),
+        widget(input)
+            .key(surface_key("skin-edit-size", history))
+            .bind(move |input: &mut NumberInput| {
+                let v = read();
+                if shown.swap(v.to_bits(), Ordering::Relaxed) != v.to_bits() {
+                    input.assign(f64::from(v));
+                }
+            })
+            .on(move |e: &NumberChanged| {
+                change(ui, &write_id, |d| {
+                    d.pane_mut(history).size = unless_default(e.value as f32, default)
+                });
+            }),
+    )
+}
+
+/// A control at the one width every narrow row's control takes.
+fn dense_width(l: &mut nana_ui_core::LayoutStyle) {
+    l.width = Some(LengthSpec::Px(kit::field::DENSE));
+    l.max_width = Some(LengthSpec::Percent(100.0));
+    l.min_width = Some(LengthSpec::Px(0.0));
+    l.flex_shrink = Some(0.0);
+}
+
+/// The window's width × height in one field, with the skin's own size and
+/// its scales as presets; the skin's size while the draft has none.
+fn resolution_field(ui: Ui, id: &str, history: bool, default: [f32; 2]) -> AnyView {
+    let read_id = id.to_owned();
+    let write_id = id.to_owned();
+    let read = move || {
+        let d = draft(ui, &read_id);
+        let pane = d.pane(history);
+        [&pane.width, &pane.height]
+            .into_iter()
+            .zip(default)
+            .map(|(typed, default)| f64::from(typed.trim().parse::<f32>().unwrap_or(default)))
+            .collect::<Vec<_>>()
+    };
+    let size = |v: Vec<f64>| [v[0], v[1]];
+    let to = |v: [f32; 2]| v.map(|side| f64::from(side.round()));
+    let accepts = |[w, h]: [f64; 2]| {
+        (160.0..=WINDOW_RANGE.1).contains(&w) && (WINDOW_RANGE.0..=WINDOW_RANGE.1).contains(&h)
+    };
+    let [w, h] = to(default);
+    let presets = std::iter::once(SizePreset::new(
+        format!("{} · {w}×{h}", ui.now_t("common-skin-default")),
+        [w, h],
+    ))
+    .chain(WINDOW_SCALES.iter().filter_map(|&percent| {
+        let value = to(default.map(|side| side * percent as f32 / 100.0));
+        accepts(value).then(|| {
+            SizePreset::new(
+                ui.tr(
+                    "skin-edit-size-preset-scale",
+                    &[
+                        ("percent", percent.into()),
+                        ("width", value[0].to_string().into()),
+                        ("height", value[1].to_string().into()),
+                    ],
+                ),
+                value,
+            )
         })
-        .on(move |e: &NumberChanged| {
-            change(ui, &write_id, |d| {
-                d.pane_mut(history).size = unless_default(e.value as f32, default)
-            });
-        }),
+    }))
+    .collect();
+    let mut field = SizeField::new(size(read()))
+        .range(WINDOW_RANGE.0, WINDOW_RANGE.1)
+        .step(1.0)
+        .size(ControlSize::Small)
+        .presets(presets)
+        .label(ui.now_t("skin-edit-resolution"))
+        .width_label(ui.now_t("skin-edit-width"))
+        .height_label(ui.now_t("skin-edit-height"))
+        .presets_label(ui.now_t("skin-edit-size-presets"));
+    dense_width(Arc::make_mut(&mut field.style.layout));
+    kit::dense_row(
+        ui.now_t("skin-edit-resolution"),
+        widget(field)
+            .key(surface_key("skin-edit-resolution", history))
+            .bind(move |f: &mut SizeField| {
+                let v = size(read());
+                if f.value != v {
+                    f.value = v;
+                }
+            })
+            .on(move |e: &SizeFieldChanged| {
+                let [w, h] = e.value.map(|side| side as f32);
+                change(ui, &write_id, |d| {
+                    let pane = d.pane_mut(history);
+                    pane.width = unless_default(w, default[0].round());
+                    pane.height = unless_default(h, default[1].round());
+                });
+            }),
     )
 }
 
@@ -227,14 +245,12 @@ fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
             .clamp(min, max)
     };
     let readout = value.clone();
-    captioned(
-        ui,
-        "skin-edit-line",
-        LengthSpec::Fill,
+    kit::dense_row(
+        ui.now_t("skin-edit-line"),
         widget(
             Stack::row(0.0)
                 .gap_step(gap::step::CONTROL)
-                .width(LengthSpec::Fill)
+                .width(LengthSpec::Px(kit::field::DENSE))
                 .align(AlignSpec::Center),
         )
         .children((
@@ -292,34 +308,34 @@ fn color_field(ui: Ui, id: &str, history: bool, default: Rgba8) -> AnyView {
             .parse::<Rgba8>()
             .unwrap_or(default)
     };
-    captioned(
-        ui,
-        "skin-edit-color",
-        LengthSpec::Percent(HALF_W),
-        widget(
-            ColorField::new(crate::ui::c(rgba()))
-                .label(ui.now_t("skin-edit-color"))
-                .size(ControlSize::Small),
-        )
-        .key(surface_key("skin-edit-color", history))
-        .bind(move |f: &mut ColorField| {
-            let want = crate::ui::c(rgba());
-            if f.value != want && !f.opened {
-                *f = f.clone().value(want);
-            }
-        })
-        .on(move |e: &ColorChanged| {
-            let [r, g, b, _] = e.value;
-            let to = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-            let c = Rgba8::rgba(to(r), to(g), to(b), 255); // design-tokens: data
-            change(ui, &write_id, |d| {
-                d.pane_mut(history).color = if c == default {
-                    String::new()
-                } else {
-                    c.to_hex()
-                }
-            });
-        }),
+    let field = ColorField::new(crate::ui::c(rgba()))
+        .label(ui.now_t("skin-edit-color"))
+        .size(ControlSize::Small);
+    // The colour field fills what holds it, so its width is the box's.
+    kit::dense_row(
+        ui.now_t("skin-edit-color"),
+        widget(Stack::row(0.0).with_layout(dense_width)).children(
+            widget(field)
+                .key(surface_key("skin-edit-color", history))
+                .bind(move |f: &mut ColorField| {
+                    let want = crate::ui::c(rgba());
+                    if f.value != want && !f.opened {
+                        *f = f.clone().value(want);
+                    }
+                })
+                .on(move |e: &ColorChanged| {
+                    let [r, g, b, _] = e.value;
+                    let to = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+                    let c = Rgba8::rgba(to(r), to(g), to(b), 255); // design-tokens: data
+                    change(ui, &write_id, |d| {
+                        d.pane_mut(history).color = if c == default {
+                            String::new()
+                        } else {
+                            c.to_hex()
+                        }
+                    });
+                }),
+        ),
     )
 }
 
@@ -354,33 +370,31 @@ fn font_select(ui: Ui, id: &str, history: bool) -> AnyView {
     );
     let read_id = id.to_owned();
     let write_id = id.to_owned();
-    captioned(
-        ui,
-        "skin-edit-font",
-        LengthSpec::Fill,
-        widget(
-            Select::new(Some(String::new()))
-                .options(fonts)
-                .label(ui.now_t("skin-edit-font"))
-                .size(ControlSize::Small),
-        )
-        .key(surface_key("skin-edit-font", history))
-        .bind(move |s: &mut Select| {
-            let font: Arc<str> = draft(ui, &read_id).pane(history).font.trim().into();
-            // A family saved before the list offered it still shows.
-            if !s.options.iter().any(|o| o.value == font) {
-                s.options
-                    .push(SelectOption::new(font.to_string(), font.to_string()));
-            }
-            if s.value.as_ref() != Some(&font) {
-                s.value = Some(font);
-            }
-        })
-        .on(move |e: &SelectChanged| {
-            change(ui, &write_id, |d| {
-                d.pane_mut(history).font = e.value.to_string()
-            });
-        }),
+    let mut select = Select::new(Some(String::new()))
+        .options(fonts)
+        .label(ui.now_t("skin-edit-font"))
+        .size(ControlSize::Small);
+    dense_width(Arc::make_mut(&mut select.style.layout));
+    kit::dense_row(
+        ui.now_t("skin-edit-font"),
+        widget(select)
+            .key(surface_key("skin-edit-font", history))
+            .bind(move |s: &mut Select| {
+                let font: Arc<str> = draft(ui, &read_id).pane(history).font.trim().into();
+                // A family saved before the list offered it still shows.
+                if !s.options.iter().any(|o| o.value == font) {
+                    s.options
+                        .push(SelectOption::new(font.to_string(), font.to_string()));
+                }
+                if s.value.as_ref() != Some(&font) {
+                    s.value = Some(font);
+                }
+            })
+            .on(move |e: &SelectChanged| {
+                change(ui, &write_id, |d| {
+                    d.pane_mut(history).font = e.value.to_string()
+                });
+            }),
     )
 }
 
@@ -398,39 +412,17 @@ fn pane_fields(ui: Ui, id: &str, base: &Skin, history: bool) -> AnyView {
     } else {
         base.dialogue.text.clone()
     };
-    let dimensions = default_size(base, history);
-    let typed = [
-        (Field::Width, dimensions[0].to_string()),
-        (Field::Height, dimensions[1].to_string()),
-    ]
-    .into_iter()
-    .map(|(field_, placeholder)| field(ui, id, history, field_, placeholder))
-    .collect::<Vec<_>>();
     widget(
         Stack::column(0.0)
-            .gap_step(gap::step::CONTROL)
+            .gap_step(gap::step::TIGHT)
             .width(LengthSpec::Fill),
     )
     .children((
         font_select(ui, id, history),
-        widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::CONTROL)
-                .wrap(true)
-                .width(LengthSpec::Fill),
-        )
-        .children((
-            size_field(ui, id, history, text.size),
-            color_field(ui, id, history, text.color),
-        )),
+        size_field(ui, id, history, text.size),
+        color_field(ui, id, history, text.color),
         line_slider(ui, id, history, text.line_height),
-        widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::CONTROL)
-                .wrap(true)
-                .width(LengthSpec::Fill),
-        )
-        .children(typed),
+        resolution_field(ui, id, history, default_size(base, history)),
     ))
     .into_any()
 }
@@ -919,6 +911,80 @@ mod tests {
                 .iter()
                 .any(|n| n.label.as_deref() == Some("Some Old Family")
                     || n.value.as_deref() == Some("Some Old Family")),
+        );
+    }
+
+    #[test]
+    fn resolution_field_edits_both_sides_and_its_presets_follow_the_skin() {
+        let (ui, base) = fixture();
+        let id = "nanatype.halo";
+        let doc_id = DocumentId::new(7).unwrap();
+        let mut doc = RuntimeDocument::new(doc_id);
+        let render_base = base.clone();
+        doc.context_mut()
+            .mount_view_root(doc_id, move || controls(ui, id, render_base, false))
+            .unwrap();
+        let mut session = RuntimeAgentSession::new(doc, 700, 1400).unwrap();
+        session.flush().unwrap();
+        let key = "skin-edit-resolution-display";
+        let node = |session: &mut RuntimeAgentSession, role: &str, label: &str| {
+            session.flush().unwrap();
+            session
+                .accessibility_dump()
+                .into_iter()
+                .find(|n| {
+                    n.role == role
+                        && n.label.as_deref() == Some(label)
+                        && n.agent_path.as_deref().is_some_and(|p| p.ends_with(key))
+                })
+                .unwrap_or_else(|| panic!("missing {role} {label}"))
+                .id
+        };
+        let [w, h] = default_size(&base, false).map(f32::round);
+
+        // A typed width lands in the draft; the height keeps following the skin.
+        let width = node(&mut session, "text-input", &ui.now_t("skin-edit-width"));
+        session.click_node(width).unwrap();
+        session.key_press("End", "End", Default::default()).unwrap();
+        for _ in 0..5 {
+            session
+                .key_press("Backspace", "Backspace", Default::default())
+                .unwrap();
+        }
+        session.type_text("900").unwrap();
+        session
+            .key_press("Enter", "Enter", Default::default())
+            .unwrap();
+        assert_eq!(draft(ui, id).display.width, "900");
+        assert_eq!(draft(ui, id).display.height, "");
+
+        let pick = |session: &mut RuntimeAgentSession, label: String| {
+            let menu = node(session, "menu", &ui.now_t("skin-edit-size-presets"));
+            session.click_node(menu).unwrap();
+            session.flush().unwrap();
+            let item = session
+                .accessibility_dump()
+                .into_iter()
+                .find(|n| n.label.as_deref() == Some(label.as_str()))
+                .unwrap_or_else(|| panic!("missing preset {label}"))
+                .id;
+            session.click_node(item).unwrap();
+            session.flush().unwrap();
+        };
+        pick(&mut session, format!("{}% · {}×{}", 200, w * 2.0, h * 2.0));
+        assert_eq!(draft(ui, id).display.width, (w * 2.0).to_string());
+        assert_eq!(draft(ui, id).display.height, (h * 2.0).to_string());
+        // The skin's own size clears the draft, so it follows the skin again.
+        pick(
+            &mut session,
+            format!("{} · {w}×{h}", ui.now_t("common-skin-default")),
+        );
+        assert_eq!(draft(ui, id).display.width, "");
+        assert_eq!(draft(ui, id).display.height, "");
+        let history = draft(ui, id).history;
+        assert_eq!(
+            (history.width, history.height),
+            (String::new(), String::new())
         );
     }
 
