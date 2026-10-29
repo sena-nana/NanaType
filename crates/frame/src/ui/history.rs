@@ -173,12 +173,12 @@ fn bubble_view(surface: Surface, opacity: f32, pad: [f32; 2], max: f32, body: An
     let [top, right, bottom, left] = widths;
     let backdrop = widget(Stack::column(0.0).with_layout(move |l| {
         l.position = PositionSpec::Absolute;
-        // NanaUI anchors absolute children to the parent's content box.
-        // Extend through the reserved padding to paint its full outer box.
-        l.offset_top = Some(LengthSpec::Px(-pad[1] - top));
-        l.offset_right = Some(LengthSpec::Px(-pad[0] - right));
-        l.offset_bottom = Some(LengthSpec::Px(-pad[1] - bottom));
-        l.offset_left = Some(LengthSpec::Px(-pad[0] - left));
+        // An absolute box hangs from its parent's padding box, as in CSS:
+        // zero insets paint the full outer box, reserved padding included.
+        l.offset_top = Some(LengthSpec::Px(0.0));
+        l.offset_right = Some(LengthSpec::Px(0.0));
+        l.offset_bottom = Some(LengthSpec::Px(0.0));
+        l.offset_left = Some(LengthSpec::Px(0.0));
         l.pointer_events = Some(PointerEventsSpec::None);
         l.opacity = Some(opacity);
     }))
