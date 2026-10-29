@@ -32,6 +32,8 @@ chat-pin = Pin above the panels
 window-display = Display
 window-history = History
 window-settings = Settings
+window-quick = Quick input
+quick-placeholder = Type a line, press Enter to send
 
 ## Tray
 tray-mode = Input mode

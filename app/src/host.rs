@@ -28,7 +28,7 @@ use crate::msg::{Msg, Shortcut, input_message};
 use crate::services::sounds::Keystroke;
 use crate::ui::overflow::{self, Measure, PageKey};
 use crate::ui::shader_effects::Wake;
-use crate::ui::{Ui, dialogue, history, input, settings};
+use crate::ui::{Ui, dialogue, history, input, quick, settings};
 use crate::windows::WindowKind;
 
 mod overlay;
@@ -41,6 +41,8 @@ pub struct Host {
     editor: Option<Entity<RichTextEditor>>,
     source: Option<Entity<nana_ui::runtime::TextArea>>,
     editor_menu: Option<Entity<nana_ui::runtime::OverlayHost>>,
+    /// The quick input bar's field.
+    quick_field: Option<Entity<nana_ui::runtime::TextInput>>,
     /// The `@` / `/` list was placed from a stale layout: lay out once
     /// more. Retries are bounded, should the texts never agree.
     completion_unsettled: bool,
@@ -350,6 +352,7 @@ impl Host {
             self.app.notice(message, true);
         }
         self.drive_editor();
+        self.focus_quick();
         let locale = self.app.ui.locale.get_untracked();
         // The app's reduce-motion setting wins over the system's in every
         // window's runtime, so view transitions and toasts land at once too.
@@ -372,6 +375,23 @@ impl Host {
         let mut result = self.app.update_result();
         result.redraw = pending_redraw(&self.docs);
         result
+    }
+
+    /// Put the caret in the quick bar once it is summoned (and mounted).
+    fn focus_quick(&mut self) {
+        if !self.app.focus_quick {
+            return;
+        }
+        let (Some(field), Some(doc)) =
+            (self.quick_field, self.docs.get_mut(&WindowKind::Quick.id()))
+        else {
+            return;
+        };
+        self.app.focus_quick = false;
+        let document = doc.document();
+        let cx = doc.context_mut();
+        let _ = cx.flush_reactive();
+        let _ = cx.focus_node(document, field.stable_id());
     }
 
     /// Apply the app's editor commands, and keep the editor's per-glyph
@@ -484,6 +504,18 @@ impl Host {
                     })
                     .map_err(err)?;
                 self.toasts.insert(id, stack);
+            }
+            WindowKind::Quick => {
+                let (_, field) = context
+                    .mount_view_root(doc_id, move || quick::quick_window(ui))
+                    .map_err(err)?;
+                let post = self.app.ctx.clone();
+                context
+                    .on_key(field, move |key: &nana_ui::KeyInput| {
+                        quick_key(key).map(|m| post.dispatch(m)).is_some()
+                    })
+                    .map_err(err)?;
+                self.quick_field = Some(field);
             }
             WindowKind::Input => {
                 let (_, (editor, source, stack)) = context
@@ -818,6 +850,8 @@ fn delete_rich_selection(
 
 #[cfg(test)]
 mod input_acceptance;
+#[cfg(test)]
+mod quick_acceptance;
 
 /// The menu uses the Runtime's editing path with the same OS pasteboard as keys.
 struct EditorClipboard;
@@ -858,6 +892,38 @@ fn clipboard_image() -> Option<Msg> {
 /// list's keys while it is open, then the bindings of Settings › Hotkeys.
 /// The markup `source` field also pastes clipboard images (the rich editor
 /// asks for that itself).
+/// The quick bar's own key, ahead of its field: Esc hides it. Enter is the
+/// field's own submit.
+fn quick_key(key: &nana_ui::KeyInput) -> Option<Msg> {
+    (key.state == KeyState::Pressed && chord_of(key) == Hotkey::bare("Escape"))
+        .then_some(Msg::QuickHide)
+}
+
+/// Read a window's native handle off the UI thread and post it as `msg`.
+fn post_native_handle(
+    handle: nana_ui::WindowHandle,
+    post: RuntimeProgramContext<Msg>,
+    msg: fn(isize) -> Msg,
+) {
+    std::thread::spawn(move || {
+        let hwnd = handle
+            .with_native_handle(|h| match h.as_raw() {
+                #[cfg(windows)]
+                raw_window_handle::RawWindowHandle::Win32(w) => w.hwnd.get(),
+                #[cfg(target_os = "macos")]
+                raw_window_handle::RawWindowHandle::AppKit(w) => {
+                    // The platform handle is the content view. Activation
+                    // resolves its window on the main thread.
+                    w.ns_view.as_ptr() as isize
+                }
+                _ => 0,
+            })
+            .wait()
+            .unwrap_or(0);
+        post.dispatch(msg(hwnd));
+    });
+}
+
 fn key_policy(
     post: RuntimeProgramContext<Msg>,
     ui: Ui,
@@ -1059,6 +1125,7 @@ impl RuntimeProgram for Host {
             editor: None,
             source: None,
             editor_menu: None,
+            quick_field: None,
             completion_unsettled: false,
             completion_retries: COMPLETION_RETRIES,
             editor_fx: None,
@@ -1145,7 +1212,7 @@ impl RuntimeProgram for Host {
 
     fn appearance_backdrop_opacity_for(&self, id: WindowId) -> f32 {
         match WindowKind::from_id(id) {
-            Some(WindowKind::Input | WindowKind::Settings) => 1.0,
+            Some(WindowKind::Input | WindowKind::Settings | WindowKind::Quick) => 1.0,
             _ => 0.0,
         }
     }
@@ -1192,7 +1259,10 @@ impl RuntimeProgram for Host {
                     // gives a frameless window its traffic lights.
                     if matches!(
                         kind,
-                        WindowKind::Display | WindowKind::PeerDisplay | WindowKind::History
+                        WindowKind::Display
+                            | WindowKind::PeerDisplay
+                            | WindowKind::History
+                            | WindowKind::Quick
                     ) {
                         self.app
                             .commands
@@ -1209,26 +1279,17 @@ impl RuntimeProgram for Host {
                             since_launch_ms = crate::clock::now_ms()
                         );
                         self.open_overlays();
-                        let post = self.app.ctx.clone();
-                        std::thread::spawn(move || {
-                            let hwnd = handle
-                                .with_native_handle(|h| match h.as_raw() {
-                                    #[cfg(windows)]
-                                    raw_window_handle::RawWindowHandle::Win32(w) => w.hwnd.get(),
-                                    #[cfg(target_os = "macos")]
-                                    raw_window_handle::RawWindowHandle::AppKit(w) => {
-                                        // The platform handle is the content view. Activation
-                                        // resolves its window on the main thread.
-                                        w.ns_view.as_ptr() as isize
-                                    }
-                                    _ => 0,
-                                })
-                                .wait()
-                                .unwrap_or(0);
-                            post.dispatch(Msg::InputHwnd(hwnd));
-                        });
+                        post_native_handle(handle, self.app.ctx.clone(), Msg::InputHwnd);
+                    } else if kind == WindowKind::Quick {
+                        post_native_handle(handle, self.app.ctx.clone(), Msg::QuickHwnd);
                     }
                 }
+            }
+            // Like a launcher, the quick bar goes away once it is left.
+            WindowEvent::FocusChanged { id, focused: false }
+                if id == WindowKind::Quick.id() && self.app.quick_open =>
+            {
+                self.app.update(Msg::QuickHide);
             }
             WindowEvent::Moved { id, geometry } | WindowEvent::Resized { id, geometry } => {
                 if let Some(kind) = WindowKind::from_id(id) {
@@ -1265,6 +1326,7 @@ impl RuntimeProgram for Host {
                         ..RuntimeProgramUpdate::default()
                     };
                 }
+                Some(WindowKind::Quick) => self.app.update(Msg::QuickHide),
                 Some(WindowKind::Input) => {
                     if self.app.settings.general.input_presence == InputPresence::Summon {
                         self.app.summoned = false;
@@ -1289,6 +1351,10 @@ impl RuntimeProgram for Host {
                 // must not touch it afterwards.
                 if id == WindowKind::Input.id() {
                     self.app.hotkeys.set_input_window(0);
+                }
+                if id == WindowKind::Quick.id() {
+                    self.quick_field = None;
+                    self.app.quick_closed();
                 }
                 self.docs.remove(&id);
                 self.toasts.remove(&id);

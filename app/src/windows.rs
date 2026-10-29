@@ -23,6 +23,8 @@ pub enum WindowKind {
     PeerDisplay,
     History,
     Settings,
+    /// The summon hotkey's one-line plain-text bar.
+    Quick,
 }
 
 /// Height of the input window's toolbar.
@@ -30,6 +32,8 @@ pub const TOOLBAR_H: f32 = 48.0;
 pub const INPUT_SIZE: (f32, f32) = (1200.0, 640.0);
 pub const INPUT_ACTIONS_H: f32 = 56.0;
 pub const INPUT_MIN: (f64, f64) = (720.0, 360.0);
+/// The quick input bar: one line, no chrome.
+pub const QUICK_SIZE: (f32, f32) = (640.0, 56.0);
 /// Smallest a broadcast window may be dragged to.
 pub const OVERLAY_MIN: (f64, f64) = (160.0, 96.0);
 
@@ -43,16 +47,18 @@ impl WindowKind {
             Self::PeerDisplay => WindowId(6),
             Self::History => WindowId(3),
             Self::Settings => WindowId(4),
+            Self::Quick => WindowId(7),
         }
     }
 
     /// Windows the app manages, in reconcile order.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Input,
         Self::Display,
         Self::PeerDisplay,
         Self::History,
         Self::Settings,
+        Self::Quick,
     ];
 
     pub fn from_id(id: WindowId) -> Option<Self> {
@@ -66,6 +72,7 @@ impl WindowKind {
             Self::PeerDisplay => "nt.peer-display",
             Self::History => "nt.history",
             Self::Settings => "nt.settings",
+            Self::Quick => "nt.quick",
         }
     }
 
@@ -76,6 +83,7 @@ impl WindowKind {
             Self::PeerDisplay => "peer_display",
             Self::History => "history",
             Self::Settings => "settings",
+            Self::Quick => "quick",
         }
     }
 
@@ -86,6 +94,7 @@ impl WindowKind {
             Self::PeerDisplay => "window-peer-display",
             Self::History => "window-history",
             Self::Settings => "window-settings",
+            Self::Quick => "window-quick",
         }
     }
 
@@ -95,14 +104,14 @@ impl WindowKind {
             Self::Display => Some(Canvas::Display),
             Self::PeerDisplay => Some(Canvas::PeerDisplay),
             Self::History => Some(Canvas::History),
-            Self::Input | Self::Settings => None,
+            Self::Input | Self::Settings | Self::Quick => None,
         }
     }
 
     pub fn overlay(self, s: &Settings) -> Option<&OverlaySettings> {
         match self {
             Self::Input => Some(&s.overlays.input),
-            Self::Settings => None,
+            Self::Settings | Self::Quick => None,
             _ => self.canvas().map(|c| c.overlay(s)),
         }
     }
@@ -113,7 +122,7 @@ impl WindowKind {
             Self::Display => Some(&mut s.overlays.display),
             Self::PeerDisplay => Some(&mut s.overlays.peer_display),
             Self::History => Some(&mut s.overlays.history),
-            Self::Settings => None,
+            Self::Settings | Self::Quick => None,
         }
     }
 
@@ -169,7 +178,7 @@ impl WindowKind {
 
     pub fn material(self) -> MaterialEffect {
         match self {
-            Self::Input | Self::Settings => MaterialEffect::Solid,
+            Self::Input | Self::Settings | Self::Quick => MaterialEffect::Solid,
             _ if debug_opaque() => MaterialEffect::Solid,
             _ => MaterialEffect::Transparent,
         }
@@ -187,6 +196,7 @@ pub fn size_of(kind: WindowKind, skin: &Skin, s: &Settings) -> (f32, f32) {
     match kind {
         WindowKind::Input => INPUT_SIZE,
         WindowKind::Settings => (920.0, 660.0),
+        WindowKind::Quick => QUICK_SIZE,
         _ => canvas::size_of(kind.canvas().expect("broadcast window"), skin, s),
     }
 }
@@ -230,6 +240,17 @@ pub fn descriptor(kind: WindowKind, title: &str, skin: &Skin, s: &Settings) -> W
             d.visible = true;
             d.focus_on_show = true;
             d.role = WindowRole::Main;
+        }
+        WindowKind::Quick => {
+            d.system_caption = false;
+            d.resizable = false;
+            d.minimum_size = (f64::from(QUICK_SIZE.0), f64::from(QUICK_SIZE.1));
+            d.skip_taskbar = true;
+            d.always_on_top = true;
+            d.focus_on_show = true;
+            d.role = WindowRole::Tool;
+            // Centred before it is shown, on every summon.
+            d.visible = false;
         }
         _ => {
             d.transparent = !debug_opaque();
@@ -282,13 +303,15 @@ pub fn desired(kind: WindowKind, skin: &Skin, s: &Settings, input_summoned: bool
                 && (s.general.input_presence == InputPresence::Resident || input_summoned)
         }
         WindowKind::Settings => true,
+        // Shown by the app's own flag (`App::quick_open`).
+        WindowKind::Quick => false,
         _ => o.is_some_and(|o| o.visible),
     };
     let lock = o.map(|o| o.lock).unwrap_or(Lock::Interactive);
     Desired {
         visible,
         passthrough: kind != WindowKind::Input && lock == Lock::Locked,
-        on_top: o.is_some_and(|o| o.always_on_top),
+        on_top: kind == WindowKind::Quick || o.is_some_and(|o| o.always_on_top),
         resizable: matches!(kind, WindowKind::Input | WindowKind::Settings)
             || matches!(
                 kind,
@@ -382,7 +405,7 @@ impl WindowManager {
         slot.frame = Some(frame);
         if slot.placed
             && prev != Some(frame)
-            && kind != WindowKind::Settings
+            && !matches!(kind, WindowKind::Settings | WindowKind::Quick)
             && !self.monitors.is_empty()
         {
             self.geometry.remember(&self.monitors, kind.key(), frame);
@@ -407,6 +430,7 @@ impl WindowManager {
             WindowKind::PeerDisplay => (x + (w - sw) / 2.0, y + h * 0.28 - sh / 2.0),
             WindowKind::History => (x + w - sw - margin, y + (h - sh) / 2.0),
             WindowKind::Settings => (x + (w - sw) / 2.0, y + (h - sh) / 2.0),
+            WindowKind::Quick => (x + (w - sw) / 2.0, y + h * 0.25),
         };
         Some((px.max(x) as f32, py.max(y) as f32))
     }
@@ -435,6 +459,11 @@ impl WindowManager {
             };
             let id = kind.id();
             let prev = slot.applied.clone();
+            // The quick bar opens centred each time, wherever it was left.
+            if *kind == WindowKind::Quick && d.visible && !prev.as_ref().is_some_and(|p| p.visible)
+            {
+                slot.placed = false;
+            }
             if !slot.placed && monitors_known {
                 let (pos, size) = match (*kind, placement) {
                     // Overlays whose size follows the skin keep that size.
@@ -700,6 +729,48 @@ mod tests {
         s.general.input_presence = InputPresence::Summon;
         assert!(!desired(WindowKind::Input, &skin, &s, false).visible);
         assert!(desired(WindowKind::Input, &skin, &s, true).visible);
+    }
+
+    #[test]
+    fn the_quick_bar_is_a_frameless_topmost_line_the_app_shows() {
+        let skin = skin();
+        for mode in [InputPresence::Resident, InputPresence::Summon] {
+            let mut s = Settings::default();
+            s.general.input_presence = mode;
+            let d = descriptor(WindowKind::Quick, "quick", &skin, &s);
+            assert!(!d.system_caption && !d.resizable && !d.visible);
+            assert!(d.skip_taskbar && d.always_on_top && d.focus_on_show);
+            assert_eq!(d.role, WindowRole::Tool);
+            let want = desired(WindowKind::Quick, &skin, &s, true);
+            assert!(!want.visible && want.on_top && !want.resizable && !want.passthrough);
+            assert_eq!(want.size, QUICK_SIZE);
+            assert!(pins_size(WindowKind::Quick, want.resizable));
+        }
+        assert!(!WindowKind::OVERLAYS.contains(&WindowKind::Quick));
+        assert_eq!(
+            WindowKind::from_id(WindowKind::Quick.id()),
+            Some(WindowKind::Quick)
+        );
+    }
+
+    #[test]
+    fn the_quick_bar_opens_centred_and_is_never_remembered() {
+        use nanatype_settings::MonitorKey;
+        let mut manager = WindowManager::default();
+        manager.monitors.push(MonitorInfo {
+            key: MonitorKey("test".into()),
+            work_area: [0.0, 0.0, 1920.0, 1080.0],
+            primary: true,
+        });
+        let (x, y) = manager
+            .default_place(WindowKind::Quick, QUICK_SIZE)
+            .unwrap();
+        assert_eq!(x + QUICK_SIZE.0 / 2.0, 960.0);
+        assert!(y < 1080.0 / 2.0);
+        manager.slots.entry(WindowKind::Quick).or_default().placed = true;
+        manager.moved(WindowKind::Quick, Some((10.0, 10.0)), QUICK_SIZE);
+        assert!(!manager.geometry_dirty);
+        assert_eq!(manager.geometry.restore(&manager.monitors, "quick"), None);
     }
 
     #[test]

@@ -135,6 +135,14 @@ pub struct App {
     pub ctx: RuntimeProgramContext<Msg>,
     /// The input window was summoned (summon presence).
     pub summoned: bool,
+    /// The quick input bar is up (summon presence).
+    pub quick_open: bool,
+    /// Its field should take focus on the next frame.
+    pub focus_quick: bool,
+    /// Its native handle, once ready; `0` before.
+    quick_hwnd: isize,
+    /// Its window was asked for and has not closed since.
+    quick_requested: bool,
     pub system_dark: bool,
     next_notice: u64,
     dialogs: HashMap<u64, FileTarget>,
@@ -322,6 +330,10 @@ impl App {
             theme,
             ctx: ctx.clone(),
             summoned: false,
+            quick_open: false,
+            focus_quick: false,
+            quick_hwnd: 0,
+            quick_requested: false,
             system_dark,
             next_notice: 1,
             dialogs: HashMap::new(),
@@ -2119,6 +2131,12 @@ impl App {
             Msg::HotkeyCaptured(hotkey) => self.hotkey_captured(hotkey),
             Msg::HotkeyStatus(status) => self.ui.hotkeys.set(Arc::new(status)),
             Msg::InputHwnd(hwnd) => self.hotkeys.set_input_window(hwnd),
+            Msg::QuickHwnd(hwnd) => {
+                self.quick_hwnd = hwnd;
+                self.sync_quick();
+            }
+            Msg::QuickSend(text) => self.quick_send(&text),
+            Msg::QuickHide => self.hide_quick(),
             Msg::PickFile(target) => self.pick(target),
             Msg::OpenFolder(path) => crate::services::reveal(&path),
             Msg::ExportDiagnostics => self.export_diagnostics(),
@@ -2250,6 +2268,68 @@ impl App {
         }
     }
 
+    /// Bring up the quick input bar, centred and focused.
+    fn show_quick(&mut self) {
+        self.quick_open = true;
+        self.focus_quick = true;
+        self.commands
+            .push(WindowCommand::Focus(WindowKind::Quick.id()));
+        #[cfg(target_os = "macos")]
+        {
+            hotkeys::activate(self.hotkeys.quick_window());
+        }
+    }
+
+    fn hide_quick(&mut self) {
+        self.quick_open = false;
+        self.focus_quick = false;
+        self.ui.quick_text.set_if_changed(String::new());
+    }
+
+    /// Send the bar's line as typed: escaped, so `[` or `/` stay text.
+    fn quick_send(&mut self, text: &str) {
+        let text = text.trim();
+        if text.is_empty() {
+            return;
+        }
+        let doc = nanatype_model::Document::plain(text);
+        self.run(Cmd::SendMarkup(serialize(&doc)));
+        self.hide_quick();
+    }
+
+    /// Keep the quick bar's window open while summon presence wants it, and
+    /// point the summon key at it.
+    fn sync_quick(&mut self) {
+        let summon = self.settings.general.input_presence == InputPresence::Summon;
+        if !summon && self.quick_open {
+            self.hide_quick();
+        }
+        // Like the overlays, it opens once the primary window is ready.
+        if summon
+            && !self.quick_requested
+            && self.windows.is_open(WindowKind::Input)
+            && !self.windows.is_open(WindowKind::Quick)
+        {
+            self.quick_requested = true;
+            let title = self.ui.now_t(WindowKind::Quick.title_key());
+            let desc = windows::descriptor(WindowKind::Quick, &title, &self.skin, &self.settings);
+            self.commands.push(WindowCommand::Open {
+                id: WindowKind::Quick.id(),
+                settings: desc,
+            });
+        }
+        self.hotkeys
+            .set_quick_window(if summon { self.quick_hwnd } else { 0 });
+    }
+
+    /// The quick bar's window closed: ask for it again when wanted.
+    pub(crate) fn quick_closed(&mut self) {
+        self.quick_open = false;
+        self.quick_hwnd = 0;
+        self.quick_requested = false;
+        self.hotkeys.set_quick_window(0);
+    }
+
     /// The chat messages the panel lists, oldest first.
     pub(super) fn chat_shown(&self) -> Vec<u64> {
         self.ui.chat.with_untracked(|rows| {
@@ -2266,15 +2346,15 @@ impl App {
     fn hotkey(&mut self, action: GlobalAction) {
         match action {
             GlobalAction::Summon => {
-                let restoring = self.hotkeys.take_summon_restore();
-                if self.settings.general.input_presence == InputPresence::Summon
-                    && self.summoned
-                    && !restoring
-                {
-                    // The summon key toggles the input window in summon mode.
-                    self.summoned = false;
-                } else {
+                // Only the input window can come back minimized.
+                let _ = self.hotkeys.take_summon_restore();
+                if self.settings.general.input_presence != InputPresence::Summon {
                     self.raise_input();
+                } else if self.quick_open {
+                    // The summon key toggles the quick bar in summon mode.
+                    self.hide_quick();
+                } else {
+                    self.show_quick();
                 }
             }
             GlobalAction::ShowChat => {
@@ -2344,6 +2424,7 @@ impl App {
 
     /// Native window state for this frame.
     pub fn reconcile_windows(&mut self) -> Vec<WindowCommand> {
+        self.sync_quick();
         let want: Vec<_> = WindowKind::ALL
             .into_iter()
             .map(|k| {
@@ -2353,6 +2434,9 @@ impl App {
                     desired.size = self.window_size(k);
                     if k == WindowKind::PeerDisplay && self.peer.handle.is_none() {
                         desired.visible = false;
+                    }
+                    if k == WindowKind::Quick {
+                        desired.visible = self.quick_open;
                     }
                     desired
                 })

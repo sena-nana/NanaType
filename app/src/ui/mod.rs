@@ -11,6 +11,7 @@ pub mod input;
 pub mod link_text;
 pub mod p2p;
 pub mod plugins;
+pub mod quick;
 pub mod settings;
 pub mod sources;
 pub(crate) mod speech;
@@ -245,6 +246,8 @@ pub struct Ui {
     /// The skin library shows cards (`true`) or the list; kept while the
     /// user visits other pages.
     pub skins_grid: Signal<bool>,
+    /// The quick input bar's line, cleared once sent or dismissed.
+    pub quick_text: Signal<String>,
 }
 
 impl std::ops::Deref for Ui {
@@ -319,6 +322,7 @@ impl Ui {
             completion_node: node_ref(),
             input_height: signal(crate::windows::INPUT_SIZE.1),
             skins_grid: signal(true),
+            quick_text: signal(String::new()),
         }
     }
 

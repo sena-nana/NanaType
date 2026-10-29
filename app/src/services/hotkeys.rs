@@ -44,6 +44,9 @@ struct Shared {
 pub struct Hotkeys {
     shared: Arc<Mutex<Shared>>,
     input_hwnd: Arc<AtomicIsize>,
+    /// The quick input bar, raised by the summon key instead of the input
+    /// window while it is set (summon presence).
+    quick_hwnd: Arc<AtomicIsize>,
     /// Captured before the hotkey thread restores the native window.
     summon_restore: Arc<std::sync::atomic::AtomicBool>,
     #[cfg(windows)]
@@ -64,19 +67,21 @@ impl Hotkeys {
             status: HashMap::new(),
         }));
         let input_hwnd = Arc::new(AtomicIsize::new(0));
+        let quick_hwnd = Arc::new(AtomicIsize::new(0));
         let summon_restore = Arc::new(std::sync::atomic::AtomicBool::new(false));
         #[cfg(windows)]
         {
             let thread_id = Arc::new(std::sync::atomic::AtomicU32::new(0));
             let (s, h, t) = (shared.clone(), input_hwnd.clone(), thread_id.clone());
-            let restore = summon_restore.clone();
+            let (q, restore) = (quick_hwnd.clone(), summon_restore.clone());
             std::thread::Builder::new()
                 .name("nanatype-hotkeys".into())
-                .spawn(move || win::run(s, h, t, restore, hit, status))
+                .spawn(move || win::run(s, [h, q], t, restore, hit, status))
                 .expect("spawn hotkey thread");
             Self {
                 shared,
                 input_hwnd,
+                quick_hwnd,
                 summon_restore,
                 thread_id,
             }
@@ -92,6 +97,7 @@ impl Hotkeys {
             Self {
                 shared,
                 input_hwnd,
+                quick_hwnd,
                 mac: state,
                 summon_restore,
             }
@@ -103,6 +109,7 @@ impl Hotkeys {
             Self {
                 shared,
                 input_hwnd,
+                quick_hwnd,
                 summon_restore,
             }
         }
@@ -114,6 +121,15 @@ impl Hotkeys {
 
     pub fn input_window(&self) -> isize {
         self.input_hwnd.load(Ordering::Acquire)
+    }
+
+    /// `0` sends the summon key back to the input window.
+    pub fn set_quick_window(&self, hwnd: isize) {
+        self.quick_hwnd.store(hwnd, Ordering::Release);
+    }
+
+    pub fn quick_window(&self) -> isize {
+        self.quick_hwnd.load(Ordering::Acquire)
     }
 
     pub(crate) fn take_summon_restore(&self) -> bool {
@@ -281,7 +297,7 @@ mod win {
 
     pub fn run(
         shared: Arc<Mutex<Shared>>,
-        input: Arc<AtomicIsize>,
+        [input, quick]: [Arc<AtomicIsize>; 2],
         thread_id: Arc<AtomicU32>,
         restore: Arc<std::sync::atomic::AtomicBool>,
         hit: impl Fn(GlobalAction),
@@ -337,8 +353,12 @@ mod win {
                     let id = msg.wParam.0 as i32;
                     if let Some((_, action)) = registered.iter().find(|(i, _)| *i == id) {
                         if action.raises_input() {
-                            let hwnd = input.load(Ordering::Acquire);
+                            let mut hwnd = input.load(Ordering::Acquire);
                             if *action == GlobalAction::Summon {
+                                hwnd = match quick.load(Ordering::Acquire) {
+                                    0 => hwnd,
+                                    quick => quick,
+                                };
                                 restore.store(
                                     hwnd != 0
                                         && unsafe {

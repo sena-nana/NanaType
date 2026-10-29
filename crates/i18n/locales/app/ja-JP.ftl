@@ -29,6 +29,8 @@ chat-pin = パネルの上に固定
 window-display = 表示ウィンドウ
 window-history = 履歴
 window-settings = 設定
+window-quick = クイック入力
+quick-placeholder = 入力して Enter で送信
 
 ## トレイ
 tray-mode = 入力モード

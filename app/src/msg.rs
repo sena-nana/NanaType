@@ -463,6 +463,12 @@ pub enum Msg {
     },
     /// The input window's native handle (for the summon hotkey).
     InputHwnd(isize),
+    /// The quick input bar's native handle (for the summon hotkey).
+    QuickHwnd(isize),
+    /// Send the quick bar's line as plain text and hide the bar.
+    QuickSend(String),
+    /// Hide the quick bar (Esc, or it lost focus), dropping its line.
+    QuickHide,
     /// A chat message with stable references; pictures may still be loading.
     Chat(std::sync::Arc<crate::chat::ChatMessage>),
     /// A referenced picture is now in the local cache. Never adds messages.
