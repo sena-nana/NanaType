@@ -831,6 +831,11 @@ pub(super) fn skin_filters(ui: Ui, filter: Signal<Option<String>>, grid: Signal<
                         .shrink(1.0)
                         .with_layout(|l| {
                             l.min_width = Some(LengthSpec::Px(0.0));
+                            // The switch is a chip tall plus its inset and
+                            // outline; the first line of chips sits on its
+                            // middle.
+                            l.padding_top =
+                                Some(LengthSpec::Px(space::XXS + crate::ui::kit::HAIRLINE));
                             l.row_gap = Some(LengthSpec::Px(nana_ui::theme::space::SM));
                         }),
                 )

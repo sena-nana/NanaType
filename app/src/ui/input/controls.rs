@@ -303,7 +303,10 @@ fn tile_view(ui: Ui, tile: Tile, query: Signal<String>, hint: Signal<Option<Stri
                 Stack::row(0.0)
                     .gap_step(gap::step::TIGHT)
                     .align(AlignSpec::Center)
-                    .with_layout(|l| l.padding_left = Some(LengthSpec::Px(inset::CHIP_X))),
+                    .with_layout(|l| {
+                        l.padding_left = Some(LengthSpec::Px(inset::CHIP_X));
+                        l.padding_right = Some(LengthSpec::Px(inset::CHIP_X));
+                    }),
             )
             .children((
                 widget(IconGlyph::new(icon).size(icon::SM).decorative()),
@@ -324,8 +327,9 @@ fn tile_view(ui: Ui, tile: Tile, query: Signal<String>, hint: Signal<Option<Stri
         let l = Arc::make_mut(&mut st.layout);
         l.height = Some(LengthSpec::Px(TILE_H));
         l.min_height = Some(LengthSpec::Px(TILE_H));
+        // The face carries its own inset, so the frame hugs it evenly.
         l.padding_left = Some(LengthSpec::Px(gap::HAIR));
-        l.padding_right = Some(LengthSpec::Px(inset::CHIP_X));
+        l.padding_right = Some(LengthSpec::Px(gap::HAIR));
         l.border_width = Some(1.0);
         l.border_style = Some(nana_ui_core::BorderStyle::Solid);
         l.flex_shrink = Some(0.0);
