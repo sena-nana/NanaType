@@ -114,17 +114,99 @@ impl Hotkey {
         out
     }
 
-    /// Function keys and media keys are fine alone; anything that types needs
-    /// a modifier, or it would swallow normal typing system-wide.
-    pub fn is_safe_global(&self) -> bool {
-        if self.has_modifier() {
-            return !self.key.is_empty();
-        }
+    /// Function keys and a few lock keys are fine alone: they type nothing.
+    fn types_nothing(&self) -> bool {
         let k = self.key.as_str();
         (k.len() >= 2
             && k.starts_with('F')
             && k[1..].parse::<u8>().is_ok_and(|n| (1..=24).contains(&n)))
             || matches!(k, "Pause" | "ScrollLock" | "Insert")
+    }
+
+    /// Enter, Ctrl+Enter and ⌘+Enter: the send key's choices, which no other
+    /// action may take.
+    pub fn is_send_chord(&self) -> bool {
+        matches!(self.key.as_str(), "Enter" | "NumpadEnter")
+            && !self.shift
+            && !self.alt
+            && !(self.ctrl && self.meta)
+    }
+
+    /// Chords every editor or the system already means something by:
+    /// clipboard and undo, select all, closing and switching windows, and
+    /// the input method switch.
+    fn is_system_chord(&self) -> bool {
+        let command = self.ctrl != self.meta;
+        let k = self.key.as_str();
+        (command && !self.alt && matches!(k, "KeyA" | "KeyC" | "KeyV" | "KeyX" | "KeyZ" | "KeyY"))
+            || (self.alt && !self.ctrl && !self.meta && matches!(k, "F4" | "Tab" | "Space"))
+            || (self.meta
+                && !self.ctrl
+                && !self.alt
+                && matches!(k, "Tab" | "KeyQ" | "KeyW" | "KeyH" | "KeyM"))
+            || (command && !self.alt && !self.shift && k == "Space")
+    }
+
+    /// Keys that move the caret, select or delete. Some modifier does each
+    /// of these in some editor, so inside the input window they stay the
+    /// editor's; system-wide only a chord with two of Ctrl, Alt and ⌘ is
+    /// clear of them.
+    fn edits_text(&self) -> bool {
+        matches!(
+            self.key.as_str(),
+            "ArrowLeft" | "ArrowRight" | "Home" | "End" | "Backspace" | "Delete"
+        )
+    }
+
+    /// Why this chord may not be a system-wide hotkey. A key that types
+    /// needs Ctrl, Alt or ⌘ (Shift alone still types). `send` is never true
+    /// for a hotkey today; it keeps the Enter rule in one place.
+    pub fn refusal_global(&self, send: bool) -> Option<Refusal> {
+        if self.key.is_empty() {
+            return Some(Refusal::Types);
+        }
+        if self.is_send_chord() && !send {
+            return Some(Refusal::SendOnly);
+        }
+        if !(self.ctrl || self.alt || self.meta || self.types_nothing()) {
+            return Some(Refusal::Types);
+        }
+        let strong = [self.ctrl, self.alt, self.meta]
+            .into_iter()
+            .filter(|m| *m)
+            .count();
+        if self.is_system_chord() || (self.edits_text() && strong < 2) || self.key == "Tab" {
+            return Some(Refusal::Reserved);
+        }
+        None
+    }
+
+    /// Why this chord may not be one of the input window's keys. `send` is
+    /// whether it is for the send key, the only one that may take Enter or
+    /// Ctrl+Enter.
+    pub fn refusal_local(&self, send: bool) -> Option<Refusal> {
+        if self.key.is_empty() {
+            return Some(Refusal::Types);
+        }
+        if self.is_send_chord() && !send {
+            return Some(Refusal::SendOnly);
+        }
+        if !self.is_safe_local() {
+            return Some(Refusal::Types);
+        }
+        // Tab and Shift+Tab move focus: the keyboard's way around the window.
+        let tab = self.key == "Tab" && !self.ctrl && !self.alt && !self.meta;
+        if self.is_system_chord() || self.edits_text() || tab {
+            return Some(Refusal::Reserved);
+        }
+        None
+    }
+
+    /// Function keys and media keys are fine alone; anything that types needs
+    /// a modifier other than Shift, or it would swallow normal typing
+    /// system-wide.
+    pub fn is_safe_global(&self) -> bool {
+        self.refusal_global(false).is_none()
     }
 
     /// Inside the input window a bare key is fine as long as it does not type
@@ -134,7 +216,7 @@ impl Hotkey {
             return false;
         }
         self.has_modifier()
-            || self.is_safe_global()
+            || self.types_nothing()
             || matches!(
                 self.key.as_str(),
                 "Enter"
@@ -152,6 +234,17 @@ impl Hotkey {
                     | "Delete"
             )
     }
+}
+
+/// Why a chord cannot be bound to an action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refusal {
+    /// It types text (or is no key at all).
+    Types,
+    /// The system or the editor already uses it.
+    Reserved,
+    /// Enter and Ctrl+Enter belong to the send key.
+    SendOnly,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -738,6 +831,12 @@ pub struct HotkeySettings {
     pub clear: Option<Hotkey>,
     pub toggle_mode: Option<Hotkey>,
     pub toggle_overlays: Option<Hotkey>,
+    /// Bring the input window forward with live chat in view.
+    pub show_chat: Option<Hotkey>,
+    /// Bring the input window forward replying to the newest chat message.
+    pub reply_latest: Option<Hotkey>,
+    /// Bring the input window forward with the quick phrases open.
+    pub quick_phrases: Option<Hotkey>,
     /// Keys handled by the input window itself, not registered system-wide.
     pub input: InputKeys,
 }
@@ -751,6 +850,9 @@ impl Default for HotkeySettings {
             clear: None,
             toggle_mode: None,
             toggle_overlays: None,
+            show_chat: None,
+            reply_latest: None,
+            quick_phrases: None,
             input: InputKeys::default(),
         }
     }
@@ -768,6 +870,14 @@ pub struct InputKeys {
     pub bold: Option<Hotkey>,
     pub italic: Option<Hotkey>,
     pub underline: Option<Hotkey>,
+    pub chat_prev: Option<Hotkey>,
+    pub chat_next: Option<Hotkey>,
+    pub reply: Option<Hotkey>,
+    pub mention: Option<Hotkey>,
+    pub cancel_reply: Option<Hotkey>,
+    pub toggle_chat: Option<Hotkey>,
+    pub phrases: Option<Hotkey>,
+    pub stickers: Option<Hotkey>,
 }
 
 impl Default for InputKeys {
@@ -781,6 +891,14 @@ impl Default for InputKeys {
             bold: None,
             italic: None,
             underline: None,
+            chat_prev: None,
+            chat_next: None,
+            reply: None,
+            mention: None,
+            cancel_reply: None,
+            toggle_chat: None,
+            phrases: None,
+            stickers: None,
         };
         for key in InputKey::ALL {
             *key.slot(&mut keys) = key.default_binding();
@@ -809,10 +927,24 @@ pub enum InputKey {
     Bold,
     Italic,
     Underline,
+    /// Select the chat message above the selected one (the newest first).
+    ChatPrev,
+    /// Select the one below; past the newest, select none.
+    ChatNext,
+    /// Reply to the selected chat message, or the newest.
+    Reply,
+    /// Mention the selected message's author, or the newest's.
+    Mention,
+    CancelReply,
+    /// Show live chat in the sidebar, or put it away.
+    ToggleChat,
+    /// Open the sidebar's quick phrases, or fold them away.
+    Phrases,
+    Stickers,
 }
 
 impl InputKey {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 16] = [
         Self::Send,
         Self::Newline,
         Self::RecallPrev,
@@ -821,9 +953,40 @@ impl InputKey {
         Self::Bold,
         Self::Italic,
         Self::Underline,
+        Self::ChatPrev,
+        Self::ChatNext,
+        Self::Reply,
+        Self::Mention,
+        Self::CancelReply,
+        Self::ToggleChat,
+        Self::Phrases,
+        Self::Stickers,
     ];
 
+    /// Why `chord` may not be this key's.
+    pub fn refusal(self, chord: &Hotkey) -> Option<Refusal> {
+        chord.refusal_local(self == Self::Send)
+    }
+
+    /// Whether this key acts on live chat (Settings › Hotkeys lists these
+    /// apart).
+    pub fn is_chat(self) -> bool {
+        matches!(
+            self,
+            Self::ChatPrev
+                | Self::ChatNext
+                | Self::Reply
+                | Self::Mention
+                | Self::CancelReply
+                | Self::ToggleChat
+        )
+    }
+
     pub fn default_binding(self) -> Option<Hotkey> {
+        let alt = |key: &str| Hotkey {
+            alt: true,
+            ..Hotkey::bare(key)
+        };
         Some(match self {
             Self::Send => Hotkey::bare("Enter"),
             Self::Newline => Hotkey::shift("Enter"),
@@ -833,6 +996,11 @@ impl InputKey {
             Self::Bold => Hotkey::ctrl("KeyB"),
             Self::Italic => Hotkey::ctrl("KeyI"),
             Self::Underline => Hotkey::ctrl("KeyU"),
+            Self::ChatPrev => alt("ArrowUp"),
+            Self::ChatNext => alt("ArrowDown"),
+            Self::Reply => alt("KeyR"),
+            Self::Mention => alt("KeyM"),
+            Self::CancelReply | Self::ToggleChat | Self::Phrases | Self::Stickers => return None,
         })
     }
 
@@ -846,6 +1014,14 @@ impl InputKey {
             Self::Bold => keys.bold.as_ref(),
             Self::Italic => keys.italic.as_ref(),
             Self::Underline => keys.underline.as_ref(),
+            Self::ChatPrev => keys.chat_prev.as_ref(),
+            Self::ChatNext => keys.chat_next.as_ref(),
+            Self::Reply => keys.reply.as_ref(),
+            Self::Mention => keys.mention.as_ref(),
+            Self::CancelReply => keys.cancel_reply.as_ref(),
+            Self::ToggleChat => keys.toggle_chat.as_ref(),
+            Self::Phrases => keys.phrases.as_ref(),
+            Self::Stickers => keys.stickers.as_ref(),
         }
     }
 
@@ -859,6 +1035,14 @@ impl InputKey {
             Self::Bold => &mut keys.bold,
             Self::Italic => &mut keys.italic,
             Self::Underline => &mut keys.underline,
+            Self::ChatPrev => &mut keys.chat_prev,
+            Self::ChatNext => &mut keys.chat_next,
+            Self::Reply => &mut keys.reply,
+            Self::Mention => &mut keys.mention,
+            Self::CancelReply => &mut keys.cancel_reply,
+            Self::ToggleChat => &mut keys.toggle_chat,
+            Self::Phrases => &mut keys.phrases,
+            Self::Stickers => &mut keys.stickers,
         }
     }
 }
@@ -1226,6 +1410,44 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Only the send key may hold Enter or Ctrl+Enter. Another key that has
+    /// one (the newline key of the old Ctrl+Enter-sends layout, a
+    /// hand-edited file) goes back to its default, or to none when that is
+    /// taken: plain Enter breaks the line in the editor anyway.
+    fn sanitize_hotkeys(&mut self) {
+        let h = &mut self.hotkeys;
+        for slot in [
+            &mut h.summon,
+            &mut h.continue_,
+            &mut h.skip,
+            &mut h.clear,
+            &mut h.toggle_mode,
+            &mut h.toggle_overlays,
+            &mut h.show_chat,
+            &mut h.reply_latest,
+            &mut h.quick_phrases,
+        ] {
+            if slot.as_ref().is_some_and(Hotkey::is_send_chord) {
+                *slot = None;
+            }
+        }
+        for phrase in &mut self.assets.phrases {
+            if phrase.hotkey.as_ref().is_some_and(Hotkey::is_send_chord) {
+                phrase.hotkey = None;
+            }
+        }
+        let keys = &mut h.input;
+        for key in InputKey::ALL {
+            if key == InputKey::Send || !key.get(keys).is_some_and(Hotkey::is_send_chord) {
+                continue;
+            }
+            let fallback = key
+                .default_binding()
+                .filter(|d| InputKey::ALL.into_iter().all(|k| k.get(keys) != Some(d)));
+            *key.slot(keys) = fallback;
+        }
+    }
+
     /// Clamp values a hand-edited file could break. Returns whether anything changed.
     pub fn sanitize(&mut self) -> bool {
         let before = self.clone();
@@ -1310,6 +1532,7 @@ impl Settings {
         if self.skin.id.is_empty() {
             self.skin.id = DEFAULT_SKIN.into();
         }
+        self.sanitize_hotkeys();
         self.general.speaker_name = self.general.speaker_name.chars().take(64).collect();
         self.update.proxy = self.update.proxy.trim().chars().take(512).collect();
         self.assets.telegram.api_id = self.assets.telegram.api_id.max(0);

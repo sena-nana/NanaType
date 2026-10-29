@@ -913,7 +913,17 @@ fn speech_edit_key(key: &nana_ui::KeyInput) -> bool {
     let chord = chord_of(key);
     let keys = INPUT_KEYS.read().unwrap_or_else(|e| e.into_inner());
     if let Some(action) = keys.matching(&chord) {
-        return !matches!(action, InputKey::Send | InputKey::Hide);
+        // Only keys that change the draft count as editing it.
+        return matches!(
+            action,
+            InputKey::Newline
+                | InputKey::RecallPrev
+                | InputKey::RecallNext
+                | InputKey::Bold
+                | InputKey::Italic
+                | InputKey::Underline
+                | InputKey::Mention
+        );
     }
     if matches!(
         chord.key.as_str(),
@@ -992,7 +1002,6 @@ fn test_keys(ctrl_enter: bool) -> InputKeys {
     let mut keys = InputKeys::default();
     if ctrl_enter {
         keys.send = Some(Hotkey::ctrl("Enter"));
-        keys.newline = Some(Hotkey::bare("Enter"));
     }
     keys
 }
@@ -1403,11 +1412,8 @@ impl RuntimeProgram for Host {
                     }
                     Shortcut::Input(_) => chord_of(key),
                 };
-                if !target.is_safe(&hotkey) {
-                    let text = self.app.ui.now_t(match target {
-                        Shortcut::Global(_) => "hotkeys-unsafe",
-                        Shortcut::Input(_) => "hotkeys-unsafe-local",
-                    });
+                if let Some(refusal) = target.refusal(&hotkey) {
+                    let text = self.app.ui.now_t(target.refusal_key(refusal));
                     self.app.notice(text, true);
                     return Ok(self.finish());
                 }
@@ -1687,6 +1693,24 @@ mod redraw_tests {
         assert!(matches!(
             input_shortcut(&key("B", ctrl), false, &enter),
             Some(Msg::Tool(Tool::Bold))
+        ));
+        // Live chat from the keyboard: step through messages, reply, mention.
+        let alt = InputModifiers { alt: true, ..plain };
+        assert!(matches!(
+            input_shortcut(&key("ArrowUp", alt), false, &enter),
+            Some(Msg::ChatSelect(-1))
+        ));
+        assert!(matches!(
+            input_shortcut(&key("ArrowDown", alt), true, &enter),
+            Some(Msg::ChatSelect(1))
+        ));
+        assert!(matches!(
+            input_shortcut(&key("r", alt), false, &ctrl_enter),
+            Some(Msg::ChatMentionSelected { reply: true })
+        ));
+        assert!(matches!(
+            input_shortcut(&key("m", alt), false, &enter),
+            Some(Msg::ChatMentionSelected { reply: false })
         ));
         for source in [false, true] {
             for keys in [&enter, &ctrl_enter] {

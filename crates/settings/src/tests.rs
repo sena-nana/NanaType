@@ -264,7 +264,7 @@ fn chat_panel_style_defaults_and_round_trips_without_a_schema_change() {
 fn send_key_choice_migrates_into_the_input_window_keys() {
     for (wire, send, newline) in [
         ("enter", Hotkey::bare("Enter"), Hotkey::shift("Enter")),
-        ("ctrl_enter", Hotkey::ctrl("Enter"), Hotkey::bare("Enter")),
+        ("ctrl_enter", Hotkey::ctrl("Enter"), Hotkey::shift("Enter")),
     ] {
         let mut value =
             serde_json::json!({"schema":2,"general":{"send_key":wire,"speaker_name":"奈奈"}});
@@ -285,9 +285,16 @@ fn send_key_choice_migrates_into_the_input_window_keys() {
 fn input_keys_default_round_trip_and_match_their_chords() {
     let keys = InputKeys::default();
     for key in InputKey::ALL {
-        let chord = key.get(&keys).expect("every input key has a default");
+        let Some(chord) = key.get(&keys) else {
+            assert_eq!(key.default_binding(), None, "{key:?}");
+            continue;
+        };
         assert_eq!(keys.matching(chord), Some(key));
-        assert!(chord.is_safe_local(), "{key:?}");
+        assert_eq!(key.refusal(chord), None, "{key:?}");
+    }
+    let hotkeys = HotkeySettings::default();
+    for chord in [&hotkeys.summon, &hotkeys.continue_].into_iter().flatten() {
+        assert_eq!(chord.refusal_global(false), None, "{chord:?}");
     }
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("settings.json");
@@ -1025,4 +1032,117 @@ fn speech_defaults_migrate_and_activation_is_not_persisted() {
         serde_json::from_value::<Settings>(serde_json::to_value(&settings).unwrap()).unwrap(),
         settings
     );
+}
+
+#[test]
+fn only_the_send_key_takes_enter_and_ctrl_enter() {
+    let meta = |key: &str| Hotkey {
+        meta: true,
+        ..Hotkey::bare(key)
+    };
+    for chord in [
+        Hotkey::bare("Enter"),
+        Hotkey::ctrl("Enter"),
+        meta("Enter"),
+        Hotkey::bare("NumpadEnter"),
+    ] {
+        assert_eq!(InputKey::Send.refusal(&chord), None, "{chord:?}");
+        for key in InputKey::ALL.into_iter().filter(|k| *k != InputKey::Send) {
+            assert_eq!(
+                key.refusal(&chord),
+                Some(Refusal::SendOnly),
+                "{key:?} {chord:?}"
+            );
+        }
+        assert_eq!(chord.refusal_global(false), Some(Refusal::SendOnly));
+    }
+    // Shift+Enter and Alt+Enter are anyone's.
+    let alt_enter = Hotkey {
+        alt: true,
+        ..Hotkey::bare("Enter")
+    };
+    for chord in [Hotkey::shift("Enter"), alt_enter] {
+        assert_eq!(InputKey::Newline.refusal(&chord), None, "{chord:?}");
+    }
+}
+
+#[test]
+fn chords_the_system_or_editor_owns_are_refused() {
+    let alt = |key: &str| Hotkey {
+        alt: true,
+        ..Hotkey::bare(key)
+    };
+    let ctrl_alt = |key: &str| Hotkey {
+        ctrl: true,
+        ..alt(key)
+    };
+    // Shift alone still types: system-wide it would swallow capitals.
+    assert_eq!(
+        Hotkey::shift("KeyA").refusal_global(false),
+        Some(Refusal::Types)
+    );
+    assert_eq!(Hotkey::shift("F8").refusal_global(false), None);
+    for chord in [
+        Hotkey::ctrl("KeyC"),
+        Hotkey::ctrl("KeyV"),
+        Hotkey::ctrl("KeyZ"),
+        Hotkey::ctrl("KeyA"),
+        alt("F4"),
+        alt("Tab"),
+        Hotkey::ctrl("Space"),
+        Hotkey::ctrl("ArrowLeft"),
+        Hotkey::ctrl("Backspace"),
+    ] {
+        assert_eq!(
+            chord.refusal_global(false),
+            Some(Refusal::Reserved),
+            "{chord:?}"
+        );
+        assert_eq!(
+            InputKey::Reply.refusal(&chord),
+            Some(Refusal::Reserved),
+            "{chord:?}"
+        );
+    }
+    // Caret keys and Tab stay the editor's inside the input window.
+    for chord in [
+        Hotkey::bare("ArrowLeft"),
+        Hotkey::bare("Home"),
+        Hotkey::bare("Delete"),
+        Hotkey::bare("Tab"),
+        Hotkey::shift("Tab"),
+        ctrl_alt("ArrowLeft"),
+    ] {
+        assert_eq!(
+            InputKey::Hide.refusal(&chord),
+            Some(Refusal::Reserved),
+            "{chord:?}"
+        );
+    }
+    assert_eq!(ctrl_alt("ArrowLeft").refusal_global(false), None);
+    assert_eq!(Hotkey::ctrl("KeyB").refusal_global(false), None);
+    assert_eq!(InputKey::Hide.refusal(&Hotkey::bare("Escape")), None);
+    assert_eq!(InputKey::ChatPrev.refusal(&alt("ArrowUp")), None);
+}
+
+#[test]
+fn sanitize_hands_enter_back_to_the_send_key() {
+    let mut s = Settings::default();
+    s.hotkeys.input.send = Some(Hotkey::ctrl("Enter"));
+    s.hotkeys.input.newline = Some(Hotkey::bare("Enter"));
+    s.hotkeys.input.reply = Some(Hotkey::ctrl("Enter"));
+    s.hotkeys.summon = Some(Hotkey::ctrl("Enter"));
+    assert!(s.sanitize());
+    let input = &s.hotkeys.input;
+    assert_eq!(input.send, Some(Hotkey::ctrl("Enter")));
+    assert_eq!(input.newline, Some(Hotkey::shift("Enter")));
+    assert_eq!(input.reply, InputKey::Reply.default_binding());
+    assert_eq!(s.hotkeys.summon, None);
+    // A default another key now holds is not handed out twice.
+    let mut s = Settings::default();
+    s.hotkeys.input.hide = Some(Hotkey::shift("Enter"));
+    s.hotkeys.input.newline = Some(Hotkey::bare("Enter"));
+    s.sanitize();
+    assert_eq!(s.hotkeys.input.newline, None);
+    assert!(!s.sanitize());
 }

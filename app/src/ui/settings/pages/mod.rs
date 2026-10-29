@@ -66,7 +66,7 @@ use nanatype_model::{AfterLine, EntranceKind, Overflow, VtsReset};
 use nanatype_playback::QueuePolicy;
 use nanatype_settings::{
     CaptureBackground, ChromeMode, HideLatest, HistorySync, InputKey, InputMode, InputPresence,
-    KeystrokeScheme, Lock, QuickPhrase, Settings,
+    KeystrokeScheme, Lock, QuickPhrase, Refusal, Settings,
 };
 
 use super::Page;

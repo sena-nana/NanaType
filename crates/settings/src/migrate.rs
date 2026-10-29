@@ -91,8 +91,9 @@ pub fn migrate(value: &mut Value) -> Result<u32, MigrateError> {
             if let Some(hotkeys) = hotkeys {
                 let input = hotkeys.entry("input").or_insert_with(|| json!({}));
                 if let Some(input) = input.as_object_mut() {
+                    // Plain Enter breaks the line in the editor: the newline
+                    // key keeps its Shift+Enter, Enter being the send key's.
                     input.insert("send".into(), json!({ "ctrl": true, "key": "Enter" }));
-                    input.insert("newline".into(), json!({ "key": "Enter" }));
                 }
             }
         }

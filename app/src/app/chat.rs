@@ -22,6 +22,19 @@ impl App {
                 self.ensure_urls([asset]);
             }
             Msg::ChatMention { seq, reply } => self.mention(seq, reply),
+            Msg::ChatSelect(step) => self.select_chat(step),
+            Msg::ChatMentionSelected { reply } => {
+                let shown = self.chat_shown();
+                let selected = self
+                    .ui
+                    .chat_target
+                    .get_untracked()
+                    .filter(|seq| shown.contains(seq));
+                match selected.or_else(|| shown.last().copied()) {
+                    Some(seq) => self.mention(seq, reply),
+                    None => self.notice(self.ui.now_t("chat-none"), false),
+                }
+            }
             Msg::ClearReply => {
                 self.run(Cmd::SetReply(None));
                 self.ui.chat_target.set(None);
@@ -36,6 +49,10 @@ impl App {
                 let layout = self.ui.input_dock.get_untracked().toggle_chat();
                 self.dock(layout);
             }
+            Msg::DockTab(tab) => {
+                let layout = self.ui.input_dock.get_untracked().rail(tab);
+                self.dock(layout);
+            }
             Msg::ShowChat => {
                 let layout = self.ui.input_dock.get_untracked();
                 if !layout.chat_visible() {
@@ -47,6 +64,22 @@ impl App {
         }
     }
 
+    /// Move the keyboard's chat selection, which the panel highlights, and
+    /// bring chat into view for it.
+    fn select_chat(&mut self, step: i32) {
+        let shown = self.chat_shown();
+        if shown.is_empty() {
+            self.notice(self.ui.now_t("chat-none"), false);
+            return;
+        }
+        let next = step_selection(&shown, self.ui.chat_target.get_untracked(), step);
+        let layout = self.ui.input_dock.get_untracked();
+        if !layout.chat_visible() {
+            self.dock(layout.toggle_chat());
+        }
+        self.ui.chat_target.set(next);
+    }
+
     /// Show the sidebar as `layout` (the sidebar may already) and keep it
     /// for the next start.
     fn dock(&mut self, layout: InputDockLayout) {
@@ -56,6 +89,24 @@ impl App {
         }
         self.save_geometry();
         self.sync_tray();
+    }
+}
+
+/// The selection `step` messages on from `current` in `shown` (oldest
+/// first). Up from none selects the newest; up stops at the oldest; down
+/// past the newest selects none, back to following the feed.
+fn step_selection(shown: &[u64], current: Option<u64>, step: i32) -> Option<u64> {
+    let at = current.and_then(|seq| shown.iter().position(|s| *s == seq));
+    match at {
+        None => (step < 0).then(|| shown.last().copied()).flatten(),
+        Some(i) => {
+            let j = i as i64 + i64::from(step);
+            if j < 0 {
+                shown.first().copied()
+            } else {
+                shown.get(j as usize).copied()
+            }
+        }
     }
 }
 
@@ -84,4 +135,23 @@ pub(super) fn handle_command(
         }
     }
     Ok(core.handle(cmd, now))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::step_selection;
+
+    #[test]
+    fn the_keyboard_steps_through_chat_newest_first() {
+        let shown = [3, 5, 8];
+        assert_eq!(step_selection(&shown, None, -1), Some(8));
+        assert_eq!(step_selection(&shown, None, 1), None);
+        assert_eq!(step_selection(&shown, Some(8), -1), Some(5));
+        assert_eq!(step_selection(&shown, Some(3), -1), Some(3));
+        assert_eq!(step_selection(&shown, Some(5), 1), Some(8));
+        assert_eq!(step_selection(&shown, Some(8), 1), None);
+        // A selection the filter now hides starts over from the newest.
+        assert_eq!(step_selection(&shown, Some(4), -1), Some(8));
+        assert_eq!(step_selection(&[], None, -1), None);
+    }
 }

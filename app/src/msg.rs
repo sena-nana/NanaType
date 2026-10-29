@@ -6,7 +6,7 @@ use nanatype_audio::AudioStatus;
 use nanatype_bridge::BridgeStatus;
 use nanatype_core::Cmd;
 use nanatype_playback::CueKind;
-use nanatype_settings::{Hotkey, InputKey, Settings};
+use nanatype_settings::{Hotkey, InputDockTab, InputKey, Refusal, Settings};
 
 use crate::windows::WindowKind;
 
@@ -22,6 +22,9 @@ pub enum GlobalAction {
     Clear,
     ToggleMode,
     ToggleOverlays,
+    ShowChat,
+    ReplyLatest,
+    QuickPhrases,
     /// Quick phrase `n` (Settings › Assets), inserted or sent like its menu
     /// item. Not in [`Self::ALL`]: phrases come and go with the settings.
     Phrase(usize),
@@ -29,14 +32,26 @@ pub enum GlobalAction {
 
 impl GlobalAction {
     /// The fixed actions, in the order the Hotkeys page lists them.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 9] = [
         Self::Summon,
+        Self::ShowChat,
+        Self::ReplyLatest,
+        Self::QuickPhrases,
         Self::Continue,
         Self::Skip,
         Self::Clear,
         Self::ToggleMode,
         Self::ToggleOverlays,
     ];
+
+    /// Whether the action brings the input window forward. On Windows the
+    /// hotkey thread raises it, while it holds the foreground right.
+    pub fn raises_input(self) -> bool {
+        matches!(
+            self,
+            Self::Summon | Self::ShowChat | Self::ReplyLatest | Self::QuickPhrases
+        )
+    }
 
     pub fn label_key(self) -> &'static str {
         match self {
@@ -46,6 +61,9 @@ impl GlobalAction {
             Self::Clear => "hotkeys-clear",
             Self::ToggleMode => "hotkeys-toggle-mode",
             Self::ToggleOverlays => "hotkeys-toggle-overlays",
+            Self::ShowChat => "hotkeys-show-chat",
+            Self::ReplyLatest => "hotkeys-reply-latest",
+            Self::QuickPhrases => "hotkeys-quick-phrases",
             Self::Phrase(_) => "assets-phrase-hotkey",
         }
     }
@@ -67,6 +85,9 @@ impl GlobalAction {
             Self::Clear => h.clear.as_ref(),
             Self::ToggleMode => h.toggle_mode.as_ref(),
             Self::ToggleOverlays => h.toggle_overlays.as_ref(),
+            Self::ShowChat => h.show_chat.as_ref(),
+            Self::ReplyLatest => h.reply_latest.as_ref(),
+            Self::QuickPhrases => h.quick_phrases.as_ref(),
             Self::Phrase(i) => s.assets.phrases.get(i)?.hotkey.as_ref(),
         }
     }
@@ -94,6 +115,9 @@ impl GlobalAction {
             Self::Clear => &mut h.clear,
             Self::ToggleMode => &mut h.toggle_mode,
             Self::ToggleOverlays => &mut h.toggle_overlays,
+            Self::ShowChat => &mut h.show_chat,
+            Self::ReplyLatest => &mut h.reply_latest,
+            Self::QuickPhrases => &mut h.quick_phrases,
             Self::Phrase(_) => unreachable!("handled above"),
         } = value;
     }
@@ -120,6 +144,14 @@ impl Shortcut {
                 InputKey::Bold => "tb-bold",
                 InputKey::Italic => "tb-italic",
                 InputKey::Underline => "tb-underline",
+                InputKey::ChatPrev => "hotkeys-chat-prev",
+                InputKey::ChatNext => "hotkeys-chat-next",
+                InputKey::Reply => "hotkeys-reply",
+                InputKey::Mention => "hotkeys-mention",
+                InputKey::CancelReply => "chat-reply-cancel",
+                InputKey::ToggleChat => "hotkeys-toggle-chat",
+                InputKey::Phrases => "hotkeys-phrases-panel",
+                InputKey::Stickers => "hotkeys-stickers-panel",
             },
         }
     }
@@ -167,11 +199,22 @@ impl Shortcut {
         }
     }
 
-    /// Whether `hotkey` may be bound here without swallowing typing.
-    pub fn is_safe(self, hotkey: &Hotkey) -> bool {
+    /// Why `hotkey` may not be bound here: it would swallow typing, take a
+    /// chord the system or editor uses, or take the send key's Enter.
+    pub fn refusal(self, hotkey: &Hotkey) -> Option<Refusal> {
         match self {
-            Self::Global(_) => hotkey.is_safe_global(),
-            Self::Input(_) => hotkey.is_safe_local(),
+            Self::Global(_) => hotkey.refusal_global(false),
+            Self::Input(k) => k.refusal(hotkey),
+        }
+    }
+
+    /// What a refusal says, for this kind of shortcut.
+    pub fn refusal_key(self, refusal: Refusal) -> &'static str {
+        match (refusal, self) {
+            (Refusal::Types, Self::Global(_)) => "hotkeys-unsafe",
+            (Refusal::Types, Self::Input(_)) => "hotkeys-unsafe-local",
+            (Refusal::Reserved, _) => "hotkeys-reserved",
+            (Refusal::SendOnly, _) => "hotkeys-send-only",
         }
     }
 }
@@ -187,6 +230,14 @@ pub fn input_message(key: InputKey) -> Msg {
         InputKey::Bold => Msg::Tool(Tool::Bold),
         InputKey::Italic => Msg::Tool(Tool::Italic),
         InputKey::Underline => Msg::Tool(Tool::Underline),
+        InputKey::ChatPrev => Msg::ChatSelect(-1),
+        InputKey::ChatNext => Msg::ChatSelect(1),
+        InputKey::Reply => Msg::ChatMentionSelected { reply: true },
+        InputKey::Mention => Msg::ChatMentionSelected { reply: false },
+        InputKey::CancelReply => Msg::ClearReply,
+        InputKey::ToggleChat => Msg::ToggleChat,
+        InputKey::Phrases => Msg::DockTab(InputDockTab::Phrases),
+        InputKey::Stickers => Msg::DockTab(InputDockTab::Stickers),
     }
 }
 
@@ -448,6 +499,13 @@ pub enum Msg {
         seq: u64,
         reply: bool,
     },
+    /// Move the chat selection by this many messages: up from none selects
+    /// the newest, down past the newest selects none.
+    ChatSelect(i32),
+    /// [`Self::ChatMention`] for the selected message, or the newest.
+    ChatMentionSelected {
+        reply: bool,
+    },
     /// Drop the pending reply.
     ClearReply,
     /// Empty the chat panel.
@@ -459,6 +517,8 @@ pub enum Msg {
     ToggleChat,
     /// Bring the input window forward with live chat in view.
     ShowChat,
+    /// Open this sidebar panel, or fold the sidebar when it is open.
+    DockTab(InputDockTab),
     #[cfg(feature = "updates")]
     /// The update checker reported.
     Update(crate::services::updater::Event),

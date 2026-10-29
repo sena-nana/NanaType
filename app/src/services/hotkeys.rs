@@ -336,15 +336,17 @@ mod win {
                 WM_HOTKEY => {
                     let id = msg.wParam.0 as i32;
                     if let Some((_, action)) = registered.iter().find(|(i, _)| *i == id) {
-                        if *action == GlobalAction::Summon {
+                        if action.raises_input() {
                             let hwnd = input.load(Ordering::Acquire);
-                            restore.store(
-                                hwnd != 0
-                                    && unsafe {
-                                        IsIconic(HWND(hwnd as *mut core::ffi::c_void)).as_bool()
-                                    },
-                                Ordering::Release,
-                            );
+                            if *action == GlobalAction::Summon {
+                                restore.store(
+                                    hwnd != 0
+                                        && unsafe {
+                                            IsIconic(HWND(hwnd as *mut core::ffi::c_void)).as_bool()
+                                        },
+                                    Ordering::Release,
+                                );
+                            }
                             activate(hwnd);
                         }
                         hit(*action);

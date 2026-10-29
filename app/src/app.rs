@@ -2063,11 +2063,14 @@ impl App {
             m @ (Msg::Chat(_)
             | Msg::ChatAssetReady(_)
             | Msg::ChatMention { .. }
+            | Msg::ChatSelect(_)
+            | Msg::ChatMentionSelected { .. }
             | Msg::ClearReply
             | Msg::ClearChat
             | Msg::Dock(_)
             | Msg::ToggleChat
-            | Msg::ShowChat) => self.chat_msg(m),
+            | Msg::ShowChat
+            | Msg::DockTab(_)) => self.chat_msg(m),
             m @ (Msg::Twitch(_)
             | Msg::TwitchLogin
             | Msg::TwitchCancelLogin
@@ -2236,6 +2239,24 @@ impl App {
         self.update(Msg::ShowWindow(WindowKind::Input));
     }
 
+    /// Show the input window for a hotkey and bring it forward.
+    fn raise_input(&mut self) {
+        self.update(Msg::ShowWindow(WindowKind::Input));
+        // Carbon does not grant foreground the way WM_HOTKEY does, and
+        // AppKit has to be touched on this thread.
+        #[cfg(target_os = "macos")]
+        {
+            hotkeys::activate(self.hotkeys.input_window());
+        }
+    }
+
+    /// The chat messages the panel lists, oldest first.
+    pub(super) fn chat_shown(&self) -> Vec<u64> {
+        self.ui.chat.with_untracked(|rows| {
+            crate::ui::danmaku::shown(rows, &self.settings.integrations.chat.panel)
+        })
+    }
+
     fn set_input_visibility(&mut self, visible: bool) {
         let mut summoned = self.summoned;
         self.edit(|s| windows::set_input_visibility(s, &mut summoned, visible));
@@ -2253,14 +2274,27 @@ impl App {
                     // The summon key toggles the input window in summon mode.
                     self.summoned = false;
                 } else {
-                    self.update(Msg::ShowWindow(WindowKind::Input));
-                    // Carbon does not grant foreground the way WM_HOTKEY does,
-                    // and AppKit has to be touched on this thread.
-                    #[cfg(target_os = "macos")]
-                    {
-                        hotkeys::activate(self.hotkeys.input_window());
-                    }
+                    self.raise_input();
                 }
+            }
+            GlobalAction::ShowChat => {
+                self.update(Msg::ShowChat);
+                self.raise_input();
+            }
+            GlobalAction::ReplyLatest => {
+                if let Some(&seq) = self.chat_shown().last() {
+                    self.mention(seq, true);
+                }
+                self.raise_input();
+            }
+            GlobalAction::QuickPhrases => {
+                let open = nanatype_settings::InputDockLayout {
+                    tab: nanatype_settings::InputDockTab::Phrases,
+                    collapsed: false,
+                    ..self.ui.input_dock.get_untracked()
+                };
+                self.update(Msg::Dock(open));
+                self.raise_input();
             }
             GlobalAction::Continue => self.run(Cmd::Continue),
             GlobalAction::Skip => self.run(Cmd::Skip),

@@ -819,35 +819,40 @@ pub fn cheat_sheet(ui: Ui) -> AnyView {
     let row = |k: InputKey, meaning: &str| {
         bound(k).map(|h| sheet_row(super::kit::keycap::chord(&h), SHEET_KEYS_W, t(meaning)))
     };
-    let recall = match (bound(InputKey::RecallPrev), bound(InputKey::RecallNext)) {
-        (Some(prev), Some(next)) => Some(
-            widget(
-                Stack::row(0.0)
-                    .gap_step(gap::step::TIGHT)
-                    .align(AlignSpec::Center),
-            )
-            .children((
-                super::kit::keycap::chord(&prev),
+    // Two keys that step one way and the other: "A / B".
+    let pair = |prev: InputKey, next: InputKey, meaning: &str| {
+        match (bound(prev), bound(next)) {
+            (Some(prev), Some(next)) => Some(
                 widget(
-                    Text::new("/")
-                        .decorative()
-                        .style(Type::Small.style())
-                        .color(SemanticColorRole::Muted),
-                ),
-                super::kit::keycap::chord(&next),
-            ))
-            .into_any(),
-        ),
-        (one, other) => one.or(other).map(|h| super::kit::keycap::chord(&h)),
-    }
-    .map(|lead| sheet_row(lead, SHEET_KEYS_W, t("cheat-recall")));
+                    Stack::row(0.0)
+                        .gap_step(gap::step::TIGHT)
+                        .align(AlignSpec::Center),
+                )
+                .children((
+                    super::kit::keycap::chord(&prev),
+                    widget(
+                        Text::new("/")
+                            .decorative()
+                            .style(Type::Small.style())
+                            .color(SemanticColorRole::Muted),
+                    ),
+                    super::kit::keycap::chord(&next),
+                ))
+                .into_any(),
+            ),
+            (one, other) => one.or(other).map(|h| super::kit::keycap::chord(&h)),
+        }
+        .map(|lead| sheet_row(lead, SHEET_KEYS_W, t(meaning)))
+    };
     let keys: Vec<AnyView> = [
         row(InputKey::Send, "tb-send"),
         row(InputKey::Newline, "cheat-newline"),
         row(InputKey::Bold, "tb-bold"),
         row(InputKey::Italic, "tb-italic"),
         row(InputKey::Underline, "tb-underline"),
-        recall,
+        pair(InputKey::RecallPrev, InputKey::RecallNext, "cheat-recall"),
+        pair(InputKey::ChatPrev, InputKey::ChatNext, "cheat-chat-select"),
+        row(InputKey::Reply, "hotkeys-reply"),
         row(InputKey::Hide, "cheat-hide"),
         // The `@` / `/` list's own key; not rebindable.
         Some(sheet_row(

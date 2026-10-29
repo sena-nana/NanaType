@@ -7,8 +7,9 @@ pub(super) enum KeyIssue {
     Duplicate(Shortcut),
     /// Another program owns the chord.
     Conflict,
-    /// The chord would swallow typing, or cannot be registered.
-    Unsafe,
+    /// The chord would swallow typing, belongs to the system, the editor
+    /// or the send key, or cannot be registered.
+    Unsafe(Refusal),
 }
 
 impl KeyIssue {
@@ -16,20 +17,21 @@ impl KeyIssue {
         match self {
             Self::Duplicate(_) => "hotkeys-badge-dup",
             Self::Conflict => "hotkeys-badge-conflict",
-            Self::Unsafe => "hotkeys-badge-unsafe",
+            Self::Unsafe(Refusal::Types) => "hotkeys-badge-unsafe",
+            Self::Unsafe(_) => "hotkeys-badge-reserved",
         }
     }
 
     fn tone(self) -> StatusTone {
         match self {
-            Self::Unsafe => StatusTone::Warning,
+            Self::Unsafe(_) => StatusTone::Warning,
             _ => StatusTone::Danger,
         }
     }
 
     fn color(self) -> SemanticColorRole {
         match self {
-            Self::Unsafe => SemanticColorRole::Warning,
+            Self::Unsafe(_) => SemanticColorRole::Warning,
             _ => SemanticColorRole::Danger,
         }
     }
@@ -42,13 +44,7 @@ impl KeyIssue {
                 &[("action", action_name(locale, s, other).into())],
             ),
             Self::Conflict => I18N.t_in(locale, "hotkeys-conflict-os"),
-            Self::Unsafe => I18N.t_in(
-                locale,
-                match of {
-                    Shortcut::Global(_) => "hotkeys-unsafe",
-                    Shortcut::Input(_) => "hotkeys-unsafe-local",
-                },
-            ),
+            Self::Unsafe(refusal) => I18N.t_in(locale, of.refusal_key(refusal)),
         }
     }
 }
@@ -80,10 +76,12 @@ pub(super) fn key_issue(
         Shortcut::Global(a) => states.get(&a),
         Shortcut::Input(_) => None,
     };
+    if let Some(refusal) = action.refusal(mine) {
+        return Some(KeyIssue::Unsafe(refusal));
+    }
     match state {
         Some(HotkeyState::Conflict) => Some(KeyIssue::Conflict),
-        Some(HotkeyState::Invalid) => Some(KeyIssue::Unsafe),
-        _ if !action.is_safe(mine) => Some(KeyIssue::Unsafe),
+        Some(HotkeyState::Invalid) => Some(KeyIssue::Unsafe(Refusal::Types)),
         _ => None,
     }
 }
@@ -356,11 +354,20 @@ pub(super) fn hotkeys(ui: Ui) -> AnyView {
             .map(Shortcut::Global)
             .collect(),
     );
-    let local = rows(InputKey::ALL.into_iter().map(Shortcut::Input).collect());
+    let input = |chat: bool| {
+        rows(
+            InputKey::ALL
+                .into_iter()
+                .filter(|k| k.is_chat() == chat)
+                .map(Shortcut::Input)
+                .collect(),
+        )
+    };
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
             section(ui, "hotkeys-global", global),
-            section(ui, "hotkeys-local", local),
+            section(ui, "hotkeys-local", input(false)),
+            section(ui, "hotkeys-chat", input(true)),
             section(ui, "hotkeys-phrases", vec![phrase_rows(ui)]),
         ))
         .into_any()

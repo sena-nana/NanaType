@@ -43,6 +43,15 @@ fn hotkeys_page_gathers_every_shortcut() {
             "hotkeys-recall-prev",
             "hotkeys-recall-next",
             "hotkeys-edit-phrases",
+            "hotkeys-show-chat",
+            "hotkeys-reply-latest",
+            "hotkeys-quick-phrases",
+            "hotkeys-chat",
+            "hotkeys-chat-prev",
+            "hotkeys-reply",
+            "hotkeys-mention",
+            "chat-reply-cancel",
+            "hotkeys-phrases-panel",
         ] {
             let label = ui.now_t(key);
             assert_ne!(label, key, "missing translation");
