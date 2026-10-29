@@ -1,12 +1,12 @@
-//! The sidebar's control palette: pacing, staging, expressions and text
-//! effects as tiles. Markers that go in at the caret are drawn as the chip the
+//! The sidebar's control palette: pacing, staging and text effects as a
+//! grouped list, one control per row. Markers that go in at the caret are drawn as the chip the
 //! editor shows for them; effects that wrap the selection say so in their
 //! group's heading. Hovering a tile names what it does and its markup.
 use super::*;
 use crate::ui::kit::{Type, gap, inset};
 use nana_ui::runtime::PointerHoverChanged;
 
-/// A tile's height: one chip, one small control.
+/// A row's height: one chip, one small control.
 const TILE_H: f32 = 28.0;
 
 /// What a tile shows: the editor's chip for a marker, or a glyph and label.
@@ -59,8 +59,6 @@ struct Group {
     title: String,
     wraps: bool,
     tiles: Vec<Tile>,
-    /// Ends in a field for an expression the skin does not list.
-    entry: bool,
 }
 
 fn point(m: Marker) -> Tool {
@@ -136,24 +134,6 @@ fn groups(ui: Ui) -> Vec<Group> {
             }),
         )
     }));
-    let expressions = skin
-        .dialogue
-        .portrait
-        .variants
-        .keys()
-        .map(|name| {
-            Tile::new(
-                chip(ChipKind::Expression, ti::MOOD_SMILE),
-                name.clone(),
-                format!("[expr={name}]"),
-                t("cheat-expr"),
-                point(Marker::Expression {
-                    name: name.clone(),
-                    intensity: None,
-                }),
-            )
-        })
-        .collect();
     let wrap = |icon, key: &str, tag: &str, tool: Tool| {
         Tile::new(
             Face::Plain(icon),
@@ -256,42 +236,32 @@ fn groups(ui: Ui) -> Vec<Group> {
             title: t("dock-group-rhythm"),
             wraps: false,
             tiles: rhythm,
-            entry: false,
         },
         Group {
             title: t("dock-group-stage"),
             wraps: false,
             tiles: stage,
-            entry: false,
-        },
-        Group {
-            title: t("dock-group-expression"),
-            wraps: false,
-            tiles: expressions,
-            entry: true,
         },
         Group {
             title: t("dock-group-effects"),
             wraps: true,
             tiles: effects,
-            entry: false,
         },
         Group {
             title: t("dock-group-entrance"),
             wraps: true,
             tiles: entrances,
-            entry: false,
         },
         Group {
             title: t("dock-group-speed"),
             wraps: true,
             tiles: speed,
-            entry: false,
         },
     ]
 }
 
-/// A tile as a flat button; a marker's face is the editor's chip.
+/// A tile as a full-width flat row: the face at the start (a marker's is the
+/// editor's chip), its markup faint at the end.
 fn tile_view(ui: Ui, tile: Tile, query: Signal<String>, hint: Signal<Option<String>>) -> AnyView {
     let look = super::super::rich::MentionLook::for_ui(ui.chrome_dark.get_untracked()).markers;
     let face = match tile.face {
@@ -315,6 +285,23 @@ fn tile_view(ui: Ui, tile: Tile, query: Signal<String>, hint: Signal<Option<Stri
             .into_any()
         }
     };
+    let markup = (!tile.markup.is_empty()).then(|| {
+        widget(
+            Text::new(tile.markup.clone())
+                .decorative()
+                .style(Type::Micro.style())
+                .color(SemanticColorRole::Faint)
+                .truncating(),
+        )
+    });
+    let row = widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center)
+            .width(LengthSpec::Fill)
+            .with_layout(|l| l.padding_right = Some(LengthSpec::Px(inset::CHIP_X))),
+    )
+    .children((face, widget(Stack::spacer()), markup));
     let words = tile.clone();
     let line = if tile.markup.is_empty() {
         tile.meaning.clone()
@@ -332,6 +319,7 @@ fn tile_view(ui: Ui, tile: Tile, query: Signal<String>, hint: Signal<Option<Stri
         l.padding_right = Some(LengthSpec::Px(gap::HAIR));
         l.border_width = Some(1.0);
         l.border_style = Some(nana_ui_core::BorderStyle::Solid);
+        l.width = Some(LengthSpec::Fill);
         l.flex_shrink = Some(0.0);
     }
     st.radius = Some(nana_ui_core::RadiusTier::Sm);
@@ -344,7 +332,7 @@ fn tile_view(ui: Ui, tile: Tile, query: Signal<String>, hint: Signal<Option<Stri
             .kind(ButtonKind::Text)
             .style(st),
     )
-    .children(face)
+    .children(row)
     .visible(move || words.matches(&query.get()))
     .on(move |e: &PointerHoverChanged| {
         if e.hovered {
@@ -384,28 +372,6 @@ fn heading(ui: Ui, group: &Group) -> AnyView {
     .into_any()
 }
 
-/// The expression group's free entry: a name the skin does not list, sent to
-/// VTube Studio or the bridges as is.
-fn expression_entry(ui: Ui, query: Signal<String>) -> AnyView {
-    let name = signal(String::new());
-    let mut field = kit::text_input("").placeholder(ui.now_t("tb-expression-placeholder"));
-    Arc::make_mut(&mut field.style.layout).width = Some(LengthSpec::Fill);
-    widget(field)
-        .key("input-controls-expression")
-        .visible(move || query.with(|q| q.trim().is_empty()))
-        .on(move |e: &TextChanged| name.set(e.value.to_string()))
-        .on_cx(move |_, _: &TextSubmitted, cx| {
-            let n = name.get_untracked();
-            if !n.trim().is_empty() {
-                cx.dispatch_program_all(act(point(Marker::Expression {
-                    name: n.trim().to_owned(),
-                    intensity: None,
-                })));
-            }
-        })
-        .into_any()
-}
-
 /// The control palette: search, the groups, and the hint line.
 pub(super) fn panel(ui: Ui) -> AnyView {
     let query = signal(String::new());
@@ -425,11 +391,7 @@ pub(super) fn panel(ui: Ui) -> AnyView {
                 .into_iter()
                 .map(|group| {
                     let tiles = group.tiles.clone();
-                    let entry = group.entry;
-                    let shown = move || {
-                        let q = query.get();
-                        tiles.iter().any(|t| t.matches(&q)) || (entry && q.trim().is_empty())
-                    };
+                    let shown = move || query.with(|q| tiles.iter().any(|t| t.matches(q)));
                     let cells: Vec<AnyView> = group
                         .tiles
                         .iter()
@@ -445,13 +407,11 @@ pub(super) fn panel(ui: Ui) -> AnyView {
                     .children((
                         heading(ui, &group),
                         widget(
-                            Stack::row(0.0)
-                                .gap_step(gap::step::TIGHT)
-                                .wrap(true)
+                            Stack::column(0.0)
+                                .gap_step(gap::step::HAIR)
                                 .width(LengthSpec::Fill),
                         )
                         .children(cells),
-                        entry.then(|| expression_entry(ui, query)),
                     ))
                     .into_any()
                 })
