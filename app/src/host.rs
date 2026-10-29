@@ -812,7 +812,7 @@ fn sync_editor(
     }
     for command in commands {
         let result = match command {
-            crate::app::EditorCommand::Edit(command) => cx.rich_edit(editor, command),
+            crate::app::EditorCommand::Edit(command) => cx.rich_edit(editor, *command),
             crate::app::EditorCommand::Insert(fragment) => {
                 insert_rich_fragment(cx, ui, editor, &fragment)
             }

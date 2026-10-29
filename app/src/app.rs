@@ -71,7 +71,7 @@ fn share_input_keys(keys: &InputKeys) {
 // values and the dependency's command size is part of its runtime contract.
 #[allow(clippy::large_enum_variant)]
 pub enum EditorCommand {
-    Edit(nana_ui::runtime::RichEditCommand),
+    Edit(Box<nana_ui::runtime::RichEditCommand>),
     Insert(nana_ui_core::RichText),
     /// Delete the selection as one undo step.
     Delete,
@@ -79,7 +79,7 @@ pub enum EditorCommand {
 
 impl From<nana_ui::runtime::RichEditCommand> for EditorCommand {
     fn from(command: nana_ui::runtime::RichEditCommand) -> Self {
-        Self::Edit(command)
+        Self::Edit(Box::new(command))
     }
 }
 
