@@ -12,7 +12,9 @@ use std::sync::Arc;
 
 /// Far below any platform's default thread stack: a validator that recursed
 /// on the caller's stack overflows here and aborts the test binary.
-const CALLER_STACK: usize = 256 << 10;
+/// Windows needs a little more headroom for the CRT before user code runs;
+/// keep this well under the 1 MiB default so a caller-stack recursion still dies.
+const CALLER_STACK: usize = 512 << 10;
 
 fn on_small_stack<T: Send>(f: impl FnOnce() -> T + Send) -> T {
     std::thread::scope(|s| {
