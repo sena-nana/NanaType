@@ -157,7 +157,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 510 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 512 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -224,7 +224,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - rustls 0.23.46 — <https://github.com/rustls/rustls>
 
-### Apache-2.0 OR MIT (310)
+### Apache-2.0 OR MIT (312)
 
 - accesskit 0.25.1 — <https://github.com/AccessKit/accesskit>
 - accesskit_consumer 0.39.1 — <https://github.com/AccessKit/accesskit>
@@ -419,6 +419,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - proc-macro-crate 3.5.0 — <https://github.com/bkchr/proc-macro-crate>
 - proc-macro2 1.0.107 — <https://github.com/dtolnay/proc-macro2>
 - profiling 1.0.18 — <https://github.com/aclysma/profiling>
+- psm 0.1.32 — <https://github.com/rust-lang/stacker>
 - qrcode 0.14.1 — <https://github.com/kennytm/qrcode-rust>
 - quick-error 2.0.1 — <http://github.com/tailhook/quick-error>
 - quote 1.0.47 — <https://github.com/dtolnay/quote>
@@ -463,6 +464,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - smol_str 0.3.6 — <https://github.com/rust-lang/rust-analyzer/tree/master/lib/smol_str>
 - socket2 0.6.5 — <https://github.com/rust-lang/socket2>
 - stable_deref_trait 1.2.1 — <https://github.com/storyyeller/stable_deref_trait>
+- stacker 0.1.25 — <https://github.com/rust-lang/stacker>
 - static_assertions 1.1.0 — <https://github.com/nvzqz/static-assertions-rs>
 - strength_reduce 0.2.4 — <http://github.com/ejmahler/strength_reduce>
 - svgtypes 0.16.1 — <https://github.com/linebender/svgtypes>

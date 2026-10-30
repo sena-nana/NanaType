@@ -53,8 +53,10 @@ fn common_controls(link_arg: &str) {
 
 /// An 8 MiB main-thread stack for the targets `link_arg` names. Windows'
 /// default is 1 MiB, and the UI runs on the main thread inside window
-/// callbacks: unoptimized, a skin preview's frames came close to that.
-/// Only the reservation grows; pages are committed as they are touched.
+/// callbacks. NanaUI's layout recursion moves to a fresh segment when the
+/// stack runs low, but the rest does not: unoptimized, the skins page needs
+/// more than 512 KiB of it. Only the reservation grows; pages are committed
+/// as they are touched.
 fn main_stack(link_arg: &str) {
     println!("{link_arg}/STACK:8388608");
 }
