@@ -13,9 +13,12 @@ pub use pages::font_licence_panel;
 
 use std::sync::Arc;
 
+use nana_ui::ControlSize;
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
-use nana_ui::runtime::{Activate, ListItem, ScrollAxes, ScrollView, Stack, Text};
+use nana_ui::runtime::{
+    Activate, IconButton, ListItem, RowToolsRest, ScrollAxes, ScrollView, Stack, Text,
+};
 use nana_ui_core::{LengthSpec, SemanticColorRole};
 
 use super::Ui;
@@ -145,7 +148,11 @@ const GROUPS: &[(&str, &[Page])] = &[
 /// the selected fill when it is the open page.
 fn nav_row(ui: Ui, page: Page) -> AnyView {
     let selected = move || ui.page.get() == page;
-    widget(ListItem::new("").size(nana_ui::ControlSize::Small))
+    let mut item = ListItem::new("").size(nana_ui::ControlSize::Small);
+    if page == Page::About {
+        item = item.tools_rest(RowToolsRest::Reserve).keep_tools(true);
+    }
+    let row = widget(item)
         .bind(move |item: &mut ListItem| {
             let label = super::I18N.t_in(ui.locale.get(), page.label_key());
             if item.label != label {
@@ -164,8 +171,54 @@ fn nav_row(ui: Ui, page: Page) -> AnyView {
                 },
             ),
         )
-        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::SettingsPage(page)))
-        .into_any()
+        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::SettingsPage(page)));
+    if page == Page::About {
+        row.tools(theme_toggle(ui)).into_any()
+    } else {
+        row.into_any()
+    }
+}
+
+/// A square icon action that switches the application chrome between light and
+/// dark. It follows the resolved appearance, so clicking while in system mode
+/// chooses the opposite explicit mode in one step.
+fn theme_toggle(ui: Ui) -> AnyView {
+    let dark = ui.chrome_dark.get_untracked();
+    let key = if dark {
+        "settings-theme-switch-light"
+    } else {
+        "settings-theme-switch-dark"
+    };
+    widget(
+        IconButton::new(if dark { ti::SUN } else { ti::MOON }, ui.now_t(key))
+            .size(ControlSize::Small)
+            .with_tooltip(ui.now_t(key)),
+    )
+    .bind(move |button: &mut IconButton| {
+        let dark = ui.chrome_dark.get();
+        let key = if dark {
+            "settings-theme-switch-light"
+        } else {
+            "settings-theme-switch-dark"
+        };
+        let label: Arc<str> = ui.now_t(key).into();
+        button.icon = if dark { ti::SUN } else { ti::MOON };
+        button.label = Arc::clone(&label);
+        if let Some(tooltip) = &mut button.tooltip {
+            tooltip.label = label;
+        }
+    })
+    .on_cx(move |_, _: &Activate, cx| {
+        let dark = ui.chrome_dark.get_untracked();
+        cx.dispatch_program_all(controls::edit(move |s| {
+            s.skin.chrome = if dark {
+                nanatype_settings::ChromeMode::Light
+            } else {
+                nanatype_settings::ChromeMode::Dark
+            };
+        }));
+    })
+    .into_any()
 }
 
 /// A group's caption.

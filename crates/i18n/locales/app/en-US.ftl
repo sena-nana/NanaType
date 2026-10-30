@@ -129,6 +129,8 @@ settings-platforms = Live platforms
 settings-integrations = Integrations
 settings-assets = Assets
 settings-about = About
+settings-theme-switch-light = Switch to light theme
+settings-theme-switch-dark = Switch to dark theme
 
 ## General
 general-language = Language

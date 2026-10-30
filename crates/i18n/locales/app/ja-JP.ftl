@@ -126,6 +126,8 @@ settings-platforms = ライブ配信
 settings-integrations = 連携
 settings-assets = 素材
 settings-about = 情報
+settings-theme-switch-light = ライトテーマに切り替え
+settings-theme-switch-dark = ダークテーマに切り替え
 
 ## 一般
 general-language = 表示言語

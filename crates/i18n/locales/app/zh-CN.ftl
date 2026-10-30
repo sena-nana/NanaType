@@ -126,6 +126,8 @@ settings-platforms = 直播平台
 settings-integrations = 联动
 settings-assets = 素材
 settings-about = 关于
+settings-theme-switch-light = 切换到浅色主题
+settings-theme-switch-dark = 切换到深色主题
 
 ## 常规
 general-language = 界面语言
