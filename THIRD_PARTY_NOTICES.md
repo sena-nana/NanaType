@@ -157,7 +157,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 508 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 510 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -224,7 +224,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - rustls 0.23.45 — <https://github.com/rustls/rustls>
 
-### Apache-2.0 OR MIT (308)
+### Apache-2.0 OR MIT (310)
 
 - accesskit 0.25.1 — <https://github.com/AccessKit/accesskit>
 - accesskit_consumer 0.39.1 — <https://github.com/AccessKit/accesskit>
@@ -296,6 +296,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - equivalent 1.0.2 — <https://github.com/indexmap-rs/equivalent>
 - etagere 0.3.0 — <https://github.com/nical/etagere>
 - euclid 0.22.14 — <https://github.com/servo/euclid>
+- fastrand 2.5.0 — <https://github.com/smol-rs/fastrand>
 - fdeflate 0.3.7 — <https://github.com/image-rs/fdeflate>
 - flate2 1.1.10 — <https://github.com/rust-lang/flate2-rs>
 - fluent-bundle 0.16.0 — <https://github.com/projectfluent/fluent-rs>
@@ -471,6 +472,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - syn 3.0.6 — <https://github.com/dtolnay/syn>
 - sys-locale 0.3.2 — <https://github.com/1Password/sys-locale>
 - tagptr 0.2.0 — <https://github.com/oliver-giersch/tagptr>
+- tempfile 3.27.0 — <https://github.com/Stebalien/tempfile>
 - thiserror 1.0.69 — <https://github.com/dtolnay/thiserror>
 - thiserror 2.0.20 — <https://github.com/dtolnay/thiserror>
 - thiserror-impl 1.0.69 — <https://github.com/dtolnay/thiserror>
