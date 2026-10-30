@@ -16,9 +16,7 @@ use std::sync::Arc;
 use nana_ui::ControlSize;
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
-use nana_ui::runtime::{
-    Activate, IconButton, ListItem, RowToolsRest, ScrollAxes, ScrollView, Stack, Text,
-};
+use nana_ui::runtime::{Activate, IconButton, ListItem, ScrollAxes, ScrollView, Stack, Text};
 use nana_ui_core::{LengthSpec, SemanticColorRole};
 
 use super::Ui;
@@ -150,7 +148,9 @@ fn nav_row(ui: Ui, page: Page) -> AnyView {
     let selected = move || ui.page.get() == page;
     let mut item = ListItem::new("").size(nana_ui::ControlSize::Small);
     if page == Page::About {
-        item = item.tools_rest(RowToolsRest::Reserve).keep_tools(true);
+        let layout = Arc::make_mut(&mut item.style.layout);
+        layout.flex_grow = Some(1.0);
+        layout.min_width = Some(LengthSpec::Px(0.0));
     }
     let row = widget(item)
         .bind(move |item: &mut ListItem| {
@@ -173,7 +173,14 @@ fn nav_row(ui: Ui, page: Page) -> AnyView {
         )
         .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::SettingsPage(page)));
     if page == Page::About {
-        row.tools(theme_toggle(ui)).into_any()
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::TIGHT)
+                .width(LengthSpec::Fill)
+                .align(nana_ui_core::AlignSpec::Center),
+        )
+        .children((row, theme_toggle(ui)))
+        .into_any()
     } else {
         row.into_any()
     }
