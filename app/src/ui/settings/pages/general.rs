@@ -75,7 +75,6 @@ fn settings_body(ui: Ui) -> AnyView {
                         speaker_field(ui),
                     ),
                     row(ui, "general-avatar", None, avatar_row),
-                    crate::ui::sources::identity_hint(ui),
                 ],
             ),
             section_with(
@@ -165,7 +164,7 @@ fn settings_body(ui: Ui) -> AnyView {
 }
 
 /// Automatic checks, and an extra proxy for reaching GitHub.
-fn updates(ui: Ui) -> Vec<(AnyView, Shown)> {
+fn updates(ui: Ui) -> Vec<(Row, Shown)> {
     vec![
         (
             toggle_row!(ui, "general-check-updates", general.check_updates),

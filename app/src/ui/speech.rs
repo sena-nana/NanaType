@@ -37,6 +37,12 @@ pub(crate) fn mode(ui: Ui) -> AnyView {
         },
     )
 }
+/// Whether there is a status to show: listening, or an error to read.
+pub(crate) fn has_status(ui: Ui) -> bool {
+    ui.speech.with(|s| s.phase.active() || s.error.is_some())
+}
+/// The input window's status bar: [`status_text`] on the bar inset, shown
+/// while [`has_status`] holds.
 pub(crate) fn status(ui: Ui) -> AnyView {
     widget(
         Stack::column(0.0)
@@ -47,9 +53,14 @@ pub(crate) fn status(ui: Ui) -> AnyView {
             )
             .width(LengthSpec::Fill),
     )
-    .visible(move || ui.speech.with(|s| s.phase.active() || s.error.is_some()))
-    .children(
-        widget(Text::new("").style(Type::Caption.style())).bind(move |text: &mut Text| {
+    .visible(move || has_status(ui))
+    .children(status_text(ui))
+    .into_any()
+}
+/// The phase and the interim text, as one caption without its own inset.
+pub(crate) fn status_text(ui: Ui) -> AnyView {
+    widget(Text::new("").style(Type::Caption.style()))
+        .bind(move |text: &mut Text| {
             let state = ui.speech.get();
             let mut value = state.status(ui);
             if !state.partial.is_empty() {
@@ -62,9 +73,8 @@ pub(crate) fn status(ui: Ui) -> AnyView {
             let l = Arc::make_mut(&mut text.style.layout);
             l.max_height = Some(LengthSpec::Px(crate::ui::kit::INPUT_STATUS_MAX_H));
             l.overflow_y = nana_ui_core::OverflowSpec::Hidden;
-        }),
-    )
-    .into_any()
+        })
+        .into_any()
 }
 pub(crate) fn actions(ui: Ui) -> AnyView {
     nana_ui::runtime::view::dynamic(

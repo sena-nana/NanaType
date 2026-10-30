@@ -67,6 +67,9 @@ fn share_input_keys(keys: &InputKeys) {
 }
 
 /// Editor operations applied by the host without replacing its editing state.
+// RichEditCommand is intentionally kept inline: the command queue owns these
+// values and the dependency's command size is part of its runtime contract.
+#[allow(clippy::large_enum_variant)]
 pub enum EditorCommand {
     Edit(nana_ui::runtime::RichEditCommand),
     Insert(nana_ui_core::RichText),

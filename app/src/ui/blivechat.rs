@@ -2,8 +2,8 @@
 use super::{
     Ui,
     settings::controls::{
-        address, blivechat_badge, block, button, confirm, edit, primary, row, section, segmented,
-        select_keys, switch, toggled_section,
+        Row, address, blivechat_badge, block, button, confirm, edit, primary, row, section,
+        segmented, select_keys, switch, toggled_section,
     },
 };
 use crate::msg::Msg;
@@ -108,7 +108,7 @@ fn server_section(ui: Ui) -> AnyView {
         ),
     ));
     rows.extend([
-        dynamic(
+        Row::inset(dynamic(
             move || {
                 ui.settings
                     .with(|s| crate::distribution::blive_room_kind(&s.integrations.blivechat))
@@ -117,8 +117,7 @@ fn server_section(ui: Ui) -> AnyView {
                 BliveRoomKind::AuthCode => row(ui, "int-blive-auth-code", None, auth_field(ui)),
                 BliveRoomKind::RoomId => row(ui, "int-blive-room-id", None, room_field(ui)),
             },
-        )
-        .into_any(),
+        )),
         row(
             ui,
             "int-blive-host",

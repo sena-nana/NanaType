@@ -4,19 +4,45 @@
 
 use std::sync::Arc;
 
-use nana_ui::runtime::view::{AnyView, IntoView, settings_row, widget};
+use nana_ui::runtime::view::{AnyView, IntoView, ViewBuilder, settings_row, widget};
 use nana_ui::runtime::{Divider, Stack};
 use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec, RadiusTier, SemanticColorRole};
 
 use super::tokens::{gap, inset};
 use nana_ui::runtime::view::RaisedSurfacePainter;
 
+/// One row of a section's card, already on the card's inset.
+///
+/// A card insets nothing itself (NanaUI's `group_row` adds a hairline, not
+/// padding), so a bare button or caption would sit flush against its edge.
+/// Only the row builders make one: [`row_text`], [`row_hint_fn`],
+/// [`block`] for full-width content and [`line`] for anything else. A view
+/// that already carries the card inset says so with [`Row::inset`].
+pub struct Row(AnyView);
+
+impl Row {
+    /// `view` as a row as it is: it brings the card's inset itself.
+    pub fn inset(view: impl IntoView) -> Self {
+        Self(view.into_any())
+    }
+}
+
+impl IntoView for Row {
+    fn build(self, vb: &mut ViewBuilder<'_, '_, '_>) {
+        self.0.build(vb)
+    }
+
+    fn into_any(self) -> AnyView {
+        self.0
+    }
+}
+
 /// Whether a section row is shown; `None` always shows it.
 pub type Shown = Option<Box<dyn Fn() -> bool + Send + 'static>>;
 
-/// A row that shows only while `cond` holds, for [`section_with`].
-pub fn shown_if(view: AnyView, cond: impl Fn() -> bool + Send + 'static) -> (AnyView, Shown) {
-    (view, Some(Box::new(cond)))
+/// A row that shows only while `cond` holds, for [`section_titled`].
+pub fn shown_if(view: impl IntoView, cond: impl Fn() -> bool + Send + 'static) -> (Row, Shown) {
+    (Row::inset(view), Some(Box::new(cond)))
 }
 
 /// A card's frame: the surface, a soft hairline and (on a light chrome) a
@@ -43,13 +69,13 @@ pub fn panel() -> Stack {
 /// card below, an inset hairline between rows; a hidden row takes its
 /// divider with it. `None` leaves the title out (the page heading already
 /// names it).
-pub fn section_titled(title: Option<String>, rows: Vec<(AnyView, Shown)>) -> AnyView {
+pub fn section_titled<V: IntoView>(title: Option<String>, rows: Vec<(V, Shown)>) -> AnyView {
     use nana_ui::runtime::view::group_row;
     let rows = rows
         .into_iter()
         .map(|(view, shown)| match shown {
-            Some(cond) => group_row(view).visible(cond),
-            None => group_row(view),
+            Some(cond) => group_row(Row::inset(view)).visible(cond),
+            None => group_row(Row::inset(view)),
         })
         .collect();
     nana_ui::runtime::view::settings_group(title, rows).into_any()
@@ -79,54 +105,56 @@ pub fn vrule() -> AnyView {
 }
 
 /// Rows with a divider between each, for a group nested in one card row.
-pub fn divided(rows: Vec<AnyView>) -> Vec<AnyView> {
+pub fn divided<V: IntoView>(rows: Vec<V>) -> Vec<AnyView> {
     rows.into_iter()
         .enumerate()
         .map(|(i, r)| {
             widget(Stack::column(0.0))
-                .children(((i > 0).then(divider), r))
+                .children(((i > 0).then(divider), Row::inset(r)))
                 .into_any()
         })
         .collect()
 }
 
 /// A full-width block inside a card, inset like the rows.
-pub fn block(view: impl IntoView) -> AnyView {
-    widget(
-        Stack::column(0.0)
-            .gap_step(gap::step::CONTROL)
-            .padding_step(inset::step::CARD, inset::step::ROW_Y),
+pub fn block(view: impl IntoView) -> Row {
+    Row::inset(
+        widget(
+            Stack::column(0.0)
+                .gap_step(gap::step::CONTROL)
+                .padding_step(inset::step::CARD, inset::step::ROW_Y),
+        )
+        .children(view),
     )
-    .children(view)
-    .into_any()
 }
 
 /// A row inside a card: `left` takes the room, `right` keeps its width.
 /// For rows that are not a label and a control (a list entry, a header).
-pub fn line(left: impl IntoView, right: impl IntoView) -> AnyView {
-    widget(
-        Stack::row(0.0)
-            .gap_step(gap::step::GROUP)
-            .padding_step(inset::step::CARD, inset::step::ROW_Y)
-            .align(AlignSpec::Center)
-            .width(LengthSpec::Fill),
-    )
-    .children((
-        widget(crate::ui::kit::grow_column(gap::HAIR)).children(left),
+pub fn line(left: impl IntoView, right: impl IntoView) -> Row {
+    Row::inset(
         widget(
             Stack::row(0.0)
-                .gap_step(gap::step::CONTROL)
+                .gap_step(gap::step::GROUP)
+                .padding_step(inset::step::CARD, inset::step::ROW_Y)
                 .align(AlignSpec::Center)
-                .justify(JustifySpec::End)
-                .with_layout(|l| l.flex_shrink = Some(0.0)),
+                .width(LengthSpec::Fill),
         )
-        .children(right),
-    ))
-    .into_any()
+        .children((
+            widget(crate::ui::kit::grow_column(gap::HAIR)).children(left),
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::CONTROL)
+                    .align(AlignSpec::Center)
+                    .justify(JustifySpec::End)
+                    .with_layout(|l| l.flex_shrink = Some(0.0)),
+            )
+            .children(right),
+        )),
+    )
 }
 
 /// Label (and hint) on the left, control on the right; stacks when narrow.
-pub fn row_text(label_text: String, hint_text: Option<String>, control: AnyView) -> AnyView {
+pub fn row_text(label_text: String, hint_text: Option<String>, control: AnyView) -> Row {
     let hint: Option<Arc<str>> = hint_text.map(Into::into);
     inset_row(
         settings_row(label_text)
@@ -173,7 +201,7 @@ pub fn row_hint_fn(
     label_text: String,
     hint: impl Fn() -> Option<String> + Send + 'static,
     control: AnyView,
-) -> AnyView {
+) -> Row {
     inset_row(
         settings_row(label_text)
             .hint(move || hint().map(Arc::<str>::from))
@@ -192,10 +220,8 @@ fn control_slot(control: AnyView) -> AnyView {
     .into_any()
 }
 
-fn inset_row(row: AnyView) -> AnyView {
-    widget(Stack::column(0.0).padding_xy(inset::CARD, 0.0))
-        .children(row)
-        .into_any()
+fn inset_row(row: AnyView) -> Row {
+    Row::inset(widget(Stack::column(0.0).padding_xy(inset::CARD, 0.0)).children(row))
 }
 
 /// A column that takes the room a row leaves it (and gives it back when the

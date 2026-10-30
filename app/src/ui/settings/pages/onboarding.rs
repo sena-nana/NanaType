@@ -157,7 +157,7 @@ pub(super) fn step_indicator(ui: Ui) -> AnyView {
 /// their own: the footer's line is the step's only one, so none stacks on
 /// it.
 pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
-    let body: Vec<AnyView> = match n {
+    let body: Vec<Row> = match n {
         0 => vec![
             row(ui, "onboard-language", None, language_select(ui)),
             row(
@@ -170,7 +170,7 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
         1 => vec![
             row(ui, "onboard-skin", None, skin_select(ui)),
             // Held through the entrance, so that frame does not build the preview.
-            dynamic(
+            Row::inset(dynamic(
                 move || ui.onboard_skin_shown.get(),
                 move |shown| {
                     if *shown {
@@ -179,10 +179,9 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
                         block(hint(ui.now_t("skin-preview-loading")))
                     }
                 },
-            )
-            .into_any(),
+            )),
         ],
-        2 => vec![
+        2 => vec![Row::inset(
             widget(
                 Stack::row(0.0)
                     .gap_step(nana_ui_core::SpacingStep::Xl)
@@ -193,10 +192,9 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
             .children((
                 mode_card(ui, InputMode::Compose),
                 mode_card(ui, InputMode::Mirror),
-            ))
-            .into_any(),
-        ],
-        _ => vec![
+            )),
+        )],
+        _ => vec![Row::inset(
             widget(
                 Stack::column(0.0)
                     .gap_step(nana_ui_core::SpacingStep::Lg)
@@ -209,9 +207,8 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
                 widget(Stack::row(0.0)).children(button(ui, "onboard-obs", || {
                     Msg::SettingsPage(Page::Output)
                 })),
-            ))
-            .into_any(),
-        ],
+            )),
+        )],
     };
     widget(Stack::column(0.0)).children(body).into_any()
 }

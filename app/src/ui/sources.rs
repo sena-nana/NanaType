@@ -28,10 +28,6 @@ pub fn profile_bound(_: Ui) -> bool {
     false
 }
 
-pub fn identity_hint(_: Ui) -> AnyView {
-    nothing()
-}
-
 pub fn input_send_status(_: Ui) -> AnyView {
     nothing()
 }

@@ -26,7 +26,7 @@ pub use nanatype_frame::ui::controls::{base64, confirm, hint};
 use crate::ui::kit;
 
 pub use crate::ui::kit::{
-    Shown, Type, block, divided, divider, field, gap, icon, inset, row_text, shown_if,
+    Row, Shown, Type, block, divided, divider, field, gap, icon, inset, row_text, shown_if,
 };
 
 /// A page's title.
@@ -41,12 +41,17 @@ pub fn subheading(ui: Ui, key: &str) -> AnyView {
 
 /// A titled group of rows. An empty `title_key` leaves the title out (the
 /// page heading already names it).
-pub fn section(ui: Ui, title_key: &str, rows: Vec<AnyView>) -> AnyView {
+///
+/// The card insets nothing itself, so each row is a [`Row`] that brings its
+/// own inset: a [`row`], a [`block`] for full-width content (a note, a
+/// preview), or a [`kit::line`] for anything else (a list entry, an
+/// action).
+pub fn section<V: IntoView>(ui: Ui, title_key: &str, rows: Vec<V>) -> AnyView {
     section_with(ui, title_key, rows.into_iter().map(|r| (r, None)).collect())
 }
 
 /// [`section`] whose rows may hide; a hidden row takes its divider with it.
-pub fn section_with(ui: Ui, title_key: &str, rows: Vec<(AnyView, Shown)>) -> AnyView {
+pub fn section_with<V: IntoView>(ui: Ui, title_key: &str, rows: Vec<(V, Shown)>) -> AnyView {
     let title = (!title_key.is_empty()).then(|| ui.now_t(title_key));
     crate::ui::kit::section_titled(title, rows)
 }
@@ -54,32 +59,30 @@ pub fn section_with(ui: Ui, title_key: &str, rows: Vec<(AnyView, Shown)>) -> Any
 /// The rows that only mean something while a master toggle is on, for
 /// [`section_with`]. They fold away with it, divider and all, so a
 /// switched-off feature does not show a page of dead settings.
-pub fn when_on(
+pub fn when_on<V: IntoView>(
     ui: Ui,
     enabled: impl Fn(&Settings) -> bool + Send + Sync + Copy + 'static,
-    rows: Vec<AnyView>,
-) -> (AnyView, Shown) {
+    rows: Vec<V>,
+) -> (Row, Shown) {
     shown_if(
-        widget(Stack::column(0.0))
-            .children(divided(rows))
-            .into_any(),
+        Row::inset(widget(Stack::column(0.0)).children(divided(rows))),
         move || ui.settings.with(|s| enabled(s)),
     )
 }
 
 /// A feature's card: its master row leads, and the rows that only mean
 /// something while `enabled` holds fold away with it.
-pub fn toggled_section(
+pub fn toggled_section<M: IntoView, V: IntoView>(
     ui: Ui,
     title_key: &str,
-    master: AnyView,
+    master: M,
     enabled: impl Fn(&Settings) -> bool + Send + Sync + Copy + 'static,
-    rows: Vec<AnyView>,
+    rows: Vec<V>,
 ) -> AnyView {
     section_with(
         ui,
         title_key,
-        vec![(master, None), when_on(ui, enabled, rows)],
+        vec![(Row::inset(master), None), when_on(ui, enabled, rows)],
     )
 }
 
@@ -203,7 +206,7 @@ fn breathing_badge(
 }
 
 /// Label (and hint) on the left, control on the right; stacks when narrow.
-pub fn row(ui: Ui, label_key: &str, hint_key: Option<&str>, control: AnyView) -> AnyView {
+pub fn row(ui: Ui, label_key: &str, hint_key: Option<&str>, control: AnyView) -> Row {
     row_text(ui.now_t(label_key), hint_key.map(|k| ui.now_t(k)), control)
 }
 
@@ -220,7 +223,7 @@ pub fn info_tip(ui: Ui, key: &str) -> AnyView {
 
 /// [`row`] with an info mark before its control, for detail worth a look
 /// but not a line of its own.
-pub fn row_tip(ui: Ui, label_key: &str, tip_key: &str, control: AnyView) -> AnyView {
+pub fn row_tip(ui: Ui, label_key: &str, tip_key: &str, control: AnyView) -> Row {
     row(
         ui,
         label_key,
@@ -241,7 +244,7 @@ pub fn row_live_hint(
     label_key: &str,
     hint: impl Fn() -> Option<String> + Send + 'static,
     control: AnyView,
-) -> AnyView {
+) -> Row {
     crate::ui::kit::row_hint_fn(ui.now_t(label_key), hint, control)
 }
 
@@ -299,7 +302,7 @@ pub fn address(ui: Ui, host: Bound<String>, port_of: Bound<u16>) -> AnyView {
 
 /// A card's empty list as one row: what is missing on the left, the button
 /// that adds it on the right.
-pub fn empty_row(ui: Ui, text_key: &str, action: AnyView) -> AnyView {
+pub fn empty_row(ui: Ui, text_key: &str, action: AnyView) -> Row {
     kit::line(hint(ui.now_t(text_key)), action)
 }
 

@@ -48,7 +48,7 @@ pub(super) fn step(n: u8, body: impl IntoView) -> AnyView {
 /// Getting the display into OBS: enable output before selecting its live sender
 /// name, other capture methods folded under one line. (The sample line is
 /// the page header's.)
-pub(super) fn obs_guide(ui: Ui) -> AnyView {
+pub(super) fn obs_guide(ui: Ui) -> Row {
     let body = |key: &str| {
         widget(
             Text::new(ui.now_t(key))
@@ -154,13 +154,14 @@ pub(super) fn obs_guide(ui: Ui) -> AnyView {
             "output-obs-window"
         }))),
     ));
-    widget(
-        Stack::column(0.0)
-            .gap_step(nana_ui_core::SpacingStep::Lg)
-            .padding_step(inset::step::CARD, inset::step::ROW_Y),
+    Row::inset(
+        widget(
+            Stack::column(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Lg)
+                .padding_step(inset::step::CARD, inset::step::ROW_Y),
+        )
+        .children((steps, other)),
     )
-    .children((steps, other))
-    .into_any()
 }
 
 /// How an output's settings are read and written.
@@ -371,7 +372,7 @@ fn sizing_hint(ui: Ui, read: Read) -> Option<String> {
 /// Which OBS source this output is, and where its size comes from; a
 /// source without a bounding box gets a notice card below the row, with a
 /// button that turns one on.
-fn obs_source_row(ui: Ui, kind: WindowKind, read: Read, write: Write) -> AnyView {
+fn obs_source_row(ui: Ui, kind: WindowKind, read: Read, write: Write) -> Row {
     let no_bounds = move || {
         let state = ui.obs.get();
         ui.settings.with(|s| {
@@ -410,13 +411,11 @@ fn obs_source_row(ui: Ui, kind: WindowKind, read: Read, write: Write) -> AnyView
         }))
         .css(nana_ui::runtime::view::css! { align-items: center; }),
     );
-    widget(Stack::column(0.0))
-        .children((row, notice))
-        .into_any()
+    Row::inset(widget(Stack::column(0.0)).children((row, notice)))
 }
 
 /// A row with the card's hairline above it, for a column built by hand.
-fn below_divider(row: AnyView) -> AnyView {
+fn below_divider(row: Row) -> AnyView {
     widget(Stack::column(0.0))
         .children((divider(), row))
         .into_any()
@@ -516,7 +515,7 @@ fn obs_link(ui: Ui) -> AnyView {
 pub(super) fn output(ui: Ui) -> AnyView {
     // One card for every window's sender: a window's row leads, and its
     // sender's details fold away with its switch.
-    let spout = |kind: WindowKind, title: &'static str| -> [(AnyView, Shown); 2] {
+    let spout = |kind: WindowKind, title: &'static str| -> [(Row, Shown); 2] {
         let link: fn(&crate::ui::Status) -> &LinkState = match kind {
             WindowKind::Display => |s| &s.spout_display,
             WindowKind::PeerDisplay => |s| &s.spout_peer_display,
@@ -610,9 +609,12 @@ pub(super) fn output(ui: Ui) -> AnyView {
                 None,
             ),
             shown_if(
-                widget(Stack::column(0.0))
-                    .children((name, source, below_divider(size), below_divider(straight)))
-                    .into_any(),
+                Row::inset(widget(Stack::column(0.0)).children((
+                    name,
+                    source,
+                    below_divider(size),
+                    below_divider(straight),
+                ))),
                 move || ui.settings.with(|s| read(s).enabled),
             ),
         ]
@@ -646,7 +648,7 @@ pub(super) fn output(ui: Ui) -> AnyView {
 
 /// The GPU to render on, then the scheduling preferences, each hint saying
 /// why it is not in effect when the system refused it.
-fn performance(ui: Ui) -> Vec<AnyView> {
+fn performance(ui: Ui) -> Vec<Row> {
     let adapter = gpu_adapter(ui);
     let gpu = row_live_hint(
         ui,
@@ -706,7 +708,7 @@ fn performance(ui: Ui) -> Vec<AnyView> {
 
 /// The GPU choice. The device is created at startup, so the hint says when a
 /// choice waits for a restart, or names the GPU in use.
-fn gpu_adapter(ui: Ui) -> AnyView {
+fn gpu_adapter(ui: Ui) -> Row {
     let status = ui.status.get_untracked();
     let choice = &status.performance.gpu;
     let mut options = vec![("auto".to_owned(), ui.now_t("output-gpu-adapter-auto"))];

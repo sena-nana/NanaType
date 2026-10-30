@@ -261,7 +261,7 @@ fn sticker(
         }
         if f == start {
             r.event(f, "type", "sticker-text");
-            r.cmd(Cmd::SendMarkup(markup.clone().into()), ms(f));
+            r.cmd(Cmd::SendMarkup(markup.clone()), ms(f));
         }
     });
 }

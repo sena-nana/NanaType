@@ -3359,7 +3359,7 @@ dependencies = [
 [[package]]
 name = "nana-app-icon"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "flate2",
  "image",
@@ -3369,7 +3369,7 @@ dependencies = [
 [[package]]
 name = "nana-diagnostics"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "windows-sys 0.61.2",
 ]
@@ -3377,7 +3377,7 @@ dependencies = [
 [[package]]
 name = "nana-frame-exchange"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "nana-gpu",
  "wgpu",
@@ -3386,7 +3386,7 @@ dependencies = [
 [[package]]
 name = "nana-gpu"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "nana-diagnostics",
  "wgpu",
@@ -3396,7 +3396,7 @@ dependencies = [
 [[package]]
 name = "nana-icons-tabler"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "nana-ui-core",
 ]
@@ -3404,7 +3404,7 @@ dependencies = [
 [[package]]
 name = "nana-package"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -3418,7 +3418,7 @@ dependencies = [
 [[package]]
 name = "nana-svg-raster"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "resvg",
  "tiny-skia",
@@ -3427,7 +3427,7 @@ dependencies = [
 [[package]]
 name = "nana-text"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "fontdb",
  "harfrust",
@@ -3445,7 +3445,7 @@ dependencies = [
 [[package]]
 name = "nana-ui"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -3483,7 +3483,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-charts"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "bytemuck",
  "nana-ui-core",
@@ -3492,7 +3492,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-core"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "nana-diagnostics",
  "serde",
@@ -3502,7 +3502,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-css"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "nana-ui-core",
  "serde_json",
@@ -3511,7 +3511,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-devtools"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "image",
  "nana-gpu",
@@ -3529,7 +3529,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-input"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "nana-diagnostics",
  "nana-ui-core",
@@ -3538,7 +3538,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-platform"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "arboard",
  "jni 0.21.1",
@@ -3558,7 +3558,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-runtime"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "fancy-regex",
  "fixed_decimal",
@@ -3589,7 +3589,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-scene"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "i_overlay",
  "lyon_tessellation",
@@ -3603,7 +3603,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-view-codegen"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "nana-ui-core",
  "nana-ui-css",
@@ -3617,7 +3617,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-view-macros"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "nana-ui-view-codegen",
  "proc-macro-crate",
@@ -3629,12 +3629,12 @@ dependencies = [
 [[package]]
 name = "nana-ui-view-schema"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 
 [[package]]
 name = "nana-window"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=c1746f4d08e91116543f7d51388c703a5c790277#c1746f4d08e91116543f7d51388c703a5c790277"
+source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
 dependencies = [
  "ashpd",
  "async-channel",

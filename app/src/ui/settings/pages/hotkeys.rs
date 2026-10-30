@@ -289,19 +289,19 @@ pub(super) fn hotkey_issue_line(ui: Ui, action: Shortcut) -> AnyView {
 }
 
 /// A shortcut's row: its name and recorder, then what is wrong with it.
-fn shortcut_row(ui: Ui, label: String, action: Shortcut) -> AnyView {
-    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs))
-        .children((
+fn shortcut_row(ui: Ui, label: String, action: Shortcut) -> Row {
+    Row::inset(
+        widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs)).children((
             row_text(label, None, hotkey_control(ui, action)),
             hotkey_issue_line(ui, action),
-        ))
-        .into_any()
+        )),
+    )
 }
 
 /// One row per quick phrase; renaming or adding one on the Assets page
 /// rebuilds the list.
-fn phrase_rows(ui: Ui) -> AnyView {
-    dynamic(
+fn phrase_rows(ui: Ui) -> Row {
+    Row::inset(dynamic(
         move || {
             ui.settings.with(|s| {
                 s.assets
@@ -320,7 +320,7 @@ fn phrase_rows(ui: Ui) -> AnyView {
             if labels.is_empty() {
                 return empty_row(ui, "hotkeys-phrases-empty", edit_phrases());
             }
-            let rows: Vec<AnyView> = (0..labels.len())
+            let rows: Vec<Row> = (0..labels.len())
                 .map(|i| {
                     let action = Shortcut::Global(GlobalAction::Phrase(i));
                     let name = ui
@@ -329,20 +329,17 @@ fn phrase_rows(ui: Ui) -> AnyView {
                     shortcut_row(ui, name, action)
                 })
                 .collect();
-            widget(Stack::column(0.0))
-                .children((
-                    divided(rows),
-                    divider(),
-                    crate::ui::kit::line((), edit_phrases()),
-                ))
-                .into_any()
+            Row::inset(widget(Stack::column(0.0)).children((
+                divided(rows),
+                divider(),
+                crate::ui::kit::line((), edit_phrases()),
+            )))
         },
-    )
-    .into_any()
+    ))
 }
 
 pub(super) fn hotkeys(ui: Ui) -> AnyView {
-    let rows = |actions: Vec<Shortcut>| -> Vec<AnyView> {
+    let rows = |actions: Vec<Shortcut>| -> Vec<Row> {
         actions
             .into_iter()
             .map(|action| shortcut_row(ui, ui.now_t(action.label_key()), action))

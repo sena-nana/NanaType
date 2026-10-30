@@ -105,6 +105,14 @@ fn speech_settings_show_model_progress_and_edit_takeover_recovery_in_all_locales
                 .locale(locale)
                 .mount(1000, 900, move || settings::settings_window(ui));
         settle(&mut session);
+        if let Some(out) = std::env::var_os("NANATYPE_SPEECH_CAPTURE_DIR") {
+            std::fs::create_dir_all(&out).unwrap();
+            session
+                .screenshot_png(
+                    std::path::PathBuf::from(out).join(format!("settings-{locale:?}.png")),
+                )
+                .unwrap();
+        }
         let nodes = session.accessibility_dump();
         for key in ["speech-resume", "speech-stop", "speech-model-cancel"] {
             assert!(

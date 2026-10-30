@@ -65,13 +65,15 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                 ui,
                 "skins-library",
                 vec![
-                    widget(
-                        Stack::column(0.0)
-                            .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
-                    )
-                    .children(skin_filters(ui, filter, grid))
-                    .into_any(),
-                    list.into_any(),
+                    Row::inset(
+                        widget(
+                            Stack::column(0.0)
+                                .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg),
+                        )
+                        .children(skin_filters(ui, filter, grid)),
+                    ),
+                    // The grid insets itself; list rows run to the card's edge.
+                    Row::inset(list),
                 ],
             ),
             workshop::subscriptions(

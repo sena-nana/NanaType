@@ -13,7 +13,7 @@ pub(super) const MATRIX_LABEL_W: f32 = 150.0;
 pub(super) const MATRIX_GAP: f32 = space::MD;
 
 /// A matrix line: a label, then one cell per overlay window.
-pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> AnyView {
+pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> Row {
     let cells = cells.map(|cell| {
         widget(
             // A quarter of what the label and the gaps leave, so the columns
@@ -30,24 +30,25 @@ pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> AnyView {
         .children(cell)
         .into_any()
     });
-    widget(
-        Stack::row(MATRIX_GAP)
-            .align(AlignSpec::Center)
-            .width(LengthSpec::Fill)
-            .padding_step(inset::step::CARD, inset::step::ROW_Y),
-    )
-    .children((
+    Row::inset(
         widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::TIGHT)
+            Stack::row(MATRIX_GAP)
                 .align(AlignSpec::Center)
-                .width(LengthSpec::Px(MATRIX_LABEL_W))
-                .with_layout(|l| l.flex_shrink = Some(0.0)),
+                .width(LengthSpec::Fill)
+                .padding_step(inset::step::CARD, inset::step::ROW_Y),
         )
-        .children(label),
-        cells.into_iter().collect::<Vec<_>>(),
-    ))
-    .into_any()
+        .children((
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .align(AlignSpec::Center)
+                    .width(LengthSpec::Px(MATRIX_LABEL_W))
+                    .with_layout(|l| l.flex_shrink = Some(0.0)),
+            )
+            .children(label),
+            cells.into_iter().collect::<Vec<_>>(),
+        )),
+    )
 }
 
 /// A row label, with an info mark whose tooltip says what the options do.

@@ -1,33 +1,47 @@
 use super::*;
+use crate::ui::kit;
 use nanatype_settings::SpeechBackend;
 use nanatype_speech::model::ModelState;
 
 pub(super) fn settings(ui: Ui) -> AnyView {
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
-            section(
+            section_with(
                 ui,
                 "",
                 vec![
-                    crate::ui::speech::status(ui),
-                    crate::ui::speech::actions(ui),
-                    hint(ui.now_t("speech-background-hint")),
-                    row(
-                        ui,
-                        "speech-mode",
-                        Some("speech-mode-hint"),
-                        crate::ui::speech::mode(ui),
+                    (
+                        block((
+                            crate::ui::speech::actions(ui),
+                            hint(ui.now_t("speech-background-hint")),
+                        )),
+                        None,
                     ),
-                    row(
-                        ui,
-                        "speech-silence",
-                        Some("speech-silence-hint"),
-                        number(
+                    shown_if(block(crate::ui::speech::status_text(ui)), move || {
+                        crate::ui::speech::has_status(ui)
+                    }),
+                    (
+                        row(
                             ui,
-                            (1.0, 10.0),
-                            |s| f64::from(s.speech.silence_seconds),
-                            |s, v| s.speech.silence_seconds = v.round() as u32,
+                            "speech-mode",
+                            Some("speech-mode-hint"),
+                            crate::ui::speech::mode(ui),
                         ),
+                        None,
+                    ),
+                    (
+                        row(
+                            ui,
+                            "speech-silence",
+                            Some("speech-silence-hint"),
+                            number(
+                                ui,
+                                (1.0, 10.0),
+                                |s| f64::from(s.speech.silence_seconds),
+                                |s, v| s.speech.silence_seconds = v.round() as u32,
+                            ),
+                        ),
+                        None,
                     ),
                 ],
             ),
@@ -128,7 +142,7 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                             |s, v| s.speech.language = (!v.is_empty()).then(|| v.into()),
                         ),
                     ),
-                    button(ui, "speech-refresh", || Msg::SpeechRefresh),
+                    kit::line((), button(ui, "speech-refresh", || Msg::SpeechRefresh)),
                 ],
             ),
             dynamic(
@@ -156,30 +170,25 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                     section(
                         ui,
                         "speech-model",
-                        vec![
-                            Type::Body.view(status),
-                            hint(ui.now_t("speech-model-hint")),
-                            widget(Stack::row(0.0).gap_step(gap::step::CONTROL))
-                                .children((
-                                    (!working && !ready).then(|| {
-                                        button(ui, "speech-model-download", || {
-                                            Msg::SpeechModelDownload
-                                        })
-                                    }),
-                                    (!working).then(|| {
-                                        button(ui, "speech-model-import", || {
-                                            Msg::PickFile(FileTarget::SpeechModel)
-                                        })
-                                    }),
-                                    working.then(|| {
-                                        button(ui, "speech-model-cancel", || Msg::SpeechModelCancel)
-                                    }),
-                                    (!working && ready).then(|| {
-                                        button(ui, "speech-model-delete", || Msg::SpeechModelDelete)
-                                    }),
-                                ))
-                                .into_any(),
-                        ],
+                        vec![kit::line(
+                            (Type::Body.view(status), hint(ui.now_t("speech-model-hint"))),
+                            (
+                                (!working && !ready).then(|| {
+                                    button(ui, "speech-model-download", || Msg::SpeechModelDownload)
+                                }),
+                                (!working).then(|| {
+                                    button(ui, "speech-model-import", || {
+                                        Msg::PickFile(FileTarget::SpeechModel)
+                                    })
+                                }),
+                                working.then(|| {
+                                    button(ui, "speech-model-cancel", || Msg::SpeechModelCancel)
+                                }),
+                                (!working && ready).then(|| {
+                                    button(ui, "speech-model-delete", || Msg::SpeechModelDelete)
+                                }),
+                            ),
+                        )],
                     )
                 },
             ),

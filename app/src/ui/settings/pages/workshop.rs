@@ -3,6 +3,7 @@
 //! build ([`crate::workshop::View::shown`]).
 
 use super::*;
+use crate::ui::kit::Row as CardRow;
 use crate::workshop::{Availability, Kind, Row, RowState, Tag};
 
 /// Browse the Workshop for `tag` (in the Steam overlay when it is on).
@@ -19,7 +20,7 @@ pub(super) fn subscriptions(ui: Ui, kinds: &'static [Kind], tag: Tag) -> Option<
     let list = dynamic(
         move || ui.workshop.get(),
         move |view| {
-            let mut rows: Vec<AnyView> = Vec::new();
+            let mut rows: Vec<CardRow> = Vec::new();
             if let Availability::Unavailable(why) = &view.availability {
                 rows.push(row_text(
                     ui.now_t("workshop-unavailable"),
@@ -40,10 +41,9 @@ pub(super) fn subscriptions(ui: Ui, kinds: &'static [Kind], tag: Tag) -> Option<
                     widget(Stack::row(0.0)).into_any(),
                 ));
             }
-            widget(Stack::column(0.0)).children(rows).into_any()
+            CardRow::inset(widget(Stack::column(0.0)).children(rows))
         },
-    )
-    .into_any();
+    );
     Some(section_with(
         ui,
         "workshop-subscriptions",
@@ -57,7 +57,7 @@ pub(super) fn subscriptions(ui: Ui, kinds: &'static [Kind], tag: Tag) -> Option<
                 ),
                 None,
             ),
-            (list, None),
+            (CardRow::inset(list), None),
         ],
     ))
 }
@@ -77,7 +77,7 @@ fn state_text(ui: Ui, state: &RowState) -> String {
 
 /// One subscription: its title and state, its page, and unsubscribing
 /// (asked before it acts).
-fn subscription(ui: Ui, row: &Row) -> AnyView {
+fn subscription(ui: Ui, row: &Row) -> CardRow {
     let item = row.item;
     let mut buttons = vec![icon_action(
         ui,

@@ -3,7 +3,7 @@ use super::Ui;
 use super::danmaku::Link;
 use super::settings::controls::{block, button, hint, row, row_live_hint, section, switch, text};
 use crate::msg::Msg;
-use crate::ui::kit::{Type, gap, inset, line};
+use crate::ui::kit::{Row, Type, gap, inset, line};
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{
     ConfirmDialog, ConfirmIntent, DialogCloseRequested, Stack, Switch, Text, ToggleChanged,
@@ -245,7 +245,7 @@ pub fn settings_page(ui: Ui) -> AnyView {
                 "tw-send-section",
                 vec![
                     row(ui, "tw-send-switch", None, send_toggle(ui)),
-                    deliveries(ui),
+                    Row::inset(deliveries(ui)),
                 ],
             ),
         ))

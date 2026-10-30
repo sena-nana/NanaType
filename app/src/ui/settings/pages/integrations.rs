@@ -5,7 +5,7 @@ pub(super) const VTS_SELECT_W: f32 = field::MD;
 
 /// One marker's row: its chip, then the VTS hotkey it presses ("Auto" lets
 /// the bridge match the hotkey of the same name).
-pub(super) fn vts_map_row(ui: Ui, key: String, options: Vec<SelectOption>) -> AnyView {
+pub(super) fn vts_map_row(ui: Ui, key: String, options: Vec<SelectOption>) -> Row {
     let current = {
         let key = key.clone();
         move || {
@@ -16,56 +16,57 @@ pub(super) fn vts_map_row(ui: Ui, key: String, options: Vec<SelectOption>) -> An
     };
     let start = current();
     let set_key = key.clone();
-    widget(
-        Stack::bar(0.0)
-            .gap_step(nana_ui_core::SpacingStep::Xl)
-            .padding_step(inset::step::CARD, inset::step::ROW_Y)
-            .align(AlignSpec::Center),
-    )
-    .children((
+    Row::inset(
         widget(
-            Stack::row(0.0)
-                .gap_step(nana_ui_core::SpacingStep::Sm)
-                .align(AlignSpec::Center)
-                .grow(1.0)
-                .shrink(1.0),
+            Stack::bar(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Xl)
+                .padding_step(inset::step::CARD, inset::step::ROW_Y)
+                .align(AlignSpec::Center),
         )
         .children((
-            crate::ui::kit::mono_tag(format!("[expr={key}]")),
-            widget(IconGlyph::new(ti::ARROW_RIGHT).size(icon::SM).decorative()),
-        )),
-        widget(Stack::row(0.0).width(LengthSpec::Px(VTS_SELECT_W))).children(
             widget(
-                Select::new(Some(start))
-                    .options(options)
-                    .size(ControlSize::Small),
+                Stack::row(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Sm)
+                    .align(AlignSpec::Center)
+                    .grow(1.0)
+                    .shrink(1.0),
             )
-            .bind(move |s: &mut Select| {
-                let v: Arc<str> = current().into();
-                if s.value.as_ref() != Some(&v) {
-                    s.value = Some(v);
-                }
-            })
-            .on_cx(move |_, e: &SelectChanged, cx| {
-                let (k, id) = (set_key.clone(), e.value.to_string());
-                cx.dispatch_program_all(edit(move |s| {
-                    let map = &mut s.integrations.vts.expressions;
-                    if id.is_empty() {
-                        map.remove(&k);
-                    } else {
-                        map.insert(k, id);
+            .children((
+                crate::ui::kit::mono_tag(format!("[expr={key}]")),
+                widget(IconGlyph::new(ti::ARROW_RIGHT).size(icon::SM).decorative()),
+            )),
+            widget(Stack::row(0.0).width(LengthSpec::Px(VTS_SELECT_W))).children(
+                widget(
+                    Select::new(Some(start))
+                        .options(options)
+                        .size(ControlSize::Small),
+                )
+                .bind(move |s: &mut Select| {
+                    let v: Arc<str> = current().into();
+                    if s.value.as_ref() != Some(&v) {
+                        s.value = Some(v);
                     }
-                }))
-            }),
-        ),
-    ))
-    .into_any()
+                })
+                .on_cx(move |_, e: &SelectChanged, cx| {
+                    let (k, id) = (set_key.clone(), e.value.to_string());
+                    cx.dispatch_program_all(edit(move |s| {
+                        let map = &mut s.integrations.vts.expressions;
+                        if id.is_empty() {
+                            map.remove(&k);
+                        } else {
+                            map.insert(k, id);
+                        }
+                    }))
+                }),
+            ),
+        )),
+    )
 }
 
 /// Expression markers mapped to VTube Studio hotkeys: access first, then a
 /// two-column table of every marker the model's hotkeys (or a saved
 /// mapping) give.
-pub(super) fn vts_mapping(ui: Ui) -> AnyView {
+pub(super) fn vts_mapping(ui: Ui) -> Row {
     let authorized = move || {
         ui.settings.with(|s| s.integrations.vts.token.is_some())
             && ui.status.with(|s| s.vts != LinkState::NeedsAuth)
@@ -183,20 +184,19 @@ pub(super) fn vts_mapping(ui: Ui) -> AnyView {
                 widget(Stack::row(0.0).width(LengthSpec::Px(VTS_SELECT_W)))
                     .children(caption("int-vts-map-hotkey")),
             ));
-            let rows: Vec<AnyView> = markers
+            let rows: Vec<Row> = markers
                 .into_iter()
                 .map(|key| vts_map_row(ui, key, options.clone()))
                 .collect();
-            widget(Stack::column(0.0).with_layout(|l| {
-                l.padding_bottom = Some(LengthSpec::Px(space::SM));
-            }))
-            .children((head, divided(rows)))
-            .into_any()
+            Row::inset(
+                widget(Stack::column(0.0).with_layout(|l| {
+                    l.padding_bottom = Some(LengthSpec::Px(space::SM));
+                }))
+                .children((head, divided(rows))),
+            )
         },
     );
-    widget(Stack::column(0.0))
-        .children((header, table))
-        .into_any()
+    Row::inset(widget(Stack::column(0.0)).children((header, table)))
 }
 
 pub(super) fn integrations(ui: Ui) -> AnyView {

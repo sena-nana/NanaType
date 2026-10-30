@@ -23,7 +23,7 @@ pub(super) fn about(ui: Ui) -> AnyView {
 }
 
 /// The logo, name and version, the official links and custom skins.
-fn identity(ui: Ui) -> Vec<(AnyView, Shown)> {
+fn identity(ui: Ui) -> Vec<(Row, Shown)> {
     let locale = ui.locale.get_untracked();
     let build = I18N.tr_in(
         locale,
@@ -51,7 +51,7 @@ fn identity(ui: Ui) -> Vec<(AnyView, Shown)> {
         )),
     ));
     let rows = vec![
-        (header.into_any(), None),
+        (Row::inset(header), None),
         (
             row_text(
                 ui.now_t("about-repository"),
@@ -89,17 +89,15 @@ fn identity(ui: Ui) -> Vec<(AnyView, Shown)> {
 
 /// The update check's state and what can be done next.
 #[cfg(feature = "updates")]
-fn update_row(ui: Ui) -> AnyView {
-    widget(Stack::column(0.0))
-        .children(dynamic(
-            move || ui.update.get(),
-            move |state| update_status(ui, state),
-        ))
-        .into_any()
+fn update_row(ui: Ui) -> Row {
+    Row::inset(widget(Stack::column(0.0)).children(dynamic(
+        move || ui.update.get(),
+        move |state| update_status(ui, state),
+    )))
 }
 
 #[cfg(feature = "updates")]
-fn update_status(ui: Ui, state: &crate::app::update::State) -> AnyView {
+fn update_status(ui: Ui, state: &crate::app::update::State) -> Row {
     use crate::app::update::State;
     use nanatype_update::Kind;
     let locale = ui.locale.get_untracked();
@@ -171,7 +169,7 @@ fn megabytes(bytes: u64) -> String {
 }
 
 /// The log and data folders on one row, and the first-run guide again.
-fn local(ui: Ui) -> Vec<AnyView> {
+fn local(ui: Ui) -> Vec<Row> {
     let paths = crate::paths::Paths::resolve();
     let (logs, data) = (paths.logs.clone(), paths.data.clone());
     let folder = |key: &str, path: std::path::PathBuf| {
@@ -219,7 +217,7 @@ fn local(ui: Ui) -> Vec<AnyView> {
 
 /// That NanaType is unaffiliated, and where the built-in Echo-Live skins'
 /// designs come from; the long wording of each unfolds under its row.
-fn notices(ui: Ui) -> Vec<(AnyView, Shown)> {
+fn notices(ui: Ui) -> Vec<(Row, Shown)> {
     let open = signal(false);
     let echo_open = signal(false);
     vec![
@@ -265,7 +263,7 @@ fn notices(ui: Ui) -> Vec<(AnyView, Shown)> {
 
 /// Each licence's source stays a click away; its text is embedded for
 /// offline reading and unfolds under its row. The fonts close the list.
-fn licences(ui: Ui) -> Vec<(AnyView, Shown)> {
+fn licences(ui: Ui) -> Vec<(Row, Shown)> {
     let entries = vec![
         (
             crate::distribution::LICENSE_LABEL,
@@ -371,21 +369,22 @@ fn fold_toggle(ui: Ui, open: Signal<bool>) -> AnyView {
 }
 
 /// Long text in a fixed-height scrolling panel, inset like the rows.
-fn licence_panel(lines: Vec<AnyView>) -> AnyView {
-    widget(Stack::column(0.0).padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg))
-        .children(
-            widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
-                l.height = Some(LengthSpec::Px(LICENCE_H));
-            }))
-            .children(widget(Stack::column(0.0)).children(lines)),
-        )
-        .into_any()
+fn licence_panel(lines: Vec<AnyView>) -> Row {
+    Row::inset(
+        widget(Stack::column(0.0).padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Lg))
+            .children(
+                widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
+                    l.height = Some(LengthSpec::Px(LICENCE_H));
+                }))
+                .children(widget(Stack::column(0.0)).children(lines)),
+            ),
+    )
 }
 
 /// Each font this build embeds, its author, version and licence, and the
 /// licence's full text, in a scrolling panel. Shown under About's
 /// "Open-source fonts" row.
-pub fn font_licence_panel(ui: Ui) -> AnyView {
+pub fn font_licence_panel(ui: Ui) -> Row {
     let fonts = nanatype_theme::BuiltinFonts::embedded().fonts();
     let locale = ui.locale.get_untracked();
     let entries: Vec<AnyView> = fonts

@@ -35,13 +35,11 @@ fn add_phrase(ui: Ui) -> AnyView {
 
 /// `rows` with `add` at the end of the last line, or the empty state with
 /// `add` beside it when there are none.
-fn list_or_empty(ui: Ui, rows: Vec<AnyView>, empty_key: &str, add: AnyView) -> AnyView {
+fn list_or_empty(ui: Ui, rows: Vec<Row>, empty_key: &str, add: AnyView) -> Row {
     if rows.is_empty() {
         return empty_row(ui, empty_key, add);
     }
-    widget(Stack::column(0.0))
-        .children((divided(rows), divider(), kit::line((), add)))
-        .into_any()
+    Row::inset(widget(Stack::column(0.0)).children((divided(rows), divider(), kit::line((), add))))
 }
 
 pub(super) fn assets(ui: Ui) -> AnyView {
@@ -49,7 +47,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
         move || (ui.sticker_packs.get(), ui.locale.get()),
         move |(packs, _)| {
             use crate::stickers::Phase;
-            let rows: Vec<AnyView> = packs
+            let rows: Vec<Row> = packs
                 .iter()
                 .map(|pack| {
                     let title = pack
@@ -165,7 +163,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
     let phrases = dynamic(
         move || ui.settings.with(|s| s.assets.phrases.len()),
         move |n| {
-            let rows: Vec<AnyView> = (0..*n)
+            let rows: Vec<Row> = (0..*n)
                 .map(|i| {
                     let p = ui.settings.with_untracked(|s| s.assets.phrases[i].clone());
                     let action = Shortcut::Global(GlobalAction::Phrase(i));
@@ -249,17 +247,21 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                             }))
                         }),
                     );
-                    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs))
-                        .children((
-                            widget(
-                                Stack::column(0.0)
-                                    .gap_step(nana_ui_core::SpacingStep::Md)
-                                    .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Xl),
-                            )
-                            .children((first, content)),
-                            hotkey_issue_line(ui, action),
-                        ))
-                        .into_any()
+                    Row::inset(
+                        widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs))
+                            .children((
+                                widget(
+                                    Stack::column(0.0)
+                                        .gap_step(nana_ui_core::SpacingStep::Md)
+                                        .padding_step(
+                                            inset::step::CARD,
+                                            nana_ui_core::SpacingStep::Xl,
+                                        ),
+                                )
+                                .children((first, content)),
+                                hotkey_issue_line(ui, action),
+                            )),
+                    )
                 })
                 .collect();
             list_or_empty(ui, rows, "empty-phrases", add_phrase(ui))
@@ -267,9 +269,9 @@ pub(super) fn assets(ui: Ui) -> AnyView {
     );
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
-            section(ui, "assets-stickers", vec![dirs.into_any()]),
+            section(ui, "assets-stickers", vec![Row::inset(dirs)]),
             crate::ui::settings::telegram::panel(ui),
-            section(ui, "assets-phrases", vec![phrases.into_any()]),
+            section(ui, "assets-phrases", vec![Row::inset(phrases)]),
         ))
         .into_any()
 }
