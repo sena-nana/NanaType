@@ -51,6 +51,14 @@ fn common_controls(link_arg: &str) {
     println!("{link_arg}/MANIFESTUAC:level='asInvoker' uiAccess='false'");
 }
 
+/// An 8 MiB main-thread stack for the targets `link_arg` names. Windows'
+/// default is 1 MiB, and the UI runs on the main thread inside window
+/// callbacks: unoptimized, a skin preview's frames came close to that.
+/// Only the reservation grows; pages are committed as they are touched.
+fn main_stack(link_arg: &str) {
+    println!("{link_arg}/STACK:8388608");
+}
+
 /// The development copy of the shader compiler, then the icon and version
 /// resources (when building on Windows, which has the resource compiler).
 fn windows_resources(product: &Product, build: &str) {

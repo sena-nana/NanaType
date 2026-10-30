@@ -130,6 +130,18 @@ opt-level = 2
 [profile.dev.package.blake3]
 opt-level = 2
 
+# Unoptimized, NanaUI's scene and runtime keep 100-200 KiB frames (scene
+# primitives, component geometry, startup); stacked on one window callback
+# they overflowed Windows' 1 MiB main thread opening the skins page.
+[profile.dev.package.nana-ui-scene]
+opt-level = 1
+
+[profile.dev.package.nana-ui-runtime]
+opt-level = 1
+
+[profile.dev.package.nana-ui]
+opt-level = 1
+
 [profile.release]
 debug = "line-tables-only"
 
