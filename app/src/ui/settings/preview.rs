@@ -560,6 +560,10 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, fallback_font: bool) -> AnyView {
 
 pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
     let width = signal(0.0_f32);
+    // A prepared stage can remount when the catalogue or preview signal
+    // changes. Remember the last skin we asked for so that the completion of
+    // that request cannot schedule the same request again.
+    let requested: Signal<Option<String>> = signal(None);
     dynamic(
         move || {
             (
@@ -590,10 +594,20 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
             // and the prepare registers fonts on the text engine that layout
             // needs. The settings window sends it once this frame has been
             // presented.
-            let ask = id.clone();
             // Effects start with the preview. Reduced motion and a skin with
-            // nothing animated still leave the sample still.
-            on_mount(move |_| defer_request(ask, true));
+            // nothing animated still leave the sample still. A current stage
+            // still gets one request when this view is first
+            // mounted, so entering the page can start playback. Once asked,
+            // do not ask again when another signal remounts this dynamic
+            // view; user skins are freshly loaded for each request and would
+            // otherwise remount forever. A stale or missing stage is allowed
+            // to request again.
+            let asked = requested.with_untracked(|asked| asked.as_deref() == Some(id.as_str()));
+            if prepared.is_none() || !asked {
+                let ask = id.clone();
+                requested.set(Some(id.clone()));
+                on_mount(move |_| defer_request(ask, true));
+            }
             // One prepare draws both windows. The fields for each stay mounted.
             let sample = match prepared.as_ref() {
                 Some(p) => stage_pair(*ui, p.assets.clone(), row.image_urls.clone(), width),
@@ -1207,6 +1221,9 @@ align = { param = "align" }
         assert!(keys.iter().any(|k| k == "skin-preview-display"), "{keys:?}");
         assert!(keys.iter().any(|k| k == "skin-preview-history"), "{keys:?}");
         assert!(!keys.iter().any(|k| k == "skin-preview-loading"));
+        // Preparing the stage remounts the dynamic view. It must not enqueue
+        // the same request again, or a user skin loops until stack overflow.
+        assert!(take_deferred_requests().is_empty());
         let stage = ui.skin_preview.get_untracked().unwrap();
         let rows = ui.skins.get_untracked();
         // Selecting it again, with or without effects, keeps the stage and
