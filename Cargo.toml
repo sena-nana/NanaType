@@ -104,11 +104,11 @@ ttf-parser = { version = "0.25", default-features = false }
 tungstenite = { version = "0.30", default-features = false }
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
 url = "2"
-wasmtime = { version = "=49.0.0", default-features = false }
+wasmtime = { version = "=49.0.5", default-features = false }
 # Match NanaUI's Windows bindings (including its locked patch versions).
 windows = "0.62.2"
 windows-sys = "0.61.2"
-zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "9.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 # Keep full debugger support for workspace code, but avoid generating third-party
 # type/variable information. Dependency backtraces still include source lines.

@@ -222,7 +222,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 ### Apache-2.0 OR ISC OR MIT (1)
 
-- rustls 0.23.45 — <https://github.com/rustls/rustls>
+- rustls 0.23.46 — <https://github.com/rustls/rustls>
 
 ### Apache-2.0 OR MIT (310)
 
@@ -490,7 +490,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - ttf-parser 0.25.1 — <https://github.com/harfbuzz/ttf-parser>
 - tungstenite 0.30.0 — <https://github.com/snapview/tungstenite-rs>
 - type-map 0.5.1 — <https://github.com/kardeiz/type-map>
-- typed-path 0.12.3 — <https://github.com/chipsenkbeil/typed-path>
+- typed-path 0.13.0 — <https://github.com/chipsenkbeil/typed-path>
 - typenum 1.20.1 — <https://github.com/paholg/typenum>
 - unic-langid 0.9.6 — <https://github.com/zbraniecki/unic-locale>
 - unic-langid-impl 0.9.6 — <https://github.com/zbraniecki/unic-locale>
@@ -553,31 +553,31 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 ### Apache-2.0 WITH LLVM-exception (25)
 
-- cranelift-assembler-x64 0.136.3 — <https://crates.io/crates/cranelift-assembler-x64>
-- cranelift-bforest 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-bitset 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-codegen 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-codegen-shared 0.136.3 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-control 0.136.3 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-entity 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-frontend 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-native 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
-- pulley-interpreter 49.0.0 — <https://github.com/bytecodealliance/wasmtime/tree/main/pulley>
-- pulley-macros 49.0.0 — <https://github.com/bytecodealliance/wasmtime/tree/main/pulley/macros>
+- cranelift-assembler-x64 0.136.5 — <https://crates.io/crates/cranelift-assembler-x64>
+- cranelift-bforest 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-bitset 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-codegen 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-codegen-shared 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-control 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-entity 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-frontend 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-native 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- pulley-interpreter 49.0.5 — <https://github.com/bytecodealliance/wasmtime/tree/main/pulley>
+- pulley-macros 49.0.5 — <https://github.com/bytecodealliance/wasmtime/tree/main/pulley/macros>
 - regalloc2 0.15.2 — <https://github.com/bytecodealliance/regalloc2>
 - target-lexicon 0.13.5 — <https://github.com/bytecodealliance/target-lexicon>
-- wasmtime 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-environ 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-component-util 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-core 49.0.0 — <https://crates.io/crates/wasmtime-internal-core>
-- wasmtime-internal-cranelift 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-fiber 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-jit-debug 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-jit-icache-coherence 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-unwinder 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-versioned-export-macros 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-winch 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- winch-codegen 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-environ 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-component-util 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-core 49.0.5 — <https://crates.io/crates/wasmtime-internal-core>
+- wasmtime-internal-cranelift 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-fiber 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-jit-debug 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-jit-icache-coherence 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-unwinder 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-versioned-export-macros 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-winch 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- winch-codegen 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
 
 ### Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT (3)
 
@@ -682,7 +682,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - webview2-com-sys 0.39.1 — <https://github.com/wravery/webview2-rs>
 - winnow 1.0.4 — <https://github.com/winnow-rs/winnow>
 - xmlwriter 0.1.0 — <https://github.com/RazrFalcon/xmlwriter>
-- zip 8.6.0 — <https://github.com/zip-rs/zip2>
+- zip 9.1.3 — <https://github.com/zip-rs/zip2>
 - zmij 1.0.23 — <https://github.com/dtolnay/zmij>
 
 ### MIT OR Unlicense (13)
