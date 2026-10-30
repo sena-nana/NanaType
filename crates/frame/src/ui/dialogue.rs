@@ -616,24 +616,9 @@ impl BoxCtx {
     }
 
     fn box_surface(&self) -> Surface {
-        if self.skin.dialogue.shader_effects.iter().any(|e| {
-            e.target == nanatype_theme::ShaderTarget::Artwork
-                && self
-                    .skin
-                    .shaders
-                    .get(&e.shader)
-                    .is_some_and(|s| s.static_fallback)
-                && self.skin.shader_programs.contains_key(&e.shader)
-        }) {
-            // The same authored canvas supplies the still and moving silhouette.
-            // Do not paint a stretched raster or a second generic frame under it.
-            let native = Surface::dialogue_box(&self.skin, None);
-            return Surface {
-                radii: native.radii,
-                shadows: native.shadows.into_iter().filter(|s| !s.inset).collect(),
-                ..Default::default()
-            };
-        }
+        // Artwork shaders are asynchronous and can be disabled after a GPU
+        // failure. Keep the complete static frame underneath so text never
+        // loses its background while the live layer is unavailable.
         let frame = self.skin.dialogue.box_.frame.as_ref();
         Surface::dialogue_box(&self.skin, frame.and_then(|f| self.url(&f.image)))
     }
@@ -2109,6 +2094,30 @@ pub fn has_effects(doc: &Document) -> bool {
 #[cfg(test)]
 mod decor_tests {
     use super::*;
+
+    #[test]
+    fn artwork_keeps_its_static_frame_as_a_runtime_fallback() {
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let skin = registry.load("nanatype.celestial").unwrap().skin;
+        let ctx = BoxCtx {
+            skin,
+            urls: Arc::new(
+                [(
+                    String::from("skin:still.png"),
+                    String::from("file:///still.png"),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+            source: Source::Display,
+            preview_name: String::new(),
+        };
+        let surface = ctx.box_surface();
+        assert!(
+            surface.frame.is_some(),
+            "an artwork shader must keep its static frame underneath"
+        );
+    }
 
     #[test]
     fn artwork_nameplates_shrink_the_text_before_the_ornament_strip() {
