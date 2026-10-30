@@ -124,6 +124,12 @@ opt-level = 2
 [profile.dev.package.wasmtime]
 opt-level = 2
 
+# NanaUI selects blake3's portable SIMD (`pure`). Unoptimized, its intrinsics
+# stay out of line and a multi-chunk hash needs a few hundred KiB of stack,
+# more than the small callers the shader sandbox tests rely on.
+[profile.dev.package.blake3]
+opt-level = 2
+
 [profile.release]
 debug = "line-tables-only"
 
