@@ -495,19 +495,24 @@ fn phrases(ui: Ui) -> AnyView {
     .into_any()
 }
 
+/// Compose or mirror. Each option hears its own [`SegmentedOptionChosen`]:
+/// `SegmentedSelectionRequested` goes to the control, never to an option, so
+/// a handler for it on an option never runs.
+///
+/// [`SegmentedOptionChosen`]: nana_ui::runtime::SegmentedOptionChosen
 fn modes(ui: Ui, mode: InputMode) -> AnyView {
     widget(SegmentedControl::new().size(ControlSize::Small))
         .children((
             segmented_option(ui.now_t("mode-compose-short"))
                 .selected(mode == InputMode::Compose)
-                .on_cx(|_, _: &nana_ui::runtime::SegmentedSelectionRequested, cx| {
+                .on_cx(|_, _: &nana_ui::runtime::SegmentedOptionChosen, cx| {
                     cx.dispatch_program_all(Msg::Edit(Box::new(|s: &mut Settings| {
                         s.general.input_mode = InputMode::Compose
                     })))
                 }),
             segmented_option(ui.now_t("mode-mirror-short"))
                 .selected(mode == InputMode::Mirror)
-                .on_cx(|_, _: &nana_ui::runtime::SegmentedSelectionRequested, cx| {
+                .on_cx(|_, _: &nana_ui::runtime::SegmentedOptionChosen, cx| {
                     cx.dispatch_program_all(Msg::Edit(Box::new(|s: &mut Settings| {
                         s.general.input_mode = InputMode::Mirror
                     })))

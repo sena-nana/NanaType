@@ -1199,3 +1199,41 @@ fn sticker_packs_sit_above_the_grid_filter_search_and_accept_folder_drops() {
         );
     }
 }
+
+#[test]
+fn the_footer_mode_switch_changes_the_input_mode() {
+    use nanatype::msg::Msg;
+    use nanatype_settings::InputMode;
+    for (from, to, key) in [
+        (InputMode::Compose, InputMode::Mirror, "mode-mirror-short"),
+        (InputMode::Mirror, InputMode::Compose, "mode-compose-short"),
+    ] {
+        let mut settings = Settings::default();
+        settings.general.input_mode = from;
+        let ui = Ui::new(
+            Arc::new(settings.clone()),
+            common::skin("nanatype.halo"),
+            Locale::ZhCn,
+        );
+        let mut session = common::session()
+            .themed(false)
+            .mount(1200, 640, move || input::input_window(ui));
+        settle(&mut session);
+        session.document_mut().context_mut().take_program_messages();
+        let label = ui.now_t(key);
+        let option = session
+            .accessibility_dump()
+            .into_iter()
+            .find(|n| n.label.as_deref() == Some(&label))
+            .unwrap_or_else(|| panic!("no option {label}"));
+        click_node(&mut session, option);
+        for m in session.document_mut().context_mut().take_program_messages() {
+            if let Ok(m) = m.downcast::<Msg>()
+                && let Msg::Edit(edit) = *m
+            {
+                edit(&mut settings);
+            }
+        }
+        assert_eq!(settings.general.input_mode, to, "{label}");
+    }
+}
