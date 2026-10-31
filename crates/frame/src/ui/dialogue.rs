@@ -279,17 +279,29 @@ fn document_on(
         locale: ui.locale.get_untracked(),
     };
     let rich = to_rich(doc, &env);
-    let mut entrance =
-        ui.settings
-            .with_untracked(|s| s.playback.entrance)
-            .map_or(base.entrance, |kind| Entrance {
-                kind,
-                ms: if kind == EntranceKind::None {
-                    0
-                } else {
-                    base.entrance.ms
-                },
-            });
+    let setting = ui.settings.with_untracked(|s| s.playback.entrance);
+    // The line's own `[fade]` / `[pop]` / `[slide]` win over the setting,
+    // which wins over the skin. A reveal plays one intro for the whole text,
+    // so the line takes the tag covering most of it. A base without a
+    // duration is a skipped line: it still shows at once.
+    let tagged = doc.entrance();
+    let mut entrance = match (tagged, setting) {
+        (Some(tagged), _) => Entrance {
+            kind: tagged.kind,
+            ms: if base.entrance.ms == 0 { 0 } else { tagged.ms },
+        },
+        (None, Some(kind)) => Entrance {
+            kind,
+            ms: if kind == EntranceKind::None {
+                0
+            } else {
+                base.entrance.ms
+            },
+        },
+        (None, None) => base.entrance,
+    };
+    // An explicit entrance replaces the skin's own entrance mask and scramble.
+    let overridden = tagged.is_some() || setting.is_some();
     if base.scramble.is_some() && (base.reduced_motion || !super::materials::enabled(ui)) {
         entrance = Entrance {
             kind: EntranceKind::None,
@@ -331,11 +343,7 @@ fn document_on(
         .scramble
         .clone()
         .filter(|_| !base.reduced_motion && super::materials::enabled(ui))
-        .filter(|_| {
-            ui.settings
-                .with_untracked(|s| s.playback.entrance.is_none())
-                || base.light_exit.is_some()
-        })
+        .filter(|_| !overridden || base.light_exit.is_some())
         .zip(
             reveal
                 .as_ref()
@@ -356,10 +364,7 @@ fn document_on(
         .clone()
         .filter(|_| reveal.is_some() && entrance.kind != EntranceKind::None && entrance.ms > 0)
         .filter(|_| !base.reduced_motion && super::materials::enabled(ui))
-        .filter(|_| {
-            ui.settings
-                .with_untracked(|s| s.playback.entrance.is_none() && s.playback.typing)
-        });
+        .filter(|_| !overridden && ui.settings.with_untracked(|s| s.playback.typing));
     if let (Some(key), Some(plan)) = (follow, &reveal) {
         overflow::publish_on(
             ui.track_slot,
@@ -409,10 +414,7 @@ fn document_on(
                 p.transitions =
                     super::text_scramble::transitions(spec, base.light_exit, base.light_preview);
             }
-            if ui
-                .settings
-                .with_untracked(|s| s.playback.entrance.is_some())
-            {
+            if overridden {
                 p.transitions.entrance = None;
             }
         }
@@ -2433,6 +2435,169 @@ mod decor_tests {
 }
 
 #[cfg(test)]
+mod sticker_reveal_tests {
+    use super::*;
+    use nana_ui::runtime::{DocumentId, RuntimeDocument};
+    use nana_ui_devtools::agent::RuntimeAgentSession;
+    use nana_ui_devtools::offscreen::{OffscreenSnapshots, Size};
+
+    const SIZE: Size<u32> = Size {
+        width: 760,
+        height: 220,
+    };
+
+    /// A solid red 64 px host texture, as the sticker player registers one.
+    fn red_sticker(painter: &OffscreenSnapshots, slot: &str) -> nana_ui::HostTextureRegistry {
+        let texture = painter
+            .gpu
+            .create_texture(&nana_ui::GpuTextureDescriptor {
+                label: Some("sticker"),
+                width: 64,
+                height: 64,
+                format: nana_ui::GpuTextureFormat::RGBA8_UNORM,
+                usage: nana_ui::GpuTextureUsages::SAMPLED | nana_ui::GpuTextureUsages::COPY_DST,
+            })
+            .unwrap();
+        painter
+            .gpu
+            .write_texture(
+                &texture,
+                nana_ui::GpuTextureRegion {
+                    x: 0,
+                    y: 0,
+                    width: 64,
+                    height: 64,
+                },
+                &[255u8, 0, 0, 255].repeat(64 * 64),
+                256,
+            )
+            .unwrap();
+        let registry = nana_ui::HostTextureRegistry::new();
+        registry.register(
+            slot.to_owned(),
+            nana_ui::HostTexture::new(&texture),
+            64,
+            64,
+            nana_ui::HostTextureAlphaMode::Premultiplied,
+        );
+        registry
+    }
+
+    /// "ab[sticker]cd" typed one unit every 100 ms from 1000 ms with a
+    /// 100 ms fade, its sticker an animated (host texture) picture. At each
+    /// of `at` ms: the sticker's opacity and how many red pixels it paints.
+    fn sticker_seen(skin: &str, at: &[u64]) -> Vec<(f32, usize)> {
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let ui = Stage::new(
+            Arc::new(nanatype_settings::Settings::default()),
+            registry.load(skin).unwrap().skin,
+            nanatype_i18n::Locale::ZhCn,
+        );
+        let text = nanatype_markup::parse("ab[sticker=cats/hello]cd").doc;
+        let Inline::Atom(atom) = &text.paragraphs[0].inlines[1] else {
+            panic!("not a sticker: {text:?}");
+        };
+        let url = "file:///stickers/hello.webp".to_owned();
+        let slot = format!("sticker-test-{skin}");
+        super::super::rich::publish_animated(
+            [(
+                url.clone(),
+                super::super::rich::AnimatedPicture {
+                    slot: slot.clone(),
+                    width: 64,
+                    height: 64,
+                },
+            )]
+            .into_iter()
+            .collect(),
+        );
+        ui.asset_urls.set(Arc::new(
+            [(atom.asset.to_string(), url)].into_iter().collect(),
+        ));
+        ui.display.update(|v| {
+            let v = Arc::make_mut(v);
+            v.empty = false;
+            v.line = Some(nanatype_model::LineId(1));
+            v.doc = Arc::new(text);
+            v.entrance = Entrance {
+                kind: EntranceKind::Fade,
+                ms: 100,
+            };
+            v.reveal = Reveal {
+                visible_from: 0,
+                shown: 0,
+                segment: Some(nanatype_core::SegmentReveal {
+                    origin_ms: 1000,
+                    start: 0,
+                    reveal_ms: Arc::from([0, 100, 200, 300, 400]),
+                }),
+                hidden_from: 5,
+            };
+        });
+        let id = DocumentId::new(1).unwrap();
+        let mut doc = RuntimeDocument::new(id);
+        // The animation clock reads the same as the session clock.
+        let clock = |doc: &mut RuntimeDocument, ms: u64| {
+            let t = std::time::Duration::from_millis(ms);
+            doc.context_mut().advance_animations(t);
+            doc.sync_presentation_clock(t);
+        };
+        clock(&mut doc, 1000);
+        crate::clock::capture_at(1000, || {
+            doc.context_mut()
+                .mount_view_root(id, move || dialogue_box(ui, Source::Display, None))
+                .unwrap()
+        });
+        let mut session = RuntimeAgentSession::new(doc, SIZE.width, SIZE.height).unwrap();
+        crate::clock::capture_at(1000, || session.flush().unwrap());
+        let mut painter = OffscreenSnapshots::new().unwrap();
+        let renderers = super::super::sweep::renderers();
+        let textures = red_sticker(&painter, &slot);
+        let seen = at
+            .iter()
+            .map(|&ms| {
+                clock(session.document_mut(), ms);
+                crate::clock::capture_at(ms, || session.flush().unwrap());
+                let node = ui.text_node.get_untracked().unwrap();
+                let scene = session.document().scene().clone();
+                let opacity = scene
+                    .primitives()
+                    .find(|p| p.node == node && format!("{:?}", p.kind).starts_with("Custom"))
+                    .map(|p| p.opacity)
+                    .expect("the sticker is laid out");
+                let pixels = painter
+                    .paint(&scene, SIZE, [0.0; 4], Some(&textures), Some(&renderers))
+                    .unwrap();
+                let red = pixels
+                    .chunks(4)
+                    .filter(|p| p[0] > 120 && p[1] < 60 && p[2] < 60 && p[3] > 100)
+                    .count();
+                (opacity, red)
+            })
+            .collect();
+        super::super::rich::publish_animated(HashMap::new());
+        seen
+    }
+
+    #[test]
+    fn a_sticker_appears_when_typing_reaches_it() {
+        // Its turn is the third unit, at 1200 ms.
+        let seen = sticker_seen("nanatype.halo", &[1050, 1150, 1250, 1450]);
+        assert_eq!(seen[0], (0.0, 0), "not reached yet: {seen:?}");
+        assert_eq!(seen[1], (0.0, 0), "not reached yet: {seen:?}");
+        assert!(
+            seen[2].0 > 0.0 && seen[2].0 < 1.0,
+            "fading in with the text: {seen:?}"
+        );
+        assert!(seen[3].0 == 1.0 && seen[3].1 > 0, "in: {seen:?}");
+        // An entrance material (crayon's "write") brings it in on time too.
+        let seen = sticker_seen("nanatype.crayon", &[1150, 1450]);
+        assert_eq!(seen[0], (0.0, 0), "not reached yet: {seen:?}");
+        assert!(seen[1].0 == 1.0 && seen[1].1 > 0, "in: {seen:?}");
+    }
+}
+
+#[cfg(test)]
 mod transition_override_tests {
     use super::*;
     use nana_ui::runtime::{DocumentId, RuntimeDocument};
@@ -2473,5 +2638,75 @@ mod transition_override_tests {
             .unwrap();
         assert!(p.reveal.as_ref().unwrap().intro.pop);
         assert!(p.transitions.entrance.is_none());
+    }
+
+    /// The intro the display plays for `markup` over `base_ms` of skin
+    /// entrance, with the playback setting at `setting`.
+    fn intro_of(
+        markup: &str,
+        setting: Option<EntranceKind>,
+        base_ms: u16,
+    ) -> (nana_ui_core::GlyphIntro, bool) {
+        let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
+            .load("nanatype.crayon")
+            .unwrap()
+            .skin;
+        let mut settings = nanatype_settings::Settings::default();
+        settings.playback.entrance = setting;
+        let ui = Stage::new(
+            Arc::new(settings),
+            skin.clone(),
+            nanatype_i18n::Locale::ZhCn,
+        );
+        let base = Base::dialogue(
+            &skin,
+            Entrance {
+                kind: if base_ms == 0 {
+                    EntranceKind::None
+                } else {
+                    EntranceKind::Fade
+                },
+                ms: base_ms,
+            },
+            false,
+        );
+        let text = nanatype_markup::parse(markup).doc;
+        let units = text.unit_count() as u32;
+        let id = DocumentId::new(1).unwrap();
+        let mut doc = RuntimeDocument::new(id);
+        let root = doc
+            .context_mut()
+            .mount_view_root(id, move || {
+                document(ui, &text, &base, Timing::Reveal(Reveal::full(units)))
+            })
+            .unwrap();
+        let p = doc
+            .context()
+            .world()
+            .glyph_presentation(root.roots()[0])
+            .unwrap()
+            .clone();
+        (p.reveal.unwrap().intro, p.transitions.entrance.is_some())
+    }
+
+    #[test]
+    fn entrance_tags_set_the_line_s_intro() {
+        let (intro, mask) = intro_of("测试", None, 180);
+        assert!(intro.fade && !intro.pop, "untagged text keeps the skin's");
+        assert!(mask, "and the skin's entrance mask");
+
+        let (intro, mask) = intro_of("[pop=90]测试[/pop]", None, 180);
+        assert!(intro.pop);
+        assert!((intro.duration_s - 0.09).abs() < 1e-6);
+        assert!(!mask, "a tag replaces the skin's entrance mask");
+
+        let (intro, _) = intro_of("[slide]测[/slide]试", Some(EntranceKind::Pop), 180);
+        assert!(intro.rise_px > 0.0, "a tag wins over the setting");
+
+        let (intro, _) = intro_of("[noentrance]测试[/noentrance]", None, 180);
+        assert_eq!(intro.duration_s, 0.0);
+
+        let (intro, _) = intro_of("[pop]测试[/pop]", None, 0);
+        assert_eq!(intro.duration_s, 0.0, "a skipped line still shows at once");
     }
 }

@@ -285,7 +285,12 @@ impl Core {
         self.queue.policy = p.queue;
     }
 
+    /// How the line on the display enters: its own `[fade]` / `[pop]` /
+    /// `[slide]` tags first, then the playback setting, then the skin.
     fn entrance(&self) -> Entrance {
+        if let Some(entrance) = self.display.doc.entrance() {
+            return entrance;
+        }
         let skin = &self.skin.dialogue.reveal.entrance;
         let kind = self.settings.playback.entrance.unwrap_or(skin.kind);
         Entrance {
@@ -361,17 +366,13 @@ impl Core {
                 if self.retiring.is_some() {
                     return fx;
                 }
+                // The timeline ends a segment when its last unit *starts*
+                // to enter. Hold the end until that unit has finished, so a
+                // gate, `after=`, the next line or an exit (which freezes
+                // the reveal) never catches it half drawn.
+                let intro_ms = self.intro_ms();
                 if reason == WakeReason::SegmentEnd
-                    && self.transitions_enabled()
-                    && self.settings.playback.entrance.is_none()
-                    && self
-                        .skin
-                        .dialogue
-                        .reveal
-                        .entrance
-                        .material
-                        .as_ref()
-                        .is_some_and(|m| self.skin.material_programs.contains_key(m))
+                    && intro_ms > 0
                     && self.active.as_ref().is_some_and(|a| {
                         a.generation == epoch >> 32 && a.player.epoch() == epoch & 0xffff_ffff
                     })
@@ -382,7 +383,8 @@ impl Core {
                         .hidden_from
                         .checked_sub(1)
                         .and_then(|u| self.display.reveal.unit_at(u))
-                        .map(|at| at.saturating_add(u64::from(self.display.entrance.ms)));
+                        .filter(|at| *at > 0)
+                        .map(|at| at.saturating_add(intro_ms));
                     if let Some(at_ms) = end.filter(|end| now < *end) {
                         fx.wakes.push(Wake {
                             epoch,
@@ -620,6 +622,7 @@ impl Core {
         self.display.line = None;
         self.display.empty = doc.is_blank();
         self.display.doc = Arc::new(doc);
+        self.display.entrance = self.entrance();
         self.display.speaker = self.speaker();
         self.display.reply = self.reply.clone();
         self.display.reveal = reveal;
@@ -886,6 +889,25 @@ impl Core {
         self.display.revision = revision;
         self.display.portrait = portrait;
         self.touch_display(fx);
+    }
+
+    /// How long a revealed unit takes to finish entering, as the display
+    /// draws it: the line's entrance, or the skin's scramble when that is
+    /// longer; nothing under reduced motion.
+    fn intro_ms(&self) -> u64 {
+        if self.settings.playback.reduced_motion || self.reduced_motion {
+            return 0;
+        }
+        let mut ms = u64::from(self.display.entrance.ms);
+        if self.transitions_enabled()
+            && self.settings.playback.entrance.is_none()
+            && self.display.doc.entrance().is_none()
+            && let Some(scramble) = &self.skin.dialogue.reveal.scramble
+        {
+            // Substitution, then the glyph's brief flash (text_scramble.rs).
+            ms = ms.max(u64::from(scramble.entrance_ms) + 45);
+        }
+        ms
     }
 
     fn transitions_enabled(&self) -> bool {
