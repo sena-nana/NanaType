@@ -139,7 +139,8 @@ pub fn load(root: &Path, id: &str) -> Result<Snapshot, String> {
     let mut total = 0_u64;
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).map_err(|e| e.to_string())?;
-        if entry.name() == "recovery.json" {
+        let path = entry.name().map_err(|e| e.to_string())?.into_owned();
+        if path == "recovery.json" {
             continue;
         }
         total += entry.size();
@@ -148,10 +149,7 @@ pub fn load(root: &Path, id: &str) -> Result<Snapshot, String> {
         {
             return Err("recovery exceeds budget".into());
         }
-        let (prefix, name) = entry
-            .name()
-            .split_once('/')
-            .ok_or("invalid recovery path")?;
+        let (prefix, name) = path.split_once('/').ok_or("invalid recovery path")?;
         let name = nanatype_theme::clean_path(name).map_err(|e| e.to_string())?;
         let project = match prefix {
             "working" => &mut working,

@@ -189,6 +189,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "ar_archive_writer"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73cd58deff2140a0a8eae87e417bd01db68a33e148aa93d1e8cd837e55e312b6"
+dependencies = [
+ "object 0.39.1",
+]
+
+[[package]]
 name = "arbitrary"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -978,27 +987,27 @@ dependencies = [
 
 [[package]]
 name = "cranelift-assembler-x64"
-version = "0.136.3"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6d504c8c7ba3f3accaf8e98b7096beb98e1a271404357744c7e9e730c6865ff"
+checksum = "249a61efca6a54425e027f5704a6f68a0232b4df527e05a3ef947d89dbdcb078"
 dependencies = [
  "cranelift-assembler-x64-meta",
 ]
 
 [[package]]
 name = "cranelift-assembler-x64-meta"
-version = "0.136.3"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c065757905596bc06e82969ebd7b92d691b7fd710a7e9e8181ae0c30dab588d0"
+checksum = "d5336a46e05db2d515440b1ce8a9363e7bc04b608c0f66cc98dddc5492a66fbf"
 dependencies = [
  "cranelift-srcgen",
 ]
 
 [[package]]
 name = "cranelift-bforest"
-version = "0.136.0"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06c9b7896b744283c68051c6fa53dff5919bdca5f3ad30f2502cbe03346fc27c"
+checksum = "01b3675b13214270fddbd257d5fbf4109be8b02d92fc636fe96e2829514a7235"
 dependencies = [
  "cranelift-entity",
  "wasmtime-internal-core",
@@ -1006,9 +1015,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-bitset"
-version = "0.136.0"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d44fd93e9b7d5d76846a5d7e96f4f31c84e7c84079bf69e2bf17e5d08f8d607"
+checksum = "d7c1d67aa02b6e174bd2b165c113e94af9498fcc20e2892d0f4d5ab8c9618d09"
 dependencies = [
  "serde",
  "serde_derive",
@@ -1017,9 +1026,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-codegen"
-version = "0.136.0"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24cca39a8327756e489ee65c7f2ff79a6f7c8f2837f83fef046d1899c781c59d"
+checksum = "26fe6f3ec5344c32602c414e986dcbe699fa501a3e3e7b02f887d9d12b14ae42"
 dependencies = [
  "bumpalo",
  "cranelift-assembler-x64",
@@ -1048,9 +1057,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-codegen-meta"
-version = "0.136.0"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efc14dc232222671dc863495e6c406e8e4d34ffbc32968223e5d4ad20ea78647"
+checksum = "96c5e6323d458486d95781defdb5016a1176fc911d8bc8e64b696adbda6e9044"
 dependencies = [
  "cranelift-assembler-x64-meta",
  "cranelift-codegen-shared",
@@ -1061,24 +1070,24 @@ dependencies = [
 
 [[package]]
 name = "cranelift-codegen-shared"
-version = "0.136.3"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e41f75410da6cce8601330137d73718f679db81cb790a33de3871b5c90a0de3"
+checksum = "f1260aa93b0bd48e8e55c1c7fd9ff6a260f1a1bc46e1f0151a5055b124e5b15d"
 
 [[package]]
 name = "cranelift-control"
-version = "0.136.3"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c2616c6d01c14921ac9289ef65eb7702d9c760dfdc4537a8ee5bf38ea2832c6"
+checksum = "50c179632a09850f81f1a1e9116cb09330c734a86689f3ee4c3f4ec81543acbd"
 dependencies = [
  "arbitrary",
 ]
 
 [[package]]
 name = "cranelift-entity"
-version = "0.136.0"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "589be6584f586f8b21fe17e68cb10505d1cb9a3aa42af1173b8024a12f3ec96d"
+checksum = "d8c071188cb1c3b1803e23ae415a8d5f58d741d3a4b26a79b83dd61921112eac"
 dependencies = [
  "cranelift-bitset",
  "serde",
@@ -1088,9 +1097,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-frontend"
-version = "0.136.0"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413f3f1d97d6157bd2c4e2edf1f22966a849b8d524834558e563c5a4a3bc5791"
+checksum = "e2b85ba0a55d7685117b275fe6f36c819d438862e4223d28f0b97902460ff0ac"
 dependencies = [
  "cranelift-codegen",
  "hashbrown 0.17.1",
@@ -1101,15 +1110,15 @@ dependencies = [
 
 [[package]]
 name = "cranelift-isle"
-version = "0.136.0"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b46ea04636aa506eb49e5a61c54270314912de7f1c33ad7f7c2c57cb0784e23"
+checksum = "20ed364edcaed769da7b2709d540f8f7d0ff257749ba193f475e22dba6a0178b"
 
 [[package]]
 name = "cranelift-native"
-version = "0.136.0"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6286df9a36f4563b1f191809a05efd6b5fb457a2e6cb727588f483ebbf8e0516"
+checksum = "418d98c3dce08f0d13526692bbd1888bff4c5f45207f5093d168b5a224fbc88c"
 dependencies = [
  "cranelift-codegen",
  "libc",
@@ -1118,9 +1127,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-srcgen"
-version = "0.136.3"
+version = "0.136.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc173168f291ff3b95b5d0769d6a05b1eaef5e6d74c2600affab8396b4e7b420"
+checksum = "4f016b9994e39cad68107f33fa5b8dcee8fb7e38332bde3f97690e5e8abe1b10"
 
 [[package]]
 name = "crc32fast"
@@ -1938,9 +1947,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi",
  "rand_core",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -3359,7 +3370,7 @@ dependencies = [
 [[package]]
 name = "nana-app-icon"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "flate2",
  "image",
@@ -3369,7 +3380,7 @@ dependencies = [
 [[package]]
 name = "nana-diagnostics"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "windows-sys 0.61.2",
 ]
@@ -3377,7 +3388,7 @@ dependencies = [
 [[package]]
 name = "nana-frame-exchange"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "nana-gpu",
  "wgpu",
@@ -3386,7 +3397,7 @@ dependencies = [
 [[package]]
 name = "nana-gpu"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "nana-diagnostics",
  "wgpu",
@@ -3396,7 +3407,7 @@ dependencies = [
 [[package]]
 name = "nana-icons-tabler"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "nana-ui-core",
 ]
@@ -3404,7 +3415,7 @@ dependencies = [
 [[package]]
 name = "nana-package"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -3418,7 +3429,7 @@ dependencies = [
 [[package]]
 name = "nana-svg-raster"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "resvg",
  "tiny-skia",
@@ -3427,7 +3438,7 @@ dependencies = [
 [[package]]
 name = "nana-text"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "fontdb",
  "harfrust",
@@ -3445,7 +3456,7 @@ dependencies = [
 [[package]]
 name = "nana-ui"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -3483,7 +3494,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-charts"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "bytemuck",
  "nana-ui-core",
@@ -3492,7 +3503,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-core"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "nana-diagnostics",
  "serde",
@@ -3502,7 +3513,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-css"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "nana-ui-core",
  "serde_json",
@@ -3511,7 +3522,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-devtools"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "image",
  "nana-gpu",
@@ -3529,7 +3540,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-input"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "nana-diagnostics",
  "nana-ui-core",
@@ -3538,7 +3549,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-platform"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "arboard",
  "jni 0.21.1",
@@ -3558,7 +3569,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-runtime"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "fancy-regex",
  "fixed_decimal",
@@ -3581,6 +3592,7 @@ dependencies = [
  "qrcode",
  "serde",
  "serde_json",
+ "stacker",
  "unicode-segmentation",
  "unicode-width",
  "writeable",
@@ -3589,7 +3601,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-scene"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "i_overlay",
  "lyon_tessellation",
@@ -3603,7 +3615,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-view-codegen"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "nana-ui-core",
  "nana-ui-css",
@@ -3617,7 +3629,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-view-macros"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "nana-ui-view-codegen",
  "proc-macro-crate",
@@ -3629,12 +3641,12 @@ dependencies = [
 [[package]]
 name = "nana-ui-view-schema"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 
 [[package]]
 name = "nana-window"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=edbf7542a6510baf9f9b03511860eae128572c92#edbf7542a6510baf9f9b03511860eae128572c92"
+source = "git+https://github.com/sena-nana/NanaUI?rev=48333506255670355fe52bf49b1f43b608123320#48333506255670355fe52bf49b1f43b608123320"
 dependencies = [
  "ashpd",
  "async-channel",
@@ -4597,6 +4609,15 @@ dependencies = [
 
 [[package]]
 name = "object"
+version = "0.39.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "object"
 version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd229a0361b9d0d4396176e02d65897f487eebeab7caa6d443855ee152ca0b9c"
@@ -4988,10 +5009,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "pulley-interpreter"
-version = "49.0.0"
+name = "psm"
+version = "0.1.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21c6285a6d0e71302c567546cb1e4c39dd8477a2a0910e098f4d30cdb7da907f"
+checksum = "4dcd034599e63b970727f70d79e02d62390a4a84f7c6b827c27c46d5ac3fa622"
+dependencies = [
+ "ar_archive_writer",
+ "cc",
+]
+
+[[package]]
+name = "pulley-interpreter"
+version = "49.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d74df9e20cba0f6dd07f01c3140535a6b23e40aecccfcacfb921621b41d0acb"
 dependencies = [
  "cranelift-bitset",
  "log",
@@ -5001,9 +5032,9 @@ dependencies = [
 
 [[package]]
 name = "pulley-macros"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "292caa820c675e563d62b2cfb3fbe78908bcf7603096b5487272860db3e5d9ef"
+checksum = "8415513bfa407c06de6f11dbe9437f2352e075a5520ff491a131166d3d90aed1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5370,9 +5401,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.45"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "log",
  "once_cell",
@@ -5819,6 +5850,19 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "stacker"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "707f49d46706bacf8a2b00d51dace3f9de527c13eec3778f570c411f89e69967"
+dependencies = [
+ "cc",
+ "cfg-if",
+ "libc",
+ "psm",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "static_assertions"
@@ -6454,9 +6498,9 @@ dependencies = [
 
 [[package]]
 name = "typed-path"
-version = "0.12.3"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
 
 [[package]]
 name = "typenum"
@@ -6787,9 +6831,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28a746e47c5683ec1233967948c729c18e978a59fda2b964ac6d8fae9f8f3f8"
+checksum = "d45bf3b13781b9febb0eef42e1e145146c92ef891f345fd918e0e0fa1568c992"
 dependencies = [
  "addr2line",
  "async-trait",
@@ -6801,7 +6845,7 @@ dependencies = [
  "log",
  "mach2",
  "memfd",
- "object",
+ "object 0.40.0",
  "once_cell",
  "postcard",
  "pulley-interpreter",
@@ -6825,9 +6869,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-environ"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bad97c3c8f3d80de1aa1e6995b6fcf66673b7e388bca0c80bde63e4051210434"
+checksum = "833f00f3dc6128159284c5b71e211f24c97d45e052230a14f767fd830a6fb8b0"
 dependencies = [
  "anyhow",
  "cpp_demangle",
@@ -6838,7 +6882,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap 2.14.2",
  "log",
- "object",
+ "object 0.40.0",
  "postcard",
  "rustc-demangle",
  "semver",
@@ -6856,15 +6900,15 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-component-util"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c42ffe2ad5d7990853601aaeb51af97ca2f6dd54f5f55345b7d036834af3fe9d"
+checksum = "b168d39f2d6b896d89fe096afa4ccdd7a8e927b01469b590af84f02fca3126a1"
 
 [[package]]
 name = "wasmtime-internal-core"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f24a558f82f07e4e76a8b848288901d9f663e4e95c25f6d73627daca5f4ce93"
+checksum = "7ad86a65d12c6a9202584ceb658c9a20cf5b25c32eed61c9be5e5f863f88f0d9"
 dependencies = [
  "hashbrown 0.17.1",
  "libm",
@@ -6873,9 +6917,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-cranelift"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "974fd5dbc539ccc2d676499262e0fc445aa6da8b6370ca6eec13c1031e256b2c"
+checksum = "a71f0fd1dd40e4e18d4a20cdba29ff8e0eb2c0f21b12c2eb5869e0fea789dd05"
 dependencies = [
  "cranelift-codegen",
  "cranelift-control",
@@ -6885,7 +6929,7 @@ dependencies = [
  "gimli",
  "itertools 0.14.0",
  "log",
- "object",
+ "object 0.40.0",
  "pulley-interpreter",
  "smallvec",
  "target-lexicon",
@@ -6899,9 +6943,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-fiber"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aef18909d086959f1e2b4360e8164ae2c426c93bc29014a5ca2df00b952cf79f"
+checksum = "fa4dfa39e58735b24ce3d28bfc8c2b3041603cc8a941bb268395351beff90172"
 dependencies = [
  "cc",
  "libc",
@@ -6913,9 +6957,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-jit-debug"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a077f592728c8d9be8013e47a7ae34586aac00e0b857734eb967450d08f39bb"
+checksum = "f2eb98d4486c7b0163447d77dea06f3cc87e5e5ba5fc93613f8ec42e27ea181d"
 dependencies = [
  "cc",
  "wasmtime-internal-versioned-export-macros",
@@ -6923,9 +6967,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-jit-icache-coherence"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ed19a4085fa63674ebdcfd217d76f2f5bd8088b35d1fd14444d60d2d3303f19"
+checksum = "852cae234735d79db6c58fe0d04b32f4078ad01fdb3fd6d488ac366132ba9785"
 dependencies = [
  "libc",
  "wasmtime-internal-core",
@@ -6934,21 +6978,21 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-unwinder"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5978e43aa5e9a3a03ebea8a4d4a015c92144268167abb27d99ab1b53224b28ae"
+checksum = "b9289378c82b9db7e7cf933d6bb441ad968536ac48f3f38c55b7cf9d3e8d87e1"
 dependencies = [
  "cranelift-codegen",
  "log",
- "object",
+ "object 0.40.0",
  "wasmtime-environ",
 ]
 
 [[package]]
 name = "wasmtime-internal-versioned-export-macros"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1f1e49d9125fa0eb3465ad8b866899f149a3c02a6bdcfb8a6f56c09a04a0260"
+checksum = "cc5c60c732d99dbcc5d670b71ba6ccf2b015cd16fc828990eaad2c4b8805ebdb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6957,14 +7001,14 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-winch"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0430d24d8e9cef8d954cf5110132baf446bb8644cb83191a8f12dd582ccf0734"
+checksum = "c236aa2967d9ed27babc3a76d478f6323cb5bf4c77d20102e282828226646458"
 dependencies = [
  "cranelift-codegen",
  "gimli",
  "log",
- "object",
+ "object 0.40.0",
  "target-lexicon",
  "wasmparser",
  "wasmtime-environ",
@@ -7446,9 +7490,9 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "winch-codegen"
-version = "49.0.0"
+version = "49.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1047359e21b101949c9cd6e82ed9855b59fb466c76b466328ab9651adc2a503"
+checksum = "98e378f1851ec513f230e3aa1b77a3b4c2e0ebed8db0e551b0c51144f43c133d"
 dependencies = [
  "cranelift-assembler-x64",
  "cranelift-codegen",
@@ -8299,15 +8343,18 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "8.6.0"
+version = "9.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
+checksum = "1156b39d142a34b999c2310a50455e0cb3760bf7efad0122f796d813bee26ccb"
 dependencies = [
  "crc32fast",
  "flate2",
+ "getrandom 0.4.3",
  "indexmap 2.14.2",
  "memchr",
+ "nix",
  "typed-path",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

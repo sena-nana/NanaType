@@ -157,7 +157,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 508 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 512 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -222,9 +222,9 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 ### Apache-2.0 OR ISC OR MIT (1)
 
-- rustls 0.23.45 — <https://github.com/rustls/rustls>
+- rustls 0.23.46 — <https://github.com/rustls/rustls>
 
-### Apache-2.0 OR MIT (308)
+### Apache-2.0 OR MIT (312)
 
 - accesskit 0.25.1 — <https://github.com/AccessKit/accesskit>
 - accesskit_consumer 0.39.1 — <https://github.com/AccessKit/accesskit>
@@ -296,6 +296,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - equivalent 1.0.2 — <https://github.com/indexmap-rs/equivalent>
 - etagere 0.3.0 — <https://github.com/nical/etagere>
 - euclid 0.22.14 — <https://github.com/servo/euclid>
+- fastrand 2.5.0 — <https://github.com/smol-rs/fastrand>
 - fdeflate 0.3.7 — <https://github.com/image-rs/fdeflate>
 - flate2 1.1.10 — <https://github.com/rust-lang/flate2-rs>
 - fluent-bundle 0.16.0 — <https://github.com/projectfluent/fluent-rs>
@@ -418,6 +419,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - proc-macro-crate 3.5.0 — <https://github.com/bkchr/proc-macro-crate>
 - proc-macro2 1.0.107 — <https://github.com/dtolnay/proc-macro2>
 - profiling 1.0.18 — <https://github.com/aclysma/profiling>
+- psm 0.1.32 — <https://github.com/rust-lang/stacker>
 - qrcode 0.14.1 — <https://github.com/kennytm/qrcode-rust>
 - quick-error 2.0.1 — <http://github.com/tailhook/quick-error>
 - quote 1.0.47 — <https://github.com/dtolnay/quote>
@@ -462,6 +464,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - smol_str 0.3.6 — <https://github.com/rust-lang/rust-analyzer/tree/master/lib/smol_str>
 - socket2 0.6.5 — <https://github.com/rust-lang/socket2>
 - stable_deref_trait 1.2.1 — <https://github.com/storyyeller/stable_deref_trait>
+- stacker 0.1.25 — <https://github.com/rust-lang/stacker>
 - static_assertions 1.1.0 — <https://github.com/nvzqz/static-assertions-rs>
 - strength_reduce 0.2.4 — <http://github.com/ejmahler/strength_reduce>
 - svgtypes 0.16.1 — <https://github.com/linebender/svgtypes>
@@ -471,6 +474,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - syn 3.0.6 — <https://github.com/dtolnay/syn>
 - sys-locale 0.3.2 — <https://github.com/1Password/sys-locale>
 - tagptr 0.2.0 — <https://github.com/oliver-giersch/tagptr>
+- tempfile 3.27.0 — <https://github.com/Stebalien/tempfile>
 - thiserror 1.0.69 — <https://github.com/dtolnay/thiserror>
 - thiserror 2.0.20 — <https://github.com/dtolnay/thiserror>
 - thiserror-impl 1.0.69 — <https://github.com/dtolnay/thiserror>
@@ -488,7 +492,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - ttf-parser 0.25.1 — <https://github.com/harfbuzz/ttf-parser>
 - tungstenite 0.30.0 — <https://github.com/snapview/tungstenite-rs>
 - type-map 0.5.1 — <https://github.com/kardeiz/type-map>
-- typed-path 0.12.3 — <https://github.com/chipsenkbeil/typed-path>
+- typed-path 0.13.0 — <https://github.com/chipsenkbeil/typed-path>
 - typenum 1.20.1 — <https://github.com/paholg/typenum>
 - unic-langid 0.9.6 — <https://github.com/zbraniecki/unic-locale>
 - unic-langid-impl 0.9.6 — <https://github.com/zbraniecki/unic-locale>
@@ -551,31 +555,31 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 ### Apache-2.0 WITH LLVM-exception (25)
 
-- cranelift-assembler-x64 0.136.3 — <https://crates.io/crates/cranelift-assembler-x64>
-- cranelift-bforest 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-bitset 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-codegen 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-codegen-shared 0.136.3 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-control 0.136.3 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-entity 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-frontend 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
-- cranelift-native 0.136.0 — <https://github.com/bytecodealliance/wasmtime>
-- pulley-interpreter 49.0.0 — <https://github.com/bytecodealliance/wasmtime/tree/main/pulley>
-- pulley-macros 49.0.0 — <https://github.com/bytecodealliance/wasmtime/tree/main/pulley/macros>
+- cranelift-assembler-x64 0.136.5 — <https://crates.io/crates/cranelift-assembler-x64>
+- cranelift-bforest 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-bitset 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-codegen 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-codegen-shared 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-control 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-entity 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-frontend 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- cranelift-native 0.136.5 — <https://github.com/bytecodealliance/wasmtime>
+- pulley-interpreter 49.0.5 — <https://github.com/bytecodealliance/wasmtime/tree/main/pulley>
+- pulley-macros 49.0.5 — <https://github.com/bytecodealliance/wasmtime/tree/main/pulley/macros>
 - regalloc2 0.15.2 — <https://github.com/bytecodealliance/regalloc2>
 - target-lexicon 0.13.5 — <https://github.com/bytecodealliance/target-lexicon>
-- wasmtime 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-environ 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-component-util 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-core 49.0.0 — <https://crates.io/crates/wasmtime-internal-core>
-- wasmtime-internal-cranelift 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-fiber 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-jit-debug 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-jit-icache-coherence 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-unwinder 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-versioned-export-macros 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- wasmtime-internal-winch 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
-- winch-codegen 49.0.0 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-environ 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-component-util 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-core 49.0.5 — <https://crates.io/crates/wasmtime-internal-core>
+- wasmtime-internal-cranelift 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-fiber 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-jit-debug 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-jit-icache-coherence 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-unwinder 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-versioned-export-macros 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- wasmtime-internal-winch 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
+- winch-codegen 49.0.5 — <https://github.com/bytecodealliance/wasmtime>
 
 ### Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT (3)
 
@@ -680,7 +684,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - webview2-com-sys 0.39.1 — <https://github.com/wravery/webview2-rs>
 - winnow 1.0.4 — <https://github.com/winnow-rs/winnow>
 - xmlwriter 0.1.0 — <https://github.com/RazrFalcon/xmlwriter>
-- zip 8.6.0 — <https://github.com/zip-rs/zip2>
+- zip 9.1.3 — <https://github.com/zip-rs/zip2>
 - zmij 1.0.23 — <https://github.com/dtolnay/zmij>
 
 ### MIT OR Unlicense (13)

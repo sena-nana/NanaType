@@ -260,10 +260,15 @@ impl ZipFiles {
             let entry = archive
                 .by_index_raw(i)
                 .map_err(|e| FileError::Io(e.to_string()))?;
+            // An entry whose name does not decode is refused, not guessed at.
+            let raw = entry
+                .name()
+                .map_err(|e| FileError::UnsafePath(e.to_string()))?
+                .into_owned();
             if entry.enclosed_name().is_none() {
-                return Err(FileError::UnsafePath(entry.name().to_owned()));
+                return Err(FileError::UnsafePath(raw));
             }
-            let name = entry.name().replace('\\', "/");
+            let name = raw.replace('\\', "/");
             let clean = clean_path(name.trim_end_matches('/'))?;
             if !unique.insert(clean.to_lowercase()) {
                 return Err(FileError::UnsafePath(format!(
@@ -272,12 +277,12 @@ impl ZipFiles {
             }
             if entry.size() > MAX_FILE_BYTES {
                 return Err(FileError::TooLarge {
-                    path: entry.name().to_owned(),
+                    path: raw,
                     bytes: entry.size(),
                 });
             }
             total += entry.size();
-            names.push(entry.name().replace('\\', "/"));
+            names.push(name);
         }
         if total > MAX_PACKAGE_BYTES {
             return Err(FileError::TooLarge {
@@ -348,9 +353,9 @@ impl SkinFiles for ZipFiles {
         let archive = self.archive.lock().expect("zip lock");
         let mut out: Vec<String> = archive
             .file_names()
-            .filter_map(|n| n.strip_prefix(&self.prefix))
+            // Opening refused every name that does not decode.
+            .filter_map(|n| Some(n.ok()?.strip_prefix(&self.prefix)?.to_owned()))
             .filter(|n| !n.ends_with('/') && !n.is_empty())
-            .map(str::to_owned)
             .collect();
         out.sort();
         out

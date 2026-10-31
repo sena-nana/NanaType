@@ -48,8 +48,10 @@ fn main() {
         }
 
         common_controls(&format!("cargo:rustc-link-arg-bin={}=", PRODUCT.bin));
+        main_stack(&format!("cargo:rustc-link-arg-bin={}=", PRODUCT.bin));
         // Standalone snapshot/performance tools link the same tray stack.
         common_controls("cargo:rustc-link-arg-examples=");
+        main_stack("cargo:rustc-link-arg-examples=");
     }
     windows_resources(&PRODUCT, &build);
 }
