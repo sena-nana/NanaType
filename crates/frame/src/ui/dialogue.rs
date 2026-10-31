@@ -279,17 +279,29 @@ fn document_on(
         locale: ui.locale.get_untracked(),
     };
     let rich = to_rich(doc, &env);
-    let mut entrance =
-        ui.settings
-            .with_untracked(|s| s.playback.entrance)
-            .map_or(base.entrance, |kind| Entrance {
-                kind,
-                ms: if kind == EntranceKind::None {
-                    0
-                } else {
-                    base.entrance.ms
-                },
-            });
+    let setting = ui.settings.with_untracked(|s| s.playback.entrance);
+    // The line's own `[fade]` / `[pop]` / `[slide]` win over the setting,
+    // which wins over the skin. A reveal plays one intro for the whole text,
+    // so the line takes the tag covering most of it. A base without a
+    // duration is a skipped line: it still shows at once.
+    let tagged = doc.entrance();
+    let mut entrance = match (tagged, setting) {
+        (Some(tagged), _) => Entrance {
+            kind: tagged.kind,
+            ms: if base.entrance.ms == 0 { 0 } else { tagged.ms },
+        },
+        (None, Some(kind)) => Entrance {
+            kind,
+            ms: if kind == EntranceKind::None {
+                0
+            } else {
+                base.entrance.ms
+            },
+        },
+        (None, None) => base.entrance,
+    };
+    // An explicit entrance replaces the skin's own entrance mask and scramble.
+    let overridden = tagged.is_some() || setting.is_some();
     if base.scramble.is_some() && (base.reduced_motion || !super::materials::enabled(ui)) {
         entrance = Entrance {
             kind: EntranceKind::None,
@@ -331,11 +343,7 @@ fn document_on(
         .scramble
         .clone()
         .filter(|_| !base.reduced_motion && super::materials::enabled(ui))
-        .filter(|_| {
-            ui.settings
-                .with_untracked(|s| s.playback.entrance.is_none())
-                || base.light_exit.is_some()
-        })
+        .filter(|_| !overridden || base.light_exit.is_some())
         .zip(
             reveal
                 .as_ref()
@@ -356,10 +364,7 @@ fn document_on(
         .clone()
         .filter(|_| reveal.is_some() && entrance.kind != EntranceKind::None && entrance.ms > 0)
         .filter(|_| !base.reduced_motion && super::materials::enabled(ui))
-        .filter(|_| {
-            ui.settings
-                .with_untracked(|s| s.playback.entrance.is_none() && s.playback.typing)
-        });
+        .filter(|_| !overridden && ui.settings.with_untracked(|s| s.playback.typing));
     if let (Some(key), Some(plan)) = (follow, &reveal) {
         overflow::publish_on(
             ui.track_slot,
@@ -409,10 +414,7 @@ fn document_on(
                 p.transitions =
                     super::text_scramble::transitions(spec, base.light_exit, base.light_preview);
             }
-            if ui
-                .settings
-                .with_untracked(|s| s.playback.entrance.is_some())
-            {
+            if overridden {
                 p.transitions.entrance = None;
             }
         }
@@ -2466,5 +2468,75 @@ mod transition_override_tests {
             .unwrap();
         assert!(p.reveal.as_ref().unwrap().intro.pop);
         assert!(p.transitions.entrance.is_none());
+    }
+
+    /// The intro the display plays for `markup` over `base_ms` of skin
+    /// entrance, with the playback setting at `setting`.
+    fn intro_of(
+        markup: &str,
+        setting: Option<EntranceKind>,
+        base_ms: u16,
+    ) -> (nana_ui_core::GlyphIntro, bool) {
+        let skin = nanatype_theme::SkinRegistry::new(None, "1.0.0")
+            .load("nanatype.crayon")
+            .unwrap()
+            .skin;
+        let mut settings = nanatype_settings::Settings::default();
+        settings.playback.entrance = setting;
+        let ui = Stage::new(
+            Arc::new(settings),
+            skin.clone(),
+            nanatype_i18n::Locale::ZhCn,
+        );
+        let base = Base::dialogue(
+            &skin,
+            Entrance {
+                kind: if base_ms == 0 {
+                    EntranceKind::None
+                } else {
+                    EntranceKind::Fade
+                },
+                ms: base_ms,
+            },
+            false,
+        );
+        let text = nanatype_markup::parse(markup).doc;
+        let units = text.unit_count() as u32;
+        let id = DocumentId::new(1).unwrap();
+        let mut doc = RuntimeDocument::new(id);
+        let root = doc
+            .context_mut()
+            .mount_view_root(id, move || {
+                document(ui, &text, &base, Timing::Reveal(Reveal::full(units)))
+            })
+            .unwrap();
+        let p = doc
+            .context()
+            .world()
+            .glyph_presentation(root.roots()[0])
+            .unwrap()
+            .clone();
+        (p.reveal.unwrap().intro, p.transitions.entrance.is_some())
+    }
+
+    #[test]
+    fn entrance_tags_set_the_line_s_intro() {
+        let (intro, mask) = intro_of("测试", None, 180);
+        assert!(intro.fade && !intro.pop, "untagged text keeps the skin's");
+        assert!(mask, "and the skin's entrance mask");
+
+        let (intro, mask) = intro_of("[pop=90]测试[/pop]", None, 180);
+        assert!(intro.pop);
+        assert!((intro.duration_s - 0.09).abs() < 1e-6);
+        assert!(!mask, "a tag replaces the skin's entrance mask");
+
+        let (intro, _) = intro_of("[slide]测[/slide]试", Some(EntranceKind::Pop), 180);
+        assert!(intro.rise_px > 0.0, "a tag wins over the setting");
+
+        let (intro, _) = intro_of("[noentrance]测试[/noentrance]", None, 180);
+        assert_eq!(intro.duration_s, 0.0);
+
+        let (intro, _) = intro_of("[pop]测试[/pop]", None, 0);
+        assert_eq!(intro.duration_s, 0.0, "a skipped line still shows at once");
     }
 }

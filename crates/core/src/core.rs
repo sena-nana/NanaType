@@ -285,7 +285,12 @@ impl Core {
         self.queue.policy = p.queue;
     }
 
+    /// How the line on the display enters: its own `[fade]` / `[pop]` /
+    /// `[slide]` tags first, then the playback setting, then the skin.
     fn entrance(&self) -> Entrance {
+        if let Some(entrance) = self.display.doc.entrance() {
+            return entrance;
+        }
         let skin = &self.skin.dialogue.reveal.entrance;
         let kind = self.settings.playback.entrance.unwrap_or(skin.kind);
         Entrance {
@@ -620,6 +625,7 @@ impl Core {
         self.display.line = None;
         self.display.empty = doc.is_blank();
         self.display.doc = Arc::new(doc);
+        self.display.entrance = self.entrance();
         self.display.speaker = self.speaker();
         self.display.reply = self.reply.clone();
         self.display.reveal = reveal;

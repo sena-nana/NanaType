@@ -1029,3 +1029,27 @@ fn saving_skin_typography_and_dimensions_preserves_playback_progress() {
     assert_eq!(after.1, before.1);
     assert_eq!(core.phase(), phase);
 }
+
+#[test]
+fn a_line_s_entrance_tags_set_the_display_entrance() {
+    use nanatype_model::{Entrance, EntranceKind};
+    let mut core = core_with(|s| s.playback.entrance = Some(EntranceKind::Fade));
+    type_and_send(&mut core, "[pop=90]你好[/pop]呀", 0);
+    assert_eq!(
+        core.display().entrance,
+        Entrance {
+            kind: EntranceKind::Pop,
+            ms: 90
+        },
+        "the line's own tag wins over the setting"
+    );
+    core.handle(Cmd::Skip, 10);
+    assert_eq!(
+        core.display().entrance.ms,
+        0,
+        "skipping still shows it at once"
+    );
+    core.handle(Cmd::ClearDisplay, 20);
+    type_and_send(&mut core, "plain", 30);
+    assert_eq!(core.display().entrance.kind, EntranceKind::Fade);
+}

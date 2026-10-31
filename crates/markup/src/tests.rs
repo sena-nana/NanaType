@@ -97,6 +97,46 @@ fn effects_pacing_and_entrances_parse() {
 }
 
 #[test]
+fn a_line_takes_the_entrance_its_tags_cover_most() {
+    assert_eq!(parse("plain").doc.entrance(), None);
+    let pop = Entrance {
+        kind: EntranceKind::Pop,
+        ms: 90,
+    };
+    assert_eq!(parse("ab[pop=90]c[/pop]def").doc.entrance(), Some(pop));
+    assert_eq!(
+        parse("[pop=90]ab[/pop][slide]cde[/slide][pop=90]fg[/pop]")
+            .doc
+            .entrance(),
+        Some(pop),
+        "both pop runs vote together"
+    );
+    assert_eq!(
+        parse("[fade]ab[/fade][slide]cd[/slide]")
+            .doc
+            .entrance()
+            .map(|e| e.kind),
+        Some(EntranceKind::Fade),
+        "a tie goes to the first"
+    );
+    assert_eq!(
+        parse("[noentrance]x[/noentrance]").doc.entrance(),
+        Some(Entrance {
+            kind: EntranceKind::None,
+            ms: 0
+        })
+    );
+    assert_eq!(
+        parse("[slide][sticker=cats/hello][/slide]")
+            .doc
+            .entrance()
+            .map(|e| e.kind),
+        Some(EntranceKind::SlideUp),
+        "an atom counts as one unit"
+    );
+}
+
+#[test]
 fn point_tags_become_markers_and_atoms() {
     let parsed = parse(
         "a[wait=500][pause][pause auto=2000][page][se=coin vol=0.5][expr=smile][portrait=happy][screenshake=4,200][sticker=cats/hello h=1.5 alt=\"hi there\"][emote=wave]",

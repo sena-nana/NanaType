@@ -626,6 +626,45 @@ impl Document {
         })
     }
 
+    /// The entrance the line's `[fade]` / `[pop]` / `[slide]` /
+    /// `[noentrance]` spans ask for, or `None` when no span sets one.
+    ///
+    /// A typewriter reveal plays one intro for the whole text, so the line
+    /// takes the explicit entrance covering the most units (the earliest on
+    /// a tie); untagged text does not vote for the skin's. `[noentrance]` has
+    /// no duration.
+    pub fn entrance(&self) -> Option<crate::Entrance> {
+        let mut votes: Vec<(crate::Entrance, usize)> = Vec::new();
+        for inline in self.paragraphs.iter().flat_map(|p| &p.inlines) {
+            let (entrance, units) = match inline {
+                Inline::Text(run) => (run.effects.entrance, run.text.graphemes(true).count()),
+                Inline::Ruby(ruby) => (
+                    ruby.base.effects.entrance,
+                    ruby.base.text.graphemes(true).count(),
+                ),
+                Inline::Atom(atom) => (atom.effects.entrance, 1),
+                Inline::Mention(mention) => (mention.effects.entrance, 1),
+                Inline::Marker(_) => continue,
+            };
+            let Some(mut entrance) = entrance.filter(|_| units > 0) else {
+                continue;
+            };
+            if entrance.kind == crate::EntranceKind::None {
+                entrance.ms = 0;
+            }
+            match votes.iter_mut().find(|(e, _)| *e == entrance) {
+                Some((_, count)) => *count += units,
+                None => votes.push((entrance, units)),
+            }
+        }
+        // `max_by_key` keeps the last of equals; scan in reverse for the first.
+        votes
+            .into_iter()
+            .rev()
+            .max_by_key(|(_, units)| *units)
+            .map(|(entrance, _)| entrance)
+    }
+
     /// A copy without markers: what history shows and what is copied out.
     pub fn without_markers(&self) -> Document {
         let mut doc = Document {
