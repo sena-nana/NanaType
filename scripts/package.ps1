@@ -111,7 +111,8 @@ New-Item -ItemType Directory -Force $out | Out-Null
 if ($Steam) {
     # Steamworks loads steam_api64.dll from beside the executable: take the
     # copy of the steamworks-sys this build linked.
-    $meta = cargo metadata --format-version 1 --offline --locked | ConvertFrom-Json -Depth 64
+    # steamworks is optional in crates/steam, so only --all-features resolves it.
+    $meta = cargo metadata --format-version 1 --offline --locked --all-features | ConvertFrom-Json -Depth 64
     $sys = $meta.packages | Where-Object { $_.name -eq "steamworks-sys" } | Select-Object -First 1
     if (-not $sys) { throw "steamworks-sys is not in Cargo.lock" }
     $sdk = if ($env:STEAM_SDK_LOCATION) { $env:STEAM_SDK_LOCATION } else { Join-Path (Split-Path -Parent $sys.manifest_path) "lib\steam" }
@@ -127,12 +128,14 @@ if ($Steam) {
     [IO.File]::WriteAllText($config, $filled, [Text.UTF8Encoding]::new($false))
 }
 if ($Portable) {
-    # As deep below the repository as the original, so its relative sources resolve.
-    $portableDir = if ($Product -eq "editor") { Join-Path $out "editor" } else { $out }
+    # As deep below the repository as the original, so its relative sources resolve,
+    # and outside dist/: nana-packager only writes into an empty directory.
+    $portableDir = Join-Path $root $(if ($Product -eq "editor") { "target\editor" } else { "target" })
     New-Item -ItemType Directory -Force $portableDir | Out-Null
-    $portable = Join-Path $portableDir "nana-package.toml"
-    (Get-Content $config) -replace 'backend = "installer"', 'backend = "portable"' | Set-Content $portable
-    $config = $portable
+    # Not $portable: PowerShell names are case-insensitive, so that is the -Portable switch.
+    $portableConfig = Join-Path $portableDir "nana-package.toml"
+    (Get-Content $config) -replace 'backend = "installer"', 'backend = "portable"' | Set-Content $portableConfig
+    $config = $portableConfig
 }
 nana-packager package --config $config --exe $exe --out $out --profile $Profile --build-id $env:NANATYPE_BUILD_ID
 if ($LASTEXITCODE -ne 0) { throw "Package creation failed ($LASTEXITCODE)" }
