@@ -958,6 +958,7 @@ speech-start = 开始语音输入
 speech-stop = 停止语音输入
 speech-resume = 继续识别
 speech-settings = 语音输入设置
+speech-options = 语音输入选项
 speech-starting = 正在准备语音识别…
 speech-listening = 正在监听
 speech-recognizing = 正在识别…

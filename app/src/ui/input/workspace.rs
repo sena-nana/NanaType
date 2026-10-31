@@ -536,6 +536,7 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                 popover(
                     ti::ADJUSTMENTS,
                     ui.now_t("tray-mode"),
+                    Tip::Above,
                     crate::ui::kit::popover::SM,
                     signal(false),
                     modes(ui, mode),
@@ -561,6 +562,7 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                 popover(
                     ti::USERS,
                     ui.now_t("input-management"),
+                    Tip::Above,
                     crate::ui::kit::popover::LG,
                     ui.peer_popover,
                     widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
@@ -580,7 +582,8 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                 ),
                 popover(
                     ti::CHEVRON_DOWN,
-                    ui.now_t("settings-speech"),
+                    ui.now_t("speech-options"),
+                    Tip::Above,
                     crate::ui::kit::popover::LG,
                     signal(false),
                     widget(Stack::column(0.0).gap_step(gap::step::CONTROL)).children((

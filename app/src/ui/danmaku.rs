@@ -617,6 +617,7 @@ fn header(ui: Ui) -> AnyView {
         super::input::popover(
             ti::FILTER,
             ui.now_t("chat-filter"),
+            super::input::Tip::Below,
             crate::ui::kit::popover::LG,
             signal(false),
             filters(ui),

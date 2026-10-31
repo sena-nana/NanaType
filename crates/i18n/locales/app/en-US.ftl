@@ -964,6 +964,7 @@ speech-start = Start voice input
 speech-stop = Stop voice input
 speech-resume = Resume recognition
 speech-settings = Voice input settings
+speech-options = Voice input options
 speech-starting = Preparing speech recognition…
 speech-listening = Listening
 speech-recognizing = Recognizing…

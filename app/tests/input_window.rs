@@ -1284,6 +1284,107 @@ fn tooltips_at_the_top_right_corner_stay_open_under_the_pointer() {
 }
 
 #[test]
+fn every_icon_in_the_toolbar_and_footer_has_a_tooltip() {
+    let ui = Ui::new(
+        Arc::new(Settings::default()),
+        common::skin("nanatype.halo"),
+        Locale::ZhCn,
+    );
+    let mut session = common::session()
+        .themed(false)
+        .mount(1200, 640, move || input::input_window(ui));
+    settle(&mut session);
+    let check = |session: &mut RuntimeAgentSession, keys: &[&str]| {
+        for key in keys {
+            let label = ui.now_t(key);
+            let node = session
+                .accessibility_dump()
+                .into_iter()
+                .find(|n| n.role == "button" && n.label.as_deref() == Some(&label))
+                .unwrap_or_else(|| panic!("no button {label}"));
+            let shown = tooltip_while_hovering(session, &node, 2);
+            assert!(shown.iter().all(|&s| s), "{key}: {shown:?}");
+            session.hover_xy(10.0, 200.0).unwrap();
+            settle(session);
+        }
+    };
+    check(
+        &mut session,
+        &[
+            "tb-bold",
+            "tb-italic",
+            "tb-underline",
+            "tb-strike",
+            "tb-color",
+            "tb-size",
+            "tb-font",
+            "tb-align",
+            "tb-stroke",
+            "tb-ruby",
+            "tb-clear-format",
+            "input-skin-preview",
+            "tb-source",
+            "tb-cheatsheet",
+            "input-management",
+            "settings-speech",
+            "speech-options",
+            "window-settings",
+        ],
+    );
+    // A narrow window folds the type tools into "…" and the mode switch into
+    // a popover; both icons have tips too.
+    session.set_viewport(520, 360, 1.0).unwrap();
+    settle(&mut session);
+    check(&mut session, &["tb-more", "tray-mode"]);
+}
+
+#[test]
+fn a_popover_icon_opens_its_panel_and_puts_its_tooltip_away_meanwhile() {
+    let ui = Ui::new(
+        Arc::new(Settings::default()),
+        common::skin("nanatype.halo"),
+        Locale::ZhCn,
+    );
+    let mut session = common::session()
+        .themed(false)
+        .mount(1200, 640, move || input::input_window(ui));
+    settle(&mut session);
+    let size = ui.now_t("tb-size");
+    let panel = ui.now_t("tb-apply-relative");
+    let open = |session: &RuntimeAgentSession| {
+        session
+            .accessibility_dump()
+            .iter()
+            .any(|n| n.label.as_deref() == Some(&panel))
+    };
+    let tip = |session: &RuntimeAgentSession| {
+        session
+            .accessibility_dump()
+            .iter()
+            .any(|n| n.role == "tooltip" && n.label.as_deref() == Some(&size))
+    };
+    let icon = session
+        .accessibility_dump()
+        .into_iter()
+        .find(|n| n.role == "button" && n.label.as_deref() == Some(&size))
+        .unwrap();
+    click_node(&mut session, icon.clone());
+    settle(&mut session);
+    assert!(open(&session), "the icon opens its popover");
+    assert!(!tip(&session), "no tooltip over the open popover");
+    // Escape reaches the popover, not a tooltip in front of it.
+    session
+        .key_press("Escape", "Escape", Default::default())
+        .unwrap();
+    settle(&mut session);
+    assert!(!open(&session), "Escape closes it");
+    click_node(&mut session, icon.clone());
+    assert!(open(&session));
+    click_node(&mut session, icon);
+    assert!(!open(&session), "the icon closes it again");
+}
+
+#[test]
 fn the_footer_mode_switch_changes_the_input_mode() {
     use nanatype::msg::Msg;
     use nanatype_settings::InputMode;
