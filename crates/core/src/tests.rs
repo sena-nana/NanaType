@@ -1053,3 +1053,71 @@ fn a_line_s_entrance_tags_set_the_display_entrance() {
     type_and_send(&mut core, "plain", 30);
     assert_eq!(core.display().entrance.kind, EntranceKind::Fade);
 }
+
+/// Deliver the wake `fx` asks for with `reason`, at its time.
+fn deliver(core: &mut Core, fx: &Effects, reason: WakeReason) -> (Wake, Effects) {
+    let wake = *fx
+        .wakes
+        .iter()
+        .find(|w| w.reason == reason)
+        .expect("the wake is scheduled");
+    let out = core.handle(
+        Cmd::Wake {
+            epoch: wake.epoch,
+            reason: wake.reason,
+        },
+        wake.at_ms,
+    );
+    (wake, out)
+}
+
+#[test]
+fn a_line_ends_when_its_last_character_has_finished_entering() {
+    // halo: a plain 140 ms fade, no entrance material.
+    let mut core = core_with(|_| {});
+    let fx = type_and_send(&mut core, "ab[pause]cd", 1000);
+    let last = core.display().reveal.unit_at(1).unwrap();
+    let (wake, fx) = deliver(&mut core, &fx, WakeReason::SegmentEnd);
+    assert!(wake.at_ms < last + 140);
+    assert_eq!(
+        core.phase(),
+        Some(Phase::Revealing),
+        "`b` is still fading in at the pause"
+    );
+    let (wake, fx) = deliver(&mut core, &fx, WakeReason::SegmentEnd);
+    assert_eq!(wake.at_ms, last + 140);
+    assert_eq!(core.phase(), Some(Phase::Gated));
+    assert!(fx.wakes.is_empty());
+
+    let fx = core.handle(Cmd::Continue, 2000);
+    let last = core.display().reveal.unit_at(3).unwrap();
+    let (_, fx) = deliver(&mut core, &fx, WakeReason::SegmentEnd);
+    assert_eq!(core.phase(), Some(Phase::Revealing));
+    assert!(
+        !fx.events
+            .iter()
+            .any(|e| matches!(e, Event::LineRevealed(_)))
+    );
+    let (wake, fx) = deliver(&mut core, &fx, WakeReason::SegmentEnd);
+    assert_eq!(wake.at_ms, last + 140);
+    assert_eq!(core.phase(), Some(Phase::Done));
+    assert!(
+        fx.events
+            .iter()
+            .any(|e| matches!(e, Event::LineRevealed(_)))
+    );
+}
+
+#[test]
+fn without_an_entrance_a_line_ends_with_its_last_character() {
+    let settings: [fn(&mut Settings); 2] = [
+        |s| s.playback.reduced_motion = true,
+        |s| s.playback.entrance = Some(nanatype_model::EntranceKind::None),
+    ];
+    for settings in settings {
+        let mut core = core_with(settings);
+        let fx = type_and_send(&mut core, "ab", 1000);
+        deliver(&mut core, &fx, WakeReason::SegmentEnd);
+        assert_eq!(core.phase(), Some(Phase::Done));
+    }
+}
