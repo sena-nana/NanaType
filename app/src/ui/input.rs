@@ -64,13 +64,49 @@ const GLYPH: f32 = 14.0;
 /// Icon-button hit target.
 const TARGET: f32 = 28.0;
 
+/// The side of its button a tool's tooltip hangs on.
+///
+/// Never NanaUI's default, which follows the cursor: the tip goes above the
+/// pointer, and flips below only when the flipped tip fits across as well as
+/// down. At the window's top-right corner (the rail's first icon, the chat
+/// pin) neither side fits across, so the tip stays above, and being clamped
+/// into the window puts it right under the pointer. The pointer is then over
+/// the tip, not the button: the tip closes, the button is hovered again, the
+/// tip reopens — it blinks on every move. A tip on a side of the button never
+/// covers the button, so it cannot take the pointer from it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Tip {
+    /// Under the button (above it where the window has no room): bars at the
+    /// top of the window.
+    Below,
+    /// Over the button: bars at the bottom of the window.
+    Above,
+    /// To the button's left (right where there is no room): the rail at the
+    /// window's right edge.
+    Left,
+}
+
+impl Tip {
+    fn config(self) -> nana_ui::TooltipConfig {
+        use nana_ui::TooltipPlacement as P;
+        nana_ui::TooltipConfig {
+            placement: match self {
+                Tip::Below => P::Bottom,
+                Tip::Above => P::Top,
+                Tip::Left => P::Left,
+            },
+            ..Default::default()
+        }
+    }
+}
+
 /// A toolbar icon button: the shared glyph size in a 28px square, in the
-/// toolbar ink.
-fn tool_button(icon: nana_ui::runtime::Icon, label: String, tip: String) -> IconButton {
+/// toolbar ink, its tooltip on the `side` given.
+fn tool_button(icon: nana_ui::runtime::Icon, label: String, tip: String, side: Tip) -> IconButton {
     // Large is the size whose glyph is GLYPH; the square stays 28px.
     let mut b = IconButton::new(icon, label)
         .size(ControlSize::Large)
-        .with_tooltip(tip);
+        .tooltip(tip, side.config());
     b.style.square = Some(SquareSize::IconButton);
     b
 }
@@ -88,9 +124,10 @@ fn tool(
     ui: Ui,
     icon: nana_ui::runtime::Icon,
     label: &'static str,
+    side: Tip,
     msg: impl Fn() -> Msg + Send + 'static,
 ) -> AnyView {
-    widget(tool_button(icon, ui.now_t(label), ui.now_t(label)))
+    widget(tool_button(icon, ui.now_t(label), ui.now_t(label), side))
         .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
         .into_any()
 }
@@ -109,6 +146,7 @@ fn toggle(
         icon,
         ui.now_t(label),
         with_shortcut(ui.now_t(label), keys),
+        Tip::Below,
     ))
     .bind(move |b: &mut IconButton| {
         let on = !ui.source_mode.get() && ui.sel_attrs.with(pressed);
@@ -142,10 +180,11 @@ fn is_strike(a: &RichSelectionAttrs) -> bool {
 pub(super) fn pressed_tool(
     icon: nana_ui::runtime::Icon,
     label: String,
+    side: Tip,
     on: impl Fn() -> bool + Send + 'static,
     msg: impl Fn() -> Msg + Send + 'static,
 ) -> nana_ui::runtime::view::El<IconButton> {
-    widget(tool_button(icon, label.clone(), label))
+    widget(tool_button(icon, label.clone(), label, side))
         .bind(move |b: &mut IconButton| {
             let on = on();
             if b.selected != on {
@@ -160,6 +199,7 @@ fn source_toggle(ui: Ui) -> AnyView {
     pressed_tool(
         ti::CODE,
         ui.now_t("tb-source"),
+        Tip::Below,
         move || ui.source_mode.get(),
         || Msg::ToggleSource,
     )
@@ -169,10 +209,16 @@ fn source_toggle(ui: Ui) -> AnyView {
 /// Shows the draft as the skin draws it, or as plain text.
 fn skin_preview_toggle(ui: Ui) -> AnyView {
     let on = move || ui.settings.with(|s| s.general.input_skin_preview);
-    pressed_tool(ti::EYE, ui.now_t("input-skin-preview"), on, move || {
-        let on = !ui.settings.with_untracked(|s| s.general.input_skin_preview);
-        super::settings::controls::edit(move |s| s.general.input_skin_preview = on)
-    })
+    pressed_tool(
+        ti::EYE,
+        ui.now_t("input-skin-preview"),
+        Tip::Below,
+        on,
+        move || {
+            let on = !ui.settings.with_untracked(|s| s.general.input_skin_preview);
+            super::settings::controls::edit(move |s| s.general.input_skin_preview = on)
+        },
+    )
     .key("input-skin-preview-toggle")
     .into_any()
 }
@@ -1045,9 +1091,13 @@ fn toolbar(ui: Ui) -> AnyView {
             ),
         ];
         let clear = || {
-            tool(ui, ti::CLEAR_FORMATTING, "tb-clear-format", || {
-                act(Tool::ClearFormat)
-            })
+            tool(
+                ui,
+                ti::CLEAR_FORMATTING,
+                "tb-clear-format",
+                Tip::Below,
+                || act(Tool::ClearFormat),
+            )
         };
         if compact {
             // The popovers of folded tools stay mounted, invisible and out of

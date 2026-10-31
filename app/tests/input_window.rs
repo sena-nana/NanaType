@@ -1200,6 +1200,89 @@ fn sticker_packs_sit_above_the_grid_filter_search_and_accept_folder_drops() {
     }
 }
 
+/// Hovers the centre of `node` past its tooltip's delay, `moves` times, and
+/// says after each move whether its tooltip shows.
+fn tooltip_while_hovering(
+    session: &mut RuntimeAgentSession,
+    node: &AccessibilityDumpNode,
+    moves: u64,
+) -> Vec<bool> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    // Far ahead of `settle`'s clock, so every frame here is past the delay.
+    static CLOCK: AtomicU64 = AtomicU64::new(1_000_000_000);
+    let (x, y) = (
+        node.bounds.x + node.bounds.width / 2.0,
+        node.bounds.y + node.bounds.height / 2.0,
+    );
+    (0..moves)
+        .map(|i| {
+            // The pointer trembles over the button, as a hand's does.
+            let dx = (i % 2) as f32 * 0.5;
+            session
+                .pointer_event(nana_ui::PointerPhase::Move, x + dx, y, -1, 0)
+                .unwrap();
+            session.flush().unwrap();
+            let now = Duration::from_millis(CLOCK.fetch_add(16, Ordering::Relaxed));
+            session.document_mut().context_mut().advance_animations(now);
+            session.document_mut().sync_presentation_clock(now);
+            session.flush().unwrap();
+            // "Bold · Ctrl+B": a tip may say more than the button's name.
+            let label = node.label.as_deref().unwrap_or_default();
+            session.accessibility_dump().iter().any(|n| {
+                n.role == "tooltip" && n.label.as_deref().is_some_and(|t| t.starts_with(label))
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn tooltips_at_the_top_right_corner_stay_open_under_the_pointer() {
+    // The rail's first icon and the chat pin sit where a tip that followed
+    // the cursor fit neither above it nor across: clamped into the window it
+    // covered the pointer, and shut and reopened on every move.
+    for locale in [Locale::ZhCn, Locale::EnUs] {
+        let ui = Ui::new(
+            Arc::new(Settings::default()),
+            common::skin("nanatype.halo"),
+            locale,
+        );
+        ui.input_dock.update(|d| d.chat_pinned = true);
+        let mut session =
+            common::session()
+                .themed(false)
+                .locale(locale)
+                .mount(1200, 640, move || input::input_window(ui));
+        settle(&mut session);
+        for key in [
+            "input-dock-rail-controls",
+            "input-dock-rail-stickers",
+            "input-chat-pin",
+        ] {
+            let node = keyed(&session, key);
+            let shown = tooltip_while_hovering(&mut session, &node, 12);
+            assert!(
+                shown.iter().all(|&s| s),
+                "{locale:?} {key}: tooltip shown per move {shown:?}"
+            );
+            let tip = session
+                .accessibility_dump()
+                .into_iter()
+                .find(|n| n.role == "tooltip")
+                .unwrap()
+                .bounds;
+            let b = &node.bounds;
+            let (x, y) = (b.x + b.width / 2.0, b.y + b.height / 2.0);
+            assert!(
+                !(x >= tip.x && x <= tip.x + tip.width && y >= tip.y && y <= tip.y + tip.height),
+                "{locale:?} {key}: {tip:?} covers its button {b:?}"
+            );
+            assert!(tip.x >= 0.0 && tip.x + tip.width <= 1200.0 && tip.y >= 0.0);
+            session.hover_xy(600.0, 300.0).unwrap();
+            settle(&mut session);
+        }
+    }
+}
+
 #[test]
 fn the_footer_mode_switch_changes_the_input_mode() {
     use nanatype::msg::Msg;
