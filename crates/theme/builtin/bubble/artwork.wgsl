@@ -30,6 +30,21 @@ fn bubble(p:vec2<f32>,lo:vec2<f32>,hi:vec2<f32>,tail:bool)->f32 {
  }
  return d;
 }
+// The colour block under the bubble. The tail is thin, so a copy of it
+// moved by `off` would leave the dark between the tail and its own block;
+// sweep the tail along `off` instead, so its shadow stays attached.
+fn shadow(p:vec2<f32>,lo:vec2<f32>,hi:vec2<f32>,tail:bool,off:vec2<f32>)->f32 {
+ var d=rect(p-off-(lo+hi)*.5,(hi-lo)*.5,select(20.,30.,tail));
+ if tail {
+  let a=vec2(lo.x+86.,hi.y-8.); let b=vec2(lo.x+132.,hi.y-8.); let c=vec2(lo.x+64.,hi.y+17.);
+  // Start a quarter of the way along, so no sliver shows past the tail's
+  // upper edge, and end at the full offset: the hull of the two copies.
+  let n=off*.25;
+  let swept=min(min(tri(p,a+n,b+n,b+off),tri(p,a+n,b+off,c+off)),tri(p,a+n,c+off,c+n));
+  d=min(d,swept-3.5);
+ }
+ return d;
+}
 fn heart(h:vec2<f32>)->f32 {
  return min(min(length(h-vec2(-2.4,-1.8))-3.6,length(h-vec2(2.4,-1.8))-3.6),(abs(h.x)+abs(h.y-1.1)-5.1)*.707);
 }
@@ -44,7 +59,7 @@ fn effect(i:EffectInput)->vec4<f32> {
  let off=select(vec2(5.),vec2(8.),main);
  let lw=select(3.,4.5,main);
  let d=bubble(p,lo,hi,main);
- let ds=bubble(p-off,lo,hi,main);
+ let ds=shadow(p,lo,hi,main,off);
  let inside=aa(d);
  let k=clamp((p.y-lo.y)/max(hi.y-lo.y,1.),0.,1.);
  var c=mix(rgb(255.,244.,248.),rgb(255.,227.,238.),k);

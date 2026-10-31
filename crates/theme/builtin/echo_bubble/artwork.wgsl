@@ -22,12 +22,15 @@ fn effect(i:EffectInput)->vec4<f32> {
  // Portrait/compact instances reuse the original ink and material in logical pixels.
  let portrait=i.params0.x>.5 && i.params0.x<1.5;
  let details=i.params0.y<.5;
- let q=p-s*.5; let b=s*.5-vec2(1.);
+ let q=p-s*.5;
  let opening=exp(-i.line_age*3.); let speaker=exp(-i.speaker_age*3.);
 // Echo's grey keyline and hard shadow retain their original footprint.
- let edge=rect(q,b,19.);
+// The hard shadow is the box's own (radius 20), painted only outside the
+// box, so the plate fills the box to its edge with that radius and the
+// keyline runs out to it: no ring of the window between keyline and shadow.
+ let edge=rect(q,s*.5,20.);
  var c=rgb(255.,255.,255.);
- c=mix(c,rgb(136.,136.,136.),line(edge+2.3,2.3));
- c=mix(c,rgb(237.,238.,240.),line(edge+6.5,.45)*.8);
- return vec4(c,aa(edge));
+ c=mix(c,rgb(136.,136.,136.),1.-aa(edge+5.6));
+ c=mix(c,rgb(237.,238.,240.),line(edge+7.5,.45)*.8);
+ return vec4(c,aa(edge-.65));
 }
