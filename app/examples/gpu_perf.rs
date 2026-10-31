@@ -60,12 +60,20 @@ fn session(registry: &SkinRegistry, name: &'static str, track: usize) -> (Ui, Ru
             "pacing_only" => "[speed=20ms]节奏标记 Static pacing[/speed]".into(),
             "reduced" => "[wave]减少动态效果 Reduced motion[/wave]".into(),
             "reveal" => "逐字呈现 Typewriter dialogue ".repeat(12),
+            "reveal_wave" => format!(
+                "[wave]{}[/wave]",
+                "逐字呈现 Typewriter dialogue ".repeat(12)
+            ),
+            "reveal_pulse" => format!(
+                "[pulse]{}[/pulse]",
+                "逐字呈现 Typewriter dialogue ".repeat(12)
+            ),
             _ => "渲染效率 Rendering workload".into(),
         };
         let mut core = Core::new((*settings).clone(), skin.clone());
         for _ in 0..if name == "chat_1000" { 1000 } else { 1 } {
             core.handle(Cmd::SendMarkup(text.clone()), 0);
-            if name != "reveal" {
+            if !name.starts_with("reveal") {
                 core.handle(Cmd::Skip, 1);
             }
         }
@@ -179,6 +187,8 @@ fn main() {
         "pacing_only",
         "reduced",
         "reveal",
+        "reveal_wave",
+        "reveal_pulse",
         "wave",
         "combo",
         "decor",
@@ -268,7 +278,11 @@ fn main() {
             let mut gpu_times = Vec::new();
             let (mut rendered, mut shaped, mut layouts, mut draws, mut uploaded, mut primitives) =
                 (0, 0, 0, 0, 0, 0);
+            let mut text_before = None;
             for frame in 0..180 {
+                if frame == 60 {
+                    text_before = Some(painters[0].text_glyph_counters());
+                }
                 let ms = ((trial * 180 + frame) * 16) as u64;
                 let mut count = 0;
                 // Worker execution is measured separately; time host projection and GPU work here.
@@ -400,7 +414,19 @@ fn main() {
                     read.unmap();
                 }
             }
-            trials.push(serde_json::json!({"cpu_record_submit":distribution(cpu),"gpu_timestamp":distribution(gpu_times),"rendered_targets":rendered,"text_shaped":shaped,"layout_nodes":layouts,"draw_calls":draws,"upload_bytes":uploaded,"max_scene_primitives":primitives}));
+            let text_after = painters[0].text_glyph_counters();
+            let text_before = text_before.unwrap_or_default();
+            let text = serde_json::json!({
+                "glyph_rasterized": text_after.glyph_rasterized - text_before.glyph_rasterized,
+                "glyph_upload_bytes": text_after.glyph_upload_bytes - text_before.glyph_upload_bytes,
+                "entries_created": text_after.text_gpu_entries_created - text_before.text_gpu_entries_created,
+                "instance_rebuilds": text_after.text_instance_rebuilds - text_before.text_instance_rebuilds,
+                "instance_upload_bytes": text_after.text_instance_upload_bytes - text_before.text_instance_upload_bytes,
+                "presentation_upload_bytes": text_after.text_presentation_upload_bytes - text_before.text_presentation_upload_bytes,
+                "index_slots_drawn": text_after.text_index_slots_drawn - text_before.text_index_slots_drawn,
+                "pipeline_draws": text_after.text_pipeline_draws - text_before.text_pipeline_draws,
+            });
+            trials.push(serde_json::json!({"text":text,"cpu_record_submit":distribution(cpu),"gpu_timestamp":distribution(gpu_times),"rendered_targets":rendered,"text_shaped":shaped,"layout_nodes":layouts,"draw_calls":draws,"upload_bytes":uploaded,"max_scene_primitives":primitives}));
         }
         cases.push(serde_json::json!({"scenario":name,"trials":trials,"shader_cache":nanatype::ui::shader_effects::cache_stats(),"shader_errors":nanatype::ui::shader_effects::take_notices()}));
     }
