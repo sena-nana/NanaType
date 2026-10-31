@@ -808,16 +808,63 @@ pub fn attr_of(index: u16) -> (Effects, Pace) {
         .unwrap_or((Effects::default(), Pace::Inherit))
 }
 
-fn glyph_effect(e: &nanatype_model::Continuous, d: &EffectDefaults) -> GlyphEffect {
+/// Which way the text a presentation plays on runs.
+///
+/// The directional glyph motions move a glyph across its line: a wave and a
+/// jump bob it over the line, a slide-up entrance brings it in from under
+/// the line. NanaUI's glyph presentation (`apply_effect`/`apply_reveal` in
+/// nana-ui-core's `motion/glyph.rs`, and `glyph_look` in nana-ui's
+/// `text_atlas.wgsl`) offsets glyphs along physical y whatever the writing
+/// mode, and has no way to offset along x but shake. In vertical-rl text
+/// physical y runs down the column, so those offsets would push each glyph
+/// into its neighbours instead of across the line. Until NanaUI can offset
+/// along a line's cross axis, vertical text keeps each motion's rhythm with
+/// no offset along the column: see [`Flow::entrance`] and [`glyph_effect`].
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum Flow {
+    #[default]
+    Horizontal,
+    /// Vertical-rl, set in a body `em_px` tall.
+    Vertical { em_px: f32 },
+}
+
+impl Flow {
+    /// The entrance a glyph of this flow plays for `kind`: a slide up the
+    /// column would run into the glyph before it, so vertical text fades in.
+    pub fn entrance(self, kind: EntranceKind) -> EntranceKind {
+        match (self, kind) {
+            (Flow::Vertical { .. }, EntranceKind::SlideUp) => EntranceKind::Fade,
+            _ => kind,
+        }
+    }
+}
+
+/// Across a vertical line, a glyph that would be moved `px` over the line
+/// swells instead, `hz` times a second: each in turn (the effect's stagger),
+/// so the motion still travels down the column at its own pace, and the
+/// glyph's edges move by about half of `px`.
+fn swell(px: f32, hz: f32, em_px: f32) -> GlyphEffect {
+    GlyphEffect::pulse(px / em_px.max(1.0)).frequency(hz)
+}
+
+fn glyph_effect(e: &nanatype_model::Continuous, d: &EffectDefaults, flow: Flow) -> GlyphEffect {
     match e.kind {
         ContinuousKind::Shake => {
             GlyphEffect::shake(d.shake_px * e.amp).frequency(d.shake_hz * e.speed)
         }
         ContinuousKind::Wave => {
-            GlyphEffect::wave(d.wave_px * e.amp).frequency(e.speed / d.wave_period_s.max(0.05))
+            let (px, hz) = (d.wave_px * e.amp, e.speed / d.wave_period_s.max(0.05));
+            match flow {
+                Flow::Horizontal => GlyphEffect::wave(px).frequency(hz),
+                Flow::Vertical { em_px } => swell(px, hz, em_px),
+            }
         }
         ContinuousKind::Jump => {
-            GlyphEffect::jump(d.jump_px * e.amp).frequency(e.speed / d.jump_period_s.max(0.05))
+            let (px, hz) = (d.jump_px * e.amp, e.speed / d.jump_period_s.max(0.05));
+            match flow {
+                Flow::Horizontal => GlyphEffect::jump(px).frequency(hz),
+                Flow::Vertical { em_px } => swell(px, hz, em_px),
+            }
         }
         ContinuousKind::Pulse => GlyphEffect::pulse(d.pulse_amount * e.amp)
             .frequency(e.speed / d.pulse_period_s.max(0.05)),
@@ -843,19 +890,27 @@ struct CachedEffects {
     version: usize,
     defaults: EffectDefaults,
     reduced: bool,
+    flow: Flow,
     effects: Arc<[GlyphEffectChain]>,
 }
 static EFFECTS: Mutex<Vec<CachedEffects>> = Mutex::new(Vec::new());
 
 /// Each attribute slot names all its continuous effects, or an empty chain.
-/// Pacing and entrance metadata must never keep a window awake.
-pub fn effect_table(defaults: &EffectDefaults, reduced: bool) -> Arc<[GlyphEffectChain]> {
+/// Pacing and entrance metadata must never keep a window awake. `flow` is
+/// the writing direction of the text the table plays on (see [`Flow`]).
+pub fn effect_table(
+    defaults: &EffectDefaults,
+    reduced: bool,
+    flow: Flow,
+) -> Arc<[GlyphEffectChain]> {
     let table = ATTRS.lock().unwrap_or_else(|e| e.into_inner());
     let mut cache = EFFECTS.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(found) = cache
-        .iter()
-        .find(|c| c.version == table.len() && c.defaults == *defaults && c.reduced == reduced)
-    {
+    if let Some(found) = cache.iter().find(|c| {
+        c.version == table.len()
+            && c.defaults == *defaults
+            && c.reduced == reduced
+            && c.flow == flow
+    }) {
         return found.effects.clone();
     }
     let effects: Arc<[GlyphEffectChain]> = table
@@ -867,7 +922,7 @@ pub fn effect_table(defaults: &EffectDefaults, reduced: bool) -> Arc<[GlyphEffec
                 effects
                     .continuous
                     .iter()
-                    .map(|e| glyph_effect(e, defaults))
+                    .map(|e| glyph_effect(e, defaults, flow))
                     .filter(GlyphEffect::is_effective)
                     .collect()
             })
@@ -881,6 +936,7 @@ pub fn effect_table(defaults: &EffectDefaults, reduced: bool) -> Arc<[GlyphEffec
         version: table.len(),
         defaults: defaults.clone(),
         reduced,
+        flow,
         effects: effects.clone(),
     });
     effects
@@ -2061,10 +2117,10 @@ mod effect_cache_tests {
     fn empty_pacing_and_reduced_effects_are_static_and_tables_are_cached() {
         let pacing = attr_index(&Effects::default(), Pace::FixedMs(33)).unwrap() as usize;
         let defaults = EffectDefaults::default();
-        let table = effect_table(&defaults, false);
+        let table = effect_table(&defaults, false, Flow::Horizontal);
         assert!(table[pacing].0.is_empty());
         let version = attr_version();
-        let cached = effect_table(&defaults, false);
+        let cached = effect_table(&defaults, false, Flow::Horizontal);
         if version == attr_version() && table.len() == version {
             assert!(Arc::ptr_eq(&table, &cached));
         }
@@ -2077,9 +2133,101 @@ mod effect_cache_tests {
             emphasis: None,
         };
         let index = attr_index(&effects, Pace::Inherit).unwrap() as usize;
-        let table = effect_table(&defaults, false);
+        let table = effect_table(&defaults, false, Flow::Horizontal);
         assert_eq!(table[index].0.len(), 2);
-        assert!(effect_table(&defaults, true)[index].0.is_empty());
+        assert!(
+            effect_table(&defaults, true, Flow::Horizontal)[index]
+                .0
+                .is_empty()
+        );
+    }
+
+    /// Wave and jump move a horizontal glyph over its line (physical y). In
+    /// vertical-rl text physical y runs down the column, so there they never
+    /// offset a glyph at all, yet keep playing; everything else, shake
+    /// included (it jitters both axes alike), is the same in either flow.
+    #[test]
+    fn vertical_text_never_pushes_glyphs_along_their_column() {
+        let defaults = EffectDefaults::default();
+        let vertical = Flow::Vertical { em_px: 28. };
+        fn looks(chain: &GlyphEffectChain) -> Vec<nana_ui_core::GlyphSample> {
+            (0..4u32)
+                .flat_map(|ordinal| {
+                    (0..48u64).map(move |i| {
+                        nana_ui_core::evaluate_glyph_chain(
+                            &chain.0,
+                            None,
+                            ordinal,
+                            Duration::from_millis(i * 37),
+                        )
+                    })
+                })
+                .collect()
+        }
+        let moves = |chain: &GlyphEffectChain, axis: usize| {
+            looks(chain)
+                .iter()
+                .any(|look| look.offset[axis].abs() > 1e-3)
+        };
+        let swells = |chain: &GlyphEffectChain| looks(chain).iter().any(|look| look.scale > 1.01);
+        for kind in ContinuousKind::ALL {
+            let effects = Effects {
+                continuous: vec![nanatype_model::Continuous::new(kind)],
+                entrance: None,
+                emphasis: None,
+            };
+            let index = attr_index(&effects, Pace::Inherit).unwrap() as usize;
+            let across = effect_table(&defaults, false, Flow::Horizontal)[index].clone();
+            let down = effect_table(&defaults, false, vertical)[index].clone();
+            assert!(down.is_animated(), "{kind:?} still plays in vertical text");
+            match kind {
+                ContinuousKind::Wave | ContinuousKind::Jump => {
+                    assert!(moves(&across, 1) && !moves(&across, 0), "{kind:?}");
+                    assert!(!moves(&down, 0) && !moves(&down, 1), "{kind:?}: {down:?}");
+                    assert!(swells(&down), "{kind:?} keeps a visible beat: {down:?}");
+                }
+                _ => assert_eq!(across, down, "{kind:?} has no direction"),
+            }
+        }
+        // A skin that turns a motion off turns its vertical stand-in off too.
+        let still = EffectDefaults {
+            wave_px: 0.,
+            ..EffectDefaults::default()
+        };
+        let wave = Effects {
+            continuous: vec![nanatype_model::Continuous::new(ContinuousKind::Wave)],
+            entrance: None,
+            emphasis: None,
+        };
+        let index = attr_index(&wave, Pace::Inherit).unwrap() as usize;
+        assert!(effect_table(&still, false, vertical)[index].0.is_empty());
+    }
+
+    #[test]
+    fn a_vertical_slide_up_entrance_fades_in_place() {
+        let vertical = Flow::Vertical { em_px: 24. };
+        for kind in [
+            EntranceKind::None,
+            EntranceKind::Fade,
+            EntranceKind::Pop,
+            EntranceKind::SlideUp,
+        ] {
+            assert_eq!(Flow::Horizontal.entrance(kind), kind);
+            let plan = RevealPlan {
+                at_ms: vec![Some(100), Some(200)],
+                intro: Entrance {
+                    kind: vertical.entrance(kind),
+                    ms: 200,
+                },
+            };
+            let intro = plan.schedule(Duration::ZERO, 0, false).intro;
+            assert_eq!(intro.rise_px, 0., "{kind:?} never slides along a column");
+            if kind == EntranceKind::SlideUp {
+                assert!(intro.fade && intro.duration_s > 0.);
+            } else {
+                assert_eq!(vertical.entrance(kind), kind);
+            }
+        }
     }
 }
 

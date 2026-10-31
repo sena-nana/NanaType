@@ -32,7 +32,7 @@ use nanatype_theme::{
 
 use super::editor_geometry::Capture;
 use super::overflow;
-use super::rich::{Env, Look, RevealPlan, effect_table, to_rich};
+use super::rich::{Env, Flow, Look, RevealPlan, effect_table, to_rich};
 use super::surface::{self, Surface, affine, calc, len};
 use super::{I18N, Stage, c, restyle};
 
@@ -308,6 +308,19 @@ fn document_on(
             ms: 0,
         };
     }
+    // Directional glyph motion follows the writing direction the line is
+    // mounted in. Untracked: switching it restyles this node, never remounts
+    // it, so a line keeps its motion until the next one.
+    let flow = if base.responsive_text
+        && ui.skin.with_untracked(|skin| {
+            ui.settings
+                .with_untracked(|s| ui.canvas().vertical_text(s, skin))
+        }) {
+        Flow::Vertical { em_px: base.size }
+    } else {
+        Flow::Horizontal
+    };
+    entrance.kind = flow.entrance(entrance.kind);
     let mut reveal = match &timing {
         Timing::Static => None,
         Timing::Reveal(r) => Some(RevealPlan::new(&rich, r, entrance)),
@@ -404,7 +417,10 @@ fn document_on(
                 base.reduced_motion,
             )
         });
-        view = view.presentation_chains(effect_table(&base.effects, base.reduced_motion), schedule);
+        view = view.presentation_chains(
+            effect_table(&base.effects, base.reduced_motion, flow),
+            schedule,
+        );
         if super::materials::enabled(ui)
             && !base.reduced_motion
             && let Some(p) = &mut view.presentation
@@ -1104,7 +1120,12 @@ fn box_view(ui: Stage, ctx: BoxCtx, content: AnyView) -> impl IntoView {
                     l.min_height = Some(LengthSpec::Px(0.));
                 });
             })
-            .children(((source == Source::Display).then(|| reply_quote(ui)), text))
+            // Vertical text reverses the row: the plate heads it at the right.
+            .children((
+                column_nameplate(ui, &ctx),
+                (source == Source::Display).then(|| reply_quote(ui)),
+                text,
+            ))
             .into_any()
     };
     let the_box = the_box.children((input_skin_layer(ui, &ctx, sweep_layer), shaders, text));
@@ -1571,10 +1592,131 @@ fn has_speaker(ui: Stage, ctx: &BoxCtx) -> impl Fn() -> bool + Send + 'static {
     }
 }
 
-fn nameplate(ui: Stage, ctx: &BoxCtx) -> impl IntoView + use<> {
+/// Whether vertical text moves the name plate into its first column.
+///
+/// Skins place their plate for horizontal lines: at the top left, over the
+/// start of the first line. Vertical-rl text starts at the top right, so that
+/// place leaves the name standing on its end at the far side of the box. Such
+/// a plate heads the first column instead ([`column_nameplate`]): at the text
+/// area's right edge, level with the top of the columns, beside the reply
+/// quote and the body. A plate the layout already anchors on the right edge,
+/// where vertical text starts (every built-in portrait layout), keeps its
+/// authored place.
+fn plate_in_column(p: &nanatype_theme::NameplateSpec, vertical: bool) -> bool {
+    vertical && anchor_frac(p.anchor)[0] < 1.0
+}
+
+/// The name's typography, wherever the plate sits.
+fn plate_label_style(ui: Stage, skin: &Skin) -> NodeStyle {
+    let p = &skin.dialogue.nameplate;
+    let mut st = NodeStyle::default();
+    let l = Arc::make_mut(&mut st.layout);
+    l.paint.text_material = super::materials::enabled(ui)
+        .then(|| super::materials::resolve(skin, skin.dialogue.text.material.as_deref()))
+        .flatten();
+    l.font_size = Some(p.size);
+    l.font_weight = Some(skin.fonts.name.weight);
+    l.font_family = skin.fonts.name.families.first().cloned();
+    l.color = Some(c(p.text_color));
+    l.white_space_nowrap = true;
+    if let Some(stroke) = &p.stroke {
+        surface::text_stroke(l, stroke);
+    }
+    if let Some(s) = &p.text_shadow {
+        surface::text_shadow(l, s);
+    }
+    st
+}
+
+/// The name plate heading the first column of vertical text, when
+/// [`plate_in_column`] moves it there; otherwise it takes no room. It is a
+/// child of the text area's row, ahead of the reply quote and the body, so
+/// the columns start after it instead of under it, and nothing the skin
+/// draws around the box (corner ornaments, artwork strips) can cover it.
+fn column_nameplate(ui: Stage, ctx: &BoxCtx) -> AnyView {
+    let ctx = ctx.clone();
+    let label_ctx = ctx.clone();
+    let named = has_speaker(ui, &ctx);
+    let name = speaker(ui, &ctx);
+    // The display's resolved layout (and so the plate) follows its size.
+    let spec = move |ctx: &BoxCtx| {
+        let vertical = ui
+            .settings
+            .with(|s| ui.canvas().vertical_text(s, &ctx.skin));
+        let skin = ctx.resolved(ui).skin;
+        let p = &skin.dialogue.nameplate;
+        let shown = plate_in_column(p, vertical) && p.visible;
+        (skin, shown)
+    };
+    let label_spec = spec;
+    widget(Stack::column(0.0))
+        .key("dialogue-nameplate-column")
+        .bind(move |s: &mut Stack| {
+            let (skin, shown) = spec(&ctx);
+            let shown = shown && named();
+            let p = &skin.dialogue.nameplate;
+            let plate = Surface::nameplate(&skin, p.frame.as_ref().and_then(|f| ctx.url(&f.image)));
+            // The name runs down the plate: its long padding is along the column.
+            let [along, across] = p.padding;
+            let gap = (p.size * 0.5).round().max(6.0);
+            let rotate = p.rotate;
+            *s = plate
+                .stack(Stack::column(0.0).padding_xy(across, along))
+                .with_layout(move |l| {
+                    l.display = Some(if shown {
+                        nana_ui_core::DisplaySpec::Flex
+                    } else {
+                        nana_ui_core::DisplaySpec::None
+                    });
+                    l.align_self = Some(AlignSpec::Start);
+                    l.width = Some(LengthSpec::Shrink);
+                    l.height = Some(LengthSpec::Shrink);
+                    l.flex_grow = Some(0.0);
+                    l.flex_shrink = Some(0.0);
+                    l.min_height = Some(LengthSpec::Px(0.0));
+                    l.max_height = Some(LengthSpec::Percent(100.0));
+                    l.margin_left = Some(LengthSpec::Px(gap));
+                    l.pointer_events = Some(PointerEventsSpec::None);
+                    l.transform = (rotate != 0.0).then(|| affine(0.0, 0.0, rotate, 1.0));
+                });
+        })
+        .children(widget(Text::new("")).bind(move |t: &mut Text| {
+            let (skin, shown) = label_spec(&label_ctx);
+            if shown {
+                let p = &skin.dialogue.nameplate;
+                let mut st = plate_label_style(ui, &skin);
+                let l = Arc::make_mut(&mut st.layout);
+                l.writing_mode = Some(nana_ui_core::WritingModeSpec::VerticalRl);
+                l.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
+                // A long name ends in an ellipsis at the foot of the column.
+                l.max_height = Some(LengthSpec::Px(
+                    (ui.text_area_height.get() - 2.0 * p.padding[0]).max(p.size),
+                ));
+                l.text_overflow_ellipsis = true;
+                if t.style != st {
+                    t.style = st;
+                }
+            }
+            let n = name();
+            if t.value != n {
+                t.value = n;
+            }
+        }))
+        .into_any()
+}
+
+fn nameplate(ui: Stage, ctx: &BoxCtx) -> AnyView {
     let skin = ctx.skin.clone();
     let source = ctx.source;
     let p = skin.dialogue.nameplate.clone();
+    let vertical = source != Source::Draft
+        && ui
+            .settings
+            .with_untracked(|s| ui.canvas().vertical_text(s, &skin));
+    if plate_in_column(&p, vertical) {
+        // `column_nameplate` draws it in the text area.
+        return None::<AnyView>.into_any();
+    }
     // Reserve the corner ornaments' strip for long names. Ordinary names
     // keep their content width; only an overflowing label is ellipsized.
     let artwork_clearance = if skin.has_dialogue_artwork() || skin.dialogue.responsive.is_some() {
@@ -1596,38 +1738,18 @@ fn nameplate(ui: Stage, ctx: &BoxCtx) -> impl IntoView + use<> {
         0.0
     };
     let plate = Surface::nameplate(&skin, p.frame.as_ref().and_then(|f| ctx.url(&f.image)));
-    let mut st = NodeStyle::default();
-    {
+    let mut st = plate_label_style(ui, &skin);
+    if right_clearance > 0.0 || ctx.source != Source::Draft {
         let l = Arc::make_mut(&mut st.layout);
-        l.paint.text_material = super::materials::enabled(ui)
-            .then(|| super::materials::resolve(&skin, skin.dialogue.text.material.as_deref()))
-            .flatten();
-        l.font_size = Some(p.size);
-        l.font_weight = Some(skin.fonts.name.weight);
-        l.font_family = skin.fonts.name.families.first().cloned();
-        l.color = Some(c(p.text_color));
-        l.white_space_nowrap = true;
-        if right_clearance > 0.0 || ctx.source != Source::Draft {
-            l.min_width = Some(LengthSpec::Px(0.0));
-            l.max_width = Some(LengthSpec::Percent(100.0));
-            l.flex_shrink = Some(1.0);
-            l.text_overflow_ellipsis = true;
-        }
-        if let Some(stroke) = &p.stroke {
-            surface::text_stroke(l, stroke);
-        }
-        if let Some(s) = &p.text_shadow {
-            surface::text_shadow(l, s);
-        }
+        l.min_width = Some(LengthSpec::Px(0.0));
+        l.max_width = Some(LengthSpec::Percent(100.0));
+        l.flex_shrink = Some(1.0);
+        l.text_overflow_ellipsis = true;
     }
     let visible = p.visible;
     let name = speaker(ui, ctx);
     let named = has_speaker(ui, ctx);
     let [ox, oy] = p.offset;
-    let vertical = ctx.source != Source::Draft
-        && ui
-            .settings
-            .with_untracked(|s| ui.canvas().vertical_text(s, &skin));
     if vertical {
         let l = Arc::make_mut(&mut st.layout);
         l.writing_mode = Some(nana_ui_core::WritingModeSpec::VerticalRl);
@@ -1669,6 +1791,7 @@ fn nameplate(ui: Stage, ctx: &BoxCtx) -> impl IntoView + use<> {
                 }
             })),
         )
+        .into_any()
 }
 
 fn portrait(ui: Stage, ctx: &BoxCtx) -> impl IntoView + use<> {
@@ -2189,6 +2312,100 @@ mod decor_tests {
                 }
             }
         }
+    }
+
+    /// Vertical-rl text starts at the top right: the name plate heads the
+    /// first column there, whole and upright beside the body, and goes back
+    /// over the first line when the switch is off.
+    #[test]
+    fn vertical_text_heads_its_first_column_with_the_name_plate() {
+        use nana_ui::runtime::{DocumentId, RuntimeDocument};
+        use nana_ui_devtools::agent::RuntimeAgentSession;
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let mut failures = Vec::new();
+        for entry in registry.entries() {
+            let skin = registry.load(&entry.id).unwrap().skin;
+            // The display window's default size.
+            let [w, h] = skin
+                .dialogue
+                .region
+                .map(|v| (v + 2.0 * skin.dialogue.overscan) as u32);
+            let ui = Stage::new(
+                Arc::new(nanatype_settings::Settings::default()),
+                skin.clone(),
+                nanatype_i18n::Locale::ZhCn,
+            );
+            let text = nanatype_markup::parse("晚上好！今天也谢谢你来～").doc;
+            ui.display.update(|v| {
+                let v = Arc::make_mut(v);
+                v.empty = false;
+                v.reveal = Reveal::full(text.unit_count() as u32);
+                v.doc = Arc::new(text);
+                v.speaker.name = "奈奈".into();
+            });
+            let id = DocumentId::new(1).unwrap();
+            let mut doc = RuntimeDocument::new(id);
+            doc.context_mut()
+                .mount_view_root(id, move || dialogue_box(ui, Source::Display, None))
+                .unwrap();
+            let mut session = RuntimeAgentSession::new(doc, w, h).unwrap();
+            for vertical in [true, false, true] {
+                ui.settings
+                    .update(|s| Arc::make_mut(s).overlays.display.vertical_text = vertical);
+                session.flush().unwrap();
+                let resolved =
+                    nanatype_theme::responsive_dialogue(&skin, [w as f32, h as f32]).dialogue;
+                let p = &resolved.nameplate;
+                if !p.visible {
+                    continue;
+                }
+                let plates: Vec<_> = session
+                    .accessibility_dump()
+                    .into_iter()
+                    .filter(|n| n.label.as_deref() == Some("奈奈"))
+                    .collect();
+                assert_eq!(plates.len(), 1, "{}: one name plate", entry.id);
+                let name = plates[0].bounds.clone();
+                let port = session
+                    .document()
+                    .context()
+                    .world()
+                    .layout_box(ui.text_port.get_untracked().unwrap())
+                    .unwrap();
+                let mut check = |ok: bool, what: &str| {
+                    if !ok {
+                        failures.push(format!(
+                            "{} vertical={vertical}: {what}: name={name:?} body={port:?}",
+                            entry.id
+                        ));
+                    }
+                };
+                if !vertical {
+                    check(
+                        name.y + name.height <= port.y + 2.,
+                        "a horizontal plate stays over the first line",
+                    );
+                    continue;
+                }
+                if anchor_frac(p.anchor)[0] >= 1.0 {
+                    // Anchored where vertical text starts, as authored.
+                    continue;
+                }
+                check(
+                    name.height >= p.size * 1.8 && name.width < p.size * 1.6,
+                    "the whole name runs down the plate",
+                );
+                check(
+                    name.x >= port.x + port.width - 1.,
+                    "the plate heads the columns from the right",
+                );
+                check(
+                    (name.y - port.y).abs() <= p.padding[0] + p.size * 0.5 + 2.,
+                    "the name starts level with the columns",
+                );
+            }
+        }
+        assert!(failures.is_empty(), "{failures:#?}");
     }
 
     #[test]
