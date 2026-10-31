@@ -1536,9 +1536,13 @@ const RESAMPLE: nana_ui_core::PaintTransform = nana_ui_core::PaintTransform {
 /// takes the bilinear footprint sampler, which interpolates when magnifying and
 /// averages taps when shrinking; at this transform it lands on the same raster
 /// step and pixels as no transform at all.
+///
+/// `flow` is the one the effect table was built for: across a vertical line a
+/// wave or a jump swells its glyphs too (see [`glyph_effect`]).
 pub fn glyph_resampling(
     doc: &Document,
     presentation: &nana_ui_core::GlyphPresentation,
+    flow: Flow,
 ) -> Option<nana_ui_core::PaintTransform> {
     let pops = presentation
         .reveal
@@ -1547,7 +1551,7 @@ pub fn glyph_resampling(
     // The effect table holds every interned combination, so ask the document
     // whether it pulses and the table whether a pulse survives (reduced motion
     // and a zero amount leave none).
-    let pulses = doc_pulses(doc)
+    let pulses = doc_pulses(doc, flow)
         && presentation.effect_chains.iter().any(|chain| {
             chain
                 .0
@@ -1557,12 +1561,19 @@ pub fn glyph_resampling(
     (pops || pulses).then_some(RESAMPLE)
 }
 
-fn doc_pulses(doc: &Document) -> bool {
+fn doc_pulses(doc: &Document, flow: Flow) -> bool {
+    let swells = |kind| match flow {
+        Flow::Horizontal => kind == ContinuousKind::Pulse,
+        Flow::Vertical { .. } => matches!(
+            kind,
+            ContinuousKind::Pulse | ContinuousKind::Wave | ContinuousKind::Jump
+        ),
+    };
     let pulse = |effects: &Effects| {
         effects
             .continuous
             .iter()
-            .any(|e| e.kind == ContinuousKind::Pulse && e.amp != 0.0)
+            .any(|e| swells(e.kind) && e.amp != 0.0)
     };
     doc.paragraphs.iter().any(|p| {
         p.inlines.iter().any(|i| match i {
@@ -1677,29 +1688,43 @@ mod tests {
             editor: false,
             locale: Locale::ZhCn,
         };
-        let chains = |doc: &Document, reduced: bool| {
+        let across = Flow::Horizontal;
+        let chains = |doc: &Document, reduced: bool, flow: Flow| {
             // Interning happens while the document becomes rich text.
             to_rich(doc, &env);
-            GlyphPresentation::chains(effect_table(&defaults, reduced), None)
+            GlyphPresentation::chains(effect_table(&defaults, reduced, flow), None)
         };
         let pulse = nanatype_markup::parse("[pulse]脉动 Pulse[/pulse]").doc;
         let wave = nanatype_markup::parse("[wave]波浪 Wave[/wave]").doc;
-        let t = glyph_resampling(&pulse, &chains(&pulse, false)).expect("pulse scales glyphs");
+        let t = glyph_resampling(&pulse, &chains(&pulse, false, across), across)
+            .expect("pulse scales glyphs");
         // Not a translation, which is what earns bilinear sampling, yet within
         // a hundredth of a pixel of the identity across a 4K-wide box.
         assert!(t.a != 1.0 && t.d != 1.0 && t.b == 0.0 && t.c == 0.0);
         assert!((1.0 - t.a) * 4096.0 < 0.01 && t.e == 0.0 && t.f == 0.0);
         // Moving and recolouring glyphs keep their exact texels.
-        assert_eq!(glyph_resampling(&wave, &chains(&wave, false)), None);
+        assert_eq!(
+            glyph_resampling(&wave, &chains(&wave, false, across), across),
+            None
+        );
+        // Down a vertical line a wave swells its glyphs instead of moving them.
+        let down = Flow::Vertical { em_px: 28.0 };
+        assert_eq!(
+            glyph_resampling(&wave, &chains(&wave, false, down), down),
+            Some(t)
+        );
         // Reduced motion and a zero amount leave nothing to resample.
-        assert_eq!(glyph_resampling(&pulse, &chains(&pulse, true)), None);
+        assert_eq!(
+            glyph_resampling(&pulse, &chains(&pulse, true, across), across),
+            None
+        );
         let still = EffectDefaults {
             pulse_amount: 0.0,
             ..EffectDefaults::default()
         };
         to_rich(&pulse, &env);
-        let none = GlyphPresentation::chains(effect_table(&still, false), None);
-        assert_eq!(glyph_resampling(&pulse, &none), None);
+        let none = GlyphPresentation::chains(effect_table(&still, false, across), None);
+        assert_eq!(glyph_resampling(&pulse, &none, across), None);
         // A pop entrance grows each glyph from half its size.
         let plain = nanatype_markup::parse("出现 Appear").doc;
         let rich = to_rich(&plain, &env);
@@ -1712,9 +1737,9 @@ mod tests {
             )
         };
         let pop = GlyphPresentation::chains(Arc::from([]), Some(plan(EntranceKind::Pop)));
-        assert_eq!(glyph_resampling(&plain, &pop), Some(t));
+        assert_eq!(glyph_resampling(&plain, &pop, across), Some(t));
         let fade = GlyphPresentation::chains(Arc::from([]), Some(plan(EntranceKind::Fade)));
-        assert_eq!(glyph_resampling(&plain, &fade), None);
+        assert_eq!(glyph_resampling(&plain, &fade, across), None);
     }
 
     fn look() -> Look {

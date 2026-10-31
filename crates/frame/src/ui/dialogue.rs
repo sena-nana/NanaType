@@ -437,7 +437,7 @@ fn document_on(
         if let Some(t) = view
             .presentation
             .as_ref()
-            .and_then(|p| super::rich::glyph_resampling(doc, p))
+            .and_then(|p| super::rich::glyph_resampling(doc, p, flow))
         {
             Arc::make_mut(&mut view.style.layout).transform = Some(t);
         }
