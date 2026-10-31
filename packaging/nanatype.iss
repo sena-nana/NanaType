@@ -33,7 +33,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; Inno Setup ships Chinese only as an unofficial translation; a copy is kept in packaging\inno.
+Name: "chinesesimplified"; MessagesFile: "inno\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 
