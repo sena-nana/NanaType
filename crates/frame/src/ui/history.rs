@@ -387,7 +387,15 @@ fn history_row(ui: Stage, key: u64) -> Option<HistoryRow> {
     ui.history.with_untracked(|rows| rows.get(at).cloned())
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Rows built on this thread, to tell a rebuild from a kept row.
+    static ROWS_BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
+    #[cfg(test)]
+    ROWS_BUILT.set(ROWS_BUILT.get() + 1);
     let skin = super::materials::render_skin(ui, ui.skin.get_untracked());
     let settings = ui.settings.get_untracked();
     let h = skin.history.clone();
@@ -879,6 +887,40 @@ pub fn fade_schedule(ui: Stage, now: u64) -> FadeSchedule {
     })
 }
 
+/// The settings the history window reads while it builds its rows; the
+/// rest (sound, hotkeys, integrations, the dialogue's own window...) never
+/// changes what the log shows.
+#[derive(Clone, PartialEq)]
+struct LogSettings {
+    history: nanatype_settings::HistorySettings,
+    lock: nanatype_settings::Lock,
+    size: Option<[f32; 2]>,
+    entrance: Option<nanatype_model::EntranceKind>,
+    typing: bool,
+    advanced_effects: bool,
+    motion: bool,
+    skin: String,
+    overrides: nanatype_settings::SkinOverrides,
+    personalization: Option<nanatype_settings::SkinPersonalization>,
+}
+
+impl LogSettings {
+    fn of(s: &Arc<nanatype_settings::Settings>) -> Self {
+        Self {
+            history: s.history.clone(),
+            lock: s.overlays.history.lock,
+            size: s.overlays.history.size,
+            entrance: s.playback.entrance,
+            typing: s.playback.typing,
+            advanced_effects: s.skin.advanced_effects,
+            motion: s.skin.motion,
+            skin: s.skin.id.clone(),
+            overrides: s.skin.overrides.clone(),
+            personalization: s.skin.personalizations.get(&s.skin.id).cloned(),
+        }
+    }
+}
+
 pub fn history_window(ui: Stage) -> impl IntoView {
     history_window_with(ui, || widget(Stack::column(0.)).into_any())
 }
@@ -897,12 +939,15 @@ pub fn history_window_with(
         let shown = items.get();
         ui.history.with(|rows| follow_ups(rows, &shown))
     });
+    // Rebuilding mounts every row anew, so only what the log is drawn from
+    // rebuilds it: not every edit, which replaces the whole settings value.
     let key = move || {
         let skin = ui.skin.get();
-        let settings = ui.settings.get();
         (
             Arc::as_ptr(&skin) as usize,
-            Arc::as_ptr(&settings) as usize,
+            ui.settings.with(LogSettings::of),
+            ui.locale.get(),
+            ui.reduced_motion.get(),
             ui.history_width.get(),
             ui.history_height.get(),
         )
@@ -1535,6 +1580,53 @@ mod tests {
         let mid = bubbles(&mut session, 5_060);
         let done = bubbles(&mut session, 5_600);
         assert_eq!(mid, done, "a resize lands at once");
+    }
+
+    #[test]
+    fn changing_a_setting_keeps_the_rows_on_screen() {
+        // The log overflows and has slid up for new rows a few times.
+        let (ui, mut session) = motion_log(300, 200, 3, 30);
+        bubbles(&mut session, 1_000);
+        for (key, at) in [(4, 1_000), (5, 2_000), (6, 3_000)] {
+            push_row(ui, &mut session, key, at);
+            bubbles(&mut session, at + 600);
+        }
+        let before = bubbles(&mut session, 5_000);
+        // The app replaces the whole settings value on every edit.
+        let edit = |session: &mut nana_ui_devtools::agent::RuntimeAgentSession,
+                    at: u64,
+                    change: fn(&mut nanatype_settings::Settings)| {
+            ui.settings.update(|s| {
+                let mut next = (**s).clone();
+                change(&mut next);
+                *s = Arc::new(next);
+            });
+            let t = std::time::Duration::from_millis(at);
+            session.document_mut().context_mut().advance_animations(t);
+            crate::clock::capture_at(at, || session.flush().unwrap());
+        };
+        // A setting the log does not draw from neither rebuilds its rows
+        // (every row would mount anew) nor moves them.
+        let built = ROWS_BUILT.get();
+        edit(&mut session, 5_000, |s| s.sound.master = 0.5);
+        edit(&mut session, 5_000, |s| {
+            s.overlays.display.always_on_top ^= true
+        });
+        assert_eq!(
+            ROWS_BUILT.get(),
+            built,
+            "unrelated settings rebuilt the rows"
+        );
+        let mid = bubbles(&mut session, 5_060);
+        let done = bubbles(&mut session, 5_600);
+        assert_eq!(
+            mid, before,
+            "rows on screen stay put: {before:?} -> {mid:?}"
+        );
+        assert_eq!(done, before);
+        // One it does draw from still reaches the rows.
+        edit(&mut session, 6_000, |s| s.history.show_time = true);
+        assert!(ROWS_BUILT.get() > built, "the log ignored its own setting");
     }
 
     #[test]
