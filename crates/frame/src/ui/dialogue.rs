@@ -416,6 +416,13 @@ fn document_on(
                 p.transitions.entrance = None;
             }
         }
+        if let Some(t) = view
+            .presentation
+            .as_ref()
+            .and_then(|p| super::rich::glyph_resampling(doc, p))
+        {
+            Arc::make_mut(&mut view.style.layout).transform = Some(t);
+        }
     }
     let doc = doc.clone();
     let look = look.clone();
