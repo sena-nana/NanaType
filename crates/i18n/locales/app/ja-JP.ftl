@@ -958,6 +958,7 @@ speech-start = 音声入力を開始
 speech-stop = 音声入力を停止
 speech-resume = 認識を再開
 speech-settings = 音声入力の設定
+speech-options = 音声入力のオプション
 speech-starting = 音声認識を準備中…
 speech-listening = 聞き取り中
 speech-recognizing = 認識中…

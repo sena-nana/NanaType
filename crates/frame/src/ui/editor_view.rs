@@ -260,6 +260,15 @@ pub fn editor_area<M: Send + 'static>(
                 }
             })
             .bind(move |a: &mut TextArea| {
+                // The theme's faint default selection hardly shows on the field.
+                let selection = Some(nana_ui_core::PaintColor::srgb(kit::theme::selection(
+                    ui.chrome_dark.get(),
+                )));
+                if a.style.layout.paint_colors.selection_background != selection {
+                    Arc::make_mut(&mut a.style.layout)
+                        .paint_colors
+                        .selection_background = selection;
+                }
                 let completions = ui.source_completions.get();
                 if a.completions != completions {
                     a.completions = completions;

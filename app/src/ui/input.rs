@@ -19,7 +19,8 @@ use nana_ui::runtime::{
 use nana_ui::theme::space;
 use nana_ui::{ButtonKind, ControlSize, PopoverPlacement};
 use nana_ui_core::{
-    AlignSpec, JustifySpec, LengthSpec, OverflowSpec, PositionSpec, SemanticColorRole, SquareSize,
+    AlignSpec, JustifySpec, LengthSpec, OverflowSpec, PointerEventsSpec, PositionSpec,
+    SemanticColorRole, SquareSize,
 };
 use nanatype_core::Cmd;
 use nanatype_model::{
@@ -64,13 +65,49 @@ const GLYPH: f32 = 14.0;
 /// Icon-button hit target.
 const TARGET: f32 = 28.0;
 
+/// The side of its button a tool's tooltip hangs on.
+///
+/// Never NanaUI's default, which follows the cursor: the tip goes above the
+/// pointer, and flips below only when the flipped tip fits across as well as
+/// down. At the window's top-right corner (the rail's first icon, the chat
+/// pin) neither side fits across, so the tip stays above, and being clamped
+/// into the window puts it right under the pointer. The pointer is then over
+/// the tip, not the button: the tip closes, the button is hovered again, the
+/// tip reopens — it blinks on every move. A tip on a side of the button never
+/// covers the button, so it cannot take the pointer from it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Tip {
+    /// Under the button (above it where the window has no room): bars at the
+    /// top of the window.
+    Below,
+    /// Over the button: bars at the bottom of the window.
+    Above,
+    /// To the button's left (right where there is no room): the rail at the
+    /// window's right edge.
+    Left,
+}
+
+impl Tip {
+    fn config(self) -> nana_ui::TooltipConfig {
+        use nana_ui::TooltipPlacement as P;
+        nana_ui::TooltipConfig {
+            placement: match self {
+                Tip::Below => P::Bottom,
+                Tip::Above => P::Top,
+                Tip::Left => P::Left,
+            },
+            ..Default::default()
+        }
+    }
+}
+
 /// A toolbar icon button: the shared glyph size in a 28px square, in the
-/// toolbar ink.
-fn tool_button(icon: nana_ui::runtime::Icon, label: String, tip: String) -> IconButton {
+/// toolbar ink, its tooltip on the `side` given.
+fn tool_button(icon: nana_ui::runtime::Icon, label: String, tip: String, side: Tip) -> IconButton {
     // Large is the size whose glyph is GLYPH; the square stays 28px.
     let mut b = IconButton::new(icon, label)
         .size(ControlSize::Large)
-        .with_tooltip(tip);
+        .tooltip(tip, side.config());
     b.style.square = Some(SquareSize::IconButton);
     b
 }
@@ -88,9 +125,10 @@ fn tool(
     ui: Ui,
     icon: nana_ui::runtime::Icon,
     label: &'static str,
+    side: Tip,
     msg: impl Fn() -> Msg + Send + 'static,
 ) -> AnyView {
-    widget(tool_button(icon, ui.now_t(label), ui.now_t(label)))
+    widget(tool_button(icon, ui.now_t(label), ui.now_t(label), side))
         .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
         .into_any()
 }
@@ -109,6 +147,7 @@ fn toggle(
         icon,
         ui.now_t(label),
         with_shortcut(ui.now_t(label), keys),
+        Tip::Below,
     ))
     .bind(move |b: &mut IconButton| {
         let on = !ui.source_mode.get() && ui.sel_attrs.with(pressed);
@@ -142,10 +181,11 @@ fn is_strike(a: &RichSelectionAttrs) -> bool {
 pub(super) fn pressed_tool(
     icon: nana_ui::runtime::Icon,
     label: String,
+    side: Tip,
     on: impl Fn() -> bool + Send + 'static,
     msg: impl Fn() -> Msg + Send + 'static,
 ) -> nana_ui::runtime::view::El<IconButton> {
-    widget(tool_button(icon, label.clone(), label))
+    widget(tool_button(icon, label.clone(), label, side))
         .bind(move |b: &mut IconButton| {
             let on = on();
             if b.selected != on {
@@ -160,6 +200,7 @@ fn source_toggle(ui: Ui) -> AnyView {
     pressed_tool(
         ti::CODE,
         ui.now_t("tb-source"),
+        Tip::Below,
         move || ui.source_mode.get(),
         || Msg::ToggleSource,
     )
@@ -169,53 +210,67 @@ fn source_toggle(ui: Ui) -> AnyView {
 /// Shows the draft as the skin draws it, or as plain text.
 fn skin_preview_toggle(ui: Ui) -> AnyView {
     let on = move || ui.settings.with(|s| s.general.input_skin_preview);
-    pressed_tool(ti::EYE, ui.now_t("input-skin-preview"), on, move || {
-        let on = !ui.settings.with_untracked(|s| s.general.input_skin_preview);
-        super::settings::controls::edit(move |s| s.general.input_skin_preview = on)
-    })
+    pressed_tool(
+        ti::EYE,
+        ui.now_t("input-skin-preview"),
+        Tip::Below,
+        on,
+        move || {
+            let on = !ui.settings.with_untracked(|s| s.general.input_skin_preview);
+            super::settings::controls::edit(move |s| s.general.input_skin_preview = on)
+        },
+    )
     .key("input-skin-preview-toggle")
     .into_any()
 }
 
-/// A menu trigger's face: the bare glyph, centred in the box left after the
-/// trigger's own `space::LG` padding, so the hit target stays [`TARGET`].
-/// That box is narrower than the glyph, and an overflowing row aligns to its
-/// start, so the face is glyph-wide and reaches into the padding by half the
-/// overflow on each side.
-fn trigger_face(icon: nana_ui::runtime::Icon) -> AnyView {
-    let inner = TARGET - 2.0 * space::LG;
-    let reach = -(GLYPH - inner) / 2.0;
-    widget(
-        Stack::row(0.0)
-            .align(AlignSpec::Center)
-            .justify(JustifySpec::Center)
-            .with_layout(move |l| {
-                l.width = Some(LengthSpec::Px(GLYPH));
-                l.min_width = Some(LengthSpec::Px(GLYPH));
-                l.margin_left = Some(LengthSpec::Px(reach));
-                l.margin_right = Some(LengthSpec::Px(reach));
-                l.height = Some(LengthSpec::Px(GLYPH));
-                l.flex_shrink = Some(0.0);
-                l.overflow_x = OverflowSpec::Visible;
-                l.overflow_y = OverflowSpec::Visible;
-            }),
-    )
-    .children(widget(IconGlyph::new(icon).size(GLYPH).decorative()))
-    .into_any()
+/// A menu trigger's face: a [`tool_button`] that opens and closes `open`.
+///
+/// NanaUI only gives an `IconButton` a tooltip; a popover or menu trigger has
+/// none. So the trigger is drawn by this button (the popover's trigger content,
+/// fitted to it): the pointer rests on the button, which shows the tip, and
+/// takes the press, which toggles `open` as the popover's own trigger would.
+fn trigger_button(
+    icon: nana_ui::runtime::Icon,
+    label: String,
+    tip: Tip,
+    open: Signal<bool>,
+) -> nana_ui::runtime::view::El<IconButton> {
+    opens(tool_button(icon, label.clone(), label, tip), open)
+}
+
+/// `button` as the trigger of the popover `open` keeps. Its tooltip is put
+/// away while the popover is open: it would hang over the surface, and as
+/// the topmost overlay it would take the Escape meant to close the popover.
+fn opens(button: IconButton, open: Signal<bool>) -> nana_ui::runtime::view::El<IconButton> {
+    let tooltip = button.tooltip.clone();
+    widget(button)
+        .bind(move |b: &mut IconButton| {
+            let tip = if open.get() { None } else { tooltip.clone() };
+            if b.tooltip != tip {
+                b.tooltip = tip;
+            }
+        })
+        .on(move |_: &Activate| {
+            let next = !open.get_untracked();
+            open.set(next);
+        })
 }
 
 /// A popover whose open state the app keeps, so items can close it.
 pub(super) fn popover(
     icon: nana_ui::runtime::Icon,
     label: String,
+    tip: Tip,
     width: f32,
     open: Signal<bool>,
     body: impl IntoView,
 ) -> AnyView {
-    popover_with(trigger_face(icon), label, width, open, body)
+    let face = trigger_button(icon, label.clone(), tip, open).into_any();
+    popover_with(face, label, width, open, body)
 }
 
-/// [`popover`] behind its own face.
+/// [`popover`] behind its own face, which fills the trigger.
 fn popover_with(
     face: AnyView,
     label: String,
@@ -228,6 +283,7 @@ fn popover_with(
             .trigger(label)
             .placement(PopoverPlacement::Bottom)
             .width(width)
+            .compact_trigger(true)
             .bare_trigger(true),
     )
     .trigger(face)
@@ -255,8 +311,10 @@ fn menu(
     open: Signal<bool>,
     items: Vec<AnyView>,
 ) -> AnyView {
-    widget(ActionMenu::new().trigger(label).bare_trigger(true))
-        .trigger(trigger_face(icon))
+    let mut menu = ActionMenu::new().trigger(label.clone()).bare_trigger(true);
+    menu.popover.compact_trigger = true;
+    widget(menu)
+        .trigger(trigger_button(icon, label, Tip::Below, open))
         .bind(move |m: &mut ActionMenu| m.popover.open = open.get())
         .on(move |e: &PopoverToggled| open.set(e.open))
         .on(move |_: &PopoverClosed| open.set(false))
@@ -886,31 +944,23 @@ pub fn cheat_sheet(ui: Ui) -> AnyView {
 }
 
 /// The colour tool's face: the glyph over a bar in the selection's colour.
-fn color_face(ui: Ui) -> AnyView {
+/// The glyph is a [`trigger_button`], so the face has its tooltip; the bar
+/// lies over the button and lets the pointer through to it.
+fn color_face(ui: Ui, open: Signal<bool>) -> AnyView {
     const BAR_H: f32 = 3.0;
-    let inner = TARGET - 2.0 * space::LG;
-    let reach = -(GLYPH - inner) / 2.0;
-    widget(
-        Stack::column(0.0)
-            .align(AlignSpec::Center)
-            .justify(JustifySpec::Center)
-            .with_layout(move |l| {
-                l.width = Some(LengthSpec::Px(GLYPH));
-                l.min_width = Some(LengthSpec::Px(GLYPH));
-                l.margin_left = Some(LengthSpec::Px(reach));
-                l.margin_right = Some(LengthSpec::Px(reach));
-                l.height = Some(LengthSpec::Px(GLYPH));
-                l.flex_shrink = Some(0.0);
-                l.overflow_x = OverflowSpec::Visible;
-                l.overflow_y = OverflowSpec::Visible;
-            }),
-    )
+    let label = ui.now_t("tb-color");
+    let glyph = opens(
+        tool_button(ti::LETTER_A, label.clone(), label, Tip::Below).icon_size(GLYPH - BAR_H),
+        open,
+    );
+    widget(Stack::row(0.0).with_layout(|l| {
+        l.position = PositionSpec::Relative;
+        l.width = Some(LengthSpec::Px(TARGET));
+        l.height = Some(LengthSpec::Px(TARGET));
+        l.flex_shrink = Some(0.0);
+    }))
     .children((
-        widget(
-            IconGlyph::new(ti::LETTER_A)
-                .size(GLYPH - BAR_H)
-                .decorative(),
-        ),
+        glyph,
         widget(Stack::row(0.0).radius(nana_ui_core::RadiusTier::Xs)).bind(move |s: &mut Stack| {
             let attrs = ui.sel_attrs.get();
             let colors = crate::ui::kit::theme::palette(ui.chrome_dark.get());
@@ -923,6 +973,11 @@ fn color_face(ui: Ui) -> AnyView {
                 }
             };
             let l = s.layout_mut();
+            // Under the glyph, which the button centres.
+            l.position = PositionSpec::Absolute;
+            l.offset_left = Some(LengthSpec::Px((TARGET - (GLYPH - 2.0)) / 2.0));
+            l.offset_top = Some(LengthSpec::Px((TARGET + GLYPH - BAR_H) / 2.0));
+            l.pointer_events = Some(PointerEventsSpec::None);
             l.width = Some(LengthSpec::Px(GLYPH - 2.0));
             l.height = Some(LengthSpec::Px(BAR_H));
             l.flex_shrink = Some(0.0);
@@ -1000,7 +1055,7 @@ fn toolbar(ui: Ui) -> AnyView {
         ];
         let typography = vec![
             popover_with(
-                color_face(ui),
+                color_face(ui, color_open),
                 t("tb-color"),
                 crate::ui::kit::popover::MD,
                 color_open,
@@ -1009,6 +1064,7 @@ fn toolbar(ui: Ui) -> AnyView {
             popover(
                 ti::TEXT_SIZE,
                 t("tb-size"),
+                Tip::Below,
                 crate::ui::kit::popover::MD,
                 size_open,
                 size_panel(ui, size_open),
@@ -1016,6 +1072,7 @@ fn toolbar(ui: Ui) -> AnyView {
             popover(
                 ti::TYPOGRAPHY,
                 t("tb-font"),
+                Tip::Below,
                 crate::ui::kit::popover::LG,
                 font_open,
                 font_panel(ui, font_open),
@@ -1023,6 +1080,7 @@ fn toolbar(ui: Ui) -> AnyView {
             popover(
                 ti::ALIGN_CENTER,
                 t("tb-align"),
+                Tip::Below,
                 crate::ui::kit::popover::SM,
                 align_open,
                 alignment_panel(ui, align_open),
@@ -1032,6 +1090,7 @@ fn toolbar(ui: Ui) -> AnyView {
             popover(
                 ti::BORDER_OUTER,
                 t("tb-stroke"),
+                Tip::Below,
                 crate::ui::kit::popover::MD,
                 stroke_open,
                 stroke_panel(ui, stroke_open),
@@ -1039,15 +1098,20 @@ fn toolbar(ui: Ui) -> AnyView {
             popover(
                 ti::LANGUAGE_HIRAGANA,
                 t("tb-ruby"),
+                Tip::Below,
                 crate::ui::kit::popover::MD,
                 ruby_open,
                 ruby_panel(ui, ruby_open),
             ),
         ];
         let clear = || {
-            tool(ui, ti::CLEAR_FORMATTING, "tb-clear-format", || {
-                act(Tool::ClearFormat)
-            })
+            tool(
+                ui,
+                ti::CLEAR_FORMATTING,
+                "tb-clear-format",
+                Tip::Below,
+                || act(Tool::ClearFormat),
+            )
         };
         if compact {
             // The popovers of folded tools stay mounted, invisible and out of
@@ -1095,6 +1159,7 @@ fn toolbar(ui: Ui) -> AnyView {
             popover(
                 ti::HELP,
                 t("tb-cheatsheet"),
+                Tip::Below,
                 crate::ui::kit::popover::SHEET,
                 help_open,
                 cheat_sheet(ui),

@@ -617,6 +617,7 @@ fn header(ui: Ui) -> AnyView {
         super::input::popover(
             ti::FILTER,
             ui.now_t("chat-filter"),
+            super::input::Tip::Below,
             crate::ui::kit::popover::LG,
             signal(false),
             filters(ui),
@@ -624,6 +625,7 @@ fn header(ui: Ui) -> AnyView {
         super::input::pressed_tool(
             ti::PINNED,
             ui.now_t("chat-pin"),
+            super::input::Tip::Below,
             move || ui.input_dock.with(|d| d.chat_pinned),
             move || {
                 // Shown at once; the app keeps it.

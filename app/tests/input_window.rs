@@ -1199,3 +1199,225 @@ fn sticker_packs_sit_above_the_grid_filter_search_and_accept_folder_drops() {
         );
     }
 }
+
+/// Hovers the centre of `node` past its tooltip's delay, `moves` times, and
+/// says after each move whether its tooltip shows.
+fn tooltip_while_hovering(
+    session: &mut RuntimeAgentSession,
+    node: &AccessibilityDumpNode,
+    moves: u64,
+) -> Vec<bool> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    // Far ahead of `settle`'s clock, so every frame here is past the delay.
+    static CLOCK: AtomicU64 = AtomicU64::new(1_000_000_000);
+    let (x, y) = (
+        node.bounds.x + node.bounds.width / 2.0,
+        node.bounds.y + node.bounds.height / 2.0,
+    );
+    (0..moves)
+        .map(|i| {
+            // The pointer trembles over the button, as a hand's does.
+            let dx = (i % 2) as f32 * 0.5;
+            session
+                .pointer_event(nana_ui::PointerPhase::Move, x + dx, y, -1, 0)
+                .unwrap();
+            session.flush().unwrap();
+            let now = Duration::from_millis(CLOCK.fetch_add(16, Ordering::Relaxed));
+            session.document_mut().context_mut().advance_animations(now);
+            session.document_mut().sync_presentation_clock(now);
+            session.flush().unwrap();
+            // "Bold · Ctrl+B": a tip may say more than the button's name.
+            let label = node.label.as_deref().unwrap_or_default();
+            session.accessibility_dump().iter().any(|n| {
+                n.role == "tooltip" && n.label.as_deref().is_some_and(|t| t.starts_with(label))
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn tooltips_at_the_top_right_corner_stay_open_under_the_pointer() {
+    // The rail's first icon and the chat pin sit where a tip that followed
+    // the cursor fit neither above it nor across: clamped into the window it
+    // covered the pointer, and shut and reopened on every move.
+    for locale in [Locale::ZhCn, Locale::EnUs] {
+        let ui = Ui::new(
+            Arc::new(Settings::default()),
+            common::skin("nanatype.halo"),
+            locale,
+        );
+        ui.input_dock.update(|d| d.chat_pinned = true);
+        let mut session =
+            common::session()
+                .themed(false)
+                .locale(locale)
+                .mount(1200, 640, move || input::input_window(ui));
+        settle(&mut session);
+        for key in [
+            "input-dock-rail-controls",
+            "input-dock-rail-stickers",
+            "input-chat-pin",
+        ] {
+            let node = keyed(&session, key);
+            let shown = tooltip_while_hovering(&mut session, &node, 12);
+            assert!(
+                shown.iter().all(|&s| s),
+                "{locale:?} {key}: tooltip shown per move {shown:?}"
+            );
+            let tip = session
+                .accessibility_dump()
+                .into_iter()
+                .find(|n| n.role == "tooltip")
+                .unwrap()
+                .bounds;
+            let b = &node.bounds;
+            let (x, y) = (b.x + b.width / 2.0, b.y + b.height / 2.0);
+            assert!(
+                !(x >= tip.x && x <= tip.x + tip.width && y >= tip.y && y <= tip.y + tip.height),
+                "{locale:?} {key}: {tip:?} covers its button {b:?}"
+            );
+            assert!(tip.x >= 0.0 && tip.x + tip.width <= 1200.0 && tip.y >= 0.0);
+            session.hover_xy(600.0, 300.0).unwrap();
+            settle(&mut session);
+        }
+    }
+}
+
+#[test]
+fn every_icon_in_the_toolbar_and_footer_has_a_tooltip() {
+    let ui = Ui::new(
+        Arc::new(Settings::default()),
+        common::skin("nanatype.halo"),
+        Locale::ZhCn,
+    );
+    let mut session = common::session()
+        .themed(false)
+        .mount(1200, 640, move || input::input_window(ui));
+    settle(&mut session);
+    let check = |session: &mut RuntimeAgentSession, keys: &[&str]| {
+        for key in keys {
+            let label = ui.now_t(key);
+            let node = session
+                .accessibility_dump()
+                .into_iter()
+                .find(|n| n.role == "button" && n.label.as_deref() == Some(&label))
+                .unwrap_or_else(|| panic!("no button {label}"));
+            let shown = tooltip_while_hovering(session, &node, 2);
+            assert!(shown.iter().all(|&s| s), "{key}: {shown:?}");
+            session.hover_xy(10.0, 200.0).unwrap();
+            settle(session);
+        }
+    };
+    check(
+        &mut session,
+        &[
+            "tb-bold",
+            "tb-italic",
+            "tb-underline",
+            "tb-strike",
+            "tb-color",
+            "tb-size",
+            "tb-font",
+            "tb-align",
+            "tb-stroke",
+            "tb-ruby",
+            "tb-clear-format",
+            "input-skin-preview",
+            "tb-source",
+            "tb-cheatsheet",
+            "input-management",
+            "settings-speech",
+            "speech-options",
+            "window-settings",
+        ],
+    );
+    // A narrow window folds the type tools into "…" and the mode switch into
+    // a popover; both icons have tips too.
+    session.set_viewport(520, 360, 1.0).unwrap();
+    settle(&mut session);
+    check(&mut session, &["tb-more", "tray-mode"]);
+}
+
+#[test]
+fn a_popover_icon_opens_its_panel_and_puts_its_tooltip_away_meanwhile() {
+    let ui = Ui::new(
+        Arc::new(Settings::default()),
+        common::skin("nanatype.halo"),
+        Locale::ZhCn,
+    );
+    let mut session = common::session()
+        .themed(false)
+        .mount(1200, 640, move || input::input_window(ui));
+    settle(&mut session);
+    let size = ui.now_t("tb-size");
+    let panel = ui.now_t("tb-apply-relative");
+    let open = |session: &RuntimeAgentSession| {
+        session
+            .accessibility_dump()
+            .iter()
+            .any(|n| n.label.as_deref() == Some(&panel))
+    };
+    let tip = |session: &RuntimeAgentSession| {
+        session
+            .accessibility_dump()
+            .iter()
+            .any(|n| n.role == "tooltip" && n.label.as_deref() == Some(&size))
+    };
+    let icon = session
+        .accessibility_dump()
+        .into_iter()
+        .find(|n| n.role == "button" && n.label.as_deref() == Some(&size))
+        .unwrap();
+    click_node(&mut session, icon.clone());
+    settle(&mut session);
+    assert!(open(&session), "the icon opens its popover");
+    assert!(!tip(&session), "no tooltip over the open popover");
+    // Escape reaches the popover, not a tooltip in front of it.
+    session
+        .key_press("Escape", "Escape", Default::default())
+        .unwrap();
+    settle(&mut session);
+    assert!(!open(&session), "Escape closes it");
+    click_node(&mut session, icon.clone());
+    assert!(open(&session));
+    click_node(&mut session, icon);
+    assert!(!open(&session), "the icon closes it again");
+}
+
+#[test]
+fn the_footer_mode_switch_changes_the_input_mode() {
+    use nanatype::msg::Msg;
+    use nanatype_settings::InputMode;
+    for (from, to, key) in [
+        (InputMode::Compose, InputMode::Mirror, "mode-mirror-short"),
+        (InputMode::Mirror, InputMode::Compose, "mode-compose-short"),
+    ] {
+        let mut settings = Settings::default();
+        settings.general.input_mode = from;
+        let ui = Ui::new(
+            Arc::new(settings.clone()),
+            common::skin("nanatype.halo"),
+            Locale::ZhCn,
+        );
+        let mut session = common::session()
+            .themed(false)
+            .mount(1200, 640, move || input::input_window(ui));
+        settle(&mut session);
+        session.document_mut().context_mut().take_program_messages();
+        let label = ui.now_t(key);
+        let option = session
+            .accessibility_dump()
+            .into_iter()
+            .find(|n| n.label.as_deref() == Some(&label))
+            .unwrap_or_else(|| panic!("no option {label}"));
+        click_node(&mut session, option);
+        for m in session.document_mut().context_mut().take_program_messages() {
+            if let Ok(m) = m.downcast::<Msg>()
+                && let Msg::Edit(edit) = *m
+            {
+                edit(&mut settings);
+            }
+        }
+        assert_eq!(settings.general.input_mode, to, "{label}");
+    }
+}
