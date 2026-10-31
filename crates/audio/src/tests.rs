@@ -167,3 +167,141 @@ fn keys_bus_has_its_own_gain() {
 }
 
 use crate::mixer;
+use crate::supervise::{self, Fault, Supervisor};
+
+fn lost() -> Fault {
+    Fault::Lost("device not available".into())
+}
+
+#[test]
+fn a_missing_device_is_reported_once_then_retried_quietly_with_backoff() {
+    let mut s = Supervisor::default();
+    let (report, first) = s.open_failed("no audio output device".into());
+    assert_eq!(
+        report,
+        Some(AudioStatus::Failed("no audio output device".into()))
+    );
+    let mut last = first;
+    for _ in 0..20 {
+        let (report, wait) = s.open_failed("no audio output device".into());
+        assert_eq!(report, None, "the failure is already on screen");
+        assert!(wait >= last, "the delay never shrinks");
+        last = wait;
+    }
+    assert_eq!(last, supervise::BACKOFF_MAX);
+    assert!(first < Duration::from_secs(1), "the first retry is quick");
+}
+
+#[test]
+fn a_lost_device_is_reported_once_even_when_reopening_keeps_failing() {
+    let mut s = Supervisor::default();
+    let t0 = Instant::now();
+    s.opened(t0, false);
+    let (report, wait) = s.stream_failed(t0 + supervise::STABLE, lost()).unwrap();
+    assert!(matches!(report, Some(AudioStatus::Lost(_))));
+    assert_eq!(wait, supervise::FIRST_RETRY);
+    let (report, _) = s.open_failed("no audio output device".into());
+    assert_eq!(report, None, "losing it and failing to reopen is one story");
+}
+
+#[test]
+fn a_stream_that_keeps_dying_right_away_is_not_reported_each_time() {
+    let mut s = Supervisor::default();
+    let mut now = Instant::now();
+    s.opened(now, false);
+    now += supervise::STABLE;
+    let (report, _) = s.stream_failed(now, lost()).unwrap();
+    assert!(report.is_some());
+    let mut waits = Vec::new();
+    for _ in 0..6 {
+        s.opened(now, false);
+        now += Duration::from_millis(50);
+        let (report, wait) = s.stream_failed(now, lost()).unwrap();
+        assert_eq!(report, None);
+        waits.push(wait);
+    }
+    assert!(waits.windows(2).all(|w| w[0] <= w[1]), "{waits:?}");
+    assert!(*waits.last().unwrap() > supervise::FIRST_RETRY);
+}
+
+#[test]
+fn a_stream_that_played_steadily_makes_the_next_loss_news() {
+    let mut s = Supervisor::default();
+    let t0 = Instant::now();
+    s.open_failed("no audio output device".into());
+    s.open_failed("no audio output device".into());
+    s.opened(t0, false);
+    let (report, wait) = s.stream_failed(t0 + supervise::STABLE, lost()).unwrap();
+    assert!(matches!(report, Some(AudioStatus::Lost(_))));
+    assert_eq!(wait, supervise::FIRST_RETRY, "the backoff starts over");
+}
+
+#[test]
+fn glitches_keep_the_stream_and_reroutes_rebuild_it_quietly() {
+    let mut s = Supervisor::default();
+    let t0 = Instant::now();
+    s.opened(t0, false);
+    assert_eq!(s.stream_failed(t0, Fault::Glitch), None);
+    let (report, wait) = s
+        .stream_failed(t0 + supervise::STABLE, Fault::Rerouted)
+        .unwrap();
+    assert_eq!(report, None, "a new default device is not an error");
+    assert_eq!(wait, supervise::FIRST_RETRY);
+    // A reroute that then fails to reopen is reported.
+    let (report, _) = s.open_failed("no audio output device".into());
+    assert!(matches!(report, Some(AudioStatus::Failed(_))));
+}
+
+#[test]
+fn choosing_a_device_makes_its_trouble_news_again() {
+    let mut s = Supervisor::default();
+    assert!(s.open_failed("busy".into()).0.is_some());
+    assert!(s.open_failed("busy".into()).0.is_none());
+    s.reset();
+    let (report, wait) = s.open_failed("busy".into());
+    assert!(report.is_some());
+    assert_eq!(wait, supervise::FIRST_RETRY);
+}
+
+#[test]
+fn the_chosen_device_is_looked_for_while_the_default_stands_in() {
+    let mut s = Supervisor::default();
+    let t0 = Instant::now();
+    assert_eq!(
+        s.opened(t0, false),
+        None,
+        "no fallback, nothing to look for"
+    );
+    assert_eq!(s.opened(t0, true), Some(supervise::PREFERRED_POLL));
+    // It is back but still does not open: look less often.
+    s.preferred_back();
+    assert_eq!(s.opened(t0, true), Some(supervise::PREFERRED_POLL * 2));
+    for _ in 0..10 {
+        s.preferred_back();
+    }
+    assert_eq!(s.opened(t0, true), Some(supervise::PREFERRED_POLL_MAX));
+    // It opened: the next fallback looks quickly again.
+    assert_eq!(s.opened(t0, false), None);
+    assert_eq!(s.opened(t0, true), Some(supervise::PREFERRED_POLL));
+}
+
+#[test]
+fn cpal_errors_are_sorted_by_what_they_mean_for_the_stream() {
+    use cpal::ErrorKind as K;
+    let fault = |k| supervise::classify(&cpal::Error::new(k));
+    assert_eq!(fault(K::Xrun), Fault::Glitch);
+    assert_eq!(fault(K::DeviceChanged), Fault::Glitch);
+    assert_eq!(fault(K::RealtimeDenied), Fault::Glitch);
+    assert_eq!(fault(K::StreamInvalidated), Fault::Rerouted);
+    assert!(matches!(fault(K::DeviceNotAvailable), Fault::Lost(_)));
+    assert!(matches!(fault(K::BackendError), Fault::Lost(_)));
+}
+
+#[test]
+fn backoff_grows_and_caps() {
+    assert_eq!(supervise::backoff(0), supervise::FIRST_RETRY);
+    assert_eq!(supervise::backoff(1), supervise::FIRST_RETRY);
+    assert_eq!(supervise::backoff(2), Duration::from_secs(1));
+    assert_eq!(supervise::backoff(3), Duration::from_secs(2));
+    assert_eq!(supervise::backoff(u32::MAX), supervise::BACKOFF_MAX);
+}
