@@ -1154,6 +1154,9 @@ impl RuntimeProgram for Host {
     type Error = String;
 
     fn initialize(context: &RuntimeProgramContext<Msg>) -> Result<(Self, Vec<Msg>), String> {
+        // Windows keep presenting while a light plays, so its pipeline can
+        // compile without holding the first frame that draws one.
+        crate::ui::text_light::compile_off_thread();
         let app = App::new(context);
         let mut host = Self {
             app,

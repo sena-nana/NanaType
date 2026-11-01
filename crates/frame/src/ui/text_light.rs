@@ -14,7 +14,7 @@ use nana_ui::{
 use nana_ui_core::{LengthSpec, PointerEventsSpec, PositionSpec};
 use nanatype_theme::TextLightSpec;
 use std::collections::HashMap;
-use std::sync::{Arc, LazyLock, Mutex, Weak};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock, Weak};
 
 const RENDERER: &str = "nanatype.text-light";
 const HIDDEN: u32 = 0xff_ffff;
@@ -441,7 +441,7 @@ struct Prepared {
 type Placements = HashMap<(DeviceGeneration, u64, [u32; 2]), (f32, [f32; 2], [f32; 2])>;
 #[derive(Debug, Default)]
 struct State {
-    pipelines: HashMap<PipelineKey, Pipeline>,
+    pipelines: HashMap<PipelineKey, Arc<OnceLock<Pipeline>>>,
     masks: HashMap<MaskKey, Prepared>,
     placements: Placements,
 }
@@ -605,84 +605,16 @@ impl State {
             self.masks.clear();
         }
         let device = c.gpu.wgpu().device();
-        let pipeline = self.pipelines.entry(pk).or_insert_with(|| {
-            let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("text light"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                ],
-            });
-            let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("text light"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("text_light.wgsl").into()),
-            });
-            let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("text light"),
-                bind_group_layouts: &[Some(&layout)],
-                immediate_size: 0,
-            });
-            let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("text light"),
-                layout: Some(&pl),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vertex_main"),
-                    buffers: &[],
-                    compilation_options: Default::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some("fragment_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: c.target_format.wgpu(),
-                        blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                primitive: Default::default(),
-                depth_stencil: None,
-                multisample: Default::default(),
-                multiview_mask: None,
-                cache: None,
-            });
-            Pipeline { pipeline, layout }
-        });
+        let compile = self
+            .pipelines
+            .entry(pk)
+            .or_insert_with(|| {
+                let off_thread = OFF_THREAD.load(std::sync::atomic::Ordering::Relaxed);
+                compile(device, c.target_format.wgpu(), off_thread)
+            })
+            .clone();
+        // Still compiling: this frame goes without its light.
+        let pipeline = compile.get()?;
         let data = raster(&geometry, size, scale);
         let glow_data = glow_mask(&data, size, light.spec.radius * scale * 0.35);
         let bytes = data.len() * 2;
@@ -758,6 +690,117 @@ impl State {
         self.masks.get_mut(&key)
     }
 }
+/// Compile the light's pipeline off the UI thread from now on: the driver
+/// takes a noticeable moment the first time a light is drawn, and that frame
+/// would stall every window. For the hosted app, whose frames keep coming
+/// while a light plays; offscreen renders compile on the frame that draws it.
+pub fn compile_off_thread() {
+    OFF_THREAD.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+static OFF_THREAD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The pipeline for `format`, ready now or, `off_thread`, once its thread
+/// finishes.
+fn compile(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    off_thread: bool,
+) -> Arc<OnceLock<Pipeline>> {
+    let slot = Arc::new(OnceLock::new());
+    if off_thread {
+        let (done, device) = (Arc::clone(&slot), device.clone());
+        let spawned = std::thread::Builder::new()
+            .name("nanatype.text-light-compile".into())
+            .spawn(move || {
+                let _ = done.set(build_pipeline(&device, format));
+            });
+        if spawned.is_ok() {
+            return slot;
+        }
+    }
+    let _ = slot.set(build_pipeline(device, format));
+    slot
+}
+
+fn build_pipeline(device: &wgpu::Device, format: wgpu::TextureFormat) -> Pipeline {
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("text light"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+        ],
+    });
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("text light"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("text_light.wgsl").into()),
+    });
+    let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("text light"),
+        bind_group_layouts: &[Some(&layout)],
+        immediate_size: 0,
+    });
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("text light"),
+        layout: Some(&pl),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vertex_main"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fragment_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: Default::default(),
+        depth_stencil: None,
+        multisample: Default::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+    Pipeline { pipeline, layout }
+}
+
 fn material(node: &SceneGpuNode) -> Option<Arc<Light>> {
     LIVE.get(
         node.custom
@@ -898,5 +941,30 @@ impl SceneGpuRenderer for Renderer {
         raw.set_bind_group(0, &binding.group, &[]);
         raw.draw(0..6, 0..1);
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn off_thread_the_pipeline_arrives_later_and_in_place_at_once() {
+        let painter = nana_ui_devtools::offscreen::OffscreenSnapshots::new().unwrap();
+        let device = painter.gpu.wgpu().device();
+        let format = wgpu::TextureFormat::Bgra8Unorm;
+        assert!(
+            compile(device, format, false).get().is_some(),
+            "an offscreen render compiles on the frame that draws the light"
+        );
+        let slot = compile(device, format, true);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        while slot.get().is_none() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the pipeline never arrived"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
     }
 }
