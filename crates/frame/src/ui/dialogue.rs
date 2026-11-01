@@ -2791,10 +2791,15 @@ mod sticker_reveal_tests {
             "fading in with the text: {seen:?}"
         );
         assert!(seen[3].0 == 1.0 && seen[3].1 > 0, "in: {seen:?}");
-        // An entrance material (crayon's "write") brings it in on time too.
-        let seen = sticker_seen("nanatype.crayon", &[1150, 1450]);
+        // An entrance material (crayon's "write") brings it in on time too,
+        // fading over the material: a host texture cannot carry its mask.
+        let seen = sticker_seen("nanatype.crayon", &[1150, 1250, 1450]);
         assert_eq!(seen[0], (0.0, 0), "not reached yet: {seen:?}");
-        assert!(seen[1].0 == 1.0 && seen[1].1 > 0, "in: {seen:?}");
+        assert!(
+            seen[1].0 > 0.0 && seen[1].0 < 1.0,
+            "fading in with the material: {seen:?}"
+        );
+        assert!(seen[2].0 == 1.0 && seen[2].1 > 0, "in: {seen:?}");
     }
 }
 
