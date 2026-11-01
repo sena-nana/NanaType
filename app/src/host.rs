@@ -98,17 +98,18 @@ fn skin_fps(ui: crate::ui::Ui) -> u32 {
 /// NanaType itself, or NanaUI for per-glyph reveals and effects and
 /// compositor layers, which would otherwise play at its own 120 Hz.
 ///
-/// The display windows and the input window play the skin's animation at
-/// the skin frame rate, and their glyph motion keeps to it too. The history
+/// The display windows play the skin's animation at the skin frame rate, and
+/// their glyph motion keeps to it too. The input window is one the user works
+/// in: its hovers, popovers and caret keep to 60 FPS even under a 30 FPS
+/// skin, and only its glyph motion loses the frames above that. The history
 /// window replays the same lines; it keeps the 60 FPS its own row motion has
 /// always asked for, so rows rise and fade as smoothly as before whatever
 /// the skin rate, while glyph motion in it no longer runs at twice that. The
 /// settings and quick windows are left as they ask.
 fn max_frame_rate(kind: Option<WindowKind>, skin_fps: u32) -> Option<NonZeroU32> {
     match kind? {
-        WindowKind::Display | WindowKind::PeerDisplay | WindowKind::Input => {
-            NonZeroU32::new(skin_fps)
-        }
+        WindowKind::Display | WindowKind::PeerDisplay => NonZeroU32::new(skin_fps),
+        WindowKind::Input => NonZeroU32::new(INPUT_FPS),
         WindowKind::History => NonZeroU32::new(HISTORY_FPS),
         WindowKind::Settings | WindowKind::Quick => None,
     }
@@ -116,6 +117,8 @@ fn max_frame_rate(kind: Option<WindowKind>, skin_fps: u32) -> Option<NonZeroU32>
 
 /// The history window's own row motion and its frame ceiling.
 const HISTORY_FPS: u32 = 60;
+/// The input window's frame ceiling, which its interface motion keeps to.
+const INPUT_FPS: u32 = 60;
 
 fn frame_policy(
     ui: crate::ui::Ui,
@@ -2117,13 +2120,10 @@ mod redraw_tests {
     fn glyph_motion_keeps_to_each_windows_frame_rate() {
         let rate = |kind, fps| max_frame_rate(kind, fps).map(NonZeroU32::get);
         for fps in nanatype_settings::SKIN_FRAME_RATES {
-            for kind in [
-                WindowKind::Display,
-                WindowKind::PeerDisplay,
-                WindowKind::Input,
-            ] {
+            for kind in [WindowKind::Display, WindowKind::PeerDisplay] {
                 assert_eq!(rate(Some(kind), fps), Some(fps), "{kind:?}");
             }
+            assert_eq!(rate(Some(WindowKind::Input), fps), Some(INPUT_FPS));
             assert_eq!(rate(Some(WindowKind::History), fps), Some(HISTORY_FPS));
             assert_eq!(rate(Some(WindowKind::Settings), fps), None);
             assert_eq!(rate(Some(WindowKind::Quick), fps), None);
