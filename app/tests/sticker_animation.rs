@@ -81,7 +81,9 @@ fn cached_animation_changes_pixels_without_relayout_and_respects_motion_and_visi
     writer
         .set_repeat(image::codecs::gif::Repeat::Finite(1))
         .unwrap();
-    for color in [[255, 0, 0, 255], [0, 255, 0, 255]] {
+    // The second frame's mid-level green paints back as the same sRGB byte only
+    // when the frame is sampled as linear light.
+    for color in [[255, 0, 0, 255], [0, 119, 0, 255]] {
         writer
             .encode_frame(image::Frame::from_parts(
                 image::RgbaImage::from_pixel(32, 32, image::Rgba(color)),
@@ -159,7 +161,7 @@ fn cached_animation_changes_pixels_without_relayout_and_respects_motion_and_visi
             .as_chunks::<4>()
             .0
             .iter()
-            .filter(|p| p[1] > 240 && p[0] < 10 && p[3] > 240)
+            .filter(|p| p[1].abs_diff(119) <= 2 && p[0] < 10 && p[3] > 240)
             .count()
             > 1000
     );

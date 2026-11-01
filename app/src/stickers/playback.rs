@@ -236,7 +236,9 @@ fn texture(gpu: &GpuContext, image: &image::RgbaImage) -> Result<GpuTexture, Str
             label: Some("sticker frame"),
             width: image.width(),
             height: image.height(),
-            format: GpuTextureFormat::RGBA8_UNORM,
+            // Scene samples a host texture as premultiplied linear light: the
+            // sRGB view decodes what `premultiply_linear` stored.
+            format: GpuTextureFormat::RGBA8_UNORM_SRGB,
             usage: GpuTextureUsages::SAMPLED | GpuTextureUsages::COPY_DST,
         })
         .map_err(|e| e.to_string())?;
@@ -245,11 +247,7 @@ fn texture(gpu: &GpuContext, image: &image::RgbaImage) -> Result<GpuTexture, Str
 }
 fn upload(gpu: &GpuContext, texture: &GpuTexture, image: &image::RgbaImage) -> Result<(), String> {
     let mut pixels = image.as_raw().clone();
-    for pixel in pixels.as_chunks_mut::<4>().0 {
-        for i in 0..3 {
-            pixel[i] = ((u16::from(pixel[i]) * u16::from(pixel[3]) + 127) / 255) as u8;
-        }
-    }
+    premultiply_linear(&mut pixels);
     gpu.write_texture(
         texture,
         GpuTextureRegion {
@@ -262,4 +260,59 @@ fn upload(gpu: &GpuContext, texture: &GpuTexture, image: &image::RgbaImage) -> R
         image.width() * 4,
     )
     .map_err(|e| e.to_string())
+}
+
+/// Straight-alpha sRGB bytes to sRGB-encoded premultiplied linear light, so
+/// an sRGB view samples premultiplied linear colour. Opaque texels keep their
+/// bytes; only partially covered ones are weighted in linear light.
+fn premultiply_linear(pixels: &mut [u8]) {
+    static DECODE: std::sync::OnceLock<[f32; 256]> = std::sync::OnceLock::new();
+    let decode = DECODE.get_or_init(|| {
+        std::array::from_fn(|i| {
+            let v = i as f32 / 255.0;
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        })
+    });
+    let encode = |v: f32| {
+        let v = if v <= 0.003_130_8 {
+            v * 12.92
+        } else {
+            1.055 * v.powf(1.0 / 2.4) - 0.055
+        };
+        (v * 255.0 + 0.5) as u8
+    };
+    for pixel in pixels.as_chunks_mut::<4>().0 {
+        match pixel[3] {
+            255 => {}
+            0 => pixel[..3].fill(0),
+            a => {
+                let a = f32::from(a) / 255.0;
+                for c in &mut pixel[..3] {
+                    *c = encode(decode[usize::from(*c)] * a);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::premultiply_linear;
+
+    #[test]
+    fn premultiplies_in_linear_light() {
+        let mut pixels = [
+            119, 60, 200, 255, // opaque: bytes unchanged
+            200, 10, 90, 0, // transparent: colour cleared
+            255, 255, 255, 128, // half-covered white: half its light
+        ];
+        premultiply_linear(&mut pixels);
+        assert_eq!(pixels[..8], [119, 60, 200, 255, 0, 0, 0, 0]);
+        // OETF(128 / 255) is 188, where a gamma-space premultiply gives 128.
+        assert_eq!(pixels[8..], [188, 188, 188, 128]);
+    }
 }
