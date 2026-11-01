@@ -86,6 +86,37 @@ impl FramePolicy {
     }
 }
 
+/// The skin frame rate setting, within the rates it offers.
+fn skin_fps(ui: crate::ui::Ui) -> u32 {
+    let [slow, fast] = nanatype_settings::SKIN_FRAME_RATES;
+    ui.settings
+        .with_untracked(|s| s.skin.frame_rate)
+        .clamp(slow, fast)
+}
+
+/// The fastest a window of `kind` presents, whoever asks for the frames:
+/// NanaType itself, or NanaUI for per-glyph reveals and effects and
+/// compositor layers, which would otherwise play at its own 120 Hz.
+///
+/// The display windows and the input window play the skin's animation at
+/// the skin frame rate, and their glyph motion keeps to it too. The history
+/// window replays the same lines; it keeps the 60 FPS its own row motion has
+/// always asked for, so rows rise and fade as smoothly as before whatever
+/// the skin rate, while glyph motion in it no longer runs at twice that. The
+/// settings and quick windows are left as they ask.
+fn max_frame_rate(kind: Option<WindowKind>, skin_fps: u32) -> Option<NonZeroU32> {
+    match kind? {
+        WindowKind::Display | WindowKind::PeerDisplay | WindowKind::Input => {
+            NonZeroU32::new(skin_fps)
+        }
+        WindowKind::History => NonZeroU32::new(HISTORY_FPS),
+        WindowKind::Settings | WindowKind::Quick => None,
+    }
+}
+
+/// The history window's own row motion and its frame ceiling.
+const HISTORY_FPS: u32 = 60;
+
 fn frame_policy(
     ui: crate::ui::Ui,
     kind: Option<WindowKind>,
@@ -94,10 +125,7 @@ fn frame_policy(
     peer_follows: &[overflow::Follow],
     pager: &overflow::Pager,
 ) -> FramePolicy {
-    let skin_fps = ui
-        .settings
-        .with_untracked(|s| s.skin.frame_rate)
-        .clamp(30, 60);
+    let skin_fps = skin_fps(ui);
     let (clock, tick_clock, render_only, next_at, fps) = match kind {
         Some(WindowKind::Display | WindowKind::PeerDisplay) => {
             let remote = kind == Some(WindowKind::PeerDisplay);
@@ -149,7 +177,13 @@ fn frame_policy(
         }
         Some(WindowKind::History) => {
             let fade = history::fade_schedule(*ui, now);
-            (ui.history_now, fade.animating, false, fade.next_at, 60)
+            (
+                ui.history_now,
+                fade.animating,
+                false,
+                fade.next_at,
+                HISTORY_FPS,
+            )
         }
         Some(WindowKind::Settings) => {
             let preview = crate::ui::preview::animating(*ui, now);
@@ -1649,6 +1683,10 @@ impl RuntimeProgram for Host {
         }
     }
 
+    fn max_frame_rate(&self, id: WindowId) -> Option<NonZeroU32> {
+        max_frame_rate(WindowKind::from_id(id), skin_fps(self.app.ui))
+    }
+
     fn sync_animation_clock(&mut self, epoch: Instant) {
         self.animation_clock = Some(nana_ui::RuntimeAnimationClock::new(epoch));
     }
@@ -2073,6 +2111,40 @@ mod redraw_tests {
             &pager,
         );
         assert!(matches!(policy.demand, FrameDemand::Continuous(_)) && !policy.tick_clock);
+    }
+
+    #[test]
+    fn glyph_motion_keeps_to_each_windows_frame_rate() {
+        let rate = |kind, fps| max_frame_rate(kind, fps).map(NonZeroU32::get);
+        for fps in nanatype_settings::SKIN_FRAME_RATES {
+            for kind in [
+                WindowKind::Display,
+                WindowKind::PeerDisplay,
+                WindowKind::Input,
+            ] {
+                assert_eq!(rate(Some(kind), fps), Some(fps), "{kind:?}");
+            }
+            assert_eq!(rate(Some(WindowKind::History), fps), Some(HISTORY_FPS));
+            assert_eq!(rate(Some(WindowKind::Settings), fps), None);
+            assert_eq!(rate(Some(WindowKind::Quick), fps), None);
+        }
+        assert_eq!(rate(None, 60), None);
+    }
+
+    #[test]
+    fn the_frame_ceiling_follows_the_skin_frame_rate_setting() {
+        for (setting, fps) in [(30, 30), (60, 60), (144, 60), (0, 30)] {
+            let mut settings = nanatype_settings::Settings::default();
+            settings.skin.frame_rate = setting;
+            let ui = crate::ui::Ui::new(
+                Arc::new(settings),
+                Arc::new(nanatype_theme::Skin::default()),
+                nanatype_i18n::Locale::ZhCn,
+            );
+            assert_eq!(skin_fps(ui), fps, "{setting}");
+            let host_rate = max_frame_rate(Some(WindowKind::Display), skin_fps(ui));
+            assert_eq!(host_rate.map(NonZeroU32::get), Some(fps));
+        }
     }
 
     #[test]
