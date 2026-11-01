@@ -295,7 +295,7 @@ fn rail_button(ui: Ui, tab: Tab) -> AnyView {
             }
         });
     }
-    widget(tool_button(icon, label.clone(), label))
+    widget(tool_button(icon, label.clone(), label, Tip::Left))
         .entity_ref(target)
         .key(format!("input-dock-rail-{}", tab_key(tab)))
         .bind(move |b: &mut IconButton| {
@@ -344,7 +344,7 @@ fn rail(ui: Ui) -> AnyView {
                 } else {
                     (ti::LAYOUT_SIDEBAR_RIGHT_COLLAPSE, "dock-collapse")
                 };
-                widget(tool_button(icon, ui.now_t(key), ui.now_t(key)))
+                widget(tool_button(icon, ui.now_t(key), ui.now_t(key), Tip::Left))
                     .key("input-dock-fold")
                     .on_cx(move |_, _: &Activate, cx| {
                         let d = ui.input_dock.get_untracked();
@@ -495,19 +495,24 @@ fn phrases(ui: Ui) -> AnyView {
     .into_any()
 }
 
+/// Compose or mirror. Each option hears its own [`SegmentedOptionChosen`]:
+/// `SegmentedSelectionRequested` goes to the control, never to an option, so
+/// a handler for it on an option never runs.
+///
+/// [`SegmentedOptionChosen`]: nana_ui::runtime::SegmentedOptionChosen
 fn modes(ui: Ui, mode: InputMode) -> AnyView {
     widget(SegmentedControl::new().size(ControlSize::Small))
         .children((
             segmented_option(ui.now_t("mode-compose-short"))
                 .selected(mode == InputMode::Compose)
-                .on_cx(|_, _: &nana_ui::runtime::SegmentedSelectionRequested, cx| {
+                .on_cx(|_, _: &nana_ui::runtime::SegmentedOptionChosen, cx| {
                     cx.dispatch_program_all(Msg::Edit(Box::new(|s: &mut Settings| {
                         s.general.input_mode = InputMode::Compose
                     })))
                 }),
             segmented_option(ui.now_t("mode-mirror-short"))
                 .selected(mode == InputMode::Mirror)
-                .on_cx(|_, _: &nana_ui::runtime::SegmentedSelectionRequested, cx| {
+                .on_cx(|_, _: &nana_ui::runtime::SegmentedOptionChosen, cx| {
                     cx.dispatch_program_all(Msg::Edit(Box::new(|s: &mut Settings| {
                         s.general.input_mode = InputMode::Mirror
                     })))
@@ -531,6 +536,7 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                 popover(
                     ti::ADJUSTMENTS,
                     ui.now_t("tray-mode"),
+                    Tip::Above,
                     crate::ui::kit::popover::SM,
                     signal(false),
                     modes(ui, mode),
@@ -556,6 +562,7 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                 popover(
                     ti::USERS,
                     ui.now_t("input-management"),
+                    Tip::Above,
                     crate::ui::kit::popover::LG,
                     ui.peer_popover,
                     widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
@@ -569,12 +576,14 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                 pressed_tool(
                     ti::MICROPHONE,
                     ui.now_t("settings-speech"),
+                    Tip::Above,
                     move || ui.speech.with(|s| s.phase.active()),
                     || Msg::SpeechToggle,
                 ),
                 popover(
                     ti::CHEVRON_DOWN,
-                    ui.now_t("settings-speech"),
+                    ui.now_t("speech-options"),
+                    Tip::Above,
                     crate::ui::kit::popover::LG,
                     signal(false),
                     widget(Stack::column(0.0).gap_step(gap::step::CONTROL)).children((
@@ -585,7 +594,9 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                         }),
                     )),
                 ),
-                tool(ui, ti::SETTINGS, "window-settings", || Msg::OpenSettings),
+                tool(ui, ti::SETTINGS, "window-settings", Tip::Above, || {
+                    Msg::OpenSettings
+                }),
                 super::super::sources::account_button(ui),
                 widget(
                     Button::new(ui.now_t("tb-send"))

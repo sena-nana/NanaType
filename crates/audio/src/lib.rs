@@ -10,6 +10,7 @@
 mod decode;
 mod engine;
 mod mixer;
+mod supervise;
 
 pub use decode::{DecodeError, Pcm, decode};
 pub use engine::{AudioEngine, AudioError, AudioHandle, AudioStatus, list_devices};

@@ -147,6 +147,9 @@ impl RuntimeProgram for Probe {
     fn frame_demand(&self, id: WindowId) -> FrameDemand {
         self.inner.frame_demand(id)
     }
+    fn max_frame_rate(&self, id: WindowId) -> Option<std::num::NonZeroU32> {
+        self.inner.max_frame_rate(id)
+    }
     fn prepare_window_frame(&mut self, id: WindowId, context: &RuntimeProgramContext<Msg>) {
         self.inner.prepare_window_frame(id, context)
     }

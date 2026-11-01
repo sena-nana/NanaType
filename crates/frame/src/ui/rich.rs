@@ -1455,6 +1455,70 @@ impl RevealPlan {
     }
 }
 
+/// One part in a million short of the identity: 0.004 px across a box 4000
+/// px wide, and still not a translation.
+const RESAMPLE: nana_ui_core::PaintTransform = nana_ui_core::PaintTransform {
+    a: 1.0 - 1.0 / 1_048_576.0,
+    b: 0.0,
+    c: 0.0,
+    d: 1.0 - 1.0 / 1_048_576.0,
+    e: 0.0,
+    f: 0.0,
+};
+
+/// The paint transform for `doc`'s rich text node when its glyphs change
+/// size on screen (a pulse, a pop entrance), so they are resampled smoothly.
+///
+/// NanaUI scales such a glyph's quad about its centre in the text vertex
+/// stage, but keeps the bitmap rasterized at the glyph's laid-out size, and a
+/// run whose transform is a plain translation samples its atlas texels with
+/// nearest filtering: only a non-translation run gets `RUN_LINEAR`
+/// (`nana-ui` `scene_paint/text/mod.rs`, `prepare_text`). A pulse magnifies the
+/// bitmap by up to `1 + amount`, and nearest sampling then doubles whole texel
+/// rows and columns: stair-stepped edges that crawl as the glyph breathes. A
+/// pop that shrinks it skips texels instead. Under any other transform the run
+/// takes the bilinear footprint sampler, which interpolates when magnifying and
+/// averages taps when shrinking; at this transform it lands on the same raster
+/// step and pixels as no transform at all.
+pub fn glyph_resampling(
+    doc: &Document,
+    presentation: &nana_ui_core::GlyphPresentation,
+) -> Option<nana_ui_core::PaintTransform> {
+    let pops = presentation
+        .reveal
+        .as_ref()
+        .is_some_and(|r| r.intro.pop && r.intro.duration_s > 0.0);
+    // The effect table holds every interned combination, so ask the document
+    // whether it pulses and the table whether a pulse survives (reduced motion
+    // and a zero amount leave none).
+    let pulses = doc_pulses(doc)
+        && presentation.effect_chains.iter().any(|chain| {
+            chain
+                .0
+                .iter()
+                .any(|e| e.kind == nana_ui_core::GlyphEffectKind::Pulse && e.is_effective())
+        });
+    (pops || pulses).then_some(RESAMPLE)
+}
+
+fn doc_pulses(doc: &Document) -> bool {
+    let pulse = |effects: &Effects| {
+        effects
+            .continuous
+            .iter()
+            .any(|e| e.kind == ContinuousKind::Pulse && e.amp != 0.0)
+    };
+    doc.paragraphs.iter().any(|p| {
+        p.inlines.iter().any(|i| match i {
+            Inline::Text(r) => pulse(&r.effects),
+            Inline::Ruby(r) => pulse(&r.base.effects),
+            Inline::Mention(m) => pulse(&m.effects),
+            // Objects are drawn as images, already filtered.
+            Inline::Atom(_) | Inline::Marker(_) => false,
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1543,6 +1607,58 @@ mod tests {
                 .latin
                 .is_none()
         );
+    }
+
+    #[test]
+    fn scaled_glyphs_get_a_transform_that_resamples_them() {
+        use nana_ui_core::GlyphPresentation;
+        let defaults = EffectDefaults::default();
+        let look = look();
+        let urls = HashMap::new();
+        let env = Env {
+            look: &look,
+            urls: &urls,
+            editor: false,
+            locale: Locale::ZhCn,
+        };
+        let chains = |doc: &Document, reduced: bool| {
+            // Interning happens while the document becomes rich text.
+            to_rich(doc, &env);
+            GlyphPresentation::chains(effect_table(&defaults, reduced), None)
+        };
+        let pulse = nanatype_markup::parse("[pulse]脉动 Pulse[/pulse]").doc;
+        let wave = nanatype_markup::parse("[wave]波浪 Wave[/wave]").doc;
+        let t = glyph_resampling(&pulse, &chains(&pulse, false)).expect("pulse scales glyphs");
+        // Not a translation, which is what earns bilinear sampling, yet within
+        // a hundredth of a pixel of the identity across a 4K-wide box.
+        assert!(t.a != 1.0 && t.d != 1.0 && t.b == 0.0 && t.c == 0.0);
+        assert!((1.0 - t.a) * 4096.0 < 0.01 && t.e == 0.0 && t.f == 0.0);
+        // Moving and recolouring glyphs keep their exact texels.
+        assert_eq!(glyph_resampling(&wave, &chains(&wave, false)), None);
+        // Reduced motion and a zero amount leave nothing to resample.
+        assert_eq!(glyph_resampling(&pulse, &chains(&pulse, true)), None);
+        let still = EffectDefaults {
+            pulse_amount: 0.0,
+            ..EffectDefaults::default()
+        };
+        to_rich(&pulse, &env);
+        let none = GlyphPresentation::chains(effect_table(&still, false), None);
+        assert_eq!(glyph_resampling(&pulse, &none), None);
+        // A pop entrance grows each glyph from half its size.
+        let plain = nanatype_markup::parse("出现 Appear").doc;
+        let rich = to_rich(&plain, &env);
+        let reveal = nanatype_core::Reveal::full(0);
+        let plan = |kind| {
+            RevealPlan::new(&rich, &reveal, Entrance { kind, ms: 200 }).schedule(
+                Duration::ZERO,
+                0,
+                false,
+            )
+        };
+        let pop = GlyphPresentation::chains(Arc::from([]), Some(plan(EntranceKind::Pop)));
+        assert_eq!(glyph_resampling(&plain, &pop), Some(t));
+        let fade = GlyphPresentation::chains(Arc::from([]), Some(plan(EntranceKind::Fade)));
+        assert_eq!(glyph_resampling(&plain, &fade), None);
     }
 
     fn look() -> Look {
@@ -1964,6 +2080,81 @@ mod effect_cache_tests {
         let table = effect_table(&defaults, false);
         assert_eq!(table[index].0.len(), 2);
         assert!(effect_table(&defaults, true)[index].0.is_empty());
+    }
+
+    /// Every look of `chain` over a few glyphs and a couple of seconds, in
+    /// text set in `mode`.
+    fn looks(
+        chain: &[nana_ui_core::GlyphEffect],
+        reveal: Option<&nana_ui_core::RevealSchedule>,
+        mode: nana_ui_core::WritingModeSpec,
+    ) -> Vec<nana_ui_core::GlyphSample> {
+        (0..4u32)
+            .flat_map(|ordinal| {
+                (0..48u64).map(move |i| {
+                    nana_ui_core::evaluate_glyph_chain_in(
+                        chain,
+                        reveal,
+                        ordinal,
+                        Duration::from_millis(i * 37),
+                        mode,
+                    )
+                })
+            })
+            .collect()
+    }
+
+    fn moves(looks: &[nana_ui_core::GlyphSample], axis: usize) -> bool {
+        looks.iter().any(|look| look.offset[axis].abs() > 1e-3)
+    }
+
+    /// Wave and jump move a glyph across its line: over it in horizontal
+    /// text, sideways in vertical text, never along the column. The table is
+    /// the same for both; NanaUI turns the motion with the text's writing
+    /// mode. Nothing swells a glyph in their place.
+    #[test]
+    fn wave_and_jump_move_vertical_glyphs_across_their_column() {
+        use nana_ui_core::WritingModeSpec;
+        let defaults = EffectDefaults::default();
+        for kind in [ContinuousKind::Wave, ContinuousKind::Jump] {
+            let effects = Effects {
+                continuous: vec![nanatype_model::Continuous::new(kind)],
+                entrance: None,
+                emphasis: None,
+            };
+            let index = attr_index(&effects, Pace::Inherit).unwrap() as usize;
+            let chain = effect_table(&defaults, false)[index].clone();
+            let across = looks(&chain.0, None, WritingModeSpec::HorizontalTb);
+            assert!(moves(&across, 1) && !moves(&across, 0), "{kind:?}");
+            for mode in [WritingModeSpec::VerticalRl, WritingModeSpec::VerticalLr] {
+                let down = looks(&chain.0, None, mode);
+                assert!(moves(&down, 0), "{kind:?} moves across a {mode:?} column");
+                assert!(
+                    down.iter().all(|look| look.offset[1] == 0.0),
+                    "{kind:?} never moves along a {mode:?} column"
+                );
+                assert!(down.iter().all(|look| look.scale == 1.0), "{kind:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_slide_up_entrance_rises_across_a_vertical_column() {
+        use nana_ui_core::WritingModeSpec;
+        let plan = RevealPlan {
+            at_ms: vec![Some(100), Some(200)],
+            intro: Entrance {
+                kind: EntranceKind::SlideUp,
+                ms: 200,
+            },
+        };
+        let schedule = plan.schedule(Duration::ZERO, 0, false);
+        assert!(schedule.intro.rise_px > 0.);
+        let across = looks(&[], Some(&schedule), WritingModeSpec::HorizontalTb);
+        assert!(moves(&across, 1) && !moves(&across, 0));
+        let down = looks(&[], Some(&schedule), WritingModeSpec::VerticalRl);
+        assert!(moves(&down, 0));
+        assert!(down.iter().all(|look| look.offset[1] == 0.0));
     }
 }
 

@@ -20,6 +20,20 @@ pub fn palette(dark: bool) -> SemanticPalette {
     }
 }
 
+/// The fill behind selected text in a plain text field (the markup source).
+/// NanaUI's default, `accent_soft`, is the accent at 10% (light) or 14%
+/// (dark): on a field's background that is all but invisible. This is the
+/// same accent, strong enough to stand off the field in either appearance
+/// (1.5:1) while the text over it stays readable (4.5:1). Dark stops short of
+/// light's alpha: past 0.40 the lighter fill starts to wash out the text.
+pub fn selection(dark: bool) -> [f32; 4] {
+    SemanticColor {
+        a: if dark { 0.40 } else { 0.45 },
+        ..palette(dark).accent
+    }
+    .as_rgba_array()
+}
+
 /// Radius steps 4 / 8 / 12 / 16 / 20 (and 24). Swatches and keycaps use
 /// `Xs`; controls, chips and rows `Sm`; popovers, menus and list cards `Md`;
 /// settings cards `Lg`; floating rails `Xl`.
@@ -133,6 +147,30 @@ mod tests {
             assert_eq!(compiled.palette(), palette(dark));
             assert_eq!(compiled.metrics().radius_sm, 8.0);
             assert_eq!(compiled.metrics().radius_lg, 16.0);
+        }
+    }
+
+    #[test]
+    fn a_text_selection_stands_off_the_field_and_keeps_its_text_readable() {
+        let over = |fill: [f32; 4], bg: SemanticColor| SemanticColor {
+            r: fill[0] * fill[3] + bg.r * (1.0 - fill[3]),
+            g: fill[1] * fill[3] + bg.g * (1.0 - fill[3]),
+            b: fill[2] * fill[3] + bg.b * (1.0 - fill[3]),
+            a: 1.0,
+        };
+        for dark in [false, true] {
+            let p = palette(dark);
+            // A field rests on `background` and deepens toward `surface`.
+            for bg in [p.background, p.surface, p.subtle] {
+                let selected = over(selection(dark), bg);
+                let stand_off = contrast(rgba8(selected), rgba8(bg));
+                assert!(stand_off >= 1.5, "{dark}: selection {stand_off:.2}:1");
+                let text = contrast(rgba8(p.text), rgba8(selected));
+                assert!(text >= 4.5, "{dark}: selected text {text:.2}:1");
+                // NanaUI's default fill, for the record of what this fixes.
+                let soft = over(p.accent_soft.as_rgba_array(), bg);
+                assert!(contrast(rgba8(soft), rgba8(bg)) < stand_off);
+            }
         }
     }
 
