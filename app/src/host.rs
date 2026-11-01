@@ -419,12 +419,7 @@ impl Host {
             crate::ui::rich::attr_version(),
         );
         if self.editor_fx != Some(key) {
-            // The input editor always writes horizontally.
-            let effects = crate::ui::rich::effect_table(
-                &self.app.skin.effects,
-                reduced,
-                crate::ui::rich::Flow::Horizontal,
-            );
+            let effects = crate::ui::rich::effect_table(&self.app.skin.effects, reduced);
             if cx
                 .set_rich_presentation_chains(editor.stable_id(), effects, None)
                 .is_ok()

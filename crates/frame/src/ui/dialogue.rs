@@ -32,7 +32,7 @@ use nanatype_theme::{
 
 use super::editor_geometry::Capture;
 use super::overflow;
-use super::rich::{Env, Flow, Look, RevealPlan, effect_table, to_rich};
+use super::rich::{Env, Look, RevealPlan, effect_table, to_rich};
 use super::surface::{self, Surface, affine, calc, len};
 use super::{I18N, Stage, c, restyle};
 
@@ -308,19 +308,6 @@ fn document_on(
             ms: 0,
         };
     }
-    // Directional glyph motion follows the writing direction the line is
-    // mounted in. Untracked: switching it restyles this node, never remounts
-    // it, so a line keeps its motion until the next one.
-    let flow = if base.responsive_text
-        && ui.skin.with_untracked(|skin| {
-            ui.settings
-                .with_untracked(|s| ui.canvas().vertical_text(s, skin))
-        }) {
-        Flow::Vertical { em_px: base.size }
-    } else {
-        Flow::Horizontal
-    };
-    entrance.kind = flow.entrance(entrance.kind);
     let mut reveal = match &timing {
         Timing::Static => None,
         Timing::Reveal(r) => Some(RevealPlan::new(&rich, r, entrance)),
@@ -417,10 +404,7 @@ fn document_on(
                 base.reduced_motion,
             )
         });
-        view = view.presentation_chains(
-            effect_table(&base.effects, base.reduced_motion, flow),
-            schedule,
-        );
+        view = view.presentation_chains(effect_table(&base.effects, base.reduced_motion), schedule);
         if super::materials::enabled(ui)
             && !base.reduced_motion
             && let Some(p) = &mut view.presentation
@@ -437,7 +421,7 @@ fn document_on(
         if let Some(t) = view
             .presentation
             .as_ref()
-            .and_then(|p| super::rich::glyph_resampling(doc, p, flow))
+            .and_then(|p| super::rich::glyph_resampling(doc, p))
         {
             Arc::make_mut(&mut view.style.layout).transform = Some(t);
         }
