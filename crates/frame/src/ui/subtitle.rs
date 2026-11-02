@@ -15,6 +15,17 @@ use super::quote::{QUOTE_MIN, legible};
 use super::{Stage, c};
 use crate::skin_theme::on;
 
+/// The room a one-line subtitle takes under text drawn with `text`: what
+/// the display keeps free for it while subtitles can show.
+pub fn room(spec: &SubtitleSpec, text: &TextSpec) -> f32 {
+    let size = spec.size_for(text.size);
+    gap(spec.gap) + size * text.line_height.clamp(1.0, 2.0)
+}
+
+fn gap(gap: f32) -> f32 {
+    gap.clamp(0.0, 64.0)
+}
+
 /// How long a subtitle takes to fade in.
 pub const FADE_MS: u64 = 220;
 
@@ -109,11 +120,49 @@ pub fn view(text: &str, style: NodeStyle, gap: f32) -> AnyView {
         Stack::column(0.0)
             .width(LengthSpec::Fill)
             .with_layout(move |l| {
-                l.margin_top = Some(LengthSpec::Px(gap.clamp(0.0, 64.0)));
+                l.margin_top = Some(LengthSpec::Px(self::gap(gap)));
                 l.flex_shrink = Some(0.0);
                 l.min_width = Some(LengthSpec::Px(0.0));
             }),
     )
+    .key("subtitle")
+    .children(widget(Text::new(text.to_owned()).style(style)))
+    .into_any()
+}
+
+/// `style` set for a subtitle column `height` tall in vertical-rl text: CJK
+/// reads down the column, Latin runs sideways along it, as in the line.
+pub fn column_style(mut style: NodeStyle, height: f32) -> NodeStyle {
+    let l = Arc::make_mut(&mut style.layout);
+    l.writing_mode = Some(nana_ui_core::WritingModeSpec::VerticalRl);
+    l.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
+    l.height = Some(LengthSpec::Px(height));
+    style
+}
+
+/// How wide `text` runs as a subtitle column, `gap` included.
+pub fn column_width(
+    text: &str,
+    style: &NodeStyle,
+    gap: f32,
+    height: f32,
+    locale: nanatype_i18n::Locale,
+) -> f32 {
+    let rich = nana_ui_core::RichText::new(text);
+    super::rich::vertical_extent(&rich, style, height, locale).ceil() + self::gap(gap)
+}
+
+/// `text` as a subtitle column `width` wide (`gap` included) in a column
+/// [`column_style`] set, `gap` after the columns it follows.
+pub fn column_view(text: &str, mut style: NodeStyle, gap: f32, width: f32) -> AnyView {
+    let gap = self::gap(gap);
+    Arc::make_mut(&mut style.layout).width = Some(LengthSpec::Px((width - gap).max(1.0)));
+    widget(Stack::column(0.0).with_layout(move |l| {
+        l.margin_right = Some(LengthSpec::Px(gap));
+        l.flex_shrink = Some(0.0);
+        l.width = Some(LengthSpec::Px((width - gap).max(1.0)));
+        l.height = Some(LengthSpec::Fill);
+    }))
     .key("subtitle")
     .children(widget(Text::new(text.to_owned()).style(style)))
     .into_any()

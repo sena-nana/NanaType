@@ -2,6 +2,13 @@
 
 use super::*;
 
+thread_local! {
+    /// The scene's display, whose subtitles settle under their text after a
+    /// layout the way the host moves them.
+    pub static TRACKS: std::cell::Cell<Option<nanatype::ui::Stage>> =
+        const { std::cell::Cell::new(None) };
+}
+
 /// The sample content, settings and fonts every mode captures.
 pub struct Scene {
     pub ui: Ui,
@@ -98,6 +105,10 @@ impl Scene {
         if std::env::var_os("NANATYPE_SNAPSHOT_MATERIALS_OFF").is_some() {
             settings.skin.advanced_effects = false;
         }
+        // Subtitle shots translate, so the display keeps their room.
+        settings.translate.enabled = std::env::var_os("NANATYPE_SNAPSHOT_SUBTITLE").is_some();
+        settings.overlays.display.vertical_text =
+            std::env::var_os("NANATYPE_SNAPSHOT_VERTICAL").is_some();
         settings.accessibility.ui_scale = ui_scale_percent();
         let high_contrast = std::env::var_os("NANATYPE_SNAPSHOT_HIGH_CONTRAST").is_some();
         if high_contrast {
@@ -109,6 +120,7 @@ impl Scene {
             scale: settings.accessibility.scale(),
         });
         let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), locale);
+        TRACKS.set(Some(*ui));
         ui.chrome_dark.set(dark);
         ui.chrome_contrast.set(high_contrast);
         if std::env::var_os("NANATYPE_SNAPSHOT_STATIC").is_some() {

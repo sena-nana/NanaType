@@ -716,6 +716,9 @@ impl Host {
         if ui.text_scroll.get_untracked() != y {
             ui.text_scroll.set(y);
         }
+        if let Some(doc) = docs.get(&ui.display_kind().id()) {
+            dialogue::settle_subtitle(*ui, doc.context().world());
+        }
     }
 
     /// Read the typewriter's last layout: scroll along with the typing, or
