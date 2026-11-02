@@ -1,6 +1,7 @@
+use crate::app::App;
+use crate::msg::UpdateMsg;
 use crate::services::updater::{self, Event};
 use crate::ui::feedback::{self, ToastRequest};
-use crate::{app::App, msg::Msg};
 use nanatype_update::{Asset, Checked, Error, Kind};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -43,20 +44,19 @@ pub enum State {
 pub type Pending = Option<(Checked, Asset)>;
 
 impl App {
-    pub(super) fn update_msg(&mut self, msg: Msg) {
+    pub(super) fn update_msg(&mut self, msg: UpdateMsg) {
         match msg {
-            Msg::Update(event) => self.update_event(event),
-            Msg::CheckUpdate => self.check_update(Duration::ZERO, true),
-            Msg::DownloadUpdate => self.download_update(),
-            Msg::CancelUpdate => self.updater.cancel(),
-            Msg::InstallUpdate => self.install_update(),
-            Msg::SkipUpdate => self.skip_update(),
-            Msg::OpenUpdateNotes => {
+            UpdateMsg::Event(event) => self.update_event(event),
+            UpdateMsg::Check => self.check_update(Duration::ZERO, true),
+            UpdateMsg::Download => self.download_update(),
+            UpdateMsg::Cancel => self.updater.cancel(),
+            UpdateMsg::Install => self.install_update(),
+            UpdateMsg::Skip => self.skip_update(),
+            UpdateMsg::OpenNotes => {
                 if let Some((checked, _)) = &self.pending_update {
                     crate::services::open_url(&checked.manifest.notes_url());
                 }
             }
-            _ => unreachable!("not an update message"),
         }
     }
 

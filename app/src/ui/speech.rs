@@ -1,5 +1,5 @@
 //! Shared operator controls; interim text stays outside the streamed draft.
-use crate::msg::Msg;
+use crate::msg::{Msg, SpeechMsg};
 use crate::ui::{
     Ui,
     kit::{Type, gap},
@@ -90,7 +90,7 @@ pub(crate) fn actions(ui: Ui) -> AnyView {
                         } else {
                             "speech-start"
                         },
-                        || Msg::SpeechToggle,
+                        || Msg::Speech(SpeechMsg::Toggle),
                     ),
                     (active
                         && matches!(
@@ -98,7 +98,7 @@ pub(crate) fn actions(ui: Ui) -> AnyView {
                             nanatype_speech::controller::Phase::Paused
                                 | nanatype_speech::controller::Phase::Error
                         ))
-                    .then(|| button(ui, "speech-resume", || Msg::SpeechResume)),
+                    .then(|| button(ui, "speech-resume", || Msg::Speech(SpeechMsg::Resume))),
                 ))
                 .into_any()
         },

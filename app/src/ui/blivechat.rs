@@ -6,7 +6,7 @@ use super::{
         segmented, select_keys, switch, toggled_section,
     },
 };
-use crate::msg::Msg;
+use crate::msg::{BliveMsg, Msg};
 use crate::ui::kit::{self, Type, gap};
 use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
@@ -176,7 +176,7 @@ fn auth_field(ui: Ui) -> AnyView {
     let save = move || {
         let code = draft.get_untracked().trim().to_owned();
         draft.set(String::new());
-        Msg::BlivechatAuthCode(code)
+        Msg::Blive(BliveMsg::AuthCode(code))
     };
     widget(
         Stack::row(0.0)
@@ -215,7 +215,7 @@ fn auth_field(ui: Ui) -> AnyView {
                     .color(SemanticColorRole::Muted),
             ),
             button(ui, "int-blive-auth-clear", || {
-                Msg::BlivechatAuthCode(String::new())
+                Msg::Blive(BliveMsg::AuthCode(String::new()))
             }),
         )),
     ))
@@ -245,7 +245,7 @@ fn comet_section(ui: Ui) -> AnyView {
                 .on(move |_: &Activate| armed.set(true))
                 .into_any()
         },
-        || Msg::CometResetToken,
+        || Msg::Blive(BliveMsg::ResetCometToken),
     );
     section(
         ui,

@@ -3,12 +3,15 @@
 //! build ([`crate::workshop::View::shown`]).
 
 use super::*;
+use crate::msg::WorkshopMsg;
 use crate::ui::kit::Row as CardRow;
 use crate::workshop::{Availability, Kind, Row, RowState, Tag};
 
 /// Browse the Workshop for `tag` (in the Steam overlay when it is on).
 pub(super) fn browse_button(ui: Ui, tag: Tag) -> AnyView {
-    button(ui, "workshop-browse", move || Msg::WorkshopBrowse(tag))
+    button(ui, "workshop-browse", move || {
+        Msg::Workshop(WorkshopMsg::Browse(tag))
+    })
 }
 
 /// The page section listing subscriptions of the given kinds; empty while
@@ -83,14 +86,14 @@ fn subscription(ui: Ui, row: &Row) -> CardRow {
         ui,
         "workshop-view",
         ti::EXTERNAL_LINK,
-        move || Msg::WorkshopOpen(item),
+        move || Msg::Workshop(WorkshopMsg::Open(item)),
     )];
     if row.state == RowState::NotInstalled {
         buttons.push(icon_action(
             ui,
             "workshop-download",
             ti::DOWNLOAD,
-            move || Msg::WorkshopDownload(item),
+            move || Msg::Workshop(WorkshopMsg::Download(item)),
         ));
     }
     buttons.push(unsubscribe(ui, &row.title, item));
@@ -116,6 +119,6 @@ pub(super) fn unsubscribe(ui: Ui, title: &str, item: u64) -> AnyView {
             .on(move |_: &Activate| armed.set(true))
             .into_any()
         },
-        move || Msg::WorkshopUnsubscribe(item),
+        move || Msg::Workshop(WorkshopMsg::Unsubscribe(item)),
     )
 }

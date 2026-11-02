@@ -9,7 +9,11 @@ use nanatype_blive::{
 };
 use nanatype_settings::{BliveRoomKind, BlivechatSettings, BlivechatSource};
 
-use crate::{app::App, chat::Platform, msg::Msg};
+use crate::{
+    app::App,
+    chat::Platform,
+    msg::{BliveMsg, Msg},
+};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct State {
@@ -38,17 +42,17 @@ pub fn comet_address(settings: &BlivechatSettings) -> String {
 }
 
 impl App {
-    pub(super) fn blivechat_msg(&mut self, msg: Msg) {
+    pub(super) fn blivechat_msg(&mut self, msg: BliveMsg) {
         match msg {
-            Msg::Blivechat(event) => self.blivechat_event(event),
-            Msg::CometRelay(status) => {
+            BliveMsg::Event(event) => self.blivechat_event(event),
+            BliveMsg::Relay(status) => {
                 if let RelayStatus::Error(fault) = &status {
                     nanatype_diag::report!(crate::diag::COMET_RELAY_ERROR; "{fault}");
                 }
                 self.blive_state(|s| s.relay = status);
                 self.blivechat_status_line();
             }
-            Msg::BlivechatAuthCode(code) => {
+            BliveMsg::AuthCode(code) => {
                 if let Err(e) = self.blivechat_auth.set(&code) {
                     nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 1u64; "{e}");
                     let text = self.ui.now_t("int-blive-auth-not-stored");
@@ -66,10 +70,9 @@ impl App {
                     self.blivechat.reconnect();
                 }
             }
-            Msg::CometResetToken => {
+            BliveMsg::ResetCometToken => {
                 self.edit(|s| s.integrations.blivechat.comet_token = new_token())
             }
-            _ => unreachable!("not a blivechat message"),
         }
     }
 
@@ -118,7 +121,7 @@ impl App {
             (false, _) => (None, None),
             (true, BlivechatSource::Comet) if b.comet_token.is_empty() => {
                 // First use, or hand-edited settings: make one, then start.
-                self.ctx.dispatch(Msg::CometResetToken);
+                self.ctx.dispatch(Msg::Blive(BliveMsg::ResetCometToken));
                 (None, None)
             }
             // The relay's port is open once `set` returns, so the client can

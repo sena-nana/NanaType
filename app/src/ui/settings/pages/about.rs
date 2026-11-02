@@ -1,4 +1,7 @@
 use super::*;
+#[cfg(feature = "updates")]
+use crate::msg::UpdateMsg;
+use crate::msg::WindowMsg;
 
 use nana_ui::runtime::Icon;
 
@@ -102,7 +105,7 @@ fn update_status(ui: Ui, state: &crate::app::update::State) -> Row {
     use nanatype_update::Kind;
     let locale = ui.locale.get_untracked();
     let tr = |key: &str, args: &[(&str, nanatype_i18n::Arg<'_>)]| I18N.tr_in(locale, key, args);
-    let check = || button(ui, "update-check", || Msg::CheckUpdate);
+    let check = || button(ui, "update-check", || Msg::Update(UpdateMsg::Check));
     let (title, detail, buttons) = match state {
         State::Idle => (ui.now_t("about-update"), None, vec![check()]),
         State::Checking => (ui.now_t("update-checking"), None, Vec::new()),
@@ -121,9 +124,9 @@ fn update_status(ui: Ui, state: &crate::app::update::State) -> Row {
                 &[("size", megabytes(*size).into())],
             )),
             vec![
-                button(ui, "update-notes", || Msg::OpenUpdateNotes),
-                button(ui, "update-skip", || Msg::SkipUpdate),
-                primary(ui, "update-download", || Msg::DownloadUpdate),
+                button(ui, "update-notes", || Msg::Update(UpdateMsg::OpenNotes)),
+                button(ui, "update-skip", || Msg::Update(UpdateMsg::Skip)),
+                primary(ui, "update-download", || Msg::Update(UpdateMsg::Download)),
             ],
         ),
         State::Downloading {
@@ -140,7 +143,9 @@ fn update_status(ui: Ui, state: &crate::app::update::State) -> Row {
                 "update-downloading-hint",
                 &[("percent", (done * 100 / (*total).max(1)).to_string().into())],
             )),
-            vec![button(ui, "update-cancel", || Msg::CancelUpdate)],
+            vec![button(ui, "update-cancel", || {
+                Msg::Update(UpdateMsg::Cancel)
+            })],
         ),
         State::Ready { version, kind, .. } => {
             let (hint_key, action) = match kind {
@@ -151,13 +156,13 @@ fn update_status(ui: Ui, state: &crate::app::update::State) -> Row {
             (
                 tr("update-ready", &[("version", version.as_str().into())]),
                 Some(ui.now_t(hint_key)),
-                vec![primary(ui, action, || Msg::InstallUpdate)],
+                vec![primary(ui, action, || Msg::Update(UpdateMsg::Install))],
             )
         }
         State::Failed { message, detail } => (
             message.clone(),
             Some(detail.clone()),
-            vec![button(ui, "update-retry", || Msg::CheckUpdate)],
+            vec![button(ui, "update-retry", || Msg::Update(UpdateMsg::Check))],
         ),
     };
     row_text(title, detail, controls(buttons))
@@ -208,7 +213,7 @@ fn local(ui: Ui) -> Vec<Row> {
             .on_cx(move |_, _: &Activate, cx| {
                 ui.onboard_step.set(0);
                 cx.dispatch_program_all(edit(|s| s.general.onboarding_done = false));
-                cx.dispatch_program_all(Msg::SettingsPage(Page::General));
+                cx.dispatch_program_all(Msg::Window(WindowMsg::SettingsPage(Page::General)));
             })
             .into_any(),
         ),

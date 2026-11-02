@@ -1,4 +1,5 @@
 //! Host-owned widgets and paths generated from a validated, retained value tree.
+use crate::msg::{PackageMsg, SkinMsg, WorkshopMsg};
 use crate::ui::kit::{self, Tone, Type, gap, inset};
 use crate::{
     msg::{FileTarget, Msg},
@@ -24,9 +25,11 @@ pub use nanatype_frame::ui::plugin_view::{
 /// The live plugins' views at `slot`; their events go back to the plugin.
 pub fn mounted(ui: Ui, slot: Mount) -> AnyView {
     nanatype_frame::ui::plugin_view::mounted(*ui, slot, |id| {
-        Arc::new(move |event| Msg::PluginInput {
-            id: id.clone(),
-            event,
+        Arc::new(move |event| {
+            Msg::Package(PackageMsg::PluginInput {
+                id: id.clone(),
+                event,
+            })
         })
     })
 }
@@ -34,7 +37,9 @@ pub fn mounted(ui: Ui, slot: Mount) -> AnyView {
 /// The Packages page's header actions: import a package, reload them all.
 pub fn actions(ui: Ui) -> AnyView {
     kit::hstack((
-        kit::button(ui.now_t("packages-refresh"), || Msg::RefreshPackages),
+        kit::button(ui.now_t("packages-refresh"), || {
+            Msg::Package(PackageMsg::Refresh)
+        }),
         super::settings::controls::primary(ui, "packages-import", || {
             Msg::PickFile(FileTarget::ImportSkin)
         }),
@@ -113,7 +118,9 @@ fn package_card(
         if enabled {
             widget(Button::new(ui.now_t("packages-disable")).size(ControlSize::Small))
                 .on_cx(move |_, _: &Activate, cx| {
-                    cx.dispatch_program_all(Msg::DisablePlugin(disable_id.clone()))
+                    cx.dispatch_program_all(Msg::Package(PackageMsg::DisablePlugin(
+                        disable_id.clone(),
+                    )))
                 })
                 .into_any()
         } else {
@@ -121,7 +128,9 @@ fn package_card(
                 .key(format!("package-review:{id}"))
                 .bind(move |button: &mut Button| button.disabled = ui.plugin_activation_busy.get())
                 .on_cx(move |_, _: &Activate, cx| {
-                    cx.dispatch_program_all(Msg::RequestPluginActivation(enable_id.clone()));
+                    cx.dispatch_program_all(Msg::Package(PackageMsg::RequestActivation(
+                        enable_id.clone(),
+                    )));
                 })
                 .into_any()
         }
@@ -203,8 +212,8 @@ fn package_card(
                     )
                     .on_cx(move |_, _: &Activate, cx| {
                         cx.dispatch_program_all(match workshop {
-                            Some(item) => Msg::WorkshopUnsubscribe(item),
-                            None => Msg::RemovePackage(remove_id.clone()),
+                            Some(item) => Msg::Workshop(WorkshopMsg::Unsubscribe(item)),
+                            None => Msg::Package(PackageMsg::Remove(remove_id.clone())),
                         })
                     })
                 }),
@@ -212,7 +221,7 @@ fn package_card(
                 workshop.is_none().then(|| {
                     widget(Button::new(ui.now_t("skins-export")).size(ControlSize::Small)).on_cx(
                         move |_, _: &Activate, cx| {
-                            cx.dispatch_program_all(Msg::ExportSkin(export_id.clone()))
+                            cx.dispatch_program_all(Msg::Skin(SkinMsg::Export(export_id.clone())))
                         },
                     )
                 }),
@@ -275,10 +284,10 @@ pub fn settings(ui: Ui) -> AnyView {
                     buttons.push(
                         widget(Button::new(command.label.clone()).size(ControlSize::Small))
                             .on_cx(move |_, _: &Activate, cx| {
-                                cx.dispatch_program_all(Msg::PluginCommand {
+                                cx.dispatch_program_all(Msg::Package(PackageMsg::PluginCommand {
                                     id: id.clone(),
                                     command: command_id.clone(),
-                                })
+                                }))
                             })
                             .into_any(),
                     );
@@ -528,7 +537,7 @@ pub fn activation(ui: Ui) -> AnyView {
                                 !ui.plugin_source_trusted.get() || ui.plugin_activation_busy.get()
                         })
                         .on_cx(|_, _: &Activate, cx| {
-                            cx.dispatch_program_all(Msg::ConfirmPluginActivation)
+                            cx.dispatch_program_all(Msg::Package(PackageMsg::ConfirmActivation))
                         }),
                         activation_cancel(ui),
                     )),
@@ -542,6 +551,8 @@ pub fn activation(ui: Ui) -> AnyView {
 fn activation_cancel(ui: Ui) -> AnyView {
     widget(Button::new(ui.now_t("packages-consent-cancel")))
         .key("plugin-consent-cancel")
-        .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::CancelPluginActivation))
+        .on_cx(|_, _: &Activate, cx| {
+            cx.dispatch_program_all(Msg::Package(PackageMsg::CancelActivation))
+        })
         .into_any()
 }

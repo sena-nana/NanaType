@@ -40,7 +40,10 @@ use nanatype_theme::{LoadedSkin, LoadedSoundPack, SkinRegistry};
 use crate::assets::AssetLibrary;
 use crate::chat::ChatMessage;
 use crate::clock;
-use crate::msg::{FileTarget, GlobalAction, MarkupEdit, Msg};
+use crate::msg::{
+    ChatMsg, EditorMsg, FileTarget, GlobalAction, MarkupEdit, Msg, PackageMsg, SkinMsg, StickerMsg,
+    WindowMsg,
+};
 use crate::paths::Paths;
 use crate::scheduler::Scheduler;
 use crate::services::chat_assets::ChatAssets;
@@ -237,7 +240,7 @@ impl App {
         // Layout-dependent materials (stroke-time maps) build off the UI thread.
         crate::ui::pipeline::set_waker({
             let post = post.clone();
-            move || post(Msg::LayoutMaterialsReady)
+            move || post(Msg::Skin(SkinMsg::LayoutMaterialsReady))
         });
         let persist = Persist::start({
             let post = post.clone();
@@ -391,7 +394,7 @@ impl App {
         startup::dev_hooks(ctx);
         let ctx = ctx.clone();
         crate::services::instance::serve(crate::services::instance::Product::APP, move || {
-            ctx.dispatch(Msg::SecondInstance)
+            ctx.dispatch(Msg::Window(WindowMsg::SecondInstance))
         });
         app.plugins.sync(
             &app.registry,
@@ -620,7 +623,7 @@ impl App {
                     })
                 })
                 .collect();
-            ctx.dispatch(Msg::Displays(monitors));
+            ctx.dispatch(Msg::Window(WindowMsg::Displays(monitors)));
         });
     }
 
@@ -797,12 +800,12 @@ impl App {
         let ctx = self.ctx.clone();
         std::thread::spawn(move || {
             let (bank, errors) = sounds::load(&skin, pack.as_ref());
-            ctx.dispatch(Msg::SoundsLoaded {
+            ctx.dispatch(Msg::Skin(SkinMsg::SoundsLoaded {
                 skin: skin.skin.meta.id.clone(),
                 pack: pack.map(|p| p.id),
                 bank,
                 errors,
-            });
+            }));
         });
     }
 
@@ -892,7 +895,7 @@ impl App {
                     })
                 }))
                 .map_err(|_| "Skin scan worker failed".to_owned());
-                ctx.dispatch(Msg::SkinScanReady { ticket, result });
+                ctx.dispatch(Msg::Skin(SkinMsg::ScanReady { ticket, result }));
             })
         {
             self.skin_reload.cancel();
@@ -1118,7 +1121,9 @@ impl App {
         let current = self.skin_watch.as_ref().map(|w| w.paths().to_vec());
         if skin_dir != current {
             self.skin_watch = skin_dir.map(|paths| {
-                crate::services::watch::Watch::start(paths, post.clone(), || Msg::SkinFilesChanged)
+                crate::services::watch::Watch::start(paths, post.clone(), || {
+                    Msg::Skin(SkinMsg::FilesChanged)
+                })
             });
         }
         let stickers: Vec<PathBuf> = self
@@ -1140,7 +1145,7 @@ impl App {
                     stickers,
                     vec![self.paths.data.join("media")],
                     post,
-                    || Msg::AssetsChanged,
+                    || Msg::Sticker(StickerMsg::AssetsChanged),
                 )
             });
         }
@@ -1911,18 +1916,20 @@ impl App {
                 // Inspection validates every resource and signature: keep it off the UI thread.
                 let mut registry = self.registry.clone();
                 crate::plugins::background("package-install", &self.ctx, move || {
-                    Msg::PackageInstalled(
+                    Msg::Package(PackageMsg::Installed(
                         registry
                             .install(&path)
                             .map(|outcome| (outcome, Box::new(registry))),
-                    )
+                    ))
                 });
             }
             FileTarget::ExportSkin => {
                 if let Some(id) = self.export_target.take() {
                     let registry = self.registry.clone();
                     crate::plugins::background("package-export", &self.ctx, move || {
-                        Msg::PackageExported(registry.export(&id, &path).map_err(|e| e.to_string()))
+                        Msg::Package(PackageMsg::Exported(
+                            registry.export(&id, &path).map_err(|e| e.to_string()),
+                        ))
                     });
                 }
             }
@@ -1997,70 +2004,26 @@ impl App {
     }
 
     pub fn update(&mut self, msg: Msg) {
-        if matches!(msg, Msg::SettingsPage(crate::ui::settings::Page::Speech)) {
+        if matches!(
+            msg,
+            Msg::Window(WindowMsg::SettingsPage(crate::ui::settings::Page::Speech))
+        ) {
             self.speech_inventory();
         }
         match msg {
-            m @ (Msg::SpeechToggle
-            | Msg::SpeechResume
-            | Msg::SpeechEdit
-            | Msg::SpeechEvent(..)
-            | Msg::SpeechTick(..)
-            | Msg::SpeechInventory(_)
-            | Msg::SpeechRefresh
-            | Msg::SpeechModelDownload
-            | Msg::SpeechModelCancel
-            | Msg::SpeechModelDelete
-            | Msg::SpeechModelProgress(..)
-            | Msg::SpeechModelDone(..)) => self.speech_msg(m),
-            m @ (Msg::RequestPluginActivation(_)
-            | Msg::CancelPluginActivation
-            | Msg::ConfirmPluginActivation
-            | Msg::DisablePlugin(_)
-            | Msg::RefreshPackages
-            | Msg::RemovePackage(_)
-            | Msg::PluginPackagesChanged
-            | Msg::PluginPackagesReviewed(_)
-            | Msg::PluginsReviewed { .. }
-            | Msg::PackagesListed { .. }
-            | Msg::PluginReviewReady { .. }
-            | Msg::PackageInstalled(_)
-            | Msg::PackageExported(_)
-            | Msg::PluginResult { .. }
-            | Msg::PluginCommand { .. }
-            | Msg::PluginInput { .. }) => self.package_msg(m),
-            m @ (Msg::StickerImportFolders(_)
-            | Msg::Telegram(_)
-            | Msg::TelegramEvent(_)
-            | Msg::AssetsChanged
-            | Msg::Stickers(_)
-            | Msg::StickerDownload(_)
-            | Msg::StickerRetry(_)
-            | Msg::StickerRepository(_)
-            | Msg::StickerRemove(_)) => self.sticker_msg(m),
-            m @ (Msg::Markup(_)
-            | Msg::Tool(_)
-            | Msg::EditorCommand(_)
-            | Msg::EditorChanged(_)
-            | Msg::EditorSelection(_)
-            | Msg::Complete(_)
-            | Msg::EditorPaste
-            | Msg::ToggleSource
-            | Msg::EditorContext { .. }
-            | Msg::EditorAction { .. }
-            | Msg::InsertPhrase(_)
-            | Msg::InsertNewline
-            | Msg::PasteImage { .. }) => self.editor_msg(m),
-            m @ (Msg::OverlayAction(..)
-            | Msg::ToggleWindow(_)
-            | Msg::ShowWindow(_)
-            | Msg::HideInput
-            | Msg::ResetWindow(_)
-            | Msg::OpenSettings
-            | Msg::SettingsPage(_)
-            | Msg::SettingsPlatform(_)
-            | Msg::SecondInstance
-            | Msg::Displays(_)) => self.window_msg(m),
+            Msg::Speech(m) => self.speech_msg(m),
+            Msg::Package(m) => self.package_msg(m),
+            Msg::Sticker(m) => self.sticker_msg(m),
+            Msg::Editor(m) => self.editor_msg(m),
+            Msg::Window(m) => self.window_msg(m),
+            Msg::Skin(m) => self.skin_msg(m),
+            Msg::Chat(m) => self.chat_msg(m),
+            Msg::Twitch(m) => self.twitch_msg(m),
+            Msg::Blive(m) => self.blivechat_msg(m),
+            Msg::Obs(m) => self.obs_msg(m),
+            Msg::Workshop(m) => self.workshop_msg(m),
+            #[cfg(feature = "updates")]
+            Msg::Update(m) => self.update_msg(m),
             Msg::HoldOnboardPreview => {
                 self.onboard_preview_gen = self.onboard_preview_gen.wrapping_add(1);
                 let generation = self.onboard_preview_gen;
@@ -2078,55 +2041,6 @@ impl App {
                 self.ui.onboard_skin_shown.set(true);
             }
             Msg::RevealOnboardPreview { .. } => {}
-            m @ (Msg::DeleteSkin(_)
-            | Msg::ExportSkin(_)
-            | Msg::DuplicateSkin(_)
-            | Msg::SkinFilesChanged
-            | Msg::LayoutMaterialsReady
-            | Msg::SkinScanReady { .. }
-            | Msg::PrepareSkinPreview { .. }
-            | Msg::SkinPreviewReady { .. }
-            | Msg::SaveSkinPersonalization { .. }
-            | Msg::SoundsLoaded { .. }) => self.skin_msg(m),
-            m @ (Msg::Chat(_)
-            | Msg::ChatAssetReady(_)
-            | Msg::ChatMention { .. }
-            | Msg::ChatSelect(_)
-            | Msg::ChatMentionSelected { .. }
-            | Msg::ClearReply
-            | Msg::ClearChat
-            | Msg::Dock(_)
-            | Msg::ToggleChat
-            | Msg::ShowChat
-            | Msg::DockTab(_)) => self.chat_msg(m),
-            m @ (Msg::Twitch(_)
-            | Msg::TwitchLogin
-            | Msg::TwitchCancelLogin
-            | Msg::TwitchOpenActivation
-            | Msg::TwitchRefresh
-            | Msg::TwitchLogout
-            | Msg::TwitchSendToggle
-            | Msg::TwitchSendConfirm(_)
-            | Msg::TwitchRetry(_)
-            | Msg::TwitchSkipFailed(_)) => self.twitch_msg(m),
-            m @ (Msg::Blivechat(_)
-            | Msg::CometRelay(_)
-            | Msg::BlivechatAuthCode(_)
-            | Msg::CometResetToken) => self.blivechat_msg(m),
-            m @ (Msg::Obs(_) | Msg::ObsPassword(_) | Msg::ObsFitBounds(_)) => self.obs_msg(m),
-            m @ (Msg::Workshop(_)
-            | Msg::WorkshopBrowse(_)
-            | Msg::WorkshopOpen(_)
-            | Msg::WorkshopUnsubscribe(_)
-            | Msg::WorkshopDownload(_)) => self.workshop_msg(m),
-            #[cfg(feature = "updates")]
-            m @ (Msg::Update(_)
-            | Msg::CheckUpdate
-            | Msg::DownloadUpdate
-            | Msg::CancelUpdate
-            | Msg::InstallUpdate
-            | Msg::SkipUpdate
-            | Msg::OpenUpdateNotes) => self.update_msg(m),
             Msg::PeerStart {
                 invitation,
                 password,
@@ -2270,12 +2184,12 @@ impl App {
             1600,
             false,
         ));
-        self.update(Msg::ShowWindow(WindowKind::Input));
+        self.update(Msg::Window(WindowMsg::Show(WindowKind::Input)));
     }
 
     /// Show the input window for a hotkey and bring it forward.
     fn raise_input(&mut self) {
-        self.update(Msg::ShowWindow(WindowKind::Input));
+        self.update(Msg::Window(WindowMsg::Show(WindowKind::Input)));
         // Carbon does not grant foreground the way WM_HOTKEY does, and
         // AppKit has to be touched on this thread.
         #[cfg(target_os = "macos")]
@@ -2374,7 +2288,7 @@ impl App {
                 }
             }
             GlobalAction::ShowChat => {
-                self.update(Msg::ShowChat);
+                self.update(Msg::Chat(ChatMsg::Show));
                 self.raise_input();
             }
             GlobalAction::ReplyLatest => {
@@ -2389,7 +2303,7 @@ impl App {
                     collapsed: false,
                     ..self.ui.input_dock.get_untracked()
                 };
-                self.update(Msg::Dock(open));
+                self.update(Msg::Chat(ChatMsg::Dock(open)));
                 self.raise_input();
             }
             GlobalAction::Continue => self.run(Cmd::Continue),
@@ -2412,7 +2326,7 @@ impl App {
                     s.overlays.history.visible = show;
                 });
             }
-            GlobalAction::Phrase(i) => self.update(Msg::InsertPhrase(i)),
+            GlobalAction::Phrase(i) => self.update(Msg::Editor(EditorMsg::InsertPhrase(i))),
         }
     }
 
@@ -2687,18 +2601,26 @@ fn demo_editor(ctx: &RuntimeProgramContext<Msg>) {
     use crate::msg::Tool;
     use nana_ui::runtime::RichEditCommand as C;
     use nanatype_model::{Continuous, ContinuousKind, Inline, Marker};
-    let text = |t: &str| Msg::EditorCommand(C::InsertText(t.into()));
+    let text = |t: &str| Msg::Editor(EditorMsg::Command(C::InsertText(t.into())));
     let steps = [
         text("你好，这是"),
-        Msg::Tool(Tool::Bold),
+        Msg::Editor(EditorMsg::Tool(Tool::Bold)),
         text("粗体"),
-        Msg::Tool(Tool::Bold),
+        Msg::Editor(EditorMsg::Tool(Tool::Bold)),
         text("和"),
-        Msg::Tool(Tool::Effect(Continuous::new(ContinuousKind::Wave))),
+        Msg::Editor(EditorMsg::Tool(Tool::Effect(Continuous::new(
+            ContinuousKind::Wave,
+        )))),
         text("波浪"),
-        Msg::Tool(Tool::Effect(Continuous::new(ContinuousKind::Wave))),
-        Msg::Tool(Tool::Insert(Inline::Marker(Marker::Wait { ms: 400 }))),
-        Msg::Tool(Tool::Color("#e8505b".parse().expect("colour"))),
+        Msg::Editor(EditorMsg::Tool(Tool::Effect(Continuous::new(
+            ContinuousKind::Wave,
+        )))),
+        Msg::Editor(EditorMsg::Tool(Tool::Insert(Inline::Marker(
+            Marker::Wait { ms: 400 },
+        )))),
+        Msg::Editor(EditorMsg::Tool(Tool::Color(
+            "#e8505b".parse().expect("colour"),
+        ))),
         text("红色！"),
     ];
     std::thread::sleep(Duration::from_millis(1500));

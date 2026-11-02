@@ -1,6 +1,6 @@
 use super::{App, EditorCommand};
 use crate::completion;
-use crate::msg::{Complete, MarkupEdit, Msg, Tool};
+use crate::msg::{Complete, EditorMsg, MarkupEdit, Msg, Tool};
 use nana_ui::runtime::RichEditCommand;
 use nanatype_core::Cmd;
 use nanatype_markup::{parse, serialize_line};
@@ -8,55 +8,56 @@ use nanatype_model::{Document, Inline};
 
 impl App {
     /// The input editor: markup, tools, paste and phrases.
-    pub(super) fn editor_msg(&mut self, msg: Msg) {
+    pub(super) fn editor_msg(&mut self, msg: EditorMsg) {
         if matches!(
             &msg,
-            Msg::EditorCommand(_)
-                | Msg::EditorChanged(_)
-                | Msg::EditorPaste
-                | Msg::InsertPhrase(_)
-                | Msg::InsertNewline
-                | Msg::PasteImage { .. }
-                | Msg::Complete(Complete::Accept(_))
+            EditorMsg::Command(_)
+                | EditorMsg::Changed(_)
+                | EditorMsg::Paste
+                | EditorMsg::InsertPhrase(_)
+                | EditorMsg::InsertNewline
+                | EditorMsg::PasteImage { .. }
+                | EditorMsg::Complete(Complete::Accept(_))
         ) {
             self.speech_user_edit();
         }
-        if let Msg::Complete(action) = msg {
-            self.complete(action);
-            return;
-        }
+        // Moving through the list must not rebuild it.
+        let refresh = !matches!(msg, EditorMsg::Complete(_));
         self.editor_edit(msg);
-        self.refresh_completion();
+        if refresh {
+            self.refresh_completion();
+        }
     }
 
-    fn editor_edit(&mut self, msg: Msg) {
+    fn editor_edit(&mut self, msg: EditorMsg) {
         match msg {
-            Msg::EditorSelection(selection) => {
+            EditorMsg::Complete(action) => self.complete(action),
+            EditorMsg::Selection(selection) => {
                 self.completer.caret = (selection.start == selection.end).then_some(selection.end);
             }
-            Msg::Markup(edit) => self.markup(edit),
-            Msg::Tool(tool) => self.tool(tool),
-            Msg::EditorCommand(command) => self.rich_commands.push(command.into()),
-            Msg::EditorChanged(rich) => self.editor_changed(rich),
-            Msg::EditorPaste => {
+            EditorMsg::Markup(edit) => self.markup(edit),
+            EditorMsg::Tool(tool) => self.tool(tool),
+            EditorMsg::Command(command) => self.rich_commands.push(command.into()),
+            EditorMsg::Changed(rich) => self.editor_changed(rich),
+            EditorMsg::Paste => {
                 if let Ok(mut clipboard) = arboard::Clipboard::new()
                     && let Ok(image) = clipboard.get_image()
                 {
                     let (w, h) = (image.width as u32, image.height as u32);
-                    self.update(Msg::PasteImage {
+                    self.update(Msg::Editor(EditorMsg::PasteImage {
                         width: w,
                         height: h,
                         rgba: image.bytes.into_owned(),
-                    });
+                    }));
                 }
             }
-            Msg::ToggleSource => {
+            EditorMsg::ToggleSource => {
                 let on = !self.ui.source_mode.get_untracked();
                 self.ui.source_mode.set(on);
                 self.focus_editor = true;
             }
-            Msg::EditorContext { .. } | Msg::EditorAction { .. } => {}
-            Msg::InsertPhrase(i) => {
+            EditorMsg::Context { .. } | EditorMsg::Action { .. } => {}
+            EditorMsg::InsertPhrase(i) => {
                 if let Some(p) = self.settings.assets.phrases.get(i).cloned() {
                     let speaker = self.ui.speaker.get_untracked().name.clone();
                     let expanded = nanatype_markup::expand_template(&p.markup, |k| match k {
@@ -85,7 +86,7 @@ impl App {
                     }
                 }
             }
-            Msg::InsertNewline => {
+            EditorMsg::InsertNewline => {
                 if self.ui.source_mode.get_untracked() {
                     self.markup(MarkupEdit::Insert("\n".into()));
                 } else {
@@ -93,7 +94,7 @@ impl App {
                         .push(nana_ui::runtime::RichEditCommand::InsertText("\n".into()).into());
                 }
             }
-            Msg::PasteImage {
+            EditorMsg::PasteImage {
                 width,
                 height,
                 rgba,
@@ -101,7 +102,7 @@ impl App {
                 let _ = (width, height, rgba);
                 self.notice(self.ui.now_t("chat-images-unavailable"), true);
             }
-            Msg::PasteImage {
+            EditorMsg::PasteImage {
                 width,
                 height,
                 rgba,
@@ -112,7 +113,6 @@ impl App {
                     self.notice(text, true);
                 }
             },
-            _ => unreachable!("not a editor message"),
         }
     }
 }

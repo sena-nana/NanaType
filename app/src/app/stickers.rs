@@ -1,13 +1,13 @@
 use super::App;
-use crate::msg::Msg;
+use crate::msg::StickerMsg;
 use std::sync::Arc;
 
 impl App {
     /// Sticker packs and the Telegram importer.
-    pub(super) fn sticker_msg(&mut self, msg: Msg) {
+    pub(super) fn sticker_msg(&mut self, msg: StickerMsg) {
         match msg {
-            Msg::StickerImportFolders(paths) => self.import_sticker_folders(paths),
-            Msg::Telegram(command) => {
+            StickerMsg::ImportFolders(paths) => self.import_sticker_folders(paths),
+            StickerMsg::Telegram(command) => {
                 if matches!(command, crate::stickers::telegram::Command::Cancel) {
                     let _ = self.telegram.send(command);
                 } else if !self.ui.telegram.with_untracked(|s| s.busy) {
@@ -23,7 +23,7 @@ impl App {
                     }
                 }
             }
-            Msg::TelegramEvent(event) => match event {
+            StickerMsg::TelegramEvent(event) => match event {
                 crate::stickers::telegram::Event::State(state) => {
                     self.ui.telegram.set(Arc::new(state))
                 }
@@ -31,12 +31,12 @@ impl App {
                     self.import_sticker_folders(vec![root])
                 }
             },
-            Msg::AssetsChanged => {
+            StickerMsg::AssetsChanged => {
                 self.sticker_manager
                     .rebuild(&self.settings.assets.sticker_dirs);
                 self.publish_sticker_packs();
             }
-            Msg::Stickers(event) => {
+            StickerMsg::Event(event) => {
                 let completed = matches!(&event, crate::stickers::Event::Done { .. });
                 if let Some(root) = self.sticker_manager.accept(event) {
                     let path = root.display().to_string();
@@ -56,7 +56,7 @@ impl App {
                     self.publish_sticker_packs();
                 }
             }
-            Msg::StickerDownload(preset) => {
+            StickerMsg::Download(preset) => {
                 if let Some(root) = self
                     .sticker_manager
                     .rows
@@ -68,11 +68,11 @@ impl App {
                     self.publish_sticker_packs();
                 }
             }
-            Msg::StickerRetry(root) => {
+            StickerMsg::Retry(root) => {
                 self.sticker_manager.start(&root, None);
                 self.publish_sticker_packs();
             }
-            Msg::StickerRepository(root) => {
+            StickerMsg::Repository(root) => {
                 if let Some(url) = self
                     .sticker_manager
                     .rows
@@ -86,7 +86,7 @@ impl App {
                     crate::services::open_url(url);
                 }
             }
-            Msg::StickerRemove(root) => {
+            StickerMsg::Remove(root) => {
                 self.sticker_manager.remove(&root);
                 self.edit(|s| {
                     s.assets
@@ -95,7 +95,6 @@ impl App {
                 });
                 self.refresh_assets();
             }
-            _ => unreachable!("not a sticker message"),
         }
     }
 }

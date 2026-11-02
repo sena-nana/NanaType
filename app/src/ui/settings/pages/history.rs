@@ -1,4 +1,5 @@
 use super::*;
+use crate::msg::WindowMsg;
 
 pub(super) fn history(ui: Ui) -> AnyView {
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
@@ -198,6 +199,8 @@ pub(super) fn page_link(ui: Ui, page: Page) -> AnyView {
             .kind(ButtonKind::Ghost)
             .size(ControlSize::Small),
     )
-    .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::SettingsPage(page)))
+    .on_cx(move |_, _: &Activate, cx| {
+        cx.dispatch_program_all(Msg::Window(WindowMsg::SettingsPage(page)))
+    })
     .into_any()
 }

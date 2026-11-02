@@ -71,7 +71,7 @@ use nanatype_settings::{
 
 use super::Page;
 use super::controls::*;
-use crate::msg::{FileTarget, GlobalAction, Msg, Shortcut};
+use crate::msg::{ChatMsg, FileTarget, GlobalAction, Msg, Shortcut};
 use crate::services::hotkeys::HotkeyState;
 use crate::ui::{I18N, LinkState, SkinRow, Ui};
 use crate::windows::WindowKind;
@@ -116,7 +116,7 @@ pub fn actions(ui: Ui, page: Page) -> Option<AnyView> {
             Msg::PickFile(FileTarget::ImportSkin)
         })),
         Page::Packages => Some(crate::ui::plugins::actions(ui)),
-        Page::Platforms => Some(button(ui, "chat-open-panel", || Msg::ShowChat)),
+        Page::Platforms => Some(button(ui, "chat-open-panel", || Msg::Chat(ChatMsg::Show))),
         Page::Output => Some(button(ui, "output-sample", || Msg::PlaySample)),
         Page::History => Some(
             widget(

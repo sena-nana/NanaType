@@ -2,6 +2,7 @@
 //! (controls, stickers, phrases, chat) at the window's edge, with live chat
 //! optionally pinned above the insert panels.
 use super::*;
+use crate::msg::{ChatMsg, EditorMsg, SpeechMsg, StickerMsg, WindowMsg};
 use crate::ui::kit::{gap, inset};
 use nanatype_settings::{INPUT_CHAT_MIN, InputDockLayout, InputDockTab as Tab};
 
@@ -250,7 +251,7 @@ fn dock_to(ui: Ui, layout: InputDockLayout) -> Msg {
     if ui.input_dock.get_untracked() != layout {
         ui.input_dock.set(layout);
     }
-    Msg::Dock(layout)
+    Msg::Chat(ChatMsg::Dock(layout))
 }
 
 /// Folder drops on the stickers icon open the panel and import the packs.
@@ -274,7 +275,9 @@ fn register_sticker_drop(
                 }
                 nana_ui::runtime::FileDropEvent::Dropped { paths, .. } => {
                     cx.dispatch_program_all(dock_to(ui, open));
-                    cx.dispatch_program_all(Msg::StickerImportFolders(paths.to_vec()));
+                    cx.dispatch_program_all(Msg::Sticker(StickerMsg::ImportFolders(
+                        paths.to_vec(),
+                    )));
                 }
                 nana_ui::runtime::FileDropEvent::Left => {}
             }
@@ -411,7 +414,9 @@ fn phrase_card(index: usize, phrase: &nanatype_settings::QuickPhrase) -> AnyView
             ),
         )),
     )
-    .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::InsertPhrase(index)))
+    .on_cx(move |_, _: &Activate, cx| {
+        cx.dispatch_program_all(Msg::Editor(EditorMsg::InsertPhrase(index)))
+    })
     .into_any()
 }
 
@@ -424,7 +429,9 @@ fn phrases(ui: Ui) -> AnyView {
                 .size(ControlSize::Small),
         )
         .on_cx(|_, _: &Activate, cx| {
-            cx.dispatch_program_all(Msg::SettingsPage(super::super::settings::Page::Assets))
+            cx.dispatch_program_all(Msg::Window(WindowMsg::SettingsPage(
+                super::super::settings::Page::Assets,
+            )))
         })
     };
     let list = dynamic(
@@ -577,7 +584,7 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                     ui.now_t("settings-speech"),
                     Tip::Above,
                     move || ui.speech.with(|s| s.phase.active()),
-                    || Msg::SpeechToggle,
+                    || Msg::Speech(SpeechMsg::Toggle),
                 ),
                 popover(
                     ti::CHEVRON_DOWN,
@@ -589,12 +596,12 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                         crate::ui::speech::mode(ui),
                         crate::ui::speech::actions(ui),
                         crate::ui::settings::controls::button(ui, "speech-settings", || {
-                            Msg::SettingsPage(crate::ui::settings::Page::Speech)
+                            Msg::Window(WindowMsg::SettingsPage(crate::ui::settings::Page::Speech))
                         }),
                     )),
                 ),
                 tool(ui, ti::SETTINGS, "window-settings", Tip::Above, || {
-                    Msg::OpenSettings
+                    Msg::Window(WindowMsg::OpenSettings)
                 }),
                 widget(
                     Button::new(ui.now_t("tb-send"))

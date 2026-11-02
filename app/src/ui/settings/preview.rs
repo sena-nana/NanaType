@@ -16,7 +16,7 @@ use nanatype_settings::Settings;
 use nanatype_theme::Skin;
 
 use super::controls::{Type, hint, section};
-use crate::msg::Msg;
+use crate::msg::{Msg, SkinMsg};
 use crate::ui::Ui;
 use crate::ui::kit::{self, gap};
 use nana_ui::icons_tabler as ti;
@@ -546,10 +546,10 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, fallback_font: bool) -> AnyView {
                 })
                 .on_cx(move |_, _: &Activate, cx| {
                     if let Ok(profile) = draft(ui, &save_id).profile(&save_base) {
-                        cx.dispatch_program_all(Msg::SaveSkinPersonalization {
+                        cx.dispatch_program_all(Msg::Skin(SkinMsg::SavePersonalization {
                             id: save_id.clone(),
                             profile,
-                        });
+                        }));
                     }
                 }),
             )),
@@ -829,10 +829,10 @@ mod tests {
             .into_iter()
             .find_map(|m| m.downcast::<Msg>().ok())
             .unwrap();
-        let Msg::SaveSkinPersonalization {
+        let Msg::Skin(SkinMsg::SavePersonalization {
             id: saved_id,
             profile,
-        } = *saved
+        }) = *saved
         else {
             panic!("save message");
         };
@@ -1108,7 +1108,7 @@ align = { param = "align" }
             .into_iter()
             .find_map(|m| m.downcast::<Msg>().ok())
             .unwrap();
-        let Msg::SaveSkinPersonalization { profile, .. } = *saved else {
+        let Msg::Skin(SkinMsg::SavePersonalization { profile, .. }) = *saved else {
             panic!("save message");
         };
         // Only values that differ from the defaults are kept.

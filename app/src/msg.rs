@@ -223,21 +223,21 @@ impl Shortcut {
 pub fn input_message(key: InputKey) -> Msg {
     match key {
         InputKey::Send => Msg::Core(Cmd::Send),
-        InputKey::Newline => Msg::InsertNewline,
+        InputKey::Newline => Msg::Editor(EditorMsg::InsertNewline),
         InputKey::RecallPrev => Msg::Core(Cmd::Recall(-1)),
         InputKey::RecallNext => Msg::Core(Cmd::Recall(1)),
-        InputKey::Hide => Msg::HideInput,
-        InputKey::Bold => Msg::Tool(Tool::Bold),
-        InputKey::Italic => Msg::Tool(Tool::Italic),
-        InputKey::Underline => Msg::Tool(Tool::Underline),
-        InputKey::ChatPrev => Msg::ChatSelect(-1),
-        InputKey::ChatNext => Msg::ChatSelect(1),
-        InputKey::Reply => Msg::ChatMentionSelected { reply: true },
-        InputKey::Mention => Msg::ChatMentionSelected { reply: false },
-        InputKey::CancelReply => Msg::ClearReply,
-        InputKey::ToggleChat => Msg::ToggleChat,
-        InputKey::Phrases => Msg::DockTab(InputDockTab::Phrases),
-        InputKey::Stickers => Msg::DockTab(InputDockTab::Stickers),
+        InputKey::Hide => Msg::Window(WindowMsg::HideInput),
+        InputKey::Bold => Msg::Editor(EditorMsg::Tool(Tool::Bold)),
+        InputKey::Italic => Msg::Editor(EditorMsg::Tool(Tool::Italic)),
+        InputKey::Underline => Msg::Editor(EditorMsg::Tool(Tool::Underline)),
+        InputKey::ChatPrev => Msg::Chat(ChatMsg::Select(-1)),
+        InputKey::ChatNext => Msg::Chat(ChatMsg::Select(1)),
+        InputKey::Reply => Msg::Chat(ChatMsg::MentionSelected { reply: true }),
+        InputKey::Mention => Msg::Chat(ChatMsg::MentionSelected { reply: false }),
+        InputKey::CancelReply => Msg::Chat(ChatMsg::ClearReply),
+        InputKey::ToggleChat => Msg::Chat(ChatMsg::Toggle),
+        InputKey::Phrases => Msg::Chat(ChatMsg::DockTab(InputDockTab::Phrases)),
+        InputKey::Stickers => Msg::Chat(ChatMsg::DockTab(InputDockTab::Stickers)),
     }
 }
 
@@ -252,68 +252,6 @@ pub enum FileTarget {
 }
 
 pub enum Msg {
-    SpeechToggle,
-    SpeechResume,
-    SpeechEdit,
-    SpeechEvent(u64, nanatype_speech::Event),
-    SpeechTick(u64, u64),
-    SpeechRefresh,
-    SpeechInventory(nanatype_speech::Inventory),
-    SpeechModelDownload,
-    SpeechModelCancel,
-    SpeechModelDelete,
-    SpeechModelProgress(u8),
-    SpeechModelDone(Result<(), String>),
-    RequestPluginActivation(String),
-    ConfirmPluginActivation,
-    CancelPluginActivation,
-    DisablePlugin(String),
-    RefreshPackages,
-    RemovePackage(String),
-    /// A running plugin's package folder (or a dependency's) changed on disk.
-    PluginPackagesChanged,
-    /// Fresh digests for running plugins, reviewed off the UI thread.
-    PluginPackagesReviewed(Vec<(String, u64, Result<String, String>)>),
-    /// Enabled plugins reviewed off the UI thread by sync `ticket`.
-    PluginsReviewed {
-        ticket: u64,
-        reviews: crate::plugins::Reviews,
-    },
-    /// Package rows with verified signatures, from listing `ticket`.
-    PackagesListed {
-        ticket: u64,
-        rows: Vec<crate::plugins::PackageRow>,
-    },
-    /// A package archive was inspected and installed off the UI thread.
-    PackageInstalled(
-        Result<
-            (
-                nanatype_theme::InstallOutcome,
-                Box<nanatype_theme::SkinRegistry>,
-            ),
-            Vec<nanatype_theme::SkinDiagnostic>,
-        >,
-    ),
-    /// A package export finished off the UI thread.
-    PackageExported(Result<(), String>),
-    /// A fresh snapshot for the current activation review or confirmation request.
-    PluginReviewReady {
-        ticket: u64,
-        result: Result<std::sync::Arc<crate::plugins::ActivationReview>, String>,
-    },
-    PluginCommand {
-        id: String,
-        command: String,
-    },
-    PluginInput {
-        id: String,
-        event: serde_json::Value,
-    },
-    PluginResult {
-        id: String,
-        generation: u64,
-        response: std::sync::Arc<nanatype_plugins::WorkerResponse>,
-    },
     PeerStart {
         invitation: Option<String>,
         password: String,
@@ -327,50 +265,12 @@ pub enum Msg {
     Core(Cmd),
     /// Change settings.
     Edit(SettingsEdit),
-    /// Replace the editor's markup source (source mode).
-    Markup(MarkupEdit),
-    /// A formatting action from the toolbar or a shortcut.
-    Tool(Tool),
-    /// A raw editor command (scripted demos; phrase insertion).
-    EditorCommand(nana_ui::runtime::RichEditCommand),
-    /// The rich editor's document changed.
-    EditorChanged(nana_ui_core::RichText),
-    /// The rich editor's selection moved (byte offsets).
-    EditorSelection(std::ops::Range<usize>),
-    /// The `@` / `/` completion list.
-    Complete(Complete),
-    /// The rich editor found no text to paste (try an image).
-    EditorPaste,
-    EditorContext {
-        source: bool,
-        x: f32,
-        y: f32,
-        keyboard: bool,
-    },
-    EditorAction {
-        source: bool,
-        action: nana_ui::runtime::TextEditAction,
-    },
-    /// Switch between the rich editor and the markup source.
-    ToggleSource,
     Hotkey(GlobalAction),
     /// Start recording a chord for an action; `None` stops recording.
     RecordHotkey(Option<Shortcut>),
     /// A chord was captured while recording.
     HotkeyCaptured(Hotkey),
-    ToggleWindow(WindowKind),
-    ShowWindow(WindowKind),
-    OverlayAction(WindowKind, crate::services::overlay_menu::Action),
-    HideInput,
-    ResetWindow(WindowKind),
-    OpenSettings,
-    SettingsPage(crate::ui::settings::Page),
-    /// The live-platforms page, open at this platform.
-    SettingsPlatform(crate::chat::Platform),
     PickFile(FileTarget),
-    DeleteSkin(String),
-    ExportSkin(String),
-    DuplicateSkin(String),
     OpenFolder(std::path::PathBuf),
     /// Package recent logs for a bug report (About page).
     ExportDiagnostics,
@@ -381,9 +281,6 @@ pub enum Msg {
     PlaySample,
     VtsAuthorize,
     VtsRefresh,
-    InsertPhrase(usize),
-    /// Break the line at the caret (the input window's newline key).
-    InsertNewline,
     DismissNotice(u64),
     /// The tray stops showing error notice `id` in its tooltip.
     TrayErrorExpired(u64),
@@ -403,24 +300,6 @@ pub enum Msg {
     Cue(CueKind),
     Audio(AudioStatus),
     Bridge(BridgeStatus),
-    /// A sticker file changed on disk.
-    AssetsChanged,
-    Stickers(crate::stickers::Event),
-    StickerDownload(crate::stickers::Preset),
-    StickerRetry(std::path::PathBuf),
-    StickerRemove(std::path::PathBuf),
-    StickerRepository(std::path::PathBuf),
-    StickerImportFolders(Vec<std::path::PathBuf>),
-    Telegram(crate::stickers::telegram::Command),
-    TelegramEvent(crate::stickers::telegram::Event),
-    /// A file of the active (folder) skin changed and hot reload is on.
-    SkinFilesChanged,
-    /// Background layout materials finished; re-project the views using them.
-    LayoutMaterialsReady,
-    SkinScanReady {
-        ticket: u64,
-        result: Result<Box<crate::services::watch::PreparedSkins>, String>,
-    },
     /// The skin step's entrance has started; mount its preview when that
     /// entrance is over. A newer hold drops the one it replaces.
     HoldOnboardPreview,
@@ -428,39 +307,7 @@ pub enum Msg {
     RevealOnboardPreview {
         generation: u64,
     },
-    /// Prepare only the selected preview; static selection must not start motion.
-    PrepareSkinPreview {
-        id: String,
-        play: bool,
-    },
-    /// A skin preview finished preparing in the background.
-    SkinPreviewReady {
-        ticket: u64,
-        result: Result<Box<crate::ui::PreparedPreview>, String>,
-    },
-    SaveSkinPersonalization {
-        id: String,
-        profile: nanatype_settings::SkinPersonalization,
-    },
-    /// A second instance asked us to come forward.
-    SecondInstance,
-    /// Skin sounds finished decoding.
-    SoundsLoaded {
-        skin: String,
-        /// The sound pack layered over the skin's sounds.
-        pack: Option<String>,
-        bank: crate::services::sounds::Bank,
-        errors: Vec<String>,
-    },
-    /// The monitor layout was read.
-    Displays(Vec<nanatype_settings::MonitorInfo>),
     HotkeyStatus(std::collections::HashMap<GlobalAction, crate::services::hotkeys::HotkeyState>),
-    /// An image pasted into the editor (straight RGBA).
-    PasteImage {
-        width: u32,
-        height: u32,
-        rgba: Vec<u8>,
-    },
     /// The input window's native handle (for the summon hotkey).
     InputHwnd(isize),
     /// The quick input bar's native handle (for the summon hotkey).
@@ -469,88 +316,6 @@ pub enum Msg {
     QuickSend(String),
     /// Hide the quick bar (Esc, or it lost focus), dropping its line.
     QuickHide,
-    /// A chat message with stable references; pictures may still be loading.
-    Chat(std::sync::Arc<crate::chat::ChatMessage>),
-    /// A referenced picture is now in the local cache. Never adds messages.
-    ChatAssetReady(nanatype_model::AssetRef),
-    Twitch(nanatype_twitch::SessionEvent),
-    TwitchLogin,
-    TwitchCancelLogin,
-    /// Open twitch.tv/activate for the pending device code.
-    TwitchOpenActivation,
-    TwitchRefresh,
-    TwitchLogout,
-    TwitchSendToggle,
-    TwitchSendConfirm(bool),
-    TwitchRetry(nanatype_model::LineId),
-    TwitchSkipFailed(nanatype_model::LineId),
-    /// The third-party (blivechat protocol) connection reported.
-    Blivechat(nanatype_blive::BliveEvent),
-    /// The 彗星号 relay reported.
-    CometRelay(nanatype_blive::RelayStatus),
-    /// Keep this blivechat 身份码 in the system's secret store; empty forgets it.
-    BlivechatAuthCode(String),
-    /// Make a new 彗星号 address; pages using the old one are refused.
-    CometResetToken,
-    /// The obs-websocket connection reported.
-    Obs(nanatype_obs::ObsEvent),
-    /// Keep this obs-websocket password in the system's secret store; empty
-    /// forgets it.
-    ObsPassword(String),
-    /// Give this window's OBS source a bounding box at its drawn size.
-    ObsFitBounds(crate::windows::WindowKind),
-    /// Quote the message when `reply` is true; otherwise insert its author
-    /// label at the caret.
-    ChatMention {
-        seq: u64,
-        reply: bool,
-    },
-    /// Move the chat selection by this many messages: up from none selects
-    /// the newest, down past the newest selects none.
-    ChatSelect(i32),
-    /// [`Self::ChatMention`] for the selected message, or the newest.
-    ChatMentionSelected {
-        reply: bool,
-    },
-    /// Drop the pending reply.
-    ClearReply,
-    /// Empty the chat panel.
-    ClearChat,
-    /// The input sidebar's panel, chat pin or fold changed: show it (the
-    /// sidebar does at once), save it, and update the tray.
-    Dock(nanatype_settings::InputDockLayout),
-    /// Show live chat in the input sidebar, or put it away.
-    ToggleChat,
-    /// Bring the input window forward with live chat in view.
-    ShowChat,
-    /// Open this sidebar panel, or fold the sidebar when it is open.
-    DockTab(InputDockTab),
-    #[cfg(feature = "updates")]
-    /// The update checker reported.
-    Update(crate::services::updater::Event),
-    #[cfg(feature = "updates")]
-    CheckUpdate,
-    #[cfg(feature = "updates")]
-    DownloadUpdate,
-    #[cfg(feature = "updates")]
-    CancelUpdate,
-    #[cfg(feature = "updates")]
-    /// Open the downloaded installer (or its folder).
-    InstallUpdate,
-    #[cfg(feature = "updates")]
-    /// Stop reminding about the release on offer.
-    SkipUpdate,
-    #[cfg(feature = "updates")]
-    OpenUpdateNotes,
-    /// The Steam Workshop reported.
-    Workshop(nanatype_steam::Event),
-    /// Browse the Workshop for this kind of content.
-    WorkshopBrowse(crate::workshop::Tag),
-    /// Open a subscribed item's Workshop page.
-    WorkshopOpen(u64),
-    WorkshopUnsubscribe(u64),
-    /// Download a subscribed item again.
-    WorkshopDownload(u64),
     /// Show a message in the status line.
     Notice {
         text: String,
@@ -559,6 +324,280 @@ pub enum Msg {
     /// A host callback changed UI signals outside a program update.
     UiChanged,
     Quit,
+    // Each domain's messages, handled by its own module in `app/`.
+    Speech(SpeechMsg),
+    Package(PackageMsg),
+    Editor(EditorMsg),
+    Window(WindowMsg),
+    Skin(SkinMsg),
+    Sticker(StickerMsg),
+    Chat(ChatMsg),
+    Twitch(TwitchMsg),
+    Blive(BliveMsg),
+    Obs(ObsMsg),
+    #[cfg(feature = "updates")]
+    Update(UpdateMsg),
+    Workshop(WorkshopMsg),
+}
+
+pub enum SpeechMsg {
+    Toggle,
+    Resume,
+    Edit,
+    Event(u64, nanatype_speech::Event),
+    Tick(u64, u64),
+    Refresh,
+    Inventory(nanatype_speech::Inventory),
+    ModelDownload,
+    ModelCancel,
+    ModelDelete,
+    ModelProgress(u8),
+    ModelDone(Result<(), String>),
+}
+
+pub enum PackageMsg {
+    RequestActivation(String),
+    ConfirmActivation,
+    CancelActivation,
+    DisablePlugin(String),
+    Refresh,
+    Remove(String),
+    /// A running plugin's package folder (or a dependency's) changed on disk.
+    PluginPackagesChanged,
+    /// Fresh digests for running plugins, reviewed off the UI thread.
+    PluginPackagesReviewed(Vec<(String, u64, Result<String, String>)>),
+    /// Enabled plugins reviewed off the UI thread by sync `ticket`.
+    PluginsReviewed {
+        ticket: u64,
+        reviews: crate::plugins::Reviews,
+    },
+    /// Package rows with verified signatures, from listing `ticket`.
+    Listed {
+        ticket: u64,
+        rows: Vec<crate::plugins::PackageRow>,
+    },
+    /// A package archive was inspected and installed off the UI thread.
+    Installed(
+        Result<
+            (
+                nanatype_theme::InstallOutcome,
+                Box<nanatype_theme::SkinRegistry>,
+            ),
+            Vec<nanatype_theme::SkinDiagnostic>,
+        >,
+    ),
+    /// A package export finished off the UI thread.
+    Exported(Result<(), String>),
+    /// A fresh snapshot for the current activation review or confirmation request.
+    ReviewReady {
+        ticket: u64,
+        result: Result<std::sync::Arc<crate::plugins::ActivationReview>, String>,
+    },
+    PluginCommand {
+        id: String,
+        command: String,
+    },
+    PluginInput {
+        id: String,
+        event: serde_json::Value,
+    },
+    PluginResult {
+        id: String,
+        generation: u64,
+        response: std::sync::Arc<nanatype_plugins::WorkerResponse>,
+    },
+}
+
+pub enum EditorMsg {
+    /// Replace the editor's markup source (source mode).
+    Markup(MarkupEdit),
+    /// A formatting action from the toolbar or a shortcut.
+    Tool(Tool),
+    /// A raw editor command (scripted demos; phrase insertion).
+    Command(nana_ui::runtime::RichEditCommand),
+    /// The rich editor's document changed.
+    Changed(nana_ui_core::RichText),
+    /// The rich editor's selection moved (byte offsets).
+    Selection(std::ops::Range<usize>),
+    /// The `@` / `/` completion list.
+    Complete(Complete),
+    /// The rich editor found no text to paste (try an image).
+    Paste,
+    Context {
+        source: bool,
+        x: f32,
+        y: f32,
+        keyboard: bool,
+    },
+    Action {
+        source: bool,
+        action: nana_ui::runtime::TextEditAction,
+    },
+    /// Switch between the rich editor and the markup source.
+    ToggleSource,
+    InsertPhrase(usize),
+    /// Break the line at the caret (the input window's newline key).
+    InsertNewline,
+    /// An image pasted into the editor (straight RGBA).
+    PasteImage {
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    },
+}
+
+pub enum WindowMsg {
+    Toggle(WindowKind),
+    Show(WindowKind),
+    OverlayAction(WindowKind, crate::services::overlay_menu::Action),
+    HideInput,
+    Reset(WindowKind),
+    OpenSettings,
+    SettingsPage(crate::ui::settings::Page),
+    /// The live-platforms page, open at this platform.
+    SettingsPlatform(crate::chat::Platform),
+    /// A second instance asked us to come forward.
+    SecondInstance,
+    /// The monitor layout was read.
+    Displays(Vec<nanatype_settings::MonitorInfo>),
+}
+
+pub enum SkinMsg {
+    Delete(String),
+    Export(String),
+    Duplicate(String),
+    /// A file of the active (folder) skin changed and hot reload is on.
+    FilesChanged,
+    /// Background layout materials finished; re-project the views using them.
+    LayoutMaterialsReady,
+    ScanReady {
+        ticket: u64,
+        result: Result<Box<crate::services::watch::PreparedSkins>, String>,
+    },
+    /// Prepare only the selected preview; static selection must not start motion.
+    PreparePreview {
+        id: String,
+        play: bool,
+    },
+    /// A skin preview finished preparing in the background.
+    PreviewReady {
+        ticket: u64,
+        result: Result<Box<crate::ui::PreparedPreview>, String>,
+    },
+    SavePersonalization {
+        id: String,
+        profile: nanatype_settings::SkinPersonalization,
+    },
+    /// Skin sounds finished decoding.
+    SoundsLoaded {
+        skin: String,
+        /// The sound pack layered over the skin's sounds.
+        pack: Option<String>,
+        bank: crate::services::sounds::Bank,
+        errors: Vec<String>,
+    },
+}
+
+pub enum StickerMsg {
+    /// A sticker file changed on disk.
+    AssetsChanged,
+    Event(crate::stickers::Event),
+    Download(crate::stickers::Preset),
+    Retry(std::path::PathBuf),
+    Remove(std::path::PathBuf),
+    Repository(std::path::PathBuf),
+    ImportFolders(Vec<std::path::PathBuf>),
+    Telegram(crate::stickers::telegram::Command),
+    TelegramEvent(crate::stickers::telegram::Event),
+}
+
+pub enum ChatMsg {
+    /// A chat message with stable references; pictures may still be loading.
+    Message(std::sync::Arc<crate::chat::ChatMessage>),
+    /// A referenced picture is now in the local cache. Never adds messages.
+    AssetReady(nanatype_model::AssetRef),
+    /// Quote the message when `reply` is true; otherwise insert its author
+    /// label at the caret.
+    Mention { seq: u64, reply: bool },
+    /// Move the chat selection by this many messages: up from none selects
+    /// the newest, down past the newest selects none.
+    Select(i32),
+    /// [`Self::Mention`] for the selected message, or the newest.
+    MentionSelected { reply: bool },
+    /// Drop the pending reply.
+    ClearReply,
+    /// Empty the chat panel.
+    Clear,
+    /// The input sidebar's panel, chat pin or fold changed: show it (the
+    /// sidebar does at once), save it, and update the tray.
+    Dock(nanatype_settings::InputDockLayout),
+    /// Show live chat in the input sidebar, or put it away.
+    Toggle,
+    /// Bring the input window forward with live chat in view.
+    Show,
+    /// Open this sidebar panel, or fold the sidebar when it is open.
+    DockTab(InputDockTab),
+}
+
+pub enum TwitchMsg {
+    Event(nanatype_twitch::SessionEvent),
+    Login,
+    CancelLogin,
+    /// Open twitch.tv/activate for the pending device code.
+    OpenActivation,
+    Refresh,
+    Logout,
+    SendToggle,
+    SendConfirm(bool),
+    Retry(nanatype_model::LineId),
+    SkipFailed(nanatype_model::LineId),
+}
+
+pub enum BliveMsg {
+    /// The third-party (blivechat protocol) connection reported.
+    Event(nanatype_blive::BliveEvent),
+    /// The 彗星号 relay reported.
+    Relay(nanatype_blive::RelayStatus),
+    /// Keep this blivechat 身份码 in the system's secret store; empty forgets it.
+    AuthCode(String),
+    /// Make a new 彗星号 address; pages using the old one are refused.
+    ResetCometToken,
+}
+
+pub enum ObsMsg {
+    /// The obs-websocket connection reported.
+    Event(nanatype_obs::ObsEvent),
+    /// Keep this obs-websocket password in the system's secret store; empty
+    /// forgets it.
+    Password(String),
+    /// Give this window's OBS source a bounding box at its drawn size.
+    FitBounds(crate::windows::WindowKind),
+}
+
+#[cfg(feature = "updates")]
+pub enum UpdateMsg {
+    /// The update checker reported.
+    Event(crate::services::updater::Event),
+    Check,
+    Download,
+    Cancel,
+    /// Open the downloaded installer (or its folder).
+    Install,
+    /// Stop reminding about the release on offer.
+    Skip,
+    OpenNotes,
+}
+
+pub enum WorkshopMsg {
+    /// The Steam Workshop reported.
+    Event(nanatype_steam::Event),
+    /// Browse the Workshop for this kind of content.
+    Browse(crate::workshop::Tag),
+    /// Open a subscribed item's Workshop page.
+    Open(u64),
+    Unsubscribe(u64),
+    /// Download a subscribed item again.
+    Download(u64),
 }
 
 /// A toolbar or shortcut action on the draft. Applied to the rich editor's

@@ -1,4 +1,5 @@
 use super::*;
+use crate::msg::StickerMsg;
 use crate::ui::kit;
 
 /// A trash button that arms a [`confirm`].
@@ -108,7 +109,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                             "stickers-repository"
                         };
                         actions.push(button(ui, label, move || {
-                            Msg::StickerRepository(root.clone())
+                            Msg::Sticker(StickerMsg::Repository(root.clone()))
                         }));
                     }
                     if !pack.phase.busy() && pack.phase != Phase::Ready {
@@ -123,8 +124,10 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                             },
                             move || {
                                 preset
-                                    .map(Msg::StickerDownload)
-                                    .unwrap_or_else(|| Msg::StickerRetry(root.clone()))
+                                    .map(|e| Msg::Sticker(StickerMsg::Download(e)))
+                                    .unwrap_or_else(|| {
+                                        Msg::Sticker(StickerMsg::Retry(root.clone()))
+                                    })
                             },
                         ));
                     }
@@ -132,7 +135,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                         let root = pack.root.clone();
                         if pack.phase.busy() {
                             actions.push(button(ui, "common-cancel", move || {
-                                Msg::StickerRemove(root.clone())
+                                Msg::Sticker(StickerMsg::Remove(root.clone()))
                             }));
                         } else {
                             actions.push(confirm(
@@ -140,7 +143,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                                 ui.now_t("assets-remove-folder-confirm"),
                                 ui.now_t("assets-remove"),
                                 |armed| remove_button(ui, armed),
-                                move || Msg::StickerRemove(root.clone()),
+                                move || Msg::Sticker(StickerMsg::Remove(root.clone())),
                             ));
                         }
                     }

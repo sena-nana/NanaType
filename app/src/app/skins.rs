@@ -1,13 +1,13 @@
 use super::App;
-use crate::msg::{FileTarget, Msg};
+use crate::msg::{FileTarget, Msg, SkinMsg};
 use crate::services::sounds;
 use nanatype_theme::TomlTable;
 
 impl App {
     /// Skin files, previews, personalization and the skin catalogue.
-    pub(super) fn skin_msg(&mut self, msg: Msg) {
+    pub(super) fn skin_msg(&mut self, msg: SkinMsg) {
         match msg {
-            Msg::DeleteSkin(id) => {
+            SkinMsg::Delete(id) => {
                 if let Err(e) = self.registry.remove(&id) {
                     let text = self
                         .ui
@@ -20,16 +20,16 @@ impl App {
                     self.edit(|s| s.skin.id = nanatype_theme::DEFAULT_SKIN.into());
                 }
             }
-            Msg::ExportSkin(id) => {
+            SkinMsg::Export(id) => {
                 self.export_target = Some(id);
                 self.pick(FileTarget::ExportSkin);
             }
-            Msg::DuplicateSkin(base) => self.duplicate_skin(&base),
-            Msg::SkinFilesChanged => {
+            SkinMsg::Duplicate(base) => self.duplicate_skin(&base),
+            SkinMsg::FilesChanged => {
                 self.request_skin_reload(true);
             }
-            Msg::LayoutMaterialsReady => self.ui.layout_epoch.update(|e| *e += 1),
-            Msg::SkinScanReady { ticket, result } => match self.skin_reload.finish(ticket) {
+            SkinMsg::LayoutMaterialsReady => self.ui.layout_epoch.update(|e| *e += 1),
+            SkinMsg::ScanReady { ticket, result } => match self.skin_reload.finish(ticket) {
                 Err(latest) => {
                     if let Ok(prepared) = result {
                         crate::ui::retire_skin_urls(
@@ -56,8 +56,8 @@ impl App {
                     Err(error) => self.notice(error, true),
                 },
             },
-            Msg::PrepareSkinPreview { id, play } => self.prepare_skin_preview(id, play),
-            Msg::SkinPreviewReady { ticket, result } => match result {
+            SkinMsg::PreparePreview { id, play } => self.prepare_skin_preview(id, play),
+            SkinMsg::PreviewReady { ticket, result } => match result {
                 _ if ticket != self.skin_preview_ticket => {
                     if let Ok(prepared) = result {
                         prepared.discard(self.ui);
@@ -77,7 +77,7 @@ impl App {
                 }
                 Err(error) => self.notice(error, true),
             },
-            Msg::SaveSkinPersonalization { id, mut profile } => {
+            SkinMsg::SavePersonalization { id, mut profile } => {
                 if profile.valid() && self.registry.entries().iter().any(|r| r.id == id) {
                     // Keep only values the skin's params accept and that
                     // differ from their defaults.
@@ -96,7 +96,7 @@ impl App {
                     }
                 }
             }
-            Msg::SoundsLoaded {
+            SkinMsg::SoundsLoaded {
                 skin,
                 pack,
                 bank,
@@ -112,7 +112,6 @@ impl App {
                     }
                 }
             }
-            _ => unreachable!("not a skin message"),
         }
     }
 
@@ -131,7 +130,7 @@ impl App {
                     Box::new(job.run(&registry))
                 }))
                 .map_err(|_| "Skin preview worker failed".to_owned());
-                ctx.dispatch(Msg::SkinPreviewReady { ticket, result });
+                ctx.dispatch(Msg::Skin(SkinMsg::PreviewReady { ticket, result }));
             })
         {
             self.notice(error.to_string(), true);

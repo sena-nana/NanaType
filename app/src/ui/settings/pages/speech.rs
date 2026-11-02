@@ -1,4 +1,5 @@
 use super::*;
+use crate::msg::SpeechMsg;
 use crate::ui::kit;
 use nanatype_settings::SpeechBackend;
 use nanatype_speech::model::ModelState;
@@ -142,7 +143,10 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                             |s, v| s.speech.language = (!v.is_empty()).then(|| v.into()),
                         ),
                     ),
-                    kit::line((), button(ui, "speech-refresh", || Msg::SpeechRefresh)),
+                    kit::line(
+                        (),
+                        button(ui, "speech-refresh", || Msg::Speech(SpeechMsg::Refresh)),
+                    ),
                 ],
             ),
             dynamic(
@@ -174,7 +178,9 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                             (Type::Body.view(status), hint(ui.now_t("speech-model-hint"))),
                             (
                                 (!working && !ready).then(|| {
-                                    button(ui, "speech-model-download", || Msg::SpeechModelDownload)
+                                    button(ui, "speech-model-download", || {
+                                        Msg::Speech(SpeechMsg::ModelDownload)
+                                    })
                                 }),
                                 (!working).then(|| {
                                     button(ui, "speech-model-import", || {
@@ -182,10 +188,14 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                                     })
                                 }),
                                 working.then(|| {
-                                    button(ui, "speech-model-cancel", || Msg::SpeechModelCancel)
+                                    button(ui, "speech-model-cancel", || {
+                                        Msg::Speech(SpeechMsg::ModelCancel)
+                                    })
                                 }),
                                 (!working && ready).then(|| {
-                                    button(ui, "speech-model-delete", || Msg::SpeechModelDelete)
+                                    button(ui, "speech-model-delete", || {
+                                        Msg::Speech(SpeechMsg::ModelDelete)
+                                    })
                                 }),
                             ),
                         )],

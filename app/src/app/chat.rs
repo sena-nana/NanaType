@@ -1,5 +1,5 @@
 use super::App;
-use crate::msg::Msg;
+use crate::msg::{ChatMsg, Msg, WindowMsg};
 use nanatype_core::{Cmd, Core, Effects};
 use nanatype_model::outgoing;
 use nanatype_settings::InputDockLayout;
@@ -7,23 +7,23 @@ use std::sync::Arc;
 
 impl App {
     /// The live chat panel.
-    pub(super) fn chat_msg(&mut self, msg: Msg) {
+    pub(super) fn chat_msg(&mut self, msg: ChatMsg) {
         match msg {
-            Msg::Chat(message) => {
+            ChatMsg::Message(message) => {
                 if self.plugins.has_running() {
                     self.plugins.broadcast(serde_json::json!({"type":"chat_message","platform":message.platform.source(),"author":message.user.name,"text":message.doc.plain_text()}),self.ui);
                 }
                 self.chat_message(message);
             }
-            Msg::ChatAssetReady(asset) => {
+            ChatMsg::AssetReady(asset) => {
                 let mut urls = (*self.ui.asset_urls.get_untracked()).clone();
                 urls.remove(&asset.to_string());
                 self.ui.asset_urls.set(Arc::new(urls));
                 self.ensure_urls([asset]);
             }
-            Msg::ChatMention { seq, reply } => self.mention(seq, reply),
-            Msg::ChatSelect(step) => self.select_chat(step),
-            Msg::ChatMentionSelected { reply } => {
+            ChatMsg::Mention { seq, reply } => self.mention(seq, reply),
+            ChatMsg::Select(step) => self.select_chat(step),
+            ChatMsg::MentionSelected { reply } => {
                 let shown = self.chat_shown();
                 let selected = self
                     .ui
@@ -35,32 +35,33 @@ impl App {
                     None => self.notice(self.ui.now_t("chat-none"), false),
                 }
             }
-            Msg::ClearReply => {
+            ChatMsg::ClearReply => {
                 self.run(Cmd::SetReply(None));
                 self.ui.chat_target.set(None);
             }
-            Msg::ClearChat => {
+            ChatMsg::Clear => {
                 self.chat.clear();
                 self.ui.chat_target.set(None);
                 self.publish_chat();
             }
-            Msg::Dock(layout) => self.dock(layout),
-            Msg::ToggleChat => {
+            ChatMsg::Dock(layout) => self.dock(layout),
+            ChatMsg::Toggle => {
                 let layout = self.ui.input_dock.get_untracked().toggle_chat();
                 self.dock(layout);
             }
-            Msg::DockTab(tab) => {
+            ChatMsg::DockTab(tab) => {
                 let layout = self.ui.input_dock.get_untracked().rail(tab);
                 self.dock(layout);
             }
-            Msg::ShowChat => {
+            ChatMsg::Show => {
                 let layout = self.ui.input_dock.get_untracked();
                 if !layout.chat_visible() {
                     self.dock(layout.toggle_chat());
                 }
-                self.update(Msg::ShowWindow(crate::windows::WindowKind::Input));
+                self.update(Msg::Window(WindowMsg::Show(
+                    crate::windows::WindowKind::Input,
+                )));
             }
-            _ => unreachable!("not a chat message"),
         }
     }
 

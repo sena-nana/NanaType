@@ -2,7 +2,7 @@
 use super::Ui;
 use super::danmaku::Link;
 use super::settings::controls::{block, button, hint, row, row_live_hint, section, switch, text};
-use crate::msg::Msg;
+use crate::msg::{Msg, TwitchMsg};
 use crate::ui::kit::{Row, Type, gap, inset, line};
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{
@@ -65,16 +65,18 @@ fn account_card(ui: Ui) -> AnyView {
                 AccountState::Ready(p) => (
                     Some(format!("@{}", p.login)),
                     vec![
-                        button(ui, "tw-refresh", || Msg::TwitchRefresh),
-                        button(ui, "tw-logout", || Msg::TwitchLogout),
+                        button(ui, "tw-refresh", || Msg::Twitch(TwitchMsg::Refresh)),
+                        button(ui, "tw-logout", || Msg::Twitch(TwitchMsg::Logout)),
                     ],
                     None,
                 ),
                 AccountState::Pending { code, .. } => (
                     None,
                     vec![
-                        button(ui, "tw-open-activation", || Msg::TwitchOpenActivation),
-                        button(ui, "common-cancel", || Msg::TwitchCancelLogin),
+                        button(ui, "tw-open-activation", || {
+                            Msg::Twitch(TwitchMsg::OpenActivation)
+                        }),
+                        button(ui, "common-cancel", || Msg::Twitch(TwitchMsg::CancelLogin)),
                     ],
                     Some(block((
                         hint(ui.now_t("tw-pending-hint")),
@@ -85,14 +87,14 @@ fn account_card(ui: Ui) -> AnyView {
                 AccountState::Failed(message) => (
                     Some(diagnostic(ui, message)),
                     vec![
-                        button(ui, "tw-login", || Msg::TwitchLogin),
-                        button(ui, "tw-refresh", || Msg::TwitchRefresh),
+                        button(ui, "tw-login", || Msg::Twitch(TwitchMsg::Login)),
+                        button(ui, "tw-refresh", || Msg::Twitch(TwitchMsg::Refresh)),
                     ],
                     None,
                 ),
                 _ => (
                     Some(ui.now_t("tw-login-hint")),
-                    vec![button(ui, "tw-login", || Msg::TwitchLogin)],
+                    vec![button(ui, "tw-login", || Msg::Twitch(TwitchMsg::Login))],
                     None,
                 ),
             };
@@ -119,7 +121,9 @@ fn send_toggle(ui: Ui) -> AnyView {
             s.checked = state.sending;
             s.disabled = !state.can_send() && !state.sending;
         })
-        .on_cx(|_, _: &ToggleChanged, cx| cx.dispatch_program_all(Msg::TwitchSendToggle))
+        .on_cx(|_, _: &ToggleChanged, cx| {
+            cx.dispatch_program_all(Msg::Twitch(TwitchMsg::SendToggle))
+        })
         .into_any()
 }
 fn deliveries(ui: Ui) -> AnyView {
@@ -153,9 +157,11 @@ fn deliveries(ui: Ui) -> AnyView {
                             Msg::CopyText(remaining.clone())
                         }));
                         if d.blocked {
-                            row.push(button(ui, "tw-retry", move || Msg::TwitchRetry(line)));
+                            row.push(button(ui, "tw-retry", move || {
+                                Msg::Twitch(TwitchMsg::Retry(line))
+                            }));
                             row.push(button(ui, "tw-skip-failed", move || {
-                                Msg::TwitchSkipFailed(line)
+                                Msg::Twitch(TwitchMsg::SkipFailed(line))
                             }));
                         }
                     }
@@ -197,12 +203,14 @@ pub fn confirm_dialog(ui: Ui) -> AnyView {
     })
     .open(move || ui.twitch.get().confirm)
     .on_cx(|_, intent: &ConfirmIntent, cx| {
-        cx.dispatch_program_all(Msg::TwitchSendConfirm(matches!(
+        cx.dispatch_program_all(Msg::Twitch(TwitchMsg::SendConfirm(matches!(
             intent,
             ConfirmIntent::Confirm { .. }
-        )))
+        ))))
     })
-    .on_cx(|_, _: &DialogCloseRequested, cx| cx.dispatch_program_all(Msg::TwitchSendConfirm(false)))
+    .on_cx(|_, _: &DialogCloseRequested, cx| {
+        cx.dispatch_program_all(Msg::Twitch(TwitchMsg::SendConfirm(false)))
+    })
     .into_any()
 }
 pub fn settings_page(ui: Ui) -> AnyView {

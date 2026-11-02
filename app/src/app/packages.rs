@@ -1,22 +1,22 @@
 use super::App;
-use crate::msg::Msg;
+use crate::msg::{Msg, PackageMsg};
 use std::sync::Arc;
 
 impl App {
     /// Plugin consent, package removal and plugin traffic.
-    pub(super) fn package_msg(&mut self, msg: Msg) {
+    pub(super) fn package_msg(&mut self, msg: PackageMsg) {
         match msg {
-            Msg::RequestPluginActivation(id) => {
+            PackageMsg::RequestActivation(id) => {
                 let ticket = self.plugin_activation.request(id.clone(), self.ui);
                 self.review_plugin(ticket, id);
             }
-            Msg::CancelPluginActivation => self.plugin_activation.cancel(self.ui),
-            Msg::ConfirmPluginActivation => {
+            PackageMsg::CancelActivation => self.plugin_activation.cancel(self.ui),
+            PackageMsg::ConfirmActivation => {
                 if let Some((ticket, reviewed)) = self.plugin_activation.confirm(self.ui) {
                     self.review_plugin(ticket, reviewed.id.clone());
                 }
             }
-            Msg::PluginReviewReady { ticket, result } => {
+            PackageMsg::ReviewReady { ticket, result } => {
                 match self.plugin_activation.complete(ticket, result, self.ui) {
                     Ok(Some(current)) => {
                         let unchanged = self.settings.enabled_plugins.contains(&current.id)
@@ -53,7 +53,7 @@ impl App {
                     Err(error) => self.notice(error, true),
                 }
             }
-            Msg::PluginsReviewed { ticket, reviews } => self.plugins.start_reviewed(
+            PackageMsg::PluginsReviewed { ticket, reviews } => self.plugins.start_reviewed(
                 ticket,
                 reviews,
                 &self.settings.enabled_plugins,
@@ -61,15 +61,15 @@ impl App {
                 self.ctx.clone(),
                 self.ui,
             ),
-            Msg::PackagesListed { ticket, rows } => self.plugins.listed(ticket, rows, self.ui),
-            Msg::PackageInstalled(result) => self.package_installed(result),
-            Msg::PackageExported(result) => {
+            PackageMsg::Listed { ticket, rows } => self.plugins.listed(ticket, rows, self.ui),
+            PackageMsg::Installed(result) => self.package_installed(result),
+            PackageMsg::Exported(result) => {
                 if let Err(e) = result {
                     let text = self.ui.tr("skins-export-failed", &[("message", e.into())]);
                     self.notice(text, true);
                 }
             }
-            Msg::DisablePlugin(id) => {
+            PackageMsg::DisablePlugin(id) => {
                 self.plugin_activation.cancel_for(&id, self.ui);
                 self.plugins.stop(&id, self.ui);
                 self.edit(|s| {
@@ -77,7 +77,7 @@ impl App {
                     s.plugin_approvals.remove(&id);
                 });
             }
-            Msg::RefreshPackages => {
+            PackageMsg::Refresh => {
                 self.plugin_activation.cancel(self.ui);
                 self.registry.rescan();
                 self.refresh_skin_rows();
@@ -90,7 +90,7 @@ impl App {
                     self.ui,
                 );
             }
-            Msg::RemovePackage(id) => match self.registry.remove(&id) {
+            PackageMsg::Remove(id) => match self.registry.remove(&id) {
                 Ok(()) => {
                     self.plugin_activation.cancel(self.ui);
                     self.edit(|s| {
@@ -105,20 +105,24 @@ impl App {
                 }
                 Err(error) => self.notice(error.to_string(), true),
             },
-            Msg::PluginPackagesChanged => {
+            PackageMsg::PluginPackagesChanged => {
                 let registry = self.registry.clone();
                 let ids = self.plugins.running();
                 crate::plugins::background("plugin-review", &self.ctx, move || {
-                    Msg::PluginPackagesReviewed(crate::plugins::review_digests(&registry, &ids))
+                    Msg::Package(PackageMsg::PluginPackagesReviewed(
+                        crate::plugins::review_digests(&registry, &ids),
+                    ))
                 });
             }
-            Msg::PluginPackagesReviewed(reviewed) => self.plugins.revalidate(&reviewed, self.ui),
-            Msg::PluginResult {
+            PackageMsg::PluginPackagesReviewed(reviewed) => {
+                self.plugins.revalidate(&reviewed, self.ui)
+            }
+            PackageMsg::PluginResult {
                 id,
                 generation,
                 response,
             } => self.plugins.receive(&id, generation, &response, self.ui),
-            Msg::PluginCommand { id, command } => {
+            PackageMsg::PluginCommand { id, command } => {
                 let allowed = self.ui.plugin_views.with_untracked(|views| {
                     views
                         .get(&id)
@@ -130,22 +134,21 @@ impl App {
                         .event(&id, serde_json::json!({"type":"command","id":command}));
                 }
             }
-            Msg::PluginInput { id, event } => {
+            PackageMsg::PluginInput { id, event } => {
                 let _ = self.plugins.event(&id, event);
             }
-            _ => unreachable!("not a package message"),
         }
     }
 
     fn review_plugin(&mut self, ticket: u64, id: String) {
         let registry = self.registry.clone();
         if let Err(error) = crate::plugins::try_background("plugin-review", &self.ctx, move || {
-            Msg::PluginReviewReady {
+            Msg::Package(PackageMsg::ReviewReady {
                 ticket,
                 result: crate::plugins::review(&registry, &id).map(Arc::new),
-            }
+            })
         }) {
-            self.package_msg(Msg::PluginReviewReady {
+            self.package_msg(PackageMsg::ReviewReady {
                 ticket,
                 result: Err(error.to_string()),
             });

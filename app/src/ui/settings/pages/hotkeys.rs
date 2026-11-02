@@ -1,4 +1,5 @@
 use super::*;
+use crate::msg::WindowMsg;
 
 /// What is wrong with an action's binding, worst first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -314,7 +315,7 @@ fn phrase_rows(ui: Ui) -> Row {
         move |labels| {
             let edit_phrases = || {
                 button(ui, "hotkeys-edit-phrases", || {
-                    Msg::SettingsPage(Page::Assets)
+                    Msg::Window(WindowMsg::SettingsPage(Page::Assets))
                 })
             };
             if labels.is_empty() {

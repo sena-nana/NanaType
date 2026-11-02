@@ -3,13 +3,13 @@
 //! Without OBS (off, unreachable, no source, no box) an output keeps its
 //! fixed size.
 
+use crate::msg::ObsMsg;
 use std::sync::Arc;
 
 use nanatype_obs::{ObsConfig, ObsEvent, ObsItem, ObsScene, ObsStatus, ObsUpdate};
 use nanatype_settings::{Settings, SpoutOutput, fit_output_size};
 
 use crate::app::App;
-use crate::msg::Msg;
 use crate::output::KINDS;
 use crate::ui::LinkState;
 use crate::windows::WindowKind;
@@ -89,10 +89,10 @@ pub fn box_size(item: &ObsItem, out: &SpoutOutput, window: Option<[f32; 2]>) -> 
 }
 
 impl App {
-    pub(super) fn obs_msg(&mut self, msg: Msg) {
+    pub(super) fn obs_msg(&mut self, msg: ObsMsg) {
         match msg {
-            Msg::Obs(event) => self.obs_event(event),
-            Msg::ObsPassword(password) => {
+            ObsMsg::Event(event) => self.obs_event(event),
+            ObsMsg::Password(password) => {
                 if let Err(e) = self.obs_password.set(&password) {
                     nanatype_diag::report!(crate::diag::OBS_SECRET_FAILED, op = 1u64; "{e}");
                     let text = self.ui.now_t("obs-password-not-stored");
@@ -101,8 +101,7 @@ impl App {
                 self.obs_configure();
                 self.publish_obs_sizes();
             }
-            Msg::ObsFitBounds(kind) => self.obs_fit_bounds(kind),
-            _ => unreachable!("not an OBS message"),
+            ObsMsg::FitBounds(kind) => self.obs_fit_bounds(kind),
         }
     }
 

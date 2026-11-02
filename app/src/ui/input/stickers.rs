@@ -1,6 +1,7 @@
 //! The sidebar's stickers: search, pack tabs, the grid, and a folder-drop
 //! target that imports packs.
 use super::*;
+use crate::msg::{StickerMsg, WindowMsg};
 use crate::ui::kit::{self, Type, gap};
 use nana_ui::runtime::{FileDropEvent, TabOption, Tabs, TabsEvent};
 
@@ -77,9 +78,9 @@ pub(super) fn panel(ui: Ui) -> AnyView {
                             .size(ControlSize::Small),
                     )
                     .on_cx(move |_, _: &Activate, cx| {
-                        cx.dispatch_program_all(Msg::SettingsPage(
+                        cx.dispatch_program_all(Msg::Window(WindowMsg::SettingsPage(
                             crate::ui::settings::Page::Assets,
-                        ))
+                        )))
                     }),
                 ))
                 .into_any();
@@ -224,7 +225,7 @@ pub(super) fn panel(ui: Ui) -> AnyView {
         FileDropEvent::Dropped { paths, .. } => {
             hovered.set(false);
             selected.set(String::new());
-            cx.dispatch_program_all(Msg::StickerImportFolders(paths.to_vec()));
+            cx.dispatch_program_all(Msg::Sticker(StickerMsg::ImportFolders(paths.to_vec())));
         }
     })
     .children((

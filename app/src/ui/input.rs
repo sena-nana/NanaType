@@ -32,7 +32,7 @@ use nanatype_settings::{InputKey, InputMode, Settings};
 use super::dialogue::{Source, dialogue_box};
 use super::rich::{ChipKind, MarkerLook};
 use super::{I18N, Ui, c};
-use crate::msg::{FileTarget, MarkupEdit, Msg, Tool};
+use crate::msg::{ChatMsg, EditorMsg, FileTarget, MarkupEdit, Msg, Tool};
 use crate::ui::kit::{self, Tone, Type, gap, icon, inset};
 use crate::windows::TOOLBAR_H;
 
@@ -57,7 +57,7 @@ use nanatype_frame::ui::editor_view::{self, EditorEvent};
 pub use nanatype_frame::ui::editor_view::{marker_label, preview_editor};
 
 fn act(tool: Tool) -> Msg {
-    Msg::Tool(tool)
+    Msg::Editor(EditorMsg::Tool(tool))
 }
 
 /// Toolbar glyphs: one size for every tool, centred in a 28px target.
@@ -202,7 +202,7 @@ fn source_toggle(ui: Ui) -> AnyView {
         ui.now_t("tb-source"),
         Tip::Below,
         move || ui.source_mode.get(),
-        || Msg::ToggleSource,
+        || Msg::Editor(EditorMsg::ToggleSource),
     )
     .into_any()
 }
@@ -1301,7 +1301,9 @@ fn reply_bar(ui: Ui) -> AnyView {
                         .size(ControlSize::Small)
                         .with_tooltip(ui.now_t("chat-reply-cancel")),
                 )
-                .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::ClearReply)),
+                .on_cx(|_, _: &Activate, cx| {
+                    cx.dispatch_program_all(Msg::Chat(ChatMsg::ClearReply))
+                }),
             ))
             .into_any()
         },
@@ -1356,17 +1358,17 @@ fn editor_area(
                 x,
                 y,
                 keyboard,
-            } => Msg::EditorContext {
+            } => Msg::Editor(EditorMsg::Context {
                 source,
                 x,
                 y,
                 keyboard,
-            },
-            EditorEvent::Changed(rich) => Msg::EditorChanged(rich),
-            EditorEvent::Selection(selection) => Msg::EditorSelection(selection),
-            EditorEvent::Paste => Msg::EditorPaste,
+            }),
+            EditorEvent::Changed(rich) => Msg::Editor(EditorMsg::Changed(rich)),
+            EditorEvent::Selection(selection) => Msg::Editor(EditorMsg::Selection(selection)),
+            EditorEvent::Paste => Msg::Editor(EditorMsg::Paste),
             EditorEvent::Typed { text, selection } => {
-                Msg::Markup(MarkupEdit::Typed { text, selection })
+                Msg::Editor(EditorMsg::Markup(MarkupEdit::Typed { text, selection }))
             }
         })
     })

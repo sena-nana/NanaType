@@ -12,7 +12,7 @@ use nanatype_settings::{InputMode, Lock, Settings};
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
-use crate::msg::{GlobalAction, Msg};
+use crate::msg::{ChatMsg, GlobalAction, Msg, SpeechMsg, WindowMsg};
 use crate::windows::WindowKind;
 
 const ID_INPUT: &str = "nt.input";
@@ -253,7 +253,7 @@ fn ico_png(ico: &[u8], px: u32) -> Option<&[u8]> {
 }
 
 fn toggle_msg(kind: WindowKind) -> Msg {
-    Msg::ToggleWindow(kind)
+    Msg::Window(WindowMsg::Toggle(kind))
 }
 
 fn menu_message(id: &str) -> Option<Msg> {
@@ -264,7 +264,7 @@ fn menu_message(id: &str) -> Option<Msg> {
         ID_INPUT => toggle_msg(WindowKind::Input),
         ID_DISPLAY => toggle_msg(WindowKind::Display),
         ID_HISTORY => toggle_msg(WindowKind::History),
-        ID_CHAT => Msg::ToggleChat,
+        ID_CHAT => Msg::Chat(ChatMsg::Toggle),
         ID_LOCK => Msg::Edit(Box::new(|s: &mut Settings| {
             let locked = s.overlays.display.lock == Lock::Locked;
             let lock = if locked {
@@ -284,10 +284,10 @@ fn menu_message(id: &str) -> Option<Msg> {
         ID_MIRROR => Msg::Edit(Box::new(|s: &mut Settings| {
             s.general.input_mode = InputMode::Mirror
         })),
-        ID_SETTINGS => Msg::OpenSettings,
-        ID_OBS => Msg::SettingsPage(crate::ui::settings::Page::Output),
+        ID_SETTINGS => Msg::Window(WindowMsg::OpenSettings),
+        ID_OBS => Msg::Window(WindowMsg::SettingsPage(crate::ui::settings::Page::Output)),
         ID_QUIT => Msg::Quit,
-        ID_SPEECH => Msg::SpeechToggle,
+        ID_SPEECH => Msg::Speech(SpeechMsg::Toggle),
         other => {
             let skin = other.strip_prefix(SKIN_PREFIX)?.to_owned();
             Msg::Edit(Box::new(move |s: &mut Settings| s.skin.id = skin))
@@ -363,7 +363,7 @@ impl Tray {
                 ..
             } = event
             {
-                post(Msg::ShowWindow(WindowKind::Input));
+                post(Msg::Window(WindowMsg::Show(WindowKind::Input)));
             }
         }));
         Ok(Self {
@@ -565,18 +565,18 @@ mod tests {
     fn shared_handler_keeps_tray_and_overlay_targets_separate() {
         assert!(matches!(
             menu_message(ID_DISPLAY),
-            Some(Msg::ToggleWindow(WindowKind::Display))
+            Some(Msg::Window(WindowMsg::Toggle(WindowKind::Display)))
         ));
         assert!(matches!(
             menu_message(ID_HISTORY),
-            Some(Msg::ToggleWindow(WindowKind::History))
+            Some(Msg::Window(WindowMsg::Toggle(WindowKind::History)))
         ));
         assert!(matches!(
             menu_message("nt.overlay:peer_display:close"),
-            Some(Msg::OverlayAction(
+            Some(Msg::Window(WindowMsg::OverlayAction(
                 WindowKind::PeerDisplay,
                 super::super::overlay_menu::Action::Close
-            ))
+            )))
         ));
         let Some(Msg::Edit(edit)) = menu_message("nt.skin:nanatype.night") else {
             panic!("tray skin edit")

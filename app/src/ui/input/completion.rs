@@ -9,6 +9,7 @@
 use super::*;
 use crate::completion::Trigger;
 use crate::msg::Complete;
+use crate::msg::EditorMsg;
 use crate::ui::kit::{card_frame, gap, icon, popover};
 use nana_ui::runtime::{IconGlyph, ListItem};
 use nana_ui_core::RadiusTier;
@@ -177,7 +178,7 @@ fn row(ui: Ui, i: usize, item: &crate::completion::Item, glyph: nana_ui::Icon) -
             }),
         )
         .on_cx(move |_, _: &Activate, cx| {
-            cx.dispatch_program_all(Msg::Complete(Complete::Accept(Some(i))))
+            cx.dispatch_program_all(Msg::Editor(EditorMsg::Complete(Complete::Accept(Some(i)))))
         })
         .into_any()
 }

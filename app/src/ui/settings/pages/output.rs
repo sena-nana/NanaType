@@ -1,3 +1,4 @@
+use crate::msg::ObsMsg;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::*;
@@ -407,7 +408,7 @@ fn obs_source_row(ui: Ui, kind: WindowKind, read: Read, write: Write) -> Row {
             ui.now_t("obs-bounds-notice"),
         )
         .trailing(primary(ui, "obs-fit-bounds", move || {
-            Msg::ObsFitBounds(kind)
+            Msg::Obs(ObsMsg::FitBounds(kind))
         }))
         .css(nana_ui::runtime::view::css! { align-items: center; }),
     );
@@ -428,7 +429,7 @@ fn obs_password_field(ui: Ui) -> AnyView {
     let save = move || {
         let password = draft.get_untracked();
         draft.set(String::new());
-        Msg::ObsPassword(password)
+        Msg::Obs(ObsMsg::Password(password))
     };
     widget(
         Stack::row(0.0)
@@ -466,7 +467,9 @@ fn obs_password_field(ui: Ui) -> AnyView {
                     .style(Type::Small.style())
                     .color(SemanticColorRole::Muted),
             ),
-            button(ui, "obs-password-clear", || Msg::ObsPassword(String::new())),
+            button(ui, "obs-password-clear", || {
+                Msg::Obs(ObsMsg::Password(String::new()))
+            }),
         )),
     ))
     .into_any()

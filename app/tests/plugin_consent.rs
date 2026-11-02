@@ -4,7 +4,7 @@ mod common;
 
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nanatype::{
-    msg::Msg,
+    msg::{Msg, PackageMsg},
     plugins::{
         Activation, ActivationReview, Manager, approval_matches, changed, review, review_digests,
     },
@@ -682,7 +682,7 @@ fn consent_panel_discloses_risks_and_needs_a_real_trusted_source_selection() {
             assert!(
                 messages(&mut session)
                     .iter()
-                    .any(|m| matches!(m, Msg::CancelPluginActivation))
+                    .any(|m| matches!(m, Msg::Package(PackageMsg::CancelActivation)))
             );
             activation.cancel(ui);
             activation.complete(first, Ok(review.clone()), ui).unwrap();
@@ -754,7 +754,7 @@ fn consent_panel_discloses_risks_and_needs_a_real_trusted_source_selection() {
             assert!(
                 messages(&mut session)
                     .iter()
-                    .any(|m| matches!(m, Msg::ConfirmPluginActivation))
+                    .any(|m| matches!(m, Msg::Package(PackageMsg::ConfirmActivation)))
             );
             let (confirmation, _) = activation.confirm(ui).unwrap();
             capture(&mut session, &captures, locale, width, "confirming");
@@ -782,7 +782,7 @@ fn consent_panel_discloses_risks_and_needs_a_real_trusted_source_selection() {
             assert!(
                 messages(&mut session)
                     .iter()
-                    .any(|m| matches!(m, Msg::CancelPluginActivation))
+                    .any(|m| matches!(m, Msg::Package(PackageMsg::CancelActivation)))
             );
             activation.cancel(ui);
             assert!(

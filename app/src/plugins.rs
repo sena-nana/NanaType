@@ -1,5 +1,8 @@
 //! Package catalogue and per-plugin process lifetimes. Only local UI events return.
-use crate::{msg::Msg, ui::Ui};
+use crate::{
+    msg::{Msg, PackageMsg},
+    ui::Ui,
+};
 use nana_ui::RuntimeProgramContext;
 use nanatype_plugins::{PluginUpdate, WorkerResponse};
 use nanatype_theme::{PackageCapability, PackageManifest, SkinRegistry};
@@ -177,7 +180,7 @@ impl Manager {
             crate::services::watch::Watch::start(
                 roots,
                 move |m| ctx.dispatch(m),
-                || Msg::PluginPackagesChanged,
+                || Msg::Package(PackageMsg::PluginPackagesChanged),
             )
         });
     }
@@ -205,9 +208,11 @@ impl Manager {
     pub fn refresh(&mut self, registry: &SkinRegistry, ctx: &RuntimeProgramContext<Msg>) {
         self.listing = NEXT_TICKET.fetch_add(1, Ordering::Relaxed);
         let (registry, ticket) = (registry.clone(), self.listing);
-        background("package-list", ctx, move || Msg::PackagesListed {
-            ticket,
-            rows: package_rows(&registry),
+        background("package-list", ctx, move || {
+            Msg::Package(PackageMsg::Listed {
+                ticket,
+                rows: package_rows(&registry),
+            })
         });
     }
     pub fn listed(&self, ticket: u64, rows: Vec<PackageRow>, ui: Ui) {
@@ -247,15 +252,17 @@ impl Manager {
             return;
         }
         let (registry, ticket) = (registry.clone(), self.ticket);
-        background("plugin-review", &ctx, move || Msg::PluginsReviewed {
-            ticket,
-            reviews: pending
-                .into_iter()
-                .map(|id| {
-                    let reviewed = review(&registry, &id).map(Arc::new);
-                    (id, reviewed)
-                })
-                .collect(),
+        background("plugin-review", &ctx, move || {
+            Msg::Package(PackageMsg::PluginsReviewed {
+                ticket,
+                reviews: pending
+                    .into_iter()
+                    .map(|id| {
+                        let reviewed = review(&registry, &id).map(Arc::new);
+                        (id, reviewed)
+                    })
+                    .collect(),
+            })
         });
     }
     /// Start reviewed plugins whose approval still matches their content.
@@ -284,11 +291,11 @@ impl Manager {
                     approvals.get(&id),
                     &executable,
                     move |generation, response| {
-                        dispatch.dispatch(Msg::PluginResult {
+                        dispatch.dispatch(Msg::Package(PackageMsg::PluginResult {
                             id: plugin_id.clone(),
                             generation,
                             response: Arc::new(response),
-                        });
+                        }));
                     },
                     ui,
                 )

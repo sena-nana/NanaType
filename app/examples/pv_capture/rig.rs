@@ -4,7 +4,7 @@
 use nana_ui::runtime::view::IntoView;
 use nana_ui::runtime::{DocumentId, Entity, RichTextEditor, RuntimeDocument, TextArea};
 use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
-use nanatype::msg::Msg;
+use nanatype::msg::{ChatMsg, EditorMsg, Msg, SkinMsg};
 use nanatype::ui::{self, Ui, dialogue};
 use nanatype_core::{Cmd, Core, Effects, Event, Wake};
 use nanatype_playback::CueKind;
@@ -300,14 +300,17 @@ impl Rig {
             );
         }
         match message {
-            Msg::EditorChanged(rich) => {
+            Msg::Editor(EditorMsg::Changed(rich)) => {
                 let look = dialogue::Base::editor(&self.ui.skin.get_untracked()).look();
                 let doc = ui::rich::from_rich(&rich, &look);
                 self.ui.editor_value.set(rich);
                 self.ui.draft.set(Arc::new(doc.clone()));
                 self.cmd(Cmd::DraftChanged(doc), now);
             }
-            Msg::Markup(nanatype::msg::MarkupEdit::Typed { text, selection }) => {
+            Msg::Editor(EditorMsg::Markup(nanatype::msg::MarkupEdit::Typed {
+                text,
+                selection,
+            })) => {
                 let mut src = self.ui.source.get_untracked();
                 src.text = text;
                 src.selection = selection;
@@ -316,7 +319,7 @@ impl Rig {
                 self.ui.draft.set(Arc::new(doc.clone()));
                 self.cmd(Cmd::DraftChanged(doc), now);
             }
-            Msg::ChatMention { seq, reply: true } => {
+            Msg::Chat(ChatMsg::Mention { seq, reply: true }) => {
                 let m = self
                     .ui
                     .chat
@@ -335,11 +338,11 @@ impl Rig {
                     self.ui.chat_target.set(None);
                 }
             }
-            Msg::ClearReply => {
+            Msg::Chat(ChatMsg::ClearReply) => {
                 self.cmd(Cmd::SetReply(None), now);
                 self.ui.chat_target.set(None);
             }
-            Msg::LayoutMaterialsReady => self.ui.layout_epoch.update(|e| *e += 1),
+            Msg::Skin(SkinMsg::LayoutMaterialsReady) => self.ui.layout_epoch.update(|e| *e += 1),
             // Window chrome and side effects the footage does not need.
             _ => {}
         }

@@ -1,5 +1,6 @@
 //! Windowless acceptance of the production view, routing and host handoff.
 use super::*;
+use crate::msg::{EditorMsg, SpeechMsg, WindowMsg};
 use crate::ui::settings::base64;
 use nana_ui::runtime::{HeadlessInput, RichEditCommand, TextArea, TextEditAction};
 use nana_ui::{NanaTextShaper, runtime::LayoutBox};
@@ -73,7 +74,7 @@ impl Fixture {
             let keys = test_keys(ctrl_enter);
             let policy = move |key: &KeyInput| {
                 if fence_speech_key(ui, key) {
-                    observed.lock().unwrap().push(Msg::SpeechEdit);
+                    observed.lock().unwrap().push(Msg::Speech(SpeechMsg::Edit));
                 }
                 let completing = ui.completion.with_untracked(Option::is_some);
                 match input_key(key, source_mode, completing, &keys) {
@@ -169,7 +170,7 @@ impl Fixture {
         let doc = self.session.document();
         let focused = doc.context().world().focused(doc.document()) == Some(self.node());
         if fence_speech_composition(self.ui, &payload, focused) {
-            self.pending.push(Msg::SpeechEdit);
+            self.pending.push(Msg::Speech(SpeechMsg::Edit));
         }
         self.input.advance(Duration::from_millis(16));
         self.input
@@ -198,11 +199,11 @@ impl Fixture {
         {
             if let Ok(message) = message.downcast::<Msg>() {
                 match *message {
-                    Msg::EditorChanged(rich) => {
+                    Msg::Editor(EditorMsg::Changed(rich)) => {
                         crate::app::sync_rich_draft(self.ui, rich);
                         self.edits += 1;
                     }
-                    Msg::Markup(edit) => {
+                    Msg::Editor(EditorMsg::Markup(edit)) => {
                         let mut src = self.ui.source.get_untracked();
                         crate::app::apply_source_markup(&mut src, edit);
                         self.ui
@@ -550,12 +551,12 @@ fn real_input_routes_send_settings_and_ime_before_application_shortcuts() {
             f.key("b", CTRL);
             assert!(matches!(
                 f.messages.lock().unwrap().pop(),
-                Some(Msg::Tool(Tool::Bold))
+                Some(Msg::Editor(EditorMsg::Tool(Tool::Bold)))
             ));
             f.key("Escape", Default::default());
             assert!(matches!(
                 f.messages.lock().unwrap().pop(),
-                Some(Msg::HideInput)
+                Some(Msg::Window(WindowMsg::HideInput))
             ));
         }
     }
@@ -652,7 +653,11 @@ fn unfocused_wheel_boundaries_hit_testing_caret_follow_and_edge_drag_use_one_vie
             .take_program_messages();
         assert!(messages.iter().all(|m| !matches!(
             m.downcast_ref::<Msg>(),
-            Some(Msg::EditorChanged(_) | Msg::Markup(_) | Msg::Core(Cmd::Send))
+            Some(
+                Msg::Editor(EditorMsg::Changed(_))
+                    | Msg::Editor(EditorMsg::Markup(_))
+                    | Msg::Core(Cmd::Send)
+            )
         )));
     }
 }
@@ -1254,12 +1259,12 @@ fn secondary_press_mounts_the_production_menu_and_runs_its_selected_edit() {
             .pending
             .drain(..)
             .find_map(|m| match m {
-                Msg::EditorContext {
+                Msg::Editor(EditorMsg::Context {
                     source: actual,
                     x,
                     y,
                     keyboard,
-                } => {
+                }) => {
                     assert_eq!(actual, source);
                     Some((x, y, keyboard))
                 }
@@ -1312,7 +1317,7 @@ fn secondary_press_mounts_the_production_menu_and_runs_its_selected_edit() {
         );
         f.key("Enter", Default::default());
         assert!(
-            matches!(f.pending.pop(),Some(Msg::EditorAction { source: actual, action:TextEditAction::Cut }) if actual==source)
+            matches!(f.pending.pop(),Some(Msg::Editor(EditorMsg::Action { source: actual, action:TextEditAction::Cut })) if actual==source)
         );
         assert!(
             f.messages.lock().unwrap().is_empty(),
@@ -1532,16 +1537,16 @@ fn windows_system_clipboard_round_trip_and_image_fallback() {
         })
         .unwrap();
     assert!(
-        matches!(clipboard_image(),Some(Msg::PasteImage { width:2,height:1,rgba }) if rgba==[255,0,0,255,0,255,0,255])
+        matches!(clipboard_image(),Some(Msg::Editor(EditorMsg::PasteImage { width:2,height:1,rgba })) if rgba==[255,0,0,255,0,255,0,255])
     );
     let key = KeyInput::named("KeyV", "v", KeyState::Pressed, CTRL);
     assert!(matches!(
         input_shortcut(&key, true, &test_keys(false)),
-        Some(Msg::PasteImage {
+        Some(Msg::Editor(EditorMsg::PasteImage {
             width: 2,
             height: 1,
             ..
-        })
+        }))
     ));
     let mut f = Fixture::new(false, false, "");
     f.focus();
@@ -1554,7 +1559,9 @@ fn windows_system_clipboard_round_trip_and_image_fallback() {
         .unwrap();
     f.pump();
     assert!(
-        f.pending.iter().any(|m| matches!(m, Msg::EditorPaste)),
+        f.pending
+            .iter()
+            .any(|m| matches!(m, Msg::Editor(EditorMsg::Paste))),
         "rich image paste must ask application for the image"
     );
 }
@@ -1668,7 +1675,13 @@ fn clicking_source_toolbar_preserves_selection_records_undo_and_restores_typing_
     let tool = f
         .pending
         .drain(..)
-        .find_map(|m| if let Msg::Tool(t) = m { Some(t) } else { None })
+        .find_map(|m| {
+            if let Msg::Editor(EditorMsg::Tool(t)) = m {
+                Some(t)
+            } else {
+                None
+            }
+        })
         .expect("real toolbar click");
     assert!(matches!(tool, Tool::Bold));
     input::capture_source_selection(f.ui, f.session.document().context(), f.source);
@@ -1837,7 +1850,13 @@ fn typography_popovers_keep_selection_and_dispatch_authored_attributes() {
         let tool = f
             .pending
             .drain(..)
-            .find_map(|m| if let Msg::Tool(t) = m { Some(t) } else { None })
+            .find_map(|m| {
+                if let Msg::Editor(EditorMsg::Tool(t)) = m {
+                    Some(t)
+                } else {
+                    None
+                }
+            })
             .expect("panel choice dispatches a tool");
         if panel == "tb-size" {
             let Tool::Size(Some(Size::Px(px))) = tool else {
@@ -1886,7 +1905,7 @@ fn an_open_completion_list_takes_tab_enter_arrows_and_escape_first() {
     assert!(
         f.pending
             .iter()
-            .any(|m| matches!(m, Msg::EditorSelection(s) if *s == (4..4))),
+            .any(|m| matches!(m, Msg::Editor(EditorMsg::Selection(s)) if *s == (4..4))),
         "caret not reported"
     );
     let token = crate::completion::token(&f.text(), 4).unwrap();
@@ -1912,7 +1931,7 @@ fn an_open_completion_list_takes_tab_enter_arrows_and_escape_first() {
         );
         let got = f.messages.lock().unwrap().pop();
         assert!(
-            matches!(got, Some(Msg::Complete(c)) if c == expected),
+            matches!(got, Some(Msg::Editor(EditorMsg::Complete(c))) if c == expected),
             "{name} shift={shift}"
         );
     }
@@ -1923,7 +1942,7 @@ fn an_open_completion_list_takes_tab_enter_arrows_and_escape_first() {
     f.key("Escape", Default::default());
     assert!(matches!(
         f.messages.lock().unwrap().pop(),
-        Some(Msg::HideInput)
+        Some(Msg::Window(WindowMsg::HideInput))
     ));
 }
 
@@ -2083,7 +2102,7 @@ fn the_markup_source_fills_in_from_its_own_popup() {
             .lock()
             .unwrap()
             .iter()
-            .any(|m| matches!(m, Msg::HideInput)),
+            .any(|m| matches!(m, Msg::Window(WindowMsg::HideInput))),
         "Esc hid the window"
     );
     assert!(world(&f), "dismissal not seen");
@@ -2262,12 +2281,14 @@ fn speech_fence_is_set_during_real_editor_routing_before_any_text_commit() {
             }
             assert!(f.ui.speech_edit_pending.get_untracked());
             assert!(
-                f.pending.iter().any(|m| matches!(m, Msg::SpeechEdit))
+                f.pending
+                    .iter()
+                    .any(|m| matches!(m, Msg::Speech(SpeechMsg::Edit)))
                     || f.messages
                         .lock()
                         .unwrap()
                         .iter()
-                        .any(|m| matches!(m, Msg::SpeechEdit))
+                        .any(|m| matches!(m, Msg::Speech(SpeechMsg::Edit)))
             );
         }
     }

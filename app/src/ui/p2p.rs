@@ -5,7 +5,7 @@ use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec, PositionSpec, SemanticCol
 use nanatype_p2p::Status;
 
 use super::Ui;
-use crate::msg::Msg;
+use crate::msg::{Msg, WindowMsg};
 use crate::p2p::{InvitePhase, SessionUi};
 use crate::ui::kit::{self, Tone, Type, gap};
 
@@ -176,9 +176,9 @@ pub(crate) fn card_with_fields(
                     }),
                     widget(Button::new(ui.now_t("peer-window-toggle")).size(ControlSize::Small))
                         .on_cx(move |_, _: &Activate, cx| {
-                            cx.dispatch_program_all(Msg::ToggleWindow(
+                            cx.dispatch_program_all(Msg::Window(WindowMsg::Toggle(
                                 crate::windows::WindowKind::PeerDisplay,
-                            ))
+                            )))
                         }),
                     widget(Button::new(ui.now_t("peer-leave")).size(ControlSize::Small))
                         .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::PeerLeave)),

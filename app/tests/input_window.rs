@@ -2,6 +2,7 @@
 
 mod common;
 
+use nanatype::msg::{EditorMsg, StickerMsg};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use nana_ui::runtime::StableNodeId;
@@ -451,9 +452,9 @@ fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
                 .any(
                     |m| m.downcast::<nanatype::msg::Msg>().is_ok_and(|m| matches!(
                         *m,
-                        nanatype::msg::Msg::Tool(nanatype::msg::Tool::Insert(
+                        nanatype::msg::Msg::Editor(EditorMsg::Tool(nanatype::msg::Tool::Insert(
                             nanatype_model::Inline::Marker(nanatype_model::Marker::Page)
-                        ))
+                        )))
                     ))
                 )
         );
@@ -805,7 +806,7 @@ fn toolbar_popovers_remain_clickable_over_the_scrolling_preview() {
             .any(
                 |m| m.downcast::<nanatype::msg::Msg>().is_ok_and(|m| matches!(
                     *m,
-                    nanatype::msg::Msg::Tool(nanatype::msg::Tool::Color(_))
+                    nanatype::msg::Msg::Editor(EditorMsg::Tool(nanatype::msg::Tool::Color(_)))
                 ))
             ),
         "color action must remain reachable over the preview"
@@ -1076,8 +1077,8 @@ fn sticker_packs_sit_above_the_grid_filter_search_and_accept_folder_drops() {
                 .into_iter()
                 .any(|m| m.downcast::<Msg>().is_ok_and(|m| matches!(
                     *m,
-                    Msg::Tool(nanatype::msg::Tool::Insert(nanatype_model::Inline::Atom(
-                        nanatype_model::Atom { height_em: 4.0, .. }
+                    Msg::Editor(EditorMsg::Tool(nanatype::msg::Tool::Insert(
+                        nanatype_model::Inline::Atom(nanatype_model::Atom { height_em: 4.0, .. })
                     )))
                 )))
         );
@@ -1147,7 +1148,7 @@ fn sticker_packs_sit_above_the_grid_filter_search_and_accept_folder_drops() {
         session
             .drop_files_xy(std::slice::from_ref(&folder), port.x + 8.0, port.y + 8.0)
             .unwrap();
-        assert!(session.document_mut().context_mut().take_program_messages().into_iter().any(|m|m.downcast::<Msg>().is_ok_and(|m|matches!(*m,Msg::StickerImportFolders(ref dirs) if dirs==&vec![folder.clone()]))));
+        assert!(session.document_mut().context_mut().take_program_messages().into_iter().any(|m|m.downcast::<Msg>().is_ok_and(|m|matches!(*m,Msg::Sticker(StickerMsg::ImportFolders(ref dirs)) if dirs==&vec![folder.clone()]))));
         open_panel(&mut session, "controls");
         let port = keyed(&session, "input-controls-scroll").bounds;
         session
@@ -1161,7 +1162,7 @@ fn sticker_packs_sit_above_the_grid_filter_search_and_accept_folder_drops() {
                 .into_iter()
                 .any(|m| m
                     .downcast::<Msg>()
-                    .is_ok_and(|m| matches!(*m, Msg::StickerImportFolders(_))))
+                    .is_ok_and(|m| matches!(*m, Msg::Sticker(StickerMsg::ImportFolders(_)))))
         );
         let header = keyed(&session, "input-dock-rail-stickers").bounds;
         session
@@ -1194,7 +1195,7 @@ fn sticker_packs_sit_above_the_grid_filter_search_and_accept_folder_drops() {
                 .into_iter()
                 .any(|m| m
                     .downcast::<Msg>()
-                    .is_ok_and(|m| matches!(*m, Msg::StickerImportFolders(_)))),
+                    .is_ok_and(|m| matches!(*m, Msg::Sticker(StickerMsg::ImportFolders(_))))),
             "the stickers icon accepts folder drops"
         );
     }

@@ -1,7 +1,7 @@
 use super::controls::{block, row, row_text, row_tip, section_with, shown_if, text};
 use crate::ui::kit::{self, Type, field};
 use crate::{
-    msg::Msg,
+    msg::{Msg, StickerMsg},
     stickers::telegram::{Command, Phase},
     ui::Ui,
 };
@@ -21,7 +21,9 @@ fn action(ui: Ui, key: &str, command: impl Fn() -> Command + Send + 'static) -> 
             b.disabled =
                 state.busy || (connect && matches!(state.phase, Phase::Code | Phase::Password));
         })
-        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::Telegram(command())))
+        .on_cx(move |_, _: &Activate, cx| {
+            cx.dispatch_program_all(Msg::Sticker(StickerMsg::Telegram(command())))
+        })
         .into_any()
 }
 
@@ -116,7 +118,9 @@ pub(super) fn panel(ui: Ui) -> AnyView {
             let state = ui.telegram.get();
             state.busy && state.progress.is_some()
         })
-        .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::Telegram(Command::Cancel)));
+        .on_cx(|_, _: &Activate, cx| {
+            cx.dispatch_program_all(Msg::Sticker(StickerMsg::Telegram(Command::Cancel)))
+        });
     let logout = widget(Button::new(ui.now_t("telegram-logout")).size(ControlSize::Small))
         .visible(move || {
             let state = ui.telegram.get();
@@ -128,7 +132,7 @@ pub(super) fn panel(ui: Ui) -> AnyView {
             for secret in [api_hash, phone, code, password] {
                 secret.set(String::new());
             }
-            cx.dispatch_program_all(Msg::Telegram(Command::Logout))
+            cx.dispatch_program_all(Msg::Sticker(StickerMsg::Telegram(Command::Logout)))
         });
     let results = dynamic(
         move || ui.telegram.get().results.clone(),
@@ -385,23 +389,27 @@ mod tests {
                 .collect();
             assert!(commands.iter().any(|m| match (&**m, phase) {
                 (
-                    Msg::Telegram(Command::Connect {
+                    Msg::Sticker(StickerMsg::Telegram(Command::Connect {
                         api_id: 12345,
                         api_hash,
                         phone,
                         ..
-                    }),
+                    })),
                     Phase::Offline,
                 ) => api_hash == &"a".repeat(32) && phone == "+12345678",
-                (Msg::Telegram(Command::Code(code)), Phase::Code) => code == "12345",
-                (Msg::Telegram(Command::Password(password)), Phase::Password) =>
-                    password == "test-password",
-                (Msg::Telegram(Command::Search(query)), Phase::Ready) => query == "cats",
+                (Msg::Sticker(StickerMsg::Telegram(Command::Code(code))), Phase::Code) =>
+                    code == "12345",
+                (
+                    Msg::Sticker(StickerMsg::Telegram(Command::Password(password))),
+                    Phase::Password,
+                ) => password == "test-password",
+                (Msg::Sticker(StickerMsg::Telegram(Command::Search(query))), Phase::Ready) =>
+                    query == "cats",
                 _ => false,
             }));
             if phase == Phase::Ready {
                 assert!(commands.iter().any(
-                    |m| matches!(&**m, Msg::Telegram(Command::Download(name)) if name == "TestPack")
+                    |m| matches!(&**m, Msg::Sticker(StickerMsg::Telegram(Command::Download(name))) if name == "TestPack")
                 ));
             }
         }

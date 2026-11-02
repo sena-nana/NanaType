@@ -1,4 +1,8 @@
-use crate::{app::App, chat::Platform, msg::Msg};
+use crate::{
+    app::App,
+    chat::Platform,
+    msg::{ChatMsg, Msg, TwitchMsg, WindowMsg},
+};
 use nanatype_core::Event as CoreEvent;
 use nanatype_model::{Document, outgoing};
 use nanatype_twitch::{
@@ -51,35 +55,34 @@ fn activation_page(uri: &str) -> bool {
 
 impl App {
     /// Twitch sign-in, chat and sending.
-    pub(super) fn twitch_msg(&mut self, msg: Msg) {
+    pub(super) fn twitch_msg(&mut self, msg: TwitchMsg) {
         match msg {
-            Msg::Twitch(event) => self.twitch_event(event),
-            Msg::TwitchLogin => self.twitch_login(),
-            Msg::TwitchCancelLogin => {
+            TwitchMsg::Event(event) => self.twitch_event(event),
+            TwitchMsg::Login => self.twitch_login(),
+            TwitchMsg::CancelLogin => {
                 self.twitch.cancel_login();
                 self.twitch_disable_send();
             }
-            Msg::TwitchOpenActivation => {
+            TwitchMsg::OpenActivation => {
                 if let AccountState::Pending { uri, .. } = &self.ui.twitch.get_untracked().account
                     && activation_page(uri)
                 {
                     crate::services::open_url(uri);
                 }
             }
-            Msg::TwitchRefresh => {
+            TwitchMsg::Refresh => {
                 self.twitch.refresh();
                 self.twitch_disable_send();
             }
-            Msg::TwitchLogout => {
+            TwitchMsg::Logout => {
                 self.twitch.logout();
                 self.twitch_disable_send();
                 self.twitch_state(|s| s.avatar = None);
             }
-            Msg::TwitchSendToggle => self.twitch_toggle(),
-            Msg::TwitchSendConfirm(accept) => self.twitch_confirm(accept),
-            Msg::TwitchRetry(line) => self.twitch.retry(line),
-            Msg::TwitchSkipFailed(line) => self.twitch.skip_failed(line),
-            _ => unreachable!("not a twitch message"),
+            TwitchMsg::SendToggle => self.twitch_toggle(),
+            TwitchMsg::SendConfirm(accept) => self.twitch_confirm(accept),
+            TwitchMsg::Retry(line) => self.twitch.retry(line),
+            TwitchMsg::SkipFailed(line) => self.twitch.skip_failed(line),
         }
     }
 
@@ -101,7 +104,7 @@ impl App {
     }
     fn twitch_login(&mut self) {
         self.twitch_disable_send();
-        self.update(Msg::SettingsPlatform(Platform::Twitch));
+        self.update(Msg::Window(WindowMsg::SettingsPlatform(Platform::Twitch)));
         self.twitch.login();
     }
     fn twitch_toggle(&mut self) {
@@ -113,7 +116,7 @@ impl App {
         if state.can_send() {
             self.twitch_state(|s| s.confirm = true);
         }
-        self.update(Msg::SettingsPlatform(Platform::Twitch));
+        self.update(Msg::Window(WindowMsg::SettingsPlatform(Platform::Twitch)));
     }
     fn twitch_confirm(&mut self, accept: bool) {
         let state = self.ui.twitch.get_untracked();
@@ -183,7 +186,7 @@ impl App {
                         &profile.avatar,
                         {
                             let ctx = self.ctx.clone();
-                            move |asset| ctx.dispatch(Msg::ChatAssetReady(asset))
+                            move |asset| ctx.dispatch(Msg::Chat(ChatMsg::AssetReady(asset)))
                         },
                     );
                     self.twitch_state(|s| s.avatar = asset.map(|a| a.to_string()));

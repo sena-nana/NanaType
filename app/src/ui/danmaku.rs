@@ -28,7 +28,7 @@ use super::history;
 use super::rich::{Env, Look, MentionLook, to_rich};
 use super::{I18N, Ui};
 use crate::chat::ChatMessage;
-use crate::msg::Msg;
+use crate::msg::{ChatMsg, Msg, WindowMsg};
 use crate::skin_theme::rgba8;
 use crate::ui::kit::theme::palette;
 use crate::ui::kit::{Tone, Type, gap, inset};
@@ -279,7 +279,7 @@ fn row_actions(
             })
             .on_cx(move |_, _: &Activate, cx| {
                 super::motion::press(cx, ui.reduced_motion.get_untracked());
-                cx.dispatch_program_all(Msg::ChatMention { seq, reply });
+                cx.dispatch_program_all(Msg::Chat(ChatMsg::Mention { seq, reply }));
             })
     };
     widget(
@@ -630,7 +630,7 @@ fn header(ui: Ui) -> AnyView {
                 // Shown at once; the app keeps it.
                 let next = ui.input_dock.get_untracked().toggle_pin();
                 ui.input_dock.set(next);
-                Msg::Dock(next)
+                Msg::Chat(ChatMsg::Dock(next))
             },
         )
         .key("input-chat-pin"),
@@ -676,9 +676,9 @@ fn filters(ui: Ui) -> AnyView {
                 |f, v| f.member = v,
             ),
             widget(Stack::spacer()),
-            action(ui, ti::TRASH, "chat-clear", || Msg::ClearChat),
+            action(ui, ti::TRASH, "chat-clear", || Msg::Chat(ChatMsg::Clear)),
             action(ui, ti::SETTINGS, "window-settings", || {
-                Msg::SettingsPage(super::settings::Page::Platforms)
+                Msg::Window(WindowMsg::SettingsPage(super::settings::Page::Platforms))
             }),
         )),
         super::settings::chat_panel_style(ui),

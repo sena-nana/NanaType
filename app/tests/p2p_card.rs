@@ -7,7 +7,7 @@ use nana_ui::runtime::view::widget;
 use nana_ui_core::LengthSpec;
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nanatype::{
-    msg::Msg,
+    msg::{Msg, WindowMsg},
     p2p::SessionUi,
     ui::{Ui, p2p},
 };
@@ -92,7 +92,9 @@ fn card_actions_fit_and_preserve_the_draft_in_each_locale() {
             );
             assert!(matches!(
                 click(&mut session, &ui.now_t("peer-window-toggle"), width as f32),
-                Msg::ToggleWindow(nanatype::windows::WindowKind::PeerDisplay)
+                Msg::Window(WindowMsg::Toggle(
+                    nanatype::windows::WindowKind::PeerDisplay
+                ))
             ));
             assert!(matches!(
                 click(&mut session, &ui.now_t("peer-leave"), width as f32),

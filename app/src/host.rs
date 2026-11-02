@@ -24,7 +24,9 @@ use crate::app::{App, INPUT_KEYS};
 use crate::clock;
 #[cfg(test)]
 use crate::msg::Tool;
-use crate::msg::{Msg, Shortcut, input_message};
+use crate::msg::{
+    EditorMsg, Msg, Shortcut, SkinMsg, SpeechMsg, StickerMsg, WindowMsg, input_message,
+};
 use crate::services::sounds::Keystroke;
 use crate::ui::overflow::{self, Measure, PageKey};
 use crate::ui::shader_effects::Wake;
@@ -587,7 +589,9 @@ impl Host {
         if let (Some(doc), Some(source)) = (self.docs.get(&WindowKind::Input.id()), self.source)
             && input::completion::source_dismissed(ui, doc.context().world(), source.stable_id())
         {
-            self.app.post(Msg::Complete(crate::msg::Complete::Dismiss));
+            self.app.post(Msg::Editor(EditorMsg::Complete(
+                crate::msg::Complete::Dismiss,
+            )));
         }
         let anchor = self.completion_anchor();
         // Placed from a stale layout: lay out once more and place again.
@@ -762,7 +766,7 @@ fn mount_editor_menu(
                     .into_iter()
                     .find(|a| a.key() == key.as_ref())
             {
-                cx.dispatch_program_all(Msg::EditorAction { source, action });
+                cx.dispatch_program_all(Msg::Editor(EditorMsg::Action { source, action }));
             }
         })?;
         Ok(overlay)
@@ -922,11 +926,11 @@ fn clipboard_image() -> Option<Msg> {
         return None;
     }
     let image = clipboard.get_image().ok()?;
-    Some(Msg::PasteImage {
+    Some(Msg::Editor(EditorMsg::PasteImage {
         width: image.width as u32,
         height: image.height as u32,
         rgba: image.bytes.into_owned(),
-    })
+    }))
 }
 
 /// The input window's keys before the editor's own editing: the `@` / `/`
@@ -972,7 +976,7 @@ fn key_policy(
 ) -> impl FnMut(&nana_ui::KeyInput) -> bool + Send + 'static {
     move |key| {
         if fence_speech_key(ui, key) {
-            post.dispatch(Msg::SpeechEdit);
+            post.dispatch(Msg::Speech(SpeechMsg::Edit));
         }
         let completing = ui.completion.with_untracked(Option::is_some);
         let action = {
@@ -1059,11 +1063,16 @@ fn input_key(
         if source && moves_caret(key) {
             // The markup field reports no caret moves: close the list rather
             // than leave it on a token the caret has left.
-            return Some((Msg::Complete(crate::msg::Complete::Dismiss), false));
+            return Some((
+                Msg::Editor(EditorMsg::Complete(crate::msg::Complete::Dismiss)),
+                false,
+            ));
         }
         match completion_key(key) {
             // The markup field's own popup closes too.
-            Some(message @ Msg::Complete(crate::msg::Complete::Dismiss)) if source => {
+            Some(message @ Msg::Editor(EditorMsg::Complete(crate::msg::Complete::Dismiss)))
+                if source =>
+            {
                 return Some((message, false));
             }
             // It chooses and fills in itself, ahead of the bindings.
@@ -1128,7 +1137,7 @@ fn completion_key(key: &nana_ui::KeyInput) -> Option<Msg> {
         ("Escape", false) => Complete::Dismiss,
         _ => return None,
     };
-    Some(Msg::Complete(action))
+    Some(Msg::Editor(EditorMsg::Complete(action)))
 }
 
 /// Keys that move the caret without typing.
@@ -1218,20 +1227,22 @@ impl RuntimeProgram for Host {
         if let (Some(source), Some(doc)) = (self.source, self.docs.get(&WindowKind::Input.id())) {
             input::capture_source_selection(self.app.ui, doc.context(), source);
         }
-        if matches!(&message, Msg::ToggleSource | Msg::HideInput)
-            && let Some(menu) = self.editor_menu.take()
+        if matches!(
+            &message,
+            Msg::Editor(EditorMsg::ToggleSource) | Msg::Window(WindowMsg::HideInput)
+        ) && let Some(menu) = self.editor_menu.take()
             && let Some(doc) = self.docs.get_mut(&WindowKind::Input.id())
         {
             let _ = doc.context_mut().remove_view(menu);
         }
         match message {
-            Msg::EditorContext {
+            Msg::Editor(EditorMsg::Context {
                 source,
                 x,
                 y,
                 keyboard,
-            } => self.open_editor_menu(source, x, y, keyboard),
-            Msg::EditorAction { source, action } => self.editor_action(source, action),
+            }) => self.open_editor_menu(source, x, y, keyboard),
+            Msg::Editor(EditorMsg::Action { source, action }) => self.editor_action(source, action),
             Msg::ToastDismissed(kind, toast) => self.dismiss_toast(kind, toast),
             message => self.app.update(message),
         }
@@ -1536,7 +1547,7 @@ impl RuntimeProgram for Host {
             && !input.disposition.handled
             && self.app.settings.hotkeys.input.hide.as_ref() == Some(&chord_of(key))
         {
-            self.app.update(Msg::HideInput);
+            self.app.update(Msg::Window(WindowMsg::HideInput));
             return Ok(self.finish());
         }
         Ok(RuntimeProgramUpdate::default())
@@ -1571,7 +1582,7 @@ impl RuntimeProgram for Host {
         // just presented it, so the step is on screen before the stage loads.
         if WindowKind::from_id(id) == Some(WindowKind::Settings) {
             for (skin, play) in settings::preview::take_deferred_requests() {
-                context.dispatch(Msg::PrepareSkinPreview { id: skin, play });
+                context.dispatch(Msg::Skin(SkinMsg::PreparePreview { id: skin, play }));
             }
         }
         RuntimeProgramUpdate::default()
@@ -1727,7 +1738,7 @@ impl RuntimeProgram for Host {
             self.app.ui.reduced_motion.get_untracked(),
         );
         if self.stickers.take_rebuild() {
-            context.dispatch(Msg::AssetsChanged);
+            context.dispatch(Msg::Sticker(StickerMsg::AssetsChanged));
         }
         match WindowKind::from_id(id) {
             Some(WindowKind::Input) => self.anchor_completion(),
@@ -1770,6 +1781,7 @@ fn pending_redraw(docs: &HashMap<WindowId, RuntimeDocument>) -> nana_ui::Runtime
 #[cfg(test)]
 mod redraw_tests {
     use super::*;
+    use crate::msg::ChatMsg;
     use nana_ui::runtime::view::{signal, widget};
     use nana_ui::runtime::{LayoutViewport, Text};
 
@@ -1806,25 +1818,25 @@ mod redraw_tests {
         ));
         assert!(matches!(
             input_shortcut(&key("B", ctrl), false, &enter),
-            Some(Msg::Tool(Tool::Bold))
+            Some(Msg::Editor(EditorMsg::Tool(Tool::Bold)))
         ));
         // Live chat from the keyboard: step through messages, reply, mention.
         let alt = InputModifiers { alt: true, ..plain };
         assert!(matches!(
             input_shortcut(&key("ArrowUp", alt), false, &enter),
-            Some(Msg::ChatSelect(-1))
+            Some(Msg::Chat(ChatMsg::Select(-1)))
         ));
         assert!(matches!(
             input_shortcut(&key("ArrowDown", alt), true, &enter),
-            Some(Msg::ChatSelect(1))
+            Some(Msg::Chat(ChatMsg::Select(1)))
         ));
         assert!(matches!(
             input_shortcut(&key("r", alt), false, &ctrl_enter),
-            Some(Msg::ChatMentionSelected { reply: true })
+            Some(Msg::Chat(ChatMsg::MentionSelected { reply: true }))
         ));
         assert!(matches!(
             input_shortcut(&key("m", alt), false, &enter),
-            Some(Msg::ChatMentionSelected { reply: false })
+            Some(Msg::Chat(ChatMsg::MentionSelected { reply: false }))
         ));
         for source in [false, true] {
             for keys in [&enter, &ctrl_enter] {
@@ -1860,7 +1872,7 @@ mod redraw_tests {
         };
         let keys = test_keys(false);
         let complete = |k: &KeyInput, source| match input_key(k, source, true, &keys) {
-            Some((Msg::Complete(c), consumed)) => Some((c, consumed)),
+            Some((Msg::Editor(EditorMsg::Complete(c)), consumed)) => Some((c, consumed)),
             _ => None,
         };
         // Rich: the app's list takes them.
@@ -1943,7 +1955,7 @@ mod redraw_tests {
         assert!(input_shortcut(&enter(Default::default()), false, &keys).is_none());
         assert!(matches!(
             input_shortcut(&enter(ctrl), false, &keys),
-            Some(Msg::InsertNewline)
+            Some(Msg::Editor(EditorMsg::InsertNewline))
         ));
         let bold = KeyInput::named("KeyB", "b", KeyState::Pressed, ctrl);
         assert!(input_shortcut(&bold, false, &keys).is_none());

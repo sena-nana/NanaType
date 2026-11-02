@@ -1,4 +1,5 @@
 use super::*;
+use crate::msg::{SkinMsg, WorkshopMsg};
 use nana_ui::runtime::view::El;
 
 /// The current skin's accent bar: its width, and how far it stays off a
@@ -263,7 +264,7 @@ pub(super) fn skin_actions(ui: Ui, skin: &SkinRow, locale: Locale) -> AnyView {
     let menu = move |armed: Option<Signal<bool>>| {
         let mut items = vec![menu_item(ui, menu_open, "skins-duplicate", ti::COPY, {
             let id = did.clone();
-            move || Msg::DuplicateSkin(id.clone())
+            move || Msg::Skin(SkinMsg::Duplicate(id.clone()))
         })];
         match workshop {
             Some(item) => items.push(menu_item(
@@ -271,11 +272,11 @@ pub(super) fn skin_actions(ui: Ui, skin: &SkinRow, locale: Locale) -> AnyView {
                 menu_open,
                 "workshop-view",
                 ti::EXTERNAL_LINK,
-                move || Msg::WorkshopOpen(item),
+                move || Msg::Workshop(WorkshopMsg::Open(item)),
             )),
             None => items.push(menu_item(ui, menu_open, "skins-export", ti::FILE_EXPORT, {
                 let id = eid.clone();
-                move || Msg::ExportSkin(id.clone())
+                move || Msg::Skin(SkinMsg::Export(id.clone()))
             })),
         }
         if let Some(f) = folder.clone() {
@@ -329,7 +330,7 @@ pub(super) fn skin_actions(ui: Ui, skin: &SkinRow, locale: Locale) -> AnyView {
             ),
             ui.now_t("workshop-unsubscribe"),
             move |armed| menu(Some(armed)),
-            move || Msg::WorkshopUnsubscribe(item),
+            move || Msg::Workshop(WorkshopMsg::Unsubscribe(item)),
         )
     } else {
         confirm(
@@ -341,7 +342,7 @@ pub(super) fn skin_actions(ui: Ui, skin: &SkinRow, locale: Locale) -> AnyView {
             ),
             ui.now_t("skins-delete"),
             move |armed| menu(Some(armed)),
-            move || Msg::DeleteSkin(rid.clone()),
+            move || Msg::Skin(SkinMsg::Delete(rid.clone())),
         )
     }
 }

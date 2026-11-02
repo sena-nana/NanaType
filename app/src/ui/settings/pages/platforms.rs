@@ -2,6 +2,7 @@
 //! panel's settings that every platform shares.
 
 use super::*;
+use crate::msg::WindowMsg;
 
 use crate::chat::Platform;
 use nana_ui::runtime::view::segmented_option;
@@ -16,7 +17,7 @@ fn tabs(ui: Ui) -> AnyView {
             segmented_option(ui.now_t(platform.label_key()))
                 .selected(move || ui.platform_tab.get() == platform)
                 .on_cx(move |_, _: &SegmentedOptionChosen, cx| {
-                    cx.dispatch_program_all(Msg::SettingsPlatform(platform))
+                    cx.dispatch_program_all(Msg::Window(WindowMsg::SettingsPlatform(platform)))
                 })
                 .into_any()
         })

@@ -2,7 +2,7 @@
 //! for the registry; browsing opens the Workshop in the Steam overlay, or
 //! through the Steam client when the overlay is off.
 use super::App;
-use crate::msg::Msg;
+use crate::msg::WorkshopMsg;
 use nanatype_steam::Event;
 
 impl App {
@@ -19,29 +19,31 @@ impl App {
         self.steam.close_session_lobby()
     }
 
-    pub(super) fn workshop_msg(&mut self, msg: Msg) {
+    pub(super) fn workshop_msg(&mut self, msg: WorkshopMsg) {
         match msg {
-            Msg::Workshop(Event::Items(items)) => {
+            WorkshopMsg::Event(Event::Items(items)) => {
                 if self.workshop.set_items(items) {
                     self.rescan_workshop();
                 }
                 self.publish_workshop();
             }
-            Msg::Workshop(Event::Details(details)) => {
+            WorkshopMsg::Event(Event::Details(details)) => {
                 self.workshop.set_details(details);
                 self.publish_workshop();
             }
-            Msg::Workshop(Event::Author { owner, name }) => {
+            WorkshopMsg::Event(Event::Author { owner, name }) => {
                 self.workshop.set_author(owner, name);
                 self.publish_workshop();
             }
-            Msg::Workshop(Event::InviteFailed) => {
+            WorkshopMsg::Event(Event::InviteFailed) => {
                 self.notice(self.ui.now_t("peer-invite-unavailable"), true);
             }
-            Msg::Workshop(Event::InviteOpened) => self.peer_invite_opened(),
-            Msg::Workshop(Event::InviteAccepted { name }) => self.peer_invite_accepted(name),
-            Msg::Workshop(Event::SessionInvite(invitation)) => self.peer_steam_invite(invitation),
-            Msg::Workshop(Event::Unsubscribed { item, result }) => match result {
+            WorkshopMsg::Event(Event::InviteOpened) => self.peer_invite_opened(),
+            WorkshopMsg::Event(Event::InviteAccepted { name }) => self.peer_invite_accepted(name),
+            WorkshopMsg::Event(Event::SessionInvite(invitation)) => {
+                self.peer_steam_invite(invitation)
+            }
+            WorkshopMsg::Event(Event::Unsubscribed { item, result }) => match result {
                 Ok(()) => self.unsubscribed(item),
                 Err(message) => {
                     let text = self.ui.tr(
@@ -51,13 +53,12 @@ impl App {
                     self.notice(text, true);
                 }
             },
-            Msg::WorkshopBrowse(tag) => {
+            WorkshopMsg::Browse(tag) => {
                 self.open_workshop(&nanatype_steam::browse_url(Some(tag.name())));
             }
-            Msg::WorkshopOpen(item) => self.open_workshop(&nanatype_steam::item_url(item)),
-            Msg::WorkshopUnsubscribe(item) => self.steam.unsubscribe(item),
-            Msg::WorkshopDownload(item) => self.steam.download(item),
-            _ => unreachable!("not a Workshop message"),
+            WorkshopMsg::Open(item) => self.open_workshop(&nanatype_steam::item_url(item)),
+            WorkshopMsg::Unsubscribe(item) => self.steam.unsubscribe(item),
+            WorkshopMsg::Download(item) => self.steam.download(item),
         }
     }
 

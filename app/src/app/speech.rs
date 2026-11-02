@@ -1,6 +1,6 @@
 //! Application-owned dictation policy. Both timer and OS callbacks cross this boundary.
 use super::App;
-use crate::msg::Msg;
+use crate::msg::{Msg, SpeechMsg};
 use nanatype_speech::{
     Backend, Event, Inventory, Service,
     controller::{Controller, Phase},
@@ -73,7 +73,9 @@ impl Speech {
         };
         Self {
             controller: Controller::default(),
-            service: Service::new(directory, move |g, e| post(Msg::SpeechEvent(g, e))),
+            service: Service::new(directory, move |g, e| {
+                post(Msg::Speech(SpeechMsg::Event(g, e)))
+            }),
             state,
             model_cancel: None,
         }
@@ -123,7 +125,7 @@ impl App {
     fn schedule_speech_tick(&self, generation: u64) {
         self.scheduler.post_after(
             Duration::from_millis(250),
-            Msg::SpeechTick(generation, self.speech.controller.revision),
+            Msg::Speech(SpeechMsg::Tick(generation, self.speech.controller.revision)),
         );
     }
     /// Called synchronously by input routing as well as semantic edit messages.
@@ -164,7 +166,9 @@ impl App {
         let _ = std::thread::Builder::new()
             .name("nanatype-speech-devices".into())
             .spawn(move || {
-                ctx.dispatch(Msg::SpeechInventory(nanatype_speech::inventory()));
+                ctx.dispatch(Msg::Speech(SpeechMsg::Inventory(
+                    nanatype_speech::inventory(),
+                )));
             });
     }
     pub(crate) fn install_speech_model(&mut self, source: Option<PathBuf>) {
@@ -183,18 +187,18 @@ impl App {
             .name("nanatype-speech-model".into())
             .spawn(move || {
                 let result = model::install(&directory, source.as_deref(), &cancel, |percent| {
-                    ctx.dispatch(Msg::SpeechModelProgress(percent));
+                    ctx.dispatch(Msg::Speech(SpeechMsg::ModelProgress(percent)));
                 });
-                ctx.dispatch(Msg::SpeechModelDone(result));
+                ctx.dispatch(Msg::Speech(SpeechMsg::ModelDone(result)));
             })
         {
-            failure.dispatch(Msg::SpeechModelDone(Err(e.to_string())));
+            failure.dispatch(Msg::Speech(SpeechMsg::ModelDone(Err(e.to_string()))));
         }
         self.publish_speech();
     }
-    pub(super) fn speech_msg(&mut self, msg: Msg) {
+    pub(super) fn speech_msg(&mut self, msg: SpeechMsg) {
         match msg {
-            Msg::SpeechToggle => {
+            SpeechMsg::Toggle => {
                 if self.speech.controller.active() {
                     self.speech.service.stop();
                     self.speech.controller.stop();
@@ -203,11 +207,11 @@ impl App {
                     self.start_speech();
                 }
             }
-            Msg::SpeechResume => self.start_speech(),
-            Msg::SpeechEdit => self.speech_user_edit(),
-            Msg::SpeechRefresh => self.speech_inventory(),
-            Msg::SpeechInventory(inventory) => self.speech.state.inventory = inventory,
-            Msg::SpeechEvent(generation, event) => {
+            SpeechMsg::Resume => self.start_speech(),
+            SpeechMsg::Edit => self.speech_user_edit(),
+            SpeechMsg::Refresh => self.speech_inventory(),
+            SpeechMsg::Inventory(inventory) => self.speech.state.inventory = inventory,
+            SpeechMsg::Event(generation, event) => {
                 if generation != self.speech.controller.generation
                     || !self.speech.controller.running()
                 {
@@ -249,7 +253,7 @@ impl App {
                     }
                 }
             }
-            Msg::SpeechTick(generation, revision) => {
+            SpeechMsg::Tick(generation, revision) => {
                 if generation != self.speech.controller.generation
                     || revision != self.speech.controller.revision
                     || !self.speech.controller.running()
@@ -285,13 +289,13 @@ impl App {
                     self.schedule_speech_tick(generation);
                 }
             }
-            Msg::SpeechModelDownload => self.install_speech_model(None),
-            Msg::SpeechModelCancel => {
+            SpeechMsg::ModelDownload => self.install_speech_model(None),
+            SpeechMsg::ModelCancel => {
                 if let Some(cancel) = &self.speech.model_cancel {
                     cancel.store(true, Ordering::Release);
                 }
             }
-            Msg::SpeechModelDelete => {
+            SpeechMsg::ModelDelete => {
                 if self.speech.model_cancel.is_some() {
                     return;
                 }
@@ -303,10 +307,10 @@ impl App {
                         Err(e) => ModelState::Error(e.to_string()),
                     };
             }
-            Msg::SpeechModelProgress(percent) => {
+            SpeechMsg::ModelProgress(percent) => {
                 self.speech.state.model = ModelState::Working(percent);
             }
-            Msg::SpeechModelDone(result) => {
+            SpeechMsg::ModelDone(result) => {
                 self.speech.model_cancel = None;
                 self.speech.state.model = match result {
                     Ok(()) => ModelState::Ready,
@@ -320,7 +324,6 @@ impl App {
                     Err(e) => ModelState::Error(e),
                 };
             }
-            _ => unreachable!("not a speech message"),
         }
         self.publish_speech();
     }

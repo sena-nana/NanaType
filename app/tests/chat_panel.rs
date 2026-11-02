@@ -7,7 +7,7 @@ use nana_ui_core::PointerEventsSpec;
 use nana_ui_devtools::agent::{AccessibilityDumpNode, RuntimeAgentSession};
 use nanatype::{
     chat::{ChatKind, ChatMessage},
-    msg::Msg,
+    msg::{ChatMsg, Msg},
     ui::{Ui, danmaku},
 };
 use nanatype_i18n::Locale;
@@ -107,7 +107,7 @@ fn take_mentions(session: &mut RuntimeAgentSession) -> Vec<(u64, bool)> {
         .take_program_messages()
         .into_iter()
         .filter_map(|m| match *m.downcast::<Msg>().ok()? {
-            Msg::ChatMention { seq, reply } => Some((seq, reply)),
+            Msg::Chat(ChatMsg::Mention { seq, reply }) => Some((seq, reply)),
             _ => None,
         })
         .collect()

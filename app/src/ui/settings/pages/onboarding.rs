@@ -1,4 +1,5 @@
 use super::*;
+use crate::msg::WindowMsg;
 
 /// The diagram's text caret and the dialogue box's live edge (width, height).
 const CARET: (f32, f32) = (2.0, 12.0);
@@ -205,7 +206,7 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
                 hotkeys_sentence(ui),
                 // The button names itself; a row label beside it would repeat it.
                 widget(Stack::row(0.0)).children(button(ui, "onboard-obs", || {
-                    Msg::SettingsPage(Page::Output)
+                    Msg::Window(WindowMsg::SettingsPage(Page::Output))
                 })),
             )),
         )],

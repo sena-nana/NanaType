@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tray_icon::menu::{CheckMenuItem, ContextMenu, MenuItem, PredefinedMenuItem, Submenu};
 
 use crate::{
-    msg::Msg,
+    msg::{Msg, WindowMsg},
     ui::{I18N, SkinRow, Ui},
     windows::WindowKind,
 };
@@ -85,7 +85,9 @@ impl Action {
     pub(crate) fn message(self, kind: WindowKind) -> Msg {
         match self {
             Self::Skin(id) => Msg::Edit(Box::new(move |s| s.skin.id = id)),
-            Self::AdjustSkin => Msg::SettingsPage(crate::ui::settings::Page::Skins),
+            Self::AdjustSkin => {
+                Msg::Window(WindowMsg::SettingsPage(crate::ui::settings::Page::Skins))
+            }
             Self::VerticalText => Msg::Edit(Box::new(move |s| {
                 let o = kind.overlay_mut(s).expect("broadcast overlay");
                 o.vertical_text = !o.vertical_text;
@@ -97,7 +99,7 @@ impl Action {
             Self::Lock => Msg::Edit(Box::new(move |s| {
                 kind.overlay_mut(s).expect("broadcast overlay").lock = Lock::Locked;
             })),
-            Self::Reset => Msg::ResetWindow(kind),
+            Self::Reset => Msg::Window(WindowMsg::Reset(kind)),
             Self::Close => Msg::Edit(Box::new(move |s| {
                 kind.overlay_mut(s).expect("broadcast overlay").visible = false
             })),
@@ -123,7 +125,7 @@ pub(crate) fn message(id: &str) -> Option<Msg> {
             .into_iter()
             .find(|action| action.key() == key)?,
     };
-    Some(Msg::OverlayAction(kind, action))
+    Some(Msg::Window(WindowMsg::OverlayAction(kind, action)))
 }
 
 /// Owned state crosses to the native thread. App rechecks these availability
@@ -414,7 +416,7 @@ mod tests {
                 .chain([Action::Skin("custom:skin".into())])
             {
                 assert!(
-                    matches!(message(&action.id(kind)), Some(Msg::OverlayAction(target, decoded)) if target == kind && decoded == action)
+                    matches!(message(&action.id(kind)), Some(Msg::Window(WindowMsg::OverlayAction(target, decoded))) if target == kind && decoded == action)
                 );
             }
             let mut settings = Settings::default();

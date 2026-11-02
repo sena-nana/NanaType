@@ -1,4 +1,5 @@
 use super::*;
+use crate::msg::WindowMsg;
 
 /// The overlay windows, in the matrix's column order.
 pub(super) const OVERLAYS: [WindowKind; 4] = [
@@ -269,7 +270,7 @@ pub(super) fn windows(ui: Ui) -> AnyView {
                         .with_tooltip(ui.now_t("windows-reset")),
                 )
                 .on_cx(move |_, _: &Activate, cx| {
-                    cx.dispatch_program_all(Msg::ResetWindow(kind));
+                    cx.dispatch_program_all(Msg::Window(WindowMsg::Reset(kind)));
                 }),
             ))
             .into_any()

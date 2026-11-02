@@ -20,7 +20,7 @@ use nana_ui::runtime::{Activate, IconButton, ListItem, ScrollAxes, ScrollView, S
 use nana_ui_core::{LengthSpec, SemanticColorRole};
 
 use super::Ui;
-use crate::msg::Msg;
+use crate::msg::{Msg, WindowMsg};
 use crate::ui::kit::{PAGE_HEADER_H, PAGE_MAX_W, SIDEBAR_W, Type, gap, icon, inset};
 
 /// The panel and settings page use the same persisted style control.
@@ -171,7 +171,9 @@ fn nav_row(ui: Ui, page: Page) -> AnyView {
                 },
             ),
         )
-        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::SettingsPage(page)));
+        .on_cx(move |_, _: &Activate, cx| {
+            cx.dispatch_program_all(Msg::Window(WindowMsg::SettingsPage(page)))
+        });
     if page == Page::About {
         widget(
             Stack::row(0.0)

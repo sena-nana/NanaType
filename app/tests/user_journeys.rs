@@ -10,7 +10,7 @@ use nana_ui_devtools::agent::{
 };
 use nana_ui_platform::InputModifiers;
 use nanatype::{
-    msg::Msg,
+    msg::{Msg, WindowMsg},
     ui::{
         Ui,
         settings::{self, Page},
@@ -254,7 +254,7 @@ fn sidebar_reaches_every_page_and_new_pages_start_at_the_top() {
             assert!(
                 f.messages()
                     .iter()
-                    .any(|m| matches!(m, Msg::SettingsPage(p) if *p == page))
+                    .any(|m| matches!(m, Msg::Window(WindowMsg::SettingsPage(p)) if *p == page))
             );
             f.ui.page.set(page);
             f.session.flush().unwrap();

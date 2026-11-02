@@ -1,5 +1,8 @@
 use super::demo_editor;
 use crate::msg::Msg;
+#[cfg(feature = "updates")]
+use crate::msg::UpdateMsg;
+use crate::msg::{BliveMsg, ChatMsg, ObsMsg, StickerMsg, TwitchMsg, WorkshopMsg};
 use crate::paths::Paths;
 use crate::scheduler::Scheduler;
 use crate::services::chat_assets::ChatAssets;
@@ -45,8 +48,8 @@ impl Workers {
             bridge: BridgeHandle::new(forward(&post, Msg::Bridge)),
             chat_assets: ChatAssets::start(
                 paths.blobs(),
-                forward(&post, |m| Msg::Chat(Arc::new(m))),
-                forward(&post, Msg::ChatAssetReady),
+                forward(&post, |m| Msg::Chat(ChatMsg::Message(Arc::new(m)))),
+                forward(&post, |e| Msg::Chat(ChatMsg::AssetReady(e))),
             ),
             hotkeys: Hotkeys::start(
                 forward(&post, Msg::Hotkey),
@@ -54,24 +57,31 @@ impl Workers {
             ),
             twitch: nanatype_twitch::TwitchHandle::new(
                 paths.config.clone(),
-                forward(&post, Msg::Twitch),
+                forward(&post, |e| Msg::Twitch(TwitchMsg::Event(e))),
             ),
-            blivechat: nanatype_blive::BliveHandle::new(forward(&post, Msg::Blivechat)),
-            comet_relay: nanatype_blive::RelayHandle::new(forward(&post, Msg::CometRelay)),
-            obs: nanatype_obs::ObsHandle::new(forward(&post, Msg::Obs)),
-            steam: nanatype_steam::SteamHandle::start(steam, forward(&post, Msg::Workshop)),
+            blivechat: nanatype_blive::BliveHandle::new(forward(&post, |e| {
+                Msg::Blive(BliveMsg::Event(e))
+            })),
+            comet_relay: nanatype_blive::RelayHandle::new(forward(&post, |e| {
+                Msg::Blive(BliveMsg::Relay(e))
+            })),
+            obs: nanatype_obs::ObsHandle::new(forward(&post, |e| Msg::Obs(ObsMsg::Event(e)))),
+            steam: nanatype_steam::SteamHandle::start(
+                steam,
+                forward(&post, |e| Msg::Workshop(WorkshopMsg::Event(e))),
+            ),
             sticker_manager: crate::stickers::Manager::new(
                 &paths.data,
-                forward(&post, Msg::Stickers),
+                forward(&post, |e| Msg::Sticker(StickerMsg::Event(e))),
             ),
             telegram: crate::stickers::telegram::Service::new(
                 paths.data.clone(),
-                forward(&post, Msg::TelegramEvent),
+                forward(&post, |e| Msg::Sticker(StickerMsg::TelegramEvent(e))),
             ),
             #[cfg(feature = "updates")]
             updater: crate::services::updater::Updater::new(
                 paths.cache.join("updates"),
-                forward(&post, Msg::Update),
+                forward(&post, |e| Msg::Update(UpdateMsg::Event(e))),
             ),
         }
     }
