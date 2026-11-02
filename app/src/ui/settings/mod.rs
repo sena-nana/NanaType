@@ -286,10 +286,6 @@ fn sidebar(ui: Ui) -> AnyView {
                 l.flex_shrink = Some(0.0);
             }),
     )
-    // Wider with the UI scale, so the page names still fit.
-    .bind(move |s: &mut Stack| {
-        s.layout_mut().width = Some(LengthSpec::Px(SIDEBAR_W * ui.ui_scale.get()));
-    })
     .children((
         widget(
             Stack::fill_column(0.0)
@@ -392,11 +388,6 @@ pub fn settings_window(ui: Ui) -> impl IntoView {
                                             .max_width(PAGE_MAX_W)
                                             .width(LengthSpec::Fill),
                                     )
-                                    // The column grows with the UI scale too.
-                                    .bind(move |s: &mut Stack| {
-                                        s.layout_mut().max_width =
-                                            Some(LengthSpec::Px(PAGE_MAX_W * ui.ui_scale.get()));
-                                    })
                                     .children(pages::page(ui, *page)),
                                 ),
                             ),

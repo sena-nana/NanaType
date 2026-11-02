@@ -61,10 +61,9 @@ pub struct Host {
     /// The toast stack of each control window (settings, input, chat).
     toasts: HashMap<WindowId, Entity<ToastStack>>,
     stickers: crate::stickers::playback::Playback,
-    /// Language, forced reduced motion and text scale each document was last
-    /// given; re-sent only when they change (or to a new window), not per
-    /// message.
-    doc_env: HashMap<WindowId, (nanatype_i18n::Locale, bool, f32)>,
+    /// Language and forced reduced motion each document was last given;
+    /// re-sent only when they change (or to a new window), not per message.
+    doc_env: HashMap<WindowId, (nanatype_i18n::Locale, bool)>,
     /// The app theme each output window last held back from: an output
     /// window keeps the plain theme whatever the app's own windows wear.
     output_held: HashMap<WindowId, Arc<CompiledTheme>>,
@@ -408,18 +407,12 @@ impl Host {
         // The app's reduce-motion setting wins over the system's in every
         // window's runtime, so view transitions and toasts land at once too.
         let forced = self.app.settings.playback.reduced_motion;
-        let ui_scale = self.app.settings.accessibility.scale();
         self.doc_env.retain(|id, _| self.docs.contains_key(id));
         for (id, doc) in &mut self.docs {
-            // Output windows are broadcast as they are: never scaled.
-            let scale = match WindowKind::from_id(*id) {
-                Some(kind) if kind.canvas().is_none() => ui_scale,
-                _ => 1.0,
-            };
-            if self.doc_env.get(id) == Some(&(locale, forced, scale)) {
+            if self.doc_env.get(id) == Some(&(locale, forced)) {
                 continue;
             }
-            self.doc_env.insert(*id, (locale, forced, scale));
+            self.doc_env.insert(*id, (locale, forced));
             let cx = doc.context_mut();
             nanatype_frame::apply_locale(cx, locale);
             if forced {
@@ -427,7 +420,6 @@ impl Host {
             } else {
                 cx.follow_system_reduced_motion();
             }
-            cx.set_default_text_scale(scale);
             // The app paints its own high contrast (`App::theme`), honouring
             // the setting over the system's; NanaUI's overlay would replace
             // it in every window, the broadcast ones too.
@@ -1359,6 +1351,8 @@ impl RuntimeProgram for Host {
                     if matches!(kind, WindowKind::Input | WindowKind::Settings) {
                         self.app.tint_captions();
                     }
+                    // A window opens unzoomed: the app's own take the UI scale.
+                    self.app.apply_zoom(kind);
                     // Broadcast windows have no caption, but macOS still
                     // gives a frameless window its traffic lights.
                     if matches!(
@@ -1477,6 +1471,13 @@ impl RuntimeProgram for Host {
             WindowEvent::ReducedMotionChanged { reduced, .. } => {
                 self.app.ui.system_reduced_motion.set(reduced);
                 self.app.sync_reduced_motion();
+            }
+            // Every window hears it; the first one that does re-zooms them all.
+            WindowEvent::TextScaleChanged { scale, .. }
+                if self.app.ui.system_text_scale.get_untracked() != Some(scale) =>
+            {
+                self.app.ui.system_text_scale.set(Some(scale));
+                self.app.apply_zoom_all();
             }
             WindowEvent::HighContrastChanged { high_contrast, .. } => {
                 // NanaUI has just laid its overlay on every document again.

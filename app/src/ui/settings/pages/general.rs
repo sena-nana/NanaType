@@ -65,7 +65,15 @@ fn character_row(ui: Ui, i: usize, n: usize, active: bool) -> Row {
             .width(LengthSpec::Fill),
     )
     .children((
-        widget(Stack::row(0.0).width(LengthSpec::Px(field::MD))).children(
+        // The name gives way first when the page is narrow, so the order
+        // buttons stay on the card.
+        widget(
+            Stack::row(0.0)
+                .width(LengthSpec::Px(field::MD))
+                .shrink(1.0)
+                .with_layout(|l| l.min_width = Some(LengthSpec::Px(field::XS))),
+        )
+        .children(
             widget(
                 crate::ui::kit::text_input(c.name.clone())
                     .label(ui.now_t("general-speaker"))
@@ -195,53 +203,75 @@ fn characters(ui: Ui) -> Row {
 }
 
 /// High contrast and the UI scale of the app's own windows. Reduced motion
-/// lives with the other motion settings, under Playback.
+/// lives with the other motion settings, under Playback. "Follow system"
+/// shows only where the system has a text size (Windows).
 fn accessibility(ui: Ui) -> AnyView {
     let (lo, hi, step) = nanatype_settings::UI_SCALE;
-    section(
+    let has_system = move || ui.system_text_scale.get().is_some();
+    let follows = move || {
+        has_system()
+            && ui
+                .settings
+                .with(|s| s.accessibility.ui_scale_follows_system)
+    };
+    section_with(
         ui,
         "general-accessibility",
         vec![
-            row(
-                ui,
-                "general-contrast",
-                Some("general-contrast-hint"),
-                select(
+            (
+                row(
                     ui,
-                    select_keys(
+                    "general-contrast",
+                    Some("general-contrast-hint"),
+                    select(
                         ui,
-                        &[
-                            ("system", "general-appearance-system"),
-                            ("off", "general-contrast-off"),
-                            ("on", "general-contrast-on"),
-                        ],
+                        select_keys(
+                            ui,
+                            &[
+                                ("system", "general-appearance-system"),
+                                ("off", "general-contrast-off"),
+                                ("on", "general-contrast-on"),
+                            ],
+                        ),
+                        |s| match s.accessibility.contrast {
+                            ContrastMode::System => "system".into(),
+                            ContrastMode::Off => "off".into(),
+                            ContrastMode::On => "on".into(),
+                        },
+                        |s, v| {
+                            s.accessibility.contrast = match v {
+                                "off" => ContrastMode::Off,
+                                "on" => ContrastMode::On,
+                                _ => ContrastMode::System,
+                            }
+                        },
                     ),
-                    |s| match s.accessibility.contrast {
-                        ContrastMode::System => "system".into(),
-                        ContrastMode::Off => "off".into(),
-                        ContrastMode::On => "on".into(),
-                    },
-                    |s, v| {
-                        s.accessibility.contrast = match v {
-                            "off" => ContrastMode::Off,
-                            "on" => ContrastMode::On,
-                            _ => ContrastMode::System,
-                        }
-                    },
                 ),
+                None,
             ),
-            row(
-                ui,
-                "general-ui-scale",
-                Some("general-ui-scale-hint"),
-                slider_with(
+            shown_if(
+                toggle_row!(
                     ui,
-                    (f64::from(lo), f64::from(hi), f64::from(step)),
-                    "",
-                    |_, v| Some(format!("{}%", v.round())),
-                    |s| f64::from(s.accessibility.ui_scale),
-                    |s, v| s.accessibility.ui_scale = v.round() as u32,
+                    "general-ui-scale-system",
+                    accessibility.ui_scale_follows_system
                 ),
+                has_system,
+            ),
+            shown_if(
+                row(
+                    ui,
+                    "general-ui-scale",
+                    Some("general-ui-scale-hint"),
+                    slider_with(
+                        ui,
+                        (f64::from(lo), f64::from(hi), f64::from(step)),
+                        "",
+                        |_, v| Some(format!("{}%", v.round())),
+                        |s| f64::from(s.accessibility.ui_scale),
+                        |s, v| s.accessibility.ui_scale = v.round() as u32,
+                    ),
+                ),
+                move || !follows(),
             ),
         ],
     )

@@ -237,6 +237,9 @@ pub struct Ui {
     pub hotkeys: Signal<Arc<HashMap<GlobalAction, HotkeyState>>>,
     /// The system's own reduce-motion preference, as last reported.
     pub system_reduced_motion: Signal<bool>,
+    /// The system's text size as a factor, as last reported; `None` where it
+    /// has none (macOS, Linux), which hides "Follow system" for the UI scale.
+    pub system_text_scale: Signal<Option<f32>>,
     /// Whether the input window is shown by the application's presence policy.
     pub input_shown: Signal<bool>,
     /// The first-run guide's step, 0-based; kept while the user visits other
@@ -334,6 +337,7 @@ impl Ui {
             recording: signal(None),
             hotkeys: signal(Arc::new(HashMap::new())),
             system_reduced_motion: signal(false),
+            system_text_scale: signal(None),
             input_shown: signal(true),
             onboard_step,
             onboard_skin_shown: signal(true),

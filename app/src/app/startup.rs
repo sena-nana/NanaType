@@ -123,6 +123,7 @@ pub(super) fn ui(
     ui.chrome_contrast
         .set(settings.accessibility.high_contrast(ctx.high_contrast()));
     ui.system_reduced_motion.set(ctx.reduced_motion());
+    ui.system_text_scale.set(ctx.text_scale());
     ui.reduced_motion
         .set(settings.playback.reduced_motion || ctx.reduced_motion());
     ui

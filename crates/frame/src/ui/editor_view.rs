@@ -22,8 +22,7 @@ pub const PLAIN_TEXT_SIZE: f32 = 16.0;
 fn editor_base(ui: Stage) -> Base {
     let mut base = Base::editor(&ui.skin.get());
     if !ui.settings.with(|s| s.general.input_skin_preview) {
-        // The canvas keeps skin sizes; plain text takes the UI scale here.
-        base.size = PLAIN_TEXT_SIZE * ui.ui_scale.get();
+        base.size = PLAIN_TEXT_SIZE;
         base.line_height = base.line_height.min(1.5);
         base.shadow = None;
         base.stroke = None;

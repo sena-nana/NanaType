@@ -170,7 +170,7 @@ pub struct App {
     /// Its window was asked for and has not closed since.
     quick_requested: bool,
     pub system_dark: bool,
-    /// The system asks for high contrast (Windows reports it; macOS does not).
+    /// The system asks for high contrast (Windows and macOS report it).
     pub system_high_contrast: bool,
     next_notice: u64,
     dialogs: HashMap<u64, FileTarget>,
@@ -1071,23 +1071,39 @@ impl App {
         self.apply_effects(fx);
     }
 
-    /// Grow the app's own open windows to the UI scale's minimum size, so a
-    /// larger scale cuts nothing off. (A window's minimum is fixed when it
-    /// opens; the input window's takes the new one at the next launch.)
-    fn fit_ui_windows(&mut self) {
-        for kind in [WindowKind::Input, WindowKind::Settings] {
-            let (Some(frame), Some((w, h))) = (
-                self.windows.frame(kind),
-                windows::minimum_size(kind, &self.settings),
-            ) else {
-                continue;
-            };
-            if frame.w < w || frame.h < h {
-                self.commands.push(WindowCommand::SetBounds {
-                    id: kind.id(),
-                    position: (frame.x as f32, frame.y as f32),
-                    size: (frame.w.max(w) as f32, frame.h.max(h) as f32),
-                });
+    /// How much `kind` zooms its content now ([`windows::zoom`]).
+    pub fn zoom(&self, kind: WindowKind) -> f32 {
+        windows::zoom(
+            kind,
+            &self.settings,
+            self.ui.system_text_scale.get_untracked(),
+        )
+    }
+
+    /// Zoom `kind`'s content to the UI scale, and give it the minimum size
+    /// that zoom needs (a smaller window grows to it at once). Broadcast
+    /// windows are left alone.
+    pub fn apply_zoom(&mut self, kind: WindowKind) {
+        let Some(minimum) = windows::minimum_size(kind, self.zoom(kind)) else {
+            return;
+        };
+        let id = kind.id();
+        self.commands.push(WindowCommand::SetContentZoom {
+            id,
+            zoom: self.zoom(kind),
+        });
+        self.commands.push(WindowCommand::SetSizeLimits {
+            id,
+            minimum: Some(minimum),
+            maximum: None,
+        });
+    }
+
+    /// [`Self::apply_zoom`] for every window that is open.
+    pub fn apply_zoom_all(&mut self) {
+        for kind in WindowKind::ALL {
+            if self.windows.is_open(kind) {
+                self.apply_zoom(kind);
             }
         }
     }
@@ -1117,7 +1133,6 @@ impl App {
         self.output_theme = output;
         self.ui.chrome_dark.set(chrome.dark);
         self.ui.chrome_contrast.set(chrome.high_contrast);
-        self.ui.ui_scale.set_if_changed(chrome.scale);
         self.tint_captions();
     }
 
@@ -1307,7 +1322,9 @@ impl App {
         let look_changed = prev.skin.overrides != s.skin.overrides || active_profile_changed;
         let chrome_changed =
             prev.skin.chrome != s.skin.chrome || prev.accessibility != s.accessibility;
-        let scale_changed = prev.accessibility.ui_scale != s.accessibility.ui_scale;
+        let zoom_changed = prev.accessibility.ui_scale != s.accessibility.ui_scale
+            || prev.accessibility.ui_scale_follows_system
+                != s.accessibility.ui_scale_follows_system;
         let assets_changed = prev.assets.sticker_dirs != s.assets.sticker_dirs;
         let device_changed = prev.sound.device != s.sound.device;
         let pack_changed = prev.sound.pack != s.sound.pack;
@@ -1324,8 +1341,8 @@ impl App {
         if chrome_changed {
             self.refresh_theme();
         }
-        if scale_changed {
-            self.fit_ui_windows();
+        if zoom_changed {
+            self.apply_zoom_all();
         }
         if locale_changed {
             let locale = locale_of(&self.settings);
@@ -2530,7 +2547,8 @@ impl App {
     }
 
     pub fn window_size(&self, kind: WindowKind) -> (f32, f32) {
-        windows::size_of(kind, &self.skin, &self.settings)
+        windows::own_size(kind, self.zoom(kind))
+            .unwrap_or_else(|| windows::size_of(kind, &self.skin, &self.settings))
     }
 
     /// Native window state for this frame.

@@ -28,8 +28,11 @@ pub struct App {
     pub ui: Ui,
     pub theme: Arc<CompiledTheme>,
     pub system_dark: bool,
-    /// The system asks for high contrast (Windows reports it).
+    /// The system asks for high contrast (Windows and macOS report it).
     pub system_high_contrast: bool,
+    /// The system's text size, where it has one (Windows), for NanaType's
+    /// "Follow system" UI scale.
+    pub system_text_scale: Option<f32>,
     /// The editor window, once it is on screen.
     pub window: Option<nana_ui::WindowHandle>,
     /// Native window commands for the host to issue.
@@ -114,6 +117,7 @@ impl App {
             theme: nanatype_frame::ui::kit::theme::compile(chrome),
             system_dark,
             system_high_contrast,
+            system_text_scale: ctx.text_scale(),
             window: None,
             commands: Vec::new(),
             toasts: Vec::new(),
@@ -161,6 +165,20 @@ impl App {
             // The host handles these.
             Msg::ToastDismissed(_) | Msg::SecondInstance => {}
         }
+    }
+
+    /// Zoom the window's content to NanaType's UI scale, and let its
+    /// minimum size grow with it.
+    pub fn apply_zoom(&self) {
+        let Some(window) = &self.window else {
+            return;
+        };
+        let zoom = self
+            .ui
+            .settings
+            .with_untracked(|s| s.accessibility.zoom(self.system_text_scale));
+        let _ = window.set_content_zoom(zoom);
+        let _ = window.set_size_limits(Some(crate::ui::shell::minimum_size(zoom)), None);
     }
 
     /// Follow NanaType's chrome and contrast settings, or the system's.

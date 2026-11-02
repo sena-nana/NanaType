@@ -507,6 +507,16 @@ fn accessibility_defaults_load_into_older_files_and_stay_global() {
     assert_eq!(s.accessibility, AccessibilitySettings::default());
     assert_eq!(s.accessibility.contrast, ContrastMode::System);
     assert_eq!(s.accessibility.scale(), 1.0);
+    assert!(!s.accessibility.ui_scale_follows_system);
+    // Following the system takes its text size where it reports one.
+    let follows = AccessibilitySettings {
+        ui_scale: 150,
+        ui_scale_follows_system: true,
+        ..Default::default()
+    };
+    assert_eq!(follows.zoom(Some(1.25)), 1.25);
+    assert_eq!(follows.zoom(None), 1.5);
+    assert_eq!(AccessibilitySettings::default().zoom(Some(2.0)), 1.0);
     for (mode, system, on) in [
         (ContrastMode::System, false, false),
         (ContrastMode::System, true, true),
@@ -524,6 +534,7 @@ fn accessibility_defaults_load_into_older_files_and_stay_global() {
         accessibility: AccessibilitySettings {
             contrast: ContrastMode::On,
             ui_scale: 150,
+            ui_scale_follows_system: true,
         },
         ..Default::default()
     };

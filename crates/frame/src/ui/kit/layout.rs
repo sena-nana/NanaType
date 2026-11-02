@@ -248,18 +248,6 @@ fn name_slot_controls(cx: &mut AppContext, slot: NodeRef) {
     }
 }
 
-/// Keep the text under `node` at its own size whatever the UI scale: a skin
-/// preview shows what the broadcast shows.
-pub fn unscaled_text(node: NodeRef) {
-    on_mount(move |cx| {
-        if let Some(id) = node.get_untracked() {
-            let mut queue = MutationQueue::new();
-            queue.set_text_scale(id, Some(1.0));
-            let _ = cx.commit_mutations(queue);
-        }
-    });
-}
-
 /// Once mounted, let the first text under `caption` name every unnamed
 /// control under `controls`: a caption written above or beside its field.
 pub fn caption_names_controls(caption: NodeRef, controls: NodeRef) {

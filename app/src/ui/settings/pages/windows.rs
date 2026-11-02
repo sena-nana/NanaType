@@ -15,25 +15,23 @@ pub(super) const MATRIX_LABEL_W: f32 = 150.0;
 pub(super) const MATRIX_GAP: f32 = space::MD;
 
 /// A matrix line: a label, then one cell per overlay window. The label's
-/// text names each cell's control for assistive technology; its column
-/// widens with the UI scale.
-pub(super) fn matrix_row(ui: Ui, label: AnyView, cells: [AnyView; 4]) -> Row {
+/// text names each cell's control for assistive technology.
+pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> Row {
     let (line, caption) = (node_ref(), node_ref());
     crate::ui::kit::caption_names_controls(caption, line);
-    let label_w = move || MATRIX_LABEL_W * ui.ui_scale.get();
     let cells = cells.map(|cell| {
-        widget(Stack::row(0.0).align(AlignSpec::Center).with_layout(|l| {
-            l.flex_shrink = Some(0.0);
-            l.min_width = Some(LengthSpec::Px(0.0));
-        }))
-        // A quarter of what the label and the gaps leave, so the columns
-        // line up whatever their cells hold.
-        .bind(move |s: &mut Stack| {
-            s.layout_mut().width = Some(crate::ui::surface::calc(
-                100.0 / 4.0,
-                -(label_w() + 4.0 * MATRIX_GAP) / 4.0 - 0.5,
-            ));
-        })
+        widget(
+            // A quarter of what the label and the gaps leave, so the columns
+            // line up whatever their cells hold.
+            Stack::row(0.0).align(AlignSpec::Center).with_layout(|l| {
+                l.width = Some(crate::ui::surface::calc(
+                    100.0 / 4.0,
+                    -(MATRIX_LABEL_W + 4.0 * MATRIX_GAP) / 4.0 - 0.5,
+                ));
+                l.flex_shrink = Some(0.0);
+                l.min_width = Some(LengthSpec::Px(0.0));
+            }),
+        )
         .children(cell)
         .into_any()
     });
@@ -50,9 +48,9 @@ pub(super) fn matrix_row(ui: Ui, label: AnyView, cells: [AnyView; 4]) -> Row {
                 Stack::row(0.0)
                     .gap_step(gap::step::TIGHT)
                     .align(AlignSpec::Center)
+                    .width(LengthSpec::Px(MATRIX_LABEL_W))
                     .with_layout(|l| l.flex_shrink = Some(0.0)),
             )
-            .bind(move |s: &mut Stack| s.layout_mut().width = Some(LengthSpec::Px(label_w())))
             .node_ref(caption)
             .children(label),
             cells.into_iter().collect::<Vec<_>>(),
@@ -148,7 +146,6 @@ pub(super) fn overlay_select(
 /// column per window, "—" where a setting does not apply.
 pub(super) fn windows(ui: Ui) -> AnyView {
     let header = matrix_row(
-        ui,
         widget(Stack::row(0.0)).into_any(),
         OVERLAYS.map(|kind| {
             let key = match kind {
@@ -166,12 +163,10 @@ pub(super) fn windows(ui: Ui) -> AnyView {
         }),
     );
     let show = matrix_row(
-        ui,
         matrix_label(ui, "windows-visible", None),
         OVERLAYS.map(|kind| overlay_switch(ui, kind, |o| o.visible, |o, v| o.visible = v)),
     );
     let lock = matrix_row(
-        ui,
         matrix_label(ui, "windows-lock", Some("windows-lock-tip")),
         OVERLAYS.map(|kind| {
             if kind == WindowKind::Input {
@@ -199,7 +194,6 @@ pub(super) fn windows(ui: Ui) -> AnyView {
         }),
     );
     let background = matrix_row(
-        ui,
         matrix_label(ui, "windows-background", Some("windows-background-tip")),
         OVERLAYS.map(|kind| {
             if kind == WindowKind::Input {
@@ -229,13 +223,11 @@ pub(super) fn windows(ui: Ui) -> AnyView {
         }),
     );
     let on_top = matrix_row(
-        ui,
         matrix_label(ui, "windows-on-top", None),
         OVERLAYS
             .map(|kind| overlay_switch(ui, kind, |o| o.always_on_top, |o, v| o.always_on_top = v)),
     );
     let vertical_text = matrix_row(
-        ui,
         matrix_label(
             ui,
             "windows-vertical-text",
@@ -251,7 +243,6 @@ pub(super) fn windows(ui: Ui) -> AnyView {
     // The size the window was dragged to ("Follow skin" until it is), and
     // the reset that puts it back where and as big as the skin says.
     let size = matrix_row(
-        ui,
         matrix_label(ui, "windows-size", None),
         OVERLAYS.map(|kind| {
             let text = move || {

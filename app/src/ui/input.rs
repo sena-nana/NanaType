@@ -1401,9 +1401,6 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
         let (w, _) = canvas_size();
         ((viewport.get().0 - 32.0).max(1.0) / w.max(1.0)).min(1.0)
     };
-    // The canvas draws in the skin's sizes, not the UI scale's.
-    let canvas = nana_ui::runtime::view::node_ref();
-    crate::ui::kit::unscaled_text(canvas);
     let preview = widget(ScrollView::new(ScrollAxes::Both).with_layout(|l| {
         l.width = Some(LengthSpec::Fill);
         l.height = Some(LengthSpec::Px(0.0));
@@ -1471,7 +1468,6 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
                     l.flex_shrink = Some(0.0);
                 }))
                 .key("input-preview-canvas")
-                .node_ref(canvas)
                 .bind(move |s: &mut Stack| {
                     let (w, h) = canvas_size();
                     let l = s.layout_mut();

@@ -117,7 +117,6 @@ impl Scene {
         let theme = nanatype::ui::kit::theme::compile(nanatype::ui::kit::theme::Chrome {
             dark,
             high_contrast,
-            scale: settings.accessibility.scale(),
         });
         let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), locale);
         TRACKS.set(Some(*ui));

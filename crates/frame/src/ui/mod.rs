@@ -116,9 +116,6 @@ pub struct Stage {
     pub chrome_dark: Signal<bool>,
     /// The application's own windows paint in high contrast (never a skin).
     pub chrome_contrast: Signal<bool>,
-    /// The UI scale of the application's own windows, as a factor. Their
-    /// text takes it from NanaUI; a skin's text never does.
-    pub ui_scale: Signal<f32>,
     pub display: Signal<Arc<DisplayView>>,
     /// A private display snapshot used by isolated skin previews. It keeps
     /// the preview on the same dialogue renderer without touching the live
@@ -231,7 +228,6 @@ impl Stage {
             speaker: signal(speaker),
             chrome_dark: signal(crate::skin_theme::dark_mode(settings.skin.chrome, false)),
             chrome_contrast: signal(settings.accessibility.high_contrast(false)),
-            ui_scale: signal(settings.accessibility.scale()),
             locale: signal(locale),
             settings: signal(settings),
             skin_drafts: signal(HashMap::new()),
@@ -313,12 +309,10 @@ impl Stage {
     }
 
     /// How the application's own chrome paints now (tracked): its colours.
-    /// The scale stays 1 here; text reads [`Self::ui_scale`] itself.
     pub fn chrome(self) -> kit::theme::Chrome {
         kit::theme::Chrome {
             dark: self.chrome_dark.get(),
             high_contrast: self.chrome_contrast.get(),
-            scale: 1.0,
         }
     }
 
@@ -327,7 +321,6 @@ impl Stage {
         kit::theme::Chrome {
             dark: self.chrome_dark.get_untracked(),
             high_contrast: self.chrome_contrast.get_untracked(),
-            scale: 1.0,
         }
     }
 

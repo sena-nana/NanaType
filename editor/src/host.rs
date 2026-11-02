@@ -36,7 +36,6 @@ impl Host {
         let context = doc.context_mut();
         let _ = context.set_theme_tokens(self.app.theme.clone());
         nanatype_frame::apply_locale(context, ui.locale.get_untracked());
-        context.set_default_text_scale(ui.ui_scale.get_untracked());
         let (_, toasts) = context
             .mount_view_root(id, move || {
                 let stack = entity_ref::<ToastStack>();
@@ -196,6 +195,8 @@ impl RuntimeProgram for Host {
                 let window = context.window();
                 nanatype_frame::shell::tint_caption(&window, &self.app.theme);
                 self.app.window = Some(window);
+                self.app.system_text_scale = context.text_scale();
+                self.app.apply_zoom();
             }
             WindowEvent::FocusChanged { focused: false, .. }
             | WindowEvent::VisibilityChanged { hidden: true, .. } => {
@@ -220,6 +221,10 @@ impl RuntimeProgram for Host {
             }
             WindowEvent::ReducedMotionChanged { reduced, .. } => {
                 self.app.ui.reduced_motion.set(reduced);
+            }
+            WindowEvent::TextScaleChanged { scale, .. } => {
+                self.app.system_text_scale = Some(scale);
+                self.app.apply_zoom();
             }
             WindowEvent::HighContrastChanged { high_contrast, .. } => {
                 self.app.system_high_contrast = high_contrast;

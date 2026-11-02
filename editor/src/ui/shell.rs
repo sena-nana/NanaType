@@ -24,6 +24,12 @@ use std::sync::Arc;
 pub const COMPACT: f32 = 1280.0;
 /// The smallest window the workspace is laid out for.
 pub const MIN_SIZE: [f32; 2] = [960.0, 600.0];
+
+/// [`MIN_SIZE`] at a content zoom, for the window's size limits.
+pub fn minimum_size(zoom: f32) -> (f64, f64) {
+    let [w, h] = MIN_SIZE.map(|v| f64::from((v * zoom).round()));
+    (w, h)
+}
 /// Side panel and inspector: default, least and most width.
 pub const SIDE_W: f32 = 240.0;
 const SIDE_LIMITS: (f32, f32) = (180.0, 360.0);

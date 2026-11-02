@@ -80,11 +80,12 @@ pub fn run() -> ExitCode {
         vendor: "sena-nana",
     );
     let launch = Launch::from_args(std::env::args().skip(1));
-    // It grows with NanaType's UI scale, so nothing in it is cut off.
-    let scale = nanatype_settings::peek_accessibility(&launch.paths().settings()).scale();
+    // Its minimum grows with NanaType's UI scale (the window zooms its
+    // content once it is up), so nothing in it is laid out too small.
+    let zoom = nanatype_settings::peek_accessibility(&launch.paths().settings()).zoom(None);
     let mut primary = nana_ui::WindowDescriptor::new("NanaType Editor").initial_size(1440.0, 900.0);
-    let [min_w, min_h] = ui::shell::MIN_SIZE.map(|v| (v * scale).round());
-    primary.minimum_size = (f64::from(min_w), f64::from(min_h));
+    let (min_w, min_h) = ui::shell::minimum_size(zoom);
+    primary.minimum_size = (min_w, min_h);
     primary.constrain_to_work_area = true;
     primary.system_caption = true;
     primary.resizable = true;

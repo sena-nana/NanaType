@@ -708,9 +708,12 @@ pub const UI_SCALE: (u32, u32, u32) = (80, 200, 10);
 #[serde(default)]
 pub struct AccessibilitySettings {
     pub contrast: ContrastMode,
-    /// Text and controls, in percent of their size, on top of the system's
-    /// display scale ([`UI_SCALE`]).
+    /// Everything the windows draw, in percent of its size, on top of the
+    /// system's display scale ([`UI_SCALE`]).
     pub ui_scale: u32,
+    /// Take the system's text size instead of [`Self::ui_scale`], where the
+    /// system has one (Windows).
+    pub ui_scale_follows_system: bool,
 }
 
 impl Default for AccessibilitySettings {
@@ -718,6 +721,7 @@ impl Default for AccessibilitySettings {
         Self {
             contrast: ContrastMode::System,
             ui_scale: 100,
+            ui_scale_follows_system: false,
         }
     }
 }
@@ -726,6 +730,15 @@ impl AccessibilitySettings {
     /// [`Self::ui_scale`] as a factor.
     pub fn scale(&self) -> f32 {
         self.ui_scale as f32 / 100.0
+    }
+
+    /// The zoom of the app's own windows, given the system's text size
+    /// (`None` where it has none).
+    pub fn zoom(&self, system_text: Option<f32>) -> f32 {
+        match system_text {
+            Some(text) if self.ui_scale_follows_system => text,
+            _ => self.scale(),
+        }
     }
 
     /// Whether the chrome paints in high contrast, given the system's flag.

@@ -195,32 +195,47 @@ pub fn debug_opaque() -> bool {
 const SETTINGS_SIZE: (f32, f32) = (920.0, 660.0);
 const SETTINGS_MIN: (f64, f64) = (720.0, 480.0);
 
-/// The smallest the app's own windows may be at the UI scale: they grow
-/// with their text and controls so nothing is cut. Broadcast windows have
-/// no minimum here.
-pub fn minimum_size(kind: WindowKind, s: &Settings) -> Option<(f64, f64)> {
-    let scale = f64::from(s.accessibility.scale());
+/// How much `kind` zooms its whole content: the UI scale for the app's own
+/// windows (`system_text` is the system's text size, where it has one),
+/// none for the broadcast windows, whose picture is the skin's.
+pub fn zoom(kind: WindowKind, s: &Settings, system_text: Option<f32>) -> f32 {
+    match kind.canvas() {
+        Some(_) => 1.0,
+        None => s.accessibility.zoom(system_text),
+    }
+}
+
+/// The smallest the app's own windows may be at `zoom`: as designed, zoomed,
+/// so their content is never laid out smaller than it was made for.
+/// Broadcast windows have no minimum here.
+pub fn minimum_size(kind: WindowKind, zoom: f32) -> Option<(f64, f64)> {
     let base = match kind {
         WindowKind::Input => INPUT_MIN,
         WindowKind::Settings => SETTINGS_MIN,
         WindowKind::Quick => (f64::from(QUICK_SIZE.0), f64::from(QUICK_SIZE.1)),
         _ => return None,
     };
-    Some(((base.0 * scale).round(), (base.1 * scale).round()))
+    let zoom = f64::from(zoom);
+    Some(((base.0 * zoom).round(), (base.1 * zoom).round()))
+}
+
+/// The size an app's own window opens at, at `zoom`; `None` for broadcast
+/// windows.
+pub fn own_size(kind: WindowKind, zoom: f32) -> Option<(f32, f32)> {
+    let size = match kind {
+        WindowKind::Input => INPUT_SIZE,
+        WindowKind::Settings => SETTINGS_SIZE,
+        WindowKind::Quick => QUICK_SIZE,
+        _ => return None,
+    };
+    let (w, h) = minimum_size(kind, zoom)?;
+    Some((size.0.max(w as f32), size.1.max(h as f32)))
 }
 
 /// Logical size of a window for the current skin and settings.
 pub fn size_of(kind: WindowKind, skin: &Skin, s: &Settings) -> (f32, f32) {
-    let at_least = |size: (f32, f32)| {
-        let (w, h) = minimum_size(kind, s).unwrap_or_default();
-        (size.0.max(w as f32), size.1.max(h as f32))
-    };
-    match kind {
-        WindowKind::Input => at_least(INPUT_SIZE),
-        WindowKind::Settings => at_least(SETTINGS_SIZE),
-        WindowKind::Quick => at_least(QUICK_SIZE),
-        _ => canvas::size_of(kind.canvas().expect("broadcast window"), skin, s),
-    }
+    own_size(kind, zoom(kind, s, None))
+        .unwrap_or_else(|| canvas::size_of(kind.canvas().expect("broadcast window"), skin, s))
 }
 
 /// The app icon for window title bars and the taskbar.
@@ -245,7 +260,7 @@ pub fn descriptor(kind: WindowKind, title: &str, skin: &Skin, s: &Settings) -> W
     d.icon = icon();
     match kind {
         WindowKind::Input => {
-            d.minimum_size = minimum_size(kind, s).unwrap_or(INPUT_MIN);
+            d.minimum_size = minimum_size(kind, zoom(kind, s, None)).unwrap_or(INPUT_MIN);
             d.system_caption = true;
             d.resizable = true;
             d.focus_on_show = true;
@@ -256,7 +271,7 @@ pub fn descriptor(kind: WindowKind, title: &str, skin: &Skin, s: &Settings) -> W
             d.visible = false;
         }
         WindowKind::Settings => {
-            d.minimum_size = minimum_size(kind, s).unwrap_or(SETTINGS_MIN);
+            d.minimum_size = minimum_size(kind, zoom(kind, s, None)).unwrap_or(SETTINGS_MIN);
             // A large UI scale can ask for more than a small screen has.
             d.constrain_to_work_area = true;
             d.system_caption = true;
@@ -640,6 +655,30 @@ mod tests {
             .skin
             .as_ref()
             .clone()
+    }
+
+    #[test]
+    fn only_the_apps_own_windows_zoom_and_their_minimum_grows_with_it() {
+        let mut s = Settings::default();
+        s.accessibility.ui_scale = 150;
+        for kind in [WindowKind::Input, WindowKind::Settings, WindowKind::Quick] {
+            assert_eq!(zoom(kind, &s, None), 1.5);
+        }
+        for kind in [
+            WindowKind::Display,
+            WindowKind::PeerDisplay,
+            WindowKind::History,
+        ] {
+            assert_eq!(zoom(kind, &s, Some(2.0)), 1.0);
+            assert_eq!(minimum_size(kind, 1.5), None);
+        }
+        assert_eq!(minimum_size(WindowKind::Input, 1.5), Some((1080.0, 540.0)));
+        assert_eq!(own_size(WindowKind::Settings, 1.0), Some(SETTINGS_SIZE));
+        assert_eq!(own_size(WindowKind::Settings, 2.0), Some((1440.0, 960.0)));
+        // Following the system takes its text size where it has one.
+        s.accessibility.ui_scale_follows_system = true;
+        assert_eq!(zoom(WindowKind::Settings, &s, Some(1.25)), 1.25);
+        assert_eq!(zoom(WindowKind::Settings, &s, None), 1.5);
     }
 
     #[test]

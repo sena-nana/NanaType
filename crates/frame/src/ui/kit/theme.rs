@@ -2,9 +2,9 @@
 //! blue accent), the app's radius steps, its shadows and motion. It never
 //! reads the selected skin — only content boxes use skin colours.
 //!
-//! [`Chrome`] picks the rendition: light or dark, in high contrast or not,
-//! and the UI scale its controls are drawn at. Output windows always take
-//! the plain one ([`Chrome::output`]).
+//! [`Chrome`] picks the rendition: light or dark, in high contrast or not.
+//! Output windows always take the plain one ([`Chrome::output`]). The UI
+//! scale is not here: the app's own windows zoom their whole content.
 //!
 //! To change how the app looks, change it here: every window, every page
 //! and every part in [`super`] reads these tokens.
@@ -21,8 +21,6 @@ pub struct Chrome {
     pub dark: bool,
     /// Opaque black and white with the strongest accents (≥7:1 text).
     pub high_contrast: bool,
-    /// Controls and spacing they size by, as a factor (1 = as designed).
-    pub scale: f32,
 }
 
 impl Chrome {
@@ -31,7 +29,6 @@ impl Chrome {
         Self {
             dark,
             high_contrast: false,
-            scale: 1.0,
         }
     }
 }
@@ -42,7 +39,6 @@ impl Chrome {
         Self {
             dark: crate::skin_theme::dark_mode(settings.skin.chrome, system_dark),
             high_contrast: settings.accessibility.high_contrast(system_hc),
-            scale: settings.accessibility.scale(),
         }
     }
 }
@@ -111,12 +107,9 @@ pub fn selection(chrome: impl Into<Chrome>) -> [f32; 4] {
 
 /// Radius steps 4 / 8 / 12 / 16 / 20 (and 24). Swatches and keycaps use
 /// `Xs`; controls, chips and rows `Sm`; popovers, menus and list cards `Md`;
-/// settings cards `Lg`; floating rails `Xl`. Control heights, paddings and
-/// the switch grow with `scale`, so scaled text keeps fitting its control;
-/// radii stay.
-fn metrics(scale: f32) -> ThemeMetrics {
+/// settings cards `Lg`; floating rails `Xl`.
+fn metrics() -> ThemeMetrics {
     let base = nana_ui_core::UI_METRICS;
-    let s = |v: f32| (v * scale).round();
     ThemeMetrics {
         radius_xs: 4.0,
         radius_sm: 8.0,
@@ -124,20 +117,6 @@ fn metrics(scale: f32) -> ThemeMetrics {
         radius_lg: 16.0,
         radius_xl: 20.0,
         radius_xxl: 24.0,
-        compact_control_height: s(base.compact_control_height),
-        control_height: s(base.control_height),
-        compact_control_padding_x: s(base.compact_control_padding_x),
-        control_padding_x: s(base.control_padding_x),
-        selection_height: s(base.selection_height),
-        icon_button_size: s(base.icon_button_size),
-        field_padding_x: s(base.field_padding_x),
-        list_item_padding_x: s(base.list_item_padding_x),
-        large_control_padding_x: s(base.large_control_padding_x),
-        switch: nana_ui_core::SwitchMetrics {
-            track_width: s(base.switch.track_width),
-            track_height: s(base.switch.track_height),
-            label_gap: s(base.switch.label_gap),
-        },
         ..base
     }
 }
@@ -194,7 +173,7 @@ pub fn compile(chrome: impl Into<Chrome>) -> Arc<CompiledTheme> {
     };
     let mut def = base
         .with_palette(palette(chrome))
-        .with_metrics(metrics(chrome.scale))
+        .with_metrics(metrics())
         .with_effects(effects(chrome))
         .with_toast(toast)
         .with_id(ThemeId::new(match (dark, chrome.high_contrast) {
@@ -295,7 +274,6 @@ mod tests {
             let chrome = Chrome {
                 dark,
                 high_contrast: true,
-                scale: 1.0,
             };
             let p = palette(chrome);
             let ratio = |a: SemanticColor, b: SemanticColor| contrast(rgba8(a), rgba8(b));
@@ -378,23 +356,5 @@ mod tests {
             assert_eq!(compiled.palette(), p);
             assert_ne!(compiled.palette(), compile(dark).palette());
         }
-    }
-
-    #[test]
-    fn the_ui_scale_grows_controls_and_keeps_radii() {
-        let base = compile(false);
-        let big = compile(Chrome {
-            dark: false,
-            high_contrast: false,
-            scale: 2.0,
-        });
-        let (b, m) = (base.metrics(), big.metrics());
-        assert_eq!(m.control_height, b.control_height * 2.0);
-        assert_eq!(m.icon_button_size, b.icon_button_size * 2.0);
-        assert_eq!(m.switch.track_width, b.switch.track_width * 2.0);
-        assert_eq!(m.radius_sm, b.radius_sm);
-        // Output windows never take either.
-        assert_eq!(Chrome::from(true), Chrome::output(true));
-        assert_eq!(*compile(Chrome::output(false)), *base);
     }
 }
