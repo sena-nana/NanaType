@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "public_key": "3b3c6b15025c7e1662504110c1909e91d859ad92d40b20388e3a8ab2f034ee6a",
+  "protected": {
+    "artwork.wgsl": "e9665d2090b69b174341dd0861d759c79ceec85ef3e96639941d18fa2c354bd7",
+    "ornament.png": "c171e79a55d1c1598b206b2bbd6393d15e4c10a4d010cbd1b4d91f1c7121572e",
+    "package.toml": "b9c0a952068ceaa1e3fe8804bd71e7ce56514f2428e91e556babac517f46d605",
+    "skin.toml": "47dfa0de39fb591e304d5f0a5408389503f3a2345162d4723f2c142d25d0af2b",
+    "still.png": "832bdaec77db8a4c646d9dced5346b9642bcb545d982349ddf985389df50a4d0"
+  },
+  "editable": [],
+  "signature": "73c5c7c5b1d66bace7e32a47859b536ac23fb77d32ad8e8476894efa26071c9ff16e7b56eb29c12408aa2930aac78dfd6556b813ab988d27a1434e81bf8cf702"
+}

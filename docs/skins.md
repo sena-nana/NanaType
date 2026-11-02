@@ -732,6 +732,8 @@ exit_ms = 400           # 随后在剩余 320ms 内全文随机消失
 
 内置皮肤的 `skin.toml` 由 `cargo run -p nanatype-theme --example regenerate_builtin_skins` 统一生成：省略默认值，布局只保留与基础的差异，短数组写在一行；导出皮肤使用同一格式。生成后 `builtin_responsive_layouts_resolve_to_the_recorded_dialogues` 测试确认每套皮肤在各断点的解析结果不变，有意修改设计后以 `NANATYPE_BLESS=1` 重新记录。
 
+每个内置包都带有用内置密钥签名的 `package.integrity.json`，包内所有文件受保护；公钥是 `crates/theme/src/project.rs` 中的 `BUILTIN_SEAL_KEY`，私钥不入库。修改内置包（包括重新生成 `skin.toml`）后运行 `NANATYPE_PACKAGE_KEY=<私钥> cargo run -p nanatype-theme --example seal_builtins` 重新签名；签名过期时 `every_builtin_package_carries_a_current_builtin_seal` 测试失败。仓库根的 `.gitattributes` 让内置包按原字节检出，避免换行转换破坏摘要。
+
 整幅程序版画的默认横版保留原始绘制和主体专属动效；竖版、窄窗使用独立构图，主体纹饰通过锁定比例的 `decor` 或按逻辑像素绘制的图元重新安排。每个布局只保留一个主体来源，避免重复装饰。
 
 `shaders.<id>.static_fallback = true` 表示关闭动效、关闭皮肤动态效果或减少动态效果时仍绘制同一版画，但冻结时间、揭示与事件输入，不申请持续帧；冻结画面只绘制一次并缓存复用；首次准备管线只进行有限刷新。`animated = false` 可声明完全静态的绘制（例如蜡笔画纸），它始终冻结。未声明这两个字段的第三方程序保持原行为。
