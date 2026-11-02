@@ -155,6 +155,8 @@ pub struct Stage {
     /// The history window's search: `None` while folded away. It filters
     /// that window only, and only while [`history::search_allowed`].
     pub history_search: Signal<Option<String>>,
+    /// The search field, which takes the caret as it unfolds.
+    pub history_search_field: NodeRef,
     pub history_index: Computed<Arc<HashMap<u64, usize>>>,
     /// The draft being typed, and the editor around it.
     pub draft: Signal<Arc<Document>>,
@@ -252,6 +254,7 @@ impl Stage {
             history_now: signal(crate::clock::now_ms()),
             history,
             history_search: signal(None),
+            history_search_field: node_ref(),
             history_index,
             draft: signal(Arc::new(Document::new())),
             source: signal(Source::default()),

@@ -1234,6 +1234,7 @@ fn search_bar(ui: Stage) -> AnyView {
                                 .label(label.clone())
                                 .size(ControlSize::Small),
                         )
+                        .node_ref(ui.history_search_field)
                         // Folding clears it, so it opens empty.
                         .bind(move |t: &mut TextInput| {
                             if !open() && !t.state.value.is_empty() {
@@ -1266,6 +1267,27 @@ fn search_bar(ui: Stage) -> AnyView {
             )),
         )
         .into_any()
+}
+
+/// Put the caret in the search field as it unfolds; `open` is whether the
+/// last look saw it open. Folding needs nothing: the field hides and clears.
+pub fn focus_search(ui: Stage, doc: &mut nana_ui::runtime::RuntimeDocument, open: &mut bool) {
+    if !ui.history_search.with_untracked(Option::is_some) {
+        *open = false;
+        return;
+    }
+    if *open {
+        return;
+    }
+    let document = doc.document();
+    let cx = doc.context_mut();
+    let _ = cx.flush_reactive();
+    // Not mounted yet: try again on the next look.
+    let Some(field) = ui.history_search_field.get_untracked() else {
+        return;
+    };
+    let _ = cx.focus_node(document, field);
+    *open = cx.world().focused(document) == Some(field);
 }
 
 /// How visible the log is: the newest shown row's opacity, which `fade_after_s`
@@ -1379,6 +1401,55 @@ mod tests {
         }
         ui.settings.set(Arc::new(settings));
         assert_eq!(visible_keys(ui), [2]);
+    }
+
+    /// The search button unfolds a field that takes the caret at once, so
+    /// typing filters straight away; folding and unfolding again does too.
+    #[test]
+    fn unfolding_the_search_focuses_its_field() {
+        use nana_ui::runtime::{DocumentId, RuntimeDocument};
+        use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
+        let ui = Stage::new(
+            Arc::new(nanatype_settings::Settings::default()),
+            Arc::new(Skin::default()),
+            nanatype_i18n::Locale::EnUs,
+        );
+        let id = DocumentId::new(1).unwrap();
+        let mut doc = RuntimeDocument::new(id);
+        doc.context_mut()
+            .mount_view_root(id, move || history_window_with(ui, true, || ().into_any()))
+            .unwrap();
+        let mut session = RuntimeAgentSession::new(doc, 420, 560).unwrap();
+        session.flush().unwrap();
+        let mut open = false;
+        let label = ui.now_t("history-search");
+        for round in 0..2 {
+            let button = session
+                .accessibility_dump()
+                .into_iter()
+                .find(|n| n.role == "button" && n.label.as_deref() == Some(label.as_str()))
+                .expect("search button");
+            session.activate(button.id).unwrap();
+            session.flush().unwrap();
+            focus_search(ui, session.document_mut(), &mut open);
+            assert!(open, "round {round}");
+            let document = session.document().document();
+            let focused = session.document().context().world().focused(document);
+            assert_eq!(
+                focused,
+                ui.history_search_field.get_untracked(),
+                "round {round}"
+            );
+            session.type_text("nana").unwrap();
+            session.flush().unwrap();
+            assert_eq!(ui.history_search.get_untracked().as_deref(), Some("nana"));
+            // Folded (the button again, or Esc through the host): the next
+            // unfolding focuses afresh.
+            ui.history_search.set(None);
+            session.flush().unwrap();
+            focus_search(ui, session.document_mut(), &mut open);
+            assert!(!open);
+        }
     }
 
     #[test]

@@ -45,6 +45,8 @@ pub struct Host {
     editor_menu: Option<Entity<nana_ui::runtime::OverlayHost>>,
     /// The quick input bar's field.
     quick_field: Option<Entity<nana_ui::runtime::TextInput>>,
+    /// The history window's search was open at the last look.
+    history_search_open: bool,
     /// The `@` / `/` list was placed from a stale layout: lay out once
     /// more. Retries are bounded, should the texts never agree.
     completion_unsettled: bool,
@@ -399,6 +401,9 @@ impl Host {
         }
         self.drive_editor();
         self.focus_quick();
+        if let Some(doc) = self.docs.get_mut(&WindowKind::History.id()) {
+            history::focus_search(*self.app.ui, doc, &mut self.history_search_open);
+        }
         let locale = self.app.ui.locale.get_untracked();
         // The app's reduce-motion setting wins over the system's in every
         // window's runtime, so view transitions and toasts land at once too.
@@ -1220,6 +1225,7 @@ impl RuntimeProgram for Host {
             source: None,
             editor_menu: None,
             quick_field: None,
+            history_search_open: false,
             completion_unsettled: false,
             completion_retries: COMPLETION_RETRIES,
             editor_fx: None,
