@@ -18,6 +18,13 @@ pub enum DeliveryState {
     Cancelled,
 }
 
+impl DeliveryState {
+    /// Not yet settled: waiting or on its way.
+    pub fn in_flight(self) -> bool {
+        matches!(self, Self::Queued | Self::Sending)
+    }
+}
+
 /// Why a line cannot become chat text; nothing was sent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OutgoingError {

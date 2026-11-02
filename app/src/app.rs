@@ -133,7 +133,7 @@ pub struct App {
     updater: crate::services::updater::Updater,
     #[cfg(feature = "updates")]
     pending_update: update::Pending,
-    _chat_assets: ChatAssets,
+    chat_assets: ChatAssets,
     /// Live chat, oldest first, capped at the panel's size.
     chat: VecDeque<Arc<ChatMessage>>,
     live_chat: live::LiveChat,
@@ -340,7 +340,7 @@ impl App {
             updater: workers.updater,
             #[cfg(feature = "updates")]
             pending_update: Default::default(),
-            _chat_assets: workers.chat_assets,
+            chat_assets: workers.chat_assets,
             chat: VecDeque::new(),
             live_chat: Default::default(),
             hotkeys: workers.hotkeys,

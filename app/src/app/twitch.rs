@@ -28,7 +28,7 @@ impl State {
     pub fn pending(&self) -> usize {
         self.deliveries
             .iter()
-            .filter(|d| matches!(d.state, DeliveryState::Queued | DeliveryState::Sending))
+            .filter(|d| d.state.in_flight())
             .count()
     }
     fn confirm_sending(&mut self, draft: &Document, accept: bool) -> Result<bool, ()> {
@@ -94,7 +94,7 @@ impl App {
             s.confirm = false;
             for d in &mut s.deliveries {
                 d.blocked = false;
-                if matches!(d.state, DeliveryState::Queued | DeliveryState::Sending) {
+                if d.state.in_flight() {
                     d.state = DeliveryState::Cancelled;
                 }
             }
@@ -210,7 +210,7 @@ impl App {
             }
             Event::Chat { channel, event } => {
                 crate::diag::TWITCH_LIVE.chat();
-                self._chat_assets.twitch(session.epoch, channel, event)
+                self.chat_assets.twitch(session.epoch, channel, event)
             }
             Event::Deleted { channel, id } => self.live_deleted(Platform::Twitch, &channel, &id),
             Event::Delivery(delivery) => {
@@ -221,13 +221,11 @@ impl App {
                         s.deliveries.push(delivery.clone());
                     }
                     while s.deliveries.len() > 200 {
-                        if let Some(index) = s.deliveries.iter().position(|d| {
-                            !d.blocked
-                                && !matches!(
-                                    d.state,
-                                    DeliveryState::Queued | DeliveryState::Sending
-                                )
-                        }) {
+                        if let Some(index) = s
+                            .deliveries
+                            .iter()
+                            .position(|d| !d.blocked && !d.state.in_flight())
+                        {
                             s.deliveries.remove(index);
                         } else {
                             break;

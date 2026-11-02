@@ -106,7 +106,7 @@ impl App {
                 });
                 self.publish_chat();
             }
-            BliveUpdate::Chat(chat) => self._chat_assets.blivechat(event.epoch, chat),
+            BliveUpdate::Chat(chat) => self.chat_assets.blivechat(event.epoch, chat),
         }
     }
 
