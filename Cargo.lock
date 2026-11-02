@@ -3990,6 +3990,7 @@ dependencies = [
 name = "nanatype-settings"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "nanatype-model",
  "nanatype-playback",
  "serde",

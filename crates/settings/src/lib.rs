@@ -6,6 +6,7 @@ mod geometry;
 mod migrate;
 mod schema;
 mod store;
+mod transfer;
 
 #[cfg(test)]
 mod tests;
@@ -20,4 +21,10 @@ pub use schema::*;
 pub use store::{
     LoadNote, Loaded, load_json, load_settings, peek_diagnostics, peek_performance, save_json,
     write_atomic,
+};
+pub use transfer::{
+    EXPORT_APP, EXPORT_FORMAT, EmbeddedFile, Envelope, ExportOptions, Exported, ImportError,
+    Incoming, MAX_AVATAR_BYTES, PREVIOUS_FILE, PROFILE_DIR, PROFILE_SCOPE, Profile, ProfileFile,
+    changed_sections, export, load_profiles, new_profile_id, parse_import, profile_sections,
+    valid_profile_id,
 };

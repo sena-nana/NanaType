@@ -373,6 +373,9 @@ pub struct General {
     pub launch_at_login: bool,
     pub onboarding_done: bool,
     pub check_updates: bool,
+    /// The profile last switched to (profiles/<id>.json); its sections are
+    /// saved back into it before another is switched to.
+    pub profile: Option<String>,
 }
 
 impl Default for General {
@@ -387,6 +390,7 @@ impl Default for General {
             launch_at_login: false,
             onboarding_done: false,
             check_updates: true,
+            profile: None,
         }
     }
 }
@@ -968,6 +972,8 @@ pub struct HotkeySettings {
     pub toggle_history: Option<Hotkey>,
     pub next_character: Option<Hotkey>,
     pub prev_character: Option<Hotkey>,
+    /// Switch to the next profile in the list.
+    pub next_profile: Option<Hotkey>,
     /// Keys handled by the input window itself, not registered system-wide.
     pub input: InputKeys,
 }
@@ -989,6 +995,7 @@ impl Default for HotkeySettings {
             toggle_history: None,
             next_character: None,
             prev_character: None,
+            next_profile: None,
             input: InputKeys::default(),
         }
     }
@@ -1567,6 +1574,7 @@ impl Settings {
             &mut h.toggle_history,
             &mut h.next_character,
             &mut h.prev_character,
+            &mut h.next_profile,
         ] {
             if slot.as_ref().is_some_and(Hotkey::is_send_chord) {
                 *slot = None;

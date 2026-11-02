@@ -153,12 +153,8 @@ pub fn load_settings(path: &Path, legacy: Option<&Path>) -> Loaded<Settings> {
     } else if let Some(legacy) = legacy.filter(|p| p.exists()) {
         legacy.to_path_buf()
     } else {
-        // New installations show both sides of the conversation. Deserializing
-        // older files and recovery still use the historical opt-in default.
-        let mut value = Settings::default();
-        value.history.chat.enabled = true;
         return Loaded {
-            value,
+            value: Settings::fresh(),
             note: LoadNote::Fresh,
         };
     };

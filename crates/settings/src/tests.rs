@@ -1244,3 +1244,255 @@ fn the_active_character_survives_a_restart() {
     assert_eq!(loaded.value, s);
     assert_eq!(loaded.value.general.active_character().name, "Two");
 }
+
+/// Settings that touch every kind of section an export or profile handles.
+fn busy_settings() -> Settings {
+    let mut s = Settings::fresh();
+    s.general.locale = Some("ja-JP".into());
+    s.general.characters[0].name = "Nana".into();
+    s.playback.speed_scale = 1.5;
+    s.sound.master = 0.4;
+    s.sound.device = Some("Speakers".into());
+    s.skin.id = "nanatype.night".into();
+    s.overlays.display.always_on_top = false;
+    s.hotkeys.summon = Some(Hotkey::ctrl("KeyJ"));
+    s.integrations.twitch.channel = "nana".into();
+    s.integrations.vts.token = Some("vts-secret".into());
+    s.integrations.blivechat.comet_token = "comet0secret".into();
+    s.update.proxy = "http://user:pass@proxy.example:8080/".into();
+    s.assets.phrases.push(QuickPhrase {
+        label: "hi".into(),
+        markup: "hello".into(),
+        send: false,
+        hotkey: None,
+    });
+    s.sanitize();
+    s
+}
+
+#[test]
+fn export_then_import_round_trips_without_credentials() {
+    let s = busy_settings();
+    let exported = export(
+        &s,
+        &GeometryStore::default(),
+        ExportOptions::default(),
+        "1.0",
+        7,
+    );
+    let text = serde_json::to_string(&exported.envelope).unwrap();
+    assert!(!text.contains("vts-secret") && !text.contains("comet0secret"));
+    assert!(!text.contains("user:pass"), "proxy credentials stay behind");
+    assert!(text.contains(r#""app":"NanaType""#));
+
+    let incoming = parse_import(&text).unwrap();
+    assert_eq!(incoming.from_schema, SETTINGS_SCHEMA);
+    assert_eq!(incoming.exported_at, Some(7));
+    // Onto a fresh install: everything travels but the credentials and
+    // this computer's devices.
+    let mut other = Settings::fresh();
+    other.integrations.vts.token = Some("theirs".into());
+    let merged = incoming.merge(&other);
+    assert_eq!(merged.playback, s.playback);
+    assert_eq!(merged.skin, s.skin);
+    assert_eq!(merged.hotkeys, s.hotkeys);
+    assert_eq!(merged.general.locale, s.general.locale);
+    assert_eq!(merged.integrations.twitch.channel, "nana");
+    assert_eq!(merged.integrations.vts.token.as_deref(), Some("theirs"));
+    assert_eq!(merged.integrations.blivechat.comet_token, "");
+    assert_eq!(merged.sound.device, None);
+    assert_eq!(merged.update.proxy, "http://proxy.example:8080/");
+    // Back onto itself, nothing changes.
+    let mut same = s.clone();
+    same.update.proxy = "http://proxy.example:8080/".into();
+    assert_eq!(incoming.merge(&s), same);
+    assert_eq!(changed_sections(&s, &same), vec!["update"]);
+}
+
+#[test]
+fn integrations_and_window_positions_are_optional() {
+    let s = busy_settings();
+    let geometry = GeometryStore {
+        input_dock: Some(InputDockLayout::default()),
+        ..GeometryStore::default()
+    };
+    let options = ExportOptions {
+        window_positions: true,
+        integrations: false,
+        avatars: false,
+    };
+    let envelope = export(&s, &geometry, options, "1.0", 1).envelope;
+    assert!(envelope.settings.get("integrations").is_none());
+    assert_eq!(envelope.geometry, Some(geometry));
+    let text = serde_json::to_string(&envelope).unwrap();
+    let incoming = parse_import(&text).unwrap();
+    let mut here = Settings::fresh();
+    here.integrations.twitch.channel = "mine".into();
+    let merged = incoming.merge(&here);
+    assert_eq!(
+        merged.integrations, here.integrations,
+        "kept when not carried"
+    );
+    assert_eq!(merged.playback, s.playback);
+    let without = export(
+        &s,
+        &GeometryStore::default(),
+        ExportOptions::default(),
+        "",
+        1,
+    );
+    assert!(
+        without.envelope.geometry.is_none(),
+        "positions stay by default"
+    );
+}
+
+#[test]
+fn avatars_travel_inside_the_export() {
+    let tmp = tempfile::tempdir().unwrap();
+    let avatar = tmp.path().join("face.png");
+    fs::write(&avatar, b"not really a png").unwrap();
+    let mut s = Settings::fresh();
+    s.general.characters[0].avatar = Some(avatar.display().to_string());
+    s.general.characters.push(Character {
+        avatar: Some(tmp.path().join("gone.png").display().to_string()),
+        ..Character::default()
+    });
+    let exported = export(
+        &s,
+        &GeometryStore::default(),
+        ExportOptions::default(),
+        "",
+        1,
+    );
+    assert_eq!(exported.missing_avatars, 1);
+    let text = serde_json::to_string(&exported.envelope).unwrap();
+    let incoming = parse_import(&text).unwrap();
+    let mut merged = incoming.merge(&Settings::fresh());
+    let dir = tmp.path().join("avatars");
+    assert_eq!(incoming.unpack_avatars(&dir, &mut merged, 9).unwrap(), 1);
+    let placed = merged.general.characters[0].avatar.clone().unwrap();
+    assert!(placed.starts_with(&dir.display().to_string()) && placed.ends_with(".png"));
+    assert_eq!(fs::read(placed).unwrap(), b"not really a png");
+}
+
+#[test]
+fn older_imports_migrate_and_newer_ones_are_refused() {
+    let v4 = r#"{"app":"NanaType","format":1,"schema":4,"settings":
+        {"schema":4,"general":{"speaker_name":"Old","onboarding_done":true}}}"#;
+    let incoming = parse_import(v4).unwrap();
+    assert_eq!(incoming.from_schema, 4);
+    let merged = incoming.merge(&Settings::fresh());
+    assert_eq!(merged.general.characters[0].name, "Old");
+    assert_eq!(merged.schema, SETTINGS_SCHEMA);
+    // A bare settings.json from the very first build.
+    let v0 = parse_import(r#"{"theme":"night","speaker_name":"Zero"}"#);
+    assert_eq!(
+        v0.unwrap_err(),
+        ImportError::NotSettings,
+        "too bare to tell"
+    );
+    let v0 = parse_import(r#"{"general":{},"theme":"night"}"#).unwrap();
+    assert_eq!(v0.from_schema, 0);
+
+    let newer = format!(
+        r#"{{"app":"NanaType","format":1,"schema":{n},"settings":{{"schema":{n}}}}}"#,
+        n = SETTINGS_SCHEMA + 1
+    );
+    assert_eq!(
+        parse_import(&newer).unwrap_err(),
+        ImportError::TooNew(SETTINGS_SCHEMA + 1)
+    );
+    let format = r#"{"app":"NanaType","format":99,"schema":1,"settings":{}}"#;
+    assert_eq!(
+        parse_import(format).unwrap_err(),
+        ImportError::FormatTooNew(99)
+    );
+    assert_eq!(
+        parse_import(r#"{"app":"Other","settings":{}}"#).unwrap_err(),
+        ImportError::NotSettings
+    );
+    assert!(matches!(
+        parse_import("not json"),
+        Err(ImportError::Unreadable(_))
+    ));
+}
+
+#[test]
+fn reset_keeps_credentials_and_language() {
+    let mut s = busy_settings();
+    s.general.onboarding_done = true;
+    let reset = s.reset_from();
+    assert_eq!(reset.integrations.vts.token.as_deref(), Some("vts-secret"));
+    assert_eq!(reset.integrations.blivechat.comet_token, "comet0secret");
+    assert_eq!(reset.general.locale.as_deref(), Some("ja-JP"));
+    assert!(reset.general.onboarding_done);
+    let mut expected = Settings::fresh();
+    expected.integrations.vts.token = s.integrations.vts.token.clone();
+    expected.integrations.blivechat.comet_token = s.integrations.blivechat.comet_token.clone();
+    expected.general.locale = s.general.locale.clone();
+    expected.general.onboarding_done = true;
+    assert_eq!(reset, expected);
+}
+
+#[test]
+fn switching_profiles_changes_only_profile_sections() {
+    let base = busy_settings();
+    let mut singing = base.clone();
+    singing.skin.id = "nanatype.parchment".into();
+    singing.playback.speed_scale = 0.5;
+    singing.sound.master = 0.9;
+    singing.general.characters[0].name = "Utaite".into();
+    singing.assets.phrases.clear();
+    let profile = Profile::capture("p1".into(), "歌回".into(), &singing);
+    assert!(profile.settings.pointer("/sound/device").is_none());
+    assert!(profile.settings.get("hotkeys").is_none());
+
+    let mut here = base.clone();
+    here.hotkeys.summon = Some(Hotkey::ctrl("KeyK"));
+    here.general.locale = Some("en-US".into());
+    here.sound.device = Some("Headset".into());
+    here.history.archive.keep_days = 3;
+    here.skin.chrome = ChromeMode::Dark;
+    let switched = profile.apply(&here);
+    assert_eq!(switched.skin.id, "nanatype.parchment");
+    assert_eq!(switched.playback.speed_scale, 0.5);
+    assert_eq!(switched.sound.master, 0.9);
+    assert_eq!(switched.general.characters[0].name, "Utaite");
+    assert!(switched.assets.phrases.is_empty());
+    // Global sections are untouched.
+    assert_eq!(switched.hotkeys, here.hotkeys);
+    assert_eq!(switched.general.locale, here.general.locale);
+    assert_eq!(switched.integrations, here.integrations);
+    assert_eq!(switched.sound.device, here.sound.device);
+    assert_eq!(switched.history.archive, here.history.archive);
+    assert_eq!(switched.skin.chrome, ChromeMode::Dark);
+    assert_eq!(
+        changed_sections(&here, &switched),
+        vec!["general", "playback", "sound", "skin", "assets"]
+    );
+}
+
+#[test]
+fn profiles_are_saved_and_listed_from_their_folder() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join(PROFILE_DIR);
+    let a = Profile::capture("pa".into(), "杂谈".into(), &busy_settings());
+    let b = Profile::capture("pb".into(), "歌回".into(), &Settings::fresh());
+    for p in [&a, &b] {
+        save_json(&Profile::path(&dir, &p.id), &p.file(1)).unwrap();
+    }
+    fs::write(dir.join("broken.json"), "{").unwrap();
+    fs::write(dir.join("Bad Name.json"), "{}").unwrap();
+    let mut newer = b.file(1);
+    newer.settings["schema"] = (SETTINGS_SCHEMA + 1).into();
+    save_json(&Profile::path(&dir, "pnew"), &newer).unwrap();
+    let (profiles, skipped) = load_profiles(&dir);
+    let names: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, ["杂谈", "歌回"]);
+    assert_eq!(profiles[0], a);
+    assert_eq!(skipped.len(), 2, "{skipped:?}");
+    let id = new_profile_id(0xa, |id| id == "pa");
+    assert_eq!(id, "pb");
+    assert!(valid_profile_id(&id) && !valid_profile_id("../x"));
+}
