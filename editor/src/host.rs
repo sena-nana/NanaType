@@ -48,15 +48,11 @@ impl Host {
     }
 
     fn finish(&mut self) -> RuntimeProgramUpdate {
-        nanatype_frame::ui::collect_effect_garbage();
-        for message in nanatype_frame::ui::shader_effects::take_notices() {
+        for message in nanatype_frame::ui::settle_effects() {
             self.app.notice(message, true);
         }
         self.show_toasts();
-        let pending = self.doc.as_ref().is_some_and(|doc| {
-            let cx = doc.context();
-            cx.has_pending_reactive() || cx.world().has_pending_work()
-        });
+        let pending = self.doc.as_ref().is_some_and(nanatype_frame::needs_redraw);
         RuntimeProgramUpdate {
             window_commands: std::mem::take(&mut self.app.commands),
             redraw: if pending {
@@ -76,10 +72,7 @@ impl Host {
                 (Some(stack), Some(doc)) => request.push(doc, stack, Msg::ToastDismissed),
                 _ => false,
             };
-            // No window yet: keep it for one that opens while it is fresh.
-            if !shown && request.fresh() {
-                self.app.toasts.push(request);
-            }
+            request.retry_unless(shown, &mut self.app.toasts);
         }
     }
 }

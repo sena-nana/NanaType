@@ -345,9 +345,7 @@ fn caption(value: impl Into<String>) -> Text {
     readable(value)
         .style({
             let mut st = Type::Caption.style();
-            let layout = std::sync::Arc::make_mut(&mut st.layout);
-            layout.overflow_wrap = Some(nana_ui_core::OverflowWrapSpec::Anywhere);
-            layout.white_space = nana_ui_core::WhiteSpaceSpec::PreWrap;
+            kit::wrap_anywhere(&mut st);
             st
         })
         .color(SemanticColorRole::Muted)
@@ -362,9 +360,7 @@ fn provided(ui: Ui, text: &str) -> String {
 }
 fn readable(value: impl Into<String>) -> Text {
     let mut text = Text::new(value);
-    let layout = std::sync::Arc::make_mut(&mut text.style.layout);
-    layout.overflow_wrap = Some(nana_ui_core::OverflowWrapSpec::Anywhere);
-    layout.white_space = nana_ui_core::WhiteSpaceSpec::PreWrap;
+    kit::wrap_anywhere(&mut text.style);
     text
 }
 /// Every declared read with its owner, format, size, source, license and signature coverage.

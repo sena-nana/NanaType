@@ -390,8 +390,7 @@ impl Host {
     }
 
     fn finish(&mut self) -> RuntimeProgramUpdate {
-        crate::ui::collect_effect_garbage();
-        for message in crate::ui::shader_effects::take_notices() {
+        for message in nanatype_frame::ui::settle_effects() {
             self.app.notice(message, true);
         }
         self.drive_editor();
@@ -498,11 +497,7 @@ impl Host {
                 };
                 shown |= request.push(doc, stack, move |toast| Msg::ToastDismissed(kind, toast));
             }
-            // No window to show it in yet (a notice at start-up): keep it
-            // for one that opens while it is still fresh.
-            if !shown && request.fresh() {
-                self.app.toasts.push(request);
-            }
+            request.retry_unless(shown, &mut self.app.toasts);
         }
     }
 
@@ -1772,10 +1767,10 @@ impl RuntimeProgram for Host {
 /// Read the same pending work the runtime will drain, including direct editor
 /// commands and toasts. This avoids a second, incomplete message-to-window map.
 fn pending_redraw(docs: &HashMap<WindowId, RuntimeDocument>) -> nana_ui::RuntimeRedraw {
-    nana_ui::RuntimeRedraw::for_windows(docs.iter().filter_map(|(id, doc)| {
-        let cx = doc.context();
-        (cx.has_pending_reactive() || cx.world().has_pending_work()).then_some(*id)
-    }))
+    nana_ui::RuntimeRedraw::for_windows(
+        docs.iter()
+            .filter_map(|(id, doc)| nanatype_frame::needs_redraw(doc).then_some(*id)),
+    )
 }
 
 #[cfg(test)]

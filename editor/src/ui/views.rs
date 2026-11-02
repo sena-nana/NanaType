@@ -121,11 +121,9 @@ pub(crate) fn button(ui: Ui, key: &str) -> Button {
 
 /// Wrapping, selectable-looking text that never widens its column.
 pub(crate) fn readable(value: impl Into<String>) -> Text {
-    let mut text = Text::new(value).style(Type::Caption.style());
-    let layout = Arc::make_mut(&mut text.style.layout);
-    layout.overflow_wrap = Some(nana_ui_core::OverflowWrapSpec::Anywhere);
-    layout.white_space = nana_ui_core::WhiteSpaceSpec::PreWrap;
-    text
+    let mut style = Type::Caption.style();
+    kit::wrap_anywhere(&mut style);
+    Text::new(value).style(style)
 }
 
 pub(crate) fn kind_key(kind: ProjectKind) -> &'static str {

@@ -39,6 +39,14 @@ impl ToastRequest {
         self.at.elapsed() < std::time::Duration::from_millis(self.ms)
     }
 
+    /// Keep a toast no window could show (a notice at start-up) for one
+    /// that opens while it is still fresh.
+    pub fn retry_unless(self, shown: bool, queue: &mut Vec<Self>) {
+        if !shown && self.fresh() {
+            queue.push(self);
+        }
+    }
+
     /// Push it into `stack`; closing or timing out sends `dismissed(toast)`.
     pub fn push<M: Send + 'static>(
         &self,

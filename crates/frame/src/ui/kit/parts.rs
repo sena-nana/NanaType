@@ -17,6 +17,14 @@ use nana_ui_core::{
 
 use super::tokens::{DOT, Tone, Type, gap, inset};
 
+/// Let text break anywhere and keep its line breaks, so a long path, key or
+/// log line never widens its column.
+pub fn wrap_anywhere(style: &mut NodeStyle) {
+    let layout = Arc::make_mut(&mut style.layout);
+    layout.overflow_wrap = Some(nana_ui_core::OverflowWrapSpec::Anywhere);
+    layout.white_space = nana_ui_core::WhiteSpaceSpec::PreWrap;
+}
+
 /// A quiet tag: a subtle chip with a soft hairline at the control radius,
 /// its text small. For a marker, a capability, a sender name. (NanaUI's
 /// `Chip` is a focusable button with a hover state, a full-round pill and

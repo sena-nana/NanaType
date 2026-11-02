@@ -319,6 +319,13 @@ pub fn c(color: nanatype_model::Rgba8) -> [f32; 4] {
     crate::skin_theme::rgba(color)
 }
 
+/// After an update: release dead effects, then take what the shader
+/// sandbox has to tell the user.
+pub fn settle_effects() -> Vec<String> {
+    collect_effect_garbage();
+    shader_effects::take_notices()
+}
+
 /// Release GPU resources of every custom effect whose material is gone.
 pub fn collect_effect_garbage() {
     shader_effects::collect_garbage();

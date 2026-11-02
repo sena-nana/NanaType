@@ -44,6 +44,13 @@ pub fn locale_of(s: &nanatype_settings::Settings) -> nanatype_i18n::Locale {
         .unwrap_or_else(nanatype_i18n::Locale::system)
 }
 
+/// Whether `doc` has reactive updates or scheduled work left, so its window
+/// must draw again.
+pub fn needs_redraw(doc: &nana_ui::runtime::RuntimeDocument) -> bool {
+    let cx = doc.context();
+    cx.has_pending_reactive() || cx.world().has_pending_work()
+}
+
 /// Put a window's document in `locale`: the language its text shapes in, so
 /// Han characters take that language's glyph forms, and what NanaUI's own
 /// controls say. Both are set before a window's views are built and again
