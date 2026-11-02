@@ -1,6 +1,6 @@
 # OBS / Spout 输出
 
-Windows 下展示框、伙伴展示框和历史记录可各自通过 Spout2 发送 GPU 共享纹理，OBS 用 Spout2 插件的 *Spout2 Capture* 接收。使用方法见 [README › 接入 OBS](../README.md#接入-obs)；本页说明发送端的生命周期和实测结论。
+Windows 下展示框、伙伴展示框和历史记录可各自通过 Spout2 发送 GPU 共享纹理，OBS 用 Spout2 插件的 *Spout2 Capture* 接收。使用方法见 [使用指南 › 接入 OBS](usage.md#接入-obs)；本页说明发送端的生命周期和实测结论。
 
 ## 发送端生命周期
 

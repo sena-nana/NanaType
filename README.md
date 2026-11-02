@@ -1,92 +1,120 @@
-# NanaType
+<p align="center">
+  <img src=".github/readme/banner.png" alt="NanaType — 虚拟主播打字机" width="100%">
+</p>
 
-虚拟主播打字机：在直播中把你打的台词以 AVG / RPG 对话框的样式逐字呈现，并以直播聊天风格保留历史记录。
+<h3 align="center">把打下的每一句台词，逐字演成直播画面里的 AVG / RPG 对话框</h3>
 
-- **输入框**：与设置页同风格的普通窗口，支持拖动、缩放、最小化和最大化。在皮肤预览中直接编辑，支持富文本与源码模式。右侧栏可添加命令、表情包和常用短语区域；窄栏显示图标，多余区域通过菜单切换，“＋”始终可见。区域顺序、当前标签、侧栏宽度和窗口位置／尺寸自动恢复。预览适配剩余空间，保持直播画布尺寸和换行不变；联机、账号、设置和发送集中在底栏。
-- **语音输入**：系统识别优先，可下载小型多语言离线模型；支持手动编辑与停顿自动发送。编辑会暂停识别并取消自动发送，手动发送后恢复；后台持续监听，托盘可停止。见 [语音输入](docs/voice-input.md)。
-- **展示框**：透明的展示框窗口，打字机逐字揭示，支持逐字特效、停顿、翻页、震屏、立绘差分；皮肤可自定义文字入场与退场，蜡笔画使用斜向擦入和擦除，分割线沿左下—右上倾斜 45°，从左上向右下推进。
-- **历史记录**：头像 + 名字 + 气泡的聊天列表，可随打字同步出现。
-- **接入 OBS**：Spout2（Windows）或 Syphon（macOS）共享 GPU 纹理，零回读，窗口隐藏时也持续输出；也可以用透明窗口捕获。
-- **联动**：VTube Studio（表情、热键、参数和口型同步，`[expr]` / `[vts]` 标记按打字位置触发）、OSC、本地 WebSocket 广播。
-- **联机**：通过 Steam 最多 8 人同房间。自己的台词在展示框，伙伴窗口按入座顺序给其他每人一块实时台词，共享历史包含所有人已发送的内容。非 Steam 构建不提供联机。
-- **Twitch**：聊天匿名接收，用 Twitch 账号登录后可把台词同步发送到频道。
-- **第三方弹幕**：通过 blivechat 协议接收弹幕——连接本机或局域网运行的 [blivechat](https://github.com/xfgryujk/blivechat)，或经创意工坊插件接入 [彗星号](https://huixinghao.cn/)（彗星号支持的 B 站、抖音、快手等平台都能转发）。
-- **皮肤**：内置 28 套（情书、机器学习、十四行诗、蜡笔画、光环、夜色、羊皮纸、ADV 经典、RPG 窗口、香草、气泡、字幕、直播弹幕、漫画、终端、掌机像素、樱花、水墨、Echo-Live 原版、Echo-Live 玻璃、Echo-Live 气泡、Echo-Live 虚空、蔷薇哥特、星月魔法、森林精灵、潮汐水族馆、朱砂华灯、柠檬汽水；四套 Echo-Live 样式还原原作），可导入 / 导出 `.ntpkg` 皮肤包，支持热重载及受限 WGSL 高级动效。全部皮肤采用统一包格式，框架无皮肤专用分支；支持显式跨包资源依赖，以及禁止网络和文件访问的 Lua/Wasm 功能插件，见 [插件与包接口](docs/plugins.md)。
-- **多语言**：简体中文、English、日本語。
+<p align="center">
+  <a href="https://github.com/sena-nana/NanaType/releases"><img src="https://img.shields.io/github/v/release/sena-nana/NanaType?include_prereleases&label=%E4%B8%8B%E8%BD%BD&color=e86a92" alt="最新版本"></a>
+  <a href="https://github.com/sena-nana/NanaType/actions/workflows/ci.yml"><img src="https://github.com/sena-nana/NanaType/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%20%7C%20macOS-3b8cff" alt="平台：Windows | macOS">
+  <img src="https://img.shields.io/badge/Rust-1.98%2B-orange?logo=rust" alt="Rust 1.98+">
+  <a href="LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT"></a>
+</p>
 
-## 使用
+<p align="center">
+  <a href="https://github.com/sena-nana/NanaType/releases"><b>下载</b></a> ·
+  <a href="docs/usage.md"><b>使用指南</b></a> ·
+  <a href="docs/markup.md"><b>台词标记</b></a> ·
+  <a href="docs/skins.md"><b>制作皮肤</b></a> ·
+  <a href="docs/building.md"><b>从源码构建</b></a>
+</p>
 
-1. 启动后输入框出现在屏幕下方，之后记住调整的位置和尺寸；关闭输入框会隐藏到托盘并保留草稿，F8 可再次唤出。展示框与历史记录窗口为透明叠加层。
-2. 在输入框里直接输入台词，按 **Enter** 发送（Shift+Enter 换行，可在设置里改为 Ctrl+Enter）。Ctrl+↑ / ↓ 调回发过的台词，Esc 隐藏。
-3. 选中文字后用工具栏（或 Ctrl+B / I / U）加粗、上色、描边、注音、加动效、调节奏；不选中时，设置作用于接下来输入的文字。停顿、翻页、音效、表情等标记以细竖线显示在文字间，不占排版宽度，所以输入框与展示框的换行完全一致。
-4. 工具栏的 `</>` 按钮切换到标记源码，两边编辑的是同一份台词。
-5. 全局快捷键：**F8** 唤出输入框，**F9** 继续（越过停顿 / 跳过当前段）。
-6. 托盘菜单可显示 / 隐藏各窗口、锁定叠加层、切换模式与皮肤、打开设置。托盘图标本身也标出状态：镜像中带粉色圆点，展示框与历史记录都隐藏时变灰，叠加层锁定时带一把小锁。
+<p align="center">
+  简体中文 · English · 日本語（界面）
+</p>
 
-展示框、联机伙伴展示框和历史记录窗口可左键拖动、滚轮等比缩放，并通过右键菜单关闭当前窗口、直接切换全局皮肤或打开皮肤调整、切换置顶、锁定以及恢复默认位置和尺寸。自己的展示框还可继续播放、跳过当前播放和清空展示；历史窗口可切换头像、名字、时间，并通过「清空历史记录 › 确认清空」清空本次历史（联机期间不可用）。锁定后鼠标穿透，从托盘或「设置 › 窗口」解锁。关闭窗口只隐藏，已启用的 Spout2／Syphon 输出继续运行；原生右键菜单不会进入共享纹理输出。
+---
 
-输入模式：
+NanaType 是为虚拟主播做的直播打字机。你在输入框里打字，展示框按打字机节奏逐字揭示台词，带上停顿、震屏、立绘差分和逐字特效；历史窗口以直播聊天的样式保留说过的话。画面经 Spout2 / Syphon 直接送进 OBS，不读回 CPU，窗口隐藏时也照常输出。
 
-两种编辑模式均支持滚轮／触控板滚动和 PageUp／PageDown 导航，Shift 可扩展选区。右键菜单提供撤销、重做、剪切、复制、粘贴和全选；中文输入法组字时，Enter、Esc 和方向键优先交给输入法。
+<p align="center">
+  <img src=".github/readme/skins.png" alt="内置皮肤一览" width="100%">
+  <br>
+  <sub>28 套内置皮肤中的 12 套，均为实际 GPU 渲染</sub>
+</p>
 
-- **编辑后发送**：写完后发送，展示框按打字机节奏播放。
-- **实时镜像**：展示框实时跟随输入，发送后台词进入历史。
+## ✨ 功能
 
-### Twitch 聊天与台词发送
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>⌨️ 所见即所得的输入框</h4>
+      在皮肤预览里直接编辑，换行与直播画面完全一致。支持加粗、上色、描边、注音、动效和节奏，也能切到标记源码；右侧栏放命令、表情包和常用短语。
+    </td>
+    <td width="50%" valign="top">
+      <h4>🎬 打字机展示框</h4>
+      透明叠加窗口逐字揭示台词，支持停顿、翻页、震屏、音效和立绘差分。可选「编辑后发送」，或让展示框实时镜像你正在打的字。
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>🎨 28 套内置皮肤</h4>
+      从情书、蜡笔画、羊皮纸到终端、掌机像素和 Echo-Live 样式。皮肤是统一格式的 <code>.ntpkg</code> 包，可继承、热重载，支持受限 WGSL 动效与沙箱化的 Lua / Wasm 插件。
+    </td>
+    <td valign="top">
+      <h4>📺 零拷贝接入 OBS</h4>
+      Windows 用 Spout2，macOS 用 Syphon，共享 GPU 纹理。展示框、联机伙伴和历史记录可分别输出，也可以用透明窗口捕获。
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>🎙️ 语音输入</h4>
+      系统识别优先，也可下载小型多语言离线模型；停顿后自动发送，编辑时自动让出。
+    </td>
+    <td valign="top">
+      <h4>🤝 Steam 联机</h4>
+      最多 8 人同房间，伙伴的台词实时出现在各自的展示框里，共享一份历史；能直连则直连，否则经 Steam 中继。
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>🔗 主播工具联动</h4>
+      VTube Studio 表情、热键、参数与口型同步，标记按打字位置触发；另有 OSC 与本地 WebSocket 广播。
+    </td>
+    <td valign="top">
+      <h4>💬 弹幕与聊天</h4>
+      Twitch 聊天收发；通过 blivechat 协议接入 <a href="https://github.com/xfgryujk/blivechat">blivechat</a> 或 <a href="https://huixinghao.cn/">彗星号</a>，B 站、抖音、快手弹幕都能转进来。
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>😺 表情包与贴纸</h4>
+      导入本地文件夹、Echo-Live 表情或 Telegram 贴纸包，GIF / WebP / TGS / WebM 动图在展示框和 OBS 输出中都会播放。
+    </td>
+    <td valign="top">
+      <h4>🧰 包编辑器</h4>
+      独立的 <a href="docs/package-editor.md">NanaType Editor</a> 用来制作、签名和隔离调试皮肤包与插件。
+    </td>
+  </tr>
+</table>
 
-1. 打开 **设置 › Twitch**，填写频道名或 `https://www.twitch.tv/频道名`，开启 **接收聊天**。读取聊天不需要登录。
-2. 要发送台词，点击 **使用 Twitch 登录**，打开 twitch.tv/activate 输入页面显示的代码。令牌保存在系统保护的存储中（Windows DPAPI / macOS 钥匙串）。
-3. 打开 **把台词发送到 Twitch 聊天** 并确认，之后发送的台词会以你的身份发到频道。长台词按 500 字符拆分，失败时暂停队列等待重试或跳过。
+<p align="center">
+  <img src=".github/readme/input.png" alt="输入框：停顿、等待、音效等标记以内联标签显示，右侧为控制面板" width="88%">
+  <br>
+  <sub>输入框：停顿、继续、音效等标记显示为内联标签，与展示框换行一致</sub>
+</p>
 
-协议、登录与限速细节见 [Twitch 接入说明](docs/twitch.md)。
+## 🚀 快速开始
 
-### 第三方弹幕：blivechat 与彗星号
+1. 从 [Releases](https://github.com/sena-nana/NanaType/releases) 下载 Windows 安装包 / 便携包，或 macOS 的 `.dmg`。
+2. 启动后输入框出现在屏幕下方，展示框与历史记录是透明叠加层。
+3. 打字，按 **Enter** 发送（**Shift+Enter** 换行）。展示框开始逐字播放。
+4. 在 OBS 里添加 *Spout2 Capture*（Windows）或 *Syphon Client*（macOS），选择 `NanaType Display`，合成模式选 *Premultiplied Alpha*。
 
-打开 **设置 › 第三方弹幕**，开启后选择来源：
+| 快捷键 | 作用 |
+| --- | --- |
+| <kbd>F8</kbd> | 唤出输入框 |
+| <kbd>F9</kbd> | 继续：越过停顿 / 跳过当前段 |
+| <kbd>Ctrl</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> | 调回发过的台词 |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd> | 加粗 / 斜体 / 下划线 |
+| <kbd>Esc</kbd> | 隐藏输入框 |
 
-- **blivechat**：运行 blivechat（默认 `127.0.0.1:12450`），填写开放平台身份码并点 **保存并连接**，或改用房间号。身份码保存在系统保护的存储中（Windows DPAPI / macOS 钥匙串），不写入设置文件。
-- **彗星号**：在彗星号画布中加入 NanaType 插件，把设置页显示的连接地址粘贴进插件设置即可。插件页面在 `integrations/comet/`，上传方式与工作原理见 [彗星号接入说明](docs/comet.md)。
+Twitch、弹幕、联机、OBS 多路输出、表情包等的详细用法见 **[使用指南](docs/usage.md)**。
 
-第三方弹幕消息出现在弹幕面板，@、回复和混入历史的用法相同。没有直播间时可以用模拟服务器试用 blivechat 模式：
+## ✍️ 台词标记
 
-```bash
-cargo run -p nanatype-blive --example mock_blivechat
-```
-
-彗星号模式可以用脚本代替插件页面，把样例消息推给中转（需要 Node 22+）：
-
-```bash
-node scripts/comet_publish.mjs "ws://127.0.0.1:12451/comet?token=…"
-```
-
-### 联机
-
-1. 需要 Steam 正在运行。从输入窗口底栏打开联机入口，房主点击「创建联机」。房间最多 8 人，可以设密码；密码不会写进邀请。
-2. 「邀请好友」打开 Steam 邀请。被邀请的好友不用再输入密码。复制出来的邀请给其他人时，如果房间上了锁，加入前要输入密码。
-3. 「展示框」始终显示自己的内容。「联机伙伴展示框」按入座顺序给其他每人一块实时台词，并在还没人进来时提供邀请和接受状态。共享历史按房主确认的顺序包含所有人已发送的内容。各方保留各自皮肤和窗口布局；实时镜像公开正在输入的内容，编辑后发送只公开已发送内容。F9、跳过和清空展示只控制自己。
-4. 历史窗口在联机期间显示本次会话的台词。联机前的历史和直播间弹幕不共享。离开后恢复本机历史；本次会话不会跨进程重启恢复。会话最多保留最近 1000 条台词，并按消息大小限制裁剪。
-5. 断线时保留编辑能力，发送与手动播放控制暂停。断线会让出席位，同一个人可以在还有空位时重连，已经发出的台词还在。房主离开会结束房间。
-
-图片、贴纸、头像、引用中的头像和当前立绘以内容哈希分发。预览经房主转发；完整图片向发布者直接获取，直连失败时再向房主要。单个资源上限 16 MiB；超限或缺失时使用占位。仅自己的台词触发本机 VTube Studio／OSC 等人物控制。
-
-Steam 能直连时走直连，否则经 Steam 中继。直连时对端能看到网络地址。
-
-### 接入 OBS
-
-- **Spout2**：设置 › 输出 / OBS 打开 Spout2 输出。OBS 中安装 Spout2 插件，添加 *Spout2 Capture*，选择发送端名称（默认 `NanaType Display` / `NanaType Partner` / `NanaType History`），合成模式选 *Premultiplied Alpha*。
-- **分别输出**：在设置 › 输出 / OBS 分别启用「展示框」和「展示框 · 联机伙伴」，再在 OBS 添加两个来源，分别选择 `NanaType Display`（自己）和 `NanaType Partner`（对方）。尺寸、透明度和发送端名称分别设置；启用的发送端名称须互不重复。伙伴输出只在联机期间运行；联机中隐藏窗口仍会持续输出。共享历史另选 `NanaType History`。
-- **窗口捕获**：*Window Capture*，捕获方式选 *Windows 10 (1903 and up)*。
-- **Syphon**（macOS）：设置 › 输出 / OBS 打开 Syphon 输出。OBS 中添加 *Syphon Client*，选择发送端名称（默认 `NanaType Display` / `NanaType Partner` / `NanaType History`），合成模式选 *Premultiplied Alpha*。也可以用 *macOS Screen Capture* 捕获展示框窗口。Spout2 仅 Windows。
-
-关闭输出 5 秒内重开会复用原发送端，OBS 画面恢复中位约 15–30 ms；发送端生命周期与真实 OBS 实测见 [OBS / Spout 输出](docs/obs-spout.md)。
-
-### 检查更新
-
-Steam 版由 Steam 更新，没有这一项。GitHub 版在 **设置 › 关于** 检查 GitHub Release 上的新版本，**设置 › 通用 › 更新** 默认每天自动检查一次。新版本的安装包校验通过后才会打开。下载同时尝试 GitHub 和内置代理（gh-proxy.com、ghfast.top、ghproxy.net），也可加一个自定义代理；代理只负责传输，版本清单带 Ed25519 签名，安装包按 SHA-256 校验。详见 [检查更新](docs/updates.md)。
-
-## 台词标记
-
-台词以 BBCode 风格的标记保存：源码模式、快捷短语和模板都用它。完整说明见 [docs/markup.md](docs/markup.md)。
+工具栏做的每一处效果都保存为 BBCode 风格的标记，源码模式、快捷短语和模板通用：
 
 ```text
 [@auto=1500]大家好！[wait=400][b][color=#e86a92]今天[/color][/b]也来[wave]打字[/wave]啦～
@@ -94,112 +122,30 @@ Steam 版由 Steam 更新，没有这一项。GitHub 版在 **设置 › 关于*
 [ruby=かんじ]漢字[/ruby][sticker=cats/hello h=1.6]
 ```
 
-## 表情包
+完整语法见 [台词标记](docs/markup.md)。
 
-在「设置 › 素材 › 表情包」中，可以下载「绵羊的像素头像（静态）」和「绵羊的动态表情包」预设，也可以添加本地图片文件夹、Echo-Live 根目录（包含 `res/data/emoji.js`）或 Echo-Live 表情扩展目录（包含 `main.js`）。预设只在点击时联网下载，之后与本地文件夹使用相同的导入和管理流程。
+## 📚 文档
 
-导入时会在后台准备图片、缩略图和 GIF 完整帧缓存；列表显示下载、处理、可用或失败状态。完成后可离线使用，源文件不变，未变化的内容在重启后复用缓存。修改图片或表情定义会自动重建相应缓存；移除只取消加载，不删除原文件。
+| | |
+| --- | --- |
+| **用户** | [使用指南](docs/usage.md) · [语音输入](docs/voice-input.md) · [Twitch](docs/twitch.md) · [彗星号](docs/comet.md) · [OBS / Spout 输出](docs/obs-spout.md) · [检查更新](docs/updates.md) · [Steam 版](docs/steam.md) |
+| **创作者** | [台词标记](docs/markup.md) · [皮肤格式](docs/skins.md) · [插件与包接口](docs/plugins.md) · [包编辑器](docs/package-editor.md) · [字体](docs/fonts.md) |
+| **开发者** | [从源码构建](docs/building.md) · [渲染管线](docs/rendering-pipeline.md) · [日志](docs/logging.md) |
 
-在输入框表情面板中搜索名称或包名并点击插入，仍保存为 `[sticker=sp/happy h=1.35]` 或 `[sticker=sprel/laugh h=4]` 等 NanaType 标记。动态表情在预览、展示、历史和 Spout／Syphon 输出中播放；减少动态效果时显示首帧。本功能只读取 Echo-Live 的图片表情定义，不执行扩展脚本。
+## 🛠️ 从源码构建
 
-输入框右侧的表情包区域在底部提供「全部」和各系列子标签，表情网格单独滚动，搜索只筛选当前系列。把一个或多个文件夹拖到表情包区域或顶部的表情包标签即可快速添加；拖到标签时会自动打开该区域，导入后与设置页统一管理。
-
-预设图片来自 [Echo-Live](https://github.com/sheep-realms/Echo-Live) 和 [绵羊动态表情包扩展](https://github.com/sheep-realms/Echo-Live-Sheep-realms-EmoteLab-Extension)，作者与图片授权显示在列表中，下载目录保留来源、定义与许可证。
-
-「设置 › 素材 › Telegram 贴纸」可登录 Telegram 账号，使用官方搜索查找贴纸包，也可输入包名或 `https://t.me/addstickers/包名` 下载整包。首次登录需要从 [my.telegram.org](https://my.telegram.org) 获取自己的 API ID 和 API Hash，填写带国家代码的手机号，再输入收到的验证码及可选的两步验证密码。再次点击「连接 / 登录」可恢复本机会话，不必重新填写登录凭据。
-
-下载代理支持 `socks5://127.0.0.1:7890` 和带认证的 `socks5://用户名:密码@主机:端口`；留空直连。修改后重新连接，登录、搜索、文件下载和跨数据中心连接均使用相同代理。此设置只用于 Telegram。
-
-支持静态 WebP、TGS 矢量动画和带透明度的 VP9 WebM。下载完成后沿用本地文件夹的解析、预转码和注册流程，出现在相同的表情包列表及底部系列标签中，标识为 `tg_包名/文件ID`。动画转为 PNG 完整帧缓存，重启后可离线复用；超出 Telegram 尺寸、时长或当前渲染器支持范围的动画会明确报错。原始文件及来源保留，贴纸的权利仍属于各自创作者。
-
-API Hash、手机号、验证码及密码只在登录期间使用，不写入配置。授权会话单独保存在应用数据目录的 `telegram.session` 中，Windows 使用当前用户的 DPAPI 加密，其他平台使用仅当前用户可读写的文件权限；请勿共享该会话文件。「退出登录并清除会话」会注销并删除本机会话，已下载的贴纸仍可离线使用。
-
-## 皮肤
-
-皮肤是一个含 `skin.toml` 的文件夹或 `.ntpkg` 压缩包，可继承内置皮肤只写差异。格式见 [docs/skins.md](docs/skins.md)。
-
-音效包是含 `sounds.toml` 的包，在 **设置 › 播放 › 音效包** 中选择后，替换皮肤自带的打字音、开场与继续音效，其余音效仍由皮肤提供，见 [音效包](docs/skins.md#音效包)。
-
-## 构建
-
-需要 Rust 1.98+ 和 Windows 10 SDK（图标与版本资源）。NanaUI 与 nanalive-spout（Spout2 发送端）以固定 rev 通过 GitHub 远程仓库引用，首次构建时 cargo 会自动拉取，无需本地检出；构建 nanalive-spout 需要 git 可用（会拉取 Spout2 子模块）。
-
-WebM 解码使用固定版本的 libvpx：Windows 和 Apple Silicon 首次构建会下载并校验上游预编译静态库，运行时无需额外安装。Intel Mac 使用源码构建，需 `brew install nasm` 和 `rustup component add llvm-tools`；其他需要源码构建的平台可启用 `shiguredo_libvpx/source-build` 特性。
+需要 Rust 1.98+。依赖会在首次构建时自动拉取。
 
 ```bash
-cargo run -p nanatype
-```
-
-包编辑器是独立程序 NanaType Editor（[说明](docs/package-editor.md)），与 NanaType 共用 `crates/frame`，各自构建和打包，互不包含对方的代码与文案：
-
-```bash
-cargo run -p nanatype-editor
-```
-
-开发构建保留工作区代码的完整调试信息，第三方依赖仅保留源码行号，以减少编译和链接时的调试数据；不影响应用功能，但调试第三方依赖时不包含变量和类型信息。
-
-发布默认使用 `dist`：`opt-level = "s"`、thin LTO、单 codegen unit，并单独生成 PDB。`dist-small` 使用 `z`，保留相同功能；[性能对比](docs/release-profile-performance.md)显示其便携包再缩小约 2 MiB，但关键场景 CPU 耗时增加约 16%～27%，因此保持可选。
-
-[S/Z 混合实验](docs/release-profile-performance.md#sz-混合实验)仅再缩小约 178 KiB（0.49%），部分 P95 增加，因此默认仍用纯 `s`。
-
-日常检查可用 `cargo check -p nanatype` 避免链接，`cargo build -p nanatype --timings` 查看编译耗时。
-
-```bash
+cargo run -p nanatype          # NanaType
+cargo run -p nanatype-editor   # NanaType Editor
 cargo test --workspace --exclude nanatype
 ```
 
-离屏渲染所有窗口的界面快照（不开桌面窗口）：
+平台依赖、打包、Steam 版和开发用环境变量见 [从源码构建](docs/building.md)。
 
-```bash
-cargo run -p nanatype --example snapshots -- target/snapshots nanatype.night ja-JP
-```
-
-打包（需要 `nana-packager` 与 Inno Setup 6）：
-
-```bash
-pwsh scripts/package.ps1
-pwsh scripts/package.ps1 -Product editor
-```
-
-`-Product editor` 打包 NanaType Editor（`NanaTypeEditor-<版本>-setup.exe`／`-portable.zip`），只构建 `nanatype-editor`。`sh scripts/check-product-split.sh` 检查两个程序的依赖与特性没有越界（CI 中运行）。更小的便携包可用 `pwsh scripts/package.ps1 -Portable -Profile dist-small`。打包脚本固定关闭发布构建的增量编译并使用锁文件；编译、许可证或发布自检失败时停止。便携包排除自检产生的 `data/` 用户数据，首次运行时由应用创建；内置字体、解码器、GPU 后备渲染和异常恢复均保留。
-
-macOS 上打成 `NanaType.app`、zip 与 dmg（需要 `nana-packager`，产物未签名）：
-
-```bash
-scripts/package-macos.sh
-scripts/package-macos.sh --product editor
-```
-
-Syphon 使用 nanalive-spout 仓库的 `nanalive-syphon` 静态编译进程序，无需附带 `Syphon.framework`；首次构建需要 Xcode Command Line Tools。完整许可文本（含 Syphon Metal 服务端声明）在 `Contents/Resources/THIRD_PARTY_LICENSES.txt`，由 `scripts/macos-licenses.py` 按 macOS 目标的依赖生成。
-
-推送 `vX.Y.Z` 标签时，`.github/workflows/release.yml` 在 Windows 和 macOS 上运行这两个脚本，生成签名的更新清单并创建草稿 Release，见 [检查更新](docs/updates.md)。
-
-Steam 版用 `steam` feature 构建：不含更新检查，皮肤页与播放页可访问创意工坊订阅，设置与 GitHub 版共用。Steam ID 放在不提交的 `.cargo/config.toml`（参照 `.cargo/config.example.toml`），然后：
-
-```bash
-pwsh scripts/package.ps1 -Steam
-```
-
-```bash
-scripts/package-macos.sh --steam
-```
-
-详见 [Steam 版](docs/steam.md)。
-
-开发辅助环境变量（仅调试构建或显式设置时生效）：
-
-| 变量 | 作用 |
-| --- | --- |
-| `NANATYPE_DEBUG=1` | 会话日志记录到 Trace 级并全部落盘（同「详细日志」再加 Trace），见 [日志](docs/logging.md) |
-| `NANATYPE_DEMO=1` | 启动 1.5 秒后播放示例台词（调试构建） |
-| `NANATYPE_DEMO_MARKUP=<标记文本>` | 覆盖自动播放的示例台词（需 `NANATYPE_DEMO`） |
-| `NANATYPE_EXIT_AFTER=<毫秒>` | 到时正常退出（用于测量启动、刷出日志） |
-| `NANATYPE_OPAQUE=1` | 叠加窗口改为不透明（调试构建） |
-| `NANATYPE_PERF=<JSON 文件>` | 退出时保存各原生窗口呈现／输出帧数、宿主回调耗时与可用工作计数；丢弃前 2 秒 |
-
-渲染流程、帧调度和表面分支见 [渲染管线](docs/rendering-pipeline.md)；渲染测量、GPU 时间戳、截图比较及限制见 [渲染优化验证记录](docs/rendering-performance.md)。
-
-## 结构
+<details>
+<summary><b>项目结构</b></summary>
 
 | crate | 内容 |
 | --- | --- |
@@ -217,20 +163,20 @@ scripts/package-macos.sh --steam
 | `crates/core` | 会话逻辑：草稿、发送、继续、队列、历史、回溯 |
 | `crates/p2p` | Steam 联机（最多 8 人）、会话排序、重连与图片转发 |
 | `crates/update` | 检查更新：签名的 Release 清单、文件代理、校验下载 |
-| `crates/frame` | 两个程序共用的框架：皮肤渲染（展示框、历史、输入框）、界面组件、皮肤预览、插件宿主、媒体服务与路径 |
+| `crates/frame` | 两个程序共用的框架：皮肤渲染、界面组件、皮肤预览、插件宿主、媒体服务与路径 |
 | `app` | NanaType：NanaUI 宿主、窗口、视图、热键、托盘、Spout |
 | `editor` | NanaType Editor：包编辑器、签名与隔离调试 |
 
 纯逻辑 crate 不依赖界面框架，可单独测试。
 
-## 接口来源
+</details>
 
-Twitch 按官方开发者文档自行实现；blivechat 使用其公开协议接收外部转发消息。
+## 💝 致谢
 
-## 设计来源
+- 内置的 **Echo-Live 原版、玻璃、气泡、虚空** 四套皮肤，设计参考自 [sheep-realms/Echo-Live](https://github.com/sheep-realms/Echo-Live)，原作者为 Sheep-realms 及该项目贡献者；NanaType 使用本地皮肤格式实现和适配这些样式。原项目的授权说明见 [Echo-Live 授权协议与声明](https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md)。软件「设置 › 关于 › 设计来源」也提供原始仓库链接。
+- 表情包预设来自 [Echo-Live](https://github.com/sheep-realms/Echo-Live) 和 [绵羊动态表情包扩展](https://github.com/sheep-realms/Echo-Live-Sheep-realms-EmoteLab-Extension)。
+- Twitch 按官方开发者文档自行实现；blivechat 使用其公开协议接收外部转发消息。
 
-内置的 **Echo-Live 原版、玻璃、气泡、虚空** 四套皮肤，设计参考自 [sheep-realms/Echo-Live](https://github.com/sheep-realms/Echo-Live)，原作者为 Sheep-realms 及该项目贡献者；NanaType 使用本地皮肤格式实现和适配这些样式。原项目的授权说明见 [Echo-Live 授权协议与声明](https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md)。软件「设置 › 关于 › 设计来源」也提供原始仓库链接。
-
-## 许可
+## 📄 许可
 
 本仓库原创代码采用 [MIT](LICENSE-MIT)；第三方依赖、字体、插画及其他材料按各自许可分发，详见 [许可范围](LICENSE) 与 [第三方声明](THIRD_PARTY_NOTICES.md)。
