@@ -13,6 +13,8 @@ pub enum BridgeEvent {
         id: u64,
         text: String,
         markup: String,
+        /// The character the line is said by.
+        speaker: String,
     },
     LineEnd {
         id: u64,

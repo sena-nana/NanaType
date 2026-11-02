@@ -655,6 +655,16 @@ pub fn prepare_skin_preview(
     apply_skin_preview(ui, PreviewJob::new(ui, id, play).run(registry))
 }
 
+/// A character's name, or "Character n" while it has none.
+pub fn character_name(ui: Ui, i: usize, c: &nanatype_settings::Character) -> String {
+    let name = c.name.trim();
+    if name.is_empty() {
+        ui.tr("general-character-unnamed", &[("n", (i as u64 + 1).into())])
+    } else {
+        name.to_owned()
+    }
+}
+
 pub fn retire_skin_urls(ui: Ui, previous: impl IntoIterator<Item = String>) {
     let Some(media) = crate::services::media::global() else {
         return;
@@ -667,10 +677,17 @@ pub fn retire_skin_urls(ui: Ui, previous: impl IntoIterator<Item = String>) {
     });
     ui.portraits
         .with_untracked(|urls| keep.extend(urls.values().cloned()));
-    if let Some(path) = ui.settings.with_untracked(|s| s.general.avatar.clone())
-        && let Some(url) = crate::services::media::url(std::path::Path::new(&path), None)
-    {
-        keep.insert(url);
+    let avatars: Vec<String> = ui.settings.with_untracked(|s| {
+        s.general
+            .characters
+            .iter()
+            .filter_map(|c| c.avatar.clone())
+            .collect()
+    });
+    for path in avatars {
+        if let Some(url) = crate::services::media::url(std::path::Path::new(&path), None) {
+            keep.insert(url);
+        }
     }
     media.retire_urls(previous, &keep);
 }

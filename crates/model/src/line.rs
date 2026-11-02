@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ChatRef, Document};
+use crate::{ChatRef, Document, Rgba8};
 
 /// Unique within a process run; ordered by creation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -27,6 +27,9 @@ pub struct Speaker {
     /// Portrait variant active when the line started.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub portrait: Option<String>,
+    /// Colour of the name on the name plate; `None` keeps the skin's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Rgba8>,
 }
 
 /// What the typewriter does after the last character.

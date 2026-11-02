@@ -57,6 +57,9 @@ pub enum Cmd {
     SetReducedMotion(bool),
     SetSkin(Arc<Skin>),
     SetSpeaker(Option<Speaker>),
+    /// Show the last sent line again, as it was said. It is not sent
+    /// anywhere else and adds no history row.
+    Replay,
     RemoveHistoryRows(Vec<u64>),
     /// A row from another message source (live chat).
     External(HistoryItem),
@@ -186,6 +189,10 @@ pub struct Core {
     /// The chat message the next sent line answers.
     reply: Option<ChatRef>,
     speaker_override: Option<Speaker>,
+    /// The last line sent from here, for [`Cmd::Replay`].
+    last_sent: Option<Line>,
+    /// The line [`Cmd::Replay`] last started; it adds no history row.
+    replay: Option<LineId>,
 }
 
 fn global(generation: u64, epoch: u64) -> u64 {
@@ -222,6 +229,8 @@ impl Core {
             draft_meta: LineMeta::default(),
             reply: None,
             speaker_override: None,
+            last_sent: None,
+            replay: None,
         };
         core.refresh_params();
         core.display.entrance = core.entrance();
@@ -310,9 +319,20 @@ impl Core {
             return speaker;
         }
         Speaker {
-            name: self.settings.general.speaker_name.clone(),
-            avatar: self.settings.general.avatar.clone(),
             portrait: self.display.portrait.clone(),
+            ..self.settings.general.active_character().speaker()
+        }
+    }
+
+    /// In mirror mode the draft on the display follows a speaker change.
+    fn refresh_draft_speaker(&mut self, fx: &mut Effects) {
+        if self.mode() == InputMode::Mirror && !self.mirror_committed && self.display.line.is_none()
+        {
+            let speaker = self.speaker();
+            if self.display.speaker != speaker {
+                self.display.speaker = speaker;
+                self.touch_display(fx);
+            }
         }
     }
 
@@ -431,14 +451,9 @@ impl Core {
             }
             Cmd::SetSpeaker(speaker) => {
                 self.speaker_override = speaker;
-                if self.mode() == InputMode::Mirror
-                    && !self.mirror_committed
-                    && self.display.line.is_none()
-                {
-                    self.display.speaker = self.speaker();
-                    self.touch_display(&mut fx);
-                }
+                self.refresh_draft_speaker(&mut fx);
             }
+            Cmd::Replay => self.replay(now, &mut fx),
             Cmd::RemoveHistoryRows(keys) => {
                 self.history
                     .retain(|row| row.item.source.is_local() || !keys.contains(&row.key));
@@ -506,6 +521,7 @@ impl Core {
                 self.blank_display(fx);
             }
         }
+        self.refresh_draft_speaker(fx);
         self.touch_display(fx);
     }
 
@@ -707,6 +723,7 @@ impl Core {
     /// after-line behaviour.
     fn commit_mirror(&mut self, line: Line, now: Millis, fx: &mut Effects) {
         fx.events.push(Event::LineSubmitted(line.clone()));
+        self.last_sent = Some(line.clone());
         self.mirror_committed = true;
         let doc = Arc::new(line.doc.without_markers());
         let item = self.local_item(&line);
@@ -729,6 +746,22 @@ impl Core {
 
     fn submit(&mut self, line: Line, now: Millis, fx: &mut Effects) {
         fx.events.push(Event::LineSubmitted(line.clone()));
+        self.last_sent = Some(line.clone());
+        self.enqueue(line, now, fx);
+    }
+
+    fn replay(&mut self, now: Millis, fx: &mut Effects) {
+        let Some(last) = &self.last_sent else { return };
+        let line = Line {
+            id: LineId::next(),
+            created_at: unix_millis(),
+            ..last.clone()
+        };
+        self.replay = Some(line.id);
+        self.enqueue(line, now, fx);
+    }
+
+    fn enqueue(&mut self, line: Line, now: Millis, fx: &mut Effects) {
         let busy = self.retiring.is_some()
             || self
                 .active
@@ -775,7 +808,7 @@ impl Core {
         }
         let timeline = Arc::new(compile(&line.doc, &self.pacing, &self.sound_rule));
         let sync = self.settings.history.sync;
-        if sync != HistorySync::OnComplete {
+        if sync != HistorySync::OnComplete && self.replay != Some(line.id) {
             let doc = Arc::new(line.doc.without_markers());
             let item = self.local_item(&line);
             let reveal = (sync == HistorySync::Reveal).then_some(Reveal {
@@ -1117,6 +1150,7 @@ impl Core {
                 PlayerEffect::LineRevealed(id) => {
                     if self.settings.history.sync == HistorySync::OnComplete
                         && let Some(active) = &self.active
+                        && self.replay != Some(id)
                     {
                         let line = active.line.clone();
                         let item = self.local_item(&line);

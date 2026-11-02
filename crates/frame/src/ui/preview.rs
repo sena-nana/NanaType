@@ -330,11 +330,16 @@ fn sample_stage(
     // The input window draws its box from the display profile, with the
     // skin preview on and the sample speaker in the name plate.
     settings.general.input_skin_preview = true;
-    settings.general.speaker_name = if ui.editor_nodes.is_some() {
+    let name = if ui.editor_nodes.is_some() {
         ui.preview_name.get_untracked()
     } else {
         ui.now_t("skins-preview-name")
     };
+    settings.general.characters = vec![nanatype_settings::Character {
+        name,
+        ..Default::default()
+    }];
+    settings.general.character = 0;
     settings
         .skin
         .personalizations

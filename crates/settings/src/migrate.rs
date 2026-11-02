@@ -116,6 +116,23 @@ pub fn migrate(value: &mut Value) -> Result<u32, MigrateError> {
         }
         obj.insert("schema".into(), json!(4));
     }
+    if from < 5 {
+        // The one speaker name and avatar became the first character.
+        if let Some(general) = obj.get_mut("general").and_then(Value::as_object_mut) {
+            let name = general.remove("speaker_name");
+            let avatar = general.remove("avatar");
+            if (name.is_some() || avatar.is_some()) && !general.contains_key("characters") {
+                let mut first = Map::new();
+                first.insert("name".into(), name.unwrap_or_else(|| json!("")));
+                if let Some(avatar) = avatar.filter(|a| !a.is_null()) {
+                    first.insert("avatar".into(), avatar);
+                }
+                general.insert("characters".into(), json!([first]));
+                general.insert("character".into(), json!(0));
+            }
+        }
+        obj.insert("schema".into(), json!(5));
+    }
     Ok(from)
 }
 

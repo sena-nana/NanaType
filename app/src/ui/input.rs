@@ -308,13 +308,14 @@ fn item(label: String, open: Signal<bool>, msg: impl Fn() -> Msg + Send + 'stati
 fn menu(
     icon: nana_ui::runtime::Icon,
     label: String,
+    tip: Tip,
     open: Signal<bool>,
     items: Vec<AnyView>,
 ) -> AnyView {
     let mut menu = ActionMenu::new().trigger(label.clone()).bare_trigger(true);
     menu.popover.compact_trigger = true;
     widget(menu)
-        .trigger(trigger_button(icon, label, Tip::Below, open))
+        .trigger(trigger_button(icon, label, tip, open))
         .bind(move |m: &mut ActionMenu| m.popover.open = open.get())
         .on(move |e: &PopoverToggled| open.set(e.open))
         .on(move |_: &PopoverClosed| open.set(false))
@@ -1134,7 +1135,7 @@ fn toolbar(ui: Ui) -> AnyView {
                 open_item(t("tb-ruby"), ruby_open),
                 item(t("tb-clear-format"), more_open, || act(Tool::ClearFormat)),
             ];
-            bar.push(menu(ti::DOTS, t("tb-more"), more_open, items));
+            bar.push(menu(ti::DOTS, t("tb-more"), Tip::Below, more_open, items));
             bar.push(
                 widget(Stack::row(0.0).with_layout(|l| {
                     l.width = Some(LengthSpec::Px(0.0));

@@ -51,9 +51,9 @@ use std::sync::Arc;
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, widget};
 use nana_ui::runtime::{
-    ActionMenu, ActionMenuItem, Activate, Button, Chip, IconButton, IconGlyph, ListItem,
-    PopoverClosed, PopoverToggled, ScrollAxes, ScrollView, Select, SelectChanged, SelectOption,
-    Stack, StatusBadge, Switch, Text, TextChanged, ToggleChanged,
+    ActionMenu, ActionMenuItem, Activate, Button, Chip, ColorChanged, ColorField, IconButton,
+    IconGlyph, ListItem, PopoverClosed, PopoverToggled, ScrollAxes, ScrollView, Select,
+    SelectChanged, SelectOption, Stack, StatusBadge, Switch, Text, TextChanged, ToggleChanged,
 };
 use nana_ui::theme::space;
 use nana_ui::{ButtonKind, ControlSize, StatusTone};
@@ -62,7 +62,7 @@ use nana_ui_core::{
     SemanticColorMix, SemanticColorRole,
 };
 use nanatype_i18n::Locale;
-use nanatype_model::{AfterLine, EntranceKind, Overflow, VtsReset};
+use nanatype_model::{AfterLine, EntranceKind, Overflow, Rgba8, VtsReset};
 use nanatype_playback::QueuePolicy;
 use nanatype_settings::{
     CaptureBackground, ChromeMode, HideLatest, HistorySync, InputKey, InputMode, InputPresence,
@@ -155,7 +155,7 @@ fn language_select(ui: Ui) -> AnyView {
     )
 }
 
-/// The speaker-name field, bound to the setting.
+/// The active character's name field, bound to the setting.
 fn speaker_field(ui: Ui) -> AnyView {
     widget(
         Stack::row(0.0)
@@ -168,8 +168,13 @@ fn speaker_field(ui: Ui) -> AnyView {
         ui,
         String::new(),
         field::MD,
-        |s| s.general.speaker_name.clone(),
-        |s, v| s.general.speaker_name = v,
+        |s| s.general.active_character().name,
+        |s, v| {
+            let i = s.general.character;
+            if let Some(c) = s.general.characters.get_mut(i) {
+                c.name = v;
+            }
+        },
     ))
     .into_any()
 }

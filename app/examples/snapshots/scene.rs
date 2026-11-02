@@ -85,7 +85,7 @@ impl Scene {
             Arc::make_mut(&mut skin).dialogue.sweep.enabled = true;
         }
         let mut settings = Settings::default();
-        settings.general.speaker_name = "奈奈".into();
+        settings.general.characters[0].name = "奈奈".into();
         settings.skin.id = skin_id.to_owned();
         settings.history.show_time = true;
         settings.history.chat.enabled = true;

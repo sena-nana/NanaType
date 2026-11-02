@@ -18,7 +18,7 @@ fn skin() -> Arc<nanatype_theme::Skin> {
 fn core_with(f: impl FnOnce(&mut Settings)) -> Core {
     let mut s = Settings::default();
     s.playback.punctuation_pauses = false;
-    s.general.speaker_name = "奈奈".into();
+    s.general.characters[0].name = "奈奈".into();
     f(&mut s);
     Core::new(s, skin())
 }
@@ -37,7 +37,7 @@ fn account_identity_is_snapshotted_for_queued_lines_and_history() {
     let speaker = nanatype_model::Speaker {
         name: "account one".into(),
         avatar: Some("blob:one".into()),
-        portrait: None,
+        ..Default::default()
     };
     core.handle(Cmd::SetSpeaker(Some(speaker.clone())), 0);
     let first = type_and_send(&mut core, "first", 0);
@@ -59,8 +59,7 @@ fn account_identity_is_snapshotted_for_queued_lines_and_history() {
     core.handle(
         Cmd::SetSpeaker(Some(nanatype_model::Speaker {
             name: "account two".into(),
-            avatar: None,
-            portrait: None,
+            ..Default::default()
         })),
         2,
     );
@@ -1120,4 +1119,95 @@ fn without_an_entrance_a_line_ends_with_its_last_character() {
         deliver(&mut core, &fx, WakeReason::SegmentEnd);
         assert_eq!(core.phase(), Some(Phase::Done));
     }
+}
+
+fn submitted(fx: &Effects) -> Vec<&nanatype_model::Line> {
+    fx.events
+        .iter()
+        .filter_map(|e| match e {
+            Event::LineSubmitted(line) => Some(line),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn switching_characters_changes_who_the_next_line_is_said_by() {
+    let mut core = core_with(|s| {
+        s.history.sync = HistorySync::OnSubmit;
+        s.general.characters.push(nanatype_settings::Character {
+            name: "Two".into(),
+            avatar: Some("C:/two.png".into()),
+            color: Some(nanatype_model::Rgba8::rgb(255, 0, 0)),
+            hotkey: None,
+        });
+    });
+    let fx = type_and_send(&mut core, "first", 0);
+    assert_eq!(submitted(&fx)[0].speaker.name, "奈奈");
+    let mut next = core.settings().clone();
+    next.general.cycle_character(1);
+    core.handle(Cmd::SetSettings(Box::new(next)), 1);
+    let fx = type_and_send(&mut core, "second", 2);
+    let line = submitted(&fx)[0];
+    assert_eq!(line.speaker.name, "Two");
+    assert_eq!(line.speaker.avatar.as_deref(), Some("C:/two.png"));
+    assert_eq!(
+        line.speaker.color,
+        Some(nanatype_model::Rgba8::rgb(255, 0, 0))
+    );
+    assert_eq!(core.display().speaker.name, "Two");
+    let authors: Vec<_> = core
+        .history()
+        .iter()
+        .map(|r| r.item.author.clone())
+        .collect();
+    assert_eq!(authors, ["奈奈", "Two"], "earlier rows keep their speaker");
+}
+
+#[test]
+fn a_mirrored_draft_follows_the_character_switch() {
+    let mut core = core_with(|s| {
+        s.general.input_mode = InputMode::Mirror;
+        s.general.characters.push(nanatype_settings::Character {
+            name: "Two".into(),
+            ..Default::default()
+        });
+    });
+    core.handle(Cmd::DraftChanged(parse("hi").doc), 0);
+    assert_eq!(core.display().speaker.name, "奈奈");
+    let mut next = core.settings().clone();
+    next.general.select_character(1);
+    let fx = core.handle(Cmd::SetSettings(Box::new(next)), 1);
+    assert!(fx.display_changed);
+    assert_eq!(core.display().speaker.name, "Two");
+}
+
+#[test]
+fn replay_shows_the_last_line_again_without_sending_or_recording_it() {
+    let mut core = core_with(|s| s.history.sync = HistorySync::OnSubmit);
+    assert!(
+        core.handle(Cmd::Replay, 0).events.is_empty(),
+        "nothing sent yet"
+    );
+    let fx = type_and_send(&mut core, "hello", 0);
+    let sent = submitted(&fx)[0].clone();
+    core.handle(Cmd::ClearDisplay, 1);
+    let mut next = core.settings().clone();
+    next.general.characters[0].name = "renamed".into();
+    core.handle(Cmd::SetSettings(Box::new(next)), 2);
+    let fx = core.handle(Cmd::Replay, 3);
+    assert!(submitted(&fx).is_empty(), "a replay is not a new line");
+    let started = fx
+        .events
+        .iter()
+        .find_map(|e| match e {
+            Event::LineStarted(line) => Some(line),
+            _ => None,
+        })
+        .expect("the replay starts on the display");
+    assert_ne!(started.id, sent.id);
+    assert_eq!(started.doc, sent.doc);
+    assert_eq!(started.speaker.name, "奈奈", "said as it was");
+    assert_eq!(core.display().line, Some(started.id));
+    assert_eq!(core.history().len(), 1);
 }

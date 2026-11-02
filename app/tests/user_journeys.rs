@@ -189,9 +189,14 @@ fn speaker_hints_remain_readable_in_all_locales_and_window_sizes() {
 #[test]
 fn the_empty_speaker_field_takes_a_click_typing_and_backspace() {
     let palette = nanatype::ui::kit::theme::palette(false);
-    for (onboarding, key) in [(true, "onboard-speaker"), (false, "general-speaker")] {
+    for onboarding in [true, false] {
         let mut f = Fixture::new(Locale::ZhCn, onboarding, Page::General);
-        let field = f.field(key);
+        // The page lists characters; the first one's name is the field.
+        let (key, field) = if onboarding {
+            ("onboard-speaker", f.field("onboard-speaker"))
+        } else {
+            ("general-speaker", f.find("text-input", "general-speaker"))
+        };
         f.click(&field);
         let id = StableNodeId::new(field.id).unwrap();
         let world = f.session.document().context().world();
@@ -214,7 +219,14 @@ fn the_empty_speaker_field_takes_a_click_typing_and_backspace() {
             .key_press("Backspace", "Backspace", InputModifiers::default())
             .unwrap();
         f.apply_edits();
-        assert_eq!(f.ui.settings.get_untracked().general.speaker_name, "a");
+        assert_eq!(
+            f.ui.settings
+                .get_untracked()
+                .general
+                .active_character()
+                .name,
+            "a"
+        );
     }
 }
 

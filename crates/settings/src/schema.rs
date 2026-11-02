@@ -1,17 +1,19 @@
-//! Settings schema v4. Every struct is `#[serde(default)]`, so a file written
+//! Settings schema v5. Every struct is `#[serde(default)]`, so a file written
 //! by an older build loads with new fields at their defaults, and fields this
 //! build does not know are kept in `unknown` and written back unchanged.
 
 use std::collections::BTreeMap;
 
 use nanatype_model::{
-    AfterLine, EntranceKind, Overflow, ParamValue, Rgba8, VtsReset, valid_param_id,
+    AfterLine, EntranceKind, Overflow, ParamValue, Rgba8, Speaker, VtsReset, valid_param_id,
 };
 use nanatype_playback::QueuePolicy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const SETTINGS_SCHEMA: u32 = 4;
+pub const SETTINGS_SCHEMA: u32 = 5;
+/// Most characters a profile keeps.
+pub const MAX_CHARACTERS: usize = 32;
 pub const DEFAULT_SKIN: &str = "nanatype.halo";
 /// Skin loop rates the settings offer; the first is the default.
 pub const SKIN_FRAME_RATES: [u32; 2] = [30, 60];
@@ -360,9 +362,10 @@ pub enum KeystrokeScheme {
 pub struct General {
     /// `None` follows the system language.
     pub locale: Option<String>,
-    pub speaker_name: String,
-    /// Avatar image for history rows (absolute path).
-    pub avatar: Option<String>,
+    /// Who the lines are said by. Never empty: the last one stays.
+    pub characters: Vec<Character>,
+    /// Index of the character new lines are said by.
+    pub character: usize,
     pub input_presence: InputPresence,
     pub input_mode: InputMode,
     /// Show the draft inside the skin's stream canvas instead of a full editor.
@@ -376,14 +379,93 @@ impl Default for General {
     fn default() -> Self {
         Self {
             locale: None,
-            speaker_name: String::new(),
-            avatar: None,
+            characters: vec![Character::default()],
+            character: 0,
             input_presence: InputPresence::Resident,
             input_mode: InputMode::Compose,
             input_skin_preview: false,
             launch_at_login: false,
             onboarding_done: false,
             check_updates: true,
+        }
+    }
+}
+
+impl General {
+    /// The character new lines are said by.
+    pub fn active_character(&self) -> Character {
+        self.characters
+            .get(self.character)
+            .or(self.characters.first())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Make character `i` the active one; out of range does nothing.
+    pub fn select_character(&mut self, i: usize) {
+        if i < self.characters.len() {
+            self.character = i;
+        }
+    }
+
+    /// Step the active character by `step`, wrapping around the list.
+    pub fn cycle_character(&mut self, step: i32) {
+        let n = self.characters.len() as i64;
+        if n > 0 {
+            self.character = (self.character as i64 + i64::from(step)).rem_euclid(n) as usize;
+        }
+    }
+
+    /// Remove character `i`, keeping the last one and the active choice.
+    pub fn remove_character(&mut self, i: usize) {
+        if self.characters.len() <= 1 || i >= self.characters.len() {
+            return;
+        }
+        self.characters.remove(i);
+        if self.character > i || self.character >= self.characters.len() {
+            self.character = self.character.saturating_sub(1);
+        }
+    }
+
+    /// Move character `i` by `step` places; the active one moves with it.
+    pub fn move_character(&mut self, i: usize, step: i32) {
+        let n = self.characters.len();
+        let j = i as i64 + i64::from(step);
+        if i >= n || j < 0 || j as usize >= n {
+            return;
+        }
+        let j = j as usize;
+        self.characters.swap(i, j);
+        if self.character == i {
+            self.character = j;
+        } else if self.character == j {
+            self.character = i;
+        }
+    }
+}
+
+/// A persona lines can be said by: the name on the plate and in the
+/// history, with its own picture and name colour.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Character {
+    pub name: String,
+    /// Avatar image for history rows (absolute path).
+    pub avatar: Option<String>,
+    /// Colour of the name on the name plate; `None` keeps the skin's.
+    pub color: Option<Rgba8>,
+    /// System-wide key that switches to this character.
+    pub hotkey: Option<Hotkey>,
+}
+
+impl Character {
+    /// Who a line said now by this character is from.
+    pub fn speaker(&self) -> Speaker {
+        Speaker {
+            name: self.name.clone(),
+            avatar: self.avatar.clone(),
+            portrait: None,
+            color: self.color,
         }
     }
 }
@@ -706,6 +788,21 @@ pub struct Overlays {
     pub history: OverlaySettings,
 }
 
+impl Overlays {
+    /// Lock the display, partner and history overlays (clicks pass through
+    /// them), or unlock them all when the display is locked.
+    pub fn toggle_lock(&mut self) {
+        let lock = if self.display.lock == Lock::Locked {
+            Lock::Interactive
+        } else {
+            Lock::Locked
+        };
+        self.display.lock = lock;
+        self.peer_display.lock = lock;
+        self.history.lock = lock;
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HistorySync {
@@ -864,6 +961,13 @@ pub struct HotkeySettings {
     pub reply_latest: Option<Hotkey>,
     /// Bring the input window forward with the quick phrases open.
     pub quick_phrases: Option<Hotkey>,
+    /// Lock or unlock the overlays (click-through).
+    pub toggle_lock: Option<Hotkey>,
+    /// Show the last sent line on the display again.
+    pub replay: Option<Hotkey>,
+    pub toggle_history: Option<Hotkey>,
+    pub next_character: Option<Hotkey>,
+    pub prev_character: Option<Hotkey>,
     /// Keys handled by the input window itself, not registered system-wide.
     pub input: InputKeys,
 }
@@ -880,6 +984,11 @@ impl Default for HotkeySettings {
             show_chat: None,
             reply_latest: None,
             quick_phrases: None,
+            toggle_lock: None,
+            replay: None,
+            toggle_history: None,
+            next_character: None,
+            prev_character: None,
             input: InputKeys::default(),
         }
     }
@@ -1453,6 +1562,11 @@ impl Settings {
             &mut h.show_chat,
             &mut h.reply_latest,
             &mut h.quick_phrases,
+            &mut h.toggle_lock,
+            &mut h.replay,
+            &mut h.toggle_history,
+            &mut h.next_character,
+            &mut h.prev_character,
         ] {
             if slot.as_ref().is_some_and(Hotkey::is_send_chord) {
                 *slot = None;
@@ -1461,6 +1575,11 @@ impl Settings {
         for phrase in &mut self.assets.phrases {
             if phrase.hotkey.as_ref().is_some_and(Hotkey::is_send_chord) {
                 phrase.hotkey = None;
+            }
+        }
+        for character in &mut self.general.characters {
+            if character.hotkey.as_ref().is_some_and(Hotkey::is_send_chord) {
+                character.hotkey = None;
             }
         }
         let keys = &mut h.input;
@@ -1560,7 +1679,17 @@ impl Settings {
             self.skin.id = DEFAULT_SKIN.into();
         }
         self.sanitize_hotkeys();
-        self.general.speaker_name = self.general.speaker_name.chars().take(64).collect();
+        let g = &mut self.general;
+        g.characters.truncate(MAX_CHARACTERS);
+        if g.characters.is_empty() {
+            g.characters.push(Character::default());
+        }
+        for character in &mut g.characters {
+            character.name = character.name.chars().take(64).collect();
+        }
+        if g.character >= g.characters.len() {
+            g.character = 0;
+        }
         self.update.proxy = self.update.proxy.trim().chars().take(512).collect();
         self.assets.telegram.api_id = self.assets.telegram.api_id.max(0);
         self.assets.telegram.proxy = self

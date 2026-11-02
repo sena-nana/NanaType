@@ -40,7 +40,7 @@ fn scramble_renders_locks_and_retires_without_relayout() {
         settings.skin.id = "nanatype.machine_learning".into();
         settings.skin.advanced_effects = enabled;
         settings.playback.reduced_motion = reduced;
-        settings.general.speaker_name = "奈奈 / ML".into();
+        settings.general.characters[0].name = "奈奈 / ML".into();
         let root = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
         root.reduced_motion.set(reduced);
         let ui = if remote { root.remote() } else { root };
@@ -273,7 +273,7 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
         settings.skin.id = "nanatype.machine_learning".into();
         settings.skin.advanced_effects = true;
         let name = "奈奈 / Machine Learning · 一个很长的姓名";
-        settings.general.speaker_name = name.into();
+        settings.general.characters[0].name = name.into();
         let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
         let mut core = Core::new(settings, skin.clone());
         core.handle(

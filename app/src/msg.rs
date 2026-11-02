@@ -25,14 +25,21 @@ pub enum GlobalAction {
     ShowChat,
     ReplyLatest,
     QuickPhrases,
+    ToggleLock,
+    Replay,
+    ToggleHistory,
+    NextCharacter,
+    PrevCharacter,
     /// Quick phrase `n` (Settings › Assets), inserted or sent like its menu
     /// item. Not in [`Self::ALL`]: phrases come and go with the settings.
     Phrase(usize),
+    /// Switch to character `n` (Settings › General). Not in [`Self::ALL`].
+    Character(usize),
 }
 
 impl GlobalAction {
     /// The fixed actions, in the order the Hotkeys page lists them.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 14] = [
         Self::Summon,
         Self::ShowChat,
         Self::ReplyLatest,
@@ -40,8 +47,13 @@ impl GlobalAction {
         Self::Continue,
         Self::Skip,
         Self::Clear,
+        Self::Replay,
         Self::ToggleMode,
         Self::ToggleOverlays,
+        Self::ToggleHistory,
+        Self::ToggleLock,
+        Self::NextCharacter,
+        Self::PrevCharacter,
     ];
 
     /// Whether the action brings the input window forward. On Windows the
@@ -64,16 +76,43 @@ impl GlobalAction {
             Self::ShowChat => "hotkeys-show-chat",
             Self::ReplyLatest => "hotkeys-reply-latest",
             Self::QuickPhrases => "hotkeys-quick-phrases",
+            Self::ToggleLock => "hotkeys-toggle-lock",
+            Self::Replay => "hotkeys-replay",
+            Self::ToggleHistory => "hotkeys-toggle-history",
+            Self::NextCharacter => "hotkeys-next-character",
+            Self::PrevCharacter => "hotkeys-prev-character",
             Self::Phrase(_) => "assets-phrase-hotkey",
+            Self::Character(_) => "general-character-hotkey",
         }
     }
 
     /// Every action a chord can be bound to: the fixed ones, then one per
-    /// quick phrase.
+    /// quick phrase and one per character.
     pub fn all_in(s: &Settings) -> impl Iterator<Item = Self> + '_ {
         Self::ALL
             .into_iter()
             .chain((0..s.assets.phrases.len()).map(Self::Phrase))
+            .chain((0..s.general.characters.len()).map(Self::Character))
+    }
+
+    /// What an action does when it is just a message: everything but the
+    /// actions that raise the input window and the playback keys.
+    pub fn message(self) -> Option<Msg> {
+        Some(match self {
+            Self::ToggleLock => Msg::Edit(Box::new(|s: &mut Settings| s.overlays.toggle_lock())),
+            Self::Replay => Msg::Core(Cmd::Replay),
+            Self::ToggleHistory => Msg::Window(WindowMsg::Toggle(WindowKind::History)),
+            Self::NextCharacter => {
+                Msg::Edit(Box::new(|s: &mut Settings| s.general.cycle_character(1)))
+            }
+            Self::PrevCharacter => {
+                Msg::Edit(Box::new(|s: &mut Settings| s.general.cycle_character(-1)))
+            }
+            Self::Character(i) => Msg::Edit(Box::new(move |s: &mut Settings| {
+                s.general.select_character(i)
+            })),
+            _ => return None,
+        })
     }
 
     pub fn get(self, s: &Settings) -> Option<&Hotkey> {
@@ -88,14 +127,20 @@ impl GlobalAction {
             Self::ShowChat => h.show_chat.as_ref(),
             Self::ReplyLatest => h.reply_latest.as_ref(),
             Self::QuickPhrases => h.quick_phrases.as_ref(),
+            Self::ToggleLock => h.toggle_lock.as_ref(),
+            Self::Replay => h.replay.as_ref(),
+            Self::ToggleHistory => h.toggle_history.as_ref(),
+            Self::NextCharacter => h.next_character.as_ref(),
+            Self::PrevCharacter => h.prev_character.as_ref(),
             Self::Phrase(i) => s.assets.phrases.get(i)?.hotkey.as_ref(),
+            Self::Character(i) => s.general.characters.get(i)?.hotkey.as_ref(),
         }
     }
 
     /// The binding a fresh install has.
     pub fn default_binding(self) -> Option<Hotkey> {
         match self {
-            Self::Phrase(_) => None,
+            Self::Phrase(_) | Self::Character(_) => None,
             _ => Self::get(self, &Settings::default()).cloned(),
         }
     }
@@ -104,6 +149,12 @@ impl GlobalAction {
         if let Self::Phrase(i) = self {
             if let Some(p) = s.assets.phrases.get_mut(i) {
                 p.hotkey = value;
+            }
+            return;
+        }
+        if let Self::Character(i) = self {
+            if let Some(c) = s.general.characters.get_mut(i) {
+                c.hotkey = value;
             }
             return;
         }
@@ -118,7 +169,12 @@ impl GlobalAction {
             Self::ShowChat => &mut h.show_chat,
             Self::ReplyLatest => &mut h.reply_latest,
             Self::QuickPhrases => &mut h.quick_phrases,
-            Self::Phrase(_) => unreachable!("handled above"),
+            Self::ToggleLock => &mut h.toggle_lock,
+            Self::Replay => &mut h.replay,
+            Self::ToggleHistory => &mut h.toggle_history,
+            Self::NextCharacter => &mut h.next_character,
+            Self::PrevCharacter => &mut h.prev_character,
+            Self::Phrase(_) | Self::Character(_) => unreachable!("handled above"),
         } = value;
     }
 }
@@ -243,7 +299,8 @@ pub fn input_message(key: InputKey) -> Msg {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileTarget {
-    Avatar,
+    /// Character `n`'s avatar.
+    Avatar(usize),
     InsertImage,
     ImportSkin,
     ExportSkin,
@@ -676,4 +733,74 @@ pub enum MarkupEdit {
     /// Remove every tag inside the selection.
     Align(Option<nanatype_model::ParagraphAlign>),
     ClearFormat,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn edited(msg: Option<Msg>, mut s: Settings) -> Settings {
+        let Some(Msg::Edit(edit)) = msg else {
+            panic!("a settings edit")
+        };
+        edit(&mut s);
+        s
+    }
+
+    #[test]
+    fn new_actions_dispatch_their_messages() {
+        assert!(matches!(
+            GlobalAction::Replay.message(),
+            Some(Msg::Core(Cmd::Replay))
+        ));
+        assert!(matches!(
+            GlobalAction::ToggleHistory.message(),
+            Some(Msg::Window(WindowMsg::Toggle(WindowKind::History)))
+        ));
+        let locked = edited(GlobalAction::ToggleLock.message(), Settings::default());
+        let o = &locked.overlays;
+        assert!(
+            [o.display.lock, o.peer_display.lock, o.history.lock]
+                .iter()
+                .all(|l| *l == nanatype_settings::Lock::Locked)
+        );
+        assert_eq!(o.input.lock, nanatype_settings::Lock::Interactive);
+        let unlocked = edited(GlobalAction::ToggleLock.message(), locked);
+        assert_eq!(unlocked.overlays, Settings::default().overlays);
+
+        let mut s = Settings::default();
+        s.general.characters.push(nanatype_settings::Character {
+            name: "Two".into(),
+            ..Default::default()
+        });
+        let s = edited(GlobalAction::NextCharacter.message(), s);
+        assert_eq!(s.general.character, 1);
+        let s = edited(GlobalAction::NextCharacter.message(), s);
+        assert_eq!(s.general.character, 0, "wraps around");
+        let s = edited(GlobalAction::PrevCharacter.message(), s);
+        assert_eq!(s.general.character, 1);
+        let s = edited(GlobalAction::Character(0).message(), s);
+        assert_eq!(s.general.character, 0);
+        // Raising and playback actions are the app's own.
+        assert!(GlobalAction::Summon.message().is_none());
+        assert!(GlobalAction::Continue.message().is_none());
+    }
+
+    #[test]
+    fn character_hotkeys_bind_like_the_fixed_ones() {
+        let mut s = Settings::default();
+        s.general.characters.push(Default::default());
+        let chord = Hotkey::ctrl("Digit2");
+        Shortcut::Global(GlobalAction::NextCharacter).bind(&mut s, Some(chord.clone()));
+        Shortcut::Global(GlobalAction::Character(1)).bind(&mut s, Some(chord.clone()));
+        assert_eq!(s.general.characters[1].hotkey.as_ref(), Some(&chord));
+        assert_eq!(GlobalAction::NextCharacter.get(&s), None, "taken over");
+        assert!(GlobalAction::all_in(&s).any(|a| a == GlobalAction::Character(1)));
+        for action in GlobalAction::ALL {
+            assert_eq!(
+                action.default_binding(),
+                action.get(&Settings::default()).cloned()
+            );
+        }
+    }
 }

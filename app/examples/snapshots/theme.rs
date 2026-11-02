@@ -125,7 +125,7 @@ pub fn audit(
     stress_skin.dialogue.region[1] += 140.0;
     ui.skin.set(Arc::new(stress_skin));
     let mut settings = (*ui.settings.get_untracked()).clone();
-    settings.general.speaker_name = "奈奈与联机伙伴・A Very Long Speaker Name".into();
+    settings.general.characters[0].name = "奈奈与联机伙伴・A Very Long Speaker Name".into();
     ui.settings.set(Arc::new(settings));
     let text = parse("[ruby=ものがたり]故事[/ruby]继续，今天也请多关照。\n第二行是长台词，用来检查装饰、换行与边界。\n第三行仍然清晰。[at=1001 name=星野ほたる]").doc;
     ui.draft.set(Arc::new(text.clone()));

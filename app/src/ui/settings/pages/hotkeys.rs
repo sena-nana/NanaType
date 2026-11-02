@@ -60,6 +60,19 @@ pub(super) fn action_name(locale: Locale, s: &Settings, action: Shortcut) -> Str
             .map(|p| p.label.trim().to_owned())
             .filter(|l| !l.is_empty())
             .unwrap_or_else(|| I18N.t_in(locale, "assets-phrases")),
+        Shortcut::Global(GlobalAction::Character(i)) => s
+            .general
+            .characters
+            .get(i)
+            .map(|c| c.name.trim().to_owned())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| {
+                I18N.tr_in(
+                    locale,
+                    "general-character-unnamed",
+                    &[("n", (i as u64 + 1).into())],
+                )
+            }),
         _ => I18N.t_in(locale, action.label_key()),
     }
 }
@@ -339,6 +352,43 @@ fn phrase_rows(ui: Ui) -> Row {
     ))
 }
 
+/// One row per character; renaming or adding one in Settings › General
+/// rebuilds the list.
+fn character_rows(ui: Ui) -> Row {
+    Row::inset(dynamic(
+        move || {
+            ui.settings.with(|s| {
+                s.general
+                    .characters
+                    .iter()
+                    .map(|c| c.name.clone())
+                    .collect::<Vec<_>>()
+            })
+        },
+        move |names| {
+            let rows: Vec<Row> = (0..names.len())
+                .map(|i| {
+                    let action = Shortcut::Global(GlobalAction::Character(i));
+                    let name = ui
+                        .settings
+                        .with_untracked(|s| action_name(ui.locale.get_untracked(), s, action));
+                    shortcut_row(ui, name, action)
+                })
+                .collect();
+            Row::inset(widget(Stack::column(0.0)).children((
+                divided(rows),
+                divider(),
+                crate::ui::kit::line(
+                    (),
+                    button(ui, "hotkeys-edit-characters", || {
+                        Msg::Window(WindowMsg::SettingsPage(Page::General))
+                    }),
+                ),
+            )))
+        },
+    ))
+}
+
 pub(super) fn hotkeys(ui: Ui) -> AnyView {
     let rows = |actions: Vec<Shortcut>| -> Vec<Row> {
         actions
@@ -367,6 +417,7 @@ pub(super) fn hotkeys(ui: Ui) -> AnyView {
             section(ui, "hotkeys-local", input(false)),
             section(ui, "hotkeys-chat", input(true)),
             section(ui, "hotkeys-phrases", vec![phrase_rows(ui)]),
+            section(ui, "hotkeys-characters", vec![character_rows(ui)]),
         ))
         .into_any()
 }

@@ -454,6 +454,7 @@ impl App {
             tray.sync(&self.settings);
         }
         self.sync_tray_skins();
+        self.sync_tray_characters();
         self.sync_tray();
         share_input_keys(&self.settings.hotkeys.input);
         self.request_displays();
@@ -683,6 +684,19 @@ impl App {
         let changed = key(&next) != key(&self.sound_pack);
         self.sound_pack = next;
         changed
+    }
+
+    fn sync_tray_characters(&mut self) {
+        let g = &self.settings.general;
+        let names: Vec<String> = g
+            .characters
+            .iter()
+            .enumerate()
+            .map(|(i, c)| crate::ui::character_name(self.ui, i, c))
+            .collect();
+        if let Some(tray) = &mut self.tray {
+            tray.set_characters(&names, g.character);
+        }
     }
 
     fn sync_tray_skins(&mut self) {
@@ -1231,6 +1245,9 @@ impl App {
                 })
         };
         let active_profile_changed = body_profile(&prev) != body_profile(s);
+        let speaker_changed = prev.general.active_character() != s.general.active_character();
+        let characters_changed = prev.general.characters != s.general.characters
+            || prev.general.character != s.general.character;
         let look_changed = prev.skin.overrides != s.skin.overrides || active_profile_changed;
         let chrome_changed = prev.skin.chrome != s.skin.chrome;
         let assets_changed = prev.assets.sticker_dirs != s.assets.sticker_dirs;
@@ -1259,6 +1276,7 @@ impl App {
             // The font stack follows the language.
             self.apply_skin();
             self.sync_tray_skins();
+            self.sync_tray_characters();
             for kind in [
                 WindowKind::Display,
                 WindowKind::PeerDisplay,
@@ -1318,6 +1336,16 @@ impl App {
                 self.ctx.clone(),
                 self.ui,
             );
+        }
+        if speaker_changed {
+            // The draft's name plate and the partner's lane label follow.
+            self.ui
+                .speaker
+                .set(self.settings.general.active_character().speaker());
+            self.peer_publish();
+        }
+        if characters_changed && !locale_changed {
+            self.sync_tray_characters();
         }
         if let Some(tray) = &self.tray {
             tray.sync(&self.settings);
@@ -1558,6 +1586,7 @@ impl App {
                 id: line.id.0,
                 text: line.doc.plain_text(),
                 markup: serialize(&line.doc),
+                speaker: line.speaker.name.clone(),
             },
             Event::LineFinished(id) => BridgeEvent::LineEnd { id: id.0 },
             Event::Expression { name, intensity } => BridgeEvent::Expression {
@@ -1576,13 +1605,17 @@ impl App {
             // Plugins can draw into the streamed display slot: never hand
             // them the user's absolute file paths.
             let plugin_out = match (&out, event) {
-                (BridgeEvent::LineStart { id, text, .. }, Event::LineStarted(line)) => {
+                (
                     BridgeEvent::LineStart {
-                        id: *id,
-                        text: text.clone(),
-                        markup: serialize(&without_local_paths(&line.doc)),
-                    }
-                }
+                        id, text, speaker, ..
+                    },
+                    Event::LineStarted(line),
+                ) => BridgeEvent::LineStart {
+                    id: *id,
+                    text: text.clone(),
+                    markup: serialize(&without_local_paths(&line.doc)),
+                    speaker: speaker.clone(),
+                },
                 _ => out.clone(),
             };
             if let Ok(event) = serde_json::to_value(&plugin_out) {
@@ -1868,7 +1901,7 @@ impl App {
             FileTarget::SpeechModel => FileDialogRequest::new(id, FileDialogKind::OpenFile)
                 .title(t("speech-model-import"))
                 .filters([FileFilter::new("Whisper base Q5_1", ["bin"])]),
-            FileTarget::Avatar => FileDialogRequest::new(id, FileDialogKind::OpenFile)
+            FileTarget::Avatar(_) => FileDialogRequest::new(id, FileDialogKind::OpenFile)
                 .title(t("general-avatar-pick"))
                 .filters([images]),
             FileTarget::InsertImage => FileDialogRequest::new(id, FileDialogKind::OpenFile)
@@ -1917,9 +1950,13 @@ impl App {
         };
         match target {
             FileTarget::SpeechModel => self.install_speech_model(Some(path)),
-            FileTarget::Avatar => {
+            FileTarget::Avatar(i) => {
                 let p = path.display().to_string();
-                self.edit(|s| s.general.avatar = Some(p));
+                self.edit(|s| {
+                    if let Some(c) = s.general.characters.get_mut(i) {
+                        c.avatar = Some(p);
+                    }
+                });
             }
             FileTarget::InsertImage => {
                 self.insert_asset(AssetRef::File(path.display().to_string()))
@@ -2341,6 +2378,16 @@ impl App {
                 });
             }
             GlobalAction::Phrase(i) => self.update(Msg::Editor(EditorMsg::InsertPhrase(i))),
+            GlobalAction::ToggleLock
+            | GlobalAction::Replay
+            | GlobalAction::ToggleHistory
+            | GlobalAction::NextCharacter
+            | GlobalAction::PrevCharacter
+            | GlobalAction::Character(_) => {
+                if let Some(msg) = action.message() {
+                    self.update(msg);
+                }
+            }
         }
     }
 

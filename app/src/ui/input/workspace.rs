@@ -528,6 +528,58 @@ fn modes(ui: Ui, mode: InputMode) -> AnyView {
         .into_any()
 }
 
+/// Who the next line is said by, when there is more than one character.
+fn character_picker(ui: Ui) -> AnyView {
+    let open = signal(false);
+    let picker = dynamic(
+        move || {
+            ui.settings.with(|s| {
+                let g = &s.general;
+                let names: Vec<String> = g
+                    .characters
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| crate::ui::character_name(ui, i, c))
+                    .collect();
+                (names, g.character)
+            })
+        },
+        move |(names, active)| {
+            if names.len() < 2 {
+                return None::<AnyView>.into_any();
+            }
+            let items = names
+                .iter()
+                .enumerate()
+                .map(|(i, name)| {
+                    widget(ActionMenuItem::new(name.clone()).radio(i == *active))
+                        .on_cx(move |_, _: &Activate, cx| {
+                            open.set(false);
+                            cx.dispatch_program_all(Msg::Hotkey(
+                                crate::msg::GlobalAction::Character(i),
+                            ));
+                        })
+                        .into_any()
+                })
+                .collect();
+            let label = ui.tr(
+                "input-character",
+                &[("name", names[*active].clone().into())],
+            );
+            menu(ti::USER, label, Tip::Above, open, items)
+        },
+    );
+    // Takes no room in the bar while there is only one character.
+    widget(Stack::row(0.0).with_layout(|l| {
+        l.width = Some(LengthSpec::Shrink);
+        l.flex_grow = Some(0.0);
+        l.flex_shrink = Some(0.0);
+    }))
+    .visible(move || ui.settings.with(|s| s.general.characters.len() > 1))
+    .children(picker)
+    .into_any()
+}
+
 pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String>) -> AnyView {
     dynamic(
         move || {
@@ -564,6 +616,7 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
             .key("input-actions")
             .children((
                 mode_control,
+                character_picker(ui),
                 status_content(ui),
                 popover(
                     ti::USERS,

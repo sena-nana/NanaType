@@ -200,12 +200,8 @@ impl Stage {
                 history.with(|rows| rows.iter().enumerate().map(|(i, r)| (r.key, i)).collect()),
             )
         });
-        let speaker = nanatype_model::Speaker {
-            name: settings.general.speaker_name.clone(),
-            avatar: settings.general.avatar.clone(),
-            portrait: None,
-        };
-        let preview_name = settings.general.speaker_name.clone();
+        let speaker = settings.general.active_character().speaker();
+        let preview_name = speaker.name.clone();
         let entrance_view = Arc::new(DisplayView::empty(entrance));
         let peer_lanes = std::array::from_fn(|_| PeerLane {
             display: signal(entrance_view.clone()),

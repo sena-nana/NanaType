@@ -8,7 +8,7 @@
 use std::cell::{Cell, RefCell};
 
 use nanatype_i18n::{I18n, Locale};
-use nanatype_settings::{InputMode, Lock, Settings};
+use nanatype_settings::{InputMode, Settings};
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
@@ -28,7 +28,9 @@ const ID_SETTINGS: &str = "nt.settings";
 const ID_OBS: &str = "nt.obs";
 const ID_QUIT: &str = "nt.quit";
 const ID_SPEECH: &str = "nt.speech";
+const ID_REPLAY: &str = "nt.replay";
 const SKIN_PREFIX: &str = "nt.skin:";
+const CHARACTER_PREFIX: &str = "nt.character:";
 
 /// Windows keeps 128 UTF-16 units of a tooltip, terminator included.
 const TOOLTIP_MAX: usize = 120;
@@ -73,12 +75,15 @@ pub struct Tray {
     chat: MenuItem,
     lock: MenuItem,
     continue_: MenuItem,
+    replay: MenuItem,
     sample: MenuItem,
     mode: Submenu,
     compose: CheckMenuItem,
     mirror: CheckMenuItem,
     skins_menu: Submenu,
     skins: Vec<(String, CheckMenuItem)>,
+    characters_menu: Submenu,
+    characters: Vec<CheckMenuItem>,
     settings: MenuItem,
     obs: MenuItem,
     quit: MenuItem,
@@ -265,18 +270,9 @@ fn menu_message(id: &str) -> Option<Msg> {
         ID_DISPLAY => toggle_msg(WindowKind::Display),
         ID_HISTORY => toggle_msg(WindowKind::History),
         ID_CHAT => Msg::Chat(ChatMsg::Toggle),
-        ID_LOCK => Msg::Edit(Box::new(|s: &mut Settings| {
-            let locked = s.overlays.display.lock == Lock::Locked;
-            let lock = if locked {
-                Lock::Interactive
-            } else {
-                Lock::Locked
-            };
-            s.overlays.display.lock = lock;
-            s.overlays.peer_display.lock = lock;
-            s.overlays.history.lock = lock;
-        })),
+        ID_LOCK => Msg::Hotkey(GlobalAction::ToggleLock),
         ID_CONTINUE => Msg::Hotkey(GlobalAction::Continue),
+        ID_REPLAY => Msg::Hotkey(GlobalAction::Replay),
         ID_SAMPLE => Msg::PlaySample,
         ID_COMPOSE => Msg::Edit(Box::new(|s: &mut Settings| {
             s.general.input_mode = InputMode::Compose
@@ -289,6 +285,9 @@ fn menu_message(id: &str) -> Option<Msg> {
         ID_QUIT => Msg::Quit,
         ID_SPEECH => Msg::Speech(SpeechMsg::Toggle),
         other => {
+            if let Some(i) = other.strip_prefix(CHARACTER_PREFIX) {
+                return Some(Msg::Hotkey(GlobalAction::Character(i.parse().ok()?)));
+            }
             let skin = other.strip_prefix(SKIN_PREFIX)?.to_owned();
             Msg::Edit(Box::new(move |s: &mut Settings| s.skin.id = skin))
         }
@@ -315,6 +314,7 @@ impl Tray {
         let chat = item(ID_CHAT);
         let lock = item(ID_LOCK);
         let continue_ = item(ID_CONTINUE);
+        let replay = item(ID_REPLAY);
         let sample = item(ID_SAMPLE);
         let compose = check(ID_COMPOSE);
         let mirror = check(ID_MIRROR);
@@ -322,6 +322,7 @@ impl Tray {
         mode.append_items(&[&compose, &mirror])
             .map_err(|e| e.to_string())?;
         let skins_menu = Submenu::new("", true);
+        let characters_menu = Submenu::new("", true);
         let settings = item(ID_SETTINGS);
         let obs = item(ID_OBS);
         let quit = item(ID_QUIT);
@@ -335,9 +336,11 @@ impl Tray {
             &lock,
             &PredefinedMenuItem::separator(),
             &continue_,
+            &replay,
             &sample,
             &speech,
             &PredefinedMenuItem::separator(),
+            &characters_menu,
             &mode,
             &skins_menu,
             &PredefinedMenuItem::separator(),
@@ -377,12 +380,15 @@ impl Tray {
             chat,
             lock,
             continue_,
+            replay,
             sample,
             mode,
             compose,
             mirror,
             skins_menu,
             skins: Vec::new(),
+            characters_menu,
+            characters: Vec::new(),
             settings,
             obs,
             quit,
@@ -394,6 +400,8 @@ impl Tray {
     pub fn relabel(&self, i18n: &I18n, locale: Locale) {
         let t = |k: &str| i18n.t_in(locale, k);
         self.sample.set_text(t("tray-action-sample"));
+        self.replay.set_text(t("tray-action-replay"));
+        self.characters_menu.set_text(t("tray-character"));
         self.mode.set_text(t("tray-mode"));
         self.compose.set_text(t("mode-compose"));
         self.mirror.set_text(t("mode-mirror"));
@@ -413,6 +421,9 @@ impl Tray {
             .set_checked(s.general.input_mode == InputMode::Mirror);
         for (id, item) in &self.skins {
             item.set_checked(*id == s.skin.id);
+        }
+        for (i, item) in self.characters.iter().enumerate() {
+            item.set_checked(i == s.general.character);
         }
     }
 
@@ -506,6 +517,26 @@ impl Tray {
     }
 }
 
+impl Tray {
+    /// Rebuild the character submenu from the characters' names.
+    pub fn set_characters(&mut self, names: &[String], active: usize) {
+        for item in self.characters.drain(..) {
+            let _ = self.characters_menu.remove(&item);
+        }
+        for (i, name) in names.iter().enumerate() {
+            let item = CheckMenuItem::with_id(
+                format!("{CHARACTER_PREFIX}{i}"),
+                name,
+                true,
+                i == active,
+                None,
+            );
+            let _ = self.characters_menu.append(&item);
+            self.characters.push(item);
+        }
+    }
+}
+
 /// `text` cut to what a Windows tooltip keeps, with an ellipsis.
 fn truncate(text: &str) -> String {
     if text.encode_utf16().count() <= TOOLTIP_MAX {
@@ -585,6 +616,19 @@ mod tests {
         edit(&mut settings);
         assert_eq!(settings.skin.id, "nanatype.night");
         assert!(menu_message("nt.unknown").is_none());
+        assert!(matches!(
+            menu_message(ID_LOCK),
+            Some(Msg::Hotkey(GlobalAction::ToggleLock))
+        ));
+        assert!(matches!(
+            menu_message(ID_REPLAY),
+            Some(Msg::Hotkey(GlobalAction::Replay))
+        ));
+        assert!(matches!(
+            menu_message("nt.character:2"),
+            Some(Msg::Hotkey(GlobalAction::Character(2)))
+        ));
+        assert!(menu_message("nt.character:x").is_none());
     }
 
     #[test]

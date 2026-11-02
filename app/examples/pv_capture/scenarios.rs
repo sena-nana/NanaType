@@ -52,7 +52,7 @@ fn setup(
     let scene = Scene::new(registry, work, skin_id, locale);
     let l = lines::of(locale);
     let mut s = scene.settings.clone();
-    s.general.speaker_name = l.speaker.into();
+    s.general.characters[0].name = l.speaker.into();
     s.general.input_mode = InputMode::Compose;
     s.playback.speed_scale = l.speed;
     // Capture-clock timestamps are near the epoch; a clock would read 08:00.
@@ -383,7 +383,7 @@ fn room(scene: Scene, core: Core, out: &Path, l: &Lines) {
         .iter()
         .map(|name| {
             let mut s = (*ui.settings.get_untracked()).clone();
-            s.general.speaker_name = (*name).into();
+            s.general.characters[0].name = (*name).into();
             Core::new(s, scene.skin.clone())
         })
         .collect();
@@ -654,7 +654,7 @@ pub const SCENE_SKINS: &[&str] = &[
 fn backdrops(registry: &SkinRegistry, out: &Path, work: &Path, locale: Locale) {
     for id in SCENE_SKINS {
         let (scene, _) = setup(registry, work, id, locale, |s| {
-            s.general.speaker_name = String::new();
+            s.general.characters[0].name = String::new();
         });
         let mut skin = scene.ui.skin.get_untracked();
         Arc::make_mut(&mut skin).dialogue.region = [960.0, 540.0];

@@ -1562,6 +1562,25 @@ fn speaker(ui: Stage, ctx: &BoxCtx) -> impl Fn() -> String + Send + 'static {
     }
 }
 
+/// The speaker's own name colour for the box's source, tracked.
+fn speaker_color(ui: Stage, ctx: &BoxCtx) -> impl Fn() -> Option<Rgba8> + Send + 'static {
+    let source = ctx.source;
+    move || match source {
+        Source::Display => drawn(ui).speaker.color,
+        Source::Draft => ui.speaker.with(|s| s.color),
+        Source::Preview => None,
+    }
+}
+
+/// `st` with the name in `color`, when the speaker has one.
+fn tinted(st: &NodeStyle, color: Option<Rgba8>) -> NodeStyle {
+    let mut st = st.clone();
+    if let Some(color) = color {
+        Arc::make_mut(&mut st.layout).color = Some(c(color));
+    }
+    st
+}
+
 /// Whether a speaker is showing (the typewriter hides when empty), tracked.
 fn has_speaker(ui: Stage, ctx: &BoxCtx) -> impl Fn() -> bool + Send + 'static {
     let source = ctx.source;
@@ -1622,6 +1641,7 @@ fn column_nameplate(ui: Stage, ctx: &BoxCtx) -> AnyView {
     let label_ctx = ctx.clone();
     let named = has_speaker(ui, &ctx);
     let name = speaker(ui, &ctx);
+    let color = speaker_color(ui, &ctx);
     // The display's resolved layout (and so the plate) follows its size.
     let spec = move |ctx: &BoxCtx| {
         let vertical = ui
@@ -1677,6 +1697,7 @@ fn column_nameplate(ui: Stage, ctx: &BoxCtx) -> AnyView {
                     (ui.text_area_height.get() - 2.0 * p.padding[0]).max(p.size),
                 ));
                 l.text_overflow_ellipsis = true;
+                let st = tinted(&st, color());
                 if t.style != st {
                     t.style = st;
                 }
@@ -1733,6 +1754,7 @@ fn nameplate(ui: Stage, ctx: &BoxCtx) -> AnyView {
     let visible = p.visible;
     let name = speaker(ui, ctx);
     let named = has_speaker(ui, ctx);
+    let color = speaker_color(ui, ctx);
     let [ox, oy] = p.offset;
     if vertical {
         let l = Arc::make_mut(&mut st.layout);
@@ -1768,12 +1790,18 @@ fn nameplate(ui: Stage, ctx: &BoxCtx) -> AnyView {
             )
             .key("dialogue-nameplate")
             .editor_part(ui, "nameplate")
-            .children(widget(Text::new("").style(st)).bind(move |t: &mut Text| {
-                let n = name();
-                if t.value != n {
-                    t.value = n;
-                }
-            })),
+            .children(
+                widget(Text::new("").style(st.clone())).bind(move |t: &mut Text| {
+                    let want = tinted(&st, color());
+                    if t.style != want {
+                        t.style = want;
+                    }
+                    let n = name();
+                    if t.value != n {
+                        t.value = n;
+                    }
+                }),
+            ),
         )
         .into_any()
 }

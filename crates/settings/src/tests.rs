@@ -98,13 +98,18 @@ fn retired_layout_mode_loads_as_interactive_and_saves_without_the_old_mode() {
         fs::write(
             &path,
             serde_json::to_vec(&serde_json::json!({
-                "schema": schema, "overlays": overlays, "general": {"speaker_name": "Nana"}
+                "schema": schema, "overlays": overlays,
+                "general": if schema < 5 {
+                    serde_json::json!({"speaker_name": "Nana"})
+                } else {
+                    serde_json::json!({"characters": [{"name": "Nana"}]})
+                }
             }))
             .unwrap(),
         )
         .unwrap();
         let s = load_settings(&path, None).value;
-        assert_eq!(s.general.speaker_name, "Nana");
+        assert_eq!(s.general.active_character().name, "Nana");
         for o in [
             &s.overlays.input,
             &s.overlays.display,
@@ -200,7 +205,7 @@ fn input_skin_preview_defaults_to_plain_text_and_survives_restart() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("settings.json");
     let old: Settings =
-        serde_json::from_str(r#"{"schema":4,"general":{"speaker_name":"奈奈"}}"#).unwrap();
+        serde_json::from_str(r#"{"schema":5,"general":{"characters":[{"name":"奈奈"}]}}"#).unwrap();
     assert!(!old.general.input_skin_preview);
     let mut settings = old;
     for preview in [true, false] {
@@ -272,7 +277,7 @@ fn send_key_choice_migrates_into_the_input_window_keys() {
         assert!(value["general"].get("send_key").is_none());
         let settings: Settings = serde_json::from_value(value).unwrap();
         assert_eq!(settings.schema, SETTINGS_SCHEMA);
-        assert_eq!(settings.general.speaker_name, "奈奈");
+        assert_eq!(settings.general.active_character().name, "奈奈");
         let input = &settings.hotkeys.input;
         assert_eq!(input.send.as_ref(), Some(&send));
         assert_eq!(input.newline.as_ref(), Some(&newline));
@@ -335,7 +340,7 @@ fn v0_settings_migrate_into_the_new_schema() {
     let s = loaded.value;
     assert_eq!(s.schema, SETTINGS_SCHEMA);
     assert_eq!(s.skin.id, "nanatype.night");
-    assert_eq!(s.general.speaker_name, "奈奈");
+    assert_eq!(s.general.active_character().name, "奈奈");
     assert_eq!(s.general.input_mode, InputMode::Mirror);
     assert_eq!(s.general.input_presence, InputPresence::Summon);
     assert_eq!(
@@ -382,7 +387,7 @@ fn unknown_fields_survive_a_round_trip() {
     .unwrap();
     let loaded = load_settings(&path, None);
     assert!(matches!(loaded.note, LoadNote::Migrated { .. }));
-    assert_eq!(loaded.value.general.speaker_name, "a");
+    assert_eq!(loaded.value.general.active_character().name, "a");
     assert!(loaded.value.unknown.contains_key("future_feature"));
     save_json(&path, &loaded.value).unwrap();
     let text = fs::read_to_string(&path).unwrap();
@@ -456,12 +461,12 @@ fn newer_schemas_load_read_only() {
     let path = tmp.path().join("settings.json");
     fs::write(
         &path,
-        r#"{ "schema": 7, "general": { "speaker_name": "z" } }"#,
+        r#"{ "schema": 7, "general": { "characters": [{ "name": "z" }] } }"#,
     )
     .unwrap();
     let loaded = load_settings(&path, None);
     assert!(matches!(loaded.note, LoadNote::TooNew { schema: 7 }));
-    assert_eq!(loaded.value.general.speaker_name, "z");
+    assert_eq!(loaded.value.general.active_character().name, "z");
 }
 
 #[test]
@@ -470,10 +475,13 @@ fn atomic_writes_keep_a_backup() {
     let path = tmp.path().join("settings.json");
     save_json(&path, &Settings::default()).unwrap();
     let mut s = Settings::default();
-    s.general.speaker_name = "b".into();
+    s.general.characters[0].name = "b".into();
     save_json(&path, &s).unwrap();
     assert!(path.with_extension("json.bak").exists());
-    assert_eq!(load_settings(&path, None).value.general.speaker_name, "b");
+    assert_eq!(
+        load_settings(&path, None).value.general.characters[0].name,
+        "b"
+    );
 }
 
 #[test]
@@ -1151,4 +1159,88 @@ fn sanitize_hands_enter_back_to_the_send_key() {
     s.sanitize();
     assert_eq!(s.hotkeys.input.newline, None);
     assert!(!s.sanitize());
+}
+
+#[test]
+fn the_speaker_name_and_avatar_become_the_first_character() {
+    let mut value = serde_json::json!({
+        "schema": 4,
+        "general": {"speaker_name": "奈奈", "avatar": "C:/me.png", "locale": "ja-JP"}
+    });
+    assert_eq!(migrate(&mut value).unwrap(), 4);
+    assert!(value["general"].get("speaker_name").is_none());
+    assert!(value["general"].get("avatar").is_none());
+    let s: Settings = serde_json::from_value(value).unwrap();
+    assert_eq!(s.schema, SETTINGS_SCHEMA);
+    assert_eq!(s.general.locale.as_deref(), Some("ja-JP"));
+    assert_eq!(
+        s.general.characters,
+        vec![Character {
+            name: "奈奈".into(),
+            avatar: Some("C:/me.png".into()),
+            ..Character::default()
+        }]
+    );
+    assert_eq!(s.general.character, 0);
+    assert!(s.unknown.is_empty(), "{:?}", s.unknown);
+    // Nothing to carry: the default single character.
+    let mut value = serde_json::json!({"schema": 4, "general": {}});
+    migrate(&mut value).unwrap();
+    let s: Settings = serde_json::from_value(value).unwrap();
+    assert_eq!(s.general.characters, vec![Character::default()]);
+}
+
+#[test]
+fn characters_switch_wrap_and_keep_the_last_one() {
+    let mut g = General::default();
+    for name in ["A", "B", "C"] {
+        g.characters.push(Character {
+            name: name.into(),
+            ..Character::default()
+        });
+    }
+    g.characters.remove(0);
+    g.select_character(2);
+    assert_eq!(g.active_character().name, "C");
+    g.cycle_character(1);
+    assert_eq!(g.active_character().name, "A");
+    g.cycle_character(-1);
+    assert_eq!(g.active_character().name, "C");
+    g.select_character(9);
+    assert_eq!(g.character, 2);
+    // The active character moves and survives removals before it.
+    g.move_character(2, -1);
+    assert_eq!((g.character, g.active_character().name.as_str()), (1, "C"));
+    g.remove_character(0);
+    assert_eq!(g.active_character().name, "C");
+    g.remove_character(0);
+    assert_eq!(g.active_character().name, "B");
+    g.remove_character(0);
+    assert_eq!(g.characters.len(), 1, "the last character stays");
+    // A hand-edited file cannot leave the list empty or point past it.
+    let mut s = Settings::default();
+    s.general.characters.clear();
+    s.general.character = 4;
+    s.sanitize();
+    assert_eq!(s.general.characters.len(), 1);
+    assert_eq!(s.general.character, 0);
+}
+
+#[test]
+fn the_active_character_survives_a_restart() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("settings.json");
+    let mut s = Settings::default();
+    s.general.characters.push(Character {
+        name: "Two".into(),
+        color: Some(nanatype_model::Rgba8::rgb(255, 0, 0)),
+        hotkey: Some(Hotkey::ctrl("Digit2")),
+        ..Character::default()
+    });
+    s.general.select_character(1);
+    save_json(&path, &s).unwrap();
+    let loaded = load_settings(&path, None);
+    assert!(matches!(loaded.note, LoadNote::Loaded));
+    assert_eq!(loaded.value, s);
+    assert_eq!(loaded.value.general.active_character().name, "Two");
 }
