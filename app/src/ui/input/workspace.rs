@@ -558,7 +558,6 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
             .children((
                 mode_control,
                 status_content(ui),
-                super::super::sources::input_send_status(ui),
                 popover(
                     ti::USERS,
                     ui.now_t("input-management"),
@@ -597,7 +596,6 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                 tool(ui, ti::SETTINGS, "window-settings", Tip::Above, || {
                     Msg::OpenSettings
                 }),
-                super::super::sources::account_button(ui),
                 widget(
                     Button::new(ui.now_t("tb-send"))
                         .icon(ti::SEND)

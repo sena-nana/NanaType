@@ -8,7 +8,7 @@ description = "Microphone dictation, native speech and bounded offline recogniti
 
 [dependencies]
 nanatype-settings.workspace = true
-cpal = "0.18"
+cpal.workspace = true
 crossbeam-channel.workspace = true
 whisper-rs = "0.16"
 webrtc-vad = "0.4"

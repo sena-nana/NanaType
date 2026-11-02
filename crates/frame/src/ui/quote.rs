@@ -20,11 +20,6 @@ pub fn backdrop(fill: Rgba8, framed: bool) -> Option<Rgba8> {
     (!framed && fill.a >= 128).then_some(fill.with_alpha(255))
 }
 
-fn mix(a: Rgba8, b: Rgba8, t: f32) -> Rgba8 {
-    let m = |x: u8, y: u8| (f32::from(x) * (1.0 - t) + f32::from(y) * t).round() as u8;
-    Rgba8::rgb(m(a.r, b.r), m(a.g, b.g), m(a.b, b.b))
-}
-
 /// The smallest contrast a quote's name or text keeps on its backdrop.
 pub const QUOTE_MIN: f32 = 4.5;
 
@@ -40,7 +35,7 @@ pub const QUOTE_PICK: f32 = 7.0;
 pub fn legible(fg: Rgba8, bg: Rgba8, target: f32) -> Rgba8 {
     let ink = on(bg);
     (0..=20)
-        .map(|i| mix(fg.with_alpha(255), ink, i as f32 / 20.0))
+        .map(|i| fg.with_alpha(255).mix(ink, i as f32 / 20.0).with_alpha(255))
         .find(|c| contrast(*c, bg) >= target)
         .unwrap_or(ink)
 }

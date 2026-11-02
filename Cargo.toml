@@ -82,6 +82,7 @@ proptest = { version = "1", default-features = false, features = ["std"] }
 # between crates stay on the member that needs them.
 base64 = "0.22"
 blake3 = "1"
+cpal = "0.18"
 crossbeam-channel = "0.5"
 ed25519-dalek = "3"
 embed-resource = "3"

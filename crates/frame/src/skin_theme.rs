@@ -238,15 +238,6 @@ pub fn rgba(c: Rgba8) -> [f32; 4] {
     ]
 }
 
-pub fn mix(a: Rgba8, b: Rgba8, t: f32) -> Rgba8 {
-    let m = |x: u8, y: u8| (f32::from(x) * (1.0 - t) + f32::from(y) * t).round() as u8;
-    Rgba8::rgba(m(a.r, b.r), m(a.g, b.g), m(a.b, b.b), m(a.a, b.a))
-}
-
-fn luminance(c: Rgba8) -> f32 {
-    c.luminance()
-}
-
 /// WCAG contrast ratio between two opaque colours.
 pub fn contrast(a: Rgba8, b: Rgba8) -> f32 {
     a.contrast(b)
@@ -275,7 +266,7 @@ pub fn accent_fg(accent: Rgba8, surface: Rgba8, text: Rgba8, min: f32) -> Rgba8 
         return accent;
     }
     (1..=20)
-        .map(|i| mix(accent, text, i as f32 / 20.0))
+        .map(|i| accent.mix(text, i as f32 / 20.0))
         .find(|c| contrast(*c, surface) >= min)
         .unwrap_or(text)
 }
@@ -295,7 +286,7 @@ pub fn dark_mode(mode: ChromeMode, system_dark: bool) -> bool {
 
 /// CIE L* (0–100) of an opaque colour: the lightness step a reader sees.
 pub fn lightness(c: Rgba8) -> f32 {
-    let y = luminance(c);
+    let y = c.luminance();
     if y > 216.0 / 24389.0 {
         116.0 * y.cbrt() - 16.0
     } else {

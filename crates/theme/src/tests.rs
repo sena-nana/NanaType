@@ -1771,23 +1771,10 @@ fn docs_list_exactly_the_builtin_skins() {
     rows.sort();
     assert_eq!(rows, builtins, "docs/skins.md's built-in table");
 
-    // README: "内置 N 套（name、name、…；…）".
+    // README: "N 套内置皮肤". The names are listed in docs/skins.md, above.
     let readme = repo_file("README.md");
-    let line = readme
-        .lines()
-        .find(|l| l.contains("**皮肤**"))
-        .expect("README's skin bullet");
-    let count = format!("内置 {} 套", builtins.len());
-    assert!(line.contains(&count), "README should say {count}: {line}");
-    let list = line
-        .split_once('（')
-        .and_then(|(_, r)| r.split(['；', '）']).next())
-        .expect("README's skin list");
-    let mut listed: Vec<&str> = list.split('、').map(str::trim).collect();
-    listed.sort_unstable();
-    let mut names: Vec<&str> = builtins.iter().map(|(_, n)| n.as_str()).collect();
-    names.sort_unstable();
-    assert_eq!(listed, names, "README's skin list");
+    let count = format!("{} 套内置皮肤", builtins.len());
+    assert!(readme.contains(&count), "README should say {count}");
 }
 
 /// Every key path a skin can write: the default skin's fields and every key

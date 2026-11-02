@@ -6,7 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
-use nanatype_model::LinkFault;
+use nanatype_model::{LinkFault, ws_idle};
 use tungstenite::{Message, WebSocket};
 
 use crate::protocol::{self, ChatEvent, FatalKind, HEARTBEAT_MESSAGE, Incoming, RoomKey};
@@ -118,17 +118,6 @@ impl BliveHandle {
     }
 }
 
-/// The fault behind a WebSocket error.
-fn ws_fault(e: &tungstenite::Error) -> LinkFault {
-    match e {
-        tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed => {
-            LinkFault::Closed
-        }
-        tungstenite::Error::Io(io) => LinkFault::from_io(io),
-        other => LinkFault::Other(other.to_string()),
-    }
-}
-
 fn connect(config: &BliveConfig) -> Result<WebSocket<TcpStream>, LinkFault> {
     let io = |e: std::io::Error| LinkFault::from_io(&e);
     let unresolved = || LinkFault::Unresolved(config.host.clone());
@@ -139,10 +128,7 @@ fn connect(config: &BliveConfig) -> Result<WebSocket<TcpStream>, LinkFault> {
         .ok_or_else(unresolved)?;
     let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2)).map_err(io)?;
     let url = format!("ws://{}:{}/api/chat", config.host, config.port);
-    let (socket, _) = tungstenite::client(url, stream).map_err(|e| match e {
-        tungstenite::HandshakeError::Failure(e) => ws_fault(&e),
-        tungstenite::HandshakeError::Interrupted(_) => LinkFault::TimedOut,
-    })?;
+    let (socket, _) = tungstenite::client(url, stream).map_err(LinkFault::from_handshake)?;
     socket
         .get_ref()
         .set_read_timeout(Some(Duration::from_millis(100)))
@@ -152,14 +138,6 @@ fn connect(config: &BliveConfig) -> Result<WebSocket<TcpStream>, LinkFault> {
 
 pub(crate) fn stopped(stop: &Receiver<()>) -> bool {
     stop.try_recv() != Err(TryRecvError::Empty)
-}
-
-/// A read that timed out: nothing arrived yet.
-pub(crate) fn idle(e: &tungstenite::Error) -> bool {
-    matches!(e, tungstenite::Error::Io(io) if matches!(
-        io.kind(),
-        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-    ))
 }
 
 /// Sleep until `until`, waking early when stopped.
@@ -215,7 +193,7 @@ fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
         Err(e) => return Ended::Dropped(e),
     };
     if let Err(e) = socket.send(Message::text(protocol::join_message(&config.room))) {
-        return Ended::Dropped(ws_fault(&e));
+        return Ended::Dropped(LinkFault::from_ws(&e));
     }
     emit(BliveUpdate::Status(BliveStatus::Connected));
     let mut last_sent = Instant::now();
@@ -228,7 +206,7 @@ fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
         }
         if last_sent.elapsed() >= HEARTBEAT_EVERY {
             if let Err(e) = socket.send(Message::text(HEARTBEAT_MESSAGE)) {
-                return Ended::Dropped(ws_fault(&e));
+                return Ended::Dropped(LinkFault::from_ws(&e));
             }
             last_sent = Instant::now();
         }
@@ -241,7 +219,7 @@ fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
                 match protocol::parse(text.as_str()) {
                     Some(Incoming::Heartbeat) => {
                         if let Err(e) = socket.send(Message::text(HEARTBEAT_MESSAGE)) {
-                            return Ended::Dropped(ws_fault(&e));
+                            return Ended::Dropped(LinkFault::from_ws(&e));
                         }
                         last_sent = Instant::now();
                     }
@@ -257,8 +235,8 @@ fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
                 return Ended::Dropped(LinkFault::Closed);
             }
             Ok(_) => last_heard = Instant::now(),
-            Err(e) if idle(&e) => {}
-            Err(e) => return Ended::Dropped(ws_fault(&e)),
+            Err(e) if ws_idle(&e) => {}
+            Err(e) => return Ended::Dropped(LinkFault::from_ws(&e)),
         }
     }
 }

@@ -372,10 +372,8 @@ mod tests {
     #[test]
     fn noise_falls_back_to_lossy_within_one_message() {
         let mut pixels = vec![0u8; 480 * 480 * 4];
+        getrandom::fill(&mut pixels).unwrap();
         for pixel in pixels.chunks_mut(4) {
-            pixel[0] = rand::random();
-            pixel[1] = rand::random();
-            pixel[2] = rand::random();
             pixel[3] = 255;
         }
         let image = RgbaImage::from_raw(480, 480, pixels).unwrap();

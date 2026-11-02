@@ -17,5 +17,5 @@ base64.workspace = true
 blake3.workspace = true
 flate2 = { workspace = true, default-features = false, features = ["zlib-rs"] }
 image = { workspace = true, features = ["png", "jpeg", "gif", "webp", "bmp"] }
-rand = "0.10"
+getrandom.workspace = true
 webp = "0.3"

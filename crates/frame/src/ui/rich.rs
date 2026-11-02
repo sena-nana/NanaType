@@ -195,7 +195,10 @@ pub struct MarkerLook {
 impl MarkerLook {
     pub fn from_skin(skin: &nanatype_theme::Skin) -> Self {
         let c = &skin.chrome;
-        let fill = mix(c.surface.with_alpha(255), c.accent.with_alpha(255), 0.16);
+        let fill = c
+            .surface
+            .with_alpha(255)
+            .mix(c.accent.with_alpha(255), 0.16);
         Self {
             fill,
             text: crate::skin_theme::on(fill),
@@ -219,11 +222,6 @@ impl MarkerLook {
             },
         )
     }
-}
-
-fn mix(a: Rgba8, b: Rgba8, t: f32) -> Rgba8 {
-    let m = |x: u8, y: u8| (f32::from(x) * (1.0 - t) + f32::from(y) * t).round() as u8;
-    Rgba8::rgba(m(a.r, b.r), m(a.g, b.g), m(a.b, b.b), m(a.a, b.a))
 }
 
 /// What a marker chip stands for: its glyph and the hue of its stripe.
@@ -349,7 +347,7 @@ impl MentionLook {
         let p = crate::ui::kit::theme::palette(dark);
         let fill = crate::skin_theme::rgba8(p.surface);
         let accent = crate::skin_theme::rgba8(p.accent);
-        let fill = mix(fill, accent, 0.16);
+        let fill = fill.mix(accent, 0.16);
         let text = crate::skin_theme::on(fill);
         Self {
             fill: crate::skin_theme::rgba(fill),

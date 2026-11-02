@@ -41,18 +41,25 @@ pub struct Loaded<T> {
     pub note: LoadNote,
 }
 
+/// Write `bytes` to `path` through `<name>.tmp`, keeping the previous file
+/// as `<name>.bak`: a crash mid-write leaves the old file whole.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let tmp = path.with_extension("json.tmp");
+    let beside = |suffix: &str| {
+        let mut name = path.file_name().unwrap_or_default().to_owned();
+        name.push(suffix);
+        path.with_file_name(name)
+    };
+    let tmp = beside(".tmp");
     {
         let mut file = fs::File::create(&tmp)?;
         file.write_all(bytes)?;
         file.sync_all()?;
     }
     if path.exists() {
-        let _ = fs::copy(path, path.with_extension("json.bak"));
+        let _ = fs::copy(path, beside(".bak"));
     }
     fs::rename(&tmp, path)
 }

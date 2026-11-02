@@ -46,6 +46,40 @@ impl LinkFault {
     }
 }
 
+#[cfg(feature = "ws")]
+impl LinkFault {
+    /// The fault behind a WebSocket error.
+    pub fn from_ws(e: &tungstenite::Error) -> Self {
+        match e {
+            tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed => {
+                Self::Closed
+            }
+            tungstenite::Error::Io(io) => Self::from_io(io),
+            other => Self::Other(other.to_string()),
+        }
+    }
+
+    /// The fault behind a failed WebSocket handshake on a blocking stream,
+    /// where an interrupted handshake means its read timed out.
+    pub fn from_handshake<R: tungstenite::handshake::HandshakeRole>(
+        e: tungstenite::HandshakeError<R>,
+    ) -> Self {
+        match e {
+            tungstenite::HandshakeError::Failure(e) => Self::from_ws(&e),
+            tungstenite::HandshakeError::Interrupted(_) => Self::TimedOut,
+        }
+    }
+}
+
+/// A WebSocket read that timed out: nothing arrived yet.
+#[cfg(feature = "ws")]
+pub fn ws_idle(e: &tungstenite::Error) -> bool {
+    matches!(e, tungstenite::Error::Io(io) if matches!(
+        io.kind(),
+        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+    ))
+}
+
 /// English, for logs and tests; the interface translates the fault.
 impl fmt::Display for LinkFault {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

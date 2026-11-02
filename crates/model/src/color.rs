@@ -38,6 +38,17 @@ impl Rgba8 {
         }
     }
 
+    /// Linear blend towards `other` in sRGB, alpha included: `t` 0 is `self`, 1 is `other`.
+    pub fn mix(self, other: Self, t: f32) -> Self {
+        let m = |x: u8, y: u8| (f32::from(x) * (1.0 - t) + f32::from(y) * t).round() as u8;
+        Self::rgba(
+            m(self.r, other.r),
+            m(self.g, other.g),
+            m(self.b, other.b),
+            m(self.a, other.a),
+        )
+    }
+
     /// WCAG relative luminance of the colour, ignoring alpha.
     pub fn luminance(self) -> f32 {
         let lin = |v: u8| {

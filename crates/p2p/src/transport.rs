@@ -1953,9 +1953,9 @@ fn credential_matches(presented: &str, secret: &str, password: &str) -> bool {
 }
 
 fn random_secret() -> String {
-    blake3::hash(&rand::random::<[u8; 32]>())
-        .to_hex()
-        .to_string()
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).expect("the OS random source is available");
+    blake3::hash(&bytes).to_hex().to_string()
 }
 
 #[cfg(test)]

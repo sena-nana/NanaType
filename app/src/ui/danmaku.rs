@@ -562,11 +562,10 @@ pub fn combined_link(links: &[Link]) -> Link {
 /// filter popover and the pin.
 fn header(ui: Ui) -> AnyView {
     let dot = widget(crate::ui::kit::dot_frame()).bind(move |s: &mut Stack| {
-        let mut links = super::sources::links(ui);
-        links.extend([
+        let links = [
             ui.status.with(|x| x.blivechat_link),
             super::twitch::link(&ui.twitch.get().connection),
-        ]);
+        ];
         let link = combined_link(&links);
         *s = crate::ui::kit::dot_frame().surface(link.tone().role());
     });
@@ -577,7 +576,7 @@ fn header(ui: Ui) -> AnyView {
             .truncating(),
     )
     .bind(move |t: &mut Text| {
-        let mut parts = super::sources::status_parts(ui);
+        let mut parts = Vec::new();
         if ui.settings.with(|s| s.integrations.twitch.enabled) {
             parts.push(format!(
                 "{}: {}",
@@ -689,8 +688,7 @@ fn filters(ui: Ui) -> AnyView {
 
 /// Any chat source has somewhere to read from.
 pub fn chat_configured(s: &Settings) -> bool {
-    super::sources::configured(s)
-        || s.integrations.blivechat.enabled
+    s.integrations.blivechat.enabled
         || (s.integrations.twitch.enabled && !s.integrations.twitch.channel.is_empty())
 }
 

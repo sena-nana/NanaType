@@ -20,7 +20,6 @@ fn settings_body(ui: Ui) -> AnyView {
     let avatar_row = {
         let has = ui.settings.get_untracked().general.avatar.is_some();
         widget(Stack::row(0.0).gap_step(gap::step::CONTROL))
-            .visible(move || !crate::ui::sources::profile_bound(ui))
             .children((
                 button(ui, "general-avatar-pick", || {
                     Msg::PickFile(FileTarget::Avatar)

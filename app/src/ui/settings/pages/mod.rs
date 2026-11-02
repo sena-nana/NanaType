@@ -164,32 +164,12 @@ fn speaker_field(ui: Ui) -> AnyView {
                 l.flex_shrink = Some(0.0);
             }),
     )
-    .children(dynamic(
-        move || crate::ui::sources::profile_bound(ui),
-        move |bound| {
-            if *bound {
-                dynamic(
-                    move || ui.speaker.get().name,
-                    move |name| {
-                        widget(
-                            Text::new(name.clone())
-                                .style(Type::Body.style())
-                                .truncating(),
-                        )
-                        .into_any()
-                    },
-                )
-                .into_any()
-            } else {
-                text(
-                    ui,
-                    String::new(),
-                    field::MD,
-                    |s| s.general.speaker_name.clone(),
-                    |s, v| s.general.speaker_name = v,
-                )
-            }
-        },
+    .children(text(
+        ui,
+        String::new(),
+        field::MD,
+        |s| s.general.speaker_name.clone(),
+        |s, v| s.general.speaker_name = v,
     ))
     .into_any()
 }

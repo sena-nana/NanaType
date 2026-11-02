@@ -24,18 +24,6 @@ use std::sync::Arc;
 
 type StatusFn = Arc<dyn Fn(BridgeStatus) + Send + Sync>;
 
-/// The fault behind a WebSocket error.
-pub(crate) fn ws_fault(e: &tungstenite::Error) -> nanatype_model::LinkFault {
-    use nanatype_model::LinkFault;
-    match e {
-        tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed => {
-            LinkFault::Closed
-        }
-        tungstenite::Error::Io(io) => LinkFault::from_io(io),
-        other => LinkFault::Other(other.to_string()),
-    }
-}
-
 /// Owns the sink threads. Dropping it stops them.
 pub struct BridgeHandle {
     status: StatusFn,

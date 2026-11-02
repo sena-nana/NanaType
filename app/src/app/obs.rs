@@ -3,11 +3,9 @@
 //! Without OBS (off, unreachable, no source, no box) an output keeps its
 //! fixed size.
 
-use std::path::Path;
 use std::sync::Arc;
 
 use nanatype_obs::{ObsConfig, ObsEvent, ObsItem, ObsScene, ObsStatus, ObsUpdate};
-use nanatype_secrets::SecretStore;
 use nanatype_settings::{Settings, SpoutOutput, fit_output_size};
 
 use crate::app::App;
@@ -90,46 +88,6 @@ pub fn box_size(item: &ObsItem, out: &SpoutOutput, window: Option<[f32; 2]>) -> 
         .unwrap_or([1280, 720])
 }
 
-/// The obs-websocket password, read from the secret store the first time.
-pub struct Password {
-    store: SecretStore,
-    value: Option<Option<String>>,
-}
-
-impl Password {
-    pub fn new(config_dir: &Path) -> Self {
-        Self {
-            store: SecretStore::new(config_dir, "obs-websocket"),
-            value: None,
-        }
-    }
-
-    fn get(&mut self) -> Option<String> {
-        self.value
-            .get_or_insert_with(|| match self.store.load() {
-                Ok(bytes) => bytes
-                    .and_then(|b| String::from_utf8(b).ok())
-                    .filter(|p| !p.is_empty()),
-                Err(e) => {
-                    nanatype_diag::report!(crate::diag::OBS_SECRET_FAILED, op = 0u64; "{e}");
-                    None
-                }
-            })
-            .clone()
-    }
-
-    /// Keep `password` (or forget it when empty). It stays for this run
-    /// even when the system will not store it.
-    fn set(&mut self, password: &str) -> std::io::Result<()> {
-        self.value = Some((!password.is_empty()).then(|| password.to_owned()));
-        if password.is_empty() {
-            self.store.clear()
-        } else {
-            self.store.save(password.as_bytes())
-        }
-    }
-}
-
 impl App {
     pub(super) fn obs_msg(&mut self, msg: Msg) {
         match msg {
@@ -137,8 +95,7 @@ impl App {
             Msg::ObsPassword(password) => {
                 if let Err(e) = self.obs_password.set(&password) {
                     nanatype_diag::report!(crate::diag::OBS_SECRET_FAILED, op = 1u64; "{e}");
-                    let text = crate::ui::I18N
-                        .t_in(self.ui.locale.get_untracked(), "obs-password-not-stored");
+                    let text = self.ui.now_t("obs-password-not-stored");
                     self.notice(text, true);
                 }
                 self.obs_configure();
@@ -202,11 +159,7 @@ impl App {
         let connecting = config.is_some();
         self.obs.set(config);
         let renewed = self.obs.epoch() != epoch;
-        let saved = self
-            .obs_password
-            .value
-            .as_ref()
-            .is_some_and(Option::is_some);
+        let saved = self.obs_password.held();
         self.obs_state(|s| {
             s.password_saved = saved;
             if renewed {

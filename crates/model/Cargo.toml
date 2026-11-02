@@ -10,6 +10,11 @@ description = "NanaType dialogue document model: runs, atoms, markers and lines"
 serde.workspace = true
 serde_json.workspace = true
 unicode-segmentation.workspace = true
+# `ws`: LinkFault for the WebSocket clients.
+tungstenite = { workspace = true, features = ["handshake"], optional = true }
+
+[features]
+ws = ["dep:tungstenite"]
 
 [dev-dependencies]
 proptest.workspace = true

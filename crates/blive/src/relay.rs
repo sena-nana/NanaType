@@ -22,8 +22,8 @@ use serde_json::Value;
 use tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tungstenite::{Message, Utf8Bytes, WebSocket};
 
-use crate::client::idle;
 use crate::protocol::{CHAT_COMMANDS, HEARTBEAT, HEARTBEAT_MESSAGE, TEXT_ID, string};
+use nanatype_model::ws_idle as idle;
 
 /// The publisher's path; the token comes as `?token=`.
 pub const PUBLISH_PATH: &str = "/comet";

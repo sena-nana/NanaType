@@ -7,7 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, TryRecvError, unbounded};
-use nanatype_model::LinkFault;
+use nanatype_model::{LinkFault, ws_idle};
 use serde_json::{Value, json};
 use tungstenite::{Message, WebSocket};
 
@@ -143,23 +143,6 @@ impl ObsHandle {
     }
 }
 
-fn ws_fault(e: &tungstenite::Error) -> LinkFault {
-    match e {
-        tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed => {
-            LinkFault::Closed
-        }
-        tungstenite::Error::Io(io) => LinkFault::from_io(io),
-        other => LinkFault::Other(other.to_string()),
-    }
-}
-
-fn idle(e: &tungstenite::Error) -> bool {
-    matches!(e, tungstenite::Error::Io(io) if matches!(
-        io.kind(),
-        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-    ))
-}
-
 fn connect(config: &ObsConfig) -> Result<WebSocket<TcpStream>, LinkFault> {
     let io = |e: std::io::Error| LinkFault::from_io(&e);
     let unresolved = || LinkFault::Unresolved(config.host.clone());
@@ -173,10 +156,7 @@ fn connect(config: &ObsConfig) -> Result<WebSocket<TcpStream>, LinkFault> {
         .set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(io)?;
     let url = format!("ws://{}:{}", config.host, config.port);
-    let (socket, _) = tungstenite::client(url, stream).map_err(|e| match e {
-        tungstenite::HandshakeError::Failure(e) => ws_fault(&e),
-        tungstenite::HandshakeError::Interrupted(_) => LinkFault::TimedOut,
-    })?;
+    let (socket, _) = tungstenite::client(url, stream).map_err(LinkFault::from_handshake)?;
     socket
         .get_ref()
         .set_read_timeout(Some(Duration::from_millis(100)))
@@ -241,7 +221,7 @@ impl Session<'_> {
     fn send(&mut self, text: String) -> Result<(), LinkFault> {
         self.socket
             .send(Message::text(text))
-            .map_err(|e| ws_fault(&e))
+            .map_err(|e| LinkFault::from_ws(&e))
     }
 
     fn request(&mut self, kind: &str, data: Value, what: Pending) -> Result<(), LinkFault> {
@@ -380,7 +360,7 @@ fn handshake(
                         .map_err(|_| Ended::Fatal(ObsStatus::NeedsPassword))?;
                     socket
                         .send(Message::text(identify))
-                        .map_err(|e| Ended::Dropped(ws_fault(&e)))?;
+                        .map_err(|e| Ended::Dropped(LinkFault::from_ws(&e)))?;
                 }
                 Some(Incoming::Identified) => identified = true,
                 _ => {}
@@ -394,8 +374,8 @@ fn handshake(
                 });
             }
             Ok(_) => {}
-            Err(e) if idle(&e) => {}
-            Err(e) => return Err(Ended::Dropped(ws_fault(&e))),
+            Err(e) if ws_idle(&e) => {}
+            Err(e) => return Err(Ended::Dropped(LinkFault::from_ws(&e))),
         }
     }
     Ok(())
@@ -453,8 +433,8 @@ fn session(config: &ObsConfig, commands: &Receiver<Command>, emit: &EmitFn) -> E
                 }
                 Ok(Message::Close(_)) => return Err(LinkFault::Closed),
                 Ok(_) => {}
-                Err(e) if idle(&e) => {}
-                Err(e) => return Err(ws_fault(&e)),
+                Err(e) if ws_idle(&e) => {}
+                Err(e) => return Err(LinkFault::from_ws(&e)),
             }
         }
     })();

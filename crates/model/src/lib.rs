@@ -33,6 +33,8 @@ pub use envelope::{DOCUMENT_FORMAT, DOCUMENT_VERSION, DocumentEnvelope, Envelope
 pub use events::BridgeEvent;
 pub use line::{AfterLine, Line, LineId, LineMeta, Speaker, unix_millis};
 pub use link::LinkFault;
+#[cfg(feature = "ws")]
+pub use link::ws_idle;
 pub use skin_param::{ParamValue, valid_param_id};
 pub use source::{
     ChatRef, ChatRun, ChatUser, HistoryItem, MessageSource, SourceEvent, SourceId, SourceKind,

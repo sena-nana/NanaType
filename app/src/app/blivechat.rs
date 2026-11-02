@@ -2,13 +2,11 @@
 //! 彗星号 workshop plugin through NanaType's own relay (the plugin pushes
 //! blivechat frames to the relay, and the same client joins its `/api/chat`).
 
-use std::path::Path;
 use std::sync::Arc;
 
 use nanatype_blive::{
     BliveConfig, BliveEvent, BliveStatus, BliveUpdate, ChatEvent, RelayConfig, RelayStatus, RoomKey,
 };
-use nanatype_secrets::SecretStore;
 use nanatype_settings::{BliveRoomKind, BlivechatSettings, BlivechatSource};
 
 use crate::{app::App, chat::Platform, msg::Msg};
@@ -19,47 +17,6 @@ pub struct State {
     pub relay: RelayStatus,
     /// A 身份码 is kept in the secret store.
     pub auth_saved: bool,
-}
-
-/// The 身份码, read from the secret store the first time it is needed.
-pub struct AuthCode {
-    store: SecretStore,
-    value: Option<Option<String>>,
-}
-
-impl AuthCode {
-    pub fn new(config_dir: &Path) -> Self {
-        Self {
-            store: SecretStore::new(config_dir, "blivechat-auth"),
-            value: None,
-        }
-    }
-
-    fn get(&mut self) -> Option<String> {
-        self.value
-            .get_or_insert_with(|| match self.store.load() {
-                Ok(bytes) => bytes
-                    .and_then(|b| String::from_utf8(b).ok())
-                    .filter(|c| !c.trim().is_empty()),
-                Err(e) => {
-                    nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 0u64; "{e}");
-                    None
-                }
-            })
-            .clone()
-    }
-
-    /// Keep `code` (or forget it when empty). It stays for this run even when
-    /// the system will not store it.
-    fn set(&mut self, code: &str) -> std::io::Result<()> {
-        let code = code.trim();
-        self.value = Some((!code.is_empty()).then(|| code.to_owned()));
-        if code.is_empty() {
-            self.store.clear()
-        } else {
-            self.store.save(code.as_bytes())
-        }
-    }
 }
 
 /// A new 128-bit 彗星号 token.
@@ -94,8 +51,7 @@ impl App {
             Msg::BlivechatAuthCode(code) => {
                 if let Err(e) = self.blivechat_auth.set(&code) {
                     nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 1u64; "{e}");
-                    let text = crate::ui::I18N
-                        .t_in(self.ui.locale.get_untracked(), "int-blive-auth-not-stored");
+                    let text = self.ui.now_t("int-blive-auth-not-stored");
                     self.notice(text, true);
                 }
                 let saved = !code.trim().is_empty();

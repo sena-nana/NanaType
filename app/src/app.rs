@@ -5,6 +5,7 @@ mod editor;
 mod live;
 pub mod obs;
 mod packages;
+mod secret;
 mod skins;
 pub mod speech;
 mod startup;
@@ -118,11 +119,13 @@ pub struct App {
     pub comet_relay: nanatype_blive::RelayHandle,
     /// OBS's program scene, sizing the Spout/Syphon outputs.
     pub obs: nanatype_obs::ObsHandle,
-    obs_password: obs::Password,
+    /// The obs-websocket password.
+    obs_password: secret::LazySecret,
     /// Steam: Workshop subscriptions (inert outside the Steam build).
     steam: nanatype_steam::SteamHandle,
     workshop: crate::workshop::Workshop,
-    blivechat_auth: blivechat::AuthCode,
+    /// The blivechat 身份码.
+    blivechat_auth: secret::LazySecret,
     #[cfg(feature = "updates")]
     updater: crate::services::updater::Updater,
     #[cfg(feature = "updates")]
@@ -282,8 +285,18 @@ impl App {
             Cmd::SetReducedMotion(settings.playback.reduced_motion || ctx.reduced_motion()),
             clock::now_ms(),
         );
-        let blivechat_auth = blivechat::AuthCode::new(&paths.config);
-        let obs_password = obs::Password::new(&paths.config);
+        let blivechat_auth = secret::LazySecret::new(
+            &paths.config,
+            "blivechat-auth",
+            &crate::diag::BLIVECHAT_SECRET_FAILED,
+            true,
+        );
+        let obs_password = secret::LazySecret::new(
+            &paths.config,
+            "obs-websocket",
+            &crate::diag::OBS_SECRET_FAILED,
+            false,
+        );
         let mut app = Self {
             speech: speech::Speech::new(paths.data.join("speech"), post.clone()),
             plugins: Default::default(),

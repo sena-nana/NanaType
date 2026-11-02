@@ -7,7 +7,7 @@ rust-version.workspace = true
 description = "NanaType live chat: a blivechat client and a blivechat-compatible relay"
 
 [dependencies]
-nanatype-model.workspace = true
+nanatype-model = { workspace = true, features = ["ws"] }
 nanatype-chat.workspace = true
 serde_json.workspace = true
 tungstenite = { workspace = true, features = ["handshake"] }

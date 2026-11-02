@@ -7,7 +7,7 @@ rust-version.workspace = true
 description = "NanaType expression bridge: VTube Studio, OSC and a local WebSocket broadcast"
 
 [dependencies]
-nanatype-model.workspace = true
+nanatype-model = { workspace = true, features = ["ws"] }
 serde.workspace = true
 serde_json.workspace = true
 rosc = "0.10"

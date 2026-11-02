@@ -260,10 +260,8 @@ fn connect(port: u16) -> Result<WebSocket<TcpStream>, LinkFault> {
     let timeout = Some(Duration::from_secs(2));
     stream.set_read_timeout(timeout).map_err(io)?;
     stream.set_write_timeout(timeout).map_err(io)?;
-    let (socket, _) = tungstenite::client(format!("ws://{addr}"), stream).map_err(|e| match e {
-        tungstenite::HandshakeError::Failure(e) => crate::ws_fault(&e),
-        tungstenite::HandshakeError::Interrupted(_) => LinkFault::TimedOut,
-    })?;
+    let (socket, _) =
+        tungstenite::client(format!("ws://{addr}"), stream).map_err(LinkFault::from_handshake)?;
     // Short reads keep events (and the mouth) on time.
     socket
         .get_ref()
@@ -304,7 +302,7 @@ impl Client {
             return;
         };
         if let Err(e) = s.socket.send(Message::text(text)) {
-            self.drop_session(crate::ws_fault(&e));
+            self.drop_session(LinkFault::from_ws(&e));
         }
     }
 
@@ -549,7 +547,7 @@ impl Client {
                     e.kind(),
                     std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
                 ) => {}
-            Err(e) => self.drop_session(crate::ws_fault(&e)),
+            Err(e) => self.drop_session(LinkFault::from_ws(&e)),
         }
     }
 

@@ -54,10 +54,6 @@ fn connect(endpoint: &str) -> Result<Socket, String> {
     Ok(socket)
 }
 
-fn idle(error: &tungstenite::Error) -> bool {
-    matches!(error, tungstenite::Error::Io(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut))
-}
-
 fn say(socket: &mut Socket, line: &str) -> Result<(), String> {
     socket
         .send(Message::text(line))
@@ -96,7 +92,7 @@ pub(crate) fn run(
             Ok(Message::Text(text)) => text,
             Ok(Message::Close(_)) => return Err("disconnected".into()),
             Ok(_) => continue,
-            Err(error) if idle(&error) => continue,
+            Err(error) if nanatype_model::ws_idle(&error) => continue,
             Err(_) => return Err("disconnected".into()),
         };
         heard = Instant::now();
