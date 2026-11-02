@@ -304,10 +304,8 @@ impl App {
     /// Mark a line as part of the session. Nothing is sent here: the partner
     /// sees it through the published display and history, when they show it.
     pub(crate) fn peer_submitted(&mut self, event: &CoreEvent) {
-        if let CoreEvent::LineSubmitted(line) = event
-            && self.peer.handle.is_some()
-        {
-            self.peer.lines.insert(line.id);
+        if self.peer.handle.is_some() {
+            session_line(&mut self.peer.lines, event, |id| self.core.replay_of(id));
         }
     }
 
@@ -394,6 +392,7 @@ impl App {
         );
         seated.truncate(crate::ui::REMOTE_LANES);
         let mut remote_revision = Vec::new();
+        let mut replays = Vec::new();
         let mut names = Vec::new();
         for (index, id) in seated.iter().enumerate() {
             let lane = self.ui.peer_lanes[index];
@@ -425,6 +424,14 @@ impl App {
                     text: text.clone(),
                     at_ms: *at_ms,
                 });
+            }
+            // A replay has no history row to be read from: read it from the
+            // display, unless it was already there when the room arrived.
+            if remote_view.replay
+                && let Some(line) = remote_view.line
+                && self.peer.remote_revision.get(index).is_some()
+            {
+                replays.push((id.clone(), line, remote_view.doc.clone()));
             }
             remote_view.line = remote_view.line.map(|line| room.render_id(id, line));
             let stamp = (id.clone(), revision, remote_view.line, local_sub.is_some());
@@ -541,6 +548,9 @@ impl App {
             self.ui.peer.set(Arc::new(state));
         }
         self.refresh_peer_urls();
+        for (owner, line, doc) in replays {
+            self.tts_partner_replay(&owner, line, &doc);
+        }
         for (owner, line, item, translation, theirs) in partner_lines {
             self.tts_partner(&owner, line, &item);
             self.translate_partner(&owner, line, &item, theirs);
@@ -571,6 +581,27 @@ impl App {
 
 /// Hide a line from before the session; mirror drafts (no line yet) and the
 /// session's own lines show as they are.
+/// Add `event`'s line to the session's: every line sent, and a replay of
+/// one that is (`replay_of`). A replay shows on the partner's display
+/// marked as one, without a history row, as it does here.
+fn session_line(
+    lines: &mut HashSet<LineId>,
+    event: &CoreEvent,
+    replay_of: impl Fn(LineId) -> Option<LineId>,
+) {
+    match event {
+        CoreEvent::LineSubmitted(line) => {
+            lines.insert(line.id);
+        }
+        CoreEvent::LineStarted(line) => {
+            if replay_of(line.id).is_some_and(|of| lines.contains(&of)) {
+                lines.insert(line.id);
+            }
+        }
+        _ => {}
+    }
+}
+
 pub(crate) fn session_display(
     display: &DisplayView,
     lines: Option<&HashSet<LineId>>,
@@ -628,11 +659,54 @@ mod tests {
     /// Type and send, recording the line the way the session does.
     fn send(core: &mut Core, lines: &mut HashSet<LineId>, text: &str, now: u64) {
         core.handle(Cmd::DraftChanged(nanatype_markup::parse(text).doc), now);
-        for event in core.handle(Cmd::Send, now).events {
-            if let CoreEvent::LineSubmitted(line) = event {
-                lines.insert(line.id);
-            }
+        run(core, lines, Cmd::Send, now);
+    }
+
+    fn run(core: &mut Core, lines: &mut HashSet<LineId>, cmd: Cmd, now: u64) {
+        for event in core.handle(cmd, now).events {
+            session_line(lines, &event, |id| core.replay_of(id));
         }
+    }
+
+    #[test]
+    fn a_replay_reaches_the_partner_as_one_without_a_row() {
+        let mut core = core(InputMode::Compose);
+        let mut lines = HashSet::new();
+        send(&mut core, &mut lines, "hello", 0);
+        run(&mut core, &mut lines, Cmd::Skip, 10);
+        run(&mut core, &mut lines, Cmd::Continue, 20_000);
+        run(&mut core, &mut lines, Cmd::Replay, 30_000);
+        let display = session_display(core.display(), Some(&lines));
+        assert!(!display.empty && display.replay);
+        assert_eq!(
+            published(&core, &lines),
+            ("hello".into(), vec!["hello".into()])
+        );
+        // On the wire it is one more field, which older peers skip; a line
+        // that is no replay leaves it out.
+        let wire = serde_json::to_value(&display).unwrap();
+        assert_eq!(wire["replay"], true);
+        let mut old = wire.clone();
+        old.as_object_mut().unwrap().remove("replay");
+        let read: DisplayView = serde_json::from_value(old).unwrap();
+        assert!(!read.replay);
+        run(&mut core, &mut lines, Cmd::Skip, 30_010);
+        send(&mut core, &mut lines, "next", 40_000);
+        run(&mut core, &mut lines, Cmd::Continue, 60_000);
+        assert_eq!(core.display().doc.plain_text(), "next");
+        let wire = serde_json::to_value(core.display()).unwrap();
+        assert!(wire.get("replay").is_none());
+    }
+
+    #[test]
+    fn a_replay_of_a_line_from_before_the_session_stays_private() {
+        let mut core = core(InputMode::Compose);
+        send(&mut core, &mut HashSet::new(), "private", 0);
+        let mut lines = HashSet::new();
+        run(&mut core, &mut lines, Cmd::Skip, 10);
+        run(&mut core, &mut lines, Cmd::Replay, 30_000);
+        assert!(core.display().replay);
+        assert!(session_display(core.display(), Some(&lines)).empty);
     }
 
     /// What the partner receives: the same view the own windows draw.

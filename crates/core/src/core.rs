@@ -206,6 +206,8 @@ pub struct Core {
     last_sent: Option<Line>,
     /// The line [`Cmd::Replay`] last started; it adds no history row.
     replay: Option<LineId>,
+    /// The sent line that replay repeats.
+    replay_of: Option<LineId>,
 }
 
 fn global(generation: u64, epoch: u64) -> u64 {
@@ -244,6 +246,7 @@ impl Core {
             speaker_override: None,
             last_sent: None,
             replay: None,
+            replay_of: None,
         };
         core.refresh_params();
         core.display.entrance = core.entrance();
@@ -264,6 +267,11 @@ impl Core {
 
     pub fn draft_meta(&self) -> LineMeta {
         self.draft_meta
+    }
+
+    /// The sent line that `line` replays, when it is the last replay.
+    pub fn replay_of(&self, line: LineId) -> Option<LineId> {
+        self.replay_of.filter(|_| self.replay == Some(line))
     }
 
     pub fn display(&self) -> &DisplayView {
@@ -773,6 +781,7 @@ impl Core {
             created_at: unix_millis(),
             ..last.clone()
         };
+        self.replay_of = Some(last.id);
         self.replay = Some(line.id);
         self.enqueue(line, now, fx);
     }
@@ -865,6 +874,7 @@ impl Core {
         self.display.text_exit = None;
         self.display.shake = None;
         self.display.subtitle = None;
+        self.display.replay = self.replay == Some(line.id);
         self.display.empty = false;
         self.display.reveal = if animate {
             Reveal {

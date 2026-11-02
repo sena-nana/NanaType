@@ -82,6 +82,21 @@ impl<S: Speak> Narrator<S> {
         self.queue(tts, None, &item.doc)
     }
 
+    /// A partner replayed a line: their display shows it again with no new
+    /// history row. Read once, after what is said.
+    pub fn partner_replay(
+        &mut self,
+        tts: &TtsSettings,
+        owner: &str,
+        line: LineId,
+        doc: &Document,
+    ) -> Option<u64> {
+        if !(tts.enabled && tts.partners) || !self.partners.insert((owner.to_owned(), line)) {
+            return None;
+        }
+        self.queue(tts, None, doc)
+    }
+
     fn queue(&mut self, tts: &TtsSettings, voice: Option<&str>, doc: &Document) -> Option<u64> {
         let text = speakable(doc)?;
         let voice = voice.or(tts.voice.as_deref());
@@ -153,6 +168,11 @@ impl App {
 
     pub(super) fn tts_chat(&mut self, doc: &Document) {
         self.tts.chat(&self.settings.tts, doc);
+    }
+
+    pub(crate) fn tts_partner_replay(&mut self, owner: &str, line: LineId, doc: &Document) {
+        self.tts
+            .partner_replay(&self.settings.tts, owner, line, doc);
     }
 
     pub(crate) fn tts_partner(&mut self, owner: &str, line: LineId, item: &HistoryItem) {
@@ -332,10 +352,19 @@ mod tests {
         assert_eq!(n.partner(&all, "b", id, &item, now), None);
         let old = HistoryItem { at: 0, ..item };
         assert_eq!(n.partner(&all, "b", LineId::next(), &old, now), None);
+        // A replay is a line of its own, read once too.
+        let again = LineId::next();
+        assert!(n.partner_replay(&all, "b", again, &old.doc).is_some());
+        assert_eq!(n.partner_replay(&all, "b", again, &old.doc), None);
+        assert_eq!(n.partner_replay(&on(), "b", LineId::next(), &old.doc), None);
         // Neither cuts off what is being said.
         assert_eq!(
             n.engine.calls,
-            [speak("gg", "default"), speak("partner line", "default")]
+            [
+                speak("gg", "default"),
+                speak("partner line", "default"),
+                speak("partner line", "default")
+            ]
         );
     }
 

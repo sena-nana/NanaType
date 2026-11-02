@@ -152,6 +152,10 @@ pub struct DisplayView {
     /// The line's translation, once it arrives. Older peers omit it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subtitle: Option<Subtitle>,
+    /// The line is a replay of one already said: it adds no history row, and
+    /// a co-op partner treats it the same. Older peers omit (and ignore) it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub replay: bool,
 }
 
 impl DisplayView {
@@ -172,6 +176,7 @@ impl DisplayView {
             entrance,
             empty: true,
             subtitle: None,
+            replay: false,
         }
     }
 
