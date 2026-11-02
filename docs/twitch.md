@@ -1,3 +1,5 @@
+[简体中文](twitch.md) · [English](en/twitch.md) · [日本語](ja/twitch.md)
+
 # Twitch 聊天接入
 
 ## 来源与许可

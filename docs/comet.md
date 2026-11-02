@@ -1,3 +1,5 @@
+[简体中文](comet.md) · [English](en/comet.md) · [日本語](ja/comet.md)
+
 # 彗星号接入
 
 [彗星号](https://huixinghao.cn/) 是直播辅助工具，它的创意工坊插件都是静态网页，运行在彗星号画布的 iframe 里，通过 `window.postMessage` 收到直播间事件（[开发文档](https://gitee.com/t_tgl/hxh-dev-docs)）。NanaType 用一个插件页面把这些事件转发出来，再经过 blivechat 协议接收，和连接一台 blivechat 服务器走的是同一条路。

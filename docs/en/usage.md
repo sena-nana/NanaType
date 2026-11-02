@@ -1,0 +1,111 @@
+[简体中文](../usage.md) · [English](usage.md) · [日本語](../ja/usage.md)
+
+# User Guide
+
+Everything about day-to-day use: streaming platforms, OBS, sessions with friends, stickers and skins. For a feature overview, see the [README](../../README.en.md).
+
+## Basics
+
+1. On launch the input window appears near the bottom of the screen; after that it remembers wherever you move and resize it. Closing the input window hides it to the tray and keeps your draft; press F8 to bring it back. The display and history windows are transparent overlays.
+2. Type your line straight into the input window and press **Enter** to send (Shift+Enter for a new line; you can switch to Ctrl+Enter in settings). Ctrl+↑ / ↓ recalls lines you have already sent, and Esc hides the window.
+3. Select text and use the toolbar (or Ctrl+B / I / U) to make it bold, color it, add an outline, ruby, effects or rhythm. With nothing selected, the setting applies to whatever you type next. Pauses, page breaks, sounds, expressions and other markers appear as thin vertical bars between characters and take up no layout width, so line wrapping in the input window matches the display exactly.
+4. The `</>` button on the toolbar switches to the markup source; both views edit the same line.
+5. Global hotkeys: **F8** shows the input window, **F9** continues (past a pause / skips the current segment).
+6. From the tray menu you can show or hide each window, lock the overlays, switch modes and skins, and open settings. The tray icon also shows the current state: a pink dot while mirroring, grayed out when both the display and history are hidden, and a small padlock while the overlays are locked.
+
+The display, the partner display and the history window can be dragged with the left mouse button and scaled proportionally with the scroll wheel. Their right-click menu lets you close the window, switch the global skin or open skin adjustments, toggle **Always on top**, lock the window, and **Restore default position and size**. Your own display can also continue playback, skip what is currently playing and clear the display; the history window can toggle avatars, names and timestamps, and clear this session's history via **Clear history › Confirm clear** (unavailable during a session with friends). A locked window lets the mouse pass through; unlock it from the tray or **Settings › Windows**. Closing a window only hides it — any enabled Spout2 / Syphon output keeps running, and native context menus never end up in the shared-texture output.
+
+Input modes:
+
+Both editing modes support scrolling with the wheel / trackpad and PageUp / PageDown navigation, with Shift to extend the selection. The context menu offers undo, redo, cut, copy, paste and select all. While an IME is composing, Enter, Esc and the arrow keys go to the IME first.
+
+- **Compose & send**: finish writing, then send; the display plays it back at typewriter pace.
+- **Live mirror**: the display follows your typing in real time; when you send, the line goes into history.
+
+### Twitch chat and sending lines
+
+1. Open **Settings › Twitch**, enter a channel name or `https://www.twitch.tv/channelname`, and turn on **Receive chat**. Reading chat does not require signing in.
+2. To send lines, click **Sign in with Twitch**, open twitch.tv/activate and enter the code shown on the page. The token is kept in OS-protected storage (Windows DPAPI / macOS Keychain).
+3. Turn on **Send lines to Twitch chat** and confirm; from then on, lines you send are posted to the channel as you. Long lines are split at 500 characters; if sending fails, the queue pauses so you can retry or skip.
+
+For protocol, sign-in and rate-limit details, see [Twitch integration](twitch.md).
+
+### Third-party chat: blivechat and Comet (彗星号)
+
+Open **Settings › Third-party chat**, turn it on and choose a source:
+
+- **blivechat**: run blivechat (default `127.0.0.1:12450`), enter your Bilibili Open Platform identity code and click **Save and connect**, or use a room number instead. The identity code is kept in OS-protected storage (Windows DPAPI / macOS Keychain) and never written to the settings file.
+- **彗星号 (Comet)**: add the NanaType plugin to your Comet canvas and paste the connection address shown on the settings page into the plugin's settings. The plugin page lives in [`integrations/comet/`](../../integrations/comet/); for how to upload it and how it works, see [Comet integration](comet.md).
+
+Third-party chat messages show up in the chat panel, and @-mentions, replies and mixing into history work the same way. With no live room at hand, you can try blivechat mode against the mock server:
+
+```bash
+cargo run -p nanatype-blive --example mock_blivechat
+```
+
+For Comet mode, a script can stand in for the plugin page and push sample messages to the relay (requires Node 22+):
+
+```bash
+node scripts/comet_publish.mjs "ws://127.0.0.1:12451/comet?token=…"
+```
+
+### Sessions with friends
+
+1. Steam must be running. Open the session entry from the bar at the bottom of the input window; the host clicks **Create session**. A room holds up to 8 people and can have a password; the password is never included in invites.
+2. **Invite friend** opens the Steam invite dialog. Invited friends don't need to enter the password. If you copy an invite and hand it to someone else, they must enter the password before joining when the room is locked.
+3. The **Display** always shows your own lines. The **Partner display** gives every other member a live panel in seating order, and offers invites and acceptance status while nobody has joined yet. The shared history contains everything anyone has sent, in the order confirmed by the host. Everyone keeps their own skin and window layout; live mirror reveals what you are typing, while compose & send only reveals what you have sent. F9, skip and clear display only affect you.
+4. During a session the history window shows this session's lines. History from before the session and live-room chat are not shared. When you leave, your local history comes back; a session is not restored across a process restart. A session keeps at most the latest 1000 lines, trimmed further by message-size limits.
+5. If you disconnect you can keep editing, but sending and manual playback controls are paused. Disconnecting frees your seat; the same person can reconnect while a seat is free, and lines already sent are kept. If the host leaves, the room ends.
+
+Images, stickers, avatars, avatars inside quotes and the current portrait are distributed by content hash. Previews are relayed by the host; full images are fetched directly from whoever posted them, falling back to the host if a direct connection fails. Each resource is capped at 16 MiB; oversized or missing resources show a placeholder. Only your own lines drive character controls such as your local VTube Studio / OSC.
+
+Connections go direct when Steam can manage it, otherwise through Steam's relay. With a direct connection, peers can see your network address.
+
+### Connecting to OBS
+
+- **Spout2**: turn on Spout2 output in **Settings › Output / OBS**. In OBS, install the Spout2 plugin, add *Spout2 Capture*, pick the sender name (default `NanaType Display` / `NanaType Partner` / `NanaType History`) and set the composite mode to *Premultiplied Alpha*.
+- **Separate outputs**: in **Settings › Output / OBS**, enable **Display** and **Partner display** separately, then add two sources in OBS, choosing `NanaType Display` (you) and `NanaType Partner` (the others). Size, opacity and sender name are set per output; enabled sender names must all be different. The partner output only runs during a session, and keeps outputting even while its window is hidden. For the shared history, pick `NanaType History`.
+- **Window capture**: *Window Capture* with the capture method *Windows 10 (1903 and up)*.
+- **Syphon** (macOS): turn on Syphon output in **Settings › Output / OBS**. In OBS, add *Syphon Client*, pick the sender name (default `NanaType Display` / `NanaType Partner` / `NanaType History`) and set the composite mode to *Premultiplied Alpha*. You can also capture the display window with *macOS Screen Capture*. Spout2 is Windows-only.
+
+Turning an output off and back on within 5 seconds reuses the original sender, and the OBS picture comes back in a median of about 15–30 ms. For sender lifecycles and measurements with real OBS, see [OBS / Spout output](obs-spout.md).
+
+### Checking for updates
+
+The Steam edition is updated by Steam and has no such option. The GitHub edition checks GitHub Releases for new versions from **Settings › About**, and **Settings › General › Updates** checks automatically once a day by default. A new installer is only opened after it passes verification. Downloads try GitHub and the built-in proxies (gh-proxy.com, ghfast.top, ghproxy.net) in parallel, and you can add one custom proxy. Proxies only carry the bytes: the version manifest is signed with Ed25519 and installers are checked against SHA-256. See [Checking for updates](updates.md).
+
+## Line markup
+
+Lines are stored as BBCode-style markup, shared by source mode, quick phrases and templates. See [Line markup](markup.md) for the full reference.
+
+```text
+[@auto=1500]大家好！[wait=400][b][color=#e86a92]今天[/color][/b]也来[wave]打字[/wave]啦～
+[pause][shake amp=2]哇！[/shake][se=coin][expr=smile]
+[ruby=かんじ]漢字[/ruby][sticker=cats/hello h=1.6]
+```
+
+## Sticker packs
+
+In **Settings › Assets › Sticker packs** you can download the **Sheep's pixel heads (static)** and **Sheep's animated emotes** presets, or add a local image folder, an Echo-Live root folder (containing `res/data/emoji.js`) or an Echo-Live emote extension folder (containing `main.js`). Presets only go online when you click them; after that they use the same import and management flow as local folders.
+
+On import, images, thumbnails and full GIF frame caches are prepared in the background; the list shows downloading, processing, ready or failed. Once done everything works offline, the source files stay untouched, and unchanged content reuses its cache after a restart. Changing an image or the emote definitions rebuilds the affected cache automatically; removing a pack only stops loading it and never deletes the original files.
+
+In the input window's sticker panel, search by name or pack name and click to insert. The result is still saved as NanaType markup such as `[sticker=sp/happy h=1.35]` or `[sticker=sprel/laugh h=4]`. Animated stickers play in the preview, display, history and Spout / Syphon output; with reduced motion they show their first frame. This feature only reads Echo-Live's image emote definitions and never runs extension scripts.
+
+The sticker area on the right of the input window has **All** and per-series sub-tabs along the bottom; the sticker grid scrolls on its own and search only filters the current series. Drag one or more folders onto the sticker area or the sticker tab at the top to add them quickly; dropping on the tab opens the area automatically, and imported packs are managed together with the settings page.
+
+The preset images come from [Echo-Live](https://github.com/sheep-realms/Echo-Live) and the [Sheep-realms animated emote extension](https://github.com/sheep-realms/Echo-Live-Sheep-realms-EmoteLab-Extension). Authors and image licenses are shown in the list, and the download folder keeps the source, definitions and license.
+
+**Settings › Assets › Telegram stickers** lets you sign in to a Telegram account and find sticker packs with the official search, or download a whole pack by entering its name or `https://t.me/addstickers/packname`. The first sign-in needs your own API ID and API Hash from [my.telegram.org](https://my.telegram.org), a phone number with country code, then the code you receive and your optional two-step verification password. Clicking **Connect / log in** again restores the local session without re-entering credentials.
+
+The download proxy accepts `socks5://127.0.0.1:7890` and authenticated `socks5://user:password@host:port`; leave it empty to connect directly. Reconnect after changing it; sign-in, search, file downloads and cross-datacenter connections all use the same proxy. This setting only applies to Telegram.
+
+Static WebP, TGS vector animations and VP9 WebM with transparency are supported. After downloading, packs go through the same parsing, pre-transcoding and registration as local folders, appear in the same sticker list and bottom series tabs, and are identified as `tg_packname/fileID`. Animations are converted to full PNG frame caches that work offline after a restart; animations beyond Telegram's size or duration limits, or beyond what the current renderer supports, report a clear error. Original files and their sources are kept, and the stickers' rights remain with their creators.
+
+The API Hash, phone number, code and password are only used while signing in and are never written to the config. The authorized session is stored separately as `telegram.session` in the app data folder, encrypted with the current user's DPAPI on Windows and protected by user-only file permissions elsewhere; do not share this session file. **Log out and clear session** signs out and deletes the local session; downloaded stickers keep working offline.
+
+## Skins
+
+A skin is a folder containing `skin.toml`, or a `.ntpkg` archive, and can inherit from a built-in skin and only write the differences. See [Skin format](skins.md) for the format.
+
+A sound pack is a package containing `sounds.toml`. Choose it in **Settings › Playback › Sound pack** to replace the skin's typing, opening and continue sounds; the remaining sounds still come from the skin. See [Sound packs](skins.md#sound-packs).

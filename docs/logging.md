@@ -1,3 +1,5 @@
+[简体中文](logging.md) · [English](en/logging.md) · [日本語](ja/logging.md)
+
 # 日志
 
 NanaType 与 NanaType Editor 只有一条日志管道：NanaUI 的 `nana-diagnostics`。它负责收集、缓冲、落盘、轮转、崩溃快照和导出；NanaType 在 `crates/diag`（`nanatype-diag`）里决定记录什么、保留多少、哪些内容绝不能写。
