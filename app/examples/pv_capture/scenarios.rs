@@ -612,6 +612,7 @@ fn workshop(scene: Scene, core: Core, out: &Path, l: &Lines) {
             },
             package: Some(package.into()),
             folder: None,
+            author: None,
         })
         .collect(),
     };

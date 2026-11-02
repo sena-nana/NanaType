@@ -56,8 +56,6 @@ fn stroke_maps_build_in_the_background_and_keep_the_reveal_clock() {
     warm_ms.sort_by(f64::total_cmp);
     // One immutable output may feed more than one material slot.
     let mut project = nanatype_theme::PackageProject::capture(&*loaded.files).unwrap();
-    // An edited copy of the sealed built-in is an unsigned derivative.
-    project.files.remove(nanatype_theme::INTEGRITY_FILE);
     let mut manifest: nanatype_theme::TomlTable = std::str::from_utf8(&project.files["skin.toml"])
         .unwrap()
         .parse()

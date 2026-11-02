@@ -68,6 +68,8 @@ pub struct Row {
     /// The package id the installed copy declares.
     pub package: Option<String>,
     pub folder: Option<PathBuf>,
+    /// The author's Steam name, once Steam has it.
+    pub author: Option<String>,
 }
 
 /// What the UI shows: availability and every subscription.
@@ -90,6 +92,8 @@ pub struct Workshop {
     pub availability: Availability,
     items: Vec<Item>,
     details: HashMap<u64, Details>,
+    /// Steam names by SteamID.
+    authors: HashMap<u64, String>,
 }
 
 impl Workshop {
@@ -98,6 +102,7 @@ impl Workshop {
             availability,
             items,
             details: HashMap::new(),
+            authors: HashMap::new(),
         }
     }
 
@@ -132,6 +137,10 @@ impl Workshop {
 
     pub fn set_details(&mut self, details: Vec<Details>) {
         self.details.extend(details.into_iter().map(|d| (d.id, d)));
+    }
+
+    pub fn set_author(&mut self, owner: u64, name: String) {
+        self.authors.insert(owner, name);
     }
 
     /// Drop an unsubscribed item now; Steam deletes its files at exit.
@@ -211,6 +220,10 @@ impl Workshop {
                     state,
                     package,
                     folder: item.folder.clone(),
+                    author: details
+                        .and_then(|d| self.authors.get(&d.owner))
+                        .filter(|name| !name.is_empty())
+                        .cloned(),
                 }
             })
             .collect();
@@ -275,7 +288,9 @@ mod tests {
             id: 3,
             title: "Rain".into(),
             tags: vec![Tag::SoundPacks.name().into()],
+            owner: 7,
         }]);
+        workshop.set_author(7, "Mio".into());
         let roots = workshop.roots();
         assert_eq!(roots.iter().map(|r| r.item).collect::<Vec<_>>(), [1, 2]);
         let registry = SkinRegistry::with_external(None, "1.0.0", roots);
@@ -288,6 +303,8 @@ mod tests {
             (row(3).kind, &row(3).state, row(3).title.as_str()),
             (Kind::SoundPack, &RowState::Downloading(Some(50)), "Rain")
         );
+        assert_eq!(row(3).author.as_deref(), Some("Mio"));
+        assert_eq!(row(1).author, None);
         assert_eq!(view.row_of("ws.skin").map(|r| r.item), Some(1));
 
         // An update in place means scanning again; forgetting drops the root.

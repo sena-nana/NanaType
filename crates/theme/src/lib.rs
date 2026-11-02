@@ -44,8 +44,7 @@ pub use package::{
     clean_resource_path,
 };
 pub use project::{
-    BUILTIN_SEAL_KEY, INTEGRITY_FILE, PackageProject, PackageSeal, SealIdentity, SealStatus,
-    verify_integrity,
+    INTEGRITY_FILE, PackageProject, PackageSeal, SealIdentity, SealStatus, verify_integrity,
 };
 mod registry;
 mod responsive;

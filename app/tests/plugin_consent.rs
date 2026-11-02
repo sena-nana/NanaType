@@ -889,11 +889,34 @@ fn package_metadata_and_signature_states_are_visible_in_every_locale_and_width()
     std::fs::create_dir_all(&captures).unwrap();
     for locale in Locale::ALL {
         for width in [900, 440, 300] {
-            for (name, integrity, label) in [
-                ("unsigned", Ok(None), "package-unsigned"),
-                ("signed", Ok(Some(seal.clone())), "package-signature-valid"),
+            let imported = nanatype_theme::SkinOrigin::Directory(script.clone());
+            let workshop = nanatype_theme::SkinOrigin::Workshop {
+                folder: script.clone(),
+                item: 7,
+            };
+            for (name, origin, integrity, label) in [
+                (
+                    "builtin",
+                    nanatype_theme::SkinOrigin::Builtin,
+                    Ok(None),
+                    "package-source-builtin",
+                ),
+                ("workshop", workshop, Ok(None), "package-source-workshop"),
+                (
+                    "unsigned",
+                    imported.clone(),
+                    Ok(None),
+                    "package-source-third-party",
+                ),
+                (
+                    "signed",
+                    imported.clone(),
+                    Ok(Some(seal.clone())),
+                    "package-signature-valid",
+                ),
                 (
                     "invalid",
+                    imported.clone(),
                     Err("protected file was modified: main.lua".to_owned()),
                     "package-integrity-failed",
                 ),
@@ -905,7 +928,7 @@ fn package_metadata_and_signature_states_are_visible_in_every_locale_and_width()
                 );
                 let row = nanatype::plugins::PackageRow {
                     manifest: project.manifest().unwrap(),
-                    origin: nanatype_theme::SkinOrigin::Directory(script.clone()),
+                    origin: origin.clone(),
                     integrity,
                 };
                 ui.packages.set(Arc::new(vec![row]));
@@ -926,8 +949,17 @@ fn package_metadata_and_signature_states_are_visible_in_every_locale_and_width()
                         .count()
                         >= 2
                 );
+                let warned = labels
+                    .iter()
+                    .any(|l| l.contains(&ui.now_t("package-third-party-warning")));
+                assert_eq!(warned, matches!(name, "unsigned" | "signed"), "{name}");
                 if name == "signed" {
                     assert!(labels.iter().any(|l| l.contains(&fingerprint)));
+                    assert!(
+                        labels
+                            .iter()
+                            .any(|l| l.contains(&ui.now_t("package-source-third-party")))
+                    );
                 }
                 if name == "invalid" {
                     assert!(

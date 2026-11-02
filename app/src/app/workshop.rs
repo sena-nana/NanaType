@@ -31,6 +31,10 @@ impl App {
                 self.workshop.set_details(details);
                 self.publish_workshop();
             }
+            Msg::Workshop(Event::Author { owner, name }) => {
+                self.workshop.set_author(owner, name);
+                self.publish_workshop();
+            }
             Msg::Workshop(Event::InviteFailed) => {
                 self.notice(self.ui.now_t("peer-invite-unavailable"), true);
             }

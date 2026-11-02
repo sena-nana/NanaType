@@ -398,6 +398,53 @@ pub fn integrity_label(
         Err(error) => format!("{}: {error}", ui.now_t("package-integrity-failed")),
     }
 }
+/// Where an installed package comes from, as the package lists show it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provenance {
+    /// Shipped inside NanaType.
+    Builtin,
+    /// Installed and kept current by Steam from the Workshop.
+    Workshop,
+    /// Imported from a file or folder; nothing vouches for its source.
+    ThirdParty,
+    /// Its seal no longer matches its files.
+    Tampered,
+}
+
+impl Provenance {
+    pub fn of(
+        origin: &nanatype_theme::SkinOrigin,
+        integrity: &Result<Option<nanatype_theme::SealStatus>, String>,
+    ) -> Self {
+        use nanatype_theme::SkinOrigin;
+        match origin {
+            SkinOrigin::Builtin => Self::Builtin,
+            _ if integrity.is_err() => Self::Tampered,
+            SkinOrigin::Workshop { .. } => Self::Workshop,
+            SkinOrigin::Directory(_) | SkinOrigin::Archive(_) => Self::ThirdParty,
+        }
+    }
+}
+
+/// The source badge: built-in, the Workshop with its author's Steam name
+/// when known, third-party, or the failed integrity check.
+pub fn provenance_label(
+    ui: Stage,
+    provenance: Provenance,
+    integrity: &Result<Option<nanatype_theme::SealStatus>, String>,
+    workshop_author: Option<&str>,
+) -> String {
+    match provenance {
+        Provenance::Builtin => ui.now_t("package-source-builtin"),
+        Provenance::Workshop => match workshop_author {
+            Some(author) => ui.tr("package-source-workshop-by", &[("author", author.into())]),
+            None => ui.now_t("package-source-workshop"),
+        },
+        Provenance::ThirdParty => ui.now_t("package-source-third-party"),
+        Provenance::Tampered => integrity_label(ui, integrity),
+    }
+}
+
 pub fn fingerprint(hash: &str) -> String {
     hash.as_bytes()
         .chunks(8)

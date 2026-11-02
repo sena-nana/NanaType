@@ -1,3 +1,0 @@
-# Built-in packages are sealed by content hash (package.integrity.json):
-# check them out byte for byte, never with converted line endings.
-crates/theme/builtin/** -text

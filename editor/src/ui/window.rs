@@ -152,18 +152,15 @@ fn installed(ui: Ui) -> AnyView {
                     .map(|row| {
                         let id = row.manifest.meta.id.clone();
                         let builtin = matches!(row.origin, SkinOrigin::Builtin);
-                        let integrity = super::plugin_view::integrity_label(*ui, &row.integrity);
+                        let source = super::plugin_view::provenance_label(
+                            *ui,
+                            super::plugin_view::Provenance::of(&row.origin, &row.integrity),
+                            &row.integrity,
+                            None,
+                        );
                         let name =
                             nanatype_theme::localized(&row.manifest.meta.name, locale.tag(), &id);
-                        let caption = if builtin {
-                            format!(
-                                "{} · {}",
-                                ui.now_t("skins-builtin"),
-                                row.manifest.meta.version
-                            )
-                        } else {
-                            format!("{} · {integrity}", row.manifest.meta.version)
-                        };
+                        let caption = format!("{} · {source}", row.manifest.meta.version);
                         super::views::card(
                             format!("editor-package:{id}"),
                             if builtin { ti::PACKAGE } else { ti::BOX },

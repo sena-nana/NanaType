@@ -108,6 +108,8 @@ pub struct Details {
     pub id: u64,
     pub title: String,
     pub tags: Vec<String>,
+    /// The author's SteamID; their name arrives as [`Event::Author`].
+    pub owner: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,6 +117,11 @@ pub enum Event {
     /// The subscriptions, whenever any of them changes.
     Items(Vec<Item>),
     Details(Vec<Details>),
+    /// A Workshop author's Steam name, once Steam has it.
+    Author {
+        owner: u64,
+        name: String,
+    },
     Unsubscribed {
         item: u64,
         result: Result<(), String>,
@@ -349,7 +356,7 @@ mod worker {
     use std::time::{Duration, Instant};
     use steamworks::{
         ChatMemberStateChange, Client, GameLobbyJoinRequested, LobbyChatUpdate, LobbyId, LobbyType,
-        PublishedFileId,
+        PersonaStateChange, PublishedFileId, SteamId,
     };
 
     /// The host's invite lobby. `id` stays 0 until Steam finishes creating it.
@@ -413,6 +420,19 @@ mod worker {
             let name = members.friends().get_friend(update.user_changed).name();
             members_post(Event::InviteAccepted { name });
         });
+        // Workshop authors whose names were asked for, answered as they arrive.
+        let authors = Arc::new(Mutex::new(HashSet::<u64>::new()));
+        let names = client.clone();
+        let names_post = post.clone();
+        let names_asked = authors.clone();
+        // Kept alive: dropping the handle unregisters the callback.
+        let _names = client.register_callback(move |change: PersonaStateChange| {
+            let owner = change.steam_id.raw();
+            if names_asked.lock().unwrap().contains(&owner) {
+                let name = names.friends().get_friend(change.steam_id).name();
+                names_post(Event::Author { owner, name });
+            }
+        });
         if let Some(id) = connect_lobby(std::env::args()) {
             join_session(&client, id, &post);
         }
@@ -467,7 +487,7 @@ mod worker {
                 .collect();
             if !fresh.is_empty() {
                 described.extend(fresh.iter().copied());
-                describe(&client, fresh, post.clone());
+                describe(&client, fresh, authors.clone(), post.clone());
             }
             let downloading = now
                 .iter()
@@ -638,28 +658,48 @@ mod worker {
             .collect()
     }
 
-    /// Ask the Workshop for titles and tags; answers arrive as callbacks.
-    fn describe(client: &Client, ids: Vec<u64>, post: Arc<dyn Fn(Event) + Send + Sync>) {
+    /// Ask the Workshop for titles, tags and authors, then for each author's
+    /// name; answers arrive as callbacks.
+    fn describe(
+        client: &Client,
+        ids: Vec<u64>,
+        authors: Arc<Mutex<HashSet<u64>>>,
+        post: Arc<dyn Fn(Event) + Send + Sync>,
+    ) {
         for page in ids.chunks(PAGE) {
             let ids = page.iter().map(|id| PublishedFileId(*id)).collect();
             let Ok(query) = client.ugc().query_items(ids) else {
                 continue;
             };
-            let post = post.clone();
+            let (post, client, authors) = (post.clone(), client.clone(), authors.clone());
             query.fetch(move |results| {
                 let Ok(results) = results else {
                     return;
                 };
-                let details = results
+                let details: Vec<Details> = results
                     .iter()
                     .flatten()
                     .map(|r| Details {
                         id: r.published_file_id.0,
                         title: r.title,
                         tags: r.tags,
+                        owner: r.owner.raw(),
                     })
                     .collect();
+                let owners: HashSet<u64> = details.iter().map(|d| d.owner).collect();
                 post(Event::Details(details));
+                let friends = client.friends();
+                for owner in owners {
+                    if !authors.lock().unwrap().insert(owner) {
+                        continue;
+                    }
+                    // False: Steam already knows the name; otherwise a
+                    // PersonaStateChange brings it.
+                    if !friends.request_user_information(SteamId::from_raw(owner), true) {
+                        let name = friends.get_friend(SteamId::from_raw(owner)).name();
+                        post(Event::Author { owner, name });
+                    }
+                }
             });
         }
     }

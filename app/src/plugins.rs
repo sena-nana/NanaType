@@ -27,6 +27,7 @@ pub struct ActivationReview {
     pub manifest: PackageManifest,
     pub digest: String,
     pub integrity: Option<nanatype_theme::SealStatus>,
+    pub origin: nanatype_theme::SkinOrigin,
     pub source: String,
     pub location: String,
     /// Folders of the package and its dependencies, watched while it runs.
@@ -48,7 +49,14 @@ pub fn review(registry: &SkinRegistry, id: &str) -> Result<ActivationReview, Str
     }
     let source = String::from_utf8(bytes.clone()).map_err(|e| e.to_string())?;
     let data = Arc::new(nanatype_theme::DataAccess::for_plugin(&project, &manifest)?);
+    let origin = registry
+        .packages()
+        .into_iter()
+        .find(|(package, _)| package.meta.id == id)
+        .map(|(_, origin)| origin)
+        .ok_or("package is no longer installed")?;
     Ok(ActivationReview {
+        origin,
         data,
         roots: files.watch_roots(),
         id: id.into(),

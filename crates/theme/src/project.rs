@@ -9,10 +9,6 @@ use std::{
 };
 
 pub const INTEGRITY_FILE: &str = "package.integrity.json";
-/// Public half of the key every built-in package is sealed with
-/// (`examples/seal_builtins.rs`). The secret stays off the repository.
-pub const BUILTIN_SEAL_KEY: &str =
-    "3b3c6b15025c7e1662504110c1909e91d859ad92d40b20388e3a8ab2f034ee6a";
 const DOMAIN: &[u8] = b"NanaType package seal v1\0";
 fn error(message: impl ToString) -> FileError {
     FileError::Io(message.to_string())
@@ -48,9 +44,6 @@ impl SealIdentity {
     /// Host-only key persistence. Never write these bytes into a package.
     pub fn secret_bytes(&self) -> [u8; 32] {
         self.0.to_bytes()
-    }
-    pub fn public_key(&self) -> String {
-        hex(self.0.verifying_key().as_bytes())
     }
     pub fn fingerprint(&self) -> String {
         blake3::hash(self.0.verifying_key().as_bytes())
@@ -433,23 +426,5 @@ mod tests {
                 .is_err()
         );
         assert_eq!(p.files, original);
-    }
-    #[test]
-    fn every_builtin_package_carries_a_current_builtin_seal() {
-        let expected = blake3::hash(&unhex::<32>(BUILTIN_SEAL_KEY).unwrap())
-            .to_hex()
-            .to_string();
-        let registry = crate::SkinRegistry::new(None, "0.1.0");
-        let packages = registry.packages();
-        assert!(!packages.is_empty());
-        for (manifest, _) in packages {
-            let id = &manifest.meta.id;
-            let files = registry.package_files(id).unwrap();
-            let status = verify_integrity(&*files)
-                .unwrap_or_else(|e| panic!("{id}: {e}; rerun examples/seal_builtins.rs"))
-                .unwrap_or_else(|| panic!("{id} is unsealed; run examples/seal_builtins.rs"));
-            assert_eq!(status.fingerprint, expected, "{id} sealed with another key");
-            assert!(status.editable.is_empty(), "{id} leaves files unprotected");
-        }
     }
 }

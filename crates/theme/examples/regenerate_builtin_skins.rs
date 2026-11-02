@@ -1,8 +1,7 @@
 //! Rewrite every `builtin/<skin>/skin.toml` in canonical form: defaults
 //! omitted, responsive layouts reduced to their differences from the base
 //! dialogue, short arrays inline. Rebuild afterwards; the embedded copies are
-//! the ones this binary was compiled with. Then reseal them with
-//! `examples/seal_builtins.rs`.
+//! the ones this binary was compiled with.
 //!
 //! `cargo run -p nanatype-theme --example regenerate_builtin_skins`
 use nanatype_theme::{SkinRegistry, standalone_manifest};

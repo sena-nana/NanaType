@@ -17,7 +17,9 @@ const SOURCE_PREVIEW_H: f32 = 160.0;
 /// A package's lead mark on its card.
 const PACKAGE_TILE: f32 = 36.0;
 
-pub use nanatype_frame::ui::plugin_view::{fingerprint, integrity_label};
+pub use nanatype_frame::ui::plugin_view::{
+    Provenance, fingerprint, integrity_label, provenance_label,
+};
 
 /// The live plugins' views at `slot`; their events go back to the plugin.
 pub fn mounted(ui: Ui, slot: Mount) -> AnyView {
@@ -44,6 +46,7 @@ pub fn actions(ui: Ui) -> AnyView {
 fn package_card(
     ui: Ui,
     row: &crate::plugins::PackageRow,
+    workshop_author: Option<&str>,
     enabled: bool,
     error: Option<&String>,
 ) -> AnyView {
@@ -66,11 +69,20 @@ fn package_card(
     } else {
         ti::PACKAGE
     };
-    let integrity_tone = match &row.integrity {
-        Ok(Some(_)) => Tone::Success,
-        Ok(None) => Tone::Neutral,
-        Err(_) => Tone::Danger,
+    let provenance = Provenance::of(&row.origin, &row.integrity);
+    let source_tone = match provenance {
+        Provenance::Builtin | Provenance::Workshop => Tone::Success,
+        Provenance::ThirdParty => Tone::Warning,
+        Provenance::Tampered => Tone::Danger,
     };
+    // A third-party package may still carry its author's seal: say so under
+    // the warning, which stands either way.
+    let third_party = (provenance == Provenance::ThirdParty).then(|| {
+        let warning = kit::callout(Tone::Warning, ui.now_t("package-third-party-warning"));
+        let seal = matches!(row.integrity, Ok(Some(_)))
+            .then(|| widget(caption(integrity_label(*ui, &row.integrity))));
+        (seal, warning)
+    });
     let tags: Vec<AnyView> = package
         .capabilities
         .iter()
@@ -138,7 +150,10 @@ fn package_card(
                         ),
                     )),
                 )),
-                kit::badge(integrity_label(*ui, &row.integrity), integrity_tone),
+                kit::badge(
+                    provenance_label(*ui, provenance, &row.integrity, workshop_author),
+                    source_tone,
+                ),
             ),
             widget(
                 Stack::column(0.0)
@@ -163,6 +178,7 @@ fn package_card(
                     provided(ui, &package.licensed_to)
                 ))),
                 dependencies,
+                third_party,
                 error.map(|e| kit::callout(Tone::Danger, e.clone())),
             )),
             kit::rule(),
@@ -208,15 +224,31 @@ fn package_card(
 
 pub fn settings(ui: Ui) -> AnyView {
     let packages = dynamic(
-        move || (ui.packages.get(), ui.settings.get(), ui.plugin_errors.get()),
-        move |(rows, settings, errors)| {
+        move || {
+            (
+                ui.packages.get(),
+                ui.settings.get(),
+                ui.plugin_errors.get(),
+                ui.workshop.get(),
+            )
+        },
+        move |(rows, settings, errors, workshop)| {
             let cards = rows
                 .iter()
                 .map(|row| {
                     let id = &row.manifest.meta.id;
+                    let author = match row.origin {
+                        nanatype_theme::SkinOrigin::Workshop { item, .. } => workshop
+                            .rows
+                            .iter()
+                            .find(|r| r.item == item)
+                            .and_then(|r| r.author.as_deref()),
+                        _ => None,
+                    };
                     package_card(
                         ui,
                         row,
+                        author,
                         settings.enabled_plugins.contains(id),
                         errors.get(id),
                     )
@@ -411,10 +443,29 @@ pub fn activation(ui: Ui) -> AnyView {
                         ui.now_t("package-license"),
                         provided(ui, &review.manifest.meta.license)
                     ))),
-                    widget(readable(integrity_label(
-                        *ui,
-                        &Ok(review.integrity.clone()),
-                    ))),
+                    // Where it comes from, its seal, and the third-party warning.
+                    (
+                        widget(readable(provenance_label(
+                            *ui,
+                            Provenance::of(&review.origin, &Ok(None)),
+                            &Ok(None),
+                            None,
+                        ))),
+                        review.integrity.is_some().then(|| {
+                            widget(readable(integrity_label(
+                                *ui,
+                                &Ok(review.integrity.clone()),
+                            )))
+                        }),
+                        matches!(
+                            review.origin,
+                            nanatype_theme::SkinOrigin::Directory(_)
+                                | nanatype_theme::SkinOrigin::Archive(_)
+                        )
+                        .then(|| {
+                            kit::callout(Tone::Warning, ui.now_t("package-third-party-warning"))
+                        }),
+                    ),
                     kit::callout(Tone::Warning, ui.now_t("packages-consent-risk")),
                     widget(Text::new(ui.now_t("packages-consent-data"))),
                     widget(readable(reads(ui, &review.data))).key("plugin-consent-reads"),
