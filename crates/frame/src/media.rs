@@ -23,6 +23,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::assets::file_url;
+use nanatype_model::codec::{fnv1a64, fnv1a64_seeded};
 
 /// NanaUI refuses local pictures larger than this (`MAX_LOCAL_URL_BYTES`).
 pub const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
@@ -319,18 +320,9 @@ fn mirror_key(canonical: &Path, len: u64, mtime: u128) -> String {
         path = path.replace('/', "\\").to_lowercase();
     }
     let key = format!("{path}\0{len}\0{mtime}");
-    let a = fnv64(key.as_bytes(), 0xcbf2_9ce4_8422_2325);
-    let b = fnv64(key.as_bytes(), 0x6c62_272e_07bb_0142);
+    let a = fnv1a64(key.as_bytes());
+    let b = fnv1a64_seeded(0x6c62_272e_07bb_0142, key.as_bytes());
     format!("{a:016x}{b:016x}")
-}
-
-fn fnv64(bytes: &[u8], seed: u64) -> u64 {
-    let mut hash = seed;
-    for b in bytes {
-        hash ^= u64::from(*b);
-        hash = hash.wrapping_mul(0x0100_0000_01b3);
-    }
-    hash
 }
 
 /// `\\?\C:\x` → `C:\x`: what `fs::canonicalize` returns on Windows, in the
@@ -411,8 +403,6 @@ mod tests {
         assert_ne!(key, mirror_key(Path::new("/stickers/a.png"), 43, 7));
         assert_ne!(key, mirror_key(Path::new("/stickers/a.png"), 42, 8));
         assert_ne!(key, mirror_key(Path::new("/stickers/b.png"), 42, 7));
-        assert_eq!(fnv64(b"", 0xcbf2_9ce4_8422_2325), 0xcbf2_9ce4_8422_2325);
-        assert_eq!(fnv64(b"a", 0xcbf2_9ce4_8422_2325), 0xaf63_dc4c_8601_ec8c);
     }
 
     #[test]

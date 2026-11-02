@@ -74,9 +74,7 @@ fn max_level(crate_name: &str, level: LevelFilter) -> LevelFilter {
 
 fn slot(crate_name: &str) -> usize {
     // FNV-1a: stable and cheap; the budget only needs a spread.
-    let hash = crate_name.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
-        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    });
+    let hash = nanatype_model::codec::fnv1a64(crate_name.as_bytes());
     (hash % SLOTS as u64) as usize
 }
 

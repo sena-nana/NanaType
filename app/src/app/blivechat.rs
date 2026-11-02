@@ -33,7 +33,7 @@ fn new_token() -> String {
             .map_or(0, |d| d.as_nanos());
         bytes = nanos.to_le_bytes();
     }
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    nanatype_model::codec::hex(&bytes)
 }
 
 /// The address the 彗星号 page connects to.

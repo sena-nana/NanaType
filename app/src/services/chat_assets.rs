@@ -309,12 +309,7 @@ fn file_age(path: &Path) -> Option<Duration> {
 }
 
 fn fnv(text: &str) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in text.bytes() {
-        hash ^= u64::from(b);
-        hash = hash.wrapping_mul(0x0100_0000_01b3);
-    }
-    hash
+    nanatype_model::codec::fnv1a64(text.as_bytes())
 }
 
 #[cfg(test)]

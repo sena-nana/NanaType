@@ -1,6 +1,7 @@
 //! Auditable package projects and selective, detached Ed25519 seals.
 use crate::{FileError, PACKAGE_MANIFEST, PackageManifest, SkinFiles, clean_path};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+use nanatype_model::codec::hex;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -13,18 +14,8 @@ const DOMAIN: &[u8] = b"NanaType package seal v1\0";
 fn error(message: impl ToString) -> FileError {
     FileError::Io(message.to_string())
 }
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
 fn unhex<const N: usize>(text: &str) -> Result<[u8; N], FileError> {
-    if text.len() != N * 2 || !text.is_ascii() {
-        return Err(error("invalid seal encoding"));
-    }
-    let mut bytes = [0; N];
-    for (i, byte) in bytes.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&text[i * 2..i * 2 + 2], 16).map_err(error)?;
-    }
-    Ok(bytes)
+    nanatype_model::codec::unhex(text).ok_or_else(|| error("invalid seal encoding"))
 }
 fn local(path: &str) -> bool {
     !path.starts_with("pkg:") && !path.starts_with("dependencies/") && path != INTEGRITY_FILE

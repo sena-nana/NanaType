@@ -7,5 +7,6 @@ rust-version.workspace = true
 description = "NanaType's diagnostics: event domains, redaction, the third-party log bridge and startup policy over nana-diagnostics"
 
 [dependencies]
+nanatype-model.workspace = true
 nana-diagnostics.workspace = true
 log = { version = "0.4", features = ["std"] }

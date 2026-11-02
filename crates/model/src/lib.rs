@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 
 mod chars;
+pub mod codec;
 mod color;
 mod document;
 mod envelope;

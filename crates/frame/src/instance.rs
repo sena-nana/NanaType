@@ -172,12 +172,7 @@ fn listen_open(
 fn identity() -> u64 {
     let home =
         std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).unwrap_or_default();
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in home.to_string_lossy().bytes() {
-        hash ^= u64::from(b);
-        hash = hash.wrapping_mul(0x0100_0000_01b3);
-    }
-    hash
+    nanatype_model::codec::fnv1a64(home.to_string_lossy().as_bytes())
 }
 
 fn acquire(product: Product) -> Instance {

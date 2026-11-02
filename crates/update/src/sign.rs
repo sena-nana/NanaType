@@ -6,20 +6,12 @@ use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 /// the `NANATYPE_UPDATE_KEY` repository secret; see docs/updates.md.
 pub const PUBLIC_KEY: &str = "b74c785e0bcd1aae298c3d3b616124b992602060d19515be9664f1788fcb713d";
 
-pub fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
+pub use nanatype_model::codec::hex;
 
+/// [`nanatype_model::codec::unhex`], ignoring surrounding whitespace (a
+/// signature file may end in a newline).
 pub fn unhex<const N: usize>(text: &str) -> Option<[u8; N]> {
-    let text = text.trim();
-    if text.len() != N * 2 || !text.is_ascii() {
-        return None;
-    }
-    let mut bytes = [0; N];
-    for (i, byte) in bytes.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&text[i * 2..i * 2 + 2], 16).ok()?;
-    }
-    Some(bytes)
+    nanatype_model::codec::unhex(text.trim())
 }
 
 /// The hex signature of `manifest` under the hex-encoded 32-byte `secret`.
