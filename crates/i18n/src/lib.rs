@@ -58,6 +58,8 @@ impl Locale {
     /// The Fluent sources this build carries for the locale: the shared
     /// strings, then each enabled product's.
     fn sources(self) -> Vec<&'static str> {
+        // Without a product feature nothing is pushed.
+        #[cfg_attr(not(any(feature = "app", feature = "editor")), allow(unused_mut))]
         let mut sources = vec![match self {
             Self::ZhCn => include_str!("../locales/zh-CN.ftl"),
             Self::EnUs => include_str!("../locales/en-US.ftl"),
