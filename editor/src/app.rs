@@ -177,8 +177,8 @@ impl App {
             .ui
             .settings
             .with_untracked(|s| s.accessibility.zoom(self.system_text_scale));
-        let _ = window.set_content_zoom(zoom);
-        let _ = window.set_size_limits(Some(crate::ui::shell::minimum_size(zoom)), None);
+        drop(window.set_content_zoom(zoom));
+        drop(window.set_size_limits(Some(crate::ui::shell::minimum_size(zoom)), None));
     }
 
     /// Follow NanaType's chrome and contrast settings, or the system's.
