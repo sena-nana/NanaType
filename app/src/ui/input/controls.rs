@@ -376,7 +376,9 @@ fn heading(ui: Ui, group: &Group) -> AnyView {
 pub(super) fn panel(ui: Ui) -> AnyView {
     let query = signal(String::new());
     let hint = signal(None::<String>);
-    let mut search = kit::text_input("").placeholder(ui.now_t("dock-controls-search"));
+    let mut search = kit::text_input("")
+        .placeholder(ui.now_t("dock-controls-search"))
+        .label(ui.now_t("dock-controls-search"));
     Arc::make_mut(&mut search.style.layout).width = Some(LengthSpec::Fill);
     let body = dynamic(
         move || {

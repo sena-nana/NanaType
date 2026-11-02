@@ -6,7 +6,7 @@ use crate::ui::Ui;
 use crate::ui::controls::{confirm, hint};
 use crate::ui::kit::{self, field, gap};
 use crate::ui::views::*;
-use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, widget};
+use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, node_ref, widget};
 use nana_ui::runtime::{
     Activate, Button, Checkbox, Select, SelectChanged, SelectOption, Stack, TextArea, TextChanged,
     ToggleChanged, ViewContext,
@@ -48,6 +48,8 @@ pub fn view(ui: Ui) -> AnyView {
 
 /// A control under its caption, up to `width` wide, never wider than the line.
 pub(crate) fn labelled(caption: String, width: f32, control: impl IntoView) -> AnyView {
+    let (column, text) = (node_ref(), node_ref());
+    kit::caption_names_controls(text, column);
     widget(
         Stack::column(0.0)
             .gap_step(nana_ui_core::SpacingStep::Xxs)
@@ -55,7 +57,13 @@ pub(crate) fn labelled(caption: String, width: f32, control: impl IntoView) -> A
             .shrink(1.)
             .with_layout(|l| l.max_width = Some(LengthSpec::Percent(100.))),
     )
-    .children((hint(caption), control))
+    .node_ref(column)
+    .children((
+        widget(Stack::column(0.0))
+            .node_ref(text)
+            .children(hint(caption)),
+        control,
+    ))
     .into_any()
 }
 
@@ -238,6 +246,7 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
             kit::text_area(dependencies.get_untracked())
                 .read_only(!editable)
                 .placeholder("nanatype.halo@1.0.0")
+                .label(ui.now_t("pkgedit-dependencies-hint"))
                 .height(FORM_TEXT_H),
         )
         .key("package-editor-dependencies")

@@ -1,5 +1,6 @@
 use super::*;
 use crate::msg::WindowMsg;
+use nana_ui::runtime::view::node_ref;
 
 /// The overlay windows, in the matrix's column order.
 pub(super) const OVERLAYS: [WindowKind; 4] = [
@@ -13,8 +14,11 @@ pub(super) const MATRIX_LABEL_W: f32 = 150.0;
 /// Space between the matrix's columns.
 pub(super) const MATRIX_GAP: f32 = space::MD;
 
-/// A matrix line: a label, then one cell per overlay window.
+/// A matrix line: a label, then one cell per overlay window. The label's
+/// text names each cell's control for assistive technology.
 pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> Row {
+    let (line, caption) = (node_ref(), node_ref());
+    crate::ui::kit::caption_names_controls(caption, line);
     let cells = cells.map(|cell| {
         widget(
             // A quarter of what the label and the gaps leave, so the columns
@@ -38,6 +42,7 @@ pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> Row {
                 .width(LengthSpec::Fill)
                 .padding_step(inset::step::CARD, inset::step::ROW_Y),
         )
+        .node_ref(line)
         .children((
             widget(
                 Stack::row(0.0)
@@ -46,6 +51,7 @@ pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> Row {
                     .width(LengthSpec::Px(MATRIX_LABEL_W))
                     .with_layout(|l| l.flex_shrink = Some(0.0)),
             )
+            .node_ref(caption)
             .children(label),
             cells.into_iter().collect::<Vec<_>>(),
         )),

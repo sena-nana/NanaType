@@ -508,24 +508,28 @@ fn phrases(ui: Ui) -> AnyView {
 ///
 /// [`SegmentedOptionChosen`]: nana_ui::runtime::SegmentedOptionChosen
 fn modes(ui: Ui, mode: InputMode) -> AnyView {
-    widget(SegmentedControl::new().size(ControlSize::Small))
-        .children((
-            segmented_option(ui.now_t("mode-compose-short"))
-                .selected(mode == InputMode::Compose)
-                .on_cx(|_, _: &nana_ui::runtime::SegmentedOptionChosen, cx| {
-                    cx.dispatch_program_all(Msg::Edit(Box::new(|s: &mut Settings| {
-                        s.general.input_mode = InputMode::Compose
-                    })))
-                }),
-            segmented_option(ui.now_t("mode-mirror-short"))
-                .selected(mode == InputMode::Mirror)
-                .on_cx(|_, _: &nana_ui::runtime::SegmentedOptionChosen, cx| {
-                    cx.dispatch_program_all(Msg::Edit(Box::new(|s: &mut Settings| {
-                        s.general.input_mode = InputMode::Mirror
-                    })))
-                }),
-        ))
-        .into_any()
+    widget(
+        SegmentedControl::new()
+            .size(ControlSize::Small)
+            .label(ui.now_t("general-mode")),
+    )
+    .children((
+        segmented_option(ui.now_t("mode-compose-short"))
+            .selected(mode == InputMode::Compose)
+            .on_cx(|_, _: &nana_ui::runtime::SegmentedOptionChosen, cx| {
+                cx.dispatch_program_all(Msg::Edit(Box::new(|s: &mut Settings| {
+                    s.general.input_mode = InputMode::Compose
+                })))
+            }),
+        segmented_option(ui.now_t("mode-mirror-short"))
+            .selected(mode == InputMode::Mirror)
+            .on_cx(|_, _: &nana_ui::runtime::SegmentedOptionChosen, cx| {
+                cx.dispatch_program_all(Msg::Edit(Box::new(|s: &mut Settings| {
+                    s.general.input_mode = InputMode::Mirror
+                })))
+            }),
+    ))
+    .into_any()
 }
 
 /// Who the next line is said by, when there is more than one character.

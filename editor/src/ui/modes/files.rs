@@ -330,6 +330,7 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
             widget(
                 kit::text_input("")
                     .placeholder(ui.now_t("pkgedit-search"))
+                    .label(ui.now_t("pkgedit-search"))
                     .size(ControlSize::Small),
             )
             .key("package-editor-search")
@@ -391,6 +392,7 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
                 widget(
                     kit::text_input(ui.search_replacement.get_untracked())
                         .placeholder(ui.now_t("pkgedit-replacement"))
+                        .label(ui.now_t("pkgedit-replacement"))
                         .size(ControlSize::Small),
                 )
                 .on(move |e: &TextChanged| ui.search_replacement.set(e.value.to_string())),

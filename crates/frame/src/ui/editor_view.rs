@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use nana_ui::runtime::view::{AnyView, EntityRef, IntoView, entity_ref, widget};
+use nana_ui::runtime::view::{AnyView, EntityRef, IntoView, entity_ref, node_ref, widget};
 use nana_ui::runtime::{RichTextEditor, RichTextEditorEvent, Stack, Text, TextArea, TextChanged};
 use nana_ui_core::{LengthSpec, OverflowSpec, PointerEventsSpec, PositionSpec, SemanticColorRole};
 use nanatype_i18n::{Arg, Locale};
@@ -135,6 +135,9 @@ pub fn editor_area<M: Send + 'static>(
         st.foreground = Some(SemanticColorRole::Muted);
         st
     };
+    // The empty-draft hint names the rich editor for assistive technology,
+    // which has no label of its own.
+    let hint = node_ref();
     widget(Stack::fill_column(0.0).with_layout(|l| {
         l.position = PositionSpec::Relative;
         l.flex_grow = Some(1.0);
@@ -149,6 +152,7 @@ pub fn editor_area<M: Send + 'static>(
         .children((
             widget(RichTextEditor::new(ui.editor_value.get_untracked()).disabled(inert))
                 .entity_ref(editor)
+                .labelled_by(hint)
                 .on_cx({
                     let send = send.clone();
                     move |_, e: &nana_ui::runtime::SecondaryPress, cx| {
@@ -234,6 +238,7 @@ pub fn editor_area<M: Send + 'static>(
                 // Markers and whitespace show in the editor though the line is
                 // blank, so the hint waits for a truly empty draft.
                 .key("input-empty-hint")
+                .node_ref(hint)
                 .visible(move || !ui.composing.get() && ui.draft.with(|d| d.is_empty())),
         )),
         widget(Stack::fill_column(0.0).with_layout(|l| {
@@ -243,8 +248,9 @@ pub fn editor_area<M: Send + 'static>(
         .visible(move || ui.source_mode.get())
         .children(
             widget({
-                let mut area =
-                    kit::text_area("").placeholder(ui.now_t("editor-source-placeholder"));
+                let mut area = kit::text_area("")
+                    .placeholder(ui.now_t("editor-source-placeholder"))
+                    .label(ui.now_t("editor-source-label"));
                 area.disabled = inert;
                 let l = Arc::make_mut(&mut area.style.layout);
                 l.width = Some(LengthSpec::Fill);

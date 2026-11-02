@@ -23,7 +23,14 @@ fn tabs(ui: Ui) -> AnyView {
         })
         .collect();
     widget(Stack::row(0.0))
-        .children(widget(SegmentedControl::new().size(ControlSize::Small)).children(options))
+        .children(
+            widget(
+                SegmentedControl::new()
+                    .size(ControlSize::Small)
+                    .label(ui.now_t("settings-platforms")),
+            )
+            .children(options),
+        )
         .into_any()
 }
 

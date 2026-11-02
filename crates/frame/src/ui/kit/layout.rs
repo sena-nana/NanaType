@@ -4,8 +4,12 @@
 
 use std::sync::Arc;
 
-use nana_ui::runtime::view::{AnyView, IntoView, ViewBuilder, settings_row, widget};
-use nana_ui::runtime::{Divider, Stack};
+use nana_ui::runtime::view::{
+    AnyView, IntoView, NodeRef, ViewBuilder, node_ref, on_mount, settings_row, widget,
+};
+use nana_ui::runtime::{
+    AppContext, Divider, Entity, MutationQueue, SettingsRow, StableNodeId, Stack,
+};
 use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec, RadiusTier, SemanticColorRole};
 
 use super::tokens::{gap, inset};
@@ -210,14 +214,86 @@ pub fn row_hint_fn(
     )
 }
 
+/// The row's control, in a slot that spaces it from its neighbours. The row
+/// names the slot it is given for assistive technology; the control inside
+/// it is what a screen reader lands on, so it takes the row's label too.
 fn control_slot(control: AnyView) -> AnyView {
+    let slot = node_ref();
+    on_mount(move |cx| name_slot_controls(cx, slot));
     widget(
         Stack::row(0.0)
             .gap_step(gap::step::CONTROL)
             .align(AlignSpec::Center),
     )
+    .node_ref(slot)
     .children(control)
     .into_any()
+}
+
+/// Let the row's label name every unnamed control under `slot`: a switch, a
+/// slider beside its readout, a field inside its width box.
+fn name_slot_controls(cx: &mut AppContext, slot: NodeRef) {
+    let Some(slot) = slot.get_untracked() else {
+        return;
+    };
+    let world = cx.world();
+    let label = world.labelled_by(slot).or_else(|| {
+        let row = world.node(slot)?.parent?;
+        cx.read(Entity::<SettingsRow>::from_stable_id(row), |r| r.label_slot)
+            .ok()
+            .flatten()
+    });
+    if let Some(label) = label {
+        name_controls(cx, slot, label);
+    }
+}
+
+/// Once mounted, let the first text under `caption` name every unnamed
+/// control under `controls`: a caption written above or beside its field.
+pub fn caption_names_controls(caption: NodeRef, controls: NodeRef) {
+    on_mount(move |cx| {
+        let label = caption.get_untracked().and_then(|c| {
+            let world = cx.world();
+            let mut stack = vec![c];
+            while let Some(id) = stack.pop() {
+                if world.text(id).is_some_and(|t| !t.is_empty()) {
+                    return Some(id);
+                }
+                stack.extend(world.node(id)?.children.into_iter().rev());
+            }
+            None
+        });
+        if let (Some(scope), Some(label)) = (controls.get_untracked(), label) {
+            name_controls(cx, scope, label);
+        }
+    });
+}
+
+/// Let `label` name every control under `scope` that has no name of its own
+/// (a switch, a slider, a field, a select or a segmented choice).
+pub fn name_controls(cx: &mut AppContext, scope: StableNodeId, label: StableNodeId) {
+    use nana_ui::runtime::AccessibilityRole as R;
+    let world = cx.world();
+    let mut queue = MutationQueue::new();
+    let mut stack = vec![scope];
+    while let Some(id) = stack.pop() {
+        let Some(node) = world.node(id) else {
+            continue;
+        };
+        let unnamed = world.accessibility(id).is_some_and(|a| {
+            matches!(
+                a.role,
+                R::Switch | R::Slider | R::TextInput | R::ComboBox | R::RadioGroup | R::Checkbox
+            ) && a.label.as_deref().is_none_or(str::is_empty)
+        });
+        if id != scope && unnamed && world.labelled_by(id).is_none() {
+            queue.set_labelled_by(id, Some(label));
+        }
+        stack.extend(node.children);
+    }
+    if !queue.is_empty() {
+        let _ = cx.commit_mutations(queue);
+    }
 }
 
 fn inset_row(row: AnyView) -> Row {

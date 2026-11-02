@@ -1231,6 +1231,7 @@ fn search_bar(ui: Stage) -> AnyView {
                         widget(
                             TextInput::new("")
                                 .placeholder(ui.now_t("history-search-placeholder"))
+                                .label(label.clone())
                                 .size(ControlSize::Small),
                         )
                         // Folding clears it, so it opens empty.

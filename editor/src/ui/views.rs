@@ -227,6 +227,7 @@ pub fn launcher(ui: Ui) -> AnyView {
             widget(
                 kit::text_input("")
                     .placeholder(ui.now_t("pkgedit-id-placeholder"))
+                    .label(ui.now_t("pkgedit-id-placeholder"))
                     .size(ControlSize::Small),
             )
             .key("package-editor-id")
