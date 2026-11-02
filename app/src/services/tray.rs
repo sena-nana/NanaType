@@ -12,7 +12,7 @@ use nanatype_settings::{InputMode, Settings};
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
-use crate::msg::{ChatMsg, GlobalAction, Msg, SpeechMsg, WindowMsg};
+use crate::msg::{ChatMsg, GlobalAction, Msg, ProfileMsg, SpeechMsg, WindowMsg};
 use crate::windows::WindowKind;
 
 const ID_INPUT: &str = "nt.input";
@@ -31,6 +31,7 @@ const ID_SPEECH: &str = "nt.speech";
 const ID_REPLAY: &str = "nt.replay";
 const SKIN_PREFIX: &str = "nt.skin:";
 const CHARACTER_PREFIX: &str = "nt.character:";
+const PROFILE_PREFIX: &str = "nt.profile:";
 
 /// Windows keeps 128 UTF-16 units of a tooltip, terminator included.
 const TOOLTIP_MAX: usize = 120;
@@ -84,6 +85,8 @@ pub struct Tray {
     skins: Vec<(String, CheckMenuItem)>,
     characters_menu: Submenu,
     characters: Vec<CheckMenuItem>,
+    profiles_menu: Submenu,
+    profiles: Vec<(String, CheckMenuItem)>,
     settings: MenuItem,
     obs: MenuItem,
     quit: MenuItem,
@@ -285,6 +288,9 @@ fn menu_message(id: &str) -> Option<Msg> {
         ID_QUIT => Msg::Quit,
         ID_SPEECH => Msg::Speech(SpeechMsg::Toggle),
         other => {
+            if let Some(id) = other.strip_prefix(PROFILE_PREFIX) {
+                return Some(Msg::Profile(ProfileMsg::Switch(id.to_owned())));
+            }
             if let Some(i) = other.strip_prefix(CHARACTER_PREFIX) {
                 return Some(Msg::Hotkey(GlobalAction::Character(i.parse().ok()?)));
             }
@@ -323,6 +329,8 @@ impl Tray {
             .map_err(|e| e.to_string())?;
         let skins_menu = Submenu::new("", true);
         let characters_menu = Submenu::new("", true);
+        // Enabled once there is a profile to switch to.
+        let profiles_menu = Submenu::new("", false);
         let settings = item(ID_SETTINGS);
         let obs = item(ID_OBS);
         let quit = item(ID_QUIT);
@@ -341,6 +349,7 @@ impl Tray {
             &speech,
             &PredefinedMenuItem::separator(),
             &characters_menu,
+            &profiles_menu,
             &mode,
             &skins_menu,
             &PredefinedMenuItem::separator(),
@@ -389,6 +398,8 @@ impl Tray {
             skins: Vec::new(),
             characters_menu,
             characters: Vec::new(),
+            profiles_menu,
+            profiles: Vec::new(),
             settings,
             obs,
             quit,
@@ -402,6 +413,7 @@ impl Tray {
         self.sample.set_text(t("tray-action-sample"));
         self.replay.set_text(t("tray-action-replay"));
         self.characters_menu.set_text(t("tray-character"));
+        self.profiles_menu.set_text(t("tray-profile"));
         self.mode.set_text(t("tray-mode"));
         self.compose.set_text(t("mode-compose"));
         self.mirror.set_text(t("mode-mirror"));
@@ -424,6 +436,9 @@ impl Tray {
         }
         for (i, item) in self.characters.iter().enumerate() {
             item.set_checked(i == s.general.character);
+        }
+        for (id, item) in &self.profiles {
+            item.set_checked(s.general.profile.as_ref() == Some(id));
         }
     }
 
@@ -537,6 +552,27 @@ impl Tray {
     }
 }
 
+impl Tray {
+    /// Rebuild the profile submenu: `(id, name)`.
+    pub fn set_profiles(&mut self, profiles: &[(String, String)], active: Option<&str>) {
+        for (_, item) in self.profiles.drain(..) {
+            let _ = self.profiles_menu.remove(&item);
+        }
+        for (id, name) in profiles {
+            let item = CheckMenuItem::with_id(
+                format!("{PROFILE_PREFIX}{id}"),
+                name,
+                true,
+                Some(id.as_str()) == active,
+                None,
+            );
+            let _ = self.profiles_menu.append(&item);
+            self.profiles.push((id.clone(), item));
+        }
+        self.profiles_menu.set_enabled(!profiles.is_empty());
+    }
+}
+
 /// `text` cut to what a Windows tooltip keeps, with an ellipsis.
 fn truncate(text: &str) -> String {
     if text.encode_utf16().count() <= TOOLTIP_MAX {
@@ -629,6 +665,10 @@ mod tests {
             Some(Msg::Hotkey(GlobalAction::Character(2)))
         ));
         assert!(menu_message("nt.character:x").is_none());
+        assert!(matches!(
+            menu_message("nt.profile:p1a"),
+            Some(Msg::Profile(ProfileMsg::Switch(id))) if id == "p1a"
+        ));
     }
 
     #[test]

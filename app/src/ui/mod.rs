@@ -263,6 +263,8 @@ pub struct Ui {
     pub quick_text: Signal<String>,
     /// Saved history sessions and the one open in the viewer.
     pub archive: Signal<Arc<crate::archive::View>>,
+    /// Settings export, import, backup and profiles.
+    pub backup: Signal<Arc<crate::app::backup::View>>,
 }
 
 impl std::ops::Deref for Ui {
@@ -339,6 +341,7 @@ impl Ui {
             skins_grid: signal(true),
             quick_text: signal(String::new()),
             archive: signal(Arc::new(crate::archive::View::default())),
+            backup: signal(Arc::new(crate::app::backup::View::default())),
         }
     }
 

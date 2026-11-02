@@ -24,6 +24,7 @@ mod onboarding;
 mod output;
 mod platforms;
 mod playback;
+mod profiles;
 mod skin_grid;
 mod skins;
 mod speech;
@@ -31,6 +32,7 @@ mod windows;
 mod workshop;
 
 pub use self::about::font_licence_panel;
+pub use self::profiles::import_dialog;
 
 use self::about::*;
 use self::assets::*;
@@ -42,6 +44,7 @@ use self::onboarding::*;
 use self::output::*;
 use self::platforms::*;
 use self::playback::*;
+use self::profiles::*;
 use self::skins::*;
 use self::windows::*;
 

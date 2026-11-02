@@ -409,6 +409,6 @@ pub fn settings_window(ui: Ui) -> impl IntoView {
         body,
         widget(nana_ui::runtime::OverlayHost::new())
             .css(nana_ui::runtime::view::css! {position: absolute; inset: 0;})
-            .children(super::twitch::confirm_dialog(ui)),
+            .children((super::twitch::confirm_dialog(ui), pages::import_dialog(ui))),
     ))
 }

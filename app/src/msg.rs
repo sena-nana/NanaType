@@ -30,6 +30,7 @@ pub enum GlobalAction {
     ToggleHistory,
     NextCharacter,
     PrevCharacter,
+    NextProfile,
     /// Quick phrase `n` (Settings › Assets), inserted or sent like its menu
     /// item. Not in [`Self::ALL`]: phrases come and go with the settings.
     Phrase(usize),
@@ -39,7 +40,7 @@ pub enum GlobalAction {
 
 impl GlobalAction {
     /// The fixed actions, in the order the Hotkeys page lists them.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Summon,
         Self::ShowChat,
         Self::ReplyLatest,
@@ -54,6 +55,7 @@ impl GlobalAction {
         Self::ToggleLock,
         Self::NextCharacter,
         Self::PrevCharacter,
+        Self::NextProfile,
     ];
 
     /// Whether the action brings the input window forward. On Windows the
@@ -81,6 +83,7 @@ impl GlobalAction {
             Self::ToggleHistory => "hotkeys-toggle-history",
             Self::NextCharacter => "hotkeys-next-character",
             Self::PrevCharacter => "hotkeys-prev-character",
+            Self::NextProfile => "hotkeys-next-profile",
             Self::Phrase(_) => "assets-phrase-hotkey",
             Self::Character(_) => "general-character-hotkey",
         }
@@ -111,6 +114,7 @@ impl GlobalAction {
             Self::Character(i) => Msg::Edit(Box::new(move |s: &mut Settings| {
                 s.general.select_character(i)
             })),
+            Self::NextProfile => Msg::Profile(ProfileMsg::Next),
             _ => return None,
         })
     }
@@ -132,6 +136,7 @@ impl GlobalAction {
             Self::ToggleHistory => h.toggle_history.as_ref(),
             Self::NextCharacter => h.next_character.as_ref(),
             Self::PrevCharacter => h.prev_character.as_ref(),
+            Self::NextProfile => h.next_profile.as_ref(),
             Self::Phrase(i) => s.assets.phrases.get(i)?.hotkey.as_ref(),
             Self::Character(i) => s.general.characters.get(i)?.hotkey.as_ref(),
         }
@@ -174,6 +179,7 @@ impl GlobalAction {
             Self::ToggleHistory => &mut h.toggle_history,
             Self::NextCharacter => &mut h.next_character,
             Self::PrevCharacter => &mut h.prev_character,
+            Self::NextProfile => &mut h.next_profile,
             Self::Phrase(_) | Self::Character(_) => unreachable!("handled above"),
         } = value;
     }
@@ -308,6 +314,8 @@ pub enum FileTarget {
     SpeechModel,
     /// Save the session open in Settings › History as this format.
     ExportHistory(crate::archive::Format),
+    ExportSettings,
+    ImportSettings,
 }
 
 pub enum Msg {
@@ -398,6 +406,8 @@ pub enum Msg {
     Update(UpdateMsg),
     Workshop(WorkshopMsg),
     History(HistoryMsg),
+    Backup(BackupMsg),
+    Profile(ProfileMsg),
 }
 
 pub enum SpeechMsg {
@@ -677,6 +687,45 @@ pub enum HistoryMsg {
     OpenFolder,
 }
 
+/// Settings export, import, reset and the backup kept before them
+/// (Settings › General).
+pub enum BackupMsg {
+    /// Ask where to save an export with the page's options.
+    Export,
+    /// The export's path and how many avatars stayed behind.
+    Exported(Result<(std::path::PathBuf, usize), String>),
+    /// Ask which file to import.
+    Import,
+    /// A chosen file was read, checked and migrated off the UI thread.
+    Checked(Result<Box<nanatype_settings::Incoming>, nanatype_settings::ImportError>),
+    /// Apply the checked import (`true`) or drop it.
+    Confirm(bool),
+    /// The import's avatars are written; apply its settings.
+    Unpacked(Box<Settings>, Option<Box<nanatype_settings::GeometryStore>>),
+    /// Everything back to defaults (asked first on the page).
+    Reset,
+    /// Back to the settings before the last import, reset or restore.
+    Restore,
+    Restored(Result<Box<Settings>, String>),
+}
+
+/// Named snapshots of the profile-scoped settings (Settings › General).
+pub enum ProfileMsg {
+    /// Save the current settings as a new profile with this name.
+    SaveAs(String),
+    /// Save the current settings into this profile.
+    Update(String),
+    Switch(String),
+    /// Switch to the profile after the active one in the list.
+    Next,
+    Rename {
+        id: String,
+        name: String,
+    },
+    Duplicate(String),
+    Delete(String),
+}
+
 /// A toolbar or shortcut action on the draft. Applied to the rich editor's
 /// selection, or as markup in source mode.
 #[derive(Debug, Clone, PartialEq)]
@@ -781,6 +830,10 @@ mod tests {
         assert_eq!(s.general.character, 1);
         let s = edited(GlobalAction::Character(0).message(), s);
         assert_eq!(s.general.character, 0);
+        assert!(matches!(
+            GlobalAction::NextProfile.message(),
+            Some(Msg::Profile(ProfileMsg::Next))
+        ));
         // Raising and playback actions are the app's own.
         assert!(GlobalAction::Summon.message().is_none());
         assert!(GlobalAction::Continue.message().is_none());

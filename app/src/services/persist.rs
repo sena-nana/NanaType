@@ -16,6 +16,9 @@ enum Job {
     Write(PathBuf, Vec<u8>),
     /// Add to the end of a file, making it (and its folder) if needed.
     Append(PathBuf, Vec<u8>),
+    /// Delete a file (and the `.bak` its writes keep), dropping any write
+    /// still pending for it.
+    Remove(PathBuf),
     /// Write everything pending now and reply.
     Flush(Sender<()>),
 }
@@ -46,6 +49,10 @@ impl Persist {
 
     pub fn append(&self, path: PathBuf, bytes: Vec<u8>) {
         let _ = self.tx.send(Job::Append(path, bytes));
+    }
+
+    pub fn remove(&self, path: PathBuf) {
+        let _ = self.tx.send(Job::Remove(path));
     }
 
     /// Block until pending writes are on disk (exit), at most `timeout`.
@@ -81,6 +88,19 @@ fn run(rx: Receiver<Job>, on_error: impl Fn(String)) {
                 Ok(Job::Append(path, bytes)) => {
                     if let Err(e) = append(&path, &bytes) {
                         on_error(format!("{}: {e}", path.display()));
+                    }
+                }
+                Ok(Job::Remove(path)) => {
+                    pending.remove(&path);
+                    let mut bak = path.clone().into_os_string();
+                    bak.push(".bak");
+                    for file in [path, PathBuf::from(bak)] {
+                        match std::fs::remove_file(&file) {
+                            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                                on_error(format!("{}: {e}", file.display()));
+                            }
+                            _ => {}
+                        }
                     }
                 }
                 Ok(Job::Flush(reply)) => {

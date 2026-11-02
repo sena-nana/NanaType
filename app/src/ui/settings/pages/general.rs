@@ -313,6 +313,8 @@ fn settings_body(ui: Ui) -> AnyView {
                     ),
                 ],
             ),
+            section(ui, "general-profiles", profiles(ui)),
+            section_with(ui, "general-backup", backup(ui)),
             // A Steam build updates through Steam.
             crate::distribution::UPDATES.then(|| section_with(ui, "general-updates", updates(ui))),
         ))

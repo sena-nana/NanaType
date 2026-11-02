@@ -444,6 +444,17 @@ impl WindowManager {
         }
     }
 
+    /// Take window positions from an imported file: every window is placed
+    /// again from them.
+    pub fn replace_geometry(&mut self, geometry: GeometryStore) {
+        self.geometry = geometry;
+        self.geometry_dirty = true;
+        for slot in self.slots.values_mut() {
+            slot.placed = false;
+            slot.applied = None;
+        }
+    }
+
     /// Commands that bring every open window to its desired state.
     pub fn reconcile(&mut self, want: &[(WindowKind, Desired)]) -> Vec<WindowCommand> {
         let mut out = Vec::new();

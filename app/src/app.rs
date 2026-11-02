@@ -1,5 +1,6 @@
 //! Application state and the single update function.
 mod archive;
+pub mod backup;
 pub mod blivechat;
 mod chat;
 mod editor;
@@ -140,6 +141,8 @@ pub struct App {
     live_chat: live::LiveChat,
     /// Saved history: the session's file and what is already in it.
     archive: archive::Archive,
+    /// The profiles, a checked import and the settings kept before one.
+    backup: backup::Backup,
     pub hotkeys: Hotkeys,
     pub tray: Option<Tray>,
     pub persist: Persist,
@@ -347,6 +350,7 @@ impl App {
             chat: VecDeque::new(),
             live_chat: Default::default(),
             archive: Default::default(),
+            backup: Default::default(),
             hotkeys: workers.hotkeys,
             tray: None,
             persist,
@@ -462,6 +466,7 @@ impl App {
         self.check_update_on_start();
         self.notice_unseen_crash();
         self.archive_start();
+        self.backup_start();
         if !self.settings.general.onboarding_done {
             self.open_settings();
         }
@@ -1930,6 +1935,13 @@ impl App {
                     .filters([FileFilter::new(label, [format.ext()])])
                     .file_name(self.archive_export_name(format))
             }
+            FileTarget::ExportSettings => FileDialogRequest::new(id, FileDialogKind::SaveFile)
+                .title(t("backup-export"))
+                .filters([FileFilter::new("JSON", ["json"])])
+                .file_name(self.settings_export_name()),
+            FileTarget::ImportSettings => FileDialogRequest::new(id, FileDialogKind::OpenFile)
+                .title(t("backup-import"))
+                .filters([FileFilter::new("JSON", ["json"])]),
         };
         let window = [WindowKind::Settings, WindowKind::Input]
             .into_iter()
@@ -1986,6 +1998,8 @@ impl App {
                 self.import_sticker_folders(vec![path]);
             }
             FileTarget::ExportHistory(format) => self.archive_export(format, path),
+            FileTarget::ExportSettings => self.settings_export(path),
+            FileTarget::ImportSettings => self.settings_import(path),
         }
     }
 
@@ -2073,6 +2087,8 @@ impl App {
             Msg::Obs(m) => self.obs_msg(m),
             Msg::Workshop(m) => self.workshop_msg(m),
             Msg::History(m) => self.history_msg(m),
+            Msg::Backup(m) => self.backup_msg(m),
+            Msg::Profile(m) => self.profile_msg(m),
             #[cfg(feature = "updates")]
             Msg::Update(m) => self.update_msg(m),
             Msg::HoldOnboardPreview => {
@@ -2383,6 +2399,7 @@ impl App {
             | GlobalAction::ToggleHistory
             | GlobalAction::NextCharacter
             | GlobalAction::PrevCharacter
+            | GlobalAction::NextProfile
             | GlobalAction::Character(_) => {
                 if let Some(msg) = action.message() {
                     self.update(msg);
