@@ -110,6 +110,15 @@ Turning an output off and back on within 5 seconds reuses the original sender, a
 - **Import**: **Import settings** reads an exported file or a hand-copied `settings.json`. Files from older versions are upgraded through the settings migrations first; files from a newer NanaType are refused. A confirmation lists what will change and nothing is applied before it. The current settings are first backed up to `settings.previous.json`, and **Restore previous settings** undoes the import (pressing it again returns to the imported settings). A file without integrations keeps yours; your sign-ins are always kept. Embedded avatars are written to `avatars/` in the data folder.
 - **Reset all to defaults**: after a confirmation, the settings go back to a new install's, keeping the language, the finished first-run guide and the sign-ins (keychain passwords are not touched and you stay signed in). The current settings are backed up first, so **Restore previous settings** undoes it. Window positions and profiles are not affected.
 
+### Accessibility
+
+- **Settings › General › Accessibility** changes only the app's own windows: Settings, the input window (with its history and chat panels) and the package editor. Skins, and what the display, partner and history windows show (Spout2 / Syphon output included), always stay as they are.
+- **High contrast**: **Follow system**, **Off** or **On**. On, the interface switches to opaque black and white with text at 7:1 or more, borders, control outlines and focus indicators at 3:1 or more, and heavier rules. **Follow system** follows the Windows high-contrast theme; macOS does not report **Increase contrast** yet, so turn it on by hand there.
+- **Interface size**: 80%–200% (100% by default) enlarges text and controls on top of the system's display scale, never twice. Windows' minimum sizes grow with it, and an open Settings or input window grows to fit; skin previews keep the size the output has. The package editor takes the new size the next time it opens.
+- **Reduce motion** is under **Settings › Playback**; the system's reduce-motion preference also turns it on.
+- Every control has a name a screen reader announces, and switches and sliders report their state. Tab / Shift+Tab move between controls, Enter or Space operates them, Esc closes dialogs and pop-up menus.
+- These settings are global; profiles do not change them.
+
 ### Checking for updates
 
 The Steam edition is updated by Steam and has no such option. The GitHub edition checks GitHub Releases for new versions from **Settings › About**, and **Settings › General › Updates** checks automatically once a day by default. A new installer is only opened after it passes verification. Downloads try GitHub and the built-in proxies (gh-proxy.com, ghfast.top, ghproxy.net) in parallel, and you can add one custom proxy. Proxies only carry the bytes: the version manifest is signed with Ed25519 and installers are checked against SHA-256. See [Checking for updates](updates.md).
