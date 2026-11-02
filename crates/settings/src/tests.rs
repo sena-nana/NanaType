@@ -501,6 +501,49 @@ fn sanitize_clamps_hand_edited_values() {
 }
 
 #[test]
+fn accessibility_defaults_load_into_older_files_and_stay_global() {
+    // A file from before the setting: system contrast, the system's size.
+    let s: Settings = serde_json::from_str(r#"{"schema":5}"#).unwrap();
+    assert_eq!(s.accessibility, AccessibilitySettings::default());
+    assert_eq!(s.accessibility.contrast, ContrastMode::System);
+    assert_eq!(s.accessibility.scale(), 1.0);
+    for (mode, system, on) in [
+        (ContrastMode::System, false, false),
+        (ContrastMode::System, true, true),
+        (ContrastMode::Off, true, false),
+        (ContrastMode::On, false, true),
+    ] {
+        let a = AccessibilitySettings {
+            contrast: mode,
+            ..Default::default()
+        };
+        assert_eq!(a.high_contrast(system), on, "{mode:?} with system {system}");
+    }
+    // Round trips, and a hand-edited size lands on a step in range.
+    let mut s = Settings {
+        accessibility: AccessibilitySettings {
+            contrast: ContrastMode::On,
+            ui_scale: 150,
+        },
+        ..Default::default()
+    };
+    let back: Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+    assert_eq!(back.accessibility, s.accessibility);
+    assert!(!s.sanitize());
+    for (written, kept) in [(5, 80), (1000, 200), (144, 140), (146, 150)] {
+        s.accessibility.ui_scale = written;
+        s.sanitize();
+        assert_eq!(s.accessibility.ui_scale, kept, "{written}%");
+    }
+    // The settings window's look follows the computer, not the profile.
+    assert!(
+        !crate::transfer::PROFILE_SCOPE
+            .iter()
+            .any(|p| p.starts_with("/accessibility"))
+    );
+}
+
+#[test]
 fn hotkey_labels_and_global_safety() {
     let h = Hotkey {
         ctrl: true,

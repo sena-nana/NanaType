@@ -79,16 +79,19 @@ pub fn run() -> ExitCode {
         version: env!("CARGO_PKG_VERSION"),
         vendor: "sena-nana",
     );
+    let launch = Launch::from_args(std::env::args().skip(1));
+    // It grows with NanaType's UI scale, so nothing in it is cut off.
+    let scale = nanatype_settings::peek_accessibility(&launch.paths().settings()).scale();
     let mut primary = nana_ui::WindowDescriptor::new("NanaType Editor").initial_size(1440.0, 900.0);
-    let [min_w, min_h] = ui::shell::MIN_SIZE;
+    let [min_w, min_h] = ui::shell::MIN_SIZE.map(|v| (v * scale).round());
     primary.minimum_size = (f64::from(min_w), f64::from(min_h));
+    primary.constrain_to_work_area = true;
     primary.system_caption = true;
     primary.resizable = true;
     primary.focus_on_show = true;
     primary.role = nana_ui_platform::WindowRole::Main;
     primary.icon = icon();
     // One "Detailed logs" switch, in NanaType's settings, covers both programs.
-    let launch = Launch::from_args(std::env::args().skip(1));
     let logging = nanatype_settings::peek_diagnostics(&launch.paths().settings());
     match NanaApplication::builder(identity)
         .diagnostics(nanatype_diag::config(logging.verbose))

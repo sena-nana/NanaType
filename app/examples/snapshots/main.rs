@@ -10,6 +10,9 @@
 //! comparisons of built-in skins (self-contained manifests, no inheritance).
 //! `NANATYPE_SNAPSHOT_APPEARANCE=dark` selects neutral dark application chrome.
 //! `NANATYPE_SNAPSHOT_SUBTITLE=text` gives the sample lines that translation.
+//! `NANATYPE_SNAPSHOT_UI_SCALE=150` draws the settings and input windows at
+//! that UI scale (percent), at its minimum window size or larger.
+//! `NANATYPE_SNAPSHOT_HIGH_CONTRAST=1` paints their chrome in high contrast.
 //! `NANATYPE_SNAPSHOT_SCALE` captures at a physical pixel scale (default 1).
 //! `NANATYPE_SNAPSHOT_WIDTH=300` overrides the logical width of selected views.
 //! `NANATYPE_PREVIEW_SCALE_AUDIT=1` captures tall/maximum logical canvases
@@ -86,10 +89,31 @@ fn shot(
         })
         .unwrap_or(w);
     assert!(w > 0, "snapshot width must be positive");
+    // The app's own windows grow with the UI scale, as their minimum size does.
+    let ui_scale = scene::ui_scale_percent() as f32 / 100.0;
+    let own = name.starts_with("settings") || name.starts_with("input");
+    let (w, h) = if own {
+        (
+            (w as f32 * ui_scale).round() as u32,
+            (h as f32 * ui_scale).round() as u32,
+        )
+    } else {
+        (w, h)
+    };
+    // Broadcast windows always take the plain theme.
+    let theme = if own {
+        theme
+    } else {
+        let dark = theme.appearance() == nana_ui_core::ThemeAppearance::Dark;
+        nanatype::ui::kit::theme::compile(dark)
+    };
     nanatype::clock::capture_at(at.saturating_sub(1000), || {
         let id = DocumentId::new(1).unwrap();
         let mut doc = document(id);
         let _ = doc.context_mut().set_theme_tokens(theme);
+        if own {
+            doc.context_mut().set_default_text_scale(ui_scale);
+        }
         mount(&mut doc, id);
         let scale = std::env::var("NANATYPE_SNAPSHOT_SCALE")
             .ok()

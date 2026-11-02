@@ -263,7 +263,7 @@ fn groups(ui: Ui) -> Vec<Group> {
 /// A tile as a full-width flat row: the face at the start (a marker's is the
 /// editor's chip), its markup faint at the end.
 fn tile_view(ui: Ui, tile: Tile, query: Signal<String>, hint: Signal<Option<String>>) -> AnyView {
-    let look = super::super::rich::MentionLook::for_ui(ui.chrome_dark.get_untracked()).markers;
+    let look = super::super::rich::MentionLook::for_ui(ui.chrome_untracked()).markers;
     let face = match tile.face {
         Face::Chip(kind, icon) => marker_chip(&look, kind, icon, &tile.label),
         Face::Plain(icon) => {
@@ -385,6 +385,7 @@ pub(super) fn panel(ui: Ui) -> AnyView {
             (
                 ui.locale.get(),
                 ui.chrome_dark.get(),
+                ui.chrome_contrast.get(),
                 ui.skin.with(|s| Arc::as_ptr(s) as usize),
             )
         },

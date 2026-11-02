@@ -152,7 +152,12 @@ pub struct App {
     pub hotkeys: Hotkeys,
     pub tray: Option<Tray>,
     pub persist: Persist,
+    /// The theme the app's own windows install: high contrast and the UI
+    /// scale included.
     pub theme: Arc<CompiledTheme>,
+    /// The plain theme of the same lightness, for the output windows, whose
+    /// picture is broadcast. The same `Arc` as [`Self::theme`] when they agree.
+    pub output_theme: Arc<CompiledTheme>,
     pub ctx: RuntimeProgramContext<Msg>,
     /// The input window was summoned (summon presence).
     pub summoned: bool,
@@ -165,6 +170,8 @@ pub struct App {
     /// Its window was asked for and has not closed since.
     quick_requested: bool,
     pub system_dark: bool,
+    /// The system asks for high contrast (Windows reports it; macOS does not).
+    pub system_high_contrast: bool,
     next_notice: u64,
     dialogs: HashMap<u64, FileTarget>,
     next_dialog: u64,
@@ -288,10 +295,10 @@ impl App {
             ctx.system_appearance(),
             Some(nana_ui_platform::SystemAppearance::Dark)
         );
-        let theme = crate::ui::kit::theme::compile(skin_theme::dark_mode(
-            settings.skin.chrome,
-            system_dark,
-        ));
+        let system_high_contrast = ctx.high_contrast();
+        let (theme, output_theme) = crate::ui::kit::theme::compile_both(
+            crate::ui::kit::theme::Chrome::of(&settings, system_dark, system_high_contrast),
+        );
         let ui = startup::ui(ctx, &settings, &skin, locale, &geometry, system_dark);
 
         let workers = startup::Workers::start(&paths, &settings, steam, post.clone());
@@ -363,6 +370,7 @@ impl App {
             tray: None,
             persist,
             theme,
+            output_theme,
             ctx: ctx.clone(),
             summoned: false,
             quick_open: false,
@@ -370,6 +378,7 @@ impl App {
             quick_hwnd: 0,
             quick_requested: false,
             system_dark,
+            system_high_contrast,
             next_notice: 1,
             dialogs: HashMap::new(),
             next_dialog: 1,
@@ -1062,6 +1071,27 @@ impl App {
         self.apply_effects(fx);
     }
 
+    /// Grow the app's own open windows to the UI scale's minimum size, so a
+    /// larger scale cuts nothing off. (A window's minimum is fixed when it
+    /// opens; the input window's takes the new one at the next launch.)
+    fn fit_ui_windows(&mut self) {
+        for kind in [WindowKind::Input, WindowKind::Settings] {
+            let (Some(frame), Some((w, h))) = (
+                self.windows.frame(kind),
+                windows::minimum_size(kind, &self.settings),
+            ) else {
+                continue;
+            };
+            if frame.w < w || frame.h < h {
+                self.commands.push(WindowCommand::SetBounds {
+                    id: kind.id(),
+                    position: (frame.x as f32, frame.y as f32),
+                    size: (frame.w.max(w) as f32, frame.h.max(h) as f32),
+                });
+            }
+        }
+    }
+
     fn apply_saved_sizes(&mut self) {
         for kind in [WindowKind::Display, WindowKind::History] {
             if let Some(frame) = self.windows.frame(kind) {
@@ -1077,9 +1107,17 @@ impl App {
 
     /// Refresh operator chrome without reloading assets or changing content boxes.
     pub fn refresh_theme(&mut self) {
-        let dark = skin_theme::dark_mode(self.settings.skin.chrome, self.system_dark);
-        self.theme = crate::ui::kit::theme::compile(dark);
-        self.ui.chrome_dark.set(dark);
+        let chrome = crate::ui::kit::theme::Chrome::of(
+            &self.settings,
+            self.system_dark,
+            self.system_high_contrast,
+        );
+        let (theme, output) = crate::ui::kit::theme::compile_both(chrome);
+        self.theme = theme;
+        self.output_theme = output;
+        self.ui.chrome_dark.set(chrome.dark);
+        self.ui.chrome_contrast.set(chrome.high_contrast);
+        self.ui.ui_scale.set_if_changed(chrome.scale);
         self.tint_captions();
     }
 
@@ -1263,7 +1301,9 @@ impl App {
         let characters_changed = prev.general.characters != s.general.characters
             || prev.general.character != s.general.character;
         let look_changed = prev.skin.overrides != s.skin.overrides || active_profile_changed;
-        let chrome_changed = prev.skin.chrome != s.skin.chrome;
+        let chrome_changed =
+            prev.skin.chrome != s.skin.chrome || prev.accessibility != s.accessibility;
+        let scale_changed = prev.accessibility.ui_scale != s.accessibility.ui_scale;
         let assets_changed = prev.assets.sticker_dirs != s.assets.sticker_dirs;
         let device_changed = prev.sound.device != s.sound.device;
         let pack_changed = prev.sound.pack != s.sound.pack;
@@ -1279,6 +1319,9 @@ impl App {
         self.sync_reduced_motion();
         if chrome_changed {
             self.refresh_theme();
+        }
+        if scale_changed {
+            self.fit_ui_windows();
         }
         if locale_changed {
             let locale = locale_of(&self.settings);

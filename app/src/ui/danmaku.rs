@@ -172,7 +172,7 @@ fn row_view(ui: Ui, source: RowSource, width: f32) -> AnyView {
     .bind(move |s: &mut Stack| {
         let selected = matches!(source, RowSource::Chat(seq) if ui.chat_target.get() == Some(seq));
         let active = selected || hovered.get() || focused.get();
-        let mut accent = palette(ui.chrome_dark.get()).accent.as_rgba_array();
+        let mut accent = palette(ui.chrome()).accent.as_rgba_array();
         let border = if active { accent } else { [0.0; 4] };
         accent[3] = if selected {
             crate::ui::kit::wash::SELECTED
@@ -401,8 +401,8 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
             .truncating(),
         )
     });
-    let dark = ui.chrome_dark.get_untracked();
-    let colors = palette(dark);
+    let chrome = ui.chrome_untracked();
+    let colors = palette(chrome);
     let look = Look {
         size: 14.0,
         color: rgba8(colors.text),
@@ -412,7 +412,7 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
         name: None,
         accent: None,
         latin: None,
-        mention: MentionLook::for_ui(dark),
+        mention: MentionLook::for_ui(chrome),
         ink: None,
     };
     let mut body_style = Type::Chat.style();
@@ -763,11 +763,12 @@ pub fn chat_panel(ui: Ui) -> AnyView {
             (
                 ui.chat_width.get().round() as i32,
                 ui.chrome_dark.get(),
+                ui.chrome_contrast.get(),
                 ui.locale.get(),
                 ui.reduced_motion.get(),
             )
         },
-        move |(width, _, _, _)| {
+        move |(width, _, _, _, _)| {
             let width = *width as f32;
             widget(
                 Stack::column(0.0)

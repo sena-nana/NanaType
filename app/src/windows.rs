@@ -191,12 +191,34 @@ pub fn debug_opaque() -> bool {
     cfg!(debug_assertions) && std::env::var_os("NANATYPE_OPAQUE").is_some()
 }
 
+/// The settings window's size as designed, and the smallest it may be.
+const SETTINGS_SIZE: (f32, f32) = (920.0, 660.0);
+const SETTINGS_MIN: (f64, f64) = (720.0, 480.0);
+
+/// The smallest the app's own windows may be at the UI scale: they grow
+/// with their text and controls so nothing is cut. Broadcast windows have
+/// no minimum here.
+pub fn minimum_size(kind: WindowKind, s: &Settings) -> Option<(f64, f64)> {
+    let scale = f64::from(s.accessibility.scale());
+    let base = match kind {
+        WindowKind::Input => INPUT_MIN,
+        WindowKind::Settings => SETTINGS_MIN,
+        WindowKind::Quick => (f64::from(QUICK_SIZE.0), f64::from(QUICK_SIZE.1)),
+        _ => return None,
+    };
+    Some(((base.0 * scale).round(), (base.1 * scale).round()))
+}
+
 /// Logical size of a window for the current skin and settings.
 pub fn size_of(kind: WindowKind, skin: &Skin, s: &Settings) -> (f32, f32) {
+    let at_least = |size: (f32, f32)| {
+        let (w, h) = minimum_size(kind, s).unwrap_or_default();
+        (size.0.max(w as f32), size.1.max(h as f32))
+    };
     match kind {
-        WindowKind::Input => INPUT_SIZE,
-        WindowKind::Settings => (920.0, 660.0),
-        WindowKind::Quick => QUICK_SIZE,
+        WindowKind::Input => at_least(INPUT_SIZE),
+        WindowKind::Settings => at_least(SETTINGS_SIZE),
+        WindowKind::Quick => at_least(QUICK_SIZE),
         _ => canvas::size_of(kind.canvas().expect("broadcast window"), skin, s),
     }
 }
@@ -223,7 +245,7 @@ pub fn descriptor(kind: WindowKind, title: &str, skin: &Skin, s: &Settings) -> W
     d.icon = icon();
     match kind {
         WindowKind::Input => {
-            d.minimum_size = INPUT_MIN;
+            d.minimum_size = minimum_size(kind, s).unwrap_or(INPUT_MIN);
             d.system_caption = true;
             d.resizable = true;
             d.focus_on_show = true;
@@ -234,7 +256,9 @@ pub fn descriptor(kind: WindowKind, title: &str, skin: &Skin, s: &Settings) -> W
             d.visible = false;
         }
         WindowKind::Settings => {
-            d.minimum_size = (720.0, 480.0);
+            d.minimum_size = minimum_size(kind, s).unwrap_or(SETTINGS_MIN);
+            // A large UI scale can ask for more than a small screen has.
+            d.constrain_to_work_area = true;
             d.system_caption = true;
             d.resizable = true;
             d.visible = true;
@@ -244,7 +268,7 @@ pub fn descriptor(kind: WindowKind, title: &str, skin: &Skin, s: &Settings) -> W
         WindowKind::Quick => {
             d.system_caption = false;
             d.resizable = false;
-            d.minimum_size = (f64::from(QUICK_SIZE.0), f64::from(QUICK_SIZE.1));
+            d.minimum_size = (f64::from(w), f64::from(h));
             d.skip_taskbar = true;
             d.always_on_top = true;
             d.focus_on_show = true;

@@ -194,6 +194,59 @@ fn characters(ui: Ui) -> Row {
     ))
 }
 
+/// High contrast and the UI scale of the app's own windows. Reduced motion
+/// lives with the other motion settings, under Playback.
+fn accessibility(ui: Ui) -> AnyView {
+    let (lo, hi, step) = nanatype_settings::UI_SCALE;
+    section(
+        ui,
+        "general-accessibility",
+        vec![
+            row(
+                ui,
+                "general-contrast",
+                Some("general-contrast-hint"),
+                select(
+                    ui,
+                    select_keys(
+                        ui,
+                        &[
+                            ("system", "general-appearance-system"),
+                            ("off", "general-contrast-off"),
+                            ("on", "general-contrast-on"),
+                        ],
+                    ),
+                    |s| match s.accessibility.contrast {
+                        ContrastMode::System => "system".into(),
+                        ContrastMode::Off => "off".into(),
+                        ContrastMode::On => "on".into(),
+                    },
+                    |s, v| {
+                        s.accessibility.contrast = match v {
+                            "off" => ContrastMode::Off,
+                            "on" => ContrastMode::On,
+                            _ => ContrastMode::System,
+                        }
+                    },
+                ),
+            ),
+            row(
+                ui,
+                "general-ui-scale",
+                Some("general-ui-scale-hint"),
+                slider_with(
+                    ui,
+                    (f64::from(lo), f64::from(hi), f64::from(step)),
+                    "",
+                    |_, v| Some(format!("{}%", v.round())),
+                    |s| f64::from(s.accessibility.ui_scale),
+                    |s, v| s.accessibility.ui_scale = v.round() as u32,
+                ),
+            ),
+        ],
+    )
+}
+
 fn settings_body(ui: Ui) -> AnyView {
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
@@ -232,6 +285,7 @@ fn settings_body(ui: Ui) -> AnyView {
                     ),
                 ],
             ),
+            accessibility(ui),
             section(ui, "general-characters", vec![characters(ui)]),
             section_with(
                 ui,

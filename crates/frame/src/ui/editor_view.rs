@@ -22,7 +22,8 @@ pub const PLAIN_TEXT_SIZE: f32 = 16.0;
 fn editor_base(ui: Stage) -> Base {
     let mut base = Base::editor(&ui.skin.get());
     if !ui.settings.with(|s| s.general.input_skin_preview) {
-        base.size = PLAIN_TEXT_SIZE;
+        // The canvas keeps skin sizes; plain text takes the UI scale here.
+        base.size = PLAIN_TEXT_SIZE * ui.ui_scale.get();
         base.line_height = base.line_height.min(1.5);
         base.shadow = None;
         base.stroke = None;
@@ -276,7 +277,7 @@ pub fn editor_area<M: Send + 'static>(
             .bind(move |a: &mut TextArea| {
                 // The theme's faint default selection hardly shows on the field.
                 let selection = Some(nana_ui_core::PaintColor::srgb(kit::theme::selection(
-                    ui.chrome_dark.get(),
+                    ui.chrome(),
                 )));
                 if a.style.layout.paint_colors.selection_background != selection {
                     Arc::make_mut(&mut a.style.layout)

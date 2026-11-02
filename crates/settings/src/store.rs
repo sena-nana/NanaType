@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::migrate::{MigrateError, migrate};
-use crate::schema::{DiagnosticsSettings, PerformanceSettings, Settings};
+use crate::schema::{AccessibilitySettings, DiagnosticsSettings, PerformanceSettings, Settings};
 
 #[derive(Debug)]
 pub enum LoadNote {
@@ -127,6 +127,27 @@ pub fn peek_diagnostics(path: &Path) -> DiagnosticsSettings {
         .and_then(|text| serde_json::from_str::<Peek>(&text).ok())
         .unwrap_or_default()
         .diagnostics
+}
+
+/// The accessibility section alone, read before the runtime starts: the
+/// input window opens at the UI scale's minimum size. Like
+/// [`peek_diagnostics`], an unreadable file reads as the defaults.
+pub fn peek_accessibility(path: &Path) -> AccessibilitySettings {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default)]
+    struct Peek {
+        accessibility: AccessibilitySettings,
+    }
+    let mut settings = Settings {
+        accessibility: fs::read_to_string(path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<Peek>(&text).ok())
+            .unwrap_or_default()
+            .accessibility,
+        ..Settings::default()
+    };
+    settings.sanitize();
+    settings.accessibility
 }
 
 /// The performance section alone, read before the runtime starts: the GPU

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, Weak};
 
 use nana_ui::runtime::view::{
-    AnyView, IntoView, RaisedSurfacePainter, Signal, dynamic, watch_effect, widget,
+    AnyView, IntoView, RaisedSurfacePainter, Signal, dynamic, node_ref, watch_effect, widget,
 };
 use nana_ui::runtime::{Stack, Text};
 use nana_ui_core::{
@@ -18,7 +18,7 @@ use nanatype_theme::Skin;
 
 use super::controls::hint;
 use super::editor_geometry::Capture;
-use super::kit::{gap, inset};
+use super::kit::{self, gap, inset};
 use super::{Stage, dialogue, history};
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -1011,6 +1011,8 @@ fn scaled_stage(
     scale: f32,
 ) -> AnyView {
     let [w, h] = size;
+    let canvas = node_ref();
+    kit::unscaled_text(canvas);
     widget(
         Stack::column(0.0)
             .width(LengthSpec::Px(w * scale))
@@ -1039,6 +1041,7 @@ fn scaled_stage(
             }),
     )
     .key(canvas_key)
+    .node_ref(canvas)
     .children(
         widget(
             Stack::column(0.0)

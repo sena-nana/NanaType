@@ -59,9 +59,13 @@ pub struct Host {
     /// The toast stack of each control window (settings, input, chat).
     toasts: HashMap<WindowId, Entity<ToastStack>>,
     stickers: crate::stickers::playback::Playback,
-    /// Language and forced reduced motion each document was last given;
-    /// re-sent only when they change (or to a new window), not per message.
-    doc_env: HashMap<WindowId, (nanatype_i18n::Locale, bool)>,
+    /// Language, forced reduced motion and text scale each document was last
+    /// given; re-sent only when they change (or to a new window), not per
+    /// message.
+    doc_env: HashMap<WindowId, (nanatype_i18n::Locale, bool, f32)>,
+    /// The app theme each output window last held back from: an output
+    /// window keeps the plain theme whatever the app's own windows wear.
+    output_held: HashMap<WindowId, Arc<CompiledTheme>>,
     /// The last keystroke click, and whether a key press (rather than IME
     /// text) played it.
     last_keystroke: Option<(Instant, bool)>,
@@ -399,12 +403,18 @@ impl Host {
         // The app's reduce-motion setting wins over the system's in every
         // window's runtime, so view transitions and toasts land at once too.
         let forced = self.app.settings.playback.reduced_motion;
+        let ui_scale = self.app.settings.accessibility.scale();
         self.doc_env.retain(|id, _| self.docs.contains_key(id));
         for (id, doc) in &mut self.docs {
-            if self.doc_env.get(id) == Some(&(locale, forced)) {
+            // Output windows are broadcast as they are: never scaled.
+            let scale = match WindowKind::from_id(*id) {
+                Some(kind) if kind.canvas().is_none() => ui_scale,
+                _ => 1.0,
+            };
+            if self.doc_env.get(id) == Some(&(locale, forced, scale)) {
                 continue;
             }
-            self.doc_env.insert(*id, (locale, forced));
+            self.doc_env.insert(*id, (locale, forced, scale));
             let cx = doc.context_mut();
             nanatype_frame::apply_locale(cx, locale);
             if forced {
@@ -412,6 +422,11 @@ impl Host {
             } else {
                 cx.follow_system_reduced_motion();
             }
+            cx.set_default_text_scale(scale);
+            // The app paints its own high contrast (`App::theme`), honouring
+            // the setting over the system's; NanaUI's overlay would replace
+            // it in every window, the broadcast ones too.
+            cx.set_high_contrast(false);
         }
         self.show_toasts();
         let mut result = self.app.update_result();
@@ -501,6 +516,29 @@ impl Host {
         }
     }
 
+    /// A new app theme reaches every window's document (the scene host
+    /// installs it); an output window takes the plain one back before it
+    /// paints, so high contrast and the UI scale never reach the broadcast.
+    fn hold_output_theme(&mut self, id: WindowId) {
+        if !WindowKind::from_id(id).is_some_and(|k| k.canvas().is_some()) {
+            return;
+        }
+        let theme = &self.app.theme;
+        if self
+            .output_held
+            .get(&id)
+            .is_some_and(|held| Arc::ptr_eq(held, theme))
+        {
+            return;
+        }
+        if let Some(doc) = self.docs.get_mut(&id) {
+            let _ = doc
+                .context_mut()
+                .set_theme_tokens(self.app.output_theme.clone());
+            self.output_held.insert(id, theme.clone());
+        }
+    }
+
     fn dismiss_toast(&mut self, kind: WindowKind, toast: Entity<Toast>) {
         let id = kind.id();
         if let (Some(stack), Some(doc)) = (self.toasts.get(&id).copied(), self.docs.get_mut(&id)) {
@@ -513,7 +551,12 @@ impl Host {
         let mut doc = RuntimeDocument::new(doc_id);
         let ui = self.app.ui;
         let context = doc.context_mut();
-        let _ = context.set_theme_tokens(self.app.theme.clone());
+        let _ = context.set_theme_tokens(if kind.canvas().is_some() {
+            self.output_held.insert(id, self.app.theme.clone());
+            self.app.output_theme.clone()
+        } else {
+            self.app.theme.clone()
+        });
         nanatype_frame::apply_locale(context, ui.locale.get_untracked());
         let err = |e: FrameworkError| e.to_string();
         match kind {
@@ -1183,6 +1226,7 @@ impl RuntimeProgram for Host {
             toasts: HashMap::new(),
             stickers: Default::default(),
             doc_env: HashMap::new(),
+            output_held: HashMap::new(),
             last_keystroke: None,
             animation_clock: None,
         };
@@ -1288,6 +1332,7 @@ impl RuntimeProgram for Host {
     fn discard_window(&mut self, id: WindowId) {
         self.stickers.discard(id);
         self.docs.remove(&id);
+        self.output_held.remove(&id);
         self.toasts.remove(&id);
         crate::ui::collect_effect_garbage();
     }
@@ -1407,6 +1452,7 @@ impl RuntimeProgram for Host {
                     self.app.quick_closed();
                 }
                 self.docs.remove(&id);
+                self.output_held.remove(&id);
                 self.toasts.remove(&id);
             }
             WindowEvent::FileDialogCompleted { result, .. } => {
@@ -1422,6 +1468,14 @@ impl RuntimeProgram for Host {
             WindowEvent::ReducedMotionChanged { reduced, .. } => {
                 self.app.ui.system_reduced_motion.set(reduced);
                 self.app.sync_reduced_motion();
+            }
+            WindowEvent::HighContrastChanged { high_contrast, .. } => {
+                // NanaUI has just laid its overlay on every document again.
+                self.doc_env.clear();
+                if self.app.system_high_contrast != high_contrast {
+                    self.app.system_high_contrast = high_contrast;
+                    self.app.refresh_theme();
+                }
             }
             _ => {}
         }
@@ -1725,6 +1779,7 @@ impl RuntimeProgram for Host {
         if let (Some(clock), Some(doc)) = (self.animation_clock, self.docs.get_mut(&id)) {
             clock.wake(doc.context_mut(), Instant::now());
         }
+        self.hold_output_theme(id);
         #[cfg(windows)]
         self.prepare_outputs(context);
         if let Some(perf) = &mut self.perf {

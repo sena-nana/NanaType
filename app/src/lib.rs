@@ -76,7 +76,10 @@ pub fn run() -> ExitCode {
     debug_assert_eq!(identity.id, paths::APP_ID);
     // The primary window is the input window; it opens hidden and is placed
     // and shown once the monitor layout is known.
-    let defaults = nanatype_settings::Settings::default();
+    let defaults = nanatype_settings::Settings {
+        accessibility: nanatype_settings::peek_accessibility(&paths::Paths::of_app().settings()),
+        ..Default::default()
+    };
     let skin = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"))
         .load(nanatype_theme::DEFAULT_SKIN)
         .expect("built-in skin")

@@ -113,6 +113,11 @@ pub struct Stage {
     pub skin: Signal<Arc<Skin>>,
     /// Resolved application appearance, independent of the selected skin.
     pub chrome_dark: Signal<bool>,
+    /// The application's own windows paint in high contrast (never a skin).
+    pub chrome_contrast: Signal<bool>,
+    /// The UI scale of the application's own windows, as a factor. Their
+    /// text takes it from NanaUI; a skin's text never does.
+    pub ui_scale: Signal<f32>,
     pub display: Signal<Arc<DisplayView>>,
     /// A private display snapshot used by isolated skin previews. It keeps
     /// the preview on the same dialogue renderer without touching the live
@@ -218,6 +223,8 @@ impl Stage {
             editor_nodes: None,
             speaker: signal(speaker),
             chrome_dark: signal(crate::skin_theme::dark_mode(settings.skin.chrome, false)),
+            chrome_contrast: signal(settings.accessibility.high_contrast(false)),
+            ui_scale: signal(settings.accessibility.scale()),
             locale: signal(locale),
             settings: signal(settings),
             skin_drafts: signal(HashMap::new()),
@@ -293,6 +300,25 @@ impl Stage {
     /// The first remote person's track: their display, clock and text nodes.
     pub fn remote(self) -> Self {
         self.lane(0)
+    }
+
+    /// How the application's own chrome paints now (tracked): its colours.
+    /// The scale stays 1 here; text reads [`Self::ui_scale`] itself.
+    pub fn chrome(self) -> kit::theme::Chrome {
+        kit::theme::Chrome {
+            dark: self.chrome_dark.get(),
+            high_contrast: self.chrome_contrast.get(),
+            scale: 1.0,
+        }
+    }
+
+    /// [`Self::chrome`], untracked.
+    pub fn chrome_untracked(self) -> kit::theme::Chrome {
+        kit::theme::Chrome {
+            dark: self.chrome_dark.get_untracked(),
+            high_contrast: self.chrome_contrast.get_untracked(),
+            scale: 1.0,
+        }
     }
 
     /// A string that follows the language setting.

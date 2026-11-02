@@ -837,7 +837,7 @@ fn sheet_row(lead: AnyView, lead_w: f32, meaning: String) -> AnyView {
 /// The `?` sheet: the markers the editor shows as chips with what each does,
 /// and the input window's own keys.
 pub fn cheat_sheet(ui: Ui) -> AnyView {
-    let look = super::rich::MentionLook::for_ui(ui.chrome_dark.get_untracked()).markers;
+    let look = super::rich::MentionLook::for_ui(ui.chrome_untracked()).markers;
     let t = |k: &str| ui.now_t(k);
     let markers: Vec<AnyView> = [
         (ChipKind::Wait, ti::CLOCK, "[wait=500]", "cheat-wait"),
@@ -964,7 +964,7 @@ fn color_face(ui: Ui, open: Signal<bool>) -> AnyView {
         glyph,
         widget(Stack::row(0.0).radius(nana_ui_core::RadiusTier::Xs)).bind(move |s: &mut Stack| {
             let attrs = ui.sel_attrs.get();
-            let colors = crate::ui::kit::theme::palette(ui.chrome_dark.get());
+            let colors = crate::ui::kit::theme::palette(ui.chrome());
             let color = if attrs.mixed.contains(RichAttrMask::COLOR) {
                 colors.faint.as_rgba_array()
             } else {
@@ -1000,12 +1000,13 @@ fn toolbar(ui: Ui) -> AnyView {
         (
             ui.locale.get(),
             ui.chrome_dark.get(),
+            ui.chrome_contrast.get(),
             available_width.get() < COMPACT_BELOW,
             ui.skin.with(|s| Arc::as_ptr(s) as usize),
             ui.settings.with(|s| s.hotkeys.input.clone()),
         )
     };
-    dynamic(key, move |(_, _, compact, _, _)| {
+    dynamic(key, move |(_, _, _, compact, _, _)| {
         let compact = *compact;
         let [
             color_open,
@@ -1247,7 +1248,7 @@ fn status_content(ui: Ui) -> AnyView {
 /// button that drops it.
 fn reply_bar(ui: Ui) -> AnyView {
     dynamic(
-        move || (ui.reply.get(), ui.chrome_dark.get()),
+        move || (ui.reply.get(), ui.chrome()),
         move |(reply, _)| {
             let Some(reply) = reply else {
                 return widget(Stack::row(0.0)).into_any();
@@ -1285,7 +1286,7 @@ fn reply_bar(ui: Ui) -> AnyView {
                     reply.user.avatar.as_ref().map(ToString::to_string),
                     &reply.user.name,
                     REPLY_AVATAR,
-                    crate::ui::kit::theme::palette(ui.chrome_dark.get())
+                    crate::ui::kit::theme::palette(ui.chrome())
                         .accent
                         .as_rgba_array(),
                 ),
@@ -1400,6 +1401,9 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
         let (w, _) = canvas_size();
         ((viewport.get().0 - 32.0).max(1.0) / w.max(1.0)).min(1.0)
     };
+    // The canvas draws in the skin's sizes, not the UI scale's.
+    let canvas = nana_ui::runtime::view::node_ref();
+    crate::ui::kit::unscaled_text(canvas);
     let preview = widget(ScrollView::new(ScrollAxes::Both).with_layout(|l| {
         l.width = Some(LengthSpec::Fill);
         l.height = Some(LengthSpec::Px(0.0));
@@ -1467,6 +1471,7 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
                     l.flex_shrink = Some(0.0);
                 }))
                 .key("input-preview-canvas")
+                .node_ref(canvas)
                 .bind(move |s: &mut Stack| {
                     let (w, h) = canvas_size();
                     let l = s.layout_mut();

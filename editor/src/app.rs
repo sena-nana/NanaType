@@ -12,6 +12,7 @@ use nana_ui_platform::host::WindowCommand;
 use nanatype_frame::paths::Paths;
 use nanatype_frame::plugin_host::background;
 use nanatype_frame::ui::feedback::ToastRequest;
+use nanatype_frame::ui::kit::theme::Chrome;
 use nanatype_theme::SkinRegistry;
 
 use crate::msg::{FileTarget, Msg};
@@ -27,6 +28,8 @@ pub struct App {
     pub ui: Ui,
     pub theme: Arc<CompiledTheme>,
     pub system_dark: bool,
+    /// The system asks for high contrast (Windows reports it).
+    pub system_high_contrast: bool,
     /// The editor window, once it is on screen.
     pub window: Option<nana_ui::WindowHandle>,
     /// Native window commands for the host to issue.
@@ -86,13 +89,15 @@ impl App {
             ctx.system_appearance(),
             Some(nana_ui_platform::SystemAppearance::Dark)
         );
-        let dark = nanatype_frame::skin_theme::dark_mode(settings.skin.chrome, system_dark);
+        let system_high_contrast = ctx.high_contrast();
+        let chrome = Chrome::of(&settings, system_dark, system_high_contrast);
         let ui = Ui::new(Arc::new(settings), loaded.skin, locale);
         let post = ctx.clone();
         ui.post.set(Some(Arc::new(move |a| {
             post.dispatch(Msg::PackageEditor(a))
         })));
-        ui.chrome_dark.set(dark);
+        ui.chrome_dark.set(chrome.dark);
+        ui.chrome_contrast.set(chrome.high_contrast);
         ui.reduced_motion.set(ctx.reduced_motion());
         ui.data_dir.set(paths.data.clone());
         let post = ctx.clone();
@@ -106,8 +111,9 @@ impl App {
             paths,
             registry,
             ui,
-            theme: nanatype_frame::ui::kit::theme::compile(dark),
+            theme: nanatype_frame::ui::kit::theme::compile(chrome),
             system_dark,
+            system_high_contrast,
             window: None,
             commands: Vec::new(),
             toasts: Vec::new(),
@@ -157,12 +163,15 @@ impl App {
         }
     }
 
-    /// Follow NanaType's chrome setting, or the system's appearance.
+    /// Follow NanaType's chrome and contrast settings, or the system's.
     pub fn refresh_theme(&mut self) {
-        let chrome = self.ui.settings.with_untracked(|s| s.skin.chrome);
-        let dark = nanatype_frame::skin_theme::dark_mode(chrome, self.system_dark);
-        self.theme = nanatype_frame::ui::kit::theme::compile(dark);
-        self.ui.chrome_dark.set(dark);
+        let chrome = self
+            .ui
+            .settings
+            .with_untracked(|s| Chrome::of(s, self.system_dark, self.system_high_contrast));
+        self.theme = nanatype_frame::ui::kit::theme::compile(chrome);
+        self.ui.chrome_dark.set(chrome.dark);
+        self.ui.chrome_contrast.set(chrome.high_contrast);
         if let Some(window) = &self.window {
             nanatype_frame::shell::tint_caption(window, &self.theme);
         }

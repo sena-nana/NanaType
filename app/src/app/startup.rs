@@ -120,6 +120,8 @@ pub(super) fn ui(
         ));
     ui.chrome_dark
         .set(skin_theme::dark_mode(settings.skin.chrome, system_dark));
+    ui.chrome_contrast
+        .set(settings.accessibility.high_contrast(ctx.high_contrast()));
     ui.system_reduced_motion.set(ctx.reduced_motion());
     ui.reduced_motion
         .set(settings.playback.reduced_motion || ctx.reduced_motion());

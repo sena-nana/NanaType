@@ -19,8 +19,8 @@ pub use geometry::{
 pub use migrate::{MigrateError, migrate};
 pub use schema::*;
 pub use store::{
-    LoadNote, Loaded, load_json, load_settings, peek_diagnostics, peek_performance, save_json,
-    write_atomic,
+    LoadNote, Loaded, load_json, load_settings, peek_accessibility, peek_diagnostics,
+    peek_performance, save_json, write_atomic,
 };
 pub use transfer::{
     EXPORT_APP, EXPORT_FORMAT, EmbeddedFile, Envelope, ExportOptions, Exported, ImportError,

@@ -343,8 +343,8 @@ impl Default for MentionLook {
 
 impl MentionLook {
     /// Inline labels in operator panels use the application palette.
-    pub fn for_ui(dark: bool) -> Self {
-        let p = crate::ui::kit::theme::palette(dark);
+    pub fn for_ui(chrome: impl Into<crate::ui::kit::theme::Chrome>) -> Self {
+        let p = crate::ui::kit::theme::palette(chrome);
         let fill = crate::skin_theme::rgba8(p.surface);
         let accent = crate::skin_theme::rgba8(p.accent);
         let fill = fill.mix(accent, 0.16);

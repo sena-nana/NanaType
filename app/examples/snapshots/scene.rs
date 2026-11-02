@@ -98,8 +98,19 @@ impl Scene {
         if std::env::var_os("NANATYPE_SNAPSHOT_MATERIALS_OFF").is_some() {
             settings.skin.advanced_effects = false;
         }
-        let theme = nanatype::ui::kit::theme::compile(dark);
+        settings.accessibility.ui_scale = ui_scale_percent();
+        let high_contrast = std::env::var_os("NANATYPE_SNAPSHOT_HIGH_CONTRAST").is_some();
+        if high_contrast {
+            settings.accessibility.contrast = nanatype_settings::ContrastMode::On;
+        }
+        let theme = nanatype::ui::kit::theme::compile(nanatype::ui::kit::theme::Chrome {
+            dark,
+            high_contrast,
+            scale: settings.accessibility.scale(),
+        });
         let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), locale);
+        ui.chrome_dark.set(dark);
+        ui.chrome_contrast.set(high_contrast);
         if std::env::var_os("NANATYPE_SNAPSHOT_STATIC").is_some() {
             ui.reduced_motion.set(true);
         }
@@ -226,4 +237,12 @@ impl Scene {
             _packaged: packaged_fonts,
         }
     }
+}
+
+/// The UI scale the run captures the app's own windows at, in percent.
+pub fn ui_scale_percent() -> u32 {
+    std::env::var("NANATYPE_SNAPSHOT_UI_SCALE")
+        .ok()
+        .map(|s| s.parse::<u32>().expect("UI scale in percent"))
+        .unwrap_or(100)
 }

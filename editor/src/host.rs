@@ -36,6 +36,7 @@ impl Host {
         let context = doc.context_mut();
         let _ = context.set_theme_tokens(self.app.theme.clone());
         nanatype_frame::apply_locale(context, ui.locale.get_untracked());
+        context.set_default_text_scale(ui.ui_scale.get_untracked());
         let (_, toasts) = context
             .mount_view_root(id, move || {
                 let stack = entity_ref::<ToastStack>();
@@ -188,6 +189,10 @@ impl RuntimeProgram for Host {
     ) -> RuntimeProgramUpdate {
         match event {
             WindowEvent::Ready { .. } => {
+                // The app paints its own high contrast, as the setting says.
+                if let Some(doc) = self.doc.as_mut() {
+                    doc.context_mut().set_high_contrast(false);
+                }
                 let window = context.window();
                 nanatype_frame::shell::tint_caption(&window, &self.app.theme);
                 self.app.window = Some(window);
@@ -215,6 +220,15 @@ impl RuntimeProgram for Host {
             }
             WindowEvent::ReducedMotionChanged { reduced, .. } => {
                 self.app.ui.reduced_motion.set(reduced);
+            }
+            WindowEvent::HighContrastChanged { high_contrast, .. } => {
+                self.app.system_high_contrast = high_contrast;
+                self.app.refresh_theme();
+                if let Some(doc) = self.doc.as_mut() {
+                    let cx = doc.context_mut();
+                    cx.set_high_contrast(false);
+                    let _ = cx.set_theme_tokens(self.app.theme.clone());
+                }
             }
             _ => {}
         }

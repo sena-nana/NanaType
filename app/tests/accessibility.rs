@@ -174,3 +174,86 @@ fn tab_reaches_every_settings_control() {
     }
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
+
+/// The settings window at `percent` UI scale and in `high_contrast`, at the
+/// minimum size the scale gives it, as the app installs both.
+fn scaled_settings(page: settings::Page, percent: u32, high_contrast: bool) -> RuntimeAgentSession {
+    use nana_ui::runtime::{DocumentId, RuntimeDocument};
+    use nanatype::ui::kit::theme::{Chrome, compile};
+    let mut s = Settings::default();
+    s.accessibility.ui_scale = percent;
+    s.general.onboarding_done = true;
+    let (w, h) =
+        nanatype::windows::minimum_size(nanatype::windows::WindowKind::Settings, &s).unwrap();
+    let scale = s.accessibility.scale();
+    let ui = Ui::new(Arc::new(s), common::skin("nanatype.halo"), Locale::EnUs);
+    ui.page.set(page);
+    ui.chrome_contrast.set(high_contrast);
+    let id = DocumentId::new(1).unwrap();
+    let mut doc = RuntimeDocument::new(id);
+    let cx = doc.context_mut();
+    cx.set_theme_tokens(compile(Chrome {
+        dark: false,
+        high_contrast,
+        scale,
+    }))
+    .unwrap();
+    nanatype_frame::apply_locale(cx, Locale::EnUs);
+    cx.set_default_text_scale(scale);
+    cx.mount_view_root(id, move || settings::settings_window(ui))
+        .unwrap();
+    let mut session = RuntimeAgentSession::new_scaled(doc, w as u32, h as u32, 1.0).unwrap();
+    for _ in 0..4 {
+        session.flush().unwrap();
+    }
+    session
+}
+
+#[test]
+fn at_a_large_ui_scale_settings_controls_stay_inside_the_window() {
+    let mut found = Vec::new();
+    for percent in [150, 200] {
+        for page in settings::Page::ALL {
+            let mut session = scaled_settings(page, percent, false);
+            let width = session.accessibility_dump()[0].bounds.width;
+            if let Ok(dir) = std::env::var("NANATYPE_A11Y_CAPTURE") {
+                std::fs::create_dir_all(&dir).unwrap();
+                session
+                    .screenshot_png(
+                        std::path::Path::new(&dir).join(format!("{page:?}-{percent}.png")),
+                    )
+                    .unwrap();
+            }
+            for n in session.accessibility_dump() {
+                if !CONTROLS.contains(&n.role.as_str()) || n.bounds.width == 0.0 {
+                    continue;
+                }
+                if n.bounds.x < -0.5 || n.bounds.x + n.bounds.width > width + 0.5 {
+                    found.push(format!(
+                        "{percent}% {page:?}: {} {:?} at x {}..{} of {width}",
+                        n.role,
+                        n.label,
+                        n.bounds.x,
+                        n.bounds.x + n.bounds.width
+                    ));
+                }
+            }
+        }
+    }
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+#[test]
+fn high_contrast_settings_paint_on_an_opaque_white_page() {
+    let mut session = scaled_settings(settings::Page::General, 100, true);
+    if let Ok(dir) = std::env::var("NANATYPE_A11Y_CAPTURE") {
+        std::fs::create_dir_all(&dir).unwrap();
+        session
+            .screenshot_png(std::path::Path::new(&dir).join("General-high-contrast.png"))
+            .unwrap();
+    }
+    let (size, rgba) = session.screenshot_rgba().unwrap();
+    // The page's far corner, away from every card and control.
+    let corner = common::pixel(&rgba, size.width, size.width - 4, size.height - 4);
+    assert_eq!(corner, [255, 255, 255, 255]);
+}

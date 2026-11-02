@@ -343,12 +343,16 @@ fn link_icon(ui: Ui, key: &str, icon: Icon, url: &'static str) -> AnyView {
     icon_action(ui, key, icon, move || Msg::OpenUrl(url))
 }
 
-/// A row's controls, side by side.
+/// A row's controls, side by side; they wrap rather than run off the card
+/// at a large UI scale.
 pub(super) fn controls(buttons: Vec<AnyView>) -> AnyView {
     widget(
         Stack::row(0.0)
             .gap_step(gap::step::TIGHT)
-            .align(AlignSpec::Center),
+            .align(AlignSpec::Center)
+            .wrap(true)
+            .shrink(1.0)
+            .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
     )
     .children(buttons)
     .into_any()

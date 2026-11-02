@@ -665,6 +665,56 @@ pub enum ChromeMode {
     Dark,
 }
 
+/// High contrast for the application's own windows (never the skins).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContrastMode {
+    /// On while the system asks for high contrast (where it reports it).
+    #[default]
+    System,
+    Off,
+    On,
+}
+
+/// The smallest and largest UI scale, in percent, and its step.
+pub const UI_SCALE: (u32, u32, u32) = (80, 200, 10);
+
+/// How the application's own windows read: settings, the input window and
+/// the editor. Nothing here reaches the display, partner or history output.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AccessibilitySettings {
+    pub contrast: ContrastMode,
+    /// Text and controls, in percent of their size, on top of the system's
+    /// display scale ([`UI_SCALE`]).
+    pub ui_scale: u32,
+}
+
+impl Default for AccessibilitySettings {
+    fn default() -> Self {
+        Self {
+            contrast: ContrastMode::System,
+            ui_scale: 100,
+        }
+    }
+}
+
+impl AccessibilitySettings {
+    /// [`Self::ui_scale`] as a factor.
+    pub fn scale(&self) -> f32 {
+        self.ui_scale as f32 / 100.0
+    }
+
+    /// Whether the chrome paints in high contrast, given the system's flag.
+    pub fn high_contrast(&self, system: bool) -> bool {
+        match self.contrast {
+            ContrastMode::System => system,
+            ContrastMode::Off => false,
+            ContrastMode::On => true,
+        }
+    }
+}
+
 /// User tweaks applied on top of the active skin.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -1631,6 +1681,7 @@ pub struct Settings {
     pub update: UpdateSettings,
     pub diagnostics: DiagnosticsSettings,
     pub performance: PerformanceSettings,
+    pub accessibility: AccessibilitySettings,
     /// Fields from a newer build, preserved verbatim.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, Value>,
@@ -1658,6 +1709,7 @@ impl Default for Settings {
             update: UpdateSettings::default(),
             diagnostics: DiagnosticsSettings::default(),
             performance: PerformanceSettings::default(),
+            accessibility: AccessibilitySettings::default(),
             unknown: BTreeMap::new(),
         }
     }
@@ -1788,6 +1840,9 @@ impl Settings {
         ] {
             *v = finite_or(*v, 1.0).clamp(0.0, 1.0);
         }
+        let (lo, hi, step) = UI_SCALE;
+        let a = &mut self.accessibility;
+        a.ui_scale = (a.ui_scale.clamp(lo, hi) + step / 2) / step * step;
         let h = &mut self.history;
         h.max_items = h.max_items.clamp(1, 5000);
         h.visible_items = h.visible_items.clamp(1, h.max_items);
