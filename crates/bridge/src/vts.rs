@@ -63,6 +63,8 @@ pub struct VtsHotkey {
 
 enum Command {
     Event(BridgeEvent),
+    /// The voice began a word of this many characters.
+    Word(usize),
     Config(VtsConfig),
     RequestToken,
     RefreshHotkeys,
@@ -178,6 +180,35 @@ pub(crate) fn mouth(t: f32) -> f32 {
     (flap * swell).clamp(0.0, 1.0)
 }
 
+/// How long a word of `chars` characters is likely said.
+fn word_secs(chars: usize) -> f32 {
+    (0.11 * chars as f32).clamp(0.14, 0.9)
+}
+
+/// The mouth `t` seconds into a word said over `secs` with `chars`
+/// characters: it opens on each syllable (about one a character) and closes
+/// as the word ends, so it follows the voice instead of a fixed flap. In
+/// `0..=1`; zero once the word is over.
+pub(crate) fn word_mouth(t: f32, secs: f32, chars: usize) -> f32 {
+    if !(0.0..secs).contains(&t) {
+        return 0.0;
+    }
+    let syllables = chars.clamp(1, 6) as f32;
+    let phase = t / secs * syllables;
+    // Each syllable rises and falls; the word as a whole swells and closes.
+    let syllable = (std::f32::consts::PI * phase.fract()).sin();
+    let word = (std::f32::consts::PI * t / secs).sin().sqrt();
+    (0.35 + 0.65 * syllable).clamp(0.0, 1.0) * word
+}
+
+/// The word being said, from the voice's word boundaries.
+#[derive(Debug, Clone, Copy)]
+struct Word {
+    at: Instant,
+    secs: f32,
+    chars: usize,
+}
+
 /// A parameter held by `[vts param=...]` until `until`.
 #[derive(Debug, Clone)]
 struct Hold {
@@ -193,6 +224,9 @@ struct Avatar {
     active: BTreeSet<String>,
     /// Talking since.
     speaking: Option<Instant>,
+    /// The last word the voice began, while it talks. A voice without word
+    /// boundaries leaves it empty and the mouth flaps.
+    word: Option<Word>,
     /// The mouth needs one last injection to close.
     close_mouth: bool,
     holds: Vec<Hold>,
@@ -242,6 +276,10 @@ impl VtsClient {
         ) {
             let _ = self.tx.send(Command::Event(event.clone()));
         }
+    }
+
+    pub fn word(&self, chars: usize) {
+        let _ = self.tx.send(Command::Word(chars));
     }
 
     pub fn request_token(&self) {
@@ -366,6 +404,7 @@ impl Client {
                             Command::RefreshHotkeys => self.next_attempt = Instant::now(),
                             Command::Config(c) => self.configure(c),
                             Command::Event(e) => self.track_offline(&e),
+                            Command::Word(_) => {}
                         }
                     }
                     continue;
@@ -401,6 +440,16 @@ impl Client {
                     Command::RefreshHotkeys => {}
                     Command::Config(c) => self.configure(c),
                     Command::Event(e) => self.event(e),
+                    Command::Word(chars) => {
+                        if self.avatar.speaking.is_some() {
+                            self.avatar.word = Some(Word {
+                                at: Instant::now(),
+                                secs: word_secs(chars),
+                                chars,
+                            });
+                            self.avatar.next_inject = None;
+                        }
+                    }
                 }
                 if self.session.is_none() {
                     break;
@@ -458,6 +507,7 @@ impl Client {
                 if speaking && self.config.lip_sync.is_some() {
                     self.avatar.speaking.get_or_insert_with(Instant::now);
                 } else if !speaking && self.avatar.speaking.take().is_some() {
+                    self.avatar.word = None;
                     self.avatar.close_mouth = true;
                 }
             }
@@ -512,8 +562,14 @@ impl Client {
         let mut values = Vec::new();
         if let Some(lip) = &self.config.lip_sync {
             if let Some(since) = a.speaking {
-                let t = now.duration_since(since).as_secs_f32();
-                values.push(json!({ "id": lip.param, "value": mouth(t) * lip.amp }));
+                // Closed between words; flapping again if the words stop
+                // coming for longer than a pause while it still talks.
+                let word = a.word.map(|w| (now.duration_since(w.at).as_secs_f32(), w));
+                let value = match word {
+                    Some((t, w)) if t < w.secs + 0.8 => word_mouth(t, w.secs, w.chars),
+                    _ => mouth(now.duration_since(since).as_secs_f32()),
+                };
+                values.push(json!({ "id": lip.param, "value": value * lip.amp }));
             } else if a.close_mouth {
                 values.push(json!({ "id": lip.param, "value": 0.0 }));
             }
@@ -705,6 +761,29 @@ mod tests {
         let min = samples.iter().cloned().fold(1.0, f32::min);
         let max = samples.iter().cloned().fold(0.0, f32::max);
         assert!(max - min > 0.5, "{min}..{max}");
+    }
+
+    #[test]
+    fn the_mouth_follows_a_spoken_word_and_closes_after_it() {
+        let secs = word_secs(3);
+        assert!(secs > 0.2 && secs < 0.5, "{secs}");
+        let samples: Vec<f32> = (0..=30)
+            .map(|i| word_mouth(secs * i as f32 / 30.0, secs, 3))
+            .collect();
+        assert!(samples.iter().all(|v| (0.0..=1.0).contains(v)));
+        assert_eq!(samples[0], 0.0, "opens from closed");
+        assert_eq!(*samples.last().unwrap(), 0.0, "closed when the word ends");
+        let max = samples.iter().cloned().fold(0.0, f32::max);
+        assert!(max > 0.7, "{max}");
+        // Three syllables: it dips between them.
+        let dips = samples
+            .windows(3)
+            .filter(|w| w[1] < w[0] && w[1] < w[2])
+            .count();
+        assert!(dips >= 2, "{samples:?}");
+        assert_eq!(word_mouth(-0.1, secs, 3), 0.0);
+        // Longer words are said longer, within reason.
+        assert!(word_secs(8) > word_secs(2) && word_secs(40) <= 0.9);
     }
 
     #[test]

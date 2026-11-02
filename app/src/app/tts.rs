@@ -2,10 +2,11 @@
 //! stops); the engine behind it starts on first use.
 use super::App;
 use crate::msg::{Msg, TtsMsg};
+use nanatype_core::Cmd;
 use nanatype_model::{Document, HistoryItem, Line, LineId, unix_millis};
 use nanatype_settings::{Character, TtsSettings};
-use nanatype_tts::{Event, Speak, Tts, speakable};
-use std::collections::HashSet;
+use nanatype_tts::{Event, Speak, Tts, speakable, speakable_units};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// Partner lines older than this when they arrive (a room just joined)
@@ -19,6 +20,18 @@ pub struct Narrator<S: Speak> {
     talking: HashSet<u64>,
     /// Partner lines already read.
     partners: HashSet<(String, LineId)>,
+    /// What each utterance says, while it is said (word sizes for the mouth).
+    texts: HashMap<u64, String>,
+    /// The line whose typing follows its voice.
+    paced: Option<Paced>,
+}
+
+/// A line typed along with its utterance.
+struct Paced {
+    id: u64,
+    line: LineId,
+    /// The reveal unit of each byte of the spoken text.
+    units: Vec<u32>,
 }
 
 impl<S: Speak> Narrator<S> {
@@ -27,6 +40,8 @@ impl<S: Speak> Narrator<S> {
             engine,
             talking: HashSet::new(),
             partners: HashSet::new(),
+            texts: HashMap::new(),
+            paced: None,
         }
     }
 
@@ -42,13 +57,59 @@ impl<S: Speak> Narrator<S> {
             return None;
         }
         self.engine.stop();
-        let text = speakable(&line.doc)?;
+        self.paced = None;
+        let (text, units) = speakable_units(&line.doc)?;
         let voice = characters
             .iter()
             .find(|c| c.name == line.speaker.name)
             .and_then(|c| c.voice.as_deref())
             .or(tts.voice.as_deref());
-        Some(self.engine.speak(&text, voice, tts.rate, tts.volume))
+        let id = self.engine.speak(&text, voice, tts.rate, tts.volume);
+        self.texts.insert(id, text);
+        if tts.pace_typing {
+            self.paced = Some(Paced {
+                id,
+                line: line.id,
+                units,
+            });
+        }
+        Some(id)
+    }
+
+    /// The line whose typing follows its voice, when that is `line`.
+    pub fn paces(&self, line: LineId) -> bool {
+        self.paced.as_ref().is_some_and(|p| p.line == line)
+    }
+
+    /// What the typewriter does about an engine event: type up to a spoken
+    /// word, or on its own once the voice is over.
+    pub fn pace(&mut self, event: &Event) -> Option<Cmd> {
+        let p = self.paced.as_ref()?;
+        match *event {
+            Event::Word { id, start, len } if id == p.id => {
+                let end = (start + len.max(1)).min(p.units.len());
+                let through = p.units.get(start..end)?.iter().max()? + 1;
+                Some(Cmd::SpeechReached {
+                    line: p.line,
+                    through,
+                })
+            }
+            Event::Finished(id) if id == p.id => {
+                let line = p.line;
+                self.paced = None;
+                Some(Cmd::SpeechEnded(line))
+            }
+            _ => None,
+        }
+    }
+
+    /// How many characters a spoken word has, for the mouth.
+    pub fn word_chars(&self, event: &Event) -> Option<usize> {
+        let Event::Word { id, start, len } = *event else {
+            return None;
+        };
+        let word = self.texts.get(&id)?.get(start..start + len)?;
+        Some(word.chars().filter(|c| c.is_alphanumeric()).count().max(1))
     }
 
     /// Skip, clear or switching off: silence everything.
@@ -100,7 +161,9 @@ impl<S: Speak> Narrator<S> {
     fn queue(&mut self, tts: &TtsSettings, voice: Option<&str>, doc: &Document) -> Option<u64> {
         let text = speakable(doc)?;
         let voice = voice.or(tts.voice.as_deref());
-        Some(self.engine.speak(&text, voice, tts.rate, tts.volume))
+        let id = self.engine.speak(&text, voice, tts.rate, tts.volume);
+        self.texts.insert(id, text);
+        Some(id)
     }
 
     /// Whether a voice is talking.
@@ -117,6 +180,7 @@ impl<S: Speak> Narrator<S> {
             }
             Event::Finished(id) => {
                 self.talking.remove(id);
+                self.texts.remove(id);
             }
             Event::Word { .. } | Event::Voices(_) => {}
         }
@@ -164,6 +228,9 @@ impl App {
     pub(super) fn tts_line(&mut self, line: &Line) {
         let s = &self.settings;
         self.tts.line_started(&s.tts, &s.general.characters, line);
+        if self.tts.paces(line.id) {
+            self.run(Cmd::SpeechPaced(line.id));
+        }
     }
 
     pub(super) fn tts_chat(&mut self, doc: &Document) {
@@ -184,6 +251,14 @@ impl App {
         match msg {
             TtsMsg::Event(Event::Voices(voices)) => self.ui.tts_voices.set(Arc::new(voices)),
             TtsMsg::Event(event) => {
+                if let Some(cmd) = self.tts.pace(&event) {
+                    self.run(cmd);
+                }
+                if self.settings.tts.enabled
+                    && let Some(chars) = self.tts.word_chars(&event)
+                {
+                    self.bridge.word(chars);
+                }
                 // Switched off mid-line, the mouth still closes.
                 if let Some(speaking) = self.tts.event(&event)
                     && (self.settings.tts.enabled || !speaking)
@@ -365,6 +440,63 @@ mod tests {
                 speak("partner line", "default"),
                 speak("partner line", "default")
             ]
+        );
+    }
+
+    #[test]
+    fn paced_typing_follows_the_line_s_words_until_its_voice_ends() {
+        let mut n = Narrator::new(Fake::default());
+        let paced = TtsSettings {
+            pace_typing: true,
+            ..on()
+        };
+        // Units: 你 好 ， space w o r l d.
+        let l = line("Nana", "你好， world");
+        let id = n.line_started(&paced, &characters(), &l).unwrap();
+        assert!(n.paces(l.id));
+        // "你好" is six bytes of "你好， world": through unit 2.
+        let word = Event::Word {
+            id,
+            start: 0,
+            len: 6,
+        };
+        assert_eq!(
+            n.pace(&word),
+            Some(Cmd::SpeechReached {
+                line: l.id,
+                through: 2
+            })
+        );
+        assert_eq!(n.word_chars(&word), Some(2));
+        let world = Event::Word {
+            id,
+            start: 10,
+            len: 5,
+        };
+        assert!(matches!(
+            n.pace(&world),
+            Some(Cmd::SpeechReached { through: 9, .. })
+        ));
+        // Another utterance's words are not this line's.
+        assert_eq!(
+            n.pace(&Event::Word {
+                id: id + 1,
+                start: 0,
+                len: 1
+            }),
+            None
+        );
+        assert_eq!(n.pace(&Event::Finished(id)), Some(Cmd::SpeechEnded(l.id)));
+        assert!(!n.paces(l.id));
+        // Off, nothing is paced.
+        let id = n.line_started(&on(), &characters(), &l).unwrap();
+        assert_eq!(
+            n.pace(&Event::Word {
+                id,
+                start: 0,
+                len: 6
+            }),
+            None
         );
     }
 

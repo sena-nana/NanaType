@@ -7,7 +7,7 @@ mod macos;
 mod sapi;
 mod text;
 
-pub use text::speakable;
+pub use text::{speakable, speakable_units};
 
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;

@@ -16,6 +16,43 @@ pub enum WakeReason {
     AutoAdvance,
     /// Consumer-owned presentation deadline; the player does not schedule it.
     PresentationDone,
+    /// Typing waits for speech: no word came in time, so it types on its own.
+    SpeechTimeout,
+}
+
+/// How long typing waits for the first spoken word before it types on its own.
+pub const SPEECH_WAIT_MS: u32 = 300;
+/// Gap between the units a spoken word releases, and the most a word's
+/// units take in all.
+const SPEECH_GAP_MS: u32 = 35;
+const SPEECH_WORD_MS: u32 = 240;
+
+/// Typing paced by speech: units wait until a spoken word reaches them.
+#[derive(Debug, Clone)]
+struct Speech {
+    /// When each unit of the line was released (host ms); `None` waits.
+    release: Vec<Option<u64>>,
+    /// A word arrived; the timeout no longer applies.
+    heard: bool,
+}
+
+impl Speech {
+    /// Release units up to `through` (exclusive) from `now`, spread a little
+    /// so a word still types in. Units released already keep their time.
+    fn release(&mut self, through: u32, now: u64) {
+        let through = (through as usize).min(self.release.len());
+        let held: Vec<usize> = (0..through)
+            .filter(|u| self.release[*u].is_none())
+            .collect();
+        let gap = if held.is_empty() {
+            0
+        } else {
+            SPEECH_GAP_MS.min(SPEECH_WORD_MS / held.len() as u32)
+        };
+        for (k, u) in held.into_iter().enumerate() {
+            self.release[u] = Some(now + u64::from(gap) * k as u64);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,6 +151,10 @@ pub struct Player {
     /// Pages started by [`Self::paginate`]; their own layout is not paged
     /// again, so a re-wrap cannot add a sliver of a page.
     paged: Vec<u32>,
+    /// Typing follows speech ([`Self::follow_speech`]).
+    speech: Option<Speech>,
+    /// The current segment's reveal offsets while speech paces it.
+    paced: Option<Arc<[u32]>>,
 }
 
 impl Player {
@@ -134,6 +175,8 @@ impl Player {
             revealed: false,
             skipped_to_end: false,
             paged: Vec::new(),
+            speech: None,
+            paced: None,
         };
         let mut out = Vec::new();
         player.enter_segment(0, now, &mut out);
@@ -187,6 +230,27 @@ impl Player {
     }
 
     fn enter_segment(&mut self, seg: usize, now: u64, out: &mut Vec<PlayerEffect>) {
+        self.paced = None;
+        if let Some(speech) = &mut self.speech {
+            // Words said while the box waited show as the segment starts.
+            let units = self.timeline.segments[seg].units.clone();
+            let said = units
+                .clone()
+                .take_while(|u| speech.release[*u as usize].is_some())
+                .count() as u32;
+            for u in units.clone() {
+                speech.release[u as usize] = None;
+            }
+            speech.release(units.start + said, now);
+            self.state = State::Revealing {
+                seg,
+                origin: now,
+                skipped: false,
+            };
+            out.push(PlayerEffect::ContinueIndicator(false));
+            self.retime(seg, now, now, out);
+            return;
+        }
         let epoch = self.bump();
         let segment = &self.timeline.segments[seg];
         self.state = State::Revealing {
@@ -305,9 +369,178 @@ impl Player {
                 out.push(PlayerEffect::AutoAdvance(self.line))
             }
             (State::Fading { .. }, WakeReason::FadeDone) => self.finish(&mut out),
+            (_, WakeReason::SpeechTimeout) if self.speech.as_ref().is_some_and(|s| !s.heard) => {
+                out = self.speech_ended(now).1;
+            }
             _ => {}
         }
         out
+    }
+
+    /// Pace the rest of the line to speech: from now on units wait for
+    /// [`Self::speech_reached`]. Typing goes on by itself if no word comes
+    /// within [`SPEECH_WAIT_MS`] (or after [`Self::speech_ended`]). Returns
+    /// whether the current schedule was replaced (cancel its cues first).
+    pub fn follow_speech(&mut self, now: u64) -> (bool, Vec<PlayerEffect>) {
+        let mut out = Vec::new();
+        let State::Revealing {
+            seg,
+            origin,
+            skipped: false,
+        } = self.state
+        else {
+            return (false, out);
+        };
+        if self.speech.is_some() {
+            return (false, out);
+        }
+        // What is on screen already stays; the rest waits.
+        let tl = &self.timeline;
+        let mut release = vec![None; tl.unit_count as usize];
+        let s = &tl.segments[seg];
+        for u in 0..s.units.start {
+            release[u as usize] = Some(0);
+        }
+        let elapsed = now.saturating_sub(origin);
+        for (i, at) in s.reveal_ms.iter().enumerate() {
+            if u64::from(*at) <= elapsed {
+                release[s.units.start as usize + i] = Some(origin + u64::from(*at));
+            }
+        }
+        self.speech = Some(Speech {
+            release,
+            heard: false,
+        });
+        self.retime(seg, origin, now, &mut out);
+        out.push(PlayerEffect::WakeAt {
+            epoch: self.epoch,
+            at_ms: now + u64::from(SPEECH_WAIT_MS),
+            reason: WakeReason::SpeechTimeout,
+        });
+        (true, out)
+    }
+
+    /// Speech reached unit `through` of the line (exclusive): type up to it.
+    pub fn speech_reached(&mut self, through: u32, now: u64) -> (bool, Vec<PlayerEffect>) {
+        let mut out = Vec::new();
+        let Some(speech) = &mut self.speech else {
+            return (false, out);
+        };
+        speech.heard = true;
+        speech.release(through, now);
+        match self.state {
+            State::Revealing {
+                seg,
+                origin,
+                skipped: false,
+            } => {
+                self.retime(seg, origin, now, &mut out);
+                (true, out)
+            }
+            // Waiting at a gate: the next segment picks the words up.
+            _ => (false, out),
+        }
+    }
+
+    /// Speech is over (or never came): the rest types at its own pace.
+    pub fn speech_ended(&mut self, now: u64) -> (bool, Vec<PlayerEffect>) {
+        let mut out = Vec::new();
+        let Some(mut speech) = self.speech.take() else {
+            return (false, out);
+        };
+        let State::Revealing {
+            seg,
+            origin,
+            skipped: false,
+        } = self.state
+        else {
+            self.paced = None;
+            return (false, out);
+        };
+        // Resume the line's own rhythm from the first unit still waiting,
+        // after what speech released has typed in.
+        let s = &self.timeline.segments[seg];
+        let start = s.units.start as usize;
+        let first = (0..s.reveal_ms.len()).find(|i| speech.release[start + i].is_none());
+        if let Some(first) = first {
+            let typed = (start..start + first)
+                .filter_map(|u| speech.release[u])
+                .max()
+                .unwrap_or(now)
+                .max(now);
+            let base = s.reveal_ms[first];
+            for i in first..s.reveal_ms.len() {
+                let natural = u64::from(s.reveal_ms[i] - base);
+                speech.release[start + i] = Some(typed + natural);
+            }
+        }
+        self.speech = Some(speech);
+        self.retime(seg, origin, now, &mut out);
+        self.speech = None;
+        (true, out)
+    }
+
+    /// Re-issue segment `seg` (begun at `origin`) on speech's schedule: the
+    /// units released so far and their cues; the end once all are out.
+    fn retime(&mut self, seg: usize, origin: u64, now: u64, out: &mut Vec<PlayerEffect>) {
+        let epoch = self.bump();
+        let Some(speech) = &self.speech else {
+            return;
+        };
+        let s = &self.timeline.segments[seg];
+        let start = s.units.start as usize;
+        // Released units are a prefix: the rest stays hidden.
+        let offsets: Vec<u32> = (0..s.reveal_ms.len())
+            .map_while(|i| speech.release[start + i])
+            .map(|at| at.saturating_sub(origin).min(u64::from(u32::MAX)) as u32)
+            .collect();
+        let all = offsets.len() == s.reveal_ms.len();
+        let last = s.reveal_ms.last().copied().unwrap_or(0);
+        let tail = s.duration_ms.saturating_sub(last);
+        let end = all.then(|| offsets.last().copied().unwrap_or(0).saturating_add(tail));
+        // A cue keeps its place in the text: the unit it sounds with (the
+        // first one not before it), or the end.
+        let elapsed = now.saturating_sub(origin);
+        let cues: Vec<Cue> = s
+            .cues
+            .iter()
+            .filter_map(|c| {
+                let unit = match c.kind {
+                    CueKind::TypeSound { unit, .. } => Some((unit as usize).saturating_sub(start)),
+                    _ => s.reveal_ms.iter().position(|at| *at >= c.at_ms),
+                };
+                let at = match unit {
+                    Some(i) if i < s.reveal_ms.len() => *offsets.get(i)?,
+                    _ => end?,
+                };
+                (u64::from(at) > elapsed || (at == 0 && elapsed == 0)).then(|| Cue {
+                    at_ms: at,
+                    kind: c.kind.clone(),
+                })
+            })
+            .collect();
+        let offsets: Arc<[u32]> = offsets.into();
+        self.paced = Some(offsets.clone());
+        out.push(PlayerEffect::ShowSegment {
+            epoch,
+            seg,
+            origin_ms: origin,
+            reveal_ms: offsets,
+        });
+        if !cues.is_empty() {
+            out.push(PlayerEffect::ScheduleCues {
+                epoch,
+                origin_ms: origin,
+                cues: cues.into(),
+            });
+        }
+        if let Some(end) = end {
+            out.push(PlayerEffect::WakeAt {
+                epoch,
+                at_ms: origin + u64::from(end),
+                reason: WakeReason::SegmentEnd,
+            });
+        }
     }
 
     fn finish(&mut self, out: &mut Vec<PlayerEffect>) {
@@ -336,6 +569,9 @@ impl Player {
     /// Reveal the rest of the current segment at once. Pending sounds and
     /// expressions fire now; typing clicks and shakes are dropped.
     fn skip_segment(&mut self, seg: usize, origin: u64, now: u64, out: &mut Vec<PlayerEffect>) {
+        // Skipped by hand: the rest of the line types on its own.
+        self.speech = None;
+        self.paced = None;
         let epoch = self.bump();
         let segment = &self.timeline.segments[seg];
         let elapsed = now.saturating_sub(origin);
@@ -367,6 +603,8 @@ impl Player {
     /// fire now.
     pub fn finish_reveal(&mut self, now: u64) -> Vec<PlayerEffect> {
         let mut out = Vec::new();
+        self.speech = None;
+        self.paced = None;
         let last = self.timeline.last_segment();
         let segments = &self.timeline.segments;
         let (seg, elapsed) = match self.state {
@@ -470,6 +708,11 @@ impl Player {
         now: u64,
         mut out: Vec<PlayerEffect>,
     ) -> (bool, Vec<PlayerEffect>) {
+        if self.speech.is_some() && !skipped {
+            // The cut segment keeps following speech.
+            self.retime(seg, origin, now, &mut out);
+            return (true, out);
+        }
         let elapsed = now.saturating_sub(origin);
         let epoch = self.bump();
         let s = &self.timeline.segments[seg];
@@ -567,13 +810,11 @@ impl Player {
             } => {
                 let s = &tl.segments[seg];
                 let elapsed = now.saturating_sub(origin);
+                let reveal = self.paced.as_ref().unwrap_or(&s.reveal_ms);
                 let shown = if skipped {
                     s.reveal_ms.len()
                 } else {
-                    s.reveal_ms
-                        .iter()
-                        .filter(|t| u64::from(**t) <= elapsed)
-                        .count()
+                    reveal.iter().filter(|t| u64::from(**t) <= elapsed).count()
                 };
                 (seg, s.units.start + shown as u32)
             }

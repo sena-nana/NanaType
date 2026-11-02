@@ -330,6 +330,9 @@ pub struct TtsSettings {
     pub chat: bool,
     /// Also read co-op partners' lines.
     pub partners: bool,
+    /// The typewriter types each word as the voice says it (by the voice's
+    /// word boundaries), and on its own when the voice gives none.
+    pub pace_typing: bool,
 }
 
 impl Default for TtsSettings {
@@ -341,6 +344,7 @@ impl Default for TtsSettings {
             volume: 1.0,
             chat: false,
             partners: false,
+            pace_typing: false,
         }
     }
 }

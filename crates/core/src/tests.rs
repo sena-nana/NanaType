@@ -1323,3 +1323,35 @@ fn chat_rows_take_their_translation_by_key() {
     let view = serde_json::to_value(core.display()).unwrap();
     assert!(view.get("subtitle").is_none(), "{view}");
 }
+
+#[test]
+fn typing_paced_by_speech_hides_what_the_voice_has_not_reached() {
+    let mut core = core_with(|_| {});
+    type_and_send(&mut core, "hello world", 0);
+    let line = core.display().line.unwrap();
+    let fx = core.handle(Cmd::SpeechPaced(line), 0);
+    assert!(
+        fx.wakes
+            .iter()
+            .any(|w| w.reason == WakeReason::SpeechTimeout)
+    );
+    let reveal = &core.display().reveal;
+    assert_eq!(reveal.hidden_from, 1, "only the first unit is out");
+    assert_eq!(reveal.unit_at(5), None);
+    core.handle(Cmd::SpeechReached { line, through: 5 }, 100);
+    let reveal = core.display().reveal.clone();
+    assert_eq!(reveal.hidden_from, 5);
+    assert!(reveal.unit_at(4).is_some_and(|at| at >= 100));
+    // Another line's speech changes nothing.
+    core.handle(
+        Cmd::SpeechReached {
+            line: nanatype_model::LineId(line.0 + 99),
+            through: 11,
+        },
+        150,
+    );
+    assert_eq!(core.display().reveal.hidden_from, 5);
+    // The voice is done: the rest types on.
+    core.handle(Cmd::SpeechEnded(line), 200);
+    assert_eq!(core.display().reveal.hidden_from, 11);
+}

@@ -20,6 +20,6 @@ mod tests;
 
 pub use mirror::{MirrorDelta, mirror_delta, mirror_matches, mirror_offsets};
 pub use pacing::{PacingParams, PunctPauses, TypingSoundRule};
-pub use player::{Phase, Player, PlayerEffect, RevealSnapshot, WakeReason};
+pub use player::{Phase, Player, PlayerEffect, RevealSnapshot, SPEECH_WAIT_MS, WakeReason};
 pub use queue::{LineQueue, QueueDecision, QueuePolicy};
 pub use timeline::{Cue, CueKind, Segment, SegmentEnd, Timeline, compile};

@@ -83,8 +83,9 @@ Turning an output off and back on within 5 seconds reuses the original sender, a
 - A new line cuts off the one being read. **Skip line** and **Clear display** stop reading; **Replay the last line** reads it again.
 - Pick a **Default voice** and one per character (the list shows the interface language's voices first; **Voice language** shows others or all). **Rate** and **Volume** apply to every voice, and **Test** plays a sample.
 - **Also read viewer chat** and **Also read co-op partners' lines** are off by default. They read with the default voice, after what is being said, and only chat that joins the history; a partner's line is read once, when it shows.
-- While reading aloud is on, VTube Studio lip sync (and the `speaking` event) follows the voice instead of the typewriter.
-- The switch, default voice, rate, volume and the two options are global; each character's voice travels with the characters in a profile.
+- **Type along with the voice** (off by default) makes the typewriter type word by word as the voice says them, each word up to where it is spoken. If the voice gives no word timing within 0.3 seconds (or reading fails or ends), the rest types at its own pace; continue and skip show it at once as always.
+- While reading aloud is on, VTube Studio lip sync (and the `speaking` event) follows the voice instead of the typewriter. When the voice gives word timing, the mouth opens on each word's syllables and closes between words; otherwise it flaps at a steady pace.
+- The switch, default voice, rate, volume and the options are global; each character's voice travels with the characters in a profile.
 
 ### Translated subtitles
 

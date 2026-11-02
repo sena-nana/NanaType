@@ -9,6 +9,7 @@ description = "Spoken lines through the operating system's own voices"
 [dependencies]
 nanatype-model.workspace = true
 crossbeam-channel.workspace = true
+unicode-segmentation.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

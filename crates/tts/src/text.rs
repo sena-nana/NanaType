@@ -1,31 +1,72 @@
 //! What of a line is read aloud.
-use nanatype_model::{Document, Inline};
+use nanatype_model::{Document, Inline, TextRun};
+use unicode_segmentation::UnicodeSegmentation;
 
 /// The words of `doc`, or `None` when there is nothing to say (a sticker,
 /// an image, only punctuation). Ruby reads as its base, as it is shown; a
 /// mention reads as the viewer's name; pictures and markers are left out.
 /// Paragraphs and runs of spaces become single spaces.
 pub fn speakable(doc: &Document) -> Option<String> {
-    let mut out = String::new();
+    speakable_units(doc).map(|(text, _)| text)
+}
+
+/// [`speakable`], with the reveal unit of `doc` each byte of the text comes
+/// from (a space between words takes the unit before it), so a spoken word
+/// can be matched to the units on screen.
+pub fn speakable_units(doc: &Document) -> Option<(String, Vec<u32>)> {
+    let mut text = String::new();
+    let mut units: Vec<u32> = Vec::new();
+    // A space is only written once a word follows it.
+    let mut space;
+    let mut unit = 0u32;
+    let mut push = |c: char, unit: u32, text: &mut String, space: &mut bool| {
+        if c.is_whitespace() {
+            *space = !text.is_empty();
+            return;
+        }
+        if std::mem::take(space) {
+            text.push(' ');
+            units.push(units.last().copied().unwrap_or(unit));
+        }
+        text.push(c);
+        units.extend(std::iter::repeat_n(unit, c.len_utf8()));
+    };
     for paragraph in &doc.paragraphs {
-        out.push(' ');
+        space = !text.is_empty();
         for inline in &paragraph.inlines {
             match inline {
-                Inline::Text(run) => out.push_str(&run.text),
-                Inline::Ruby(ruby) => out.push_str(&ruby.base.text),
-                Inline::Mention(mention) => {
-                    out.push(' ');
-                    out.push_str(&mention.user.name);
-                    out.push(' ');
+                Inline::Text(TextRun { text: run, .. })
+                | Inline::Ruby(nanatype_model::RubyGroup {
+                    base: TextRun { text: run, .. },
+                    ..
+                }) => {
+                    for grapheme in run.graphemes(true) {
+                        for c in grapheme.chars() {
+                            push(c, unit, &mut text, &mut space);
+                        }
+                        unit += 1;
+                    }
                 }
-                Inline::Atom(_) => out.push(' '),
+                Inline::Mention(mention) => {
+                    space = !text.is_empty();
+                    for c in mention.user.name.chars() {
+                        push(c, unit, &mut text, &mut space);
+                    }
+                    space = !text.is_empty();
+                    unit += 1;
+                }
+                Inline::Atom(_) => {
+                    space = !text.is_empty();
+                    unit += 1;
+                }
                 Inline::Marker(_) => {}
             }
         }
     }
-    let words: Vec<&str> = out.split_whitespace().collect();
-    let text = words.join(" ");
-    text.chars().any(char::is_alphanumeric).then_some(text)
+    drop(push);
+    text.chars()
+        .any(char::is_alphanumeric)
+        .then_some((text, units))
 }
 
 #[cfg(test)]
@@ -86,6 +127,21 @@ mod tests {
             ],
         };
         assert_eq!(speakable(&doc).as_deref(), Some("Look here 漢字 hi Mika !"));
+    }
+
+    #[test]
+    fn each_spoken_byte_knows_its_unit() {
+        let doc = Document {
+            paragraphs: vec![
+                para(vec![text("a 漢"), sticker(), text("b")]),
+                para(vec![text("cd")]),
+            ],
+        };
+        // Units: a, space, 漢, sticker, b, c, d.
+        let (text, units) = speakable_units(&doc).unwrap();
+        assert_eq!(text, "a 漢 b cd");
+        assert_eq!(units, [0, 0, 2, 2, 2, 2, 4, 4, 5, 6]);
+        assert_eq!(units.len(), text.len());
     }
 
     #[test]

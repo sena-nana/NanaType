@@ -33,6 +33,17 @@ pub enum Cmd {
         line: LineId,
         breaks: Vec<u32>,
     },
+    /// The line is read aloud and typing follows the voice: hold the units
+    /// not typed yet until [`Cmd::SpeechReached`]. Without a word within
+    /// [`nanatype_playback::SPEECH_WAIT_MS`] it types on its own.
+    SpeechPaced(LineId),
+    /// The voice reached unit `through` of `line` (exclusive).
+    SpeechReached {
+        line: LineId,
+        through: u32,
+    },
+    /// The voice finished or failed: the rest types at its own pace.
+    SpeechEnded(LineId),
     /// Send the draft.
     Send,
     /// Send markup directly (quick phrase), leaving the draft alone.
@@ -368,6 +379,11 @@ impl Core {
             Cmd::DraftChanged(doc) => self.draft_changed(doc, now, &mut fx),
             Cmd::DraftMeta(meta) => self.draft_meta = meta,
             Cmd::PageBreaks { line, breaks } => self.page_breaks(line, &breaks, now, &mut fx),
+            Cmd::SpeechPaced(line) => self.speech(line, now, &mut fx, |p| p.follow_speech(now)),
+            Cmd::SpeechReached { line, through } => {
+                self.speech(line, now, &mut fx, |p| p.speech_reached(through, now))
+            }
+            Cmd::SpeechEnded(line) => self.speech(line, now, &mut fx, |p| p.speech_ended(now)),
             Cmd::Send => self.send(now, &mut fx),
             Cmd::SendMarkup(markup) => {
                 let parsed = nanatype_markup::parse(&markup);
@@ -925,6 +941,27 @@ impl Core {
         self.apply_player(effects, now, fx);
     }
 
+    /// Speech pacing for the active `line` (an exit freezes it).
+    fn speech(
+        &mut self,
+        line: LineId,
+        now: Millis,
+        fx: &mut Effects,
+        f: impl FnOnce(&mut Player) -> (bool, Vec<PlayerEffect>),
+    ) {
+        if self.retiring.is_some() {
+            return;
+        }
+        let Some(active) = self.active.as_mut().filter(|a| a.line.id == line) else {
+            return;
+        };
+        let (touched, effects) = f(&mut active.player);
+        if touched && let Some(epoch) = self.cue_epoch.take() {
+            fx.cancel_epochs.push(epoch);
+        }
+        self.apply_player(effects, now, fx);
+    }
+
     fn set_speaking(&mut self, on: bool, fx: &mut Effects) {
         if self.speaking != on {
             self.speaking = on;
@@ -1123,6 +1160,9 @@ impl Core {
                         .timeline()
                         .clone();
                     let s = &tl.segments[seg];
+                    // A schedule shorter than the segment (typing that waits
+                    // for speech) hides the units it leaves out.
+                    let hidden_from = s.units.end.min(s.units.start + reveal_ms.len() as u32);
                     let reveal = Reveal {
                         visible_from: s.visible_from,
                         shown: s.units.start,
@@ -1131,7 +1171,7 @@ impl Core {
                             start: s.units.start,
                             reveal_ms,
                         }),
-                        hidden_from: s.units.end,
+                        hidden_from,
                     };
                     self.display.reveal = reveal.clone();
                     self.display.entrance = self.entrance();

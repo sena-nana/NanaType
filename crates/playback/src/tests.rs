@@ -494,3 +494,72 @@ fn skipping_to_the_end_keeps_the_last_page() {
     p.finish_reveal(10);
     assert_eq!(p.paginate(&[4], None, 20), (false, vec![]));
 }
+
+fn schedule(effects: &[PlayerEffect]) -> Option<(u64, Vec<u32>)> {
+    effects.iter().rev().find_map(|e| match e {
+        PlayerEffect::ShowSegment {
+            origin_ms,
+            reveal_ms,
+            ..
+        } => Some((*origin_ms, reveal_ms.to_vec())),
+        _ => None,
+    })
+}
+
+#[test]
+fn typing_waits_for_speech_and_follows_its_words() {
+    let t = tl("abcdef", &no_punct());
+    let (mut p, _) = Player::start(LineId(1), t.clone(), AfterLine::Hold, None, 1_000);
+    // 60 ms in, "a" and "b" are on screen; the rest waits for the voice.
+    let (touched, out) = p.follow_speech(1_060);
+    assert!(touched);
+    assert_eq!(schedule(&out), Some((1_000, vec![0, 50])));
+    assert_eq!(wakes(&out), [(1_360, WakeReason::SpeechTimeout)]);
+    // A word reaches "d": "c" and "d" type in from now.
+    let (_, out) = p.speech_reached(4, 1_200);
+    assert_eq!(schedule(&out), Some((1_000, vec![0, 50, 200, 235])));
+    assert!(wakes(&out).is_empty(), "no end while units wait");
+    assert_eq!(p.snapshot(1_210).revealed, 3);
+    // The timeout is stale once a word came.
+    assert!(
+        p.on_wake(p.epoch() - 1, WakeReason::SpeechTimeout, 1_360)
+            .is_empty()
+    );
+    // The last word: the segment ends after its own tail.
+    let (_, out) = p.speech_reached(6, 1_500);
+    let (_, r) = schedule(&out).unwrap();
+    assert_eq!(r.len(), 6);
+    let tail = t.segments[0].duration_ms - t.segments[0].reveal_ms[5];
+    assert_eq!(
+        wakes(&out),
+        [(1_000 + u64::from(r[5] + tail), WakeReason::SegmentEnd)]
+    );
+}
+
+#[test]
+fn without_a_word_in_time_typing_goes_on_alone() {
+    let t = tl("abcd", &no_punct());
+    let (mut p, _) = Player::start(LineId(1), t.clone(), AfterLine::Hold, None, 0);
+    let (_, out) = p.follow_speech(0);
+    assert_eq!(schedule(&out), Some((0, vec![0])));
+    let out = p.on_wake(p.epoch(), WakeReason::SpeechTimeout, 300);
+    // The rest keeps its own rhythm from where it waited.
+    assert_eq!(schedule(&out), Some((0, vec![0, 300, 350, 400])));
+    assert_eq!(wakes(&out).len(), 1);
+    // Ended speech, or a skip, leaves later segments alone.
+    assert_eq!(p.speech_reached(4, 400), (false, Vec::new()));
+}
+
+#[test]
+fn speech_said_during_a_pause_shows_when_the_next_segment_starts() {
+    let t = tl("ab[pause]cd", &no_punct());
+    let (mut p, _) = Player::start(LineId(1), t.clone(), AfterLine::Hold, None, 0);
+    p.follow_speech(0);
+    p.speech_reached(2, 100);
+    let out = p.on_wake(p.epoch(), WakeReason::SegmentEnd, 400);
+    assert_eq!(p.phase(), Phase::Gated, "{out:?}");
+    // The voice reads on past the pause.
+    p.speech_reached(4, 500);
+    let (_, out) = p.advance(900);
+    assert_eq!(schedule(&out), Some((900, vec![0, 35])));
+}

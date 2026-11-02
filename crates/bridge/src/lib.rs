@@ -92,6 +92,14 @@ impl BridgeHandle {
         }
     }
 
+    /// The voice reading the line began a word of `chars` characters: the
+    /// VTube Studio mouth opens with it instead of flapping on its own.
+    pub fn word(&self, chars: usize) {
+        if let Some(v) = &self.vts {
+            v.word(chars);
+        }
+    }
+
     pub fn emit(&self, event: BridgeEvent) {
         if let Some(v) = &self.vts {
             v.emit(&event);

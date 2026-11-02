@@ -269,6 +269,7 @@ fn tts(ui: Ui) -> AnyView {
         ),
         toggle_row!(ui, "tts-chat", tts.chat),
         toggle_row!(ui, "tts-partners", tts.partners),
+        toggle_row!(ui, "tts-pace", tts.pace_typing),
         kit::line(
             hint(ui.now_t("tts-hint")),
             kit::hstack((
