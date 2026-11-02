@@ -1,4 +1,5 @@
 //! Package catalogue and per-plugin process lifetimes. Only local UI events return.
+use crate::ui::EditShared;
 use crate::{
     msg::{Msg, PackageMsg},
     ui::Ui,
@@ -189,18 +190,15 @@ impl Manager {
     }
     fn remove(&mut self, id: &str, error: Option<String>, ui: Ui) {
         self.running.remove(id);
-        ui.plugin_views.update(|views| {
-            Arc::make_mut(views).remove(id);
+        ui.plugin_views.edit(|views| {
+            views.remove(id);
         });
-        ui.plugin_errors.update(|errors| {
-            let errors = Arc::make_mut(errors);
-            match error {
-                Some(message) => {
-                    errors.insert(id.into(), message);
-                }
-                None => {
-                    errors.remove(id);
-                }
+        ui.plugin_errors.edit(|errors| match error {
+            Some(message) => {
+                errors.insert(id.into(), message);
+            }
+            None => {
+                errors.remove(id);
             }
         });
     }
@@ -237,9 +235,8 @@ impl Manager {
                     .get(id)
                     .is_some_and(|a| a.matches(&running.digest))
         });
-        let mut views = (*ui.plugin_views.get_untracked()).clone();
-        views.retain(|id, _| self.running.contains_key(id));
-        ui.plugin_views.set(Arc::new(views));
+        ui.plugin_views
+            .edit(|views| views.retain(|id, _| self.running.contains_key(id)));
         self.refresh_watch(&ctx);
         self.ticket = NEXT_TICKET.fetch_add(1, Ordering::Relaxed);
         let pending: Vec<String> = enabled
@@ -395,16 +392,16 @@ impl Manager {
                     .plugin_views
                     .with_untracked(|views| views.get(id) == Some(update))
                 {
-                    ui.plugin_views.update(|views| {
-                        Arc::make_mut(views).insert(id.into(), update.clone());
+                    ui.plugin_views.edit(|views| {
+                        views.insert(id.into(), update.clone());
                     });
                 }
                 if ui
                     .plugin_errors
                     .with_untracked(|errors| errors.contains_key(id))
                 {
-                    ui.plugin_errors.update(|errors| {
-                        Arc::make_mut(errors).remove(id);
+                    ui.plugin_errors.edit(|errors| {
+                        errors.remove(id);
                     });
                 }
             }

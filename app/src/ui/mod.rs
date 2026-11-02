@@ -36,6 +36,19 @@ use nanatype_theme::Skin;
 use crate::msg::{GlobalAction, Shortcut};
 use crate::services::hotkeys::HotkeyState;
 
+/// Edit the value behind a `Signal<Arc<T>>` in place; it is copied only
+/// while a view still holds the previous one.
+pub trait EditShared<T> {
+    fn edit(&self, f: impl FnOnce(&mut T));
+}
+
+impl<T: Clone + 'static> EditShared<T> for Signal<Arc<T>> {
+    #[track_caller]
+    fn edit(&self, f: impl FnOnce(&mut T)) {
+        self.update(|shared| f(Arc::make_mut(shared)));
+    }
+}
+
 /// A notice, shown as a toast (see [`feedback`]).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Notice {
@@ -597,8 +610,8 @@ pub fn apply_skin_preview(
                     .map(|r| r.image_urls.values().cloned().collect::<Vec<_>>())
                     .unwrap_or_default()
             });
-            ui.skins.update(|rows| {
-                if let Some(row) = Arc::make_mut(rows).iter_mut().find(|r| r.id == id) {
+            ui.skins.edit(|rows| {
+                if let Some(row) = rows.iter_mut().find(|r| r.id == id) {
                     if let Some(urls) = urls {
                         row.image_urls = Arc::new(urls);
                     }

@@ -2,7 +2,7 @@
 //! 彗星号 workshop plugin through NanaType's own relay (the plugin pushes
 //! blivechat frames to the relay, and the same client joins its `/api/chat`).
 
-use std::sync::Arc;
+use crate::ui::EditShared;
 
 use nanatype_blive::{
     BliveConfig, BliveEvent, BliveStatus, BliveUpdate, ChatEvent, RelayConfig, RelayStatus, RoomKey,
@@ -49,7 +49,7 @@ impl App {
                 if let RelayStatus::Error(fault) = &status {
                     nanatype_diag::report!(crate::diag::COMET_RELAY_ERROR; "{fault}");
                 }
-                self.blive_state(|s| s.relay = status);
+                self.ui.blivechat.edit(|s| s.relay = status);
                 self.blivechat_status_line();
             }
             BliveMsg::AuthCode(code) => {
@@ -92,7 +92,7 @@ impl App {
                     _ => {}
                 }
                 let fatal = matches!(status, BliveStatus::Fatal(..));
-                self.blive_state(|s| s.status = status);
+                self.ui.blivechat.edit(|s| s.status = status);
                 let text = self.blivechat_status_line();
                 if fatal {
                     self.notice(text, true);
@@ -108,10 +108,6 @@ impl App {
             }
             BliveUpdate::Chat(chat) => self._chat_assets.blivechat(event.epoch, chat),
         }
-    }
-
-    fn blive_state(&self, f: impl FnOnce(&mut State)) {
-        self.ui.blivechat.update(|s| f(Arc::make_mut(s)));
     }
 
     /// Connect, reconnect or stop after a settings change.
@@ -143,7 +139,7 @@ impl App {
                         // Only read the secret store once the code is wanted.
                         let code = self.blivechat_auth.get();
                         let saved = code.is_some();
-                        self.blive_state(|s| s.auth_saved = saved);
+                        self.ui.blivechat.edit(|s| s.auth_saved = saved);
                         code.and_then(|code| RoomKey::parse(true, &code))
                     }
                     BliveRoomKind::RoomId => RoomKey::parse(false, &b.room_id),
@@ -164,7 +160,7 @@ impl App {
         let joining = client.is_some();
         self.blivechat.set(client);
         if self.blivechat.epoch() != epoch {
-            self.blive_state(|s| {
+            self.ui.blivechat.edit(|s| {
                 s.status = if joining {
                     BliveStatus::Connecting
                 } else {

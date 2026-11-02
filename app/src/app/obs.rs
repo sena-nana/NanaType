@@ -4,6 +4,7 @@
 //! fixed size.
 
 use crate::msg::ObsMsg;
+use crate::ui::EditShared;
 use std::sync::Arc;
 
 use nanatype_obs::{ObsConfig, ObsEvent, ObsItem, ObsScene, ObsStatus, ObsUpdate};
@@ -115,7 +116,7 @@ impl App {
                     nanatype_diag::report!(crate::diag::OBS_ERROR; "{fault}");
                 }
                 let refused = matches!(status, ObsStatus::AuthFailed | ObsStatus::NeedsPassword);
-                self.obs_state(|s| s.status = status);
+                self.ui.obs.edit(|s| s.status = status);
                 let link = self.obs_link_state();
                 if refused && let LinkState::Error(text) = &link {
                     self.notice(text.clone(), true);
@@ -123,7 +124,7 @@ impl App {
                 self.edit_status(|s| s.obs = link);
             }
             ObsUpdate::Scene(scene) => {
-                self.obs_state(|s| s.scene = scene);
+                self.ui.obs.edit(|s| s.scene = scene);
                 let link = self.obs_link_state();
                 self.edit_status(|s| s.obs = link);
                 self.publish_obs_sizes();
@@ -134,10 +135,6 @@ impl App {
                 self.notice(text, true);
             }
         }
-    }
-
-    fn obs_state(&self, f: impl FnOnce(&mut State)) {
-        self.ui.obs.update(|s| f(Arc::make_mut(s)));
     }
 
     /// Connect, reconnect or stop after a settings change, and size the
@@ -159,7 +156,7 @@ impl App {
         self.obs.set(config);
         let renewed = self.obs.epoch() != epoch;
         let saved = self.obs_password.held();
-        self.obs_state(|s| {
+        self.ui.obs.edit(|s| {
             s.password_saved = saved;
             if renewed {
                 s.scene = None;

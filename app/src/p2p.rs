@@ -6,6 +6,7 @@ use nanatype_core::{Cmd, DisplayView, Event as CoreEvent, HistoryRow};
 use nanatype_model::{AssetRef, LineId, SourceId};
 use nanatype_p2p::{Config, Event, PeerHandle, Resources, Room, Status, TrackSnapshot};
 
+use crate::ui::EditShared;
 use crate::{app::App, clock, msg::Msg};
 
 /// Whether a Steam friend has accepted the room invite.
@@ -230,10 +231,10 @@ impl App {
             } => {
                 self.peer.local = local_id;
                 self.peer.admit = admit;
-                let mut state = (*self.ui.peer.get_untracked()).clone();
-                state.host = host;
-                state.invitation = invitation;
-                self.ui.peer.set(Arc::new(state));
+                self.ui.peer.edit(|state| {
+                    state.host = host;
+                    state.invitation = invitation;
+                });
                 self.peer_publish();
             }
             Event::Status(status) => {
@@ -241,9 +242,7 @@ impl App {
                     self.peer_leave();
                     return;
                 }
-                let mut state = (*self.ui.peer.get_untracked()).clone();
-                state.status = status;
-                self.ui.peer.set(Arc::new(state));
+                self.ui.peer.edit(|state| state.status = status);
             }
             Event::Room {
                 mut room,

@@ -1,3 +1,4 @@
+use crate::ui::EditShared;
 use crate::{
     app::App,
     chat::Platform,
@@ -77,7 +78,7 @@ impl App {
             TwitchMsg::Logout => {
                 self.twitch.logout();
                 self.twitch_disable_send();
-                self.twitch_state(|s| s.avatar = None);
+                self.ui.twitch.edit(|s| s.avatar = None);
             }
             TwitchMsg::SendToggle => self.twitch_toggle(),
             TwitchMsg::SendConfirm(accept) => self.twitch_confirm(accept),
@@ -86,12 +87,9 @@ impl App {
         }
     }
 
-    fn twitch_state(&self, edit: impl FnOnce(&mut State)) {
-        self.ui.twitch.update(|state| edit(Arc::make_mut(state)));
-    }
     fn twitch_disable_send(&mut self) {
         self.twitch.set_sending(false);
-        self.twitch_state(|s| {
+        self.ui.twitch.edit(|s| {
             s.sending = false;
             s.confirm = false;
             for d in &mut s.deliveries {
@@ -114,7 +112,7 @@ impl App {
             return;
         }
         if state.can_send() {
-            self.twitch_state(|s| s.confirm = true);
+            self.ui.twitch.edit(|s| s.confirm = true);
         }
         self.update(Msg::Window(WindowMsg::SettingsPlatform(Platform::Twitch)));
     }
@@ -189,11 +187,13 @@ impl App {
                             move |asset| ctx.dispatch(Msg::Chat(ChatMsg::AssetReady(asset)))
                         },
                     );
-                    self.twitch_state(|s| s.avatar = asset.map(|a| a.to_string()));
+                    self.ui
+                        .twitch
+                        .edit(|s| s.avatar = asset.map(|a| a.to_string()));
                 } else {
                     self.twitch_disable_send();
                 }
-                self.twitch_state(|s| s.account = account);
+                self.ui.twitch.edit(|s| s.account = account);
             }
             Event::Connection(connection) => {
                 let (state, error) = match &connection {
@@ -206,7 +206,7 @@ impl App {
                 if !matches!(connection, ConnectionState::Connected(_)) {
                     self.twitch_disable_send();
                 }
-                self.twitch_state(|s| s.connection = connection);
+                self.ui.twitch.edit(|s| s.connection = connection);
             }
             Event::Chat { channel, event } => {
                 crate::diag::TWITCH_LIVE.chat();
@@ -214,7 +214,7 @@ impl App {
             }
             Event::Deleted { channel, id } => self.live_deleted(Platform::Twitch, &channel, &id),
             Event::Delivery(delivery) => {
-                self.twitch_state(|s| {
+                self.ui.twitch.edit(|s| {
                     if let Some(old) = s.deliveries.iter_mut().find(|d| d.line == delivery.line) {
                         *old = delivery.clone();
                     } else {
