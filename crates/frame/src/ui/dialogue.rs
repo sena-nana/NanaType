@@ -1109,6 +1109,7 @@ fn box_view(ui: Stage, ctx: BoxCtx, content: AnyView) -> impl IntoView {
                 column_nameplate(ui, &ctx),
                 (source == Source::Display).then(|| reply_quote(ui)),
                 text,
+                (source == Source::Display).then(|| display_subtitle(ui)),
             ))
             .into_any()
     };
@@ -1449,6 +1450,56 @@ fn reply_quote(ui: Stage) -> AnyView {
             });
         })
         .children(quote)
+        .into_any()
+}
+
+/// The line's translation under the text area, outside its scrollport so
+/// long text never pushes it out of the box. It fades in as it arrives and
+/// leaves with the line; vertical text has none.
+fn display_subtitle(ui: Stage) -> AnyView {
+    let body = dynamic(
+        move || {
+            let view = drawn(ui);
+            (
+                view.subtitle.as_ref().map(|s| s.text.clone()),
+                Arc::as_ptr(&ui.skin.get()) as usize,
+            )
+        },
+        move |(text, _)| {
+            let Some(text) = text.as_deref() else {
+                return widget(Stack::column(0.0)).into_any();
+            };
+            let skin = ui.skin.get_untracked();
+            let d = &skin.dialogue;
+            let backdrop = super::quote::backdrop(d.box_.color, d.box_.frame.is_some());
+            let style = super::subtitle::style(ui, &skin, &d.subtitle, &d.text, backdrop);
+            super::subtitle::view(text, style, d.subtitle.gap)
+        },
+    );
+    widget(Stack::column(0.0).width(LengthSpec::Fill))
+        .bind(move |s: &mut Stack| {
+            let view = drawn(ui);
+            let skin = ui.skin.get();
+            let shown = !view.empty
+                && skin.dialogue.subtitle.visible
+                && ui.settings.with(|s| s.translate.display)
+                && !ui.settings.with(|s| ui.canvas().vertical_text(s, &skin));
+            let opacity = view.subtitle.as_ref().map_or(1.0, |sub| {
+                super::subtitle::presence(sub.at_ms, ui.now.get(), ui.reduced_motion.get())
+            });
+            restyle(s, |l| {
+                l.display = Some(if shown && view.subtitle.is_some() {
+                    nana_ui_core::DisplaySpec::Flex
+                } else {
+                    nana_ui_core::DisplaySpec::None
+                });
+                l.opacity = (opacity < 1.0).then_some(opacity);
+                l.flex_grow = Some(0.);
+                l.flex_shrink = Some(0.);
+                l.min_width = Some(LengthSpec::Px(0.));
+            });
+        })
+        .children(body)
         .into_any()
 }
 
@@ -2213,6 +2264,12 @@ pub fn display_animating(ui: Stage, now: u64) -> bool {
     }
     if let Some(sh) = view.shake
         && now <= sh.at_ms + u64::from(sh.ms) + 50
+    {
+        return true;
+    }
+    if let Some(sub) = &view.subtitle
+        && now <= sub.at_ms + super::subtitle::FADE_MS + 50
+        && !ui.reduced_motion.get_untracked()
     {
         return true;
     }

@@ -345,6 +345,76 @@ impl Default for TtsSettings {
     }
 }
 
+/// Where translations come from.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TranslateProvider {
+    /// An OpenAI-compatible chat completions endpoint (OpenAI, DeepSeek, a
+    /// local Ollama or LM Studio).
+    #[default]
+    Openai,
+    Deepl,
+}
+
+impl TranslateProvider {
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Openai => "openai",
+            Self::Deepl => "deepl",
+        }
+    }
+    pub fn from_key(key: &str) -> Option<Self> {
+        match key {
+            "openai" => Some(Self::Openai),
+            "deepl" => Some(Self::Deepl),
+            _ => None,
+        }
+    }
+}
+
+/// Translated subtitles for sent lines. The API keys live in the system's
+/// secret store, never here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TranslateSettings {
+    pub enabled: bool,
+    pub provider: TranslateProvider,
+    /// The OpenAI-compatible endpoint's base URL, up to `/v1`.
+    pub base_url: String,
+    pub model: String,
+    /// A BCP 47 code (`en`, `ja`, `zh-Hant`); the source is detected.
+    pub target: String,
+    /// Which lines are translated: the streamer's, co-op partners' (when
+    /// they send none of their own) and viewer chat in the history.
+    pub own: bool,
+    pub partners: bool,
+    pub chat: bool,
+    /// Where translations show: under the line on the display, and under
+    /// rows in the history window. Saved history keeps them either way.
+    pub display: bool,
+    pub history: bool,
+    /// A proxy for the provider; empty uses the system's.
+    pub proxy: String,
+}
+
+impl Default for TranslateSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            provider: TranslateProvider::default(),
+            base_url: "https://api.openai.com/v1".into(),
+            model: "gpt-4o-mini".into(),
+            target: "en".into(),
+            own: true,
+            partners: false,
+            chat: false,
+            display: true,
+            history: true,
+            proxy: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateSettings {
@@ -1550,6 +1620,7 @@ pub struct Settings {
     pub sound: SoundSettings,
     pub speech: SpeechSettings,
     pub tts: TtsSettings,
+    pub translate: TranslateSettings,
     pub skin: SkinSettings,
     pub overlays: Overlays,
     pub history: HistorySettings,
@@ -1576,6 +1647,7 @@ impl Default for Settings {
             sound: SoundSettings::default(),
             speech: SpeechSettings::default(),
             tts: TtsSettings::default(),
+            translate: TranslateSettings::default(),
             skin: SkinSettings::default(),
             overlays: Overlays::default(),
             history: HistorySettings::default(),
@@ -1663,6 +1735,27 @@ impl Settings {
         voice_id(&mut t.voice);
         for character in &mut self.general.characters {
             voice_id(&mut character.voice);
+        }
+        let tr = &mut self.translate;
+        let target = tr.target.trim();
+        if target.is_empty()
+            || target.len() > 16
+            || !target
+                .split('-')
+                .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_alphanumeric()))
+        {
+            tr.target = TranslateSettings::default().target;
+        } else if target.len() != tr.target.len() {
+            tr.target = target.to_owned();
+        }
+        for (field, limit) in [
+            (&mut tr.base_url, 2048),
+            (&mut tr.model, 256),
+            (&mut tr.proxy, 2048),
+        ] {
+            if field.len() > limit {
+                field.clear();
+            }
         }
         let mut plugins = std::collections::BTreeSet::new();
         self.enabled_plugins.retain(|id| {

@@ -49,10 +49,19 @@ const LOCAL: &[&str] = &[
 
 /// Exported only when integrations are included: services, their hosts,
 /// ports and channels.
-const INTEGRATIONS: &[&str] = &["/integrations", "/output/obs", "/assets/telegram"];
+const INTEGRATIONS: &[&str] = &[
+    "/integrations",
+    "/output/obs",
+    "/assets/telegram",
+    "/translate/base_url",
+];
 
 /// Proxies whose `user:password@` is dropped from exports.
-const PROXIES: &[&str] = &["/update/proxy", "/assets/telegram/proxy"];
+const PROXIES: &[&str] = &[
+    "/update/proxy",
+    "/assets/telegram/proxy",
+    "/translate/proxy",
+];
 
 /// What "reset to defaults" keeps: credentials, the language and the
 /// finished first-run guide.
@@ -70,7 +79,9 @@ const KEPT_ON_RESET: &[&str] = &[
 /// history overlay and the quick phrases. Everything else is global: the
 /// language, hotkeys, input behaviour, integrations and their endpoints,
 /// outputs, speech input and text to speech (each character's voice
-/// travels with the characters), updates, autostart, plugins and devices.
+/// travels with the characters), translation (its provider, language and
+/// where subtitles show; the API keys are in the system's secret store and
+/// never exported), updates, autostart, plugins and devices.
 pub const PROFILE_SCOPE: &[&str] = &[
     "/general/characters",
     "/general/character",
@@ -375,6 +386,7 @@ pub fn changed_sections(before: &Settings, after: &Settings) -> Vec<&'static str
         "sound",
         "speech",
         "tts",
+        "translate",
         "skin",
         "overlays",
         "history",

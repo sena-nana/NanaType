@@ -617,6 +617,7 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
     let body = dynamic(
         move || {
             ui.history.with(|_| ());
+            let shown = ui.settings.with(|s| s.translate.history);
             history_row(ui, key).map(|r| {
                 (
                     r.reveal.is_some(),
@@ -627,6 +628,7 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
                             x.segment.as_ref().map(|s| s.origin_ms),
                         )
                     }),
+                    r.translation.clone().filter(|_| shown),
                 )
             })
         },
@@ -650,13 +652,39 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
                 Some(r) => Timing::Reveal(r.clone()),
                 None => Timing::Static,
             };
-            if exposed
-                && f32::from(skin.history.bubble_color.a) * bubble_opacity < 128.0
-                && base.stroke.is_none()
-            {
+            let see_through =
+                exposed && f32::from(skin.history.bubble_color.a) * bubble_opacity < 128.0;
+            let text = if see_through && base.stroke.is_none() {
                 document(ui, &transparent_text(&row.doc, base.color), &base, timing)
             } else {
                 document(ui, &row.doc, &base, timing)
+            };
+            let translation = row
+                .translation
+                .as_deref()
+                .filter(|_| skin.dialogue.subtitle.visible)
+                .filter(|_| ui.settings.with_untracked(|s| s.translate.history));
+            match translation {
+                Some(translation) => {
+                    // Under the text, as on the display, sized from the
+                    // bubble's own text.
+                    let mut spec = skin.history.text.clone();
+                    spec.size = base.size;
+                    let h = &skin.history;
+                    let backdrop = super::quote::backdrop(h.bubble_color, h.bubble_frame.is_some())
+                        .filter(|_| !see_through);
+                    let style =
+                        super::subtitle::style(ui, &skin, &skin.dialogue.subtitle, &spec, backdrop);
+                    widget(Stack::column(0.0).with_layout(|l| {
+                        l.min_width = Some(LengthSpec::Px(0.0));
+                    }))
+                    .children((
+                        text,
+                        super::subtitle::view(translation, style, skin.dialogue.subtitle.gap),
+                    ))
+                    .into_any()
+                }
+                None => text,
             }
         },
     );
@@ -1314,6 +1342,7 @@ mod tests {
             },
             doc: Arc::new(Document::plain(text)),
             reveal: None,
+            translation: None,
         };
         let rows: Vec<HistoryRow> = (0..40)
             .map(|i| row(10 + i, "Viewer", "filler"))
@@ -1456,6 +1485,7 @@ mod tests {
             item,
             doc: Arc::new(Document::new()),
             reveal: None,
+            translation: None,
         }
     }
 
@@ -1550,6 +1580,7 @@ mod tests {
                     item: item(name, SourceKind::Chat, 100),
                     doc: Arc::new(Document::plain("求个自我介绍～")),
                     reveal: None,
+                    translation: None,
                 }]));
                 let id = DocumentId::new(1).unwrap();
                 let mut doc = RuntimeDocument::new(id);
@@ -1624,6 +1655,7 @@ mod tests {
             doc: Arc::new(item.doc.clone()),
             item,
             reveal: None,
+            translation: None,
         }
     }
 
@@ -1810,6 +1842,7 @@ mod tests {
             item,
             doc: Arc::new(nanatype_model::Document::new()),
             reveal: None,
+            translation: None,
         })
         .collect();
         let shown: Vec<u64> = (0..6).collect();

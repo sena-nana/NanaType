@@ -1212,3 +1212,114 @@ fn replay_shows_the_last_line_again_without_sending_or_recording_it() {
     assert_eq!(core.display().line, Some(started.id));
     assert_eq!(core.history().len(), 1);
 }
+
+fn line_id(core: &Core) -> nanatype_model::LineId {
+    core.display().line.expect("a line on the display")
+}
+
+#[test]
+fn a_translation_subtitles_its_line_and_row_but_not_a_newer_line() {
+    let mut core = core_with(|_| {});
+    type_and_send(&mut core, "大家好", 0);
+    let first = line_id(&core);
+    let revision = core.display().revision;
+    let fx = core.handle(
+        Cmd::Translated {
+            line: first,
+            text: "Hello everyone".into(),
+        },
+        40,
+    );
+    assert!(fx.display_changed && fx.history_changed);
+    assert!(core.display().revision > revision);
+    let sub = core.display().subtitle.clone().unwrap();
+    assert_eq!((&*sub.text, sub.at_ms), ("Hello everyone", 40));
+    assert_eq!(
+        core.history()[0].translation.as_deref(),
+        Some("Hello everyone")
+    );
+
+    // A newer line starts bare, and a late answer for the old one only
+    // reaches its row.
+    type_and_send(&mut core, "下一句", 100);
+    assert_eq!(core.display().subtitle, None);
+    let fx = core.handle(
+        Cmd::Translated {
+            line: first,
+            text: "Hi all".into(),
+        },
+        120,
+    );
+    assert!(!fx.display_changed);
+    assert_eq!(core.display().subtitle, None);
+    assert_eq!(core.history()[0].translation.as_deref(), Some("Hi all"));
+    assert_eq!(core.history()[1].translation, None);
+
+    // Clearing drops it with the line.
+    let second = line_id(&core);
+    core.handle(
+        Cmd::Translated {
+            line: second,
+            text: "Next".into(),
+        },
+        130,
+    );
+    core.handle(Cmd::ClearDisplay, 140);
+    assert_eq!(core.display().subtitle, None);
+}
+
+#[test]
+fn a_translation_before_the_row_exists_joins_it_on_completion() {
+    let mut core = core_with(|s| s.history.sync = HistorySync::OnComplete);
+    let fx = type_and_send(&mut core, "xy", 0);
+    let id = line_id(&core);
+    core.handle(
+        Cmd::Translated {
+            line: id,
+            text: "XY".into(),
+        },
+        1,
+    );
+    assert!(core.history().is_empty());
+    run_until(&mut core, fx.wakes, 10_000);
+    assert_eq!(core.history()[0].translation.as_deref(), Some("XY"));
+}
+
+#[test]
+fn chat_rows_take_their_translation_by_key() {
+    let mut core = core_with(|_| {});
+    core.handle(
+        Cmd::External(nanatype_model::HistoryItem {
+            source: nanatype_model::SourceId("twitch".into()),
+            kind: nanatype_model::SourceKind::Chat,
+            line: None,
+            author: "viewer".into(),
+            avatar: None,
+            doc: Document::plain("gg"),
+            at: 0,
+            uid: None,
+            reply: None,
+        }),
+        0,
+    );
+    let key = core.history()[0].key;
+    let fx = core.handle(
+        Cmd::TranslatedRow {
+            key,
+            text: "打得好".into(),
+        },
+        1,
+    );
+    assert!(fx.history_changed && !fx.display_changed);
+    assert_eq!(core.history()[0].translation.as_deref(), Some("打得好"));
+    // Rows and displays from older builds carry no translation.
+    let row: HistoryRow =
+        serde_json::from_value(serde_json::to_value(&core.history()[0]).unwrap()).unwrap();
+    assert_eq!(row, core.history()[0]);
+    let mut json = serde_json::to_value(&core.history()[0]).unwrap();
+    json.as_object_mut().unwrap().remove("translation");
+    let old: HistoryRow = serde_json::from_value(json).unwrap();
+    assert_eq!(old.translation, None);
+    let view = serde_json::to_value(core.display()).unwrap();
+    assert!(view.get("subtitle").is_none(), "{view}");
+}

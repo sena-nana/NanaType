@@ -20,7 +20,7 @@ mod tests;
 pub use crate::core::{
     Cmd, Core, CueBatch, DEFAULT_TYPING_VARIANTS, Effects, Event, UiSound, Wake,
 };
-pub use view::{DisplayView, HistoryRow, Reveal, SegmentReveal, ShakeView, TextExit};
+pub use view::{DisplayView, HistoryRow, Reveal, SegmentReveal, ShakeView, Subtitle, TextExit};
 
 /// Milliseconds on the host's monotonic clock.
 pub type Millis = u64;

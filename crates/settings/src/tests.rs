@@ -1544,3 +1544,84 @@ fn profiles_are_saved_and_listed_from_their_folder() {
     assert_eq!(id, "pb");
     assert!(valid_profile_id(&id) && !valid_profile_id("../x"));
 }
+
+#[test]
+fn translation_is_off_by_default_and_older_files_load_without_it() {
+    let mut settings: Settings = serde_json::from_str(r#"{"schema":5}"#).unwrap();
+    let t = &settings.translate;
+    assert_eq!(*t, TranslateSettings::default());
+    assert!(!t.enabled && t.own && !t.partners && !t.chat);
+    assert!(t.display && t.history);
+    assert_eq!(t.provider, TranslateProvider::Openai);
+    assert_eq!(t.target, "en");
+    assert!(!settings.sanitize());
+
+    settings.translate.target = " zh-Hant ".into();
+    settings.sanitize();
+    assert_eq!(settings.translate.target, "zh-Hant");
+    for bad in ["", "e n", "en_US", "-en", &"x".repeat(40)] {
+        settings.translate.target = bad.into();
+        settings.sanitize();
+        assert_eq!(settings.translate.target, "en", "{bad:?}");
+    }
+    settings.translate.model = "m".repeat(300);
+    settings.sanitize();
+    assert_eq!(settings.translate.model, "");
+
+    settings.translate.enabled = true;
+    settings.translate.provider = TranslateProvider::Deepl;
+    let value = serde_json::to_value(&settings).unwrap();
+    assert_eq!(value["translate"]["provider"], "deepl");
+    let mut migrated = value.clone();
+    assert_eq!(migrate(&mut migrated), Ok(SETTINGS_SCHEMA));
+    assert_eq!(
+        serde_json::from_value::<Settings>(migrated).unwrap(),
+        settings
+    );
+}
+
+#[test]
+fn translation_stays_global_and_exports_carry_no_credentials() {
+    let mut s = Settings::default();
+    s.translate.enabled = true;
+    s.translate.base_url = "http://localhost:11434/v1".into();
+    s.translate.proxy = "http://user:secret@proxy.local:8080".into();
+    let profile = Profile::capture("p1".into(), "歌回".into(), &s);
+    assert!(profile.settings.get("translate").is_none());
+    let here = Settings::default();
+    assert_eq!(profile.apply(&here).translate, here.translate);
+    assert_eq!(changed_sections(&here, &s), vec!["translate"]);
+
+    let full = export(
+        &s,
+        &GeometryStore::default(),
+        ExportOptions::default(),
+        "1",
+        1,
+    );
+    let text = serde_json::to_string(&full.envelope).unwrap();
+    assert!(
+        !text.contains("secret") && !text.contains("user:"),
+        "{text}"
+    );
+    let t = &full.envelope.settings["translate"];
+    assert_eq!(t["proxy"], "http://proxy.local:8080");
+    assert_eq!(t["base_url"], "http://localhost:11434/v1");
+    // No key of any kind is a setting: they live in the secret store.
+    let keys: Vec<&String> = t.as_object().unwrap().keys().collect();
+    assert!(
+        keys.iter()
+            .all(|k| !k.contains("key") && !k.contains("token")),
+        "{keys:?}"
+    );
+    let bare = ExportOptions {
+        integrations: false,
+        ..ExportOptions::default()
+    };
+    let bare = export(&s, &GeometryStore::default(), bare, "1", 1);
+    assert!(
+        bare.envelope.settings["translate"]
+            .get("base_url")
+            .is_none()
+    );
+}
