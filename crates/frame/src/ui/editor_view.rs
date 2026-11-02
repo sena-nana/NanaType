@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use nana_ui::runtime::view::{AnyView, EntityRef, IntoView, entity_ref, node_ref, widget};
+use nana_ui::runtime::view::{AnyView, EntityRef, IntoView, entity_ref, widget};
 use nana_ui::runtime::{RichTextEditor, RichTextEditorEvent, Stack, Text, TextArea, TextChanged};
 use nana_ui_core::{LengthSpec, OverflowSpec, PointerEventsSpec, PositionSpec, SemanticColorRole};
 use nanatype_i18n::{Arg, Locale};
@@ -135,9 +135,6 @@ pub fn editor_area<M: Send + 'static>(
         st.foreground = Some(SemanticColorRole::Muted);
         st
     };
-    // The empty-draft hint names the rich editor for assistive technology,
-    // which has no label of its own.
-    let hint = node_ref();
     widget(Stack::fill_column(0.0).with_layout(|l| {
         l.position = PositionSpec::Relative;
         l.flex_grow = Some(1.0);
@@ -152,7 +149,17 @@ pub fn editor_area<M: Send + 'static>(
         .children((
             widget(RichTextEditor::new(ui.editor_value.get_untracked()).disabled(inert))
                 .entity_ref(editor)
-                .labelled_by(hint)
+                // It draws no label: assistive technology hears what it is
+                // for, then the hint the empty draft shows.
+                .bind(move |e: &mut RichTextEditor| {
+                    let locale = ui.locale.get();
+                    let name: Arc<str> = I18N.t_in(locale, "editor-label").into();
+                    let hint: Arc<str> = I18N.t_in(locale, "editor-placeholder").into();
+                    if e.accessible_name.as_ref() != Some(&name) {
+                        e.accessible_name = Some(name);
+                        e.accessible_description = Some(hint);
+                    }
+                })
                 .on_cx({
                     let send = send.clone();
                     move |_, e: &nana_ui::runtime::SecondaryPress, cx| {
@@ -238,7 +245,6 @@ pub fn editor_area<M: Send + 'static>(
                 // Markers and whitespace show in the editor though the line is
                 // blank, so the hint waits for a truly empty draft.
                 .key("input-empty-hint")
-                .node_ref(hint)
                 .visible(move || !ui.composing.get() && ui.draft.with(|d| d.is_empty())),
         )),
         widget(Stack::fill_column(0.0).with_layout(|l| {

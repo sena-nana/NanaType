@@ -4,6 +4,7 @@
 editor-placeholder = ここにセリフを入力… @ で視聴者、/ でマーカーと演出
 editor-source-placeholder = [b]マークアップ[/b]で編集できます。例：[shake]わっ！[/shake][wait=500]
 editor-source-label = マークアップのソース
+editor-label = セリフ
 marker-wait = 間 { $ms }ms
 marker-pause = 待機
 marker-pause-auto = 待 { $ms }ms

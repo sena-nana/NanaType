@@ -4,6 +4,7 @@
 editor-placeholder = Type your line here… @ for a viewer, / for a marker or effect
 editor-source-placeholder = Edit with [b]markup[/b], e.g. [shake]Whoa![/shake][wait=500]
 editor-source-label = Markup source
+editor-label = Line
 marker-wait = wait { $ms }ms
 marker-pause = continue
 marker-pause-auto = wait { $ms }ms

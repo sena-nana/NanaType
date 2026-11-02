@@ -337,6 +337,7 @@ windows-visible = Show
 windows-lock = Interaction
 windows-lock-interactive = Interactive
 windows-on-top = Always on top
+windows-cell-name = { $setting }: { $window }
 windows-vertical-text = Vertical text
 windows-background = Capture background
 windows-background-transparent = Transparent

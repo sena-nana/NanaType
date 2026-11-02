@@ -334,6 +334,7 @@ windows-visible = 表示
 windows-lock = 操作
 windows-lock-interactive = 操作可能
 windows-on-top = 最前面に表示
+windows-cell-name = { $setting }：{ $window }
 windows-vertical-text = 縦書き
 windows-background = キャプチャ背景
 windows-background-transparent = 透明

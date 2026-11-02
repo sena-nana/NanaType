@@ -334,6 +334,7 @@ windows-visible = 显示
 windows-lock = 交互
 windows-lock-interactive = 可交互
 windows-on-top = 置顶
+windows-cell-name = { $setting }：{ $window }
 windows-vertical-text = 竖排文字
 windows-background = 捕获背景
 windows-background-transparent = 透明

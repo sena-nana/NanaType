@@ -97,6 +97,60 @@ fn a_settings_row_names_its_control_by_its_label() {
 }
 
 #[test]
+fn a_window_matrix_cell_is_named_by_its_line_and_column() {
+    let ui = Ui::new(
+        Arc::new(Settings::default()),
+        common::skin("nanatype.halo"),
+        Locale::EnUs,
+    );
+    ui.page.set(settings::Page::Windows);
+    let mut session =
+        common::session()
+            .themed(false)
+            .locale(Locale::EnUs)
+            .mount(1000, 1200, move || settings::settings_window(ui));
+    for _ in 0..4 {
+        session.flush().unwrap();
+    }
+    let labels: Vec<_> = session
+        .accessibility_dump()
+        .into_iter()
+        .filter_map(|n| n.label)
+        .collect();
+    for name in ["Always on top: History", "Interaction: Partner"] {
+        assert!(
+            labels.iter().any(|l| l == name),
+            "no {name:?} in {labels:?}"
+        );
+    }
+}
+
+#[test]
+fn the_line_editor_is_named_for_what_it_is_not_its_hint() {
+    let ui = Ui::new(
+        Arc::new(Settings::default()),
+        common::skin("nanatype.halo"),
+        Locale::EnUs,
+    );
+    let mut session =
+        common::session()
+            .themed(false)
+            .locale(Locale::EnUs)
+            .mount(1200, 640, move || input::input_window(ui));
+    for _ in 0..4 {
+        session.flush().unwrap();
+    }
+    let name = nanatype::ui::I18N.t_in(Locale::EnUs, "editor-label");
+    assert!(
+        session
+            .accessibility_dump()
+            .into_iter()
+            .any(|n| n.label.as_deref() == Some(name.as_str())),
+        "no control named {name:?}"
+    );
+}
+
+#[test]
 fn every_input_window_control_is_named() {
     let mut found = Vec::new();
     for locale in [Locale::ZhCn, Locale::EnUs] {

@@ -1,6 +1,5 @@
 use super::*;
 use crate::msg::WindowMsg;
-use nana_ui::runtime::view::node_ref;
 
 /// The overlay windows, in the matrix's column order.
 pub(super) const OVERLAYS: [WindowKind; 4] = [
@@ -14,11 +13,9 @@ pub(super) const MATRIX_LABEL_W: f32 = 150.0;
 /// Space between the matrix's columns.
 pub(super) const MATRIX_GAP: f32 = space::MD;
 
-/// A matrix line: a label, then one cell per overlay window. The label's
-/// text names each cell's control for assistive technology.
+/// A matrix line: a label, then one cell per overlay window. Each cell's
+/// control is named after its line and column ([`cell_name`]).
 pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> Row {
-    let (line, caption) = (node_ref(), node_ref());
-    crate::ui::kit::caption_names_controls(caption, line);
     let cells = cells.map(|cell| {
         widget(
             // A quarter of what the label and the gaps leave, so the columns
@@ -42,7 +39,6 @@ pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> Row {
                 .width(LengthSpec::Fill)
                 .padding_step(inset::step::CARD, inset::step::ROW_Y),
         )
-        .node_ref(line)
         .children((
             widget(
                 Stack::row(0.0)
@@ -51,10 +47,32 @@ pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> Row {
                     .width(LengthSpec::Px(MATRIX_LABEL_W))
                     .with_layout(|l| l.flex_shrink = Some(0.0)),
             )
-            .node_ref(caption)
             .children(label),
             cells.into_iter().collect::<Vec<_>>(),
         )),
+    )
+}
+
+/// The column heading of `kind`'s window.
+fn column_key(kind: WindowKind) -> &'static str {
+    match kind {
+        WindowKind::Display => "windows-display",
+        WindowKind::PeerDisplay => "windows-peer-display",
+        WindowKind::History => "windows-history",
+        _ => "windows-input",
+    }
+}
+
+/// What assistive technology calls a cell: its line's setting and its
+/// column's window ("Always on top: History").
+pub(super) fn cell_name(ui: Ui, line_key: &str, kind: WindowKind) -> String {
+    I18N.tr_in(
+        ui.locale.get_untracked(),
+        "windows-cell-name",
+        &[
+            ("setting", ui.now_t(line_key).into()),
+            ("window", ui.now_t(column_key(kind)).into()),
+        ],
     )
 }
 
@@ -86,21 +104,25 @@ pub(super) fn not_applicable() -> AnyView {
 pub(super) fn overlay_switch(
     ui: Ui,
     kind: WindowKind,
+    line_key: &str,
     get: fn(&nanatype_settings::OverlaySettings) -> bool,
     set: fn(&mut nanatype_settings::OverlaySettings, bool),
 ) -> AnyView {
     let read = move |s: &Settings| kind.overlay(s).is_some_and(get);
-    widget(Switch::new("", read(&ui.settings.get_untracked())))
-        .bind(move |s: &mut Switch| s.checked = ui.settings.with(|x| read(x)))
-        .on_cx(move |_, e: &ToggleChanged, cx| {
-            let v = e.checked;
-            cx.dispatch_program_all(edit(move |s| {
-                if let Some(o) = kind.overlay_mut(s) {
-                    set(o, v);
-                }
-            }));
-        })
-        .into_any()
+    widget(
+        Switch::new("", read(&ui.settings.get_untracked()))
+            .accessible_name(cell_name(ui, line_key, kind)),
+    )
+    .bind(move |s: &mut Switch| s.checked = ui.settings.with(|x| read(x)))
+    .on_cx(move |_, e: &ToggleChanged, cx| {
+        let v = e.checked;
+        cx.dispatch_program_all(edit(move |s| {
+            if let Some(o) = kind.overlay_mut(s) {
+                set(o, v);
+            }
+        }));
+    })
+    .into_any()
 }
 
 /// A select filling its cell, bound to one field of `kind`'s overlay
@@ -108,6 +130,7 @@ pub(super) fn overlay_switch(
 pub(super) fn overlay_select(
     ui: Ui,
     kind: WindowKind,
+    line_key: &str,
     options: &[(&'static str, &'static str)],
     get: fn(&nanatype_settings::OverlaySettings) -> &'static str,
     set: fn(&mut nanatype_settings::OverlaySettings, &str),
@@ -122,6 +145,7 @@ pub(super) fn overlay_select(
             widget(
                 Select::new(Some(read(&ui.settings.get_untracked()).to_owned()))
                     .options(opts)
+                    .accessible_name(cell_name(ui, line_key, kind))
                     .size(ControlSize::Small),
             )
             .bind(move |s: &mut Select| {
@@ -148,14 +172,8 @@ pub(super) fn windows(ui: Ui) -> AnyView {
     let header = matrix_row(
         widget(Stack::row(0.0)).into_any(),
         OVERLAYS.map(|kind| {
-            let key = match kind {
-                WindowKind::Display => "windows-display",
-                WindowKind::PeerDisplay => "windows-peer-display",
-                WindowKind::History => "windows-history",
-                _ => "windows-input",
-            };
             widget(
-                Text::new(ui.now_t(key))
+                Text::new(ui.now_t(column_key(kind)))
                     .style(Type::Overline.one_line())
                     .color(SemanticColorRole::Muted),
             )
@@ -164,7 +182,15 @@ pub(super) fn windows(ui: Ui) -> AnyView {
     );
     let show = matrix_row(
         matrix_label(ui, "windows-visible", None),
-        OVERLAYS.map(|kind| overlay_switch(ui, kind, |o| o.visible, |o, v| o.visible = v)),
+        OVERLAYS.map(|kind| {
+            overlay_switch(
+                ui,
+                kind,
+                "windows-visible",
+                |o| o.visible,
+                |o, v| o.visible = v,
+            )
+        }),
     );
     let lock = matrix_row(
         matrix_label(ui, "windows-lock", Some("windows-lock-tip")),
@@ -175,6 +201,7 @@ pub(super) fn windows(ui: Ui) -> AnyView {
             overlay_select(
                 ui,
                 kind,
+                "windows-lock",
                 &[
                     ("interactive", "windows-lock-interactive"),
                     ("locked", "windows-lock-locked-short"),
@@ -202,6 +229,7 @@ pub(super) fn windows(ui: Ui) -> AnyView {
             overlay_select(
                 ui,
                 kind,
+                "windows-background",
                 &[
                     ("transparent", "windows-background-transparent"),
                     ("chroma", "windows-background-chroma"),
@@ -224,8 +252,15 @@ pub(super) fn windows(ui: Ui) -> AnyView {
     );
     let on_top = matrix_row(
         matrix_label(ui, "windows-on-top", None),
-        OVERLAYS
-            .map(|kind| overlay_switch(ui, kind, |o| o.always_on_top, |o, v| o.always_on_top = v)),
+        OVERLAYS.map(|kind| {
+            overlay_switch(
+                ui,
+                kind,
+                "windows-on-top",
+                |o| o.always_on_top,
+                |o, v| o.always_on_top = v,
+            )
+        }),
     );
     let vertical_text = matrix_row(
         matrix_label(
@@ -237,7 +272,13 @@ pub(super) fn windows(ui: Ui) -> AnyView {
             if !matches!(kind, WindowKind::Display | WindowKind::PeerDisplay) {
                 return not_applicable();
             }
-            overlay_switch(ui, kind, |o| o.vertical_text, |o, v| o.vertical_text = v)
+            overlay_switch(
+                ui,
+                kind,
+                "windows-vertical-text",
+                |o| o.vertical_text,
+                |o, v| o.vertical_text = v,
+            )
         }),
     );
     // The size the window was dragged to ("Follow skin" until it is), and
