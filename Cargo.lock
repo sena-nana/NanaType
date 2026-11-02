@@ -4051,6 +4051,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nanatype-translate"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "ureq",
+ "url",
+]
+
+[[package]]
 name = "nanatype-tts"
 version = "0.1.0"
 dependencies = [

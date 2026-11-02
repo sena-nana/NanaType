@@ -1,0 +1,12 @@
+[package]
+name = "nanatype-translate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Translated subtitles for sent lines through an OpenAI-compatible endpoint or DeepL"
+
+[dependencies]
+serde_json.workspace = true
+ureq.workspace = true
+url.workspace = true
