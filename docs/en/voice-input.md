@@ -2,7 +2,7 @@
 
 # Voice input
 
-The microphone button in the input window's bottom bar starts and stops voice input; the menu next to it switches the mode, resumes recognition and opens the settings. **Settings › Input › Voice input** gathers the recognition method, microphone, language and pause length in one place, and manages the local model.
+The microphone button in the input window's bottom bar starts and stops voice input; the menu next to it switches the mode, resumes recognition and opens the settings. **Settings › Input › Voice** gathers the recognition method, microphone, language and pause length in one place, and manages the local model.
 
 The voice mode is independent of the existing **Compose & send** / **Live mirror** modes:
 
