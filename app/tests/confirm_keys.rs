@@ -144,8 +144,6 @@ fn focus(f: &mut Fixture, key: &str) {
 }
 
 /// Enter on the confirming button goes ahead; on Cancel it backs out.
-/// (Arming hides the focused trigger, so the focus is put on them here: see
-/// the ignored test below.)
 fn inline(page: Page, trigger: &str, confirm: &str, expect: impl Fn(&Msg) -> bool) {
     let mut f = Fixture::new(page);
     if page == Page::History {
@@ -199,14 +197,10 @@ fn resetting_confirms_from_the_keyboard() {
     );
 }
 
-/// Esc right after arming, and Enter going ahead without first moving to
-/// the confirming button, need the armed confirmation to take the focus
-/// from its trigger, which arming hides (the focus falls back to the top of
-/// the window). A view cannot ask for the focus in NanaUI yet:
-/// `request_focus` wants the document's id, which a view handler does not
-/// have. This waits for that API rather than a workaround here.
+/// Arming hides the focused trigger, so the armed confirmation takes the
+/// focus: Esc right after arming backs out (and the trigger has the focus
+/// again), Enter goes ahead without first moving to the confirming button.
 #[test]
-#[ignore = "needs a view-level focus request in NanaUI"]
 fn an_armed_confirmation_backs_out_on_esc_and_confirms_on_enter() {
     for (page, trigger, expect) in [
         (
@@ -222,6 +216,12 @@ fn an_armed_confirmation_backs_out_on_esc_and_confirms_on_enter() {
         arm(&mut f, trigger);
         f.key("Escape");
         assert!(!armed(&f), "{trigger}: Esc");
+        let back = f.buttons(trigger)[0].id;
+        assert_eq!(
+            focused(&f),
+            Some(back),
+            "{trigger}: focus back on the trigger"
+        );
         arm(&mut f, trigger);
         f.messages();
         f.key("Enter");

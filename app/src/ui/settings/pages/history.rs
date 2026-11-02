@@ -115,7 +115,7 @@ pub(super) fn history(ui: Ui) -> AnyView {
                             *ui,
                             ui.now_t("history-clear-confirm"),
                             ui.now_t("history-clear"),
-                            |armed| {
+                            move |armed| {
                                 widget(
                                     Button::new(ui.now_t("history-clear")).size(ControlSize::Small),
                                 )
@@ -364,7 +364,7 @@ fn viewer(ui: Ui, view: &archive::View, name: &str) -> Row {
             *ui,
             ui.now_t("history-saved-delete-confirm"),
             ui.now_t("history-saved-delete"),
-            |armed| {
+            move |armed| {
                 widget(Button::new(ui.now_t("history-saved-delete")).size(ControlSize::Small))
                     .on(move |_: &Activate| armed.set(true))
                     .into_any()

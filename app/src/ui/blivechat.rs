@@ -240,7 +240,7 @@ fn comet_section(ui: Ui) -> AnyView {
         *ui,
         ui.now_t("int-comet-reset-question"),
         ui.now_t("int-comet-reset"),
-        |armed| {
+        move |armed| {
             widget(Button::new(ui.now_t("int-comet-reset")).size(ControlSize::Small))
                 .on(move |_: &Activate| armed.set(true))
                 .into_any()

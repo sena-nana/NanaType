@@ -96,7 +96,7 @@ fn profile_row(ui: Ui, id: String, active: bool) -> Row {
         *ui,
         ui.now_t("profile-delete-confirm"),
         ui.now_t("assets-remove"),
-        |armed| remove_button(ui, armed),
+        move |armed| remove_button(ui, armed),
         move || Msg::Profile(ProfileMsg::Delete(id.clone())),
     );
     crate::ui::kit::line(rename, controls(vec![switch, update, duplicate, delete]))
@@ -188,7 +188,7 @@ pub(super) fn backup(ui: Ui) -> Vec<(Row, Shown)> {
                     *ui,
                     ui.now_t("backup-reset-confirm"),
                     ui.now_t("backup-reset-button"),
-                    |armed| {
+                    move |armed| {
                         widget(
                             Button::new(ui.now_t("backup-reset-button")).size(ControlSize::Small),
                         )

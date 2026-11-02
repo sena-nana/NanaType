@@ -142,7 +142,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                                 *ui,
                                 ui.now_t("assets-remove-folder-confirm"),
                                 ui.now_t("assets-remove"),
-                                |armed| remove_button(ui, armed),
+                                move |armed| remove_button(ui, armed),
                                 move || Msg::Sticker(StickerMsg::Remove(root.clone())),
                             ));
                         }
@@ -219,7 +219,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                             *ui,
                             ui.now_t("assets-phrase-remove-confirm"),
                             ui.now_t("assets-remove"),
-                            |armed| remove_button(ui, armed),
+                            move |armed| remove_button(ui, armed),
                             move || {
                                 edit(move |s| {
                                     if i < s.assets.phrases.len() {

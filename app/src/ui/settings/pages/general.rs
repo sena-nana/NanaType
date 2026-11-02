@@ -109,7 +109,7 @@ fn character_row(ui: Ui, i: usize, n: usize, active: bool) -> Row {
                 *ui,
                 ui.now_t("general-character-remove-confirm"),
                 ui.now_t("assets-remove"),
-                |armed| remove_button(ui, armed),
+                move |armed| remove_button(ui, armed),
                 move || edit(move |s| s.general.remove_character(i)),
             )
         }),
