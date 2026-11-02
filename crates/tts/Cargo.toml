@@ -1,0 +1,24 @@
+[package]
+name = "nanatype-tts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Spoken lines through the operating system's own voices"
+
+[dependencies]
+nanatype-model.workspace = true
+crossbeam-channel.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject", "NSRange", "NSString", "NSArray", "NSEnumerator"] }
+objc2-avf-audio = { version = "0.3", default-features = false, features = ["std", "AVSpeechSynthesis"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Media_Speech",
+    "Win32_System_Com",
+] }

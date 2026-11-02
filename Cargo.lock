@@ -4050,6 +4050,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nanatype-tts"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-channel",
+ "nanatype-model",
+ "objc2 0.6.4",
+ "objc2-avf-audio",
+ "objc2-foundation 0.3.2",
+ "windows",
+]
+
+[[package]]
 name = "nanatype-twitch"
 version = "0.1.0"
 dependencies = [
