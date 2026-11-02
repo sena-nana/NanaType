@@ -107,8 +107,9 @@ pub fn selection(chrome: impl Into<Chrome>) -> [f32; 4] {
 
 /// Radius steps 4 / 8 / 12 / 16 / 20 (and 24). Swatches and keycaps use
 /// `Xs`; controls, chips and rows `Sm`; popovers, menus and list cards `Md`;
-/// settings cards `Lg`; floating rails `Xl`.
-fn metrics() -> ThemeMetrics {
+/// settings cards `Lg`; floating rails `Xl`. High contrast draws a heavier
+/// focus ring that stands further off the control.
+fn metrics(chrome: Chrome) -> ThemeMetrics {
     let base = nana_ui_core::UI_METRICS;
     ThemeMetrics {
         radius_xs: 4.0,
@@ -117,6 +118,14 @@ fn metrics() -> ThemeMetrics {
         radius_lg: 16.0,
         radius_xl: 20.0,
         radius_xxl: 24.0,
+        focus_ring: if chrome.high_contrast {
+            nana_ui_core::FocusRingMetrics {
+                width: 3.0,
+                offset: 2.0,
+            }
+        } else {
+            base.focus_ring
+        },
         ..base
     }
 }
@@ -173,7 +182,7 @@ pub fn compile(chrome: impl Into<Chrome>) -> Arc<CompiledTheme> {
     };
     let mut def = base
         .with_palette(palette(chrome))
-        .with_metrics(metrics())
+        .with_metrics(metrics(chrome))
         .with_effects(effects(chrome))
         .with_toast(toast)
         .with_id(ThemeId::new(match (dark, chrome.high_contrast) {
@@ -356,5 +365,21 @@ mod tests {
             assert_eq!(compiled.palette(), p);
             assert_ne!(compiled.palette(), compile(dark).palette());
         }
+    }
+
+    #[test]
+    fn high_contrast_draws_a_heavier_focus_ring_and_output_stays_plain() {
+        let base = compile(false);
+        let hc = compile(Chrome {
+            dark: false,
+            high_contrast: true,
+        });
+        let (b, h) = (base.metrics().focus_ring, hc.metrics().focus_ring);
+        assert_eq!(b, nana_ui_core::FOCUS_RING_METRICS);
+        assert!(h.width > b.width && h.offset > b.offset);
+        assert_eq!(hc.metrics().control_height, base.metrics().control_height);
+        // Output windows never take it.
+        assert_eq!(Chrome::from(true), Chrome::output(true));
+        assert_eq!(*compile(Chrome::output(false)), *base);
     }
 }
