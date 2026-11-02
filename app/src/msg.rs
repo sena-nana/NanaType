@@ -36,6 +36,9 @@ pub enum GlobalAction {
     Phrase(usize),
     /// Switch to character `n` (Settings › General). Not in [`Self::ALL`].
     Character(usize),
+    /// Switch to the profile of hotkey entry `n` (`hotkeys.profiles`). Not
+    /// in [`Self::ALL`].
+    Profile(usize),
 }
 
 impl GlobalAction {
@@ -86,16 +89,52 @@ impl GlobalAction {
             Self::NextProfile => "hotkeys-next-profile",
             Self::Phrase(_) => "assets-phrase-hotkey",
             Self::Character(_) => "general-character-hotkey",
+            Self::Profile(_) => "profile-hotkey",
         }
     }
 
-    /// Every action a chord can be bound to: the fixed ones, then one per
-    /// quick phrase and one per character.
+    /// Every action a chord can be bound to: the fixed ones and one per
+    /// profile (all global), then one per quick phrase and one per character
+    /// (which come with the profile in use).
     pub fn all_in(s: &Settings) -> impl Iterator<Item = Self> + '_ {
         Self::ALL
             .into_iter()
+            .chain((0..s.hotkeys.profiles.len()).map(Self::Profile))
             .chain((0..s.assets.phrases.len()).map(Self::Phrase))
             .chain((0..s.general.characters.len()).map(Self::Character))
+    }
+
+    /// The bindings a profile brings, its phrases' and characters'.
+    fn from_profile(self) -> bool {
+        matches!(self, Self::Phrase(_) | Self::Character(_))
+    }
+
+    /// The profile's bindings whose chord an earlier one has: global
+    /// hotkeys win, then phrases and characters in list order. They stay in
+    /// the settings but are not registered while the clash lasts.
+    pub fn clashes(s: &Settings) -> Vec<(Self, Hotkey)> {
+        let mut taken = std::collections::HashSet::new();
+        let mut clashes = Vec::new();
+        for action in Self::all_in(s) {
+            let Some(chord) = action.get(s) else {
+                continue;
+            };
+            if !taken.insert(chord.clone()) && action.from_profile() {
+                clashes.push((action, chord.clone()));
+            }
+        }
+        clashes
+    }
+
+    /// The clashes `next` has that `before` did not: what a profile switch
+    /// brings.
+    pub fn new_clashes(before: &Settings, next: &Settings) -> Vec<Self> {
+        let before = Self::clashes(before);
+        Self::clashes(next)
+            .into_iter()
+            .filter(|clash| !before.contains(clash))
+            .map(|(action, _)| action)
+            .collect()
     }
 
     /// What an action does when it is just a message: everything but the
@@ -139,13 +178,14 @@ impl GlobalAction {
             Self::NextProfile => h.next_profile.as_ref(),
             Self::Phrase(i) => s.assets.phrases.get(i)?.hotkey.as_ref(),
             Self::Character(i) => s.general.characters.get(i)?.hotkey.as_ref(),
+            Self::Profile(i) => s.hotkeys.profiles.get(i)?.hotkey.as_ref(),
         }
     }
 
     /// The binding a fresh install has.
     pub fn default_binding(self) -> Option<Hotkey> {
         match self {
-            Self::Phrase(_) | Self::Character(_) => None,
+            Self::Phrase(_) | Self::Character(_) | Self::Profile(_) => None,
             _ => Self::get(self, &Settings::default()).cloned(),
         }
     }
@@ -160,6 +200,12 @@ impl GlobalAction {
         if let Self::Character(i) = self {
             if let Some(c) = s.general.characters.get_mut(i) {
                 c.hotkey = value;
+            }
+            return;
+        }
+        if let Self::Profile(i) = self {
+            if let Some(p) = s.hotkeys.profiles.get_mut(i) {
+                p.hotkey = value;
             }
             return;
         }
@@ -180,7 +226,9 @@ impl GlobalAction {
             Self::NextCharacter => &mut h.next_character,
             Self::PrevCharacter => &mut h.prev_character,
             Self::NextProfile => &mut h.next_profile,
-            Self::Phrase(_) | Self::Character(_) => unreachable!("handled above"),
+            Self::Phrase(_) | Self::Character(_) | Self::Profile(_) => {
+                unreachable!("handled above")
+            }
         } = value;
     }
 }
@@ -815,6 +863,64 @@ mod tests {
         };
         edit(&mut s);
         s
+    }
+
+    #[test]
+    fn global_hotkeys_win_over_a_profile_s_phrases_and_characters() {
+        let mut s = Settings::default();
+        let f8 = Hotkey::bare("F8");
+        let f2 = Hotkey::bare("F2");
+        s.hotkeys.profiles.push(nanatype_settings::ProfileHotkey {
+            id: "p1".into(),
+            name: "Karaoke".into(),
+            hotkey: Some(f2.clone()),
+        });
+        s.assets.phrases = vec![
+            nanatype_settings::QuickPhrase {
+                label: "hi".into(),
+                markup: "hi".into(),
+                send: false,
+                hotkey: Some(f8.clone()),
+            },
+            nanatype_settings::QuickPhrase {
+                label: "bye".into(),
+                markup: "bye".into(),
+                send: false,
+                hotkey: Some(Hotkey::bare("F3")),
+            },
+        ];
+        s.general.characters[0].hotkey = Some(Hotkey::bare("F3"));
+        s.general.characters.push(nanatype_settings::Character {
+            hotkey: Some(f2.clone()),
+            ..Default::default()
+        });
+        // Summon keeps F8 and the profile F2; between the phrase and the
+        // character the earlier in the list keeps F3.
+        assert_eq!(
+            GlobalAction::clashes(&s),
+            [
+                (GlobalAction::Phrase(0), f8),
+                (GlobalAction::Character(0), Hotkey::bare("F3")),
+                (GlobalAction::Character(1), f2.clone()),
+            ]
+        );
+        assert_eq!(GlobalAction::Profile(0).get(&s), Some(&f2));
+        let mut none = s.clone();
+        none.assets.phrases.clear();
+        none.general.characters.truncate(1);
+        none.general.characters[0].hotkey = None;
+        assert_eq!(
+            GlobalAction::new_clashes(&none, &s),
+            [
+                GlobalAction::Phrase(0),
+                GlobalAction::Character(0),
+                GlobalAction::Character(1)
+            ]
+        );
+        assert!(GlobalAction::new_clashes(&s, &s).is_empty());
+        GlobalAction::Profile(0).set(&mut s, None);
+        assert_eq!(s.hotkeys.profiles[0].hotkey, None);
+        assert_eq!(GlobalAction::clashes(&s).len(), 2);
     }
 
     #[test]

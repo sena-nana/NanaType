@@ -1131,8 +1131,22 @@ pub struct HotkeySettings {
     pub prev_character: Option<Hotkey>,
     /// Switch to the next profile in the list.
     pub next_profile: Option<Hotkey>,
+    /// Switch to one profile, by its id. Global like every hotkey here (a
+    /// profile never brings or takes these); one entry per saved profile.
+    pub profiles: Vec<ProfileHotkey>,
     /// Keys handled by the input window itself, not registered system-wide.
     pub input: InputKeys,
+}
+
+/// The hotkey that switches to a saved profile.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProfileHotkey {
+    /// The profile's file stem (profiles/<id>.json).
+    pub id: String,
+    /// Its name as last seen, for the Hotkeys page.
+    pub name: String,
+    pub hotkey: Option<Hotkey>,
 }
 
 impl Default for HotkeySettings {
@@ -1153,6 +1167,7 @@ impl Default for HotkeySettings {
             next_character: None,
             prev_character: None,
             next_profile: None,
+            profiles: Vec::new(),
             input: InputKeys::default(),
         }
     }
@@ -1751,6 +1766,11 @@ impl Settings {
         for character in &mut self.general.characters {
             if character.hotkey.as_ref().is_some_and(Hotkey::is_send_chord) {
                 character.hotkey = None;
+            }
+        }
+        for profile in &mut h.profiles {
+            if profile.hotkey.as_ref().is_some_and(Hotkey::is_send_chord) {
+                profile.hotkey = None;
             }
         }
         let keys = &mut h.input;

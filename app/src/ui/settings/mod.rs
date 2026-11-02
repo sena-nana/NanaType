@@ -9,7 +9,7 @@ mod skin_params;
 mod telegram;
 
 pub use controls::{base64, links_pulsing};
-pub use pages::font_licence_panel;
+pub use pages::{action_name, font_licence_panel};
 
 use std::sync::Arc;
 

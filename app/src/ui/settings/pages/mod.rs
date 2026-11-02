@@ -33,6 +33,7 @@ mod windows;
 mod workshop;
 
 pub use self::about::font_licence_panel;
+pub use self::hotkeys::action_name;
 pub use self::profiles::import_dialog;
 
 use self::about::*;

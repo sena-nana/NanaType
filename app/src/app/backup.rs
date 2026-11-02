@@ -12,7 +12,7 @@ use nanatype_settings::{
 };
 
 use super::App;
-use crate::msg::{BackupMsg, FileTarget, Msg, ProfileMsg};
+use crate::msg::{BackupMsg, FileTarget, GlobalAction, Msg, ProfileMsg, Shortcut};
 use crate::plugins::background;
 
 /// Where imported avatars are written, under the data folder.
@@ -350,7 +350,8 @@ impl App {
         Some(p.name)
     }
 
-    /// The page's list and the tray's submenu follow the profiles.
+    /// The page's list, the tray's submenu and the profile hotkeys follow
+    /// the profiles.
     fn sync_profiles(&mut self) {
         let list: Vec<(String, String)> = self
             .backup
@@ -358,6 +359,10 @@ impl App {
             .iter()
             .map(|p| (p.id.clone(), p.name.clone()))
             .collect();
+        let keys = profile_hotkeys(&self.settings.hotkeys.profiles, &list);
+        if keys != self.settings.hotkeys.profiles {
+            self.edit(move |s| s.hotkeys.profiles = keys);
+        }
         if let Some(tray) = &mut self.tray {
             tray.set_profiles(&list, self.settings.general.profile.as_deref());
         }
@@ -406,12 +411,31 @@ impl App {
                 }
                 let mut next = target.apply(&self.settings);
                 next.general.profile = Some(id);
+                // Hotkeys the profile brings that clash stay unregistered
+                // (`hotkey_bindings`); say which, once.
+                let brought: Vec<String> = GlobalAction::new_clashes(&self.settings, &next)
+                    .into_iter()
+                    .map(|action| {
+                        crate::ui::settings::action_name(
+                            self.ui.locale.get_untracked(),
+                            &next,
+                            Shortcut::Global(action),
+                        )
+                    })
+                    .collect();
                 self.apply_settings(next);
                 self.sync_profiles();
                 let text = self
                     .ui
                     .tr("profile-switched", &[("name", target.name.into())]);
                 self.notice(text, false);
+                if !brought.is_empty() {
+                    let names = brought.join(&self.ui.now_t("peer-name-separator"));
+                    let text = self
+                        .ui
+                        .tr("profile-hotkeys-clash", &[("names", names.into())]);
+                    self.notice(text, true);
+                }
             }
             ProfileMsg::Next => {
                 let profiles = &self.backup.profiles;
@@ -467,5 +491,47 @@ impl App {
                 self.sync_profiles();
             }
         }
+    }
+}
+
+/// One hotkey entry per profile in `list` (id, name), in its order: kept
+/// bindings, current names, none for a new profile and none for one gone.
+fn profile_hotkeys(
+    keys: &[nanatype_settings::ProfileHotkey],
+    list: &[(String, String)],
+) -> Vec<nanatype_settings::ProfileHotkey> {
+    list.iter()
+        .map(|(id, name)| nanatype_settings::ProfileHotkey {
+            id: id.clone(),
+            name: name.clone(),
+            hotkey: keys
+                .iter()
+                .find(|k| &k.id == id)
+                .and_then(|k| k.hotkey.clone()),
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nanatype_settings::{Hotkey, ProfileHotkey};
+
+    #[test]
+    fn profile_hotkeys_follow_the_profiles() {
+        let key = |id: &str, name: &str, hotkey: Option<&str>| ProfileHotkey {
+            id: id.into(),
+            name: name.into(),
+            hotkey: hotkey.map(Hotkey::bare),
+        };
+        let keys = [key("a", "Old", Some("F2")), key("gone", "Gone", Some("F3"))];
+        let list = [
+            ("b".to_owned(), "New".to_owned()),
+            ("a".to_owned(), "Renamed".to_owned()),
+        ];
+        assert_eq!(
+            profile_hotkeys(&keys, &list),
+            [key("b", "New", None), key("a", "Renamed", Some("F2"))]
+        );
     }
 }

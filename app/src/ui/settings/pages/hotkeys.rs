@@ -51,7 +51,7 @@ impl KeyIssue {
 }
 
 /// What an action is called: its label, or a phrase's own label.
-pub(super) fn action_name(locale: Locale, s: &Settings, action: Shortcut) -> String {
+pub fn action_name(locale: Locale, s: &Settings, action: Shortcut) -> String {
     match action {
         Shortcut::Global(GlobalAction::Phrase(i)) => s
             .assets
@@ -60,6 +60,13 @@ pub(super) fn action_name(locale: Locale, s: &Settings, action: Shortcut) -> Str
             .map(|p| p.label.trim().to_owned())
             .filter(|l| !l.is_empty())
             .unwrap_or_else(|| I18N.t_in(locale, "assets-phrases")),
+        Shortcut::Global(GlobalAction::Profile(i)) => s
+            .hotkeys
+            .profiles
+            .get(i)
+            .map(|p| p.name.trim().to_owned())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| I18N.t_in(locale, "general-profiles")),
         Shortcut::Global(GlobalAction::Character(i)) => s
             .general
             .characters
@@ -389,6 +396,46 @@ fn character_rows(ui: Ui) -> Row {
     ))
 }
 
+/// One row per saved profile; saving, renaming or deleting one in
+/// Settings › General rebuilds the list.
+fn profile_rows(ui: Ui) -> Row {
+    Row::inset(dynamic(
+        move || {
+            ui.settings.with(|s| {
+                s.hotkeys
+                    .profiles
+                    .iter()
+                    .map(|p| p.name.clone())
+                    .collect::<Vec<_>>()
+            })
+        },
+        move |names| {
+            let edit_profiles = || {
+                button(ui, "hotkeys-edit-profiles", || {
+                    Msg::Window(WindowMsg::SettingsPage(Page::General))
+                })
+            };
+            if names.is_empty() {
+                return empty_row(ui, "hotkeys-profiles-empty", edit_profiles());
+            }
+            let rows: Vec<Row> = (0..names.len())
+                .map(|i| {
+                    let action = Shortcut::Global(GlobalAction::Profile(i));
+                    let name = ui
+                        .settings
+                        .with_untracked(|s| action_name(ui.locale.get_untracked(), s, action));
+                    shortcut_row(ui, name, action)
+                })
+                .collect();
+            Row::inset(widget(Stack::column(0.0)).children((
+                divided(rows),
+                divider(),
+                crate::ui::kit::line((), edit_profiles()),
+            )))
+        },
+    ))
+}
+
 pub(super) fn hotkeys(ui: Ui) -> AnyView {
     let rows = |actions: Vec<Shortcut>| -> Vec<Row> {
         actions
@@ -418,6 +465,7 @@ pub(super) fn hotkeys(ui: Ui) -> AnyView {
             section(ui, "hotkeys-chat", input(true)),
             section(ui, "hotkeys-phrases", vec![phrase_rows(ui)]),
             section(ui, "hotkeys-characters", vec![character_rows(ui)]),
+            section(ui, "hotkeys-profiles", vec![profile_rows(ui)]),
         ))
         .into_any()
 }

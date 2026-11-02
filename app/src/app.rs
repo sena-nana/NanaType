@@ -1123,9 +1123,13 @@ impl App {
 
     // ---- services ---------------------------------------------------------
 
+    /// What is registered: every binding but a profile's phrase or
+    /// character whose chord a global hotkey (or an earlier one) has.
     fn hotkey_bindings(&self) -> hotkeys::Bindings {
+        let clashes = GlobalAction::clashes(&self.settings);
         GlobalAction::all_in(&self.settings)
             .filter_map(|a| a.get(&self.settings).cloned().map(|h| (a, h)))
+            .filter(|binding| !clashes.contains(binding))
             .collect()
     }
 
@@ -2496,6 +2500,12 @@ impl App {
             | GlobalAction::Character(_) => {
                 if let Some(msg) = action.message() {
                     self.update(msg);
+                }
+            }
+            GlobalAction::Profile(i) => {
+                if let Some(p) = self.settings.hotkeys.profiles.get(i) {
+                    let id = p.id.clone();
+                    self.update(Msg::Profile(crate::msg::ProfileMsg::Switch(id)));
                 }
             }
         }
