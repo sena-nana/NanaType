@@ -20,6 +20,8 @@ pub(super) struct Archive {
     seen: Option<u64>,
     /// Partner lines already saved, by owner and line.
     partners: HashSet<(String, LineId)>,
+    /// Partner lines whose translation is saved too.
+    translated: HashSet<(String, LineId)>,
     /// The session a save dialog is open for.
     export: Option<String>,
 }
@@ -76,7 +78,7 @@ impl App {
             .iter()
             .filter(|row| seen.is_none_or(|k| row.key > k))
             .filter(|row| self.archive_wants(&row.item))
-            .map(|row| Record::of(&row.item, false))
+            .map(|row| Record::of(&row.item, false).translated(row.translation.as_deref()))
             .collect();
         if let Some(newest) = self.core.history().back().map(|r| r.key) {
             self.archive.seen = Some(seen.map_or(newest, |k| k.max(newest)));
@@ -86,11 +88,66 @@ impl App {
         }
     }
 
-    /// Save a co-op partner's line the first time the room shows it.
-    pub(crate) fn archive_partner(&mut self, owner: &str, line: LineId, item: &HistoryItem) {
-        if self.archive_wants(item) && self.archive.partners.insert((owner.to_owned(), line)) {
-            self.archive_save(Record::of(item, true));
+    /// Save a co-op partner's line the first time the room shows it, and
+    /// its translation once there is one.
+    pub(crate) fn archive_partner(
+        &mut self,
+        owner: &str,
+        line: LineId,
+        item: &HistoryItem,
+        translation: Option<&str>,
+    ) {
+        if !self.archive_wants(item) {
+            return;
         }
+        let key = (owner.to_owned(), line);
+        if self.archive.partners.insert(key.clone()) {
+            if translation.is_some() {
+                self.archive.translated.insert(key);
+            }
+            self.archive_save(Record::of(item, true).translated(translation));
+        } else if let Some(translation) = translation
+            && self.archive.translated.insert(key)
+        {
+            self.archive_amend(item, translation);
+        }
+    }
+
+    /// A translation for an own line (`line`) or a chat row (`key`) is about
+    /// to join its history row. A row already saved gets it as an
+    /// amendment; one still to be saved takes it along.
+    pub(super) fn archive_translation(
+        &mut self,
+        line: Option<LineId>,
+        key: Option<u64>,
+        translation: &str,
+    ) {
+        let Some(row) =
+            self.core.history().iter().rev().find(|r| {
+                (line.is_some() && r.item.line == line) || key.is_some_and(|k| r.key == k)
+            })
+        else {
+            return;
+        };
+        let saved = self.archive.seen.is_some_and(|k| row.key <= k);
+        if saved && self.archive.file.is_some() && self.archive_wants(&row.item) {
+            let item = row.item.clone();
+            self.archive_amend(&item, translation);
+        }
+    }
+
+    fn archive_amend(&mut self, item: &HistoryItem, translation: &str) {
+        let Some(file) = self.archive.file.clone() else {
+            return;
+        };
+        let amend = archive::Amend {
+            amend: archive::Key {
+                at: item.at,
+                speaker: item.author.clone(),
+            },
+            translation: translation.to_owned(),
+        };
+        self.persist.append(file, amend.line());
     }
 
     /// The History page came into view: its list may be stale.

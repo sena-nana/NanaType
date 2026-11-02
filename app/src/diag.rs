@@ -63,6 +63,24 @@ pub static RETIRED_CLEANUP_FAILED: EventDescriptor = EventDescriptor::new(
     // 0 Bilibili login, 1 Douyin login.
     &[FieldDescriptor::u64("what")],
 );
+/// A line could not be translated. Logged when the failure changes, not
+/// for every line; the line itself is never recorded.
+pub static TRANSLATE_FAILED: EventDescriptor = EventDescriptor::new(
+    APP,
+    11,
+    "app.translate_failed",
+    Severity::Warn,
+    // kind: nanatype_translate::Error::code; status: the HTTP status or 0.
+    &[FieldDescriptor::u64("kind"), FieldDescriptor::u64("status")],
+);
+pub static TRANSLATE_SECRET_FAILED: EventDescriptor = EventDescriptor::new(
+    APP,
+    12,
+    "app.translate_secret_failed",
+    Severity::Warn,
+    // 0 load, 1 store.
+    &[FieldDescriptor::u64("op")],
+);
 
 pub static SPOUT_FAILED: EventDescriptor = EventDescriptor::new(
     OUTPUT,
@@ -295,6 +313,8 @@ pub static EVENTS: &[&EventDescriptor] = &[
     &DISPLAYS_UNAVAILABLE,
     &WATCH_UNAVAILABLE,
     &PERSIST_FAILED,
+    &TRANSLATE_FAILED,
+    &TRANSLATE_SECRET_FAILED,
     &SPOUT_FAILED,
     &WINDOW_OUTPUT,
     &BRIDGE_ERROR,

@@ -60,6 +60,7 @@ fn section_key(section: &str) -> &'static str {
         "sound" => "backup-section-sound",
         "speech" => "backup-section-speech",
         "tts" => "backup-section-tts",
+        "translate" => "backup-section-translate",
         "skin" => "backup-section-skin",
         "overlays" => "backup-section-overlays",
         "history" => "backup-section-history",

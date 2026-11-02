@@ -86,6 +86,8 @@ pub struct Status {
     pub spout_history: LinkState,
     /// The obs-websocket link.
     pub obs: LinkState,
+    /// Translation: ready, working, or why the last line failed.
+    pub translate: LinkState,
     pub notices: Vec<Notice>,
     pub queued: usize,
     pub audio_devices: Vec<String>,
@@ -196,6 +198,8 @@ pub struct Ui {
     pub blivechat: Signal<Arc<crate::app::blivechat::State>>,
     /// The OBS link and its program scene.
     pub obs: Signal<Arc<crate::app::obs::State>>,
+    /// Translation keys and the last test.
+    pub translate: Signal<Arc<crate::app::translate::State>>,
     #[cfg(feature = "updates")]
     pub update: Signal<Arc<crate::app::update::State>>,
     /// Kept only in memory and cleared after import; never serialized with settings.
@@ -304,6 +308,7 @@ impl Ui {
             twitch: signal(Arc::new(crate::app::twitch::State::default())),
             blivechat: signal(Arc::new(crate::app::blivechat::State::default())),
             obs: signal(Arc::new(crate::app::obs::State::default())),
+            translate: signal(Arc::new(crate::app::translate::State::default())),
             #[cfg(feature = "updates")]
             update: signal(Arc::new(crate::app::update::State::default())),
             input_width: signal(crate::windows::INPUT_SIZE.0),

@@ -9,6 +9,7 @@
 //! `NANATYPE_SNAPSHOT_SKINS_DIR` loads saved `id/skin.toml` manifests for
 //! comparisons of built-in skins (self-contained manifests, no inheritance).
 //! `NANATYPE_SNAPSHOT_APPEARANCE=dark` selects neutral dark application chrome.
+//! `NANATYPE_SNAPSHOT_SUBTITLE=text` gives the sample lines that translation.
 //! `NANATYPE_SNAPSHOT_SCALE` captures at a physical pixel scale (default 1).
 //! `NANATYPE_SNAPSHOT_WIDTH=300` overrides the logical width of selected views.
 //! `NANATYPE_PREVIEW_SCALE_AUDIT=1` captures tall/maximum logical canvases

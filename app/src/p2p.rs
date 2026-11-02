@@ -56,7 +56,7 @@ pub struct Session {
     pub local: String,
     pub room: Option<Arc<Room>>,
     pub room_received: Option<std::time::Instant>,
-    pub remote_revision: Vec<(String, u64, Option<LineId>)>,
+    pub remote_revision: Vec<(String, u64, Option<LineId>, bool)>,
     /// Lines sent during this session; earlier ones stay private.
     pub lines: HashSet<LineId>,
     pub revision: u64,
@@ -415,8 +415,19 @@ impl App {
                     names.push(track.name.clone());
                 }
             }
+            // Their own translation, else one made here.
+            let local_sub = remote_view
+                .line
+                .filter(|_| remote_view.subtitle.is_none())
+                .and_then(|line| self.translate_partner_text(id, line));
+            if let Some((text, at_ms)) = &local_sub {
+                remote_view.subtitle = Some(nanatype_core::Subtitle {
+                    text: text.clone(),
+                    at_ms: *at_ms,
+                });
+            }
             remote_view.line = remote_view.line.map(|line| room.render_id(id, line));
-            let stamp = (id.clone(), revision, remote_view.line);
+            let stamp = (id.clone(), revision, remote_view.line, local_sub.is_some());
             if self.peer.remote_revision.get(index) != Some(&stamp) {
                 remote_view.revision = lane.display.get_untracked().revision + 1;
                 lane.display.set(Arc::new(remote_view));
@@ -475,10 +486,22 @@ impl App {
             // Visibility and reveal follow the owner's history policy.
             let source_row = by_line.get(&(owner.as_str(), entry.line)).copied();
             if let Some(row) = source_row {
-                if owner != &self.peer.local {
-                    partner_lines.push((owner.clone(), entry.line, row.item.clone()));
-                }
                 let mut row = row.clone();
+                if owner != &self.peer.local {
+                    let theirs = row.translation.is_some();
+                    if !theirs {
+                        row.translation = self
+                            .translate_partner_text(owner, entry.line)
+                            .map(|(text, _)| text);
+                    }
+                    partner_lines.push((
+                        owner.clone(),
+                        entry.line,
+                        row.item.clone(),
+                        row.translation.clone(),
+                        theirs,
+                    ));
+                }
                 row.key = entry.order;
                 row.item.line = Some(room.render_id(owner, entry.line));
                 row.item.source = SourceId(format!("peer:{owner}"));
@@ -518,9 +541,10 @@ impl App {
             self.ui.peer.set(Arc::new(state));
         }
         self.refresh_peer_urls();
-        for (owner, line, item) in partner_lines {
+        for (owner, line, item, translation, theirs) in partner_lines {
             self.tts_partner(&owner, line, &item);
-            self.archive_partner(&owner, line, &item);
+            self.translate_partner(&owner, line, &item, theirs);
+            self.archive_partner(&owner, line, &item, translation.as_deref());
         }
     }
 

@@ -13,6 +13,7 @@ pub mod speech;
 mod startup;
 mod stickers;
 mod system;
+pub mod translate;
 pub mod tts;
 pub mod twitch;
 #[cfg(feature = "updates")]
@@ -110,6 +111,8 @@ pub struct App {
     pub speech: speech::Speech,
     /// Lines read aloud.
     pub tts: tts::Narrator<tts::Lazy>,
+    /// Translated subtitles.
+    translate: translate::Translate,
     /// The onboarding skin preview waiting out its step's entrance.
     /// A newer hold replaces it, and the old reveal does nothing.
     onboard_preview_gen: u64,
@@ -312,6 +315,7 @@ impl App {
         let mut app = Self {
             speech: speech::Speech::new(paths.data.join("speech"), post.clone()),
             tts: tts::Narrator::new(tts::Lazy::new(post.clone())),
+            translate: translate::Translate::new(&paths.config, post.clone()),
             plugins: Default::default(),
             plugin_activation: Default::default(),
             assets: AssetLibrary::new(paths.blobs()),
@@ -393,6 +397,7 @@ impl App {
             settings,
         };
         app.publish_speech();
+        app.translate_configure();
         app.apply_performance(None);
         app.startup_notices(loaded_settings.note, fallback.is_some(), locale);
         match Tray::build(post) {
@@ -1362,6 +1367,9 @@ impl App {
         if prev.tts.enabled && !self.settings.tts.enabled {
             self.tts.silence();
         }
+        if prev.translate != self.settings.translate || locale_changed {
+            self.translate_configure();
+        }
         if prev.speech != self.settings.speech
             || (locale_changed && self.settings.speech.language.is_none())
         {
@@ -1526,6 +1534,7 @@ impl App {
         for event in &fx.events {
             if let Event::LineStarted(line) = event {
                 self.tts_line(line);
+                self.translate_line(line);
             }
             self.twitch_submitted(event);
             self.peer_submitted(event);
@@ -1605,6 +1614,7 @@ impl App {
                 text: line.doc.plain_text(),
                 markup: serialize(&line.doc),
                 speaker: line.speaker.name.clone(),
+                translation: self.translate_cached(line),
             },
             Event::LineFinished(id) => BridgeEvent::LineEnd { id: id.0 },
             Event::Expression { name, intensity } => BridgeEvent::Expression {
@@ -1627,7 +1637,11 @@ impl App {
             let plugin_out = match (&out, event) {
                 (
                     BridgeEvent::LineStart {
-                        id, text, speaker, ..
+                        id,
+                        text,
+                        speaker,
+                        translation,
+                        ..
                     },
                     Event::LineStarted(line),
                 ) => BridgeEvent::LineStart {
@@ -1635,6 +1649,7 @@ impl App {
                     text: text.clone(),
                     markup: serialize(&without_local_paths(&line.doc)),
                     speaker: speaker.clone(),
+                    translation: translation.clone(),
                 },
                 _ => out.clone(),
             };
@@ -2104,6 +2119,7 @@ impl App {
         match msg {
             Msg::Speech(m) => self.speech_msg(m),
             Msg::Tts(m) => self.tts_msg(m),
+            Msg::Translate(m) => self.translate_msg(m),
             Msg::Package(m) => self.package_msg(m),
             Msg::Sticker(m) => self.sticker_msg(m),
             Msg::Editor(m) => self.editor_msg(m),
@@ -2234,7 +2250,11 @@ impl App {
             let locale = self.ui.locale.get_untracked();
             let item = message.history_item(locale);
             self.tts_chat(&item.doc);
-            self.run(Cmd::External(item));
+            self.run(Cmd::External(item.clone()));
+            if let Some(row) = self.core.history().back().filter(|r| r.item == item) {
+                let key = row.key;
+                self.translate_chat(key, &item);
+            }
             self.live_record_row(&message);
         }
         self.chat.push_back(message);

@@ -337,6 +337,7 @@ fn saved_history_lists_sessions_and_acts_on_the_open_one() {
             platform: None,
             text: text.into(),
             markup: None,
+            translation: None,
         };
         f.ui.archive.set(Arc::new(View {
             sessions: vec![

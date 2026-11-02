@@ -1423,6 +1423,7 @@ pub fn sample_events(text: &str) -> Vec<(&'static str, serde_json::Value)> {
                 text: text.into(),
                 markup,
                 speaker: "Nana".into(),
+                translation: None,
             }),
         ),
         (

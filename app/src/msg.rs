@@ -394,6 +394,7 @@ pub enum Msg {
     // Each domain's messages, handled by its own module in `app/`.
     Speech(SpeechMsg),
     Tts(TtsMsg),
+    Translate(TranslateMsg),
     Package(PackageMsg),
     Editor(EditorMsg),
     Window(WindowMsg),
@@ -432,6 +433,15 @@ pub enum TtsMsg {
     Refresh,
     /// Say a sample in a character's voice (`None`: the default voice).
     Test(Option<usize>),
+}
+
+pub enum TranslateMsg {
+    Reply(nanatype_translate::Reply),
+    /// Keep a provider's API key in the system's secret store; empty
+    /// forgets it.
+    Key(nanatype_settings::TranslateProvider, String),
+    /// Translate a sample line with the current settings.
+    Test,
 }
 
 pub enum PackageMsg {

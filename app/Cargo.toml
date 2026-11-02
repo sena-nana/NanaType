@@ -42,6 +42,7 @@ nanatype-settings.workspace = true
 nanatype-audio.workspace = true
 nanatype-speech.workspace = true
 nanatype-tts.workspace = true
+nanatype-translate.workspace = true
 nanatype-bridge.workspace = true
 nanatype-blive.workspace = true
 nanatype-twitch.workspace = true

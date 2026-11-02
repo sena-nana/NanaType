@@ -28,6 +28,7 @@ mod profiles;
 mod skin_grid;
 mod skins;
 mod speech;
+mod translate;
 mod windows;
 mod workshop;
 

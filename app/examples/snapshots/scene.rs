@@ -148,6 +148,25 @@ impl Scene {
             core.handle(Cmd::SendMarkup(line), 0);
             core.handle(Cmd::Skip, 1);
         }
+        // `NANATYPE_SNAPSHOT_SUBTITLE=text` translates the line on the
+        // display and every typed row, already faded in.
+        if let Ok(text) = std::env::var("NANATYPE_SNAPSHOT_SUBTITLE") {
+            let lines: Vec<_> = core
+                .history()
+                .iter()
+                .filter_map(|row| row.item.line)
+                .chain(core.display().line)
+                .collect();
+            for line in lines {
+                core.handle(
+                    Cmd::Translated {
+                        line,
+                        text: text.as_str().into(),
+                    },
+                    0,
+                );
+            }
+        }
         ui.chat
             .set(Arc::new(chat.iter().cloned().map(Arc::new).collect()));
         ui.reply.set(Some(chat[1].quote(locale)));

@@ -43,7 +43,38 @@ pub struct Record {
     /// The line's markup, for typed lines.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub markup: Option<String>,
+    /// Its translation, when one arrived. A translation that arrives after
+    /// the line was written follows as an [`Amend`] line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation: Option<String>,
 }
+
+/// A later addition to a record already in the file: its translation.
+/// Builds that do not know it skip the line, as they skip a torn one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Amend {
+    pub amend: Key,
+    pub translation: String,
+}
+
+/// Which record an [`Amend`] is for.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Key {
+    pub at: u64,
+    pub speaker: String,
+}
+
+impl Amend {
+    /// The amendment as one line of the file.
+    pub fn line(&self) -> Vec<u8> {
+        let mut bytes = serde_json::to_vec(self).unwrap_or_default();
+        bytes.push(b'\n');
+        bytes
+    }
+}
+
+/// Amendment lines start with this (serde writes fields in order).
+const AMEND_PREFIX: &str = "{\"amend\":";
 
 impl Record {
     /// A history row as saved; `partner` for a co-op partner's line.
@@ -60,7 +91,13 @@ impl Record {
             platform: (!typed).then(|| item.source.0.clone()),
             text: item.doc.plain_text(),
             markup: typed.then(|| nanatype_markup::serialize(&item.doc)),
+            translation: None,
         }
+    }
+
+    pub fn translated(mut self, translation: Option<&str>) -> Self {
+        self.translation = translation.map(str::to_owned);
+        self
     }
 
     /// The record as one line of its file.
@@ -192,12 +229,27 @@ pub fn path(dir: &Path, name: &str) -> Option<PathBuf> {
         .then(|| dir.join(format!("{name}.{EXT}")))
 }
 
-/// Every record of a file's text. A line cut short by a crash is skipped.
+/// Every record of a file's text, with later translations folded in. A
+/// line cut short by a crash is skipped.
 pub fn parse(text: &str) -> Vec<Record> {
-    text.lines()
-        .filter(|l| !l.trim().is_empty())
-        .filter_map(|l| serde_json::from_str(l).ok())
-        .collect()
+    let mut records: Vec<Record> = Vec::new();
+    for line in text.lines().filter(|l| !l.trim().is_empty()) {
+        if line.starts_with(AMEND_PREFIX) {
+            let Ok(amend) = serde_json::from_str::<Amend>(line) else {
+                continue;
+            };
+            if let Some(r) = records
+                .iter_mut()
+                .rev()
+                .find(|r| r.at == amend.amend.at && r.speaker == amend.amend.speaker)
+            {
+                r.translation = Some(amend.translation);
+            }
+        } else if let Ok(record) = serde_json::from_str(line) {
+            records.push(record);
+        }
+    }
+    records
 }
 
 pub fn load(dir: &Path, name: &str) -> std::io::Result<Vec<Record>> {
@@ -222,7 +274,10 @@ pub fn list(dir: &Path) -> Vec<Session> {
             let text = std::fs::read_to_string(&p).ok()?;
             Some(Session {
                 name,
-                lines: text.lines().filter(|l| !l.trim().is_empty()).count(),
+                lines: text
+                    .lines()
+                    .filter(|l| !l.trim().is_empty() && !l.starts_with(AMEND_PREFIX))
+                    .count(),
             })
         })
         .collect();
@@ -275,6 +330,12 @@ pub fn txt(records: &[Record], offset: i64) -> String {
             out.push_str(head.trim_end());
             out.push('\n');
         }
+        // The translation follows under the text.
+        for line in r.translation.iter().flat_map(|t| t.lines()) {
+            out.push_str(&pad);
+            out.push_str(line);
+            out.push('\n');
+        }
     }
     out
 }
@@ -316,8 +377,14 @@ pub fn srt(records: &[Record]) -> String {
         } else {
             format!("{}: ", r.speaker)
         };
+        // A translation is the subtitle's second line.
+        let translation = r
+            .translation
+            .as_deref()
+            .map(|t| format!("\n{t}"))
+            .unwrap_or_default();
         out.push_str(&format!(
-            "{}\n{} --> {}\n{speaker}{}\n\n",
+            "{}\n{} --> {}\n{speaker}{}{translation}\n\n",
             i + 1,
             srt_time(start),
             srt_time(end),
@@ -340,6 +407,7 @@ mod tests {
             platform: None,
             text: text.into(),
             markup: None,
+            translation: None,
         }
     }
 
@@ -386,6 +454,56 @@ mod tests {
         let json = String::from_utf8(own.line()).unwrap();
         assert!(json.contains(r#""source":"self""#), "{json}");
         assert!(!json.contains("platform"), "{json}");
+    }
+
+    #[test]
+    fn translations_join_their_records_and_older_files_still_read() {
+        // A file from before translations: no field, still read.
+        let old = r#"{"at":1,"speaker":"Nana","source":"self","text":"你好"}"#;
+        let records = parse(old);
+        assert_eq!(records[0].translation, None);
+        assert!(
+            !String::from_utf8(records[0].line())
+                .unwrap()
+                .contains("translation")
+        );
+
+        let inline = record(2, "Nana", "早上好").translated(Some("Good morning"));
+        let mut file = String::from(old);
+        file.push('\n');
+        file.push_str(&String::from_utf8(inline.line()).unwrap());
+        let late = Amend {
+            amend: Key {
+                at: 1,
+                speaker: "Nana".into(),
+            },
+            translation: "Hello".into(),
+        };
+        let late = String::from_utf8(late.line()).unwrap();
+        assert!(late.starts_with(AMEND_PREFIX), "{late}");
+        file.push_str(&late);
+        // One for a record that is not there changes nothing.
+        file.push_str(r#"{"amend":{"at":9,"speaker":"x"},"translation":"lost"}"#);
+        file.push('\n');
+        let records = parse(&file);
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].translation.as_deref(), Some("Hello"));
+        assert_eq!(records[1].translation.as_deref(), Some("Good morning"));
+        // A build without translations reads the amendment as nothing.
+        assert!(serde_json::from_str::<Record>(late.trim()).is_err());
+
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("2026-11-02_120000.jsonl"), &file).unwrap();
+        assert_eq!(list(tmp.path())[0].lines, 2, "amendments are not lines");
+
+        assert_eq!(
+            txt(&records[1..], 0),
+            "[00:00:00] Nana: 早上好\n                 Good morning\n"
+        );
+        assert_eq!(
+            srt(&records[1..]),
+            "1\n00:00:00,000 --> 00:00:01,500\nNana: 早上好\nGood morning\n\n"
+        );
     }
 
     #[test]
