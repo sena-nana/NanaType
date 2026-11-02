@@ -205,11 +205,17 @@ pub(super) fn backup(ui: Ui) -> Vec<(Row, Shown)> {
 
 /// What a checked import will change, with Import and Cancel.
 pub fn import_dialog(ui: Ui) -> AnyView {
+    // It opens on Import: Enter imports (a backup is kept), Esc cancels.
+    let import = nana_ui::runtime::view::entity_ref::<Button>();
     widget(
         ConfirmDialog::new(ui.now_t("backup-import-title"), String::new())
-            .confirm_label(ui.now_t("backup-import-button"))
             .cancel_label(ui.now_t("common-cancel")),
     )
+    .confirm(
+        widget(Button::new(ui.now_t("backup-import-button")).kind(ButtonKind::Primary))
+            .entity_ref(import),
+    )
+    .initial_focus_on(import)
     .bind(move |dialog: &mut ConfirmDialog| {
         if let Some(p) = &ui.backup.get().pending {
             dialog.message = crate::app::backup::summary(ui, p).into();
