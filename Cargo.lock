@@ -3730,7 +3730,6 @@ dependencies = [
  "nanatype-audio",
  "nanatype-blive",
  "nanatype-bridge",
- "nanatype-chat",
  "nanatype-core",
  "nanatype-diag",
  "nanatype-frame",
@@ -3787,7 +3786,6 @@ name = "nanatype-blive"
 version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
- "nanatype-chat",
  "nanatype-model",
  "serde_json",
  "tungstenite",
@@ -3803,13 +3801,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tungstenite",
-]
-
-[[package]]
-name = "nanatype-chat"
-version = "0.1.0"
-dependencies = [
- "serde_json",
 ]
 
 [[package]]

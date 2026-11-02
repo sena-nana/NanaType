@@ -368,7 +368,7 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
                 } else if m.admin {
                     labels.push(ui.now_t("chat-moderator"));
                 }
-                if m.guard != nanatype_chat::Guard::None {
+                if m.guard != nanatype_blive::chat::Guard::None {
                     labels.push(ui.now_t(crate::chat::guard_key(m.guard)));
                 }
                 if m.medal_level > 0 && !m.medal_name.is_empty() {
@@ -826,7 +826,7 @@ pub fn chat_panel(ui: Ui) -> AnyView {
 mod tests {
     use super::*;
     use crate::chat::ChatKind;
-    use nanatype_chat::Guard;
+    use nanatype_blive::chat::Guard;
     use nanatype_model::{ChatUser, Document};
 
     fn message(seq: u64, kind: ChatKind) -> Arc<ChatMessage> {

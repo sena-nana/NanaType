@@ -51,9 +51,9 @@ impl RoomKey {
     }
 }
 
-pub use nanatype_chat::{Author, ChatEvent, Guard};
+pub use crate::chat::{Author, ChatEvent, Guard};
 // The same lenient field readers as the relay protocol uses for its panel.
-pub(crate) use nanatype_chat::{int, millis, string, url};
+pub(crate) use crate::chat::{int, millis, string, url};
 
 /// Why blivechat gave up on a room (`FATAL_ERROR`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

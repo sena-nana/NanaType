@@ -1,7 +1,7 @@
 //! Live chat as the app keeps it: platform-tagged events with their pictures saved
 //! locally, ready for the chat panel, the history list and replies.
 
-use nanatype_chat::{Author, ChatEvent, Guard};
+use nanatype_blive::chat::{Author, ChatEvent, Guard};
 use nanatype_i18n::Locale;
 use nanatype_model::{
     AssetRef, Atom, AtomKind, ChatRef, ChatRun, ChatUser, Document, HistoryItem, Inline, SourceId,

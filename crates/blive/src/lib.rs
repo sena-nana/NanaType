@@ -17,6 +17,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod chat;
 mod client;
 pub mod protocol;
 pub mod relay;

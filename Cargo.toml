@@ -11,7 +11,6 @@ members = [
     "crates/audio",
     "crates/speech",
     "crates/bridge",
-    "crates/chat",
     "crates/blive",
     "crates/obs",
     "crates/twitch",
@@ -46,7 +45,6 @@ nanatype-settings = { path = "crates/settings" }
 nanatype-audio = { path = "crates/audio" }
 nanatype-speech = { path = "crates/speech" }
 nanatype-bridge = { path = "crates/bridge" }
-nanatype-chat = { path = "crates/chat" }
 nanatype-blive = { path = "crates/blive" }
 nanatype-obs = { path = "crates/obs" }
 nanatype-twitch = { path = "crates/twitch" }

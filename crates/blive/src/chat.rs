@@ -1,5 +1,5 @@
-//! Live chat events every source normalizes into, and the lenient JSON
-//! readers they share. Sources keep their own wire parsers.
+//! The live chat events [`crate::protocol`] reads blivechat frames into, and
+//! the lenient JSON readers it uses.
 pub mod json;
 pub use json::{int, millis, string, url};
 

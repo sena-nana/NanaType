@@ -8,7 +8,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use crate::chat::{ChatMessage, Platform};
 use crossbeam_channel::{Sender, bounded, unbounded};
-use nanatype_chat::ChatEvent;
+use nanatype_blive::chat::ChatEvent;
 use nanatype_model::AssetRef;
 
 const AVATAR_TTL: Duration = Duration::from_secs(3 * 24 * 3600);
@@ -320,7 +320,7 @@ fn fnv(text: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nanatype_chat::Author;
+    use nanatype_blive::chat::Author;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     fn event(url: String, n: u64) -> ChatEvent {

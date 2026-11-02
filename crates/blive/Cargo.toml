@@ -8,7 +8,6 @@ description = "NanaType live chat: a blivechat client and a blivechat-compatible
 
 [dependencies]
 nanatype-model = { workspace = true, features = ["ws"] }
-nanatype-chat.workspace = true
 serde_json.workspace = true
 tungstenite = { workspace = true, features = ["handshake"] }
 crossbeam-channel.workspace = true

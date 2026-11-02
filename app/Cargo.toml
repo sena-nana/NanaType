@@ -42,7 +42,6 @@ nanatype-settings.workspace = true
 nanatype-audio.workspace = true
 nanatype-speech.workspace = true
 nanatype-bridge.workspace = true
-nanatype-chat.workspace = true
 nanatype-blive.workspace = true
 nanatype-twitch.workspace = true
 nanatype-core.workspace = true
