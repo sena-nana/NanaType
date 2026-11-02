@@ -1,3 +1,5 @@
+[简体中文](steam.md) · [English](en/steam.md) · [日本語](ja/steam.md)
+
 # Steam 版
 
 Steam 版与 GitHub 发布版共用同一套代码，用 Cargo feature 区分：

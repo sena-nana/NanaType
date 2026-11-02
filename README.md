@@ -21,7 +21,8 @@
 </p>
 
 <p align="center">
-  简体中文 · English · 日本語（界面）
+  <b>简体中文</b> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a><br>
+  <sub>界面支持简体中文 / English / 日本語</sub>
 </p>
 
 ---

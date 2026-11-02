@@ -1,3 +1,5 @@
+[简体中文](plugins.md) · [English](en/plugins.md) · [日本語](ja/plugins.md)
+
 # 统一包与功能插件
 
 包的身份来自 `package.toml`，样式来自 `skin.toml`。`capabilities` 可组合 `skin`、`resources`、`lua`、`sounds`（[音效包](skins.md#音效包)）。内置皮肤与用户包采用相同格式和校验规则，内置资源由构建工具扫描目录生成，清单在构建时生成可缓存的解析数据；运行时仍使用同一份格式与校验规则，开发目录每次重载重新读取。皮肤 ID 仅用于选择、索引和依赖解析，不参与绘制决策。

@@ -1,3 +1,5 @@
+[简体中文](package-editor.md) · [English](en/package-editor.md) · [日本語](ja/package-editor.md)
+
 # 包编辑器
 
 对应 [#6](https://github.com/sena-nana/NanaType/issues/6)，格式与边界见[统一包整体设计](package-design.md#包编辑器)。编辑器是独立程序 **NanaType Editor**（`editor/`，单独构建、单独安装），与 NanaType 共用 `crates/frame` 中的皮肤渲染器、界面组件和插件宿主，但互不包含对方的代码、文案和资源：NanaType 中没有编辑入口，编辑器中也没有弹幕、联机、贴纸、输出和热键。

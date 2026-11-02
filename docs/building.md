@@ -1,3 +1,5 @@
+[简体中文](building.md) · [English](en/building.md) · [日本語](ja/building.md)
+
 # 从源码构建
 
 构建、测试、打包与开发辅助选项。功能概览见 [README](../README.md)。

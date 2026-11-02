@@ -1,3 +1,5 @@
+[简体中文](usage.md) · [English](en/usage.md) · [日本語](ja/usage.md)
+
 # 使用指南
 
 日常操作、直播平台与 OBS 接入、联机、表情包和皮肤的完整说明。功能概览见 [README](../README.md)。
