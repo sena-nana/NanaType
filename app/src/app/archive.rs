@@ -164,16 +164,19 @@ impl App {
                     .as_ref()
                     .is_some_and(|open| !sessions.iter().any(|s| &s.name == open))
                 {
-                    view.open = None;
-                    view.records.clear();
+                    view.close();
                 }
                 view.sessions = sessions;
                 self.ui.archive.set(Arc::new(view));
             }
             HistoryMsg::Open(None) => {
                 let mut view = (*self.ui.archive.get_untracked()).clone();
-                view.open = None;
-                view.records.clear();
+                view.close();
+                self.ui.archive.set(Arc::new(view));
+            }
+            HistoryMsg::Earlier => {
+                let mut view = (*self.ui.archive.get_untracked()).clone();
+                view.earlier();
                 self.ui.archive.set(Arc::new(view));
             }
             HistoryMsg::Open(Some(name)) => {
@@ -186,8 +189,7 @@ impl App {
             HistoryMsg::Loaded { name, records } => match records {
                 Ok(records) => {
                     let mut view = (*self.ui.archive.get_untracked()).clone();
-                    view.open = Some(name);
-                    view.records = records;
+                    view.open(name, records);
                     self.ui.archive.set(Arc::new(view));
                 }
                 Err(message) => {

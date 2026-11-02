@@ -134,6 +134,42 @@ pub struct View {
     /// The session whose lines are shown.
     pub open: Option<String>,
     pub records: Vec<Record>,
+    /// How many of the newest records the viewer lists; earlier ones come a
+    /// page at a time.
+    pub shown: usize,
+}
+
+impl View {
+    /// Lines the viewer lists at first, and adds with each "earlier".
+    pub const PAGE: usize = 500;
+
+    /// Show `records` of session `name` from its newest page.
+    pub fn open(&mut self, name: String, records: Vec<Record>) {
+        self.open = Some(name);
+        self.records = records;
+        self.shown = Self::PAGE;
+    }
+
+    pub fn close(&mut self) {
+        self.open = None;
+        self.records.clear();
+        self.shown = 0;
+    }
+
+    /// List one more page of earlier lines.
+    pub fn earlier(&mut self) {
+        self.shown = (self.shown + Self::PAGE).min(self.records.len());
+    }
+
+    /// The lines listed, oldest first.
+    pub fn listed(&self) -> &[Record] {
+        &self.records[self.hidden()..]
+    }
+
+    /// Earlier lines not listed yet.
+    pub fn hidden(&self) -> usize {
+        self.records.len().saturating_sub(self.shown)
+    }
 }
 
 /// What a session exports as.
@@ -504,6 +540,32 @@ mod tests {
             srt(&records[1..]),
             "1\n00:00:00,000 --> 00:00:01,500\nNana: 早上好\nGood morning\n\n"
         );
+    }
+
+    #[test]
+    fn the_viewer_pages_back_through_a_whole_session() {
+        let records: Vec<Record> = (0..1203).map(|i| record(i, "Nana", "hi")).collect();
+        let mut view = View::default();
+        view.open("s".into(), records);
+        assert_eq!(view.listed().len(), View::PAGE);
+        assert_eq!(view.listed().last().unwrap().at, 1202, "the newest first");
+        assert_eq!(view.hidden(), 703);
+        view.earlier();
+        assert_eq!(view.hidden(), 203);
+        view.earlier();
+        assert_eq!(view.hidden(), 0);
+        assert_eq!(view.listed().len(), 1203);
+        assert_eq!(view.listed()[0].at, 0, "the whole session");
+        view.earlier();
+        assert_eq!(view.listed().len(), 1203);
+        // Another session starts from its newest page again.
+        view.open(
+            "t".into(),
+            (0..10).map(|i| record(i, "Nana", "hi")).collect(),
+        );
+        assert_eq!((view.listed().len(), view.hidden()), (10, 0));
+        view.close();
+        assert!(view.listed().is_empty());
     }
 
     #[test]

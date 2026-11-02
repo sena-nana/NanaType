@@ -3,8 +3,6 @@ use crate::archive;
 use crate::msg::{HistoryMsg, WindowMsg};
 use crate::ui::kit;
 
-/// Most lines the viewer lists (the newest); an export has them all.
-const VIEWER_LINES: usize = 500;
 /// The viewer's scrolling height.
 const VIEWER_H: f32 = 280.0;
 
@@ -273,7 +271,7 @@ fn saved_sessions(ui: Ui) -> AnyView {
                     ),
                 ));
                 if open {
-                    rows.push(viewer(ui, &view.records, &session.name));
+                    rows.push(viewer(ui, &view, &session.name));
                 }
             }
             Row::inset(widget(Stack::column(0.0)).children((
@@ -286,11 +284,13 @@ fn saved_sessions(ui: Ui) -> AnyView {
     section(ui, "history-saved", vec![Row::inset(body)])
 }
 
-/// One session's lines (time · speaker · text) in a scrolling panel, then
-/// its exports and deletion.
-fn viewer(ui: Ui, records: &[archive::Record], name: &str) -> Row {
-    let skip = records.len().saturating_sub(VIEWER_LINES);
-    let lines: Vec<AnyView> = records[skip..]
+/// One session's lines (time · speaker · text) in a scrolling panel, the
+/// newest page first with earlier pages a click away, then its exports and
+/// deletion.
+fn viewer(ui: Ui, view: &archive::View, name: &str) -> Row {
+    let hidden = view.hidden();
+    let lines: Vec<AnyView> = view
+        .listed()
         .iter()
         .map(|r| {
             widget(
@@ -322,14 +322,27 @@ fn viewer(ui: Ui, records: &[archive::Record], name: &str) -> Row {
             .into_any()
         })
         .collect();
-    let note = (skip > 0).then(|| {
+    let note = (hidden > 0).then(|| {
         hint(ui.tr(
             "history-saved-truncated",
             &[
-                ("shown", (VIEWER_LINES as u64).into()),
-                ("count", (records.len() as u64).into()),
+                ("shown", (view.listed().len() as u64).into()),
+                ("count", (view.records.len() as u64).into()),
             ],
         ))
+    });
+    // Heads the list, so the earlier lines appear right under it.
+    let earlier = (hidden > 0).then(|| {
+        widget(
+            Button::new(ui.tr(
+                "history-saved-earlier",
+                &[("count", (hidden.min(archive::View::PAGE) as u64).into())],
+            ))
+            .kind(ButtonKind::Ghost)
+            .size(ControlSize::Small),
+        )
+        .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::History(HistoryMsg::Earlier)))
+        .into_any()
     });
     let name = name.to_owned();
     let actions = widget(
@@ -364,7 +377,7 @@ fn viewer(ui: Ui, records: &[archive::Record], name: &str) -> Row {
         widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
             l.max_height = Some(LengthSpec::Px(VIEWER_H));
         }))
-        .children(widget(Stack::column(0.0).gap_step(gap::step::HAIR)).children(lines)),
+        .children(widget(Stack::column(0.0).gap_step(gap::step::HAIR)).children((earlier, lines))),
         actions,
     ))
 }

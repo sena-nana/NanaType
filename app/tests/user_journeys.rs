@@ -339,7 +339,7 @@ fn saved_history_lists_sessions_and_acts_on_the_open_one() {
             markup: None,
             translation: None,
         };
-        f.ui.archive.set(Arc::new(View {
+        let mut view = View {
             sessions: vec![
                 Session {
                     name: "2026-11-02_213005".into(),
@@ -350,12 +350,16 @@ fn saved_history_lists_sessions_and_acts_on_the_open_one() {
                     lines: 7,
                 },
             ],
-            open: Some("2026-11-02_213005".into()),
-            records: vec![
+            ..View::default()
+        };
+        view.open(
+            "2026-11-02_213005".into(),
+            vec![
                 record(1_762_000_000_000, "七七", "大家晚上好"),
                 record(1_762_000_005_000, "七七", "今天玩什么呢"),
             ],
-        }));
+        );
+        f.ui.archive.set(Arc::new(view));
         f.session.flush().unwrap();
         let line = f.reach(650.0, 480.0, |f| {
             f.session
@@ -399,6 +403,70 @@ fn saved_history_lists_sessions_and_acts_on_the_open_one() {
             Msg::History(HistoryMsg::Open(Some(name))) if name == "2026-11-01_200000"
         )));
     }
+}
+
+/// A long session lists its newest page, and earlier pages a click away
+/// until the whole session shows.
+#[test]
+fn saved_history_pages_back_through_a_long_session() {
+    use nanatype::archive::{Record, Session, Source, View};
+    use nanatype::msg::HistoryMsg;
+    let mut f = Fixture::new(Locale::EnUs, false, Page::History);
+    let records: Vec<Record> = (0..View::PAGE as u64 + 30)
+        .map(|i| Record {
+            at: 1_762_000_000_000 + i * 1000,
+            speaker: "Nana".into(),
+            source: Source::Own,
+            platform: None,
+            text: format!("line {i}"),
+            markup: None,
+            translation: None,
+        })
+        .collect();
+    let mut view = View {
+        sessions: vec![Session {
+            name: "2026-11-02_213005".into(),
+            lines: records.len(),
+        }],
+        ..View::default()
+    };
+    view.open("2026-11-02_213005".into(), records);
+    f.ui.archive.set(Arc::new(view.clone()));
+    f.session.flush().unwrap();
+    let has = |f: &Fixture, text: &str| {
+        f.session
+            .accessibility_dump()
+            .into_iter()
+            .any(|n| n.label.as_deref() == Some(text))
+    };
+    let newest = format!("line {}", View::PAGE + 29);
+    assert!(has(&f, &newest));
+    assert!(!has(&f, "line 0"));
+    let label = f.ui.tr("history-saved-earlier", &[("count", 30u64.into())]);
+    let earlier = f.reach(650.0, 480.0, |f| {
+        f.session
+            .accessibility_dump()
+            .into_iter()
+            .find(|n| n.role == "button" && n.label.as_deref() == Some(label.as_str()))
+            .expect("the earlier lines button")
+    });
+    f.click(&earlier);
+    assert!(
+        f.messages()
+            .iter()
+            .any(|m| matches!(m, Msg::History(HistoryMsg::Earlier)))
+    );
+    view.earlier();
+    f.ui.archive.set(Arc::new(view));
+    f.session.flush().unwrap();
+    assert!(has(&f, "line 0") && has(&f, &newest));
+    assert!(
+        !f.session
+            .accessibility_dump()
+            .into_iter()
+            .any(|n| n.label.as_deref() == Some(label.as_str())),
+        "nothing earlier left"
+    );
 }
 
 #[test]

@@ -699,6 +699,8 @@ pub enum HistoryMsg {
         name: String,
         records: Result<Vec<crate::archive::Record>, String>,
     },
+    /// List a page of the open session's earlier lines.
+    Earlier,
     /// Ask where to save the open session.
     Export(crate::archive::Format),
     Exported(Result<std::path::PathBuf, String>),
