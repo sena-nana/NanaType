@@ -593,10 +593,10 @@ fn session_line(
         CoreEvent::LineSubmitted(line) => {
             lines.insert(line.id);
         }
-        CoreEvent::LineStarted(line) => {
-            if replay_of(line.id).is_some_and(|of| lines.contains(&of)) {
-                lines.insert(line.id);
-            }
+        CoreEvent::LineStarted(line)
+            if replay_of(line.id).is_some_and(|of| lines.contains(&of)) =>
+        {
+            lines.insert(line.id);
         }
         _ => {}
     }

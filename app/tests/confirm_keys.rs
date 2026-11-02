@@ -6,7 +6,7 @@ mod common;
 use std::sync::Arc;
 
 use nana_ui::runtime::StableNodeId;
-use nana_ui_devtools::agent::{AccessibilityDumpNode, AgentSession, RuntimeAgentSession};
+use nana_ui_devtools::agent::{AccessibilityDumpNode, RuntimeAgentSession};
 use nana_ui_platform::InputModifiers;
 use nanatype::app::backup::{Pending, View};
 use nanatype::msg::{BackupMsg, HistoryMsg, Msg};
@@ -44,14 +44,6 @@ impl Fixture {
             .filter(|n| n.role == "button" && n.label.as_deref() == Some(label.as_str()))
             .filter(|n| n.bounds.width > 0.0)
             .collect()
-    }
-
-    fn click(&mut self, node: &AccessibilityDumpNode) {
-        let b = &node.bounds;
-        self.session
-            .click_xy(b.x + b.width / 2.0, b.y + b.height / 2.0)
-            .unwrap();
-        self.session.flush().unwrap();
     }
 
     fn key(&mut self, key: &str) {

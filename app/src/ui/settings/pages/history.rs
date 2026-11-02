@@ -271,7 +271,7 @@ fn saved_sessions(ui: Ui) -> AnyView {
                     ),
                 ));
                 if open {
-                    rows.push(viewer(ui, &view, &session.name));
+                    rows.push(viewer(ui, view, &session.name));
                 }
             }
             Row::inset(widget(Stack::column(0.0)).children((

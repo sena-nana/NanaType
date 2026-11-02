@@ -105,7 +105,7 @@ impl GlobalAction {
     }
 
     /// The bindings a profile brings, its phrases' and characters'.
-    fn from_profile(self) -> bool {
+    fn comes_with_profile(self) -> bool {
         matches!(self, Self::Phrase(_) | Self::Character(_))
     }
 
@@ -119,7 +119,7 @@ impl GlobalAction {
             let Some(chord) = action.get(s) else {
                 continue;
             };
-            if !taken.insert(chord.clone()) && action.from_profile() {
+            if !taken.insert(chord.clone()) && action.comes_with_profile() {
                 clashes.push((action, chord.clone()));
             }
         }
