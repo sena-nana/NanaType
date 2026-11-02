@@ -15,6 +15,7 @@ compile_error!(
 );
 
 pub mod app;
+pub mod archive;
 pub mod assets;
 pub mod chat;
 pub mod completion;

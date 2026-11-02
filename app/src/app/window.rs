@@ -58,6 +58,9 @@ impl App {
             }
             WindowMsg::SettingsPage(page) => {
                 self.ui.page.set(page);
+                if page == crate::ui::settings::Page::History {
+                    self.archive_page_shown();
+                }
                 self.open_settings();
             }
             WindowMsg::SecondInstance => {

@@ -1,4 +1,5 @@
 //! Application state and the single update function.
+mod archive;
 pub mod blivechat;
 mod chat;
 mod editor;
@@ -137,6 +138,8 @@ pub struct App {
     /// Live chat, oldest first, capped at the panel's size.
     chat: VecDeque<Arc<ChatMessage>>,
     live_chat: live::LiveChat,
+    /// Saved history: the session's file and what is already in it.
+    archive: archive::Archive,
     pub hotkeys: Hotkeys,
     pub tray: Option<Tray>,
     pub persist: Persist,
@@ -343,6 +346,7 @@ impl App {
             chat_assets: workers.chat_assets,
             chat: VecDeque::new(),
             live_chat: Default::default(),
+            archive: Default::default(),
             hotkeys: workers.hotkeys,
             tray: None,
             persist,
@@ -456,6 +460,7 @@ impl App {
         #[cfg(feature = "updates")]
         self.check_update_on_start();
         self.notice_unseen_crash();
+        self.archive_start();
         if !self.settings.general.onboarding_done {
             self.open_settings();
         }
@@ -1490,6 +1495,9 @@ impl App {
             self.ui.display.set(Arc::new(self.shared_display()));
             self.ui.now.set(clock::now_ms());
         }
+        if fx.history_changed {
+            self.archive_rows();
+        }
         if fx.history_changed && self.peer.handle.is_none() {
             self.ui
                 .history
@@ -1879,6 +1887,16 @@ impl App {
             FileTarget::StickerFolder => {
                 FileDialogRequest::new(id, FileDialogKind::PickFolder).title(t("assets-add-folder"))
             }
+            FileTarget::ExportHistory(format) => {
+                let (title, label) = match format {
+                    crate::archive::Format::Txt => ("history-saved-export-txt", "Text"),
+                    crate::archive::Format::Srt => ("history-saved-export-srt", "SubRip"),
+                };
+                FileDialogRequest::new(id, FileDialogKind::SaveFile)
+                    .title(t(title))
+                    .filters([FileFilter::new(label, [format.ext()])])
+                    .file_name(self.archive_export_name(format))
+            }
         };
         let window = [WindowKind::Settings, WindowKind::Input]
             .into_iter()
@@ -1930,6 +1948,7 @@ impl App {
             FileTarget::StickerFolder => {
                 self.import_sticker_folders(vec![path]);
             }
+            FileTarget::ExportHistory(format) => self.archive_export(format, path),
         }
     }
 
@@ -2016,6 +2035,7 @@ impl App {
             Msg::Blive(m) => self.blivechat_msg(m),
             Msg::Obs(m) => self.obs_msg(m),
             Msg::Workshop(m) => self.workshop_msg(m),
+            Msg::History(m) => self.history_msg(m),
             #[cfg(feature = "updates")]
             Msg::Update(m) => self.update_msg(m),
             Msg::HoldOnboardPreview => {

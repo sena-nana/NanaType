@@ -261,6 +261,8 @@ pub struct Ui {
     pub skins_grid: Signal<bool>,
     /// The quick input bar's line, cleared once sent or dismissed.
     pub quick_text: Signal<String>,
+    /// Saved history sessions and the one open in the viewer.
+    pub archive: Signal<Arc<crate::archive::View>>,
 }
 
 impl std::ops::Deref for Ui {
@@ -336,6 +338,7 @@ impl Ui {
             input_height: signal(crate::windows::INPUT_SIZE.1),
             skins_grid: signal(true),
             quick_text: signal(String::new()),
+            archive: signal(Arc::new(crate::archive::View::default())),
         }
     }
 

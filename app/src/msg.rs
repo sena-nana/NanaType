@@ -249,6 +249,8 @@ pub enum FileTarget {
     ExportSkin,
     StickerFolder,
     SpeechModel,
+    /// Save the session open in Settings › History as this format.
+    ExportHistory(crate::archive::Format),
 }
 
 pub enum Msg {
@@ -338,6 +340,7 @@ pub enum Msg {
     #[cfg(feature = "updates")]
     Update(UpdateMsg),
     Workshop(WorkshopMsg),
+    History(HistoryMsg),
 }
 
 pub enum SpeechMsg {
@@ -598,6 +601,23 @@ pub enum WorkshopMsg {
     Unsubscribe(u64),
     /// Download a subscribed item again.
     Download(u64),
+}
+
+/// Saved history (Settings › History).
+pub enum HistoryMsg {
+    /// The saved sessions, newest first, listed off the UI thread.
+    Listed(Vec<crate::archive::Session>),
+    /// Show this session's lines; `None` closes the viewer.
+    Open(Option<String>),
+    Loaded {
+        name: String,
+        records: Result<Vec<crate::archive::Record>, String>,
+    },
+    /// Ask where to save the open session.
+    Export(crate::archive::Format),
+    Exported(Result<std::path::PathBuf, String>),
+    Delete(String),
+    OpenFolder,
 }
 
 /// A toolbar or shortcut action on the draft. Applied to the rich editor's

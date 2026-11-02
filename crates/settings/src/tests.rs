@@ -418,6 +418,12 @@ fn files_from_before_chat_settings_get_their_defaults() {
         "no free gifts in history"
     );
     assert!(s.history.show_quote);
+    let a = &s.history.archive;
+    assert!(
+        a.enabled && !a.chat,
+        "own lines are saved, viewer chat is not"
+    );
+    assert_eq!(a.keep_days, 30);
 }
 
 #[test]

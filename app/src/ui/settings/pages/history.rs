@@ -1,5 +1,12 @@
 use super::*;
-use crate::msg::WindowMsg;
+use crate::archive;
+use crate::msg::{HistoryMsg, WindowMsg};
+use crate::ui::kit;
+
+/// Most lines the viewer lists (the newest); an export has them all.
+const VIEWER_LINES: usize = 500;
+/// The viewer's scrolling height.
+const VIEWER_H: f32 = 280.0;
 
 pub(super) fn history(ui: Ui) -> AnyView {
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
@@ -187,8 +194,170 @@ pub(super) fn history(ui: Ui) -> AnyView {
                     ),
                 ],
             ),
+            archive_settings(ui),
+            saved_sessions(ui),
         ))
         .into_any()
+}
+
+/// Whether sent lines are saved to disk, viewer chat with them, and for how
+/// long. Retention applies even while saving is off, to what is already there.
+fn archive_settings(ui: Ui) -> AnyView {
+    section_with(
+        ui,
+        "history-archive",
+        vec![
+            (
+                toggle_row!(ui, "history-archive-enabled", history.archive.enabled),
+                None,
+            ),
+            when_on(
+                ui,
+                |s| s.history.archive.enabled,
+                vec![toggle_row!(
+                    ui,
+                    "history-archive-chat",
+                    history.archive.chat
+                )],
+            ),
+            (
+                row(
+                    ui,
+                    "history-archive-keep",
+                    Some("history-archive-keep-hint"),
+                    number(
+                        ui,
+                        (0.0, 3650.0),
+                        |s| f64::from(s.history.archive.keep_days),
+                        |s, v| s.history.archive.keep_days = v as u32,
+                    ),
+                ),
+                None,
+            ),
+        ],
+    )
+}
+
+fn folder_button(ui: Ui) -> AnyView {
+    button(ui, "history-saved-folder", || {
+        Msg::History(HistoryMsg::OpenFolder)
+    })
+}
+
+/// The saved sessions, newest first; the open one shows its lines below it.
+fn saved_sessions(ui: Ui) -> AnyView {
+    let body = dynamic(
+        move || (ui.archive.get(), ui.locale.get()),
+        move |(view, _)| {
+            if view.sessions.is_empty() {
+                return empty_row(ui, "history-saved-empty", folder_button(ui));
+            }
+            let mut rows = Vec::new();
+            for session in &view.sessions {
+                let open = view.open.as_deref() == Some(session.name.as_str());
+                let name = session.name.clone();
+                rows.push(row_text(
+                    session.title(),
+                    Some(ui.tr(
+                        "history-saved-lines",
+                        &[("count", (session.lines as u64).into())],
+                    )),
+                    button(
+                        ui,
+                        if open {
+                            "history-saved-close"
+                        } else {
+                            "history-saved-view"
+                        },
+                        move || Msg::History(HistoryMsg::Open((!open).then(|| name.clone()))),
+                    ),
+                ));
+                if open {
+                    rows.push(viewer(ui, &view.records, &session.name));
+                }
+            }
+            Row::inset(widget(Stack::column(0.0)).children((
+                divided(rows),
+                divider(),
+                kit::line((), folder_button(ui)),
+            )))
+        },
+    );
+    section(ui, "history-saved", vec![Row::inset(body)])
+}
+
+/// One session's lines (time · speaker · text) in a scrolling panel, then
+/// its exports and deletion.
+fn viewer(ui: Ui, records: &[archive::Record], name: &str) -> Row {
+    let skip = records.len().saturating_sub(VIEWER_LINES);
+    let lines: Vec<AnyView> = records[skip..]
+        .iter()
+        .map(|r| {
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .align(AlignSpec::Start)
+                    .width(LengthSpec::Fill),
+            )
+            .children((
+                widget(Stack::row(0.0).gap_step(gap::step::TIGHT).with_layout(|l| {
+                    l.flex_shrink = Some(0.0);
+                    crate::ui::tnum(l);
+                }))
+                .children((
+                    Type::Caption.view(crate::ui::history::local_time(r.at, true)),
+                    Type::Small.view(r.speaker.clone()),
+                )),
+                widget(kit::grow_column(0.0)).children(Type::Body.view(r.text.clone())),
+            ))
+            .into_any()
+        })
+        .collect();
+    let note = (skip > 0).then(|| {
+        hint(ui.tr(
+            "history-saved-truncated",
+            &[
+                ("shown", (VIEWER_LINES as u64).into()),
+                ("count", (records.len() as u64).into()),
+            ],
+        ))
+    });
+    let name = name.to_owned();
+    let actions = widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center)
+            .justify(JustifySpec::End)
+            .wrap(true)
+            .width(LengthSpec::Fill),
+    )
+    .children((
+        button(ui, "history-saved-export-txt", || {
+            Msg::History(HistoryMsg::Export(archive::Format::Txt))
+        }),
+        button(ui, "history-saved-export-srt", || {
+            Msg::History(HistoryMsg::Export(archive::Format::Srt))
+        }),
+        confirm(
+            *ui,
+            ui.now_t("history-saved-delete-confirm"),
+            ui.now_t("history-saved-delete"),
+            |armed| {
+                widget(Button::new(ui.now_t("history-saved-delete")).size(ControlSize::Small))
+                    .on(move |_: &Activate| armed.set(true))
+                    .into_any()
+            },
+            move || Msg::History(HistoryMsg::Delete(name.clone())),
+        ),
+    ));
+    block((
+        note,
+        widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
+            l.max_height = Some(LengthSpec::Px(VIEWER_H));
+        }))
+        .children(widget(Stack::column(0.0).gap_step(gap::step::HAIR)).children(lines)),
+        actions,
+    ))
 }
 
 /// "Windows →": a quiet button that opens another settings page (the page

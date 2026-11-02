@@ -758,6 +758,32 @@ pub struct HistorySettings {
     pub chat: HistoryChat,
     /// Show the chat message a line answers above it.
     pub show_quote: bool,
+    /// Sent lines saved to disk.
+    pub archive: HistoryArchive,
+}
+
+/// Saved history: one JSON Lines file per session under the data folder.
+/// Clearing the on-screen history never touches these files.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HistoryArchive {
+    /// Save the streamer's own lines and a co-op partner's.
+    pub enabled: bool,
+    /// Also save viewer chat that joins the history (off: it is other
+    /// people's words).
+    pub chat: bool,
+    /// Sessions older than this many days go at startup; 0 keeps them all.
+    pub keep_days: u32,
+}
+
+impl Default for HistoryArchive {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            chat: false,
+            keep_days: 30,
+        }
+    }
 }
 
 /// Which live-chat messages a list shows.
@@ -817,6 +843,7 @@ impl Default for HistorySettings {
             hide_latest: HideLatest::Skin,
             chat: HistoryChat::default(),
             show_quote: true,
+            archive: HistoryArchive::default(),
         }
     }
 }

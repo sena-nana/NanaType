@@ -566,6 +566,26 @@ chat-status-retrying = 切断されました。再接続中：{ $message }
 history-chat = コメント
 history-chat-show = 履歴にコメントを表示
 history-show-quote = 返信の引用を表示
+history-archive = 履歴の保存
+history-archive-enabled = セリフを PC に保存
+history-archive-enabled-hint = 配信ごとに 1 ファイル、データフォルダに保存します。上の履歴を消去しても削除されません
+history-archive-chat = 視聴者のコメントも保存
+history-archive-chat-hint = 履歴に入ったコメントだけを保存します。視聴者の言葉なので、初期設定ではオフです
+history-archive-keep = 保存期間（日）
+history-archive-keep-hint = 起動時にそれより古い記録を削除します。0 で無期限
+history-saved = 保存した記録
+history-saved-empty = まだ保存された記録はありません
+history-saved-lines = { $count } 行
+history-saved-view = 表示
+history-saved-close = 閉じる
+history-saved-folder = フォルダを開く
+history-saved-export-txt = .txt で書き出す
+history-saved-export-srt = .srt 字幕で書き出す
+history-saved-delete = 削除
+history-saved-delete-confirm = この回の記録ファイルを削除しますか？
+history-saved-truncated = 最新の { $shown } 行を表示中（全 { $count } 行）。すべて見るには書き出してください
+history-saved-exported = { $path } に保存しました
+history-saved-failed = 保存した履歴を読み書きできません：{ $message }
 int-chat-quote-display = ダイアログに返信の引用を表示
 
 ## wave3-input

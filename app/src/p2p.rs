@@ -468,12 +468,16 @@ impl App {
                 );
             }
         }
+        let mut partner_lines = Vec::new();
         for entry in &room.entries {
             let owner = &entry.participant;
             let track = room.tracks.get(owner);
             // Visibility and reveal follow the owner's history policy.
             let source_row = by_line.get(&(owner.as_str(), entry.line)).copied();
             if let Some(row) = source_row {
+                if owner != &self.peer.local {
+                    partner_lines.push((owner.clone(), entry.line, row.item.clone()));
+                }
                 let mut row = row.clone();
                 row.key = entry.order;
                 row.item.line = Some(room.render_id(owner, entry.line));
@@ -514,6 +518,9 @@ impl App {
             self.ui.peer.set(Arc::new(state));
         }
         self.refresh_peer_urls();
+        for (owner, line, item) in partner_lines {
+            self.archive_partner(&owner, line, &item);
+        }
     }
 
     fn refresh_peer_urls(&mut self) {

@@ -275,7 +275,7 @@ fn settings_body_scroll_reaches_and_operates_bottom_controls() {
     for locale in Locale::ALL {
         for (page, key) in [
             (Page::General, "general-check-updates"),
-            (Page::History, "history-show-quote"),
+            (Page::History, "history-archive-chat"),
         ] {
             let mut f = Fixture::new(locale, false, page);
             assert!(
@@ -298,16 +298,93 @@ fn settings_body_scroll_reaches_and_operates_bottom_controls() {
             f.apply_edits();
             let s = f.ui.settings.get_untracked();
             // The lowest switches on General and History are the
-            // (default-on) update check and reply quotes.
+            // (default-on) update check and the (default-off) saving of
+            // viewer chat.
             assert!(if page == Page::General {
                 !s.general.check_updates
             } else {
-                !s.history.show_quote
+                s.history.archive.chat
             });
             f.scroll(650.0, 3000.0);
             let heading = f.find("text", page.label_key()).bounds;
             assert!(heading.y >= 0.0 && heading.y < 100.0);
         }
+    }
+}
+
+#[test]
+fn saved_history_lists_sessions_and_acts_on_the_open_one() {
+    use nanatype::archive::{Format, Record, Session, Source, View};
+    use nanatype::msg::HistoryMsg;
+    for locale in Locale::ALL {
+        let mut f = Fixture::new(locale, false, Page::History);
+        let record = |at: u64, speaker: &str, text: &str| Record {
+            at,
+            speaker: speaker.into(),
+            source: Source::Own,
+            platform: None,
+            text: text.into(),
+            markup: None,
+        };
+        f.ui.archive.set(Arc::new(View {
+            sessions: vec![
+                Session {
+                    name: "2026-11-02_213005".into(),
+                    lines: 2,
+                },
+                Session {
+                    name: "2026-11-01_200000".into(),
+                    lines: 7,
+                },
+            ],
+            open: Some("2026-11-02_213005".into()),
+            records: vec![
+                record(1_762_000_000_000, "七七", "大家晚上好"),
+                record(1_762_000_005_000, "七七", "今天玩什么呢"),
+            ],
+        }));
+        f.session.flush().unwrap();
+        let line = f.reach(650.0, 480.0, |f| {
+            f.session
+                .accessibility_dump()
+                .into_iter()
+                .find(|n| n.label.as_deref() == Some("今天玩什么呢"))
+                .expect("the open session's lines")
+        });
+        assert!(line.bounds.y >= 0.0);
+        let srt = f.reach(650.0, 480.0, |f| {
+            f.find("button", "history-saved-export-srt")
+        });
+        f.click(&srt);
+        assert!(
+            f.messages()
+                .iter()
+                .any(|m| matches!(m, Msg::History(HistoryMsg::Export(Format::Srt))))
+        );
+        // Deleting asks first; the confirming button takes the trigger's place.
+        let delete = f.reach(650.0, 480.0, |f| f.find("button", "history-saved-delete"));
+        f.click(&delete);
+        f.session.flush().unwrap();
+        assert!(f.messages().is_empty());
+        let sure = f.reach(650.0, 480.0, |f| {
+            let label = f.ui.now_t("history-saved-delete");
+            f.session
+                .accessibility_dump()
+                .into_iter()
+                .filter(|n| n.role == "button" && n.label.as_deref() == Some(&label))
+                .find(|n| n.bounds.width > 0.0)
+                .expect("the confirming delete")
+        });
+        f.click(&sure);
+        assert!(f.messages().iter().any(
+            |m| matches!(m, Msg::History(HistoryMsg::Delete(name)) if name == "2026-11-02_213005")
+        ));
+        let view = f.reach(650.0, 480.0, |f| f.find("button", "history-saved-view"));
+        f.click(&view);
+        assert!(f.messages().iter().any(|m| matches!(
+            m,
+            Msg::History(HistoryMsg::Open(Some(name))) if name == "2026-11-01_200000"
+        )));
     }
 }
 

@@ -572,6 +572,29 @@ chat-status-retrying = Disconnected, retrying: { $message }
 history-chat = Live chat
 history-chat-show = Show live chat in history
 history-show-quote = Show reply quotes
+history-archive = Saved history
+history-archive-enabled = Save lines to disk
+history-archive-enabled-hint = One file per session in the data folder; clearing the history above leaves them alone
+history-archive-chat = Also save viewer chat
+history-archive-chat-hint = Only chat that joins the history is saved. Off by default: these are your viewers' words
+history-archive-keep = Keep for (days)
+history-archive-keep-hint = Older sessions are deleted at startup; 0 keeps them forever
+history-saved = Saved sessions
+history-saved-empty = Nothing saved yet
+history-saved-lines = { $count ->
+    [one] { $count } line
+   *[other] { $count } lines
+}
+history-saved-view = View
+history-saved-close = Close
+history-saved-folder = Open folder
+history-saved-export-txt = Export .txt
+history-saved-export-srt = Export .srt subtitles
+history-saved-delete = Delete
+history-saved-delete-confirm = Delete this session's file?
+history-saved-truncated = Showing the last { $shown } of { $count } lines; export to get them all
+history-saved-exported = Saved to { $path }
+history-saved-failed = Could not read or write saved history: { $message }
 int-chat-quote-display = Quote replies on the dialogue box
 
 ## wave3-input

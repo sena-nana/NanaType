@@ -566,6 +566,26 @@ chat-status-retrying = 连接断开，正在重试：{ $message }
 history-chat = 弹幕
 history-chat-show = 在历史记录中显示弹幕
 history-show-quote = 显示回复引用
+history-archive = 保存历史记录
+history-archive-enabled = 把台词保存到本地
+history-archive-enabled-hint = 每场一个文件，存放在数据文件夹；清空上面的历史记录不会删除它们
+history-archive-chat = 同时保存弹幕
+history-archive-chat-hint = 只保存进入历史记录的弹幕。默认关闭：那是观众说的话
+history-archive-keep = 保留天数
+history-archive-keep-hint = 启动时删除更早的记录；0 为永久保留
+history-saved = 已保存的记录
+history-saved-empty = 还没有保存的记录
+history-saved-lines = { $count } 句
+history-saved-view = 查看
+history-saved-close = 收起
+history-saved-folder = 打开文件夹
+history-saved-export-txt = 导出 .txt
+history-saved-export-srt = 导出 .srt 字幕
+history-saved-delete = 删除
+history-saved-delete-confirm = 删除这一场的记录文件？
+history-saved-truncated = 只显示最近 { $shown } 句（共 { $count } 句），导出可得到全部
+history-saved-exported = 已保存到 { $path }
+history-saved-failed = 无法读写保存的历史记录：{ $message }
 int-chat-quote-display = 对话框显示回复引用
 
 ## wave3-input
