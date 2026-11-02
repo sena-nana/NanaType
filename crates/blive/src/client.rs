@@ -1,13 +1,12 @@
 //! The connection thread: join, keep alive, reconnect.
 
-use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
-use nanatype_model::{LinkFault, ws_idle};
-use tungstenite::{Message, WebSocket};
+use nanatype_model::{LinkFault, ws_connect, ws_idle};
+use tungstenite::Message;
 
 use crate::protocol::{self, ChatEvent, FatalKind, HEARTBEAT_MESSAGE, Incoming, RoomKey};
 
@@ -118,24 +117,6 @@ impl BliveHandle {
     }
 }
 
-fn connect(config: &BliveConfig) -> Result<WebSocket<TcpStream>, LinkFault> {
-    let io = |e: std::io::Error| LinkFault::from_io(&e);
-    let unresolved = || LinkFault::Unresolved(config.host.clone());
-    let addr = (config.host.as_str(), config.port)
-        .to_socket_addrs()
-        .map_err(|_| unresolved())?
-        .next()
-        .ok_or_else(unresolved)?;
-    let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2)).map_err(io)?;
-    let url = format!("ws://{}:{}/api/chat", config.host, config.port);
-    let (socket, _) = tungstenite::client(url, stream).map_err(LinkFault::from_handshake)?;
-    socket
-        .get_ref()
-        .set_read_timeout(Some(Duration::from_millis(100)))
-        .map_err(io)?;
-    Ok(socket)
-}
-
 pub(crate) fn stopped(stop: &Receiver<()>) -> bool {
     stop.try_recv() != Err(TryRecvError::Empty)
 }
@@ -188,7 +169,13 @@ enum Ended {
 }
 
 fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
-    let mut socket = match connect(config) {
+    let mut socket = match ws_connect(
+        &config.host,
+        config.port,
+        "/api/chat",
+        None,
+        Duration::from_millis(100),
+    ) {
         Ok(socket) => socket,
         Err(e) => return Ended::Dropped(e),
     };

@@ -80,6 +80,37 @@ pub fn ws_idle(e: &tungstenite::Error) -> bool {
     ))
 }
 
+/// Open a plain `ws://host:port{path}` client. The handshake reads with
+/// `handshake_timeout` (none blocks); the socket then reads with
+/// `read_timeout`, so a session loop can poll between frames.
+#[cfg(feature = "ws")]
+pub fn ws_connect(
+    host: &str,
+    port: u16,
+    path: &str,
+    handshake_timeout: Option<std::time::Duration>,
+    read_timeout: std::time::Duration,
+) -> Result<tungstenite::WebSocket<std::net::TcpStream>, LinkFault> {
+    use std::net::{TcpStream, ToSocketAddrs};
+    let io = |e: io::Error| LinkFault::from_io(&e);
+    let unresolved = || LinkFault::Unresolved(host.to_owned());
+    let addr = (host, port)
+        .to_socket_addrs()
+        .map_err(|_| unresolved())?
+        .next()
+        .ok_or_else(unresolved)?;
+    let stream =
+        TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(2)).map_err(io)?;
+    stream.set_read_timeout(handshake_timeout).map_err(io)?;
+    let url = format!("ws://{host}:{port}{path}");
+    let (socket, _) = tungstenite::client(url, stream).map_err(LinkFault::from_handshake)?;
+    socket
+        .get_ref()
+        .set_read_timeout(Some(read_timeout))
+        .map_err(io)?;
+    Ok(socket)
+}
+
 /// English, for logs and tests; the interface translates the fault.
 impl fmt::Display for LinkFault {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -1,13 +1,13 @@
 //! The connection thread: identify, follow the program scene, reconnect.
 
 use std::collections::HashMap;
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::TcpStream;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, TryRecvError, unbounded};
-use nanatype_model::{LinkFault, ws_idle};
+use nanatype_model::{LinkFault, ws_connect, ws_idle};
 use serde_json::{Value, json};
 use tungstenite::{Message, WebSocket};
 
@@ -141,27 +141,6 @@ impl ObsHandle {
             });
         }
     }
-}
-
-fn connect(config: &ObsConfig) -> Result<WebSocket<TcpStream>, LinkFault> {
-    let io = |e: std::io::Error| LinkFault::from_io(&e);
-    let unresolved = || LinkFault::Unresolved(config.host.clone());
-    let addr = (config.host.as_str(), config.port)
-        .to_socket_addrs()
-        .map_err(|_| unresolved())?
-        .next()
-        .ok_or_else(unresolved)?;
-    let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2)).map_err(io)?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(2)))
-        .map_err(io)?;
-    let url = format!("ws://{}:{}", config.host, config.port);
-    let (socket, _) = tungstenite::client(url, stream).map_err(LinkFault::from_handshake)?;
-    socket
-        .get_ref()
-        .set_read_timeout(Some(Duration::from_millis(100)))
-        .map_err(io)?;
-    Ok(socket)
 }
 
 enum Ended {
@@ -393,7 +372,13 @@ fn commands_closed(commands: &Receiver<Command>) -> bool {
 }
 
 fn session(config: &ObsConfig, commands: &Receiver<Command>, emit: &EmitFn) -> Ended {
-    let mut socket = match connect(config) {
+    let mut socket = match ws_connect(
+        &config.host,
+        config.port,
+        "",
+        Some(Duration::from_secs(2)),
+        Duration::from_millis(100),
+    ) {
         Ok(socket) => socket,
         Err(e) => return Ended::Dropped(e),
     };
