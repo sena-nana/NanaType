@@ -98,20 +98,24 @@ fn skin_fps(ui: crate::ui::Ui) -> u32 {
 /// NanaType itself, or NanaUI for per-glyph reveals and effects and
 /// compositor layers, which would otherwise play at its own 120 Hz.
 ///
-/// The display windows play the skin's animation at the skin frame rate, and
-/// their glyph motion keeps to it too. The input window is one the user works
+/// The display windows are what the audience watches: their glyph motion,
+/// typing included, plays at NanaUI's own rate, since at a 30 FPS skin rate
+/// letters visibly step in. The skin's own animation still asks for the skin
+/// frame rate only (`frame_policy`). The input window is one the user works
 /// in: its hovers, popovers and caret keep to 60 FPS even under a 30 FPS
 /// skin, and only its glyph motion loses the frames above that. The history
 /// window replays the same lines; it keeps the 60 FPS its own row motion has
 /// always asked for, so rows rise and fade as smoothly as before whatever
 /// the skin rate, while glyph motion in it no longer runs at twice that. The
 /// settings and quick windows are left as they ask.
-fn max_frame_rate(kind: Option<WindowKind>, skin_fps: u32) -> Option<NonZeroU32> {
+fn max_frame_rate(kind: Option<WindowKind>) -> Option<NonZeroU32> {
     match kind? {
-        WindowKind::Display | WindowKind::PeerDisplay => NonZeroU32::new(skin_fps),
         WindowKind::Input => NonZeroU32::new(INPUT_FPS),
         WindowKind::History => NonZeroU32::new(HISTORY_FPS),
-        WindowKind::Settings | WindowKind::Quick => None,
+        WindowKind::Display
+        | WindowKind::PeerDisplay
+        | WindowKind::Settings
+        | WindowKind::Quick => None,
     }
 }
 
@@ -1690,7 +1694,7 @@ impl RuntimeProgram for Host {
     }
 
     fn max_frame_rate(&self, id: WindowId) -> Option<NonZeroU32> {
-        max_frame_rate(WindowKind::from_id(id), skin_fps(self.app.ui))
+        max_frame_rate(WindowKind::from_id(id))
     }
 
     fn sync_animation_clock(&mut self, epoch: Instant) {
@@ -2121,21 +2125,20 @@ mod redraw_tests {
 
     #[test]
     fn glyph_motion_keeps_to_each_windows_frame_rate() {
-        let rate = |kind, fps| max_frame_rate(kind, fps).map(NonZeroU32::get);
-        for fps in nanatype_settings::SKIN_FRAME_RATES {
-            for kind in [WindowKind::Display, WindowKind::PeerDisplay] {
-                assert_eq!(rate(Some(kind), fps), Some(fps), "{kind:?}");
-            }
-            assert_eq!(rate(Some(WindowKind::Input), fps), Some(INPUT_FPS));
-            assert_eq!(rate(Some(WindowKind::History), fps), Some(HISTORY_FPS));
-            assert_eq!(rate(Some(WindowKind::Settings), fps), None);
-            assert_eq!(rate(Some(WindowKind::Quick), fps), None);
+        let rate = |kind| max_frame_rate(kind).map(NonZeroU32::get);
+        // Typing on the display windows is not held to the skin frame rate.
+        for kind in [WindowKind::Display, WindowKind::PeerDisplay] {
+            assert_eq!(rate(Some(kind)), None, "{kind:?}");
         }
-        assert_eq!(rate(None, 60), None);
+        assert_eq!(rate(Some(WindowKind::Input)), Some(INPUT_FPS));
+        assert_eq!(rate(Some(WindowKind::History)), Some(HISTORY_FPS));
+        assert_eq!(rate(Some(WindowKind::Settings)), None);
+        assert_eq!(rate(Some(WindowKind::Quick)), None);
+        assert_eq!(rate(None), None);
     }
 
     #[test]
-    fn the_frame_ceiling_follows_the_skin_frame_rate_setting() {
+    fn the_skin_frame_rate_setting_keeps_to_the_rates_offered() {
         for (setting, fps) in [(30, 30), (60, 60), (144, 60), (0, 30)] {
             let mut settings = nanatype_settings::Settings::default();
             settings.skin.frame_rate = setting;
@@ -2145,8 +2148,6 @@ mod redraw_tests {
                 nanatype_i18n::Locale::ZhCn,
             );
             assert_eq!(skin_fps(ui), fps, "{setting}");
-            let host_rate = max_frame_rate(Some(WindowKind::Display), skin_fps(ui));
-            assert_eq!(host_rate.map(NonZeroU32::get), Some(fps));
         }
     }
 

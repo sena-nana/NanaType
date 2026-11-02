@@ -622,8 +622,8 @@ pub struct SkinSettings {
     /// Skin backgrounds move. Off, each is drawn once at rest and that frame
     /// is reused.
     pub motion: bool,
-    /// Frames per second for the display window's animation, typing
-    /// included: 30 or 60.
+    /// Frames per second for the display window's skin animation: 30 or 60.
+    /// Typing and other glyph motion are not held to it.
     pub frame_rate: u32,
     pub id: String,
     pub overrides: SkinOverrides,
