@@ -8,6 +8,7 @@ description = "Spoken lines through the operating system's own voices"
 
 [dependencies]
 nanatype-model.workspace = true
+nanatype-audio.workspace = true
 crossbeam-channel.workspace = true
 unicode-segmentation.workspace = true
 
@@ -18,6 +19,11 @@ objc2-avf-audio = { version = "0.3", default-features = false, features = ["std"
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
+    "Foundation",
+    "Foundation_Collections",
+    "Media_Core",
+    "Media_SpeechSynthesis",
+    "Storage_Streams",
     "Win32_Foundation",
     "Win32_Globalization",
     "Win32_Media_Speech",

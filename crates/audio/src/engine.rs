@@ -66,6 +66,11 @@ impl AudioHandle {
         self.send(Command::Unload(id));
     }
 
+    /// Stop `id` mid-play and unload it.
+    pub fn silence(&self, id: SoundId) {
+        self.send(Command::Silence(id));
+    }
+
     pub fn play(&self, voice: Voice) {
         self.send(Command::Play(voice));
     }

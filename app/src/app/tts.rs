@@ -188,23 +188,32 @@ impl<S: Speak> Narrator<S> {
     }
 }
 
-/// The system engine, started the first time something is said.
+/// The system engine, started the first time something is said. Voices it
+/// synthesizes to sound play through the app's own output.
 pub struct Lazy {
     tts: Option<Tts>,
     post: Arc<dyn Fn(Msg) + Send + Sync>,
+    audio: nanatype_audio::AudioHandle,
 }
 
 impl Lazy {
-    pub fn new(post: impl Fn(Msg) + Send + Sync + 'static) -> Self {
+    pub fn new(
+        post: impl Fn(Msg) + Send + Sync + 'static,
+        audio: nanatype_audio::AudioHandle,
+    ) -> Self {
         Self {
             tts: None,
             post: Arc::new(post),
+            audio,
         }
     }
     fn get(&mut self) -> &mut Tts {
         self.tts.get_or_insert_with(|| {
             let post = self.post.clone();
-            Tts::new(move |e| post(Msg::Tts(TtsMsg::Event(e))))
+            Tts::with_audio(
+                move |e| post(Msg::Tts(TtsMsg::Event(e))),
+                self.audio.clone(),
+            )
         })
     }
     pub fn request_voices(&mut self) {

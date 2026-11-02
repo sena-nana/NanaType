@@ -63,6 +63,15 @@ impl std::error::Error for DecodeError {}
 
 /// Decode WAV, OGG Vorbis, FLAC or MP3 bytes. `extension` is a hint only.
 pub fn decode(bytes: Vec<u8>, extension: Option<&str>) -> Result<Pcm, DecodeError> {
+    decode_up_to(bytes, extension, MAX_SECONDS)
+}
+
+/// [`decode`] for sounds up to `max_seconds` long (a line read aloud).
+pub fn decode_up_to(
+    bytes: Vec<u8>,
+    extension: Option<&str>,
+    max_seconds: u32,
+) -> Result<Pcm, DecodeError> {
     let mut hint = Hint::new();
     if let Some(ext) = extension {
         hint.with_extension(ext);
@@ -90,7 +99,7 @@ pub fn decode(bytes: Vec<u8>, extension: Option<&str>) -> Result<Pcm, DecodeErro
         .map_err(|e| DecodeError::Unsupported(e.to_string()))?;
     let mut channels = 0u16;
     let mut out: Vec<f32> = Vec::new();
-    let limit = rate as usize * MAX_SECONDS as usize * 2;
+    let limit = rate as usize * max_seconds as usize * 2;
     loop {
         let packet = match format.next_packet() {
             Ok(p) => p,

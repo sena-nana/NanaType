@@ -12,7 +12,7 @@ mod engine;
 mod mixer;
 mod supervise;
 
-pub use decode::{DecodeError, Pcm, decode};
+pub use decode::{DecodeError, Pcm, decode, decode_up_to};
 pub use engine::{AudioEngine, AudioError, AudioHandle, AudioStatus, list_devices};
 pub use mixer::{Bus, Scheduled, SoundId, Voice};
 

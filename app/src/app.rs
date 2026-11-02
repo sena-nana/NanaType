@@ -321,7 +321,7 @@ impl App {
         );
         let mut app = Self {
             speech: speech::Speech::new(paths.data.join("speech"), post.clone()),
-            tts: tts::Narrator::new(tts::Lazy::new(post.clone())),
+            tts: tts::Narrator::new(tts::Lazy::new(post.clone(), workers.audio.clone())),
             translate: translate::Translate::new(&paths.config, post.clone()),
             plugins: Default::default(),
             plugin_activation: Default::default(),

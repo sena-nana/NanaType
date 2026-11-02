@@ -4065,6 +4065,7 @@ name = "nanatype-tts"
 version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
+ "nanatype-audio",
  "nanatype-model",
  "objc2 0.6.4",
  "objc2-avf-audio",

@@ -1,11 +1,17 @@
 //! Lines read aloud by the operating system's own voices: AVSpeechSynthesizer
-//! on macOS, SAPI on Windows. No network and no models; other systems stay
-//! silent. One worker thread owns the engine, so callers never block on it.
+//! on macOS; on Windows the OneCore voices (WinRT, played through the app's
+//! own audio output) and the SAPI ones. No network and no models; other
+//! systems stay silent. One worker thread owns the engine, so callers never
+//! block on it.
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(windows)]
+mod onecore;
+#[cfg(windows)]
 mod sapi;
 mod text;
+#[cfg_attr(not(windows), allow(dead_code))]
+mod timed;
 
 pub use text::{speakable, speakable_units};
 
@@ -92,12 +98,28 @@ pub struct Tts {
 
 impl Tts {
     pub fn new(deliver: impl Fn(Event) + Send + Sync + 'static) -> Self {
+        Self::start(deliver, None)
+    }
+
+    /// Like [`Self::new`], with the app's audio output: voices the engine
+    /// synthesizes to audio (Windows OneCore) play there, on its device.
+    pub fn with_audio(
+        deliver: impl Fn(Event) + Send + Sync + 'static,
+        audio: nanatype_audio::AudioHandle,
+    ) -> Self {
+        Self::start(deliver, Some(audio))
+    }
+
+    fn start(
+        deliver: impl Fn(Event) + Send + Sync + 'static,
+        audio: Option<nanatype_audio::AudioHandle>,
+    ) -> Self {
         let (tx, rx) = crossbeam_channel::unbounded();
         let deliver: Deliver = Arc::new(deliver);
         // Without a thread nothing is said; the handle still works.
         let _ = std::thread::Builder::new()
             .name("nanatype-tts".into())
-            .spawn(move || run(rx, deliver));
+            .spawn(move || run(rx, deliver, audio));
         Self { tx, next: 0 }
     }
 
@@ -147,17 +169,32 @@ fn clamp_or(v: f32, lo: f32, hi: f32, fallback: f32) -> f32 {
     }
 }
 
-fn engine() -> Option<Box<dyn Engine>> {
+#[allow(unused_variables)]
+fn engine(audio: Option<nanatype_audio::AudioHandle>) -> Option<Box<dyn Engine>> {
     #[cfg(target_os = "macos")]
     return Some(Box::new(macos::Mac::new()));
     #[cfg(windows)]
-    return sapi::Sapi::new().map(|e| Box::new(e) as Box<dyn Engine>);
+    return onecore::System::new(audio).map(|e| Box::new(e) as Box<dyn Engine>);
     #[cfg(not(any(target_os = "macos", windows)))]
     None
 }
 
-fn run(rx: Receiver<Command>, deliver: Deliver) {
-    let mut engine = engine();
+/// Voices from two engines in one list: `first`'s, then `second`'s whose
+/// names `first` does not have.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn merge_voices(first: Vec<Voice>, second: Vec<Voice>) -> Vec<Voice> {
+    let mut voices = first;
+    for voice in second {
+        if !voices.iter().any(|v| v.name == voice.name) {
+            voices.push(voice);
+        }
+    }
+    voices.sort_by(|a, b| (&a.language, &a.name).cmp(&(&b.language, &b.name)));
+    voices
+}
+
+fn run(rx: Receiver<Command>, deliver: Deliver, audio: Option<nanatype_audio::AudioHandle>) {
+    let mut engine = engine(audio);
     // Said or queued and not reported finished yet, oldest first.
     let mut open: Vec<u64> = Vec::new();
     loop {
@@ -258,6 +295,27 @@ mod tests {
         assert_eq!(utf16_range(text, 2, 2), (4, 4));
         assert_eq!(utf16_range(text, 4, 1), (8, 1));
         assert_eq!(utf16_range(text, 9, 3), (9, 0));
+    }
+
+    #[test]
+    fn two_engines_list_each_name_once() {
+        let voice = |id: &str, name: &str, language: &str| Voice {
+            id: id.into(),
+            name: name.into(),
+            language: language.into(),
+        };
+        let merged = merge_voices(
+            vec![
+                voice("onecore:zira", "Microsoft Zira", "en-US"),
+                voice("onecore:haruka", "Microsoft Haruka", "ja-JP"),
+            ],
+            vec![
+                voice("sapi:zira", "Microsoft Zira", "en-US"),
+                voice("sapi:zira-desktop", "Microsoft Zira Desktop", "en-US"),
+            ],
+        );
+        let ids: Vec<&str> = merged.iter().map(|v| v.id.as_str()).collect();
+        assert_eq!(ids, ["onecore:zira", "sapi:zira-desktop", "onecore:haruka"]);
     }
 
     #[test]

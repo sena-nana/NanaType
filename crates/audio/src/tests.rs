@@ -305,3 +305,51 @@ fn backoff_grows_and_caps() {
     assert_eq!(supervise::backoff(3), Duration::from_secs(2));
     assert_eq!(supervise::backoff(u32::MAX), supervise::BACKOFF_MAX);
 }
+
+#[test]
+fn speech_stops_mid_play_and_keeps_its_own_volume() {
+    let mut m = Mixer::new(48_000);
+    let id: SoundId = "tts:1".into();
+    let long = Arc::new(Pcm {
+        rate: 48_000,
+        channels: 1,
+        samples: vec![0.5; 48_000],
+    });
+    m.apply(Command::Load(id.clone(), long));
+    // The sound effects master does not turn a voice down.
+    m.apply(Command::Master(0.0));
+    m.apply(Command::Play(Voice {
+        sound: id.clone(),
+        bus: Bus::Speech,
+        gain: 1.0,
+        pitch: 1.0,
+    }));
+    let mut out = vec![0.0f32; 256 * 2];
+    m.render(&mut out, 2, Instant::now());
+    assert!((out[0] - 0.5).abs() < 1e-6);
+    m.apply(Command::Silence(id.clone()));
+    m.render(&mut out, 2, Instant::now());
+    assert_eq!(m.voices(), 0);
+    assert!(out.iter().all(|s| *s == 0.0));
+    // Unloaded with it.
+    m.apply(Command::Play(Voice {
+        sound: id,
+        bus: Bus::Speech,
+        gain: 1.0,
+        pitch: 1.0,
+    }));
+    assert_eq!(m.voices(), 0);
+}
+
+#[test]
+fn a_long_reading_decodes_past_the_sound_limit() {
+    // The limit allows stereo: a mono sound twice as long is over it.
+    let samples = vec![0i16; 8_000 * (2 * crate::decode::MAX_SECONDS as usize + 1)];
+    let bytes = wav(8_000, &samples);
+    assert!(matches!(
+        decode(bytes.clone(), Some("wav")),
+        Err(DecodeError::TooLong)
+    ));
+    let pcm = decode_up_to(bytes, Some("wav"), 600).unwrap();
+    assert_eq!(pcm.frames(), samples.len());
+}

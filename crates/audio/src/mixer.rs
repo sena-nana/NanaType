@@ -19,6 +19,8 @@ pub enum Bus {
     Ui,
     /// Keystrokes in the input window.
     Keys,
+    /// A voice reading lines aloud: its volume is its own, not the master's.
+    Speech,
 }
 
 impl Bus {
@@ -28,6 +30,7 @@ impl Bus {
             Self::Effects => 1,
             Self::Ui => 2,
             Self::Keys => 3,
+            Self::Speech => 4,
         }
     }
 }
@@ -60,9 +63,16 @@ struct Playing {
 pub(crate) enum Command {
     Load(SoundId, Arc<Pcm>),
     Unload(SoundId),
+    /// Stop `id` where it plays (and drop it from the schedule), then unload it.
+    Silence(SoundId),
     Play(Voice),
-    Schedule { epoch: u64, items: Vec<Scheduled> },
-    Cancel { epoch: u64 },
+    Schedule {
+        epoch: u64,
+        items: Vec<Scheduled>,
+    },
+    Cancel {
+        epoch: u64,
+    },
     Master(f32),
     BusGain(Bus, f32),
 }
@@ -73,7 +83,7 @@ pub(crate) struct Mixer {
     voices: Vec<Playing>,
     pending: Vec<(u64, Scheduled)>,
     master: f32,
-    buses: [f32; 4],
+    buses: [f32; 5],
 }
 
 impl Mixer {
@@ -84,7 +94,7 @@ impl Mixer {
             voices: Vec::with_capacity(MAX_VOICES),
             pending: Vec::with_capacity(256),
             master: 0.8,
-            buses: [1.0; 4],
+            buses: [1.0; 5],
         }
     }
 
@@ -95,6 +105,12 @@ impl Mixer {
             }
             Command::Unload(id) => {
                 self.sounds.remove(&id);
+            }
+            Command::Silence(id) => {
+                if let Some(pcm) = self.sounds.remove(&id) {
+                    self.voices.retain(|v| !Arc::ptr_eq(&v.pcm, &pcm));
+                }
+                self.pending.retain(|(_, s)| s.voice.sound != id);
             }
             Command::Play(voice) => self.start(&voice, 0),
             Command::Schedule { epoch, items } => {
@@ -158,6 +174,11 @@ impl Mixer {
         let buses = self.buses;
         let master = self.master;
         self.voices.retain_mut(|v| {
+            let master = if v.bus == Bus::Speech.index() {
+                1.0
+            } else {
+                master
+            };
             let gain = v.gain * buses[v.bus] * master;
             let len = v.pcm.frames() as f64;
             let start = v.delay.min(frames);

@@ -78,7 +78,7 @@ Turning an output off and back on within 5 seconds reuses the original sender, a
 
 ### Text to speech
 
-- **Settings › Voice › Text to speech › Read sent lines aloud** (off by default) reads each line with the operating system's own voices as it starts on the display: AVSpeechSynthesizer on macOS, SAPI on Windows. Nothing is downloaded and nothing leaves the computer; install more voices in the system settings, then choose **Refresh voices**.
+- **Settings › Voice › Text to speech › Read sent lines aloud** (off by default) reads each line with the operating system's own voices as it starts on the display: AVSpeechSynthesizer on macOS; on Windows both the OneCore voices (WinRT, played through NanaType's own sound output, so on the output device chosen under **Sound**, with word timing) and the SAPI voices, each name listed once (the OneCore one kept). Nothing is downloaded and nothing leaves the computer; install more voices in the system settings, then choose **Refresh voices**.
 - What is read is the line's text: ruby reads as its base, a mention as the viewer's name, and stickers, images and markers are left out. A line of only stickers or punctuation is not read.
 - A new line cuts off the one being read. **Skip line** and **Clear display** stop reading; **Replay the last line** reads it again.
 - Pick a **Default voice** and one per character (the list shows the interface language's voices first; **Voice language** shows others or all). **Rate** and **Volume** apply to every voice, and **Test** plays a sample.
