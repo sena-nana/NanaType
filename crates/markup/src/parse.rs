@@ -241,6 +241,15 @@ impl Builder<'_> {
             self.header(&tag, range);
             return;
         }
+        // `[speaker=奈奈]` is the header's `speaker`, on its own.
+        if tag.name == "speaker" && !tag.close {
+            let header = Tag {
+                name: "@speaker".into(),
+                ..tag
+            };
+            self.header(&header, range);
+            return;
+        }
         if tag.name == "align" {
             if self.ruby.is_some() {
                 self.diag(range, DiagnosticKind::IgnoredInRuby(tag.name));
@@ -342,11 +351,16 @@ impl Builder<'_> {
             args: entries.clone(),
             ..tag.clone()
         };
-        let mut meta = self.meta;
+        let mut meta = self.meta.clone();
         for (key, v) in &entries {
             let ok = match key.as_str() {
                 "auto" => value::ms(v).map(|ms| meta.auto_advance_ms = Some(ms)),
                 "after" => value::after(v, tag).map(|a| meta.after = Some(a)),
+                "speaker" => {
+                    let name = v.trim();
+                    (!name.is_empty() && name.len() <= 256)
+                        .then(|| meta.speaker = Some(name.to_owned()))
+                }
                 "delay" | "per" => Some(()),
                 _ => None,
             };

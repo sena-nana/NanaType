@@ -221,6 +221,28 @@ fn header_sets_line_meta_only_at_the_start() {
 }
 
 #[test]
+fn a_line_can_name_its_speaker() {
+    let parsed = parse("[@speaker=奈奈 auto=500]你好");
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+    assert_eq!(parsed.meta.speaker.as_deref(), Some("奈奈"));
+    assert_eq!(parsed.meta.auto_advance_ms, Some(500));
+    // `[speaker=…]` on its own, quoted for spaces, or by number.
+    let named = parse("[speaker=\"Guest Star\"]hi");
+    assert_eq!(named.meta.speaker.as_deref(), Some("Guest Star"));
+    assert_eq!(named.doc.plain_text(), "hi");
+    assert_eq!(parse("[speaker=2]hi").meta.speaker.as_deref(), Some("2"));
+    // Only at the start, and never empty.
+    let late = parse("hi[speaker=奈奈]");
+    assert_eq!(late.diagnostics[0].kind, DiagnosticKind::MisplacedHeader);
+    assert_eq!(late.meta.speaker, None);
+    assert!(!parse("[@speaker=\"\"]hi").diagnostics.is_empty());
+    // It round-trips in the header.
+    let line = serialize_line(&named.doc, &named.meta);
+    assert_eq!(line, "[@ speaker=\"Guest Star\"]hi");
+    assert_eq!(parse(&line).meta, named.meta);
+}
+
+#[test]
 fn newlines_split_paragraphs_with_styles_kept_open() {
     let parsed = parse("[b]一\n二[/b]");
     assert_eq!(parsed.doc.paragraphs.len(), 2);

@@ -277,7 +277,7 @@ impl Core {
     }
 
     pub fn draft_meta(&self) -> LineMeta {
-        self.draft_meta
+        self.draft_meta.clone()
     }
 
     /// The sent line that `line` replays, when it is the last replay.
@@ -356,11 +356,27 @@ impl Core {
         }
     }
 
+    /// Who says a line with `meta`: the character its `speaker` names, or
+    /// the usual speaker when it names none (or one not found).
+    fn speaker_for(&self, meta: &LineMeta) -> Speaker {
+        match meta
+            .speaker
+            .as_deref()
+            .and_then(|key| self.settings.general.character_named(key))
+        {
+            Some(character) => Speaker {
+                portrait: self.display.portrait.clone(),
+                ..character.speaker()
+            },
+            None => self.speaker(),
+        }
+    }
+
     /// In mirror mode the draft on the display follows a speaker change.
     fn refresh_draft_speaker(&mut self, fx: &mut Effects) {
         if self.mode() == InputMode::Mirror && !self.mirror_committed && self.display.line.is_none()
         {
-            let speaker = self.speaker();
+            let speaker = self.speaker_for(&self.draft_meta);
             if self.display.speaker != speaker {
                 self.display.speaker = speaker;
                 self.touch_display(fx);
@@ -377,7 +393,10 @@ impl Core {
         let mut fx = Effects::default();
         match cmd {
             Cmd::DraftChanged(doc) => self.draft_changed(doc, now, &mut fx),
-            Cmd::DraftMeta(meta) => self.draft_meta = meta,
+            Cmd::DraftMeta(meta) => {
+                self.draft_meta = meta;
+                self.refresh_draft_speaker(&mut fx);
+            }
             Cmd::PageBreaks { line, breaks } => self.page_breaks(line, &breaks, now, &mut fx),
             Cmd::SpeechPaced(line) => self.speech(line, now, &mut fx, |p| p.follow_speech(now)),
             Cmd::SpeechReached { line, through } => {
@@ -388,7 +407,7 @@ impl Core {
             Cmd::SendMarkup(markup) => {
                 let parsed = nanatype_markup::parse(&markup);
                 if !parsed.doc.is_blank() {
-                    let mut line = Line::new(parsed.doc, self.speaker());
+                    let mut line = Line::new(parsed.doc, self.speaker_for(&parsed.meta));
                     line.meta = parsed.meta;
                     self.submit(line, now, &mut fx);
                 }
@@ -678,7 +697,7 @@ impl Core {
         self.display.empty = doc.is_blank();
         self.display.doc = Arc::new(doc);
         self.display.entrance = self.entrance();
-        self.display.speaker = self.speaker();
+        self.display.speaker = self.speaker_for(&self.draft_meta);
         self.display.reply = self.reply.clone();
         self.display.reveal = reveal;
         self.display.mirror_reveal_ms = mirror_times;
@@ -709,7 +728,7 @@ impl Core {
         if self.recall.is_none() {
             self.stash = Some(Draft {
                 doc: self.draft.clone(),
-                meta: self.draft_meta,
+                meta: self.draft_meta.clone(),
             });
         }
         self.recall = next;
@@ -736,7 +755,7 @@ impl Core {
         }
         self.sent.push_back(Draft {
             doc: doc.clone(),
-            meta: self.draft_meta,
+            meta: self.draft_meta.clone(),
         });
         while self.sent.len() > RECALL_CAP {
             self.sent.pop_front();
@@ -748,7 +767,7 @@ impl Core {
         if self.settings.general.input_presence == InputPresence::Summon {
             fx.hide_input = true;
         }
-        let mut line = Line::new(doc, self.speaker());
+        let mut line = Line::new(doc, self.speaker_for(&self.draft_meta));
         line.meta = std::mem::take(&mut self.draft_meta);
         line.reply = self.reply.take().map(Box::new);
         fx.reply_changed |= line.reply.is_some();

@@ -510,11 +510,11 @@ fn mirror_recall_and_restore_publish_the_editor_contents_without_submitting() {
 fn recall_restores_line_headers_and_the_stashed_drafts_header() {
     let mut core = core_with(|_| {});
     let original = parse("[@auto=200 after=clear delay=100][b]清屏台词[/b]");
-    core.handle(Cmd::DraftMeta(original.meta), 0);
+    core.handle(Cmd::DraftMeta(original.meta.clone()), 0);
     core.handle(Cmd::DraftChanged(original.doc.clone()), 0);
     core.handle(Cmd::Send, 1);
     let stashed = parse("[@after=fade delay=500 per=20]暂存草稿");
-    core.handle(Cmd::DraftMeta(stashed.meta), 2);
+    core.handle(Cmd::DraftMeta(stashed.meta.clone()), 2);
     core.handle(Cmd::DraftChanged(stashed.doc.clone()), 2);
     for (direction, expected) in [(-1, &original), (1, &stashed), (-1, &original)] {
         let fx = core.handle(Cmd::Recall(direction), 3);
@@ -540,7 +540,7 @@ fn recall_restores_line_headers_and_the_stashed_drafts_header() {
 fn mode_round_trips_and_edited_recall_preserve_sends_and_headers() {
     let mut core = core_with(|_| {});
     let original = parse("[@auto=250 after=clear delay=100][b]初稿[/b][pause]尾声");
-    core.handle(Cmd::DraftMeta(original.meta), 0);
+    core.handle(Cmd::DraftMeta(original.meta.clone()), 0);
     core.handle(Cmd::DraftChanged(original.doc.clone()), 0);
     for (at, mode) in [InputMode::Mirror, InputMode::Compose, InputMode::Mirror]
         .into_iter()
@@ -671,7 +671,7 @@ fn cancelled_lines_stop_speaking() {
 fn typed_line_headers_reach_the_sent_line() {
     let mut core = core_with(|_| {});
     let parsed = parse("[@after=clear delay=100]hi");
-    core.handle(Cmd::DraftMeta(parsed.meta), 0);
+    core.handle(Cmd::DraftMeta(parsed.meta.clone()), 0);
     core.handle(Cmd::DraftChanged(parsed.doc), 0);
     let fx = core.handle(Cmd::Send, 1);
     let line = fx
@@ -1354,4 +1354,37 @@ fn typing_paced_by_speech_hides_what_the_voice_has_not_reached() {
     // The voice is done: the rest types on.
     core.handle(Cmd::SpeechEnded(line), 200);
     assert_eq!(core.display().reveal.hidden_from, 11);
+}
+
+#[test]
+fn a_line_can_be_said_by_another_character() {
+    let mut core = core_with(|s| {
+        s.general.characters.push(nanatype_settings::Character {
+            name: "Guest".into(),
+            avatar: Some("blob:guest".into()),
+            ..Default::default()
+        });
+    });
+    let said_by = |fx: &Effects| {
+        fx.events.iter().find_map(|e| match e {
+            Event::LineSubmitted(line) => Some(line.speaker.name.clone()),
+            _ => None,
+        })
+    };
+    // By name (any case), or by number; only that line.
+    let parsed = parse("[@speaker=guest]hi");
+    core.handle(Cmd::DraftMeta(parsed.meta.clone()), 0);
+    core.handle(Cmd::DraftChanged(parsed.doc.clone()), 0);
+    let fx = core.handle(Cmd::Send, 0);
+    assert_eq!(said_by(&fx).as_deref(), Some("Guest"));
+    assert_eq!(core.display().speaker.avatar.as_deref(), Some("blob:guest"));
+    let fx = core.handle(Cmd::SendMarkup("[speaker=1]back".into()), 10);
+    assert_eq!(said_by(&fx).as_deref(), Some("奈奈"));
+    let fx = type_and_send(&mut core, "plain", 20);
+    assert_eq!(said_by(&fx).as_deref(), Some("奈奈"));
+    // A name not in the list falls back to the active character.
+    let fx = core.handle(Cmd::SendMarkup("[speaker=Nobody]x".into()), 30);
+    assert_eq!(said_by(&fx).as_deref(), Some("奈奈"));
+    let fx = core.handle(Cmd::SendMarkup("[speaker=9]x".into()), 40);
+    assert_eq!(said_by(&fx).as_deref(), Some("奈奈"));
 }

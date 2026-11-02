@@ -45,7 +45,7 @@ pub enum AfterLine {
     Clear { delay_ms: u32 },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LineMeta {
     /// Continue to the next queued line this long after the reveal ends.
@@ -54,6 +54,10 @@ pub struct LineMeta {
     /// Overrides the settings' after-line behaviour for this line.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub after: Option<AfterLine>,
+    /// Say this line as another character: a name, or its number in the
+    /// list from 1. One not found leaves the active character.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speaker: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

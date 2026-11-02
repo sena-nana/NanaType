@@ -272,6 +272,9 @@ fn marker_tag(marker: &Marker) -> String {
 /// Markup with a `[@...]` header carrying the line's meta, when it has any.
 pub fn serialize_line(doc: &Document, meta: &LineMeta) -> String {
     let mut header = Vec::new();
+    if let Some(name) = &meta.speaker {
+        header.push(format!("speaker={}", crate::value::quote(name)));
+    }
     if let Some(ms) = meta.auto_advance_ms {
         header.push(format!("auto={ms}"));
     }

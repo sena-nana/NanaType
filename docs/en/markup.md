@@ -78,6 +78,7 @@ Written at the very start:
 
 - `auto`: how many milliseconds after playback finishes to advance to the next line automatically (in queue mode).
 - `after`: `hold` to keep it, `fade` to fade out (`delay` is how long it stays in milliseconds, `per` adds milliseconds per character), `clear` to remove it immediately.
+- `speaker`: say this one line as another character (its name, avatar, colour and voice), leaving the active character as it is. Give the character's name (matched as written, then ignoring case; quote it when it has spaces: `[@speaker="Guest Star"]`) or its number in the list under **Settings › General › Characters**, from 1 (`[@speaker=2]`). One not found leaves the active character. It can also be written on its own as `[speaker=Nana]`, likewise only at the very start.
 
 ## Quick phrase templates
 

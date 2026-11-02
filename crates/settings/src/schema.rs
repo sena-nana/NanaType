@@ -513,6 +513,25 @@ impl General {
             .unwrap_or_default()
     }
 
+    /// The character a line's `speaker` names: by name (exactly, then
+    /// ignoring case), else by its number in the list from 1.
+    pub fn character_named(&self, key: &str) -> Option<&Character> {
+        let key = key.trim();
+        self.characters
+            .iter()
+            .find(|c| c.name.trim() == key)
+            .or_else(|| {
+                let lower = key.to_lowercase();
+                self.characters
+                    .iter()
+                    .find(|c| c.name.trim().to_lowercase() == lower)
+            })
+            .or_else(|| {
+                let n: usize = key.strip_prefix('#').unwrap_or(key).parse().ok()?;
+                self.characters.get(n.checked_sub(1)?)
+            })
+    }
+
     /// Make character `i` the active one; out of range does nothing.
     pub fn select_character(&mut self, i: usize) {
         if i < self.characters.len() {
