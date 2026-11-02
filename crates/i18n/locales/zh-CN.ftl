@@ -30,6 +30,9 @@ common-cancel = 取消
 # Chat panel
 history-role-host = 主播
 history-role-viewer = 观众
+history-search = 搜索历史记录
+history-search-close = 关闭搜索
+history-search-placeholder = 内容或名字
 
 # Skin preview editor
 skin-edit-invalid = 请输入有效数值和十六进制颜色。留空表示皮肤默认值。

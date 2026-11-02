@@ -30,6 +30,9 @@ common-cancel = Cancel
 # Chat panel
 history-role-host = Host
 history-role-viewer = Viewer
+history-search = Search history
+history-search-close = Close search
+history-search-placeholder = Text or name
 
 # Skin preview editor
 skin-edit-invalid = Enter valid numbers and a hex color. Leave fields empty for skin defaults.

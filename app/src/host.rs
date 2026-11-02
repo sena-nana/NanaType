@@ -1507,6 +1507,14 @@ impl RuntimeProgram for Host {
         if key.state != KeyState::Pressed {
             return Ok(RuntimeProgramUpdate::default());
         }
+        // Esc folds the history window's search and shows the whole log again.
+        if WindowKind::from_id(id) == Some(WindowKind::History)
+            && chord_of(key) == Hotkey::bare("Escape")
+            && self.app.ui.history_search.with_untracked(Option::is_some)
+        {
+            self.app.ui.history_search.set(None);
+            return Ok(self.finish());
+        }
         if let Some(target) = self.app.ui.recording.get_untracked() {
             let code = key.physical.0.as_ref();
             if code == "Escape" {

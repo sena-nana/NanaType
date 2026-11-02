@@ -145,6 +145,9 @@ pub struct Stage {
     pub peer_now: Signal<u64>,
     pub history_now: Signal<u64>,
     pub history: Signal<Arc<Vec<HistoryRow>>>,
+    /// The history window's search: `None` while folded away. It filters
+    /// that window only, and only while [`history::search_allowed`].
+    pub history_search: Signal<Option<String>>,
     pub history_index: Computed<Arc<HashMap<u64, usize>>>,
     /// The draft being typed, and the editor around it.
     pub draft: Signal<Arc<Document>>,
@@ -239,6 +242,7 @@ impl Stage {
             peer_now: signal(crate::clock::now_ms()),
             history_now: signal(crate::clock::now_ms()),
             history,
+            history_search: signal(None),
             history_index,
             draft: signal(Arc::new(Document::new())),
             source: signal(Source::default()),

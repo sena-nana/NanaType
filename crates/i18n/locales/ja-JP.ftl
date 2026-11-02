@@ -30,6 +30,9 @@ common-cancel = キャンセル
 # Chat panel
 history-role-host = 配信者
 history-role-viewer = 視聴者
+history-search = 履歴を検索
+history-search-close = 検索を閉じる
+history-search-placeholder = 内容または名前
 
 # Skin preview editor
 skin-edit-invalid = 有効な数値と16進数の色を入力してください。空欄はスキンの既定値です。

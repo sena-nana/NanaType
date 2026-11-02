@@ -11,8 +11,10 @@ use nana_ui::runtime::view::{
     widget,
 };
 use nana_ui::runtime::{
-    AnimatableProperty, NodeStyle, PaintTransform, ScrollAxes, ScrollView, SizeChanged, Stack, Text,
+    Activate, AnimatableProperty, IconButton, NodeStyle, PaintTransform, ScrollAxes, ScrollView,
+    SizeChanged, Stack, Text, TextChanged, TextInput, TextInputState,
 };
+use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{
     AlignSpec, BackgroundImage, CssGradient, Easing, GradientStop, LengthSpec, LinearGradient,
     OverflowSpec, PointerEventsSpec, PositionSpec,
@@ -846,8 +848,38 @@ fn selected_rows(rows: &[HistoryRow], selection: Selection) -> impl Iterator<Ite
         .take(selection.visible)
 }
 
+/// Whether the history window offers its search: while it takes clicks, and
+/// not while it is sent to OBS over Spout/Syphon, whose picture is this same
+/// window's. So the broadcast never shows a filtered log or the field.
+pub fn search_allowed(s: &nanatype_settings::Settings) -> bool {
+    s.overlays.history.lock != nanatype_settings::Lock::Locked && !s.output.history.enabled
+}
+
+/// The search that filters the window now, lowercased; `None` shows all.
+fn query(ui: Stage) -> Option<String> {
+    let q = ui
+        .history_search
+        .with(|q| q.as_deref().map(|q| q.trim().to_lowercase()))?;
+    (!q.is_empty() && ui.settings.with(|s| search_allowed(s))).then_some(q)
+}
+
+/// A row whose text or speaker contains `q` (already lowercased).
+pub fn row_matches(row: &HistoryRow, q: &str) -> bool {
+    row.item.author.to_lowercase().contains(q) || row.doc.plain_text().to_lowercase().contains(q)
+}
+
 fn visible_keys(ui: Stage) -> Vec<u64> {
     let selection = selection(ui);
+    // A search looks through the whole kept log, not just the shown rows.
+    if let Some(q) = query(ui) {
+        return ui.history.with(|rows| {
+            rows.iter()
+                .filter(|row| row.item.line.is_none() || !selection.hidden.contains(&row.item.line))
+                .filter(|row| row_matches(row, &q))
+                .map(|row| row.key)
+                .collect()
+        });
+    }
     ui.history.with(|rows| {
         let mut keys: Vec<_> = selected_rows(rows, selection).map(|r| r.key).collect();
         keys.reverse();
@@ -922,12 +954,14 @@ impl LogSettings {
 }
 
 pub fn history_window(ui: Stage) -> impl IntoView {
-    history_window_with(ui, || widget(Stack::column(0.)).into_any())
+    history_window_with(ui, false, || widget(Stack::column(0.)).into_any())
 }
 
-/// [`history_window`] with `overlay` (the product's plugin views) above the log.
+/// [`history_window`] with `overlay` (the product's plugin views) above the
+/// log, and with `search` a search button in its corner.
 pub fn history_window_with(
     ui: Stage,
+    search: bool,
     overlay: impl Fn() -> AnyView + Send + Sync + 'static,
 ) -> impl IntoView {
     let overlay = std::sync::Arc::new(overlay);
@@ -1133,8 +1167,76 @@ pub fn history_window_with(
                 above,
                 overlay(),
             )),
+            search.then(|| search_bar(ui)),
         ))
     })
+}
+
+/// A quiet search button in the window's top corner that unfolds into a
+/// field. The button again (or Esc, through the host) folds it and clears it.
+fn search_bar(ui: Stage) -> AnyView {
+    let open = move || ui.history_search.with(Option::is_some);
+    let label = ui.now_t("history-search");
+    let close = ui.now_t("history-search-close");
+    let cluster = widget(Stack::row(0.0).gap(4.0).align(AlignSpec::Center));
+    // Across the window's top, at its end; only the field and the button
+    // take clicks, so the rest still drags the window.
+    let layer = widget(
+        Stack::column(0.0)
+            .padding(6.0)
+            .align(AlignSpec::End)
+            .with_layout(|l| {
+                l.position = PositionSpec::Absolute;
+                l.offset_left = Some(LengthSpec::Px(0.0));
+                l.offset_top = Some(LengthSpec::Px(0.0));
+                l.offset_right = Some(LengthSpec::Px(0.0));
+                l.pointer_events = Some(PointerEventsSpec::None);
+            }),
+    );
+    layer
+        .visible(move || ui.settings.with(|s| search_allowed(s)))
+        .children(
+            cluster.children((
+                widget(Stack::row(0.0).width(LengthSpec::Px(160.0)))
+                    .visible(open)
+                    .children(
+                        widget(
+                            TextInput::new("")
+                                .placeholder(ui.now_t("history-search-placeholder"))
+                                .size(ControlSize::Small),
+                        )
+                        // Folding clears it, so it opens empty.
+                        .bind(move |t: &mut TextInput| {
+                            if !open() && !t.state.value.is_empty() {
+                                t.state = TextInputState::new(String::new());
+                            }
+                        })
+                        .on(move |e: &TextChanged| {
+                            ui.history_search.set(Some(e.value.to_string()));
+                        }),
+                    ),
+                widget(
+                    IconButton::new(nana_ui::icons_tabler::SEARCH, label.clone())
+                        .size(ControlSize::Small)
+                        .kind(ButtonKind::Ghost)
+                        .with_tooltip(label.clone()),
+                )
+                .bind(move |b: &mut IconButton| {
+                    let shown = open();
+                    b.icon = if shown {
+                        nana_ui::icons_tabler::X
+                    } else {
+                        nana_ui::icons_tabler::SEARCH
+                    };
+                    b.label = if shown { close.clone() } else { label.clone() }.into();
+                })
+                .on(move |_: &Activate| {
+                    ui.history_search
+                        .set(if open() { None } else { Some(String::new()) });
+                }),
+            )),
+        )
+        .into_any()
 }
 
 /// How visible the log is: the newest shown row's opacity, which `fade_after_s`
@@ -1149,7 +1251,8 @@ fn log_presence(ui: Stage) -> f32 {
 
 /// A row said at `at` (unix ms), faded out `fade_after_s` seconds later.
 fn row_opacity(ui: Stage, at: u64, fade_after_s: Option<u32>) -> f32 {
-    let Some(after) = fade_after_s else {
+    // Found rows show however old they are.
+    let Some(after) = fade_after_s.filter(|_| query(ui).is_none()) else {
         return 1.0;
     };
     let age = crate::clock::unix_of(ui.history_now.get()).saturating_sub(at);
@@ -1187,6 +1290,66 @@ fn title_view(skin: &Skin, t: &HistoryTitle) -> AnyView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_filters_the_window_but_never_the_broadcast_output() {
+        let settings = nanatype_settings::Settings::default();
+        let ui = Stage::new(
+            Arc::new(settings.clone()),
+            Arc::new(Skin::default()),
+            nanatype_i18n::Locale::EnUs,
+        );
+        let row = |key, author: &str, text: &str| HistoryRow {
+            key,
+            item: HistoryItem {
+                source: nanatype_model::SourceId::local(),
+                kind: SourceKind::Typewriter,
+                line: None,
+                author: author.into(),
+                avatar: None,
+                doc: Document::plain(text),
+                at: 0,
+                uid: None,
+                reply: None,
+            },
+            doc: Arc::new(Document::plain(text)),
+            reveal: None,
+        };
+        let rows: Vec<HistoryRow> = (0..40)
+            .map(|i| row(10 + i, "Viewer", "filler"))
+            .chain([
+                row(1, "Nana", "Hello there"),
+                row(2, "Bob", "good night"),
+                row(3, "nana", "bye"),
+            ])
+            .collect();
+        ui.history.set(Arc::new(rows));
+        let shown = settings.history.visible_items as usize;
+        assert_eq!(visible_keys(ui).len(), shown);
+        // Found rows come from the whole kept log, by text or name, in any case.
+        ui.history_search.set(Some(" NANA ".into()));
+        assert_eq!(visible_keys(ui), [1, 3]);
+        ui.history_search.set(Some("NIGHT".into()));
+        assert_eq!(visible_keys(ui), [2]);
+        ui.history_search.set(Some(String::new()));
+        assert_eq!(visible_keys(ui).len(), shown);
+        // The window is what Spout/Syphon sends: while it does, nothing is
+        // filtered, and a locked window cannot be searched either.
+        ui.history_search.set(Some("night".into()));
+        for edit in [
+            (|s: &mut nanatype_settings::Settings| s.output.history.enabled = true)
+                as fn(&mut nanatype_settings::Settings),
+            |s| s.overlays.history.lock = nanatype_settings::Lock::Locked,
+        ] {
+            let mut s = settings.clone();
+            edit(&mut s);
+            assert!(!search_allowed(&s));
+            ui.settings.set(Arc::new(s));
+            assert_eq!(visible_keys(ui).len(), shown);
+        }
+        ui.settings.set(Arc::new(settings));
+        assert_eq!(visible_keys(ui), [2]);
+    }
 
     #[test]
     fn translucent_bubble_artwork_keeps_its_content_opaque() {

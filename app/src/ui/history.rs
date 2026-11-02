@@ -8,7 +8,7 @@ pub use nanatype_frame::ui::history::*;
 use super::Ui;
 
 pub fn history_window(ui: Ui) -> impl IntoView {
-    history_window_with(*ui, move || {
+    history_window_with(*ui, true, move || {
         super::plugins::mounted(ui, nanatype_plugins::Mount::History)
     })
 }
