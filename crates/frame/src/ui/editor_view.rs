@@ -13,6 +13,27 @@ use nanatype_model::{Marker, VtsAction};
 use super::dialogue::Base;
 use super::{I18N, Stage, kit};
 
+/// Text size of the plain (non-preview) editor: a chat box, not the stream.
+pub const PLAIN_TEXT_SIZE: f32 = 16.0;
+
+/// The editor's base text. Plain mode keeps the rich document's
+/// skin-relative sizes and font roles intact and changes only inherited
+/// presentation, never stored spans.
+fn editor_base(ui: Stage) -> Base {
+    let mut base = Base::editor(&ui.skin.get());
+    if !ui.settings.with(|s| s.general.input_skin_preview) {
+        base.size = PLAIN_TEXT_SIZE;
+        base.line_height = base.line_height.min(1.5);
+        base.shadow = None;
+        base.stroke = None;
+        base.weight = 400;
+        base.letter_spacing = 0.0;
+        base.align = nanatype_theme::TextAlign::Start;
+        base.family = Some(crate::skin_theme::NANA_UI_FAMILIES[0].into());
+    }
+    base
+}
+
 /// What the user did in the draft, for the product to turn into a message.
 #[derive(Debug, Clone)]
 pub enum EditorEvent {
@@ -74,20 +95,7 @@ pub fn editor_area<M: Send + 'static>(
     inert: bool,
     send: impl Fn(EditorEvent) -> Option<M> + Clone + Send + Sync + 'static,
 ) -> AnyView {
-    let text_base = move || {
-        // Keep the rich document's skin-relative sizes and font roles intact;
-        // plain mode changes only inherited presentation, never stored spans.
-        let mut base = Base::editor(&ui.skin.get());
-        if !ui.settings.with(|s| s.general.input_skin_preview) {
-            base.shadow = None;
-            base.stroke = None;
-            base.weight = 400;
-            base.letter_spacing = 0.0;
-            base.align = nanatype_theme::TextAlign::Start;
-            base.family = Some(crate::skin_theme::NANA_UI_FAMILIES[0].into());
-        }
-        base
-    };
+    let text_base = move || editor_base(ui);
     let style = move || {
         let mut st = text_base().node_style();
         let preview = ui.settings.with(|s| s.general.input_skin_preview);
@@ -158,7 +166,7 @@ pub fn editor_area<M: Send + 'static>(
                     // Rehydrate image objects in place. NanaUI preserves this
                     // editor's selection and undo stack when its value updates.
                     let urls = ui.asset_urls.get();
-                    let look = Base::editor(&ui.skin.get()).look();
+                    let look = editor_base(ui).look();
                     let value = super::rich::to_rich(
                         &ui.draft.get(),
                         &super::rich::Env {

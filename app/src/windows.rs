@@ -29,7 +29,7 @@ pub enum WindowKind {
 
 /// Height of the input window's toolbar.
 pub const TOOLBAR_H: f32 = 48.0;
-pub const INPUT_SIZE: (f32, f32) = (1200.0, 640.0);
+pub const INPUT_SIZE: (f32, f32) = (960.0, 480.0);
 pub const INPUT_ACTIONS_H: f32 = 56.0;
 pub const INPUT_MIN: (f64, f64) = (720.0, 360.0);
 /// The quick input bar: one line, no chrome.
