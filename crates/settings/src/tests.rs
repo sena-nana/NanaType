@@ -1049,6 +1049,54 @@ fn speech_defaults_migrate_and_activation_is_not_persisted() {
 }
 
 #[test]
+fn tts_is_off_by_default_and_older_files_load_without_it() {
+    let mut settings: Settings =
+        serde_json::from_str(r#"{"schema":5,"general":{"characters":[{"name":"Nana"}]}}"#).unwrap();
+    assert_eq!(settings.tts, TtsSettings::default());
+    assert!(!settings.tts.enabled && !settings.tts.chat && !settings.tts.partners);
+    assert_eq!((settings.tts.rate, settings.tts.volume), (1.0, 1.0));
+    assert_eq!(settings.general.characters[0].voice, None);
+    assert!(!settings.sanitize());
+
+    settings.tts.rate = 9.0;
+    settings.tts.volume = f32::NAN;
+    settings.tts.voice = Some(String::new());
+    settings.general.characters[0].voice = Some("x".repeat(600));
+    settings.sanitize();
+    assert_eq!(settings.tts.rate, TTS_RATE.1);
+    assert_eq!(settings.tts.volume, 1.0);
+    assert_eq!(settings.tts.voice, None);
+    assert_eq!(settings.general.characters[0].voice, None);
+
+    settings.tts.enabled = true;
+    settings.general.characters[0].voice = Some("com.apple.voice.compact.ja-JP.Kyoko".into());
+    let mut value = serde_json::to_value(&settings).unwrap();
+    assert_eq!(migrate(&mut value), Ok(SETTINGS_SCHEMA));
+    assert_eq!(serde_json::from_value::<Settings>(value).unwrap(), settings);
+}
+
+#[test]
+fn character_voices_switch_with_profiles_and_tts_stays_global() {
+    let mut base = Settings::default();
+    base.general.characters[0].voice = Some("narrator".into());
+    let mut singing = base.clone();
+    singing.general.characters[0].voice = Some("singer".into());
+    singing.tts.rate = 1.5;
+    let profile = Profile::capture("p1".into(), "歌回".into(), &singing);
+    assert!(profile.settings.get("tts").is_none());
+
+    let mut here = base.clone();
+    here.tts.enabled = true;
+    let switched = profile.apply(&here);
+    assert_eq!(
+        switched.general.characters[0].voice.as_deref(),
+        Some("singer")
+    );
+    assert_eq!(switched.tts, here.tts);
+    assert_eq!(changed_sections(&base, &here), vec!["tts"]);
+}
+
+#[test]
 fn only_the_send_key_takes_enter_and_ctrl_enter() {
     let meta = |key: &str| Hotkey {
         meta: true,

@@ -13,6 +13,7 @@ pub mod speech;
 mod startup;
 mod stickers;
 mod system;
+pub mod tts;
 pub mod twitch;
 #[cfg(feature = "updates")]
 pub mod update;
@@ -107,6 +108,8 @@ pub struct App {
     pub windows: WindowManager,
     pub scheduler: Scheduler,
     pub speech: speech::Speech,
+    /// Lines read aloud.
+    pub tts: tts::Narrator<tts::Lazy>,
     /// The onboarding skin preview waiting out its step's entrance.
     /// A newer hold replaces it, and the old reveal does nothing.
     onboard_preview_gen: u64,
@@ -308,6 +311,7 @@ impl App {
         );
         let mut app = Self {
             speech: speech::Speech::new(paths.data.join("speech"), post.clone()),
+            tts: tts::Narrator::new(tts::Lazy::new(post.clone())),
             plugins: Default::default(),
             plugin_activation: Default::default(),
             assets: AssetLibrary::new(paths.blobs()),
@@ -1355,6 +1359,9 @@ impl App {
         if let Some(tray) = &self.tray {
             tray.sync(&self.settings);
         }
+        if prev.tts.enabled && !self.settings.tts.enabled {
+            self.tts.silence();
+        }
         if prev.speech != self.settings.speech
             || (locale_changed && self.settings.speech.language.is_none())
         {
@@ -1418,6 +1425,9 @@ impl App {
     fn run_command(&mut self, cmd: Cmd, automatic: bool) {
         if matches!(cmd, Cmd::Recall(_) | Cmd::SendMarkup(_)) {
             self.speech_user_edit();
+        }
+        if matches!(cmd, Cmd::Skip | Cmd::ClearDisplay) {
+            self.tts.silence();
         }
         if self.peer_blocked(&cmd) {
             if matches!(cmd, Cmd::Send) {
@@ -1514,6 +1524,9 @@ impl App {
             });
         }
         for event in &fx.events {
+            if let Event::LineStarted(line) = event {
+                self.tts_line(line);
+            }
             self.twitch_submitted(event);
             self.peer_submitted(event);
             self.bridge_event(event);
@@ -1599,6 +1612,8 @@ impl App {
                 intensity: *intensity,
             },
             Event::Portrait(v) => BridgeEvent::Portrait { variant: v.clone() },
+            // Read aloud, the voice moves the mouth instead (`bridge_speaking`).
+            Event::Speaking(_) if self.settings.tts.enabled => return,
             Event::Speaking(s) => BridgeEvent::Speaking { speaking: *s },
             Event::Shake { amp, ms } => BridgeEvent::Shake { amp: *amp, ms: *ms },
             Event::Vts(action) => BridgeEvent::Vts {
@@ -1626,6 +1641,17 @@ impl App {
             if let Ok(event) = serde_json::to_value(&plugin_out) {
                 self.plugins.broadcast(event, self.ui);
             }
+        }
+        self.bridge.emit(out);
+    }
+
+    /// A voice started or stopped talking.
+    fn bridge_speaking(&mut self, speaking: bool) {
+        let out = BridgeEvent::Speaking { speaking };
+        if self.plugins.has_running()
+            && let Ok(event) = serde_json::to_value(&out)
+        {
+            self.plugins.broadcast(event, self.ui);
         }
         self.bridge.emit(out);
     }
@@ -2073,9 +2099,11 @@ impl App {
             Msg::Window(WindowMsg::SettingsPage(crate::ui::settings::Page::Speech))
         ) {
             self.speech_inventory();
+            self.tts.engine.request_voices();
         }
         match msg {
             Msg::Speech(m) => self.speech_msg(m),
+            Msg::Tts(m) => self.tts_msg(m),
             Msg::Package(m) => self.package_msg(m),
             Msg::Sticker(m) => self.sticker_msg(m),
             Msg::Editor(m) => self.editor_msg(m),
@@ -2204,7 +2232,9 @@ impl App {
         let history = &self.settings.history.chat;
         if include && history.enabled && message.passes(&history.filter) {
             let locale = self.ui.locale.get_untracked();
-            self.run(Cmd::External(message.history_item(locale)));
+            let item = message.history_item(locale);
+            self.tts_chat(&item.doc);
+            self.run(Cmd::External(item));
             self.live_record_row(&message);
         }
         self.chat.push_back(message);

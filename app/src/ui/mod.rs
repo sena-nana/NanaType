@@ -181,6 +181,8 @@ pub const META_LABEL: &str = if cfg!(target_os = "macos") {
 #[derive(Clone, Copy)]
 pub struct Ui {
     pub speech: Signal<Arc<crate::app::speech::State>>,
+    /// The system's voices for reading aloud, once listed.
+    pub tts_voices: Signal<Arc<Vec<nanatype_tts::Voice>>>,
     /// Set synchronously in the editor routing phase, before queued messages/timers.
     pub speech_edit_pending: Signal<bool>,
     pub stage: Stage,
@@ -297,6 +299,7 @@ impl Ui {
             plugin_activation_busy: signal(false),
             plugin_activation_error: signal(None),
             speech: signal(Arc::new(crate::app::speech::State::default())),
+            tts_voices: signal(Arc::new(Vec::new())),
             speech_edit_pending: signal(false),
             twitch: signal(Arc::new(crate::app::twitch::State::default())),
             blivechat: signal(Arc::new(crate::app::blivechat::State::default())),

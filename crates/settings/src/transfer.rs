@@ -69,7 +69,8 @@ const KEPT_ON_RESET: &[&str] = &[
 /// windows (visibility, lock, size; not their positions on screen), the
 /// history overlay and the quick phrases. Everything else is global: the
 /// language, hotkeys, input behaviour, integrations and their endpoints,
-/// outputs, speech, updates, autostart, plugins and devices.
+/// outputs, speech input and text to speech (each character's voice
+/// travels with the characters), updates, autostart, plugins and devices.
 pub const PROFILE_SCOPE: &[&str] = &[
     "/general/characters",
     "/general/character",
@@ -373,6 +374,7 @@ pub fn changed_sections(before: &Settings, after: &Settings) -> Vec<&'static str
         "playback",
         "sound",
         "speech",
+        "tts",
         "skin",
         "overlays",
         "history",

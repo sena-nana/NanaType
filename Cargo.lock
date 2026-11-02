@@ -3746,6 +3746,7 @@ dependencies = [
  "nanatype-speech",
  "nanatype-steam",
  "nanatype-theme",
+ "nanatype-tts",
  "nanatype-twitch",
  "nanatype-update",
  "notify",

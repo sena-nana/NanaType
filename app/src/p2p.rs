@@ -519,6 +519,7 @@ impl App {
         }
         self.refresh_peer_urls();
         for (owner, line, item) in partner_lines {
+            self.tts_partner(&owner, line, &item);
             self.archive_partner(&owner, line, &item);
         }
     }

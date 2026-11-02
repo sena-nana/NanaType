@@ -393,6 +393,7 @@ pub enum Msg {
     Quit,
     // Each domain's messages, handled by its own module in `app/`.
     Speech(SpeechMsg),
+    Tts(TtsMsg),
     Package(PackageMsg),
     Editor(EditorMsg),
     Window(WindowMsg),
@@ -423,6 +424,14 @@ pub enum SpeechMsg {
     ModelDelete,
     ModelProgress(u8),
     ModelDone(Result<(), String>),
+}
+
+pub enum TtsMsg {
+    Event(nanatype_tts::Event),
+    /// List the installed voices again.
+    Refresh,
+    /// Say a sample in a character's voice (`None`: the default voice).
+    Test(Option<usize>),
 }
 
 pub enum PackageMsg {

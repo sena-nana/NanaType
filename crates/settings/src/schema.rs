@@ -311,6 +311,40 @@ impl Default for SpeechSettings {
     }
 }
 
+/// Rates [`TtsSettings::rate`] keeps, as a multiple of the voice's own pace.
+pub const TTS_RATE: (f32, f32) = (0.5, 2.0);
+
+/// Sent lines read aloud by the system's voices. A character's own voice
+/// is [`Character::voice`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TtsSettings {
+    pub enabled: bool,
+    /// For characters without a voice, chat and partners; `None` is the
+    /// system default.
+    pub voice: Option<String>,
+    /// A multiple of the voice's own pace.
+    pub rate: f32,
+    pub volume: f32,
+    /// Also read viewers' messages that reach the history.
+    pub chat: bool,
+    /// Also read co-op partners' lines.
+    pub partners: bool,
+}
+
+impl Default for TtsSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            voice: None,
+            rate: 1.0,
+            volume: 1.0,
+            chat: false,
+            partners: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateSettings {
@@ -460,6 +494,9 @@ pub struct Character {
     pub color: Option<Rgba8>,
     /// System-wide key that switches to this character.
     pub hotkey: Option<Hotkey>,
+    /// The system voice its lines are read aloud with; `None` uses
+    /// [`TtsSettings::voice`].
+    pub voice: Option<String>,
 }
 
 impl Character {
@@ -1512,6 +1549,7 @@ pub struct Settings {
     pub playback: PlaybackSettings,
     pub sound: SoundSettings,
     pub speech: SpeechSettings,
+    pub tts: TtsSettings,
     pub skin: SkinSettings,
     pub overlays: Overlays,
     pub history: HistorySettings,
@@ -1537,6 +1575,7 @@ impl Default for Settings {
             playback: PlaybackSettings::default(),
             sound: SoundSettings::default(),
             speech: SpeechSettings::default(),
+            tts: TtsSettings::default(),
             skin: SkinSettings::default(),
             overlays: Overlays::default(),
             history: HistorySettings::default(),
@@ -1612,6 +1651,18 @@ impl Settings {
                 || !v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
         }) {
             self.speech.language = None;
+        }
+        let t = &mut self.tts;
+        t.rate = finite_or(t.rate, 1.0).clamp(TTS_RATE.0, TTS_RATE.1);
+        t.volume = finite_or(t.volume, 1.0).clamp(0.0, 1.0);
+        let voice_id = |v: &mut Option<String>| {
+            if v.as_ref().is_some_and(|v| v.is_empty() || v.len() > 512) {
+                *v = None;
+            }
+        };
+        voice_id(&mut t.voice);
+        for character in &mut self.general.characters {
+            voice_id(&mut character.voice);
         }
         let mut plugins = std::collections::BTreeSet::new();
         self.enabled_plugins.retain(|id| {

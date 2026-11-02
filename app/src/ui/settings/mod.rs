@@ -86,7 +86,7 @@ impl Page {
     pub fn label_key(self) -> &'static str {
         match self {
             Self::General => "settings-general",
-            Self::Speech => "settings-speech",
+            Self::Speech => "settings-voice",
             Self::Playback => "settings-playback",
             Self::Skins => "settings-skins",
             Self::Packages => "settings-packages",

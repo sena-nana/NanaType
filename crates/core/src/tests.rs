@@ -1140,6 +1140,7 @@ fn switching_characters_changes_who_the_next_line_is_said_by() {
             avatar: Some("C:/two.png".into()),
             color: Some(nanatype_model::Rgba8::rgb(255, 0, 0)),
             hotkey: None,
+            voice: None,
         });
     });
     let fx = type_and_send(&mut core, "first", 0);

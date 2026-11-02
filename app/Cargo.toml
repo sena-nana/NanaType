@@ -41,6 +41,7 @@ nanatype-i18n = { workspace = true, features = ["app"] }
 nanatype-settings.workspace = true
 nanatype-audio.workspace = true
 nanatype-speech.workspace = true
+nanatype-tts.workspace = true
 nanatype-bridge.workspace = true
 nanatype-blive.workspace = true
 nanatype-twitch.workspace = true
