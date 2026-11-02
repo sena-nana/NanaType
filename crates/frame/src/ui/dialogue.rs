@@ -722,7 +722,7 @@ impl Track {
         if !view.empty {
             if !first && (self.shown.is_none() || self.leaving) {
                 self.entered_at = Some(now);
-                MOVING_UNTIL[slot].store(now + ENTER_MS, Ordering::Relaxed);
+                tracks().moving_until[slot].store(now + ENTER_MS, Ordering::Relaxed);
             }
             self.leaving = false;
             self.shown = Some(view.clone());
@@ -733,7 +733,7 @@ impl Track {
                 if !self.leaving {
                     self.leaving = true;
                     self.left_at = now;
-                    MOVING_UNTIL[slot].store(now + EXIT_MS, Ordering::Relaxed);
+                    tracks().moving_until[slot].store(now + EXIT_MS, Ordering::Relaxed);
                 }
                 shown.clone()
             }
@@ -756,14 +756,42 @@ impl Track {
     }
 }
 
-static STAGES: [Mutex<Track>; super::TRACK_SLOTS] =
-    [const { Mutex::new(Track::new()) }; super::TRACK_SLOTS];
-/// Until when (ms) the box is entering or leaving, for frame requests.
-static MOVING_UNTIL: [AtomicU64; super::TRACK_SLOTS] =
-    [const { AtomicU64::new(0) }; super::TRACK_SLOTS];
+/// Each track's box as drawn, and until when (ms) it is entering or
+/// leaving, for frame requests.
+struct Tracks {
+    stages: [Mutex<Track>; super::TRACK_SLOTS],
+    moving_until: [AtomicU64; super::TRACK_SLOTS],
+}
+
+impl Tracks {
+    const fn new() -> Self {
+        Self {
+            stages: [const { Mutex::new(Track::new()) }; super::TRACK_SLOTS],
+            moving_until: [const { AtomicU64::new(0) }; super::TRACK_SLOTS],
+        }
+    }
+}
+
+#[cfg(not(test))]
+fn tracks() -> &'static Tracks {
+    static TRACKS: Tracks = Tracks::new();
+    &TRACKS
+}
+
+/// Tests mount display boxes side by side: each thread gets its own tracks,
+/// so one test's clock never enters or leaves another's box.
+#[cfg(test)]
+fn tracks() -> &'static Tracks {
+    thread_local! {
+        static TRACKS: &'static Tracks = Box::leak(Box::new(Tracks::new()));
+    }
+    TRACKS.with(|t| *t)
+}
 
 fn stage(slot: usize) -> std::sync::MutexGuard<'static, Track> {
-    STAGES[slot].lock().unwrap_or_else(|e| e.into_inner())
+    tracks().stages[slot]
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
 }
 
 /// The typewriter's view as drawn (see [`Track`]), tracked.
@@ -2335,7 +2363,7 @@ fn sprite(url: &str, frames: u32, i: u32) -> BackgroundImage {
 /// Whether the display needs frames for the box itself (fade, shake, the
 /// continue mark). Text reveal and effects request their own frames.
 pub fn display_animating(ui: Stage, now: u64) -> bool {
-    if now <= MOVING_UNTIL[ui.track_slot].load(Ordering::Relaxed) + 50 {
+    if now <= tracks().moving_until[ui.track_slot].load(Ordering::Relaxed) + 50 {
         return true;
     }
     let view = ui.display.get_untracked();
