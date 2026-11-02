@@ -114,10 +114,11 @@ Turning an output off and back on within 5 seconds reuses the original sender, a
 ### Accessibility
 
 - **Settings › General › Accessibility** changes only the app's own windows: Settings, the input window (with its history and chat panels) and the package editor. Skins, and what the display, partner and history windows show (Spout2 / Syphon output included), always stay as they are.
-- **High contrast**: **Follow system**, **Off** or **On**. On, the interface switches to opaque black and white with text at 7:1 or more, borders, control outlines and focus indicators at 3:1 or more, and heavier rules. **Follow system** follows the Windows high-contrast theme; macOS does not report **Increase contrast** yet, so turn it on by hand there.
-- **Interface size**: 80%–200% (100% by default) enlarges text and controls on top of the system's display scale, never twice. Windows' minimum sizes grow with it, and an open Settings or input window grows to fit; skin previews keep the size the output has. The package editor takes the new size the next time it opens.
+- **High contrast**: **Follow system**, **Off** or **On**. On, the interface switches to opaque black and white with text at 7:1 or more, borders, control outlines and focus indicators at 3:1 or more, and heavier rules and focus rings. **Follow system** follows the Windows high-contrast theme and macOS **Increase contrast**, and changes the moment they do.
+- **Interface size**: 80%–200% (100% by default) enlarges everything in the window together on top of the system's display scale: text, controls, icons and spacing, skin previews included. Windows' minimum sizes change at once, and an open window that is too small grows to fit. The package editor takes the new size the next time it opens.
+- **Follow the system text size** (Windows only): uses **Settings › Accessibility › Text size** as the interface size, and follows it as it changes.
 - **Reduce motion** is under **Settings › Playback**; the system's reduce-motion preference also turns it on.
-- Every control has a name a screen reader announces, and switches and sliders report their state. Tab / Shift+Tab move between controls, Enter or Space operates them, Esc closes dialogs and pop-up menus.
+- Every control has a name a screen reader announces, and switches and sliders report their state. Tab / Shift+Tab move between controls, Enter or Space operates them, Esc closes dialogs and pop-up menus. An action asked twice (clearing the history, deleting a saved session) puts the focus on its confirming button: Enter goes ahead, Esc backs out to the button you started from.
 - These settings are global; profiles do not change them.
 
 ### Checking for updates
