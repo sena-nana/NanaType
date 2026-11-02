@@ -326,6 +326,17 @@ opacity = 0.8
 [dialogue.reply]                  # reply quote on the dialogue box, same fields as [history.reply]
 visible = true                    # users can also turn it off in the Chat panel settings
 
+[dialogue.subtitle]               # a line's translation (Settings › Integrations › Translated subtitles), under the text on the dialogue box; history bubbles use it too
+visible = true
+size = 18                         # defaults to 70% of the text (at least 11, never larger than the text)
+color = "#5a4a55"                 # defaults to the text color, accepts color roles
+muted = 0.3                       # how far the color moves toward the box's fill (0 keeps it, 1 is the fill); contrast never drops below 4.5:1
+gap = 4                           # space above it, in pixels
+
+# The subtitle keeps the text's ([dialogue.text] / [history.text]) font, material, outline (scaled to its size), shadow and alignment,
+# only smaller and quieter, so skins without [dialogue.subtitle] show it well too. Over a see-through or framed box it is not muted;
+# a see-through box without an outline gets a thin contrasting one.
+
 [mention]                         # [at=…] in a line: a tag with avatar and nickname, consistent across input box, dialogue box and history
 fill = "accent"                   # tag background, accepts color roles; darkened automatically if contrast with text_color is below 4.5:1
 text_color = "#ffffff"            # always used as is; the line's shadow or glow isn't drawn under the tag
