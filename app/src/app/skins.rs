@@ -122,17 +122,12 @@ impl App {
         let ticket = self.skin_preview_ticket;
         let job = crate::ui::PreviewJob::new(self.ui, &id, play);
         let registry = self.registry.clone();
-        let ctx = self.ctx.clone();
-        if let Err(error) = std::thread::Builder::new()
-            .name("skin-preview".into())
-            .spawn(move || {
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    Box::new(job.run(&registry))
-                }))
-                .map_err(|_| "Skin preview worker failed".to_owned());
-                ctx.dispatch(Msg::Skin(SkinMsg::PreviewReady { ticket, result }));
-            })
-        {
+        if let Err(error) = crate::plugins::try_background("skin-preview", &self.ctx, move || {
+            let result = crate::plugins::caught("Skin preview worker failed", || {
+                Box::new(job.run(&registry))
+            });
+            Msg::Skin(SkinMsg::PreviewReady { ticket, result })
+        }) {
             self.notice(error.to_string(), true);
         }
     }

@@ -20,7 +20,7 @@ static NEXT_TICKET: AtomicU64 = AtomicU64::new(1);
 
 mod activation;
 pub use activation::Activation;
-pub use nanatype_frame::plugin_host::{Worker, background, data_answer, try_background};
+pub use nanatype_frame::plugin_host::{Worker, background, caught, data_answer, try_background};
 
 pub use nanatype_frame::packages::{PackageRow, package_rows};
 

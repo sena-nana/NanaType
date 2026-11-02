@@ -174,6 +174,12 @@ pub fn try_background<M: Send + 'static>(
         .map(|_| ())
 }
 
+/// Run `work`, turning a panic into `Err(failed)`, so the request waiting on
+/// a background job still gets an answer.
+pub fn caught<T>(failed: &str, work: impl FnOnce() -> T) -> Result<T, String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).map_err(|_| failed.to_owned())
+}
+
 #[cfg(test)]
 mod worker_tests {
     use super::*;

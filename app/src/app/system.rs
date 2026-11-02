@@ -115,12 +115,9 @@ impl App {
         let paths = self.paths.clone();
         let locale = self.ui.locale.get_untracked();
         let summary = crate::services::diagnostics::summary(&self.settings, locale.tag());
-        let ctx = self.ctx.clone();
-        let spawned = std::thread::Builder::new()
-            .name("nanatype-diagnostics".into())
-            .spawn(move || {
-                let result = crate::services::diagnostics::export(&paths, &summary);
-                ctx.dispatch(Msg::DiagnosticsExported(result));
+        let spawned =
+            crate::plugins::try_background("nanatype-diagnostics", &self.ctx, move || {
+                Msg::DiagnosticsExported(crate::services::diagnostics::export(&paths, &summary))
             });
         match spawned {
             Ok(_) => {

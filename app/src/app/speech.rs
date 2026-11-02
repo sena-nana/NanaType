@@ -162,14 +162,9 @@ impl App {
         }
     }
     pub(crate) fn speech_inventory(&self) {
-        let ctx = self.ctx.clone();
-        let _ = std::thread::Builder::new()
-            .name("nanatype-speech-devices".into())
-            .spawn(move || {
-                ctx.dispatch(Msg::Speech(SpeechMsg::Inventory(
-                    nanatype_speech::inventory(),
-                )));
-            });
+        crate::plugins::background("nanatype-speech-devices", &self.ctx, || {
+            Msg::Speech(SpeechMsg::Inventory(nanatype_speech::inventory()))
+        });
     }
     pub(crate) fn install_speech_model(&mut self, source: Option<PathBuf>) {
         // A cancelled operation keeps this slot until it finishes removing its staging file.
@@ -181,18 +176,17 @@ impl App {
         self.speech.model_cancel = Some(cancel.clone());
         self.speech.state.model = ModelState::Working(0);
         let directory = self.speech.service.directory().to_owned();
-        let ctx = self.ctx.clone();
-        let failure = ctx.clone();
-        if let Err(e) = std::thread::Builder::new()
-            .name("nanatype-speech-model".into())
-            .spawn(move || {
+        let progress = self.ctx.clone();
+        if let Err(e) =
+            crate::plugins::try_background("nanatype-speech-model", &self.ctx, move || {
                 let result = model::install(&directory, source.as_deref(), &cancel, |percent| {
-                    ctx.dispatch(Msg::Speech(SpeechMsg::ModelProgress(percent)));
+                    progress.dispatch(Msg::Speech(SpeechMsg::ModelProgress(percent)));
                 });
-                ctx.dispatch(Msg::Speech(SpeechMsg::ModelDone(result)));
+                Msg::Speech(SpeechMsg::ModelDone(result))
             })
         {
-            failure.dispatch(Msg::Speech(SpeechMsg::ModelDone(Err(e.to_string()))));
+            self.ctx
+                .dispatch(Msg::Speech(SpeechMsg::ModelDone(Err(e.to_string()))));
         }
         self.publish_speech();
     }

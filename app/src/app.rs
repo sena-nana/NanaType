@@ -797,15 +797,14 @@ impl App {
     fn load_sounds(&self) {
         let skin = self.loaded.clone();
         let pack = self.sound_pack.clone();
-        let ctx = self.ctx.clone();
-        std::thread::spawn(move || {
+        crate::plugins::background("nanatype-sounds", &self.ctx, move || {
             let (bank, errors) = sounds::load(&skin, pack.as_ref());
-            ctx.dispatch(Msg::Skin(SkinMsg::SoundsLoaded {
+            Msg::Skin(SkinMsg::SoundsLoaded {
                 skin: skin.skin.meta.id.clone(),
                 pack: pack.map(|p| p.id),
                 bank,
                 errors,
-            }));
+            })
         });
     }
 
@@ -870,34 +869,29 @@ impl App {
         let mut registry = self.registry.clone();
         let scanned = self.skin_reload_scan;
         let id = self.settings.skin.id.clone();
-        let ctx = self.ctx.clone();
-        if let Err(error) = std::thread::Builder::new()
-            .name("skin-scan".into())
-            .spawn(move || {
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    if scanned {
-                        registry.rescan();
-                    }
-                    let loaded = if scanned {
-                        registry.load_scanned(&id)
-                    } else {
-                        registry.load(&id)
-                    };
-                    let image_urls = loaded
-                        .as_ref()
-                        .ok()
-                        .map(|skin| crate::assets::skin_preview_urls(&skin.skin, &*skin.files));
-                    Box::new(crate::services::watch::PreparedSkins {
-                        registry,
-                        loaded,
-                        scanned,
-                        image_urls,
-                    })
-                }))
-                .map_err(|_| "Skin scan worker failed".to_owned());
-                ctx.dispatch(Msg::Skin(SkinMsg::ScanReady { ticket, result }));
-            })
-        {
+        if let Err(error) = crate::plugins::try_background("skin-scan", &self.ctx, move || {
+            let result = crate::plugins::caught("Skin scan worker failed", || {
+                if scanned {
+                    registry.rescan();
+                }
+                let loaded = if scanned {
+                    registry.load_scanned(&id)
+                } else {
+                    registry.load(&id)
+                };
+                let image_urls = loaded
+                    .as_ref()
+                    .ok()
+                    .map(|skin| crate::assets::skin_preview_urls(&skin.skin, &*skin.files));
+                Box::new(crate::services::watch::PreparedSkins {
+                    registry,
+                    loaded,
+                    scanned,
+                    image_urls,
+                })
+            });
+            Msg::Skin(SkinMsg::ScanReady { ticket, result })
+        }) {
             self.skin_reload.cancel();
             self.notice(error.to_string(), true);
         }
