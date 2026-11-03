@@ -37,12 +37,16 @@ pub fn mounted(ui: Ui, slot: Mount) -> AnyView {
 /// The Packages page's header actions: import a package, reload them all.
 pub fn actions(ui: Ui) -> AnyView {
     kit::hstack((
-        kit::button(ui.now_t("packages-refresh"), || {
-            Msg::Package(PackageMsg::Refresh)
-        }),
-        super::settings::controls::primary(ui, "packages-import", || {
-            Msg::PickFile(FileTarget::ImportSkin)
-        }),
+        kit::tool(
+            nana_ui::icons_tabler::REFRESH,
+            ui.now_t("packages-refresh"),
+            || Msg::Package(PackageMsg::Refresh),
+        ),
+        kit::tool(
+            nana_ui::icons_tabler::DOWNLOAD,
+            ui.now_t("packages-import"),
+            || Msg::PickFile(FileTarget::ImportSkin),
+        ),
     ))
 }
 

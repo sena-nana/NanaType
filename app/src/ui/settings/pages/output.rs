@@ -467,7 +467,7 @@ fn obs_password_field(ui: Ui) -> AnyView {
                     .style(Type::Small.style())
                     .color(SemanticColorRole::Muted),
             ),
-            button(ui, "obs-password-clear", || {
+            icon_action(ui, "obs-password-clear", ti::ERASER, || {
                 Msg::Obs(ObsMsg::Password(String::new()))
             }),
         )),
@@ -479,7 +479,7 @@ fn obs_password_field(ui: Ui) -> AnyView {
 fn obs_link(ui: Ui) -> AnyView {
     toggled_section(
         ui,
-        "",
+        "output-obs-link",
         row(
             ui,
             "obs-link",

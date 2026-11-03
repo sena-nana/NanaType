@@ -85,6 +85,46 @@ pub fn section_titled<V: IntoView>(title: Option<String>, rows: Vec<(V, Shown)>)
     nana_ui::runtime::view::settings_group(title, rows).into_any()
 }
 
+/// [`section_titled`] with icon tools at the end of its title line: the
+/// actions on the whole group (add, refresh, open its folder). The tools
+/// hang out of the line rather than raising it, so a titled group with
+/// tools stands as tall as one without.
+pub fn section_tools<V: IntoView>(title: String, tools: AnyView, rows: Vec<(V, Shown)>) -> AnyView {
+    use nana_ui::runtime::Text;
+    use nana_ui::runtime::view::heading_tools;
+    use nana_ui_core::{SpacingStep, TextWeight, TypeRole};
+    let heading = widget(
+        Stack::row(0.0)
+            .align(AlignSpec::Center)
+            .width(LengthSpec::Fill)
+            .with_layout(|l| l.padding_left = Some(LengthSpec::Px(nana_ui_core::space::XS))),
+    )
+    .children((
+        widget(
+            Text::new(title)
+                .role(TypeRole::Meta)
+                .weight(TextWeight::Semibold)
+                .color(SemanticColorRole::Muted),
+        ),
+        spacer(),
+        heading_tools(tools),
+    ));
+    widget(Stack::column(0.0).gap_step(SpacingStep::Md))
+        .children((heading, section_titled(None, rows)))
+        .into_any()
+}
+
+/// A heading's or a row's icon tool: `glyph`, named and tipped `label`.
+pub fn tool<M: Send + 'static>(
+    glyph: nana_ui::runtime::Icon,
+    label: String,
+    msg: impl Fn() -> M + Send + 'static,
+) -> AnyView {
+    widget(nana_ui::runtime::IconButton::tool(glyph, label))
+        .on_cx(move |_, _: &nana_ui::runtime::Activate, cx| cx.dispatch_program_all(msg()))
+        .into_any()
+}
+
 /// The inset hairline between two rows of a card.
 pub fn divider() -> AnyView {
     widget(Divider::horizontal().inset(inset::CARD)).into_any()
@@ -157,13 +197,13 @@ pub fn line(left: impl IntoView, right: impl IntoView) -> Row {
     )
 }
 
-/// Label (and hint) on the left, control on the right; stacks when narrow.
-/// A hint too long to read beside a control goes in a tip card under the
-/// row instead (see [`with_tip`]).
+/// Label (and detail) on the left, control on the right; stacks when narrow.
+/// `hint_text` is a value under the label (an address, a version); a detail
+/// long enough to read as a paragraph goes in a [`hint_mark`] before the
+/// control instead, so the row stays one line.
 pub fn row_text(label_text: String, hint_text: Option<String>, control: AnyView) -> Row {
     if let Some(text) = hint_text.as_deref().filter(|h| long_hint(h)) {
-        let text = text.to_owned();
-        return with_tip(row_text(label_text, None, control), text);
+        return row_marked(label_text, text.to_owned(), control);
     }
     let hint: Option<Arc<str>> = hint_text.map(Into::into);
     inset_row(
@@ -174,8 +214,35 @@ pub fn row_text(label_text: String, hint_text: Option<String>, control: AnyView)
     )
 }
 
-/// A hint at least this wide (a CJK character counts two) reads as a
-/// paragraph: beside a control it wraps into a narrow column of lines.
+/// A label and its control on one line, what the setting does in a
+/// [`hint_mark`] before the control rather than a line under the label.
+pub fn row_marked(label_text: String, tip: String, control: AnyView) -> Row {
+    row_text(
+        label_text,
+        None,
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::HAIR)
+                .align(AlignSpec::Center),
+        )
+        .children((hint_mark(tip), control))
+        .into_any(),
+    )
+}
+
+/// An info mark whose tooltip says what a label leaves out.
+pub fn hint_mark(text: String) -> AnyView {
+    widget(
+        nana_ui::runtime::IconButton::new(nana_ui::icons_tabler::INFO_CIRCLE, text.clone())
+            .size(nana_ui::ControlSize::Small)
+            .kind(nana_ui::ButtonKind::Ghost)
+            .with_tooltip(text),
+    )
+    .into_any()
+}
+
+/// A detail at least this wide (a CJK character counts two) reads as a
+/// paragraph: under a label it wraps into a block of lines.
 const TIP_AT: usize = 72;
 
 fn long_hint(text: &str) -> bool {
@@ -184,18 +251,6 @@ fn long_hint(text: &str) -> bool {
         .map(|c| if wide(c) { 2 } else { 1 })
         .sum::<usize>()
         >= TIP_AT
-}
-
-/// `row` with `text` in a tip card under it: what the row needs said, too
-/// long for a hint beside its control.
-pub fn with_tip(row: Row, text: String) -> Row {
-    let tip = widget(
-        Stack::column(0.0)
-            .padding_step(inset::step::CARD, inset::step::ROW_Y)
-            .with_layout(|l| l.padding_top = Some(LengthSpec::Px(0.0))),
-    )
-    .children(super::callout(super::Tone::Neutral, text));
-    Row::inset(widget(Stack::column(0.0)).children((row, tip)))
 }
 
 /// A label and its control on one line, packed close: the label is cut

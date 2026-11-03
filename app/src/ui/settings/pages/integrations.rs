@@ -141,11 +141,7 @@ pub(super) fn vts_mapping(ui: Ui) -> Row {
             }
             if markers.is_empty() {
                 return if *connected {
-                    empty_row(
-                        ui,
-                        "empty-vts-hotkeys",
-                        button(ui, "int-vts-refresh", || Msg::VtsRefresh),
-                    )
+                    block(hint(ui.now_t("empty-vts-hotkeys")))
                 } else {
                     empty_row(
                         ui,

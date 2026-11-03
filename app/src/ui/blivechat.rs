@@ -2,15 +2,15 @@
 use super::{
     Ui,
     settings::controls::{
-        Row, address, blivechat_badge, block, button, confirm, edit, primary, row, section,
-        segmented, select_keys, switch, toggled_section,
+        Row, address, blivechat_badge, block, confirm, edit, primary, row, section, segmented,
+        select_keys, switch, toggled_section,
     },
 };
 use crate::msg::{BliveMsg, Msg};
 use crate::ui::kit::{self, Type, gap};
 use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
-use nana_ui::runtime::{Activate, Button, Stack, Text, TextChanged, TextInput, TextSubmitted};
+use nana_ui::runtime::{Activate, Stack, Text, TextChanged, TextInput, TextSubmitted};
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_settings::{BliveRoomKind, BlivechatSource};
 
@@ -214,9 +214,11 @@ fn auth_field(ui: Ui) -> AnyView {
                     .style(Type::Small.style())
                     .color(SemanticColorRole::Muted),
             ),
-            button(ui, "int-blive-auth-clear", || {
-                Msg::Blive(BliveMsg::AuthCode(String::new()))
-            }),
+            kit::tool(
+                nana_ui::icons_tabler::ERASER,
+                ui.now_t("int-blive-auth-clear"),
+                || Msg::Blive(BliveMsg::AuthCode(String::new())),
+            ),
         )),
     ))
     .into_any()
@@ -241,9 +243,12 @@ fn comet_section(ui: Ui) -> AnyView {
         ui.now_t("int-comet-reset-question"),
         ui.now_t("int-comet-reset"),
         move |armed| {
-            widget(Button::new(ui.now_t("int-comet-reset")).size(ControlSize::Small))
-                .on(move |_: &Activate| armed.set(true))
-                .into_any()
+            widget(nana_ui::runtime::IconButton::tool(
+                nana_ui::icons_tabler::REFRESH,
+                ui.now_t("int-comet-reset"),
+            ))
+            .on(move |_: &Activate| armed.set(true))
+            .into_any()
         },
         || Msg::Blive(BliveMsg::ResetCometToken),
     );
@@ -261,11 +266,15 @@ fn comet_section(ui: Ui) -> AnyView {
                         .align(AlignSpec::Center),
                 )
                 .children((
-                    button(ui, "int-comet-copy", move || {
-                        Msg::CopyText(ui.settings.with_untracked(|s| {
-                            crate::app::blivechat::comet_address(&s.integrations.blivechat)
-                        }))
-                    }),
+                    kit::tool(
+                        nana_ui::icons_tabler::COPY,
+                        ui.now_t("int-comet-copy"),
+                        move || {
+                            Msg::CopyText(ui.settings.with_untracked(|s| {
+                                crate::app::blivechat::comet_address(&s.integrations.blivechat)
+                            }))
+                        },
+                    ),
                     reset,
                 ))
                 .into_any(),

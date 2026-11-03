@@ -133,17 +133,19 @@ pub(crate) fn card_with_fields(
                         style
                     }),
                 )),
-                widget(
-                    Button::new(ui.now_t(if expanded {
+                kit::tool(
+                    if expanded {
+                        nana_ui::icons_tabler::CHEVRON_UP
+                    } else {
+                        nana_ui::icons_tabler::CHEVRON_DOWN
+                    },
+                    ui.now_t(if expanded {
                         "peer-collapse"
                     } else {
                         "peer-expand"
-                    }))
-                    .size(ControlSize::Small),
-                )
-                .on_cx(move |_, _: &Activate, cx| {
-                    cx.dispatch_program_all(Msg::PeerPanel(!expanded))
-                }),
+                    }),
+                    move || Msg::PeerPanel(!expanded),
+                ),
             ))
             .into_any();
             if !expanded {
@@ -171,18 +173,17 @@ pub(crate) fn card_with_fields(
                         )
                     }),
                     (!code.is_empty()).then(|| {
-                        widget(Button::new(ui.now_t("peer-copy")).size(ControlSize::Small)).on_cx(
-                            move |_, _: &Activate, cx| {
-                                cx.dispatch_program_all(Msg::CopyText(code.clone()))
-                            },
+                        kit::tool(
+                            nana_ui::icons_tabler::COPY,
+                            ui.now_t("peer-copy"),
+                            move || Msg::CopyText(code.clone()),
                         )
                     }),
-                    widget(Button::new(ui.now_t("peer-window-toggle")).size(ControlSize::Small))
-                        .on_cx(move |_, _: &Activate, cx| {
-                            cx.dispatch_program_all(Msg::Window(WindowMsg::Toggle(
-                                crate::windows::WindowKind::PARTNER,
-                            )))
-                        }),
+                    kit::tool(
+                        nana_ui::icons_tabler::APP_WINDOW,
+                        ui.now_t("peer-window-toggle"),
+                        || Msg::Window(WindowMsg::Toggle(crate::windows::WindowKind::PARTNER)),
+                    ),
                     widget(Button::new(ui.now_t("peer-leave")).size(ControlSize::Small))
                         .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::PeerLeave)),
                 ))

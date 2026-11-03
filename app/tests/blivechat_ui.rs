@@ -91,11 +91,15 @@ fn the_comet_section_only_shows_and_copies_the_address() {
         m.downcast::<Msg>()
             .is_ok_and(|m| matches!(*m, Msg::CopyText(ref text) if text == address))
     }));
+    // The address row's info mark is named by its hint, which says where to
+    // paste the address; it is not a control of the plugin.
+    let hint = ui.now_t("int-comet-address-hint");
     let buttons = session
         .accessibility_dump()
         .into_iter()
         .filter(|n| n.role == "button")
         .filter_map(|n| n.label)
+        .filter(|l| *l != hint)
         .collect::<Vec<_>>();
     for word in ["插件", "端口", "index.html"] {
         assert!(

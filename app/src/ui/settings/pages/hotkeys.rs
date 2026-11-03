@@ -333,13 +333,8 @@ fn phrase_rows(ui: Ui) -> Row {
             })
         },
         move |labels| {
-            let edit_phrases = || {
-                button(ui, "hotkeys-edit-phrases", || {
-                    Msg::Window(WindowMsg::SettingsPage(Page::Assets))
-                })
-            };
             if labels.is_empty() {
-                return empty_row(ui, "hotkeys-phrases-empty", edit_phrases());
+                return block(hint(ui.now_t("hotkeys-phrases-empty")));
             }
             let rows: Vec<Row> = (0..labels.len())
                 .map(|i| {
@@ -350,11 +345,7 @@ fn phrase_rows(ui: Ui) -> Row {
                     shortcut_row(ui, name, action)
                 })
                 .collect();
-            Row::inset(widget(Stack::column(0.0)).children((
-                divided(rows),
-                divider(),
-                crate::ui::kit::line((), edit_phrases()),
-            )))
+            Row::inset(widget(Stack::column(0.0)).children(divided(rows)))
         },
     ))
 }
@@ -382,16 +373,7 @@ fn character_rows(ui: Ui) -> Row {
                     shortcut_row(ui, name, action)
                 })
                 .collect();
-            Row::inset(widget(Stack::column(0.0)).children((
-                divided(rows),
-                divider(),
-                crate::ui::kit::line(
-                    (),
-                    button(ui, "hotkeys-edit-characters", || {
-                        Msg::Window(WindowMsg::SettingsPage(Page::General))
-                    }),
-                ),
-            )))
+            Row::inset(widget(Stack::column(0.0)).children(divided(rows)))
         },
     ))
 }
@@ -410,13 +392,8 @@ fn profile_rows(ui: Ui) -> Row {
             })
         },
         move |names| {
-            let edit_profiles = || {
-                button(ui, "hotkeys-edit-profiles", || {
-                    Msg::Window(WindowMsg::SettingsPage(Page::General))
-                })
-            };
             if names.is_empty() {
-                return empty_row(ui, "hotkeys-profiles-empty", edit_profiles());
+                return block(hint(ui.now_t("hotkeys-profiles-empty")));
             }
             let rows: Vec<Row> = (0..names.len())
                 .map(|i| {
@@ -427,11 +404,7 @@ fn profile_rows(ui: Ui) -> Row {
                     shortcut_row(ui, name, action)
                 })
                 .collect();
-            Row::inset(widget(Stack::column(0.0)).children((
-                divided(rows),
-                divider(),
-                crate::ui::kit::line((), edit_profiles()),
-            )))
+            Row::inset(widget(Stack::column(0.0)).children(divided(rows)))
         },
     ))
 }
@@ -463,9 +436,40 @@ pub(super) fn hotkeys(ui: Ui) -> AnyView {
             section(ui, "hotkeys-global", global),
             section(ui, "hotkeys-local", input(false)),
             section(ui, "hotkeys-chat", input(true)),
-            section(ui, "hotkeys-phrases", vec![phrase_rows(ui)]),
-            section(ui, "hotkeys-characters", vec![character_rows(ui)]),
-            section(ui, "hotkeys-profiles", vec![profile_rows(ui)]),
+            jump_section(
+                ui,
+                "hotkeys-phrases",
+                "hotkeys-edit-phrases",
+                Page::Assets,
+                phrase_rows(ui),
+            ),
+            jump_section(
+                ui,
+                "hotkeys-characters",
+                "hotkeys-edit-characters",
+                Page::General,
+                character_rows(ui),
+            ),
+            jump_section(
+                ui,
+                "hotkeys-profiles",
+                "hotkeys-edit-profiles",
+                Page::General,
+                profile_rows(ui),
+            ),
         ))
         .into_any()
+}
+
+/// A group of hotkeys for things edited on another page: Edit on its title
+/// opens that page.
+fn jump_section(ui: Ui, title_key: &str, edit_key: &str, page: Page, rows: Row) -> AnyView {
+    section_tools(
+        ui,
+        title_key,
+        vec![tool(ui, ti::EDIT, edit_key, move || {
+            Msg::Window(WindowMsg::SettingsPage(page))
+        })],
+        vec![(rows, None)],
+    )
 }

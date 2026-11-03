@@ -105,24 +105,20 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
 /// The open page's page-wide actions, shown in its header.
 pub fn actions(ui: Ui, page: Page) -> Option<AnyView> {
     match page {
-        Page::Skins if crate::distribution::STEAM => Some(
-            widget(
-                Stack::row(0.0)
-                    .gap_step(gap::step::CONTROL)
-                    .align(AlignSpec::Center),
-            )
-            .children((
-                workshop::browse_button(ui, crate::workshop::Tag::Skins),
-                primary(ui, "skins-import", || Msg::PickFile(FileTarget::ImportSkin)),
-            ))
-            .into_any(),
-        ),
-        Page::Skins => Some(primary(ui, "skins-import", || {
-            Msg::PickFile(FileTarget::ImportSkin)
-        })),
+        Page::Skins => Some(crate::ui::kit::hstack((
+            crate::distribution::STEAM
+                .then(|| workshop::browse_button(ui, crate::workshop::Tag::Skins)),
+            tool(ui, ti::DOWNLOAD, "skins-import", || {
+                Msg::PickFile(FileTarget::ImportSkin)
+            }),
+        ))),
         Page::Packages => Some(crate::ui::plugins::actions(ui)),
-        Page::Platforms => Some(button(ui, "chat-open-panel", || Msg::Chat(ChatMsg::Show))),
-        Page::Output => Some(button(ui, "output-sample", || Msg::PlaySample)),
+        Page::Platforms => Some(tool(ui, ti::MESSAGES, "chat-open-panel", || {
+            Msg::Chat(ChatMsg::Show)
+        })),
+        Page::Output => Some(tool(ui, ti::PLAYER_PLAY, "output-sample", || {
+            Msg::PlaySample
+        })),
         Page::History => Some(
             widget(
                 Stack::row(0.0)

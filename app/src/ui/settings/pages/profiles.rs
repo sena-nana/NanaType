@@ -32,20 +32,16 @@ pub(super) fn profiles(ui: Ui) -> Vec<Row> {
         )
         .on(move |e: &TextChanged| name.set(e.value.to_string())),
     );
-    let save = button(ui, "profile-save-as", move || {
+    let save = icon_action(ui, "profile-save-as", ti::PLUS, move || {
         Msg::Profile(ProfileMsg::SaveAs(name.get_untracked()))
     });
     vec![
         list,
-        with_tip(
+        row(
             ui,
-            row(
-                ui,
-                "profile-new",
-                None,
-                controls(vec![field.into_any(), save]),
-            ),
-            "profile-hint",
+            "profile-new",
+            Some("profile-hint"),
+            controls(vec![field.into_any(), save]),
         ),
     ]
 }
@@ -71,18 +67,27 @@ fn profile_row(ui: Ui, id: String, active: bool) -> Row {
             ),
         )
     };
-    let switch = if active {
-        widget(
-            Text::new(ui.now_t("profile-active"))
-                .style(Type::Small.style())
-                .color(SemanticColorRole::Muted),
-        )
-        .into_any()
-    } else {
+    // The one in use is the selected mark; any other switches to itself.
+    let switch = {
         let id = id.clone();
-        button(ui, "profile-switch", move || {
-            Msg::Profile(ProfileMsg::Switch(id.clone()))
+        let key = if active {
+            "profile-active"
+        } else {
+            "profile-switch"
+        };
+        let glyph = if active { ti::CIRCLE_CHECK } else { ti::CIRCLE };
+        widget(
+            IconButton::new(glyph, ui.now_t(key))
+                .size(ControlSize::Small)
+                .selected(active)
+                .with_tooltip(ui.now_t(key)),
+        )
+        .on_cx(move |_, _: &Activate, cx| {
+            if !active {
+                cx.dispatch_program_all(Msg::Profile(ProfileMsg::Switch(id.clone())))
+            }
         })
+        .into_any()
     };
     let update = {
         let id = id.clone();
@@ -148,15 +153,16 @@ pub(super) fn backup(ui: Ui) -> Vec<(Row, Shown)> {
         })
         .collect();
     let mut export = chips;
-    export.push(primary(ui, "backup-export-button", || {
+    export.push(icon_action(ui, "backup-export-button", ti::UPLOAD, || {
         Msg::Backup(BackupMsg::Export)
     }));
     vec![
         (
-            with_tip(
+            row(
                 ui,
-                row(ui, "backup-export", None, controls(export)),
-                "backup-export-hint",
+                "backup-export",
+                Some("backup-export-hint"),
+                controls(export),
             ),
             None,
         ),
@@ -165,7 +171,7 @@ pub(super) fn backup(ui: Ui) -> Vec<(Row, Shown)> {
                 ui,
                 "backup-import",
                 Some("backup-import-hint"),
-                button(ui, "backup-import-button", || {
+                icon_action(ui, "backup-import-button", ti::DOWNLOAD, || {
                     Msg::Backup(BackupMsg::Import)
                 }),
             ),
@@ -176,7 +182,7 @@ pub(super) fn backup(ui: Ui) -> Vec<(Row, Shown)> {
                 ui,
                 "backup-restore",
                 Some("backup-restore-hint"),
-                button(ui, "backup-restore-button", || {
+                icon_action(ui, "backup-restore-button", ti::ARROW_BACK_UP, || {
                     Msg::Backup(BackupMsg::Restore)
                 }),
             ),
@@ -193,7 +199,9 @@ pub(super) fn backup(ui: Ui) -> Vec<(Row, Shown)> {
                     ui.now_t("backup-reset-button"),
                     move |armed| {
                         widget(
-                            Button::new(ui.now_t("backup-reset-button")).size(ControlSize::Small),
+                            IconButton::new(ti::RESTORE, ui.now_t("backup-reset-button"))
+                                .size(ControlSize::Small)
+                                .with_tooltip(ui.now_t("backup-reset-button")),
                         )
                         .on(move |_: &Activate| armed.set(true))
                         .into_any()

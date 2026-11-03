@@ -364,6 +364,29 @@ fn settings_pages(scene: &Scene, out: &std::path::Path) {
             },
         );
     }
+    // With `NANATYPE_SNAPSHOT_TALL=1`, every page whole, General past the
+    // first-run guide: for reviewing a page's layout top to bottom.
+    if std::env::var_os("NANATYPE_SNAPSHOT_TALL").is_some() {
+        let mut done = settings.clone();
+        done.general.onboarding_done = true;
+        ui.settings.set(Arc::new(done));
+        for page in settings::Page::ALL {
+            ui.page.set(page);
+            shot(
+                &format!("settings-{page:?}-tall"),
+                out,
+                920,
+                2400,
+                theme.clone(),
+                |doc, id| {
+                    doc.context_mut()
+                        .mount_view_root(id, move || settings::settings_window(ui))
+                        .unwrap();
+                },
+            );
+        }
+        ui.settings.set(Arc::new(settings.clone()));
+    }
     // The skin library as a list (the view switch's other state), in the
     // window and whole.
     ui.page.set(settings::Page::Skins);
@@ -465,6 +488,7 @@ fn completion(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
             .mount_view_root(id, move || input::input_window(ui))
             .unwrap();
         let mut session = RuntimeAgentSession::new_scaled(doc, iw, ih, 1.0).unwrap();
+        session.set_gpu_renderers(nanatype::ui::sweep::renderers());
         session.flush().unwrap();
         for _ in 0..2 {
             let at = input::completion::anchor(

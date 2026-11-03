@@ -161,10 +161,10 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
     let body: Vec<Row> = match n {
         0 => vec![
             row(ui, "onboard-language", None, language_select(ui)),
-            row(
-                ui,
-                "onboard-speaker",
-                Some("general-speaker-hint"),
+            // The guide says it under the label: a first run reads it.
+            row_text(
+                ui.now_t("onboard-speaker"),
+                Some(ui.now_t("general-speaker-hint")),
                 speaker_field(ui),
             ),
         ],

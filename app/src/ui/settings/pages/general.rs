@@ -80,8 +80,8 @@ fn avatar_preview(ui: Ui, i: usize) -> AnyView {
 /// The avatar preview beside "Pick avatar".
 const AVATAR_PREVIEW: f32 = 32.0;
 
-/// Character `i` of `n`: name, hotkey, use, order and remove; then its
-/// avatar and name colour.
+/// Character `i` of `n` on one line: its avatar (pick, clear), name, name
+/// colour (reset), hotkey; then which one is in use, order and remove.
 fn character_row(ui: Ui, i: usize, n: usize, active: bool) -> Row {
     let c = ui
         .settings
@@ -93,18 +93,71 @@ fn character_row(ui: Ui, i: usize, n: usize, active: bool) -> Row {
                 .with(|s| s.general.characters.get(i).is_some_and(f))
         }
     };
-    let first = widget(
+    let start = c.color.unwrap_or(Rgba8::WHITE);
+    // The one in use is the selected mark; any other switches to itself.
+    let in_use = {
+        let key = if active {
+            "general-character-active"
+        } else {
+            "general-character-use"
+        };
+        let glyph = if active { ti::CIRCLE_CHECK } else { ti::CIRCLE };
+        let b = IconButton::new(glyph, ui.now_t(key))
+            .size(ControlSize::Small)
+            .selected(active)
+            .with_tooltip(ui.now_t(key));
+        widget(b)
+            .on_cx(move |_, _: &Activate, cx| {
+                if !active {
+                    cx.dispatch_program_all(edit(move |s| s.general.select_character(i)))
+                }
+            })
+            .into_any()
+    };
+    // One line; a narrow window moves in-use, order and remove under it.
+    let line = widget(
         Stack::row(0.0)
             .gap_step(gap::step::CONTROL)
             .align(AlignSpec::Center)
+            .wrap(true)
             .width(LengthSpec::Fill),
     )
     .children((
-        // The name gives way first when the page is narrow, so the order
-        // buttons stay on the card.
+        // The preview fills what it is given; it keeps its own size here.
         widget(
             Stack::row(0.0)
-                .width(LengthSpec::Px(field::MD))
+                .width(LengthSpec::Px(AVATAR_PREVIEW))
+                .with_layout(|l| l.flex_shrink = Some(0.0)),
+        )
+        .children(avatar_preview(ui, i)),
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::HAIR)
+                .align(AlignSpec::Center),
+        )
+        .children((
+            icon_action(
+                ui,
+                ti::FOLDER_OPEN,
+                "general-avatar-pick",
+                true,
+                move || Msg::PickFile(FileTarget::Avatar(i)),
+            ),
+            widget(Stack::row(0.0))
+                .visible(has(|c| c.avatar.is_some()))
+                .children(icon_action(
+                    ui,
+                    ti::X,
+                    "general-avatar-clear",
+                    true,
+                    move || edit_character(i, |c| c.avatar = None),
+                )),
+        )),
+        // The name gives way first when the page is narrow, so the tools
+        // stay on the card.
+        widget(
+            Stack::row(0.0)
+                .width(LengthSpec::Px(field::SM))
                 .shrink(1.0)
                 .with_layout(|l| l.min_width = Some(LengthSpec::Px(field::XS))),
         )
@@ -122,86 +175,76 @@ fn character_row(ui: Ui, i: usize, n: usize, active: bool) -> Row {
                 cx.dispatch_program_all(edit_character(i, move |c| c.name = v))
             }),
         ),
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::HAIR)
+                .align(AlignSpec::Center),
+        )
+        .children((
+            widget(
+                Stack::row(0.0)
+                    .width(LengthSpec::Px(field::XS))
+                    .with_layout(|l| l.flex_shrink = Some(0.0)),
+            )
+            .children(
+                widget(
+                    ColorField::new(crate::ui::c(start))
+                        .label(ui.now_t("general-character-color"))
+                        .size(ControlSize::Small),
+                )
+                .on_cx(move |_, e: &ColorChanged, cx| {
+                    let [r, g, b, a] = e.value;
+                    let to = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+                    let color = Rgba8::rgba(to(r), to(g), to(b), to(a)); // design-tokens: data
+                    cx.dispatch_program_all(edit_character(i, move |c| c.color = Some(color)))
+                }),
+            ),
+            widget(Stack::row(0.0))
+                .visible(has(|c| c.color.is_some()))
+                .children(icon_action(
+                    ui,
+                    ti::RESTORE,
+                    "general-character-color-reset",
+                    true,
+                    move || edit_character(i, |c| c.color = None),
+                )),
+        )),
         hotkey_control(ui, action),
         widget(Stack::row(0.0).grow(1.0)),
-        if active {
-            widget(
-                Text::new(ui.now_t("general-character-active"))
-                    .style(Type::Small.style())
-                    .color(SemanticColorRole::Muted),
-            )
-            .into_any()
-        } else {
-            button(ui, "general-character-use", move || {
-                edit(move |s| s.general.select_character(i))
-            })
-        },
-        icon_action(ui, ti::ARROW_UP, "general-character-up", i > 0, move || {
-            edit(move |s| s.general.move_character(i, -1))
-        }),
-        icon_action(
-            ui,
-            ti::ARROW_DOWN,
-            "general-character-down",
-            i + 1 < n,
-            move || edit(move |s| s.general.move_character(i, 1)),
-        ),
-        // The last character cannot go.
-        (n > 1).then(|| {
-            confirm(
-                *ui,
-                ui.now_t("general-character-remove-confirm"),
-                ui.now_t("assets-remove"),
-                move |armed| remove_button(ui, armed),
-                move || edit(move |s| s.general.remove_character(i)),
-            )
-        }),
-    ));
-    let start = c.color.unwrap_or(Rgba8::WHITE);
-    let second = widget(
-        Stack::row(0.0)
-            .gap_step(gap::step::CONTROL)
-            .align(AlignSpec::Center)
-            .wrap(true),
-    )
-    .children((
-        avatar_preview(ui, i),
-        button(ui, "general-avatar-pick", move || {
-            Msg::PickFile(FileTarget::Avatar(i))
-        }),
-        widget(Stack::row(0.0))
-            .visible(has(|c| c.avatar.is_some()))
-            .children(button(ui, "general-avatar-clear", move || {
-                edit_character(i, |c| c.avatar = None)
-            })),
-        widget(Stack::row(0.0).grow(1.0)),
         widget(
-            Text::new(ui.now_t("general-character-color"))
-                .style(Type::Small.style())
-                .color(SemanticColorRole::Muted),
-        ),
-        widget(ColorField::new(crate::ui::c(start)).size(ControlSize::Small)).on_cx(
-            move |_, e: &ColorChanged, cx| {
-                let [r, g, b, a] = e.value;
-                let to = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-                let color = Rgba8::rgba(to(r), to(g), to(b), to(a)); // design-tokens: data
-                cx.dispatch_program_all(edit_character(i, move |c| c.color = Some(color)))
-            },
-        ),
-        widget(Stack::row(0.0))
-            .visible(has(|c| c.color.is_some()))
-            .children(button(ui, "general-character-color-reset", move || {
-                edit_character(i, |c| c.color = None)
-            })),
+            Stack::row(0.0)
+                .gap_step(gap::step::HAIR)
+                .align(AlignSpec::Center)
+                .with_layout(|l| l.flex_shrink = Some(0.0)),
+        )
+        .children((
+            in_use,
+            icon_action(ui, ti::ARROW_UP, "general-character-up", i > 0, move || {
+                edit(move |s| s.general.move_character(i, -1))
+            }),
+            icon_action(
+                ui,
+                ti::ARROW_DOWN,
+                "general-character-down",
+                i + 1 < n,
+                move || edit(move |s| s.general.move_character(i, 1)),
+            ),
+            // The last character cannot go.
+            (n > 1).then(|| {
+                confirm(
+                    *ui,
+                    ui.now_t("general-character-remove-confirm"),
+                    ui.now_t("assets-remove"),
+                    move |armed| remove_button(ui, armed),
+                    move || edit(move |s| s.general.remove_character(i)),
+                )
+            }),
+        )),
     ));
     Row::inset(
         widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs)).children((
-            widget(
-                Stack::column(0.0)
-                    .gap_step(nana_ui_core::SpacingStep::Md)
-                    .padding_step(inset::step::CARD, nana_ui_core::SpacingStep::Xl),
-            )
-            .children((first, second)),
+            widget(Stack::column(0.0).padding_step(inset::step::CARD, inset::step::ROW_Y))
+                .children(line),
             hotkey_issue_line(ui, action),
         )),
     )
@@ -219,23 +262,31 @@ fn characters(ui: Ui) -> Row {
             let rows: Vec<Row> = (0..*n)
                 .map(|i| character_row(ui, i, *n, i == *active))
                 .collect();
-            let add = (*n < nanatype_settings::MAX_CHARACTERS).then(|| {
-                button(ui, "general-character-add", || {
-                    edit(|s| s.general.characters.push(Default::default()))
-                })
-            });
-            let hint = widget(
-                Text::new(ui.now_t("general-speaker-hint"))
-                    .style(Type::Small.style())
-                    .color(SemanticColorRole::Muted),
-            );
-            Row::inset(widget(Stack::column(0.0)).children((
-                divided(rows),
-                divider(),
-                crate::ui::kit::line(hint, add),
-            )))
+            Row::inset(widget(Stack::column(0.0)).children(divided(rows)))
         },
     ))
+}
+
+/// The characters' group: what an empty name does and Add on its title.
+fn characters_section(ui: Ui) -> AnyView {
+    let room = move || {
+        ui.settings
+            .with(|s| s.general.characters.len() < nanatype_settings::MAX_CHARACTERS)
+    };
+    section_tools(
+        ui,
+        "general-characters",
+        vec![
+            info_tip(ui, "general-speaker-hint"),
+            widget(Stack::row(0.0))
+                .visible(room)
+                .children(tool(ui, ti::PLUS, "general-character-add", || {
+                    edit(|s| s.general.characters.push(Default::default()))
+                }))
+                .into_any(),
+        ],
+        vec![(characters(ui), None)],
+    )
 }
 
 /// High contrast and the UI scale of the app's own windows. Reduced motion
@@ -352,7 +403,7 @@ fn settings_body(ui: Ui) -> AnyView {
                 ],
             ),
             accessibility(ui),
-            section(ui, "general-characters", vec![characters(ui)]),
+            characters_section(ui),
             section_with(
                 ui,
                 "general-input",

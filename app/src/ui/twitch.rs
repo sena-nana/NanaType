@@ -65,7 +65,11 @@ fn account_card(ui: Ui) -> AnyView {
                 AccountState::Ready(p) => (
                     Some(format!("@{}", p.login)),
                     vec![
-                        button(ui, "tw-refresh", || Msg::Twitch(TwitchMsg::Refresh)),
+                        crate::ui::kit::tool(
+                            nana_ui::icons_tabler::REFRESH,
+                            ui.now_t("tw-refresh"),
+                            || Msg::Twitch(TwitchMsg::Refresh),
+                        ),
                         button(ui, "tw-logout", || Msg::Twitch(TwitchMsg::Logout)),
                     ],
                     None,
@@ -153,9 +157,11 @@ fn deliveries(ui: Ui) -> AnyView {
                         row.push(hint(d.detail.clone()));
                     }
                     if matches!(d.state, DeliveryState::Failed | DeliveryState::Uncertain) {
-                        row.push(button(ui, "tw-copy-remaining", move || {
-                            Msg::CopyText(remaining.clone())
-                        }));
+                        row.push(crate::ui::kit::tool(
+                            nana_ui::icons_tabler::COPY,
+                            ui.now_t("tw-copy-remaining"),
+                            move || Msg::CopyText(remaining.clone()),
+                        ));
                         if d.blocked {
                             row.push(button(ui, "tw-retry", move || {
                                 Msg::Twitch(TwitchMsg::Retry(line))

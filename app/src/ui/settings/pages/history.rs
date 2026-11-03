@@ -117,7 +117,9 @@ pub(super) fn history(ui: Ui) -> AnyView {
                             ui.now_t("history-clear"),
                             move |armed| {
                                 widget(
-                                    Button::new(ui.now_t("history-clear")).size(ControlSize::Small),
+                                    IconButton::new(ti::ERASER, ui.now_t("history-clear"))
+                                        .size(ControlSize::Small)
+                                        .with_tooltip(ui.now_t("history-clear")),
                                 )
                                 .on(move |_: &Activate| armed.set(true))
                                 .into_any()
@@ -174,9 +176,10 @@ pub(super) fn history(ui: Ui) -> AnyView {
                                 ui,
                                 "chat-min-gift",
                                 None,
-                                number(
+                                number_unit(
                                     ui,
                                     (0.0, 10000.0),
+                                    "unit-yuan",
                                     |s| f64::from(s.history.chat.filter.min_gift_coin) / 1000.0,
                                     |s, v| {
                                         s.history.chat.filter.min_gift_coin =
@@ -223,9 +226,10 @@ fn archive_settings(ui: Ui) -> AnyView {
                     ui,
                     "history-archive-keep",
                     Some("history-archive-keep-hint"),
-                    number(
+                    number_unit(
                         ui,
                         (0.0, 3650.0),
+                        "unit-days",
                         |s| f64::from(s.history.archive.keep_days),
                         |s, v| s.history.archive.keep_days = v as u32,
                     ),
@@ -236,19 +240,13 @@ fn archive_settings(ui: Ui) -> AnyView {
     )
 }
 
-fn folder_button(ui: Ui) -> AnyView {
-    button(ui, "history-saved-folder", || {
-        Msg::History(HistoryMsg::OpenFolder)
-    })
-}
-
 /// The saved sessions, newest first; the open one shows its lines below it.
 fn saved_sessions(ui: Ui) -> AnyView {
     let body = dynamic(
         move || (ui.archive.get(), ui.locale.get()),
         move |(view, _)| {
             if view.sessions.is_empty() {
-                return empty_row(ui, "history-saved-empty", folder_button(ui));
+                return block(hint(ui.now_t("history-saved-empty")));
             }
             let mut rows = Vec::new();
             for session in &view.sessions {
@@ -274,14 +272,17 @@ fn saved_sessions(ui: Ui) -> AnyView {
                     rows.push(viewer(ui, view, &session.name));
                 }
             }
-            Row::inset(widget(Stack::column(0.0)).children((
-                divided(rows),
-                divider(),
-                kit::line((), folder_button(ui)),
-            )))
+            Row::inset(widget(Stack::column(0.0)).children(divided(rows)))
         },
     );
-    section(ui, "history-saved", vec![Row::inset(body)])
+    section_tools(
+        ui,
+        "history-saved",
+        vec![tool(ui, ti::FOLDER, "history-saved-folder", || {
+            Msg::History(HistoryMsg::OpenFolder)
+        })],
+        vec![(Row::inset(body), None)],
+    )
 }
 
 /// One session's lines (time · speaker · text) in a scrolling panel, the
@@ -365,9 +366,13 @@ fn viewer(ui: Ui, view: &archive::View, name: &str) -> Row {
             ui.now_t("history-saved-delete-confirm"),
             ui.now_t("history-saved-delete"),
             move |armed| {
-                widget(Button::new(ui.now_t("history-saved-delete")).size(ControlSize::Small))
-                    .on(move |_: &Activate| armed.set(true))
-                    .into_any()
+                widget(
+                    IconButton::new(ti::TRASH, ui.now_t("history-saved-delete"))
+                        .size(ControlSize::Small)
+                        .with_tooltip(ui.now_t("history-saved-delete")),
+                )
+                .on(move |_: &Activate| armed.set(true))
+                .into_any()
             },
             move || Msg::History(HistoryMsg::Delete(name.clone())),
         ),

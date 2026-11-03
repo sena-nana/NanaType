@@ -13,10 +13,12 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                 "",
                 vec![
                     (
-                        block((
-                            crate::ui::speech::actions(ui),
-                            kit::callout(kit::Tone::Neutral, ui.now_t("speech-background-hint")),
-                        )),
+                        row(
+                            ui,
+                            "speech-input",
+                            Some("speech-background-hint"),
+                            listen_buttons(ui),
+                        ),
                         None,
                     ),
                     shown_if(block(crate::ui::speech::status_text(ui)), move || {
@@ -36,9 +38,10 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                             ui,
                             "speech-silence",
                             Some("speech-silence-hint"),
-                            number(
+                            number_unit(
                                 ui,
                                 (1.0, 10.0),
+                                "unit-seconds",
                                 |s| f64::from(s.speech.silence_seconds),
                                 |s, v| s.speech.silence_seconds = v.round() as u32,
                             ),
@@ -47,9 +50,12 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                     ),
                 ],
             ),
-            section(
+            section_tools(
                 ui,
                 "speech-recognition",
+                vec![tool(ui, ti::REFRESH, "speech-refresh", || {
+                    Msg::Speech(SpeechMsg::Refresh)
+                })],
                 vec![
                     row(
                         ui,
@@ -144,11 +150,10 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                             |s, v| s.speech.language = (!v.is_empty()).then(|| v.into()),
                         ),
                     ),
-                    kit::line(
-                        (),
-                        button(ui, "speech-refresh", || Msg::Speech(SpeechMsg::Refresh)),
-                    ),
-                ],
+                ]
+                .into_iter()
+                .map(|r| (r, None))
+                .collect(),
             ),
             dynamic(
                 move || (ui.locale.get(), ui.speech.with(|s| s.model.clone())),
@@ -175,42 +180,39 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                     section(
                         ui,
                         "speech-model",
-                        vec![with_tip(
-                            ui,
-                            // The buttons under the status: beside it, with
-                            // longer labels, they left it a narrow column.
-                            block((
-                                Type::Body.view(status),
-                                widget(
-                                    Stack::row(0.0)
-                                        .gap_step(gap::step::CONTROL)
-                                        .align(AlignSpec::Center)
-                                        .wrap(true),
-                                )
-                                .children((
+                        vec![kit::row_marked(
+                            status,
+                            ui.now_t("speech-model-hint"),
+                            controls(
+                                vec![
                                     (!working && !ready).then(|| {
-                                        button(ui, "speech-model-download", || {
-                                            Msg::Speech(SpeechMsg::ModelDownload)
-                                        })
+                                        icon_action(
+                                            ui,
+                                            "speech-model-download",
+                                            ti::CLOUD_DOWNLOAD,
+                                            || Msg::Speech(SpeechMsg::ModelDownload),
+                                        )
                                     }),
                                     (!working).then(|| {
-                                        button(ui, "speech-model-import", || {
+                                        icon_action(ui, "speech-model-import", ti::DOWNLOAD, || {
                                             Msg::PickFile(FileTarget::SpeechModel)
                                         })
                                     }),
                                     working.then(|| {
-                                        button(ui, "speech-model-cancel", || {
+                                        icon_action(ui, "speech-model-cancel", ti::X, || {
                                             Msg::Speech(SpeechMsg::ModelCancel)
                                         })
                                     }),
                                     (!working && ready).then(|| {
-                                        button(ui, "speech-model-delete", || {
+                                        icon_action(ui, "speech-model-delete", ti::TRASH, || {
                                             Msg::Speech(SpeechMsg::ModelDelete)
                                         })
                                     }),
-                                )),
-                            )),
-                            "speech-model-hint",
+                                ]
+                                .into_iter()
+                                .flatten()
+                                .collect(),
+                            ),
                         )],
                     )
                 },
@@ -282,27 +284,28 @@ fn tts(ui: Ui) -> AnyView {
         toggle_row!(ui, "tts-chat", tts.chat),
         toggle_row!(ui, "tts-partners", tts.partners),
         toggle_row!(ui, "tts-pace", tts.pace_typing),
-        with_tip(
-            ui,
-            kit::line(
-                (),
-                kit::hstack((
-                    button(ui, "tts-refresh", || Msg::Tts(TtsMsg::Refresh)),
-                    button(ui, "tts-test", || Msg::Tts(TtsMsg::Test(None))),
-                )),
-            ),
-            "tts-hint",
-        ),
     ];
     if !nanatype_tts::Tts::available() {
         rows.insert(0, block(hint(ui.now_t("tts-unavailable"))));
     }
-    toggled_section(
+    let enabled = |s: &Settings| s.tts.enabled;
+    section_tools(
         ui,
         "tts",
-        toggle_row!(ui, "tts-enabled", tts.enabled),
-        |s| s.tts.enabled,
-        rows,
+        vec![
+            info_tip(ui, "tts-hint"),
+            tool(ui, ti::REFRESH, "tts-refresh", || Msg::Tts(TtsMsg::Refresh)),
+            widget(Stack::row(0.0))
+                .visible(move || ui.settings.with(|s| enabled(s)))
+                .children(tool(ui, ti::PLAYER_PLAY, "tts-test", || {
+                    Msg::Tts(TtsMsg::Test(None))
+                }))
+                .into_any(),
+        ],
+        vec![
+            (toggle_row!(ui, "tts-enabled", tts.enabled), None),
+            when_on(ui, enabled, rows),
+        ],
     )
 }
 
@@ -419,4 +422,40 @@ fn character_voice(ui: Ui, filter: Signal<String>, i: usize, name: &str) -> Row 
         ))
         .into_any(),
     )
+}
+
+/// Start or stop listening, and Resume while it is paused: bound in place,
+/// so the row's control slot keeps its size as the phase changes.
+fn listen_buttons(ui: Ui) -> AnyView {
+    use nanatype_speech::controller::Phase;
+    let phase = move || ui.speech.with(|s| s.phase);
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        widget(Button::new(ui.now_t("speech-start")).size(ControlSize::Small))
+            .bind(move |b: &mut Button| {
+                let key = if phase().active() {
+                    "speech-stop"
+                } else {
+                    "speech-start"
+                };
+                let label = super::I18N.t_in(ui.locale.get(), key);
+                if b.label != label {
+                    b.label = label;
+                }
+            })
+            .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::Speech(SpeechMsg::Toggle))),
+        widget(Stack::row(0.0))
+            .visible(move || {
+                let p = phase();
+                p.active() && matches!(p, Phase::Paused | Phase::Error)
+            })
+            .children(button(ui, "speech-resume", || {
+                Msg::Speech(SpeechMsg::Resume)
+            })),
+    ))
+    .into_any()
 }

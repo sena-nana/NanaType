@@ -177,7 +177,12 @@ fn speaker_hints_remain_readable_in_all_locales_and_window_sizes() {
             let mut f = Fixture::new(locale, onboarding, Page::General);
             for (w, h) in [(720, 480), (920, 660)] {
                 f.session.set_viewport(w, h, 1.0).unwrap();
-                assert!(f.find("text", "general-speaker-hint").bounds.width >= 120.0);
+                if onboarding {
+                    assert!(f.find("text", "general-speaker-hint").bounds.width >= 120.0);
+                } else {
+                    // On the page it is the characters' info mark, read on hover.
+                    assert!(f.find("button", "general-speaker-hint").bounds.width > 0.0);
+                }
             }
         }
     }

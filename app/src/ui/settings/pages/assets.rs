@@ -15,14 +15,14 @@ pub(super) fn remove_button(ui: Ui, armed: Signal<bool>) -> AnyView {
 
 /// "Add folder…", which picks a sticker folder.
 fn add_folder(ui: Ui) -> AnyView {
-    button(ui, "assets-add-folder", || {
+    tool(ui, ti::PLUS, "assets-add-folder", || {
         Msg::PickFile(FileTarget::StickerFolder)
     })
 }
 
 /// "Add phrase", which appends an empty quick phrase.
 fn add_phrase(ui: Ui) -> AnyView {
-    button(ui, "assets-phrase-add", || {
+    tool(ui, ti::PLUS, "assets-phrase-add", || {
         edit(|s| {
             s.assets.phrases.push(QuickPhrase {
                 label: String::new(),
@@ -34,13 +34,12 @@ fn add_phrase(ui: Ui) -> AnyView {
     })
 }
 
-/// `rows` with `add` at the end of the last line, or the empty state with
-/// `add` beside it when there are none.
-fn list_or_empty(ui: Ui, rows: Vec<Row>, empty_key: &str, add: AnyView) -> Row {
+/// `rows`, or the empty state when there are none.
+fn list_or_empty(ui: Ui, rows: Vec<Row>, empty_key: &str) -> Row {
     if rows.is_empty() {
-        return empty_row(ui, empty_key, add);
+        return block(hint(ui.now_t(empty_key)));
     }
-    Row::inset(widget(Stack::column(0.0)).children((divided(rows), divider(), kit::line((), add))))
+    Row::inset(widget(Stack::column(0.0)).children(divided(rows)))
 }
 
 pub(super) fn assets(ui: Ui) -> AnyView {
@@ -108,33 +107,28 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                         } else {
                             "stickers-repository"
                         };
-                        actions.push(button(ui, label, move || {
+                        actions.push(icon_action(ui, label, ti::EXTERNAL_LINK, move || {
                             Msg::Sticker(StickerMsg::Repository(root.clone()))
                         }));
                     }
                     if !pack.phase.busy() && pack.phase != Phase::Ready {
                         let root = pack.root.clone();
                         let preset = pack.preset;
-                        actions.push(button(
-                            ui,
-                            if pack.phase == Phase::NotDownloaded {
-                                "stickers-download"
-                            } else {
-                                "stickers-retry"
-                            },
-                            move || {
-                                preset
-                                    .map(|e| Msg::Sticker(StickerMsg::Download(e)))
-                                    .unwrap_or_else(|| {
-                                        Msg::Sticker(StickerMsg::Retry(root.clone()))
-                                    })
-                            },
-                        ));
+                        let (key, glyph) = if pack.phase == Phase::NotDownloaded {
+                            ("stickers-download", ti::CLOUD_DOWNLOAD)
+                        } else {
+                            ("stickers-retry", ti::REFRESH)
+                        };
+                        actions.push(icon_action(ui, key, glyph, move || {
+                            preset
+                                .map(|e| Msg::Sticker(StickerMsg::Download(e)))
+                                .unwrap_or_else(|| Msg::Sticker(StickerMsg::Retry(root.clone())))
+                        }));
                     }
                     if pack.phase != Phase::NotDownloaded {
                         let root = pack.root.clone();
                         if pack.phase.busy() {
-                            actions.push(button(ui, "common-cancel", move || {
+                            actions.push(icon_action(ui, "common-cancel", ti::X, move || {
                                 Msg::Sticker(StickerMsg::Remove(root.clone()))
                             }));
                         } else {
@@ -160,7 +154,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                     )
                 })
                 .collect();
-            list_or_empty(ui, rows, "empty-stickers", add_folder(ui))
+            list_or_empty(ui, rows, "empty-stickers")
         },
     );
     let phrases = dynamic(
@@ -267,14 +261,24 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                     )
                 })
                 .collect();
-            list_or_empty(ui, rows, "empty-phrases", add_phrase(ui))
+            list_or_empty(ui, rows, "empty-phrases")
         },
     );
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
-            section(ui, "assets-stickers", vec![Row::inset(dirs)]),
+            section_tools(
+                ui,
+                "assets-stickers",
+                vec![add_folder(ui)],
+                vec![(Row::inset(dirs), None)],
+            ),
             crate::ui::settings::telegram::panel(ui),
-            section(ui, "assets-phrases", vec![Row::inset(phrases)]),
+            section_tools(
+                ui,
+                "assets-phrases",
+                vec![add_phrase(ui)],
+                vec![(Row::inset(phrases), None)],
+            ),
         ))
         .into_any()
 }

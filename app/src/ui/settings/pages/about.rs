@@ -201,7 +201,7 @@ fn local(ui: Ui) -> Vec<Row> {
             ui,
             "about-diagnostics",
             Some("about-diagnostics-hint"),
-            button(ui, "about-export", || Msg::ExportDiagnostics),
+            icon_action(ui, "about-export", ti::UPLOAD, || Msg::ExportDiagnostics),
         ),
         // The first-run guide again, from its first step, on General.
         row(

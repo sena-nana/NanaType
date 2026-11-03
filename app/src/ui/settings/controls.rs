@@ -5,9 +5,9 @@ use std::sync::{Arc, LazyLock};
 
 use nana_ui::runtime::view::{AnyView, IntoView, segmented_option, widget};
 use nana_ui::runtime::{
-    Activate, Button, Chip, ColorChanged, ColorField, IconButton, NumberChanged, RangeField,
-    RangeInput, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption,
-    Stack, StatusBadge, Switch, Text, TextChanged, ToggleChanged,
+    Activate, Button, Chip, ColorChanged, ColorField, NumberChanged, RangeField, RangeInput,
+    SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption, Stack,
+    StatusBadge, Switch, Text, TextChanged, ToggleChanged,
 };
 use nana_ui::{ButtonKind, ControlSize, StatusTone};
 use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec, SemanticColorRole};
@@ -214,43 +214,47 @@ fn breathing_badge(
         .into_any()
 }
 
-/// Label (and hint) on the left, control on the right; stacks when narrow.
+/// Label on the left, control on the right; stacks when narrow. What the
+/// setting does (`hint_key`) is an info mark before the control, so the row
+/// stays one line.
 pub fn row(ui: Ui, label_key: &str, hint_key: Option<&str>, control: AnyView) -> Row {
-    row_text(ui.now_t(label_key), hint_key.map(|k| ui.now_t(k)), control)
-}
-
-/// `row` with the text of `key` in a tip card under it, whatever its
-/// length: for a row whose control leaves a hint no room.
-pub fn with_tip(ui: Ui, row: Row, key: &str) -> Row {
-    kit::with_tip(row, ui.now_t(key))
+    match hint_key {
+        Some(key) => kit::row_marked(ui.now_t(label_key), ui.now_t(key), control),
+        None => row_text(ui.now_t(label_key), None, control),
+    }
 }
 
 /// An info mark whose tooltip carries the detail a label leaves out.
 pub fn info_tip(ui: Ui, key: &str) -> AnyView {
-    widget(
-        IconButton::new(nana_ui::icons_tabler::INFO_CIRCLE, ui.now_t(key))
-            .size(ControlSize::Small)
-            .kind(ButtonKind::Ghost)
-            .with_tooltip(ui.now_t(key)),
-    )
-    .into_any()
+    kit::hint_mark(ui.now_t(key))
 }
 
 /// [`row`] with an info mark before its control, for detail worth a look
 /// but not a line of its own.
 pub fn row_tip(ui: Ui, label_key: &str, tip_key: &str, control: AnyView) -> Row {
-    row(
-        ui,
-        label_key,
-        None,
-        widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::HAIR)
-                .align(AlignSpec::Center),
-        )
-        .children((info_tip(ui, tip_key), control))
-        .into_any(),
-    )
+    row(ui, label_key, Some(tip_key), control)
+}
+
+/// [`section_with`] whose title line ends in `tools`: the group's own
+/// actions as icons ([`tool`]).
+pub fn section_tools<V: IntoView>(
+    ui: Ui,
+    title_key: &str,
+    tools: Vec<AnyView>,
+    rows: Vec<(V, Shown)>,
+) -> AnyView {
+    kit::section_tools(ui.now_t(title_key), tools.into_any(), rows)
+}
+
+/// An icon tool that sends `msg`, named and tipped by `key`: a group's
+/// action on its title line, or a row's at its end.
+pub fn tool(
+    ui: Ui,
+    glyph: nana_ui::runtime::Icon,
+    key: &str,
+    msg: impl Fn() -> Msg + Send + 'static,
+) -> AnyView {
+    kit::tool(glyph, ui.now_t(key), msg)
 }
 
 /// [`row`] whose hint follows the settings (it is re-read on every change).
@@ -599,6 +603,28 @@ pub fn number(
     get: fn(&Settings) -> f64,
     set: fn(&mut Settings, f64),
 ) -> AnyView {
+    number_field(ui, range, None, get, set)
+}
+
+/// [`number`] with its unit (the `unit_key` message) drawn after the
+/// number, so the label names only the quantity.
+pub fn number_unit(
+    ui: Ui,
+    range: (f64, f64),
+    unit_key: &str,
+    get: fn(&Settings) -> f64,
+    set: fn(&mut Settings, f64),
+) -> AnyView {
+    number_field(ui, range, Some(ui.now_t(unit_key)), get, set)
+}
+
+fn number_field(
+    ui: Ui,
+    range: (f64, f64),
+    unit: Option<String>,
+    get: fn(&Settings) -> f64,
+    set: fn(&mut Settings, f64),
+) -> AnyView {
     widget(
         Stack::row(0.0)
             .width(LengthSpec::Px(field::SM))
@@ -609,6 +635,9 @@ pub fn number(
             let mut n = kit::number_input(get(&ui.settings.get_untracked()))
                 .range(range.0, range.1)
                 .size(ControlSize::Small);
+            if let Some(unit) = unit {
+                n = n.unit(unit);
+            }
             crate::ui::tnum(Arc::make_mut(&mut n.style.layout));
             n
         })

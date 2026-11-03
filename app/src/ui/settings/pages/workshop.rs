@@ -9,7 +9,7 @@ use crate::workshop::{Availability, Kind, Row, RowState, Tag};
 
 /// Browse the Workshop for `tag` (in the Steam overlay when it is on).
 pub(super) fn browse_button(ui: Ui, tag: Tag) -> AnyView {
-    button(ui, "workshop-browse", move || {
+    tool(ui, ti::WORLD, "workshop-browse", move || {
         Msg::Workshop(WorkshopMsg::Browse(tag))
     })
 }
