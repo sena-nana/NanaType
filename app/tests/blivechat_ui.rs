@@ -40,7 +40,7 @@ fn enabled(source: BlivechatSource) -> Settings {
 }
 
 #[test]
-fn the_page_folds_away_while_off_and_names_both_sources_in_every_locale() {
+fn the_page_folds_away_while_off_and_names_every_source_in_every_locale() {
     for locale in Locale::ALL {
         let ui = ui(locale, Settings::default());
         let mut off = session(ui);
@@ -55,7 +55,11 @@ fn the_page_folds_away_while_off_and_names_both_sources_in_every_locale() {
         assert!(has_button(&mut server, &ui.now_t("int-blive-auth-save")));
         assert!(!has_button(&mut server, &ui.now_t("int-comet-copy")));
         let nodes = server.accessibility_dump();
-        for key in ["int-blive-source-server", "int-blive-source-comet"] {
+        for key in [
+            "int-blive-source-server",
+            "int-blive-source-comet",
+            "int-blive-source-laplace",
+        ] {
             let label = ui.now_t(key);
             assert!(
                 nodes
@@ -105,6 +109,26 @@ fn the_comet_section_only_shows_and_copies_the_address() {
         assert!(
             buttons.iter().all(|b| !b.contains(word)),
             "no plugin or port controls: {buttons:?}"
+        );
+    }
+}
+
+#[test]
+fn the_laplace_section_asks_for_the_bridge_and_its_token() {
+    for locale in Locale::ALL {
+        let ui = ui(locale, enabled(BlivechatSource::Laplace));
+        let mut session = session(ui);
+        let save = ui.now_t("int-laplace-token-save");
+        assert_ne!(save, "int-laplace-token-save", "missing translation");
+        assert!(has_button(&mut session, &save));
+        assert!(!has_button(&mut session, &ui.now_t("int-comet-copy")));
+        let label = ui.now_t("int-laplace-host");
+        assert!(
+            session
+                .accessibility_dump()
+                .iter()
+                .any(|n| n.label.as_deref() == Some(label.as_str())),
+            "the host row shows in {locale:?}"
         );
     }
 }

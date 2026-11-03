@@ -1,11 +1,12 @@
-//! Third-party chat over the blivechat protocol: a blivechat server, or the
-//! 彗星号 workshop plugin through NanaType's own relay (the plugin pushes
-//! blivechat frames to the relay, and the same client joins its `/api/chat`).
+//! Third-party chat: a blivechat server, the 彗星号 workshop plugin through
+//! NanaType's own relay (the plugin pushes blivechat frames to the relay, and
+//! the same client joins its `/api/chat`), or a LAPLACE Event Bridge.
 
 use crate::ui::EditShared;
 
 use nanatype_blive::{
-    BliveConfig, BliveEvent, BliveStatus, BliveUpdate, ChatEvent, RelayConfig, RelayStatus, RoomKey,
+    BliveConfig, BliveEvent, BliveStatus, BliveUpdate, ChatEvent, Join, RelayConfig, RelayStatus,
+    RoomKey,
 };
 use nanatype_settings::{BliveRoomKind, BlivechatSettings, BlivechatSource};
 
@@ -21,6 +22,8 @@ pub struct State {
     pub relay: RelayStatus,
     /// A 身份码 is kept in the secret store.
     pub auth_saved: bool,
+    /// A LAPLACE token is kept in the secret store.
+    pub laplace_token_saved: bool,
 }
 
 /// A new 128-bit 彗星号 token.
@@ -69,6 +72,15 @@ impl App {
                 ) {
                     self.blivechat.reconnect();
                 }
+            }
+            BliveMsg::LaplaceToken(token) => {
+                if let Err(e) = self.laplace_token.set(&token) {
+                    nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 1u64; "{e}");
+                    let text = self.ui.now_t("int-laplace-token-not-stored");
+                    self.notice(text, true);
+                }
+                // A new token is a new configuration, so it connects again.
+                self.blivechat_configure();
             }
             BliveMsg::ResetCometToken => {
                 self.edit(|s| s.integrations.blivechat.comet_token = new_token())
@@ -130,9 +142,26 @@ impl App {
                 Some(BliveConfig {
                     host: "127.0.0.1".into(),
                     port: b.comet_port,
-                    room: RoomKey::RoomId(1),
+                    join: Join::Blivechat(RoomKey::RoomId(1)),
                 }),
             ),
+            (true, BlivechatSource::Laplace) => {
+                // Only read the secret store once the token is wanted.
+                let token = self.laplace_token.get();
+                let saved = token.is_some();
+                self.ui.blivechat.edit(|s| s.laplace_token_saved = saved);
+                let b = &self.settings.integrations.blivechat;
+                (
+                    None,
+                    Some(BliveConfig {
+                        host: b.laplace_host.clone(),
+                        port: b.laplace_port,
+                        join: Join::Laplace {
+                            token: token.unwrap_or_default(),
+                        },
+                    }),
+                )
+            }
             (true, BlivechatSource::Server) => {
                 let room = match crate::distribution::blive_room_kind(b) {
                     BliveRoomKind::AuthCode => {
@@ -150,7 +179,7 @@ impl App {
                     room.map(|room| BliveConfig {
                         host: b.host.clone(),
                         port: b.port,
-                        room,
+                        join: Join::Blivechat(room),
                     }),
                 )
             }

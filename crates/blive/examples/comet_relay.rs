@@ -51,7 +51,7 @@ fn main() {
     client.set(Some(BliveConfig {
         host: "127.0.0.1".into(),
         port,
-        room: RoomKey::RoomId(1),
+        join: nanatype_blive::Join::Blivechat(RoomKey::RoomId(1)),
     }));
     loop {
         std::thread::sleep(Duration::from_secs(60));

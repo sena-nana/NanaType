@@ -8,20 +8,33 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
 use nanatype_model::{LinkFault, ws_connect, ws_idle};
 use tungstenite::Message;
 
+use crate::laplace;
 use crate::protocol::{self, ChatEvent, FatalKind, HEARTBEAT_MESSAGE, Incoming, RoomKey};
 
 /// blivechat sends a heartbeat every 10 s and drops clients silent for 15 s.
 const HEARTBEAT_EVERY: Duration = Duration::from_secs(10);
 /// No frame at all for this long means the connection is dead.
 const SILENCE_LIMIT: Duration = Duration::from_secs(30);
+/// The LAPLACE bridge only pings every 54 s, and answers ours.
+const LAPLACE_PING_EVERY: Duration = Duration::from_secs(20);
+const LAPLACE_SILENCE_LIMIT: Duration = Duration::from_secs(60);
 const RETRY_AFTER: Duration = Duration::from_secs(3);
 const RETRY_AFTER_FATAL: Duration = Duration::from_secs(30);
+
+/// What to connect to on the server.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Join {
+    /// A room on a blivechat server (or the 彗星号 relay).
+    Blivechat(RoomKey),
+    /// A LAPLACE Event Bridge's feed; `token` is empty when it has none.
+    Laplace { token: String },
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BliveConfig {
     pub host: String,
     pub port: u16,
-    pub room: RoomKey,
+    pub join: Join,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -139,8 +152,14 @@ fn run(config: BliveConfig, stop: Receiver<()>, emit: EmitFn) {
         let retry = match session(&config, &stop, &emit) {
             Ended::Stopped => return,
             Ended::Dropped(reason) => {
+                // A wrong token stays wrong; ask again now and then.
+                let retry = if reason == LinkFault::Unauthorized {
+                    RETRY_AFTER_FATAL
+                } else {
+                    RETRY_AFTER
+                };
                 emit(BliveUpdate::Status(BliveStatus::Error(reason)));
-                RETRY_AFTER
+                retry
             }
             Ended::Fatal(FatalKind::AuthCode, message) => {
                 emit(BliveUpdate::Status(BliveStatus::Fatal(
@@ -169,17 +188,36 @@ enum Ended {
 }
 
 fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
+    let (path, join, beat, beat_every, silence) = match &config.join {
+        Join::Blivechat(room) => (
+            "/api/chat".to_owned(),
+            Some(protocol::join_message(room)),
+            Message::text(HEARTBEAT_MESSAGE),
+            HEARTBEAT_EVERY,
+            SILENCE_LIMIT,
+        ),
+        Join::Laplace { token } => (
+            laplace::path(token),
+            None,
+            Message::Ping(Default::default()),
+            LAPLACE_PING_EVERY,
+            LAPLACE_SILENCE_LIMIT,
+        ),
+    };
+    let laplace = join.is_none();
     let mut socket = match ws_connect(
         &config.host,
         config.port,
-        "/api/chat",
+        &path,
         None,
         Duration::from_millis(100),
     ) {
         Ok(socket) => socket,
         Err(e) => return Ended::Dropped(e),
     };
-    if let Err(e) = socket.send(Message::text(protocol::join_message(&config.room))) {
+    if let Some(join) = join
+        && let Err(e) = socket.send(Message::text(join))
+    {
         return Ended::Dropped(LinkFault::from_ws(&e));
     }
     emit(BliveUpdate::Status(BliveStatus::Connected));
@@ -191,21 +229,33 @@ fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
             let _ = socket.flush();
             return Ended::Stopped;
         }
-        if last_sent.elapsed() >= HEARTBEAT_EVERY {
-            if let Err(e) = socket.send(Message::text(HEARTBEAT_MESSAGE)) {
+        if last_sent.elapsed() >= beat_every {
+            if let Err(e) = socket.send(beat.clone()) {
                 return Ended::Dropped(LinkFault::from_ws(&e));
             }
             last_sent = Instant::now();
         }
-        if last_heard.elapsed() >= SILENCE_LIMIT {
+        if last_heard.elapsed() >= silence {
             return Ended::Dropped(LinkFault::Silent);
         }
         match socket.read() {
             Ok(Message::Text(text)) => {
                 last_heard = Instant::now();
-                match protocol::parse(text.as_str()) {
+                let incoming = if laplace {
+                    laplace::parse(text.as_str())
+                } else {
+                    protocol::parse(text.as_str())
+                };
+                match incoming {
                     Some(Incoming::Heartbeat) => {
-                        if let Err(e) = socket.send(Message::text(HEARTBEAT_MESSAGE)) {
+                        let answer = if laplace {
+                            let ping: serde_json::Value =
+                                serde_json::from_str(text.as_str()).unwrap_or_default();
+                            Message::text(laplace::pong(&ping["timestamp"], now_ms()))
+                        } else {
+                            Message::text(HEARTBEAT_MESSAGE)
+                        };
+                        if let Err(e) = socket.send(answer) {
                             return Ended::Dropped(LinkFault::from_ws(&e));
                         }
                         last_sent = Instant::now();
@@ -226,4 +276,10 @@ fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
             Err(e) => return Ended::Dropped(LinkFault::from_ws(&e)),
         }
     }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
 }

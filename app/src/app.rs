@@ -137,6 +137,8 @@ pub struct App {
     workshop: crate::workshop::Workshop,
     /// The blivechat 身份码.
     blivechat_auth: secret::LazySecret,
+    /// The LAPLACE Event Bridge's token.
+    laplace_token: secret::LazySecret,
     #[cfg(feature = "updates")]
     updater: crate::services::updater::Updater,
     #[cfg(feature = "updates")]
@@ -313,6 +315,12 @@ impl App {
             &crate::diag::BLIVECHAT_SECRET_FAILED,
             true,
         );
+        let laplace_token = secret::LazySecret::new(
+            &paths.config,
+            "laplace-token",
+            &crate::diag::BLIVECHAT_SECRET_FAILED,
+            true,
+        );
         let obs_password = secret::LazySecret::new(
             &paths.config,
             "obs-websocket",
@@ -357,6 +365,7 @@ impl App {
             steam: workers.steam,
             workshop,
             blivechat_auth,
+            laplace_token,
             #[cfg(feature = "updates")]
             updater: workers.updater,
             #[cfg(feature = "updates")]

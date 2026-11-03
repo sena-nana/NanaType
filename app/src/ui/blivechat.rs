@@ -1,4 +1,5 @@
-//! The third-party chat page: a blivechat server, or 彗星号 through the relay.
+//! The third-party chat page: a blivechat server, 彗星号 through the relay,
+//! or a LAPLACE Event Bridge.
 use super::{
     Ui,
     settings::controls::{
@@ -51,6 +52,9 @@ pub fn settings_page(ui: Ui) -> AnyView {
             widget(Stack::column(0.0))
                 .visible(source_is(ui, BlivechatSource::Comet))
                 .children(comet_section(ui)),
+            widget(Stack::column(0.0))
+                .visible(source_is(ui, BlivechatSource::Laplace))
+                .children(laplace_section(ui)),
         ))
         .into_any()
 }
@@ -63,15 +67,18 @@ fn source_choice(ui: Ui) -> AnyView {
             &[
                 ("server", "int-blive-source-server"),
                 ("comet", "int-blive-source-comet"),
+                ("laplace", "int-blive-source-laplace"),
             ],
         ),
         |s| match s.integrations.blivechat.source {
             BlivechatSource::Server => "server".into(),
             BlivechatSource::Comet => "comet".into(),
+            BlivechatSource::Laplace => "laplace".into(),
         },
         |s, v| {
             s.integrations.blivechat.source = match v {
                 "comet" => BlivechatSource::Comet,
+                "laplace" => BlivechatSource::Laplace,
                 _ => BlivechatSource::Server,
             }
         },
@@ -283,4 +290,90 @@ fn comet_section(ui: Ui) -> AnyView {
             block(address),
         ],
     )
+}
+
+fn laplace_section(ui: Ui) -> AnyView {
+    section(
+        ui,
+        "int-laplace-section",
+        vec![
+            row(
+                ui,
+                "int-laplace-host",
+                Some("int-laplace-host-hint"),
+                address(
+                    ui,
+                    (
+                        |s| s.integrations.blivechat.laplace_host.clone(),
+                        |s, v| s.integrations.blivechat.laplace_host = v,
+                    ),
+                    (
+                        |s| s.integrations.blivechat.laplace_port,
+                        |s, v| s.integrations.blivechat.laplace_port = v,
+                    ),
+                ),
+            ),
+            row(
+                ui,
+                "int-laplace-token",
+                Some("int-laplace-token-hint"),
+                laplace_token_field(ui),
+            ),
+        ],
+    )
+}
+
+/// The bridge's token goes to the system's secret store, never to the
+/// settings file; once saved it shows as saved, with a way to forget it.
+fn laplace_token_field(ui: Ui) -> AnyView {
+    let draft = signal(String::new());
+    let save = move || {
+        let token = draft.get_untracked().trim().to_owned();
+        draft.set(String::new());
+        Msg::Blive(BliveMsg::LaplaceToken(token))
+    };
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center)
+            .wrap(true),
+    )
+    .children((
+        widget(Stack::row(0.0).width(LengthSpec::Px(crate::ui::kit::field::SM))).children(
+            widget(
+                kit::text_input("")
+                    .secure(true)
+                    .placeholder(ui.now_t("int-laplace-token-placeholder"))
+                    .size(ControlSize::Small),
+            )
+            .bind(move |input: &mut TextInput| {
+                let text = draft.get();
+                if input.state.value.as_ref() != text.as_str() {
+                    input.state.value = text.into();
+                }
+            })
+            .on(move |e: &TextChanged| draft.set(e.value.chars().take(256).collect()))
+            .on_cx(move |_, _: &TextSubmitted, cx| cx.dispatch_program_all(save())),
+        ),
+        primary(ui, "int-laplace-token-save", save),
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::TIGHT)
+                .align(AlignSpec::Center),
+        )
+        .visible(move || ui.blivechat.get().laplace_token_saved)
+        .children((
+            widget(
+                Text::new(ui.now_t("int-laplace-token-saved"))
+                    .style(Type::Small.style())
+                    .color(SemanticColorRole::Muted),
+            ),
+            kit::tool(
+                nana_ui::icons_tabler::ERASER,
+                ui.now_t("int-laplace-token-clear"),
+                || Msg::Blive(BliveMsg::LaplaceToken(String::new())),
+            ),
+        )),
+    ))
+    .into_any()
 }

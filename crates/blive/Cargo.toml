@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "NanaType live chat: a blivechat client and a blivechat-compatible relay"
+description = "NanaType live chat: a blivechat and LAPLACE Event Bridge client and a blivechat-compatible relay"
 
 [dependencies]
 nanatype-model = { workspace = true, features = ["ws"] }

@@ -9,6 +9,9 @@
 //! Messages arrive on a thread of their own through the callback given to
 //! [`BliveHandle::new`]; nothing here touches UI state.
 //!
+//! [`laplace`] reads a LAPLACE Event Bridge instead: the same connection
+//! thread, with [`Join::Laplace`] in place of a room.
+//!
 //! [`relay`] is a small blivechat-compatible server for sources that can only
 //! push: the 彗星号 workshop plugin connects to it and sends blivechat frames,
 //! and a [`BliveHandle`] joins its `/api/chat` like any blivechat server.
@@ -19,12 +22,13 @@
 
 pub mod chat;
 mod client;
+pub mod laplace;
 pub mod protocol;
 pub mod relay;
 
 #[cfg(test)]
 mod tests;
 
-pub use client::{BliveConfig, BliveEvent, BliveHandle, BliveStatus, BliveUpdate};
+pub use client::{BliveConfig, BliveEvent, BliveHandle, BliveStatus, BliveUpdate, Join};
 pub use protocol::{Author, ChatEvent, FatalKind, Guard, RoomKey};
 pub use relay::{RelayConfig, RelayHandle, RelayStatus};

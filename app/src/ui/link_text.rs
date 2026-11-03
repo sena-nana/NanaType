@@ -34,6 +34,7 @@ pub fn fault(locale: Locale, f: &LinkFault) -> String {
             &[("host", host.as_str().into())],
         ),
         LinkFault::Silent => t("link-fault-silent"),
+        LinkFault::Unauthorized => t("link-fault-unauthorized"),
         LinkFault::Remote(m) if m.trim().is_empty() => t("link-fault-remote-empty"),
         LinkFault::Remote(m) => I18N.tr_in(
             locale,
@@ -110,8 +111,9 @@ fn blive(locale: Locale, status: &BliveStatus, room: &str) -> (String, Link) {
     }
 }
 
-/// Third-party chat's status line and dot: a blivechat server's join, or
-/// for 彗星号 the relay and how many plugin pages push to it.
+/// Third-party chat's status line and dot: a blivechat server's join, for
+/// 彗星号 the relay and how many plugin pages push to it, or the LAPLACE
+/// bridge's connection.
 pub fn blivechat(
     locale: Locale,
     settings: &BlivechatSettings,
@@ -132,6 +134,10 @@ pub fn blivechat(
             };
             blive(locale, &state.status, &room)
         }
+        BlivechatSource::Laplace => match &state.status {
+            BliveStatus::Connected => (I18N.t_in(locale, "int-laplace-connected"), Link::Connected),
+            other => blive(locale, other, ""),
+        },
         BlivechatSource::Comet => match &state.relay {
             RelayStatus::Error(f) => (
                 I18N.tr_in(
@@ -211,6 +217,7 @@ mod tests {
             LinkFault::PortInUse(8765),
             LinkFault::Unresolved("example.invalid".into()),
             LinkFault::Silent,
+            LinkFault::Unauthorized,
             LinkFault::Remote(String::new()),
             LinkFault::Remote("Plugin not allowed".into()),
         ];
@@ -242,7 +249,7 @@ mod tests {
             {
                 texts.push(blive(locale, &status, "1").0);
             }
-            use BlivechatSource::{Comet, Server};
+            use BlivechatSource::{Comet, Laplace, Server};
             let listening = |publishers| RelayStatus::Listening { publishers };
             for (source, relay, status) in [
                 (Server, RelayStatus::Off, BliveStatus::Off),
@@ -255,6 +262,12 @@ mod tests {
                 ),
                 (Comet, listening(0), BliveStatus::Connected),
                 (Comet, listening(2), BliveStatus::Connected),
+                (Laplace, RelayStatus::Off, BliveStatus::Connected),
+                (
+                    Laplace,
+                    RelayStatus::Off,
+                    BliveStatus::Error(LinkFault::Unauthorized),
+                ),
             ] {
                 let settings = BlivechatSettings {
                     enabled: true,
@@ -265,6 +278,7 @@ mod tests {
                     status,
                     relay,
                     auth_saved: false,
+                    laplace_token_saved: false,
                 };
                 texts.push(blivechat(locale, &settings, &state).0);
             }

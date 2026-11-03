@@ -75,7 +75,7 @@ NanaType is a streaming typewriter built for VTubers. You type in the input box,
     </td>
     <td valign="top">
       <h4>💬 Live chat</h4>
-      Read and send Twitch chat. Through the blivechat protocol you can also bring in <a href="https://github.com/xfgryujk/blivechat">blivechat</a> or <a href="https://huixinghao.cn/">Comet (彗星号)</a>, which relay Bilibili, Douyin and Kuaishou comments.
+      Read and send Twitch chat. Through the blivechat protocol you can also bring in <a href="https://github.com/xfgryujk/blivechat">blivechat</a> or <a href="https://huixinghao.cn/">Comet (彗星号)</a>, or connect a <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>, which relay Bilibili, Douyin and Kuaishou comments.
     </td>
   </tr>
   <tr>
@@ -159,7 +159,7 @@ Platform dependencies, packaging, the Steam edition and development environment 
 | `crates/audio` | Decoding, mixing and sample-accurate scheduling |
 | `crates/bridge` | VTube Studio, OSC, WebSocket |
 | `crates/twitch` | Anonymous Twitch IRC reading, device-code sign-in and Helix sending |
-| `crates/blive` | blivechat client (protocol parsing, connection and reconnects) and the Comet relay |
+| `crates/blive` | blivechat and LAPLACE Event Bridge client (protocol parsing, connection and reconnects) and the Comet relay |
 | `integrations/comet` | Comet Workshop plugin page: converts Comet events into blivechat messages |
 | `crates/core` | Session logic: drafts, sending, continue, queue, history, rewind |
 | `crates/p2p` | Steam online play (up to 8 people), session ordering, reconnects and image forwarding |
@@ -176,7 +176,7 @@ The pure-logic crates don't depend on the UI framework and can be tested on thei
 
 - The four built-in **Echo-Live Vanilla, Glass, Bubble and Void** skins are based on designs from [sheep-realms/Echo-Live](https://github.com/sheep-realms/Echo-Live), by Sheep-realms and the project's contributors; NanaType reimplements and adapts these styles in its own skin format. For the original project's licensing, see the [Echo-Live license and statement](https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md). The app also links to the original repository under **Settings › About**.
 - The sticker presets come from [Echo-Live](https://github.com/sheep-realms/Echo-Live) and the [Sheep-realms EmoteLab extension](https://github.com/sheep-realms/Echo-Live-Sheep-realms-EmoteLab-Extension).
-- Twitch support is implemented independently from the official developer documentation; blivechat support uses its public protocol for receiving externally forwarded messages.
+- Twitch support is implemented independently from the official developer documentation; blivechat and LAPLACE Event Bridge support use their public protocols for receiving externally forwarded messages.
 
 ## 📄 License
 

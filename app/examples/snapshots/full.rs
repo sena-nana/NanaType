@@ -16,8 +16,9 @@ pub fn capture(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
     links(scene, out);
 }
 
-/// The third-party chat page in both sources: a blivechat server joined by
-/// room number, and 彗星号 with two plugin pages pushing to the relay.
+/// The third-party chat page in every source: a blivechat server joined by
+/// room number, 彗星号 with a plugin page pushing to the relay, and a
+/// LAPLACE Event Bridge.
 fn blivechat(scene: &Scene, out: &std::path::Path) {
     use nanatype_blive::{BliveStatus, RelayStatus};
     use nanatype_settings::{BliveRoomKind, BlivechatSource};
@@ -36,6 +37,11 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
             BlivechatSource::Comet,
             RelayStatus::Listening { publishers: 1 },
         ),
+        (
+            "laplace-settings",
+            BlivechatSource::Laplace,
+            RelayStatus::Off,
+        ),
     ] {
         let mut s = (*before_settings).clone();
         let b = &mut s.integrations.blivechat;
@@ -48,6 +54,7 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
             status: BliveStatus::Connected,
             relay,
             auth_saved: false,
+            laplace_token_saved: source == BlivechatSource::Laplace,
         };
         let mut status = (*before_status).clone();
         (status.blivechat, status.blivechat_link) =

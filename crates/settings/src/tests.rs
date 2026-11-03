@@ -1007,6 +1007,10 @@ fn third_party_chat_defaults_off_and_round_trips_at_schema_2() {
     assert_eq!((b.host.as_str(), b.port), ("127.0.0.1", BLIVECHAT_PORT));
     assert_eq!(b.comet_port, COMET_RELAY_PORT);
     assert!(b.comet_token.is_empty());
+    assert_eq!(
+        (b.laplace_host.as_str(), b.laplace_port),
+        ("127.0.0.1", LAPLACE_PORT)
+    );
 
     let mut value = serde_json::json!({"schema":2,"integrations":{"blivechat":{"enabled":true,"source":"comet","room_kind":"room_id","room_id":"21452505","comet_token":"abc123"}}});
     assert_eq!(migrate(&mut value).unwrap(), 2);
@@ -1039,12 +1043,31 @@ fn third_party_chat_values_are_repaired() {
     b.comet_port = 0;
     b.room_id = " 42 ".into();
     b.comet_token = "ab\"<cd>".into();
+    b.laplace_host = "".into();
+    b.laplace_port = 0;
     assert!(s.sanitize());
     let b = &s.integrations.blivechat;
     assert_eq!(b.host, "127.0.0.1");
     assert_eq!((b.port, b.comet_port), (BLIVECHAT_PORT, COMET_RELAY_PORT));
     assert_eq!(b.room_id, "42");
     assert_eq!(b.comet_token, "abcd");
+    assert_eq!(
+        (b.laplace_host.as_str(), b.laplace_port),
+        ("127.0.0.1", LAPLACE_PORT)
+    );
+}
+
+#[test]
+fn a_laplace_source_round_trips() {
+    let value = serde_json::json!({"schema":2,"integrations":{"blivechat":{"enabled":true,
+        "source":"laplace","laplace_host":"10.0.0.2","laplace_port":9697}}});
+    let settings: Settings = serde_json::from_value(value).unwrap();
+    let b = &settings.integrations.blivechat;
+    assert_eq!(b.source, BlivechatSource::Laplace);
+    assert_eq!(
+        (b.laplace_host.as_str(), b.laplace_port),
+        ("10.0.0.2", 9697)
+    );
 }
 
 #[test]

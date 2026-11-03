@@ -96,7 +96,7 @@ scripts/package-macos.sh --steam
 | `crates/audio` | デコード、ミキシング、サンプル単位のスケジューリング |
 | `crates/bridge` | VTube Studio、OSC、WebSocket |
 | `crates/twitch` | Twitch IRC の匿名受信、デバイスコードによるログインと Helix 送信 |
-| `crates/blive` | blivechat クライアント（プロトコル解析、接続と再接続）と彗星号の中継 |
+| `crates/blive` | blivechat と LAPLACE Event Bridge のクライアント（プロトコル解析、接続と再接続）と彗星号の中継 |
 | `integrations/comet` | 彗星号ワークショップのプラグインページ：彗星号のイベントを blivechat メッセージに変換 |
 | `crates/core` | セッションロジック：下書き、送信、続行、キュー、履歴、巻き戻し |
 | `crates/p2p` | Steam のオンライン接続（最大 8 人）、セッションの順序付け、再接続と画像の転送 |

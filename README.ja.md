@@ -75,7 +75,7 @@ NanaType は VTuber のための配信用タイプライターです。入力ボ
     </td>
     <td valign="top">
       <h4>💬 コメント連携</h4>
-      Twitch チャットの受信と送信に対応。blivechat プロトコル経由で <a href="https://github.com/xfgryujk/blivechat">blivechat</a> や <a href="https://huixinghao.cn/">彗星号</a> を接続すれば、bilibili・抖音（Douyin）・快手（Kuaishou）のコメントも取り込めます。
+      Twitch チャットの受信と送信に対応。blivechat プロトコル経由で <a href="https://github.com/xfgryujk/blivechat">blivechat</a> や <a href="https://huixinghao.cn/">彗星号</a>、または <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a> を接続すれば、bilibili・抖音（Douyin）・快手（Kuaishou）のコメントも取り込めます。
     </td>
   </tr>
   <tr>
@@ -159,7 +159,7 @@ cargo test --workspace --exclude nanatype
 | `crates/audio` | デコード、ミキシング、サンプル単位のスケジューリング |
 | `crates/bridge` | VTube Studio、OSC、WebSocket |
 | `crates/twitch` | Twitch IRC の匿名受信、デバイスコードによるログインと Helix での送信 |
-| `crates/blive` | blivechat クライアント（プロトコル解析、接続と再接続）と彗星号の中継 |
+| `crates/blive` | blivechat と LAPLACE Event Bridge のクライアント（プロトコル解析、接続と再接続）と彗星号の中継 |
 | `integrations/comet` | 彗星号のクリエイティブワークショップ用プラグインページ：彗星号のイベントを blivechat のメッセージに変換 |
 | `crates/core` | セッションのロジック：下書き、送信、続行、キュー、履歴、巻き戻し |
 | `crates/p2p` | Steam オンライン（最大 8 人）、セッションの順序付け、再接続と画像の転送 |
@@ -176,7 +176,7 @@ cargo test --workspace --exclude nanatype
 
 - 内蔵の **Echo-Live オリジナル、ガラス、バブル、ヴォイド** の 4 スキンは、[sheep-realms/Echo-Live](https://github.com/sheep-realms/Echo-Live)（Sheep-realms とプロジェクトの貢献者による作品）のデザインを参考にしています。NanaType は独自のスキン形式でこれらのスタイルを実装・調整しています。元プロジェクトのライセンスについては [Echo-Live のライセンスと声明](https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md) をご覧ください。アプリの **設定 › 情報** にも元リポジトリへのリンクがあります。
 - スタンプのプリセットは [Echo-Live](https://github.com/sheep-realms/Echo-Live) と [Sheep-realms EmoteLab 拡張](https://github.com/sheep-realms/Echo-Live-Sheep-realms-EmoteLab-Extension) に由来します。
-- Twitch 連携は公式の開発者ドキュメントに基づいて独自に実装しています。blivechat は外部から転送されたメッセージを受け取るための公開プロトコルを使っています。
+- Twitch 連携は公式の開発者ドキュメントに基づいて独自に実装しています。blivechat と LAPLACE Event Bridge は外部から転送されたメッセージを受け取るための公開プロトコルを使っています。
 
 ## 📄 ライセンス
 

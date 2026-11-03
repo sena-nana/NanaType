@@ -75,7 +75,7 @@ NanaType 是为虚拟主播做的直播打字机。你在输入框里打字，�
     </td>
     <td valign="top">
       <h4>💬 弹幕与聊天</h4>
-      Twitch 聊天收发；通过 blivechat 协议接入 <a href="https://github.com/xfgryujk/blivechat">blivechat</a> 或 <a href="https://huixinghao.cn/">彗星号</a>，B 站、抖音、快手弹幕都能转进来。
+      Twitch 聊天收发；通过 blivechat 协议接入 <a href="https://github.com/xfgryujk/blivechat">blivechat</a> 或 <a href="https://huixinghao.cn/">彗星号</a>，或连接 <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>，B 站、抖音、快手弹幕都能转进来。
     </td>
   </tr>
   <tr>
@@ -159,7 +159,7 @@ cargo test --workspace --exclude nanatype
 | `crates/audio` | 解码、混音与按采样时刻调度 |
 | `crates/bridge` | VTube Studio、OSC、WebSocket |
 | `crates/twitch` | Twitch IRC 匿名接收、设备码登录与 Helix 发送 |
-| `crates/blive` | blivechat 客户端（协议解析、连接与重连）和彗星号中转 |
+| `crates/blive` | blivechat 与 LAPLACE Event Bridge 客户端（协议解析、连接与重连）和彗星号中转 |
 | `integrations/comet` | 彗星号创意工坊插件页面：把彗星号事件转换成 blivechat 消息 |
 | `crates/core` | 会话逻辑：草稿、发送、继续、队列、历史、回溯 |
 | `crates/p2p` | Steam 联机（最多 8 人）、会话排序、重连与图片转发 |
@@ -176,7 +176,7 @@ cargo test --workspace --exclude nanatype
 
 - 内置的 **Echo-Live 原版、玻璃、气泡、虚空** 四套皮肤，设计参考自 [sheep-realms/Echo-Live](https://github.com/sheep-realms/Echo-Live)，原作者为 Sheep-realms 及该项目贡献者；NanaType 使用本地皮肤格式实现和适配这些样式。原项目的授权说明见 [Echo-Live 授权协议与声明](https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md)。软件「设置 › 关于 › 设计来源」也提供原始仓库链接。
 - 表情包预设来自 [Echo-Live](https://github.com/sheep-realms/Echo-Live) 和 [绵羊动态表情包扩展](https://github.com/sheep-realms/Echo-Live-Sheep-realms-EmoteLab-Extension)。
-- Twitch 按官方开发者文档自行实现；blivechat 使用其公开协议接收外部转发消息。
+- Twitch 按官方开发者文档自行实现；blivechat 与 LAPLACE Event Bridge 使用其公开协议接收外部转发消息。
 
 ## 📄 许可
 

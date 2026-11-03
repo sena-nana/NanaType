@@ -23,6 +23,9 @@ pub enum LinkFault {
     Unresolved(String),
     /// The connection stayed open but nothing arrived for too long.
     Silent,
+    /// The other program turned the connection down for a wrong or missing
+    /// token (HTTP 401 on the handshake).
+    Unauthorized,
     /// The other program refused a request, in its own words.
     Remote(String),
     /// Anything else, as the system put it.
@@ -55,6 +58,9 @@ impl LinkFault {
                 Self::Closed
             }
             tungstenite::Error::Io(io) => Self::from_io(io),
+            tungstenite::Error::Http(response) if response.status().as_u16() == 401 => {
+                Self::Unauthorized
+            }
             other => Self::Other(other.to_string()),
         }
     }
@@ -121,6 +127,7 @@ impl fmt::Display for LinkFault {
             Self::PortInUse(port) => write!(f, "port {port} is in use"),
             Self::Unresolved(host) => write!(f, "cannot resolve {host}"),
             Self::Silent => f.write_str("no data for too long"),
+            Self::Unauthorized => f.write_str("token rejected"),
             Self::Remote(message) | Self::Other(message) => f.write_str(message),
         }
     }
