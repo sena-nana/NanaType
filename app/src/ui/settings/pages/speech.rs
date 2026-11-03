@@ -15,7 +15,7 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                     (
                         block((
                             crate::ui::speech::actions(ui),
-                            hint(ui.now_t("speech-background-hint")),
+                            kit::callout(kit::Tone::Neutral, ui.now_t("speech-background-hint")),
                         )),
                         None,
                     ),
@@ -282,12 +282,16 @@ fn tts(ui: Ui) -> AnyView {
         toggle_row!(ui, "tts-chat", tts.chat),
         toggle_row!(ui, "tts-partners", tts.partners),
         toggle_row!(ui, "tts-pace", tts.pace_typing),
-        kit::line(
-            hint(ui.now_t("tts-hint")),
-            kit::hstack((
-                button(ui, "tts-refresh", || Msg::Tts(TtsMsg::Refresh)),
-                button(ui, "tts-test", || Msg::Tts(TtsMsg::Test(None))),
-            )),
+        with_tip(
+            ui,
+            kit::line(
+                (),
+                kit::hstack((
+                    button(ui, "tts-refresh", || Msg::Tts(TtsMsg::Refresh)),
+                    button(ui, "tts-test", || Msg::Tts(TtsMsg::Test(None))),
+                )),
+            ),
+            "tts-hint",
         ),
     ];
     if !nanatype_tts::Tts::available() {

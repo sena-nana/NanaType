@@ -219,16 +219,10 @@ pub fn row(ui: Ui, label_key: &str, hint_key: Option<&str>, control: AnyView) ->
     row_text(ui.now_t(label_key), hint_key.map(|k| ui.now_t(k)), control)
 }
 
-/// `row` with a tip card under it: what the row needs said, too long for
-/// a hint beside its control.
+/// `row` with the text of `key` in a tip card under it, whatever its
+/// length: for a row whose control leaves a hint no room.
 pub fn with_tip(ui: Ui, row: Row, key: &str) -> Row {
-    let tip = widget(
-        Stack::column(0.0)
-            .padding_step(inset::step::CARD, inset::step::ROW_Y)
-            .with_layout(|l| l.padding_top = Some(LengthSpec::Px(0.0))),
-    )
-    .children(kit::callout(kit::Tone::Neutral, ui.now_t(key)));
-    Row::inset(widget(Stack::column(0.0)).children((row, tip)))
+    kit::with_tip(row, ui.now_t(key))
 }
 
 /// An info mark whose tooltip carries the detail a label leaves out.

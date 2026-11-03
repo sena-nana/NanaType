@@ -158,7 +158,13 @@ pub fn line(left: impl IntoView, right: impl IntoView) -> Row {
 }
 
 /// Label (and hint) on the left, control on the right; stacks when narrow.
+/// A hint too long to read beside a control goes in a tip card under the
+/// row instead (see [`with_tip`]).
 pub fn row_text(label_text: String, hint_text: Option<String>, control: AnyView) -> Row {
+    if let Some(text) = hint_text.as_deref().filter(|h| long_hint(h)) {
+        let text = text.to_owned();
+        return with_tip(row_text(label_text, None, control), text);
+    }
     let hint: Option<Arc<str>> = hint_text.map(Into::into);
     inset_row(
         settings_row(label_text)
@@ -166,6 +172,30 @@ pub fn row_text(label_text: String, hint_text: Option<String>, control: AnyView)
             .control(control_slot(control))
             .into_any(),
     )
+}
+
+/// A hint at least this wide (a CJK character counts two) reads as a
+/// paragraph: beside a control it wraps into a narrow column of lines.
+const TIP_AT: usize = 72;
+
+fn long_hint(text: &str) -> bool {
+    let wide = |c: char| c >= '\u{2E80}';
+    text.chars()
+        .map(|c| if wide(c) { 2 } else { 1 })
+        .sum::<usize>()
+        >= TIP_AT
+}
+
+/// `row` with `text` in a tip card under it: what the row needs said, too
+/// long for a hint beside its control.
+pub fn with_tip(row: Row, text: String) -> Row {
+    let tip = widget(
+        Stack::column(0.0)
+            .padding_step(inset::step::CARD, inset::step::ROW_Y)
+            .with_layout(|l| l.padding_top = Some(LengthSpec::Px(0.0))),
+    )
+    .children(super::callout(super::Tone::Neutral, text));
+    Row::inset(widget(Stack::column(0.0)).children((row, tip)))
 }
 
 /// A label and its control on one line, packed close: the label is cut

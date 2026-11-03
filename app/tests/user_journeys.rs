@@ -195,7 +195,9 @@ fn the_empty_speaker_field_takes_a_click_typing_and_backspace() {
         let (key, field) = if onboarding {
             ("onboard-speaker", f.field("onboard-speaker"))
         } else {
-            ("general-speaker", f.find("text-input", "general-speaker"))
+            // Below the fold at the window's smallest size.
+            let field = f.reach(650.0, 480.0, |f| f.find("text-input", "general-speaker"));
+            ("general-speaker", field)
         };
         f.click(&field);
         let id = StableNodeId::new(field.id).unwrap();
