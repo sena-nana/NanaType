@@ -1235,34 +1235,31 @@ impl App {
         }
     }
 
+    /// How many partner seats are live: one window (and output) each. None
+    /// without a co-op session; before the first room snapshot, the first
+    /// seat already holds the waiting room.
+    pub fn partner_seats(&self) -> usize {
+        if self.peer.handle.is_some() {
+            crate::ui::remote_bands(self.ui.peer_seats.get_untracked())
+        } else {
+            0
+        }
+    }
+
     pub fn refresh_spout_status(&mut self) {
         let locale = self.ui.locale.get_untracked();
-        self.spout
-            .sync(&self.settings, locale, self.peer.handle.is_some());
+        let partners = self.partner_seats();
+        self.spout.sync(&self.settings, locale, partners);
         if let Some(at) = self.spout.take_cleanup_schedule() {
             self.scheduler.output_cleanup(at);
         }
-        let display = self
-            .spout
-            .status
-            .get(&WindowKind::Display)
-            .cloned()
-            .unwrap_or_default();
-        let history = self
-            .spout
-            .status
-            .get(&WindowKind::History)
-            .cloned()
-            .unwrap_or_default();
-        let peer = self
-            .spout
-            .status
-            .get(&WindowKind::PeerDisplay)
-            .cloned()
-            .unwrap_or_default();
+        let status = |kind| self.spout.status.get(&kind).cloned().unwrap_or_default();
+        let display = status(WindowKind::Display);
+        let history = status(WindowKind::History);
+        let seats = WindowKind::PARTNERS.map(status).to_vec();
         self.edit_status(|s| {
             s.spout_display = display;
-            s.spout_peer_display = peer;
+            s.spout_partners = seats;
             s.spout_history = history;
         });
     }
@@ -1357,13 +1354,15 @@ impl App {
             self.sync_tray_characters();
             for kind in [
                 WindowKind::Display,
-                WindowKind::PeerDisplay,
                 WindowKind::History,
                 WindowKind::Settings,
-            ] {
+            ]
+            .into_iter()
+            .chain(WindowKind::PARTNERS)
+            {
                 self.commands.push(WindowCommand::SetTitle {
                     id: kind.id(),
-                    title: I18N.t_in(locale, kind.title_key()),
+                    title: kind.title(locale),
                 });
             }
         }
@@ -1470,7 +1469,7 @@ impl App {
             }
             for kind in [
                 WindowKind::Display,
-                WindowKind::PeerDisplay,
+                WindowKind::PARTNER,
                 WindowKind::History,
             ] {
                 if let Some(o) = kind.overlay_mut(&mut s) {
@@ -2561,7 +2560,8 @@ impl App {
                     let mut desired =
                         windows::desired(k, &self.skin, &self.settings, self.summoned);
                     desired.size = self.window_size(k);
-                    if k == WindowKind::PeerDisplay && self.peer.handle.is_none() {
+                    // A partner window shows only while someone sits there.
+                    if k.seat().is_some_and(|seat| seat >= self.partner_seats()) {
                         desired.visible = false;
                     }
                     if k == WindowKind::Quick {

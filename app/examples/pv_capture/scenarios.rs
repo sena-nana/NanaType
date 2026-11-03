@@ -397,7 +397,7 @@ fn room(scene: Scene, core: Core, out: &Path, l: &Lines) {
         ((d.region[1] + d.overscan * 2.0) * 2.0) as u32,
     );
     rig.mount("partners", size, 2.0, true, move || {
-        dialogue::peer_window(ui)
+        dialogue::peer_window(ui, 0)
     });
     rig.history("history", 2.0);
     let session = |members: usize, names: &[&str], connected: bool| {

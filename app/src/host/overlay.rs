@@ -9,7 +9,7 @@ fn interactive(kind: WindowKind, lock: Lock, handled: bool) -> bool {
         && !handled
         && matches!(
             kind,
-            WindowKind::Display | WindowKind::PeerDisplay | WindowKind::History
+            WindowKind::Display | WindowKind::PeerDisplay(_) | WindowKind::History
         )
 }
 
@@ -127,7 +127,7 @@ mod tests {
                     let allowed = lock != Lock::Locked
                         && matches!(
                             kind,
-                            WindowKind::Display | WindowKind::PeerDisplay | WindowKind::History
+                            WindowKind::Display | WindowKind::PeerDisplay(_) | WindowKind::History
                         );
                     assert_eq!(
                         command(kind, lock, payload, false, Some(FRAME)).is_some(),
@@ -153,7 +153,7 @@ mod tests {
                 let allowed = lock == Lock::Interactive
                     && matches!(
                         kind,
-                        WindowKind::Display | WindowKind::PeerDisplay | WindowKind::History
+                        WindowKind::Display | WindowKind::PeerDisplay(_) | WindowKind::History
                     );
                 assert_eq!(
                     menu_position(kind, lock, &payload, false),
@@ -268,7 +268,7 @@ mod tests {
 
         for kind in [
             WindowKind::Display,
-            WindowKind::PeerDisplay,
+            WindowKind::PARTNER,
             WindowKind::History,
         ] {
             let mut settings = nanatype_settings::Settings::default();
@@ -298,7 +298,9 @@ mod tests {
                 .mount_view_root(id, move || -> AnyView {
                     match kind {
                         WindowKind::Display => dialogue::display_window(ui).into_any(),
-                        WindowKind::PeerDisplay => dialogue::display_window(ui.remote()).into_any(),
+                        WindowKind::PeerDisplay(_) => {
+                            dialogue::display_window(ui.remote()).into_any()
+                        }
                         _ => history::history_window(ui).into_any(),
                     }
                 })

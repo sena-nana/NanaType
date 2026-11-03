@@ -53,7 +53,7 @@ node scripts/comet_publish.mjs "ws://127.0.0.1:12451/comet?token=…"
 
 1. 需要 Steam 正在运行。从输入窗口底栏打开联机入口，房主点击「创建联机」。房间最多 8 人，可以设密码；密码不会写进邀请。
 2. 「邀请好友」打开 Steam 邀请。被邀请的好友不用再输入密码。复制出来的邀请给其他人时，如果房间上了锁，加入前要输入密码。
-3. 「展示框」始终显示自己的内容。「联机伙伴展示框」按入座顺序给其他每人一块实时台词，并在还没人进来时提供邀请和接受状态。共享历史按房主确认的顺序包含所有人已发送的内容。各方保留各自皮肤和窗口布局；实时镜像公开正在输入的内容，编辑后发送只公开已发送内容。F9、跳过和清空展示只控制自己。
+3. 「展示框」始终显示自己的内容。其他每人按入座顺序各有一个「联机伙伴展示框」窗口（座位 1 是房主，之后按加入顺序），座位 1 的窗口在还没人进来时提供邀请和接受状态。这些窗口共用一套显示、锁定和尺寸设置，位置按座位分别记住。共享历史按房主确认的顺序包含所有人已发送的内容。各方保留各自皮肤和窗口布局；实时镜像公开正在输入的内容，编辑后发送只公开已发送内容。F9、跳过和清空展示只控制自己。
 4. 历史窗口在联机期间显示本次会话的台词。联机前的历史和直播间弹幕不共享。离开后恢复本机历史；本次会话不会跨进程重启恢复。会话最多保留最近 1000 条台词，并按消息大小限制裁剪。
 5. 断线时保留编辑能力，发送与手动播放控制暂停。断线会让出席位，同一个人可以在还有空位时重连，已经发出的台词还在。房主离开会结束房间。
 
@@ -63,10 +63,10 @@ Steam 能直连时走直连，否则经 Steam 中继。直连时对端能看到�
 
 ### 接入 OBS
 
-- **Spout2**：设置 › 输出 / OBS 打开 Spout2 输出。OBS 中安装 Spout2 插件，添加 *Spout2 Capture*，选择发送端名称（默认 `NanaType Display` / `NanaType Partner` / `NanaType History`），合成模式选 *Premultiplied Alpha*。
-- **分别输出**：在设置 › 输出 / OBS 分别启用「展示框」和「展示框 · 联机伙伴」，再在 OBS 添加两个来源，分别选择 `NanaType Display`（自己）和 `NanaType Partner`（对方）。尺寸、透明度和发送端名称分别设置；启用的发送端名称须互不重复。伙伴输出只在联机期间运行；联机中隐藏窗口仍会持续输出。共享历史另选 `NanaType History`。
+- **Spout2**：设置 › 输出 / OBS 打开 Spout2 输出。OBS 中安装 Spout2 插件，添加 *Spout2 Capture*，选择发送端名称（默认 `NanaType Display` / `NanaType Partner 1`… / `NanaType History`），合成模式选 *Premultiplied Alpha*。
+- **分别输出**：自己的展示框在设置 › 输出 / OBS 启用，OBS 里选 `NanaType Display`。联机伙伴每人一路输出，在输入窗口的联机面板「推流输出」里按座位开启，OBS 里分别选 `NanaType Partner 1`…`NanaType Partner 7`。输出按座位记忆：谁坐在这个座位就从这一路输出，座位空着时不输出。启用的发送端名称须互不重复。共享历史另选 `NanaType History`。
 - **窗口捕获**：*Window Capture*，捕获方式选 *Windows 10 (1903 and up)*。
-- **Syphon**（macOS）：设置 › 输出 / OBS 打开 Syphon 输出。OBS 中添加 *Syphon Client*，选择发送端名称（默认 `NanaType Display` / `NanaType Partner` / `NanaType History`），合成模式选 *Premultiplied Alpha*。也可以用 *macOS Screen Capture* 捕获展示框窗口。Spout2 仅 Windows。
+- **Syphon**（macOS）：设置 › 输出 / OBS 打开 Syphon 输出。OBS 中添加 *Syphon Client*，选择发送端名称（默认 `NanaType Display` / `NanaType Partner 1`… / `NanaType History`），合成模式选 *Premultiplied Alpha*。也可以用 *macOS Screen Capture* 捕获展示框窗口。Spout2 仅 Windows。
 
 关闭输出 5 秒内重开会复用原发送端，OBS 画面恢复中位约 15–30 ms；发送端生命周期与真实 OBS 实测见 [OBS / Spout 输出](obs-spout.md)。
 

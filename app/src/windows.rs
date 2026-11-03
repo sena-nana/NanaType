@@ -12,7 +12,8 @@ use nana_ui_platform::{WindowId, WindowRole};
 use nanatype_frame::canvas::{self, Canvas};
 pub use nanatype_frame::shell::tint_caption;
 use nanatype_settings::{
-    GeometryStore, InputPresence, Lock, MonitorInfo, OverlaySettings, Placement, Settings,
+    GeometryStore, InputPresence, Lock, MonitorInfo, OverlaySettings, PARTNER_SEATS, Placement,
+    Settings,
 };
 use nanatype_theme::Skin;
 
@@ -20,7 +21,10 @@ use nanatype_theme::Skin;
 pub enum WindowKind {
     Input,
     Display,
-    PeerDisplay,
+    /// One co-op partner's display, by seat (the host, then guests as they
+    /// joined; the local person has no seat). Each is its own window, so each
+    /// has its own Spout/Syphon output.
+    PeerDisplay(u8),
     History,
     Settings,
     /// The summon hotkey's one-line plain-text bar.
@@ -38,13 +42,38 @@ pub const QUICK_SIZE: (f32, f32) = (640.0, 56.0);
 pub const OVERLAY_MIN: (f64, f64) = (160.0, 96.0);
 
 impl WindowKind {
-    pub const OVERLAYS: [Self; 4] = [Self::Input, Self::Display, Self::PeerDisplay, Self::History];
+    pub const OVERLAYS: [Self; 4] = [Self::Input, Self::Display, Self::PARTNER, Self::History];
+
+    /// The first partner seat, standing in for every partner window where they
+    /// share settings (the overlay switches, the windows page).
+    pub const PARTNER: Self = Self::PeerDisplay(0);
+
+    /// Every partner seat's window, in seat order.
+    pub const PARTNERS: [Self; PARTNER_SEATS] = [
+        Self::PeerDisplay(0),
+        Self::PeerDisplay(1),
+        Self::PeerDisplay(2),
+        Self::PeerDisplay(3),
+        Self::PeerDisplay(4),
+        Self::PeerDisplay(5),
+        Self::PeerDisplay(6),
+    ];
+
+    /// The partner seat this window shows, if it is a partner window.
+    pub fn seat(self) -> Option<usize> {
+        match self {
+            Self::PeerDisplay(seat) => Some(usize::from(seat)),
+            _ => None,
+        }
+    }
 
     pub fn id(self) -> WindowId {
         match self {
             Self::Input => WindowId::PRIMARY,
             Self::Display => WindowId(2),
-            Self::PeerDisplay => WindowId(6),
+            // The first seat keeps the single partner window's id.
+            Self::PeerDisplay(0) => WindowId(6),
+            Self::PeerDisplay(seat) => WindowId(7 + u64::from(seat)),
             Self::History => WindowId(3),
             Self::Settings => WindowId(4),
             Self::Quick => WindowId(7),
@@ -52,10 +81,16 @@ impl WindowKind {
     }
 
     /// Windows the app manages, in reconcile order.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 5 + PARTNER_SEATS] = [
         Self::Input,
         Self::Display,
-        Self::PeerDisplay,
+        Self::PeerDisplay(0),
+        Self::PeerDisplay(1),
+        Self::PeerDisplay(2),
+        Self::PeerDisplay(3),
+        Self::PeerDisplay(4),
+        Self::PeerDisplay(5),
+        Self::PeerDisplay(6),
         Self::History,
         Self::Settings,
         Self::Quick,
@@ -69,7 +104,13 @@ impl WindowKind {
         match self {
             Self::Input => "nt.input",
             Self::Display => "nt.display",
-            Self::PeerDisplay => "nt.peer-display",
+            Self::PeerDisplay(0) => "nt.peer-display",
+            Self::PeerDisplay(1) => "nt.peer-display-2",
+            Self::PeerDisplay(2) => "nt.peer-display-3",
+            Self::PeerDisplay(3) => "nt.peer-display-4",
+            Self::PeerDisplay(4) => "nt.peer-display-5",
+            Self::PeerDisplay(5) => "nt.peer-display-6",
+            Self::PeerDisplay(_) => "nt.peer-display-7",
             Self::History => "nt.history",
             Self::Settings => "nt.settings",
             Self::Quick => "nt.quick",
@@ -80,7 +121,14 @@ impl WindowKind {
         match self {
             Self::Input => "input",
             Self::Display => "display",
-            Self::PeerDisplay => "peer_display",
+            // The first seat keeps the single partner window's saved place.
+            Self::PeerDisplay(0) => "peer_display",
+            Self::PeerDisplay(1) => "peer_display_2",
+            Self::PeerDisplay(2) => "peer_display_3",
+            Self::PeerDisplay(3) => "peer_display_4",
+            Self::PeerDisplay(4) => "peer_display_5",
+            Self::PeerDisplay(5) => "peer_display_6",
+            Self::PeerDisplay(_) => "peer_display_7",
             Self::History => "history",
             Self::Settings => "settings",
             Self::Quick => "quick",
@@ -91,10 +139,20 @@ impl WindowKind {
         match self {
             Self::Input => "window-input",
             Self::Display => "window-display",
-            Self::PeerDisplay => "window-peer-display",
+            Self::PeerDisplay(_) => "window-peer-display",
             Self::History => "window-history",
             Self::Settings => "window-settings",
             Self::Quick => "window-quick",
+        }
+    }
+
+    /// The window's title. Partner seats after the first are numbered, so a
+    /// window capture can tell them apart.
+    pub fn title(self, locale: nanatype_i18n::Locale) -> String {
+        let title = crate::ui::I18N.t_in(locale, self.title_key());
+        match self.seat() {
+            Some(seat) if seat > 0 => format!("{title} {}", seat + 1),
+            _ => title,
         }
     }
 
@@ -102,7 +160,7 @@ impl WindowKind {
     pub fn canvas(self) -> Option<Canvas> {
         match self {
             Self::Display => Some(Canvas::Display),
-            Self::PeerDisplay => Some(Canvas::PeerDisplay),
+            Self::PeerDisplay(_) => Some(Canvas::PeerDisplay),
             Self::History => Some(Canvas::History),
             Self::Input | Self::Settings | Self::Quick => None,
         }
@@ -120,7 +178,7 @@ impl WindowKind {
         match self {
             Self::Input => Some(&mut s.overlays.input),
             Self::Display => Some(&mut s.overlays.display),
-            Self::PeerDisplay => Some(&mut s.overlays.peer_display),
+            Self::PeerDisplay(_) => Some(&mut s.overlays.peer_display),
             Self::History => Some(&mut s.overlays.history),
             Self::Settings | Self::Quick => None,
         }
@@ -306,7 +364,7 @@ pub fn descriptor(kind: WindowKind, title: &str, skin: &Skin, s: &Settings) -> W
             // there. A small floor still stops a resize from collapsing it.
             if matches!(
                 kind,
-                WindowKind::Display | WindowKind::PeerDisplay | WindowKind::History
+                WindowKind::Display | WindowKind::PeerDisplay(_) | WindowKind::History
             ) {
                 d.minimum_size = OVERLAY_MIN;
             }
@@ -354,7 +412,7 @@ pub fn desired(kind: WindowKind, skin: &Skin, s: &Settings, input_summoned: bool
         resizable: matches!(kind, WindowKind::Input | WindowKind::Settings)
             || matches!(
                 kind,
-                WindowKind::History | WindowKind::Display | WindowKind::PeerDisplay
+                WindowKind::History | WindowKind::Display | WindowKind::PeerDisplay(_)
             ) && lock != Lock::Locked,
         size: size_of(kind, skin, s),
     }
@@ -365,13 +423,17 @@ pub fn desired(kind: WindowKind, skin: &Skin, s: &Settings, input_summoned: bool
 pub fn pins_size(kind: WindowKind, resizable: bool) -> bool {
     match kind {
         WindowKind::Input | WindowKind::Settings => false,
-        WindowKind::Display | WindowKind::PeerDisplay | WindowKind::History if resizable => false,
+        WindowKind::Display | WindowKind::PeerDisplay(_) | WindowKind::History if resizable => {
+            false
+        }
         _ => true,
     }
 }
 
 #[derive(Default)]
 struct Slot {
+    /// An open was asked for and the window is not ready yet.
+    opening: bool,
     handle: Option<WindowHandle>,
     applied: Option<Desired>,
     /// Logical top-left and size last reported by the window.
@@ -392,6 +454,15 @@ impl WindowManager {
         self.slots.get(&kind).is_some_and(|s| s.handle.is_some())
     }
 
+    /// Whether to ask for `kind`'s window: it is neither open nor asked for.
+    /// Asking once more before it is ready would open it twice.
+    pub fn should_open(&mut self, kind: WindowKind) -> bool {
+        let slot = self.slots.entry(kind).or_default();
+        let open = slot.handle.is_none() && !slot.opening;
+        slot.opening = true;
+        open
+    }
+
     pub fn handle(&self, kind: WindowKind) -> Option<&WindowHandle> {
         self.slots.get(&kind).and_then(|s| s.handle.as_ref())
     }
@@ -399,6 +470,7 @@ impl WindowManager {
     pub fn ready(&mut self, kind: WindowKind, handle: WindowHandle) {
         let slot = self.slots.entry(kind).or_default();
         slot.handle = Some(handle);
+        slot.opening = false;
         slot.applied = None;
         slot.placed = false;
     }
@@ -466,7 +538,11 @@ impl WindowManager {
         let (px, py) = match kind {
             WindowKind::Input => (x + (w - sw) / 2.0, y + h - sh - margin),
             WindowKind::Display => (x + (w - sw) / 2.0, y + h * 0.55 - sh / 2.0),
-            WindowKind::PeerDisplay => (x + (w - sw) / 2.0, y + h * 0.28 - sh / 2.0),
+            // Seats cascade from the first, so none opens on top of another.
+            WindowKind::PeerDisplay(seat) => {
+                let step = 36.0 * f64::from(seat);
+                (x + (w - sw) / 2.0 + step, y + h * 0.28 - sh / 2.0 + step)
+            }
             WindowKind::History => (x + w - sw - margin, y + (h - sh) / 2.0),
             WindowKind::Settings => (x + (w - sw) / 2.0, y + (h - sh) / 2.0),
             WindowKind::Quick => (x + (w - sw) / 2.0, y + h * 0.25),
@@ -615,7 +691,7 @@ mod tests {
             None
         );
         assert_eq!(settings.overlays.display.size, Some([900.0, 200.0]));
-        WindowKind::PeerDisplay.remember_size(&mut settings, [600.0, 300.0], None);
+        WindowKind::PARTNER.remember_size(&mut settings, [600.0, 300.0], None);
         assert_eq!(settings.overlays.peer_display.size, Some([600.0, 300.0]));
         assert_eq!(settings.overlays.display.size, Some([900.0, 200.0]));
     }
@@ -632,11 +708,11 @@ mod tests {
         s.skin.personalizations.insert(s.skin.id.clone(), p);
         assert_eq!(size_of(WindowKind::Display, &skin, &s), (160.0, 96.0));
         assert_eq!(size_of(WindowKind::History, &skin, &s), (300.0, 500.0));
-        assert_eq!(size_of(WindowKind::PeerDisplay, &skin, &s), (700.0, 180.0));
+        assert_eq!(size_of(WindowKind::PARTNER, &skin, &s), (700.0, 180.0));
         s.overlays.peer_display.size = None;
         s.skin.overrides.region = Some([555.0, 140.0]);
         assert_eq!(
-            size_of(WindowKind::PeerDisplay, &skin, &s),
+            size_of(WindowKind::PARTNER, &skin, &s),
             (
                 555.0 + skin.dialogue.overscan * 2.0,
                 140.0 + skin.dialogue.overscan * 2.0
@@ -666,7 +742,7 @@ mod tests {
         }
         for kind in [
             WindowKind::Display,
-            WindowKind::PeerDisplay,
+            WindowKind::PARTNER,
             WindowKind::History,
         ] {
             assert_eq!(zoom(kind, &s, Some(2.0)), 1.0);
@@ -771,7 +847,7 @@ mod tests {
         let s = Settings::default();
         for kind in [
             WindowKind::Display,
-            WindowKind::PeerDisplay,
+            WindowKind::PARTNER,
             WindowKind::History,
         ] {
             assert_eq!(kind.overlay(&s).unwrap().lock, Lock::Interactive);
@@ -865,19 +941,39 @@ mod tests {
         s.overlays.peer_display.lock = Lock::Interactive;
         s.overlays.peer_display.visible = false;
         let own = desired(WindowKind::Display, &skin, &s, false);
-        let peer = desired(WindowKind::PeerDisplay, &skin, &s, false);
+        let peer = desired(WindowKind::PARTNER, &skin, &s, false);
         assert_eq!(own.size, (760.0, 200.0));
         assert_eq!(peer.size, (500.0, 300.0));
         assert!(own.visible && !peer.visible);
         assert!(own.passthrough);
         assert!(!peer.passthrough);
         assert!(!own.resizable && peer.resizable);
-        assert_ne!(WindowKind::Display.id(), WindowKind::PeerDisplay.id());
-        assert_ne!(WindowKind::Display.key(), WindowKind::PeerDisplay.key());
+        assert_ne!(WindowKind::Display.id(), WindowKind::PARTNER.id());
+        assert_ne!(WindowKind::Display.key(), WindowKind::PARTNER.key());
         assert_eq!(
-            WindowKind::from_id(WindowKind::PeerDisplay.id()),
-            Some(WindowKind::PeerDisplay)
+            WindowKind::from_id(WindowKind::PARTNER.id()),
+            Some(WindowKind::PARTNER)
         );
+    }
+
+    #[test]
+    fn every_window_has_its_own_id_tag_and_key() {
+        let mut ids = std::collections::HashSet::new();
+        let mut tags = std::collections::HashSet::new();
+        let mut keys = std::collections::HashSet::new();
+        for kind in WindowKind::ALL {
+            assert!(ids.insert(kind.id()), "{kind:?}");
+            assert!(tags.insert(kind.tag()), "{kind:?}");
+            assert!(keys.insert(kind.key()), "{kind:?}");
+            assert_eq!(WindowKind::from_id(kind.id()), Some(kind));
+        }
+        for (seat, kind) in WindowKind::PARTNERS.into_iter().enumerate() {
+            assert_eq!(kind.seat(), Some(seat));
+            assert!(WindowKind::ALL.contains(&kind));
+        }
+        // The first seat keeps the single partner window's id and place.
+        assert_eq!(WindowKind::PARTNER.id(), WindowId(6));
+        assert_eq!(WindowKind::PARTNER.key(), "peer_display");
     }
 
     #[test]
@@ -896,7 +992,7 @@ mod tests {
         let s = Settings::default();
         for kind in [
             WindowKind::Display,
-            WindowKind::PeerDisplay,
+            WindowKind::PARTNER,
             WindowKind::History,
         ] {
             assert_eq!(

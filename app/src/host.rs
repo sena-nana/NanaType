@@ -120,7 +120,7 @@ fn max_frame_rate(kind: Option<WindowKind>) -> Option<NonZeroU32> {
         WindowKind::Input => NonZeroU32::new(INPUT_FPS),
         WindowKind::History => NonZeroU32::new(HISTORY_FPS),
         WindowKind::Display
-        | WindowKind::PeerDisplay
+        | WindowKind::PeerDisplay(_)
         | WindowKind::Settings
         | WindowKind::Quick => None,
     }
@@ -141,22 +141,21 @@ fn frame_policy(
 ) -> FramePolicy {
     let skin_fps = skin_fps(ui);
     let (clock, tick_clock, render_only, next_at, fps) = match kind {
-        Some(WindowKind::Display | WindowKind::PeerDisplay) => {
-            let remote = kind == Some(WindowKind::PeerDisplay);
-            if remote && !ui.peer.get_untracked().active {
+        Some(WindowKind::Display | WindowKind::PeerDisplay(_)) => {
+            let seat = kind.and_then(WindowKind::seat);
+            let remote = seat.is_some();
+            // A partner window shows one seat, and nothing while it is empty.
+            if let Some(seat) = seat
+                && (!ui.peer.get_untracked().active
+                    || seat >= crate::ui::remote_bands(ui.peer_seats.get_untracked()))
+            {
                 return FramePolicy::default();
             }
-            let count = if remote {
-                crate::ui::remote_bands(ui.peer_seats.get_untracked())
-            } else {
-                1
+            let tracks: Vec<Ui> = vec![seat.map_or(ui, |seat| ui.lane(seat))];
+            let follows = match seat {
+                Some(seat) => &peer_follows[seat..=seat],
+                None => &[],
             };
-            let tracks: Vec<Ui> = if remote {
-                (0..count).map(|index| ui.lane(index)).collect()
-            } else {
-                vec![ui]
-            };
-            let follows = if remote { &peer_follows[..count] } else { &[] };
             let typing = tracks
                 .iter()
                 .any(|track| dialogue::display_animating(**track, now));
@@ -378,12 +377,10 @@ impl Host {
             context.dispatch(Msg::UiChanged);
         }
         let locale = self.app.ui.locale.get_untracked();
-        self.app.spout.prepare(
-            &self.app.settings,
-            self.app.peer.handle.is_some(),
-            context.gpu(),
-            locale,
-        );
+        let partners = self.app.partner_seats();
+        self.app
+            .spout
+            .prepare(&self.app.settings, partners, context.gpu(), locale);
         self.spout_status_changed(context);
     }
 
@@ -562,9 +559,10 @@ impl Host {
                     .mount_view_root(doc_id, move || dialogue::display_window(ui))
                     .map_err(err)?;
             }
-            WindowKind::PeerDisplay => {
+            WindowKind::PeerDisplay(seat) => {
+                let seat = usize::from(seat);
                 context
-                    .mount_view_root(doc_id, move || dialogue::peer_window(ui))
+                    .mount_view_root(doc_id, move || dialogue::peer_window(ui, seat))
                     .map_err(err)?;
             }
             WindowKind::History => {
@@ -719,9 +717,10 @@ impl Host {
     }
 
     /// Read the typewriter's last layout: scroll along with the typing, or
-    /// tell the core where a full box turns the page.
-    fn follow_track(&mut self, now: u64, remote: bool) {
-        if !remote {
+    /// tell the core where a full box turns the page. `seat` is the partner
+    /// window's seat, `None` for the local display.
+    fn follow_track(&mut self, now: u64, seat: Option<usize>) {
+        let Some(seat) = seat else {
             let ui = self.app.ui;
             Self::apply_follow(
                 &mut self.app,
@@ -733,23 +732,17 @@ impl Host {
                 Some(&mut self.pager),
             );
             return;
-        }
-        let count = crate::ui::remote_bands(self.app.ui.peer_seats.get_untracked());
-        for index in 0..count {
-            let ui = self.app.ui.lane(index);
-            Self::apply_follow(
-                &mut self.app,
-                &self.docs,
-                now,
-                ui,
-                true,
-                &mut self.peer_follows[index],
-                None,
-            );
-        }
-        for follow in &mut self.peer_follows[count..] {
+        };
+        let Some(follow) = self.peer_follows.get_mut(seat) else {
+            return;
+        };
+        // An empty seat starts over for whoever sits there next.
+        if seat >= crate::ui::remote_bands(self.app.ui.peer_seats.get_untracked()) {
             *follow = overflow::Follow::default();
+            return;
         }
+        let ui = self.app.ui.lane(seat);
+        Self::apply_follow(&mut self.app, &self.docs, now, ui, true, follow, None);
     }
 
     fn open_overlays(&mut self) {
@@ -1358,7 +1351,7 @@ impl RuntimeProgram for Host {
                     if matches!(
                         kind,
                         WindowKind::Display
-                            | WindowKind::PeerDisplay
+                            | WindowKind::PeerDisplay(_)
                             | WindowKind::History
                             | WindowKind::Quick
                     ) {
@@ -1401,7 +1394,7 @@ impl RuntimeProgram for Host {
                     if unlocked
                         && matches!(
                             kind,
-                            WindowKind::Display | WindowKind::PeerDisplay | WindowKind::History
+                            WindowKind::Display | WindowKind::PeerDisplay(_) | WindowKind::History
                         )
                         && ((current.0 - w).abs() > 1.0 || (current.1 - h).abs() > 1.0)
                     {
@@ -1632,7 +1625,7 @@ impl RuntimeProgram for Host {
         let kind = WindowKind::from_id(id)?;
         self.app
             .spout
-            .config(kind, &self.app.settings, self.app.peer.handle.is_some())
+            .config(kind, &self.app.settings, self.app.partner_seats())
     }
 
     fn window_frame_presented(
@@ -1665,10 +1658,9 @@ impl RuntimeProgram for Host {
             return;
         };
         let paused = self.app.spout.paused_output(kind, clock::now_ms()).cloned();
-        let Some(out) =
-            crate::output::resolve(kind, &self.app.settings, self.app.peer.handle.is_some())
-                .output()
-                .or(paused.as_ref())
+        let Some(out) = crate::output::resolve(kind, &self.app.settings, self.app.partner_seats())
+            .output()
+            .or(paused.as_ref())
         else {
             return;
         };
@@ -1718,7 +1710,7 @@ impl RuntimeProgram for Host {
             nanatype_diag::report!(crate::diag::WINDOW_OUTPUT, window = crate::diag::window(kind); "{status:?}");
             let locale = self.app.ui.locale.get_untracked();
             let previous = self.app.ui.status.get_untracked();
-            if crate::output::resolve(kind, &self.app.settings, self.app.peer.handle.is_some())
+            if crate::output::resolve(kind, &self.app.settings, self.app.partner_seats())
                 .output()
                 .is_some()
             {
@@ -1810,9 +1802,9 @@ impl RuntimeProgram for Host {
         }
         match WindowKind::from_id(id) {
             Some(WindowKind::Input) => self.anchor_completion(),
-            Some(WindowKind::Display) => self.follow_track(now, false),
-            Some(WindowKind::PeerDisplay) if self.app.peer.handle.is_some() => {
-                self.follow_track(now, true)
+            Some(WindowKind::Display) => self.follow_track(now, None),
+            Some(WindowKind::PeerDisplay(seat)) if self.app.peer.handle.is_some() => {
+                self.follow_track(now, Some(usize::from(seat)))
             }
             Some(WindowKind::Settings) => {
                 let ui = *self.app.ui;
@@ -2063,12 +2055,12 @@ mod redraw_tests {
         local.advance(now, true);
         assert_eq!(ui.now.get_untracked(), now);
         assert_eq!(ui.peer_now.get_untracked(), 456);
-        let peer = policy(WindowKind::PeerDisplay);
+        let peer = policy(WindowKind::PARTNER);
         assert!(matches!(peer.demand, FrameDemand::OnDemand));
         peer.advance(now, true);
         assert_eq!(ui.peer_now.get_untracked(), 456);
         ui.peer.update(|peer| Arc::make_mut(peer).active = true);
-        let peer = policy(WindowKind::PeerDisplay);
+        let peer = policy(WindowKind::PARTNER);
         assert!(matches!(peer.demand, FrameDemand::Continuous(_)));
         peer.advance(now, false);
         assert_eq!(ui.peer_now.get_untracked(), 456);
@@ -2207,7 +2199,7 @@ mod redraw_tests {
     fn glyph_motion_keeps_to_each_windows_frame_rate() {
         let rate = |kind| max_frame_rate(kind).map(NonZeroU32::get);
         // Typing on the display windows is not held to the skin frame rate.
-        for kind in [WindowKind::Display, WindowKind::PeerDisplay] {
+        for kind in [WindowKind::Display, WindowKind::PARTNER] {
             assert_eq!(rate(Some(kind)), None, "{kind:?}");
         }
         assert_eq!(rate(Some(WindowKind::Input)), Some(INPUT_FPS));

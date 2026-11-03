@@ -92,9 +92,7 @@ fn card_actions_fit_and_preserve_the_draft_in_each_locale() {
             );
             assert!(matches!(
                 click(&mut session, &ui.now_t("peer-window-toggle"), width as f32),
-                Msg::Window(WindowMsg::Toggle(
-                    nanatype::windows::WindowKind::PeerDisplay
-                ))
+                Msg::Window(WindowMsg::Toggle(nanatype::windows::WindowKind::PARTNER))
             ));
             assert!(matches!(
                 click(&mut session, &ui.now_t("peer-leave"), width as f32),
@@ -102,5 +100,64 @@ fn card_actions_fit_and_preserve_the_draft_in_each_locale() {
             ));
             assert_eq!(*ui.draft.get_untracked(), draft);
         }
+    }
+}
+
+#[test]
+fn each_partner_seat_has_its_own_output_switch() {
+    for locale in [Locale::ZhCn, Locale::EnUs, Locale::JaJp] {
+        let width = 400;
+        let skin = common::skin("nanatype.halo");
+        let ui = Ui::new(Arc::new(Default::default()), skin, locale);
+        ui.peer_panel.set(true);
+        ui.peer.set(Arc::new(SessionUi {
+            active: true,
+            host: true,
+            status: Status::Connected {
+                route: "direct".into(),
+                rtt_ms: 12,
+            },
+            members: 3,
+            seats: vec!["Alice".into(), String::new()],
+            ..SessionUi::default()
+        }));
+        let mut session = common::session().themed(false).mount(width, 320, move || {
+            widget(Stack::column(0.0).width(LengthSpec::Fill)).children(p2p::card(ui))
+        });
+        session.flush().unwrap();
+        let out =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../target/p2p-card-tests");
+        std::fs::create_dir_all(&out).unwrap();
+        session
+            .screenshot_png(&out.join(format!("seats-{locale:?}.png")))
+            .unwrap();
+        let switches: Vec<_> = session
+            .accessibility_dump()
+            .into_iter()
+            .filter(|node| node.role == "switch")
+            .collect();
+        assert_eq!(switches.len(), 2, "one switch per seat");
+        for (seat, node) in switches.iter().enumerate() {
+            assert!(
+                node.bounds.x + node.bounds.width <= width as f32,
+                "seat {seat}'s switch is outside the card: {:?}",
+                node.bounds
+            );
+        }
+        assert!(session.click_node(switches[1].id).unwrap());
+        let Some(Msg::Edit(edit)) = session
+            .document_mut()
+            .context_mut()
+            .take_program_messages()
+            .into_iter()
+            .find_map(|message| message.downcast::<Msg>().ok())
+            .map(|message| *message)
+        else {
+            panic!("the switch edits the settings")
+        };
+        let mut settings = nanatype_settings::Settings::default();
+        edit(&mut settings);
+        assert!(!settings.output.partners[0].enabled);
+        assert!(settings.output.partners[1].enabled);
     }
 }

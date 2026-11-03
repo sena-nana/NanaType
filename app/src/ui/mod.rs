@@ -82,7 +82,8 @@ pub struct Status {
     pub blivechat: String,
     pub blivechat_link: danmaku::Link,
     pub spout_display: LinkState,
-    pub spout_peer_display: LinkState,
+    /// Each partner seat's sender, in seat order.
+    pub spout_partners: Vec<LinkState>,
     pub spout_history: LinkState,
     /// The obs-websocket link.
     pub obs: LinkState,
@@ -360,7 +361,7 @@ impl Ui {
     /// The broadcast window this track's display draws in.
     pub fn display_kind(self) -> crate::windows::WindowKind {
         if self.track_slot > 0 {
-            crate::windows::WindowKind::PeerDisplay
+            crate::windows::WindowKind::PARTNERS[self.track_slot - 1]
         } else {
             crate::windows::WindowKind::Display
         }

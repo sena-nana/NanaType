@@ -4,7 +4,7 @@ use crate::msg::WindowMsg;
 /// The overlay windows, in the matrix's column order.
 pub(super) const OVERLAYS: [WindowKind; 4] = [
     WindowKind::Display,
-    WindowKind::PeerDisplay,
+    WindowKind::PARTNER,
     WindowKind::History,
     WindowKind::Input,
 ];
@@ -57,7 +57,7 @@ pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> Row {
 fn column_key(kind: WindowKind) -> &'static str {
     match kind {
         WindowKind::Display => "windows-display",
-        WindowKind::PeerDisplay => "windows-peer-display",
+        WindowKind::PeerDisplay(_) => "windows-peer-display",
         WindowKind::History => "windows-history",
         _ => "windows-input",
     }
@@ -269,7 +269,7 @@ pub(super) fn windows(ui: Ui) -> AnyView {
             Some("windows-vertical-text-tip"),
         ),
         OVERLAYS.map(|kind| {
-            if !matches!(kind, WindowKind::Display | WindowKind::PeerDisplay) {
+            if !matches!(kind, WindowKind::Display | WindowKind::PeerDisplay(_)) {
                 return not_applicable();
             }
             overlay_switch(

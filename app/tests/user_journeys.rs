@@ -488,7 +488,9 @@ fn obs_guide_enables_output_before_selecting_the_sender() {
         f.apply_edits();
         let s = f.ui.settings.get_untracked();
         assert!(
-            s.output.display.enabled && !s.output.peer_display.enabled && !s.output.history.enabled
+            s.output.display.enabled
+                && !s.output.partners.iter().any(|o| o.enabled)
+                && !s.output.history.enabled
         );
         assert!(f.find("button", "output-obs-enabled").disabled);
     }

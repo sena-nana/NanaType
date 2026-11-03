@@ -1,5 +1,8 @@
+use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
-use nana_ui::runtime::{Activate, Button, Stack, Text, TextChanged, TextInput};
+use nana_ui::runtime::{
+    Activate, Button, IconButton, Stack, Switch, Text, TextChanged, TextInput, ToggleChanged,
+};
 use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec, PositionSpec, SemanticColorRole};
 use nanatype_p2p::Status;
@@ -154,7 +157,7 @@ pub(crate) fn card_with_fields(
             }
             let body = if state.active {
                 let code = state.invitation.clone();
-                widget(
+                let body = widget(
                     Stack::row(0.0)
                         .gap_step(gap::step::CONTROL)
                         .with_layout(|l| l.flex_wrap = nana_ui_core::FlexWrap::Wrap),
@@ -177,13 +180,16 @@ pub(crate) fn card_with_fields(
                     widget(Button::new(ui.now_t("peer-window-toggle")).size(ControlSize::Small))
                         .on_cx(move |_, _: &Activate, cx| {
                             cx.dispatch_program_all(Msg::Window(WindowMsg::Toggle(
-                                crate::windows::WindowKind::PeerDisplay,
+                                crate::windows::WindowKind::PARTNER,
                             )))
                         }),
                     widget(Button::new(ui.now_t("peer-leave")).size(ControlSize::Small))
                         .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::PeerLeave)),
                 ))
-                .into_any()
+                .into_any();
+                widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
+                    .children((body, seat_outputs(ui, state)))
+                    .into_any()
             } else {
                 widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
                     .children((
@@ -265,6 +271,94 @@ pub(crate) fn card_with_fields(
         },
     )
     .into_any()
+}
+
+/// One Spout/Syphon sender per partner seat, switched on here. The switch
+/// belongs to the seat, not the person: whoever sits there goes out on it.
+fn seat_outputs(ui: Ui, state: &SessionUi) -> AnyView {
+    // Before the room snapshot the first seat is already open for whoever
+    // joins.
+    let seats = state.seats.len().clamp(1, nanatype_settings::PARTNER_SEATS);
+    let rows: Vec<AnyView> = (0..seats)
+        .map(|seat| {
+            let n = seat + 1;
+            let label = match state.seats.get(seat).filter(|name| !name.is_empty()) {
+                Some(name) => ui.tr(
+                    "peer-seat-named",
+                    &[("n", n.into()), ("name", name.as_str().into())],
+                ),
+                None => ui.tr("peer-seat", &[("n", n.into())]),
+            };
+            let sender = move |s: &nanatype_settings::Settings| {
+                s.output
+                    .partners
+                    .get(seat)
+                    .map(|o| o.name.clone())
+                    .unwrap_or_default()
+            };
+            let enabled = move |s: &nanatype_settings::Settings| {
+                s.output.partners.get(seat).is_some_and(|o| o.enabled)
+            };
+            let copy = ui.now_t("output-spout-copy");
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .width(LengthSpec::Fill)
+                    .align(AlignSpec::Center),
+            )
+            .children((
+                widget(field(false)).children(widget(Text::new(label).style({
+                    let mut style = Type::Body.style();
+                    let layout = std::sync::Arc::make_mut(&mut style.layout);
+                    layout.white_space_nowrap = true;
+                    layout.text_overflow_ellipsis = true;
+                    layout.overflow_x = nana_ui_core::OverflowSpec::Hidden;
+                    style
+                }))),
+                crate::ui::settings::controls::link_badge_by(ui, move |s| {
+                    s.spout_partners.get(seat).cloned().unwrap_or_default()
+                }),
+                widget(
+                    IconButton::new(ti::COPY, copy.clone())
+                        .size(ControlSize::Small)
+                        .with_tooltip(copy),
+                )
+                .on_cx(move |_, _: &Activate, cx| {
+                    let name = ui.settings.with_untracked(|s| sender(s));
+                    cx.dispatch_program_all(Msg::CopyText(name))
+                }),
+                widget({
+                    let mut switch = Switch::new("", enabled(&ui.settings.get_untracked()));
+                    switch.accessible_name =
+                        Some(ui.tr("peer-seat-output", &[("n", n.into())]).into());
+                    switch
+                })
+                .bind(move |switch: &mut Switch| {
+                    switch.checked = ui.settings.with(|s| enabled(s));
+                })
+                .on_cx(move |_, e: &ToggleChanged, cx| {
+                    let on = e.checked;
+                    cx.dispatch_program_all(crate::ui::settings::controls::edit(move |s| {
+                        if let Some(out) = s.output.partners.get_mut(seat) {
+                            out.enabled = on;
+                        }
+                    }))
+                }),
+            ))
+            .into_any()
+        })
+        .collect();
+    widget(Stack::column(0.0).gap_step(gap::step::HAIR))
+        .children((
+            widget(Text::new(ui.now_t("peer-outputs")).style(Type::Label.style())),
+            widget(
+                Text::new(ui.now_t("peer-outputs-hint"))
+                    .style(Type::Small.style())
+                    .color(SemanticColorRole::Muted),
+            ),
+            rows,
+        ))
+        .into_any()
 }
 
 /// What the host sees while a friend has not connected yet.

@@ -185,7 +185,7 @@ impl App {
                         _ => None,
                     }
                 });
-            if let Some(out) = output_mut(kind, &mut self.settings)
+            if let Some(out) = crate::output::settings_for_mut(kind, &mut self.settings)
                 && out.obs_size != size
             {
                 out.obs_size = size;
@@ -237,14 +237,5 @@ impl App {
             ObsStatus::AuthFailed => LinkState::Error(t("obs-status-auth-failed")),
             ObsStatus::Error(fault) => LinkState::Error(crate::ui::link_text::fault(locale, fault)),
         }
-    }
-}
-
-fn output_mut(kind: WindowKind, s: &mut Settings) -> Option<&mut SpoutOutput> {
-    match kind {
-        WindowKind::Display => Some(&mut s.output.display),
-        WindowKind::PeerDisplay => Some(&mut s.output.peer_display),
-        WindowKind::History => Some(&mut s.output.history),
-        _ => None,
     }
 }

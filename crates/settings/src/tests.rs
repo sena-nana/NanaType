@@ -798,10 +798,9 @@ fn the_single_partner_sender_moves_into_the_first_seat() {
 
 #[test]
 fn partner_seats_are_always_one_per_seat() {
-    let mut s: Settings = serde_json::from_str(
-        r#"{"output":{"partners":[{"enabled":true,"name":"Only"}]}}"#,
-    )
-    .unwrap();
+    let mut s: Settings =
+        serde_json::from_str(r#"{"output":{"partners":[{"enabled":true,"name":"Only"}]}}"#)
+            .unwrap();
     assert!(s.sanitize());
     assert_eq!(s.output.partners.len(), PARTNER_SEATS);
     assert_eq!(s.output.partners[0].name, "Only");

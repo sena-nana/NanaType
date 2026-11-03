@@ -521,17 +521,14 @@ pub(super) fn output(ui: Ui) -> AnyView {
     let spout = |kind: WindowKind, title: &'static str| -> [(Row, Shown); 2] {
         let link: fn(&crate::ui::Status) -> &LinkState = match kind {
             WindowKind::Display => |s| &s.spout_display,
-            WindowKind::PeerDisplay => |s| &s.spout_peer_display,
             _ => |s| &s.spout_history,
         };
         let read: Read = match kind {
             WindowKind::Display => |s| &s.output.display,
-            WindowKind::PeerDisplay => |s| &s.output.peer_display,
             _ => |s| &s.output.history,
         };
         let write: Write = match kind {
             WindowKind::Display => |s| &mut s.output.display,
-            WindowKind::PeerDisplay => |s| &mut s.output.peer_display,
             _ => |s| &mut s.output.history,
         };
         // The sender's name is fixed: shown only so the user knows which one
@@ -622,13 +619,24 @@ pub(super) fn output(ui: Ui) -> AnyView {
             ),
         ]
     };
+    // Partner seats are switched on where the co-op session is: this row
+    // only says so.
+    let partners = (
+        row(
+            ui,
+            "output-peer-display",
+            Some("output-partners-moved"),
+            widget(Stack::row(0.0)).into_any(),
+        ),
+        None,
+    );
     let senders = [
         spout(WindowKind::Display, "output-display"),
-        spout(WindowKind::PeerDisplay, "output-peer-display"),
         spout(WindowKind::History, "output-history"),
     ]
     .into_iter()
     .flatten()
+    .chain([partners])
     .collect();
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((

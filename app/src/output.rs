@@ -55,17 +55,39 @@ fn spout_error_key(e: &nanalive_spout::SpoutOutputError) -> &'static str {
 pub fn settings_for(kind: WindowKind, s: &Settings) -> Option<&SpoutOutput> {
     match kind {
         WindowKind::Display => Some(&s.output.display),
-        WindowKind::PeerDisplay => Some(&s.output.peer_display),
+        WindowKind::PeerDisplay(seat) => s.output.partners.get(usize::from(seat)),
         WindowKind::History => Some(&s.output.history),
         _ => None,
     }
 }
 
-pub const KINDS: [WindowKind; 3] = [
+pub fn settings_for_mut(kind: WindowKind, s: &mut Settings) -> Option<&mut SpoutOutput> {
+    match kind {
+        WindowKind::Display => Some(&mut s.output.display),
+        WindowKind::PeerDisplay(seat) => s.output.partners.get_mut(usize::from(seat)),
+        WindowKind::History => Some(&mut s.output.history),
+        _ => None,
+    }
+}
+
+pub const KINDS: [WindowKind; 2 + nanatype_settings::PARTNER_SEATS] = [
     WindowKind::Display,
-    WindowKind::PeerDisplay,
     WindowKind::History,
+    WindowKind::PeerDisplay(0),
+    WindowKind::PeerDisplay(1),
+    WindowKind::PeerDisplay(2),
+    WindowKind::PeerDisplay(3),
+    WindowKind::PeerDisplay(4),
+    WindowKind::PeerDisplay(5),
+    WindowKind::PeerDisplay(6),
 ];
+
+/// Whether `kind`'s window has someone to show: always, except a partner seat
+/// nobody sits in. `partners` is how many seats are live (none without a
+/// co-op session).
+fn seated(kind: WindowKind, partners: usize) -> bool {
+    kind.seat().is_none_or(|seat| seat < partners)
+}
 
 pub fn name_conflicts(kind: WindowKind, s: &Settings) -> bool {
     let Some(output) = settings_for(kind, s) else {
@@ -83,8 +105,9 @@ pub fn name_conflicts(kind: WindowKind, s: &Settings) -> bool {
         })
 }
 
+/// What `kind`'s window sends with every seat taken.
 pub fn config(kind: WindowKind, s: &Settings) -> Option<WindowOutputConfig> {
-    resolve(kind, s, true).config()
+    resolve(kind, s, nanatype_settings::PARTNER_SEATS).config()
 }
 
 #[derive(Clone, Copy)]
@@ -95,11 +118,9 @@ pub(crate) enum ResolvedOutput<'a> {
 }
 
 /// Configuration, sender lifetime and frame delivery share this decision.
-/// Enabled names remain reserved even while the partner is disconnected.
-pub(crate) fn resolve(kind: WindowKind, s: &Settings, peer_active: bool) -> ResolvedOutput<'_> {
-    let Some(out) = settings_for(kind, s)
-        .filter(|o| o.enabled && (kind != WindowKind::PeerDisplay || peer_active))
-    else {
+/// Enabled names remain reserved even while their seat is empty.
+pub(crate) fn resolve(kind: WindowKind, s: &Settings, partners: usize) -> ResolvedOutput<'_> {
+    let Some(out) = settings_for(kind, s).filter(|o| o.enabled && seated(kind, partners)) else {
         return ResolvedOutput::Off;
     };
     if !(cfg!(windows) || cfg!(target_os = "macos")) {
@@ -206,12 +227,12 @@ impl SenderLease {
         &self,
         kind: WindowKind,
         s: &Settings,
-        peer: bool,
+        partners: usize,
     ) -> Option<WindowOutputConfig> {
         // Only sync mutates the lease. A live clock query here could cross the
         // deadline halfway through NanaUI's window loop: the first retirement
         // callback would cancel cleanup while another window still had its pool.
-        if self.expires.is_none() || !can_pause(kind, &self.output, s, peer) {
+        if self.expires.is_none() || !can_pause(kind, &self.output, s, partners) {
             return None;
         }
         ResolvedOutput::Ready(&self.output)
@@ -292,12 +313,12 @@ impl<G: Copy + PartialEq> Retry<G> {
 }
 
 #[cfg(any(windows, test))]
-fn can_pause(kind: WindowKind, previous: &SpoutOutput, s: &Settings, peer_active: bool) -> bool {
+fn can_pause(kind: WindowKind, previous: &SpoutOutput, s: &Settings, partners: usize) -> bool {
     let Some(out) = settings_for(kind, s) else {
         return false;
     };
     !out.enabled
-        && (kind != WindowKind::PeerDisplay || peer_active)
+        && seated(kind, partners)
         && out.name == previous.name
         && out.extent() == previous.extent()
         && out.straight_alpha == previous.straight_alpha
@@ -354,13 +375,13 @@ fn t(locale: Locale, key: &str) -> String {
 impl Spout {
     /// Keep a disabled Windows sender briefly for a quick restart. Renaming,
     /// incompatible settings and peer disconnect release it immediately.
-    pub fn sync(&mut self, s: &Settings, locale: Locale, peer_active: bool) {
+    pub fn sync(&mut self, s: &Settings, locale: Locale, partners: usize) {
         #[cfg(windows)]
         {
             let now = crate::clock::now_ms();
             let active = KINDS
                 .into_iter()
-                .any(|kind| resolve(kind, s, peer_active).output().is_some());
+                .any(|kind| resolve(kind, s, partners).output().is_some());
             if self
                 .bridge
                 .as_ref()
@@ -374,16 +395,16 @@ impl Spout {
                 bridge.idle.reconcile(active, now);
             }
             self.senders.retain(|kind, sender| {
-                let pause = can_pause(*kind, &sender.lease.output, s, peer_active);
+                let pause = can_pause(*kind, &sender.lease.output, s, partners);
                 sender
                     .lease
-                    .reconcile(resolve(*kind, s, peer_active).output(), pause, now)
+                    .reconcile(resolve(*kind, s, partners).output(), pause, now)
             });
         }
         #[cfg(target_os = "macos")]
         let mut live = Vec::new();
         for kind in KINDS {
-            let resolved = resolve(kind, s, peer_active);
+            let resolved = resolve(kind, s, partners);
             let wanted = resolved.output();
             let renamed = wanted.is_some_and(|o| self.names.get(&kind) != Some(&o.name));
             let state = match resolved {
@@ -447,9 +468,9 @@ impl Spout {
         &self,
         kind: WindowKind,
         s: &Settings,
-        peer_active: bool,
+        partners: usize,
     ) -> Option<WindowOutputConfig> {
-        let resolved = resolve(kind, s, peer_active);
+        let resolved = resolve(kind, s, partners);
         if let Some(config) = resolved.config() {
             return Some(config);
         }
@@ -458,7 +479,7 @@ impl Spout {
             return self
                 .senders
                 .get(&kind)
-                .and_then(|sender| sender.lease.paused_config(kind, s, peer_active));
+                .and_then(|sender| sender.lease.paused_config(kind, s, partners));
         }
         None
     }
@@ -553,7 +574,7 @@ impl Spout {
     pub(crate) fn prepare(
         &mut self,
         s: &Settings,
-        peer: bool,
+        partners: usize,
         gpu: &nana_ui::GpuContext,
         locale: Locale,
     ) {
@@ -570,7 +591,7 @@ impl Spout {
         let generation = gpu.generation();
         let now = crate::clock::now_ms();
         let pending = KINDS.map(|kind| {
-            resolve(kind, s, peer)
+            resolve(kind, s, partners)
                 .output()
                 .filter(|out| {
                     self.senders
@@ -822,12 +843,10 @@ mod tests {
             output: s.output.display.clone(),
             expires: Some(5_000),
         };
-        let before = crate::clock::capture_at(4_999, || {
-            lease.paused_config(WindowKind::Display, &s, false)
-        });
-        let after = crate::clock::capture_at(5_001, || {
-            lease.paused_config(WindowKind::Display, &s, false)
-        });
+        let before =
+            crate::clock::capture_at(4_999, || lease.paused_config(WindowKind::Display, &s, 0));
+        let after =
+            crate::clock::capture_at(5_001, || lease.paused_config(WindowKind::Display, &s, 0));
         assert_eq!(before, after);
         assert!(after.unwrap().suspended);
         // The single cleanup message reconciles/removes every expired lease,
@@ -896,22 +915,22 @@ mod tests {
     fn paused_sender_rejects_rename_resize_alpha_collision_and_peer_departure() {
         let mut s = Settings::default();
         let previous = s.output.display.clone();
-        assert!(can_pause(WindowKind::Display, &previous, &s, false));
+        assert!(can_pause(WindowKind::Display, &previous, &s, 0));
         s.output.display.name.push('x');
-        assert!(!can_pause(WindowKind::Display, &previous, &s, false));
+        assert!(!can_pause(WindowKind::Display, &previous, &s, 0));
         s.output.display = previous.clone();
         s.output.display.size = Some([100, 100]);
-        assert!(!can_pause(WindowKind::Display, &previous, &s, false));
+        assert!(!can_pause(WindowKind::Display, &previous, &s, 0));
         s.output.display = previous.clone();
         s.output.display.straight_alpha = !previous.straight_alpha;
-        assert!(!can_pause(WindowKind::Display, &previous, &s, false));
+        assert!(!can_pause(WindowKind::Display, &previous, &s, 0));
         s.output.display = previous.clone();
         s.output.history.enabled = true;
         s.output.history.name = previous.name.clone();
-        assert!(!can_pause(WindowKind::Display, &previous, &s, false));
-        let peer = s.output.peer_display.clone();
-        assert!(!can_pause(WindowKind::PeerDisplay, &peer, &s, false));
-        assert!(can_pause(WindowKind::PeerDisplay, &peer, &s, true));
+        assert!(!can_pause(WindowKind::Display, &previous, &s, 0));
+        let peer = s.output.partners[0].clone();
+        assert!(!can_pause(WindowKind::PARTNER, &peer, &s, 0));
+        assert!(can_pause(WindowKind::PARTNER, &peer, &s, 1));
         let mut lease = SenderLease {
             output: previous,
             expires: None,
@@ -928,7 +947,7 @@ mod tests {
         settings.output.display.enabled = true;
         settings.output.display.name = "   ".into();
         let mut outputs = Spout::default();
-        outputs.sync(&settings, Locale::ZhCn, false);
+        outputs.sync(&settings, Locale::ZhCn, 0);
         assert!(config(WindowKind::Display, &settings).is_none());
         assert!(outputs.names.is_empty());
         assert_eq!(
@@ -936,42 +955,42 @@ mod tests {
             LinkState::Error(t(Locale::ZhCn, "spout-error-name"))
         );
         settings.output.display.name = "Renamed".into();
-        outputs.sync(&settings, Locale::ZhCn, false);
+        outputs.sync(&settings, Locale::ZhCn, 0);
         assert!(config(WindowKind::Display, &settings).unwrap().while_hidden);
         assert_eq!(outputs.status[&WindowKind::Display], LinkState::Connecting);
         outputs
             .status
             .insert(WindowKind::Display, LinkState::Connected("ready".into()));
-        outputs.sync(&settings, Locale::ZhCn, false);
+        outputs.sync(&settings, Locale::ZhCn, 0);
         assert!(matches!(
             outputs.status[&WindowKind::Display],
             LinkState::Connected(_)
         ));
         settings.output.display.name = "Renamed again".into();
-        outputs.sync(&settings, Locale::ZhCn, false);
+        outputs.sync(&settings, Locale::ZhCn, 0);
         assert_eq!(outputs.status[&WindowKind::Display], LinkState::Connecting);
         assert_eq!(outputs.names[&WindowKind::Display], "Renamed again");
-        settings.output.peer_display.enabled = true;
+        settings.output.partners[0].enabled = true;
         assert!(
-            resolve(WindowKind::PeerDisplay, &settings, false)
+            resolve(WindowKind::PARTNER, &settings, 0)
                 .config()
                 .is_none()
         );
         assert!(
-            resolve(WindowKind::PeerDisplay, &settings, true)
+            resolve(WindowKind::PARTNER, &settings, 1)
                 .config()
                 .is_some()
         );
-        settings.output.peer_display.name = settings.output.display.name.clone();
-        outputs.sync(&settings, Locale::ZhCn, true);
+        settings.output.partners[0].name = settings.output.display.name.clone();
+        outputs.sync(&settings, Locale::ZhCn, 1);
         assert!(outputs.names.is_empty());
         assert!(
-            resolve(WindowKind::Display, &settings, true)
+            resolve(WindowKind::Display, &settings, 1)
                 .output()
                 .is_none()
         );
-        settings.output.peer_display.enabled = false;
-        outputs.sync(&settings, Locale::ZhCn, false);
+        settings.output.partners[0].enabled = false;
+        outputs.sync(&settings, Locale::ZhCn, 0);
         assert_eq!(outputs.status[&WindowKind::Display], LinkState::Connecting);
     }
 
@@ -983,11 +1002,11 @@ mod tests {
         let mut s = Settings::default();
         s.output.display.enabled = true;
         s.output.display.size = Some([1280, 720]);
-        s.output.peer_display.enabled = true;
-        s.output.peer_display.size = Some([640, 360]);
-        s.output.peer_display.straight_alpha = true;
+        s.output.partners[0].enabled = true;
+        s.output.partners[0].size = Some([640, 360]);
+        s.output.partners[0].straight_alpha = true;
         let own = config(WindowKind::Display, &s).unwrap();
-        let peer = config(WindowKind::PeerDisplay, &s).unwrap();
+        let peer = config(WindowKind::PARTNER, &s).unwrap();
         assert_eq!(
             own.extent,
             WindowOutputExtent::Fixed {
@@ -1005,8 +1024,8 @@ mod tests {
         assert_eq!(own.alpha, WindowOutputAlpha::Premultiplied);
         assert_eq!(peer.alpha, WindowOutputAlpha::Straight);
         assert!(own.while_hidden && peer.while_hidden);
-        s.output.peer_display.enabled = false;
-        assert!(config(WindowKind::PeerDisplay, &s).is_none());
+        s.output.partners[0].enabled = false;
+        assert!(config(WindowKind::PARTNER, &s).is_none());
         assert_eq!(config(WindowKind::Display, &s), Some(own));
         assert!(config(WindowKind::History, &s).is_none());
     }
@@ -1018,60 +1037,96 @@ mod tests {
         }
         let mut s = Settings::default();
         s.output.display.enabled = true;
-        s.output.peer_display.enabled = true;
+        s.output.partners[0].enabled = true;
         let mut outputs = Spout::default();
         let locale = Locale::ZhCn;
-        outputs.sync(&s, locale, false);
+        outputs.sync(&s, locale, 0);
         assert!(matches!(
-            outputs.status[&WindowKind::PeerDisplay],
+            outputs.status[&WindowKind::PARTNER],
             LinkState::Off
         ));
-        outputs.sync(&s, locale, true);
+        outputs.sync(&s, locale, 1);
         assert!(matches!(
-            outputs.status[&WindowKind::PeerDisplay],
+            outputs.status[&WindowKind::PARTNER],
             LinkState::Connecting
         ));
         outputs
             .status
             .insert(WindowKind::Display, LinkState::Connected("self".into()));
-        outputs.status.insert(
-            WindowKind::PeerDisplay,
-            LinkState::Connected("partner".into()),
-        );
-        outputs.sync(&s, locale, false);
+        outputs
+            .status
+            .insert(WindowKind::PARTNER, LinkState::Connected("partner".into()));
+        outputs.sync(&s, locale, 0);
         assert!(matches!(
-            outputs.status[&WindowKind::PeerDisplay],
+            outputs.status[&WindowKind::PARTNER],
             LinkState::Off
         ));
         assert!(matches!(
             outputs.status[&WindowKind::Display],
             LinkState::Connected(_)
         ));
-        outputs.sync(&s, locale, true);
+        outputs.sync(&s, locale, 1);
         assert!(matches!(
-            outputs.status[&WindowKind::PeerDisplay],
+            outputs.status[&WindowKind::PARTNER],
             LinkState::Connecting
         ));
+    }
+
+    #[test]
+    fn each_partner_seat_sends_on_its_own_while_someone_sits_there() {
+        if !(cfg!(windows) || cfg!(target_os = "macos")) {
+            return;
+        }
+        let mut s = Settings::default();
+        for seat in &mut s.output.partners {
+            seat.enabled = true;
+        }
+        let seat = |n: u8| WindowKind::PeerDisplay(n);
+        // Every seat has its own name, so all of them can be on at once.
+        for kind in WindowKind::PARTNERS {
+            assert!(!name_conflicts(kind, &s), "{kind:?}");
+        }
+        assert!(resolve(seat(0), &s, 0).output().is_none());
+        assert!(resolve(seat(0), &s, 1).output().is_some());
+        assert!(resolve(seat(1), &s, 1).output().is_none());
+        assert_eq!(
+            resolve(seat(2), &s, 3).output().map(|o| o.name.as_str()),
+            Some("NanaType Partner 3")
+        );
+        let mut outputs = Spout::default();
+        outputs.sync(&s, Locale::ZhCn, 2);
+        assert_eq!(outputs.status[&seat(1)], LinkState::Connecting);
+        assert_eq!(outputs.status[&seat(2)], LinkState::Off);
+        // The second person leaves: their seat stops, the first keeps going.
+        outputs
+            .status
+            .insert(seat(0), LinkState::Connected("first".into()));
+        outputs.sync(&s, Locale::ZhCn, 1);
+        assert!(matches!(outputs.status[&seat(0)], LinkState::Connected(_)));
+        assert_eq!(outputs.status[&seat(1)], LinkState::Off);
+        // A seat switched off stays off whoever sits there.
+        s.output.partners[0].enabled = false;
+        assert!(resolve(seat(0), &s, 7).output().is_none());
     }
 
     #[test]
     fn duplicate_enabled_names_are_rejected() {
         let mut s = Settings::default();
         s.output.display.enabled = true;
-        s.output.peer_display.enabled = true;
-        s.output.peer_display.name = s.output.display.name.clone();
+        s.output.partners[0].enabled = true;
+        s.output.partners[0].name = s.output.display.name.clone();
         assert!(name_conflicts(WindowKind::Display, &s));
-        assert!(name_conflicts(WindowKind::PeerDisplay, &s));
+        assert!(name_conflicts(WindowKind::PARTNER, &s));
         assert!(!name_conflicts(WindowKind::History, &s));
         assert!(config(WindowKind::Display, &s).is_none());
-        assert!(config(WindowKind::PeerDisplay, &s).is_none());
+        assert!(config(WindowKind::PARTNER, &s).is_none());
         let mut outputs = Spout::default();
-        outputs.sync(&s, Locale::ZhCn, true);
+        outputs.sync(&s, Locale::ZhCn, 1);
         assert!(matches!(
-            outputs.status[&WindowKind::PeerDisplay],
+            outputs.status[&WindowKind::PARTNER],
             LinkState::Error(_)
         ));
-        s.output.peer_display.enabled = false;
+        s.output.partners[0].enabled = false;
         assert!(!name_conflicts(WindowKind::Display, &s));
     }
 }

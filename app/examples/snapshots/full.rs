@@ -121,7 +121,7 @@ fn p2p(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
         theme.clone(),
         |doc, id| {
             doc.context_mut()
-                .mount_view_root(id, move || dialogue::peer_window(ui))
+                .mount_view_root(id, move || dialogue::peer_window(ui, 0))
                 .unwrap();
         },
     );
@@ -156,13 +156,13 @@ fn p2p(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
     let before_output = ui.settings.get_untracked();
     let mut enabled_output = (*before_output).clone();
     enabled_output.output.display.enabled = true;
-    enabled_output.output.peer_display.enabled = true;
+    enabled_output.output.partners[0].enabled = true;
     enabled_output.output.history.enabled = true;
     ui.settings.set(Arc::new(enabled_output));
     let before_output_status = ui.status.get_untracked();
     let mut output_status = (*before_output_status).clone();
     output_status.spout_display = LinkState::Connecting;
-    output_status.spout_peer_display = LinkState::Connecting;
+    output_status.spout_partners = vec![LinkState::Connecting; nanatype_settings::PARTNER_SEATS];
     output_status.spout_history = LinkState::Connecting;
     ui.status.set(Arc::new(output_status));
     ui.page.set(settings::Page::Output);
@@ -577,10 +577,10 @@ fn links(scene: &Scene, out: &std::path::Path) {
     // source has no box yet, the partner's source is not in the scene.
     let mut on = (*ui.settings.get_untracked()).clone();
     on.output.obs.enabled = true;
-    on.output.peer_display.enabled = true;
+    on.output.partners[0].enabled = true;
     on.output.display.obs_source = "NanaType Display".into();
     on.output.history.obs_source = "NanaType History".into();
-    on.output.peer_display.obs_source = "Partner".into();
+    on.output.partners[0].obs_source = "Partner".into();
     on.output.history.size = Some([1280, 720]);
     let obs = |name: &str, bounds: Option<[f64; 2]>| nanatype_obs::ObsItem {
         id: 1,

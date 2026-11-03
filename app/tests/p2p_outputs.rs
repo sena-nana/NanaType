@@ -11,17 +11,18 @@ use nanatype_i18n::Locale;
 use nanatype_settings::Settings;
 use std::{path::Path, sync::Arc};
 
-fn render(ui: Ui, remote: bool, path: &Path) -> image::RgbaImage {
-    nanatype::clock::capture_at(100_000, || render_at(ui, remote, path))
+/// The local display (`None`), or a partner seat's window.
+fn render(ui: Ui, seat: Option<usize>, path: &Path) -> image::RgbaImage {
+    nanatype::clock::capture_at(100_000, || render_at(ui, seat, path))
 }
 
-fn render_at(ui: Ui, remote: bool, path: &Path) -> image::RgbaImage {
+fn render_at(ui: Ui, seat: Option<usize>, path: &Path) -> image::RgbaImage {
     let mut session = common::session()
-        .id(if remote { 6 } else { 2 })
+        .id(seat.map_or(2, |seat| 6 + seat as u64 * 2))
         .themed(false)
         .mount(796, 236, move || {
-            if remote {
-                nana_ui::runtime::view::IntoView::into_any(dialogue::peer_window(ui))
+            if let Some(seat) = seat {
+                nana_ui::runtime::view::IntoView::into_any(dialogue::peer_window(ui, seat))
             } else {
                 nana_ui::runtime::view::IntoView::into_any(dialogue::display_window(ui))
             }
@@ -67,8 +68,8 @@ fn separate_scenes_keep_self_and_partner_content_when_roles_change() {
             host,
             ..Default::default()
         }));
-        let own_image = render(ui, false, &out.join(format!("self-{host}.png")));
-        let partner_image = render(ui, true, &out.join(format!("partner-{host}.png")));
+        let own_image = render(ui, None, &out.join(format!("self-{host}.png")));
+        let partner_image = render(ui, Some(0), &out.join(format!("partner-{host}.png")));
         assert!(pixels(&own_image, [208, 0, 80]) > 100, "self text missing");
         assert_eq!(
             pixels(&own_image, [0, 128, 208]),
@@ -95,17 +96,33 @@ fn separate_scenes_keep_self_and_partner_content_when_roles_change() {
         .display
         .set(Arc::new(second.display().clone()));
     ui.peer_seats.set(2);
-    let both = render(ui, true, &out.join("two-partners.png"));
-    assert!(pixels(&both, [0, 128, 208]) > 40, "first partner missing");
-    assert!(pixels(&both, [32, 160, 64]) > 40, "second partner missing");
-    assert_eq!(
-        pixels(&both, [208, 0, 80]),
-        0,
-        "self leaked into the shared partner window"
+    let first = render(ui, Some(0), &out.join("partner-seat-1.png"));
+    let second_image = render(ui, Some(1), &out.join("partner-seat-2.png"));
+    assert!(pixels(&first, [0, 128, 208]) > 40, "first partner missing");
+    assert!(
+        pixels(&second_image, [32, 160, 64]) > 40,
+        "second partner missing"
     );
+    assert_eq!(
+        pixels(&first, [32, 160, 64]),
+        0,
+        "second partner leaked into the first seat's window"
+    );
+    assert_eq!(
+        pixels(&second_image, [0, 128, 208]),
+        0,
+        "first partner leaked into the second seat's window"
+    );
+    for image in [&first, &second_image] {
+        assert_eq!(
+            pixels(image, [208, 0, 80]),
+            0,
+            "self leaked into a partner window"
+        );
+    }
     ui.peer_seats.set(0);
     ui.peer.set(Arc::new(SessionUi::default()));
-    let inactive = render(ui, true, &out.join("inactive.png"));
+    let inactive = render(ui, Some(0), &out.join("inactive.png"));
     assert_eq!(
         pixels(&inactive, [0, 128, 208]),
         0,

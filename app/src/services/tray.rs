@@ -641,7 +641,7 @@ mod tests {
         assert!(matches!(
             menu_message("nt.overlay:peer_display:close"),
             Some(Msg::Window(WindowMsg::OverlayAction(
-                WindowKind::PeerDisplay,
+                WindowKind::PARTNER,
                 super::super::overlay_menu::Action::Close
             )))
         ));

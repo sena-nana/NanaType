@@ -13,10 +13,16 @@ use crate::{
 };
 
 const PREFIX: &str = "nt.overlay:";
-const WINDOWS: [WindowKind; 3] = [
+const WINDOWS: [WindowKind; 2 + nanatype_settings::PARTNER_SEATS] = [
     WindowKind::Display,
-    WindowKind::PeerDisplay,
     WindowKind::History,
+    WindowKind::PeerDisplay(0),
+    WindowKind::PeerDisplay(1),
+    WindowKind::PeerDisplay(2),
+    WindowKind::PeerDisplay(3),
+    WindowKind::PeerDisplay(4),
+    WindowKind::PeerDisplay(5),
+    WindowKind::PeerDisplay(6),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -173,7 +179,7 @@ impl Snapshot {
             }
             Action::ClearDisplay => self.kind == WindowKind::Display && self.connected,
             Action::VerticalText => {
-                matches!(self.kind, WindowKind::Display | WindowKind::PeerDisplay)
+                matches!(self.kind, WindowKind::Display | WindowKind::PeerDisplay(_))
             }
             Action::Avatar | Action::Name | Action::Time => self.kind == WindowKind::History,
             Action::ClearHistory => {
@@ -432,11 +438,13 @@ mod tests {
                 edit(&mut settings);
             }
             for other in WINDOWS {
+                // Partner seats share one set of window settings.
+                let same = kind == other || (kind.seat().is_some() && other.seat().is_some());
                 let o = other.overlay(&settings).unwrap();
-                assert_eq!(o.visible, kind != other);
-                assert_eq!(o.always_on_top, kind != other);
-                assert_eq!(o.lock == Lock::Locked, kind == other);
-                assert_eq!(o.vertical_text, kind == other);
+                assert_eq!(o.visible, !same);
+                assert_eq!(o.always_on_top, !same);
+                assert_eq!(o.lock == Lock::Locked, same);
+                assert_eq!(o.vertical_text, same);
             }
         }
         for id in [
@@ -471,7 +479,7 @@ mod tests {
                 assert!(leaves.iter().any(|i| matches!(i, MenuItemKind::Check(i) if i.id().0.ends_with("skin:broken:skin") && !i.is_enabled() && i.text() == "Broken && skin")));
                 assert_eq!(leaves.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if i.id().0 == Action::ClearHistory.id(kind) && i.text() == ui.now_t("overlay-menu-confirm-clear"))), kind == WindowKind::History);
                 assert!(!items.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if i.id().0 == Action::ClearHistory.id(kind))));
-                assert_eq!(items.iter().any(|i| matches!(i, MenuItemKind::Check(i) if i.id().0 == Action::VerticalText.id(kind) && !i.is_checked())), matches!(kind, WindowKind::Display | WindowKind::PeerDisplay));
+                assert_eq!(items.iter().any(|i| matches!(i, MenuItemKind::Check(i) if i.id().0 == Action::VerticalText.id(kind) && !i.is_checked())), matches!(kind, WindowKind::Display | WindowKind::PeerDisplay(_)));
             }
         }
     }

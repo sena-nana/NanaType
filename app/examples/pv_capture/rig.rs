@@ -143,7 +143,9 @@ impl Rig {
             (d.region[1] + d.overscan * 2.0) as u32,
         );
         let ui = self.ui;
-        self.mount(name, size, scale, true, move || dialogue::peer_window(ui))
+        self.mount(name, size, scale, true, move || {
+            dialogue::peer_window(ui, 0)
+        })
     }
 
     pub fn history(&mut self, name: &'static str, scale: f32) -> usize {

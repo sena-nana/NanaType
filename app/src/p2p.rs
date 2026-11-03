@@ -33,6 +33,9 @@ pub struct SessionUi {
     pub invite_names: Vec<String>,
     /// People in the room, including the local user. Zero before the first snapshot.
     pub members: usize,
+    /// The name of whoever sits in each partner seat, in seat order; empty
+    /// before they publish one.
+    pub seats: Vec<String>,
 }
 impl Default for SessionUi {
     fn default() -> Self {
@@ -45,6 +48,7 @@ impl Default for SessionUi {
             invite: InvitePhase::Idle,
             invite_names: Vec::new(),
             members: 0,
+            seats: Vec::new(),
         }
     }
 }
@@ -113,20 +117,34 @@ impl App {
                     self.ui.display.set(Arc::new(empty()));
                 }
                 self.peer_publish();
-                let kind = crate::windows::WindowKind::PeerDisplay;
-                if !self.windows.is_open(kind) {
-                    let title = self.ui.now_t(kind.title_key());
-                    let descriptor =
-                        crate::windows::descriptor(kind, &title, &self.skin, &self.settings);
-                    self.commands
-                        .push(nana_ui_platform::host::WindowCommand::Open {
-                            id: kind.id(),
-                            settings: descriptor,
-                        });
-                }
+                self.open_partner_windows();
                 self.refresh_spout_status();
             }
             Err(error) => self.notice(error, true),
+        }
+    }
+
+    /// Open a window for every live seat that has none yet. A window stays
+    /// open (hidden) once its seat empties, for the next person to sit there.
+    fn open_partner_windows(&mut self) {
+        let locale = self.ui.locale.get_untracked();
+        for kind in crate::windows::WindowKind::PARTNERS
+            .into_iter()
+            .take(self.partner_seats())
+        {
+            if self.windows.should_open(kind) {
+                let descriptor = crate::windows::descriptor(
+                    kind,
+                    &kind.title(locale),
+                    &self.skin,
+                    &self.settings,
+                );
+                self.commands
+                    .push(nana_ui_platform::host::WindowCommand::Open {
+                        id: kind.id(),
+                        settings: descriptor,
+                    });
+            }
         }
     }
 
@@ -394,6 +412,7 @@ impl App {
         let mut remote_revision = Vec::new();
         let mut replays = Vec::new();
         let mut names = Vec::new();
+        let mut seat_names = Vec::new();
         for (index, id) in seated.iter().enumerate() {
             let lane = self.ui.peer_lanes[index];
             let track = room.tracks.get(id);
@@ -414,6 +433,7 @@ impl App {
                     names.push(track.name.clone());
                 }
             }
+            seat_names.push(track.map(|track| track.name.clone()).unwrap_or_default());
             // Their own translation, else one made here.
             let local_sub = remote_view
                 .line
@@ -466,7 +486,8 @@ impl App {
             }
         }
         let remote_name = names.join(&self.ui.now_t("peer-name-separator"));
-        if self.ui.peer_seats.get_untracked() != seated.len() {
+        let reseated = self.ui.peer_seats.get_untracked() != seated.len();
+        if reseated {
             self.ui.peer_seats.set(seated.len());
         }
         // Index every owner's rows once instead of scanning per entry.
@@ -541,11 +562,17 @@ impl App {
             self.ui.history.set(Arc::new(rows));
         }
         let shown = self.ui.peer.get_untracked();
-        if shown.name != remote_name || shown.members != members {
+        if shown.name != remote_name || shown.members != members || shown.seats != seat_names {
             let mut state = (*shown).clone();
             state.name = remote_name;
             state.members = members;
+            state.seats = seat_names;
             self.ui.peer.set(Arc::new(state));
+        }
+        if reseated {
+            // Someone sat down or left: their window and output follow.
+            self.open_partner_windows();
+            self.refresh_spout_status();
         }
         self.refresh_peer_urls();
         for (owner, line, doc) in replays {

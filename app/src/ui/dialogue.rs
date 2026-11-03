@@ -2,14 +2,14 @@
 //! these windows add what only NanaType has: plugin views and the peer track.
 
 use nana_ui::runtime::Stack;
-use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
+use nana_ui::runtime::view::{IntoView, dynamic, widget};
 
 pub use nanatype_frame::ui::dialogue::*;
 
 use super::Ui;
 
-/// Each native window is one GPU output surface. The partner window stacks
-/// one dialogue band per other seated person.
+/// Each native window is one GPU output surface: the local display, and one
+/// window per other seated person.
 pub fn display_window(ui: Ui) -> impl IntoView {
     widget(Stack::column(0.)).children((
         dialogue_box(*ui, Source::Display, None),
@@ -17,7 +17,9 @@ pub fn display_window(ui: Ui) -> impl IntoView {
     ))
 }
 
-pub fn peer_window(ui: Ui) -> impl IntoView {
+/// One partner seat's window: that person's dialogue box, and while nobody
+/// has connected yet the first seat's invite controls.
+pub fn peer_window(ui: Ui, seat: usize) -> impl IntoView {
     widget(Stack::fill_column(0.0).with_layout(|layout| {
         layout.position = nana_ui_core::PositionSpec::Relative;
     }))
@@ -31,29 +33,21 @@ pub fn peer_window(ui: Ui) -> impl IntoView {
                 )
             },
             move |(active, seats, legacy_empty)| {
-                if !active {
+                // Before a room snapshot, and in tests, the first seat shows
+                // whatever `peer_display` has.
+                let seated = if *seats == 0 {
+                    seat == 0 && !legacy_empty
+                } else {
+                    seat < (*seats).min(super::REMOTE_LANES)
+                };
+                if !active || !seated {
                     return widget(Stack::column(0.0)).into_any();
                 }
-                // Before a room snapshot, and in tests, one box fills the window.
-                let count = if *seats == 0 {
-                    usize::from(!legacy_empty)
-                } else {
-                    (*seats).min(super::REMOTE_LANES)
-                };
-                let boxes: Vec<AnyView> = (0..count)
-                    .map(|index| {
-                        widget(Stack::column(0.0).with_layout(|layout| {
-                            layout.flex_grow = Some(1.0);
-                            layout.height = Some(nana_ui_core::LengthSpec::Fill);
-                            layout.width = Some(nana_ui_core::LengthSpec::Fill);
-                        }))
-                        .children(dialogue_box(ui.stage.lane(index), Source::Display, None))
-                        .into_any()
-                    })
-                    .collect();
-                widget(Stack::fill_column(0.0)).children(boxes).into_any()
+                widget(Stack::fill_column(0.0))
+                    .children(dialogue_box(ui.stage.lane(seat), Source::Display, None))
+                    .into_any()
             },
         ),
-        super::p2p::waiting_room(ui),
+        (seat == 0).then(|| super::p2p::waiting_room(ui)),
     ))
 }

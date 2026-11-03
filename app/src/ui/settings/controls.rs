@@ -103,11 +103,11 @@ pub fn links_pulsing(ui: Ui) -> bool {
                 &s.osc,
                 &s.ws,
                 &s.spout_display,
-                &s.spout_peer_display,
                 &s.spout_history,
                 &s.obs,
             ]
             .into_iter()
+            .chain(&s.spout_partners)
             .any(|l| *l == LinkState::Connecting)
                 || s.blivechat_link == crate::ui::danmaku::Link::Connecting
         })
@@ -117,6 +117,15 @@ pub fn links_pulsing(ui: Ui) -> bool {
 /// or waiting for access, red failed, grey off. Connecting breathes unless
 /// motion is reduced.
 pub fn link_badge(ui: Ui, get: fn(&Status) -> &LinkState) -> AnyView {
+    link_badge_by(ui, move |s| get(s).clone())
+}
+
+/// [`link_badge`] for a state that has to be looked up, such as one partner
+/// seat's sender.
+pub fn link_badge_by(
+    ui: Ui,
+    get: impl Fn(&Status) -> LinkState + Send + Sync + Copy + 'static,
+) -> AnyView {
     let describe = move || {
         let locale = ui.locale.get();
         ui.status.with(|s| match get(s) {
@@ -134,7 +143,7 @@ pub fn link_badge(ui: Ui, get: fn(&Status) -> &LinkState) -> AnyView {
         })
     };
     breathing_badge(ui, describe, move || {
-        ui.status.with(|st| *get(st) == LinkState::Connecting)
+        ui.status.with(|st| get(st) == LinkState::Connecting)
     })
 }
 
