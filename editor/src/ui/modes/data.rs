@@ -3,7 +3,7 @@ use super::package::*;
 use crate::msg::Msg;
 use crate::session::{Action, EditorView};
 use crate::ui::Ui;
-use crate::ui::controls::{hint, label};
+use crate::ui::controls::hint;
 use crate::ui::kit::{self, field, gap};
 use crate::ui::views::*;
 use nana_ui::ControlSize;
@@ -20,7 +20,7 @@ use std::sync::Arc;
 const FORMATS: [DataFormat; 3] = [DataFormat::Text, DataFormat::Json, DataFormat::Nthz];
 
 /// `[data.<id>]` rows and their form; read-only while package.toml is.
-fn data_section(ui: Ui, view: &EditorView, editable: bool) -> AnyView {
+fn data_section(ui: Ui, view: &EditorView, editable: bool) -> (AnyView, Option<AnyView>) {
     let editing: Editing = buffer(ui, "data.editing", None);
     let rows = view
         .data
@@ -75,22 +75,30 @@ fn data_section(ui: Ui, view: &EditorView, editable: bool) -> AnyView {
             None => widget(Stack::column(0.)).into_any(),
         },
     );
-    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm))
+    let body = widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm))
         .key("package-editor-data")
         .children((
             rows.is_empty().then(|| hint(ui.now_t("pkgedit-data-none"))),
             widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm)).children(rows),
             form,
-            editable.then(|| {
-                natural(
-                    widget(button(ui, "pkgedit-data-add"))
-                        .key("package-editor-data-add")
-                        .bind(move |b: &mut Button| b.disabled = editing.get().is_some())
-                        .on(move |_: &Activate| editing.set(Some(None))),
-                )
-            }),
         ))
-        .into_any()
+        .into_any();
+    (
+        body,
+        editable.then(|| add_tool(ui, "pkgedit-data-add", "package-editor-data-add", editing)),
+    )
+}
+
+/// Add on a group's title: opens an empty form, and waits while one is open.
+fn add_tool(ui: Ui, label_key: &str, key: &str, editing: Editing) -> AnyView {
+    widget(nana_ui::runtime::IconButton::tool(
+        nana_ui::icons_tabler::PLUS,
+        ui.now_t(label_key),
+    ))
+    .key(key.to_owned())
+    .bind(move |b: &mut nana_ui::runtime::IconButton| b.disabled = editing.get().is_some())
+    .on(move |_: &Activate| editing.set(Some(None)))
+    .into_any()
 }
 
 fn data_form(
@@ -257,7 +265,7 @@ fn processor_key(name: &str, version: u32) -> String {
 }
 
 /// `[pipelines.<name>]` rows and their form; read-only while skin.toml is.
-fn pipeline_section(ui: Ui, view: &EditorView) -> AnyView {
+fn pipeline_section(ui: Ui, view: &EditorView) -> (AnyView, Option<AnyView>) {
     let skin = view.files.iter().find(|f| f.path == MANIFEST);
     let editable = skin.is_some_and(|f| f.editable);
     let editing: Editing = buffer(ui, "pipeline.editing", None);
@@ -329,23 +337,24 @@ fn pipeline_section(ui: Ui, view: &EditorView) -> AnyView {
         Some(_) if !editable => Some("pkgedit-skin-protected"),
         Some(_) => None,
     };
-    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm))
+    let body = widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm))
         .key("package-editor-pipelines")
         .children((
             note.map(|key| hint(ui.now_t(key))),
             (rows.is_empty() && skin.is_some()).then(|| hint(ui.now_t("pkgedit-pipelines-none"))),
             widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm)).children(rows),
             form,
-            editable.then(|| {
-                natural(
-                    widget(button(ui, "pkgedit-pipeline-add"))
-                        .key("package-editor-pipeline-add")
-                        .bind(move |b: &mut Button| b.disabled = editing.get().is_some())
-                        .on(move |_: &Activate| editing.set(Some(None))),
-                )
-            }),
         ))
-        .into_any()
+        .into_any();
+    let add = editable.then(|| {
+        add_tool(
+            ui,
+            "pkgedit-pipeline-add",
+            "package-editor-pipeline-add",
+            editing,
+        )
+    });
+    (body, add)
 }
 
 fn pipeline_form(
@@ -563,9 +572,9 @@ pub fn view(ui: Ui) -> AnyView {
             // Each heading with its section, the two a group apart: one
             // even column left the second heading closer to the first
             // section's button than to its own rows.
-            let group = |title: &str, body: AnyView| {
+            let group = |title: &str, (body, add): (AnyView, Option<AnyView>)| {
                 widget(Stack::column(0.).gap_step(gap::step::CONTROL))
-                    .children((label(ui.now_t(title)), body))
+                    .children((kit::section_heading(ui.now_t(title), add.into_any()), body))
             };
             widget(Stack::column(0.).gap_step(gap::step::GROUP))
                 .key("package-editor-data-page")

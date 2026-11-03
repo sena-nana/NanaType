@@ -8,8 +8,8 @@ use crate::ui::kit::{self, field, gap};
 use crate::ui::views::*;
 use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, node_ref, widget};
 use nana_ui::runtime::{
-    Activate, Button, Checkbox, Select, SelectChanged, SelectOption, Stack, TextArea, TextChanged,
-    ToggleChanged, ViewContext,
+    Activate, Button, Checkbox, IconButton, Select, SelectChanged, SelectOption, Stack, TextArea,
+    TextChanged, ToggleChanged, ViewContext,
 };
 use nana_ui::theme::space;
 use nana_ui::{ButtonKind, ControlSize};
@@ -107,30 +107,34 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
     let base = buffer(ui, "metadata.base", metadata.base.clone());
     let preview = buffer(ui, "metadata.preview", metadata.preview.clone());
     let tags = buffer(ui, "metadata.tags", metadata.tags.join(", "));
-    let localized = [("pkgedit-name", name), ("pkgedit-description", description)]
-        .into_iter()
-        .flat_map(|(key, values)| {
-            ["zh-CN", "en-US", "ja-JP"].into_iter().map(move |locale| {
-                labelled(
-                    format!("{} · {locale}", ui.now_t(key)),
-                    field::MD,
-                    widget(
-                        kit::text_input(
-                            values.with_untracked(|v| v.get(locale).cloned().unwrap_or_default()),
-                        )
-                        .read_only(!editable)
-                        .size(ControlSize::Small),
+    // One row per language, under the name's and the description's titles.
+    let localized =
+        |key: &'static str, values: Signal<std::collections::BTreeMap<String, String>>| {
+            ["zh-CN", "en-US", "ja-JP"]
+                .into_iter()
+                .map(|locale| {
+                    (
+                        form_row(
+                            locale.to_owned(),
+                            widget(
+                                kit::text_input(values.with_untracked(|v| {
+                                    v.get(locale).cloned().unwrap_or_default()
+                                }))
+                                .read_only(!editable)
+                                .size(ControlSize::Small),
+                            )
+                            .key(format!("editor-meta-{key}-{locale}"))
+                            .on(move |e: &TextChanged| {
+                                values.update(|v| {
+                                    v.insert(locale.into(), e.value.to_string());
+                                })
+                            }),
+                        ),
+                        None,
                     )
-                    .key(format!("editor-meta-{key}-{locale}"))
-                    .on(move |e: &TextChanged| {
-                        values.update(|v| {
-                            v.insert(locale.into(), e.value.to_string());
-                        })
-                    }),
-                )
-            })
-        })
-        .collect::<Vec<_>>();
+                })
+                .collect::<Vec<_>>()
+        };
     let version = buffer(ui, "metadata.version", metadata.version.clone());
     let author = buffer(ui, "metadata.author", metadata.author.clone());
     let created = buffer(ui, "metadata.created", metadata.created_at.clone());
@@ -200,48 +204,51 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
                 dependencies: deps,
             })));
         });
-    widget(
-        Stack::column(0.0)
-            .gap_step(nana_ui_core::SpacingStep::Lg)
-            .padding_xy(0., space::SM),
-    )
-    .key("package-editor-metadata")
-    .children((
-        (!editable).then(|| hint(ui.now_t("pkgedit-manifest-protected"))),
-        widget(
-            Stack::row(0.0)
-                .gap_step(nana_ui_core::SpacingStep::Md)
-                .wrap(true),
-        )
-        .children((
-            field(ui, "pkgedit-version", version, "1.0.0"),
-            field(ui, "package-author", author, ""),
-            field(ui, "package-created-at", created, "YYYY-MM-DD"),
-            field(ui, "package-licensed-to", licensed_to, ""),
-            field(ui, "package-license", license, "MIT"),
-        )),
+    let text_row = |key: &str, value: Signal<String>, placeholder: &str| {
         (
-            widget(Stack::row(0.).gap_step(gap::step::CONTROL).wrap(true)).children(localized),
-            widget(Stack::row(0.).gap_step(gap::step::CONTROL).wrap(true)).children((
-                field(ui, "pkgedit-min-app", min_app, "0.1.0"),
-                field(ui, "pkgedit-base", base, "nanatype.halo"),
-                field(ui, "pkgedit-cover", preview, "images/cover.png"),
-                field(ui, "pkgedit-tags", tags, "minimal, cute"),
-            )),
-        ),
-        hint(ui.now_t("pkgedit-capabilities")),
-        widget(
-            Stack::row(0.0)
-                .gap_step(nana_ui_core::SpacingStep::Lg)
-                .wrap(true),
+            form_row(ui.now_t(key), text_field(ui, key, value, placeholder)),
+            None,
         )
-        .children((
-            capability_box(PackageCapability::Skin, "packages-kind-skin"),
-            capability_box(PackageCapability::Resources, "packages-kind-resources"),
-            capability_box(PackageCapability::Lua, "packages-kind-function"),
-            capability_box(PackageCapability::Sounds, "packages-kind-sounds"),
-        )),
-        hint(ui.now_t("pkgedit-dependencies-hint")),
+    };
+    let picker = dynamic(
+        move || ui.packages.get(),
+        move |packages| {
+            widget(
+                Select::new(None::<String>)
+                    .size(ControlSize::Small)
+                    .options(
+                        packages
+                            .iter()
+                            .map(|p| {
+                                let value =
+                                    format!("{}@{}", p.manifest.meta.id, p.manifest.meta.version);
+                                SelectOption::new(value.clone(), value)
+                            })
+                            .collect::<Vec<_>>(),
+                    ),
+            )
+            .key("editor-dependency-picker")
+            .bind(move |s: &mut Select| s.disabled = !editable)
+            .on(move |e: &SelectChanged| {
+                let value = e.value.to_string();
+                let id = value.split('@').next().unwrap_or("");
+                dependencies.update(|text| {
+                    let mut rows = text.lines().map(str::to_owned).collect::<Vec<_>>();
+                    if let Some(row) = rows
+                        .iter_mut()
+                        .find(|r| r.split('@').next().map(str::trim) == Some(id))
+                    {
+                        *row = value.clone();
+                    } else {
+                        rows.push(value.clone());
+                    }
+                    *text = rows.join("\n");
+                });
+            })
+            .into_any()
+        },
+    );
+    let dependency_list = kit::block((
         widget(
             kit::text_area(dependencies.get_untracked())
                 .read_only(!editable)
@@ -253,46 +260,6 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
         .bind(move |a: &mut TextArea| sync_text(&mut a.state, dependencies.get()))
         .on(move |e: &TextChanged| dependencies.set(e.value.to_string())),
         dynamic(
-            move || ui.packages.get(),
-            move |packages| {
-                widget(
-                    Select::new(None::<String>)
-                        .size(ControlSize::Small)
-                        .options(
-                            packages
-                                .iter()
-                                .map(|p| {
-                                    let value = format!(
-                                        "{}@{}",
-                                        p.manifest.meta.id, p.manifest.meta.version
-                                    );
-                                    SelectOption::new(value.clone(), value)
-                                })
-                                .collect::<Vec<_>>(),
-                        ),
-                )
-                .key("editor-dependency-picker")
-                .bind(move |s: &mut Select| s.disabled = !editable)
-                .on(move |e: &SelectChanged| {
-                    let value = e.value.to_string();
-                    let id = value.split('@').next().unwrap_or("");
-                    dependencies.update(|text| {
-                        let mut rows = text.lines().map(str::to_owned).collect::<Vec<_>>();
-                        if let Some(row) = rows
-                            .iter_mut()
-                            .find(|r| r.split('@').next().map(str::trim) == Some(id))
-                        {
-                            *row = value.clone();
-                        } else {
-                            rows.push(value.clone());
-                        }
-                        *text = rows.join("\n");
-                    });
-                })
-                .into_any()
-            },
-        ),
-        dynamic(
             move || dependencies.get(),
             move |text| match nanatype_theme::editor::parse_dependencies(text) {
                 Ok(_) => widget(Stack::column(0.)).into_any(),
@@ -301,14 +268,116 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
                     .into_any(),
             },
         ),
-        (
+    ));
+    let capability_boxes = kit::block(
+        widget(
+            Stack::row(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Lg)
+                .wrap(true),
+        )
+        .children((
+            capability_box(PackageCapability::Skin, "packages-kind-skin"),
+            capability_box(PackageCapability::Resources, "packages-kind-resources"),
+            capability_box(PackageCapability::Lua, "packages-kind-function"),
+            capability_box(PackageCapability::Sounds, "packages-kind-sounds"),
+        )),
+    );
+    widget(
+        Stack::column(0.0)
+            .gap_step(kit::gap::step::SECTION)
+            .padding_xy(0., space::SM),
+    )
+    .key("package-editor-metadata")
+    .children((
+        (!editable).then(|| hint(ui.now_t("pkgedit-manifest-protected"))),
+        kit::section_titled(
+            Some(ui.now_t("pkgedit-group-basic")),
+            vec![
+                text_row("pkgedit-version", version, "1.0.0"),
+                text_row("package-author", author, ""),
+                text_row("package-created-at", created, "YYYY-MM-DD"),
+                text_row("package-licensed-to", licensed_to, ""),
+                text_row("package-license", license, "MIT"),
+            ],
+        ),
+        kit::section_titled(
+            Some(ui.now_t("pkgedit-name")),
+            localized("pkgedit-name", name),
+        ),
+        kit::section_titled(
+            Some(ui.now_t("pkgedit-description")),
+            localized("pkgedit-description", description),
+        ),
+        kit::section_titled(
+            Some(ui.now_t("pkgedit-group-listing")),
+            vec![
+                text_row("pkgedit-min-app", min_app, "0.1.0"),
+                text_row("pkgedit-base", base, "nanatype.halo"),
+                text_row("pkgedit-cover", preview, "images/cover.png"),
+                text_row("pkgedit-tags", tags, "minimal, cute"),
+            ],
+        ),
+        kit::section_tools(
+            ui.now_t("pkgedit-capabilities-title"),
+            kit::hint_mark(ui.now_t("pkgedit-capabilities")),
+            vec![(capability_boxes, None)],
+        ),
+        kit::section_tools(
+            ui.now_t("pkgedit-dependencies-title"),
+            kit::hint_mark(ui.now_t("pkgedit-dependencies-hint")),
+            vec![
+                (dependency_list, None),
+                (
+                    form_row(ui.now_t("pkgedit-dependency-add"), picker.into_any()),
+                    None,
+                ),
+            ],
+        ),
+        // The form's own actions, under its last group.
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
+                .align(AlignSpec::Center),
+        )
+        .children((
             natural(apply),
             natural(
                 widget(button(ui, "pkgedit-discard-form"))
                     .on_cx(send(|| Action::DiscardForms("metadata.".into()))),
             ),
-        ),
+        )),
     ))
+    .into_any()
+}
+
+/// A label and its field on one line: the field takes [`field::MD`] at the
+/// row's end.
+pub(crate) fn form_row(label: String, control: impl IntoView) -> kit::Row {
+    kit::row_text(
+        label,
+        None,
+        widget(
+            Stack::row(0.0)
+                .width(LengthSpec::Px(field::MD))
+                .shrink(1.)
+                .with_layout(|l| l.min_width = Some(LengthSpec::Px(field::XS))),
+        )
+        .children(control)
+        .into_any(),
+    )
+}
+
+/// A one-line text field for the form value `value`, read-only when its file
+/// is protected.
+fn text_field(ui: Ui, key: &str, value: Signal<String>, placeholder: &str) -> AnyView {
+    widget(
+        kit::text_input(value.get_untracked())
+            .placeholder(placeholder.to_owned())
+            .read_only(!form_editable(ui, PACKAGE_MANIFEST))
+            .size(ControlSize::Small),
+    )
+    .key(format!("package-editor-field:{key}"))
+    .on(move |e: &TextChanged| value.set(e.value.to_string()))
     .into_any()
 }
 
@@ -345,18 +414,24 @@ pub(crate) fn entry_buttons(
             .align(AlignSpec::Center),
     )
     .children((
-        widget(button(ui, "pkgedit-entry-edit"))
-            .key(format!("{key}:edit"))
-            .on(move |_: &Activate| editing.set(Some(Some(name.clone())))),
+        widget(IconButton::tool(
+            nana_ui::icons_tabler::EDIT,
+            ui.now_t("pkgedit-entry-edit"),
+        ))
+        .key(format!("{key}:edit"))
+        .on(move |_: &Activate| editing.set(Some(Some(name.clone())))),
         confirm(
             *ui,
             ui.now_t("pkgedit-entry-remove-question"),
             ui.now_t("pkgedit-entry-remove"),
             move |armed| {
-                widget(button(ui, "pkgedit-entry-remove"))
-                    .key(remove_key)
-                    .on(move |_: &Activate| armed.set(true))
-                    .into_any()
+                widget(IconButton::tool(
+                    nana_ui::icons_tabler::TRASH,
+                    ui.now_t("pkgedit-entry-remove"),
+                ))
+                .key(remove_key)
+                .on(move |_: &Activate| armed.set(true))
+                .into_any()
             },
             move || Msg::PackageEditor(remove()),
         ),

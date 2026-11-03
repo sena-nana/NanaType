@@ -90,10 +90,18 @@ pub fn section_titled<V: IntoView>(title: Option<String>, rows: Vec<(V, Shown)>)
 /// hang out of the line rather than raising it, so a titled group with
 /// tools stands as tall as one without.
 pub fn section_tools<V: IntoView>(title: String, tools: AnyView, rows: Vec<(V, Shown)>) -> AnyView {
+    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Md))
+        .children((section_heading(title, tools), section_titled(None, rows)))
+        .into_any()
+}
+
+/// A group's title line with `tools` at its end, as [`section_tools`] draws
+/// it, for a group whose body is not a card of rows.
+pub fn section_heading(title: String, tools: AnyView) -> AnyView {
     use nana_ui::runtime::Text;
     use nana_ui::runtime::view::heading_tools;
-    use nana_ui_core::{SpacingStep, TextWeight, TypeRole};
-    let heading = widget(
+    use nana_ui_core::{TextWeight, TypeRole};
+    widget(
         Stack::row(0.0)
             .align(AlignSpec::Center)
             .width(LengthSpec::Fill)
@@ -108,10 +116,8 @@ pub fn section_tools<V: IntoView>(title: String, tools: AnyView, rows: Vec<(V, S
         ),
         spacer(),
         heading_tools(tools),
-    ));
-    widget(Stack::column(0.0).gap_step(SpacingStep::Md))
-        .children((heading, section_titled(None, rows)))
-        .into_any()
+    ))
+    .into_any()
 }
 
 /// A heading's or a row's icon tool: `glyph`, named and tipped `label`.

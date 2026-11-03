@@ -343,25 +343,28 @@ fn toolbar_row(
         stage,
         spacer(),
         layout,
-        widget(button(ui, "pkgedit-export"))
+        widget(tool(ti::UPLOAD, ui.now_t("pkgedit-export")))
             .key("package-editor-export")
-            .on_cx(send(|| Action::Export)),
-        widget(button(ui, "pkgedit-save"))
+            .on_cx(|_, _: &Activate, cx| {
+                cx.dispatch_program_all(Msg::PackageEditor(Action::Export))
+            }),
+        // Filled while there is something to save.
+        widget(tool(ti::DEVICE_FLOPPY, ui.now_t("pkgedit-save")))
             .key("package-editor-save")
-            .bind(move |b: &mut Button| {
+            .bind(move |b: &mut IconButton| {
                 let kind = if ui
                     .package_editor
                     .with(|v| v.as_ref().is_some_and(|v| v.dirty))
                 {
                     ButtonKind::Primary
                 } else {
-                    ButtonKind::Subtle
+                    ButtonKind::Ghost
                 };
                 if b.kind != kind {
                     b.kind = kind;
                 }
             })
-            .on_cx(send(|| Action::Save)),
+            .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::PackageEditor(Action::Save))),
     ))
     .into_any()
 }
