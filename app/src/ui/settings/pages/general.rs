@@ -45,6 +45,41 @@ fn icon_action(
         .into_any()
 }
 
+/// Character `i`'s avatar as the chat shows it: the picked picture over the
+/// name's initial, on its name colour (or the accent). Picking, clearing,
+/// renaming or recolouring redraws it.
+fn avatar_preview(ui: Ui, i: usize) -> AnyView {
+    dynamic(
+        move || {
+            ui.settings.with(|s| {
+                s.general.characters.get(i).map(|c| {
+                    (
+                        c.avatar.clone(),
+                        crate::ui::character_name(ui, i, c),
+                        c.color,
+                    )
+                })
+            })
+        },
+        move |c| {
+            let (avatar, name, color) = c.clone().unwrap_or_default();
+            let accent = color.map_or_else(
+                || {
+                    crate::ui::kit::theme::palette(ui.chrome())
+                        .accent
+                        .as_rgba_array()
+                },
+                crate::ui::c,
+            );
+            crate::ui::danmaku::asset_avatar(ui.stage, avatar, &name, AVATAR_PREVIEW, accent)
+        },
+    )
+    .into_any()
+}
+
+/// The avatar preview beside "Pick avatar".
+const AVATAR_PREVIEW: f32 = 32.0;
+
 /// Character `i` of `n`: name, hotkey, use, order and remove; then its
 /// avatar and name colour.
 fn character_row(ui: Ui, i: usize, n: usize, active: bool) -> Row {
@@ -130,6 +165,7 @@ fn character_row(ui: Ui, i: usize, n: usize, active: bool) -> Row {
             .wrap(true),
     )
     .children((
+        avatar_preview(ui, i),
         button(ui, "general-avatar-pick", move || {
             Msg::PickFile(FileTarget::Avatar(i))
         }),
