@@ -57,32 +57,17 @@ pub(super) fn panel(ui: Ui) -> AnyView {
         move |(q, series, _)| {
             let stickers = ui.stickers.get_untracked();
             if stickers.is_empty() {
-                let mut style = Type::Body.style();
-                let l = Arc::make_mut(&mut style.layout);
-                l.width = Some(LengthSpec::Fill);
-                l.min_width = Some(LengthSpec::Px(0.0));
-                return widget(
-                    Stack::column(0.0)
-                        .gap_step(gap::step::CONTROL)
-                        .width(LengthSpec::Fill),
+                // The app's empty state: the line and the way to settings
+                // under it, centred together.
+                return crate::ui::kit::empty_state(
+                    ui.now_t("empty-stickers"),
+                    Some((
+                        ui.now_t("window-settings"),
+                        Box::new(|| {
+                            Msg::Window(WindowMsg::SettingsPage(crate::ui::settings::Page::Assets))
+                        }),
+                    )),
                 )
-                .children((
-                    widget(
-                        Text::new(ui.now_t("empty-stickers"))
-                            .style(style)
-                            .color(SemanticColorRole::Muted),
-                    ),
-                    widget(
-                        Button::new(ui.now_t("window-settings"))
-                            .kind(ButtonKind::Text)
-                            .size(ControlSize::Small),
-                    )
-                    .on_cx(move |_, _: &Activate, cx| {
-                        cx.dispatch_program_all(Msg::Window(WindowMsg::SettingsPage(
-                            crate::ui::settings::Page::Assets,
-                        )))
-                    }),
-                ))
                 .into_any();
             }
             let q = q.to_lowercase();

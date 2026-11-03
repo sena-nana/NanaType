@@ -285,15 +285,21 @@ fn tile_view(ui: Ui, tile: Tile, query: Signal<String>, hint: Signal<Option<Stri
             .into_any()
         }
     };
+    // The markup gives way to the face: at its natural width a long one
+    // ran past the tile's edge. It keeps to the end, the spacer taking the
+    // room left over.
     let markup = (!tile.markup.is_empty()).then(|| {
+        let mut style = Type::Micro.one_line();
+        Arc::make_mut(&mut style.layout).flex_grow = Some(0.0);
         widget(
             Text::new(tile.markup.clone())
                 .decorative()
-                .style(Type::Micro.style())
+                .style(style)
                 .color(SemanticColorRole::Faint)
                 .truncating(),
         )
     });
+    let face = widget(Stack::row(0.0).with_layout(|l| l.flex_shrink = Some(0.0))).children(face);
     let row = widget(
         Stack::row(0.0)
             .gap_step(gap::step::TIGHT)
