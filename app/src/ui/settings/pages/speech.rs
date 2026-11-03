@@ -177,9 +177,17 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                         "speech-model",
                         vec![with_tip(
                             ui,
-                            kit::line(
+                            // The buttons under the status: beside it, with
+                            // longer labels, they left it a narrow column.
+                            block((
                                 Type::Body.view(status),
-                                (
+                                widget(
+                                    Stack::row(0.0)
+                                        .gap_step(gap::step::CONTROL)
+                                        .align(AlignSpec::Center)
+                                        .wrap(true),
+                                )
+                                .children((
                                     (!working && !ready).then(|| {
                                         button(ui, "speech-model-download", || {
                                             Msg::Speech(SpeechMsg::ModelDownload)
@@ -200,8 +208,8 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                                             Msg::Speech(SpeechMsg::ModelDelete)
                                         })
                                     }),
-                                ),
-                            ),
+                                )),
+                            )),
                             "speech-model-hint",
                         )],
                     )

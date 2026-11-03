@@ -10,7 +10,7 @@ use nanatype_settings::Settings;
 use std::sync::Arc;
 
 /// Narrower than this, a text of a few characters reads as a column.
-const MIN_TEXT_W: f32 = 90.0;
+const MIN_TEXT_W: f32 = 120.0;
 
 #[test]
 fn settings_rows_leave_their_copy_room() {
@@ -44,7 +44,7 @@ fn settings_rows_leave_their_copy_room() {
                 for n in shown {
                     let b = &n.bounds;
                     let chars = n.label.as_deref().map_or(0, |l| l.chars().count());
-                    if n.role == "text" && chars >= 3 && b.height > 60.0 && b.width < MIN_TEXT_W {
+                    if n.role == "text" && chars >= 3 && b.height > 40.0 && b.width < MIN_TEXT_W {
                         bad.push(format!(
                             "{locale:?} {width} {page:?}: {:?} squeezed to {}px",
                             n.label, b.width
