@@ -67,6 +67,13 @@ fn inline_name_width(h: &nanatype_theme::History, col_w: f32, show_time: bool) -
     h.name_width.min((col_w - time - body - 10.0).max(32.0))
 }
 
+/// Whether a narrow inline log still has room for the time: beside it the
+/// name must keep about three characters. Below that the time goes first,
+/// the least of the three; with it kept, the name was cut to "…".
+fn inline_time_fits(h: &nanatype_theme::History, col_w: f32) -> bool {
+    inline_name_width(h, col_w, true) >= (h.name_size * 3.0).min(h.name_width)
+}
+
 /// Outline only text runs, so @ labels retain their own fill and lettering.
 fn transparent_text(doc: &Document, color: Rgba8) -> Document {
     let mut drawn = doc.clone();
@@ -559,7 +566,8 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
         super::tnum(l);
     }
     let show_name = settings.history.show_name && !row.item.author.is_empty() && !follows;
-    let show_time = settings.history.show_time && !follows;
+    let show_time =
+        settings.history.show_time && !follows && (!inline || inline_time_fits(&h, col_w));
     let inline_name_w = inline_name_width(&h, col_w, show_time);
     // Who is talking, once live chat shares the list.
     let role = (show_name && !inline && (chat || settings.history.chat.enabled)).then(|| {
@@ -1341,6 +1349,24 @@ fn title_view(skin: &Skin, t: &HistoryTitle) -> AnyView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An inline log narrower than its three columns drops the time before
+    /// the name is cut to "…"; with room it keeps both.
+    #[test]
+    fn a_narrow_inline_log_gives_the_time_up_for_the_name() {
+        let mut h = nanatype_theme::History {
+            name_size: 16.0,
+            name_width: 120.0,
+            time_seconds: true,
+            ..nanatype_theme::History::default()
+        };
+        h.text.size = 20.0;
+        let three = h.name_size * 3.0;
+        assert!(!inline_time_fits(&h, 230.0));
+        assert!(inline_name_width(&h, 230.0, false) >= three);
+        assert!(inline_time_fits(&h, 400.0));
+        assert!(inline_name_width(&h, 400.0, true) >= three);
+    }
 
     #[test]
     fn search_filters_the_window_but_never_the_broadcast_output() {
