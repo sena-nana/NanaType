@@ -6,7 +6,7 @@ use std::sync::Arc;
 use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, segmented_option, widget};
 use nana_ui::runtime::{
-    Activate, Chip, ColorChanged, ColorField, RangeChanged, RangeField, SegmentedControl,
+    Activate, Chip, ColorChanged, ColorField, RangeField, RangeInput, SegmentedControl,
     SegmentedOptionChosen, Select, SelectChanged, SelectOption, Stack, Switch, Text, TextChanged,
     TextInput, TextInputState, ToggleChanged,
 };
@@ -140,7 +140,7 @@ fn number(p: Param) -> AnyView {
                     r.value = v;
                 }
             })
-            .on(move |e: &RangeChanged| {
+            .on(move |e: &RangeInput| {
                 let v = ((e.value - min) / step).round() * step + min;
                 p.set(ParamValue::Number(v.clamp(min, max)));
             }),

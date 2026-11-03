@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, on_mount, signal, widget};
 use nana_ui::runtime::{
     Activate, Button, ColorChanged, ColorField, Icon, IconButton, NumberChanged, NumberInput,
-    RangeChanged, RangeField, Select, SelectChanged, SelectOption, SizeChanged, SizeField,
+    RangeField, RangeInput, Select, SelectChanged, SelectOption, SizeChanged, SizeField,
     SizeFieldChanged, SizePreset, Stack, Text,
 };
 use nana_ui::{ButtonKind, ControlSize};
@@ -268,7 +268,7 @@ fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
                         r.value = v;
                     }
                 })
-                .on(move |e: &RangeChanged| {
+                .on(move |e: &RangeInput| {
                     let v = ((e.value / LINE_STEP).round() * LINE_STEP).clamp(min, max);
                     change(ui, &write_id, |d| {
                         d.pane_mut(history).line_height = unless_default(v as f32, default)

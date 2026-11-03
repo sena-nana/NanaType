@@ -175,34 +175,34 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                     section(
                         ui,
                         "speech-model",
-                        // Stacked: in a line, the buttons left the hint a
-                        // column a few characters wide.
-                        vec![kit::row_text_stacked(
-                            status,
-                            Some(ui.now_t("speech-model-hint")),
-                            (
-                                (!working && !ready).then(|| {
-                                    button(ui, "speech-model-download", || {
-                                        Msg::Speech(SpeechMsg::ModelDownload)
-                                    })
-                                }),
-                                (!working).then(|| {
-                                    button(ui, "speech-model-import", || {
-                                        Msg::PickFile(FileTarget::SpeechModel)
-                                    })
-                                }),
-                                working.then(|| {
-                                    button(ui, "speech-model-cancel", || {
-                                        Msg::Speech(SpeechMsg::ModelCancel)
-                                    })
-                                }),
-                                (!working && ready).then(|| {
-                                    button(ui, "speech-model-delete", || {
-                                        Msg::Speech(SpeechMsg::ModelDelete)
-                                    })
-                                }),
-                            )
-                                .into_any(),
+                        vec![with_tip(
+                            ui,
+                            kit::line(
+                                Type::Body.view(status),
+                                (
+                                    (!working && !ready).then(|| {
+                                        button(ui, "speech-model-download", || {
+                                            Msg::Speech(SpeechMsg::ModelDownload)
+                                        })
+                                    }),
+                                    (!working).then(|| {
+                                        button(ui, "speech-model-import", || {
+                                            Msg::PickFile(FileTarget::SpeechModel)
+                                        })
+                                    }),
+                                    working.then(|| {
+                                        button(ui, "speech-model-cancel", || {
+                                            Msg::Speech(SpeechMsg::ModelCancel)
+                                        })
+                                    }),
+                                    (!working && ready).then(|| {
+                                        button(ui, "speech-model-delete", || {
+                                            Msg::Speech(SpeechMsg::ModelDelete)
+                                        })
+                                    }),
+                                ),
+                            ),
+                            "speech-model-hint",
                         )],
                     )
                 },

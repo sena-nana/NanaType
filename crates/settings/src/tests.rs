@@ -770,22 +770,55 @@ fn old_settings_preserve_local_output_and_add_disabled_partner_output() {
     assert_eq!(s.output.display.name, "My Display");
     assert_eq!(s.output.display.size, Some([1280, 720]));
     assert_eq!(s.overlays.display.size, Some([900.0, 300.0]));
-    assert!(!s.output.peer_display.enabled);
-    assert_eq!(s.output.peer_display.name, "NanaType Partner");
+    assert_eq!(s.output.partners.len(), PARTNER_SEATS);
+    for (index, seat) in s.output.partners.iter().enumerate() {
+        assert!(!seat.enabled);
+        assert_eq!(seat.name, partner_output_name(index));
+    }
     assert_eq!(s.overlays.peer_display.size, None);
+}
+
+#[test]
+fn the_single_partner_sender_moves_into_the_first_seat() {
+    let mut s: Settings = serde_json::from_str(
+        r#"{"output":{"peer_display":{"enabled":true,"name":"Old Partner","size":[640,360]}}}"#,
+    )
+    .unwrap();
+    assert!(s.sanitize());
+    assert!(s.output.peer_display.is_none());
+    assert!(s.output.partners[0].enabled);
+    assert_eq!(s.output.partners[0].name, "Old Partner");
+    assert_eq!(s.output.partners[0].size, Some([640, 360]));
+    assert_eq!(s.output.partners[1], partner_output(1));
+    let saved = serde_json::to_value(&s).unwrap();
+    assert!(saved["output"].get("peer_display").is_none());
+    let loaded: Settings = serde_json::from_value(saved).unwrap();
+    assert_eq!(loaded, s);
+}
+
+#[test]
+fn partner_seats_are_always_one_per_seat() {
+    let mut s: Settings = serde_json::from_str(
+        r#"{"output":{"partners":[{"enabled":true,"name":"Only"}]}}"#,
+    )
+    .unwrap();
+    assert!(s.sanitize());
+    assert_eq!(s.output.partners.len(), PARTNER_SEATS);
+    assert_eq!(s.output.partners[0].name, "Only");
+    assert_eq!(s.output.partners[6], partner_output(6));
 }
 
 #[test]
 fn partner_settings_round_trip_and_sanitize() {
     let mut s = Settings::default();
-    s.output.peer_display.enabled = true;
-    s.output.peer_display.name = "  Partner  ".into();
-    s.output.peer_display.size = Some([0, 99999]);
+    s.output.partners[2].enabled = true;
+    s.output.partners[2].name = "  Partner  ".into();
+    s.output.partners[2].size = Some([0, 99999]);
     s.overlays.peer_display.size = Some([0.0, 99999.0]);
     s.overlays.peer_display.lock = Lock::Interactive;
     assert!(s.sanitize());
-    assert_eq!(s.output.peer_display.name, "Partner");
-    assert_eq!(s.output.peer_display.size, Some([16, 1920]));
+    assert_eq!(s.output.partners[2].name, "Partner");
+    assert_eq!(s.output.partners[2].size, Some([16, 1920]));
     assert_eq!(s.overlays.peer_display.size, Some([160.0, 8192.0]));
     let loaded: Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
     assert_eq!(loaded, s);

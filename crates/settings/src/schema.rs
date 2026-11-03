@@ -1467,13 +1467,37 @@ impl Default for ObsLink {
     }
 }
 
+/// Partner seats in a co-op room: everyone but the local person, in seat
+/// order (the host, then guests as they joined).
+pub const PARTNER_SEATS: usize = 7;
+
+/// Seat `index`'s default sender name, counted from one.
+pub fn partner_output_name(index: usize) -> String {
+    format!("NanaType Partner {}", index + 1)
+}
+
+/// Seat `index`'s sender as it starts out: off, under its own name.
+pub fn partner_output(index: usize) -> SpoutOutput {
+    SpoutOutput {
+        enabled: false,
+        name: partner_output_name(index),
+        ..SpoutOutput::default()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputSettings {
     pub display: SpoutOutput,
-    pub peer_display: SpoutOutput,
+    /// One sender per partner seat, remembered by seat: whoever sits there
+    /// goes out under that seat's name. Always [`PARTNER_SEATS`] long.
+    pub partners: Vec<SpoutOutput>,
     pub history: SpoutOutput,
     pub obs: ObsLink,
+    /// The single partner sender of earlier versions, read once into the
+    /// first seat by [`Settings::sanitize`].
+    #[serde(skip_serializing)]
+    pub peer_display: Option<SpoutOutput>,
 }
 
 impl Default for OutputSettings {
@@ -1484,11 +1508,8 @@ impl Default for OutputSettings {
                 name: "NanaType Display".into(),
                 ..SpoutOutput::default()
             },
-            peer_display: SpoutOutput {
-                enabled: false,
-                name: "NanaType Partner".into(),
-                ..SpoutOutput::default()
-            },
+            partners: (0..PARTNER_SEATS).map(partner_output).collect(),
+            peer_display: None,
             history: SpoutOutput {
                 enabled: false,
                 name: "NanaType History".into(),
@@ -1922,11 +1943,18 @@ impl Settings {
                 *h = finite_or(*h, 200.0).clamp(60.0, 8192.0);
             }
         }
-        for out in [
-            &mut self.output.display,
-            &mut self.output.peer_display,
-            &mut self.output.history,
-        ] {
+        let o = &mut self.output;
+        o.partners.truncate(PARTNER_SEATS);
+        while o.partners.len() < PARTNER_SEATS {
+            o.partners.push(partner_output(o.partners.len()));
+        }
+        if let Some(legacy) = o.peer_display.take() {
+            o.partners[0] = legacy;
+        }
+        for out in [&mut o.display, &mut o.history]
+            .into_iter()
+            .chain(o.partners.iter_mut())
+        {
             out.name = out.name.trim().chars().take(255).collect();
             out.obs_source = out.obs_source.chars().take(255).collect();
             if let Some([w, h]) = out.size {

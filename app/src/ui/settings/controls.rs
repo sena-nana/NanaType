@@ -5,8 +5,8 @@ use std::sync::{Arc, LazyLock};
 
 use nana_ui::runtime::view::{AnyView, IntoView, segmented_option, widget};
 use nana_ui::runtime::{
-    Activate, Button, Chip, ColorChanged, ColorField, IconButton, NumberChanged, RangeChanged,
-    RangeField, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption,
+    Activate, Button, Chip, ColorChanged, ColorField, IconButton, NumberChanged, RangeField,
+    RangeInput, SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption,
     Stack, StatusBadge, Switch, Text, TextChanged, ToggleChanged,
 };
 use nana_ui::{ButtonKind, ControlSize, StatusTone};
@@ -210,9 +210,16 @@ pub fn row(ui: Ui, label_key: &str, hint_key: Option<&str>, control: AnyView) ->
     row_text(ui.now_t(label_key), hint_key.map(|k| ui.now_t(k)), control)
 }
 
-/// [`row`] with its control under the label and hint, at any width.
-pub fn row_stacked(ui: Ui, label_key: &str, hint_key: Option<&str>, control: AnyView) -> Row {
-    kit::row_text_stacked(ui.now_t(label_key), hint_key.map(|k| ui.now_t(k)), control)
+/// `row` with a tip card under it: what the row needs said, too long for
+/// a hint beside its control.
+pub fn with_tip(ui: Ui, row: Row, key: &str) -> Row {
+    let tip = widget(
+        Stack::column(0.0)
+            .padding_step(inset::step::CARD, inset::step::ROW_Y)
+            .with_layout(|l| l.padding_top = Some(LengthSpec::Px(0.0))),
+    )
+    .children(kit::callout(kit::Tone::Neutral, ui.now_t(key)));
+    Row::inset(widget(Stack::column(0.0)).children((row, tip)))
 }
 
 /// An info mark whose tooltip carries the detail a label leaves out.
@@ -531,7 +538,7 @@ pub fn slider_with(
                     r.value = v;
                 }
             })
-            .on_cx(move |_, e: &RangeChanged, cx| {
+            .on_cx(move |_, e: &RangeInput, cx| {
                 let v = e.value;
                 cx.dispatch_program_all(edit(move |s| set(s, v)));
             }),
