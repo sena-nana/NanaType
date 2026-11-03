@@ -129,7 +129,7 @@ Twitch、弹幕、联机、OBS 多路输出、表情包等的详细用法见 **[
 
 | | |
 | --- | --- |
-| **用户** | [使用指南](docs/usage.md) · [语音输入](docs/voice-input.md) · [Twitch](docs/twitch.md) · [彗星号](docs/comet.md) · [OBS / Spout 输出](docs/obs-spout.md) · [检查更新](docs/updates.md) · [Steam 版](docs/steam.md) |
+| **用户** | [使用指南](docs/usage.md) · [语音输入](docs/voice-input.md) · [Twitch](docs/twitch.md) · [彗星号](docs/comet.md) · [LAPLACE](docs/laplace.md) · [OBS / Spout 输出](docs/obs-spout.md) · [检查更新](docs/updates.md) · [Steam 版](docs/steam.md) |
 | **创作者** | [台词标记](docs/markup.md) · [皮肤格式](docs/skins.md) · [插件与包接口](docs/plugins.md) · [包编辑器](docs/package-editor.md) · [字体](docs/fonts.md) |
 | **开发者** | [从源码构建](docs/building.md) · [渲染管线](docs/rendering-pipeline.md) · [日志](docs/logging.md) |
 

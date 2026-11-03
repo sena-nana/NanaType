@@ -130,5 +130,19 @@ fn the_laplace_section_takes_a_pasted_link() {
                 .any(|n| n.label.as_deref() == Some(label.as_str())),
             "the link row shows in {locale:?}"
         );
+        let guide = ui.now_t("int-laplace-guide");
+        let nodes = session.accessibility_dump();
+        let button = nodes
+            .iter()
+            .find(|n| n.role == "button" && n.label.as_deref() == Some(guide.as_str()))
+            .expect("a guide button");
+        assert!(session.click_node(button.id).unwrap());
+        let messages = session.document_mut().context_mut().take_program_messages();
+        assert!(
+            messages.into_iter().any(|m| m
+                .downcast::<Msg>()
+                .is_ok_and(|m| matches!(*m, Msg::OpenUrl(url) if url.ends_with("laplace.md")))),
+            "the guide opens in {locale:?}"
+        );
     }
 }

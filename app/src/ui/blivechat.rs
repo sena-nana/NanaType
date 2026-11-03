@@ -361,6 +361,21 @@ fn laplace_link_field(ui: Ui) -> AnyView {
             .on_cx(move |_, _: &TextSubmitted, cx| cx.dispatch_program_all(save())),
         ),
         primary(ui, "int-laplace-link-save", save),
+        kit::tool(
+            nana_ui::icons_tabler::BOOK,
+            ui.now_t("int-laplace-guide"),
+            move || Msg::OpenUrl(laplace_guide(ui.locale.get_untracked())),
+        ),
     ))
     .into_any()
+}
+
+/// How to set up a bridge for NanaType, in the interface's language.
+fn laplace_guide(locale: nanatype_i18n::Locale) -> &'static str {
+    use nanatype_i18n::Locale;
+    match locale {
+        Locale::JaJp => "https://github.com/sena-nana/NanaType/blob/main/docs/ja/laplace.md",
+        Locale::EnUs => "https://github.com/sena-nana/NanaType/blob/main/docs/en/laplace.md",
+        _ => "https://github.com/sena-nana/NanaType/blob/main/docs/laplace.md",
+    }
 }

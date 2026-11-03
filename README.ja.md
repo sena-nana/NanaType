@@ -129,7 +129,7 @@ Twitch、コメント連携、オンライン、OBS の複数出力、スタン�
 
 | | |
 | --- | --- |
-| **ユーザー** | [使い方ガイド](docs/ja/usage.md) · [音声入力](docs/ja/voice-input.md) · [Twitch](docs/ja/twitch.md) · [彗星号](docs/ja/comet.md) · [OBS / Spout 出力](docs/ja/obs-spout.md) · [アップデートの確認](docs/ja/updates.md) · [Steam 版](docs/ja/steam.md) |
+| **ユーザー** | [使い方ガイド](docs/ja/usage.md) · [音声入力](docs/ja/voice-input.md) · [Twitch](docs/ja/twitch.md) · [彗星号](docs/ja/comet.md) · [LAPLACE](docs/ja/laplace.md) · [OBS / Spout 出力](docs/ja/obs-spout.md) · [アップデートの確認](docs/ja/updates.md) · [Steam 版](docs/ja/steam.md) |
 | **クリエイター** | [セリフのマークアップ](docs/ja/markup.md) · [スキン形式](docs/ja/skins.md) · [プラグインとパッケージ API](docs/ja/plugins.md) · [パッケージエディター](docs/ja/package-editor.md) · [フォント](docs/ja/fonts.md) |
 | **開発者** | [ソースからビルド](docs/ja/building.md) · [レンダリングパイプライン](docs/rendering-pipeline.md)（中国語） · [ログ](docs/ja/logging.md) |
 

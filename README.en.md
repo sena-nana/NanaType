@@ -129,7 +129,7 @@ See [Dialogue markup](docs/en/markup.md) for the full syntax.
 
 | | |
 | --- | --- |
-| **Users** | [User guide](docs/en/usage.md) · [Voice input](docs/en/voice-input.md) · [Twitch](docs/en/twitch.md) · [Comet](docs/en/comet.md) · [OBS / Spout output](docs/en/obs-spout.md) · [Checking for updates](docs/en/updates.md) · [Steam edition](docs/en/steam.md) |
+| **Users** | [User guide](docs/en/usage.md) · [Voice input](docs/en/voice-input.md) · [Twitch](docs/en/twitch.md) · [Comet](docs/en/comet.md) · [LAPLACE](docs/en/laplace.md) · [OBS / Spout output](docs/en/obs-spout.md) · [Checking for updates](docs/en/updates.md) · [Steam edition](docs/en/steam.md) |
 | **Creators** | [Dialogue markup](docs/en/markup.md) · [Skin format](docs/en/skins.md) · [Plugins and package API](docs/en/plugins.md) · [Package editor](docs/en/package-editor.md) · [Fonts](docs/en/fonts.md) |
 | **Developers** | [Building from source](docs/en/building.md) · [Rendering pipeline](docs/rendering-pipeline.md) (Chinese) · [Logging](docs/en/logging.md) |
 
