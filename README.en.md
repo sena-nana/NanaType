@@ -75,7 +75,7 @@ NanaType is a streaming typewriter built for VTubers. You type in the input box,
     </td>
     <td valign="top">
       <h4>💬 Live chat</h4>
-      Read and send Twitch chat. Through the blivechat protocol you can also bring in <a href="https://github.com/xfgryujk/blivechat">blivechat</a> or <a href="https://huixinghao.cn/">Comet (彗星号)</a>, or connect a <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>, which relay Bilibili, Douyin and Kuaishou comments.
+      Read and send Twitch chat. Through the blivechat protocol you can also bring in <a href="https://github.com/xfgryujk/blivechat">blivechat</a> or <a href="https://huixinghao.cn/">Comet (彗星号)</a>, or connect a <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a> (with LAPLACE joining by auth code only), which relay Bilibili, Douyin and Kuaishou comments.
     </td>
   </tr>
   <tr>

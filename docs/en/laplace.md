@@ -4,6 +4,8 @@
 
 [LAPLACE Chat](https://chat.laplace.live/) is a Bilibili live chat tool. It can broadcast the live-room events it receives through the [LAPLACE Event Bridge](https://github.com/laplace-live/event-bridge), and NanaType receives them as an Event Bridge client. LAPLACE handles the connection to Bilibili; NanaType does not connect to Bilibili itself.
 
+> **Only auth-code connections are supported.** LAPLACE Chat or Event Fetcher must join the live room with the streamer's auth code (身份码, Bilibili's live open platform). LAPLACE joining by room number (`connectionMode=direct`) uses Bilibili's non-public web interface; NanaType does not support it, even when it is forwarded through an Event Bridge.
+
 ## How the data flows
 
 ```
@@ -19,7 +21,7 @@ NanaType (crates/blive/src/laplace.rs) → chat panel, history
 
 ## Setting it up
 
-Pick one:
+First have LAPLACE join your room with your **auth code**, then pick one:
 
 - **A local Event Bridge**: download `leb-server` from the [Event Bridge releases](https://github.com/laplace-live/event-bridge/releases) and run it (add `--auth your-token` if you want a token), then have the LAPLACE Chat dashboard connect to it. Keep the dashboard open.
 - **Event Fetcher**: from v2.2.0, Event Fetcher has a bridge mode (`WEBSOCKET_BRIDGE=1`). It connects to Bilibili itself and serves the Event Bridge, so the dashboard need not stay open.
@@ -38,7 +40,7 @@ The token goes to the system keychain and only the token-free address is kept in
 
 ### Why an OBS link may not connect
 
-An OBS link with `connectionMode=direct` (`…/obs/<room>?connectionMode=direct&…`) means the page connects to Bilibili itself. The link holds only the room number and LAPLACE's login-sync credential (`loginSyncToken`), not an address to connect to. NanaType no longer connects to Bilibili directly, so such links are refused. Use an Event Bridge or Event Fetcher as above.
+A LAPLACE Chat OBS link (`…/obs/<room or auth code>?…`) means the page joins the room itself. It holds no Event Bridge address, only the room number or auth code and LAPLACE's login-sync credential (`loginSyncToken`), so it is refused. Joining by room number (`connectionMode=direct`) is not supported in any case. Join with your auth code, then set up an Event Bridge or Event Fetcher as above.
 
 The `loginSyncToken` in an OBS link is your LAPLACE login credential; do not share it.
 
@@ -53,7 +55,7 @@ The `loginSyncToken` in an OBS link is your LAPLACE login credential; do not sha
 | `superchat-delete` | Super Chat removed | Removed by `scIds` |
 | Others (entries, likes, `message-recall`, …) | — | Ignored |
 
-On the open platform `uid` is 0, and no uid is recorded.
+With an auth code, Bilibili gives an open_id instead of a uid, so `uid` is 0 and NanaType records none; the open platform does not say who moderates either, and `userType` can only mark the streamer (when LAPLACE fills it in).
 
 ## Connection details
 

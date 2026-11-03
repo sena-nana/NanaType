@@ -75,7 +75,7 @@ NanaType 是为虚拟主播做的直播打字机。你在输入框里打字，�
     </td>
     <td valign="top">
       <h4>💬 弹幕与聊天</h4>
-      Twitch 聊天收发；通过 blivechat 协议接入 <a href="https://github.com/xfgryujk/blivechat">blivechat</a> 或 <a href="https://huixinghao.cn/">彗星号</a>，或连接 <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>，B 站、抖音、快手弹幕都能转进来。
+      Twitch 聊天收发；通过 blivechat 协议接入 <a href="https://github.com/xfgryujk/blivechat">blivechat</a> 或 <a href="https://huixinghao.cn/">彗星号</a>，或连接 <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>（仅支持 LAPLACE 用身份码连接直播间），B 站、抖音、快手弹幕都能转进来。
     </td>
   </tr>
   <tr>

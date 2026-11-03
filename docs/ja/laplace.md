@@ -4,6 +4,8 @@
 
 [LAPLACE Chat](https://chat.laplace.live/) は bilibili のライブコメントツールです。受け取ったライブルームのイベントを [LAPLACE Event Bridge](https://github.com/laplace-live/event-bridge) で配信でき、NanaType は Event Bridge のクライアントとしてそれを受け取ります。bilibili への接続は LAPLACE が担当し、NanaType は bilibili に直接つなぎません。
 
+> **認証コード（身份码）での接続のみ対応しています。** LAPLACE Chat または Event Fetcher は、配信者の認証コード（bilibili ライブのオープンプラットフォーム）でライブルームにつないでください。ルーム番号での直接接続（`connectionMode=direct`）は bilibili の非公開のウェブ用インターフェースを使うため、Event Bridge を経由しても NanaType は対応しません。
+
 ## データの流れ
 
 ```
@@ -19,7 +21,7 @@ NanaType（crates/blive/src/laplace.rs）→ コメントパネル、履歴
 
 ## 使い方
 
-どちらかを選びます。
+まず LAPLACE を**認証コード**でライブルームにつなぎ、次のどちらかを選びます。
 
 - **ローカルの Event Bridge**：[Event Bridge のリリース](https://github.com/laplace-live/event-bridge/releases)から `leb-server` をダウンロードして起動し（トークンが必要なら `--auth トークン`）、LAPLACE Chat のダッシュボードをそこにつなぎます。ダッシュボードは開いたままにします。
 - **Event Fetcher**：v2.2.0 以降の Event Fetcher は bridge モード（`WEBSOCKET_BRIDGE=1`）を持ち、自分で bilibili につないで Event Bridge を提供します。ダッシュボードを開いておく必要はありません。
@@ -38,7 +40,7 @@ NanaType（crates/blive/src/laplace.rs）→ コメントパネル、履歴
 
 ### OBS リンクでつながらない理由
 
-`connectionMode=direct` の OBS リンク（`…/obs/ルーム番号?connectionMode=direct&…`）は、ページ自身が bilibili に直接つなぐものです。リンクにはルーム番号と LAPLACE のログイン同期用の資格情報（`loginSyncToken`）しかなく、接続先のアドレスがありません。NanaType は bilibili に直接つながないため、このリンクは受け付けません。上の Event Bridge か Event Fetcher を使ってください。
+LAPLACE Chat の OBS リンク（`…/obs/ルーム番号または認証コード?…`）は、ページ自身がライブルームにつなぐものです。Event Bridge のアドレスはなく、ルーム番号か認証コードと LAPLACE のログイン同期用の資格情報（`loginSyncToken`）しか含まれないため、受け付けません。ルーム番号での直接接続（`connectionMode=direct`）はそもそも対応していません。認証コードでつないでから、上の手順で Event Bridge か Event Fetcher を使ってください。
 
 OBS リンクの `loginSyncToken` は LAPLACE のログイン情報です。人に渡さないでください。
 
@@ -53,7 +55,7 @@ OBS リンクの `loginSyncToken` は LAPLACE のログイン情報です。人�
 | `superchat-delete` | スーパーチャットの取り下げ | `scIds` で削除 |
 | そのほか（入室、いいね、`message-recall` など） | — | 無視 |
 
-オープンプラットフォームでは `uid` が 0 になり、uid は記録しません。
+認証コードでの接続では bilibili が uid の代わりに open_id を渡すため `uid` は 0 になり、NanaType は uid を記録しません。オープンプラットフォームではモデレーターもわからず、`userType` で見分けられるのは配信者だけです（LAPLACE が設定した場合）。
 
 ## 接続の詳細
 

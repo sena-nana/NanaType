@@ -75,7 +75,7 @@ NanaType は VTuber のための配信用タイプライターです。入力ボ
     </td>
     <td valign="top">
       <h4>💬 コメント連携</h4>
-      Twitch チャットの受信と送信に対応。blivechat プロトコル経由で <a href="https://github.com/xfgryujk/blivechat">blivechat</a> や <a href="https://huixinghao.cn/">彗星号</a>、または <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a> を接続すれば、bilibili・抖音（Douyin）・快手（Kuaishou）のコメントも取り込めます。
+      Twitch チャットの受信と送信に対応。blivechat プロトコル経由で <a href="https://github.com/xfgryujk/blivechat">blivechat</a> や <a href="https://huixinghao.cn/">彗星号</a>、または <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>（LAPLACE が認証コードで接続している場合のみ）を接続すれば、bilibili・抖音（Douyin）・快手（Kuaishou）のコメントも取り込めます。
     </td>
   </tr>
   <tr>

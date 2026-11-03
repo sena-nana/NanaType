@@ -9,6 +9,10 @@
 //! bridge keeps the line alive with WebSocket pings; the older Bun bridge
 //! sends `{"type":"ping"}`, which wants a `pong` back.
 //!
+//! Only LAPLACE joining the room by auth code (the open platform) is
+//! supported; a LAPLACE that reads Bilibili's web interface by room number
+//! is the unofficial path NanaType does not take, bridged or not.
+//!
 //! Events are read into the same [`ChatEvent`]s as blivechat's, every field
 //! leniently, so a newer bridge never drops a message.
 //!
@@ -42,8 +46,8 @@ pub struct Link {
 pub enum LinkError {
     /// Not a `ws`, `wss`, `http` or `https` address.
     Invalid,
-    /// A LAPLACE Chat page that reads Bilibili itself (`connectionMode=direct`)
-    /// and so names no bridge to read from.
+    /// A LAPLACE Chat page that joins the room itself (by room number, which
+    /// is not supported, or by auth code) and so names no bridge to read from.
     DirectPage,
 }
 

@@ -4,6 +4,8 @@
 
 [LAPLACE Chat](https://chat.laplace.live/) 是 B 站弹幕工具。它可以把收到的直播间事件通过 [LAPLACE Event Bridge](https://github.com/laplace-live/event-bridge) 广播出去，NanaType 作为 Event Bridge 的客户端接收这些事件。B 站的连接由 LAPLACE 负责，NanaType 不直连 B 站。
 
+> **只支持身份码连接。** LAPLACE Chat 或 Event Fetcher 必须用主播的身份码（B 站直播开放平台）连接直播间。用房间号直连（`connectionMode=direct`）的 LAPLACE 走的是 B 站网页的非公开接口，NanaType 不支持，即使经过 Event Bridge 转发也一样。
+
 ## 数据怎么走
 
 ```
@@ -19,7 +21,7 @@ NanaType（crates/blive/src/laplace.rs）→ 弹幕面板、历史记录
 
 ## 使用步骤
 
-二选一：
+先在 LAPLACE 里用**身份码**连接你的直播间，然后二选一：
 
 - **本机 Event Bridge**：从 [Event Bridge 发布页](https://github.com/laplace-live/event-bridge/releases) 下载 `leb-server` 并运行（需要令牌时加 `--auth 你的令牌`），再让 LAPLACE Chat 控制台连上这个 Event Bridge。保持控制台开着。
 - **Event Fetcher**：Event Fetcher v2.2.0 起可以开启 bridge 模式（`WEBSOCKET_BRIDGE=1`），它自己连 B 站并直接提供 Event Bridge，不需要一直开着控制台。
@@ -38,7 +40,7 @@ NanaType（crates/blive/src/laplace.rs）→ 弹幕面板、历史记录
 
 ### 为什么 OBS 链接连不上
 
-`connectionMode=direct` 的 OBS 链接（`…/obs/房间号?connectionMode=direct&…`）表示这个页面自己直连 B 站，链接里只有房间号和 LAPLACE 的登录同步凭据（`loginSyncToken`），没有可以接入的地址。NanaType 不再直连 B 站，所以这类链接会被拒绝。请改用上面的 Event Bridge 或 Event Fetcher。
+LAPLACE Chat 的 OBS 链接（`…/obs/房间号或身份码?…`）表示这个页面自己连接直播间，链接里没有 Event Bridge 地址，只有房间号或身份码和 LAPLACE 的登录同步凭据（`loginSyncToken`），所以会被拒绝。房间号直连（`connectionMode=direct`）本身也不受支持。请用身份码连接，再按上面的步骤开启 Event Bridge 或 Event Fetcher。
 
 OBS 链接里的 `loginSyncToken` 是你的 LAPLACE 登录凭据，不要发给别人。
 
@@ -53,7 +55,7 @@ OBS 链接里的 `loginSyncToken` 是你的 LAPLACE 登录凭据，不要发给�
 | `superchat-delete` | 撤下醒目留言 | 按 `scIds` 移除 |
 | 其他（进房、点赞、`message-recall` 等） | — | 忽略 |
 
-开放平台下 `uid` 为 0，此时不记录 uid。
+身份码连接时 B 站用 open_id 代替 uid，`uid` 为 0，NanaType 不记录 uid；开放平台也不告诉谁是房管，`userType` 只能认出主播（如果 LAPLACE 给出）。
 
 ## 连接细节
 
