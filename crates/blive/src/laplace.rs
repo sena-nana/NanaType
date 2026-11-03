@@ -1,8 +1,9 @@
 //! LAPLACE Event Bridge: the WebSocket bridge LAPLACE Chat (or its event
 //! fetcher) broadcasts Bilibili live events through.
 //!
-//! A client connects to `ws://host:port/`, with the bridge's token as
-//! `?token=` when it has one, and receives one JSON event per frame, named by
+//! A client connects to the bridge's link (`ws://localhost:9696`, or `wss://`
+//! for one behind TLS), with its token as `?token=` when it has one, and
+//! receives one JSON event per frame, named by
 //! its `type` (`message`, `gift`, `superchat`, `toast`, ...). There is no
 //! room to join: the bridge sends whatever rooms LAPLACE Chat watches. The Go
 //! bridge keeps the line alive with WebSocket pings; the older Bun bridge
@@ -26,20 +27,94 @@ pub const DEFAULT_PORT: u16 = 9696;
 const OWNER: i64 = 100;
 const MODERATOR: i64 = 1;
 
-/// The path to connect to, carrying `token` when there is one.
-pub fn path(token: &str) -> String {
-    if token.is_empty() {
-        return "/".into();
-    }
-    let mut path = String::from("/?token=");
-    for b in token.bytes() {
-        if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
-            path.push(b as char);
+/// A bridge's link as the user pasted it, split into the address, which may
+/// be shown and kept in settings, and the token, which may not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Link {
+    /// `ws://` or `wss://` with host, port and path; no token.
+    pub address: String,
+    /// Empty when the bridge has none.
+    pub token: String,
+}
+
+/// Why a pasted link names no bridge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkError {
+    /// Not a `ws`, `wss`, `http` or `https` address.
+    Invalid,
+    /// A LAPLACE Chat page that reads Bilibili itself (`connectionMode=direct`)
+    /// and so names no bridge to read from.
+    DirectPage,
+}
+
+impl Link {
+    /// Read a pasted link: `ws://` or `wss://` (`http(s)://`, as a browser
+    /// shows the same address, is taken for them), or a bare `host[:port]`,
+    /// which is a local bridge on [`DEFAULT_PORT`] unless it names a port.
+    ///
+    /// A LAPLACE Chat page link (its OBS link, `…/obs/<room>?…`) reads as
+    /// the event fetcher it was set to use (`danmakuFetcherApi`, with
+    /// `eventFetcherAuth` for the token). Only the token is kept from a
+    /// query: a page link carries its own login token among the rest.
+    pub fn parse(text: &str) -> Result<Self, LinkError> {
+        let text = text.trim();
+        let bare = !text.contains("://");
+        let parsed = if bare {
+            url::Url::parse(&format!("ws://{text}"))
         } else {
-            path.push_str(&format!("%{b:02X}"));
+            url::Url::parse(text)
+        };
+        let mut url = parsed.map_err(|_| LinkError::Invalid)?;
+        let pairs: Vec<(String, String)> = url.query_pairs().into_owned().collect();
+        let query = |name: &str| {
+            pairs
+                .iter()
+                .find(|(k, _)| k == name)
+                .map(|(_, v)| v.trim().to_owned())
+        };
+        if query("connectionMode").is_some() || url.path().starts_with("/obs/") {
+            return match query("danmakuFetcherApi").filter(|api| !api.is_empty()) {
+                Some(api) => {
+                    let mut link = Self::parse(&api)?;
+                    link.token = query("eventFetcherAuth").unwrap_or_default();
+                    Ok(link)
+                }
+                None => Err(LinkError::DirectPage),
+            };
         }
+        let scheme = match url.scheme() {
+            "ws" | "http" => "ws",
+            "wss" | "https" => "wss",
+            _ => return Err(LinkError::Invalid),
+        };
+        url.set_scheme(scheme).map_err(|_| LinkError::Invalid)?;
+        if url.host_str().is_none_or(str::is_empty) {
+            return Err(LinkError::Invalid);
+        }
+        if bare && url.port().is_none() {
+            url.set_port(Some(DEFAULT_PORT))
+                .map_err(|_| LinkError::Invalid)?;
+        }
+        let token = query("token").unwrap_or_default();
+        let _ = url.set_username("");
+        let _ = url.set_password(None);
+        url.set_fragment(None);
+        url.set_query(None);
+        Ok(Self {
+            address: url.into(),
+            token,
+        })
     }
-    path
+
+    /// What the client connects to: the address with the token put back.
+    /// `None` if the address is not one [`Link::parse`] made.
+    pub fn url(&self) -> Option<String> {
+        let mut url = url::Url::parse(&self.address).ok()?;
+        if !self.token.is_empty() {
+            url.query_pairs_mut().append_pair("token", &self.token);
+        }
+        Some(url.into())
+    }
 }
 
 /// The answer to a bridge's JSON ping.

@@ -697,9 +697,9 @@ pub enum BliveMsg {
     Relay(nanatype_blive::RelayStatus),
     /// Keep this blivechat 身份码 in the system's secret store; empty forgets it.
     AuthCode(String),
-    /// Keep this LAPLACE Event Bridge token in the system's secret store;
-    /// empty forgets it.
-    LaplaceToken(String),
+    /// A LAPLACE Event Bridge link the user pasted: its address goes to the
+    /// settings, its token (or none) to the system's secret store.
+    LaplaceLink(String),
     /// Make a new 彗星号 address; pages using the old one are refused.
     ResetCometToken,
 }

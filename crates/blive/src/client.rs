@@ -1,12 +1,15 @@
 //! The connection thread: join, keep alive, reconnect.
 
+use std::io::{Read, Write};
+use std::net::TcpStream;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
 use nanatype_model::{LinkFault, ws_connect, ws_idle};
-use tungstenite::Message;
+use tungstenite::stream::MaybeTlsStream;
+use tungstenite::{Message, WebSocket};
 
 use crate::laplace;
 use crate::protocol::{self, ChatEvent, FatalKind, HEARTBEAT_MESSAGE, Incoming, RoomKey};
@@ -18,6 +21,8 @@ const SILENCE_LIMIT: Duration = Duration::from_secs(30);
 /// The LAPLACE bridge only pings every 54 s, and answers ours.
 const LAPLACE_PING_EVERY: Duration = Duration::from_secs(20);
 const LAPLACE_SILENCE_LIMIT: Duration = Duration::from_secs(60);
+/// Reads wait this long, so the loop can poll between frames.
+const READ_TIMEOUT: Duration = Duration::from_millis(100);
 const RETRY_AFTER: Duration = Duration::from_secs(3);
 const RETRY_AFTER_FATAL: Duration = Duration::from_secs(30);
 
@@ -26,10 +31,13 @@ const RETRY_AFTER_FATAL: Duration = Duration::from_secs(30);
 pub enum Join {
     /// A room on a blivechat server (or the 彗星号 relay).
     Blivechat(RoomKey),
-    /// A LAPLACE Event Bridge's feed; `token` is empty when it has none.
-    Laplace { token: String },
+    /// A LAPLACE Event Bridge's feed at `url` (`ws://` or `wss://`, with
+    /// its token), from [`crate::laplace::Link::url`].
+    Laplace { url: String },
 }
 
+/// `host` and `port` are a blivechat server's; a LAPLACE bridge is wholly
+/// named by its link.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BliveConfig {
     pub host: String,
@@ -188,92 +196,139 @@ enum Ended {
 }
 
 fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
-    let (path, join, beat, beat_every, silence) = match &config.join {
-        Join::Blivechat(room) => (
-            "/api/chat".to_owned(),
-            Some(protocol::join_message(room)),
-            Message::text(HEARTBEAT_MESSAGE),
-            HEARTBEAT_EVERY,
-            SILENCE_LIMIT,
-        ),
-        Join::Laplace { token } => (
-            laplace::path(token),
-            None,
-            Message::Ping(Default::default()),
-            LAPLACE_PING_EVERY,
-            LAPLACE_SILENCE_LIMIT,
-        ),
-    };
-    let laplace = join.is_none();
-    let mut socket = match ws_connect(
-        &config.host,
-        config.port,
-        &path,
-        None,
-        Duration::from_millis(100),
-    ) {
-        Ok(socket) => socket,
-        Err(e) => return Ended::Dropped(e),
-    };
-    if let Some(join) = join
-        && let Err(e) = socket.send(Message::text(join))
-    {
-        return Ended::Dropped(LinkFault::from_ws(&e));
-    }
-    emit(BliveUpdate::Status(BliveStatus::Connected));
-    let mut last_sent = Instant::now();
-    let mut last_heard = Instant::now();
-    loop {
-        if stopped(stop) {
-            let _ = socket.close(None);
-            let _ = socket.flush();
-            return Ended::Stopped;
-        }
-        if last_sent.elapsed() >= beat_every {
-            if let Err(e) = socket.send(beat.clone()) {
-                return Ended::Dropped(LinkFault::from_ws(&e));
-            }
-            last_sent = Instant::now();
-        }
-        if last_heard.elapsed() >= silence {
-            return Ended::Dropped(LinkFault::Silent);
-        }
-        match socket.read() {
-            Ok(Message::Text(text)) => {
-                last_heard = Instant::now();
-                let incoming = if laplace {
-                    laplace::parse(text.as_str())
-                } else {
-                    protocol::parse(text.as_str())
-                };
-                match incoming {
-                    Some(Incoming::Heartbeat) => {
-                        let answer = if laplace {
-                            let ping: serde_json::Value =
-                                serde_json::from_str(text.as_str()).unwrap_or_default();
-                            Message::text(laplace::pong(&ping["timestamp"], now_ms()))
-                        } else {
-                            Message::text(HEARTBEAT_MESSAGE)
-                        };
-                        if let Err(e) = socket.send(answer) {
-                            return Ended::Dropped(LinkFault::from_ws(&e));
-                        }
-                        last_sent = Instant::now();
-                    }
-                    Some(Incoming::Fatal { kind, message }) => {
-                        let _ = socket.close(None);
-                        return Ended::Fatal(kind, message);
-                    }
-                    Some(Incoming::Event(event)) => emit(BliveUpdate::Chat(event)),
-                    Some(Incoming::Other) | None => {}
+    match &config.join {
+        Join::Blivechat(room) => {
+            match ws_connect(&config.host, config.port, "/api/chat", None, READ_TIMEOUT) {
+                Ok(socket) => Session {
+                    join: Some(protocol::join_message(room)),
+                    beat: Message::text(HEARTBEAT_MESSAGE),
+                    beat_every: HEARTBEAT_EVERY,
+                    silence: SILENCE_LIMIT,
                 }
+                .run(socket, stop, emit),
+                Err(e) => Ended::Dropped(e),
             }
-            Ok(Message::Close(_)) => {
-                return Ended::Dropped(LinkFault::Closed);
+        }
+        Join::Laplace { url } => match laplace_connect(url) {
+            Ok(socket) => Session {
+                join: None,
+                beat: Message::Ping(Default::default()),
+                beat_every: LAPLACE_PING_EVERY,
+                silence: LAPLACE_SILENCE_LIMIT,
             }
-            Ok(_) => last_heard = Instant::now(),
-            Err(e) if ws_idle(&e) => {}
-            Err(e) => return Ended::Dropped(LinkFault::from_ws(&e)),
+            .run(socket, stop, emit),
+            Err(e) => Ended::Dropped(e),
+        },
+    }
+}
+
+/// Open a LAPLACE bridge's `ws://` or `wss://` link.
+fn laplace_connect(url: &str) -> Result<WebSocket<MaybeTlsStream<TcpStream>>, LinkFault> {
+    use std::net::ToSocketAddrs;
+    let io = |e: std::io::Error| LinkFault::from_io(&e);
+    let parsed = url::Url::parse(url).map_err(|e| LinkFault::Other(e.to_string()))?;
+    let host = parsed.host_str().unwrap_or_default().to_owned();
+    let port = parsed
+        .port_or_known_default()
+        .unwrap_or(laplace::DEFAULT_PORT);
+    let unresolved = || LinkFault::Unresolved(host.clone());
+    let addr = (host.as_str(), port)
+        .to_socket_addrs()
+        .map_err(|_| unresolved())?
+        .next()
+        .ok_or_else(unresolved)?;
+    let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(5)).map_err(io)?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .map_err(io)?;
+    let (socket, _) = tungstenite::client_tls_with_config(url, stream, None, None)
+        .map_err(LinkFault::from_handshake)?;
+    let tcp = match socket.get_ref() {
+        MaybeTlsStream::Plain(s) => s,
+        MaybeTlsStream::Rustls(s) => &s.sock,
+        _ => return Err(LinkFault::Other("unsupported stream".into())),
+    };
+    tcp.set_read_timeout(Some(READ_TIMEOUT)).map_err(io)?;
+    Ok(socket)
+}
+
+/// How one protocol keeps a joined connection alive.
+struct Session {
+    /// Sent once on connecting.
+    join: Option<String>,
+    beat: Message,
+    beat_every: Duration,
+    silence: Duration,
+}
+
+impl Session {
+    fn run<S: Read + Write>(
+        self,
+        mut socket: WebSocket<S>,
+        stop: &Receiver<()>,
+        emit: &EmitFn,
+    ) -> Ended {
+        let laplace = self.join.is_none();
+        if let Some(join) = self.join
+            && let Err(e) = socket.send(Message::text(join))
+        {
+            return Ended::Dropped(LinkFault::from_ws(&e));
+        }
+        emit(BliveUpdate::Status(BliveStatus::Connected));
+        let mut last_sent = Instant::now();
+        let mut last_heard = Instant::now();
+        loop {
+            if stopped(stop) {
+                let _ = socket.close(None);
+                let _ = socket.flush();
+                return Ended::Stopped;
+            }
+            if last_sent.elapsed() >= self.beat_every {
+                if let Err(e) = socket.send(self.beat.clone()) {
+                    return Ended::Dropped(LinkFault::from_ws(&e));
+                }
+                last_sent = Instant::now();
+            }
+            if last_heard.elapsed() >= self.silence {
+                return Ended::Dropped(LinkFault::Silent);
+            }
+            match socket.read() {
+                Ok(Message::Text(text)) => {
+                    last_heard = Instant::now();
+                    let incoming = if laplace {
+                        laplace::parse(text.as_str())
+                    } else {
+                        protocol::parse(text.as_str())
+                    };
+                    match incoming {
+                        Some(Incoming::Heartbeat) => {
+                            let answer = if laplace {
+                                let ping: serde_json::Value =
+                                    serde_json::from_str(text.as_str()).unwrap_or_default();
+                                Message::text(laplace::pong(&ping["timestamp"], now_ms()))
+                            } else {
+                                Message::text(HEARTBEAT_MESSAGE)
+                            };
+                            if let Err(e) = socket.send(answer) {
+                                return Ended::Dropped(LinkFault::from_ws(&e));
+                            }
+                            last_sent = Instant::now();
+                        }
+                        Some(Incoming::Fatal { kind, message }) => {
+                            let _ = socket.close(None);
+                            return Ended::Fatal(kind, message);
+                        }
+                        Some(Incoming::Event(event)) => emit(BliveUpdate::Chat(event)),
+                        Some(Incoming::Other) | None => {}
+                    }
+                }
+                Ok(Message::Close(_)) => {
+                    return Ended::Dropped(LinkFault::Closed);
+                }
+                Ok(_) => last_heard = Instant::now(),
+                Err(e) if ws_idle(&e) => {}
+                Err(e) => return Ended::Dropped(LinkFault::from_ws(&e)),
+            }
         }
     }
 }

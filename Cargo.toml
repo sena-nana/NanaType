@@ -97,6 +97,7 @@ imagesize = "0.15"
 objc2-app-kit = "0.3"
 pollster = "1"
 raw-window-handle = "0.6"
+rustls = { version = "0.23", default-features = false }
 sha2 = "0.10"
 shiguredo_libvpx = "=2026.2.0-canary.3"
 tempfile = "3"

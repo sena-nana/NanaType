@@ -467,8 +467,6 @@ fn laplace_frames_it_does_not_use_are_ignored() {
     );
     assert_eq!(laplace::parse("[1]"), None);
     assert_eq!(laplace::parse("not json"), None);
-    assert_eq!(laplace::path(""), "/");
-    assert_eq!(laplace::path("a b&c"), "/?token=a%20b%26c");
 }
 
 #[test]
@@ -515,7 +513,10 @@ fn the_client_reads_a_laplace_bridge_and_answers_its_pings() {
         host: "127.0.0.1".into(),
         port,
         join: Join::Laplace {
-            token: "secret".into(),
+            url: laplace::Link::parse(&format!("127.0.0.1:{port}/?token=secret"))
+                .unwrap()
+                .url()
+                .unwrap(),
         },
     }));
     match event_rx.recv_timeout(Duration::from_secs(5)).unwrap() {
@@ -561,7 +562,7 @@ fn a_bridge_that_turns_the_token_down_reports_it() {
         host: "127.0.0.1".into(),
         port,
         join: Join::Laplace {
-            token: "wrong".into(),
+            url: format!("ws://127.0.0.1:{port}/?token=wrong"),
         },
     }));
     assert_eq!(status_rx.recv().unwrap(), BliveStatus::Connecting);
@@ -569,4 +570,57 @@ fn a_bridge_that_turns_the_token_down_reports_it() {
         status_rx.recv_timeout(Duration::from_secs(5)).unwrap(),
         BliveStatus::Error(nanatype_model::LinkFault::Unauthorized)
     );
+}
+
+#[test]
+fn laplace_links_read_as_pasted() {
+    let link = |text: &str| laplace::Link::parse(text).map(|l| (l.address, l.token));
+    let pair = |a: &str, t: &str| Ok((a.to_owned(), t.to_owned()));
+    assert_eq!(
+        link("ws://localhost:9696"),
+        pair("ws://localhost:9696/", "")
+    );
+    assert_eq!(
+        link(" wss://event-fetcher.laplace.cn/?token=laplace "),
+        pair("wss://event-fetcher.laplace.cn/", "laplace")
+    );
+    assert_eq!(
+        link("https://example.com/bridge?a=1&token=x%20y#top"),
+        pair("wss://example.com/bridge", "x y"),
+        "only the token is kept from the query"
+    );
+    assert_eq!(
+        link("http://10.0.0.2:9000"),
+        pair("ws://10.0.0.2:9000/", "")
+    );
+    // A bare address is a local bridge on its usual port.
+    assert_eq!(link("localhost"), pair("ws://localhost:9696/", ""));
+    assert_eq!(link("192.168.1.5:9697"), pair("ws://192.168.1.5:9697/", ""));
+    for bad in ["", "   ", "ftp://host", "ws://", "not a link at all"] {
+        assert_eq!(link(bad), Err(laplace::LinkError::Invalid), "{bad:?}");
+    }
+    // A LAPLACE Chat OBS link reading Bilibili itself names no bridge.
+    assert_eq!(
+        link(
+            "https://chat.laplace.live/obs/5146751?connectionMode=direct&loginSyncToken=secret&showGift=true"
+        ),
+        Err(laplace::LinkError::DirectPage)
+    );
+    // One set to an event fetcher reads as that fetcher, and nothing else of
+    // the page's query (its login token among it) is kept.
+    assert_eq!(
+        link(
+            "https://chat.laplace.live/obs/5146751?connectionMode=fetcher\
+             &danmakuFetcherApi=https%3A%2F%2Fevent-fetcher.example.com&eventFetcherAuth=k3y\
+             &loginSyncToken=secret"
+        ),
+        pair("wss://event-fetcher.example.com/", "k3y")
+    );
+    let l = laplace::Link {
+        address: "wss://example.com/".into(),
+        token: "a b&c".into(),
+    };
+    assert_eq!(l.url().unwrap(), "wss://example.com/?token=a+b%26c");
+    let l = laplace::Link::parse("ws://h:1").unwrap();
+    assert_eq!(l.url().unwrap(), "ws://h:1/", "no token, no query");
 }

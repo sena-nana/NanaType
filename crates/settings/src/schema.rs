@@ -1640,7 +1640,7 @@ pub enum BlivechatSource {
     Server,
     /// The 彗星号 workshop plugin, through NanaType's own relay.
     Comet,
-    /// A LAPLACE Event Bridge at `laplace_host:laplace_port`.
+    /// A LAPLACE Event Bridge at `laplace_url`.
     Laplace,
 }
 
@@ -1670,14 +1670,15 @@ pub struct BlivechatSettings {
     /// What the 彗星号 page must present; it keeps other local pages from
     /// pushing chat. Made when 彗星号 is first chosen.
     pub comet_token: String,
-    pub laplace_host: String,
-    pub laplace_port: u16,
-    // The bridge's token is kept in the system's secret store.
+    /// The LAPLACE bridge's link without its token (`ws://` or `wss://`),
+    /// as read from what the user pasted. The token is kept in the system's
+    /// secret store.
+    pub laplace_url: String,
 }
 
 pub const BLIVECHAT_PORT: u16 = 12450;
 pub const COMET_RELAY_PORT: u16 = 12451;
-pub const LAPLACE_PORT: u16 = 9696;
+pub const LAPLACE_URL: &str = "ws://127.0.0.1:9696/";
 
 impl Default for BlivechatSettings {
     fn default() -> Self {
@@ -1690,8 +1691,7 @@ impl Default for BlivechatSettings {
             room_id: String::new(),
             comet_port: COMET_RELAY_PORT,
             comet_token: String::new(),
-            laplace_host: "127.0.0.1".into(),
-            laplace_port: LAPLACE_PORT,
+            laplace_url: LAPLACE_URL.into(),
         }
     }
 }
@@ -2015,12 +2015,9 @@ impl Settings {
         l.room_id = l.room_id.trim().chars().take(20).collect();
         l.comet_token.retain(|c| c.is_ascii_alphanumeric());
         l.comet_token.truncate(64);
-        l.laplace_host = l.laplace_host.trim().chars().take(253).collect();
-        if l.laplace_host.is_empty() {
-            l.laplace_host = "127.0.0.1".into();
-        }
-        if l.laplace_port == 0 {
-            l.laplace_port = LAPLACE_PORT;
+        l.laplace_url = l.laplace_url.trim().chars().take(2048).collect();
+        if l.laplace_url.is_empty() {
+            l.laplace_url = LAPLACE_URL.into();
         }
         *self != before
     }

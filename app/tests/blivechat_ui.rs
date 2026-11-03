@@ -114,21 +114,21 @@ fn the_comet_section_only_shows_and_copies_the_address() {
 }
 
 #[test]
-fn the_laplace_section_asks_for_the_bridge_and_its_token() {
+fn the_laplace_section_takes_a_pasted_link() {
     for locale in Locale::ALL {
         let ui = ui(locale, enabled(BlivechatSource::Laplace));
         let mut session = session(ui);
-        let save = ui.now_t("int-laplace-token-save");
-        assert_ne!(save, "int-laplace-token-save", "missing translation");
+        let save = ui.now_t("int-laplace-link-save");
+        assert_ne!(save, "int-laplace-link-save", "missing translation");
         assert!(has_button(&mut session, &save));
         assert!(!has_button(&mut session, &ui.now_t("int-comet-copy")));
-        let label = ui.now_t("int-laplace-host");
+        let label = ui.now_t("int-laplace-link");
         assert!(
             session
                 .accessibility_dump()
                 .iter()
                 .any(|n| n.label.as_deref() == Some(label.as_str())),
-            "the host row shows in {locale:?}"
+            "the link row shows in {locale:?}"
         );
     }
 }

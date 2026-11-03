@@ -73,13 +73,31 @@ impl App {
                     self.blivechat.reconnect();
                 }
             }
-            BliveMsg::LaplaceToken(token) => {
-                if let Err(e) = self.laplace_token.set(&token) {
+            BliveMsg::LaplaceLink(text) => {
+                use nanatype_blive::laplace::{Link, LinkError};
+                let link = match Link::parse(&text) {
+                    Ok(link) => link,
+                    Err(e) => {
+                        let text = self.ui.now_t(match e {
+                            LinkError::Invalid => "int-laplace-link-invalid",
+                            LinkError::DirectPage => "int-laplace-link-direct",
+                        });
+                        self.notice(text, true);
+                        return;
+                    }
+                };
+                // A link without a token is a bridge without one.
+                if let Err(e) = self.laplace_token.set(&link.token) {
                     nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 1u64; "{e}");
                     let text = self.ui.now_t("int-laplace-token-not-stored");
                     self.notice(text, true);
                 }
-                // A new token is a new configuration, so it connects again.
+                // A new link is a new configuration, so it connects again.
+                self.edit(|s| {
+                    let b = &mut s.integrations.blivechat;
+                    b.laplace_url = link.address;
+                    b.enabled = true;
+                });
                 self.blivechat_configure();
             }
             BliveMsg::ResetCometToken => {
@@ -150,15 +168,16 @@ impl App {
                 let token = self.laplace_token.get();
                 let saved = token.is_some();
                 self.ui.blivechat.edit(|s| s.laplace_token_saved = saved);
-                let b = &self.settings.integrations.blivechat;
+                let link = nanatype_blive::laplace::Link {
+                    address: self.settings.integrations.blivechat.laplace_url.clone(),
+                    token: token.unwrap_or_default(),
+                };
                 (
                     None,
-                    Some(BliveConfig {
-                        host: b.laplace_host.clone(),
-                        port: b.laplace_port,
-                        join: Join::Laplace {
-                            token: token.unwrap_or_default(),
-                        },
+                    link.url().map(|url| BliveConfig {
+                        host: String::new(),
+                        port: 0,
+                        join: Join::Laplace { url },
                     }),
                 )
             }

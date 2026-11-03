@@ -293,57 +293,62 @@ fn comet_section(ui: Ui) -> AnyView {
 }
 
 fn laplace_section(ui: Ui) -> AnyView {
+    // What it connects to, with the token never shown.
+    let saved = widget(
+        Text::new("")
+            .style(Type::Caption.mono())
+            .color(SemanticColorRole::Muted),
+    )
+    .bind(move |t: &mut Text| {
+        let address = ui
+            .settings
+            .with(|s| s.integrations.blivechat.laplace_url.clone());
+        let v = if ui.blivechat.get().laplace_token_saved {
+            let sep = if address.contains('?') { '&' } else { '?' };
+            format!("{address}{sep}token=••••")
+        } else {
+            address
+        };
+        if t.value != v {
+            t.value = v;
+        }
+    });
     section(
         ui,
         "int-laplace-section",
         vec![
             row(
                 ui,
-                "int-laplace-host",
-                Some("int-laplace-host-hint"),
-                address(
-                    ui,
-                    (
-                        |s| s.integrations.blivechat.laplace_host.clone(),
-                        |s, v| s.integrations.blivechat.laplace_host = v,
-                    ),
-                    (
-                        |s| s.integrations.blivechat.laplace_port,
-                        |s, v| s.integrations.blivechat.laplace_port = v,
-                    ),
-                ),
+                "int-laplace-link",
+                Some("int-laplace-link-hint"),
+                laplace_link_field(ui),
             ),
-            row(
-                ui,
-                "int-laplace-token",
-                Some("int-laplace-token-hint"),
-                laplace_token_field(ui),
-            ),
+            // The address is long: on its own line, so the label keeps its width.
+            block(saved),
         ],
     )
 }
 
-/// The bridge's token goes to the system's secret store, never to the
-/// settings file; once saved it shows as saved, with a way to forget it.
-fn laplace_token_field(ui: Ui) -> AnyView {
+/// The bridge's link, pasted whole: its token goes to the system's secret
+/// store and only the address to the settings file.
+fn laplace_link_field(ui: Ui) -> AnyView {
     let draft = signal(String::new());
     let save = move || {
-        let token = draft.get_untracked().trim().to_owned();
+        let link = draft.get_untracked().trim().to_owned();
         draft.set(String::new());
-        Msg::Blive(BliveMsg::LaplaceToken(token))
+        Msg::Blive(BliveMsg::LaplaceLink(link))
     };
     widget(
         Stack::row(0.0)
             .gap_step(gap::step::TIGHT)
-            .align(AlignSpec::Center)
-            .wrap(true),
+            .align(AlignSpec::Center),
     )
     .children((
         widget(Stack::row(0.0).width(LengthSpec::Px(crate::ui::kit::field::SM))).children(
             widget(
                 kit::text_input("")
                     .secure(true)
-                    .placeholder(ui.now_t("int-laplace-token-placeholder"))
+                    .placeholder(ui.now_t("int-laplace-link-placeholder"))
                     .size(ControlSize::Small),
             )
             .bind(move |input: &mut TextInput| {
@@ -352,28 +357,10 @@ fn laplace_token_field(ui: Ui) -> AnyView {
                     input.state.value = text.into();
                 }
             })
-            .on(move |e: &TextChanged| draft.set(e.value.chars().take(256).collect()))
+            .on(move |e: &TextChanged| draft.set(e.value.chars().take(2048).collect()))
             .on_cx(move |_, _: &TextSubmitted, cx| cx.dispatch_program_all(save())),
         ),
-        primary(ui, "int-laplace-token-save", save),
-        widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::TIGHT)
-                .align(AlignSpec::Center),
-        )
-        .visible(move || ui.blivechat.get().laplace_token_saved)
-        .children((
-            widget(
-                Text::new(ui.now_t("int-laplace-token-saved"))
-                    .style(Type::Small.style())
-                    .color(SemanticColorRole::Muted),
-            ),
-            kit::tool(
-                nana_ui::icons_tabler::ERASER,
-                ui.now_t("int-laplace-token-clear"),
-                || Msg::Blive(BliveMsg::LaplaceToken(String::new())),
-            ),
-        )),
+        primary(ui, "int-laplace-link-save", save),
     ))
     .into_any()
 }

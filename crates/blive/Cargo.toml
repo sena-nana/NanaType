@@ -9,5 +9,9 @@ description = "NanaType live chat: a blivechat and LAPLACE Event Bridge client a
 [dependencies]
 nanatype-model = { workspace = true, features = ["ws"] }
 serde_json.workspace = true
-tungstenite = { workspace = true, features = ["handshake"] }
+# `wss://` LAPLACE bridges; rustls and its roots already come with ureq.
+tungstenite = { workspace = true, features = ["handshake", "rustls-tls-webpki-roots"] }
+url.workspace = true
+# The one crypto provider, as ureq picks it, so the crate works on its own.
+rustls = { workspace = true, features = ["ring", "std", "tls12"] }
 crossbeam-channel.workspace = true
