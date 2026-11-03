@@ -5,12 +5,12 @@ use nana_ui::runtime::view::{
 };
 use nana_ui::runtime::{Activate, Button, Stack};
 use nana_ui::{ButtonKind, ControlSize};
-use nana_ui_core::{AlignSpec, SemanticColorRole};
+use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nana_ui_platform::KeyState;
 use std::sync::{Arc, Mutex};
 
 use super::Stage;
-use super::kit::{Type, gap};
+use super::kit::{Type, field, gap};
 
 /// Standard, padded base64 (for `data:` URLs).
 pub fn base64(bytes: &[u8]) -> String {
@@ -83,18 +83,22 @@ pub fn confirm<M: Send + 'static>(
             }
         });
         let msg = msg.clone();
+        // The question takes a line of its own, at most a field wide, and
+        // wraps there, the buttons under it: on one line it pushed the
+        // row's label into a column a character wide.
         widget(
             Stack::row(0.0)
                 .gap_step(gap::step::CONTROL)
                 .align(AlignSpec::Center)
-                .wrap(true),
+                .wrap(true)
+                .with_layout(|l| l.max_width = Some(LengthSpec::Px(field::MD))),
         )
         .children((
-            widget(
+            widget(Stack::column(0.0).width(LengthSpec::Fill)).children(widget(
                 Type::Small
                     .text(question.clone())
                     .color(SemanticColorRole::Warning),
-            ),
+            )),
             widget(Button::new(ui.now_t("common-cancel")).size(ControlSize::Small))
                 .entity_ref(cancel)
                 .on(move |_: &Activate| armed.set(false)),
@@ -125,7 +129,11 @@ pub fn confirm<M: Send + 'static>(
                         .node_ref(trigger_ref)
                         .children(trigger)
                 })
-                .keep_alive(),
+                .keep_alive()
+                // The block's column is full width by default: in a
+                // settings row's control slot it took the whole row and
+                // squeezed the label to a character a line.
+                .css(nana_ui::runtime::view::css! { width: auto; }),
             // Nothing to see: each branch only moves the focus as it mounts.
             when(armed, move || {
                 returning.set(true);

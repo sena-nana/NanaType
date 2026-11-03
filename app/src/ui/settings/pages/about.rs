@@ -38,7 +38,10 @@ fn identity(ui: Ui) -> Vec<(Row, Shown)> {
         Stack::row(0.0)
             .gap_step(gap::step::SECTION)
             .padding_step(inset::step::CARD, inset::step::CARD)
-            .align(AlignSpec::Center),
+            .align(AlignSpec::Center)
+            // Sized to its content, the header took the card's width for the
+            // text beside the logo and ran past the card's right edge.
+            .width(LengthSpec::Fill),
     )
     .children((
         super::super::logo(ABOUT_ICON),

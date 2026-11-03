@@ -175,8 +175,11 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                     section(
                         ui,
                         "speech-model",
-                        vec![kit::line(
-                            (Type::Body.view(status), hint(ui.now_t("speech-model-hint"))),
+                        // Stacked: in a line, the buttons left the hint a
+                        // column a few characters wide.
+                        vec![kit::row_text_stacked(
+                            status,
+                            Some(ui.now_t("speech-model-hint")),
                             (
                                 (!working && !ready).then(|| {
                                     button(ui, "speech-model-download", || {
@@ -198,7 +201,8 @@ pub(super) fn settings(ui: Ui) -> AnyView {
                                         Msg::Speech(SpeechMsg::ModelDelete)
                                     })
                                 }),
-                            ),
+                            )
+                                .into_any(),
                         )],
                     )
                 },

@@ -37,7 +37,9 @@ pub(super) fn profiles(ui: Ui) -> Vec<Row> {
     });
     vec![
         list,
-        row(
+        // The hint is a paragraph: beside the field and button it was a
+        // column a few characters wide.
+        row_stacked(
             ui,
             "profile-new",
             Some("profile-hint"),
@@ -149,7 +151,8 @@ pub(super) fn backup(ui: Ui) -> Vec<(Row, Shown)> {
     }));
     vec![
         (
-            row(
+            // Three chips and a button leave the hint no room beside them.
+            row_stacked(
                 ui,
                 "backup-export",
                 Some("backup-export-hint"),

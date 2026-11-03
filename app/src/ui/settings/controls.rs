@@ -210,6 +210,11 @@ pub fn row(ui: Ui, label_key: &str, hint_key: Option<&str>, control: AnyView) ->
     row_text(ui.now_t(label_key), hint_key.map(|k| ui.now_t(k)), control)
 }
 
+/// [`row`] with its control under the label and hint, at any width.
+pub fn row_stacked(ui: Ui, label_key: &str, hint_key: Option<&str>, control: AnyView) -> Row {
+    kit::row_text_stacked(ui.now_t(label_key), hint_key.map(|k| ui.now_t(k)), control)
+}
+
 /// An info mark whose tooltip carries the detail a label leaves out.
 pub fn info_tip(ui: Ui, key: &str) -> AnyView {
     widget(

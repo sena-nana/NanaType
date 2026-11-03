@@ -168,6 +168,19 @@ pub fn row_text(label_text: String, hint_text: Option<String>, control: AnyView)
     )
 }
 
+/// [`row_text`] with the control under the copy at any width, for a hint
+/// too long to sit in a column beside a wide control.
+pub fn row_text_stacked(label_text: String, hint_text: Option<String>, control: AnyView) -> Row {
+    let hint: Option<Arc<str>> = hint_text.map(Into::into);
+    inset_row(
+        settings_row(label_text)
+            .hint(hint)
+            .stacked(true)
+            .control(control_slot(control))
+            .into_any(),
+    )
+}
+
 /// A label and its control on one line, packed close: the label is cut
 /// before the control is, and the row never stacks. For a narrow column of
 /// settings, whose controls are [`super::field::DENSE`] wide.
