@@ -125,8 +125,11 @@ fn matched_text(ui: Ui) -> String {
 
 pub fn matched(ui: Ui) -> AnyView {
     widget(
+        // One line that gives way: at its natural width it ran on under the
+        // inspector.
         kit::Type::Caption
             .text(String::new())
+            .style(kit::Type::Caption.one_line())
             .color(SemanticColorRole::Muted)
             .truncating(),
     )

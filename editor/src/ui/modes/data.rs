@@ -560,14 +560,19 @@ pub fn view(ui: Ui) -> AnyView {
                 .files
                 .iter()
                 .any(|f| f.path == PACKAGE_MANIFEST && f.editable);
-            widget(Stack::column(0.).gap_step(gap::step::CONTROL))
+            // Each heading with its section, the two a group apart: one
+            // even column left the second heading closer to the first
+            // section's button than to its own rows.
+            let group = |title: &str, body: AnyView| {
+                widget(Stack::column(0.).gap_step(gap::step::CONTROL))
+                    .children((label(ui.now_t(title)), body))
+            };
+            widget(Stack::column(0.).gap_step(gap::step::GROUP))
                 .key("package-editor-data-page")
                 .children((
                     (!editable).then(|| hint(ui.now_t("pkgedit-manifest-protected"))),
-                    label(ui.now_t("pkgedit-data")),
-                    data_section(ui, &view, editable),
-                    label(ui.now_t("pkgedit-pipelines")),
-                    pipeline_section(ui, &view),
+                    group("pkgedit-data", data_section(ui, &view, editable)),
+                    group("pkgedit-pipelines", pipeline_section(ui, &view)),
                 ))
                 .into_any()
         },

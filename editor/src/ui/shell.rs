@@ -958,8 +958,10 @@ fn status_bar(ui: Ui) -> AnyView {
                         .padding_xy(gap::CONTROL, 0.),
                 )
                 .children(widget(
+                    // One line that gives way: at its natural width it ran
+                    // over the status beside it and out of the window.
                     Text::new(origin)
-                        .style(Type::Caption.style())
+                        .style(Type::Caption.one_line())
                         .color(SemanticColorRole::Muted)
                         .truncating(),
                 )),
