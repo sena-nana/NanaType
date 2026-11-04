@@ -37,7 +37,6 @@ const LOCAL: &[&str] = &[
     "/enabled_plugins",
     "/plugin_approvals",
     "/integrations/vts/token",
-    "/integrations/blivechat/comet_token",
     "/update/skipped_version",
     "/update/last_check",
     "/diagnostics",
@@ -67,7 +66,6 @@ const PROXIES: &[&str] = &[
 /// finished first-run guide.
 const KEPT_ON_RESET: &[&str] = &[
     "/integrations/vts/token",
-    "/integrations/blivechat/comet_token",
     "/general/locale",
     "/general/onboarding_done",
     "/diagnostics/crash_seen",

@@ -17,10 +17,9 @@ pub fn capture(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
 }
 
 /// The third-party chat page in every source: a blivechat server joined by
-/// room number, 彗星号 with a plugin page pushing to the relay, and a
-/// LAPLACE Event Bridge.
+/// room number, 彗星号's own feed, and a LAPLACE Event Bridge.
 fn blivechat(scene: &Scene, out: &std::path::Path) {
-    use nanatype_blive::{BliveStatus, RelayStatus};
+    use nanatype_blive::BliveStatus;
     use nanatype_settings::{BliveRoomKind, BlivechatSource};
     let ui = scene.ui;
     let theme = &scene.theme;
@@ -30,18 +29,10 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
     let before_page = ui.page.get_untracked();
     ui.platform_tab.set(nanatype::chat::Platform::Blivechat);
     ui.page.set(settings::Page::Platforms);
-    for (name, source, relay) in [
-        ("blive-settings", BlivechatSource::Server, RelayStatus::Off),
-        (
-            "comet-settings",
-            BlivechatSource::Comet,
-            RelayStatus::Listening { publishers: 1 },
-        ),
-        (
-            "laplace-settings",
-            BlivechatSource::Laplace,
-            RelayStatus::Off,
-        ),
+    for (name, source) in [
+        ("blive-settings", BlivechatSource::Server),
+        ("comet-settings", BlivechatSource::Comet),
+        ("laplace-settings", BlivechatSource::Laplace),
     ] {
         let mut s = (*before_settings).clone();
         let b = &mut s.integrations.blivechat;
@@ -49,10 +40,8 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
         b.source = source;
         b.room_kind = BliveRoomKind::RoomId;
         b.room_id = "21452505".into();
-        b.comet_token = "3f9c0a7d5e214b6c8a0f1e2d3c4b5a69".into();
         let state = nanatype::app::blivechat::State {
             status: BliveStatus::Connected,
-            relay,
             auth_saved: false,
             laplace_token_saved: source == BlivechatSource::Laplace,
         };

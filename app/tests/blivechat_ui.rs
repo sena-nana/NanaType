@@ -35,7 +35,6 @@ fn enabled(source: BlivechatSource) -> Settings {
     let mut s = Settings::default();
     s.integrations.blivechat.enabled = true;
     s.integrations.blivechat.source = source;
-    s.integrations.blivechat.comet_token = "0123abcd".into();
     s
 }
 
@@ -44,16 +43,23 @@ fn the_page_folds_away_while_off_and_names_every_source_in_every_locale() {
     for locale in Locale::ALL {
         let ui = ui(locale, Settings::default());
         let mut off = session(ui);
-        for key in ["int-blive-auth-save", "int-comet-copy"] {
-            let label = ui.now_t(key);
-            assert_ne!(label, key, "missing translation");
-            assert!(!has_button(&mut off, &label), "{key} shows while off");
-        }
+        let label = ui.now_t("int-blive-auth-save");
+        assert!(
+            !has_button(&mut off, &label),
+            "the auth code shows while off"
+        );
+        let comet = ui.now_t("int-comet-port");
+        assert_ne!(comet, "int-comet-port", "missing translation");
+        assert!(
+            !off.accessibility_dump()
+                .iter()
+                .any(|n| n.label.as_deref() == Some(comet.as_str())),
+            "the 彗星号 port shows while off"
+        );
 
         let ui = self::ui(locale, enabled(BlivechatSource::Server));
         let mut server = session(ui);
         assert!(has_button(&mut server, &ui.now_t("int-blive-auth-save")));
-        assert!(!has_button(&mut server, &ui.now_t("int-comet-copy")));
         let nodes = server.accessibility_dump();
         for key in [
             "int-blive-source-server",
@@ -72,44 +78,27 @@ fn the_page_folds_away_while_off_and_names_every_source_in_every_locale() {
 }
 
 #[test]
-fn the_comet_section_only_shows_and_copies_the_address() {
-    let ui = ui(Locale::ZhCn, enabled(BlivechatSource::Comet));
-    let mut session = session(ui);
-    let nodes = session.accessibility_dump();
-    let address = "ws://127.0.0.1:12451/comet?token=0123abcd";
-    assert!(
-        nodes
-            .iter()
-            .any(|n| n.label.as_deref() == Some(address) || n.value.as_deref() == Some(address)),
-        "the address is shown"
-    );
-    assert!(!has_button(&mut session, &ui.now_t("int-blive-auth-save")));
-    let label = ui.now_t("int-comet-copy");
-    let copy = nodes
-        .iter()
-        .find(|n| n.role == "button" && n.label.as_deref() == Some(label.as_str()))
-        .expect("a copy button");
-    assert!(session.click_node(copy.id).unwrap());
-    let messages = session.document_mut().context_mut().take_program_messages();
-    assert!(messages.into_iter().any(|m| {
-        m.downcast::<Msg>()
-            .is_ok_and(|m| matches!(*m, Msg::CopyText(ref text) if text == address))
-    }));
-    // The address row's info mark is named by its hint, which says where to
-    // paste the address; it is not a control of the plugin.
-    let hint = ui.now_t("int-comet-address-hint");
-    let buttons = session
-        .accessibility_dump()
-        .into_iter()
-        .filter(|n| n.role == "button")
-        .filter_map(|n| n.label)
-        .filter(|l| *l != hint)
-        .collect::<Vec<_>>();
-    for word in ["插件", "端口", "index.html"] {
+fn the_comet_section_only_asks_for_the_port() {
+    for locale in Locale::ALL {
+        let ui = ui(locale, enabled(BlivechatSource::Comet));
+        let mut session = session(ui);
+        let nodes = session.accessibility_dump();
+        let label = ui.now_t("int-comet-port");
         assert!(
-            buttons.iter().all(|b| !b.contains(word)),
-            "no plugin or port controls: {buttons:?}"
+            nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some(label.as_str())),
+            "the port row shows in {locale:?}"
         );
+        assert!(
+            nodes.iter().any(|n| n.value.as_deref() == Some("19400")),
+            "the client's own port by default"
+        );
+        assert!(!has_button(&mut session, &ui.now_t("int-blive-auth-save")));
+        assert!(!has_button(
+            &mut session,
+            &ui.now_t("int-laplace-link-save")
+        ));
     }
 }
 
@@ -121,7 +110,6 @@ fn the_laplace_section_takes_a_pasted_link() {
         let save = ui.now_t("int-laplace-link-save");
         assert_ne!(save, "int-laplace-link-save", "missing translation");
         assert!(has_button(&mut session, &save));
-        assert!(!has_button(&mut session, &ui.now_t("int-comet-copy")));
         let label = ui.now_t("int-laplace-link");
         assert!(
             session

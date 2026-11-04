@@ -96,8 +96,7 @@ For the render flow, frame scheduling and surface branches, see [Rendering pipel
 | `crates/audio` | Decoding, mixing and sample-accurate scheduling |
 | `crates/bridge` | VTube Studio, OSC, WebSocket |
 | `crates/twitch` | Anonymous Twitch IRC receiving, device-code sign-in and Helix sending |
-| `crates/blive` | blivechat and LAPLACE Event Bridge client (protocol parsing, connect and reconnect) and the Comet (彗星号) relay |
-| `integrations/comet` | Comet workshop plugin page: converts Comet events into blivechat messages |
+| `crates/blive` | blivechat, LAPLACE Event Bridge and Comet (彗星号) clients (protocol parsing, decryption, connect and reconnect) |
 | `crates/core` | Session logic: drafts, sending, continue, queue, history, rewind |
 | `crates/p2p` | Steam sessions (up to 8 people), session ordering, reconnects and image forwarding |
 | `crates/update` | Update checks: signed Release manifest, file proxies, verified downloads |

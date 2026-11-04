@@ -8,11 +8,12 @@ use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
 use nanatype_model::{LinkFault, ws_connect, ws_idle};
+use serde_json::Value;
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{Message, WebSocket};
 
-use crate::laplace;
 use crate::protocol::{self, ChatEvent, FatalKind, HEARTBEAT_MESSAGE, Incoming, RoomKey};
+use crate::{comet, laplace};
 
 /// blivechat sends a heartbeat every 10 s and drops clients silent for 15 s.
 const HEARTBEAT_EVERY: Duration = Duration::from_secs(10);
@@ -21,6 +22,9 @@ const SILENCE_LIMIT: Duration = Duration::from_secs(30);
 /// The LAPLACE bridge only pings every 54 s, and answers ours.
 const LAPLACE_PING_EVERY: Duration = Duration::from_secs(20);
 const LAPLACE_SILENCE_LIMIT: Duration = Duration::from_secs(60);
+/// 彗星号 answers each `ping` with `pong`.
+const COMET_PING_EVERY: Duration = Duration::from_secs(10);
+const COMET_SILENCE_LIMIT: Duration = Duration::from_secs(30);
 /// Reads wait this long, so the loop can poll between frames.
 const READ_TIMEOUT: Duration = Duration::from_millis(100);
 const RETRY_AFTER: Duration = Duration::from_secs(3);
@@ -29,15 +33,17 @@ const RETRY_AFTER_FATAL: Duration = Duration::from_secs(30);
 /// What to connect to on the server.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Join {
-    /// A room on a blivechat server (or the 彗星号 relay).
+    /// A room on a blivechat server.
     Blivechat(RoomKey),
+    /// Every room the 彗星号 client at `host:port` listens to.
+    Comet,
     /// A LAPLACE Event Bridge's feed at `url` (`ws://` or `wss://`, with
     /// its token), from [`crate::laplace::Link::url`].
     Laplace { url: String },
 }
 
-/// `host` and `port` are a blivechat server's; a LAPLACE bridge is wholly
-/// named by its link.
+/// `host` and `port` are a blivechat server's or the 彗星号 client's; a
+/// LAPLACE bridge is wholly named by its link.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BliveConfig {
     pub host: String,
@@ -200,6 +206,7 @@ fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
         Join::Blivechat(room) => {
             match ws_connect(&config.host, config.port, "/api/chat", None, READ_TIMEOUT) {
                 Ok(socket) => Session {
+                    feed: Feed::Blivechat,
                     join: Some(protocol::join_message(room)),
                     beat: Message::text(HEARTBEAT_MESSAGE),
                     beat_every: HEARTBEAT_EVERY,
@@ -209,8 +216,21 @@ fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
                 Err(e) => Ended::Dropped(e),
             }
         }
+        Join::Comet => match ws_connect(&config.host, config.port, "/", None, READ_TIMEOUT) {
+            Ok(socket) => Session {
+                feed: Feed::Comet,
+                // A first ping at once: a quiet room still hears back.
+                join: Some(comet::PING.into()),
+                beat: Message::text(comet::PING),
+                beat_every: COMET_PING_EVERY,
+                silence: COMET_SILENCE_LIMIT,
+            }
+            .run(socket, stop, emit),
+            Err(e) => Ended::Dropped(e),
+        },
         Join::Laplace { url } => match laplace_connect(url) {
             Ok(socket) => Session {
+                feed: Feed::Laplace,
                 join: None,
                 beat: Message::Ping(Default::default()),
                 beat_every: LAPLACE_PING_EVERY,
@@ -252,8 +272,17 @@ fn laplace_connect(url: &str) -> Result<WebSocket<MaybeTlsStream<TcpStream>>, Li
     Ok(socket)
 }
 
+/// Which protocol a connection's frames are in.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Feed {
+    Blivechat,
+    Laplace,
+    Comet,
+}
+
 /// How one protocol keeps a joined connection alive.
 struct Session {
+    feed: Feed,
     /// Sent once on connecting.
     join: Option<String>,
     beat: Message,
@@ -268,7 +297,6 @@ impl Session {
         stop: &Receiver<()>,
         emit: &EmitFn,
     ) -> Ended {
-        let laplace = self.join.is_none();
         if let Some(join) = self.join
             && let Err(e) = socket.send(Message::text(join))
         {
@@ -292,42 +320,52 @@ impl Session {
             if last_heard.elapsed() >= self.silence {
                 return Ended::Dropped(LinkFault::Silent);
             }
-            match socket.read() {
-                Ok(Message::Text(text)) => {
-                    last_heard = Instant::now();
-                    let incoming = if laplace {
-                        laplace::parse(text.as_str())
-                    } else {
-                        protocol::parse(text.as_str())
-                    };
-                    match incoming {
-                        Some(Incoming::Heartbeat) => {
-                            let answer = if laplace {
-                                let ping: serde_json::Value =
-                                    serde_json::from_str(text.as_str()).unwrap_or_default();
-                                Message::text(laplace::pong(&ping["timestamp"], now_ms()))
-                            } else {
-                                Message::text(HEARTBEAT_MESSAGE)
-                            };
-                            if let Err(e) = socket.send(answer) {
-                                return Ended::Dropped(LinkFault::from_ws(&e));
-                            }
-                            last_sent = Instant::now();
-                        }
-                        Some(Incoming::Fatal { kind, message }) => {
-                            let _ = socket.close(None);
-                            return Ended::Fatal(kind, message);
-                        }
-                        Some(Incoming::Event(event)) => emit(BliveUpdate::Chat(event)),
-                        Some(Incoming::Other) | None => {}
+            let text = match socket.read() {
+                Ok(Message::Text(text)) => text.as_str().to_owned(),
+                // 彗星号 encrypts its messages.
+                Ok(Message::Binary(frame)) if self.feed == Feed::Comet => {
+                    match comet::decrypt(&frame) {
+                        Some(text) => text,
+                        None => continue,
                     }
                 }
                 Ok(Message::Close(_)) => {
                     return Ended::Dropped(LinkFault::Closed);
                 }
-                Ok(_) => last_heard = Instant::now(),
-                Err(e) if ws_idle(&e) => {}
+                Ok(_) => {
+                    last_heard = Instant::now();
+                    continue;
+                }
+                Err(e) if ws_idle(&e) => continue,
                 Err(e) => return Ended::Dropped(LinkFault::from_ws(&e)),
+            };
+            last_heard = Instant::now();
+            let incoming = match self.feed {
+                Feed::Blivechat => protocol::parse(&text),
+                Feed::Laplace => laplace::parse(&text),
+                Feed::Comet => comet::parse(&text, now_ms()),
+            };
+            match incoming {
+                // 彗星号's `pong` is the answer to ours.
+                Some(Incoming::Heartbeat) if self.feed == Feed::Comet => {}
+                Some(Incoming::Heartbeat) => {
+                    let answer = if self.feed == Feed::Laplace {
+                        let ping: Value = serde_json::from_str(&text).unwrap_or_default();
+                        Message::text(laplace::pong(&ping["timestamp"], now_ms()))
+                    } else {
+                        Message::text(HEARTBEAT_MESSAGE)
+                    };
+                    if let Err(e) = socket.send(answer) {
+                        return Ended::Dropped(LinkFault::from_ws(&e));
+                    }
+                    last_sent = Instant::now();
+                }
+                Some(Incoming::Fatal { kind, message }) => {
+                    let _ = socket.close(None);
+                    return Ended::Fatal(kind, message);
+                }
+                Some(Incoming::Event(event)) => emit(BliveUpdate::Chat(event)),
+                Some(Incoming::Other) | None => {}
             }
         }
     }

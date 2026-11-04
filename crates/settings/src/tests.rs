@@ -1005,8 +1005,7 @@ fn third_party_chat_defaults_off_and_round_trips_at_schema_2() {
     assert!(!b.enabled);
     assert_eq!(b.source, BlivechatSource::Server);
     assert_eq!((b.host.as_str(), b.port), ("127.0.0.1", BLIVECHAT_PORT));
-    assert_eq!(b.comet_port, COMET_RELAY_PORT);
-    assert!(b.comet_token.is_empty());
+    assert_eq!(b.comet_port, COMET_PORT);
     assert_eq!(b.laplace_url, LAPLACE_URL);
 
     let mut value = serde_json::json!({"schema":2,"integrations":{"blivechat":{"enabled":true,"source":"comet","room_kind":"room_id","room_id":"21452505","comet_token":"abc123"}}});
@@ -1021,7 +1020,12 @@ fn third_party_chat_defaults_off_and_round_trips_at_schema_2() {
     assert_eq!(b.source, BlivechatSource::Comet);
     assert_eq!(b.room_kind, BliveRoomKind::RoomId);
     assert_eq!(b.room_id, "21452505");
-    assert_eq!(b.comet_token, "abc123");
+    assert!(
+        serde_json::to_value(&settings).unwrap()["integrations"]["blivechat"]
+            .get("comet_token")
+            .is_none(),
+        "the relay's old token is dropped"
+    );
     assert!(value_has_no_auth_code(&settings));
 }
 
@@ -1037,16 +1041,15 @@ fn third_party_chat_values_are_repaired() {
     let b = &mut s.integrations.blivechat;
     b.host = "  ".into();
     b.port = 0;
-    b.comet_port = 0;
+    // The old relay's port is the client's now.
+    b.comet_port = 12451;
     b.room_id = " 42 ".into();
-    b.comet_token = "ab\"<cd>".into();
     b.laplace_url = "  ".into();
     assert!(s.sanitize());
     let b = &s.integrations.blivechat;
     assert_eq!(b.host, "127.0.0.1");
-    assert_eq!((b.port, b.comet_port), (BLIVECHAT_PORT, COMET_RELAY_PORT));
+    assert_eq!((b.port, b.comet_port), (BLIVECHAT_PORT, COMET_PORT));
     assert_eq!(b.room_id, "42");
-    assert_eq!(b.comet_token, "abcd");
     assert_eq!(b.laplace_url, LAPLACE_URL);
 }
 
@@ -1405,7 +1408,6 @@ fn busy_settings() -> Settings {
     s.hotkeys.summon = Some(Hotkey::ctrl("KeyJ"));
     s.integrations.twitch.channel = "nana".into();
     s.integrations.vts.token = Some("vts-secret".into());
-    s.integrations.blivechat.comet_token = "comet0secret".into();
     s.update.proxy = "http://user:pass@proxy.example:8080/".into();
     s.assets.phrases.push(QuickPhrase {
         label: "hi".into(),
@@ -1428,7 +1430,7 @@ fn export_then_import_round_trips_without_credentials() {
         7,
     );
     let text = serde_json::to_string(&exported.envelope).unwrap();
-    assert!(!text.contains("vts-secret") && !text.contains("comet0secret"));
+    assert!(!text.contains("vts-secret"));
     assert!(!text.contains("user:pass"), "proxy credentials stay behind");
     assert!(text.contains(r#""app":"NanaType""#));
 
@@ -1446,7 +1448,6 @@ fn export_then_import_round_trips_without_credentials() {
     assert_eq!(merged.general.locale, s.general.locale);
     assert_eq!(merged.integrations.twitch.channel, "nana");
     assert_eq!(merged.integrations.vts.token.as_deref(), Some("theirs"));
-    assert_eq!(merged.integrations.blivechat.comet_token, "");
     assert_eq!(merged.sound.device, None);
     assert_eq!(merged.update.proxy, "http://proxy.example:8080/");
     // Back onto itself, nothing changes.
@@ -1571,12 +1572,10 @@ fn reset_keeps_credentials_and_language() {
     s.general.onboarding_done = true;
     let reset = s.reset_from();
     assert_eq!(reset.integrations.vts.token.as_deref(), Some("vts-secret"));
-    assert_eq!(reset.integrations.blivechat.comet_token, "comet0secret");
     assert_eq!(reset.general.locale.as_deref(), Some("ja-JP"));
     assert!(reset.general.onboarding_done);
     let mut expected = Settings::fresh();
     expected.integrations.vts.token = s.integrations.vts.token.clone();
-    expected.integrations.blivechat.comet_token = s.integrations.blivechat.comet_token.clone();
     expected.general.locale = s.general.locale.clone();
     expected.general.onboarding_done = true;
     assert_eq!(reset, expected);

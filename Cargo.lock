@@ -3716,7 +3716,6 @@ dependencies = [
  "embed-resource",
  "flate2",
  "futures-util",
- "getrandom 0.4.3",
  "gif",
  "grammers-client",
  "grammers-session",
@@ -3791,6 +3790,7 @@ version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
  "nanatype-model",
+ "ring",
  "rustls",
  "serde_json",
  "tungstenite",

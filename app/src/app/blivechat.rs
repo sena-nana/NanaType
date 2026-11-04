@@ -1,60 +1,26 @@
-//! Third-party chat: a blivechat server, the 彗星号 workshop plugin through
-//! NanaType's own relay (the plugin pushes blivechat frames to the relay, and
-//! the same client joins its `/api/chat`), or a LAPLACE Event Bridge.
+//! Third-party chat: a blivechat server, the 彗星号 client's own feed, or a
+//! LAPLACE Event Bridge.
 
 use crate::ui::EditShared;
 
-use nanatype_blive::{
-    BliveConfig, BliveEvent, BliveStatus, BliveUpdate, ChatEvent, Join, RelayConfig, RelayStatus,
-    RoomKey,
-};
-use nanatype_settings::{BliveRoomKind, BlivechatSettings, BlivechatSource};
+use nanatype_blive::{BliveConfig, BliveEvent, BliveStatus, BliveUpdate, ChatEvent, Join, RoomKey};
+use nanatype_settings::{BliveRoomKind, BlivechatSource};
 
-use crate::{
-    app::App,
-    chat::Platform,
-    msg::{BliveMsg, Msg},
-};
+use crate::{app::App, chat::Platform, msg::BliveMsg};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct State {
     pub status: BliveStatus,
-    pub relay: RelayStatus,
     /// A 身份码 is kept in the secret store.
     pub auth_saved: bool,
     /// A LAPLACE token is kept in the secret store.
     pub laplace_token_saved: bool,
 }
 
-/// A new 128-bit 彗星号 token.
-fn new_token() -> String {
-    let mut bytes = [0u8; 16];
-    if getrandom::fill(&mut bytes).is_err() {
-        // No system randomness: the clock still keeps other pages guessing.
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos());
-        bytes = nanos.to_le_bytes();
-    }
-    nanatype_model::codec::hex(&bytes)
-}
-
-/// The address the 彗星号 page connects to.
-pub fn comet_address(settings: &BlivechatSettings) -> String {
-    nanatype_blive::relay::publish_url(settings.comet_port, &settings.comet_token)
-}
-
 impl App {
     pub(super) fn blivechat_msg(&mut self, msg: BliveMsg) {
         match msg {
             BliveMsg::Event(event) => self.blivechat_event(event),
-            BliveMsg::Relay(status) => {
-                if let RelayStatus::Error(fault) = &status {
-                    nanatype_diag::report!(crate::diag::COMET_RELAY_ERROR; "{fault}");
-                }
-                self.ui.blivechat.edit(|s| s.relay = status);
-                self.blivechat_status_line();
-            }
             BliveMsg::AuthCode(code) => {
                 if let Err(e) = self.blivechat_auth.set(&code) {
                     nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 1u64; "{e}");
@@ -100,9 +66,6 @@ impl App {
                 });
                 self.blivechat_configure();
             }
-            BliveMsg::ResetCometToken => {
-                self.edit(|s| s.integrations.blivechat.comet_token = new_token())
-            }
         }
     }
 
@@ -143,26 +106,13 @@ impl App {
     /// Connect, reconnect or stop after a settings change.
     pub(super) fn blivechat_configure(&mut self) {
         let b = &self.settings.integrations.blivechat;
-        let (relay, client) = match (b.enabled, b.source) {
-            (false, _) => (None, None),
-            (true, BlivechatSource::Comet) if b.comet_token.is_empty() => {
-                // First use, or hand-edited settings: make one, then start.
-                self.ctx.dispatch(Msg::Blive(BliveMsg::ResetCometToken));
-                (None, None)
-            }
-            // The relay's port is open once `set` returns, so the client can
-            // join it straight after. It serves every room the same feed.
-            (true, BlivechatSource::Comet) => (
-                Some(RelayConfig {
-                    port: b.comet_port,
-                    token: b.comet_token.clone(),
-                }),
-                Some(BliveConfig {
-                    host: "127.0.0.1".into(),
-                    port: b.comet_port,
-                    join: Join::Blivechat(RoomKey::RoomId(1)),
-                }),
-            ),
+        let client = match (b.enabled, b.source) {
+            (false, _) => None,
+            (true, BlivechatSource::Comet) => Some(BliveConfig {
+                host: "127.0.0.1".into(),
+                port: b.comet_port,
+                join: Join::Comet,
+            }),
             (true, BlivechatSource::Laplace) => {
                 // Only read the secret store once the token is wanted.
                 let token = self.laplace_token.get();
@@ -172,14 +122,11 @@ impl App {
                     address: self.settings.integrations.blivechat.laplace_url.clone(),
                     token: token.unwrap_or_default(),
                 };
-                (
-                    None,
-                    link.url().map(|url| BliveConfig {
-                        host: String::new(),
-                        port: 0,
-                        join: Join::Laplace { url },
-                    }),
-                )
+                link.url().map(|url| BliveConfig {
+                    host: String::new(),
+                    port: 0,
+                    join: Join::Laplace { url },
+                })
             }
             (true, BlivechatSource::Server) => {
                 let room = match crate::distribution::blive_room_kind(b) {
@@ -193,17 +140,13 @@ impl App {
                     BliveRoomKind::RoomId => RoomKey::parse(false, &b.room_id),
                 };
                 let b = &self.settings.integrations.blivechat;
-                (
-                    None,
-                    room.map(|room| BliveConfig {
-                        host: b.host.clone(),
-                        port: b.port,
-                        join: Join::Blivechat(room),
-                    }),
-                )
+                room.map(|room| BliveConfig {
+                    host: b.host.clone(),
+                    port: b.port,
+                    join: Join::Blivechat(room),
+                })
             }
         };
-        self.comet_relay.set(relay);
         let epoch = self.blivechat.epoch();
         let joining = client.is_some();
         self.blivechat.set(client);
@@ -230,18 +173,5 @@ impl App {
             s.blivechat_link = link;
         });
         text
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tokens_are_128_bit_hex_and_differ() {
-        let a = new_token();
-        assert_eq!(a.len(), 32);
-        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
-        assert_ne!(a, new_token());
     }
 }

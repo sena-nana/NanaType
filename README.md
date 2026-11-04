@@ -75,7 +75,7 @@ NanaType 是为虚拟主播做的直播打字机。你在输入框里打字，�
     </td>
     <td valign="top">
       <h4>💬 弹幕与聊天</h4>
-      Twitch 聊天收发；通过 blivechat 协议接入 <a href="https://github.com/xfgryujk/blivechat">blivechat</a> 或 <a href="https://huixinghao.cn/">彗星号</a>，或连接 <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>（仅支持 LAPLACE 用身份码连接直播间），B 站、抖音、快手弹幕都能转进来。
+      Twitch 聊天收发；接入 <a href="https://github.com/xfgryujk/blivechat">blivechat</a>、直接连接 <a href="https://huixinghao.cn/">彗星号</a> 客户端，或连接 <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>（仅支持 LAPLACE 用身份码连接直播间），B 站、抖音、快手弹幕都能转进来。
     </td>
   </tr>
   <tr>
@@ -159,8 +159,7 @@ cargo test --workspace --exclude nanatype
 | `crates/audio` | 解码、混音与按采样时刻调度 |
 | `crates/bridge` | VTube Studio、OSC、WebSocket |
 | `crates/twitch` | Twitch IRC 匿名接收、设备码登录与 Helix 发送 |
-| `crates/blive` | blivechat 与 LAPLACE Event Bridge 客户端（协议解析、连接与重连）和彗星号中转 |
-| `integrations/comet` | 彗星号创意工坊插件页面：把彗星号事件转换成 blivechat 消息 |
+| `crates/blive` | blivechat、LAPLACE Event Bridge 与彗星号客户端（协议解析、解密、连接与重连） |
 | `crates/core` | 会话逻辑：草稿、发送、继续、队列、历史、回溯 |
 | `crates/p2p` | Steam 联机（最多 8 人）、会话排序、重连与图片转发 |
 | `crates/update` | 检查更新：签名的 Release 清单、文件代理、校验下载 |

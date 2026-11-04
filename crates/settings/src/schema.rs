@@ -1638,7 +1638,7 @@ pub enum BlivechatSource {
     /// A blivechat server at `host:port`.
     #[default]
     Server,
-    /// The 彗星号 workshop plugin, through NanaType's own relay.
+    /// The 彗星号 client's own feed on `127.0.0.1:comet_port`.
     Comet,
     /// A LAPLACE Event Bridge at `laplace_url`.
     Laplace,
@@ -1665,11 +1665,8 @@ pub struct BlivechatSettings {
     /// The room number when `room_kind` is `RoomId`. An auth code is never
     /// written here.
     pub room_id: String,
-    /// The local relay the 彗星号 page connects to.
+    /// The port the 彗星号 client serves its feed on.
     pub comet_port: u16,
-    /// What the 彗星号 page must present; it keeps other local pages from
-    /// pushing chat. Made when 彗星号 is first chosen.
-    pub comet_token: String,
     /// The LAPLACE bridge's link without its token (`ws://` or `wss://`),
     /// as read from what the user pasted. The token is kept in the system's
     /// secret store.
@@ -1677,7 +1674,9 @@ pub struct BlivechatSettings {
 }
 
 pub const BLIVECHAT_PORT: u16 = 12450;
-pub const COMET_RELAY_PORT: u16 = 12451;
+pub const COMET_PORT: u16 = 19400;
+/// NanaType's own 彗星号 relay listened here before it read the client.
+const LEGACY_COMET_RELAY_PORT: u16 = 12451;
 pub const LAPLACE_URL: &str = "ws://127.0.0.1:9696/";
 
 impl Default for BlivechatSettings {
@@ -1689,8 +1688,7 @@ impl Default for BlivechatSettings {
             port: BLIVECHAT_PORT,
             room_kind: BliveRoomKind::default(),
             room_id: String::new(),
-            comet_port: COMET_RELAY_PORT,
-            comet_token: String::new(),
+            comet_port: COMET_PORT,
             laplace_url: LAPLACE_URL.into(),
         }
     }
@@ -2009,12 +2007,10 @@ impl Settings {
         if l.port == 0 {
             l.port = BLIVECHAT_PORT;
         }
-        if l.comet_port == 0 {
-            l.comet_port = COMET_RELAY_PORT;
+        if l.comet_port == 0 || l.comet_port == LEGACY_COMET_RELAY_PORT {
+            l.comet_port = COMET_PORT;
         }
         l.room_id = l.room_id.trim().chars().take(20).collect();
-        l.comet_token.retain(|c| c.is_ascii_alphanumeric());
-        l.comet_token.truncate(64);
         l.laplace_url = l.laplace_url.trim().chars().take(2048).collect();
         if l.laplace_url.is_empty() {
             l.laplace_url = LAPLACE_URL.into();

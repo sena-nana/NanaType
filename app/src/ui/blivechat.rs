@@ -1,9 +1,9 @@
-//! The third-party chat page: a blivechat server, 彗星号 through the relay,
-//! or a LAPLACE Event Bridge.
+//! The third-party chat page: a blivechat server, the 彗星号 client, or a
+//! LAPLACE Event Bridge.
 use super::{
     Ui,
     settings::controls::{
-        Row, address, blivechat_badge, block, confirm, edit, primary, row, section, segmented,
+        Row, address, blivechat_badge, block, edit, port, primary, row, section, segmented,
         select_keys, switch, toggled_section,
     },
 };
@@ -11,7 +11,7 @@ use crate::msg::{BliveMsg, Msg};
 use crate::ui::kit::{self, Type, gap};
 use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
-use nana_ui::runtime::{Activate, Stack, Text, TextChanged, TextInput, TextSubmitted};
+use nana_ui::runtime::{Stack, Text, TextChanged, TextInput, TextSubmitted};
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_settings::{BliveRoomKind, BlivechatSource};
 
@@ -87,8 +87,7 @@ fn source_choice(ui: Ui) -> AnyView {
 
 fn server_section(ui: Ui) -> AnyView {
     let mut rows = Vec::new();
-    // Room ids and auth codes are both accepted by blivechat; the relay remains
-    // independent of the removed direct platform sources.
+    // Room ids and auth codes are both accepted by blivechat.
     rows.push(row(
         ui,
         "int-blive-room-kind",
@@ -231,64 +230,22 @@ fn auth_field(ui: Ui) -> AnyView {
     .into_any()
 }
 
+/// The 彗星号 client serves its feed on this computer; only its port is
+/// asked, and the default is the client's own.
 fn comet_section(ui: Ui) -> AnyView {
-    let address = widget(
-        Text::new("")
-            .style(Type::Caption.mono())
-            .color(SemanticColorRole::Text),
-    )
-    .bind(move |t: &mut Text| {
-        let v = ui
-            .settings
-            .with(|s| crate::app::blivechat::comet_address(&s.integrations.blivechat));
-        if t.value != v {
-            t.value = v;
-        }
-    });
-    let reset = confirm(
-        *ui,
-        ui.now_t("int-comet-reset-question"),
-        ui.now_t("int-comet-reset"),
-        move |armed| {
-            widget(nana_ui::runtime::IconButton::tool(
-                nana_ui::icons_tabler::REFRESH,
-                ui.now_t("int-comet-reset"),
-            ))
-            .on(move |_: &Activate| armed.set(true))
-            .into_any()
-        },
-        || Msg::Blive(BliveMsg::ResetCometToken),
-    );
     section(
         ui,
         "int-comet-section",
-        vec![
-            row(
+        vec![row(
+            ui,
+            "int-comet-port",
+            Some("int-comet-port-hint"),
+            port(
                 ui,
-                "int-comet-address",
-                Some("int-comet-address-hint"),
-                widget(
-                    Stack::row(0.0)
-                        .gap_step(gap::step::TIGHT)
-                        .align(AlignSpec::Center),
-                )
-                .children((
-                    kit::tool(
-                        nana_ui::icons_tabler::COPY,
-                        ui.now_t("int-comet-copy"),
-                        move || {
-                            Msg::CopyText(ui.settings.with_untracked(|s| {
-                                crate::app::blivechat::comet_address(&s.integrations.blivechat)
-                            }))
-                        },
-                    ),
-                    reset,
-                ))
-                .into_any(),
+                |s| s.integrations.blivechat.comet_port,
+                |s, v| s.integrations.blivechat.comet_port = v,
             ),
-            // The address is long: on its own line, so the label keeps its width.
-            block(address),
-        ],
+        )],
     )
 }
 

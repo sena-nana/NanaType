@@ -13,7 +13,7 @@ use crate::ui::I18N;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Platform {
-    /// A blivechat server or the 彗星号 relay.
+    /// A blivechat server, 彗星号 or a LAPLACE bridge.
     Blivechat,
     Twitch,
 }

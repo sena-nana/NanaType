@@ -75,7 +75,7 @@ NanaType は VTuber のための配信用タイプライターです。入力ボ
     </td>
     <td valign="top">
       <h4>💬 コメント連携</h4>
-      Twitch チャットの受信と送信に対応。blivechat プロトコル経由で <a href="https://github.com/xfgryujk/blivechat">blivechat</a> や <a href="https://huixinghao.cn/">彗星号</a>、または <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>（LAPLACE が認証コードで接続している場合のみ）を接続すれば、bilibili・抖音（Douyin）・快手（Kuaishou）のコメントも取り込めます。
+      Twitch チャットの受信と送信に対応。<a href="https://github.com/xfgryujk/blivechat">blivechat</a>、<a href="https://huixinghao.cn/">彗星号</a> クライアントへの直接接続、または <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>（LAPLACE が認証コードで接続している場合のみ）を接続すれば、bilibili・抖音（Douyin）・快手（Kuaishou）のコメントも取り込めます。
     </td>
   </tr>
   <tr>
@@ -159,8 +159,7 @@ cargo test --workspace --exclude nanatype
 | `crates/audio` | デコード、ミキシング、サンプル単位のスケジューリング |
 | `crates/bridge` | VTube Studio、OSC、WebSocket |
 | `crates/twitch` | Twitch IRC の匿名受信、デバイスコードによるログインと Helix での送信 |
-| `crates/blive` | blivechat と LAPLACE Event Bridge のクライアント（プロトコル解析、接続と再接続）と彗星号の中継 |
-| `integrations/comet` | 彗星号のクリエイティブワークショップ用プラグインページ：彗星号のイベントを blivechat のメッセージに変換 |
+| `crates/blive` | blivechat・LAPLACE Event Bridge・彗星号のクライアント（プロトコル解析、復号、接続と再接続） |
 | `crates/core` | セッションのロジック：下書き、送信、続行、キュー、履歴、巻き戻し |
 | `crates/p2p` | Steam オンライン（最大 8 人）、セッションの順序付け、再接続と画像の転送 |
 | `crates/update` | アップデートの確認：署名付きリリースマニフェスト、ファイルプロキシ、検証付きダウンロード |

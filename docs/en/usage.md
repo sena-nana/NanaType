@@ -35,7 +35,7 @@ For protocol, sign-in and rate-limit details, see [Twitch integration](twitch.md
 Open **Settings › Third-party chat**, turn it on and choose a source:
 
 - **blivechat**: run blivechat (default `127.0.0.1:12450`), enter your Bilibili Open Platform identity code and click **Save and connect**, or use a room number instead. The identity code is kept in OS-protected storage (Windows DPAPI / macOS Keychain) and never written to the settings file.
-- **彗星号 (Comet)**: add the NanaType plugin to your Comet canvas and paste the connection address shown on the settings page into the plugin's settings. The plugin page lives in [`integrations/comet/`](../../integrations/comet/); for how to upload it and how it works, see [Comet integration](comet.md).
+- **彗星号 (Comet)**: open the Comet client and start listening to your room; NanaType connects to it directly (port 19400 by default) and reads its chat, with no plugin. For how it works, see [Comet integration](comet.md).
 
 Third-party chat messages show up in the chat panel, and @-mentions, replies and mixing into history work the same way. With no live room at hand, you can try blivechat mode against the mock server:
 
@@ -43,10 +43,10 @@ Third-party chat messages show up in the chat panel, and @-mentions, replies and
 cargo run -p nanatype-blive --example mock_blivechat
 ```
 
-For Comet mode, a script can stand in for the plugin page and push sample messages to the relay (requires Node 22+):
+For Comet mode, a mock server can stand in for the Comet client:
 
 ```bash
-node scripts/comet_publish.mjs "ws://127.0.0.1:12451/comet?token=…"
+cargo run -p nanatype-blive --example mock_comet
 ```
 
 ### Sessions with friends
@@ -107,7 +107,7 @@ Turning an output off and back on within 5 seconds reuses the original sender, a
 
 - **Profiles**: **Settings › General › Profiles** saves the current settings under a name (say "Karaoke" or "Just chatting"); profiles can be switched, renamed, duplicated, overwritten with the current settings and deleted. Switch from the tray's **Profile** submenu too, or bind **Next profile** under **Settings › Hotkeys** (cycles in list order, unbound by default), or give each profile its own key under **Settings › Hotkeys › Profiles**. Profile keys are global like the other hotkeys and never change with a profile. When the profile switched to brings quick-phrase or character hotkeys that clash with a global hotkey (or with each other), the global one wins, the clashing ones stay unregistered until changed, and a notice names them (phrases before characters, each in list order). Switching first saves changes made under the active profile back into it. Profiles live in the config folder as `profiles/<id>.json`, written atomically like `settings.json`.
 - **What a profile holds**: the characters (with avatars, colours and hotkeys) and the active one, playback, sound (but not the output device), the skin and its adjustments (but not the Settings window's light/dark look or hot reload), the overlay windows' visibility, lock, always-on-top and size, the history window (but not saving the history), and quick phrases. Everything else is global: language, hotkeys, input behaviour, integrations with their addresses and channels, outputs, speech input, text to speech (each character's voice goes with the characters), updates, autostart, plugins and window positions on screen.
-- **Export**: **Settings › General › Backup and transfer › Export settings** saves a `.json` file carrying the app name, settings schema, export time and NanaType version. It can include integration addresses and channels (on by default), character avatars (on by default; the images are embedded, and any over 4 MB or not found are left out and counted afterwards) and window positions (off by default: they are kept per monitor layout and rarely fit another computer). Sign-ins and passwords (Twitch, OBS, the blivechat code) live in the system keychain and are never exported; neither are the VTube Studio plugin token, the 彗星号 address token or a proxy's `user:password@`. Plugin approvals, audio devices, GPU and log options and the active profile belong to this computer and stay behind as well.
+- **Export**: **Settings › General › Backup and transfer › Export settings** saves a `.json` file carrying the app name, settings schema, export time and NanaType version. It can include integration addresses and channels (on by default), character avatars (on by default; the images are embedded, and any over 4 MB or not found are left out and counted afterwards) and window positions (off by default: they are kept per monitor layout and rarely fit another computer). Sign-ins and passwords (Twitch, OBS, the blivechat code) live in the system keychain and are never exported; neither are the VTube Studio plugin token or a proxy's `user:password@`. Plugin approvals, audio devices, GPU and log options and the active profile belong to this computer and stay behind as well.
 - **Import**: **Import settings** reads an exported file or a hand-copied `settings.json`. Files from older versions are upgraded through the settings migrations first; files from a newer NanaType are refused. A confirmation lists what will change and nothing is applied before it. The current settings are first backed up to `settings.previous.json`, and **Restore previous settings** undoes the import (pressing it again returns to the imported settings). A file without integrations keeps yours; your sign-ins are always kept. Embedded avatars are written to `avatars/` in the data folder.
 - **Reset all to defaults**: after a confirmation, the settings go back to a new install's, keeping the language, the finished first-run guide and the sign-ins (keychain passwords are not touched and you stay signed in). The current settings are backed up first, so **Restore previous settings** undoes it. Window positions and profiles are not affected.
 

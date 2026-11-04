@@ -26,7 +26,6 @@ pub(super) struct Workers {
     pub hotkeys: Hotkeys,
     pub twitch: nanatype_twitch::TwitchHandle,
     pub blivechat: nanatype_blive::BliveHandle,
-    pub comet_relay: nanatype_blive::RelayHandle,
     pub obs: nanatype_obs::ObsHandle,
     pub steam: nanatype_steam::SteamHandle,
     pub sticker_manager: crate::stickers::Manager,
@@ -61,9 +60,6 @@ impl Workers {
             ),
             blivechat: nanatype_blive::BliveHandle::new(forward(&post, |e| {
                 Msg::Blive(BliveMsg::Event(e))
-            })),
-            comet_relay: nanatype_blive::RelayHandle::new(forward(&post, |e| {
-                Msg::Blive(BliveMsg::Relay(e))
             })),
             obs: nanatype_obs::ObsHandle::new(forward(&post, |e| Msg::Obs(ObsMsg::Event(e)))),
             steam: nanatype_steam::SteamHandle::start(

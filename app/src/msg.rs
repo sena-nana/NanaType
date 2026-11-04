@@ -691,17 +691,13 @@ pub enum TwitchMsg {
 }
 
 pub enum BliveMsg {
-    /// The third-party (blivechat protocol) connection reported.
+    /// The third-party chat connection reported.
     Event(nanatype_blive::BliveEvent),
-    /// The 彗星号 relay reported.
-    Relay(nanatype_blive::RelayStatus),
     /// Keep this blivechat 身份码 in the system's secret store; empty forgets it.
     AuthCode(String),
     /// A LAPLACE Event Bridge link the user pasted: its address goes to the
     /// settings, its token (or none) to the system's secret store.
     LaplaceLink(String),
-    /// Make a new 彗星号 address; pages using the old one are refused.
-    ResetCometToken,
 }
 
 pub enum ObsMsg {

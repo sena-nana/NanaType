@@ -159,8 +159,6 @@ pub static BLIVECHAT_ERROR: EventDescriptor =
     EventDescriptor::new(CHAT, 101, "chat.blivechat_error", Severity::Warn, &[]);
 pub static BLIVECHAT_FATAL: EventDescriptor =
     EventDescriptor::new(CHAT, 102, "chat.blivechat_fatal", Severity::Error, &[]);
-pub static COMET_RELAY_ERROR: EventDescriptor =
-    EventDescriptor::new(CHAT, 103, "chat.comet_relay_error", Severity::Warn, &[]);
 
 /// One live platform's connection and account, in its own domain. States
 /// are codes (see [`Conn`] and [`Account`]); a room, channel, account name or
@@ -330,7 +328,6 @@ pub static EVENTS: &[&EventDescriptor] = &[
     &BLIVECHAT_SECRET_FAILED,
     &BLIVECHAT_ERROR,
     &BLIVECHAT_FATAL,
-    &COMET_RELAY_ERROR,
 ];
 
 /// A window's code in event fields.

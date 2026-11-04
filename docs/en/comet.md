@@ -2,64 +2,60 @@
 
 # Comet (彗星号) integration
 
-[彗星号 (Comet)](https://huixinghao.cn/) is a livestreaming helper. Its Workshop plugins are static web pages that run in an iframe on the Comet canvas and receive live-room events through `window.postMessage` ([developer docs](https://gitee.com/t_tgl/hxh-dev-docs), Chinese). NanaType uses a plugin page to forward those events and receives them over the blivechat protocol, the same path used when connecting to a blivechat server.
+[Comet (彗星号)](https://huixinghao.cn/) is a live-streaming assistant. The Comet client serves a chat WebSocket on this computer itself; NanaType connects to it directly and reads every room it listens to, with no plugin page and no relay.
 
 ## How the data flows
 
 ```
-彗星号客户端 / OBS 浏览器源
-  └─ 插件页面 integrations/comet/index.html
-       postMessage 收到 LIVE_OPEN_PLATFORM_DM / SEND_GIFT / SUPER_CHAT / GUARD
-       toBlivechat() 转换成 blivechat 帧 {cmd, data}
-       │  ws://127.0.0.1:12451/comet?token=…   （页面主动连本机）
+Comet client (listening to rooms)
+       │  ws://127.0.0.1:19400/      the root path carries every room's messages
+       │  binary frames are AES-256-GCM encrypted; text frames are JSON; ping → pong
        ▼
-NanaType 中转（crates/blive/src/relay.rs）
-       校验 token，按消息 id 去重，转发给 /api/chat 的所有客户端
-       │  ws://127.0.0.1:12451/api/chat        （标准 blivechat 端点）
+NanaType connection thread (crates/blive/src/client.rs, Join::Comet)
+       comet::decrypt() decrypts, comet::parse() turns it into chat events
        ▼
-NanaType blivechat 客户端（crates/blive/src/client.rs）→ 弹幕面板、历史记录
+Chat panel, history
 ```
 
-(The Comet client or an OBS browser source loads the plugin page, which receives `LIVE_OPEN_PLATFORM_DM` / `SEND_GIFT` / `SUPER_CHAT` / `GUARD` via postMessage, converts them with `toBlivechat()` into blivechat frames, and connects out to NanaType's local relay. The relay checks the token, de-duplicates by message id and forwards to every client on `/api/chat`, including NanaType's own blivechat client, which feeds the chat panel and history.)
+- A binary frame is a 12-byte nonce, then the ciphertext with its 16-byte authentication tag at the end, under the fixed key Comet publishes. A frame that does not decrypt is skipped; later messages are unaffected.
+- Each message is `{ type, platform, rid, data }`. NanaType sends one `ping` as soon as it connects and one every 10 seconds after; 30 seconds without any frame counts as a dropped connection, retried after 3 seconds.
+- It connects to `127.0.0.1` only, on port 19400 by default, which the settings page can change.
 
-- A browser page can only open connections, not listen on a port, so a server is needed in the middle: the relay exposes blivechat's `/api/chat`, and other blivechat-compatible tools can connect to read the same chat.
-- The relay listens only on `127.0.0.1`. The pushing side must include the 128-bit token generated on the settings page, otherwise the handshake returns 401 straight away; this stops other web pages on the same machine from forging chat. You can regenerate the token on the settings page, which immediately invalidates the old address.
-- The same canvas may be loaded in both the Comet preview and OBS, so each event can be pushed twice; the relay remembers the last 1024 message ids and forwards each only once.
-- In configuration mode (`?env=1`) the plugin only connects and shows its status without forwarding, so mock data from configuration never reaches NanaType; in live mode the page is fully transparent.
+## Getting started
 
-## Setup
-
-1. In NanaType: **Settings › Third-party chat**, turn on **Receive third-party chat** and set **Source** to **彗星号 (Comet)**.
-2. The plugin page is `integrations/comet/index.html` in the repository. The settings page does not provide the plugin file; the publisher uploads it to the Workshop, and streamers add it from there.
-3. Sign in on the Comet website, open the Workshop, choose the "自定插件" (custom plugin) work type, upload `index.html` and save it to drafts. A private work can be used from your own collection without review. If you need the settings field, paste the contents of `integrations/comet/settings.json` into "自定义作品配置" (custom work configuration); it provides a "NanaType 连接地址" (NanaType connection address) input.
-4. Add the plugin to your stream canvas and paste the connection address shown on NanaType's settings page into its configuration panel on the right.
-5. Once the settings page shows "彗星号 · Connected", chat received by Comet appears in the chat panel.
-
-The relay port defaults to 12451 and is not shown on the settings page; to change it, edit `integrations.blivechat.comet_port` in the settings file.
-
-You can also skip the settings field and pass the connection address by appending an `?address=` parameter to the plugin URL.
+1. Open the Comet client and start listening to your room.
+2. In NanaType: **Settings › Third-party chat**, turn it on and choose **彗星号 (Comet)** as the source. The port only needs to match the one in Comet's settings (19400 by default).
+3. Once the status reads "彗星号 · Connected", chat Comet receives shows up in the chat panel. "Cannot reach 彗星号" means the client is not open, or the port is wrong.
 
 ## Field mapping
 
-| Comet event | blivechat command | Notes |
+| Comet `type` | NanaType event | Notes |
 | --- | --- | --- |
-| Chat `message` | `2` ADD_TEXT (v1.10 array) | `dmType = 1` is an emote message, image from `emojiImgUrl`; streamer / moderator / guard map to authorType 3 / 2 / 1 |
-| Gift `gift` | `3` ADD_GIFT | `totalCoin = unit price × count × 1000` (gold melon seeds, 1000 = ¥1); free gifts count towards `totalFreeCoin`; blind boxes count as the gift they produced |
-| Super Chat `superChat` | `5` ADD_SUPER_CHAT | `price` is in yuan |
-| Guard / membership `guard` | `4` ADD_MEMBER | `total_coin = price × 1000`, `unit` from `guardUnit` |
-| Room entry, likes, stream start, stream end | — | The blivechat protocol has no matching command; ignored |
+| `Chat` | Comment | `content` is the text; `dm_type = 1` is an emoticon comment, its picture from `emoji_img_url` |
+| `Gift` | Gift | `item` is the gift's name; `price` is taken as the unit price in yuan, `total = price × num`; a price of 0 is a free gift |
+| `Subscribe` / `Guard` | Guard / membership | Bilibili guards and Douyin memberships come as `Subscribe`, 星守护 as `Guard`; an `item` naming 总督 / 提督 / 舰长 sets that guard level, `vip_unit` is the period |
+| `SuperChat` | Super Chat | `price` is in yuan |
+| `EnterRoom`, `Like`, `EndLive`, `ListenerStatus`, `WsClose` | — | Not chat; ignored |
 
-Fan medals are included only when worn. User uids from platforms other than Bilibili get a platform prefix (such as `dou_yin:…`) so they never collide with Bilibili uids.
+The user is read from `id`, `name` and `avatar`, the fan medal from `fans_medal_name` and `fans_medal_level`; the message id is `msgId`, made from the content when missing. Users of platforms other than Bilibili get their platform before their uid (such as `dou_yin:…`), so they never clash with a Bilibili uid.
 
-## Tests
+## Testing
 
 ```bash
-node --test integrations/comet/convert.test.mjs
 cargo test -p nanatype-blive
 ```
 
-`integrations/comet/fixtures.json` is used by both sides: the Node test checks the plugin page's conversion output, and the Rust test checks that the client reads those frames back as the expected events. `scripts/comet_publish.mjs` uses the page's own conversion function to push samples to a running relay, sending each one twice so you can see the de-duplication directly.
+Without a Comet client, a mock server can stand in; it sends encrypted sample messages on port 19400 in a loop:
+
+```bash
+cargo run -p nanatype-blive --example mock_comet
+```
 
 ## Not yet verified
 
-Whether the Comet client's embedded browser places extra restrictions on connecting to `ws://127.0.0.1` (CSP, local network access prompts) still needs to be confirmed by uploading the plugin in a real Comet client. If it is blocked, the plugin shows "未连接" (not connected) in configuration mode.
+- Whether `Gift`'s `price` is the unit price or the total, and whether it is in yuan: it is treated as the unit price in yuan for now, to be checked against real gifts.
+- The guard level is read only from `item`'s text; if Comet gives a level field in `data`, it can be added.
+
+## Upgrading from earlier versions
+
+Earlier versions had a Workshop plugin page push events to NanaType's own relay (port 12451, with a token in the address). That path is gone: a saved port of 12451 becomes 19400 on its own, the old token is no longer used, and the old plugin can be removed from the canvas.

@@ -307,31 +307,153 @@ fn summary(event: &ChatEvent) -> Value {
     all
 }
 
-/// The frames the 彗星号 page sends (integrations/comet/fixtures.json, the
-/// same file its converter test checks) read back as the events it meant.
-#[test]
-fn frames_from_the_comet_page_read_as_their_events() {
-    let fixtures: Value =
-        serde_json::from_str(include_str!("../../../integrations/comet/fixtures.json")).unwrap();
-    let mut checked = 0;
-    for fixture in fixtures.as_array().unwrap() {
-        if fixture["blivechat"].is_null() {
-            continue;
-        }
-        let got = summary(&event(fixture["blivechat"].clone()));
-        let name = fixture["name"].as_str().unwrap();
-        for (key, want) in fixture["expect"].as_object().unwrap() {
-            assert_eq!(&got[key], want, "{name}: {key}");
-        }
-        // Gifts, memberships and Super Chats never name the owner or a moderator.
-        for flag in ["owner", "admin"] {
-            if fixture["expect"].get(flag).is_none() {
-                assert_eq!(got[flag], false, "{name}: {flag}");
-            }
-        }
-        checked += 1;
+fn comet_event(message: Value) -> ChatEvent {
+    match comet::parse(&message.to_string(), 42) {
+        Some(Incoming::Event(e)) => e,
+        other => panic!("not an event: {other:?}"),
     }
-    assert!(checked >= 8, "every fixture with a frame was read");
+}
+
+#[test]
+fn comet_frames_open_under_the_shared_key() {
+    let text = r#"{"type":"Chat","platform":"bili","rid":"1","data":{"content":"你好"}}"#;
+    let frame = comet::encrypt(text, [7; 12]);
+    assert_eq!(frame.len(), 12 + text.len() + 16, "nonce, ciphertext, tag");
+    assert_eq!(comet::decrypt(&frame).as_deref(), Some(text));
+    let mut tampered = frame.clone();
+    *tampered.last_mut().unwrap() ^= 1;
+    assert_eq!(comet::decrypt(&tampered), None);
+    assert_eq!(comet::decrypt(&frame[..8]), None);
+}
+
+#[test]
+fn comet_messages_read_as_their_events() {
+    let cases = [
+        (
+            json!({"type": "Chat", "platform": "bili", "rid": "21452505", "data": {
+                "msgId": "c1", "id": 5, "name": "观众", "avatar": "//i0.hdslb.com/a.jpg",
+                "content": "你好", "dm_type": 0, "fans_medal_name": "七七", "fans_medal_level": 12}}),
+            json!({"kind": "text", "id": "c1", "uid": "5", "name": "观众", "medal_level": 12,
+                "content": "你好", "emoticon": null}),
+        ),
+        (
+            json!({"type": "Chat", "platform": "dou_yin", "rid": "r", "data": {
+                "msgId": "c2", "id": "MS4wLjAB", "name": "抖音观众", "content": "[表情]",
+                "dm_type": 1, "emoji_img_url": "http://p.test/e.png"}}),
+            json!({"kind": "text", "uid": "dou_yin:MS4wLjAB", "emoticon": "https://p.test/e.png"}),
+        ),
+        (
+            json!({"type": "Gift", "platform": "bili", "rid": "1", "data": {
+                "msgId": "g1", "id": 6, "name": "送礼人", "gid": "31036", "item": "小花花",
+                "num": 3, "price": 0.1}}),
+            json!({"kind": "gift", "gift_name": "小花花", "num": 3, "total_coin": 300}),
+        ),
+        (
+            json!({"type": "Gift", "platform": "bili", "rid": "1", "data": {
+                "msgId": "g2", "id": 6, "item": "辣条", "num": 10, "price": 0}}),
+            json!({"kind": "gift", "num": 10, "total_coin": 0}),
+        ),
+        (
+            json!({"type": "Subscribe", "platform": "bili", "rid": "1", "data": {
+                "msgId": "s1", "id": 7, "name": "舰长", "action": "开通", "item": "舰长",
+                "num": 1, "price": 138, "vip_unit": "月"}}),
+            json!({"kind": "member", "guard": Guard::Captain as u8, "num": 1, "unit": "月",
+                "total_coin": 138000}),
+        ),
+        (
+            json!({"type": "Guard", "platform": "dou_yin", "rid": "r", "data": {
+                "msgId": "s2", "id": 8, "item": "星守护", "num": 1, "price": "30"}}),
+            json!({"kind": "member", "uid": "dou_yin:8", "total_coin": 30000}),
+        ),
+        (
+            json!({"type": "SuperChat", "platform": "bili", "rid": "1", "data": {
+                "msgId": "sc1", "id": 9, "name": "留言人", "content": "加油", "price": 30}}),
+            json!({"kind": "super_chat", "id": "sc1", "price": 30, "content": "加油"}),
+        ),
+    ];
+    for (message, want) in cases {
+        let got = summary(&comet_event(message.clone()));
+        for (key, value) in want.as_object().unwrap() {
+            assert_eq!(&got[key], value, "{message}: {key}");
+        }
+        assert_eq!(
+            (&got["owner"], &got["admin"]),
+            (&json!(false), &json!(false))
+        );
+    }
+}
+
+#[test]
+fn comet_messages_without_chat_or_an_id_still_read() {
+    for kind in [
+        "EnterRoom",
+        "Like",
+        "EndLive",
+        "ListenerStatus",
+        "WsClose",
+        "Novel",
+    ] {
+        let message =
+            json!({"type": kind, "platform": "bili", "rid": "1", "data": {"state": "waiting"}});
+        assert_eq!(
+            comet::parse(&message.to_string(), 0),
+            Some(Incoming::Other),
+            "{kind}"
+        );
+    }
+    assert_eq!(comet::parse("pong", 0), Some(Incoming::Heartbeat));
+    assert_eq!(comet::parse("not json", 0), None);
+    // No id or time: one is made up, and the time is now.
+    match comet_event(json!({"type": "Chat", "data": {"id": 1, "content": "嗨"}})) {
+        ChatEvent::Text { id, at_ms, .. } => {
+            assert!(!id.is_empty());
+            assert_eq!(at_ms, 42);
+        }
+        e => panic!("{e:?}"),
+    }
+}
+
+#[test]
+fn the_client_reads_the_comet_feed_and_pings_it() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut ws = tungstenite::accept(stream).unwrap();
+        let chat = json!({"type": "Chat", "platform": "bili", "rid": "1",
+            "data": {"msgId": "c", "id": 5, "name": "观众", "content": "加密的"}});
+        ws.send(Message::binary(comet::encrypt(&chat.to_string(), [1; 12])))
+            .unwrap();
+        ws.send(Message::text(
+            json!({"type": "Chat", "data": {"msgId": "d", "content": "明文的"}}).to_string(),
+        ))
+        .unwrap();
+        // A frame that does not open is skipped, not the end of the feed.
+        ws.send(Message::binary(vec![0u8; 40])).unwrap();
+        let ping = ws.read().unwrap().into_text().unwrap().to_string();
+        ws.send(Message::text("pong")).unwrap();
+        ping
+    });
+    let (event_tx, event_rx) = mpsc::channel();
+    let mut handle = BliveHandle::new(move |e: BliveEvent| {
+        if let BliveUpdate::Chat(c) = e.update {
+            let _ = event_tx.send(c);
+        }
+    });
+    handle.set(Some(BliveConfig {
+        host: "127.0.0.1".into(),
+        port,
+        join: Join::Comet,
+    }));
+    for want in ["加密的", "明文的"] {
+        match event_rx.recv_timeout(Duration::from_secs(5)).unwrap() {
+            ChatEvent::Text { content, .. } => assert_eq!(content, want),
+            e => panic!("{e:?}"),
+        }
+    }
+    let ping = server.join().unwrap();
+    assert_eq!(ping, comet::PING);
+    handle.set(None);
 }
 
 fn laplace_event(frame: Value) -> ChatEvent {

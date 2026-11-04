@@ -12,9 +12,8 @@
 //! [`laplace`] reads a LAPLACE Event Bridge instead: the same connection
 //! thread, with [`Join::Laplace`] in place of a room.
 //!
-//! [`relay`] is a small blivechat-compatible server for sources that can only
-//! push: the 彗星号 workshop plugin connects to it and sends blivechat frames,
-//! and a [`BliveHandle`] joins its `/api/chat` like any blivechat server.
+//! [`comet`] reads the 彗星号 client's own feed (`ws://127.0.0.1:19400/`),
+//! its binary frames decrypted, with [`Join::Comet`].
 //!
 //! [blivechat]: https://github.com/xfgryujk/blivechat
 
@@ -22,13 +21,12 @@
 
 pub mod chat;
 mod client;
+pub mod comet;
 pub mod laplace;
 pub mod protocol;
-pub mod relay;
 
 #[cfg(test)]
 mod tests;
 
 pub use client::{BliveConfig, BliveEvent, BliveHandle, BliveStatus, BliveUpdate, Join};
 pub use protocol::{Author, ChatEvent, FatalKind, Guard, RoomKey};
-pub use relay::{RelayConfig, RelayHandle, RelayStatus};

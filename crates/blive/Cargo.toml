@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "NanaType live chat: a blivechat and LAPLACE Event Bridge client and a blivechat-compatible relay"
+description = "NanaType live chat: blivechat, LAPLACE Event Bridge and 彗星号 clients"
 
 [dependencies]
 nanatype-model = { workspace = true, features = ["ws"] }
@@ -15,3 +15,4 @@ url.workspace = true
 # The one crypto provider, as ureq picks it, so the crate works on its own.
 rustls = { workspace = true, features = ["ring", "std", "tls12"] }
 crossbeam-channel.workspace = true
+ring.workspace = true

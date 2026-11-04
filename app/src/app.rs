@@ -125,9 +125,8 @@ pub struct App {
     keys: sounds::Keys,
     pub bridge: BridgeHandle,
     pub twitch: nanatype_twitch::TwitchHandle,
-    /// Third-party chat: the blivechat client and the 彗星号 relay it can join.
+    /// Third-party chat: blivechat, 彗星号 or a LAPLACE bridge.
     pub blivechat: nanatype_blive::BliveHandle,
-    pub comet_relay: nanatype_blive::RelayHandle,
     /// OBS's program scene, sizing the Spout/Syphon outputs.
     pub obs: nanatype_obs::ObsHandle,
     /// The obs-websocket password.
@@ -359,7 +358,6 @@ impl App {
             bridge: workers.bridge,
             twitch: workers.twitch,
             blivechat: workers.blivechat,
-            comet_relay: workers.comet_relay,
             obs: workers.obs,
             obs_password,
             steam: workers.steam,

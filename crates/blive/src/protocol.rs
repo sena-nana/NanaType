@@ -16,14 +16,6 @@ const ADD_MEMBER: i64 = 4;
 const ADD_SUPER_CHAT: i64 = 5;
 pub(crate) const DEL_SUPER_CHAT: i64 = 6;
 const FATAL_ERROR: i64 = 8;
-/// What a source can push: text, gift, member, Super Chat, deletion.
-pub(crate) const CHAT_COMMANDS: [i64; 5] = [
-    ADD_TEXT,
-    ADD_GIFT,
-    ADD_MEMBER,
-    ADD_SUPER_CHAT,
-    DEL_SUPER_CHAT,
-];
 /// Index of the message id in an `ADD_TEXT` array.
 pub(crate) const TEXT_ID: usize = 11;
 
@@ -52,7 +44,7 @@ impl RoomKey {
 }
 
 pub use crate::chat::{Author, ChatEvent, Guard};
-// The same lenient field readers as the relay protocol uses for its panel.
+// The same lenient field readers every feed uses.
 pub(crate) use crate::chat::{int, millis, string, url};
 
 /// Why blivechat gave up on a room (`FATAL_ERROR`).

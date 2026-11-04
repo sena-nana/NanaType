@@ -1,13 +1,13 @@
 //! What a link's state says, in the viewer's language.
 //!
-//! The VTube Studio, OSC and WebSocket clients, chat relays and the Spout2
+//! The VTube Studio, OSC and WebSocket clients, third-party chat and the Spout2
 //! output report typed states ([`LinkFault`], [`BridgeStatus`],
 //! [`ConnectionState`], [`WindowOutputStatus`]); these turn them into the text
 //! the settings pages and the chat panel show. The app and the snapshots
 //! both go through here, so what a screenshot shows is what users read.
 
 use nana_ui::WindowOutputStatus;
-use nanatype_blive::{BliveStatus, FatalKind, RelayStatus};
+use nanatype_blive::{BliveStatus, FatalKind};
 use nanatype_bridge::{BridgeStatus, Sink};
 use nanatype_i18n::Locale;
 use nanatype_model::LinkFault;
@@ -111,9 +111,8 @@ fn blive(locale: Locale, status: &BliveStatus, room: &str) -> (String, Link) {
     }
 }
 
-/// Third-party chat's status line and dot: a blivechat server's join, for
-/// 彗星号 the relay and how many plugin pages push to it, or the LAPLACE
-/// bridge's connection.
+/// Third-party chat's status line and dot: a blivechat server's join, or
+/// the connection to the 彗星号 client or the LAPLACE bridge.
 pub fn blivechat(
     locale: Locale,
     settings: &BlivechatSettings,
@@ -138,25 +137,13 @@ pub fn blivechat(
             BliveStatus::Connected => (I18N.t_in(locale, "int-laplace-connected"), Link::Connected),
             other => blive(locale, other, ""),
         },
-        BlivechatSource::Comet => match &state.relay {
-            RelayStatus::Error(f) => (
-                I18N.tr_in(
-                    locale,
-                    "int-comet-relay-error",
-                    &[("message", fault(locale, f).into())],
-                ),
-                Link::Error,
-            ),
-            RelayStatus::Off => (I18N.t_in(locale, "int-status-connecting"), Link::Connecting),
-            RelayStatus::Listening { publishers, .. } => match &state.status {
-                BliveStatus::Connected if *publishers == 0 => {
-                    (I18N.t_in(locale, "int-comet-waiting"), Link::Connecting)
-                }
-                BliveStatus::Connected => {
-                    (I18N.t_in(locale, "int-comet-connected"), Link::Connected)
-                }
-                other => blive(locale, other, ""),
-            },
+        BlivechatSource::Comet => match &state.status {
+            BliveStatus::Connected => (I18N.t_in(locale, "int-comet-connected"), Link::Connected),
+            // Nothing listens: the client is not open.
+            BliveStatus::Error(LinkFault::Refused) => {
+                (I18N.t_in(locale, "int-comet-not-running"), Link::Error)
+            }
+            other => blive(locale, other, ""),
         },
     }
 }
@@ -250,24 +237,14 @@ mod tests {
                 texts.push(blive(locale, &status, "1").0);
             }
             use BlivechatSource::{Comet, Laplace, Server};
-            let listening = |publishers| RelayStatus::Listening { publishers };
-            for (source, relay, status) in [
-                (Server, RelayStatus::Off, BliveStatus::Off),
-                (Server, RelayStatus::Off, BliveStatus::Connected),
-                (Comet, RelayStatus::Off, BliveStatus::Off),
-                (
-                    Comet,
-                    RelayStatus::Error(LinkFault::PortInUse(1)),
-                    BliveStatus::Off,
-                ),
-                (Comet, listening(0), BliveStatus::Connected),
-                (Comet, listening(2), BliveStatus::Connected),
-                (Laplace, RelayStatus::Off, BliveStatus::Connected),
-                (
-                    Laplace,
-                    RelayStatus::Off,
-                    BliveStatus::Error(LinkFault::Unauthorized),
-                ),
+            for (source, status) in [
+                (Server, BliveStatus::Off),
+                (Server, BliveStatus::Connected),
+                (Comet, BliveStatus::Connecting),
+                (Comet, BliveStatus::Error(LinkFault::Refused)),
+                (Comet, BliveStatus::Connected),
+                (Laplace, BliveStatus::Connected),
+                (Laplace, BliveStatus::Error(LinkFault::Unauthorized)),
             ] {
                 let settings = BlivechatSettings {
                     enabled: true,
@@ -276,7 +253,6 @@ mod tests {
                 };
                 let state = crate::app::blivechat::State {
                     status,
-                    relay,
                     auth_saved: false,
                     laplace_token_saved: false,
                 };
