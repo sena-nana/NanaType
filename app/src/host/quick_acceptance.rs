@@ -5,6 +5,7 @@ use nana_ui::NanaTextShaper;
 use nana_ui::runtime::{HeadlessInput, TextInput};
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nana_ui_platform::{CommittedText, CompositionInput, InputModifiers, KeyInput};
+use nanatype_settings::{Hotkey, Settings};
 use std::sync::Mutex;
 
 struct Fixture {
@@ -18,15 +19,17 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
+        Self::with_send(Some(Hotkey::bare("Enter")))
+    }
+
+    fn with_send(send: Option<Hotkey>) -> Self {
         let skin = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"))
             .load("nanatype.halo")
             .unwrap()
             .skin;
-        let ui = crate::ui::Ui::new(
-            Arc::new(nanatype_settings::Settings::default()),
-            skin,
-            nanatype_i18n::Locale::ZhCn,
-        );
+        let mut settings = Settings::default();
+        settings.hotkeys.input.send = send;
+        let ui = crate::ui::Ui::new(Arc::new(settings), skin, nanatype_i18n::Locale::ZhCn);
         let id = DocumentId::new(1).unwrap();
         let mut doc = RuntimeDocument::new(id);
         doc.context_mut()
@@ -42,6 +45,7 @@ impl Fixture {
         doc.context_mut()
             .on_key(field, move |key: &KeyInput| {
                 quick_key(key)
+                    .or_else(|| quick_send_key(key, ui))
                     .map(|m| observed.lock().unwrap().push(m))
                     .is_some()
             })
@@ -86,11 +90,15 @@ impl Fixture {
     }
 
     fn key(&mut self, name: &'static str) {
+        self.key_with(name, InputModifiers::default());
+    }
+
+    fn key_with(&mut self, name: &'static str, modifiers: InputModifiers) {
         self.event(InputPayload::Key(KeyInput::named(
             "Unidentified",
             name,
             KeyState::Pressed,
-            InputModifiers::default(),
+            modifiers,
         )));
     }
 
@@ -153,6 +161,27 @@ fn enter_sends_the_typed_line_and_escape_hides_the_bar() {
     ));
     f.key("Escape");
     assert!(matches!(f.take().as_slice(), [Msg::QuickHide]));
+}
+
+#[test]
+fn configured_send_key_is_shared_with_the_quick_bar() {
+    let mut f = Fixture::with_send(Some(Hotkey::ctrl("Enter")));
+    f.event(InputPayload::Text(CommittedText::new("hello")));
+    f.take();
+
+    // Enter is no longer a send key in either input mode.
+    f.key("Enter");
+    assert!(!f.take().iter().any(|m| matches!(m, Msg::QuickSend(_))));
+
+    let ctrl = InputModifiers {
+        control: true,
+        ..InputModifiers::default()
+    };
+    f.key_with("Enter", ctrl);
+    assert!(matches!(
+        f.take().as_slice(),
+        [Msg::QuickSend(text)] if text == "hello"
+    ));
 }
 
 #[test]

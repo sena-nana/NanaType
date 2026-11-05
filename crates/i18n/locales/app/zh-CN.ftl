@@ -30,7 +30,7 @@ window-display = 展示框
 window-history = 历史记录
 window-settings = 设置
 window-quick = 快速输入
-quick-placeholder = 输入内容，回车发送
+quick-placeholder = 输入内容，然后按发送快捷键
 
 ## 托盘
 tray-mode = 输入模式

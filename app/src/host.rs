@@ -642,7 +642,12 @@ impl Host {
                 let post = self.app.ctx.clone();
                 context
                     .on_key(field, move |key: &nana_ui::KeyInput| {
-                        quick_key(key).map(|m| post.dispatch(m)).is_some()
+                        if let Some(message) = quick_key(key).or_else(|| quick_send_key(key, ui)) {
+                            post.dispatch(message);
+                            true
+                        } else {
+                            false
+                        }
                     })
                     .map_err(err)?;
                 self.quick_field = Some(field);
@@ -1023,10 +1028,25 @@ fn clipboard_image() -> Option<Msg> {
 /// The markup `source` field also pastes clipboard images (the rich editor
 /// asks for that itself).
 /// The quick bar's own key, ahead of its field: Esc hides it. Enter is the
-/// field's own submit.
+/// field's own submit when it is the configured send key.
 fn quick_key(key: &nana_ui::KeyInput) -> Option<Msg> {
     (key.state == KeyState::Pressed && chord_of(key) == Hotkey::bare("Escape"))
         .then_some(Msg::QuickHide)
+}
+
+/// Send from the quick bar when the configured send key is not plain Enter.
+/// Plain Enter remains a `TextSubmitted` event so IME composition keeps its
+/// normal commit behavior; the view gates that event on the same binding.
+fn quick_send_key(key: &nana_ui::KeyInput, ui: Ui) -> Option<Msg> {
+    if key.state != KeyState::Pressed {
+        return None;
+    }
+    let chord = chord_of(key);
+    if chord == Hotkey::bare("Enter") {
+        return None;
+    }
+    let send = ui.settings.with_untracked(|s| s.hotkeys.input.send.clone());
+    (send.as_ref() == Some(&chord)).then(|| Msg::QuickSend(ui.quick_text.get_untracked()))
 }
 
 /// Read a window's native handle off the UI thread and post it as `msg`.

@@ -1,6 +1,6 @@
 //! The quick input bar: the summon hotkey's one plain-text line, with no
-//! toolbar or panels. Enter sends the line as typed (never as markup); Esc,
-//! or leaving the bar, hides it.
+//! toolbar or panels. The configured send shortcut sends the line as typed
+//! (never as markup); Esc, or leaving the bar, hides it.
 
 use std::sync::Arc;
 
@@ -9,6 +9,7 @@ use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{EntityRef, IntoView, WithRefs, entity_ref, widget, with_refs};
 use nana_ui::runtime::{IconGlyph, Stack, TextChanged, TextInput, TextSubmitted};
 use nana_ui_core::{AlignSpec, SemanticColorRole};
+use nanatype_settings::Hotkey;
 
 use super::Ui;
 use crate::msg::Msg;
@@ -52,7 +53,12 @@ pub fn quick_window(ui: Ui) -> WithRefs<impl IntoView, QuickRef> {
             })
             .on(move |e: &TextChanged| ui.quick_text.set(e.value.to_string()))
             .on_cx(move |_, _: &TextSubmitted, cx| {
-                cx.dispatch_program_all(Msg::QuickSend(ui.quick_text.get_untracked()));
+                let sends_on_enter = ui.settings.with_untracked(|s| {
+                    s.hotkeys.input.send.as_ref() == Some(&Hotkey::bare("Enter"))
+                });
+                if sends_on_enter {
+                    cx.dispatch_program_all(Msg::QuickSend(ui.quick_text.get_untracked()));
+                }
             }),
     ));
     with_refs(view, field)
