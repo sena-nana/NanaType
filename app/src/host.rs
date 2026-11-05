@@ -131,6 +131,59 @@ const HISTORY_FPS: u32 = 60;
 /// The input window's frame ceiling, which its interface motion keeps to.
 const INPUT_FPS: u32 = 60;
 
+/// Whether a history row still has a glyph entrance to finish. History rows
+/// retain their reveal segment after input completion, so the host must keep
+/// asking for frames until the final glyph's intro has settled; otherwise an
+/// output window can publish the intermediate alpha and then go idle.
+fn history_reveal_animating(reveal: &nanatype_core::Reveal, now: u64, entrance_ms: u16) -> bool {
+    let Some(segment) = reveal.segment.as_ref() else {
+        return false;
+    };
+    let first = reveal.shown.saturating_sub(segment.start) as usize;
+    let count = reveal.hidden_from.saturating_sub(segment.start) as usize;
+    segment
+        .reveal_ms
+        .get(first..count.min(segment.reveal_ms.len()))
+        .unwrap_or_default()
+        .iter()
+        .any(|offset| {
+            segment
+                .origin_ms
+                .saturating_add(u64::from(*offset))
+                .saturating_add(u64::from(entrance_ms))
+                > now
+        })
+}
+
+fn history_compositor_needs_tick(ui: crate::ui::Stage, now: u64) -> bool {
+    let (setting, skin_ms, reduced) = ui.settings.with_untracked(|s| {
+        (
+            s.playback.entrance,
+            ui.skin
+                .with_untracked(|skin| skin.dialogue.reveal.entrance.ms),
+            ui.reduced_motion.get_untracked(),
+        )
+    });
+    ui.history.with_untracked(|rows| {
+        rows.iter().any(|row| {
+            let entrance_ms = if reduced {
+                0
+            } else if let Some(tagged) = row.doc.entrance() {
+                // Match dialogue::document_on: explicit markup wins, but a
+                // zero-duration skin entrance still disables its transition.
+                if skin_ms == 0 { 0 } else { tagged.ms }
+            } else if setting == Some(nanatype_model::EntranceKind::None) {
+                0
+            } else {
+                skin_ms
+            };
+            row.reveal
+                .as_ref()
+                .is_some_and(|reveal| history_reveal_animating(reveal, now, entrance_ms))
+        })
+    })
+}
+
 fn frame_policy(
     ui: crate::ui::Ui,
     kind: Option<WindowKind>,
@@ -190,9 +243,10 @@ fn frame_policy(
         }
         Some(WindowKind::History) => {
             let fade = history::fade_schedule(*ui, now);
+            let compositor = history_compositor_needs_tick(*ui, now);
             (
                 ui.history_now,
-                fade.animating,
+                fade.animating || compositor,
                 false,
                 fade.next_at,
                 HISTORY_FPS,
@@ -2099,6 +2153,84 @@ mod redraw_tests {
         });
         assert!(!policy.tick_clock);
         assert!(matches!(policy.demand, FrameDemand::At(at) if at == clock::instant(10_667)));
+    }
+
+    #[test]
+    fn history_reveal_keeps_frames_until_the_last_glyph_settles() {
+        let now = 10_000;
+        let reveal = nanatype_core::Reveal {
+            visible_from: 0,
+            shown: 0,
+            segment: Some(nanatype_core::SegmentReveal {
+                origin_ms: now,
+                start: 0,
+                reveal_ms: Arc::from([0, 100]),
+            }),
+            hidden_from: 2,
+        };
+        assert!(history_reveal_animating(&reveal, now, 200));
+        assert!(history_reveal_animating(&reveal, now + 299, 200));
+        assert!(!history_reveal_animating(&reveal, now + 300, 200));
+        let mut finished = reveal.clone();
+        finished.shown = 2;
+        assert!(!history_reveal_animating(&finished, now, 200));
+        assert!(!history_reveal_animating(
+            &nanatype_core::Reveal::full(2),
+            now,
+            200
+        ));
+    }
+
+    #[test]
+    fn history_frame_policy_stays_live_for_a_compositor_reveal() {
+        let now = 10_000;
+        let ui = crate::ui::Ui::new(
+            Arc::new(nanatype_settings::Settings::default()),
+            Arc::new(nanatype_theme::Skin::default()),
+            nanatype_i18n::Locale::ZhCn,
+        );
+        let doc = nanatype_model::Document::plain("hi");
+        ui.history.set(Arc::new(vec![nanatype_core::HistoryRow {
+            key: 1,
+            item: nanatype_model::HistoryItem {
+                source: nanatype_model::SourceId::local(),
+                kind: nanatype_model::SourceKind::Typewriter,
+                line: None,
+                author: "Nana".into(),
+                avatar: None,
+                doc: doc.clone(),
+                at: 0,
+                uid: None,
+                reply: None,
+            },
+            doc: Arc::new(doc),
+            reveal: Some(nanatype_core::Reveal {
+                visible_from: 0,
+                shown: 0,
+                segment: Some(nanatype_core::SegmentReveal {
+                    origin_ms: now,
+                    start: 0,
+                    reveal_ms: Arc::from([0, 100]),
+                }),
+                hidden_from: 2,
+            }),
+            translation: None,
+        }]));
+        let follow = overflow::Follow::default();
+        let pager = overflow::Pager::default();
+        let live = frame_policy(ui, Some(WindowKind::History), now, &follow, &[], &pager);
+        assert!(live.tick_clock);
+        assert!(matches!(live.demand, FrameDemand::Continuous(_)));
+        let settled = frame_policy(
+            ui,
+            Some(WindowKind::History),
+            now + 1_000,
+            &follow,
+            &[],
+            &pager,
+        );
+        assert!(!settled.tick_clock);
+        assert!(matches!(settled.demand, FrameDemand::OnDemand));
     }
 
     #[test]
