@@ -31,6 +31,7 @@ framework-file-tab-close = ファイルを閉じる
 framework-color-field-label = 色
 framework-path-field-label = パス
 framework-path-field-browse = 参照
+framework-range-field-reset = デフォルトに戻す
 framework-size-field-label = サイズ
 framework-size-field-width = 幅
 framework-size-field-height = 高さ

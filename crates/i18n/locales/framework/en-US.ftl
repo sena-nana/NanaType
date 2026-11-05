@@ -31,6 +31,7 @@ framework-file-tab-close = Close file
 framework-color-field-label = Color
 framework-path-field-label = Path
 framework-path-field-browse = Browse
+framework-range-field-reset = Reset to default
 framework-size-field-label = Size
 framework-size-field-width = Width
 framework-size-field-height = Height

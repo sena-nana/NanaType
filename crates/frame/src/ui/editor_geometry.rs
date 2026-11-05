@@ -51,7 +51,7 @@ pub fn collect(ui: Stage, cx: &AppContext) -> Vec<Part> {
             .collect::<Vec<_>>()
     });
     let ids = entries.iter().map(|(_, id)| *id).collect::<Vec<_>>();
-    let projected = cx.world().project_accessibility_nodes(&ids);
+    let projected = cx.world().project_accessibility_nodes_in_viewport(&ids);
     entries
         .into_iter()
         .filter_map(|(key, id)| {
