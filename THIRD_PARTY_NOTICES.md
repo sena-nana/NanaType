@@ -358,7 +358,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - kurbo 0.13.1 — <https://github.com/linebender/kurbo>
 - lazy_static 1.5.1 — <https://github.com/rust-lang-nursery/lazy-static.rs>
 - leb128fmt 0.1.0 — <https://github.com/bluk/leb128fmt>
-- libc 0.2.189 — <https://github.com/rust-lang/libc>
+- libc 0.2.191 — <https://github.com/rust-lang/libc>
 - litrs 1.0.0 — <https://github.com/LukasKalbertodt/litrs>
 - locate-locale 0.2.0 — <https://github.com/snuk182/locate-locale>
 - lock_api 0.4.14 — <https://github.com/Amanieu/parking_lot>
