@@ -52,16 +52,6 @@ fn sound_pack(ui: Ui) -> AnyView {
     ])
 }
 
-/// Reads 0 as "Off".
-pub(super) fn off_at_zero(locale: Locale, v: f64) -> Option<String> {
-    (v <= 0.0).then(|| I18N.t_in(locale, "playback-auto-off"))
-}
-
-/// Reads 0 as "Skin default".
-pub(super) fn skin_at_zero(locale: Locale, v: f64) -> Option<String> {
-    (v <= 0.0).then(|| I18N.t_in(locale, "common-skin-default"))
-}
-
 pub(super) fn after_key(a: &AfterLine) -> String {
     match a {
         AfterLine::Hold => "hold".into(),
@@ -211,22 +201,11 @@ pub(super) fn playback(ui: Ui) -> AnyView {
                         row(
                             ui,
                             "playback-auto",
-                            None,
-                            slider_with(
+                            Some("playback-auto-hint"),
+                            slider(
                                 ui,
                                 (0.0, 10.0, 0.5),
                                 "s",
-                                |locale, v| {
-                                    Some(if v <= 0.0 {
-                                        I18N.t_in(locale, "playback-auto-off")
-                                    } else {
-                                        I18N.tr_in(
-                                            locale,
-                                            "playback-auto-value",
-                                            &[("seconds", trim_num(v, 0.5).into())],
-                                        )
-                                    })
-                                },
                                 |s| {
                                     s.playback
                                         .auto_advance_ms

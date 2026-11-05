@@ -7,10 +7,10 @@ use nana_ui::runtime::view::{AnyView, IntoView, segmented_option, widget};
 use nana_ui::runtime::{
     Activate, Button, Chip, ColorChanged, ColorField, NumberChanged, RangeField, RangeInput,
     SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption, Stack,
-    StatusBadge, Switch, Text, TextChanged, ToggleChanged,
+    StatusBadge, Switch, TextChanged, ToggleChanged,
 };
 use nana_ui::{ButtonKind, ControlSize, StatusTone};
-use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec, SemanticColorRole};
+use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec};
 use nanatype_i18n::Locale;
 use nanatype_model::Rgba8;
 use nanatype_settings::Settings;
@@ -444,46 +444,20 @@ pub fn select_keys(ui: Ui, options: &[(&'static str, &'static str)]) -> Vec<(Str
         .collect()
 }
 
-/// `v` to the step's precision, trailing zeros dropped.
-pub fn trim_num(v: f64, step: f64) -> String {
-    let places = if step >= 1.0 {
-        0
-    } else if step >= 0.1 {
-        1
-    } else {
-        2
-    };
-    let s = format!("{v:.places$}");
-    if s.contains('.') {
-        s.trim_end_matches('0').trim_end_matches('.').to_owned()
-    } else {
-        s
-    }
-}
-
-/// How a slider reads its value out: number and unit, localised where the
-/// unit has a message.
-fn unit_text(locale: Locale, v: f64, step: f64, unit: &str) -> String {
-    let n = trim_num(v, step);
+/// A unit's word in `locale`: "s" and "ms" are localised, a sign ("%",
+/// "×") or an empty unit is as it is.
+fn unit_word(locale: Locale, unit: &str) -> String {
     match unit {
-        "s" => I18N.tr_in(
-            locale,
-            "playback-after-delay-value",
-            &[("seconds", n.into())],
-        ),
-        "ms" => I18N.tr_in(locale, "common-ms", &[("ms", n.into())]),
-        "%" | "×" | "" => format!("{n}{unit}"),
-        _ => format!("{n} {unit}"),
+        "s" => I18N.t_in(locale, "unit-seconds"),
+        "ms" => I18N.t_in(locale, "unit-ms"),
+        _ => unit.to_owned(),
     }
 }
 
-/// Words for a slider value ("Off", "Skin default"); `None` reads out the
-/// number and unit.
-pub type Readout = fn(Locale, f64) -> Option<String>;
-
-/// Width the readout beside a slider keeps, so the tracks line up.
-const READOUT_W: f32 = 84.0;
-
+/// A slider over one settings field: the reading, with its unit, inside a
+/// wide thumb and the range's ends either side of the track; Alt/⌥ drags
+/// finely and a click on the thumb types a value. It ends in 恢复默认,
+/// dimmed while the field holds its default.
 pub fn slider(
     ui: Ui,
     range: (f64, f64, f64),
@@ -491,85 +465,54 @@ pub fn slider(
     get: fn(&Settings) -> f64,
     set: fn(&mut Settings, f64),
 ) -> AnyView {
-    slider_with(ui, range, unit, |_, _| None, get, set)
+    value_slider(ui, range, unit, 1.0, get, set)
 }
 
 /// A 0–1 value shown as a percentage.
 pub fn percent(ui: Ui, get: fn(&Settings) -> f64, set: fn(&mut Settings, f64)) -> AnyView {
-    slider_with(
-        ui,
-        (0.0, 1.0, 0.01),
-        "",
-        |_, v| Some(format!("{}%", (v * 100.0).round())),
-        get,
-        set,
-    )
+    value_slider(ui, (0.0, 100.0, 1.0), "%", 100.0, get, set)
 }
 
-/// A slider with its value read out beside it, worded by `readout`.
-pub fn slider_with(
+/// [`slider`] reading the field times `scale` (a 0–1 field as 0–100%).
+fn value_slider(
     ui: Ui,
     range: (f64, f64, f64),
     unit: &'static str,
-    readout: Readout,
+    scale: f64,
     get: fn(&Settings) -> f64,
     set: fn(&mut Settings, f64),
 ) -> AnyView {
     let (min, max, step) = range;
-    let text = move || {
-        let v = ui.settings.with(|x| get(x)).clamp(min, max);
-        let locale = ui.locale.get();
-        readout(locale, v).unwrap_or_else(|| unit_text(locale, v, step, unit))
-    };
-    widget(
-        Stack::row(0.0)
-            .gap_step(gap::step::CONTROL)
-            .width(LengthSpec::Px(field::MD))
-            .align(AlignSpec::Center),
-    )
-    .children((
-        widget(Stack::row(0.0).grow(1.0).shrink(1.0)).children(
-            widget(
-                RangeField::new(
-                    get(&ui.settings.get_untracked()).clamp(min, max),
-                    min,
-                    max,
-                    step,
+    let shown = move |s: &Settings| (get(s) * scale).clamp(min, max);
+    let default = shown(&Settings::default());
+    widget(Stack::row(0.0).width(LengthSpec::Px(field::MD)))
+        .children(
+            widget(Stack::row(0.0).grow(1.0).shrink(1.0)).children(
+                widget(
+                    RangeField::new(shown(&ui.settings.get_untracked()), min, max, step)
+                        .value_thumb(true)
+                        .show_bounds(true)
+                        .unit(unit_word(ui.locale.get_untracked(), unit))
+                        .default_value(Some(default))
+                        .show_label(false),
                 )
-                .show_value(false)
-                .show_label(false),
-            )
-            .bind(move |r: &mut RangeField| {
-                let v = ui.settings.with(|x| get(x)).clamp(min, max);
-                if (r.value - v).abs() > f64::EPSILON {
-                    r.value = v;
-                }
-            })
-            .on_cx(move |_, e: &RangeInput, cx| {
-                let v = e.value;
-                cx.dispatch_program_all(edit(move |s| set(s, v)));
-            }),
-        ),
-        widget(
-            Text::new(String::new())
-                .style({
-                    let mut st = Type::Small.style();
-                    let l = Arc::make_mut(&mut st.layout);
-                    l.width = Some(LengthSpec::Px(READOUT_W));
-                    l.white_space_nowrap = true;
-                    crate::ui::tnum(l);
-                    st
+                .bind(move |r: &mut RangeField| {
+                    let v = ui.settings.with(|s| shown(s));
+                    if (r.value - v).abs() > f64::EPSILON {
+                        r.value = v;
+                    }
+                    let word = unit_word(ui.locale.get(), unit);
+                    if r.unit.as_deref().unwrap_or("") != word {
+                        r.unit = (!word.is_empty()).then(|| word.into());
+                    }
                 })
-                .color(SemanticColorRole::Muted),
+                .on_cx(move |_, e: &RangeInput, cx| {
+                    let v = e.value / scale;
+                    cx.dispatch_program_all(edit(move |s| set(s, v)));
+                }),
+            ),
         )
-        .bind(move |t: &mut Text| {
-            let s = text();
-            if t.value != s {
-                t.value = s;
-            }
-        }),
-    ))
-    .into_any()
+        .into_any()
 }
 
 /// A choice among a few short options, all in view: a segmented control.

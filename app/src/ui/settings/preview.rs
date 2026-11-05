@@ -7,15 +7,15 @@ use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, on_mount, signa
 use nana_ui::runtime::{
     Activate, Button, ColorChanged, ColorField, Icon, IconButton, NumberChanged, NumberInput,
     RangeField, RangeInput, Select, SelectChanged, SelectOption, SizeChanged, SizeField,
-    SizeFieldChanged, SizePreset, Stack, Text,
+    SizeFieldChanged, SizePreset, Stack,
 };
 use nana_ui::{ButtonKind, ControlSize};
-use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
+use nana_ui_core::{AlignSpec, LengthSpec};
 use nanatype_model::Rgba8;
 use nanatype_settings::Settings;
 use nanatype_theme::Skin;
 
-use super::controls::{Type, hint, section};
+use super::controls::{hint, section};
 use crate::msg::{Msg, SkinMsg};
 use crate::ui::Ui;
 use crate::ui::kit::{self, gap};
@@ -61,8 +61,6 @@ const LINE_STEP: f64 = 0.05;
 const WINDOW_RANGE: (f64, f64) = (96.0, 8192.0);
 /// The skin's own window size scaled, offered beside it as presets (%).
 const WINDOW_SCALES: [u32; 4] = [75, 125, 150, 200];
-/// The line height's value beside its slider ("1.45×").
-const READOUT_W: f32 = 36.0;
 
 // Prepares asked for while a frame was built. The settings window sends
 // them after that frame is presented: registering a skin's fonts takes the
@@ -230,7 +228,8 @@ fn resolution_field(ui: Ui, id: &str, history: bool, default: [f32; 2]) -> AnyVi
     )
 }
 
-/// The line height: a slider with its value beside it.
+/// The line height: a slider with its reading in the thumb and the
+/// skin's own line height to go back to.
 fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
     let read_id = id.to_owned();
     let write_id = id.to_owned();
@@ -244,21 +243,17 @@ fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
             .unwrap_or(f64::from(default))
             .clamp(min, max)
     };
-    let readout = value.clone();
     kit::dense_row(
         ui.now_t("skin-edit-line"),
-        widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::TIGHT)
-                .width(LengthSpec::Px(kit::field::DENSE))
-                .align(AlignSpec::Center),
-        )
-        .children((
+        widget(Stack::row(0.0).width(LengthSpec::Px(kit::field::DENSE))).children(
             widget(Stack::row(0.0).grow(1.0).shrink(1.0)).children(
                 widget(
                     RangeField::new(value(), min, max, LINE_STEP)
                         .size(ControlSize::Small)
-                        .show_value(false)
+                        .value_thumb(true)
+                        .show_bounds(true)
+                        .unit("×")
+                        .default_value(Some(f64::from(default).clamp(min, max)))
                         .show_label(false),
                 )
                 .key(surface_key("skin-edit-line", history))
@@ -275,25 +270,7 @@ fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
                     });
                 }),
             ),
-            widget(
-                Text::new(String::new())
-                    .style({
-                        let mut st = Type::Small.style();
-                        let l = Arc::make_mut(&mut st.layout);
-                        l.width = Some(LengthSpec::Px(READOUT_W));
-                        l.white_space_nowrap = true;
-                        crate::ui::tnum(l);
-                        st
-                    })
-                    .color(SemanticColorRole::Muted),
-            )
-            .bind(move |t: &mut Text| {
-                let s = format!("{:.2}×", readout());
-                if t.value != s {
-                    t.value = s;
-                }
-            }),
-        )),
+        ),
     )
 }
 

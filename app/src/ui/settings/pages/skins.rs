@@ -142,11 +142,10 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                         ui,
                         "skins-override-page-auto",
                         "skins-override-page-auto-hint",
-                        slider_with(
+                        slider(
                             ui,
                             (0.0, 10.0, 0.5),
                             "s",
-                            skin_at_zero,
                             |s| f64::from(s.skin.overrides.overflow_auto_ms.unwrap_or(0)) / 1000.0,
                             |s, v| {
                                 s.skin.overrides.overflow_auto_ms =

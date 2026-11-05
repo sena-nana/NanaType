@@ -94,12 +94,11 @@ pub(super) fn history(ui: Ui) -> AnyView {
                     row(
                         ui,
                         "history-fade",
-                        None,
-                        slider_with(
+                        Some("history-fade-hint"),
+                        slider(
                             ui,
                             (0.0, 300.0, 5.0),
                             "s",
-                            off_at_zero,
                             |s| f64::from(s.history.fade_after_s.unwrap_or(0)),
                             |s, v| s.history.fade_after_s = (v > 0.0).then_some(v as u32),
                         ),
