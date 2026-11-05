@@ -454,6 +454,22 @@ fn unit_word(locale: Locale, unit: &str) -> String {
     }
 }
 
+/// Height of a settings slider's box, and so of its value capsule: a
+/// caption-sized capsule, under the rows' other small controls.
+const THUMB_H: f32 = 18.0;
+
+/// `range` at the small control size with a capsule [`THUMB_H`] tall, so
+/// the reading sits in the row like NanaType's other small controls.
+pub fn compact_thumb(range: RangeField) -> RangeField {
+    let mut range = range.size(ControlSize::Small);
+    let l = Arc::make_mut(&mut range.style.layout);
+    l.height = Some(LengthSpec::Px(THUMB_H));
+    l.min_height = Some(LengthSpec::Px(THUMB_H));
+    l.padding_top = Some(LengthSpec::Px(0.0));
+    l.padding_bottom = Some(LengthSpec::Px(0.0));
+    range
+}
+
 /// A slider over one settings field: the reading, with its unit, inside a
 /// wide thumb and the range's ends either side of the track; Alt/⌥ drags
 /// finely and a click on the thumb types a value. It ends in 恢复默认,
@@ -488,14 +504,14 @@ fn value_slider(
     widget(Stack::row(0.0).width(LengthSpec::Px(field::MD)))
         .children(
             widget(Stack::row(0.0).grow(1.0).shrink(1.0)).children(
-                widget(
+                widget(compact_thumb(
                     RangeField::new(shown(&ui.settings.get_untracked()), min, max, step)
                         .value_thumb(true)
                         .show_bounds(true)
                         .unit(unit_word(ui.locale.get_untracked(), unit))
                         .default_value(Some(default))
                         .show_label(false),
-                )
+                ))
                 .bind(move |r: &mut RangeField| {
                     let v = ui.settings.with(|s| shown(s));
                     if (r.value - v).abs() > f64::EPSILON {

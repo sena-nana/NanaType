@@ -247,15 +247,14 @@ fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
         ui.now_t("skin-edit-line"),
         widget(Stack::row(0.0).width(LengthSpec::Px(kit::field::DENSE))).children(
             widget(Stack::row(0.0).grow(1.0).shrink(1.0)).children(
-                widget(
+                widget(super::controls::compact_thumb(
                     RangeField::new(value(), min, max, LINE_STEP)
-                        .size(ControlSize::Small)
                         .value_thumb(true)
                         .show_bounds(true)
                         .unit("×")
                         .default_value(Some(f64::from(default).clamp(min, max)))
                         .show_label(false),
-                )
+                ))
                 .key(surface_key("skin-edit-line", history))
                 .bind(move |r: &mut RangeField| {
                     let v = value();
