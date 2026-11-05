@@ -2356,6 +2356,9 @@ impl App {
             )));
         }
         self.ui.chat_target.set(Some(seq));
+        // Keep reply inside the resident input window, even when its chat
+        // rail is folded or another panel is open.
+        let show_chat = reply && !self.ui.input_dock.get_untracked().chat_visible();
         self.focus_editor = true;
         let text = self.ui.tr(
             if reply {
@@ -2371,7 +2374,11 @@ impl App {
             1600,
             false,
         ));
-        self.update(Msg::Window(WindowMsg::Show(WindowKind::Input)));
+        if show_chat {
+            self.update(Msg::Chat(ChatMsg::Show));
+        } else {
+            self.update(Msg::Window(WindowMsg::Show(WindowKind::Input)));
+        }
     }
 
     /// Show the input window for a hotkey and bring it forward.
