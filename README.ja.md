@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://github.com/sena-nana/NanaType/releases"><b>ダウンロード</b></a> ·
-  <a href="docs/ja/usage.md"><b>使い方ガイド</b></a> ·
+  <a href="docs/ja/README.md"><b>ドキュメント</b></a> ·
   <a href="docs/ja/markup.md"><b>セリフのマークアップ</b></a> ·
   <a href="docs/ja/skins.md"><b>スキンの作り方</b></a> ·
   <a href="docs/ja/building.md"><b>ソースからビルド</b></a>
@@ -103,6 +103,8 @@ NanaType は VTuber のための配信用タイプライターです。入力ボ
 3. 文字を打って **Enter** で送信（**Shift+Enter** で改行）。表示ボックスで一文字ずつ再生が始まります。
 4. OBS で *Spout2 Capture*（Windows）または *Syphon Client*（macOS）を追加し、`NanaType Display` を選んで、合成モードを *Premultiplied Alpha* にします。
 
+### ショートカット
+
 | ショートカット | 動作 |
 | --- | --- |
 | <kbd>F8</kbd> | 入力ボックスを呼び出す |
@@ -144,32 +146,6 @@ cargo test --workspace --exclude nanatype
 ```
 
 プラットフォームごとの依存関係、パッケージング、Steam 版、開発用の環境変数は [ソースからビルド](docs/ja/building.md) にまとめています。
-
-<details>
-<summary><b>プロジェクト構成</b></summary>
-
-| crate | 内容 |
-| --- | --- |
-| `crates/model` | セリフのドキュメントモデル：テキスト、ルビ、スタンプ、マーカー |
-| `crates/markup` | マークアップの解析とシリアライズ、テンプレート |
-| `crates/playback` | 表示タイムライン、プレイヤーの状態機械、リアルタイムミラーの差分、キュー |
-| `crates/theme` | スキンパッケージ：マニフェスト、継承、検証、インストールとエクスポート |
-| `crates/i18n` | Fluent の文言（zh-CN / en-US / ja-JP） |
-| `crates/settings` | 設定の構造、バージョン移行、アトミックな書き込み、ウィンドウ位置 |
-| `crates/audio` | デコード、ミキシング、サンプル単位のスケジューリング |
-| `crates/bridge` | VTube Studio、OSC、WebSocket |
-| `crates/twitch` | Twitch IRC の匿名受信、デバイスコードによるログインと Helix での送信 |
-| `crates/blive` | blivechat・LAPLACE Event Bridge・彗星号のクライアント（プロトコル解析、復号、接続と再接続） |
-| `crates/core` | セッションのロジック：下書き、送信、続行、キュー、履歴、巻き戻し |
-| `crates/p2p` | Steam オンライン（最大 8 人）、セッションの順序付け、再接続と画像の転送 |
-| `crates/update` | アップデートの確認：署名付きリリースマニフェスト、ファイルプロキシ、検証付きダウンロード |
-| `crates/frame` | 2 つのアプリが共有するフレームワーク：スキン描画、UI コンポーネント、スキンプレビュー、プラグインホスト、メディアサービスとパス |
-| `app` | NanaType：NanaUI ホスト、ウィンドウ、ビュー、ホットキー、トレイ、Spout |
-| `editor` | NanaType Editor：パッケージエディター、署名と隔離デバッグ |
-
-ロジックだけの crate は UI フレームワークに依存せず、単体でテストできます。
-
-</details>
 
 ## 💝 謝辞
 

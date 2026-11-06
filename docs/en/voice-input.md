@@ -2,6 +2,11 @@
 
 # Voice input
 
+> **Purpose:** Configure microphone input and choose between system and on-device speech recognition.
+>
+> **On this page:** [Voice modes](#voice-input) · [Recognition methods](#recognition-method-and-language) · [Model management](#recognition-method-and-language) · [Implementation and checks](#implementation-and-verification)
+
+
 The microphone button in the input window's bottom bar starts and stops voice input; the menu next to it switches the mode, resumes recognition and opens the settings. **Settings › Input › Voice** gathers the recognition method, microphone, language and pause length in one place, and manages the local model.
 
 The voice mode is independent of the existing **Compose & send** / **Live mirror** modes:
@@ -9,9 +14,19 @@ The voice mode is independent of the existing **Compose & send** / **Live mirror
 - **Edit manually** (the default on first run): confirmed recognized text goes into the draft and you send it yourself.
 - **Send automatically**: once you stop speaking, NanaType waits 3 seconds by default (configurable from 1 to 10 seconds) and, as soon as recognition has finished, submits the current line. Speaking again cancels the countdown.
 
-Typing, IME composition, pasting, deleting, undo/redo, formatting, inserting a phrase or recalling an earlier line all pause recognition and cancel the automatic send for that line. Listening resumes after a successful manual send; you can also click **Resume recognition** after clearing or keeping the draft. Merely moving the cursor, selecting text or switching between the rich-text and source views does not pause it.
+Typing, IME composition, pasting, deleting, undo/redo, formatting, inserting a phrase or recalling an earlier line all pause recognition and cancel the automatic send for that line.
 
-If there is already a draft when you start, voice results are appended to the end and that line must be sent manually. Changing recognition settings also pauses recognition, and the current draft has to be confirmed manually first. Interim results are shown in the input window's status area and only written into the draft once confirmed. Recognized text is always inserted as plain text: saying `[pause]` out loud will not run any markup.
+Listening resumes after a successful manual send; you can also click **Resume recognition** after clearing or keeping the draft.
+
+Merely moving the cursor, selecting text or switching between the rich-text and source views does not pause it.
+
+If there is already a draft when you start, voice results are appended to the end and that line must be sent manually.
+
+Changing recognition settings also pauses recognition, and the current draft has to be confirmed manually first.
+
+Interim results are shown in the input window's status area and only written into the draft once confirmed.
+
+Recognized text is always inserted as plain text: saying `[pause]` out loud will not run any markup.
 
 Once turned on, it keeps listening even when the input window loses focus, is hidden or is minimized. The tray shows the current state and offers a way to stop. The microphone is never turned on automatically after restarting the app; pausing, stopping, device errors and quitting all release the capture device. Stopping keeps the text already confirmed and does not send the current draft.
 
@@ -27,7 +42,15 @@ Automatic sending goes through the normal send path, so it respects the playback
 
 The default recognition language follows the UI language. If a backend error occurs during recognition, NanaType does not silently carry on with another backend, to avoid mixed or duplicated results; the draft is kept and you can continue after changing the recognition method.
 
-The model is downloaded on demand with **Download / retry**, or installed via **Import model file…** from the same file obtained upstream. Cancelling and deleting are supported; while a download is running, no other installation can start. The file is stored as `speech/ggml-base-q5_1.bin` in the app data directory. Downloads and imports are first written to a temporary file and installed only after verification. Any other model, and any corrupted file, is rejected.
+The model is downloaded on demand with **Download / retry**, or installed via **Import model file…** from the same file obtained upstream.
+
+Cancelling and deleting are supported; while a download is running, no other installation can start.
+
+The file is stored as `speech/ggml-base-q5_1.bin` in the app data directory.
+
+Downloads and imports are first written to a temporary file and installed only after verification.
+
+Any other model, and any corrupted file, is rejected.
 
 Upstream file: [ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp/blob/main/ggml-base-q5_1.bin)
 
@@ -37,7 +60,15 @@ The app does not keep recordings and never writes recognized text to the diagnos
 
 ## Implementation and verification
 
-Capture, resampling and voice activity detection are independent of the UI and of the local inference thread. Input is mono 16 kHz, with 20 ms VAD frames and 200 ms of pre-roll audio; 500 ms of silence ends a recognition segment, and segments are cut at 20 seconds at most. During long sentences the local model tries to refresh the interim result every 3 seconds, and final results take precedence over interim refreshes. After a normal send, the listener and model are reused, and a draft version number invalidates stale timer tasks. The automatic-send pause is independent of recognition segmentation and is measured from voice activity timestamps.
+Capture, resampling and voice activity detection are independent of the UI and of the local inference thread.
+
+Input is mono 16 kHz, with 20 ms VAD frames and 200 ms of pre-roll audio; 500 ms of silence ends a recognition segment, and segments are cut at 20 seconds at most.
+
+During long sentences the local model tries to refresh the interim result every 3 seconds, and final results take precedence over interim refreshes.
+
+After a normal send, the listener and model are reused, and a draft version number invalidates stale timer tasks.
+
+The automatic-send pause is independent of recognition segmentation and is measured from voice activity timestamps.
 
 The start/stop state is derived from the recognition phase alone; pending and finished segments share one ordered table. The digest is verified while the model is being copied, so the file doesn't have to be read back after installation; audio format conversion and mono downmixing happen in the same pass.
 
@@ -51,29 +82,3 @@ NANATYPE_SPEECH_FIXTURES=/absolute/fixture/directory \
 ```
 
 The directory contains the fixed model above plus `jfk.wav`, `zh.wav` and `ja.wav` (16 kHz, mono PCM16). This test checks real local decoding and prints load time, inference time and real-time factor; it does not replace testing with a real microphone, permission prompts, system recognition quality or long live streams.
-
-### Verification record (2026-10-26)
-
-Machine: Apple M4, 16 GB RAM, Rust 1.99.0.
-
-| Check | Result |
-| --- | --- |
-| `cargo test --workspace` | 885 passed, 9 ignored under their own conditions; this feature's two model-file tests were run separately and passed |
-| Workspace clippy, format check | Passed |
-| Steam clippy and app library tests | Passed; 152 tests passed, 1 ignored |
-| Cross clippy of the Windows speech module | Passed, including compiling the native SAPI C++ adapter |
-| Windows cross-linking | Failed: the build script of upstream `whisper-rs-sys 0.15.0` decides BLAS linking from the host platform, and on macOS → Windows wrongly requires the `ggml-blas` static library; this cannot be taken as proof that Windows builds or runs |
-| Real model download, digest verification, import | Passed |
-| Minimum-width 720 px input window, all three UI languages, both display modes, model management view | Passed automated tests and screenshot review |
-| Main app / editor dependency isolation, license collection, macOS permission plist | Passed |
-| Real microphone, permission prompts, system recognition, device disconnects and long live streams | Not yet accepted on real hardware; Windows runtime verification is also not done |
-
-The local decoding test uses Whisper's upstream JFK English sample; the Chinese and Japanese samples are fixed short sentences generated with system TTS, all converted to 16 kHz mono PCM16. The test does not use the microphone or system recognition and is not representative of real live input.
-
-| Language | Audio length | Final decode time | Real-time factor |
-| --- | --- | --- | --- |
-| English | 11.00 s | 0.65 s | 0.059 |
-| Chinese | 6.51 s | 0.42 s | 0.065 |
-| Japanese | 7.02 s | 0.39 s | 0.056 |
-
-The standalone test process peaked at about 253 MiB RSS, and loading the model took about 1.9–2.0 seconds; this excludes the memory of the full app, and Windows performance was not measured. The synthesized Chinese and Japanese sentences came out with noticeable wrong characters: the test only confirms decoding, interim results, final results and runtime cost, not that accuracy is good enough. The default **Edit manually** mode makes it easy to correct text before sending.

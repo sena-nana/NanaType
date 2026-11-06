@@ -2,6 +2,11 @@
 
 # Logging
 
+> **Purpose:** Find logs, choose diagnostic detail, inspect exported packages, and add safe diagnostic events.
+>
+> **On this page:** [File locations](#file-locations) · [Levels](#levels-and-switches) · [Privacy](#privacy-rules) · [Events](#event-catalogue) · [Diagnostics package](#diagnostics-package)
+
+
 NanaType and NanaType Editor have a single logging pipeline: NanaUI's `nana-diagnostics`. It handles collection, buffering, writing to disk, rotation, crash snapshots and export; NanaType decides in `crates/diag` (`nanatype-diag`) what to record, how much to keep, and what must never be written.
 
 ```text
@@ -14,7 +19,13 @@ NanaType and NanaType Editor have a single logging pipeline: NanaUI's `nana-diag
 panic ──NanaUI 的 panic hook──▶ Fatal 事件 + 崩溃快照
 ```
 
-(Any thread writes `event!`/`report!`/`metric!` into a thread-local ring buffer that drops on overflow and never blocks. A `nana-diagnostics` background thread keeps a 60-second in-memory flight recorder and batch-writes the `.nlog` session log. Dependencies' `log` / `tracing` output is bridged into rate-limited, redacted `external.*` events. Panics go through NanaUI's panic hook to a Fatal event plus a crash snapshot.)
+(Any thread writes `event!`/`report!`/`metric!` into a thread-local ring buffer that drops on overflow and never blocks.
+
+A `nana-diagnostics` background thread keeps a 60-second in-memory flight recorder and batch-writes the `.nlog` session log.
+
+Dependencies' `log` / `tracing` output is bridged into rate-limited, redacted `external.*` events.
+
+Panics go through NanaUI's panic hook to a Fatal event plus a crash snapshot.)
 
 The producer path does no file I/O, takes no locks and never waits; where no runtime is installed (for example in a plugin worker process) each call site is just one atomic read.
 
@@ -104,7 +115,11 @@ Then add it to the crate's `EVENTS`. On hot paths, count with `metric!` or rate-
 
 ## Plugins
 
-Plugin workers are separate processes and do not install the diagnostics runtime. The host records each worker's ready time, timeouts and protocol errors; when a worker exits abnormally it attaches the last few lines of its stderr (Windows AppContainer workers have no stderr). Lines a plugin script writes with `nana.log(level, message)` come back over the protocol and the host logs them as `[plugin ID] message`; see the [plugin docs](plugins.md) for the rules.
+Plugin workers are separate processes and do not install the diagnostics runtime.
+
+The host records each worker's ready time, timeouts and protocol errors; when a worker exits abnormally it attaches the last few lines of its stderr (Windows AppContainer workers have no stderr).
+
+Lines a plugin script writes with `nana.log(level, message)` come back over the protocol and the host logs them as `[plugin ID] message`; see the [plugin docs](plugins.md) for the rules.
 
 ## Diagnostics package
 

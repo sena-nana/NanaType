@@ -2,6 +2,11 @@
 
 # Checking for updates
 
+> **Purpose:** Understand NanaType's signed update flow, configure a download proxy, and publish releases.
+>
+> **On this page:** [Verification flow](#how-it-works) · [Proxies](#proxies) · [Install](#checking-and-installing) · [Release signing](#signing-key)
+
+
 NanaType gets new versions from GitHub Releases. The Steam edition doesn't include the update check described here (the `updates` feature isn't compiled in) and is updated by SteamPipe instead; see [Steam edition](steam.md). Files may be downloaded through third-party proxies: trust depends only on the signature and digest, never on where the download came from.
 
 ## How it works
@@ -14,7 +19,7 @@ The client never contacts `api.github.com`, so any service that can proxy file d
 
 ## Proxies
 
-Proxies use the prefix form: `<proxy>https://github.com/sena-nana/NanaType/releases/...`. The built-in list lives in `crates/update/src/mirror.rs`; measured in 2026-10 (from a test location outside mainland China):
+Proxies use the prefix form: `<proxy>https://github.com/sena-nana/NanaType/releases/...`. The built-in list lives in `crates/update/src/mirror.rs`:
 
 | Proxy | Release files | Notes |
 | --- | --- | --- |

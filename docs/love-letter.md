@@ -1,81 +1,21 @@
-# 情书
+# 写给 NanaType 的信
 
-[皮肤源目录](../crates/theme/builtin/love_letter) · [实际书写与消融动效](love-letter-motion.webp) · [窄窗、竖版及历史记录对照](love-letter-layouts.png)
+NanaType 是一个把文字、声音、画面和等待放在同一张桌面上的工具。它不替创作者决定作品应该是什么，而是把排版、标记、皮肤、事件和插件边界做成可以检查、可以回退的基础。
 
-![情书实际渲染](love-letter-preview.png)
+## 给使用者
 
-`nanatype.love_letter` 是浅色信纸皮肤：霞鹜文楷正文 32px、行高 1.6，玫瑰棕墨迹与淡粉边饰。每字约 500ms，沿用播放速度、标点停顿和速度标记逐字起笔，多个字自然重叠书写；清空、换句或翻页时，当前可见墨迹整段同步消融 700ms，信纸保持静态。历史记录使用完整信纸底板，姓名、时间和正文均保持可读，正文静态完整显示。
+你可以从一句话开始，选择皮肤，调整字体和动效，再慢慢建立自己的台词与节奏。请先保存原始内容，遇到异常时导出脱敏日志；令牌、Cookie、私密台词和观众资料不应进入截图或工单。
 
-## 数据与分发
+## 给创作者
 
-数据来自 [Make Me a Hanzi](https://github.com/skishore/makemeahanzi)，固定提交 `bddc96d41bef78427ed0e034e9f7e31d71fd1b92`，取 `graphics.txt` 与 GB2312 汉字范围的交集，共 6,763 字。保留上游笔画顺序、轮廓与中心线，采用字符索引、坐标差分变长编码和每 64 字独立 zlib 压缩，不分发字典数据。用标准库 Python 重建：
+Markup 让说话、停顿、音效、画面与 VTube Studio 事件靠近文本，但每个效果都应服务于阅读。用短段落、明确的说话人和可取消的等待；为长文本、无障碍阅读和减少动态准备安静的版本。皮肤的光线和装饰可以有个性，却不应遮住一句话。
 
-```powershell
-python scripts/assets/build-love-letter-data.py
-```
+## 给贡献者
 
-精简数据、来源哈希、修改声明、原始 COPYING 与完整文鼎 APL 随皮肤分发；字体及其对应 OFL 亦在皮肤包内。导出的 `.ntpkg` 不需要原目录、另装字体或运行时网络访问。设计授权只覆盖原创设计，各项资源继续使用各自授权。
-
-## 皮肤接口
-
-情书不依赖专用字段或皮肤 ID：笔顺数据是 `package.toml` 中的声明式数据，经通用处理器 `text.stroke_time_map` 生成入场材质的时间纹理。
-
-```toml
-# package.toml
-[data.strokes]
-path = "strokes.nthz"
-format = "nthz"
-format_version = 1
-source = "Make Me a Hanzi bddc96d4 graphics.txt, GB2312 subset of 6763 characters; see SOURCES.txt"
-license = "Arphic Public License (ARPHICPL.TXT, APL-*.txt)"
-
-# skin.toml
-[dialogue.reveal]
-entrance = { kind = "fade", ms = 500, material = "write", scope = "glyph" }
-exit = { ms = 700, material = "dissolve", scope = "text" }
-
-[pipelines.stroke_map]
-processor = "text.stroke_time_map"
-version = 1
-inputs = { strokes = { data = "strokes" } }
-
-[materials.write]
-source = "write.wgsl"
-textures = [{ pipeline = "stroke_map", output = "time" }]
-uniforms = [{ pipeline = "stroke_map", output = "extent" }]
-```
-
-旧的 `dialogue.reveal.handwriting` 已删除，出现时加载失败并提示迁移。继承情书的子皮肤沿用父包数据，引用自动限定为 `pkg:nanatype.love_letter/strokes`。
-
-笔顺数据统一使用 `.nthz` 二进制资源，实际大小 4.91 MB。含字体和授权的完整皮肤包为 6.20 MB，相比压缩前减少约 35%。内置加载只解析索引，遇到字符再解码对应块，最多缓存 8 块；缺字不触发解压。外部资源导入时完整验证所有块，校验不填充运行时缓存。解析结果按内容哈希与格式版本在皮肤之间共享。导出的资源保持独立，可离线使用。
-
-资源加载沿用皮肤路径隔离和包大小限制，并限制字符、笔画、路径、点列以及解压后大小。继承的笔顺数据与材质在导出时随独立清单一起保存。
-
-### 二进制格式
-
-所有固定宽度整数采用小端序。容器头为 8 字节 `NTHZ\0\0\0\x01`，接四个 `u32`：元数据长度、字符数、块数、每块字符数（固定 64）。随后依次存储 UTF-8 JSON 元数据（`format = 2`、来源和修改声明）、字符索引、块表和压缩负载。
-
-每条字符索引为三个 `u32`：Unicode 码点、块内解压偏移、字形字节数。字符按码点严格递增，每连续 64 字组成一块。块表每项为三个 `u32`：相对负载区的压缩偏移、压缩长度、原始长度。负载为独立 zlib 流，包含校验和。索引和块必须连续且完全覆盖资源，不允许重复字符、越界或尾随数据。
-
-字形使用无符号 LEB128 整数：笔画数；每笔的命令数及命令流；中心线点数及点流。命令码 `0..4` 分别代表绝对 `M/L/Q/C/Z`，参数数为 `2/2/4/6/0`。各笔轮廓与中心线分别从 `(0,0)` 开始，按轴对前一坐标做差，再经 ZigZag 和 LEB128 编码。轮廓单位为整数，中心线单位为四分之一，完全保留当前数据精度。命令与点的原始顺序保持不变。
-
-## 渲染与回退
-
-字体字形保持原样；参考笔画轮廓用于分区，中心线方向和长度决定显露时间。字体轮廓与数据集不同，书写顺序为近似映射，收笔后严格显示完整字体。数据集外汉字、拉丁字母、标点、表情、注音和内联对象逐字淡入；文字与富文本源数据保持不变。
-
-字形时间图有界缓存，布局时间图随实际字体、字号、字形位置和书写方向缓存；动画帧只推进 GPU 进度，滚动不重建时间图。跳过立即显示全文，中途清空冻结当前书写状态后消融。减少动态效果、关闭高级动效、显式入场设置和关闭打字模拟沿用应用回退规则。皮肤预览播放一次后停止动画帧。
-
-应用的后台处理队列最多等待 8 项，另有 1 项正在执行；排满时保留淡入占位，待工作线程唤醒后重试，不在界面线程转换。排版变化或视图移除后，旧任务在计算前和发布前检查是否仍有效。待领取结果最多 8 项、合计 128 MiB（CPU 数据）；时间纹理每边不超过 2048，材质最多绑定两个纹理槽。同一输出可绑定多个槽，复用同一份不可变像素。
-
-## 验证
+请把实验和承诺分开：性能数字写清设备、版本、负载和测量口径；设计决策链接到源文件和许可；安全边界写成测试，而不是愿望。新增能力先缩小权限和预算，再考虑便利性。崩溃、超时、预算超限和校验失败都应可解释地停止，而不是静默绕过。
 
 ```powershell
-cargo test -p nanatype-theme pipeline
-cargo test -p nanatype --test love_letter -- --test-threads=1
-$env:NANATYPE_LOVE_LETTER_CAPTURES='target/love-letter/captures'
-cargo test -p nanatype --test love_letter -- --test-threads=1
+cargo test --workspace --all-targets --locked
 ```
 
-第二次运行会把实际 GPU 捕获帧写入 `NANATYPE_LOVE_LETTER_CAPTURES` 指定的目录，供人工检查。
-
-导出测试可通过 `NANATYPE_LOVE_LETTER_EXPORT` 指定保留 `.ntpkg` 的路径。全皮肤回归沿用 `snapshots` 的默认宽度、300px 窄窗及历史记录检查。
+感谢每一个修复换行、保存日志、标注来源、补充测试和询问“这会不会伤害使用者”的人。一个工具真正成熟，不是因为它永远不出错，而是因为它让人知道发生了什么、还能怎样继续，并且把选择留在人的手里。

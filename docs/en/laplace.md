@@ -2,6 +2,11 @@
 
 # LAPLACE integration
 
+> **Purpose:** Connect NanaType to [LAPLACE Chat](https://chat.laplace.live/) through the LAPLACE Event Bridge.
+>
+> **On this page:** [Data flow](#how-the-data-flows) · [Setup](#setting-it-up) · [Field mapping](#field-mapping) · [Connection details](#connection-details)
+
+
 [LAPLACE Chat](https://chat.laplace.live/) is a Bilibili live chat tool. It can broadcast the live-room events it receives through the [LAPLACE Event Bridge](https://github.com/laplace-live/event-bridge), and NanaType receives them as an Event Bridge client. LAPLACE handles the connection to Bilibili; NanaType does not connect to Bilibili itself.
 
 > **Only auth-code connections are supported.** LAPLACE Chat or Event Fetcher must join the live room with the streamer's auth code (身份码, Bilibili's live open platform). LAPLACE joining by room number (`connectionMode=direct`) uses Bilibili's non-public web interface; NanaType does not support it, even when it is forwarded through an Event Bridge.

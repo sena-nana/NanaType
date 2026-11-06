@@ -2,50 +2,54 @@
 
 # 检查更新
 
-NanaType 从 GitHub Release 获取新版本。Steam 版不含本文的更新检查（不编译 `updates` feature），由 SteamPipe 更新，见 [Steam 版](steam.md)。文件可以经第三方代理下载，是否可信只看签名与摘要，与下载来源无关。
+GitHub 版 NanaType 可以在应用内检查并安装新版本。Steam 版由 Steam 管理更新，不使用本文的更新检查。
 
-## 流程
+## 检查并安装
 
-1. 发布工作流（`.github/workflows/release.yml`，推送 `vX.Y.Z` 标签触发）打包 Windows 安装包与便携包、macOS（Apple 芯片）dmg 与 zip，生成 `latest.json`（每个文件的平台、类型、大小、SHA-256）及其 Ed25519 签名 `latest.json.sig`，创建草稿 Release。
-2. 客户端（`crates/update`）同时向 GitHub、内置代理和用户填写的代理请求 `releases/latest/download/latest.json` 与签名，用内置公钥验签，取版本最新的结果，并按响应快慢排列来源。
-3. 下载时边写边算 SHA-256，大小或摘要不符就换下一个来源；校验通过才交给系统打开。
+1. 打开“设置 › 关于”，点击检查更新；也可以在“设置 › 通用 › 更新”中开启自动检查。
+2. 发现新版本后，先查看版本说明，再选择下载或跳过。
+3. 下载完成后，NanaType 会先检查版本清单签名、文件大小和 SHA-256 摘要。
+4. 校验通过后再打开安装包；校验失败的文件不会运行。
 
-客户端不访问 `api.github.com`，任何能代理 `github.com` 文件下载的服务都能用。代理返回的错误页、过期缓存或被改过的文件都会被拒绝；多个来源同时比较版本号，代理缓存的旧清单不会掩盖新版本。
+自动检查默认在启动约 10 秒后进行，并且 24 小时内最多检查一次。下载内容暂存在缓存目录的 `updates/`，下次启动时会清理。
 
-## 代理
+## 不同平台的安装方式
 
-使用前缀写法：`<代理>https://github.com/sena-nana/NanaType/releases/...`。内置于 `crates/update/src/mirror.rs`，2026-10 实测（测试点不在中国大陆）：
+- **Windows 安装版**：下载完成后运行 `setup.exe`，NanaType 会先退出。程序目录中通常有 `unins000.exe`。
+- **Windows 便携版**：打开 zip 所在文件夹，解压新版本并替换旧文件。
+- **macOS**：打开下载的 `.dmg` 并替换应用。当前没有 Intel Mac 构建产物。
+- **Steam 版**：在 Steam 客户端中下载和安装更新，详见[Steam 版](steam.md)。
 
-| 代理 | Release 文件 | 备注 |
-| --- | --- | --- |
-| gh-proxy.com | 可用，SHA-256 与原文件一致 | Cloudflare 后端 |
-| ghfast.top | 可用，一致 | |
-| ghproxy.net | 可用，一致 | 适合 100 MB 以下 |
-| gh.llkk.cc、mirror.ghproxy.com | 不可达 | 未收录 |
-| jsDelivr | 不支持 Release 文件 | 未收录 |
+## 下载代理
 
-它们都是个人运营的公益服务，可能限速、换域名或停服，因此只作传输通道。**设置 › 通用 › 更新 › 自定义代理** 可再加一个以 `https://` 开头的前缀，优先尝试。
+下载默认尝试 GitHub 和内置代理。你也可以在“设置 › 通用 › 更新 › 自定义代理”中添加一个以 `https://` 开头的代理前缀。
 
-## 检查与安装
+代理只负责传输，不决定文件是否可信。代理可能限速、换域名或停服；错误页、过期缓存和被修改的文件都会因签名或摘要校验失败而被拒绝。
 
-开启自动检查时，启动约 10 秒后后台检查，24 小时内只查一次；发现新版本时提示，在 **设置 › 关于** 查看说明、跳过或下载。下载在缓存目录的 `updates/`，下次启动清空。
+目前内置代理包括：
 
-- Windows 安装版（程序目录有 `unins000.exe`）：运行 `setup.exe`，NanaType 先退出。
-- Windows 便携版：打开 zip 所在文件夹，由用户解压替换。
-- macOS：打开 dmg。Intel Mac 暂无构建产物。
+| 代理 | 说明 |
+| --- | --- |
+| `gh-proxy.com` | GitHub Release 文件代理 |
+| `ghfast.top` | GitHub Release 文件代理 |
+| `ghproxy.net` | GitHub Release 文件代理，适合较小文件 |
 
-## 签名密钥
+这些服务由第三方运营，不能把“能下载”当作“可信”。如果所有来源都失败，可以稍后重试，或从 NanaType 的官方 GitHub Releases 页面手动下载。
 
-```bash
-cargo run -p nanatype-update --example keygen
-```
+## 安全校验
 
-`public` 写入 `crates/update/src/sign.rs` 的 `PUBLIC_KEY`；`secret` 存为仓库 Secret `NANATYPE_UPDATE_KEY` 并离线备份，不要提交。工作流用 `--example manifest` 生成并签名清单，密钥与公钥不匹配时失败。
+NanaType 使用内置 Ed25519 公钥验证 `latest.json.sig`，再根据清单中的 SHA-256 和文件大小检查安装包。只有签名和摘要都通过，文件才会交给系统打开。
 
-轮换：旧版本只认旧公钥，先发布一个用旧密钥签名、内置新公钥的版本，再更换 Secret。私钥泄露后任何人都能签发清单，应立即轮换，并提示用户从 GitHub 手动下载新版。
+因此：
 
-## 发布
+- 不要运行校验失败、来源不明或要求你关闭安全检查的安装包。
+- 不要把自定义代理当作信任来源；它只应当转发 GitHub 文件。
+- 如果怀疑下载被篡改，请改用官方 GitHub Releases 页面，并保留错误提示以便反馈。
 
-1. 修改根 `Cargo.toml` 的 `workspace.package.version` 并提交。
-2. `git tag vX.Y.Z && git push origin vX.Y.Z`（标签须与版本一致）。
-3. 检查草稿 Release 后发布。只有正式发布后 `releases/latest` 才指向它；带 `-` 的标签标为预发布，不推送给正式版。
+## 遇到问题时
+
+- **没有发现新版本**：确认网络可用，检查是否在 24 小时检查间隔内，或手动点击“检查更新”。
+- **下载失败**：删除缓存后重试，或添加其他 `https://` 代理前缀。
+- **签名 / SHA-256 校验失败**：不要继续安装；切换到官方 GitHub Releases 页面重新下载。
+- **Windows 安装程序无法打开**：关闭 NanaType 后重试，确认下载的是 Windows 安装包而不是便携版。
+- **Steam 版没有更新入口**：这是正常行为，请在 Steam 中检查更新。

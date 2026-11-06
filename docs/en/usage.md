@@ -2,6 +2,11 @@
 
 # User Guide
 
+> **Purpose:** Set up NanaType for live typing, chat, OBS, voice, translation, history, stickers, and skins.
+>
+> **Start here:** [Basics](#basics) · [OBS](#connecting-to-obs) · [Voice and speech](#text-to-speech) · [History](#saving-and-searching-the-history) · [Accessibility](#accessibility)
+
+
 Everything about day-to-day use: streaming platforms, OBS, sessions with friends, stickers and skins. For a feature overview, see the [README](../../README.en.md).
 
 ## Basics
@@ -13,7 +18,15 @@ Everything about day-to-day use: streaming platforms, OBS, sessions with friends
 5. Global hotkeys: **F8** shows the input window, **F9** continues (past a pause / skips the current segment).
 6. From the tray menu you can show or hide each window, lock the overlays, switch modes and skins, and open settings. The tray icon also shows the current state: a pink dot while mirroring, grayed out when both the display and history are hidden, and a small padlock while the overlays are locked.
 
-The display, the partner display and the history window can be dragged with the left mouse button and scaled proportionally with the scroll wheel. Their right-click menu lets you close the window, switch the global skin or open skin adjustments, toggle **Always on top**, lock the window, and **Restore default position and size**. Your own display can also continue playback, skip what is currently playing and clear the display; the history window can toggle avatars, names and timestamps, and clear this session's history via **Clear history › Confirm clear** (unavailable during a session with friends). A locked window lets the mouse pass through; unlock it from the tray or **Settings › Windows**. Closing a window only hides it — any enabled Spout2 / Syphon output keeps running, and native context menus never end up in the shared-texture output.
+The display, the partner display and the history window can be dragged with the left mouse button and scaled proportionally with the scroll wheel.
+
+Their right-click menu lets you close the window, switch the global skin or open skin adjustments, toggle **Always on top**, lock the window, and **Restore default position and size**.
+
+Your own display can also continue playback, skip what is currently playing and clear the display; the history window can toggle avatars, names and timestamps, and clear this session's history via **Clear history › Confirm clear** (unavailable during a session with friends).
+
+A locked window lets the mouse pass through; unlock it from the tray or **Settings › Windows**.
+
+Closing a window only hides it — any enabled Spout2 / Syphon output keeps running, and native context menus never end up in the shared-texture output.
 
 Input modes:
 
@@ -57,7 +70,13 @@ cargo run -p nanatype-blive --example mock_comet
 4. During a session the history window shows this session's lines. History from before the session and live-room chat are not shared. When you leave, your local history comes back; a session is not restored across a process restart. A session keeps at most the latest 1000 lines, trimmed further by message-size limits.
 5. If you disconnect you can keep editing, but sending and manual playback controls are paused. Disconnecting frees your seat; the same person can reconnect while a seat is free, and lines already sent are kept. If the host leaves, the room ends.
 
-Images, stickers, avatars, avatars inside quotes and the current portrait are distributed by content hash. Previews are relayed by the host; full images are fetched directly from whoever posted them, falling back to the host if a direct connection fails. Each resource is capped at 16 MiB; oversized or missing resources show a placeholder. Only your own lines drive character controls such as your local VTube Studio / OSC.
+Images, stickers, avatars, avatars inside quotes and the current portrait are distributed by content hash.
+
+Previews are relayed by the host; full images are fetched directly from whoever posted them, falling back to the host if a direct connection fails.
+
+Each resource is capped at 16 MiB; oversized or missing resources show a placeholder.
+
+Only your own lines drive character controls such as your local VTube Studio / OSC.
 
 Connections go direct when Steam can manage it, otherwise through Steam's relay. With a direct connection, peers can see your network address.
 
@@ -123,7 +142,17 @@ Turning an output off and back on within 5 seconds reuses the original sender, a
 
 ### Checking for updates
 
-The Steam edition is updated by Steam and has no such option. The GitHub edition checks GitHub Releases for new versions from **Settings › About**, and **Settings › General › Updates** checks automatically once a day by default. A new installer is only opened after it passes verification. Downloads try GitHub and the built-in proxies (gh-proxy.com, ghfast.top, ghproxy.net) in parallel, and you can add one custom proxy. Proxies only carry the bytes: the version manifest is signed with Ed25519 and installers are checked against SHA-256. See [Checking for updates](updates.md).
+The Steam edition is updated by Steam and has no such option.
+
+The GitHub edition checks GitHub Releases for new versions from **Settings › About**, and **Settings › General › Updates** checks automatically once a day by default.
+
+A new installer is only opened after it passes verification.
+
+Downloads try GitHub and the built-in proxies (gh-proxy.com, ghfast.top, ghproxy.net) in parallel, and you can add one custom proxy.
+
+Proxies only carry the bytes: the version manifest is signed with Ed25519 and installers are checked against SHA-256.
+
+See [Checking for updates](updates.md).
 
 ## Line markup
 
@@ -139,21 +168,43 @@ Lines are stored as BBCode-style markup, shared by source mode, quick phrases an
 
 In **Settings › Assets › Sticker packs** you can download the **Sheep's pixel heads (static)** and **Sheep's animated emotes** presets, or add a local image folder, an Echo-Live root folder (containing `res/data/emoji.js`) or an Echo-Live emote extension folder (containing `main.js`). Presets only go online when you click them; after that they use the same import and management flow as local folders.
 
-On import, images, thumbnails and full GIF frame caches are prepared in the background; the list shows downloading, processing, ready or failed. Once done everything works offline, the source files stay untouched, and unchanged content reuses its cache after a restart. Changing an image or the emote definitions rebuilds the affected cache automatically; removing a pack only stops loading it and never deletes the original files.
+On import, images, thumbnails and full GIF frame caches are prepared in the background; the list shows downloading, processing, ready or failed.
 
-In the input window's sticker panel, search by name or pack name and click to insert. The result is still saved as NanaType markup such as `[sticker=sp/happy h=1.35]` or `[sticker=sprel/laugh h=4]`. Animated stickers play in the preview, display, history and Spout / Syphon output; with reduced motion they show their first frame. This feature only reads Echo-Live's image emote definitions and never runs extension scripts.
+Once done everything works offline, the source files stay untouched, and unchanged content reuses its cache after a restart.
+
+Changing an image or the emote definitions rebuilds the affected cache automatically; removing a pack only stops loading it and never deletes the original files.
+
+In the input window's sticker panel, search by name or pack name and click to insert.
+
+The result is still saved as NanaType markup such as `[sticker=sp/happy h=1.35]` or `[sticker=sprel/laugh h=4]`.
+
+Animated stickers play in the preview, display, history and Spout / Syphon output; with reduced motion they show their first frame.
+
+This feature only reads Echo-Live's image emote definitions and never runs extension scripts.
 
 The sticker area on the right of the input window has **All** and per-series sub-tabs along the bottom; the sticker grid scrolls on its own and search only filters the current series. Drag one or more folders onto the sticker area or the sticker tab at the top to add them quickly; dropping on the tab opens the area automatically, and imported packs are managed together with the settings page.
 
 The preset images come from [Echo-Live](https://github.com/sheep-realms/Echo-Live) and the [Sheep-realms animated emote extension](https://github.com/sheep-realms/Echo-Live-Sheep-realms-EmoteLab-Extension). Authors and image licenses are shown in the list, and the download folder keeps the source, definitions and license.
 
-**Settings › Assets › Telegram stickers** lets you sign in to a Telegram account and find sticker packs with the official search, or download a whole pack by entering its name or `https://t.me/addstickers/packname`. The first sign-in needs your own API ID and API Hash from [my.telegram.org](https://my.telegram.org), a phone number with country code, then the code you receive and your optional two-step verification password. Clicking **Connect / log in** again restores the local session without re-entering credentials.
+**Settings › Assets › Telegram stickers** lets you sign in to a Telegram account and find sticker packs with the official search, or download a whole pack by entering its name or `https://t.me/addstickers/packname`.
+
+The first sign-in needs your own API ID and API Hash from [my.telegram.org](https://my.telegram.org), a phone number with country code, then the code you receive and your optional two-step verification password.
+
+Clicking **Connect / log in** again restores the local session without re-entering credentials.
 
 The download proxy accepts `socks5://127.0.0.1:7890` and authenticated `socks5://user:password@host:port`; leave it empty to connect directly. Reconnect after changing it; sign-in, search, file downloads and cross-datacenter connections all use the same proxy. This setting only applies to Telegram.
 
-Static WebP, TGS vector animations and VP9 WebM with transparency are supported. After downloading, packs go through the same parsing, pre-transcoding and registration as local folders, appear in the same sticker list and bottom series tabs, and are identified as `tg_packname/fileID`. Animations are converted to full PNG frame caches that work offline after a restart; animations beyond Telegram's size or duration limits, or beyond what the current renderer supports, report a clear error. Original files and their sources are kept, and the stickers' rights remain with their creators.
+Static WebP, TGS vector animations and VP9 WebM with transparency are supported.
 
-The API Hash, phone number, code and password are only used while signing in and are never written to the config. The authorized session is stored separately as `telegram.session` in the app data folder, encrypted with the current user's DPAPI on Windows and protected by user-only file permissions elsewhere; do not share this session file. **Log out and clear session** signs out and deletes the local session; downloaded stickers keep working offline.
+After downloading, packs go through the same parsing, pre-transcoding and registration as local folders, appear in the same sticker list and bottom series tabs, and are identified as `tg_packname/fileID`.
+
+Animations are converted to full PNG frame caches that work offline after a restart; animations beyond Telegram's size or duration limits, or beyond what the current renderer supports, report a clear error.
+
+Original files and their sources are kept, and the stickers' rights remain with their creators.
+
+The API Hash, phone number, code and password are only used while signing in and are never written to the config.
+
+The authorized session is stored separately as `telegram.session` in the app data folder, encrypted with the current user's DPAPI on Windows and protected by user-only file permissions elsewhere; do not share this session file. **Log out and clear session** signs out and deletes the local session; downloaded stickers keep working offline.
 
 ## Skins
 

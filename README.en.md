@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://github.com/sena-nana/NanaType/releases"><b>Download</b></a> ·
-  <a href="docs/en/usage.md"><b>User guide</b></a> ·
+  <a href="docs/en/README.md"><b>Documentation</b></a> ·
   <a href="docs/en/markup.md"><b>Dialogue markup</b></a> ·
   <a href="docs/en/skins.md"><b>Making skins</b></a> ·
   <a href="docs/en/building.md"><b>Building from source</b></a>
@@ -103,6 +103,8 @@ NanaType is a streaming typewriter built for VTubers. You type in the input box,
 3. Type and press **Enter** to send (**Shift+Enter** for a new line). The display box starts playing your line letter by letter.
 4. In OBS, add a *Spout2 Capture* (Windows) or *Syphon Client* (macOS) source, pick `NanaType Display`, and set the composite mode to *Premultiplied Alpha*.
 
+### Common shortcuts
+
 | Shortcut | Action |
 | --- | --- |
 | <kbd>F8</kbd> | Bring up the input box |
@@ -144,32 +146,6 @@ cargo test --workspace --exclude nanatype
 ```
 
 Platform dependencies, packaging, the Steam edition and development environment variables are covered in [Building from source](docs/en/building.md).
-
-<details>
-<summary><b>Project layout</b></summary>
-
-| crate | Contents |
-| --- | --- |
-| `crates/model` | Dialogue document model: text runs, ruby, stickers, markers |
-| `crates/markup` | Markup parsing and serialisation, templates |
-| `crates/playback` | Reveal timeline, player state machine, live-mirror diffing, queue |
-| `crates/theme` | Skin packages: manifests, inheritance, validation, install and export |
-| `crates/i18n` | Fluent strings (zh-CN / en-US / ja-JP) |
-| `crates/settings` | Settings structs, version migration, atomic writes, window positions |
-| `crates/audio` | Decoding, mixing and sample-accurate scheduling |
-| `crates/bridge` | VTube Studio, OSC, WebSocket |
-| `crates/twitch` | Anonymous Twitch IRC reading, device-code sign-in and Helix sending |
-| `crates/blive` | blivechat, LAPLACE Event Bridge and Comet clients (protocol parsing, decryption, connection and reconnects) |
-| `crates/core` | Session logic: drafts, sending, continue, queue, history, rewind |
-| `crates/p2p` | Steam online play (up to 8 people), session ordering, reconnects and image forwarding |
-| `crates/update` | Update checks: signed release manifests, file proxy, verified downloads |
-| `crates/frame` | Framework shared by both programs: skin rendering, UI widgets, skin preview, plugin host, media services and paths |
-| `app` | NanaType: NanaUI host, windows, views, hotkeys, tray, Spout |
-| `editor` | NanaType Editor: package editor, signing and isolated debugging |
-
-The pure-logic crates don't depend on the UI framework and can be tested on their own.
-
-</details>
 
 ## 💝 Acknowledgements
 

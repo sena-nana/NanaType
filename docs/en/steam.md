@@ -2,6 +2,11 @@
 
 # Steam edition
 
+> **Purpose:** Build, package, publish, and operate the Steam edition of NanaType.
+>
+> **On this page:** [Edition differences](#steam-edition) · [Workshop](#workshop) · [Packaging](#packaging) · [Upload and release](#uploading-and-going-live)
+
+
 The Steam edition and the GitHub release share the same code and are told apart by Cargo features:
 
 | | GitHub release (default) | Steam edition |

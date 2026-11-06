@@ -2,9 +2,13 @@
 
 # Twitch チャット連携
 
+Twitch チャットの匿名受信、デバイスコードログイン、セリフ送信を設定するためのガイドです。最初に「受信」を設定し、送信が必要な場合だけ「ログイン」と権限を確認してください。
+
+**このページの案内**：出典とライセンス → 受信 → ログイン → 送信 → アプリ登録 → 検証
+
 ## 出典とライセンス
 
-確認日：2026-10-21。すべて Twitch 公式の開発者ドキュメントに基づいて独自に実装しており、サードパーティのコードは移植していません。
+すべて Twitch 公式の開発者ドキュメントに基づいて独自に実装しており、サードパーティのコードは移植していません。
 
 - 受信：[Twitch IRC over WebSocket](https://dev.twitch.tv/docs/chat/irc/)（`wss://irc-ws.chat.twitch.tv:443`、IRCv3 タグと `twitch.tv/tags`・`twitch.tv/commands` ケイパビリティ）。
 - ログイン：[Device Code Grant Flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow)（パブリッククライアント、client secret なし）。
@@ -66,4 +70,4 @@ cargo test -p nanatype-twitch
 NANATYPE_TWITCH_CHANNEL=频道名 cargo test -p nanatype-twitch -- --ignored --nocapture
 ```
 
-2026-10-21 に macOS で公開チャンネルに匿名で参加し、リアルタイムのメッセージを受信できました。送信は実際のアカウントを使い、自分のチャンネルで手動で受け入れ確認する必要があります。
+オンラインテストを実行すると、公開チャンネルへの匿名参加とリアルタイム受信を確認できます。送信を確認するときは、自分のチャンネルとアカウントを使い、テスト用の短いセリフだけを送ってください。

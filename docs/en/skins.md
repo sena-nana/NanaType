@@ -2,9 +2,26 @@
 
 # Skin format
 
-A skin is one capability in the unified package system. Every directory package declares its identity, version, capabilities and dependencies in `package.toml`, describes its styling in `skin.toml`, and carries its images, shaders, fonts, sounds and license files. The compressed distribution format is `.ntpkg`; the old `.ntskin` format is no longer supported. **Settings › Plugins & packages** manages every package; the Skins page lists only packages that provide the skin capability.
+> **Purpose:** Create skin and sound packages with `package.toml`, `skin.toml`, assets, materials, and restricted WGSL effects.
+>
+> **On this page:** [Package identity](#package-identity-and-shared-resources) · [Built-in skins](#built-in-skins) · [Sound packs](#sound-packs) · [Skin schema](#manifest) · [Validation](#validation-rules)
 
-The framework defaults are transparent and frameless, with the system font, black body text and no motion — they carry no particular skin design. All 28 built-in skins declare their own look; Halo is just an ordinary package that the app selects by default. To inherit from another skin with `base` in the package manifest, you must also declare an exact-version dependency on it. Tables merge layer by layer, arrays are replaced whole, and `decor = []` clears decorations. Package identity, name and tags are never inherited from the parent.
+
+A skin is one capability in the unified package system.
+
+Every directory package declares its identity, version, capabilities and dependencies in `package.toml`, describes its styling in `skin.toml`, and carries its images, shaders, fonts, sounds and license files.
+
+The compressed distribution format is `.ntpkg`; the old `.ntskin` format is no longer supported. **Settings › Plugins & packages** manages every package; the Skins page lists only packages that provide the skin capability.
+
+The framework defaults are transparent and frameless, with the system font, black body text and no motion — they carry no particular skin design.
+
+All 28 built-in skins declare their own look; Halo is just an ordinary package that the app selects by default.
+
+To inherit from another skin with `base` in the package manifest, you must also declare an exact-version dependency on it.
+
+Tables merge layer by layer, arrays are replaced whole, and `decor = []` clears decorations.
+
+Package identity, name and tags are never inherited from the parent.
 
 ## Package identity and shared resources
 
@@ -29,15 +46,31 @@ base = "nanatype.halo"           # optional; inherits configuration only
 
 Exports carry the full set of dependencies and license files, with dependencies stored under `dependencies/<package ID>/`; within one dependency closure each ID is pinned to a single exact version. Referencing another package's resources never runs that package's scripts. See [Plugin interface](plugins.md) for details.
 
-The general UI uses NanaUI's own neutral palette; pick Follow system, Light or Dark under **Settings › General › Appearance**. Only the display box (including the partner's display box), the history window and the input editing area follow the skin; thumbnails, samples and swatches in the skin picker keep the skin's look too. The input window's toolbar, status bar and chat panel all use the general palette. `chrome` supplies the content accent, inline tag background and text contrast color; it does not change the app's interface.
+The general UI uses NanaUI's own neutral palette; pick Follow system, Light or Dark under **Settings › General › Appearance**.
+
+Only the display box (including the partner's display box), the history window and the input editing area follow the skin; thumbnails, samples and swatches in the skin picker keep the skin's look too.
+
+The input window's toolbar, status bar and chat panel all use the general palette. `chrome` supplies the content accent, inline tag background and text contrast color; it does not change the app's interface.
 
 ## Built-in skins
 
 Each entry below is a separate skin package living in `crates/theme/builtin/<ID without the nanatype. prefix>/`; its manifest, styling and assets ship with the package.
 
-In **Settings › Skins › Preview**, switch between the display box and the history to adjust the body font (dropdown), font size (number box), line height (slider), text color (color picker) and window size, and edit the test text. Changes show in the preview first; only **Save** writes them to that skin's personal configuration, and saving a different skin does not switch the skin in use. The controls start at the skin's defaults; setting a value back to the default makes it follow the skin again, and leaving width or height empty means "use the skin's default". **Reset to skin defaults** and **Discard changes** are icon buttons with tooltips; resetting also needs a save to take effect, and closing Settings throws away unsaved drafts. Personal configuration never modifies the skin's own files.
+In **Settings › Skins › Preview**, switch between the display box and the history to adjust the body font (dropdown), font size (number box), line height (slider), text color (color picker) and window size, and edit the test text.
 
-Once the display box and history window are unlocked, you can drag any edge or corner to resize them independently; text keeps its size and rewraps. Windows can be 160–8192 × 96–8192 logical pixels, font size 8–200 px and line height 1–3×. A very short history window folds away its title and tightens vertical padding to leave room for messages. The partner display box shares the body text settings but remembers its own size.
+Changes show in the preview first; only **Save** writes them to that skin's personal configuration, and saving a different skin does not switch the skin in use.
+
+The controls start at the skin's defaults; setting a value back to the default makes it follow the skin again, and leaving width or height empty means "use the skin's default". **Reset to skin defaults** and **Discard changes** are icon buttons with tooltips; resetting also needs a save to take effect, and closing Settings throws away unsaved drafts.
+
+Personal configuration never modifies the skin's own files.
+
+Once the display box and history window are unlocked, you can drag any edge or corner to resize them independently; text keeps its size and rewraps.
+
+Windows can be 160–8192 × 96–8192 logical pixels, font size 8–200 px and line height 1–3×.
+
+A very short history window folds away its title and tightens vertical padding to leave room for messages.
+
+The partner display box shares the body text settings but remembers its own size.
 
 | id | Name | Tags | Highlights |
 |---|---|---|---|
@@ -72,11 +105,22 @@ Once the display box and history window are unlocked, you can drag any edge or c
 
 ![Built-in skins](../skins-preview.png)
 
-The preview card at the top of **Settings › Skins** draws the selected skin live with sample lines (including personalization). Clicking a row previews it without switching (copy, export and other actions are in the "⋯" menu at the end of the row); tags and Light / Dark filter the list. Ink Wash keeps its openly licensed ink-bamboo artwork, the procedural prints carry matching static fallbacks, and complex branches and scrolls use original transparent textures; use **Duplicate to edit** if you want to rework them. Thumbnails use the same static decorations, tails and surface drawing as the display box, with room left for decorations and shadows that extend outside; skins without a continue indicator show no placeholder dot.
+The preview card at the top of **Settings › Skins** draws the selected skin live with sample lines (including personalization).
 
-In 2026-10 the [skin redesign](../skin-redesign.md) spread the skins further apart in palette and composition: the six print skins each got their own skeleton, Terminal went amber, Night went neon, Lantern moved to a dark ground, Gothic to pewter-silver and ADV lost its gold; Halo, Live Chat, Crayon and the four Echo skins kept their original style. Every skin's @mention now uses dark text on a light ground, and the compact state no longer borrows Halo's blue. Earlier refinements are in the [classic skin design notes](../classic-skin-refinement.md). Seven skins use object or state animation: neon tube flicker, a ready crystal, a bouncy heart, typing dots, terminal glyphs, LCD cells and a blossoming branch; the rest stay static, relying on paper, line and typography. Responsive portrait and narrow layouts reuse the original print programs to rearrange textures, corner ornaments and state objects; static programs request no animation frames. With advanced effects off, the static look is kept. Full artwork leaves room for very long names; the name is ellipsized inside the nameplate while the original stays unchanged. When you explicitly personalize the box color, the chosen color and the native box drawing take priority.
+Clicking a row previews it without switching (copy, export and other actions are in the "⋯" menu at the end of the row); tags and Light / Dark filter the list.
 
-The history window carries over the display box's nameplate, rules and typography: paper themes use static fibers, double rules or a vermilion seal; the six new themes each keep their burgundy binding, star tracks, binding holes, glass waterline, vermilion stamp and mint paper layers. History decorations stay static and never run the display box's animation. Name plates and placeholder avatars for both the streamer and viewers follow the same skin palette; real avatars keep their original image. Pocket Pixel and RPG Window use font sizes that are integer multiples of 12px for body text, names, times and quotes; Subtitle shows no avatars.
+Ink Wash keeps its openly licensed ink-bamboo artwork, the procedural prints carry matching static fallbacks, and complex branches and scrolls use original transparent textures; use **Duplicate to edit** if you want to rework them.
+
+Thumbnails use the same static decorations, tails and surface drawing as the display box, with room left for decorations and shadows that extend outside; skins without a continue indicator show no placeholder dot.
+
+
+The history window carries over the display box's nameplate, rules and typography: paper themes use static fibers, double rules or a vermilion seal; the six new themes each keep their burgundy binding, star tracks, binding holes, glass waterline, vermilion stamp and mint paper layers.
+
+History decorations stay static and never run the display box's animation.
+
+Name plates and placeholder avatars for both the streamer and viewers follow the same skin palette; real avatars keep their original image.
+
+Pocket Pixel and RPG Window use font sizes that are integer multiples of 12px for body text, names, times and quotes; Subtitle shows no avatars.
 
 To regenerate the display / history comparison images for every skin, and check long nicknames, multi-line text, reply quotes and line spacing at the default width and in a 300px narrow window:
 
@@ -88,13 +132,19 @@ $env:NANATYPE_SNAPSHOT_TRANSPARENT='1'
 & target/debug/examples/snapshots.exe target/history-style-fixed all zh-CN
 ```
 
-The [real-time motion preview](../skins-motion.webp) of the six new themes shows the jellyfish swimming at a tilt, leaves bending, lanterns swaying gently, star tracks and gilded edges catching light, and bubbles rising behind the citrus slice. Text, nameplates and frames stay put; amplitudes, periods and how to inspect frame by frame are in the [design notes](../skin-art-direction.md#装饰自身的运动).
+The [real-time motion preview](../skins-motion.webp) of the six new themes shows the jellyfish swimming at a tilt, leaves bending, lanterns swaying gently, star tracks and gilded edges catching light, and bubbles rising behind the citrus slice. Text, nameplates and frames stay put; amplitudes, periods and how to inspect frame by frame are in the [design notes](../skin-art-direction.md).
 
 Ink Wash overlays a detail of the ink bamboo from Zheng Xie's [Bamboo and Poem](https://www.metmuseum.org/art/collection/search/52946), an open-access image from The Metropolitan Museum of Art (Public Domain). It was only cropped and had the paper background removed — no lines were redrawn or recolored; the source and processing record ship with the skin in `ink/ART-LICENSE.txt`.
 
 ### Echo-Live design source
 
-The `echo_vanilla`, `echo_glass`, `echo_bubble` and `echo_void` skins are designed after [sheep-realms/Echo-Live](https://github.com/sheep-realms/Echo-Live), by Sheep-realms and the project's contributors. NanaType implements and adapts these styles in its own TOML skin format. The original project is GPL-3.0-or-later; see its [license and statement](https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md). The CC0-1.0 declaration in the local manifests covers only NanaType's own contributions.
+The `echo_vanilla`, `echo_glass`, `echo_bubble` and `echo_void` skins are designed after [sheep-realms/Echo-Live](https://github.com/sheep-realms/Echo-Live), by Sheep-realms and the project's contributors.
+
+NanaType implements and adapts these styles in its own TOML skin format.
+
+The original project is GPL-3.0-or-later; see its [license and statement](https://github.com/sheep-realms/Echo-Live/blob/master/copyright.md).
+
+The CC0-1.0 declaration in the local manifests covers only NanaType's own contributions.
 
 ## Sound packs
 
@@ -110,7 +160,9 @@ volume = 0.5
 coin = "sounds/coin.ogg"
 ```
 
-Once you pick it under **Settings › Playback › Sound pack**: if the pack defines `typing`, it replaces the skin's typing sound and its rhythm (`every_n`, `skip_punct` and so on); if it defines `open` or `advance`, it replaces those sounds. `se` overrides or adds entries by name; the skin's other named sounds remain, so `[se=…]` markup written for the skin still plays. Referenced files must be inside the pack (or in a dependency, `pkg:<package ID>/<path>`); if any is missing, the whole pack is rejected.
+Once you pick it under **Settings › Playback › Sound pack**: if the pack defines `typing`, it replaces the skin's typing sound and its rhythm (`every_n`, `skip_punct` and so on); if it defines `open` or `advance`, it replaces those sounds. `se` overrides or adds entries by name; the skin's other named sounds remain, so `[se=…]` markup written for the skin still plays.
+
+Referenced files must be inside the pack (or in a dependency, `pkg:<package ID>/<path>`); if any is missing, the whole pack is rejected.
 
 If the selected sound pack is deleted, fails to load or isn't visible in the current build (for example, the GitHub build can't see Steam Workshop items), the skin's own sounds are used for now with a one-time notice, and the setting is left as it is. A sound pack can live in the same package as a skin (`capabilities = ["skin", "sounds"]`).
 
@@ -118,7 +170,13 @@ If the selected sound pack is deleted, fails to load or isn't visible in the cur
 
 `history.group_speakers` controls whether consecutive messages from the same speaker share a name row. `history.padding` is the left, top, right, bottom padding when there is no panel; `history.margin` is the top, right, bottom, left margin. `history.row_padding` is each row's horizontal padding, and `history.column_inset` is extra width reserved beside the body column. Avatar size and `history.text.size` are set by the skin and overridden by the user's personalization as usual; nothing is rewritten based on a skin ID.
 
-New messages enter according to `history.entrance` (`slide_up`, `fade`, `slide_left`; `none` makes them just appear). Messages already on screen ease out to their new positions over the same 220ms: the list moves up as a whole when a new message pushes it, and when the oldest message leaves because of the display limit, the ones below fill the gap. The framework default is `none`; every built-in skin turns entrance on. With reduced motion, messages land in place immediately.
+New messages enter according to `history.entrance` (`slide_up`, `fade`, `slide_left`; `none` makes them just appear).
+
+Messages already on screen ease out to their new positions over the same 220ms: the list moves up as a whole when a new message pushes it, and when the oldest message leaves because of the display limit, the ones below fill the gap.
+
+The framework default is `none`; every built-in skin turns entrance on.
+
+With reduced motion, messages land in place immediately.
 
 ## Manifest
 
@@ -363,7 +421,15 @@ contrast_guard = 3.0              # add a 1.5px outline when colored text contra
 
 ## Restricted WGSL effects (schema 3)
 
-The `package.toml` at the package root declares `format = 1`, `schema = 3` and `capabilities = ["skin"]`; `skin.toml` defines effects in a `shaders` table and references them from `shader_effects` or a decoration's `shader`. Older formats are no longer supported. Exports carry dependencies and all resources, so a package loads offline on its own. Arrays are replaced whole: `shader_effects = []` clears the inherited display-box effects and `decor = []` clears decoration effects. Named effect tables merge by key; an inherited effect that is no longer referenced isn't drawn.
+The `package.toml` at the package root declares `format = 1`, `schema = 3` and `capabilities = ["skin"]`; `skin.toml` defines effects in a `shaders` table and references them from `shader_effects` or a decoration's `shader`.
+
+Older formats are no longer supported.
+
+Exports carry dependencies and all resources, so a package loads offline on its own.
+
+Arrays are replaced whole: `shader_effects = []` clears the inherited display-box effects and `decor = []` clears decoration effects.
+
+Named effect tables merge by key; an inherited effect that is no longer referenced isn't drawn.
 
 ```toml
 # package.toml
@@ -401,7 +467,11 @@ A WGSL file implements only `fn effect(input: EffectInput) -> vec4<f32>`, plus a
 
 `EffectInput` contains `uv: vec2<f32>` (local 0–1), `size: vec2<f32>` (logical pixels), `phase: f32` (loop phase 0–1) and `seed: f32` (a fixed seed); `line_age` / `speaker_age` are the seconds since the corresponding event, `reveal` is the typing progress of the current page, and `waiting` is 0 or 1; `base`, `accent`, `border` and `text` are linear `vec4<f32>` theme colors; `params0` / `params1` hold four parameters each, with unsupplied values at zero.
 
-The host provides `sample0(uv)`, `sample1(uv)`, `particles(uv, phase, seed)` and `param(i)`. Sampling only touches declared images, UVs are clamped to the image edge, and an unbound slot returns transparent. `particles` uses a fixed set of sixteen points and needs no cross-frame state. `param(i: u32) -> vec4<f32>` reads item `i` of `bindings` (see [Skin parameters](#skin-parameters)); unbound slots are zero. Programs can combine phase, trigonometry and the fixed seed into light streaks, caustics, star rings, bubbles and brief responses to events.
+The host provides `sample0(uv)`, `sample1(uv)`, `particles(uv, phase, seed)` and `param(i)`.
+
+Sampling only touches declared images, UVs are clamped to the image edge, and an unbound slot returns transparent. `particles` uses a fixed set of sixteen points and needs no cross-frame state. `param(i: u32) -> vec4<f32>` reads item `i` of `bindings` (see [Skin parameters](#skin-parameters)); unbound slots are zero.
+
+Programs can combine phase, trigonometry and the fixed seed into light streaks, caustics, star rings, bubbles and brief responses to events.
 
 The shader interface is ABI 2: ABI 1 plus `param(i)` and its bindings. Like the `fx_` prefix, `param` is reserved by the host, and a custom function with that name is rejected.
 
@@ -426,15 +496,43 @@ fn effect(i: EffectInput) -> vec4<f32> {
 }
 ```
 
-Limits: at most four effect instances per box and sixteen named definitions; source must be UTF-8, at most 64 KiB per file, with no control characters other than tab and newline; IR and per-call expanded complexity are at most 4096 nodes each, with call depth at most eight; a single statement (between two of `;`, `{`, `}`) may have at most 256 operators, calls, commas, member accesses and subscripts, a single expression may nest operations at most 64 deep, and `if`/`switch`/`{}` may nest at most 32 deep — split with `let` when you exceed them. User functions may not use loops, custom entry points, global variables, bindings, pointer interfaces, atomics, storage resources, discard, extensions or diagnostic directives; `compute`, `workgroup`, `storage`, `ptr`, `atomic…`, `texture_storage_…`, `textureStore`, any barrier, `arrayLength` and `subgroup…` are rejected wherever they appear in the source (comments excepted); `fx_`, `nm_` and `__` are prefixes reserved by the host. The module, once merged with the host wrapper, can only have the host's vertex and fragment entry points, and compute shaders are never run. Fixed arrays have at most 64 elements, a single type at most 4096 bytes, and a function's local variables at most 16 KiB. Each texture's longest side is at most 2048, decoded textures per skin at most 32 MiB, and the proxy's texture and mask cache has a total budget of 64 MiB.
+Limits: at most four effect instances per box and sixteen named definitions; source must be UTF-8, at most 64 KiB per file, with no control characters other than tab and newline; IR and per-call expanded complexity are at most 4096 nodes each, with call depth at most eight; a single statement (between two of `;`, `{`, `}`) may have at most 256 operators, calls, commas, member accesses and subscripts, a single expression may nest operations at most 64 deep, and `if`/`switch`/`{}` may nest at most 32 deep — split with `let` when you exceed them.
 
-Runtime isolation: WGSL validation runs on a separate thread, so a validator crash only fails that shader while the rest of the skin loads normally. GPU compilation likewise runs on a separate thread inside an error scope, and a failure disables that effect. All skin programs share a per-second GPU budget (per-pixel expanded complexity × covered pixels, accumulated per draw, about 1.6× the heaviest built-in theme filling 3840×2160 at 60 fps): when it's exceeded within a second, the costliest program is frozen first (drawn as with motion off), and if it's still exceeded once frozen, the program is disabled with a notice. After a GPU device loss, every program drawn in the two seconds before the loss gets a strike, and a second strike disables it. Crash protection records a program's first draw in `config/shader-guard.json` and removes the record after about two seconds or 120 normal draws; if the app or driver exits in that window, the program stays disabled from the next launch on. Turning **Advanced skin effects** off and on again clears these disabled and frozen records and retries; when a skin changes a program, its hash changes and it's tried again too. `materials.*` are drawn by the UI framework under the same budget and crash protection, and count toward device-loss strikes when the device they're on also drew effects: the framework asks the host before every compile and draw, and charges by shape area or text draw extent; materials themselves are static with no animation to freeze, so exceeding the budget disables them, and a disabled material draws in its original style. These measures limit damage after a fault; they can't prevent a single driver failure.
+User functions may not use loops, custom entry points, global variables, bindings, pointer interfaces, atomics, storage resources, discard, extensions or diagnostic directives; `compute`, `workgroup`, `storage`, `ptr`, `atomic…`, `texture_storage_…`, `textureStore`, any barrier, `arrayLength` and `subgroup…` are rejected wherever they appear in the source (comments excepted); `fx_`, `nm_` and `__` are prefixes reserved by the host.
+
+The module, once merged with the host wrapper, can only have the host's vertex and fragment entry points, and compute shaders are never run.
+
+Fixed arrays have at most 64 elements, a single type at most 4096 bytes, and a function's local variables at most 16 KiB.
+
+Each texture's longest side is at most 2048, decoded textures per skin at most 32 MiB, and the proxy's texture and mask cache has a total budget of 64 MiB.
+
+Runtime isolation: WGSL validation runs on a separate thread, so a validator crash only fails that shader while the rest of the skin loads normally.
+
+GPU compilation likewise runs on a separate thread inside an error scope, and a failure disables that effect.
+
+All skin programs share a per-second GPU budget (per-pixel expanded complexity × covered pixels, accumulated per draw, about 1.6× the heaviest built-in theme filling 3840×2160 at 60 fps): when it's exceeded within a second, the costliest program is frozen first (drawn as with motion off), and if it's still exceeded once frozen, the program is disabled with a notice.
+
+After a GPU device loss, every program drawn in the two seconds before the loss gets a strike, and a second strike disables it.
+
+Crash protection records a program's first draw in `config/shader-guard.json` and removes the record after about two seconds or 120 normal draws; if the app or driver exits in that window, the program stays disabled from the next launch on.
+
+Turning **Advanced skin effects** off and on again clears these disabled and frozen records and retries; when a skin changes a program, its hash changes and it's tried again too. `materials.*` are drawn by the UI framework under the same budget and crash protection, and count toward device-loss strikes when the device they're on also drew effects: the framework asks the host before every compile and draw, and charges by shape area or text draw extent; materials themselves are static with no animation to freeze, so exceeding the budget disables them, and a disabled material draws in its original style.
+
+These measures limit damage after a fault; they can't prevent a single driver failure.
 
 `cargo run -p nanatype-theme --example check_package -- <package>` also lists each shader's expression nesting depth.
 
-**Settings › Skins › Advanced skin effects** is on by default; reduced motion turns off the dynamic WGSL in this section but keeps the static general materials in the next one. The editor, history and thumbnails stay static; the current theme only plays when you click play on the preview card. Loops only request draw frames; a skin's own loop runs at 30 fps by default, which you can change to 60 fps in **Settings › Skins › Skin frame rate**; typing and per-character effects in the display box aren't limited by this setting. **Settings › Skins › Skin motion** is on by default; turning it off freezes every skin program and light band the way reduced motion does — each program draws one still frame off-screen and every later frame just copies it (redrawn once when the size, scale or device changes), with no shader running per frame; static general materials are unaffected. Import errors show the file path and WGSL diagnostics (line and column map directly to the skin file); an invalid hot reload keeps the last valid skin, and a GPU compile failure disables that effect while keeping the static look.
+**Settings › Skins › Advanced skin effects** is on by default; reduced motion turns off the dynamic WGSL in this section but keeps the static general materials in the next one.
 
-A complete author example is [aurora/skin.toml](../examples/aurora/skin.toml), and [aurora.ntpkg](../examples/aurora.ntpkg) can be imported directly. Each of the six new built-in themes uses one WGSL, one transparent decoration texture, zero custom parameters and zero decoration nodes; composition and static fallbacks are in the [design notes](../skin-art-direction.md), and art references and vector sources are in the [source log](../skin-art-sources.md).
+The editor, history and thumbnails stay static; the current theme only plays when you click play on the preview card.
+
+Loops only request draw frames; a skin's own loop runs at 30 fps by default, which you can change to 60 fps in **Settings › Skins › Skin frame rate**; typing and per-character effects in the display box aren't limited by this setting. **Settings › Skins › Skin motion** is on by default; turning it off freezes every skin program and light band the way reduced motion does — each program draws one still frame off-screen and every later frame just copies it (redrawn once when the size, scale or device changes), with no shader running per frame; static general materials are unaffected.
+
+Import errors show the file path and WGSL diagnostics (line and column map directly to the skin file); an invalid hot reload keeps the last valid skin, and a GPU compile failure disables that effect while keeping the static look.
+
+A complete author example is [aurora/skin.toml](../examples/aurora/skin.toml), and [aurora.ntpkg](../examples/aurora.ntpkg) can be imported directly.
+
+Each of the six new built-in themes uses one WGSL, one transparent decoration texture, zero custom parameters and zero decoration nodes; composition and static fallbacks are in the [design notes](../skin-art-direction.md), and art references and vector sources are in the [source log](../skin-art-sources.md).
 
 `target = "artwork"` is for full artwork: the program draws its own transparent outline, material, border and decorations, and the host provides the display-box rectangle as the canvas without using the original box's coverage mask. Multiple artwork instances stack in `shader_effects` order; when a single program exceeds the node limit, split it into a back layer and a front layer. Configure `dialogue.box.frame` as the complete static fallback; run `cargo run -p nanatype --example skin_artwork -- crates/theme/builtin` to re-bake the built-in images, or `-- --package <dir> [--preset <preset>] [--out <png>] [--at <ms>] [--scale <factor>]` to bake one package (stacking all its artwork layers in order; `--at` renders another moment of the 16-second loop to check motion; `--scale` renders at a high-DPI factor to check line widths and antialiasing). `cargo run -p nanatype-theme --example check_package -- <dir or .ntpkg>` validates a package the way the app does and lists each shader's IR and expansion cost, reporting when limits are exceeded. Both the fallback and the WGSL are drawn before body text, quotes and names; third-party programs without a declared static fallback submit no user code when motion is off; responsive prints with `static_fallback = true` freeze the clock to keep their full material and decorations and stop requesting animation frames.
 
@@ -452,7 +550,6 @@ The general UI uses NanaUI's standard light and dark palettes and a fixed accent
 
 Schema 2 skins can use NanaUI's general fragment materials to draw textures inside boxes or glyphs. The Crayon skin uses static paper grain, a crayon border and colored-pencil hatching; body text, names, quotes and ruby use the text material for their area, and the editor doesn't enable text materials.
 
-Windows off-screen GPU acceptance on 2026-10-18: changing material parameters doesn't reshape, re-rasterize or re-upload glyphs; output with no material or an identity material matches the native path pixel for pixel. Consecutive static frames are identical and request no animation, and turning advanced effects off and on again restores the original pixels; after adding Crayon, the existing 24 display boxes still match the baseline pixel for pixel. To re-check Crayon's display box, history, long names, quotes, a 300px narrow window and 2× screenshots:
 
 ```powershell
 $env:NANATYPE_MATERIAL_AUDIT = '1'
@@ -484,11 +581,21 @@ bubble_material = "paper"
 material = "pencil"
 ```
 
-The shared shape fields `material` and `border_material` also work on nameplates, panels and plain geometric decorations. Materials currently apply to plain rectangles, rounded rectangles and polygon clipping; custom path drawing with contour/motif is left as is. Tables merge by name, and referenced files are packed in full on duplicate and export. There are at most sixteen material definitions in total, and decoded material textures are capped at 32 MiB overall; source, file paths and computational complexity follow the same restricted validation as skin shaders.
+The shared shape fields `material` and `border_material` also work on nameplates, panels and plain geometric decorations.
+
+Materials currently apply to plain rectangles, rounded rectangles and polygon clipping; custom path drawing with contour/motif is left as is.
+
+Tables merge by name, and referenced files are packed in full on duplicate and export.
+
+There are at most sixteen material definitions in total, and decoded material textures are capped at 32 MiB overall; source, file paths and computational complexity follow the same restricted validation as skin shaders.
 
 ### Declarative processing pipelines
 
-Data used only by shaders is transformed by processors registered with the host; no Lua runs. Data is declared in `package.toml` as `[data.<id>]` (see the [unified package design](../package-design.md)); `[pipelines.<name>]` in `skin.toml` picks a `processor` and its `version`, and in `inputs` binds each input to a data reference `{ data = "<id>" }` (written `pkg:<package ID>/<id>` for a dependency) or to another pipeline's output `{ pipeline = "…", output = "…" }`; `params` only accepts the finite numbers the processor declares. A material's `textures` slots can be written as `{ pipeline = "…", output = "…" }`, and `uniforms` binds `vec4` outputs, placed in order after the static `params`.
+Data used only by shaders is transformed by processors registered with the host; no Lua runs.
+
+Data is declared in `package.toml` as `[data.<id>]` (see the [unified package design](../package-design.md)); `[pipelines.<name>]` in `skin.toml` picks a `processor` and its `version`, and in `inputs` binds each input to a data reference `{ data = "<id>" }` (written `pkg:<package ID>/<id>` for a dependency) or to another pipeline's output `{ pipeline = "…", output = "…" }`; `params` only accepts the finite numbers the processor declares.
+
+A material's `textures` slots can be written as `{ pipeline = "…", output = "…" }`, and `uniforms` binds `vec4` outputs, placed in order after the static `params`.
 
 ```toml
 [pipelines.stroke_map]
@@ -502,9 +609,19 @@ textures = [{ pipeline = "stroke_map", output = "time" }]   # time texture
 uniforms = [{ pipeline = "stroke_map", output = "extent" }] # material_param(0u)
 ```
 
-The only registered processor right now is `text.stroke_time_map` v1 (outputs a `time` texture and `extent`). There can be at most 8 pipelines with a chain depth of at most 4, and they must be acyclic; unregistered processors or versions, missing or extra inputs, mismatched port types, out-of-range parameters, more than 2 texture slots, or more than 4 vec4s of `params` plus `uniforms` all stop loading, and pipelines unused by any material produce a warning. Materials that depend on text layout can only be used in `dialogue.reveal.entrance.material`; in places without that context, such as history or the editing box, pipeline texture slots are transparent placeholders and the shader falls back to a plain fade-in. Results are cached by data content hash, material and layout, rebuilt only when the text, font, layout, size or writing direction changes, and playback progress is computed on the GPU.
+The only registered processor right now is `text.stroke_time_map` v1 (outputs a `time` texture and `extent`).
 
-WGSL implements only `fn material(i: MaterialInput) -> vec4<f32>`, plus any pure helper functions. `i.position` is in local logical pixels, `i.uv` is normalized, and `i.size` is the local size; for text the local area is the current glyph cell, with `i.glyph_uv` as its normalized coordinates (zero for shapes). `i.color.rgb` is the resolved linear text or shape color, with alpha 1; return non-premultiplied linear RGBA, where alpha acts as extra coverage. The framework multiplies in the original opacity, glyph/shape mask and clipping, so a material can't enlarge what it draws. Textures are sampled with `material_sample0(uv)` / `material_sample1(uv)`; `material_param(0u)` and `material_param(1u)` read parameters.
+There can be at most 8 pipelines with a chain depth of at most 4, and they must be acyclic; unregistered processors or versions, missing or extra inputs, mismatched port types, out-of-range parameters, more than 2 texture slots, or more than 4 vec4s of `params` plus `uniforms` all stop loading, and pipelines unused by any material produce a warning.
+
+Materials that depend on text layout can only be used in `dialogue.reveal.entrance.material`; in places without that context, such as history or the editing box, pipeline texture slots are transparent placeholders and the shader falls back to a plain fade-in.
+
+Results are cached by data content hash, material and layout, rebuilt only when the text, font, layout, size or writing direction changes, and playback progress is computed on the GPU.
+
+WGSL implements only `fn material(i: MaterialInput) -> vec4<f32>`, plus any pure helper functions. `i.position` is in local logical pixels, `i.uv` is normalized, and `i.size` is the local size; for text the local area is the current glyph cell, with `i.glyph_uv` as its normalized coordinates (zero for shapes). `i.color.rgb` is the resolved linear text or shape color, with alpha 1; return non-premultiplied linear RGBA, where alpha acts as extra coverage.
+
+The framework multiplies in the original opacity, glyph/shape mask and clipping, so a material can't enlarge what it draws.
+
+Textures are sampled with `material_sample0(uv)` / `material_sample1(uv)`; `material_param(0u)` and `material_param(1u)` read parameters.
 
 Materials stay static and never request continuous frames on their own. Reduced motion keeps them; turning advanced effects off removes them and shows the static box and plain fonts. A compile failure or unavailable resource falls back to the base style. Explicit text colors, contrast outlines, the typewriter and existing text effects still apply; images and color emoji don't get text materials.
 
@@ -535,13 +652,49 @@ Colors are written as `#rgb`, `#rgba`, `#rrggbb` or `#rrggbbaa`. The newer field
 | `name` | `dialogue.nameplate.color` |
 | `name_text` | `dialogue.nameplate.text_color` |
 
-Boxes, nameplates, history panels and decorations support an optional `contour`; history bubbles use `bubble_contour`, and history name capsules can set `contour` inside `name_plate`. The presets are `rounded` (smooth corners and a continuous curved tail), `orbit` (offset rounded corners), `hud` (instrument-panel chamfers), `parchment` (paper edge), `cinema` (widescreen chamfers), `rpg` (stepped frame), `slant` (bevel cut), `cloud`, `chat` (comment bubble), `comic` (comic panel), `terminal` (device casing), `pixel` (pixel grooves), `sakura` (petal edge), `ink` (irregular paper), `ribbon` and `seal` (stamp). Without it, the original rectangle, corners and per-side borders are kept. A shaped box's fill, stroke and shadow share one path; the position, width, length and lean of `dialogue.tail` are merged into the contour, and the tail shares the box's fill and shadow — `tail.color` / `tail.shadow` only apply to the original standalone triangle tail. The content area is still a rectangle and the contour doesn't clip body text; on smaller history bubbles and nameplates, edge undulation is reduced automatically.
+Boxes, nameplates, history panels and decorations support an optional `contour`; history bubbles use `bubble_contour`, and history name capsules can set `contour` inside `name_plate`.
 
-Decorations can set a `motif`: `orbit` (orbit arcs), `sparkle` (curved star burst), `blossom` (five-petal notched cherry blossom), `petal`, `flourish` (curling leaf), `rays`, `halftone`, `fold` (folded corner) or `circuit` (circuit traces). Motifs use the decoration's existing color, gradient and border color. A decoration can also reference a PNG, JPEG, WebP or GIF in the package with `image`, shown whole within `size` at its own aspect ratio; images keep `opacity`, `rotate` and motion, and once loaded they override the decoration's fill, gradient, `motif`, `contour` and `polygon`. Images are exported with the skin, and inheriting skins can use the original image directly. For other surfaces, the priority is an available nine-slice image, then `motif`, then `contour`, then the original rectangle / `polygon`; image-based skins keep their original drawing. Preview, thumbnails, history and display share the same Surface drawing and Painter, and never load external scripts or SVG. Custom contours and motifs also follow the existing `rotate`, `opacity`, decoration layering and color roles.
+The presets are `rounded` (smooth corners and a continuous curved tail), `orbit` (offset rounded corners), `hud` (instrument-panel chamfers), `parchment` (paper edge), `cinema` (widescreen chamfers), `rpg` (stepped frame), `slant` (bevel cut), `cloud`, `chat` (comment bubble), `comic` (comic panel), `terminal` (device casing), `pixel` (pixel grooves), `sakura` (petal edge), `ink` (irregular paper), `ribbon` and `seal` (stamp).
 
-Decorations can set `motion = { kind, period_s, amplitude, phase }`: `kind` is `float` (bobbing up and down, `amplitude` in pixels, 0–32) or `breathe` (opacity breathing, `amplitude` is the maximum fraction of opacity removed, 0–1). The period `period_s` is 0.5–120 seconds; `phase` is a 0–1 cycle offset. Defaults are `float`, 6 seconds, 0.1px, 0; without `motion` the decoration stays completely still. Recommended: float no more than 2px, breathe no more than 0.15, and a period of at least 5 seconds. Motion stacks on top of the existing rotation and opacity and only changes drawing, never layout or wrapping. Only your own display box and the partner's display box play it; the editing area, history, skin preview and thumbnails use the resting pose. When the system or app enables reduced motion, the resting pose is used too. An empty display box doesn't keep requesting frames for decorations; a hidden window still draws as usual while it has OBS output.
+Without it, the original rectangle, corners and per-side borders are kept.
 
-Gradients are `gradient = { kind, angle, center, circle, stops }`: `kind` is `linear` (default; `angle` works as in CSS, 0 = up, 90 = right, default 180) or `radial` (`center` in percent, default `[50, 50]`); `stops` is 2–8 entries of `[position 0–1, color]`, and positions may not decrease. Gradients can't be drawn on borders; for a gradient border, place a decoration with `layer = "below"` and a negative `inset` under the box.
+A shaped box's fill, stroke and shadow share one path; the position, width, length and lean of `dialogue.tail` are merged into the contour, and the tail shares the box's fill and shadow — `tail.color` / `tail.shadow` only apply to the original standalone triangle tail.
+
+The content area is still a rectangle and the contour doesn't clip body text; on smaller history bubbles and nameplates, edge undulation is reduced automatically.
+
+Decorations can set a `motif`: `orbit` (orbit arcs), `sparkle` (curved star burst), `blossom` (five-petal notched cherry blossom), `petal`, `flourish` (curling leaf), `rays`, `halftone`, `fold` (folded corner) or `circuit` (circuit traces).
+
+Motifs use the decoration's existing color, gradient and border color.
+
+A decoration can also reference a PNG, JPEG, WebP or GIF in the package with `image`, shown whole within `size` at its own aspect ratio; images keep `opacity`, `rotate` and motion, and once loaded they override the decoration's fill, gradient, `motif`, `contour` and `polygon`.
+
+Images are exported with the skin, and inheriting skins can use the original image directly.
+
+For other surfaces, the priority is an available nine-slice image, then `motif`, then `contour`, then the original rectangle / `polygon`; image-based skins keep their original drawing.
+
+Preview, thumbnails, history and display share the same Surface drawing and Painter, and never load external scripts or SVG.
+
+Custom contours and motifs also follow the existing `rotate`, `opacity`, decoration layering and color roles.
+
+Decorations can set `motion = { kind, period_s, amplitude, phase }`: `kind` is `float` (bobbing up and down, `amplitude` in pixels, 0–32) or `breathe` (opacity breathing, `amplitude` is the maximum fraction of opacity removed, 0–1).
+
+The period `period_s` is 0.5–120 seconds; `phase` is a 0–1 cycle offset.
+
+Defaults are `float`, 6 seconds, 0.1px, 0; without `motion` the decoration stays completely still.
+
+Recommended: float no more than 2px, breathe no more than 0.15, and a period of at least 5 seconds.
+
+Motion stacks on top of the existing rotation and opacity and only changes drawing, never layout or wrapping.
+
+Only your own display box and the partner's display box play it; the editing area, history, skin preview and thumbnails use the resting pose.
+
+When the system or app enables reduced motion, the resting pose is used too.
+
+An empty display box doesn't keep requesting frames for decorations; a hidden window still draws as usual while it has OBS output.
+
+Gradients are `gradient = { kind, angle, center, circle, stops }`: `kind` is `linear` (default; `angle` works as in CSS, 0 = up, 90 = right, default 180) or `radial` (`center` in percent, default `[50, 50]`); `stops` is 2–8 entries of `[position 0–1, color]`, and positions may not decrease.
+
+Gradients can't be drawn on borders; for a gradient border, place a decoration with `layer = "below"` and a negative `inset` under the box.
 
 Each box has at most 4 shadow layers, and the older fields `inner_border_color`, `glow` and `shadow` each take one layer too.
 
@@ -628,7 +781,15 @@ min = 4.5
 color = { param = "fur" }                   # any field can be written as a placeholder
 ```
 
-**Placeholders**: `{ param = "<id>" }` must be the entire value, with no other keys. On load, defaults are substituted first and the result is validated like an ordinary manifest; the user's values are later written into the same spots. Placeholders can't appear under `fonts`, `sounds`, `pipelines` or `materials`, anywhere in `shaders` other than `params` and `intensity`, under `dialogue.responsive.rules`, or in the `image`, `file`, `source`, `textures`, `families` and `font_family` fields — so parameters never change which files a skin reads. Placeholders in `[dialogue]` expand along with the responsive layouts. Integer fields can only be filled by number parameters whose range and step are both integers.
+**Placeholders**: `{ param = "<id>" }` must be the entire value, with no other keys.
+
+On load, defaults are substituted first and the result is validated like an ordinary manifest; the user's values are later written into the same spots.
+
+Placeholders can't appear under `fonts`, `sounds`, `pipelines` or `materials`, anywhere in `shaders` other than `params` and `intensity`, under `dialogue.responsive.rules`, or in the `image`, `file`, `source`, `textures`, `families` and `font_family` fields — so parameters never change which files a skin reads.
+
+Placeholders in `[dialogue]` expand along with the responsive layouts.
+
+Integer fields can only be filled by number parameters whose range and step are both integers.
 
 **Validation**:
 - parameter, group, preset and option ids are 1–32 characters of a-z, 0-9 and `_`;
@@ -668,15 +829,31 @@ When input can't be parsed, the field shows why, the preview keeps the last vali
 | Thumbnails, input window, editor | `still.png`, i.e. the defaults |
 | Display box and settings preview, with `static_fallback = true` | runs the same program with the current parameters; frozen in the resting pose when motion is off |
 
-Kemomimi (animal ears) from [NanaTypeSkins](https://github.com/sena-nana/NanaTypeSkins) is the first parameterized skin: 46 parameters and 10 presets, with the ears, tail and box all generated from parameters by a single SDF program, split into two artworks — a back layer (shadow, the tail sharing one outline with the box, the box face and markings) and a front layer (the ears and where they join the head). The ears carry the expression: they perk up when a line starts, twitch upright when the speaker changes, go alert while typing and relax while waiting; between lines a 16-second script flicks them, turns one ear sideways to listen and tilts them with a head tilt, and the ear tips lag behind the motion.
+Kemomimi (animal ears) from [NanaTypeSkins](https://github.com/sena-nana/NanaTypeSkins) is the first parameterized skin: 46 parameters and 10 presets, with the ears, tail and box all generated from parameters by a single SDF program, split into two artworks — a back layer (shadow, the tail sharing one outline with the box, the box face and markings) and a front layer (the ears and where they join the head).
+
+The ears carry the expression: they perk up when a line starts, twitch upright when the speaker changes, go alert while typing and relax while waiting; between lines a 16-second script flicks them, turns one ear sideways to listen and tilts them with a head tilt, and the ear tips lag behind the motion.
 
 ## Hot reload
 
 While making a skin, turn on **Reload when files change** in **Settings › Skins**; the display box updates as soon as you change a file in the folder.
 
-The skin catalog is only used by the static picker. Built-in WGSL is validated and its textures decoded only when the skin is applied or its preview played, and the result is reused afterwards; refreshing the picker or rescanning the directory doesn't prepare built-in programs again. You can still play the motion of a skin you haven't applied, without changing the current skin. User folders and imported packages are still fully validated, and after a hot reload the picker and the display use the same scan result; manually switching to a user skin or playing its preview re-reads the files, which covers edits made without file watching. If validation fails, the last valid version keeps showing. Calling the theme library's `load` directly re-reads user files, while `load_scanned` returns the snapshot from the last scan.
+The skin catalog is only used by the static picker.
 
-Exported packages containing WGSL still expand inheritance and carry resources, but the standalone manifest omits fields equal to the contextual defaults. The original inheriting manifest is kept as is, and explicit clears such as `decor = []` are never trimmed. Authoring tools can use `standalone_manifest` to produce the same standalone manifest from a resolved skin; don't use it to trim a child skin that hasn't been merged yet.
+Built-in WGSL is validated and its textures decoded only when the skin is applied or its preview played, and the result is reused afterwards; refreshing the picker or rescanning the directory doesn't prepare built-in programs again.
+
+You can still play the motion of a skin you haven't applied, without changing the current skin.
+
+User folders and imported packages are still fully validated, and after a hot reload the picker and the display use the same scan result; manually switching to a user skin or playing its preview re-reads the files, which covers edits made without file watching.
+
+If validation fails, the last valid version keeps showing.
+
+Calling the theme library's `load` directly re-reads user files, while `load_scanned` returns the snapshot from the last scan.
+
+Exported packages containing WGSL still expand inheritance and carry resources, but the standalone manifest omits fields equal to the contextual defaults.
+
+The original inheriting manifest is kept as is, and explicit clears such as `decor = []` are never trimmed.
+
+Authoring tools can use `standalone_manifest` to produce the same standalone manifest from a resolved skin; don't use it to trim a child skin that hasn't been merged yet.
 
 Full artwork supplies its own transparent outline, so its coverage mask reuses a single white pixel and isn't rebuilt for size or DPI. Backgrounds, borders and decorations still use their real masks. Previews only load the images that static drawing needs; the active skin can still use the package's other images through `skin:`.
 
@@ -727,10 +904,29 @@ exit_hold_ms = 80       # the whole line scrambles at once first
 exit_ms = 400           # then the text disappears at random over the remaining 320ms
 ```
 
-The three non-zero durations accept 1–2000ms, and `exit_hold_ms` must be shorter than `exit_ms`; when scrambling is on, `scramble.exit_ms` is the total exit duration. Whitespace stays in place, emoji are handled as whole grapheme clusters, and images and inline avatars fade out as the original image during the exit. The motion preview plays once and stops; static thumbnails show the settled original text.
+The three non-zero durations accept 1–2000ms, and `exit_hold_ms` must be shorter than `exit_ms`; when scrambling is on, `scramble.exit_ms` is the total exit duration.
+
+Whitespace stays in place, emoji are handled as whole grapheme clusters, and images and inline avatars fade out as the original image during the exit.
+
+The motion preview plays once and stops; static thumbnails show the settled original text.
+
 The mask reuses NanaUI's content-agnostic `PresentationMask`; the alpha returned by the WGSL `material` is coverage, and RGB plays no part in the mask. `MaterialInput.progress` is 0–1, and `position`/`uv`/`size` refer to a single character or the body viewport depending on scope; `target_position` and `target_size` always refer to the visible body viewport. `glyph_uv` is the glyph-local coordinate provided by the text adapter.
-Crayon wipes each character in diagonally over 180ms and wipes the whole body out over 320ms; both dividing lines lean 45° along bottom-left to top-right and advance from top-left to bottom-right. Names, quotes and the box stay stable, and the input editor doesn't play the mask. With advanced effects off, the native fallback is used; reduced motion keeps the per-character rhythm but plays no wipe and doesn't wait for the exit. The continue key finishes the exit immediately and starts the next segment; consecutive replacements follow the queue policy. Existing history entries aren't wiped along with the body text.
-[Real GPU animation](../crayon-typewriter.webp) · [300px narrow window](../crayon-typewriter-narrow.webp). Acceptance covers Chinese and English, ruby, outlines, color emoji and inline images: a neutral mask matches the original output, nothing remains after wiping; mask updates don't reshape, rasterize glyphs or upload atlases, and continuous frames stop after a bounded deadline. Run `snapshots` with `NANATYPE_TRANSITION_AUDIT=1` to capture keyframes of the display box and history (`NANATYPE_TRANSITION_WIDTH=300` and `NANATYPE_SNAPSHOT_SCALE=2` check narrow windows and high DPI); `NANATYPE_SNAPSHOT_STATIC=1` checks reduced motion, and `NANATYPE_SNAPSHOT_MATERIALS_OFF=1` checks advanced effects off.
+
+Crayon wipes each character in diagonally over 180ms and wipes the whole body out over 320ms; both dividing lines lean 45° along bottom-left to top-right and advance from top-left to bottom-right.
+
+Names, quotes and the box stay stable, and the input editor doesn't play the mask.
+
+With advanced effects off, the native fallback is used; reduced motion keeps the per-character rhythm but plays no wipe and doesn't wait for the exit.
+
+The continue key finishes the exit immediately and starts the next segment; consecutive replacements follow the queue policy.
+
+Existing history entries aren't wiped along with the body text.
+
+[Real GPU animation](../crayon-typewriter.webp) · [300px narrow window](../crayon-typewriter-narrow.webp).
+
+Acceptance covers Chinese and English, ruby, outlines, color emoji and inline images: a neutral mask matches the original output, nothing remains after wiping; mask updates don't reshape, rasterize glyphs or upload atlases, and continuous frames stop after a bounded deadline.
+
+Run `snapshots` with `NANATYPE_TRANSITION_AUDIT=1` to capture keyframes of the display box and history (`NANATYPE_TRANSITION_WIDTH=300` and `NANATYPE_SNAPSHOT_SCALE=2` check narrow windows and high DPI); `NANATYPE_SNAPSHOT_STATIC=1` checks reduced motion, and `NANATYPE_SNAPSHOT_MATERIALS_OFF=1` checks advanced effects off.
 
 
 ## Responsive display-box layout and vertical text
@@ -741,9 +937,17 @@ Inheriting skins also need an explicit declaration to enable this: `dialogue.res
 
 `landscape` and `portrait` are layout overrides supporting `padding`, `box`, `nameplate`, `continue`, `portrait` (avatar), `decor` and `shader_effects`. Of these, `box`, `nameplate`, `continue` and `portrait` are partial overrides: write only the fields that differ from the base display box, and on load they deep-merge into the same-named part of `[dialogue]` (nested tables merge field by field). Arrays aren't merged item by item but replaced whole, including `padding`, `decor`, `shader_effects` and the `shadows`, `stops`, `polygon` and so on inside each part. To remove optional fields present in the base, list them in `unset` as dotted paths, for example `unset = ["box.frame", "nameplate.gradient"]`; it runs after merging, applies only to the parts that layout writes (which may be empty tables), and a path that doesn't exist produces a warning.
 
-As soon as a layout includes a part (even an empty table like `box = {}`), a match replaces that part wholesale with "base display box + this layout's differences", also overriding what the orientation layout or earlier rules set for it; parts that don't appear keep the previous layer's result. Body typography still comes from the user's personalization. Fully written-out parts in older manifests are still valid overrides, except that optional fields they omit (such as `frame`) now carry over from the base — move them into `unset` if you need them gone. Decorations should be layered with the native border, nine-slice and separate images; don't stretch one landscape image to stand in for a portrait composition.
+As soon as a layout includes a part (even an empty table like `box = {}`), a match replaces that part wholesale with "base display box + this layout's differences", also overriding what the orientation layout or earlier rules set for it; parts that don't appear keep the previous layer's result.
 
-The built-in skins' `skin.toml` files are all generated by `cargo run -p nanatype-theme --example regenerate_builtin_skins`: defaults are omitted, layouts keep only their differences from the base, and short arrays go on one line; exported skins use the same format. Afterwards, the `builtin_responsive_layouts_resolve_to_the_recorded_dialogues` test confirms each skin resolves the same at every breakpoint; after an intentional design change, re-record with `NANATYPE_BLESS=1`.
+Body typography still comes from the user's personalization.
+
+Fully written-out parts in older manifests are still valid overrides, except that optional fields they omit (such as `frame`) now carry over from the base — move them into `unset` if you need them gone.
+
+Decorations should be layered with the native border, nine-slice and separate images; don't stretch one landscape image to stand in for a portrait composition.
+
+The built-in skins' `skin.toml` files are all generated by `cargo run -p nanatype-theme --example regenerate_builtin_skins`: defaults are omitted, layouts keep only their differences from the base, and short arrays go on one line; exported skins use the same format.
+
+Afterwards, the `builtin_responsive_layouts_resolve_to_the_recorded_dialogues` test confirms each skin resolves the same at every breakpoint; after an intentional design change, re-record with `NANATYPE_BLESS=1`.
 
 The default landscape of full procedural prints keeps the original drawing and subject-specific motion; portrait and narrow windows use a separate composition, rearranging the subject's ornaments with aspect-locked `decor` or primitives drawn in logical pixels. Each layout keeps only one source for the subject, avoiding duplicate decorations.
 
@@ -780,13 +984,25 @@ portrait = true
 layout = { padding = [12, 16, 48, 32], decor = [] }
 ```
 
-Display-box decorations with responsive layout enabled can declare `aspect_ratio` (0.01–100, physical width-to-height ratio), `max_fraction` (maximum share of the window width and height, 0.001–4 each) and `min_window` (hidden when either window dimension falls short, 0–8192 each). These constraints only shrink decorations, never enlarge them, and resolve to logical pixels before positioning. Images use contain, and shapes and nine-slice corners keep their proportions. At very small sizes body text comes first, and secondary decorations can be hidden by rules.
+Display-box decorations with responsive layout enabled can declare `aspect_ratio` (0.01–100, physical width-to-height ratio), `max_fraction` (maximum share of the window width and height, 0.001–4 each) and `min_window` (hidden when either window dimension falls short, 0–8192 each).
+
+These constraints only shrink decorations, never enlarge them, and resolve to logical pixels before positioning.
+
+Images use contain, and shapes and nine-slice corners keep their proportions.
+
+At very small sizes body text comes first, and secondary decorations can be hidden by rules.
 
 A nine-slice's `fill` defaults to `true` for compatibility with existing skins; `fill = false` draws only the edges, keeping the separate native background or procedural material underneath. That's how Crayon's edges and its body paper can each fit the size without stretching the flowers across the whole sheet.
 
 Inline name tags in vertical text are still a single playback unit, with glyphs using the same font engine's registered fonts and fallbacks. Static tags, images and animated stickers keep their physical aspect ratio; the input editor and history keep the original tag layout.
 
-Portrait and narrow windows use each skin's original materials, contours and decoration assets: Parchment keeps its pulp fibers and corner acanthus, Ink Wash keeps its xuan paper, bamboo and seal, Sakura keeps its original branch, and Terminal, Night and Pocket Pixel keep their own state primitives. Generic patterns, sidebars and orbits the skins never had aren't used as substitutes; Citrus's portrait keeps only the slant-cut packaging at the bottom and no longer repeats the landscape's left color band. Very small windows pick the declared minimal variant, removing only standalone small objects while always keeping textures and borders. Selecting a skin prepares the current static preview, and motion starts only on explicit play.
+Portrait and narrow windows use each skin's original materials, contours and decoration assets: Parchment keeps its pulp fibers and corner acanthus, Ink Wash keeps its xuan paper, bamboo and seal, Sakura keeps its original branch, and Terminal, Night and Pocket Pixel keep their own state primitives.
+
+Generic patterns, sidebars and orbits the skins never had aren't used as substitutes; Citrus's portrait keeps only the slant-cut packaging at the bottom and no longer repeats the landscape's left color band.
+
+Very small windows pick the declared minimal variant, removing only standalone small objects while always keeping textures and borders.
+
+Selecting a skin prepares the current static preview, and motion starts only on explicit play.
 
 `[fonts.latin]` can give Latin text its own `file`, `families` and `weight`; without it, the body font and fallbacks are used.
 

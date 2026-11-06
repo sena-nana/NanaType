@@ -2,6 +2,11 @@
 
 # Fonts for the built-in skins
 
+> **Purpose:** Understand NanaType's bundled fonts, fallback behavior, subsetting rules, and licensing requirements.
+>
+> **On this page:** [How fonts work](#how-it-works) · [Bundled fonts](#bundled-fonts) · [Subsetting](#subsetting) · [Add a font](#adding-a-font)
+
+
 If a built-in skin only named system fonts, any computer without those fonts would fall back to the ordinary UI font, and skins like Pocket Pixel and Ink Wash would lose their character. This page covers which open-source fonts ship with the app, how they are compiled in, and the rules for adding more.
 
 > **Status**: Three fonts ship: Fusion Pixel, LXGW WenKai and Tangerine Bold. The first two were fetched from their official GitHub Releases on 2026-10-13, Tangerine from Google Fonts on 2026-10-18. Licences, sources, SHA-256 hashes and subsetting records are in [crates/theme/fonts/README.md](../../crates/theme/fonts/README.md).
@@ -26,7 +31,13 @@ Embedding is byte-for-byte, so the binary grows by exactly the total size of the
 
 ## Bundled fonts
 
-Sonnet additionally bundles Tangerine Bold (Version 1.3, 65,464 bytes, Toshi Omagari, OFL-1.1) as its default English script face, reusing LXGW WenKai for Chinese. The complete font was fetched from Google Fonts on 2026-10-18 and was not modified or subset; its checksum and licence record are in the font directory's README. The three bundled fonts total 3,661,172 bytes. A new optional `[fonts.latin]` role takes the same fields as the other font roles and applies only to Latin runs with no font specified; explicit fonts and personal font settings take precedence.
+Sonnet additionally bundles Tangerine Bold (Version 1.3, 65,464 bytes, Toshi Omagari, OFL-1.1) as its default English script face, reusing LXGW WenKai for Chinese.
+
+The complete font is kept unmodified; its checksum and licence record are in the font directory's README.
+
+The three bundled fonts total 3,661,172 bytes.
+
+A new optional `[fonts.latin]` role takes the same fields as the other font roles and applies only to Latin runs with no font specified; explicit fonts and personal font settings take precedence.
 
 | Skin | Font (registered family name) | Version | Author | Licence | Upstream file | Subset | File |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -46,7 +57,11 @@ Original downloads and SHA-256:
 
 Some of Fusion Pixel's glyphs come from Ark Pixel (OFL-1.1, TakWolf), Cubic 11 (OFL-1.1, including the free-licence notices of JF Dot M+H 12 and M+ BITMAP FONTS) and Galmuri (OFL-1.1, Lee Minseo). Those three licences from the archive are copied verbatim into `FusionPixel12pxProportionalSC.LICENSE.txt` together with Fusion Pixel's own `OFL.txt`.
 
-The skins' `families` are unchanged and still act as the fallback chain: a build without fonts (`--no-default-features`) behaves exactly as before. Pixel fonts look sharpest at integer multiples of 12 px; at other sizes the stroke edges blur. The body, name tag and history text (chat rows included) of `pixel` and `rpg` all use 24 px with a line height of 1.5 (36 px), which the `pixel_font_skins_stay_on_the_12px_grid` test checks.
+The skins' `families` are unchanged and still act as the fallback chain: a build without fonts (`--no-default-features`) behaves exactly as before.
+
+Pixel fonts look sharpest at integer multiples of 12 px; at other sizes the stroke edges blur.
+
+The body, name tag and history text (chat rows included) of `pixel` and `rpg` all use 24 px with a line height of 1.5 (36 px), which the `pixel_font_skins_stay_on_the_12px_grid` test checks.
 
 ### Not bundled for now
 

@@ -2,6 +2,11 @@
 
 # Comet (彗星号) integration
 
+> **Purpose:** Connect NanaType to a local [Comet (彗星号)](https://huixinghao.cn/) client and receive its live-room chat.
+>
+> **On this page:** [Data flow](#how-the-data-flows) · [Setup](#getting-started) · [Field mapping](#field-mapping) · [Testing](#testing)
+
+
 [Comet (彗星号)](https://huixinghao.cn/) is a live-streaming assistant. The Comet client serves a chat WebSocket on this computer itself; NanaType connects to it directly and reads every room it listens to, with no plugin page and no relay.
 
 ## How the data flows
@@ -51,10 +56,6 @@ Without a Comet client, a mock server can stand in; it sends encrypted sample me
 cargo run -p nanatype-blive --example mock_comet
 ```
 
-## Not yet verified
-
-- Whether `Gift`'s `price` is the unit price or the total, and whether it is in yuan: it is treated as the unit price in yuan for now, to be checked against real gifts.
-- The guard level is read only from `item`'s text; if Comet gives a level field in `data`, it can be added.
 
 ## Upgrading from earlier versions
 

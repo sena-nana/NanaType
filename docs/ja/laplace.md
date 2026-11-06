@@ -2,6 +2,10 @@
 
 # LAPLACE との連携
 
+LAPLACE Event Bridge 経由で bilibili のライブコメントを受信するための設定と仕様です。認証コードを使う構成だけを扱います。基本操作は [使い方ガイド](usage.md) も参照してください。
+
+**このページの案内**：接続要件 → データの流れ → 使い方 → OBS リンクの注意 → フィールド対応 → 接続詳細
+
 [LAPLACE Chat](https://chat.laplace.live/) は bilibili のライブコメントツールです。受け取ったライブルームのイベントを [LAPLACE Event Bridge](https://github.com/laplace-live/event-bridge) で配信でき、NanaType は Event Bridge のクライアントとしてそれを受け取ります。bilibili への接続は LAPLACE が担当し、NanaType は bilibili に直接つなぎません。
 
 > **認証コード（身份码）での接続のみ対応しています。** LAPLACE Chat または Event Fetcher は、配信者の認証コード（bilibili ライブのオープンプラットフォーム）でライブルームにつないでください。ルーム番号での直接接続（`connectionMode=direct`）は bilibili の非公開のウェブ用インターフェースを使うため、Event Bridge を経由しても NanaType は対応しません。

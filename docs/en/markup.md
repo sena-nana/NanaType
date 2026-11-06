@@ -2,6 +2,11 @@
 
 # Line markup
 
+> **Purpose:** Use NanaType's line markup for styling, timing, effects, media, and integrations.
+>
+> **On this page:** [Styles](#styles-paired) · [Effects](#per-character-effects-paired) · [Rhythm](#rhythm) · [Media and expressions](#sounds-expressions-and-the-screen) · [Whole-line settings](#whole-line-settings)
+
+
 Markup lives in the input window's editing area; the toolbar and sidebar insert it for you. Parsing never fails: unrecognized tags are shown as plain text and flagged in the status bar. `[[` stands for a literal `[`.
 
 ## Styles (paired)
@@ -84,8 +89,24 @@ Written at the very start:
 
 Quick phrases can use `{{name}}` (character name) and `{{time}}` (current time).
 
-The sidebar on the right of the input window has an icon bar that switches between four panels: **Controls**, **Stickers**, **Quick phrases** and **Chat**; click the current icon again to collapse the sidebar. The **Controls** panel turns the rhythm, screen and sound, and expression markup above into the same chips you see in the editor — click one to insert it at the caret. Text effects, entrances and speed are marked with brackets and apply to the selection. Hovering a tile shows what it does and its markup source, and there is a search box at the top. Chat messages can be pinned to the upper half of the sidebar, and the divider between them and the panel below can be dragged.
+The sidebar on the right of the input window has an icon bar that switches between four panels: **Controls**, **Stickers**, **Quick phrases** and **Chat**; click the current icon again to collapse the sidebar.
 
-The toolbar only handles how text looks: bold, italic, underline, strikethrough; color, size, font, alignment; outline, ruby and clear formatting. It provides panels for paragraph alignment, font size and font. Alignment applies to the paragraph under the caret or the selected paragraphs; size can be a multiple of the skin's size (0.5–3×) or a fixed pixel size (4–400px). Fonts can use the skin's body, name and accent slots, or a font family name you type. The panels show the current properties, and **Mixed** when they differ across the selection.
+The **Controls** panel turns the rhythm, screen and sound, and expression markup above into the same chips you see in the editor — click one to insert it at the caret.
+
+Text effects, entrances and speed are marked with brackets and apply to the selection.
+
+Hovering a tile shows what it does and its markup source, and there is a search box at the top.
+
+Chat messages can be pinned to the upper half of the sidebar, and the divider between them and the panel below can be dragged.
+
+The toolbar only handles how text looks: bold, italic, underline, strikethrough; color, size, font, alignment; outline, ruby and clear formatting.
+
+It provides panels for paragraph alignment, font size and font.
+
+Alignment applies to the paragraph under the caret or the selected paragraphs; size can be a multiple of the skin's size (0.5–3×) or a fixed pixel size (4–400px).
+
+Fonts can use the skin's body, name and accent slots, or a font family name you type.
+
+The panels show the current properties, and **Mixed** when they differ across the selection.
 
 **Skin default** clears the corresponding override; in source you can use `[size=inherit]…[/size]` and `[font=inherit]…[/font]` to restore inheritance inside an outer style. Multipliers and font slots follow the skin, while pixel sizes and named font families stay fixed. Clearing formatting also restores the default alignment of the affected paragraphs.

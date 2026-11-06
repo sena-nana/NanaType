@@ -2,7 +2,16 @@
 
 # Package editor
 
-Tracks [#6](https://github.com/sena-nana/NanaType/issues/6); for the format and boundaries see [Unified package design](../package-design.md#包编辑器). The editor is a standalone program, **NanaType Editor** (`editor/`, built and installed separately). It shares the skin renderer, UI components and plugin host in `crates/frame` with NanaType, but neither contains the other's code, strings or assets: NanaType has no editing entry point, and the editor has no chat, multiplayer, stickers, outputs or hotkeys.
+> **Purpose:** Author, preview, validate, sign, and export NanaType packages with the standalone NanaType Editor.
+>
+> **On this page:** [Workspace](#layout) · [Open a project](#opening-a-project) · [Edit and preview](#files) · [Sign packages](#protection--signing) · [Save and export](#saving-and-exporting)
+
+
+Tracks [#6](https://github.com/sena-nana/NanaType/issues/6); for the format and boundaries see [Unified package design](../package-design.md#编辑器与非目标).
+
+The editor is a standalone program, **NanaType Editor** (`editor/`, built and installed separately).
+
+It shares the skin renderer, UI components and plugin host in `crates/frame` with NanaType, but neither contains the other's code, strings or assets: NanaType has no editing entry point, and the editor has no chat, multiplayer, stickers, outputs or hotkeys.
 
 The editor works with internal drafts and with directory projects that are written back in place. Editing never changes the current skin, installed packages, plugin consents or running plugins. Changes take effect only after you export a `.ntpkg` and import it in NanaType under "Settings → Plugins & packages".
 
@@ -27,7 +36,11 @@ The editor reads and writes NanaType's data directory (Windows `%APPDATA%\dev.se
 - Signing keys (a DPAPI file or the keychain item `dev.sena-nana.nanatype.package-signing`). Keys created earlier in NanaType keep working.
 - `config/settings.json`: read-only. By default the preview uses the package's own defaults; personalization is applied only after you explicitly turn on "Simulate NanaType personalization", and it is never written back to the project.
 
-Portable NanaType keeps its data in `data/` next to the program; point the editor at it with `nanatype-editor --data <that directory>`. The portable editor itself also uses the `data/` next to its program. `nanatype-editor <file.ntpkg or project directory>` on the command line opens a project directly; launching again hands the absolute path to the window that is already open, going through the same unsaved-changes prompt. NanaType and the editor can run at the same time.
+Portable NanaType keeps its data in `data/` next to the program; point the editor at it with `nanatype-editor --data <that directory>`.
+
+The portable editor itself also uses the `data/` next to its program. `nanatype-editor <file.ntpkg or project directory>` on the command line opens a project directly; launching again hands the absolute path to the window that is already open, going through the same unsaved-changes prompt.
+
+NanaType and the editor can run at the same time.
 
 ## Opening a project
 
@@ -51,13 +64,25 @@ The "Files" workspace has a file tree on the left. A lock icon marks signature-p
 
 Binary files show their format (detected from content), size, BLAKE3 digest, and the source and license from the data declaration.
 
-Files can be created, moved, renamed, replaced, and imported several at a time. The target path field sets the directory for new or renamed files; imports go to the directory of the file selected when the import started (files at the root import into `assets/` by default). Renaming shows the affected references and updates recognised declaration paths automatically; strings inside Lua/WGSL are only flagged for manual updating, and protected references block the operation.
+Files can be created, moved, renamed, replaced, and imported several at a time.
+
+The target path field sets the directory for new or renamed files; imports go to the directory of the file selected when the import started (files at the root import into `assets/` by default).
+
+Renaming shows the affected references and updates recognised declaration paths automatically; strings inside Lua/WGSL are only flagged for manual updating, and protected references block the operation.
 
 Images can be shown on a transparency checkerboard with any declared nine-slice guides; fonts show sample text; audio shows its duration and offers play, stop and volume — the audio device is opened only when you explicitly play.
 
 Imported assets keep their file names. The host checks the path, the size, and that the extension matches the content — a `.png` must really be a PNG, for example.
 
-Full validation runs 300 ms after you stop typing, keeping only one background job and folding it into the latest version. On errors the last valid preview stays visible and is marked stale. Syntax diagnostics for sources over 64 KiB and the pipeline list of large skins are updated in the background, while the typing path keeps only lightweight checks. Full validation follows the same path as import and runs in the background, covering dependencies, signatures, skins, data and the script entry. Clicking an item in the problem list jumps to the corresponding file and line.
+Full validation runs 300 ms after you stop typing, keeping only one background job and folding it into the latest version.
+
+On errors the last valid preview stays visible and is marked stale.
+
+Syntax diagnostics for sources over 64 KiB and the pipeline list of large skins are updated in the background, while the typing path keeps only lightweight checks.
+
+Full validation follows the same path as import and runs in the background, covering dependencies, signatures, skins, data and the script entry.
+
+Clicking an item in the problem list jumps to the corresponding file and line.
 
 ## Package
 
@@ -78,7 +103,15 @@ Declared data and processing pipelines are added, edited and removed with forms 
 
 Uncommitted form content (including invalid input) is kept in the project session, so switching tabs does not lose it, and it counts toward the unsaved-changes prompt and recovery snapshots. These inputs must be applied or discarded before saving or exporting.
 
-Before writing, `package.toml` is parsed strictly and pipelines are checked against the registered processors (port types, cycles, depth, parameter ranges, whether referenced data is declared and its format matches, and whether materials lose their source). If the edit introduces new errors, nothing is written and a message explains why. Writes modify the file in place, preserving other keys and comments. When `package.toml` or `skin.toml` is signature-protected, the corresponding section is read-only. Pipelines that cannot be parsed are still listed, with a note that they must be fixed in the source.
+Before writing, `package.toml` is parsed strictly and pipelines are checked against the registered processors (port types, cycles, depth, parameter ranges, whether referenced data is declared and its format matches, and whether materials lose their source).
+
+If the edit introduces new errors, nothing is written and a message explains why.
+
+Writes modify the file in place, preserving other keys and comments.
+
+When `package.toml` or `skin.toml` is signature-protected, the corresponding section is read-only.
+
+Pipelines that cannot be parsed are still listed, with a note that they must be fixed in the source.
 
 ## Protection & signing
 
@@ -95,7 +128,13 @@ A signature only shows that the content is unchanged since signing; it does not 
 
 ## Preview
 
-The preview is the canvas in the centre of the "Design" workspace. Above the canvas are the playback mode ("Still / stop", "Play", "Reduced motion", "Advanced effects off"), "Replay", zoom and "Fit", background, and "Canvas settings" (custom logical width and height, "Simulate NanaType personalization"), plus the layout layer currently in effect; below it are the "Sample speaker" and test text. The toolbar selects the viewport preset ("Landscape", "Portrait", "Narrow", "Default size") and the view. Still, play, reduced motion, advanced effects off and replay all use a private Stage, which stops refreshing once you leave the canvas.
+The preview is the canvas in the centre of the "Design" workspace.
+
+Above the canvas are the playback mode ("Still / stop", "Play", "Reduced motion", "Advanced effects off"), "Replay", zoom and "Fit", background, and "Canvas settings" (custom logical width and height, "Simulate NanaType personalization"), plus the layout layer currently in effect; below it are the "Sample speaker" and test text.
+
+The toolbar selects the viewport preset ("Landscape", "Portrait", "Narrow", "Default size") and the view.
+
+Still, play, reduced motion, advanced effects off and replay all use a private Stage, which stops refreshing once you leave the canvas.
 
 Once a skin passes validation, the draft is drawn with the real renderer, and you can switch between three views:
 
@@ -106,15 +145,39 @@ The preview uses the same `nanatype_frame::ui::preview::stage` as NanaType's ski
 
 ## Properties and canvas
 
-The left side of the "Design" workspace holds the **Layers**: the tables declared in `skin.toml` (including inherited defaults) listed by hierarchy, with the dialogue box first and array tables (such as decorations) listed by index. Below them are the "Preview parameters", which change only the test values. Selecting a layer shows that table's values in the **Inspector** on the right and selects the parts it draws on the canvas (name tag, portrait, continue mark, decorations); clicking a part on the canvas also selects its layer.
+The left side of the "Design" workspace holds the **Layers**: the tables declared in `skin.toml` (including inherited defaults) listed by hierarchy, with the dialogue box first and array tables (such as decorations) listed by index.
 
-The inspector shows one value per row. Labels of locally declared values use the accent colour, inherited values a secondary colour. Numbers can be adjusted by dragging (one drag commits a single undo step), colours have a picker, and other values are typed in and confirmed with "Apply". "Restore inheritance" removes the local declaration, and the link icon opens the parameter binding. Sub-tables are listed at the end of the rows and can be entered level by level; "Add field" offers parameter, group, preset and responsive templates.
+Below them are the "Preview parameters", which change only the test values.
 
-**Advanced skins** treat the source as authoritative. "Show source beside the canvas" in the toolbar splits the centre into the canvas and the `skin.toml`/WGSL source, and selecting a layer scrolls the source to its table. "This table's TOML" at the bottom of the inspector shows the whole block of that table (and its sub-tables) in the source; editing it in place replaces only that block, keeping everything else and all comments verbatim. Tables without their own header tell you to edit them in the enclosing table. Shaders, materials, parameters, groups and presets all appear as layers.
+Selecting a layer shows that table's values in the **Inspector** on the right and selects the parts it draws on the canvas (name tag, portrait, continue mark, decorations); clicking a part on the canvas also selects its layer.
+
+The inspector shows one value per row.
+
+Labels of locally declared values use the accent colour, inherited values a secondary colour.
+
+Numbers can be adjusted by dragging (one drag commits a single undo step), colours have a picker, and other values are typed in and confirmed with "Apply". "Restore inheritance" removes the local declaration, and the link icon opens the parameter binding.
+
+Sub-tables are listed at the end of the rows and can be entered level by level; "Add field" offers parameter, group, preset and responsive templates.
+
+**Advanced skins** treat the source as authoritative. "Show source beside the canvas" in the toolbar splits the centre into the canvas and the `skin.toml`/WGSL source, and selecting a layer scrolls the source to its table. "This table's TOML" at the bottom of the inspector shows the whole block of that table (and its sub-tables) in the source; editing it in place replaces only that block, keeping everything else and all comments verbatim.
+
+Tables without their own header tell you to edit them in the enclosing table.
+
+Shaders, materials, parameters, groups and presets all appear as layers.
 
 The canvas supports selecting single elements, moving/resizing decorations, and moving the name tag, portrait and continue mark. Adding, duplicating, deleting and reordering decorations is at the top of the layers panel. Arrow keys move, Shift increases the step, and Esc or losing window focus cancels a drag; one drag commits a single undo record.
 
-The edit target can be "Base layout", "Landscape", "Portrait" or "Breakpoint rule". Properties show local overrides and inherited values, "Restore inheritance" removes the local declaration, and the preview shows the order in which the active layers are applied. The first override of an array copies the full effective array of the current layer. Layout geometry comes from the real render nodes, gestures are converted according to the preview zoom, and percentage lengths are preserved. Before a drag is committed, the actual resolved result is compared; if the selected layer is overridden by another responsive layer, the write is refused with a prompt to switch targets. A parameter binding must be removed explicitly before the value can become a constant; shapes inside WGSL are still edited in the source.
+The edit target can be "Base layout", "Landscape", "Portrait" or "Breakpoint rule".
+
+Properties show local overrides and inherited values, "Restore inheritance" removes the local declaration, and the preview shows the order in which the active layers are applied.
+
+The first override of an array copies the full effective array of the current layer.
+
+Layout geometry comes from the real render nodes, gestures are converted according to the preview zoom, and percentage lengths are preserved.
+
+Before a drag is committed, the actual resolved result is compared; if the selected layer is overridden by another responsive layer, the write is refused with a prompt to switch targets.
+
+A parameter binding must be removed explicitly before the value can become a constant; shapes inside WGSL are still edited in the source.
 
 Breakpoint-rule layouts keep the runtime's literal-value restrictions: if an inherited array contains parameter bindings, committing it to a rule layer is rejected by full validation and the original is kept. Landscape and portrait layouts can keep parameter bindings.
 
@@ -144,11 +207,21 @@ Debugging follows these rules:
 | Discard draft | Requires a second confirmation; deletes only the draft and never affects installed packages |
 | Export .ntpkg… | Bundles dependencies and runs full validation; on failure no file is written |
 
-Drafts, recovery snapshots and exports are written as a temporary file in the same directory followed by an atomic replace; if a write fails, the old file is kept. Saving, asset reads, full-validation digests and key access run in the background, and results carry the project identity and version. Global undo/redo covers source, forms, files, signing and the canvas, and signing and protection status are restored along with content.
+Drafts, recovery snapshots and exports are written as a temporary file in the same directory followed by an atomic replace; if a write fails, the old file is kept.
+
+Saving, asset reads, full-validation digests and key access run in the background, and results carry the project identity and version.
+
+Global undo/redo covers source, forms, files, signing and the canvas, and signing and protection status are restored along with content.
 
 A recovery snapshot is written 2 seconds after you stop editing, without overwriting the manual save point; on the next launch, the start page lets you recover or discard it. Snapshots of directory projects keep the manual save point, the source path and the latest disk baseline separately, and external changes are re-checked after recovery.
 
-The directory watcher coalesces bursts of events. Unmodified files follow the disk, edits to different files are merged, and conflicts on the same file offer keep local, accept disk, or save a copy. The baseline is re-checked before saving, and overwriting is blocked while conflicts are unresolved. Multi-file saves use a log and backups in `directory-transactions/` under the app data directory, and an interrupted save is recovered the next time the project opens; if recovery conflicts with newer external changes, the log is kept and its path is reported for manual handling.
+The directory watcher coalesces bursts of events.
+
+Unmodified files follow the disk, edits to different files are merged, and conflicts on the same file offer keep local, accept disk, or save a copy.
+
+The baseline is re-checked before saving, and overwriting is blocked while conflicts are unresolved.
+
+Multi-file saves use a log and backups in `directory-transactions/` under the app data directory, and an interrupted save is recovered the next time the project opens; if recovery conflicts with newer external changes, the log is kept and its path is reported for manual handling.
 
 On macOS the package declares the `.ntpkg` document type and handles Finder open events; on Windows the installer registers an "Open with" entry without replacing the user's default app. The command line also accepts directory paths.
 
@@ -162,45 +235,12 @@ scripts/check-product-split.sh
 cargo run -p nanatype-editor
 ```
 
-GPU UI tests run serially and produce screenshots under `target/package-editor/` in Chinese, English and Japanese at 960/1280/1440/1920px, covering the Design, Files, Sounds, Lua, Data and pipelines, Package and signing workspaces. Reliability tests cover save versions, stale results, recovery of invalid forms, undoing signatures, local declarations and reference operations, directory conflicts and interrupted saves; the 28 built-in skins reuse the theme library's loading, responsive snapshot and round-trip tests.
+GPU UI tests run serially and produce screenshots under `target/package-editor/` in Chinese, English and Japanese at 960/1280/1440/1920px, covering the Design, Files, Sounds, Lua, Data and pipelines, Package and signing workspaces.
 
-The performance example records the CPU time of edit + view under a fixed large-source / large-asset load. It cannot replace native input latency, GPU preview updates or drag frame times. Native macOS/Windows file pickers, quitting, IME, DPI 1/1.5/2, watching, audio, keychain/DPAPI, system open events and the final installers still need separate acceptance; passing automation does not mean platform acceptance is done.
+Reliability tests cover save versions, stale results, recovery of invalid forms, undoing signatures, local declarations and reference operations, directory conflicts and interrupted saves; the 28 built-in skins reuse the theme library's loading, responsive snapshot and round-trip tests.
 
+The performance example records the CPU time of edit + view under a fixed large-source / large-asset load.
 
-### Verification log for this round (2026-10-26)
+It cannot replace native input latency, GPU preview updates or drag frame times.
 
-The implementation stayed on the `main` branch with no temporary branch; voice input code was outside the scope of this change. The passing results below reflect the current working tree and do not mean native platform acceptance is complete.
-
-| Scope | Passed |
-|---|---:|
-| Editor unit, reliability, UI and integration | 39 |
-| Theme library (incl. loading, responsive snapshots and round-trips of the 28 built-in skins) | 133 |
-| Shared rendering and host | 123 |
-| Plugin unit, Wasm, separate process and macOS Seatbelt | 26 |
-| Audio decoding and mixing | 6 |
-| Editor localization | 6 |
-| Total | 333 |
-
-Before committing, duplicate paths in background project transactions, async opening, size-limited asset reads and recovery cleanup were trimmed, keeping the session/version checks. Canvas inheritance is now prepared only once, and declared values are converted straight into `toml_edit`, removing the round trip through a temporary project and serialize-then-parse. New regression tests cover full array copies for landscape/portrait and rule layers, adjacent bindings and preservation of unknown fields. After the cleanup, the editor's 39 tests and the theme library's 133 tests, Clippy, the main program build and the product isolation check passed again; other verification carries over from earlier in this round.
-
-Clippy (`-D warnings`) for `nanatype-editor --all-targets`, the main program build check and the product dependency isolation check passed. UI coverage includes Chinese, English and Japanese at logical widths 300/440/900/1099/1100/1440, checking the actually visible panel heights, button bounds and generated screenshots; the switch at 1100 is based on the whole editor width. Targeted regressions cover invalid raw TOML values, boolean form recovery, explicit parameter bindings, continuing to edit during a save, identity restrictions during recovery, separation of the manual save point from the disk baseline, dependency selection and read-only protection, directory interruption rollback, and refusing commits when a responsive override masks a canvas edit.
-
-CPU model benchmark environment: Apple M4, 16 GiB, macOS 27.0.1, debug build of the current working tree. Each scenario carries 16 MiB of assets; the Lua source is 262158 bytes and the TOML source 276890 bytes. Each round has a fixed 200 warm-up iterations and 1000 samples, 5 rounds in total. Only `Session::edit + view` is measured, excluding UI input dispatch, layout, GPU and background validation time.
-
-| Scenario | Median of per-round p50 (ms) | Median of per-round p95 (ms) | Per-round p95 range (ms) |
-|---|---:|---:|---:|
-| Lua, unsigned | 0.069 | 0.222 | 0.139–0.355 |
-| Lua, 16 MiB of assets signature-protected | 0.070 | 0.200 | 0.086–0.320 |
-| TOML, unsigned | 0.070 | 0.205 | 0.169–0.247 |
-
-Peak RSS for the whole benchmark was about 175.4 MiB. Raw data is in `target/package-editor/editor-perf-run-*.json`, the summary in `editor-perf-summary.json`, and memory readings in the matching `*-time.txt`. During exploration, a 120-sample short run measured a p95 of about 38.61 ms on the large TOML path; afterwards, syntax parsing of large files and pipeline reads for large skins were moved out of synchronous view building. Exploration and the final baseline used different warm-up/sampling rules, so no strict regression ratio is computed from them.
-
-Round-to-round p95 on short paths still fluctuates; later comparisons must use the same machine, build type, load and sampling rules, and anything above 10% must be re-measured and investigated. Baselines for input latency, preview update time, drag frame time and idle refresh in real windows have yet to be established.
-
-On macOS this round completed the separate-process startup check; the automation tools cannot attach to an unpackaged Cargo executable, so the native file picker, close/quit, IME, cross-DPI, keychain, audio device and final installer flows were not confirmed. Native Windows acceptance was not run. Canvas rotation, constraints, the full DPI 1/1.5/2 matrix and current-platform visual comparison of all built-in skins also need to be recorded as later acceptance; the pass counts above do not replace them.
-
-### UI redesign verification (2026-10-26)
-
-The editor moved to a canvas-centred layout (toolbar, activity bar, left panel / centre / inspector, bottom drawer, status bar); the model layer (`Session`, `Action`, background validation) is unchanged. Passed: editor unit 7, UI 8, reliability 15, integration 13, theme library 133, editor localization 6; Clippy (`-D warnings`) for `nanatype-editor --all-targets`, the main program build check and the product dependency isolation check. Screenshots cover Chinese, English and Japanese at logical widths 960/1280/1440/1920.
-
-Not yet done or not verified: nothing was operated by hand in a native window — panel drag-resizing, the project menu popup and light/dark switching were only checked through builds and headless screenshots. Start page cards use icons rather than cover thumbnails. The file tree has no context menu, and the find bar is always visible with no Cmd/Ctrl+F shortcut. The source cursor position does not yet select the matching layer. Panel widths are kept only for the current run. The layout target dropdown has no "new breakpoint rule" entry; rules are still added through the inspector's responsive templates.
+Native macOS/Windows file pickers, quitting, IME, DPI 1/1.5/2, watching, audio, keychain/DPAPI, system open events and the final installers still need separate acceptance; passing automation does not mean platform acceptance is done.

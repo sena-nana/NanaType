@@ -2,6 +2,10 @@
 
 # ソースからのビルド
 
+開発者向けに、NanaType をソースからビルド・テスト・パッケージ化する手順をまとめています。初めての方は [使い方ガイド](usage.md) を、配布版の更新は [アップデートの確認](updates.md) を先にご覧ください。
+
+**このページの案内**：環境とビルド → テストとスナップショット → パッケージング → 開発用スイッチ → プロジェクト構成
+
 ビルド、テスト、パッケージングと開発用の補助オプションです。機能の概要は [README](../../README.ja.md) をご覧ください。
 
 ## 環境
@@ -24,7 +28,7 @@ cargo run -p nanatype-editor
 
 リリースは既定で `dist` を使います：`opt-level = "s"`、thin LTO、単一 codegen unit、PDB は別途生成。`dist-small` は `z` を使い、機能は同じです。[性能比較](../release-profile-performance.md)ではポータブル版がさらに約 2 MiB 小さくなる一方、主要シナリオの CPU 時間が約 16%〜27% 増えるため、オプション扱いのままです。
 
-[S/Z 混合実験](../release-profile-performance.md#sz-混合实验)ではさらに約 178 KiB（0.49%）しか縮まらず、一部の P95 が悪化したため、既定は純粋な `s` のままです。
+[S/Z 混合実験](../release-profile-performance.md)ではさらに約 178 KiB（0.49%）しか縮まらず、一部の P95 が悪化したため、既定は純粋な `s` のままです。
 
 日常のチェックには、リンクを避けられる `cargo check -p nanatype` と、コンパイル時間を確認できる `cargo build -p nanatype --timings` が使えます。
 
@@ -81,7 +85,7 @@ scripts/package-macos.sh --steam
 | `NANATYPE_OPAQUE=1` | オーバーレイウィンドウを不透明にする（デバッグビルド） |
 | `NANATYPE_PERF=<JSON ファイル>` | 終了時に各ネイティブウィンドウの表示／出力フレーム数、ホストのコールバック時間、利用可能な作業数を保存。最初の 2 秒は破棄 |
 
-描画の流れ、フレームスケジューリング、サーフェスの分岐は [描画パイプライン](../rendering-pipeline.md)、描画の計測、GPU タイムスタンプ、スクリーンショット比較と制限は [描画最適化の検証記録](../rendering-performance.md) を参照してください（いずれも中国語）。
+描画の流れ、フレームスケジューリング、サーフェスの分岐は [描画パイプライン](../rendering-pipeline.md)、描画の計測、GPU タイムスタンプ、スクリーンショット比較と制限は [描画最適化の詳細](../rendering-performance.md) を参照してください（いずれも中国語）。
 
 ## プロジェクト構成
 

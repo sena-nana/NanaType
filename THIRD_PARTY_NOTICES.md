@@ -1,5 +1,18 @@
 # Third-party notices
 
+> **Purpose:** this page is the legal reference for bundled fonts, sounds, shaders,
+> Rust crates and design sources. It is intentionally complete rather than a
+> getting-started guide; keep the licence names, versions and source links intact
+> when packaging a release.
+
+## On this page
+
+- [Licence files included with releases](#third-party-notices)
+- [Telegram stickers](#telegram-stickers)
+- [Design sources](#design-sources)
+- [Embedded fonts](#fonts-embedded-for-the-built-in-skins)
+- [Embedded sounds](#sounds-embedded-in-nanatype)
+
 NanaType includes the interface materials, third-party fonts, shader compiler and Rust
 crates below. Windows releases carry their complete licence texts as named
 sections of `THIRD_PARTY_LICENSES.txt`, beside the executable. The filenames

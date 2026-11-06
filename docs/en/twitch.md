@@ -2,9 +2,14 @@
 
 # Twitch chat
 
+> **Purpose:** Receive Twitch chat anonymously, sign in securely, and send NanaType lines to a Twitch channel.
+>
+> **On this page:** [Receive](#receiving) · [Sign in](#signing-in) · [Send](#sending) · [API and licensing](#sources-and-licensing)
+
+
 ## Sources and licensing
 
-Checked on 2026-10-21. Everything is implemented from Twitch's official developer documentation; no third-party code was ported:
+The integration follows Twitch's official developer documentation; no third-party code was ported:
 
 - Receiving: [Twitch IRC over WebSocket](https://dev.twitch.tv/docs/chat/irc/) (`wss://irc-ws.chat.twitch.tv:443`, IRCv3 tags with the `twitch.tv/tags` and `twitch.tv/commands` capabilities).
 - Sign-in: [Device Code Grant Flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow) (public client, no client secret).
@@ -14,7 +19,13 @@ Checked on 2026-10-21. Everything is implemented from Twitch's official develope
 
 In **Settings › Twitch**, enter a channel name or `https://www.twitch.tv/<channel>` and turn on **Receive chat**. Only the hosts `twitch.tv`, `www.twitch.tv` and `m.twitch.tv`, and login names of 3–25 `[a-z0-9_]` characters, are accepted.
 
-Chat is always read by joining the channel with an anonymous `justinfanNNNNN` nickname, so no account is needed; signing in has no effect on receiving. The connection is shown as connected, and messages start appearing, only after `ROOMSTATE` arrives; its `room-id` is the channel ID used for sending. If no `ROOMSTATE` arrives within 15 seconds, the channel is treated as unavailable. The app sends a PING every 60 seconds and reconnects if nothing at all arrives for 90 seconds; it reconnects immediately on `RECONNECT`; failures back off at 1, 2, 4… up to 30 seconds.
+Chat is always read by joining the channel with an anonymous `justinfanNNNNN` nickname, so no account is needed; signing in has no effect on receiving.
+
+The connection is shown as connected, and messages start appearing, only after `ROOMSTATE` arrives; its `room-id` is the channel ID used for sending.
+
+If no `ROOMSTATE` arrives within 15 seconds, the channel is treated as unavailable.
+
+The app sends a PING every 60 seconds and reconnects if nothing at all arrives for 90 seconds; it reconnects immediately on `RECONNECT`; failures back off at 1, 2, 4… up to 30 seconds.
 
 | IRC message | Chat panel |
 | --- | --- |
@@ -32,7 +43,11 @@ Author IDs are namespaced with a `twitch:` prefix. Broadcaster and moderator bad
 3. The app polls for the token at the interval Twitch gives (adding 5 seconds on `slow_down`); once the device code expires, it asks you to start over.
 4. After getting the token, it calls `oauth2/validate` to check the user and scopes, then reads the nickname and avatar via Helix `users`.
 
-The token pair is stored as JSON in the system's protected storage (Windows DPAPI / macOS Keychain, service name `dev.sena-nana.nanatype.twitch`), never in the settings file or logs; on other platforms it refuses to save. A public client's refresh token can only be used once, so the new token is saved immediately after every refresh. The token is validated at startup and once an hour; on a 401 it refreshes once, and if the refresh is rejected the credentials are cleared and **Sign-in expired** is shown.
+The token pair is stored as JSON in the system's protected storage (Windows DPAPI / macOS Keychain, service name `dev.sena-nana.nanatype.twitch`), never in the settings file or logs; on other platforms it refuses to save.
+
+A public client's refresh token can only be used once, so the new token is saved immediately after every refresh.
+
+The token is validated at startup and once an hour; on a 401 it refreshes once, and if the refresh is rejected the credentials are cleared and **Sign-in expired** is shown.
 
 ## Sending
 
