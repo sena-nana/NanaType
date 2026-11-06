@@ -121,6 +121,11 @@ zip = { version = "9.1", default-features = false, features = ["deflate-flate2-z
 [profile.dev.package."*"]
 debug = "line-tables-only"
 
+# NanaUI's debug-only retained-visibility audit can panic on fractional Windows
+# bounds before a local NanaType debug build can show its windows.
+[profile.dev.package.nana-ui-scene]
+debug-assertions = false
+
 # Result extraction crosses the Lua C API thousands of times for a full canvas.
 # Keep both sides of those Wasmtime calls optimized in dev/test too, so debug
 # overhead does not exhaust the same 200 ms response deadline as shipped builds.

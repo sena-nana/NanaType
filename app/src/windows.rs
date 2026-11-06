@@ -236,7 +236,9 @@ impl WindowKind {
 
     pub fn material(self) -> MaterialEffect {
         match self {
-            Self::Input | Self::Settings | Self::Quick => MaterialEffect::Solid,
+            Self::Input | Self::Settings => MaterialEffect::Solid,
+            Self::Quick if debug_opaque() => MaterialEffect::Solid,
+            Self::Quick => MaterialEffect::Transparent,
             _ if debug_opaque() => MaterialEffect::Solid,
             _ => MaterialEffect::Transparent,
         }
@@ -348,6 +350,8 @@ pub fn descriptor(kind: WindowKind, title: &str, skin: &Skin, s: &Settings) -> W
             d.role = WindowRole::Tool;
             // Centred before it is shown, on every summon.
             d.visible = false;
+            // The scene owns the rounded surface; opacity must reach the native window.
+            d.transparent = !debug_opaque();
         }
         _ => {
             d.transparent = !debug_opaque();
@@ -889,6 +893,15 @@ mod tests {
             s.general.input_presence = mode;
             let d = descriptor(WindowKind::Quick, "quick", &skin, &s);
             assert!(!d.system_caption && !d.resizable && !d.visible);
+            assert_eq!(d.transparent, !debug_opaque());
+            assert_eq!(
+                WindowKind::Quick.material(),
+                if debug_opaque() {
+                    MaterialEffect::Solid
+                } else {
+                    MaterialEffect::Transparent
+                }
+            );
             assert!(d.skip_taskbar && d.always_on_top && d.focus_on_show);
             assert_eq!(d.role, WindowRole::Tool);
             let want = desired(WindowKind::Quick, &skin, &s, true);
