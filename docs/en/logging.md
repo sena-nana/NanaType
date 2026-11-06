@@ -68,7 +68,7 @@ Each crate declares its events as `static EventDescriptor` in its own `diag` mod
 
 | Domain | Prefix | Contents |
 | --- | --- | --- |
-| `0x0100` | `app.` | Lifecycle, settings loading, windows, error notices, translation failures (kind and HTTP status, never the line); IDs from 100 up are the shared `nanatype-frame` part |
+| `0x0100` | `app.` | Lifecycle, settings loading, windows, error notices, translation failures (kind and HTTP status, never the line), and hotkey registration, trigger, and activation results; IDs from 100 up are the shared `nanatype-frame` part |
 | `0x0101` | `settings.` | Reserved |
 | `0x0102` | `output.` | Spout/Syphon, window output state, VTS/OSC/WebSocket bridges |
 | `0x0103` | `chat.` | Shared parts such as chat images |

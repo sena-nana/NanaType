@@ -195,7 +195,7 @@ mod win {
     use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
     use std::sync::{Arc, Mutex};
 
-    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::Foundation::{GetLastError, HWND, LPARAM, WPARAM};
     use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         HOT_KEY_MODIFIERS, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT,
@@ -295,6 +295,64 @@ mod win {
         m
     }
 
+    /// Stable, non-user-facing action codes for diagnostics.
+    fn action_code(action: GlobalAction) -> u64 {
+        match action {
+            GlobalAction::Summon => 0,
+            GlobalAction::ShowChat => 1,
+            GlobalAction::ReplyLatest => 2,
+            GlobalAction::QuickPhrases => 3,
+            GlobalAction::Continue => 4,
+            GlobalAction::Skip => 5,
+            GlobalAction::Clear => 6,
+            GlobalAction::Replay => 7,
+            GlobalAction::ToggleMode => 8,
+            GlobalAction::ToggleOverlays => 9,
+            GlobalAction::ToggleHistory => 10,
+            GlobalAction::ToggleLock => 11,
+            GlobalAction::NextCharacter => 12,
+            GlobalAction::PrevCharacter => 13,
+            GlobalAction::NextProfile => 14,
+            GlobalAction::Phrase(index) => 1000 + index as u64,
+            GlobalAction::Character(index) => 2000 + index as u64,
+            GlobalAction::Profile(index) => 3000 + index as u64,
+        }
+    }
+
+    fn target_window(
+        action: GlobalAction,
+        input: &AtomicIsize,
+        quick: &AtomicIsize,
+    ) -> (isize, u64) {
+        if action == GlobalAction::Summon {
+            let hwnd = quick.load(Ordering::Acquire);
+            if hwnd != 0 {
+                return (hwnd, 2); // quick window
+            }
+        }
+        let hwnd = input.load(Ordering::Acquire);
+        (hwnd, u64::from(hwnd != 0)) // input window, or no target
+    }
+
+    fn activate_with_retry(
+        action: GlobalAction,
+        mut hwnd: isize,
+        mut target: u64,
+        input: &AtomicIsize,
+        quick: &AtomicIsize,
+    ) -> (bool, u64, u64) {
+        for attempts in 1..=3 {
+            if activate(hwnd) {
+                return (true, target, attempts);
+            }
+            if attempts < 3 {
+                std::thread::sleep(std::time::Duration::from_millis(15));
+                (hwnd, target) = target_window(action, input, quick);
+            }
+        }
+        (false, target, 3)
+    }
+
     pub fn run(
         shared: Arc<Mutex<Shared>>,
         [input, quick]: [Arc<AtomicIsize>; 2],
@@ -327,10 +385,18 @@ mod win {
                     let state = match virtual_key(&key.key) {
                         None => HotkeyState::Invalid,
                         Some(vk) => {
-                            if unsafe { RegisterHotKey(None, id, modifiers(key), vk) }.is_ok() {
+                            let result = unsafe { RegisterHotKey(None, id, modifiers(key), vk) };
+                            if result.is_ok() {
                                 registered.push((id, *action));
                                 HotkeyState::Registered
                             } else {
+                                let error = unsafe { GetLastError().0 as u64 };
+                                nanatype_diag::event!(
+                                    crate::diag::HOTKEY_REGISTER_FAILED,
+                                    action = action_code(*action),
+                                    key = vk as u64,
+                                    error = error,
+                                );
                                 HotkeyState::Conflict
                             }
                         }
@@ -352,13 +418,13 @@ mod win {
                 WM_HOTKEY => {
                     let id = msg.wParam.0 as i32;
                     if let Some((_, action)) = registered.iter().find(|(i, _)| *i == id) {
+                        nanatype_diag::event!(
+                            crate::diag::HOTKEY_TRIGGERED,
+                            action = action_code(*action),
+                        );
                         if action.raises_input() {
-                            let mut hwnd = input.load(Ordering::Acquire);
+                            let (hwnd, target) = target_window(*action, &input, &quick);
                             if *action == GlobalAction::Summon {
-                                hwnd = match quick.load(Ordering::Acquire) {
-                                    0 => hwnd,
-                                    quick => quick,
-                                };
                                 restore.store(
                                     hwnd != 0
                                         && unsafe {
@@ -367,7 +433,16 @@ mod win {
                                     Ordering::Release,
                                 );
                             }
-                            activate(hwnd);
+                            let (activated, target, attempts) =
+                                activate_with_retry(*action, hwnd, target, &input, &quick);
+                            if !activated {
+                                nanatype_diag::event!(
+                                    crate::diag::HOTKEY_ACTIVATE_FAILED,
+                                    action = action_code(*action),
+                                    target = target,
+                                    attempts = attempts,
+                                );
+                            }
                         }
                         hit(*action);
                     }

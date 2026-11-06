@@ -66,7 +66,7 @@ nana-nlog text <文件.nlog> --redact-home
 
 | 域 | 前缀 | 内容 |
 | --- | --- | --- |
-| `0x0100` | `app.` | 生命周期、设置加载、窗口、错误提示、翻译失败（种类和 HTTP 状态码，不含台词）；编号 100 起为 `nanatype-frame` 共用部分 |
+| `0x0100` | `app.` | 生命周期、设置加载、窗口、错误提示、翻译失败（种类和 HTTP 状态码，不含台词）；热键注册失败、触发和窗口激活结果；编号 100 起为 `nanatype-frame` 共用部分 |
 | `0x0101` | `settings.` | 预留 |
 | `0x0102` | `output.` | Spout/Syphon、窗口输出状态、VTS/OSC/WebSocket 桥接 |
 | `0x0103` | `chat.` | 聊天图片等共用部分 |

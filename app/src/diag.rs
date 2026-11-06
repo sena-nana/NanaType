@@ -37,6 +37,40 @@ pub static INPUT_READY: EventDescriptor = EventDescriptor::new(
     Severity::Info,
     &[FieldDescriptor::u64("since_launch_ms")],
 );
+/// A system-wide shortcut could not be registered. The action and virtual-key
+/// codes are numeric so the event never records the user's shortcut text.
+pub static HOTKEY_REGISTER_FAILED: EventDescriptor = EventDescriptor::new(
+    APP,
+    13,
+    "app.hotkey_register_failed",
+    Severity::Warn,
+    &[
+        FieldDescriptor::u64("action"),
+        FieldDescriptor::u64("key"),
+        FieldDescriptor::u64("error"),
+    ],
+);
+/// A registered system-wide shortcut reached NanaType's hotkey thread.
+pub static HOTKEY_TRIGGERED: EventDescriptor = EventDescriptor::new(
+    APP,
+    14,
+    "app.hotkey_triggered",
+    Severity::Debug,
+    &[FieldDescriptor::u64("action")],
+);
+/// A shortcut was received, but its target window could not be activated after
+/// the bounded foreground retries.
+pub static HOTKEY_ACTIVATE_FAILED: EventDescriptor = EventDescriptor::new(
+    APP,
+    15,
+    "app.hotkey_activate_failed",
+    Severity::Warn,
+    &[
+        FieldDescriptor::u64("action"),
+        FieldDescriptor::u64("target"),
+        FieldDescriptor::u64("attempts"),
+    ],
+);
 pub static WINDOW_VISIBILITY: EventDescriptor = EventDescriptor::new(
     APP,
     6,
@@ -307,6 +341,9 @@ pub static EVENTS: &[&EventDescriptor] = &[
     &ERROR_NOTICE,
     &EDIT_FAILED,
     &INPUT_READY,
+    &HOTKEY_REGISTER_FAILED,
+    &HOTKEY_TRIGGERED,
+    &HOTKEY_ACTIVATE_FAILED,
     &WINDOW_VISIBILITY,
     &DISPLAYS_UNAVAILABLE,
     &WATCH_UNAVAILABLE,
