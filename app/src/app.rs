@@ -45,8 +45,8 @@ use crate::assets::AssetLibrary;
 use crate::chat::ChatMessage;
 use crate::clock;
 use crate::msg::{
-    ChatMsg, EditorMsg, FileTarget, GlobalAction, MarkupEdit, Msg, PackageMsg, SkinMsg, StickerMsg,
-    WindowMsg,
+    ChatMsg, EditorMsg, FileTarget, GlobalAction, MarkupEdit, Msg, NoticeSource, PackageMsg,
+    SkinMsg, StickerMsg, WindowMsg,
 };
 use crate::paths::Paths;
 use crate::scheduler::Scheduler;
@@ -268,6 +268,7 @@ impl App {
                 post(Msg::Notice {
                     text: e,
                     error: true,
+                    source: NoticeSource::Persist,
                 })
             }
         });
@@ -507,8 +508,17 @@ impl App {
     }
 
     pub fn notice(&mut self, text: String, error: bool) {
+        self.notice_from(text, error, NoticeSource::App);
+    }
+
+    fn notice_from(&mut self, text: String, error: bool, source: NoticeSource) {
         if error {
-            nanatype_diag::report!(crate::diag::ERROR_NOTICE; "{text}");
+            nanatype_diag::report!(
+                crate::diag::ERROR_NOTICE,
+                source = source.code(),
+                text_bytes = text.len() as u64;
+                "{text}"
+            );
         }
         let id = self.next_notice;
         self.next_notice += 1;
@@ -2265,7 +2275,11 @@ impl App {
             Msg::PlaySample => self.play_sample(),
             Msg::VtsAuthorize => self.vts_authorize(),
             Msg::VtsRefresh => self.bridge.vts_refresh_hotkeys(),
-            Msg::Notice { text, error } => self.notice(text, error),
+            Msg::Notice {
+                text,
+                error,
+                source,
+            } => self.notice_from(text, error, source),
             Msg::DismissNotice(id) => self.edit_status(|s| s.notices.retain(|n| n.id != id)),
             Msg::TrayErrorExpired(id) => self.tray_error_expired(id),
             // The host removes toasts from its documents.
@@ -2410,11 +2424,19 @@ impl App {
         {
             hotkeys::activate(self.hotkeys.quick_window());
         }
+        #[cfg(windows)]
+        {
+            // WM_HOTKEY owns the foreground right; request activation there even
+            // when the Quick HWND is published after this callback.
+            self.hotkeys.request_quick_activation();
+        }
     }
 
     fn hide_quick(&mut self) {
         self.quick_open = false;
         self.focus_quick = false;
+        #[cfg(windows)]
+        self.hotkeys.cancel_quick_activation();
         self.ui.quick_text.set_if_changed(String::new());
     }
 
@@ -2429,15 +2451,16 @@ impl App {
         self.hide_quick();
     }
 
-    /// Keep the quick bar's window open while summon presence wants it, and
-    /// point the summon key at it.
+    /// Keep the quick bar's window open while summon presence or QuickInput
+    /// wants it, and publish its HWND to the hotkey worker.
     fn sync_quick(&mut self) {
         let summon = self.settings.general.input_presence == InputPresence::Summon;
-        if !summon && self.quick_open {
+        let wants_quick = summon || self.quick_open;
+        if !wants_quick && self.quick_open {
             self.hide_quick();
         }
         // Like the overlays, it opens once the primary window is ready.
-        if summon
+        if wants_quick
             && !self.quick_requested
             && self.windows.is_open(WindowKind::Input)
             && !self.windows.is_open(WindowKind::Quick)
@@ -2450,8 +2473,11 @@ impl App {
                 settings: desc,
             });
         }
-        self.hotkeys
-            .set_quick_window(if summon { self.quick_hwnd } else { 0 });
+        self.hotkeys.set_quick_window(if summon || self.quick_open {
+            self.quick_hwnd
+        } else {
+            0
+        });
     }
 
     /// The quick bar's window closed: ask for it again when wanted.
@@ -2459,6 +2485,8 @@ impl App {
         self.quick_open = false;
         self.quick_hwnd = 0;
         self.quick_requested = false;
+        #[cfg(windows)]
+        self.hotkeys.cancel_quick_activation();
         self.hotkeys.set_quick_window(0);
     }
 
@@ -2480,10 +2508,10 @@ impl App {
             GlobalAction::Summon => {
                 // Only the input window can come back minimized.
                 let _ = self.hotkeys.take_summon_restore();
-                if self.settings.general.input_presence != InputPresence::Summon {
-                    self.raise_input();
-                } else if self.quick_open {
-                    // The summon key toggles the quick bar in summon mode.
+                self.raise_input();
+            }
+            GlobalAction::QuickInput => {
+                if self.quick_open {
                     self.hide_quick();
                 } else {
                     self.show_quick();

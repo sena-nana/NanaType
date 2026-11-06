@@ -382,6 +382,7 @@ history-session = Session history
 
 ## Hotkeys
 hotkeys-summon = Summon input
+hotkeys-quick-summon = Summon quick input
 hotkeys-continue = Continue
 hotkeys-skip = Skip line
 hotkeys-clear = Clear display

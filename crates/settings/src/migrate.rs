@@ -133,6 +133,10 @@ pub fn migrate(value: &mut Value) -> Result<u32, MigrateError> {
         }
         obj.insert("schema".into(), json!(5));
     }
+    if from < 6 {
+        // The quick input summon shortcut was split from the input shortcut.
+        obj.insert("schema".into(), json!(6));
+    }
     Ok(from)
 }
 

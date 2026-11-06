@@ -1175,7 +1175,8 @@ fn tts_is_off_by_default_and_older_files_load_without_it() {
     settings.tts.enabled = true;
     settings.general.characters[0].voice = Some("com.apple.voice.compact.ja-JP.Kyoko".into());
     let mut value = serde_json::to_value(&settings).unwrap();
-    assert_eq!(migrate(&mut value), Ok(SETTINGS_SCHEMA));
+    assert_eq!(migrate(&mut value), Ok(5));
+    settings.schema = SETTINGS_SCHEMA;
     assert_eq!(serde_json::from_value::<Settings>(value).unwrap(), settings);
 }
 
@@ -1673,7 +1674,8 @@ fn translation_is_off_by_default_and_older_files_load_without_it() {
     let value = serde_json::to_value(&settings).unwrap();
     assert_eq!(value["translate"]["provider"], "deepl");
     let mut migrated = value.clone();
-    assert_eq!(migrate(&mut migrated), Ok(SETTINGS_SCHEMA));
+    assert_eq!(migrate(&mut migrated), Ok(5));
+    settings.schema = SETTINGS_SCHEMA;
     assert_eq!(
         serde_json::from_value::<Settings>(migrated).unwrap(),
         settings

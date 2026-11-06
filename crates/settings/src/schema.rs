@@ -1,4 +1,4 @@
-//! Settings schema v5. Every struct is `#[serde(default)]`, so a file written
+//! Settings schema v6. Every struct is `#[serde(default)]`, so a file written
 //! by an older build loads with new fields at their defaults, and fields this
 //! build does not know are kept in `unknown` and written back unchanged.
 
@@ -11,7 +11,7 @@ use nanatype_playback::QueuePolicy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const SETTINGS_SCHEMA: u32 = 5;
+pub const SETTINGS_SCHEMA: u32 = 6;
 /// Most characters a profile keeps.
 pub const MAX_CHARACTERS: usize = 32;
 pub const DEFAULT_SKIN: &str = "nanatype.halo";
@@ -1148,7 +1148,10 @@ impl Default for HistorySettings {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HotkeySettings {
+    /// Bring the input window forward.
     pub summon: Option<Hotkey>,
+    /// Open the one-line quick input bar.
+    pub quick_input: Option<Hotkey>,
     #[serde(rename = "continue")]
     pub continue_: Option<Hotkey>,
     pub skip: Option<Hotkey>,
@@ -1192,6 +1195,7 @@ impl Default for HotkeySettings {
     fn default() -> Self {
         Self {
             summon: Some(Hotkey::bare("F8")),
+            quick_input: None,
             continue_: Some(Hotkey::bare("F9")),
             skip: None,
             clear: None,
@@ -1805,6 +1809,7 @@ impl Settings {
         let h = &mut self.hotkeys;
         for slot in [
             &mut h.summon,
+            &mut h.quick_input,
             &mut h.continue_,
             &mut h.skip,
             &mut h.clear,

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tray_icon::menu::{CheckMenuItem, ContextMenu, MenuItem, PredefinedMenuItem, Submenu};
 
 use crate::{
-    msg::{Msg, WindowMsg},
+    msg::{Msg, NoticeSource, WindowMsg},
     ui::{I18N, SkinRow, Ui},
     windows::WindowKind,
 };
@@ -305,6 +305,7 @@ pub(crate) fn show(
                 post.dispatch(Msg::Notice {
                     text: error.to_string(),
                     error: true,
+                    source: NoticeSource::OverlayMenu,
                 });
                 return;
             }

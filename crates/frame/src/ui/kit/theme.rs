@@ -172,9 +172,13 @@ pub fn compile(chrome: impl Into<Chrome>) -> Arc<CompiledTheme> {
     } else {
         ThemeDefinition::NANA_LIGHT
     };
-    // Toasts arrive and leave on the app's motion tokens.
+    // Toasts arrive and leave on the app's motion tokens. Notices carry
+    // actionable OS errors (often a path plus the system message), so let
+    // their copy wrap instead of silently reducing it to one line.
     let toast = nana_ui_core::ToastRecipe {
         motion: crate::ui::motion::toast(),
+        title_max_lines: 0,
+        description_max_lines: 0,
         ..base
             .components
             .toast

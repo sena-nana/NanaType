@@ -38,6 +38,7 @@ fn hotkeys_page_gathers_every_shortcut() {
             "hotkeys-local",
             "hotkeys-phrases",
             "hotkeys-summon",
+            "hotkeys-quick-summon",
             "tb-send",
             "cheat-newline",
             "hotkeys-recall-prev",

@@ -19,9 +19,19 @@ pub static SETTINGS_LOADED: EventDescriptor = EventDescriptor::new(
 );
 pub static SETTINGS_QUARANTINED: EventDescriptor =
     EventDescriptor::new(APP, 2, "app.settings_quarantined", Severity::Error, &[]);
-/// Every error notice the user sees, as shown.
-pub static ERROR_NOTICE: EventDescriptor =
-    EventDescriptor::new(APP, 3, "app.error_notice", Severity::Warn, &[]);
+/// Every error notice the user sees, as shown. The source code identifies the
+/// producer, while the byte count helps correlate truncated or abbreviated UI
+/// text without storing an unredacted copy.
+pub static ERROR_NOTICE: EventDescriptor = EventDescriptor::new(
+    APP,
+    3,
+    "app.error_notice",
+    Severity::Warn,
+    &[
+        FieldDescriptor::u64("source"),
+        FieldDescriptor::u64("text_bytes"),
+    ],
+);
 pub static EDIT_FAILED: EventDescriptor = EventDescriptor::new(
     APP,
     4,

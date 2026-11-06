@@ -71,7 +71,7 @@ Logs must be safe to attach to a bug report by default, so sensitive content is 
 - **May be logged**: status codes, error codes, counts, durations, byte counts, window or source indices, boolean switches, skin IDs, plugin IDs.
 - Event fields can only be numbers or booleans (at most 4 per event), so they can never carry a string out.
 - Free text may appear only in fault messages, and only through `nanatype_diag::report!`. It calls `redact::text`: URLs keep only scheme, host and path; values such as `token=`, `Cookie:` and `Authorization: Bearer` become `***`; the home directory becomes `~`; the text is truncated to 512 bytes. Redaction is a safety net, not a licence: don't format strings that might contain personal information into messages.
-- Every error notice the user sees (`App::notice(…, true)`) is also logged as `app.error_notice`, so notice text must not splice in chat content or account details either.
+- Every error notice the user sees (`App::notice(…, true)`) is also logged as `app.error_notice`, so notice text must not splice in chat content or account details either. Its numeric `source` field is `0` for general app code, `1` for persistence, and `2` for the overlay menu; `text_bytes` is measured before redaction.
 
 ## Event catalogue
 

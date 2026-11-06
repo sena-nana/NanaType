@@ -12,6 +12,8 @@
 //! AppKit will not take it from the hotkey thread.
 
 use std::collections::HashMap;
+#[cfg(windows)]
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -44,9 +46,11 @@ struct Shared {
 pub struct Hotkeys {
     shared: Arc<Mutex<Shared>>,
     input_hwnd: Arc<AtomicIsize>,
-    /// The quick input bar, raised by the summon key instead of the input
-    /// window while it is set (summon presence).
+    /// The quick input bar, raised by the dedicated QuickInput shortcut.
     quick_hwnd: Arc<AtomicIsize>,
+    /// A QuickInput activation received before the quick HWND was ready.
+    #[cfg(windows)]
+    pending_quick_activation: Arc<AtomicBool>,
     /// Captured before the hotkey thread restores the native window.
     summon_restore: Arc<std::sync::atomic::AtomicBool>,
     #[cfg(windows)]
@@ -71,17 +75,20 @@ impl Hotkeys {
         let summon_restore = Arc::new(std::sync::atomic::AtomicBool::new(false));
         #[cfg(windows)]
         {
+            let pending_quick_activation = Arc::new(AtomicBool::new(false));
             let thread_id = Arc::new(std::sync::atomic::AtomicU32::new(0));
             let (s, h, t) = (shared.clone(), input_hwnd.clone(), thread_id.clone());
             let (q, restore) = (quick_hwnd.clone(), summon_restore.clone());
+            let pending = pending_quick_activation.clone();
             std::thread::Builder::new()
                 .name("nanatype-hotkeys".into())
-                .spawn(move || win::run(s, [h, q], t, restore, hit, status))
+                .spawn(move || win::run(s, [h, q], pending, t, restore, hit, status))
                 .expect("spawn hotkey thread");
             Self {
                 shared,
                 input_hwnd,
                 quick_hwnd,
+                pending_quick_activation,
                 summon_restore,
                 thread_id,
             }
@@ -123,9 +130,28 @@ impl Hotkeys {
         self.input_hwnd.load(Ordering::Acquire)
     }
 
-    /// `0` sends the summon key back to the input window.
+    /// `0` means the quick window is not ready yet.
     pub fn set_quick_window(&self, hwnd: isize) {
         self.quick_hwnd.store(hwnd, Ordering::Release);
+        #[cfg(windows)]
+        if hwnd != 0 && self.pending_quick_activation.load(Ordering::Acquire) {
+            win::poke_activate(self.thread_id.load(Ordering::Acquire));
+        }
+    }
+
+    /// Request activation on the WM_HOTKEY thread, retaining its foreground rights.
+    #[cfg(windows)]
+    pub fn request_quick_activation(&self) {
+        // Always defer one activation to WM_HOTKEY.  Even an existing HWND may
+        // still be hidden or not foregroundable when the UI receives QuickInput.
+        self.pending_quick_activation.store(true, Ordering::Release);
+        win::poke_activate(self.thread_id.load(Ordering::Acquire));
+    }
+
+    #[cfg(windows)]
+    pub fn cancel_quick_activation(&self) {
+        self.pending_quick_activation
+            .store(false, Ordering::Release);
     }
 
     pub fn quick_window(&self) -> isize {
@@ -170,7 +196,7 @@ impl Hotkeys {
     }
 }
 
-/// Bring the input window forward. Used by the hotkey thread (summon) and as
+/// Bring the input window forward. Used by the hotkey thread (global actions) and as
 /// a best effort from the UI thread.
 #[cfg(windows)]
 pub fn activate(hwnd: isize) -> bool {
@@ -192,7 +218,7 @@ pub fn activate(_hwnd: isize) -> bool {
 #[cfg(windows)]
 mod win {
     use std::collections::HashMap;
-    use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, Ordering};
     use std::sync::{Arc, Mutex};
 
     use windows::Win32::Foundation::{GetLastError, HWND, LPARAM, WPARAM};
@@ -213,11 +239,20 @@ mod win {
     use nanatype_settings::Hotkey;
 
     const WM_REBIND: u32 = WM_APP + 1;
+    const WM_ACTIVATE_QUICK: u32 = WM_APP + 2;
 
     pub fn poke(thread: u32) {
+        post_thread_message(thread, WM_REBIND);
+    }
+
+    pub fn poke_activate(thread: u32) {
+        post_thread_message(thread, WM_ACTIVATE_QUICK);
+    }
+
+    fn post_thread_message(thread: u32, message: u32) {
         if thread != 0 {
             unsafe {
-                let _ = PostThreadMessageW(thread, WM_REBIND, WPARAM(0), LPARAM(0));
+                let _ = PostThreadMessageW(thread, message, WPARAM(0), LPARAM(0));
             }
         }
     }
@@ -299,6 +334,7 @@ mod win {
     fn action_code(action: GlobalAction) -> u64 {
         match action {
             GlobalAction::Summon => 0,
+            GlobalAction::QuickInput => 15,
             GlobalAction::ShowChat => 1,
             GlobalAction::ReplyLatest => 2,
             GlobalAction::QuickPhrases => 3,
@@ -324,14 +360,48 @@ mod win {
         input: &AtomicIsize,
         quick: &AtomicIsize,
     ) -> (isize, u64) {
-        if action == GlobalAction::Summon {
-            let hwnd = quick.load(Ordering::Acquire);
-            if hwnd != 0 {
-                return (hwnd, 2); // quick window
-            }
+        if action == GlobalAction::QuickInput {
+            return (quick.load(Ordering::Acquire), 2); // quick window, or pending
         }
         let hwnd = input.load(Ordering::Acquire);
         (hwnd, u64::from(hwnd != 0)) // input window, or no target
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::target_window;
+        use crate::msg::GlobalAction;
+        use std::sync::atomic::AtomicIsize;
+
+        #[test]
+        fn quick_input_does_not_fall_back_to_input_while_quick_is_unready() {
+            let input = AtomicIsize::new(11);
+            let quick = AtomicIsize::new(0);
+
+            assert_eq!(
+                target_window(GlobalAction::QuickInput, &input, &quick),
+                (0, 2)
+            );
+        }
+
+        #[test]
+        fn quick_input_uses_quick_handle_when_ready() {
+            let input = AtomicIsize::new(11);
+            let quick = AtomicIsize::new(22);
+
+            assert_eq!(
+                target_window(GlobalAction::QuickInput, &input, &quick),
+                (22, 2)
+            );
+        }
+
+        #[test]
+        fn input_actions_use_input_handle() {
+            let input = AtomicIsize::new(11);
+            let quick = AtomicIsize::new(22);
+
+            assert_eq!(target_window(GlobalAction::Summon, &input, &quick), (11, 1));
+        }
     }
 
     fn activate_with_retry(
@@ -356,6 +426,7 @@ mod win {
     pub fn run(
         shared: Arc<Mutex<Shared>>,
         [input, quick]: [Arc<AtomicIsize>; 2],
+        pending_quick_activation: Arc<AtomicBool>,
         thread_id: Arc<AtomicU32>,
         restore: Arc<std::sync::atomic::AtomicBool>,
         hit: impl Fn(GlobalAction),
@@ -424,6 +495,8 @@ mod win {
                         );
                         if action.raises_input() {
                             let (hwnd, target) = target_window(*action, &input, &quick);
+                            let waiting_for_quick =
+                                *action == GlobalAction::QuickInput && hwnd == 0;
                             if *action == GlobalAction::Summon {
                                 restore.store(
                                     hwnd != 0
@@ -433,21 +506,40 @@ mod win {
                                     Ordering::Release,
                                 );
                             }
-                            let (activated, target, attempts) =
-                                activate_with_retry(*action, hwnd, target, &input, &quick);
-                            if !activated {
-                                nanatype_diag::event!(
-                                    crate::diag::HOTKEY_ACTIVATE_FAILED,
-                                    action = action_code(*action),
-                                    target = target,
-                                    attempts = attempts,
-                                );
+                            if waiting_for_quick {
+                                pending_quick_activation.store(true, Ordering::Release);
+                            } else {
+                                let (activated, target, attempts) =
+                                    activate_with_retry(*action, hwnd, target, &input, &quick);
+                                if !activated {
+                                    nanatype_diag::event!(
+                                        crate::diag::HOTKEY_ACTIVATE_FAILED,
+                                        action = action_code(*action),
+                                        target = target,
+                                        attempts = attempts,
+                                    );
+                                }
                             }
                         }
                         hit(*action);
                     }
                 }
                 WM_REBIND => rebind(&mut registered),
+                WM_ACTIVATE_QUICK => {
+                    let hwnd = quick.load(Ordering::Acquire);
+                    if hwnd != 0 && pending_quick_activation.swap(false, Ordering::AcqRel) {
+                        let (activated, target, attempts) =
+                            activate_with_retry(GlobalAction::QuickInput, hwnd, 2, &input, &quick);
+                        if !activated {
+                            nanatype_diag::event!(
+                                crate::diag::HOTKEY_ACTIVATE_FAILED,
+                                action = action_code(GlobalAction::QuickInput),
+                                target = target,
+                                attempts = attempts,
+                            );
+                        }
+                    }
+                }
                 _ => {}
             }
         }

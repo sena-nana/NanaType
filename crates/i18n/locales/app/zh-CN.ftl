@@ -379,6 +379,7 @@ history-session = 本场历史记录
 
 ## 快捷键
 hotkeys-summon = 唤出输入框
+hotkeys-quick-summon = 唤出快速输入
 hotkeys-continue = 继续
 hotkeys-skip = 跳过当前句
 hotkeys-clear = 清空展示框

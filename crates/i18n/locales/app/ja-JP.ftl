@@ -379,6 +379,7 @@ history-session = この配信の履歴
 
 ## ショートカット
 hotkeys-summon = 入力ウィンドウを呼び出す
+hotkeys-quick-summon = クイック入力を呼び出す
 hotkeys-continue = 続行
 hotkeys-skip = セリフをスキップ
 hotkeys-clear = 表示ウィンドウを消去
