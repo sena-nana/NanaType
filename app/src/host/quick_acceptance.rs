@@ -2,7 +2,7 @@
 //! plain text it sends.
 use super::*;
 use nana_ui::NanaTextShaper;
-use nana_ui::runtime::{HeadlessInput, TextInput};
+use nana_ui::runtime::{HeadlessInput, StableNodeId, TextInput};
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nana_ui_platform::{CommittedText, CompositionInput, InputModifiers, KeyInput};
 use nanatype_settings::{Hotkey, Settings};
@@ -145,6 +145,29 @@ fn the_bar_is_one_focused_field_without_toolbar_or_panels() {
         .unwrap();
     let (w, h) = crate::windows::QUICK_SIZE;
     assert!(field.width > w / 2.0 && field.y >= 0.0 && field.y + field.height <= h);
+}
+
+#[test]
+fn configured_opacity_is_applied_to_the_bar_offscreen() {
+    let mut f = Fixture::new();
+    f.ui.settings.update(|settings| {
+        Arc::make_mut(settings).general.quick_opacity = 0.42;
+    });
+    f.session.flush().unwrap();
+
+    let cx = f.session.document().context();
+    let field = cx
+        .world()
+        .document_order(f.session.document().document())
+        .into_iter()
+        .find(|id: &StableNodeId| {
+            cx.assembly_path(*id)
+                .is_some_and(|path| path.rsplit('/').next() == Some("quick-field"))
+        })
+        .expect("quick field is mounted");
+    let bar = cx.world().parent_id(field).expect("quick bar parent");
+    let opacity = cx.world().node_style(bar).map(|style| style.layout.opacity);
+    assert_eq!(opacity, Some(Some(0.42)));
 }
 
 #[test]

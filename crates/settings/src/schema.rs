@@ -478,6 +478,8 @@ pub struct General {
     pub input_mode: InputMode,
     /// Show the draft inside the skin's stream canvas instead of a full editor.
     pub input_skin_preview: bool,
+    /// Opacity of the summon hotkey's one-line quick input bar.
+    pub quick_opacity: f32,
     pub launch_at_login: bool,
     pub onboarding_done: bool,
     pub check_updates: bool,
@@ -495,6 +497,7 @@ impl Default for General {
             input_presence: InputPresence::Resident,
             input_mode: InputMode::Compose,
             input_skin_preview: false,
+            quick_opacity: 1.0,
             launch_at_login: false,
             onboarding_done: false,
             check_updates: true,
@@ -1977,6 +1980,7 @@ impl Settings {
         }
         self.sanitize_hotkeys();
         let g = &mut self.general;
+        g.quick_opacity = finite_or(g.quick_opacity, 1.0).clamp(0.0, 1.0);
         g.characters.truncate(MAX_CHARACTERS);
         if g.characters.is_empty() {
             g.characters.push(Character::default());

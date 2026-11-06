@@ -363,6 +363,47 @@ fn accessibility(ui: Ui) -> AnyView {
     )
 }
 
+/// A small in-settings rendering of the quick input bar, so opacity changes
+/// are visible without summoning a separate window.
+fn quick_preview_row(ui: Ui) -> Row {
+    block(
+        widget(Stack::column(0.0).gap_step(gap::step::CONTROL)).children((
+            Type::Strong.view(ui.now_t("general-quick-preview")),
+            quick_preview(ui),
+        )),
+    )
+}
+
+fn quick_preview(ui: Ui) -> AnyView {
+    widget(
+        Stack::fill_row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .padding_step(inset::step::BAR_X, inset::step::BAR_Y)
+            .align(AlignSpec::Center)
+            .surface(SemanticColorRole::Background)
+            .radius(RadiusTier::Sm)
+            .with_layout(|l| {
+                l.height = Some(LengthSpec::Px(crate::windows::QUICK_SIZE.1));
+            }),
+    )
+    .bind(move |bar: &mut Stack| {
+        bar.layout_mut().opacity = Some(
+            ui.settings
+                .with(|s| s.general.quick_opacity)
+                .clamp(0.0, 1.0),
+        );
+    })
+    .children((
+        widget(IconGlyph::new(ti::MESSAGE).size(icon::LG).decorative()).bind(
+            |g: &mut IconGlyph| {
+                g.style.foreground = Some(SemanticColorRole::Muted);
+            },
+        ),
+        widget(Text::new(ui.now_t("general-quick-preview-text")).style(Type::Body.style())),
+    ))
+    .into_any()
+}
+
 fn settings_body(ui: Ui) -> AnyView {
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
@@ -477,6 +518,20 @@ fn settings_body(ui: Ui) -> AnyView {
                         ),
                         move || mirror(ui),
                     ),
+                    (
+                        row(
+                            ui,
+                            "general-quick-opacity",
+                            Some("general-quick-opacity-hint"),
+                            percent(
+                                ui,
+                                |s| f64::from(s.general.quick_opacity),
+                                |s, v| s.general.quick_opacity = v as f32,
+                            ),
+                        ),
+                        None,
+                    ),
+                    (quick_preview_row(ui), None),
                     (
                         toggle_row!(ui, "general-autostart", general.launch_at_login),
                         None,

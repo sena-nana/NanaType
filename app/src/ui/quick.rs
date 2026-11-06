@@ -36,6 +36,15 @@ pub fn quick_window(ui: Ui) -> WithRefs<impl IntoView, QuickRef> {
             .surface(SemanticColorRole::Background),
     )
     .key("quick-window")
+    .bind(move |bar: &mut Stack| {
+        // Keep the field and its keyboard target alive at every setting, while
+        // fading the complete bar for a predictable visual result.
+        bar.layout_mut().opacity = Some(
+            ui.settings
+                .with(|s| s.general.quick_opacity)
+                .clamp(0.0, 1.0),
+        );
+    })
     .children((
         widget(IconGlyph::new(ti::MESSAGE).size(icon::LG).decorative()).bind(
             |g: &mut IconGlyph| {
