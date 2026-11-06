@@ -63,7 +63,6 @@ pub fn speakable_units(doc: &Document) -> Option<(String, Vec<u32>)> {
             }
         }
     }
-    drop(push);
     text.chars()
         .any(char::is_alphanumeric)
         .then_some((text, units))

@@ -334,6 +334,16 @@ fn guarded<T: Send>(f: impl FnOnce() -> Result<T, String> + Send) -> Result<T, S
     })
 }
 
+/// Hash on the validator's isolated stack. NanaUI's portable SIMD blake3
+/// implementation can otherwise overflow the deliberately small caller stack.
+pub(crate) fn hash(f: impl FnOnce(&mut blake3::Hasher) + Send) -> Result<blake3::Hash, String> {
+    guarded(|| {
+        let mut hasher = blake3::Hasher::new();
+        f(&mut hasher);
+        Ok(hasher.finalize())
+    })
+}
+
 /// Longest operand chain in a function whose expressions passed the
 /// whitelist. Naga handles only point backwards, so one forward pass works.
 fn expression_depth(f: &naga::Function) -> usize {
@@ -678,7 +688,11 @@ pub fn validate_shader(source: &str) -> Result<ShaderProgram, String> {
         Ok(())
     })?;
     Ok(ShaderProgram {
-        hash: blake3::hash(combined.as_bytes()).to_hex().to_string(),
+        hash: hash(|hasher| {
+            hasher.update(combined.as_bytes());
+        })?
+        .to_hex()
+        .to_string(),
         source: combined.into(),
         textures: vec![],
         cost: cost as u32,
@@ -898,15 +912,15 @@ pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec
                     Ok((path, bytes))
                 })
                 .collect::<Result<_, String>>()?;
-            let mut key = blake3::Hasher::new();
-            key.update(&SHADER_ABI.to_le_bytes());
-            key.update(&(bytes.len() as u64).to_le_bytes());
-            key.update(&bytes);
-            for (_, bytes) in &encoded {
+            let key = hash(|key| {
+                key.update(&SHADER_ABI.to_le_bytes());
                 key.update(&(bytes.len() as u64).to_le_bytes());
-                key.update(bytes);
-            }
-            let key = key.finalize();
+                key.update(&bytes);
+                for (_, bytes) in &encoded {
+                    key.update(&(bytes.len() as u64).to_le_bytes());
+                    key.update(bytes);
+                }
+            })?;
             {
                 let cache = VALIDATED.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(program) = cache
@@ -955,15 +969,17 @@ pub(crate) fn load_shaders(skin: &mut Skin, files: &dyn SkinFiles, out: &mut Vec
                     bytes: decoded.into_raw().into(),
                 });
             }
-            let mut hash = blake3::Hasher::new();
-            hash.update(program.source.as_bytes());
-            hash.update(&SHADER_ABI.to_le_bytes());
-            for t in &program.textures {
-                hash.update(&t.size[0].to_le_bytes());
-                hash.update(&t.size[1].to_le_bytes());
-                hash.update(&t.bytes);
-            }
-            program.hash = hash.finalize().to_hex().to_string();
+            program.hash = hash(|hash| {
+                hash.update(program.source.as_bytes());
+                hash.update(&SHADER_ABI.to_le_bytes());
+                for texture in &program.textures {
+                    hash.update(&texture.size[0].to_le_bytes());
+                    hash.update(&texture.size[1].to_le_bytes());
+                    hash.update(&texture.bytes);
+                }
+            })?
+            .to_hex()
+            .to_string();
             let program = Arc::new(program);
             let mut cache = VALIDATED.lock().unwrap_or_else(|e| e.into_inner());
             cache.retain(|(_, p)| p.strong_count() > 0);

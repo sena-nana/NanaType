@@ -29,7 +29,11 @@ pub fn validate_material(source: &str) -> Result<ShaderProgram, String> {
         crate::shader::MATERIAL_HELPERS,
     )?;
     Ok(ShaderProgram {
-        hash: blake3::hash(full.as_bytes()).to_hex().to_string(),
+        hash: crate::shader::hash(|hasher| {
+            hasher.update(full.as_bytes());
+        })?
+        .to_hex()
+        .to_string(),
         source: source.into(),
         textures: vec![],
         cost: cost as u32,
@@ -91,22 +95,24 @@ pub(crate) fn load_materials(
                         .transpose()
                 })
                 .collect::<Result<_, _>>()?;
-            let mut hash = blake3::Hasher::new();
-            hash.update(nana_ui_core::MATERIAL_ABI.as_bytes());
-            hash.update(&(source.len() as u64).to_le_bytes());
-            hash.update(&source);
-            for texture in &encoded {
-                match texture {
-                    Some(texture) => {
-                        hash.update(&(texture.len() as u64).to_le_bytes());
-                        hash.update(texture);
-                    }
-                    None => {
-                        hash.update(b"pipeline");
+            let key = crate::shader::hash(|key| {
+                key.update(nana_ui_core::MATERIAL_ABI.as_bytes());
+                key.update(&(source.len() as u64).to_le_bytes());
+                key.update(&source);
+                for texture in &encoded {
+                    match texture {
+                        Some(texture) => {
+                            key.update(&(texture.len() as u64).to_le_bytes());
+                            key.update(texture);
+                        }
+                        None => {
+                            key.update(b"pipeline");
+                        }
                     }
                 }
-            }
-            let key = hash.finalize().to_hex().to_string();
+            })?
+            .to_hex()
+            .to_string();
             if let Some(program) = VALIDATED
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
