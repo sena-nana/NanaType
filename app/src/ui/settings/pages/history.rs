@@ -2,6 +2,7 @@ use super::*;
 use crate::archive;
 use crate::msg::{HistoryMsg, WindowMsg};
 use crate::ui::kit;
+use nana_ui::runtime::RichTextView;
 
 /// The viewer's scrolling height.
 const VIEWER_H: f32 = 280.0;
@@ -284,6 +285,42 @@ fn saved_sessions(ui: Ui) -> AnyView {
     )
 }
 
+/// Render an archived line's original markup when it has one. Plain chat and
+/// legacy records keep their text fallback; typed records retain inline images
+/// and rich text in `markup`.
+fn saved_body(ui: Ui, record: &archive::Record) -> AnyView {
+    let Some(markup) = record.markup.as_deref() else {
+        return Type::Body.view(record.text.clone());
+    };
+    let doc = nanatype_markup::parse(markup).doc;
+    let skin = ui.skin.get_untracked();
+    let base = crate::ui::dialogue::Base::history(
+        &skin,
+        nanatype_model::Entrance {
+            kind: nanatype_model::EntranceKind::None,
+            ms: 0,
+        },
+        ui.reduced_motion.get_untracked(),
+    );
+    let look = base.look();
+    let urls = ui.asset_urls.get_untracked();
+    let rich = crate::ui::rich::to_rich(
+        &doc,
+        &crate::ui::rich::Env {
+            look: &look,
+            urls: &urls,
+            editor: false,
+            locale: ui.locale.get_untracked(),
+        },
+    );
+    widget(
+        RichTextView::new(rich)
+            .style(base.node_style())
+            .width(LengthSpec::Fill),
+    )
+    .into_any()
+}
+
 /// One session's lines (time · speaker · text) in a scrolling panel, the
 /// newest page first with earlier pages a click away, then its exports and
 /// deletion.
@@ -309,7 +346,7 @@ fn viewer(ui: Ui, view: &archive::View, name: &str) -> Row {
                     Type::Small.view(r.speaker.clone()),
                 )),
                 widget(kit::grow_column(0.0)).children((
-                    Type::Body.view(r.text.clone()),
+                    saved_body(ui, r),
                     r.translation.clone().map(|t| {
                         widget(
                             Text::new(t)

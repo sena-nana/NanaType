@@ -813,6 +813,14 @@ impl App {
         for m in &self.chat {
             wanted.extend(message_assets(m));
         }
+        // Archived records may carry inline pictures too. Keep their asset
+        // references resolvable while the Settings history viewer is open;
+        // unlike live rows, they are not part of `core.history()`.
+        for record in &self.ui.archive.get_untracked().records {
+            if let Some(markup) = record.markup.as_deref() {
+                wanted.extend(doc_assets(&nanatype_markup::parse(markup).doc));
+            }
+        }
         for asset in wanted {
             let key = asset.to_string();
             if !urls.contains_key(&key)

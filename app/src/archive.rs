@@ -9,7 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
-use nanatype_model::{HistoryItem, SourceKind};
+use nanatype_model::{HistoryItem, Inline, SourceKind};
 use serde::{Deserialize, Serialize};
 
 /// The folder under the data folder.
@@ -40,7 +40,7 @@ pub struct Record {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub platform: Option<String>,
     pub text: String,
-    /// The line's markup, for typed lines.
+    /// The line's markup when its plain-text projection would lose content.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub markup: Option<String>,
     /// Its translation, when one arrived. A translation that arrives after
@@ -76,6 +76,26 @@ impl Amend {
 /// Amendment lines start with this (serde writes fields in order).
 const AMEND_PREFIX: &str = "{\"amend\":";
 
+/// Whether the plain-text projection would lose document content or styling.
+///
+/// Typed lines have always carried markup. Chat and event lines need it too
+/// when they contain an inline asset (or any other non-plain inline), otherwise
+/// loading an archive can never recover the media reference from `text`.
+fn doc_needs_markup(item: &HistoryItem) -> bool {
+    if item.kind == SourceKind::Typewriter {
+        return true;
+    }
+    item.doc.paragraphs.iter().any(|paragraph| {
+        paragraph.align.is_some()
+            || paragraph.inlines.iter().any(|inline| match inline {
+                Inline::Text(run) => {
+                    !run.style.is_plain() || !run.effects.is_none() || !run.pace.is_inherit()
+                }
+                Inline::Ruby(_) | Inline::Atom(_) | Inline::Mention(_) | Inline::Marker(_) => true,
+            })
+    })
+}
+
 impl Record {
     /// A history row as saved; `partner` for a co-op partner's line.
     pub fn of(item: &HistoryItem, partner: bool) -> Self {
@@ -90,7 +110,7 @@ impl Record {
             },
             platform: (!typed).then(|| item.source.0.clone()),
             text: item.doc.plain_text(),
-            markup: typed.then(|| nanatype_markup::serialize(&item.doc)),
+            markup: doc_needs_markup(item).then(|| nanatype_markup::serialize(&item.doc)),
             translation: None,
         }
     }
@@ -477,8 +497,17 @@ mod tests {
             (chat.source, chat.platform.as_deref(), chat.markup.as_ref()),
             (Source::Chat, Some("twitch"), None)
         );
+        let media_item = item(
+            SourceKind::Chat,
+            "twitch",
+            "😀[emote=blob:hash alt=\"party 🎉\"]",
+        );
+        let media = Record::of(&media_item, false);
+        assert_eq!(media.text, "😀party 🎉");
+        let media_markup = media.markup.as_deref().expect("chat media markup");
+        assert_eq!(nanatype_markup::parse(media_markup).doc, media_item.doc);
         let mut file = Vec::new();
-        for r in [&own, &partner, &chat] {
+        for r in [&own, &partner, &chat, &media] {
             let line = r.line();
             assert_eq!(line.iter().filter(|b| **b == b'\n').count(), 1);
             file.extend(line);
@@ -486,7 +515,7 @@ mod tests {
         // A crash can leave half a line at the end.
         file.extend(br#"{"at":1,"speak"#);
         let text = String::from_utf8(file).unwrap();
-        assert_eq!(parse(&text), vec![own.clone(), partner, chat]);
+        assert_eq!(parse(&text), vec![own.clone(), partner, chat, media]);
         let json = String::from_utf8(own.line()).unwrap();
         assert!(json.contains(r#""source":"self""#), "{json}");
         assert!(!json.contains("platform"), "{json}");

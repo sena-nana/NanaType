@@ -191,6 +191,9 @@ impl App {
                     let mut view = (*self.ui.archive.get_untracked()).clone();
                     view.open(name, records);
                     self.ui.archive.set(Arc::new(view));
+                    // Archived rich records can reference cached chat images;
+                    // publish their URLs before the Settings viewer renders.
+                    self.refresh_assets();
                 }
                 Err(message) => {
                     let text = self
