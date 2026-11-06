@@ -350,8 +350,9 @@ pub fn descriptor(kind: WindowKind, title: &str, skin: &Skin, s: &Settings) -> W
             d.role = WindowRole::Tool;
             // Centred before it is shown, on every summon.
             d.visible = false;
-            // The scene owns the rounded surface; opacity must reach the native window.
             d.transparent = !debug_opaque();
+            // Transparent windows otherwise get a dark companion shadow.
+            d.shadow = nana_ui::WindowShadow::None;
         }
         _ => {
             d.transparent = !debug_opaque();
@@ -894,6 +895,7 @@ mod tests {
             let d = descriptor(WindowKind::Quick, "quick", &skin, &s);
             assert!(!d.system_caption && !d.resizable && !d.visible);
             assert_eq!(d.transparent, !debug_opaque());
+            assert_eq!(d.shadow, nana_ui::WindowShadow::None);
             assert_eq!(
                 WindowKind::Quick.material(),
                 if debug_opaque() {
