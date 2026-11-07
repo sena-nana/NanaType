@@ -209,9 +209,10 @@ fn frame_policy(
                 Some(seat) => &peer_follows[seat..=seat],
                 None => &[],
             };
-            let typing = tracks
-                .iter()
-                .any(|track| dialogue::display_animating(**track, now));
+            let typing = tracks.iter().any(|track| {
+                dialogue::display_animating(**track, now)
+                    || dialogue::display_compositor_needs_tick(**track, now)
+            });
             let shaders = tracks.iter().fold(Wake::Idle, |wake, track| {
                 wake.or(crate::ui::shader_effects::wake(**track))
             });
@@ -2173,6 +2174,57 @@ mod redraw_tests {
         });
         assert!(!policy.tick_clock);
         assert!(matches!(policy.demand, FrameDemand::At(at) if at == clock::instant(10_667)));
+    }
+
+    #[test]
+    fn display_frame_policy_stays_live_for_a_final_compositor_reveal() {
+        let now = 10_000;
+        let ui = crate::ui::Ui::new(
+            Arc::new(nanatype_settings::Settings::default()),
+            Arc::new(nanatype_theme::Skin::default()),
+            nanatype_i18n::Locale::ZhCn,
+        );
+        ui.display.update(|view| {
+            let view = Arc::make_mut(view);
+            view.empty = false;
+            view.entrance = nanatype_model::Entrance {
+                kind: nanatype_model::EntranceKind::Fade,
+                ms: 200,
+            };
+            view.doc = Arc::new(nanatype_model::Document::plain("hi"));
+            view.reveal = nanatype_core::Reveal {
+                visible_from: 0,
+                shown: 0,
+                segment: Some(nanatype_core::SegmentReveal {
+                    origin_ms: now,
+                    start: 0,
+                    reveal_ms: Arc::from([0, 100]),
+                }),
+                hidden_from: 2,
+            };
+        });
+        let follow = overflow::Follow::default();
+        let pager = overflow::Pager::default();
+        let live = frame_policy(
+            ui,
+            Some(WindowKind::Display),
+            now + 299,
+            &follow,
+            &[],
+            &pager,
+        );
+        assert!(live.tick_clock);
+        assert!(matches!(live.demand, FrameDemand::Continuous(_)));
+        let settled = frame_policy(
+            ui,
+            Some(WindowKind::Display),
+            now + 300,
+            &follow,
+            &[],
+            &pager,
+        );
+        assert!(!settled.tick_clock);
+        assert!(matches!(settled.demand, FrameDemand::OnDemand));
     }
 
     #[test]

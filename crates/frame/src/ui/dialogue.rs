@@ -2360,6 +2360,53 @@ fn sprite(url: &str, frames: u32, i: u32) -> BackgroundImage {
     }
 }
 
+/// Whether a reveal's last glyph still has a compositor transition to finish.
+/// Core schedules the next reveal wake, but there is no later wake after the
+/// final unit starts. Keep the host clock live for that final intro, or an
+/// output can stop on its intermediate alpha/transform.
+fn reveal_compositor_animating(reveal: &Reveal, now: u64, entrance_ms: u16) -> bool {
+    let Some(segment) = reveal.segment.as_ref() else {
+        return false;
+    };
+    let first = reveal.shown.saturating_sub(segment.start) as usize;
+    let last = reveal.hidden_from.saturating_sub(segment.start) as usize;
+    let end = last.min(segment.reveal_ms.len());
+    let offsets = if first <= end {
+        segment.reveal_ms.get(first..end).unwrap_or_default()
+    } else {
+        &[]
+    };
+    offsets.iter().any(|offset| {
+        segment
+            .origin_ms
+            .saturating_add(u64::from(*offset))
+            .saturating_add(u64::from(entrance_ms))
+            > now
+    })
+}
+
+/// Whether the display still needs frames for a glyph reveal's compositor
+/// transition. Pacing itself is owned by Core; this only covers the tail after
+/// Core's final reveal wake.
+pub fn display_compositor_needs_tick(ui: Stage, now: u64) -> bool {
+    let view = ui.display.get_untracked();
+    if view.empty
+        || ui.reduced_motion.get_untracked()
+        || view.entrance.kind == EntranceKind::None
+        || view.entrance.ms == 0
+    {
+        return false;
+    }
+    let has_scramble = ui
+        .skin
+        .with_untracked(|skin| skin.dialogue.reveal.scramble.is_some());
+    let scramble_disabled = has_scramble && !super::materials::enabled(ui);
+    if scramble_disabled {
+        return false;
+    }
+    reveal_compositor_animating(&view.reveal, now, view.entrance.ms)
+}
+
 /// Whether the display needs frames for the box itself (fade, shake, the
 /// continue mark). Text reveal and effects request their own frames.
 pub fn display_animating(ui: Stage, now: u64) -> bool {
@@ -2963,6 +3010,25 @@ mod decor_tests {
         stage.see(Arc::new(view), 0, 0);
         assert_eq!(stage.presence(0, false), (1.0, 0.0));
         assert_eq!(stage.presence(48, false), (1.0, 0.0));
+    }
+
+    #[test]
+    fn final_glyph_compositor_transition_keeps_display_live() {
+        let now = 10_000;
+        let reveal = Reveal {
+            visible_from: 0,
+            shown: 0,
+            segment: Some(nanatype_core::SegmentReveal {
+                origin_ms: now,
+                start: 0,
+                reveal_ms: Arc::from([0, 100]),
+            }),
+            hidden_from: 2,
+        };
+        assert!(reveal_compositor_animating(&reveal, now, 200));
+        assert!(reveal_compositor_animating(&reveal, now + 299, 200));
+        assert!(!reveal_compositor_animating(&reveal, now + 300, 200));
+        assert!(!reveal_compositor_animating(&Reveal::full(2), now, 200));
     }
 
     #[test]
