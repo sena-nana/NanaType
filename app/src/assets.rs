@@ -42,6 +42,12 @@ pub struct AssetLibrary {
     blob_dir: PathBuf,
 }
 
+const MAX_PASTE_DIMENSION: u32 = 4096;
+/// Pasted images keep detail up to a normal document-display size, then are
+/// stored once in their reduced form so later P2P sharing starts small.
+const MAX_PASTE_EDGE: u32 = 800;
+const MAX_PASTE_BYTES: u64 = 64 * 1024 * 1024;
+
 impl AssetLibrary {
     pub fn new(blob_dir: PathBuf) -> Self {
         Self {
@@ -118,17 +124,37 @@ impl AssetLibrary {
 
     /// Store pasted RGBA pixels as a PNG named by content.
     pub fn store_rgba(&self, width: u32, height: u32, rgba: &[u8]) -> Result<AssetRef, String> {
+        if width == 0 || height == 0 || width > MAX_PASTE_DIMENSION || height > MAX_PASTE_DIMENSION
+        {
+            return Err("pasted image dimensions exceed 4096 pixels".into());
+        }
+        let expected = u64::from(width)
+            .checked_mul(u64::from(height))
+            .and_then(|pixels| pixels.checked_mul(4))
+            .ok_or_else(|| "pasted image is too large".to_string())?;
+        if expected > MAX_PASTE_BYTES || rgba.len() as u64 != expected {
+            return Err("bad image size".into());
+        }
+        let image = image::RgbaImage::from_raw(width, height, rgba.to_vec())
+            .ok_or_else(|| "bad image size".to_string())?;
+        let image = if width > MAX_PASTE_EDGE || height > MAX_PASTE_EDGE {
+            image::DynamicImage::ImageRgba8(image)
+                .thumbnail(MAX_PASTE_EDGE, MAX_PASTE_EDGE)
+                .into_rgba8()
+        } else {
+            image
+        };
+        let (width, height) = image.dimensions();
         let mut hash = blake3::Hasher::new();
         hash.update(&width.to_le_bytes());
         hash.update(&height.to_le_bytes());
-        hash.update(rgba);
+        hash.update(image.as_raw());
         let name = hash.finalize().to_hex()[..16].to_owned();
         let path = self.blob_dir.join(format!("{name}.png"));
         if !path.exists() {
-            let img = image::RgbaImage::from_raw(width, height, rgba.to_vec())
-                .ok_or_else(|| "bad image size".to_string())?;
             let mut png = Vec::new();
-            img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            image
+                .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
                 .map_err(|e| e.to_string())?;
             // Atomic: a crash mid-write must not leave a truncated file that
             // every later paste of the same picture would reuse.
@@ -191,6 +217,12 @@ mod tests {
         assert!(lib.resolve(&asset, None).is_some());
         let blob = lib.store_rgba(1, 1, &[255, 0, 0, 255]).unwrap();
         assert!(lib.resolve(&blob, None).is_some());
+        let large = vec![128u8; 1600 * 800 * 4];
+        let reduced = lib.store_rgba(1600, 800, &large).unwrap();
+        let reduced_path = lib.resolve(&reduced, None).unwrap();
+        assert_eq!(image::image_dimensions(reduced_path).unwrap(), (800, 400));
+        assert!(lib.store_rgba(2, 2, &[0; 3]).is_err());
+        assert!(lib.store_rgba(MAX_PASTE_DIMENSION + 1, 1, &[]).is_err());
         let _ = fs::remove_dir_all(&tmp);
     }
 }

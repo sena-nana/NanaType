@@ -10,11 +10,15 @@ use std::sync::{Arc, LazyLock, Mutex, RwLock, Weak};
 use image::{AnimationDecoder, ImageDecoder};
 use serde::{Deserialize, Serialize};
 
-const VERSION: u32 = 3;
+// Bumping this version intentionally invalidates the previous on-disk cache.
+const VERSION: u32 = 5;
+const CACHE_VERSION_FILE: &str = ".cache-version";
 pub const MAX_SOURCE: u64 = 8 * 1024 * 1024;
+/// One decoded frame serves both the list preview and actual rendering.
+const MAX_DIMENSION: u32 = 128;
 const MAX_FRAMES: usize = 1024;
-const MAX_PIXELS: u64 = 256 * 1024 * 1024;
-pub const MAX_DISK: u64 = 512 * 1024 * 1024;
+const MAX_PIXELS: u64 = 64 * 1024 * 1024;
+pub const MAX_DISK: u64 = 256 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CachedImage {
@@ -26,7 +30,6 @@ pub struct CachedImage {
     /// Total cycles; None means infinite.
     pub cycles: Option<u32>,
     pub hashes: Vec<String>,
-    pub thumbnail_hash: String,
     #[serde(skip)]
     pub dir: PathBuf,
 }
@@ -38,8 +41,9 @@ impl CachedImage {
     pub fn url(&self) -> String {
         crate::assets::file_url(&self.frame_path(0))
     }
+    /// The first decoded frame is shared by the list preview and renderer.
     pub fn thumbnail(&self) -> String {
-        crate::assets::file_url(&self.dir.join("thumbnail.png"))
+        crate::assets::file_url(&self.frame_path(0))
     }
     pub fn slot(&self) -> String {
         format!("sticker:{}", self.key)
@@ -67,17 +71,41 @@ impl CachedImage {
         (0, None)
     }
     fn complete(&self) -> bool {
-        self.version == VERSION
-            && !self.delays.is_empty()
-            && self.delays.len() <= MAX_FRAMES
-            && self.width > 0
-            && self.height > 0
-            && self.width <= 1024
-            && self.height <= 1024
-            && self.delays.iter().all(|d| *d >= 10 && *d <= 600_000)
-            && self.hashes.len() == self.delays.len()
-            && valid_hash(&self.dir.join("thumbnail.png"), &self.thumbnail_hash)
-            && (0..self.delays.len()).all(|i| valid_hash(&self.frame_path(i), &self.hashes[i]))
+        if self.version != VERSION
+            || self.delays.is_empty()
+            || self.delays.len() > MAX_FRAMES
+            || self.width == 0
+            || self.height == 0
+            || self.width > MAX_DIMENSION
+            || self.height > MAX_DIMENSION
+            || self.delays.iter().any(|d| *d < 10 || *d > 600_000)
+            || self.hashes.len() != self.delays.len()
+        {
+            return false;
+        }
+        let mut disk_bytes = 0u64;
+        let frame_pixels = u64::from(self.width)
+            .checked_mul(u64::from(self.height))
+            .and_then(|pixels| pixels.checked_mul(4));
+        let Some(frame_pixels) = frame_pixels else {
+            return false;
+        };
+        let mut pixels = 0u64;
+        for (index, hash) in self.hashes.iter().enumerate() {
+            let Some(bytes) = checked_file_bytes(
+                &self.frame_path(index),
+                hash,
+                Some((self.width, self.height)),
+            ) else {
+                return false;
+            };
+            disk_bytes = disk_bytes.saturating_add(bytes);
+            pixels = pixels.saturating_add(frame_pixels);
+            if disk_bytes > MAX_DISK || pixels > MAX_PIXELS {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -87,6 +115,31 @@ static IMAGES: LazyLock<RwLock<HashMap<String, Arc<CachedImage>>>> =
     LazyLock::new(Default::default);
 static LIVE: LazyLock<Mutex<HashMap<String, Vec<Weak<CachedImage>>>>> =
     LazyLock::new(Default::default);
+
+/// Delete the previous generation in place, without retaining a backup. The
+/// marker is separate from content keys because old keys remain valid hashes
+/// after a preprocessing policy change.
+fn ensure_cache_version(base: &Path) -> Result<(), String> {
+    fs::create_dir_all(base).map_err(|e| e.to_string())?;
+    let marker = base.join(CACHE_VERSION_FILE);
+    let expected = VERSION.to_string();
+    if fs::read_to_string(&marker).ok().as_deref() != Some(expected.as_str()) {
+        for entry in fs::read_dir(base).map_err(|e| e.to_string())? {
+            let path = entry.map_err(|e| e.to_string())?.path();
+            if path == marker {
+                continue;
+            }
+            let metadata = fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+            if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() {
+                fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
+            } else {
+                fs::remove_file(&path).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    fs::write(marker, expected).map_err(|e| e.to_string())
+}
+
 fn tracked(image: CachedImage) -> Arc<CachedImage> {
     let image = Arc::new(image);
     let mut live = LIVE.lock().unwrap_or_else(|e| e.into_inner());
@@ -98,6 +151,24 @@ fn tracked(image: CachedImage) -> Arc<CachedImage> {
 fn valid_hash(path: &Path, hash: &str) -> bool {
     fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() <= MAX_SOURCE)
         && fs::read(path).is_ok_and(|bytes| blake3::hash(&bytes).to_hex().as_str() == hash)
+}
+
+/// Validate both the content hash and the decoded image dimensions before a
+/// persisted cache entry is trusted. Hashes alone do not protect against a
+/// caller that rewrites both metadata and files.
+fn checked_file_bytes(path: &Path, hash: &str, dimensions: Option<(u32, u32)>) -> Option<u64> {
+    let size = fs::metadata(path)
+        .ok()
+        .filter(|m| m.is_file() && m.len() <= MAX_SOURCE)?
+        .len();
+    if !valid_hash(path, hash) {
+        return None;
+    }
+    let actual = image::image_dimensions(path).ok()?;
+    if dimensions.is_some_and(|expected| actual != expected) {
+        return None;
+    }
+    Some(size)
 }
 pub fn lookup(url: &str) -> Option<Arc<CachedImage>> {
     IMAGES.read().ok()?.get(url).cloned()
@@ -131,7 +202,7 @@ pub fn animations() -> Vec<Arc<CachedImage>> {
         .collect()
 }
 fn limits() -> image::Limits {
-    crate::assets::image_limits(4096, 128 * 1024 * 1024)
+    crate::assets::image_limits(4096, MAX_PIXELS)
 }
 
 pub fn prepare(
@@ -139,6 +210,7 @@ pub fn prepare(
     base: &Path,
     cancelled: &AtomicBool,
 ) -> Result<Arc<CachedImage>, String> {
+    ensure_cache_version(base)?;
     let mut bytes = Vec::new();
     fs::File::open(path)
         .map_err(|e| e.to_string())?
@@ -203,7 +275,6 @@ fn transcode(
         delays: Vec::new(),
         cycles: Some(1),
         hashes: Vec::new(),
-        thumbnail_hash: String::new(),
         dir: stage.into(),
     };
     let mut pixels = 0;
@@ -212,9 +283,9 @@ fn transcode(
         if cancelled.load(Ordering::Relaxed) {
             return Err("Cancelled".into());
         }
-        let image = if image.width() > 1024 || image.height() > 1024 {
+        let image = if image.width() > MAX_DIMENSION || image.height() > MAX_DIMENSION {
             image::DynamicImage::ImageRgba8(image)
-                .thumbnail(1024, 1024)
+                .thumbnail(MAX_DIMENSION, MAX_DIMENSION)
                 .into_rgba8()
         } else {
             image
@@ -226,14 +297,6 @@ fn transcode(
         if cached.delays.is_empty() {
             cached.width = image.width();
             cached.height = image.height();
-            image::DynamicImage::ImageRgba8(image.clone())
-                .thumbnail(104, 104)
-                .save(stage.join("thumbnail.png"))
-                .map_err(|e| e.to_string())?;
-            cached.thumbnail_hash =
-                blake3::hash(&fs::read(stage.join("thumbnail.png")).map_err(|e| e.to_string())?)
-                    .to_hex()
-                    .to_string();
         }
         let path = cached.frame_path(cached.delays.len());
         image.save(&path).map_err(|e| e.to_string())?;
@@ -244,7 +307,10 @@ fn transcode(
         );
         disk_bytes += fs::metadata(path).map_err(|e| e.to_string())?.len();
         if disk_bytes > MAX_DISK / 2 {
-            return Err("Sticker frame cache exceeds 256 MiB".into());
+            return Err(format!(
+                "Sticker frame cache exceeds {} MiB",
+                MAX_DISK / 2 / (1024 * 1024)
+            ));
         }
         cached.delays.push(delay.clamp(10, 600_000));
         Ok(())
@@ -294,6 +360,7 @@ fn transcode(
 /// Active source revisions stay pinned. Reject an oversized active working set
 /// instead of deleting frames that a window may still be sampling.
 pub fn prune(base: &Path) -> Result<(), String> {
+    ensure_cache_version(base)?;
     let mut protected = HashSet::new();
     // Includes completed imports still queued for UI publication, and frames
     // retained by a renderer while an edited source is being rebuilt.
@@ -343,7 +410,10 @@ pub fn prune(base: &Path) -> Result<(), String> {
         }
     }
     if total > MAX_DISK {
-        Err("Active sticker cache exceeds 512 MiB".into())
+        Err(format!(
+            "Active sticker cache exceeds {} MiB",
+            MAX_DISK / (1024 * 1024)
+        ))
     } else {
         Ok(())
     }
@@ -352,6 +422,53 @@ pub fn prune(base: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stale_cache_generation_is_deleted_without_backup() {
+        let base =
+            std::env::temp_dir().join(format!("nanatype-cache-version-{}", std::process::id()));
+        let old = base.join("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        fs::create_dir_all(&old).unwrap();
+        fs::write(base.join(CACHE_VERSION_FILE), "3").unwrap();
+        fs::write(old.join("old-frame.png"), b"old").unwrap();
+
+        ensure_cache_version(&base).unwrap();
+
+        assert!(!old.exists());
+        assert_eq!(
+            fs::read_to_string(base.join(CACHE_VERSION_FILE)).unwrap(),
+            VERSION.to_string()
+        );
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn oversized_frames_are_downscaled_to_shared_preview_size() {
+        let base =
+            std::env::temp_dir().join(format!("nanatype-gif-downscale-{}", std::process::id()));
+        fs::create_dir_all(&base).unwrap();
+        let source = base.join("large.gif");
+        let mut writer = image::codecs::gif::GifEncoder::new(fs::File::create(&source).unwrap());
+        writer
+            .encode_frame(image::Frame::from_parts(
+                image::RgbaImage::from_fn(256, 192, |x, y| {
+                    image::Rgba([(x % 256) as u8, (y % 256) as u8, 128, 255])
+                }),
+                0,
+                0,
+                image::Delay::from_numer_denom_ms(40, 1),
+            ))
+            .unwrap();
+        drop(writer);
+
+        let cached = prepare(&source, &base.join("cache"), &AtomicBool::new(false)).unwrap();
+        assert_eq!((cached.width, cached.height), (128, 96));
+        assert_eq!(
+            image::image_dimensions(cached.frame_path(0)).unwrap(),
+            (128, 96)
+        );
+        let _ = fs::remove_dir_all(base);
+    }
+
     #[test]
     fn timing_stops_at_finite_loop_end() {
         let c = CachedImage {
@@ -362,7 +479,6 @@ mod tests {
             delays: vec![30, 70],
             cycles: Some(2),
             hashes: Vec::new(),
-            thumbnail_hash: String::new(),
             dir: PathBuf::new(),
         };
         assert_eq!(c.frame_at(0), (0, Some(30)));
@@ -395,6 +511,8 @@ mod tests {
         assert!(c.animated());
         assert_eq!(c.delays, [40, 40]);
         assert_eq!(c.cycles, None);
+        assert_eq!(c.thumbnail(), crate::assets::file_url(&c.frame_path(0)));
+        assert!(!c.dir.join("thumbnail.png").exists());
         let modified = fs::metadata(c.frame_path(0)).unwrap().modified().unwrap();
         let reused = prepare(&source, &cache, &AtomicBool::new(false)).unwrap();
         assert_eq!(

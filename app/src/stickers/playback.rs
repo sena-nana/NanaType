@@ -12,6 +12,9 @@ use nana_ui_platform::WindowId;
 use super::cache::{self, CachedImage};
 
 const MAX_GPU: u64 = 128 * 1024 * 1024;
+/// First-frame previews are resident before an animation becomes visible. Keep
+/// that baseline bounded so a large catalog cannot consume unbounded VRAM.
+const MAX_PREVIEW_GPU: u64 = 32 * 1024 * 1024;
 
 struct Playing {
     cache: Arc<CachedImage>,
@@ -38,6 +41,12 @@ impl Playback {
     }
     pub fn discard(&mut self, id: WindowId) {
         self.windows.remove(&id);
+        // No renderer can sample these slots once the last window is gone.
+        // Drop them eagerly instead of keeping every first-frame preview until
+        // the next device reset or catalog refresh.
+        if self.windows.is_empty() {
+            self.slots.clear();
+        }
     }
     pub fn take_rebuild(&mut self) -> bool {
         std::mem::take(&mut self.rebuild)
@@ -95,12 +104,18 @@ impl Playback {
         }
         self.slots.retain(|slot, _| wanted.contains(slot));
         let registry = self.windows.entry(id).or_default();
+        let mut preview_used: u64 = self
+            .slots
+            .values()
+            .filter(|playing| playing.frame.is_none())
+            .map(|playing| playing.bytes)
+            .sum();
         for cache in images {
             let slot = cache.slot();
             if !self.slots.contains_key(&slot) {
                 // Tiny first-frame preview gives the first paint useful content;
                 // the full frame is uploaded only after a visible consumer draws.
-                let (preview, failed) = match read(&cache.dir.join("thumbnail.png")) {
+                let (mut preview, failed) = match read(&cache.frame_path(0)) {
                     Ok(p) => (p, false),
                     Err(e) => {
                         nanatype_diag::report!(crate::diag::STICKER_PREVIEW_FAILED; "{e}");
@@ -108,6 +123,20 @@ impl Playback {
                         (image::RgbaImage::new(1, 1), true)
                     }
                 };
+                let preview_bytes = u64::from(preview.width())
+                    .saturating_mul(u64::from(preview.height()))
+                    .saturating_mul(4);
+                let blocked =
+                    if !failed && preview_used.saturating_add(preview_bytes) > MAX_PREVIEW_GPU {
+                        // Keep a tiny host texture so the slot remains registered,
+                        // but defer the real upload until it is visible and the
+                        // full-frame budget can admit it.
+                        preview = image::RgbaImage::new(1, 1);
+                        true
+                    } else {
+                        preview_used = preview_used.saturating_add(preview_bytes);
+                        false
+                    };
                 let Ok(texture) = texture(gpu, &preview) else {
                     continue;
                 };
@@ -122,7 +151,7 @@ impl Playback {
                         epoch: None,
                         bytes: u64::from(preview.width()) * u64::from(preview.height()) * 4,
                         failed,
-                        blocked: false,
+                        blocked,
                     },
                 );
             } else if let Some(playing) = self.slots.get_mut(&slot)
@@ -156,13 +185,25 @@ impl Playback {
         for (slot, playing) in &mut self.slots {
             if !visible.contains(slot)
                 && playing.frame.is_some()
-                && let Ok(preview) = read(&playing.cache.dir.join("thumbnail.png"))
-                && let Ok(texture) = texture(gpu, &preview)
+                && let Ok(preview) = read(&playing.cache.frame_path(0))
             {
-                playing.host.replace_texture(&texture);
-                playing.gpu = texture;
-                playing.frame = None;
-                playing.bytes = u64::from(preview.width()) * u64::from(preview.height()) * 4;
+                let preview_bytes = u64::from(preview.width())
+                    .saturating_mul(u64::from(preview.height()))
+                    .saturating_mul(4);
+                let (preview, blocked) =
+                    if preview_used.saturating_add(preview_bytes) <= MAX_PREVIEW_GPU {
+                        preview_used = preview_used.saturating_add(preview_bytes);
+                        (preview, false)
+                    } else {
+                        (image::RgbaImage::new(1, 1), true)
+                    };
+                if let Ok(texture) = texture(gpu, &preview) {
+                    playing.host.replace_texture(&texture);
+                    playing.gpu = texture;
+                    playing.frame = None;
+                    playing.bytes = u64::from(preview.width()) * u64::from(preview.height()) * 4;
+                    playing.blocked = blocked;
+                }
             }
         }
         let mut used: u64 = self.slots.values().map(|p| p.bytes).sum();

@@ -197,9 +197,13 @@ pub fn prepare(
 /// `builtin:` one). Skins on the default system stack never are.
 pub fn uses_fallback_font(skin: &Skin) -> bool {
     let body = &skin.fonts.body;
-    if body.is_default_stack() || body.has_usable_file() {
+    if body.is_default_stack() {
         return false;
     }
+    // A manifest path is only intent, not proof that register_fonts accepted
+    // the bytes. The prepared family list is the runtime registration result;
+    // use it to detect malformed/missing custom fonts and show the fallback
+    // notice instead of silently relying on an unrelated system face.
     !body.families.iter().any(|f| available(f))
 }
 
@@ -219,14 +223,28 @@ pub fn available(family: &str) -> bool {
 /// Whether the text engine shapes with `family` itself rather than a
 /// fallback. Cached: the answer only changes when fonts are installed.
 fn installed(family: &str) -> bool {
+    const MAX_ENTRIES: usize = 256;
     static CACHE: LazyLock<Mutex<HashMap<String, bool>>> =
         LazyLock::new(|| Mutex::new(HashMap::new()));
+    let key = family.trim().to_lowercase();
+    if key.is_empty() {
+        return false;
+    }
     let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    *cache.entry(family.to_owned()).or_insert_with(|| {
-        nana_ui::shaped_face_families(family, "Aa字")
-            .iter()
-            .any(|f| f.eq_ignore_ascii_case(family))
-    })
+    if let Some(found) = cache.get(&key) {
+        return *found;
+    }
+    // Family names can come from skin metadata. Bound this process-lifetime
+    // cache so arbitrary names cannot grow it forever; clearing also lets a
+    // newly registered font be observed after the next lookup cycle.
+    if cache.len() >= MAX_ENTRIES {
+        cache.clear();
+    }
+    let found = nana_ui::shaped_face_families(family, "Aa字")
+        .iter()
+        .any(|f| f.eq_ignore_ascii_case(family.trim()));
+    cache.insert(key, found);
+    found
 }
 
 pub fn rgba(c: Rgba8) -> [f32; 4] {
@@ -339,9 +357,10 @@ mod tests {
         // A built-in font this build does not embed still falls back.
         skin.fonts.body.file = Some("builtin:fonts/NotInThisBuild.ttf".into());
         assert!(uses_fallback_font(&skin));
-        // The skin's own file is always used.
+        // A skin path is only metadata; registration must report a usable
+        // family before the fallback warning can be suppressed.
         skin.fonts.body.file = Some("fonts/own.ttf".into());
-        assert!(!uses_fallback_font(&skin));
+        assert!(uses_fallback_font(&skin));
         // Installed: NanaUI registers Noto Sans SC itself.
         skin.fonts.body.file = None;
         skin.fonts.body.families = vec!["Noto Sans SC".into()];

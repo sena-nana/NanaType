@@ -27,6 +27,10 @@ use nanatype_model::codec::{fnv1a64, fnv1a64_seeded};
 
 /// NanaUI refuses local pictures larger than this (`MAX_LOCAL_URL_BYTES`).
 pub const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
+/// Static external pictures are normalized once before NanaUI sees them.
+/// Animated formats remain untouched so their timing and frames survive.
+const NORMALIZED_EDGE: u32 = 800;
+const NORMALIZED_ALLOC: u64 = 64 * 1024 * 1024;
 /// The folder under the base that holds the copies.
 pub const DIR: &str = "media";
 
@@ -114,7 +118,7 @@ impl Media {
             return None;
         }
         let name = format!("embedded-b3-{}.{ext}", blake3::hash(bytes));
-        self.cache(&name, bytes.len() as u64, || Some(bytes.to_vec()))
+        self.cache(&name, Some(bytes.len() as u64), || Some(bytes.to_vec()))
             .map(|path| file_url(&path))
     }
 
@@ -146,11 +150,13 @@ impl Media {
             .and_then(|e| e.to_str())
             .map(str::to_ascii_lowercase)
             .filter(|e| PICTURE_EXTS.contains(&e.as_str()))?;
+        // The generation prefix invalidates mirrors made before the one-time
+        // downsample/compression pass below.
         let name = format!(
-            "{}.{ext}",
+            "media-v3-{}.{ext}",
             mirror_key(&canonical, meta.len(), modified(&meta))
         );
-        self.cache(&name, meta.len(), || {
+        self.cache(&name, None, || {
             let mut bytes = Vec::with_capacity(meta.len() as usize);
             fs::File::open(&canonical)
                 .ok()?
@@ -158,19 +164,34 @@ impl Media {
                 .read_to_end(&mut bytes)
                 .ok()?;
             // Reject files changed since the cache key was computed.
-            (bytes.len() as u64 == meta.len()).then_some(bytes)
+            if bytes.len() as u64 != meta.len() {
+                return None;
+            }
+            if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp" | "bmp")
+                && image::guess_format(&bytes).is_ok()
+            {
+                // A recognized raster that exceeds decoder limits is refused,
+                // rather than copied into a URL that could trigger a huge UI decode.
+                Some(normalize_static(&bytes, &ext)?)
+            } else {
+                // Keep malformed fixtures/legacy files on their original path;
+                // NanaUI will report them as unreadable instead of panicking.
+                Some(bytes)
+            }
         })
     }
 
     fn cache(
         &self,
         name: &str,
-        len: u64,
+        expected_len: Option<u64>,
         read: impl FnOnce() -> Option<Vec<u8>>,
     ) -> Option<PathBuf> {
         let target = self.dir.join(name);
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        if fs::metadata(&target).is_ok_and(|m| m.is_file() && m.len() == len) {
+        if fs::metadata(&target)
+            .is_ok_and(|m| m.is_file() && expected_len.is_none_or(|len| m.len() == len))
+        {
             if state.used.insert(name.to_owned()) {
                 touch(&target);
             }
@@ -187,7 +208,7 @@ impl Media {
             return None;
         }
         state.used.insert(name.to_owned());
-        state.total += len;
+        state.total += bytes.len() as u64;
         if state.total > self.limits.max_total {
             self.prune_locked(&mut state);
         }
@@ -310,6 +331,31 @@ fn touch(path: &Path) {
     if let Ok(file) = fs::File::options().write(true).open(path) {
         let _ = file.set_modified(SystemTime::now());
     }
+}
+
+/// Downsample and re-encode one static raster picture. GIF and SVG are left
+/// alone because decoding them here would lose animation or vector semantics.
+fn normalize_static(bytes: &[u8], ext: &str) -> Option<Vec<u8>> {
+    if !matches!(ext, "png" | "jpg" | "jpeg" | "webp" | "bmp") {
+        return None;
+    }
+    let image = crate::assets::decode_image(bytes, 4096, NORMALIZED_ALLOC).ok()?;
+    let image = if image.width() > NORMALIZED_EDGE || image.height() > NORMALIZED_EDGE {
+        image.thumbnail(NORMALIZED_EDGE, NORMALIZED_EDGE)
+    } else {
+        image
+    };
+    let format = match ext {
+        "jpg" | "jpeg" => image::ImageFormat::Jpeg,
+        "webp" => image::ImageFormat::WebP,
+        "bmp" => image::ImageFormat::Bmp,
+        _ => image::ImageFormat::Png,
+    };
+    let mut encoded = Vec::new();
+    image
+        .write_to(&mut std::io::Cursor::new(&mut encoded), format)
+        .ok()?;
+    Some(encoded)
 }
 
 /// 128-bit FNV-1a of the canonical path (case-folded on Windows, where
@@ -480,6 +526,20 @@ mod tests {
         fs::remove_file(&a).unwrap();
         assert_eq!(m.path(&src, None).unwrap(), a);
         assert!(a.is_file());
+    }
+
+    #[test]
+    fn external_static_images_are_normalized_once() {
+        let s = Scratch::new("normalize");
+        let m = mirror(&s, Limits::default());
+        let src = s.0.join("pics").join("wide.png");
+        fs::create_dir_all(src.parent().unwrap()).unwrap();
+        image::RgbaImage::from_pixel(2000, 8, image::Rgba([20, 40, 80, 255]))
+            .save(&src)
+            .unwrap();
+        let copy = m.path(&src, None).unwrap();
+        assert_eq!(image::image_dimensions(&copy).unwrap(), (800, 3));
+        assert_eq!(m.path(&src, None).unwrap(), copy);
     }
 
     #[test]
