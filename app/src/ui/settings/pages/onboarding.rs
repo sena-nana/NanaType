@@ -1,8 +1,12 @@
 use super::*;
 use crate::msg::WindowMsg;
+use crate::ui::settings::preview::{guide_save, guide_tools};
 
 /// The diagram's text caret and the dialogue box's live edge (width, height).
 const CARET: (f32, f32) = (2.0, 12.0);
+
+/// The step that picks a skin and adjusts it.
+const SKIN_STEP: u8 = 1;
 
 /// How many steps the first-run guide has.
 pub(super) const ONBOARD_STEPS: u8 = nanatype_settings::ONBOARDING_STEPS;
@@ -76,10 +80,10 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
         .visible(move || step.get() > 0)
         .on_cx(move |_, _: &Activate, cx| {
             let n = step.get_untracked();
-            if n == 1 {
+            if n == SKIN_STEP {
                 ui.shader_preview.set(false);
             }
-            if n == 2 {
+            if n == SKIN_STEP + 1 {
                 hold_skin_preview(ui, cx);
             }
             go_to(ui, cx, n.saturating_sub(1));
@@ -92,10 +96,17 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
                 .kind(ButtonKind::Primary),
         )
         .bind(move |b: &mut Button| {
-            let last = step.get() + 1 >= ONBOARD_STEPS;
+            let n = step.get();
+            let last = n + 1 >= ONBOARD_STEPS;
             let label = ui.now_t(if last { "onboard-done" } else { "onboard-next" });
             if b.label != label {
                 b.label = label;
+            }
+            // The skin step saves its fields on Next; it waits while they
+            // do not make a valid profile (the step says why).
+            let blocked = n == SKIN_STEP && guide_save(ui).is_err();
+            if b.disabled != blocked {
+                b.disabled = blocked;
             }
         })
         .on_cx(move |_, _: &Activate, cx| {
@@ -104,10 +115,14 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
             if n + 1 >= ONBOARD_STEPS {
                 cx.dispatch_program_all(finish());
             } else {
-                if n == 1 {
+                if n == SKIN_STEP {
+                    let Ok(save) = guide_save(ui) else { return };
+                    if let Some(msg) = save {
+                        cx.dispatch_program_all(msg);
+                    }
                     ui.shader_preview.set(false);
                 }
-                if n == 0 {
+                if n + 1 == SKIN_STEP {
                     hold_skin_preview(ui, cx);
                 }
                 go_to(ui, cx, n + 1);
@@ -177,14 +192,26 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
                 speaker_field(ui),
             ),
         ],
-        1 => vec![
-            row(ui, "onboard-skin", None, skin_select(ui)),
+        SKIN_STEP => vec![
+            // Undo sits just before the picker, the choice it undoes.
+            row(
+                ui,
+                "onboard-skin",
+                None,
+                widget(
+                    Stack::row(0.0)
+                        .gap_step(nana_ui_core::SpacingStep::Sm)
+                        .align(AlignSpec::Center),
+                )
+                .children((guide_tools(ui), skin_select(ui)))
+                .into_any(),
+            ),
             // Held through the entrance, so that frame does not build the preview.
             Row::inset(dynamic(
                 move || ui.onboard_skin_shown.get(),
                 move |shown| {
                     if *shown {
-                        block(skin_preview(ui, signal(None)))
+                        block(crate::ui::settings::preview::guide_view(ui))
                     } else {
                         block(hint(ui.now_t("skin-preview-loading")))
                     }

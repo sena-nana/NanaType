@@ -302,6 +302,11 @@ fn settings_pages(scene: &Scene, out: &std::path::Path) {
     }
     // The first-run guide, one shot per step.
     ui.page.set(settings::Page::General);
+    // The skin step shows its fields once the stage is ready; the app
+    // prepares it after the first frame, the snapshot before it.
+    let builtin = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+    let active = ui.settings.with_untracked(|s| s.skin.id.clone());
+    let _ = nanatype::ui::prepare_skin_preview(ui, &builtin, &active, false);
     for n in 0..4u8 {
         ui.onboard_step.set(n);
         shot(

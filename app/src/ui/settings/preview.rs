@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, on_mount, signal, widget};
 use nana_ui::runtime::{
     Activate, Button, ColorChanged, ColorField, Icon, IconButton, NumberChanged, NumberInput,
-    RangeField, RangeInput, Select, SelectChanged, SelectOption, SizeChanged, SizeField,
-    SizeFieldChanged, SizePreset, Stack,
+    RangeField, RangeInput, RangeMarker, Select, SelectChanged, SelectOption, SizeChanged,
+    SizeField, SizeFieldChanged, SizePreset, Stack,
 };
 use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{AlignSpec, LengthSpec};
@@ -228,12 +228,33 @@ fn resolution_field(ui: Ui, id: &str, history: bool, default: [f32; 2]) -> AnyVi
     )
 }
 
-/// The line height: a slider with its reading in the thumb and the
-/// skin's own line height to go back to.
+/// The line heights the slider snaps to: tight, comfortable, double and
+/// the ends. The skin's own value joins them (see [`line_marks`]).
+const LINE_SNAPS: [f64; 6] = [1.0, 1.2, 1.5, 2.0, 2.5, 3.0];
+
+/// The slider's marks: [`LINE_SNAPS`] and the skin's `default`, which
+/// stands in for a snap too close to tell apart on the track.
+fn line_marks(default: f64) -> Vec<RangeMarker> {
+    let mut values: Vec<f64> = LINE_SNAPS
+        .into_iter()
+        .filter(|v| (v - default).abs() >= 0.1)
+        .chain([default])
+        .collect();
+    values.sort_by(f64::total_cmp);
+    values
+        .into_iter()
+        .map(|v| RangeMarker::new(v, ""))
+        .collect()
+}
+
+/// The line height: a slider across the row with its reading in the
+/// thumb, marks it snaps to as it is dragged, and the skin's own line
+/// height to go back to.
 fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
     let read_id = id.to_owned();
     let write_id = id.to_owned();
     let (min, max) = LINE_RANGE;
+    let skin_value = f64::from(default).clamp(min, max);
     let value = move || {
         draft(ui, &read_id)
             .pane(history)
@@ -243,34 +264,50 @@ fn line_slider(ui: Ui, id: &str, history: bool, default: f32) -> AnyView {
             .unwrap_or(f64::from(default))
             .clamp(min, max)
     };
-    kit::dense_row(
-        ui.now_t("skin-edit-line"),
-        widget(Stack::row(0.0).width(LengthSpec::Px(kit::field::DENSE))).children(
-            widget(Stack::row(0.0).grow(1.0).shrink(1.0)).children(
-                widget(super::controls::compact_thumb(
-                    RangeField::new(value(), min, max, LINE_STEP)
-                        .value_thumb(true)
-                        .show_bounds(true)
-                        .unit("×")
-                        .default_value(Some(f64::from(default).clamp(min, max)))
-                        .show_label(false),
-                ))
-                .key(surface_key("skin-edit-line", history))
-                .bind(move |r: &mut RangeField| {
-                    let v = value();
-                    if (r.value - v).abs() > f64::EPSILON {
-                        r.value = v;
-                    }
-                })
-                .on(move |e: &RangeInput| {
-                    let v = ((e.value / LINE_STEP).round() * LINE_STEP).clamp(min, max);
-                    change(ui, &write_id, |d| {
-                        d.pane_mut(history).line_height = unless_default(v as f32, default)
-                    });
-                }),
-            ),
-        ),
+    let mut range = super::controls::compact_thumb(
+        RangeField::new(value(), min, max, LINE_STEP)
+            .value_thumb(true)
+            .markers(line_marks(skin_value))
+            .unit("×")
+            .default_value(Some(skin_value))
+            .label(ui.now_t("skin-edit-line"))
+            .show_label(false),
+    );
+    // The track takes the row past the label, so dragging has room; the
+    // marks stand for the ends the bounds used to spell out.
+    let l = Arc::make_mut(&mut range.style.layout);
+    l.flex_grow = Some(1.0);
+    l.min_width = Some(LengthSpec::Px(0.0));
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::GROUP)
+            .align(AlignSpec::Center)
+            .width(LengthSpec::Fill)
+            .padding_xy(0.0, gap::HAIR),
     )
+    .children((
+        kit::Type::Caption.view(ui.now_t("skin-edit-line")),
+        widget(range)
+            .key(surface_key("skin-edit-line", history))
+            .bind(move |r: &mut RangeField| {
+                let v = value();
+                if (r.value - v).abs() > f64::EPSILON {
+                    r.value = v;
+                }
+            })
+            .on(move |e: &RangeInput| {
+                // The skin's own mark may sit off the step; it stays exact.
+                let v = if (e.value - skin_value).abs() < 1e-6 {
+                    skin_value
+                } else {
+                    ((e.value / LINE_STEP).round() * LINE_STEP).clamp(min, max)
+                };
+                change(ui, &write_id, |d| {
+                    d.pane_mut(history).line_height = unless_default(v as f32, default)
+                });
+            }),
+    ))
+    .into_any()
 }
 
 /// The text colour: a picker, the skin's colour while the draft has none.
@@ -414,7 +451,139 @@ fn font_missing(font: &str, fallback_font: bool) -> bool {
     }
 }
 
-fn controls(ui: Ui, id: &str, base: Arc<Skin>, fallback_font: bool) -> AnyView {
+/// Where the editor shows. The skins page saves with its own button; the
+/// first-run guide saves on Next, and keeps its undo beside the skin picker.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Host {
+    Page,
+    Guide,
+}
+
+/// A group of the guide's fields: titled inside a sunken panel, so each
+/// group reads apart from the guide's card around it.
+fn guide_group(title: Option<(Icon, String)>, body: impl IntoView) -> AnyView {
+    use nana_ui::runtime::IconGlyph;
+    use nana_ui_core::{RadiusTier, SemanticColorRole, SpacingStep};
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::TIGHT)
+            .width(LengthSpec::Fill)
+            .padding_step(SpacingStep::Lg, SpacingStep::Md)
+            .surface(SemanticColorRole::Subtle)
+            .outline(SemanticColorRole::BorderSoft, 1.0)
+            .radius(RadiusTier::Md),
+    )
+    .children((
+        title.map(|(icon, title)| {
+            widget(
+                Stack::row(0.0)
+                    .gap_step(SpacingStep::Sm)
+                    .align(AlignSpec::Center)
+                    .with_layout(|l| l.padding_bottom = Some(LengthSpec::Px(gap::HAIR))),
+            )
+            .children((
+                widget(
+                    IconGlyph::new(icon)
+                        .size(kit::icon::SM)
+                        .role(SemanticColorRole::Muted)
+                        .decorative(),
+                ),
+                kit::Type::Strong.view(title),
+            ))
+        }),
+        body,
+    ))
+    .into_any()
+}
+
+/// The guide's undo for the active skin, beside its picker: back to the
+/// skin's own values, and away with what has not been saved. Each is
+/// disabled while it would change nothing.
+pub(super) fn guide_tools(ui: Ui) -> AnyView {
+    let active = move || ui.settings.with(|s| s.skin.id.clone());
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::HAIR)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        widget(action(ui, ti::RESTORE, "skin-edit-reset"))
+            .key("guide-skin-reset")
+            .bind(move |b: &mut IconButton| {
+                let plain = follows_skin(&draft(ui, &active()));
+                if b.disabled != plain {
+                    b.disabled = plain;
+                }
+            })
+            .on(move |_: &Activate| {
+                change(ui, &active(), |d| {
+                    // The sample lines stay; only the values go.
+                    for history in [false, true] {
+                        let pane = d.pane_mut(history);
+                        *pane = Pane {
+                            text: std::mem::take(&mut pane.text),
+                            ..Pane::default()
+                        };
+                    }
+                    d.params = Default::default();
+                })
+            }),
+        widget(action(ui, ti::ARROW_BACK_UP, "skin-edit-discard"))
+            .key("guide-skin-discard")
+            .bind(move |b: &mut IconButton| {
+                let id = active();
+                let off = !ui.skin_drafts.with(|m| m.contains_key(&id));
+                if b.disabled != off {
+                    b.disabled = off;
+                }
+            })
+            .on(move |_: &Activate| {
+                let id = active();
+                ui.skin_drafts.update(|m| {
+                    m.remove(&id);
+                });
+            }),
+    ))
+    .into_any()
+}
+
+/// Whether `d` sets nothing of its own, so every field follows the skin.
+fn follows_skin(d: &Draft) -> bool {
+    let blank = |p: &Pane| {
+        Pane {
+            text: String::new(),
+            ..p.clone()
+        } == Pane::default()
+    };
+    blank(&d.display) && blank(&d.history) && d.params == Default::default()
+}
+
+/// What the guide's Next saves: the active skin's unsaved fields, `None`
+/// when there are none or they match what is saved, `Err` while they do
+/// not make a valid profile.
+pub(super) fn guide_save(ui: Ui) -> Result<Option<Msg>, InvalidProfile> {
+    let id = ui.settings.with(|s| s.skin.id.clone());
+    let Some(d) = ui.skin_drafts.with(|m| m.get(&id).cloned()) else {
+        return Ok(None);
+    };
+    let base = ui.skins.with(|rows| {
+        rows.iter()
+            .find(|r| r.id == id)
+            .and_then(|r| r.skin.clone())
+    });
+    let Some(base) = base else {
+        return Ok(None);
+    };
+    let profile = d.profile(&base)?;
+    let saved = ui
+        .settings
+        .with(|s| s.skin.personalizations.get(&id).cloned());
+    Ok((saved.as_ref() != Some(&profile))
+        .then(|| Msg::Skin(SkinMsg::SavePersonalization { id, profile })))
+}
+
+fn controls(ui: Ui, id: &str, base: Arc<Skin>, fallback_font: bool, host: Host) -> AnyView {
+    let guide = host == Host::Guide;
     let reset_id = id.to_owned();
     let discard_id = id.to_owned();
     let save_id = id.to_owned();
@@ -422,16 +591,33 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, fallback_font: bool) -> AnyView {
     let valid_base = base.clone();
     let save_base = base.clone();
     let params = super::skin_params::view(ui, id, base.clone());
-    let display = section(
-        ui,
-        "windows-display",
-        vec![kit::block(pane_fields(ui, id, &base, false))],
-    );
-    let history = section(
-        ui,
-        "windows-history",
-        vec![kit::block(pane_fields(ui, id, &base, true))],
-    );
+    let (params, display, history) = if guide {
+        (
+            params.map(|p| guide_group(None, p)),
+            guide_group(
+                Some((ti::APP_WINDOW, ui.now_t("windows-display"))),
+                pane_fields(ui, id, &base, false),
+            ),
+            guide_group(
+                Some((ti::MESSAGES, ui.now_t("windows-history"))),
+                pane_fields(ui, id, &base, true),
+            ),
+        )
+    } else {
+        (
+            params,
+            section(
+                ui,
+                "windows-display",
+                vec![kit::block(pane_fields(ui, id, &base, false))],
+            ),
+            section(
+                ui,
+                "windows-history",
+                vec![kit::block(pane_fields(ui, id, &base, true))],
+            ),
+        )
+    };
     let status_id = id.to_owned();
     let pick_id = id.to_owned();
     let status = dynamic(
@@ -446,11 +632,7 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, fallback_font: bool) -> AnyView {
             let Ok(profile) = d.profile(&base) else {
                 return hint(ui.now_t("skin-edit-invalid"));
             };
-            let mut note = ui.now_t(if saved.as_ref() == Some(&profile) {
-                "skin-edit-saved"
-            } else {
-                "skin-edit-draft-hint"
-            });
+            let mut notes = Vec::new();
             // A built-in font the draft names is registered by the sample;
             // register it here too, whichever of them runs first.
             for font in [&d.display.font, &d.history.font] {
@@ -463,11 +645,31 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, fallback_font: bool) -> AnyView {
             if font_missing(&d.display.font, fallback_font)
                 || font_missing(&d.history.font, fallback_font)
             {
-                note = format!("{}\n{note}", ui.now_t("skin-edit-font-missing"));
+                notes.push(ui.now_t("skin-edit-font-missing"));
             }
-            hint(note)
+            // The guide saves on Next, so it tells only what stands in the way.
+            if !guide {
+                notes.push(ui.now_t(if saved.as_ref() == Some(&profile) {
+                    "skin-edit-saved"
+                } else {
+                    "skin-edit-draft-hint"
+                }));
+            }
+            if notes.is_empty() {
+                return widget(Stack::column(0.0)).into_any();
+            }
+            hint(notes.join("\n"))
         },
     );
+    if guide {
+        return widget(
+            Stack::column(0.0)
+                .gap_step(gap::step::CONTROL)
+                .width(LengthSpec::Fill),
+        )
+        .children((params, display, history, status))
+        .into_any();
+    }
     // Keep controls mounted while the sample rerenders, preserving IME/selection.
     widget(
         Stack::column(0.0)
@@ -535,6 +737,15 @@ fn controls(ui: Ui, id: &str, base: Arc<Skin>, fallback_font: bool) -> AnyView {
 }
 
 pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
+    view_in(ui, previewing, Host::Page)
+}
+
+/// The active skin's preview and fields as the first-run guide shows them.
+pub fn guide_view(ui: Ui) -> AnyView {
+    view_in(ui, signal(None), Host::Guide)
+}
+
+fn view_in(ui: Ui, previewing: Signal<Option<String>>, host: Host) -> AnyView {
     let width = signal(0.0_f32);
     // A prepared stage can remount when the catalogue or preview signal
     // changes. Remember the last skin we asked for so that the completion of
@@ -593,7 +804,7 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
                 }
             };
             let controls =
-                prepared.map(|p| controls(ui, &id, p.assets.base.clone(), row.fallback_font));
+                prepared.map(|p| controls(ui, &id, p.assets.base.clone(), row.fallback_font, host));
             let apply_id = id.clone();
             let apply_read = id.clone();
             widget(
@@ -603,22 +814,27 @@ pub fn view(ui: Ui, previewing: Signal<Option<String>>) -> AnyView {
             )
             .key("skin-preview")
             .children((
-                widget(
-                    Stack::row(0.0)
-                        .gap_step(gap::step::CONTROL)
-                        .align(AlignSpec::Center)
-                        .width(LengthSpec::Fill),
-                )
-                .children((
-                    kit::spacer(),
-                    widget(action(ui, ti::CHECK, "common-apply"))
-                        .key("apply-preview")
-                        .visible(move || ui.settings.with(|s| s.skin.id != apply_read))
-                        .on_cx(move |_, _: &Activate, cx| {
-                            let id = apply_id.clone();
-                            cx.dispatch_program_all(super::controls::edit(move |s| s.skin.id = id));
-                        }),
-                )),
+                // The guide previews the active skin only: nothing to apply.
+                (host == Host::Page).then(|| {
+                    widget(
+                        Stack::row(0.0)
+                            .gap_step(gap::step::CONTROL)
+                            .align(AlignSpec::Center)
+                            .width(LengthSpec::Fill),
+                    )
+                    .children((
+                        kit::spacer(),
+                        widget(action(ui, ti::CHECK, "common-apply"))
+                            .key("apply-preview")
+                            .visible(move || ui.settings.with(|s| s.skin.id != apply_read))
+                            .on_cx(move |_, _: &Activate, cx| {
+                                let id = apply_id.clone();
+                                cx.dispatch_program_all(super::controls::edit(move |s| {
+                                    s.skin.id = id
+                                }));
+                            }),
+                    ))
+                }),
                 widget(
                     Stack::row(0.0)
                         .gap_step(gap::step::GROUP)
@@ -741,7 +957,9 @@ mod tests {
         let mut doc = RuntimeDocument::new(doc_id);
         let render_base = base.clone();
         doc.context_mut()
-            .mount_view_root(doc_id, move || controls(ui, id, render_base, false))
+            .mount_view_root(doc_id, move || {
+                controls(ui, id, render_base, false, Host::Page)
+            })
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 700, 1400).unwrap();
         session.flush().unwrap();
@@ -824,6 +1042,101 @@ mod tests {
         assert!(!ui.skin_drafts.with_untracked(|m| m.contains_key(id)));
     }
 
+    #[test]
+    fn the_guide_saves_the_active_draft_on_next_and_undoes_beside_the_picker() {
+        let (ui, _) = fixture();
+        let id = ui.settings.with_untracked(|s| s.skin.id.clone());
+        // Nothing touched: nothing to save.
+        assert!(matches!(guide_save(ui), Ok(None)));
+        change(ui, &id, |d| d.display.size = "40".into());
+        let Ok(Some(Msg::Skin(SkinMsg::SavePersonalization { id: saved, profile }))) =
+            guide_save(ui)
+        else {
+            panic!("a save for the active skin");
+        };
+        assert_eq!(saved, id);
+        assert_eq!(profile.display.text_size, Some(40.0));
+        // Fields that do not make a profile hold Next.
+        change(ui, &id, |d| d.history.size = "abc".into());
+        assert!(guide_save(ui).is_err());
+
+        let doc_id = DocumentId::new(9).unwrap();
+        let mut doc = RuntimeDocument::new(doc_id);
+        doc.context_mut()
+            .mount_view_root(doc_id, move || guide_tools(ui))
+            .unwrap();
+        let mut session = RuntimeAgentSession::new(doc, 200, 60).unwrap();
+        // Reset keeps the draft but clears every value.
+        click(&mut session, &ui.now_t("skin-edit-reset"));
+        assert!(follows_skin(&draft(ui, &id)));
+        assert!(ui.skin_drafts.with_untracked(|m| m.contains_key(&id)));
+        click(&mut session, &ui.now_t("skin-edit-discard"));
+        assert!(!ui.skin_drafts.with_untracked(|m| m.contains_key(&id)));
+        session.flush().unwrap();
+        // With nothing to undo, both are disabled.
+        let dump = session.accessibility_dump();
+        for key in ["skin-edit-reset", "skin-edit-discard"] {
+            assert!(
+                dump.iter()
+                    .any(|n| n.label.as_deref() == Some(ui.now_t(key).as_str()) && n.disabled),
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
+    fn line_height_snaps_to_common_values_and_the_skins_own() {
+        let values = |default| {
+            line_marks(default)
+                .into_iter()
+                .map(|m| m.value)
+                .collect::<Vec<_>>()
+        };
+        // The skin's value stands in for the snap too close to it.
+        assert_eq!(values(1.45), [1.0, 1.2, 1.45, 2.0, 2.5, 3.0]);
+        assert_eq!(values(1.5), [1.0, 1.2, 1.5, 2.0, 2.5, 3.0]);
+        assert_eq!(values(1.75), [1.0, 1.2, 1.5, 1.75, 2.0, 2.5, 3.0]);
+    }
+
+    #[test]
+    fn the_guide_layout_has_no_save_row() {
+        let (ui, base) = fixture();
+        let id = "nanatype.halo";
+        let doc_id = DocumentId::new(10).unwrap();
+        let mut doc = RuntimeDocument::new(doc_id);
+        doc.context_mut()
+            .mount_view_root(doc_id, move || {
+                controls(ui, id, base.clone(), false, Host::Guide)
+            })
+            .unwrap();
+        let mut session = RuntimeAgentSession::new(doc, 700, 1400).unwrap();
+        session.flush().unwrap();
+        let dump = session.accessibility_dump();
+        for key in [
+            "skin-edit-save",
+            "skin-edit-discard",
+            "skin-edit-reset",
+            "skin-edit-saved",
+            "skin-edit-draft-hint",
+        ] {
+            let label = ui.now_t(key);
+            assert!(
+                !dump
+                    .iter()
+                    .any(|n| n.label.as_deref() == Some(label.as_str())),
+                "{key}"
+            );
+        }
+        for key in ["windows-display", "windows-history"] {
+            let label = ui.now_t(key);
+            assert!(
+                dump.iter()
+                    .any(|n| n.label.as_deref() == Some(label.as_str())),
+                "{key}"
+            );
+        }
+    }
+
     fn commit_size(session: &mut RuntimeAgentSession, key: &str, text: &str) {
         session.flush().unwrap();
         let input = session
@@ -852,7 +1165,9 @@ mod tests {
         let mut doc = RuntimeDocument::new(doc_id);
         let render_base = base.clone();
         doc.context_mut()
-            .mount_view_root(doc_id, move || controls(ui, id, render_base, false))
+            .mount_view_root(doc_id, move || {
+                controls(ui, id, render_base, false, Host::Page)
+            })
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 700, 1400).unwrap();
         session.flush().unwrap();
@@ -913,7 +1228,9 @@ mod tests {
         let mut doc = RuntimeDocument::new(doc_id);
         let render_base = base.clone();
         doc.context_mut()
-            .mount_view_root(doc_id, move || controls(ui, id, render_base, false))
+            .mount_view_root(doc_id, move || {
+                controls(ui, id, render_base, false, Host::Page)
+            })
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 700, 1400).unwrap();
         session.flush().unwrap();
@@ -1036,7 +1353,9 @@ align = { param = "align" }
         let mut doc = RuntimeDocument::new(doc_id);
         let render_base = base.clone();
         doc.context_mut()
-            .mount_view_root(doc_id, move || controls(ui, id, render_base, false))
+            .mount_view_root(doc_id, move || {
+                controls(ui, id, render_base, false, Host::Page)
+            })
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 700, 1800).unwrap();
         session.flush().unwrap();
