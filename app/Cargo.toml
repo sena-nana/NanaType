@@ -79,7 +79,7 @@ gif = "0.14"
 flate2 = { workspace = true, default-features = true }
 # Downloads use iter_download and our own cache writer, not its filesystem helpers.
 grammers-client = { version = "=0.11.0", default-features = false, features = ["proxy"] }
-grammers-session = { version = "=0.11.0", default-features = false, features = ["serde"] }
+grammers-session = { version = "=0.11.0", default-features = false }
 tokio = { workspace = true, features = ["rt", "sync", "time", "net"] }
 rasterlottie = { version = "=0.2.4", default-features = false }
 webm-iterable = "0.7.1"

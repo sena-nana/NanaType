@@ -39,9 +39,17 @@ raw-window-handle.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-app-kit.workspace = true
+wgpu = { workspace = true, features = ["metal"] }
 
+# The GPU backends for both apps. On Windows NanaUI renders transparent windows
+# through DirectComposition, which only DX12 drives; Vulkan and GLES would only
+# serve as a fallback for machines with no DX12 adapter, and WARP is one.
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Time"] }
+wgpu = { workspace = true, features = ["dx12"] }
+
+[target.'cfg(not(any(windows, target_os = "macos")))'.dependencies]
+wgpu = { workspace = true, features = ["vulkan", "gles"] }
 
 [dev-dependencies]
 tempfile.workspace = true

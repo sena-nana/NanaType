@@ -19,9 +19,11 @@ $env:CARGO_INCREMENTAL = '0'
 $env:RUSTFLAGS = '-C target-feature=+crt-static'
 cargo build -p nanatype --profile dist --example gpu_perf --example render_perf --example skin_load_perf --locked
 cargo build -p nanatype --profile dist-small --example gpu_perf --example render_perf --example skin_load_perf --locked
-$env:WGPU_BACKEND = 'vulkan'
+$env:WGPU_BACKEND = 'dx12'
 target/dist/examples/gpu_perf.exe target/profile-perf/s-1.json
 target/dist-small/examples/gpu_perf.exe target/profile-perf/z-1.json
 ```
+
+本次记录在 Vulkan 上测得；此后 Windows 构建只编入 DX12 后端（应用的透明窗口走 DirectComposition），复测改用 `dx12`，结果不能与上面的 Vulkan 数字直接比较。示例会带上 dev 依赖，仍可设 `vulkan` 对照，但那不是发布程序的后端。
 
 皮肤/解码测试使用相同动画像素、帧数和尺寸，排除夹具生成、首次校验与 PNG 写盘；启动从主入口到输入窗口 Ready，不是首个可见像素。更新实现后，应保存新的源码指纹、负载和原始数据，不能混入本次记录。

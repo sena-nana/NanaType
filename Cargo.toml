@@ -70,12 +70,14 @@ nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "0ca1bc06235d65d6
     "hosted",
     "bundled-fonts",
     "wgpu-interop",
-    "wgpu-backends",
     "icons-tabler",
     # Also provides css!, used by the application even without view! templates.
     "view-macro",
     "packaged-resources",
 ] }
+# NanaUI's own WGPU. Members name the backends (nanatype-frame does) instead of
+# taking every one through nana-ui's `wgpu-backends`.
+wgpu = { version = "30.0.1", default-features = false }
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 unicode-segmentation = "1"
