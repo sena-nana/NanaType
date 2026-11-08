@@ -12,14 +12,18 @@ use nana_ui_platform::WindowId;
 use super::cache::{self, CachedImage};
 
 const MAX_GPU: u64 = 128 * 1024 * 1024;
-/// First-frame previews are resident before an animation becomes visible. Keep
-/// that baseline bounded so a large catalog cannot consume unbounded VRAM.
-const MAX_PREVIEW_GPU: u64 = 32 * 1024 * 1024;
+/// Slots nobody paints keep their last frame resident (a catalog's first frames
+/// are its previews). Bound that idle share so a large catalog cannot consume
+/// unbounded VRAM; past it, idle slots park on a 1x1 placeholder.
+const MAX_IDLE_GPU: u64 = 32 * 1024 * 1024;
+const PLACEHOLDER_BYTES: u64 = 4;
 
 struct Playing {
     cache: Arc<CachedImage>,
     gpu: GpuTexture,
     host: HostTexture,
+    /// The frame the full-size texture holds; `None` while parked on the
+    /// 1x1 placeholder.
     frame: Option<usize>,
     epoch: Option<u64>,
     bytes: u64,
@@ -42,8 +46,8 @@ impl Playback {
     pub fn discard(&mut self, id: WindowId) {
         self.windows.remove(&id);
         // No renderer can sample these slots once the last window is gone.
-        // Drop them eagerly instead of keeping every first-frame preview until
-        // the next device reset or catalog refresh.
+        // Drop them eagerly instead of keeping every resident frame until the
+        // next device reset or catalog refresh.
         if self.windows.is_empty() {
             self.slots.clear();
         }
@@ -103,43 +107,67 @@ impl Playback {
             }
         }
         self.slots.retain(|slot, _| wanted.contains(slot));
-        let registry = self.windows.entry(id).or_default();
-        let mut preview_used: u64 = self
-            .slots
+        let visible: HashSet<_> = self
+            .windows
             .values()
-            .filter(|playing| playing.frame.is_none())
-            .map(|playing| playing.bytes)
-            .sum();
+            .flat_map(|r| {
+                self.slots
+                    .keys()
+                    .filter(|slot| r.painted_extent(slot).is_some_and(|s| s[0] > 0 && s[1] > 0))
+                    .cloned()
+            })
+            .collect();
+        // Idle slots keep the frame they last showed: it is what a returning
+        // consumer paints first. Park the ones past the idle budget.
+        let mut idle: u64 = 0;
+        for (slot, playing) in &mut self.slots {
+            if visible.contains(slot) || playing.frame.is_none() {
+                continue;
+            }
+            if idle + playing.bytes <= MAX_IDLE_GPU {
+                idle += playing.bytes;
+            } else if let Ok(texture) = placeholder(gpu) {
+                playing.host.replace_texture(&texture);
+                playing.gpu = texture;
+                playing.frame = None;
+                playing.bytes = PLACEHOLDER_BYTES;
+            }
+        }
+        let mut used: u64 = self.slots.values().map(|p| p.bytes).sum();
+        let registry = self.windows.entry(id).or_default();
         for cache in images {
             let slot = cache.slot();
             if !self.slots.contains_key(&slot) {
-                // Tiny first-frame preview gives the first paint useful content;
-                // the full frame is uploaded only after a visible consumer draws.
-                let (mut preview, failed) = match read(&cache.frame_path(0)) {
-                    Ok(p) => (p, false),
-                    Err(e) => {
-                        nanatype_diag::report!(crate::diag::STICKER_PREVIEW_FAILED; "{e}");
-                        self.rebuild = true;
-                        (image::RgbaImage::new(1, 1), true)
+                // Frame 0 doubles as the preview, so the first paint shows real
+                // content and a visible static sticker never uploads twice.
+                let bytes = frame_bytes(&cache);
+                let admitted = idle + bytes <= MAX_IDLE_GPU && used + bytes <= MAX_GPU;
+                let (image, failed) = if admitted {
+                    match read_frame(&cache, 0) {
+                        Ok(image) => (Some(image), false),
+                        Err(e) => {
+                            nanatype_diag::report!(crate::diag::STICKER_PREVIEW_FAILED; "{e}");
+                            self.rebuild = true;
+                            (None, true)
+                        }
                     }
+                } else {
+                    (None, false)
                 };
-                let preview_bytes = u64::from(preview.width())
-                    .saturating_mul(u64::from(preview.height()))
-                    .saturating_mul(4);
-                let blocked =
-                    if !failed && preview_used.saturating_add(preview_bytes) > MAX_PREVIEW_GPU {
-                        // Keep a tiny host texture so the slot remains registered,
-                        // but defer the real upload until it is visible and the
-                        // full-frame budget can admit it.
-                        preview = image::RgbaImage::new(1, 1);
-                        true
-                    } else {
-                        preview_used = preview_used.saturating_add(preview_bytes);
-                        false
-                    };
-                let Ok(texture) = texture(gpu, &preview) else {
+                let uploaded = match &image {
+                    Some(image) => texture(gpu, image),
+                    None => placeholder(gpu),
+                };
+                let Ok(texture) = uploaded else {
                     continue;
                 };
+                let bytes = if image.is_some() {
+                    idle += bytes;
+                    bytes
+                } else {
+                    PLACEHOLDER_BYTES
+                };
+                used += bytes;
                 let host = HostTexture::new(&texture);
                 self.slots.insert(
                     slot.clone(),
@@ -147,11 +175,11 @@ impl Playback {
                         cache: cache.clone(),
                         gpu: texture,
                         host,
-                        frame: None,
+                        frame: image.is_some().then_some(0),
                         epoch: None,
-                        bytes: u64::from(preview.width()) * u64::from(preview.height()) * 4,
+                        bytes,
                         failed,
-                        blocked,
+                        blocked: false,
                     },
                 );
             } else if let Some(playing) = self.slots.get_mut(&slot)
@@ -171,42 +199,6 @@ impl Playback {
                 HostTextureAlphaMode::Premultiplied,
             );
         }
-        let visible: HashSet<_> = self
-            .windows
-            .values()
-            .flat_map(|r| {
-                self.slots
-                    .keys()
-                    .filter(|slot| r.painted_extent(slot).is_some_and(|s| s[0] > 0 && s[1] > 0))
-                    .cloned()
-            })
-            .collect();
-        // Drop full-size textures with no consumers before admitting new ones.
-        for (slot, playing) in &mut self.slots {
-            if !visible.contains(slot)
-                && playing.frame.is_some()
-                && let Ok(preview) = read(&playing.cache.frame_path(0))
-            {
-                let preview_bytes = u64::from(preview.width())
-                    .saturating_mul(u64::from(preview.height()))
-                    .saturating_mul(4);
-                let (preview, blocked) =
-                    if preview_used.saturating_add(preview_bytes) <= MAX_PREVIEW_GPU {
-                        preview_used = preview_used.saturating_add(preview_bytes);
-                        (preview, false)
-                    } else {
-                        (image::RgbaImage::new(1, 1), true)
-                    };
-                if let Ok(texture) = texture(gpu, &preview) {
-                    playing.host.replace_texture(&texture);
-                    playing.gpu = texture;
-                    playing.frame = None;
-                    playing.bytes = u64::from(preview.width()) * u64::from(preview.height()) * 4;
-                    playing.blocked = blocked;
-                }
-            }
-        }
-        let mut used: u64 = self.slots.values().map(|p| p.bytes).sum();
         for (slot, playing) in &mut self.slots {
             if !visible.contains(slot) || playing.failed {
                 continue;
@@ -220,22 +212,17 @@ impl Playback {
             if playing.frame == Some(frame) {
                 continue;
             }
-            let bytes = u64::from(playing.cache.width) * u64::from(playing.cache.height) * 4;
+            let bytes = frame_bytes(&playing.cache);
             if playing.frame.is_none() && used - playing.bytes + bytes > MAX_GPU {
                 playing.blocked = true;
                 continue;
             }
             playing.blocked = false;
-            let image = match read(&playing.cache.frame_path(frame)) {
-                Ok(p) if p.width() == playing.cache.width && p.height() == playing.cache.height => {
-                    p
-                }
-                _ => {
-                    nanatype_diag::event!(crate::diag::STICKER_FRAME_REBUILD);
-                    playing.failed = true;
-                    self.rebuild = true;
-                    continue;
-                }
+            let Ok(image) = read_frame(&playing.cache, frame) else {
+                nanatype_diag::event!(crate::diag::STICKER_FRAME_REBUILD);
+                playing.failed = true;
+                self.rebuild = true;
+                continue;
             };
             if playing.frame.is_none() {
                 match texture(gpu, &image) {
@@ -260,6 +247,23 @@ impl Playback {
             playing.frame = Some(frame);
         }
     }
+}
+
+fn frame_bytes(cache: &CachedImage) -> u64 {
+    u64::from(cache.width) * u64::from(cache.height) * 4
+}
+
+/// One cached frame, which must match the size the slot was registered with.
+fn read_frame(cache: &CachedImage, index: usize) -> Result<image::RgbaImage, String> {
+    let image = read(&cache.frame_path(index))?;
+    if image.dimensions() != (cache.width, cache.height) {
+        return Err("Cached frame size does not match its sticker".into());
+    }
+    Ok(image)
+}
+
+fn placeholder(gpu: &GpuContext) -> Result<GpuTexture, String> {
+    texture(gpu, &image::RgbaImage::new(1, 1))
 }
 
 fn read(path: &std::path::Path) -> Result<image::RgbaImage, String> {

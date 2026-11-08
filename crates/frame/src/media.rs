@@ -27,10 +27,15 @@ use nanatype_model::codec::{fnv1a64, fnv1a64_seeded};
 
 /// NanaUI refuses local pictures larger than this (`MAX_LOCAL_URL_BYTES`).
 pub const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
-/// Static external pictures are normalized once before NanaUI sees them.
-/// Animated formats remain untouched so their timing and frames survive.
+/// Static external pictures larger than this are downsampled once before
+/// NanaUI sees them. Smaller ones, GIF and SVG are mirrored byte for byte.
 const NORMALIZED_EDGE: u32 = 800;
-const NORMALIZED_ALLOC: u64 = 64 * 1024 * 1024;
+/// Decoder bounds for the one-time downsample. Anything beyond them is
+/// mirrored unchanged, exactly as before normalization existed.
+const NORMALIZED_SIDE: u32 = 16384;
+const NORMALIZED_ALLOC: u64 = 256 * 1024 * 1024;
+/// Quality for a downsampled JPEG; the default (75) visibly softens photos.
+const NORMALIZED_JPEG_QUALITY: u8 = 88;
 /// The folder under the base that holds the copies.
 pub const DIR: &str = "media";
 
@@ -150,10 +155,10 @@ impl Media {
             .and_then(|e| e.to_str())
             .map(str::to_ascii_lowercase)
             .filter(|e| PICTURE_EXTS.contains(&e.as_str()))?;
-        // The generation prefix invalidates mirrors made before the one-time
-        // downsample/compression pass below.
+        // The generation prefix invalidates mirrors made under an earlier
+        // normalization policy.
         let name = format!(
-            "media-v3-{}.{ext}",
+            "media-v4-{}.{ext}",
             mirror_key(&canonical, meta.len(), modified(&meta))
         );
         self.cache(&name, None, || {
@@ -167,17 +172,7 @@ impl Media {
             if bytes.len() as u64 != meta.len() {
                 return None;
             }
-            if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp" | "bmp")
-                && image::guess_format(&bytes).is_ok()
-            {
-                // A recognized raster that exceeds decoder limits is refused,
-                // rather than copied into a URL that could trigger a huge UI decode.
-                Some(normalize_static(&bytes, &ext)?)
-            } else {
-                // Keep malformed fixtures/legacy files on their original path;
-                // NanaUI will report them as unreadable instead of panicking.
-                Some(bytes)
-            }
+            Some(downsample_static(&bytes, &ext).unwrap_or(bytes))
         })
     }
 
@@ -333,28 +328,36 @@ fn touch(path: &Path) {
     }
 }
 
-/// Downsample and re-encode one static raster picture. GIF and SVG are left
-/// alone because decoding them here would lose animation or vector semantics.
-fn normalize_static(bytes: &[u8], ext: &str) -> Option<Vec<u8>> {
+/// A smaller re-encoding of a static raster picture wider or taller than
+/// [`NORMALIZED_EDGE`], or `None` to mirror the original bytes: pictures that
+/// already fit (re-encoding them only loses quality or grows lossy WebP into
+/// lossless), GIF/SVG (animation, vectors), and anything malformed or beyond
+/// the decoder bounds, which NanaUI then handles as it always has.
+/// NanaUI sniffs the content, so a `.webp` name holding PNG bytes is fine.
+fn downsample_static(bytes: &[u8], ext: &str) -> Option<Vec<u8>> {
     if !matches!(ext, "png" | "jpg" | "jpeg" | "webp" | "bmp") {
         return None;
     }
-    let image = crate::assets::decode_image(bytes, 4096, NORMALIZED_ALLOC).ok()?;
-    let image = if image.width() > NORMALIZED_EDGE || image.height() > NORMALIZED_EDGE {
-        image.thumbnail(NORMALIZED_EDGE, NORMALIZED_EDGE)
-    } else {
-        image
-    };
-    let format = match ext {
-        "jpg" | "jpeg" => image::ImageFormat::Jpeg,
-        "webp" => image::ImageFormat::WebP,
-        "bmp" => image::ImageFormat::Bmp,
-        _ => image::ImageFormat::Png,
-    };
+    let reader = || image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format();
+    let (width, height) = reader().ok()?.into_dimensions().ok()?;
+    if width <= NORMALIZED_EDGE && height <= NORMALIZED_EDGE {
+        return None;
+    }
+    let image = crate::assets::decode_image(bytes, NORMALIZED_SIDE, NORMALIZED_ALLOC)
+        .ok()?
+        .thumbnail(NORMALIZED_EDGE, NORMALIZED_EDGE);
     let mut encoded = Vec::new();
-    image
-        .write_to(&mut std::io::Cursor::new(&mut encoded), format)
-        .ok()?;
+    let mut out = std::io::Cursor::new(&mut encoded);
+    if matches!(ext, "jpg" | "jpeg") {
+        // Photos stay lossy; JPEG has no alpha to lose.
+        let encoder =
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, NORMALIZED_JPEG_QUALITY);
+        image.write_with_encoder(encoder).ok()?;
+    } else {
+        // PNG keeps alpha and line art exactly; the image crate cannot write
+        // lossy WebP, and BMP would stay uncompressed.
+        image.write_to(&mut out, image::ImageFormat::Png).ok()?;
+    }
     Some(encoded)
 }
 
@@ -540,6 +543,26 @@ mod tests {
         let copy = m.path(&src, None).unwrap();
         assert_eq!(image::image_dimensions(&copy).unwrap(), (800, 3));
         assert_eq!(m.path(&src, None).unwrap(), copy);
+
+        // Past the old 4096 decoder bound: still reduced, not refused.
+        let huge = s.0.join("pics").join("huge.jpg");
+        image::RgbImage::from_pixel(6000, 16, image::Rgb([200, 100, 50]))
+            .save(&huge)
+            .unwrap();
+        let copy = m.path(&huge, None).unwrap();
+        assert_eq!(image::image_dimensions(&copy).unwrap().0, 800);
+        assert_eq!(
+            image::guess_format(&fs::read(&copy).unwrap()).unwrap(),
+            image::ImageFormat::Jpeg
+        );
+
+        // Pictures that already fit are mirrored byte for byte.
+        let small = s.0.join("pics").join("small.jpg");
+        image::RgbImage::from_pixel(64, 48, image::Rgb([1, 2, 3]))
+            .save(&small)
+            .unwrap();
+        let copy = m.path(&small, None).unwrap();
+        assert_eq!(fs::read(copy).unwrap(), fs::read(&small).unwrap());
     }
 
     #[test]

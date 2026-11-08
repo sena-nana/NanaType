@@ -88,7 +88,7 @@ Each crate declares its events as `static EventDescriptor` in its own `diag` mod
 | `0x0109` | `plugins.` | Worker ready time, failures (with the tail of stderr), script errors |
 | `0x010A` | `plugin_log.` | Lines plugins write with `nana.log` |
 | `0x010B` | `update.` | Per-source check result and duration, downloads, version parse failures |
-| `0x010C` `0x010D` `0x010F` | `steam.` `stickers.` `audio.` | Why Steam is unavailable, sticker preview and upload failures, audio device open and loss |
+| `0x010C` `0x010D` `0x010F` | `steam.` `stickers.` `audio.` | Why Steam is unavailable, sticker preview, upload and cache cleanup failures, audio device open and loss |
 | `0x010E` | `skin.` | Reserved; skin loading and shader errors are currently logged as `app.error_notice` |
 | `0x0110` | `editor.` | The editor |
 | `0x01F0` | `external.` | Dependency logs |

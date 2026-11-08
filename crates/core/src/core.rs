@@ -455,14 +455,7 @@ impl Core {
                         a.generation == epoch >> 32 && a.player.epoch() == epoch & 0xffff_ffff
                     })
                 {
-                    let end = self
-                        .display
-                        .reveal
-                        .hidden_from
-                        .checked_sub(1)
-                        .and_then(|u| self.display.reveal.unit_at(u))
-                        .filter(|at| *at > 0)
-                        .map(|at| at.saturating_add(intro_ms));
+                    let end = self.display.reveal.settles_at(intro_ms);
                     if let Some(at_ms) = end.filter(|end| now < *end) {
                         fx.wakes.push(Wake {
                             epoch,

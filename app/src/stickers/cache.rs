@@ -10,9 +10,9 @@ use std::sync::{Arc, LazyLock, Mutex, RwLock, Weak};
 use image::{AnimationDecoder, ImageDecoder};
 use serde::{Deserialize, Serialize};
 
-// Bumping this version intentionally invalidates the previous on-disk cache.
+// Bumping this version moves the cache to a new folder; [`open`] deletes the
+// previous one.
 const VERSION: u32 = 5;
-const CACHE_VERSION_FILE: &str = ".cache-version";
 pub const MAX_SOURCE: u64 = 8 * 1024 * 1024;
 /// One decoded frame serves both the list preview and actual rendering.
 const MAX_DIMENSION: u32 = 128;
@@ -116,28 +116,29 @@ static IMAGES: LazyLock<RwLock<HashMap<String, Arc<CachedImage>>>> =
 static LIVE: LazyLock<Mutex<HashMap<String, Vec<Weak<CachedImage>>>>> =
     LazyLock::new(Default::default);
 
-/// Delete the previous generation in place, without retaining a backup. The
-/// marker is separate from content keys because old keys remain valid hashes
-/// after a preprocessing policy change.
-fn ensure_cache_version(base: &Path) -> Result<(), String> {
-    fs::create_dir_all(base).map_err(|e| e.to_string())?;
-    let marker = base.join(CACHE_VERSION_FILE);
-    let expected = VERSION.to_string();
-    if fs::read_to_string(&marker).ok().as_deref() != Some(expected.as_str()) {
-        for entry in fs::read_dir(base).map_err(|e| e.to_string())? {
-            let path = entry.map_err(|e| e.to_string())?.path();
-            if path == marker {
-                continue;
-            }
-            let metadata = fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
-            if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() {
-                fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
-            } else {
-                fs::remove_file(&path).map_err(|e| e.to_string())?;
-            }
+/// The cache folder of this [`VERSION`] under `root`, after deleting every
+/// other generation (older `v*` folders, and the entries and marker of the
+/// flat layout before them). Content keys outlive a preprocessing policy
+/// change, so a new policy gets a new folder rather than a per-entry check.
+/// Call once, on the worker that owns the cache, before any [`prepare`].
+/// Cleanup is best effort: whatever survives is retried on the next start.
+pub fn open(root: &Path) -> PathBuf {
+    let current = format!("v{VERSION}");
+    for entry in fs::read_dir(root).into_iter().flatten().flatten() {
+        if entry.file_name().to_str() == Some(current.as_str()) {
+            continue;
+        }
+        let path = entry.path();
+        let removed = match fs::symlink_metadata(&path) {
+            Ok(m) if m.is_dir() => fs::remove_dir_all(&path),
+            Ok(_) => fs::remove_file(&path),
+            Err(e) => Err(e),
+        };
+        if let Err(e) = removed {
+            nanatype_diag::report!(crate::diag::STICKER_CACHE_CLEANUP_FAILED; "{}: {e}", path.display());
         }
     }
-    fs::write(marker, expected).map_err(|e| e.to_string())
+    root.join(current)
 }
 
 fn tracked(image: CachedImage) -> Arc<CachedImage> {
@@ -210,7 +211,6 @@ pub fn prepare(
     base: &Path,
     cancelled: &AtomicBool,
 ) -> Result<Arc<CachedImage>, String> {
-    ensure_cache_version(base)?;
     let mut bytes = Vec::new();
     fs::File::open(path)
         .map_err(|e| e.to_string())?
@@ -360,7 +360,6 @@ fn transcode(
 /// Active source revisions stay pinned. Reject an oversized active working set
 /// instead of deleting frames that a window may still be sampling.
 pub fn prune(base: &Path) -> Result<(), String> {
-    ensure_cache_version(base)?;
     let mut protected = HashSet::new();
     // Includes completed imports still queued for UI publication, and frames
     // retained by a renderer while an edited source is being rebuilt.
@@ -423,22 +422,24 @@ pub fn prune(base: &Path) -> Result<(), String> {
 mod tests {
     use super::*;
     #[test]
-    fn stale_cache_generation_is_deleted_without_backup() {
-        let base =
+    fn opening_the_cache_deletes_other_generations() {
+        let root =
             std::env::temp_dir().join(format!("nanatype-cache-version-{}", std::process::id()));
-        let old = base.join("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        fs::create_dir_all(&old).unwrap();
-        fs::write(base.join(CACHE_VERSION_FILE), "3").unwrap();
-        fs::write(old.join("old-frame.png"), b"old").unwrap();
+        let flat = root.join("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        let older = root.join("v4");
+        let current = root.join(format!("v{VERSION}")).join("kept");
+        for dir in [&flat, &older, &current] {
+            fs::create_dir_all(dir).unwrap();
+        }
+        fs::write(root.join(".cache-version"), "3").unwrap();
+        fs::write(flat.join("old-frame.png"), b"old").unwrap();
 
-        ensure_cache_version(&base).unwrap();
+        assert_eq!(open(&root), root.join(format!("v{VERSION}")));
 
-        assert!(!old.exists());
-        assert_eq!(
-            fs::read_to_string(base.join(CACHE_VERSION_FILE)).unwrap(),
-            VERSION.to_string()
-        );
-        let _ = fs::remove_dir_all(base);
+        assert!(!flat.exists() && !older.exists());
+        assert!(!root.join(".cache-version").exists());
+        assert!(current.exists());
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

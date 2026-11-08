@@ -42,11 +42,10 @@ pub struct AssetLibrary {
     blob_dir: PathBuf,
 }
 
-const MAX_PASTE_DIMENSION: u32 = 4096;
 /// Pasted images keep detail up to a normal document-display size, then are
-/// stored once in their reduced form so later P2P sharing starts small.
+/// stored once in their reduced form so later P2P sharing starts small. The
+/// pixels are already in memory, so any size is accepted and reduced here.
 const MAX_PASTE_EDGE: u32 = 800;
-const MAX_PASTE_BYTES: u64 = 64 * 1024 * 1024;
 
 impl AssetLibrary {
     pub fn new(blob_dir: PathBuf) -> Self {
@@ -124,25 +123,24 @@ impl AssetLibrary {
 
     /// Store pasted RGBA pixels as a PNG named by content.
     pub fn store_rgba(&self, width: u32, height: u32, rgba: &[u8]) -> Result<AssetRef, String> {
-        if width == 0 || height == 0 || width > MAX_PASTE_DIMENSION || height > MAX_PASTE_DIMENSION
-        {
-            return Err("pasted image dimensions exceed 4096 pixels".into());
-        }
         let expected = u64::from(width)
             .checked_mul(u64::from(height))
-            .and_then(|pixels| pixels.checked_mul(4))
-            .ok_or_else(|| "pasted image is too large".to_string())?;
-        if expected > MAX_PASTE_BYTES || rgba.len() as u64 != expected {
+            .and_then(|pixels| pixels.checked_mul(4));
+        if width == 0 || height == 0 || expected != Some(rgba.len() as u64) {
             return Err("bad image size".into());
         }
-        let image = image::RgbaImage::from_raw(width, height, rgba.to_vec())
+        // Borrow the pasted pixels; only the reduced (or small) image is owned.
+        let view = image::ImageBuffer::<image::Rgba<u8>, &[u8]>::from_raw(width, height, rgba)
             .ok_or_else(|| "bad image size".to_string())?;
         let image = if width > MAX_PASTE_EDGE || height > MAX_PASTE_EDGE {
-            image::DynamicImage::ImageRgba8(image)
-                .thumbnail(MAX_PASTE_EDGE, MAX_PASTE_EDGE)
-                .into_rgba8()
+            // `imageops::thumbnail` fills the box it is given; fit the long
+            // edge to it here, as `DynamicImage::thumbnail` would.
+            let scale = f64::from(MAX_PASTE_EDGE) / f64::from(width.max(height));
+            let fit = |side: u32| ((f64::from(side) * scale).round() as u32).max(1);
+            image::imageops::thumbnail(&view, fit(width), fit(height))
         } else {
-            image
+            image::RgbaImage::from_raw(width, height, rgba.to_vec())
+                .ok_or_else(|| "bad image size".to_string())?
         };
         let (width, height) = image.dimensions();
         let mut hash = blake3::Hasher::new();
@@ -222,7 +220,13 @@ mod tests {
         let reduced_path = lib.resolve(&reduced, None).unwrap();
         assert_eq!(image::image_dimensions(reduced_path).unwrap(), (800, 400));
         assert!(lib.store_rgba(2, 2, &[0; 3]).is_err());
-        assert!(lib.store_rgba(MAX_PASTE_DIMENSION + 1, 1, &[]).is_err());
+        assert!(lib.store_rgba(0, 1, &[]).is_err());
+        // Wider than any decoder limit: the pixels are already in memory and
+        // are reduced, not refused.
+        let wide = vec![64u8; 5000 * 10 * 4];
+        let wide = lib.store_rgba(5000, 10, &wide).unwrap();
+        let wide_path = lib.resolve(&wide, None).unwrap();
+        assert_eq!(image::image_dimensions(wide_path).unwrap().0, 800);
         let _ = fs::remove_dir_all(&tmp);
     }
 }

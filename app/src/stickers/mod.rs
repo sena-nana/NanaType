@@ -168,11 +168,13 @@ pub fn add_folders(dirs: &mut Vec<String>, paths: &[PathBuf]) {
 
 impl Manager {
     pub fn new(data: &Path, post: impl Fn(Event) + Send + 'static) -> Self {
-        let cache = data.join("media/stickers");
+        let root = data.join("media/stickers");
         let (tx, rx) = unbounded::<Job>();
         std::thread::Builder::new()
             .name("nanatype-stickers".into())
             .spawn(move || {
+                // Off the UI thread: deleting a previous generation can be slow.
+                let cache = cache::open(&root);
                 for job in rx {
                     if job.cancelled.load(Ordering::Relaxed) {
                         continue;

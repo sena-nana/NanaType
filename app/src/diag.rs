@@ -175,6 +175,14 @@ pub static STICKER_FRAME_REBUILD: EventDescriptor =
     EventDescriptor::new(STICKERS, 2, "stickers.frame_rebuild", Severity::Warn, &[]);
 pub static STICKER_UPLOAD_FAILED: EventDescriptor =
     EventDescriptor::new(STICKERS, 3, "stickers.upload_failed", Severity::Warn, &[]);
+/// A previous sticker cache generation could not be deleted; retried next start.
+pub static STICKER_CACHE_CLEANUP_FAILED: EventDescriptor = EventDescriptor::new(
+    STICKERS,
+    4,
+    "stickers.cache_cleanup_failed",
+    Severity::Warn,
+    &[],
+);
 
 pub static CHAT_PICTURE_FAILED: EventDescriptor =
     EventDescriptor::new(CHAT, 1, "chat.picture_failed", Severity::Debug, &[]);
@@ -371,6 +379,7 @@ pub static EVENTS: &[&EventDescriptor] = &[
     &STICKER_PREVIEW_FAILED,
     &STICKER_FRAME_REBUILD,
     &STICKER_UPLOAD_FAILED,
+    &STICKER_CACHE_CLEANUP_FAILED,
     &CHAT_PICTURE_FAILED,
     &BLIVECHAT_SECRET_FAILED,
     &BLIVECHAT_ERROR,

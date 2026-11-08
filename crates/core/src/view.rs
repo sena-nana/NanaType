@@ -63,6 +63,26 @@ impl Reveal {
         )
     }
 
+    /// When the last unit still entering finishes an intro of `intro_ms` on the
+    /// host clock, or `None` when no unit of the segment is still to enter.
+    /// The timeline's last wake is when that unit *starts*; Core holds the
+    /// segment end and the host keeps drawing until this instant.
+    pub fn settles_at(&self, intro_ms: Millis) -> Option<Millis> {
+        let seg = self.segment.as_ref()?;
+        let from = self.shown.max(self.visible_from).max(seg.start);
+        let first = (from - seg.start) as usize;
+        let end = self.hidden_from.saturating_sub(seg.start) as usize;
+        seg.reveal_ms
+            .get(first..end.min(seg.reveal_ms.len()))?
+            .iter()
+            .max()
+            .map(|offset| {
+                seg.origin_ms
+                    .saturating_add(u64::from(*offset))
+                    .saturating_add(intro_ms)
+            })
+    }
+
     /// Bound every index to `units` so a reveal from an untrusted peer can
     /// never describe more units than its document has.
     pub fn clamp(&mut self, units: u32) {
@@ -208,4 +228,33 @@ pub struct HistoryRow {
     /// The row's translation, once it arrives. Older peers omit it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub translation: Option<Arc<str>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settles_when_the_latest_entering_unit_finishes() {
+        let reveal = Reveal {
+            visible_from: 0,
+            shown: 1,
+            segment: Some(SegmentReveal {
+                origin_ms: 10_000,
+                start: 0,
+                reveal_ms: Arc::from([0, 100, 40]),
+            }),
+            hidden_from: 3,
+        };
+        // Unit 0 is already shown; unit 1 enters last, even out of order.
+        assert_eq!(reveal.settles_at(200), Some(10_300));
+        let interrupted = Reveal {
+            hidden_from: 2,
+            ..reveal.clone()
+        };
+        assert_eq!(interrupted.settles_at(0), Some(10_100));
+        let all_shown = Reveal { shown: 3, ..reveal };
+        assert_eq!(all_shown.settles_at(200), None);
+        assert_eq!(Reveal::full(3).settles_at(200), None);
+    }
 }
