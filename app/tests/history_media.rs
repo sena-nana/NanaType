@@ -18,7 +18,9 @@ use nanatype_settings::Settings;
 
 fn pixels_matching(image: &[u8], color: [u8; 3]) -> usize {
     image
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .filter(|p| {
             p[3] > 200
                 && p[..3]
@@ -31,9 +33,11 @@ fn pixels_matching(image: &[u8], color: [u8; 3]) -> usize {
 
 fn pink_text_pixels(image: &[u8]) -> usize {
     image
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .filter(|p| {
-            let [r, g, b, a] = p else { unreachable!() };
+            let [r, g, b, a] = p;
             // The history bubble composites the requested #d00050 over its
             // warm surface. This hue test avoids counting the red test image.
             *a > 200 && *r > 170 && r.abs_diff(*g) > 20 && *b > *g

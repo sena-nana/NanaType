@@ -129,7 +129,7 @@ fn each_partner_seat_has_its_own_output_switch() {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../target/p2p-card-tests");
         std::fs::create_dir_all(&out).unwrap();
         session
-            .screenshot_png(&out.join(format!("seats-{locale:?}.png")))
+            .screenshot_png(out.join(format!("seats-{locale:?}.png")))
             .unwrap();
         let switches: Vec<_> = session
             .accessibility_dump()

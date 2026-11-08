@@ -367,43 +367,6 @@ mod win {
         (hwnd, u64::from(hwnd != 0)) // input window, or no target
     }
 
-    #[cfg(test)]
-    mod tests {
-        use super::target_window;
-        use crate::msg::GlobalAction;
-        use std::sync::atomic::AtomicIsize;
-
-        #[test]
-        fn quick_input_does_not_fall_back_to_input_while_quick_is_unready() {
-            let input = AtomicIsize::new(11);
-            let quick = AtomicIsize::new(0);
-
-            assert_eq!(
-                target_window(GlobalAction::QuickInput, &input, &quick),
-                (0, 2)
-            );
-        }
-
-        #[test]
-        fn quick_input_uses_quick_handle_when_ready() {
-            let input = AtomicIsize::new(11);
-            let quick = AtomicIsize::new(22);
-
-            assert_eq!(
-                target_window(GlobalAction::QuickInput, &input, &quick),
-                (22, 2)
-            );
-        }
-
-        #[test]
-        fn input_actions_use_input_handle() {
-            let input = AtomicIsize::new(11);
-            let quick = AtomicIsize::new(22);
-
-            assert_eq!(target_window(GlobalAction::Summon, &input, &quick), (11, 1));
-        }
-    }
-
     fn activate_with_retry(
         action: GlobalAction,
         mut hwnd: isize,
@@ -596,6 +559,43 @@ mod win {
                 let _ = AttachThreadInput(ours, fg_thread, false);
             }
             raised
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::target_window;
+        use crate::msg::GlobalAction;
+        use std::sync::atomic::AtomicIsize;
+
+        #[test]
+        fn quick_input_does_not_fall_back_to_input_while_quick_is_unready() {
+            let input = AtomicIsize::new(11);
+            let quick = AtomicIsize::new(0);
+
+            assert_eq!(
+                target_window(GlobalAction::QuickInput, &input, &quick),
+                (0, 2)
+            );
+        }
+
+        #[test]
+        fn quick_input_uses_quick_handle_when_ready() {
+            let input = AtomicIsize::new(11);
+            let quick = AtomicIsize::new(22);
+
+            assert_eq!(
+                target_window(GlobalAction::QuickInput, &input, &quick),
+                (22, 2)
+            );
+        }
+
+        #[test]
+        fn input_actions_use_input_handle() {
+            let input = AtomicIsize::new(11);
+            let quick = AtomicIsize::new(22);
+
+            assert_eq!(target_window(GlobalAction::Summon, &input, &quick), (11, 1));
         }
     }
 }

@@ -207,7 +207,11 @@ fn input_skin_preview_defaults_to_plain_text_and_survives_restart() {
     let old: Settings =
         serde_json::from_str(r#"{"schema":5,"general":{"characters":[{"name":"奈奈"}]}}"#).unwrap();
     assert!(!old.general.input_skin_preview);
-    let mut settings = old;
+    // Loading migrates to the current schema; compare against that.
+    let mut settings = Settings {
+        schema: SETTINGS_SCHEMA,
+        ..old
+    };
     for preview in [true, false] {
         settings.general.input_skin_preview = preview;
         save_json(&path, &settings).unwrap();
