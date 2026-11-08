@@ -215,7 +215,10 @@ fn local(ui: Ui) -> Vec<Row> {
             )
             .on_cx(move |_, _: &Activate, cx| {
                 ui.onboard_step.set(0);
-                cx.dispatch_program_all(edit(|s| s.general.onboarding_done = false));
+                cx.dispatch_program_all(edit(|s| {
+                    s.general.onboarding_done = false;
+                    s.general.onboarding_step = 0;
+                }));
                 cx.dispatch_program_all(Msg::Window(WindowMsg::SettingsPage(Page::General)));
             })
             .into_any(),

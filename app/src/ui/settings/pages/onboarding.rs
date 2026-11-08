@@ -5,7 +5,13 @@ use crate::msg::WindowMsg;
 const CARET: (f32, f32) = (2.0, 12.0);
 
 /// How many steps the first-run guide has.
-pub(super) const ONBOARD_STEPS: u8 = 4;
+pub(super) const ONBOARD_STEPS: u8 = nanatype_settings::ONBOARDING_STEPS;
+
+/// Show step `n` and remember it, so a guide closed halfway reopens there.
+fn go_to(ui: Ui, cx: &mut nana_ui::runtime::ViewContext<'_, Button>, n: u8) {
+    ui.onboard_step.set(n);
+    cx.dispatch_program_all(edit(move |s| s.general.onboarding_step = n));
+}
 
 /// The skin step draws its selector first. The preview follows once the
 /// entrance has had its time, so the entrance does not build it.
@@ -23,7 +29,10 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
     let finish = move || {
         ui.shader_preview.set(false);
         step.set(0);
-        edit(|s| s.general.onboarding_done = true)
+        edit(|s| {
+            s.general.onboarding_done = true;
+            s.general.onboarding_step = 0;
+        })
     };
     let header = widget(
         Stack::row(0.0)
@@ -73,7 +82,7 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
             if n == 2 {
                 hold_skin_preview(ui, cx);
             }
-            step.set(n.saturating_sub(1));
+            go_to(ui, cx, n.saturating_sub(1));
         }),
         widget(Stack::row(0.0).grow(1.0)),
         // Next, and on the last step "Get started".
@@ -101,7 +110,7 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
                 if n == 0 {
                     hold_skin_preview(ui, cx);
                 }
-                step.set(n + 1);
+                go_to(ui, cx, n + 1);
             }
         }),
     ));

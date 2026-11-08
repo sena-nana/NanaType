@@ -254,8 +254,33 @@ fn first_run_finishes_all_steps_by_pointer_at_minimum_size() {
             f.click(&next);
             f.apply_edits();
         }
-        assert!(f.ui.settings.get_untracked().general.onboarding_done);
+        let general = f.ui.settings.get_untracked().general.clone();
+        assert!(general.onboarding_done);
+        assert_eq!(general.onboarding_step, 0);
     }
+}
+
+/// A guide closed halfway remembers its step and reopens there.
+#[test]
+fn first_run_resumes_at_the_step_it_was_left_at() {
+    let mut f = Fixture::new(Locale::ZhCn, true, Page::General);
+    for step in [1, 2] {
+        f.settle(u64::from(step) * 2);
+        let next = f.reach(650.0, 480.0, |f| f.find("button", "onboard-next"));
+        f.click(&next);
+        f.apply_edits();
+        assert_eq!(f.ui.settings.get_untracked().general.onboarding_step, step);
+    }
+    let back = f.reach(650.0, 480.0, |f| f.find("button", "onboard-back"));
+    f.click(&back);
+    f.apply_edits();
+    let saved = f.ui.settings.get_untracked();
+    assert_eq!(saved.general.onboarding_step, 1);
+    assert!(!saved.general.onboarding_done);
+
+    let skin = f.registry.load(nanatype_theme::DEFAULT_SKIN).unwrap().skin;
+    let reopened = Ui::new(saved, skin, Locale::ZhCn);
+    assert_eq!(reopened.onboard_step.get_untracked(), 1);
 }
 
 #[test]

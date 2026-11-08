@@ -14,6 +14,8 @@ use serde_json::Value;
 pub const SETTINGS_SCHEMA: u32 = 6;
 /// Most characters a profile keeps.
 pub const MAX_CHARACTERS: usize = 32;
+/// How many steps the first-run guide has.
+pub const ONBOARDING_STEPS: u8 = 4;
 pub const DEFAULT_SKIN: &str = "nanatype.halo";
 /// Skin loop rates the settings offer; the first is the default.
 pub const SKIN_FRAME_RATES: [u32; 2] = [30, 60];
@@ -482,6 +484,9 @@ pub struct General {
     pub quick_opacity: f32,
     pub launch_at_login: bool,
     pub onboarding_done: bool,
+    /// The first-run guide's step (0-based) when it was last left, so a
+    /// guide closed halfway opens there again.
+    pub onboarding_step: u8,
     pub check_updates: bool,
     /// The profile last switched to (profiles/<id>.json); its sections are
     /// saved back into it before another is switched to.
@@ -500,6 +505,7 @@ impl Default for General {
             quick_opacity: 1.0,
             launch_at_login: false,
             onboarding_done: false,
+            onboarding_step: 0,
             check_updates: true,
             profile: None,
         }
@@ -1986,6 +1992,9 @@ impl Settings {
         self.sanitize_hotkeys();
         let g = &mut self.general;
         g.quick_opacity = finite_or(g.quick_opacity, 1.0).clamp(0.0, 1.0);
+        if g.onboarding_step >= ONBOARDING_STEPS {
+            g.onboarding_step = 0;
+        }
         g.characters.truncate(MAX_CHARACTERS);
         if g.characters.is_empty() {
             g.characters.push(Character::default());

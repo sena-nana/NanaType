@@ -493,12 +493,14 @@ fn sanitize_clamps_hand_edited_values() {
     let mut s = Settings::default();
     s.playback.speed_scale = f32::NAN;
     s.general.quick_opacity = 2.0;
+    s.general.onboarding_step = ONBOARDING_STEPS;
     s.sound.master = 7.0;
     s.history.visible_items = 99_999;
     s.skin.frame_rate = 144;
     assert!(s.sanitize());
     assert_eq!(s.playback.speed_scale, 1.0);
     assert_eq!(s.general.quick_opacity, 1.0);
+    assert_eq!(s.general.onboarding_step, 0);
     assert_eq!(s.sound.master, 1.0);
     assert_eq!(s.history.visible_items, s.history.max_items);
     assert_eq!(s.skin.frame_rate, 30);

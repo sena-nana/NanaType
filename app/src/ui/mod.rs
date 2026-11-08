@@ -288,7 +288,8 @@ impl Ui {
     pub fn new(settings: Arc<Settings>, skin: Arc<Skin>, locale: Locale) -> Self {
         let peer = signal(Arc::new(crate::p2p::SessionUi::default()));
         let page = signal(settings::Page::General);
-        let onboard_step = signal(0u8);
+        // The guide reopens on the step it was left at.
+        let onboard_step = signal(settings.general.onboarding_step);
         let mut stage = Stage::new(settings, skin, locale);
         stage.peer_active = computed(move || peer.with(|p| p.active));
         let stage_settings = stage.settings;
