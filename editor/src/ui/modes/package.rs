@@ -478,7 +478,7 @@ pub(crate) fn form(key: &str, children: impl IntoView) -> AnyView {
         Stack::column(0.0)
             .gap_step(nana_ui_core::SpacingStep::Md)
             .padding_step(nana_ui_core::SpacingStep::Md, nana_ui_core::SpacingStep::Md)
-            .outline(SemanticColorRole::Border, 1.)
+            .border(SemanticColorRole::Border, 1.)
             .radius(RadiusTier::Sm),
     )
     .key(key.to_owned())

@@ -60,13 +60,13 @@ nanatype-update = { path = "crates/update" }
 nanatype-steam = { path = "crates/steam" }
 nanatype-frame = { path = "crates/frame" }
 nanatype-scheduling = { path = "crates/scheduling" }
-nana-ui-platform = { git = "https://github.com/sena-nana/NanaUI", rev = "0ca1bc06235d65d656f50d5db0551a16103ec019", default-features = false }
-nana-ui-core = { git = "https://github.com/sena-nana/NanaUI", rev = "0ca1bc06235d65d656f50d5db0551a16103ec019", default-features = false }
-nana-text = { git = "https://github.com/sena-nana/NanaUI", rev = "0ca1bc06235d65d656f50d5db0551a16103ec019" }
+nana-ui-platform = { git = "https://github.com/sena-nana/NanaUI", rev = "7399ef41773dff393b5903f517a0434cef3ba17f", default-features = false }
+nana-ui-core = { git = "https://github.com/sena-nana/NanaUI", rev = "7399ef41773dff393b5903f517a0434cef3ba17f", default-features = false }
+nana-text = { git = "https://github.com/sena-nana/NanaUI", rev = "7399ef41773dff393b5903f517a0434cef3ba17f" }
 # The same source as nana-ui's, so both see one diagnostics runtime.
-nana-diagnostics = { git = "https://github.com/sena-nana/NanaUI", rev = "0ca1bc06235d65d656f50d5db0551a16103ec019" }
-nana-ui-devtools = { git = "https://github.com/sena-nana/NanaUI", rev = "0ca1bc06235d65d656f50d5db0551a16103ec019" }
-nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "0ca1bc06235d65d656f50d5db0551a16103ec019", default-features = false, features = [
+nana-diagnostics = { git = "https://github.com/sena-nana/NanaUI", rev = "7399ef41773dff393b5903f517a0434cef3ba17f" }
+nana-ui-devtools = { git = "https://github.com/sena-nana/NanaUI", rev = "7399ef41773dff393b5903f517a0434cef3ba17f" }
+nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "7399ef41773dff393b5903f517a0434cef3ba17f", default-features = false, features = [
     "hosted",
     "bundled-fonts",
     "wgpu-interop",

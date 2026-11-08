@@ -314,7 +314,7 @@ pub(super) fn mode_diagram(mode: InputMode) -> AnyView {
             .width(LengthSpec::Px(w))
             .padding_step(nana_ui_core::SpacingStep::Md, nana_ui_core::SpacingStep::Md)
             .surface(SemanticColorRole::Surface)
-            .outline(SemanticColorRole::BorderSoft, 1.0)
+            .border(SemanticColorRole::BorderSoft, 1.0)
             .radius(nana_ui_core::RadiusTier::Sm)
             .with_layout(|l| {
                 l.position = PositionSpec::Relative;
@@ -362,29 +362,62 @@ pub(super) fn mode_diagram(mode: InputMode) -> AnyView {
 }
 
 /// One input mode as a card to pick: its picture, its name and what it
-/// does. The chosen one takes the selected fill and an accent outline.
+/// does. The chosen one takes the selected fill, an accent border and an
+/// accent ring.
 pub(super) fn mode_card(ui: Ui, mode: InputMode) -> AnyView {
     let (name, about) = match mode {
         InputMode::Compose => ("mode-compose", "mode-compose-hint"),
         InputMode::Mirror => ("mode-mirror", "mode-mirror-hint"),
     };
     let chosen = move || ui.settings.with(|s| s.general.input_mode == mode);
+    let base = {
+        let mut st = ListItem::new("").style;
+        let l = Arc::make_mut(&mut st.layout);
+        // Half the row each; the row's stretch gives both the taller's height.
+        l.width = Some(LengthSpec::Px(0.0));
+        l.flex_grow = Some(1.0);
+        // What `auto_height` clears, cleared here too: the bind below
+        // replaces the whole style.
+        l.min_height = None;
+        st.control_padding_x = None;
+        l.padding_left = Some(LengthSpec::Px(space::LG));
+        l.padding_right = Some(LengthSpec::Px(space::LG));
+        l.padding_top = Some(LengthSpec::Px(space::LG));
+        l.padding_bottom = Some(LengthSpec::Px(space::LG));
+        st.radius = Some(nana_ui_core::RadiusTier::Md);
+        // The card's border says chosen or not; a selected row's hover and
+        // press would grey it or flash it.
+        st.interaction.selected_hovered.border = None;
+        st.interaction.selected_pressed.border = None;
+        st
+    };
+    // The fill, border and ring are one box's, so the fill never covers the
+    // border's antialiased inner edge at a fractional scale. The border keeps
+    // its width and only turns accent; the chosen card's extra weight is a
+    // ring outside it, so switching moves nothing.
+    let paint = move |on: bool| {
+        let border = if on {
+            SemanticColorRole::Accent
+        } else {
+            SemanticColorRole::BorderSoft
+        };
+        base.clone()
+            .border(border, 1.0)
+            .ring(SemanticColorRole::Accent, if on { 1.0 } else { 0.0 })
+    };
     let item = widget(
         ListItem::new(ui.now_t(name))
-            .style({
-                let mut st = ListItem::new("").style;
-                let l = Arc::make_mut(&mut st.layout);
-                l.width = Some(LengthSpec::Fill);
-                st.control_padding_x = None;
-                l.padding_left = Some(LengthSpec::Px(space::LG));
-                l.padding_right = Some(LengthSpec::Px(space::LG));
-                l.padding_top = Some(LengthSpec::Px(space::LG));
-                l.padding_bottom = Some(LengthSpec::Px(space::LG));
-                st
-            })
+            .style(paint(chosen()))
             .auto_height(true),
     )
-    .bind(move |i: &mut ListItem| i.selected = chosen())
+    .bind(move |i: &mut ListItem| {
+        let on = chosen();
+        i.selected = on;
+        let style = paint(on);
+        if i.style != style {
+            i.style = style;
+        }
+    })
     .on_cx(move |_, _: &Activate, cx| {
         cx.dispatch_program_all(edit(move |s| s.general.input_mode = mode));
     })
@@ -400,23 +433,7 @@ pub(super) fn mode_card(ui: Ui, mode: InputMode) -> AnyView {
             hint(ui.now_t(about)),
         )),
     );
-    widget(
-        Stack::column(0.0)
-            .width(LengthSpec::Px(0.0))
-            .grow(1.0)
-            .radius(nana_ui_core::RadiusTier::Md),
-    )
-    .bind(move |s: &mut Stack| {
-        let (role, w) = if chosen() {
-            (SemanticColorRole::Accent, 2.0)
-        } else {
-            (SemanticColorRole::BorderSoft, 1.0)
-        };
-        let taken = std::mem::replace(s, Stack::row(0.0));
-        *s = taken.outline(role, w);
-    })
-    .children(item)
-    .into_any()
+    item.into_any()
 }
 
 /// "Press [F8] to summon the input and [F9] to continue": the sentence

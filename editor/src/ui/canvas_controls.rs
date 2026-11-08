@@ -167,7 +167,7 @@ pub fn overlay(ui: Ui) -> AnyView {
                 Stack::column(0.)
                     .width(LengthSpec::Px(w))
                     .height(LengthSpec::Px(h))
-                    .outline(SemanticColorRole::Accent, 1.)
+                    .border(SemanticColorRole::Accent, 1.)
                     .with_layout(move |l| {
                         l.position = PositionSpec::Absolute;
                         l.offset_left = Some(LengthSpec::Px(x));

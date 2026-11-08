@@ -360,7 +360,7 @@ pub(super) fn skin_list_row(
                 .width(LengthSpec::Px(SWATCH))
                 .height(LengthSpec::Px(SWATCH))
                 .radius(RadiusTier::Full)
-                .outline(SemanticColorRole::BorderStrong, 1.0)
+                .border(SemanticColorRole::BorderStrong, 1.0)
                 .with_layout(move |l| l.background = Some(color)),
         )
         .into_any()
@@ -641,7 +641,7 @@ pub(super) fn skin_card(
                 .style({
                     let mut st = ListItem::new("")
                         .style
-                        .outline(SemanticColorRole::BorderSoft, 1.0)
+                        .border(SemanticColorRole::BorderSoft, 1.0)
                         .radius(nana_ui_core::RadiusTier::Md);
                     st.control_padding_x = None;
                     let l = Arc::make_mut(&mut st.layout);
@@ -725,7 +725,7 @@ pub(super) fn view_switch(ui: Ui, grid: Signal<bool>) -> AnyView {
                 nana_ui_core::SpacingStep::Xxs,
                 nana_ui_core::SpacingStep::Xxs,
             )
-            .outline(SemanticColorRole::BorderSoft, 1.0)
+            .border(SemanticColorRole::BorderSoft, 1.0)
             .radius(nana_ui_core::RadiusTier::Md)
             .with_layout(|l| {
                 l.flex_shrink = Some(0.0);

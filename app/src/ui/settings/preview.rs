@@ -470,7 +470,7 @@ fn guide_group(title: Option<(Icon, String)>, body: impl IntoView) -> AnyView {
             .width(LengthSpec::Fill)
             .padding_step(SpacingStep::Lg, SpacingStep::Md)
             .surface(SemanticColorRole::Subtle)
-            .outline(SemanticColorRole::BorderSoft, 1.0)
+            .border(SemanticColorRole::BorderSoft, 1.0)
             .radius(RadiusTier::Md),
     )
     .children((

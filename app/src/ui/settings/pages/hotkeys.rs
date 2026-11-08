@@ -191,7 +191,7 @@ pub(super) fn hotkey_control(ui: Ui, action: Shortcut) -> AnyView {
             .height(LengthSpec::Px(crate::ui::kit::keycap::H))
             .padding_xy(space::LG, 0.0)
             .align(AlignSpec::Center)
-            .outline(SemanticColorRole::Border, 1.0)
+            .border(SemanticColorRole::Border, 1.0)
             .radius(nana_ui_core::RadiusTier::Sm)
             .with_layout(|l| l.border_style = Some(nana_ui_core::BorderStyle::Dashed)),
     )
@@ -200,14 +200,14 @@ pub(super) fn hotkey_control(ui: Ui, action: Shortcut) -> AnyView {
             .style(Type::Small.style())
             .color(SemanticColorRole::Muted),
     ));
-    // Recording is a live state: the highlight outline, not the accent.
+    // Recording is a live state: the highlight border, not the accent.
     let listening = widget(
         Stack::row(0.0)
             .min_width(LengthSpec::Px(field::SM))
             .height(LengthSpec::Px(crate::ui::kit::keycap::H))
             .justify(JustifySpec::Center)
             .align(AlignSpec::Center)
-            .outline(SemanticColorRole::Highlight, 1.0)
+            .border(SemanticColorRole::Highlight, 1.0)
             .radius(nana_ui_core::RadiusTier::Sm),
     )
     .children(widget(
