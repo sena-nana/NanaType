@@ -170,7 +170,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 512 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 489 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -237,7 +237,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - rustls 0.23.46 — <https://github.com/rustls/rustls>
 
-### Apache-2.0 OR MIT (312)
+### Apache-2.0 OR MIT (295)
 
 - accesskit 0.25.1 — <https://github.com/AccessKit/accesskit>
 - accesskit_consumer 0.39.1 — <https://github.com/AccessKit/accesskit>
@@ -264,12 +264,10 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - block-buffer 0.10.4 — <https://github.com/RustCrypto/utils>
 - block-buffer 0.12.1 — <https://github.com/RustCrypto/utils>
 - borsh 1.8.1 — <https://github.com/near/borsh-rs>
-- bs58 0.5.1 — <https://github.com/Nullus157/bs58-rs>
 - bumpalo 3.20.3 — <https://github.com/fitzgen/bumpalo>
 - cfg-if 1.0.4 — <https://github.com/rust-lang/cfg-if>
 - chacha20 0.10.2 — <https://github.com/RustCrypto/stream-ciphers>
 - chacha20poly1305 0.11.0 — <https://github.com/RustCrypto/AEADs>
-- chrono 0.4.45 — <https://github.com/chronotope/chrono>
 - cipher 0.5.2 — <https://github.com/RustCrypto/traits>
 - cmov 0.5.4 — <https://github.com/RustCrypto/utils>
 - cobs 0.3.0 — <https://github.com/jamesmunns/cobs.rs>
@@ -296,12 +294,10 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - defmt 1.2.0 — <https://github.com/knurling-rs/defmt>
 - defmt-macros 1.2.0 — <https://github.com/knurling-rs/defmt>
 - defmt-parser 1.1.0 — <https://github.com/knurling-rs/defmt>
-- deranged 0.5.9 — <https://github.com/jhpratt/deranged>
 - digest 0.10.7 — <https://github.com/RustCrypto/traits>
 - digest 0.11.3 — <https://github.com/RustCrypto/traits>
 - displaydoc 0.2.7 — <https://github.com/yaahc/displaydoc>
 - document-features 0.2.12 — <https://github.com/slint-ui/document-features>
-- dyn-clone 1.0.20 — <https://github.com/dtolnay/dyn-clone>
 - ed25519 3.0.0 — <https://github.com/RustCrypto/signatures>
 - either 1.19.0 — <https://github.com/rayon-rs/either>
 - embedded-io 0.4.0 — <https://github.com/embassy-rs/embedded-io>
@@ -340,10 +336,8 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - grammers-session 0.11.0 — <https://codeberg.org/Lonami/grammers>
 - grammers-tl-types 0.11.0 — <https://codeberg.org/Lonami/grammers>
 - half 2.7.1 — <https://github.com/VoidStarKat/half-rs>
-- hashbrown 0.12.3 — <https://github.com/rust-lang/hashbrown>
 - hashbrown 0.16.1 — <https://github.com/rust-lang/hashbrown>
 - hashbrown 0.17.1 — <https://github.com/rust-lang/hashbrown>
-- hex 0.4.3 — <https://github.com/KokaKiwi/rust-hex>
 - hickory-net 0.26.3 — <https://github.com/hickory-dns/hickory-dns>
 - hickory-proto 0.26.3 — <https://github.com/hickory-dns/hickory-dns>
 - hickory-resolver 0.26.3 — <https://github.com/hickory-dns/hickory-dns>
@@ -352,12 +346,10 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - httparse 1.10.1 — <https://github.com/seanmonstar/httparse>
 - hybrid-array 0.4.15 — <https://github.com/RustCrypto/hybrid-array>
 - i_overlay 9.0.0 — <https://github.com/iShape-Rust/iOverlay>
-- ident_case 1.0.1 — <https://github.com/TedDriggs/ident_case>
 - idna 1.1.0 — <https://github.com/servo/rust-url>
 - idna_adapter 1.2.2 — <https://github.com/hsivonen/idna_adapter>
 - image 0.25.10 — <https://github.com/image-rs/image>
 - image-webp 0.2.4 — <https://github.com/image-rs/image-webp>
-- indexmap 1.9.3 — <https://github.com/bluss/indexmap>
 - indexmap 2.14.2 — <https://github.com/indexmap-rs/indexmap>
 - inout 0.2.2 — <https://github.com/RustCrypto/utils>
 - intl-memoizer 0.5.3 — <https://github.com/projectfluent/fluent-rs>
@@ -409,7 +401,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - notify-types 2.1.0 — <https://github.com/notify-rs/notify>
 - num-bigint 0.5.1 — <https://github.com/rust-num/num-bigint>
 - num-complex 0.4.6 — <https://github.com/rust-num/num-complex>
-- num-conv 0.2.2 — <https://github.com/jhpratt/num-conv>
 - num-integer 0.1.47 — <https://github.com/rust-num/num-integer>
 - num-traits 0.2.19 — <https://github.com/rust-num/num-traits>
 - object 0.40.0 — <https://github.com/gimli-rs/object>
@@ -425,7 +416,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - polycool 0.4.0 — <https://github.com/linebender/kurbo>
 - portable-atomic 1.15.0 — <https://github.com/taiki-e/portable-atomic>
 - postcard 1.1.3 — <https://github.com/jamesmunns/postcard>
-- powerfmt 0.2.1 — <https://github.com/jhpratt/powerfmt>
 - prefix-trie 0.8.4 — <https://github.com/tiborschneider/prefix-trie>
 - presser 0.3.1 — <https://github.com/EmbarkStudios/presser>
 - primal-check 0.3.4 — <https://github.com/huonw/primal>
@@ -441,8 +431,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - range-alloc 0.1.5 — <https://github.com/gfx-rs/range-alloc>
 - rasterlottie 0.2.4 — <https://github.com/neodyland/rasterlottie>
 - read-fonts 0.41.0 — <https://github.com/googlefonts/fontations>
-- ref-cast 1.0.27 — <https://github.com/dtolnay/ref-cast>
-- ref-cast-impl 1.0.27 — <https://github.com/dtolnay/ref-cast>
 - regex-automata 0.4.18 — <https://github.com/rust-lang/regex>
 - regex-syntax 0.8.11 — <https://github.com/rust-lang/regex>
 - renderdoc-sys 1.1.0 — <https://github.com/ebkalderon/renderdoc-rs>
@@ -462,8 +450,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - serde_derive 1.0.229 — <https://github.com/serde-rs/serde>
 - serde_json 1.0.151 — <https://github.com/serde-rs/json>
 - serde_spanned 1.1.2 — <https://github.com/toml-rs/toml>
-- serde_with 3.24.0 — <https://github.com/jonasbb/serde_with>
-- serde_with_macros 3.24.0 — <https://github.com/jonasbb/serde_with>
 - serdect 0.4.3 — <https://github.com/RustCrypto/formats>
 - sha1 0.11.0 — <https://github.com/RustCrypto/hashes>
 - sha2 0.10.9 — <https://github.com/RustCrypto/hashes>
@@ -492,9 +478,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - thiserror 2.0.20 — <https://github.com/dtolnay/thiserror>
 - thiserror-impl 1.0.69 — <https://github.com/dtolnay/thiserror>
 - thiserror-impl 2.0.20 — <https://github.com/dtolnay/thiserror>
-- time 0.3.55 — <https://github.com/time-rs/time>
-- time-core 0.1.9 — <https://github.com/time-rs/time>
-- time-macros 0.2.32 — <https://github.com/time-rs/time>
 - toml 1.1.7+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_datetime 1.1.2+spec-1.1.0 — <https://github.com/toml-rs/toml>
 - toml_edit 0.25.15+spec-1.1.0 — <https://github.com/toml-rs/toml>
@@ -638,14 +621,11 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - rustls-webpki 0.103.15 — <https://github.com/rustls/webpki>
 - untrusted 0.9.0 — <https://github.com/briansmith/untrusted>
 
-### MIT (59)
+### MIT (53)
 
 - bytes 1.12.1 — <https://github.com/tokio-rs/bytes>
 - color_quant 1.1.0 — <https://github.com/image-rs/color_quant>
 - core_maths 0.1.1 — <https://github.com/robertbastian/core_maths>
-- darling 0.24.1 — <https://github.com/TedDriggs/darling>
-- darling_core 0.24.1 — <https://github.com/TedDriggs/darling>
-- darling_macro 0.24.1 — <https://github.com/TedDriggs/darling>
 - data-encoding 2.11.1 — <https://github.com/ia0/data-encoding>
 - ebml-iterable 0.7.1 — <https://github.com/austinleroy/ebml-iterable>
 - ebml-iterable-specification 0.4.0 — <https://github.com/austinleroy/ebml-iterable>
@@ -676,12 +656,9 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - rgb 0.8.53 — <https://github.com/kornelski/rust-rgb>
 - rubato 0.16.2 — <https://github.com/HEnquist/rubato>
 - ruzstd 0.9.0 — <https://github.com/KillingSpark/zstd-rs>
-- schemars 0.9.0 — <https://github.com/GREsau/schemars>
-- schemars 1.2.3 — <https://github.com/GREsau/schemars>
 - simd-adler32 0.3.10 — <https://github.com/mcountryman/simd-adler32>
 - slab 0.4.12 — <https://github.com/tokio-rs/slab>
 - strict-num 0.1.1 — <https://github.com/RazrFalcon/strict-num>
-- strsim 0.11.1 — <https://github.com/rapidfuzz/strsim-rs>
 - synstructure 0.13.2 — <https://github.com/mystor/synstructure>
 - tiff 0.11.3 — <https://github.com/image-rs/image-tiff>
 - tokio 1.53.3 — <https://github.com/tokio-rs/tokio>
