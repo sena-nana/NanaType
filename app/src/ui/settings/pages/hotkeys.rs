@@ -285,14 +285,25 @@ pub(super) fn hotkey_control(ui: Ui, action: Shortcut) -> AnyView {
 
 /// The wrapping line under a hotkey row that says what is wrong.
 pub(super) fn hotkey_issue_line(ui: Ui, action: Shortcut) -> AnyView {
+    issue_line(ui, action, true)
+}
+
+/// [`hotkey_issue_line`] without the row's inset, under a compact recorder.
+pub(super) fn hotkey_issue_caption(ui: Ui, action: Shortcut) -> AnyView {
+    issue_line(ui, action, false)
+}
+
+fn issue_line(ui: Ui, action: Shortcut, inset_row: bool) -> AnyView {
     let issue = move || {
         let states = ui.hotkeys.get();
         ui.settings.with(|s| key_issue(s, &states, action))
     };
-    widget(Stack::column(0.0).with_layout(|l| {
-        l.padding_left = Some(LengthSpec::Px(inset::CARD));
-        l.padding_right = Some(LengthSpec::Px(inset::CARD));
-        l.padding_bottom = Some(LengthSpec::Px(space::XL));
+    widget(Stack::column(0.0).with_layout(move |l| {
+        if inset_row {
+            l.padding_left = Some(LengthSpec::Px(inset::CARD));
+            l.padding_right = Some(LengthSpec::Px(inset::CARD));
+            l.padding_bottom = Some(LengthSpec::Px(space::XL));
+        }
     }))
     .visible(move || issue().is_some())
     .children(

@@ -46,10 +46,21 @@ pub(super) fn step(n: u8, body: impl IntoView) -> AnyView {
     .into_any()
 }
 
-/// Getting the display into OBS: enable output before selecting its live sender
-/// name, other capture methods folded under one line. (The sample line is
-/// the page header's.)
+/// [`obs_steps`] as the Output page's row. (The sample line is the page
+/// header's.)
 pub(super) fn obs_guide(ui: Ui) -> Row {
+    Row::inset(
+        widget(Stack::column(0.0).padding_step(inset::step::CARD, inset::step::ROW_Y))
+            .children(obs_steps(ui, false)),
+    )
+}
+
+/// Getting the display into OBS: enable output before selecting its live sender
+/// name, other capture methods folded under one line. In the first-run
+/// `guide` the steps sit closer, and a last one plays a sample line to see
+/// it arrive.
+pub(super) fn obs_steps(ui: Ui, guide: bool) -> AnyView {
+    let sample = guide;
     let body = |key: &str| {
         widget(
             Text::new(ui.now_t(key))
@@ -103,20 +114,44 @@ pub(super) fn obs_guide(ui: Ui) -> Row {
             ),
         )
     };
+    let check = move || {
+        sample.then(|| {
+            step(
+                5,
+                (
+                    body("output-obs-step-check"),
+                    widget(
+                        Button::new(ui.now_t("output-sample"))
+                            .icon(ti::PLAYER_PLAY)
+                            .size(ControlSize::Small),
+                    )
+                    .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::PlaySample)),
+                ),
+            )
+        })
+    };
     let steps: Vec<AnyView> = if cfg!(windows) {
-        vec![
-            enable(),
-            step(2, body("output-obs-step-plugin")),
-            step(3, (body("output-obs-step-source"), sender)),
-            step(4, body("output-obs-step-alpha")),
+        [
+            Some(enable()),
+            Some(step(2, body("output-obs-step-plugin"))),
+            Some(step(3, (body("output-obs-step-source"), sender))),
+            Some(step(4, body("output-obs-step-alpha"))),
+            check(),
         ]
+        .into_iter()
+        .flatten()
+        .collect()
     } else if cfg!(target_os = "macos") {
-        vec![
-            enable(),
-            step(2, body("output-obs-step-syphon")),
-            step(3, (body("output-obs-step-syphon-source"), sender)),
-            step(4, body("output-obs-step-alpha")),
+        [
+            Some(enable()),
+            Some(step(2, body("output-obs-step-syphon"))),
+            Some(step(3, (body("output-obs-step-syphon-source"), sender))),
+            Some(step(4, body("output-obs-step-alpha"))),
+            check(),
         ]
+        .into_iter()
+        .flatten()
+        .collect()
     } else {
         let _ = sender;
         vec![hint(ui.now_t("output-spout-unsupported"))]
@@ -155,14 +190,13 @@ pub(super) fn obs_guide(ui: Ui) -> Row {
             "output-obs-window"
         }))),
     ));
-    Row::inset(
-        widget(
-            Stack::column(0.0)
-                .gap_step(nana_ui_core::SpacingStep::Lg)
-                .padding_step(inset::step::CARD, inset::step::ROW_Y),
-        )
-        .children((steps, other)),
-    )
+    widget(Stack::column(0.0).gap_step(if guide {
+        nana_ui_core::SpacingStep::Sm
+    } else {
+        nana_ui_core::SpacingStep::Lg
+    }))
+    .children((steps, other))
+    .into_any()
 }
 
 /// How an output's settings are read and written.
@@ -374,6 +408,34 @@ fn sizing_hint(ui: Ui, read: Read) -> Option<String> {
 /// source without a bounding box gets a notice card below the row, with a
 /// button that turns one on.
 fn obs_source_row(ui: Ui, kind: WindowKind, read: Read, write: Write) -> Row {
+    let row = row_live_hint(
+        ui,
+        "obs-source",
+        move || sizing_hint(ui, read),
+        source_select(ui, read, write),
+    );
+    let notice = widget(
+        Stack::column(0.0)
+            .padding_step(inset::step::CARD, inset::step::ROW_Y)
+            .with_layout(|l| l.padding_top = Some(LengthSpec::Px(0.0))),
+    )
+    .children(bounds_notice(ui, kind, read));
+    Row::inset(widget(Stack::column(0.0)).children((row, notice)))
+}
+
+/// The select of the OBS source an output is.
+fn source_select(ui: Ui, read: Read, write: Write) -> AnyView {
+    live_select(
+        ui,
+        move || source_options(ui, read),
+        move |s| read(s).obs_source.clone(),
+        move |s, v| write(s).obs_source = v.to_owned(),
+    )
+}
+
+/// While the output's source has no bounding box: a notice with a button
+/// that turns one on.
+fn bounds_notice(ui: Ui, kind: WindowKind, read: Read) -> AnyView {
     let no_bounds = move || {
         let state = ui.obs.get();
         ui.settings.with(|s| {
@@ -383,36 +445,21 @@ fn obs_source_row(ui: Ui, kind: WindowKind, read: Read, write: Write) -> Row {
             )
         })
     };
-    let row = row_live_hint(
-        ui,
-        "obs-source",
-        move || sizing_hint(ui, read),
-        live_select(
-            ui,
-            move || source_options(ui, read),
-            move |s| read(s).obs_source.clone(),
-            move |s, v| write(s).obs_source = v.to_owned(),
-        ),
-    );
-    let notice = widget(
-        Stack::column(0.0)
-            .padding_step(inset::step::CARD, inset::step::ROW_Y)
-            .with_layout(|l| l.padding_top = Some(LengthSpec::Px(0.0))),
-    )
-    .visible(no_bounds)
-    .children(
-        // One line beside a taller button: centred, not top-aligned.
-        nana_ui::runtime::view::callout(
-            ti::ALERT_TRIANGLE,
-            StatusTone::Warning,
-            ui.now_t("obs-bounds-notice"),
+    widget(Stack::column(0.0))
+        .visible(no_bounds)
+        .children(
+            // One line beside a taller button: centred, not top-aligned.
+            nana_ui::runtime::view::callout(
+                ti::ALERT_TRIANGLE,
+                StatusTone::Warning,
+                ui.now_t("obs-bounds-notice"),
+            )
+            .trailing(primary(ui, "obs-fit-bounds", move || {
+                Msg::Obs(ObsMsg::FitBounds(kind))
+            }))
+            .css(nana_ui::runtime::view::css! { align-items: center; }),
         )
-        .trailing(primary(ui, "obs-fit-bounds", move || {
-            Msg::Obs(ObsMsg::FitBounds(kind))
-        }))
-        .css(nana_ui::runtime::view::css! { align-items: center; }),
-    );
-    Row::inset(widget(Stack::column(0.0)).children((row, notice)))
+        .into_any()
 }
 
 /// A row with the card's hairline above it, for a column built by hand.
@@ -424,7 +471,7 @@ fn below_divider(row: Row) -> AnyView {
 
 /// The obs-websocket password: kept in the system's secret store, never in
 /// the settings file; once saved it shows as saved, with a way to forget it.
-fn obs_password_field(ui: Ui) -> AnyView {
+pub(super) fn obs_password_field(ui: Ui) -> AnyView {
     let draft = signal(String::new());
     let save = move || {
         let password = draft.get_untracked();
@@ -475,43 +522,61 @@ fn obs_password_field(ui: Ui) -> AnyView {
     .into_any()
 }
 
+/// The obs-websocket link's state and its switch.
+pub(super) fn obs_link_control(ui: Ui) -> AnyView {
+    crate::ui::kit::hstack((
+        link_badge(ui, |s| &s.obs),
+        switch(
+            ui,
+            |s| s.output.obs.enabled,
+            |s, v| s.output.obs.enabled = v,
+        ),
+    ))
+}
+
+/// Where the obs-websocket server is, and its password.
+fn obs_link_fields(ui: Ui) -> Vec<Row> {
+    vec![
+        row(ui, "obs-address", None, obs_address(ui)),
+        row(
+            ui,
+            "obs-password",
+            Some("obs-password-hint"),
+            obs_password_field(ui),
+        ),
+    ]
+}
+
+/// The obs-websocket address, as `host : port`.
+pub(super) fn obs_address(ui: Ui) -> AnyView {
+    address(
+        ui,
+        (|s| s.output.obs.host.clone(), |s, v| s.output.obs.host = v),
+        (|s| s.output.obs.port, |s, v| s.output.obs.port = v),
+    )
+}
+
+/// The display's OBS source: its select, what sizes it now, and the notice
+/// for a source without a bounding box.
+pub(super) fn display_source(
+    ui: Ui,
+) -> (AnyView, impl Fn() -> Option<String> + Send + Copy, AnyView) {
+    let read: Read = |s| &s.output.display;
+    (
+        source_select(ui, read, |s| &mut s.output.display),
+        move || sizing_hint(ui, read),
+        bounds_notice(ui, WindowKind::Display, read),
+    )
+}
+
 /// The obs-websocket link: on, where, and the password.
 fn obs_link(ui: Ui) -> AnyView {
     toggled_section(
         ui,
         "output-obs-link",
-        row(
-            ui,
-            "obs-link",
-            Some("obs-link-hint"),
-            crate::ui::kit::hstack((
-                link_badge(ui, |s| &s.obs),
-                switch(
-                    ui,
-                    |s| s.output.obs.enabled,
-                    |s, v| s.output.obs.enabled = v,
-                ),
-            )),
-        ),
+        row(ui, "obs-link", Some("obs-link-hint"), obs_link_control(ui)),
         |s| s.output.obs.enabled,
-        vec![
-            row(
-                ui,
-                "obs-address",
-                None,
-                address(
-                    ui,
-                    (|s| s.output.obs.host.clone(), |s, v| s.output.obs.host = v),
-                    (|s| s.output.obs.port, |s, v| s.output.obs.port = v),
-                ),
-            ),
-            row(
-                ui,
-                "obs-password",
-                Some("obs-password-hint"),
-                obs_password_field(ui),
-            ),
-        ],
+        obs_link_fields(ui),
     )
 }
 

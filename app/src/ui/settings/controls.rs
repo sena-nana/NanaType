@@ -90,13 +90,19 @@ pub fn toggled_section<M: IntoView, V: IntoView>(
 const PULSE_MS: u64 = 1200;
 
 /// Whether any link badge on the visible page is breathing, so the settings
-/// window needs frames for it.
+/// window needs frames for it. The first-run guide's last step shows the
+/// display output's and OBS's.
 pub fn links_pulsing(ui: Ui) -> bool {
+    let guide_links = || {
+        ui.onboard_step.get_untracked() + 1 >= nanatype_settings::ONBOARDING_STEPS
+            && !ui.settings.with_untracked(|s| s.general.onboarding_done)
+    };
     !ui.reduced_motion.get_untracked()
-        && matches!(
-            ui.page.get_untracked(),
-            super::Page::Integrations | super::Page::Output | super::Page::Platforms
-        )
+        && match ui.page.get_untracked() {
+            super::Page::Integrations | super::Page::Output | super::Page::Platforms => true,
+            super::Page::General => guide_links(),
+            _ => false,
+        }
         && ui.status.with_untracked(|s| {
             [
                 &s.vts,

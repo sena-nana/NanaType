@@ -283,6 +283,56 @@ fn first_run_resumes_at_the_step_it_was_left_at() {
     assert_eq!(reopened.onboard_step.get_untracked(), 1);
 }
 
+/// The last step records the common hotkeys in place, plays a sample line
+/// to check OBS, and its OBS link shows the address and the display's
+/// source once switched on.
+#[test]
+fn first_run_last_step_sets_hotkeys_and_links_obs() {
+    use nanatype::msg::{GlobalAction, Shortcut};
+    let mut f = Fixture::new(Locale::ZhCn, true, Page::General);
+    f.ui.onboard_step.set(3);
+    f.settle(1);
+    let record = f.ui.now_t("hotkeys-record");
+    let recorders = f
+        .session
+        .accessibility_dump()
+        .into_iter()
+        .filter(|n| n.role == "button" && n.label.as_deref() == Some(record.as_str()))
+        .count();
+    assert_eq!(recorders, 4, "summon, quick input, continue and skip");
+    let summon = f.reach(650.0, 480.0, |f| {
+        f.session
+            .accessibility_dump()
+            .into_iter()
+            .find(|n| n.role == "button" && n.label.as_deref() == Some(record.as_str()))
+            .unwrap()
+    });
+    f.click(&summon);
+    assert!(f.messages().iter().any(|m| matches!(
+        m,
+        Msg::RecordHotkey(Some(Shortcut::Global(GlobalAction::Summon)))
+    )));
+
+    let sample = f.reach(650.0, 480.0, |f| f.find("button", "output-sample"));
+    f.click(&sample);
+    assert!(f.messages().iter().any(|m| matches!(m, Msg::PlaySample)));
+
+    let address = f.ui.now_t("obs-address");
+    let shown = |f: &Fixture| {
+        f.session
+            .accessibility_dump()
+            .iter()
+            .any(|n| n.label.as_deref() == Some(address.as_str()))
+    };
+    assert!(!shown(&f), "the link's fields wait for its switch");
+    let link = f.reach(650.0, 480.0, |f| f.find("switch", "obs-link"));
+    f.click(&link);
+    f.apply_edits();
+    assert!(f.ui.settings.get_untracked().output.obs.enabled);
+    assert!(shown(&f));
+    f.reach(650.0, 480.0, |f| f.find("text", "obs-source"));
+}
+
 #[test]
 fn sidebar_reaches_every_page_and_new_pages_start_at_the_top() {
     for locale in Locale::ALL {
