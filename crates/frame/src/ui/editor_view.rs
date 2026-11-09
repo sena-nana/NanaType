@@ -21,6 +21,7 @@ pub const PLAIN_TEXT_SIZE: f32 = 16.0;
 /// presentation, never stored spans.
 fn editor_base(ui: Stage) -> Base {
     let mut base = Base::editor(&ui.skin.get());
+    base.sticker_scale = ui.settings.with(|s| s.assets.sticker_scale);
     if !ui.settings.with(|s| s.general.input_skin_preview) {
         base.size = PLAIN_TEXT_SIZE;
         base.line_height = base.line_height.min(1.5);

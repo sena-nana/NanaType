@@ -408,6 +408,7 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
         color: rgba8(colors.text),
         weight: 400,
         line_height: 1.35,
+        sticker_scale: 1.0,
         body: None,
         name: None,
         accent: None,
@@ -436,6 +437,10 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
         }
         let Some(row) = source.get(ui) else {
             return;
+        };
+        let look = Look {
+            sticker_scale: ui.settings.with(|s| s.assets.sticker_scale),
+            ..look.clone()
         };
         let rich = to_rich(
             &row.doc,

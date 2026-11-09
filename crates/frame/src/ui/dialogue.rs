@@ -44,6 +44,8 @@ pub struct Base {
     pub color: Rgba8,
     pub size: f32,
     pub line_height: f32,
+    /// Stickers' height in line heights (the user's sticker size).
+    pub sticker_scale: f32,
     pub weight: u16,
     pub family: Option<String>,
     pub name_family: Option<String>,
@@ -119,6 +121,7 @@ impl Base {
             color: t.color,
             size: t.size,
             line_height: t.line_height,
+            sticker_scale: 1.0,
             weight: skin.fonts.body.weight,
             family: t
                 .font_family
@@ -202,6 +205,7 @@ impl Base {
             color: self.color,
             weight: self.weight,
             line_height: self.line_height,
+            sticker_scale: self.sticker_scale,
             body: self.family.clone(),
             name: self.name_family.clone(),
             accent: self.accent_family.clone(),
@@ -1680,6 +1684,7 @@ fn content(ui: Stage, source: Source) -> impl IntoView {
                 return widget(Stack::column(0.0)).into_any();
             }
             let mut base = Base::dialogue(&skin, view.entrance, reduced);
+            base.sticker_scale = ui.settings.with_untracked(|s| s.assets.sticker_scale);
             base.light_preview = source == Source::Preview;
             if let Some(exit) = view.text_exit {
                 base.light_exit = Some((exit.at_ms, exit.ms));

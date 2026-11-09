@@ -1821,7 +1821,9 @@ impl App {
 
     /// The editor's look: the dialogue text of the active skin.
     fn editor_look(&self) -> crate::ui::rich::Look {
-        crate::ui::dialogue::Base::editor(&self.skin).look()
+        let mut base = crate::ui::dialogue::Base::editor(&self.skin);
+        base.sticker_scale = self.settings.assets.sticker_scale;
+        base.look()
     }
 
     /// `doc` as the editor's rich text.

@@ -35,6 +35,8 @@ pub struct Look {
     pub color: Rgba8,
     pub weight: u16,
     pub line_height: f32,
+    /// Stickers' height in line heights (`size * line_height`).
+    pub sticker_scale: f32,
     pub body: Option<String>,
     pub name: Option<String>,
     pub accent: Option<String>,
@@ -1138,7 +1140,13 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
                 }
                 Inline::Atom(a) => {
                     let id = object_id(inline);
-                    let h = env.look.size * a.height_em;
+                    // Stickers follow the user's size, in line heights; other
+                    // pictures keep their own height.
+                    let h = if a.kind == nanatype_model::AtomKind::Sticker {
+                        env.look.size * env.look.line_height * env.look.sticker_scale
+                    } else {
+                        env.look.size * a.height_em
+                    };
                     let object = match env.urls.get(&a.asset.to_string()) {
                         Some(url) => {
                             if let Some(animated) = animated_picture(url) {
@@ -1665,6 +1673,7 @@ mod tests {
             color: Rgba8::BLACK,
             weight: 500,
             line_height: 1.4,
+            sticker_scale: 1.0,
             body: None,
             name: Some("Name Font".into()),
             accent: Some("Accent Font".into()),
@@ -1672,6 +1681,39 @@ mod tests {
             mention: MentionLook::default(),
             ink: None,
         }
+    }
+
+    #[test]
+    fn stickers_take_the_user_size_in_line_heights_and_pictures_their_own() {
+        let doc = nanatype_markup::parse("[sticker=cats/hello h=4][img=blob:x h=2]").doc;
+        let urls: HashMap<String, String> = doc.paragraphs[0]
+            .inlines
+            .iter()
+            .filter_map(|i| match i {
+                Inline::Atom(a) => Some((a.asset.to_string(), "file:///missing.png".to_owned())),
+                _ => None,
+            })
+            .collect();
+        let heights = |scale: f32| {
+            let look = Look {
+                sticker_scale: scale,
+                ..look()
+            };
+            let env = Env {
+                look: &look,
+                urls: &urls,
+                editor: false,
+                locale: Locale::ZhCn,
+            };
+            to_rich(&doc, &env)
+                .objects()
+                .iter()
+                .map(|(_, o)| o.height_px)
+                .collect::<Vec<_>>()
+        };
+        // 28 px text at a 1.4 line height: a 39.2 px line.
+        assert_eq!(heights(1.0), vec![28.0 * 1.4, 56.0]);
+        assert_eq!(heights(2.0), vec![28.0 * 1.4 * 2.0, 56.0]);
     }
 
     fn round_trip(markup: &str) {

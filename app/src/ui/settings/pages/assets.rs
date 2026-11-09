@@ -34,6 +34,28 @@ fn add_phrase(ui: Ui) -> AnyView {
     })
 }
 
+/// How tall stickers are drawn, in line heights.
+fn sticker_size(ui: Ui) -> Row {
+    let (min, max) = nanatype_settings::STICKER_SCALE;
+    row(
+        ui,
+        "assets-sticker-size",
+        Some("assets-sticker-size-hint"),
+        slider(
+            ui,
+            (f64::from(min), f64::from(max), 0.1),
+            "×",
+            |s| f64::from(s.assets.sticker_scale),
+            |s, v| {
+                // Whole tenths, so the reading does not drift off the step.
+                let v = ((v * 10.0).round() / 10.0) as f32;
+                let (min, max) = nanatype_settings::STICKER_SCALE;
+                s.assets.sticker_scale = v.clamp(min, max);
+            },
+        ),
+    )
+}
+
 /// `rows`, or the empty state when there are none.
 fn list_or_empty(ui: Ui, rows: Vec<Row>, empty_key: &str) -> Row {
     if rows.is_empty() {
@@ -270,7 +292,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                 ui,
                 "assets-stickers",
                 vec![add_folder(ui)],
-                vec![(Row::inset(dirs), None)],
+                vec![(sticker_size(ui), None), (Row::inset(dirs), None)],
             ),
             crate::ui::settings::telegram::panel(ui),
             section_tools(

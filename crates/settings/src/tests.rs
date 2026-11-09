@@ -497,7 +497,9 @@ fn sanitize_clamps_hand_edited_values() {
     s.sound.master = 7.0;
     s.history.visible_items = 99_999;
     s.skin.frame_rate = 144;
+    s.assets.sticker_scale = 9.0;
     assert!(s.sanitize());
+    assert_eq!(s.assets.sticker_scale, STICKER_SCALE.1);
     assert_eq!(s.playback.speed_scale, 1.0);
     assert_eq!(s.general.quick_opacity, 1.0);
     assert_eq!(s.general.onboarding_step, 0);
@@ -505,6 +507,9 @@ fn sanitize_clamps_hand_edited_values() {
     assert_eq!(s.history.visible_items, s.history.max_items);
     assert_eq!(s.skin.frame_rate, 30);
     s.skin.frame_rate = 60;
+    s.assets.sticker_scale = f32::NAN;
+    assert!(s.sanitize());
+    assert_eq!(s.assets.sticker_scale, 1.0);
     assert!(!s.sanitize());
 }
 

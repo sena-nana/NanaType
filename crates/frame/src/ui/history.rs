@@ -650,6 +650,7 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
                 ms: skin.dialogue.reveal.entrance.ms,
             };
             let mut base = Base::history(&skin, entrance, ui.reduced_motion.get_untracked());
+            base.sticker_scale = ui.settings.with_untracked(|s| s.assets.sticker_scale);
             if row.item.kind != SourceKind::Typewriter {
                 let scale = skin.history.chat.text_scale;
                 if scale.is_finite() && scale > 0.0 {

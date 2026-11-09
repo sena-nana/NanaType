@@ -1729,14 +1729,31 @@ pub struct QuickPhrase {
     pub hotkey: Option<Hotkey>,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AssetSettings {
     /// Folders whose images become sticker libraries (folder name = library).
     pub sticker_dirs: Vec<String>,
+    /// How tall stickers are drawn, as a multiple of the text's line height
+    /// (within [`STICKER_SCALE`]).
+    pub sticker_scale: f32,
     pub phrases: Vec<QuickPhrase>,
     pub telegram: TelegramSettings,
 }
+
+impl Default for AssetSettings {
+    fn default() -> Self {
+        Self {
+            sticker_dirs: Vec::new(),
+            sticker_scale: 1.0,
+            phrases: Vec::new(),
+            telegram: TelegramSettings::default(),
+        }
+    }
+}
+
+/// Heights [`AssetSettings::sticker_scale`] keeps, in line heights.
+pub const STICKER_SCALE: (f32, f32) = (0.8, 2.0);
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -2006,6 +2023,8 @@ impl Settings {
             g.character = 0;
         }
         self.update.proxy = self.update.proxy.trim().chars().take(512).collect();
+        self.assets.sticker_scale =
+            finite_or(self.assets.sticker_scale, 1.0).clamp(STICKER_SCALE.0, STICKER_SCALE.1);
         self.assets.telegram.api_id = self.assets.telegram.api_id.max(0);
         self.assets.telegram.proxy = self
             .assets

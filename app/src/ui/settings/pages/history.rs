@@ -294,7 +294,7 @@ fn saved_body(ui: Ui, record: &archive::Record) -> AnyView {
     };
     let doc = nanatype_markup::parse(markup).doc;
     let skin = ui.skin.get_untracked();
-    let base = crate::ui::dialogue::Base::history(
+    let mut base = crate::ui::dialogue::Base::history(
         &skin,
         nanatype_model::Entrance {
             kind: nanatype_model::EntranceKind::None,
@@ -302,6 +302,7 @@ fn saved_body(ui: Ui, record: &archive::Record) -> AnyView {
         },
         ui.reduced_motion.get_untracked(),
     );
+    base.sticker_scale = ui.settings.with_untracked(|s| s.assets.sticker_scale);
     let look = base.look();
     let urls = ui.asset_urls.get_untracked();
     let rich = crate::ui::rich::to_rich(
