@@ -554,7 +554,8 @@ fn the_editor_fits_narrow_widths_in_every_language_and_works_from_the_keyboard()
     assert!(messages(&mut agent).iter().any(
         |m| matches!(m, Msg::PackageEditor(Action::Edit { path, text }) if path == MANIFEST && text.contains('#'))
     ));
-    // Search counts matches in the open file.
+    // Find opens over the source and counts matches in the open file.
+    click_key(&mut agent, "package-editor-find");
     let search = agent
         .accessibility_dump()
         .into_iter()
@@ -871,7 +872,7 @@ fn data_and_pipeline_forms_write_in_place_and_refuse_invalid_edits() {
     for key in [
         "package-editor-data-add",
         "package-editor-pipeline-add",
-        "package-editor-data:notes:edit",
+        "package-editor-entry-remove",
     ] {
         assert!(
             keyed(&nodes, key).is_none(),
@@ -911,22 +912,42 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
             let mut agent = common::session()
                 .themed(false)
                 .mount(width, height, move || body(ui, height));
+            // The list stays at every width; one entry's form shows at a time.
             click_key(&mut agent, "package-editor-data-add");
-            click_key(&mut agent, "package-editor-pipeline:stroke_map:edit");
+            assert!(keyed(&agent.accessibility_dump(), "package-editor-data-form").is_some());
+            click_key(&mut agent, "package-editor-data:strokes");
             // The remove confirmation fits beside its question too.
-            click_key(&mut agent, "package-editor-data:strokes:remove");
+            click_key(&mut agent, "package-editor-entry-remove");
+            let fits = |agent: &RuntimeAgentSession| {
+                for node in agent.accessibility_dump().iter().filter(|n| {
+                    n.role == "button"
+                        || n.agent_path.as_deref().is_some_and(|p| {
+                            p.contains("package-editor-field:") || p.contains("-form")
+                        })
+                }) {
+                    assert!(
+                        node.bounds.x >= -0.5
+                            && node.bounds.x + node.bounds.width <= width as f32 + 0.5,
+                        "{locale:?} form control off-screen at {width}px: {:?} {:?}",
+                        node.label,
+                        node.bounds
+                    );
+                }
+            };
+            fits(&agent);
+            click_key(&mut agent, "package-editor-pipeline:stroke_map");
             let nodes = agent.accessibility_dump();
             assert!(
                 nodes
                     .iter()
-                    .any(|node| node.label.as_deref().is_some_and(|label| label
-                        .contains(&ui.now_t("pkgedit-pipeline-outputs"))
-                        && label.contains("time: Texture")
-                        && label.contains("extent: Vec4"))),
+                    .any(|node| node
+                        .label
+                        .as_deref()
+                        .is_some_and(|label| label.contains("time: Texture")
+                            && label.contains("extent: Vec4"))),
                 "{locale:?} {width}: typed pipeline outputs"
             );
             for key in [
-                "package-editor-data-form",
                 "package-editor-pipeline-form",
                 "package-editor-pipeline-input:strokes",
             ] {
@@ -1017,16 +1038,19 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
             .iter()
             .all(|m| matches!(m, Msg::Notice { error: true, .. }))
     );
-    // The pipeline form sends the edited input binding.
-    click_key(&mut agent, "package-editor-data-cancel");
-    click_key(&mut agent, "package-editor-pipeline:stroke_map:edit");
+    // A declared pipeline is written field by field: Enter sends the edited
+    // input binding.
+    click_key(&mut agent, "package-editor-pipeline:stroke_map");
     type_into(
         &mut agent,
         "package-editor-pipeline-input:strokes",
         "pkg:other.pack/strokes",
     );
     messages(&mut agent);
-    click_key(&mut agent, "package-editor-pipeline-apply");
+    agent
+        .key_press("Enter", "Enter", Default::default())
+        .unwrap();
+    agent.flush().unwrap();
     let Some(Msg::PackageEditor(Action::ApplyPipeline { previous, entry })) =
         messages(&mut agent).into_iter().next()
     else {
@@ -1130,9 +1154,15 @@ fn the_input_preview_draws_the_draft_skin_without_touching_the_input_window() {
                     "the sample editor never takes focus"
                 );
             }
+            // Leaving an inspector row writes what was typed in it; nothing
+            // else is sent, and nothing from the sample.
             let sent = agent.document_mut().context_mut().take_program_messages();
             assert!(
-                !sent.iter().any(|m| m.is::<Msg>()),
+                sent.iter()
+                    .all(|m| m.downcast_ref::<Msg>().is_none_or(|m| matches!(
+                        m,
+                        Msg::PackageEditor(Action::SetDeclaration { .. })
+                    ))),
                 "the sample editor sends nothing"
             );
             assert!(Arc::ptr_eq(&typed, &ui.draft.get_untracked()));
@@ -1201,5 +1231,105 @@ fn launcher_lists_installed_packages_to_edit_or_copy() {
                 );
             }
         }
+    }
+}
+
+/// One second of silence: the smallest sound an import accepts.
+fn wav() -> Vec<u8> {
+    let samples = vec![0_u8; 800];
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&(36 + samples.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(b"WAVEfmt ");
+    bytes.extend_from_slice(&16_u32.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes()); // PCM
+    bytes.extend_from_slice(&1_u16.to_le_bytes()); // mono
+    bytes.extend_from_slice(&8000_u32.to_le_bytes());
+    bytes.extend_from_slice(&16000_u32.to_le_bytes());
+    bytes.extend_from_slice(&2_u16.to_le_bytes());
+    bytes.extend_from_slice(&16_u16.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&(samples.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(&samples);
+    bytes
+}
+
+#[test]
+fn the_sound_table_binds_events_to_the_packs_own_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = registry(dir.path());
+    let mut session = pe::create(ProjectKind::Sounds, "my.sounds").unwrap();
+    // A sound lands with the sounds, whatever is selected.
+    session.select(PACKAGE_MANIFEST);
+    let path = session.import("key.wav", wav()).unwrap();
+    assert_eq!(path, "sounds/key.wav");
+    // What the table's rows send, written the way the app writes it.
+    let mut project = session.project.clone();
+    for (path, value) in [
+        (&["sounds", "open"][..], "\"sounds/key.wav\""),
+        (&["sounds", "se", "ding"][..], "\"sounds/key.wav\""),
+        (&["sounds", "typing", "files"][..], "[\"sounds/key.wav\"]"),
+    ] {
+        let path = path.iter().map(|p| (*p).to_owned()).collect::<Vec<_>>();
+        nanatype_theme::editor::set_declaration(
+            &mut project,
+            nanatype_theme::SOUNDS_MANIFEST,
+            &path,
+            Some(value),
+            None,
+            false,
+        )
+        .unwrap();
+    }
+    session.replace_project(project).unwrap();
+    let declared = text(&session, nanatype_theme::SOUNDS_MANIFEST);
+    for line in [
+        "open = \"sounds/key.wav\"",
+        "ding = \"sounds/key.wav\"",
+        "files = [\"sounds/key.wav\"]",
+    ] {
+        assert!(declared.contains(line), "{line} in\n{declared}");
+    }
+    let (_, view) = validated(&registry, session);
+    assert_eq!(view.report.errors(), 0, "{:?}", view.report.diagnostics);
+    let captures = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("target/package-editor");
+    std::fs::create_dir_all(&captures).unwrap();
+    for width in [960, 1440] {
+        let ui = Ui::new(
+            Arc::new(Settings::default()),
+            Arc::new(Default::default()),
+            Locale::ZhCn,
+        );
+        ui.package_editor.set(Some(view.clone()));
+        ui.mode.set(Mode::Sounds);
+        let mut agent = common::session()
+            .themed(false)
+            .mount(width, 800, move || body(ui, 800));
+        agent.flush().unwrap();
+        let nodes = agent.accessibility_dump();
+        for key in [
+            "editor-sound-slot:sounds.open",
+            "editor-sound-slot:sounds.advance",
+            "editor-sound-se:ding",
+            "editor-sound-typing-add",
+        ] {
+            let node = keyed(&nodes, key).unwrap_or_else(|| panic!("{width}: missing {key}"));
+            assert!(
+                node.bounds.x >= -0.5 && node.bounds.x + node.bounds.width <= width as f32 + 0.5,
+                "{width}: {key} off-screen: {:?}",
+                node.bounds
+            );
+        }
+        // Each bound event plays its sound where it is named.
+        click_key(&mut agent, "editor-sound-play:sounds.open");
+        assert!(messages(&mut agent).iter().any(
+            |m| matches!(m, Msg::PackageEditor(Action::Audition(p)) if p == "sounds/key.wav")
+        ));
+        agent
+            .screenshot_png(captures.join(format!("sounds-{width}.png")))
+            .unwrap();
     }
 }

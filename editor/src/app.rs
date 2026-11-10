@@ -50,6 +50,12 @@ pub struct App {
     conflict_copy: Option<(u64, u64, String, Vec<u8>)>,
     replace_path: Option<(u64, u64, String)>,
     watch: Option<crate::directory::Watch>,
+    /// Edits being prepared off the UI thread. Save waits for them, so a
+    /// field left by pressing Save is written first.
+    preparing: std::cell::Cell<usize>,
+    save_pending: bool,
+    /// The sound to play once its preview is decoded.
+    audition: Option<String>,
     scanning_directory: bool,
     scan_again: bool,
 }
@@ -132,6 +138,9 @@ impl App {
             conflict_copy: None,
             replace_path: None,
             watch: None,
+            preparing: Default::default(),
+            save_pending: false,
+            audition: None,
             scanning_directory: false,
             scan_again: false,
         };
@@ -537,8 +546,14 @@ impl App {
                     self.prepare_asset(&path);
                     return;
                 }
+                let audition = self.audition.take().is_some_and(|a| a == path);
                 match result {
-                    Ok(asset) => self.ui.asset.set(Some(asset)),
+                    Ok(asset) => {
+                        self.ui.asset.set(Some(asset));
+                        if audition {
+                            self.package_editor_msg(Action::PlayAsset);
+                        }
+                    }
                     Err(e) => self.notice(e, true),
                 }
             }
@@ -661,6 +676,8 @@ impl App {
                 prefix,
                 result,
             } => {
+                self.preparing.set(self.preparing.get().saturating_sub(1));
+                let save = self.preparing.get() == 0 && std::mem::take(&mut self.save_pending);
                 if self
                     .package_editor
                     .session
@@ -669,34 +686,16 @@ impl App {
                 {
                     return;
                 }
-                if prefix == "canvas." {
-                    self.ui.canvas_preview.set(None);
+                self.project_prepared(version, prefix, result);
+                if save {
+                    self.editor_save();
+                    self.editor_publish();
                 }
-                if self
-                    .package_editor
-                    .session
-                    .as_ref()
-                    .is_some_and(|s| s.version != version)
-                {
-                    self.notice(self.ui.now_t("pkgedit-operation-stale"), true);
-                    return;
-                }
-                match result {
-                    Ok(project) => {
-                        let refresh_asset = prefix.is_empty();
-                        self.editor_try(|s| {
-                            s.replace_project(project)?;
-                            if !prefix.is_empty() {
-                                s.applied_forms(&prefix);
-                            }
-                            Ok(())
-                        });
-                        if refresh_asset {
-                            self.prepare_current_asset();
-                        }
-                    }
-                    Err(e) => self.notice(e, true),
-                }
+            }
+            Action::Audition(path) => {
+                self.audition = Some(path.clone());
+                self.editor_with(|s| s.select(&path));
+                self.prepare_asset(&path);
             }
             Action::Recoveries(rows) => self.ui.recoveries.set(Arc::new(rows)),
             Action::RestoreRecovery(id) => {
@@ -1121,6 +1120,43 @@ impl App {
     }
 
     /// Prepare one transaction off-thread; ProjectPrepared rejects stale results.
+    /// Take an edit prepared off the UI thread, unless the project moved on.
+    fn project_prepared(
+        &mut self,
+        version: u64,
+        prefix: String,
+        result: Result<nanatype_theme::PackageProject, String>,
+    ) {
+        if prefix == "canvas." {
+            self.ui.canvas_preview.set(None);
+        }
+        if self
+            .package_editor
+            .session
+            .as_ref()
+            .is_some_and(|s| s.version != version)
+        {
+            self.notice(self.ui.now_t("pkgedit-operation-stale"), true);
+            return;
+        }
+        match result {
+            Ok(project) => {
+                let refresh_asset = prefix.is_empty();
+                self.editor_try(|s| {
+                    s.replace_project(project)?;
+                    if !prefix.is_empty() {
+                        s.applied_forms(&prefix);
+                    }
+                    Ok(())
+                });
+                if refresh_asset {
+                    self.prepare_current_asset();
+                }
+            }
+            Err(e) => self.notice(e, true),
+        }
+    }
+
     fn prepare_project(
         &self,
         name: &'static str,
@@ -1134,6 +1170,7 @@ impl App {
         };
         let (session, version, mut project, registry) =
             (s.id, s.version, s.project.clone(), self.registry.clone());
+        self.preparing.set(self.preparing.get() + 1);
         background(name, &self.ctx, move || {
             let result = apply(&mut project, &registry).map(|()| project);
             Msg::PackageEditor(Action::ProjectPrepared {
@@ -1183,7 +1220,7 @@ impl App {
             return;
         };
         let session = s.id;
-        let folder = s.import_folder();
+        let folder = s.import_folder(&name);
         background("editor-import", &self.ctx, move || {
             let result = read_asset(path);
             Msg::PackageEditor(Action::Imported {
@@ -1200,6 +1237,10 @@ impl App {
             return;
         };
         if s.saving {
+            return;
+        }
+        if self.preparing.get() > 0 {
+            self.save_pending = true;
             return;
         }
         if let Err(e) = s.ensure_forms_applied() {

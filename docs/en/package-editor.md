@@ -19,11 +19,13 @@ The editor works with internal drafts and with directory projects that are writt
 
 Once a project is open, the window is a canvas-centred workspace (minimum 960×600 logical pixels, initially 1440×900):
 
-- **Toolbar**: the package name (click it for the project menu: "Revert to last save", "Close"), package type, and "Undo"/"Redo". Workspaces that show the canvas also have the layout target ("Base layout", "Landscape", "Portrait", "Breakpoint rule"), viewport size presets and the "Display"/"History"/"Input" views. On the right are the "Show source beside the canvas" or "Show live preview" toggle, export and save. Only Save uses the accent colour, and only while there are unsaved changes.
-- **Activity bar**: "Design", "Files", "Sounds", "Data and pipelines", "Lua"; at the bottom, "Package" and "Protection & signing". Entries for capabilities the project lacks are hidden (a skin-only package has no Lua, for example). Clicking the current entry again collapses or expands the left panel.
-- **Left panel / centre / right inspector**: these change with the workspace. Both side panels can be resized by dragging, and their widths are kept when you switch workspaces. When the window is narrower than 1280 logical pixels, the left panel starts collapsed.
-- **Bottom drawer**: the problem list (click to jump to the file and line) and the Lua debug log. Collapsed by default; open it from the status bar.
+- **Toolbar**: the package name (click it for the project menu: "Save", "Export", "Revert to last save", "Copy as a new package…", "Close"), package type, and "Undo"/"Redo". On the right are the workspace's layout toggle ("Show source beside the canvas" or "Show live preview"), the side-panel toggle, export and save. Only Save uses the accent colour, and only while there are unsaved changes. How the stage is looked at — view, size, motion, zoom, background, sample text — lives in the strip above the canvas.
+- **Activity bar**: "Design", "Files", "Sounds", "Data and pipelines", "Lua"; at the bottom, "Package" and "Publish". Entries for capabilities the project lacks are hidden (a skin-only package has no Lua, for example). Clicking the current entry again collapses or expands the left panel. Each workspace comes back to the file it last showed.
+- **Left panel / centre / right inspector**: every workspace uses the same three: what there is on the left (layers, files, sounds, Lua sources, declared data), the editor or the form in the centre, and the selected thing's properties on the right (the skin inspector, the sound player, the Lua debugger, the live preview). Both side panels can be resized by dragging, and their widths are kept when you switch workspaces. When the window is narrower than 1280 logical pixels, the left panel starts collapsed.
+- **Bottom drawer**: the problem list (click to jump to the file and line) and the Lua debug log. Collapsed by default; open it from the status bar and drag its top edge to resize it. Starting the debugger opens its log.
 - **Status bar**: problem count, debug log entry, project origin, and save, validation and signing status.
+
+Keyboard (Ctrl on Windows, ⌘ on macOS): `Mod+S` save, `Mod+E` export, `Mod+Z` / `Mod+Shift+Z` undo and redo (a focused text field keeps its own), `Mod+F` find in the source, `Mod+1`…`Mod+7` workspaces in activity-bar order, `Mod+B` side panel, `Mod+J` problems, `Mod+W` close the project, `F5` / `Shift+F5` start and stop the Lua debugger. A value typed into a row is written when you press Enter or leave the field; choices (checkboxes, lists, colours) are written as they are made. Save waits for a write in flight, so saving straight out of a field keeps what you typed.
 
 Colours follow the system light/dark setting; the canvas area always uses a neutral background.
 
@@ -155,11 +157,11 @@ The inspector shows one value per row.
 
 Labels of locally declared values use the accent colour, inherited values a secondary colour.
 
-Numbers can be adjusted by dragging (one drag commits a single undo step), colours have a picker, and other values are typed in and confirmed with "Apply". "Restore inheritance" removes the local declaration, and the link icon opens the parameter binding.
+Numbers can be adjusted by dragging (one drag commits a single undo step), colours have a picker, switches are written when toggled, and other values are typed in and written with Enter or by leaving the field. "Restore inheritance" removes the local declaration, and the link icon opens the parameter binding.
 
 Sub-tables are listed at the end of the rows and can be entered level by level; "Add field" offers parameter, group, preset and responsive templates.
 
-**Advanced skins** treat the source as authoritative. "Show source beside the canvas" in the toolbar splits the centre into the canvas and the `skin.toml`/WGSL source, and selecting a layer scrolls the source to its table. "This table's TOML" at the bottom of the inspector shows the whole block of that table (and its sub-tables) in the source; editing it in place replaces only that block, keeping everything else and all comments verbatim.
+**Advanced skins** treat the source as authoritative. "Show source beside the canvas" in the toolbar splits the centre into the canvas and the `skin.toml`/WGSL source, and selecting a layer scrolls the source to its table. The code icon beside the inspector's title opens the source at that table's block.
 
 Tables without their own header tell you to edit them in the enclosing table.
 

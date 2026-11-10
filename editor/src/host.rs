@@ -24,6 +24,8 @@ pub struct Host {
     /// The preview has effects that move, as of the last frame.
     previewing: bool,
     canvas_drag: Option<crate::canvas::Drag>,
+    /// Find was just opened: its field takes the focus once it is laid out.
+    focus_search: bool,
     #[cfg(target_os = "macos")]
     _open_documents: objc2::rc::Retained<crate::open_documents::Delegate>,
 }
@@ -77,6 +79,106 @@ impl Host {
     }
 }
 
+impl Host {
+    /// Carry out a keyboard command.
+    fn run(
+        &mut self,
+        command: crate::shortcuts::Command,
+        context: &RuntimeProgramContext<Msg>,
+    ) -> Result<(), FrameworkError> {
+        use crate::session::Mode;
+        use crate::shortcuts::Command;
+        use crate::ui::{Drawer, shell};
+        let ui = self.app.ui;
+        match command {
+            Command::Save | Command::Export => {
+                // Leaving the field writes what was typed in it; the save
+                // queued behind that write then waits for it.
+                if let Some(doc) = &mut self.doc {
+                    let id = doc.document();
+                    doc.context_mut().clear_focus(id)?;
+                }
+                context.dispatch(Msg::PackageEditor(if command == Command::Save {
+                    Action::Save
+                } else {
+                    Action::Export
+                }));
+            }
+            Command::Undo => self.app.update(Msg::PackageEditor(Action::Undo)),
+            Command::Redo => self.app.update(Msg::PackageEditor(Action::Redo)),
+            Command::Find => {
+                let mode = shell::current(ui);
+                let source = matches!(mode, Mode::Files | Mode::Lua)
+                    || mode == Mode::Design && ui.split_source.get_untracked();
+                if !source {
+                    ui.mode.set(Mode::Files);
+                }
+                ui.find_open.set(true);
+                self.focus_search = true;
+            }
+            Command::Dismiss => {
+                ui.find_open.set_if_changed(false);
+            }
+            Command::Workspace(mode) => {
+                let open = ui
+                    .package_editor
+                    .with_untracked(|v| v.as_ref().is_some_and(|v| mode.available(v)));
+                if open
+                    && shell::current(ui) != mode
+                    && let Some(msg) = shell::select_mode(ui, mode)
+                {
+                    self.app.update(msg);
+                }
+            }
+            Command::ToggleSide => ui.side_open.update(|open| *open = !*open),
+            Command::ToggleProblems => ui.drawer.update(|d| {
+                *d = if *d == Drawer::Problems {
+                    Drawer::Closed
+                } else {
+                    Drawer::Problems
+                }
+            }),
+            Command::Close => self.app.update(Msg::PackageEditor(Action::Close)),
+            Command::DebugStart | Command::DebugStop => {
+                let lua = ui
+                    .package_editor
+                    .with_untracked(|v| v.as_ref().is_some_and(|v| Mode::Lua.available(v)));
+                if lua {
+                    self.app
+                        .update(Msg::PackageEditor(if command == Command::DebugStart {
+                            Action::DebugStart
+                        } else {
+                            Action::DebugStop
+                        }));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Give find's field the focus once it exists.
+    fn focus_search_field(&mut self) {
+        if !self.focus_search {
+            return;
+        }
+        let Some(doc) = &mut self.doc else {
+            return;
+        };
+        let Some(target) = self.app.ui.search_field.get_untracked() else {
+            return;
+        };
+        self.focus_search = false;
+        let document = doc.document();
+        let _ = doc.context_mut().apply_accessibility_action(
+            document,
+            nana_ui::runtime::AccessibilityActionRequest {
+                target,
+                action: nana_ui::runtime::AccessibilityAction::Focus,
+            },
+        );
+    }
+}
+
 impl RuntimeProgram for Host {
     type Message = Msg;
     type Error = String;
@@ -90,6 +192,7 @@ impl RuntimeProgram for Host {
             toasts: None,
             previewing: false,
             canvas_drag: None,
+            focus_search: false,
             #[cfg(target_os = "macos")]
             _open_documents: crate::open_documents::install(context)?,
         };
@@ -244,9 +347,21 @@ impl RuntimeProgram for Host {
         &mut self,
         _: WindowId,
         input: RoutedInput<'_>,
-        _: &RuntimeProgramContext<Msg>,
+        context: &RuntimeProgramContext<Msg>,
     ) -> Result<RuntimeProgramUpdate, FrameworkError> {
         let ui = self.app.ui;
+        if let nana_ui_platform::InputPayload::Key(key) = &input.event.payload
+            && !input.disposition.prevent_default
+            && ui.package_editor.with_untracked(Option::is_some)
+        {
+            let typing = self
+                .doc
+                .as_ref()
+                .is_some_and(|doc| doc.context().focused_text_editor(doc.document()).is_some());
+            if let Some(command) = crate::shortcuts::command(key, typing) {
+                self.run(command, context)?;
+            }
+        }
         if let Some(doc) = &self.doc
             && let Some(id) = ui.source_node.get_untracked()
             && let Some(entity) = doc.context().view_entity::<nana_ui::runtime::TextArea>(id)
@@ -285,6 +400,7 @@ impl RuntimeProgram for Host {
         _: &RuntimeProgramContext<Msg>,
     ) -> RuntimeProgramUpdate {
         nanatype_frame::ui::collect_effect_garbage();
+        self.focus_search_field();
         if self.app.ui.canvas_enabled.get_untracked()
             && let Some(doc) = &self.doc
         {

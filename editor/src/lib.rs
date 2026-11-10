@@ -20,6 +20,7 @@ pub mod msg;
 mod open_documents;
 pub mod recovery;
 pub mod session;
+pub mod shortcuts;
 pub mod ui;
 
 use std::path::PathBuf;

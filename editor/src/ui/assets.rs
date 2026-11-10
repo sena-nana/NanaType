@@ -1,130 +1,17 @@
-use super::{
-    Ui,
-    controls::{confirm, hint},
-    kit,
-};
+use super::{Ui, controls::hint, kit};
 use crate::{msg::Msg, session::Action};
+use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
-use nana_ui::runtime::{Activate, Button, Stack, TextChanged};
-use nana_ui::{ButtonKind, ControlSize};
+use nana_ui::runtime::{Activate, Stack};
+
+/// The audition volume's slider.
+const VOLUME_W: f32 = 140.0;
 use nana_ui_core::{
     BackgroundImage, BackgroundImageFit, LengthSpec, PointerEventsSpec, PositionSpec,
     SemanticColorRole,
 };
-pub fn operations(ui: Ui) -> AnyView {
-    let target = ui.file_target;
-    widget(Stack::column(0.).gap_step(kit::gap::step::CONTROL))
-        .children((
-            widget(
-                Button::new(ui.now_t("pkgedit-reload-directory"))
-                    .kind(ButtonKind::Ghost)
-                    .size(ControlSize::Small),
-            )
-            .visible(move || {
-                ui.package_editor.with(|v| {
-                    v.as_ref().is_some_and(|v| {
-                        matches!(
-                            v.origin,
-                            nanatype_theme::editor::DraftOrigin::Directory { .. }
-                        )
-                    })
-                })
-            })
-            .on_cx(|_, _: &Activate, cx| {
-                cx.dispatch_program_all(Msg::PackageEditor(Action::ReloadDirectory))
-            }),
-            widget(
-                kit::text_input(target.get_untracked())
-                    .placeholder(ui.now_t("pkgedit-file-target"))
-                    .size(ControlSize::Small),
-            )
-            .key("editor-file-target")
-            .bind(move |a: &mut nana_ui::runtime::TextInput| {
-                super::views::sync_text(&mut a.state, target.get())
-            })
-            .on(move |e: &TextChanged| target.set(e.value.to_string())),
-            widget(
-                Button::new(ui.now_t("pkgedit-new-file"))
-                    .kind(ButtonKind::Ghost)
-                    .size(ControlSize::Small),
-            )
-            .key("editor-new-file")
-            .on_cx(move |_, _: &Activate, cx| {
-                cx.dispatch_program_all(Msg::PackageEditor(Action::CreateFile(
-                    target.get_untracked(),
-                )))
-            }),
-            dynamic(
-                move || {
-                    ui.package_editor.with(|v| {
-                        v.as_ref()
-                            .map(|v| (v.selected.clone(), v.version, v.report.references.clone()))
-                    })
-                },
-                move |state| {
-                    let Some((Some(path), _, refs)) = state else {
-                        return widget(Stack::column(0.)).into_any();
-                    };
-                    let from = path.clone();
-                    let refs = refs
-                        .iter()
-                        .filter(|r| r.target == *path)
-                        .map(|r| {
-                            format!(
-                                "{}: {} {}",
-                                r.file,
-                                r.path.join("."),
-                                if r.automatic {
-                                    ui.now_t("pkgedit-reference-auto")
-                                } else {
-                                    ui.now_t("pkgedit-reference-manual")
-                                }
-                            )
-                        })
-                        .collect::<Vec<_>>();
-                    let detail = if refs.is_empty() {
-                        ui.now_t("pkgedit-unused-asset")
-                    } else {
-                        refs.join("\n")
-                    };
-                    widget(Stack::column(0.).gap_step(kit::gap::step::CONTROL))
-                        .children((
-                            hint(detail.clone()),
-                            confirm(
-                                *ui,
-                                format!("{}\n{detail}", ui.now_t("pkgedit-rename-question")),
-                                ui.now_t("pkgedit-rename"),
-                                move |armed| {
-                                    widget(
-                                        Button::new(ui.now_t("pkgedit-rename"))
-                                            .kind(ButtonKind::Ghost)
-                                            .size(ControlSize::Small),
-                                    )
-                                    .on(move |_: &Activate| armed.set(true))
-                                    .into_any()
-                                },
-                                move || {
-                                    Msg::PackageEditor(Action::RenameFile {
-                                        from: from.clone(),
-                                        to: target.get_untracked(),
-                                    })
-                                },
-                            ),
-                            widget(
-                                Button::new(ui.now_t("pkgedit-replace"))
-                                    .kind(ButtonKind::Ghost)
-                                    .size(ControlSize::Small),
-                            )
-                            .on_cx(|_, _: &Activate, cx| {
-                                cx.dispatch_program_all(Msg::PackageEditor(Action::ReplaceFile))
-                            }),
-                        ))
-                        .into_any()
-                },
-            ),
-        ))
-        .into_any()
-}
+/// The selected asset: an image on a checkerboard with its nine-slice
+/// guides, a font's sample, or a sound's transport.
 pub fn preview(ui: Ui) -> AnyView {
     dynamic(
         move || {
@@ -238,45 +125,69 @@ pub fn preview(ui: Ui) -> AnyView {
                 );
             }
             if let Some(pcm) = &asset.pcm {
-                children.push(hint(format!(
-                    "{} ms · {} Hz · {} ch",
-                    pcm.duration_ms(),
-                    pcm.rate,
-                    pcm.channels
-                )));
-                children.push(
-                    widget(Stack::row(0.).wrap(true))
-                        .children((
-                            widget(Button::new(ui.now_t("pkgedit-play"))).on_cx(
-                                |_, _: &Activate, cx| {
-                                    cx.dispatch_program_all(Msg::PackageEditor(Action::PlayAsset))
-                                },
-                            ),
-                            widget(Button::new(ui.now_t("pkgedit-static"))).on_cx(
-                                |_, _: &Activate, cx| {
-                                    cx.dispatch_program_all(Msg::PackageEditor(Action::StopAudio))
-                                },
-                            ),
-                            widget(
-                                kit::text_input((ui.audio_gain.get_untracked() * 100.).to_string())
-                                    .placeholder("0–100%")
-                                    .size(ControlSize::Small),
-                            )
-                            .on(move |e: &TextChanged| {
-                                if let Ok(v) = e.value.parse::<f32>()
-                                    && v.is_finite()
-                                {
-                                    ui.audio_gain.set((v / 100.).clamp(0., 1.));
-                                }
-                            }),
-                        ))
-                        .into_any(),
-                );
+                children.push(player(
+                    ui,
+                    format!(
+                        "{} ms · {} Hz · {} ch",
+                        pcm.duration_ms(),
+                        pcm.rate,
+                        pcm.channels
+                    ),
+                ));
             }
             widget(Stack::column(0.).gap_step(kit::gap::step::CONTROL))
                 .children(children)
                 .into_any()
         },
     )
+    .into_any()
+}
+
+/// A sound's transport: play, stop, the audition volume and what was decoded.
+fn player(ui: Ui, facts: String) -> AnyView {
+    use nana_ui::runtime::{RangeChanged, RangeField, RangeInput};
+    let mut volume = RangeField::new(
+        f64::from(ui.audio_gain.get_untracked()) * 100.,
+        0.,
+        100.,
+        1.,
+    )
+    .size(nana_ui::ControlSize::Small)
+    .show_label(false);
+    {
+        let l = std::sync::Arc::make_mut(&mut volume.style.layout);
+        l.width = Some(LengthSpec::Px(VOLUME_W));
+        l.flex_shrink = Some(1.);
+    }
+    widget(
+        Stack::row(0.)
+            .wrap(true)
+            .gap_step(kit::gap::step::TIGHT)
+            .align(nana_ui_core::AlignSpec::Center),
+    )
+    .key("editor-asset-player")
+    .children((
+        widget(super::shell::tool(
+            ti::PLAYER_PLAY,
+            ui.now_t("pkgedit-play"),
+        ))
+        .key("editor-asset-play")
+        .on_cx(|_, _: &Activate, cx| {
+            cx.dispatch_program_all(Msg::PackageEditor(Action::PlayAsset))
+        }),
+        widget(super::shell::tool(
+            ti::PLAYER_STOP,
+            ui.now_t("pkgedit-stop"),
+        ))
+        .key("editor-asset-stop")
+        .on_cx(|_, _: &Activate, cx| {
+            cx.dispatch_program_all(Msg::PackageEditor(Action::StopAudio))
+        }),
+        widget(volume.accessible_name(ui.now_t("pkgedit-volume")))
+            .key("editor-asset-volume")
+            .on(move |e: &RangeInput| ui.audio_gain.set((e.value / 100.) as f32))
+            .on(move |e: &RangeChanged| ui.audio_gain.set((e.value / 100.) as f32)),
+        hint(facts),
+    ))
     .into_any()
 }

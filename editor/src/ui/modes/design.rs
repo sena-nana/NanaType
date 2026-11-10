@@ -23,9 +23,12 @@ use std::sync::Arc;
 const SOURCE_H: f32 = 320.0;
 const SOURCE_LIMITS: (f32, f32) = (140.0, 900.0);
 /// The canvas strip's selects.
-const MOTION_W: f32 = 136.0;
-const ZOOM_W: f32 = 112.0;
-const BACKGROUND_W: f32 = 120.0;
+const SURFACE_W: f32 = 120.0;
+const PRESET_W: f32 = 160.0;
+const MOTION_W: f32 = 128.0;
+const ZOOM_W: f32 = 96.0;
+/// The label beside the layout layer's select.
+const TARGET_LABEL_W: f32 = 64.0;
 /// The parameter test values under the layers, before they scroll.
 const PARAMS_MAX_H: f32 = 240.0;
 
@@ -106,6 +109,21 @@ fn layer_icon(key: &str) -> nana_ui::runtime::Icon {
 
 const SEP: &str = "/";
 
+/// Where a table sits in the tree: what is drawn first, then what it is
+/// drawn with, then the parameters, then what is not drawn at all.
+fn layer_rank(key: &str) -> u8 {
+    match key {
+        "dialogue" => 0,
+        "text" | "nameplate" | "portrait" | "continue" | "decor" | "frame" => 1,
+        "history" | "chrome" | "mention" => 2,
+        "responsive" => 3,
+        "effects" | "shaders" | "materials" | "fonts" => 4,
+        "params" | "param_groups" | "presets" | "param_checks" => 5,
+        "sounds" | "pipelines" => 6,
+        _ => 3,
+    }
+}
+
 /// Tables (and arrays of tables) become layers; plain values live in the
 /// inspector. `dialogue` leads, as the part most skins are about.
 fn layers(ui: Ui, table: &TomlTable, selected: &[String]) -> Vec<TreeNode<Arc<str>>> {
@@ -163,7 +181,7 @@ fn layers(ui: Ui, table: &TomlTable, selected: &[String]) -> Vec<TreeNode<Arc<st
         selected: &[String],
     ) -> Vec<TreeNode<Arc<str>>> {
         let mut keys = table.keys().filter(|k| *k != "meta").collect::<Vec<_>>();
-        keys.sort_by_key(|k| (k.as_str() != "dialogue", k.as_str()));
+        keys.sort_by_key(|k| (layer_rank(k), k.as_str()));
         keys.into_iter()
             .filter_map(|key| {
                 let mut child = path.to_vec();
@@ -289,6 +307,15 @@ pub fn side(ui: Ui) -> AnyView {
         .key("editor-design-side")
         .children((
             panel_header(ui.now_t("pkgedit-layers"), decor_tools(ui)),
+            // Which layout layer canvas gestures write: a matter of what is
+            // edited, so it sits with the layers and not with the view.
+            widget(Stack::column(0.).padding_xy(gap::CONTROL, gap::TIGHT)).children(
+                crate::ui::rows::row_w(
+                    TARGET_LABEL_W,
+                    ui.now_t("pkgedit-layout-target"),
+                    canvas_controls::target(ui),
+                ),
+            ),
             widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
                 l.height = Some(LengthSpec::Px(0.));
                 l.flex_grow = Some(1.);
@@ -309,8 +336,8 @@ pub fn side(ui: Ui) -> AnyView {
         .into_any()
 }
 
-/// The stage on the neutral canvas, with its strip above and the sample
-/// text below.
+/// The stage on the neutral canvas under its strip: everything about how
+/// the skin is looked at, in one place.
 fn canvas(ui: Ui) -> AnyView {
     let strip = widget(
         Toolbar::new()
@@ -327,11 +354,13 @@ fn canvas(ui: Ui) -> AnyView {
                 .padding_xy(gap::CONTROL, gap::TIGHT),
         )
         .children((
+            shell::sized(SURFACE_W, preview_panel::surface(ui)),
+            shell::sized(PRESET_W, preview_panel::size_preset(ui)),
+            kit::vrule(),
             shell::sized(MOTION_W, preview_panel::motion(ui)),
             preview_panel::replay(ui),
             kit::vrule(),
             shell::sized(ZOOM_W, preview_panel::zoom(ui)),
-            shell::sized(BACKGROUND_W, preview_panel::background(ui)),
             preview_panel::settings(ui),
             widget(
                 Stack::row(0.)
@@ -374,19 +403,7 @@ fn canvas(ui: Ui) -> AnyView {
         )),
     );
     widget(Stack::fill_column(0.).surface(SemanticColorRole::Background))
-        .children((
-            strip,
-            kit::rule(),
-            stage,
-            kit::rule(),
-            widget(
-                Stack::row(0.)
-                    .width(LengthSpec::Fill)
-                    .padding_xy(gap::CONTROL, gap::TIGHT)
-                    .surface(SemanticColorRole::Surface),
-            )
-            .children(preview_panel::sample(ui)),
-        ))
+        .children((strip, kit::rule(), stage))
         .into_any()
 }
 

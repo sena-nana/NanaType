@@ -16,17 +16,39 @@ use std::sync::Arc;
 
 /// The least room the source editor keeps.
 pub(crate) const SOURCE_MIN_H: f32 = 160.0;
-/// A form's multi-line value, and a short note.
+/// A form's multi-line value.
 pub(crate) const FORM_TEXT_H: f32 = 72.0;
-pub(crate) const NOTE_H: f32 = 56.0;
 
 pub(crate) type Search = (Signal<String>, Signal<usize>);
 
 /// A button handler that sends one editor action.
-pub(crate) fn send(
+pub(crate) fn send<W: nana_ui::runtime::View>(
     action: impl Fn() -> Action + Send + 'static,
-) -> impl FnMut(&mut Button, &Activate, &mut ViewContext<'_, Button>) + Send + 'static {
+) -> impl FnMut(&mut W, &Activate, &mut ViewContext<'_, W>) + Send + 'static {
     move |_, _, cx| cx.dispatch_program_all(Msg::PackageEditor(action()))
+}
+
+/// Run `commit` when focus leaves `field`: with Enter, the way a value typed
+/// into a row is written. The field keeps its own width.
+pub(crate) fn on_blur(
+    field: impl IntoView,
+    commit: impl Fn() -> Option<Msg> + Send + 'static,
+) -> AnyView {
+    widget(
+        Stack::row(0.)
+            .grow(1.)
+            .shrink(1.)
+            .min_width(LengthSpec::Px(0.)),
+    )
+    .on_cx(move |_, e: &nana_ui::runtime::FocusWithinChanged, cx| {
+        if !e.focused
+            && let Some(msg) = commit()
+        {
+            cx.dispatch_program_all(msg);
+        }
+    })
+    .children(field)
+    .into_any()
 }
 
 /// Update a field changed through a picker/template without resetting live typing.

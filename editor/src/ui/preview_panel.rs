@@ -215,7 +215,7 @@ pub fn zoom(ui: Ui) -> AnyView {
 }
 
 /// Checkerboard, white or dark behind the skin.
-pub fn background(ui: Ui) -> AnyView {
+fn background(ui: Ui) -> AnyView {
     bound_select(
         "editor-preview-background",
         ["pkgedit-checker", "pkgedit-white", "pkgedit-dark"]
@@ -231,8 +231,8 @@ pub fn background(ui: Ui) -> AnyView {
     )
 }
 
-/// Less-used stage options behind one button: a typed size and the
-/// personal NanaType settings.
+/// Less-used stage options behind one button: a typed size, what is behind
+/// the skin, the sample line and the personal NanaType settings.
 pub fn settings(ui: Ui) -> AnyView {
     let open = signal(false);
     let host = ui.preview_host;
@@ -253,6 +253,10 @@ pub fn settings(ui: Ui) -> AnyView {
             hint(ui.now_t("pkgedit-stage-size")),
             dimensions(ui),
             size_error(ui),
+            hint(ui.now_t("pkgedit-stage-background")),
+            background(ui),
+            hint(ui.now_t("pkgedit-stage-sample")),
+            sample(ui),
             widget(Checkbox::new(
                 ui.now_t("pkgedit-simulate"),
                 ui.preview_simulate.get_untracked(),
@@ -269,39 +273,23 @@ pub fn settings(ui: Ui) -> AnyView {
 }
 
 /// The sample speaker and text the stage shows.
-pub fn sample(ui: Ui) -> AnyView {
+fn sample(ui: Ui) -> AnyView {
     widget(
-        Stack::row(0.)
-            .gap_step(kit::gap::step::CONTROL)
-            .align(AlignSpec::Start)
+        Stack::column(0.)
+            .gap_step(kit::gap::step::TIGHT)
             .width(LengthSpec::Fill),
     )
     .children((
         widget(
-            Stack::row(0.)
-                .width(LengthSpec::Px(kit::field::XS))
-                .shrink(0.),
+            kit::text_input(ui.preview_speaker.get_untracked())
+                .placeholder(ui.now_t("pkgedit-speaker"))
+                .size(ControlSize::Small),
         )
-        .children(
-            widget(
-                kit::text_input(ui.preview_speaker.get_untracked())
-                    .placeholder(ui.now_t("pkgedit-speaker"))
-                    .size(ControlSize::Small),
-            )
-            .key("editor-preview-speaker")
-            .on(move |e: &TextChanged| ui.preview_speaker.set(e.value.to_string())),
-        ),
-        widget(
-            Stack::row(0.)
-                .grow(1.)
-                .shrink(1.)
-                .min_width(LengthSpec::Px(0.)),
-        )
-        .children(
-            widget(kit::text_area(ui.preview_text.get_untracked()).height(SAMPLE_H))
-                .key("editor-preview-text")
-                .on(move |e: &TextChanged| ui.preview_text.set(e.value.to_string())),
-        ),
+        .key("editor-preview-speaker")
+        .on(move |e: &TextChanged| ui.preview_speaker.set(e.value.to_string())),
+        widget(kit::text_area(ui.preview_text.get_untracked()).height(SAMPLE_H))
+            .key("editor-preview-text")
+            .on(move |e: &TextChanged| ui.preview_text.set(e.value.to_string())),
     ))
     .into_any()
 }
@@ -488,7 +476,7 @@ pub fn stage(ui: Ui) -> AnyView {
     .into_any()
 }
 
-/// The stage alone with its zoom: the files workspace's live preview.
+/// The stage under its own controls: the files workspace's live preview.
 pub fn compact(ui: Ui) -> AnyView {
     widget(
         Stack::column(0.)
@@ -504,9 +492,11 @@ pub fn compact(ui: Ui) -> AnyView {
                 .wrap(true),
         )
         .children((
+            super::shell::sized(COMPACT_SELECT_W, surface(ui)),
             super::shell::sized(COMPACT_SELECT_W, motion(ui)),
             replay(ui),
             super::shell::sized(COMPACT_SELECT_W, zoom(ui)),
+            settings(ui),
             stale(ui),
         )),
         stage(ui),

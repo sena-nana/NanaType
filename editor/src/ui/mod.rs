@@ -7,6 +7,7 @@ mod conflicts;
 pub mod modes;
 mod preview_panel;
 mod properties;
+mod rows;
 pub mod shell;
 pub mod views;
 pub mod window;
@@ -36,6 +37,13 @@ pub enum Drawer {
     Debug,
 }
 
+/// The entry the data workspace's form edits; `None` inside is a new one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataTarget {
+    Data(Option<String>),
+    Pipeline(Option<String>),
+}
+
 /// Shared reactive state. `Copy`: views capture it freely.
 #[derive(Clone, Copy)]
 pub struct Ui {
@@ -50,6 +58,9 @@ pub struct Ui {
     pub search_query: Signal<String>,
     pub search_index: Signal<usize>,
     pub search_replacement: Signal<String>,
+    /// Find and replace shows over the source.
+    pub find_open: Signal<bool>,
+    pub search_field: nana_ui::runtime::view::NodeRef,
     pub canvas_enabled: Signal<bool>,
     pub canvas_focus: Signal<bool>,
     pub canvas_geometry: Signal<Vec<nanatype_frame::ui::editor_geometry::Part>>,
@@ -80,6 +91,18 @@ pub struct Ui {
     pub inspector_width: Signal<f32>,
     pub side_split: nana_ui::runtime::view::NodeRef,
     pub inspector_split: nana_ui::runtime::view::NodeRef,
+    /// The files with a tab in the source pane, in the order they were opened.
+    pub open_files: Signal<Vec<String>>,
+    /// The file each workspace last showed, to come back to.
+    pub mode_files: Signal<Vec<(Mode, String)>>,
+    /// The files the next seal protects, beside `package.toml`.
+    pub protect: Signal<std::collections::BTreeSet<String>>,
+    /// The project menu's "copy as a new package" asks for the new ID.
+    pub derive_open: Signal<bool>,
+    /// What the data workspace's centre shows.
+    pub data_target: Signal<Option<DataTarget>>,
+    /// A rename being written: the form follows it once the entry exists.
+    pub data_follow: Signal<Option<(DataTarget, DataTarget)>>,
     pub post: Signal<Option<PostAction>>,
     /// The open project, if any.
     pub package_editor: Signal<Option<Arc<EditorView>>>,
@@ -128,7 +151,7 @@ impl Ui {
         Self {
             properties_file:signal("skin.toml".into()),properties_path:signal(Vec::new()),file_target:signal(String::new()),
             debug_custom:signal("{\"type\":\"command\",\"id\":\"reset\"}".into()),debug_sequence:signal("[{\"type\":\"line_start\",\"id\":1,\"text\":\"Hello\"},{\"type\":\"line_end\",\"id\":1}]".into()),debug_filter:signal(String::new()),
-            source_views:signal(Default::default()),source_node:nana_ui::runtime::view::node_ref(),search_query:signal(String::new()),search_index:signal(0),search_replacement:signal(String::new()),
+            source_views:signal(Default::default()),source_node:nana_ui::runtime::view::node_ref(),search_query:signal(String::new()),search_index:signal(0),search_replacement:signal(String::new()),find_open:signal(false),search_field:nana_ui::runtime::view::node_ref(),
             canvas_enabled:signal(false),canvas_focus:signal(false),canvas_geometry:signal(Vec::new()),canvas_selection:signal(None),canvas_target:signal(vec!["dialogue".into()]),canvas_preview:signal(None),
             asset: signal(None), audio_gain: signal(0.5),
             preview_host: host, preview_simulate: signal(false), preview_size: signal([String::new(), String::new()]),
@@ -138,6 +161,12 @@ impl Ui {
             side_width: signal(shell::SIDE_W), inspector_width: signal(shell::INSPECTOR_W),
             side_split: nana_ui::runtime::view::node_ref(), inspector_split: nana_ui::runtime::view::node_ref(),
             stage,
+            open_files: signal(Vec::new()),
+            mode_files: signal(Vec::new()),
+            protect: signal(Default::default()),
+            derive_open: signal(false),
+            data_target: signal(None),
+            data_follow: signal(None),
             post: signal(None),
             package_editor: signal(None),
             mode: editor_mode,

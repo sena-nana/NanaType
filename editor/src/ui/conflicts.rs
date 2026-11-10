@@ -2,6 +2,11 @@ use super::{Ui, controls::hint, kit};
 use crate::{msg::Msg, session::Action};
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{Activate, Button, Stack};
+/// The bar's buttons, the size of every other one in the editor.
+fn small(label: String) -> Button {
+    Button::new(label).size(nana_ui::ControlSize::Small)
+}
+
 pub fn view(ui: Ui) -> AnyView {
     dynamic(
         move || {
@@ -21,38 +26,43 @@ pub fn view(ui: Ui) -> AnyView {
                         let keep = path.clone();
                         let accept = path.clone();
                         let copy = path.clone();
-                        widget(Stack::row(0.).wrap(true).gap_step(kit::gap::step::CONTROL))
-                            .children((
-                                hint(format!("{}: {path}", ui.now_t("pkgedit-disk-conflict"))),
-                                widget(Button::new(ui.now_t("pkgedit-keep-local"))).on_cx(
-                                    move |_, _: &Activate, cx| {
-                                        cx.dispatch_program_all(Msg::PackageEditor(
-                                            Action::ResolveConflict {
-                                                path: keep.clone(),
-                                                keep: true,
-                                            },
-                                        ))
-                                    },
-                                ),
-                                widget(Button::new(ui.now_t("pkgedit-save-copy"))).on_cx(
-                                    move |_, _: &Activate, cx| {
-                                        cx.dispatch_program_all(Msg::PackageEditor(
-                                            Action::CopyConflict(copy.clone()),
-                                        ))
-                                    },
-                                ),
-                                widget(Button::new(ui.now_t("pkgedit-accept-disk"))).on_cx(
-                                    move |_, _: &Activate, cx| {
-                                        cx.dispatch_program_all(Msg::PackageEditor(
-                                            Action::ResolveConflict {
-                                                path: accept.clone(),
-                                                keep: false,
-                                            },
-                                        ))
-                                    },
-                                ),
-                            ))
-                            .into_any()
+                        widget(
+                            Stack::row(0.)
+                                .wrap(true)
+                                .align(nana_ui_core::AlignSpec::Center)
+                                .gap_step(kit::gap::step::CONTROL),
+                        )
+                        .children((
+                            hint(format!("{}: {path}", ui.now_t("pkgedit-disk-conflict"))),
+                            widget(small(ui.now_t("pkgedit-keep-local"))).on_cx(
+                                move |_, _: &Activate, cx| {
+                                    cx.dispatch_program_all(Msg::PackageEditor(
+                                        Action::ResolveConflict {
+                                            path: keep.clone(),
+                                            keep: true,
+                                        },
+                                    ))
+                                },
+                            ),
+                            widget(small(ui.now_t("pkgedit-save-copy"))).on_cx(
+                                move |_, _: &Activate, cx| {
+                                    cx.dispatch_program_all(Msg::PackageEditor(
+                                        Action::CopyConflict(copy.clone()),
+                                    ))
+                                },
+                            ),
+                            widget(small(ui.now_t("pkgedit-accept-disk"))).on_cx(
+                                move |_, _: &Activate, cx| {
+                                    cx.dispatch_program_all(Msg::PackageEditor(
+                                        Action::ResolveConflict {
+                                            path: accept.clone(),
+                                            keep: false,
+                                        },
+                                    ))
+                                },
+                            ),
+                        ))
+                        .into_any()
                     })
                     .collect::<Vec<_>>(),
             )

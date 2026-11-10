@@ -588,8 +588,8 @@ fn a_layer_selects_its_part_its_properties_and_its_source() {
         agent.accessibility_dump().iter().any(|n| n
             .agent_path
             .as_deref()
-            .is_some_and(|p| p.ends_with("editor-section-text"))),
-        "the inspector edits the table's own block"
+            .is_some_and(|p| p.ends_with("editor-section-reveal"))),
+        "the inspector leads to the table's own block in the source"
     );
     let captures = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

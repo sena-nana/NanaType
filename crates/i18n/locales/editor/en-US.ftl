@@ -48,7 +48,7 @@ pkgedit-close-save = Save and close
 pkgedit-close-discard = Close without saving
 pkgedit-tab-files = Files
 pkgedit-tab-package = Package
-pkgedit-tab-signing = Protection & signing
+pkgedit-tab-signing = Publish
 pkgedit-tab-preview = Preview
 pkgedit-import = Import asset…
 pkgedit-remove = Remove file
@@ -64,19 +64,18 @@ pkgedit-file-format = Format
 pkgedit-file-size = Size
 pkgedit-file-dependency = From dependency (read-only)
 pkgedit-data-declared = Declared as data
-pkgedit-problems = Problems (click to locate)
+pkgedit-problems = Problems
 pkgedit-no-problems = No problems found.
 pkgedit-manifest-invalid = package.toml cannot be parsed; fix it under Files first.
 pkgedit-manifest-protected = package.toml is protected by the signature and is read-only. Create a derived copy to change it.
 pkgedit-version = Version
 pkgedit-capabilities = Capabilities (enabling skin or Lua adds starter files)
-pkgedit-dependencies-hint = Dependencies, one "package-id@exact-version" per line; applying bundles them from installed packages.
+pkgedit-dependencies-hint = Dependencies are recorded as "package-id@exact-version" and bundled from the installed packages when added.
 pkgedit-group-basic = Basics
 pkgedit-group-listing = Compatibility and listing
 pkgedit-capabilities-title = Capabilities
 pkgedit-dependencies-title = Dependencies
 pkgedit-dependency-add = Add an installed package
-pkgedit-apply = Apply
 pkgedit-data = Declared data
 pkgedit-data-none = No data declared.
 pkgedit-pipelines = Pipelines
@@ -89,7 +88,6 @@ pkgedit-data-format = Format
 pkgedit-data-version = Format version
 pkgedit-data-constraints = JSON constraints
 pkgedit-data-constraints-hint = JSON constraints are optional and apply to JSON data only, for example {"{"}"type": "object", "required": ["items"]{"}"}. Leave empty for no limits.
-pkgedit-entry-edit = Edit
 pkgedit-entry-remove = Remove
 pkgedit-entry-remove-question = Remove this declaration?
 pkgedit-pipeline-add = Add pipeline
@@ -118,7 +116,7 @@ pkgedit-derive-hint = A derived copy gets a new package ID, records its source a
 pkgedit-signing-title = Signature
 pkgedit-key-title = Signing key on this computer
 pkgedit-protect-title = Protected files
-pkgedit-derive-title = Derived copy
+pkgedit-derive-title = Copy as a new package…
 pkgedit-derive-id = New package ID
 pkgedit-preview-none = This project has no skin, or the skin has not passed its checks yet.
 pkgedit-debug-no-lua = This project does not declare the Lua capability.
@@ -127,7 +125,7 @@ pkgedit-debug-trust = I reviewed the current source and trust it to run in the d
 pkgedit-debug-start = Start
 pkgedit-debug-stop = Stop
 pkgedit-debug-clear = Clear results
-pkgedit-debug-events = Send a test event
+pkgedit-debug-events = Test events
 pkgedit-debug-send = Send
 pkgedit-debug-invalid-json = An event must be a JSON object with a string "type" field.
 pkgedit-debug-error = Script error
@@ -145,7 +143,6 @@ pkgedit-undo = Undo
 
 pkgedit-redo = Redo
 
-pkgedit-discard-form = Discard form changes
 
 pkgedit-recovery = Recovery available
 
@@ -165,7 +162,7 @@ pkgedit-narrow = Narrow
 
 pkgedit-default-size = Default size
 
-pkgedit-static = Still / stop
+pkgedit-static = Still
 
 pkgedit-play = Play
 
@@ -218,7 +215,7 @@ pkgedit-base = Base skin
 
 
 
-pkgedit-cover = Cover path
+pkgedit-cover = Cover
 
 pkgedit-description = Description
 
@@ -226,7 +223,7 @@ pkgedit-disk-conflict = Disk conflict
 
 pkgedit-duplicate = Duplicate element
 
-pkgedit-event-sequence = Test event sequence (JSON array, up to 32)
+pkgedit-event-sequence = Event sequence (JSON array, up to 32)
 
 pkgedit-file-target = Package path to create or move to
 
@@ -258,7 +255,6 @@ pkgedit-reference-manual = Program reference; check manually
 
 pkgedit-rename = Rename / move
 
-pkgedit-rename-question = Change the file path and the references below? Check program references manually.
 
 pkgedit-replace = Replace file…
 
@@ -312,14 +308,10 @@ pkgedit-layers = Layers
 pkgedit-canvas = Canvas
 pkgedit-inspector = Inspector
 pkgedit-add-field = Add field
-pkgedit-section-source = This table's TOML
 pkgedit-section-reveal = Show in source
-pkgedit-section-inline = This table has no header of its own; edit it in the table that contains it.
-pkgedit-file-operations = New, move and replace
 pkgedit-files-none = No files of this kind.
 pkgedit-lua-sources = Lua sources
 pkgedit-sound-files = Audio files
-pkgedit-sound-declarations = Sound declarations
 pkgedit-layer-dialogue = Dialogue
 pkgedit-layer-nameplate = Name tag
 pkgedit-layer-portrait = Portrait
@@ -340,3 +332,47 @@ pkgedit-layer-sounds = Sounds
 pkgedit-layer-responsive = Responsive
 pkgedit-layer-pipelines = Pipelines
 pkgedit-layer-frame = Frame
+pkgedit-cover-none = No cover
+pkgedit-data-select = Choose a data entry or a pipeline on the left, or add one with +.
+pkgedit-debug-running = Script running
+pkgedit-debug-stopped = Script not running
+pkgedit-debug-title = Debug
+pkgedit-layout-target = Edits
+pkgedit-pipeline-inputs-title = Inputs
+pkgedit-pipeline-params-title = Parameters
+pkgedit-problem-error = Error
+pkgedit-problem-warning = Warning
+pkgedit-problems-more = { $count } more not shown
+pkgedit-protect-all = Protect all
+pkgedit-protect-none = Protect package.toml only
+pkgedit-publish-check = Check
+pkgedit-seal-status = Seal
+pkgedit-side-toggle = Show or hide the side panel
+pkgedit-sound-add-variant = Add a variant
+pkgedit-sound-advance = Continue
+pkgedit-sound-audition = Audition
+pkgedit-sound-effects = Named effects
+pkgedit-sound-effects-hint = [se=name] in a line plays the effect declared here.
+pkgedit-sound-lines = Line events
+pkgedit-sound-none = None
+pkgedit-sound-open = Line starts
+pkgedit-sound-se-add = Add an effect
+pkgedit-sound-se-file = Choose a sound to add it
+pkgedit-sound-se-invalid = An effect name uses letters, digits, _ and - only, and must not repeat an existing one.
+pkgedit-sound-se-name = Name
+pkgedit-sound-select = Choose an audio file on the left to audition it.
+pkgedit-sound-typing = Typing sound
+pkgedit-sound-typing-hint = Each character plays one of the variants; the values below set volume, pitch jitter and how often it plays.
+pkgedit-sound-typing-none = No typing sound variants yet.
+pkgedit-sound-used = Used by
+pkgedit-stage-background = Background
+pkgedit-stage-sample = Sample speaker and text
+pkgedit-stop = Stop
+pkgedit-tab-close = Close tab
+pkgedit-volume = Audition volume
+pkgedit-id = Package ID
+pkgedit-sound-volume = Volume
+pkgedit-sound-pitch-jitter = Pitch jitter
+pkgedit-sound-every-n = Play every N characters
+pkgedit-sound-min-interval = Minimum interval (ms)
+pkgedit-sound-skip-punct = Skip punctuation

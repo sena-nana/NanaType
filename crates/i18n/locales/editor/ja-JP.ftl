@@ -45,7 +45,7 @@ pkgedit-close-save = 保存して閉じる
 pkgedit-close-discard = 保存せずに閉じる
 pkgedit-tab-files = ファイル
 pkgedit-tab-package = パッケージ情報
-pkgedit-tab-signing = 保護と署名
+pkgedit-tab-signing = 公開
 pkgedit-tab-preview = プレビュー
 pkgedit-import = 素材を読み込む…
 pkgedit-remove = ファイルを削除
@@ -61,19 +61,18 @@ pkgedit-file-format = 形式
 pkgedit-file-size = サイズ
 pkgedit-file-dependency = 依存パッケージのファイル（読み取り専用）
 pkgedit-data-declared = データとして宣言
-pkgedit-problems = 問題（クリックで移動）
+pkgedit-problems = 問題
 pkgedit-no-problems = 問題は見つかりません。
 pkgedit-manifest-invalid = package.toml を解析できません。先に「ファイル」で修正してください。
 pkgedit-manifest-protected = package.toml は署名で保護されているため閲覧のみです。変更するには派生コピーを作成してください。
 pkgedit-version = バージョン
 pkgedit-capabilities = 機能（スキンや Lua を有効にすると初期ファイルを追加）
-pkgedit-dependencies-hint = 依存パッケージ。1 行に 1 つ「パッケージID@正確なバージョン」。適用するとインストール済みパッケージから下書きに同梱します。
+pkgedit-dependencies-hint = 依存は「パッケージID@正確なバージョン」で記録し、追加するとインストール済みパッケージから下書きに同梱します。
 pkgedit-group-basic = 基本情報
 pkgedit-group-listing = 互換性と表示
 pkgedit-capabilities-title = 機能
 pkgedit-dependencies-title = 依存関係
 pkgedit-dependency-add = インストール済みのパッケージを追加
-pkgedit-apply = 適用
 pkgedit-data = 宣言済みデータ
 pkgedit-data-none = データは宣言されていません。
 pkgedit-pipelines = 処理パイプライン
@@ -86,7 +85,6 @@ pkgedit-data-format = 形式
 pkgedit-data-version = 形式バージョン
 pkgedit-data-constraints = JSON 制約
 pkgedit-data-constraints-hint = JSON 制約は任意で、JSON データにのみ使います。例：{"{"}"type": "object", "required": ["items"]{"}"}。空欄なら制限しません。
-pkgedit-entry-edit = 編集
 pkgedit-entry-remove = 削除
 pkgedit-entry-remove-question = この宣言を削除しますか？
 pkgedit-pipeline-add = パイプラインを追加
@@ -115,7 +113,7 @@ pkgedit-derive-hint = 派生コピーは新しいパッケージ ID を使い、
 pkgedit-signing-title = 署名
 pkgedit-key-title = このPCの署名鍵
 pkgedit-protect-title = 保護するファイル
-pkgedit-derive-title = 派生コピー
+pkgedit-derive-title = 新しいパッケージとして複製…
 pkgedit-derive-id = 新しいパッケージ ID
 pkgedit-preview-none = このプロジェクトにはスキンがないか、まだ検証を通過していません。
 pkgedit-debug-no-lua = このプロジェクトは Lua 機能を宣言していません。
@@ -124,7 +122,7 @@ pkgedit-debug-trust = 現在のソースを確認し、デバッグプロセス�
 pkgedit-debug-start = 開始
 pkgedit-debug-stop = 停止
 pkgedit-debug-clear = 結果を消去
-pkgedit-debug-events = テストイベントを送信
+pkgedit-debug-events = テストイベント
 pkgedit-debug-send = 送信
 pkgedit-debug-invalid-json = イベントは文字列の type フィールドを持つ JSON オブジェクトである必要があります。
 pkgedit-debug-error = スクリプトエラー
@@ -142,7 +140,6 @@ pkgedit-undo = 元に戻す
 
 pkgedit-redo = やり直す
 
-pkgedit-discard-form = フォームの変更を破棄
 
 pkgedit-recovery = 復元データがあります
 
@@ -162,7 +159,7 @@ pkgedit-narrow = 狭いウィンドウ
 
 pkgedit-default-size = 既定サイズ
 
-pkgedit-static = 静止・停止
+pkgedit-static = 静止
 
 pkgedit-play = 再生
 
@@ -215,7 +212,7 @@ pkgedit-base = 基本スキン
 
 
 
-pkgedit-cover = カバー画像のパス
+pkgedit-cover = カバー画像
 
 pkgedit-description = 説明
 
@@ -223,7 +220,7 @@ pkgedit-disk-conflict = ディスクとの競合
 
 pkgedit-duplicate = 要素を複製
 
-pkgedit-event-sequence = テストイベント列（JSON 配列、最大 32 件）
+pkgedit-event-sequence = イベント列（JSON 配列、最大 32 件）
 
 pkgedit-file-target = 作成・移動先のパッケージ内パス
 
@@ -255,7 +252,6 @@ pkgedit-reference-manual = プログラム内の参照・手動確認が必要
 
 pkgedit-rename = 名前変更・移動
 
-pkgedit-rename-question = ファイルパスと以下の参照を変更しますか。プログラム内の参照は手動で確認してください。
 
 pkgedit-replace = ファイルを置換…
 
@@ -309,14 +305,10 @@ pkgedit-layers = レイヤー
 pkgedit-canvas = キャンバス
 pkgedit-inspector = インスペクター
 pkgedit-add-field = フィールドを追加
-pkgedit-section-source = このテーブルの TOML
 pkgedit-section-reveal = ソースで表示
-pkgedit-section-inline = このテーブルには独自の見出しがありません。含まれるテーブルで編集してください。
-pkgedit-file-operations = 新規・移動・置き換え
 pkgedit-files-none = この種類のファイルはありません。
 pkgedit-lua-sources = Lua ソース
 pkgedit-sound-files = 音声ファイル
-pkgedit-sound-declarations = 効果音の宣言
 pkgedit-layer-dialogue = 会話ボックス
 pkgedit-layer-nameplate = 名札
 pkgedit-layer-portrait = アバター
@@ -337,3 +329,47 @@ pkgedit-layer-sounds = 効果音
 pkgedit-layer-responsive = レスポンシブ
 pkgedit-layer-pipelines = パイプライン
 pkgedit-layer-frame = フレーム
+pkgedit-cover-none = カバーなし
+pkgedit-data-select = 左でデータまたはパイプラインを選ぶか、+ で追加します。
+pkgedit-debug-running = スクリプト実行中
+pkgedit-debug-stopped = スクリプト停止中
+pkgedit-debug-title = デバッグ
+pkgedit-layout-target = 編集対象
+pkgedit-pipeline-inputs-title = 入力
+pkgedit-pipeline-params-title = パラメーター
+pkgedit-problem-error = エラー
+pkgedit-problem-warning = 警告
+pkgedit-problems-more = ほか { $count } 件は表示していません
+pkgedit-protect-all = すべて保護
+pkgedit-protect-none = package.toml だけ保護
+pkgedit-publish-check = 検証
+pkgedit-seal-status = 署名の状態
+pkgedit-side-toggle = サイドパネルの表示切替
+pkgedit-sound-add-variant = バリエーションを追加
+pkgedit-sound-advance = 次へ
+pkgedit-sound-audition = 試聴
+pkgedit-sound-effects = 名前付き効果音
+pkgedit-sound-effects-hint = 本文の [se=名前] がここで宣言した効果音を鳴らします。
+pkgedit-sound-lines = セリフのイベント
+pkgedit-sound-none = なし
+pkgedit-sound-open = セリフ開始
+pkgedit-sound-se-add = 効果音を追加
+pkgedit-sound-se-file = 音声を選ぶと追加します
+pkgedit-sound-se-invalid = 効果音の名前は英数字と _ と - のみで、既存の名前と重複できません。
+pkgedit-sound-se-name = 名前
+pkgedit-sound-select = 左で音声ファイルを選ぶと試聴できます。
+pkgedit-sound-typing = タイプ音
+pkgedit-sound-typing-hint = 1 文字ごとにバリエーションから 1 つ再生します。下の値で音量、ピッチの揺れ、再生間隔を決めます。
+pkgedit-sound-typing-none = タイプ音のバリエーションはまだありません。
+pkgedit-sound-used = 使用しているイベント
+pkgedit-stage-background = 背景
+pkgedit-stage-sample = サンプルの話者とテキスト
+pkgedit-stop = 停止
+pkgedit-tab-close = タブを閉じる
+pkgedit-volume = 試聴の音量
+pkgedit-id = パッケージ ID
+pkgedit-sound-volume = 音量
+pkgedit-sound-pitch-jitter = ピッチの揺れ
+pkgedit-sound-every-n = 何文字ごとに再生
+pkgedit-sound-min-interval = 最小間隔（ミリ秒）
+pkgedit-sound-skip-punct = 句読点をスキップ

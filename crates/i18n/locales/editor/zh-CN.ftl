@@ -45,7 +45,7 @@ pkgedit-close-save = 保存并关闭
 pkgedit-close-discard = 不保存，关闭
 pkgedit-tab-files = 文件
 pkgedit-tab-package = 包信息
-pkgedit-tab-signing = 保护与签名
+pkgedit-tab-signing = 发布
 pkgedit-tab-preview = 预览
 pkgedit-import = 导入素材…
 pkgedit-remove = 移除文件
@@ -61,19 +61,18 @@ pkgedit-file-format = 格式
 pkgedit-file-size = 大小
 pkgedit-file-dependency = 来自依赖包（只读）
 pkgedit-data-declared = 声明为数据
-pkgedit-problems = 问题（点击定位）
+pkgedit-problems = 问题
 pkgedit-no-problems = 没有发现问题。
 pkgedit-manifest-invalid = package.toml 无法解析，请先在“文件”中修正。
 pkgedit-manifest-protected = package.toml 受签名保护，只能查看。创建衍生副本后才能修改。
 pkgedit-version = 版本
 pkgedit-capabilities = 能力（启用皮肤或 Lua 时会补上起始文件）
-pkgedit-dependencies-hint = 依赖，每行一个“包ID@精确版本”；应用后从已安装的包打包进草稿。
+pkgedit-dependencies-hint = 依赖按“包ID@精确版本”记录，添加后从已安装的包打包进草稿。
 pkgedit-group-basic = 基本信息
 pkgedit-group-listing = 兼容与展示
 pkgedit-capabilities-title = 能力
 pkgedit-dependencies-title = 依赖
 pkgedit-dependency-add = 添加已安装的包
-pkgedit-apply = 应用
 pkgedit-data = 声明的数据
 pkgedit-data-none = 没有声明数据。
 pkgedit-pipelines = 处理管线
@@ -86,7 +85,6 @@ pkgedit-data-format = 格式
 pkgedit-data-version = 格式版本
 pkgedit-data-constraints = JSON 约束
 pkgedit-data-constraints-hint = JSON 约束可选，只用于 JSON 数据，例如 {"{"}"type": "object", "required": ["items"]{"}"}。留空表示不限制。
-pkgedit-entry-edit = 编辑
 pkgedit-entry-remove = 删除
 pkgedit-entry-remove-question = 删除这条声明？
 pkgedit-pipeline-add = 添加管线
@@ -115,7 +113,7 @@ pkgedit-derive-hint = 衍生副本使用新的包 ID，记录来源并去除签�
 pkgedit-signing-title = 签名
 pkgedit-key-title = 本机签名密钥
 pkgedit-protect-title = 受保护的文件
-pkgedit-derive-title = 衍生副本
+pkgedit-derive-title = 复制为新包…
 pkgedit-derive-id = 新包 ID
 pkgedit-preview-none = 此工程没有皮肤，或皮肤还没通过校验。
 pkgedit-debug-no-lua = 此工程没有声明 Lua 能力。
@@ -124,7 +122,7 @@ pkgedit-debug-trust = 我已审查当前源码，信任它在调试进程中运�
 pkgedit-debug-start = 启动
 pkgedit-debug-stop = 停止
 pkgedit-debug-clear = 清除结果
-pkgedit-debug-events = 发送测试事件
+pkgedit-debug-events = 测试事件
 pkgedit-debug-send = 发送
 pkgedit-debug-invalid-json = 事件必须是带有字符串 type 字段的 JSON 对象。
 pkgedit-debug-error = 脚本错误
@@ -142,7 +140,6 @@ pkgedit-undo = 撤销
 
 pkgedit-redo = 重做
 
-pkgedit-discard-form = 放弃表单修改
 
 pkgedit-recovery = 发现恢复快照
 
@@ -162,7 +159,7 @@ pkgedit-narrow = 窄窗
 
 pkgedit-default-size = 默认尺寸
 
-pkgedit-static = 静态／停止
+pkgedit-static = 静态
 
 pkgedit-play = 播放
 
@@ -215,7 +212,7 @@ pkgedit-base = 基础皮肤
 
 
 
-pkgedit-cover = 封面路径
+pkgedit-cover = 封面
 
 pkgedit-description = 描述
 
@@ -223,7 +220,7 @@ pkgedit-disk-conflict = 磁盘冲突
 
 pkgedit-duplicate = 复制元素
 
-pkgedit-event-sequence = 测试事件序列（JSON 数组，最多 32 项）
+pkgedit-event-sequence = 事件序列（JSON 数组，最多 32 项）
 
 pkgedit-file-target = 新建／移动到的包内路径
 
@@ -255,7 +252,6 @@ pkgedit-reference-manual = 程序引用，需要人工确认
 
 pkgedit-rename = 重命名／移动
 
-pkgedit-rename-question = 确认修改文件路径及以下引用；程序中的引用需要自行检查。
 
 pkgedit-replace = 替换文件…
 
@@ -309,14 +305,10 @@ pkgedit-layers = 图层
 pkgedit-canvas = 画布
 pkgedit-inspector = 属性
 pkgedit-add-field = 新增字段
-pkgedit-section-source = 本节 TOML
 pkgedit-section-reveal = 在源码中定位
-pkgedit-section-inline = 这一节没有单独的表头，在源码中所在的表里修改。
-pkgedit-file-operations = 新建、移动与替换
 pkgedit-files-none = 没有这类文件。
 pkgedit-lua-sources = Lua 源码
 pkgedit-sound-files = 音频文件
-pkgedit-sound-declarations = 音效声明
 pkgedit-layer-dialogue = 对话框
 pkgedit-layer-nameplate = 姓名牌
 pkgedit-layer-portrait = 头像
@@ -337,3 +329,47 @@ pkgedit-layer-sounds = 音效
 pkgedit-layer-responsive = 响应式
 pkgedit-layer-pipelines = 管线
 pkgedit-layer-frame = 框体
+pkgedit-cover-none = 无封面
+pkgedit-data-select = 在左侧选择一项数据或管线，或用 + 添加。
+pkgedit-debug-running = 脚本运行中
+pkgedit-debug-stopped = 脚本未运行
+pkgedit-debug-title = 调试
+pkgedit-layout-target = 编辑层
+pkgedit-pipeline-inputs-title = 输入
+pkgedit-pipeline-params-title = 参数
+pkgedit-problem-error = 错误
+pkgedit-problem-warning = 警告
+pkgedit-problems-more = 还有 { $count } 项未显示
+pkgedit-protect-all = 全部保护
+pkgedit-protect-none = 只保护 package.toml
+pkgedit-publish-check = 校验
+pkgedit-seal-status = 签名状态
+pkgedit-side-toggle = 显示或隐藏侧栏
+pkgedit-sound-add-variant = 添加变体
+pkgedit-sound-advance = 继续
+pkgedit-sound-audition = 试听
+pkgedit-sound-effects = 命名音效
+pkgedit-sound-effects-hint = 文本中的 [se=名称] 播放这里声明的音效。
+pkgedit-sound-lines = 对话事件
+pkgedit-sound-none = 无
+pkgedit-sound-open = 对话开始
+pkgedit-sound-se-add = 添加音效
+pkgedit-sound-se-file = 选择音频即添加
+pkgedit-sound-se-invalid = 音效名称只能使用字母、数字、_ 和 -，且不能与已有名称重复。
+pkgedit-sound-se-name = 名称
+pkgedit-sound-select = 在左侧选择一个音频文件来试听。
+pkgedit-sound-typing = 打字音
+pkgedit-sound-typing-hint = 每个字符从变体中取一个播放；下面的数值决定音量、音高浮动和播放间隔。
+pkgedit-sound-typing-none = 还没有打字音变体。
+pkgedit-sound-used = 被这些事件使用
+pkgedit-stage-background = 背景
+pkgedit-stage-sample = 示例说话人与文本
+pkgedit-stop = 停止
+pkgedit-tab-close = 关闭标签
+pkgedit-volume = 试听音量
+pkgedit-id = 包 ID
+pkgedit-sound-volume = 音量
+pkgedit-sound-pitch-jitter = 音高浮动
+pkgedit-sound-every-n = 每几个字符播放
+pkgedit-sound-min-interval = 最小间隔（毫秒）
+pkgedit-sound-skip-punct = 跳过标点

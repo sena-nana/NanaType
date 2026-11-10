@@ -1,5 +1,6 @@
 //! The inspector: the declared table the layer tree selects, one compact row
-//! per value, and that table's own source. The source remains authoritative.
+//! per value, written when Enter is pressed or focus leaves it. The source
+//! remains authoritative and is one click away.
 use super::{Ui, controls::hint, kit, views::buffer};
 use crate::session::EditorView;
 use crate::{msg::Msg, session::Action};
@@ -18,8 +19,6 @@ use std::sync::Arc;
 
 /// The inspector's label column.
 const LABEL_W: f32 = 104.0;
-/// The section source editor.
-const SECTION_H: f32 = 140.0;
 /// A new field's value.
 const NEW_VALUE_H: f32 = 64.0;
 
@@ -155,7 +154,7 @@ pub fn inspector(ui: Ui) -> AnyView {
                 return hint(ui.now_t("pkgedit-property-select"));
             };
             let editable = view.files.iter().any(|f| f.path == *file && f.editable);
-            let mut rows = vec![title(ui, file, path_value, editable)];
+            let mut rows = vec![title(ui, file, path_value, editable, &view)];
             let (groups, values): (Vec<_>, Vec<_>) = table
                 .iter()
                 .partition(|(_, v)| matches!(v, Value::Table(t) if !t.contains_key("param")));
@@ -167,7 +166,9 @@ pub fn inspector(ui: Ui) -> AnyView {
                 }
                 let mut target = path_value.clone();
                 target.push(key.clone());
-                rows.push(property(ui, file, &target, key, value, &local, editable));
+                rows.push(property(
+                    ui, file, &target, key, value, &local, editable, LABEL_W,
+                ));
             }
             for (key, _) in groups {
                 let mut target = path_value.clone();
@@ -188,7 +189,6 @@ pub fn inspector(ui: Ui) -> AnyView {
                 );
             }
             rows.push(add_field(ui, file, path_value, table, editable));
-            rows.push(section_source(ui, file, path_value, editable));
             widget(
                 Stack::column(0.)
                     .gap_step(kit::gap::step::TIGHT)
@@ -203,7 +203,7 @@ pub fn inspector(ui: Ui) -> AnyView {
 }
 
 /// The table's name, where it sits, and the way back up.
-fn title(ui: Ui, file: &str, path_value: &[String], editable: bool) -> AnyView {
+fn title(ui: Ui, file: &str, path_value: &[String], editable: bool, view: &EditorView) -> AnyView {
     let path = ui.properties_path;
     let name = path_value
         .last()
@@ -235,6 +235,7 @@ fn title(ui: Ui, file: &str, path_value: &[String], editable: bool) -> AnyView {
                     .min_width(LengthSpec::Px(0.)),
             )
             .children(widget(kit::Type::Strong.text(name).truncating())),
+            reveal_source(ui, file, path_value, view),
         )),
         widget(
             Text::new(
@@ -400,109 +401,37 @@ fn add_field(
         .into_any()
 }
 
-/// The table's own block of source, edited in place: everything outside
-/// the block stays byte for byte, comments included.
-fn section_source(ui: Ui, file: &str, path_value: &[String], editable: bool) -> AnyView {
-    let Some(text) = ui
-        .package_editor
-        .with_untracked(|v| v.as_ref().and_then(|v| v.documents.get(file).cloned()))
-    else {
-        return widget(Stack::column(0.)).into_any();
-    };
-    let range = (!path_value.is_empty())
+/// Show the table's block in the source: the one place its text is edited.
+fn reveal_source(ui: Ui, file: &str, path_value: &[String], view: &EditorView) -> Option<AnyView> {
+    let text = view.documents.get(file)?.clone();
+    let (start, end) = (!path_value.is_empty())
         .then(|| table_range(&text, path_value))
-        .flatten();
-    let heading = widget(
-        Stack::row(0.)
-            .gap_step(kit::gap::step::TIGHT)
-            .align(AlignSpec::Center),
-    )
-    .children((
-        widget(
-            Stack::row(0.)
-                .grow(1.)
-                .shrink(1.)
-                .min_width(LengthSpec::Px(0.)),
-        )
-        .children(widget(
-            kit::Type::Overline.text(ui.now_t("pkgedit-section-source")),
-        )),
-        range.map(|(start, end)| {
-            let file = file.to_owned();
-            let text = text.clone();
-            widget(super::shell::tool(
-                ti::CODE,
-                ui.now_t("pkgedit-section-reveal"),
-            ))
-            .key("editor-section-reveal")
-            .on_cx(move |_, _: &Activate, cx| {
-                let (line, column) = editor::line_column(&text, start);
-                ui.split_source.set(true);
-                cx.dispatch_program_all(super::shell::reveal(
-                    ui,
-                    editor::SourceDiagnostic {
-                        path: file.clone(),
-                        offset: start,
-                        len: end.saturating_sub(start).min(1),
-                        line,
-                        column,
-                        level: editor::Level::Warning,
-                        message: String::new(),
-                    },
-                ));
-            })
-        }),
-    ));
-    let Some((start, end)) = range else {
-        return widget(Stack::column(0.).gap_step(kit::gap::step::TIGHT))
-            .children((
-                kit::rule(),
-                heading,
-                hint(ui.now_t("pkgedit-section-inline")),
-            ))
-            .into_any();
-    };
-    let block = text[start..end].to_owned();
-    let draft = signal(block.clone());
+        .flatten()?;
     let file = file.to_owned();
-    widget(Stack::column(0.).gap_step(kit::gap::step::TIGHT))
-        .key("editor-section-source")
-        .children((
-            kit::rule(),
-            heading,
-            widget({
-                let mut area = kit::text_area(block.clone())
-                    .height(SECTION_H)
-                    .read_only(!editable);
-                area.code_editing = Some(nana_ui::runtime::CodeEditing::new("#", "    "));
-                super::mono(Arc::make_mut(&mut area.style.layout));
-                area
-            })
-            .key("editor-section-text")
-            .on(move |e: &TextChanged| draft.set(e.value.to_string())),
-            widget(
-                Stack::row(0.)
-                    .width(LengthSpec::Fill)
-                    .justify(nana_ui_core::JustifySpec::End),
-            )
-            .children(
-                widget(button(ui, "pkgedit-apply"))
-                    .key("editor-section-apply")
-                    .bind(move |b: &mut Button| {
-                        b.disabled = !editable || draft.with(|d| *d == block)
-                    })
-                    .on_cx(move |_, _: &Activate, cx| {
-                        let mut next = text[..start].to_owned();
-                        next.push_str(&draft.get_untracked());
-                        next.push_str(&text[end..]);
-                        cx.dispatch_program_all(Msg::PackageEditor(Action::Edit {
-                            path: file.clone(),
-                            text: next,
-                        }));
-                    }),
-            ),
+    Some(
+        widget(super::shell::tool(
+            ti::CODE,
+            ui.now_t("pkgedit-section-reveal"),
         ))
-        .into_any()
+        .key("editor-section-reveal")
+        .on_cx(move |_, _: &Activate, cx| {
+            let (line, column) = editor::line_column(&text, start);
+            ui.split_source.set(true);
+            cx.dispatch_program_all(super::shell::reveal(
+                ui,
+                editor::SourceDiagnostic {
+                    path: file.clone(),
+                    offset: start,
+                    len: end.saturating_sub(start).min(1),
+                    line,
+                    column,
+                    level: editor::Level::Warning,
+                    message: String::new(),
+                },
+            ));
+        })
+        .into_any(),
+    )
 }
 
 /// A numeric value that scrubs: whole numbers step by one, others by a tenth.
@@ -514,7 +443,10 @@ fn number(value: &Value) -> Option<(f64, bool)> {
     }
 }
 
-fn property(
+/// One value's row: `caption` in a column `label_w` wide, the control that
+/// fits the value, and its tools.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn property(
     ui: Ui,
     file: &str,
     path: &[String],
@@ -522,6 +454,7 @@ fn property(
     value: &Value,
     local: &TomlTable,
     editable: bool,
+    label_w: f32,
 ) -> AnyView {
     let bound =
         editor::bound_at(local, path) || matches!(value,Value::Table(t) if t.contains_key("param"));
@@ -529,10 +462,11 @@ fn property(
         Value::String(s) => s.clone(),
         _ => editor::literal(value),
     };
-    let raw = buffer(ui, format!("properties.{file}:{path:?}"), text);
+    let raw = buffer(ui, format!("properties.{file}:{path:?}"), text.clone());
     let unbind = signal(false);
     let string = matches!(value, Value::String(_));
     let key = format!("editor-property:{file}:{}", path.join("."));
+    let original = text.clone();
     let commit = {
         let f = file.to_owned();
         let p = path.to_vec();
@@ -545,6 +479,27 @@ fn property(
             })
         }
     };
+    // What Enter or leaving the field writes: nothing while the text is
+    // what the source already says.
+    let sent = signal(None::<String>);
+    let typed = {
+        let commit = commit.clone();
+        move || {
+            let value = raw.get_untracked();
+            if value == original && !unbind.get_untracked()
+                || sent.with_untracked(|s| s.as_ref() == Some(&value))
+            {
+                return None;
+            }
+            // Enter and then leaving the field writes once.
+            sent.set(Some(value.clone()));
+            Some(commit(if string {
+                serde_json::to_string(&value).unwrap_or_default()
+            } else {
+                value
+            }))
+        }
+    };
     let scrub = number(value).filter(|_| !bound);
     let control = if let Value::Boolean(b) = value {
         widget(
@@ -552,7 +507,13 @@ fn property(
         )
         .key(key)
         .bind(move |c: &mut Checkbox| c.checked = raw.get().parse().unwrap_or(false))
-        .on(move |e: &ToggleChanged| raw.set(e.checked.to_string()))
+        .on_cx({
+            let commit = commit.clone();
+            move |_, e: &ToggleChanged, cx| {
+                raw.set(e.checked.to_string());
+                cx.dispatch_program_all(commit(e.checked.to_string()));
+            }
+        })
         .into_any()
     } else if let Some((initial, whole)) = scrub {
         let commit = commit.clone();
@@ -584,13 +545,21 @@ fn property(
             l.width = Some(LengthSpec::Fill);
             l.min_width = Some(LengthSpec::Px(0.));
         }
-        widget(input)
-            .key(key)
-            .bind(move |a: &mut nana_ui::runtime::TextInput| {
-                super::views::sync_text(&mut a.state, raw.get())
-            })
-            .on(move |e: &TextChanged| raw.set(e.value.to_string()))
-            .into_any()
+        let (enter, leave) = (typed.clone(), typed.clone());
+        super::views::on_blur(
+            widget(input)
+                .key(key)
+                .bind(move |a: &mut nana_ui::runtime::TextInput| {
+                    super::views::sync_text(&mut a.state, raw.get())
+                })
+                .on(move |e: &TextChanged| raw.set(e.value.to_string()))
+                .on_cx(move |_, _: &nana_ui::runtime::TextSubmitted, cx| {
+                    if let Some(msg) = enter() {
+                        cx.dispatch_program_all(msg);
+                    }
+                }),
+            leave,
+        )
     };
     let color = value
         .as_str()
@@ -614,9 +583,16 @@ fn property(
                     }
                 }
             })
-            .on(move |e: &ColorChanged| {
-                let c = e.value.map(|x| (x.clamp(0., 1.) * 255.).round() as u8);
-                raw.set(nanatype_model::Rgba8::rgba(c[0], c[1], c[2], c[3]).to_hex());
+            .on_cx({
+                let commit = commit.clone();
+                move |_, e: &ColorChanged, cx| {
+                    let c = e.value.map(|x| (x.clamp(0., 1.) * 255.).round() as u8);
+                    let hex = nanatype_model::Rgba8::rgba(c[0], c[1], c[2], c[3]).to_hex();
+                    raw.set(hex.clone());
+                    cx.dispatch_program_all(commit(
+                        serde_json::to_string(&hex).unwrap_or_default(),
+                    ));
+                }
             })
         })
         .map(|swatch| {
@@ -649,32 +625,9 @@ fn property(
         )
     });
     let linking = signal(false);
-    let apply = (scrub.is_none() && !matches!(value, Value::Boolean(_)) || bound).then(|| {
-        let commit = commit.clone();
-        widget(super::shell::tool(ti::CHECK, ui.now_t("pkgedit-apply")))
-            .key(format!("editor-property-apply:{file}:{}", path.join(".")))
-            .bind(move |b: &mut IconButton| b.disabled = !editable)
-            .on_cx(move |_, _: &Activate, cx| {
-                let value = raw.get_untracked();
-                let value = if string {
-                    serde_json::to_string(&value).unwrap_or_default()
-                } else {
-                    value
-                };
-                cx.dispatch_program_all(commit(value));
-            })
-    });
-    // Booleans apply on toggle like numbers do.
-    let toggle_apply = matches!(value, Value::Boolean(_)).then(|| {
-        let commit = commit.clone();
-        widget(super::shell::tool(ti::CHECK, ui.now_t("pkgedit-apply")))
-            .key(format!("editor-property-apply:{file}:{}", path.join(".")))
-            .bind(move |b: &mut IconButton| b.disabled = !editable)
-            .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(commit(raw.get_untracked())))
-    });
     let label = widget(
         Stack::row(0.)
-            .width(LengthSpec::Px(LABEL_W))
+            .width(LengthSpec::Px(label_w))
             .shrink(0.)
             .align(AlignSpec::Center),
     )
@@ -708,8 +661,6 @@ fn property(
                 .align(AlignSpec::Center),
         )
         .children((control, color)),
-        apply,
-        toggle_apply,
         bindable.then(|| {
             widget(super::shell::tool(ti::LINK, ui.now_t("pkgedit-bind")))
                 .key(format!("editor-property-link:{file}:{}", path.join(".")))
@@ -745,7 +696,7 @@ fn property(
                     Stack::row(0.)
                         .wrap(true)
                         .gap_step(kit::gap::step::TIGHT)
-                        .padding_xy(LABEL_W, 0.),
+                        .padding_xy(label_w, 0.),
                 )
                 .children((
                     widget(
@@ -801,7 +752,7 @@ fn property(
             widget(
                 Stack::column(0.)
                     .gap_step(kit::gap::step::HAIR)
-                    .padding_xy(LABEL_W, 0.),
+                    .padding_xy(label_w, 0.),
             )
             .children((
                 widget(Checkbox::new(ui.now_t("pkgedit-unbind"), false))

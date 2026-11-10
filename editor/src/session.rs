@@ -820,18 +820,34 @@ impl Session {
     }
 
     pub fn import(&mut self, name: &str, bytes: Vec<u8>) -> Result<String, String> {
-        let folder = self.import_folder();
+        let folder = self.import_folder(name);
         self.import_into(&folder, name, bytes)
     }
 
-    pub fn import_folder(&self) -> String {
-        self.selected
+    /// Where an imported file goes: beside the selected one, else in the
+    /// folder its kind is kept in.
+    pub fn import_folder(&self, name: &str) -> String {
+        let beside = self
+            .selected
             .as_deref()
             .and_then(|p| p.rsplit_once('/'))
             .map(|(dir, _)| dir)
-            .filter(|dir| !dir.starts_with("dependencies"))
-            .unwrap_or("assets")
-            .to_owned()
+            .filter(|dir| !dir.starts_with("dependencies"));
+        let extension = name
+            .rsplit_once('.')
+            .map(|(_, e)| e.to_ascii_lowercase())
+            .unwrap_or_default();
+        let kind = match extension.as_str() {
+            "wav" | "ogg" | "mp3" | "flac" => "sounds",
+            "ttf" | "otf" | "woff" | "woff2" => "fonts",
+            _ => "assets",
+        };
+        // A sound dropped while an image is selected still lands with the sounds.
+        match beside {
+            Some(dir) if kind == "assets" || dir.split('/').any(|part| part == kind) => dir,
+            _ => kind,
+        }
+        .to_owned()
     }
 
     pub fn import_into(
@@ -1502,6 +1518,8 @@ pub enum Action {
         result: Result<Arc<crate::asset::Preview>, String>,
     },
     PlayAsset,
+    /// Select a sound and play it once it is decoded.
+    Audition(String),
     StopAudio,
     AudioStatus(String),
     DirectoryPoll(u64),

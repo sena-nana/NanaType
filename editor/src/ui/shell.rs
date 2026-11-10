@@ -6,6 +6,7 @@ use super::modes;
 use super::{Drawer, Ui};
 use crate::msg::Msg;
 use crate::session::{Action, EditorView, Mode};
+use crate::shortcuts::hinted;
 use crate::ui::controls::hint;
 use crate::ui::kit::{self, Tone, Type, gap};
 use crate::ui::views::{button, kind_key, node_key, readable, send, view_of};
@@ -16,7 +17,7 @@ use nana_ui::runtime::{
 };
 use nana_ui::{ButtonKind, ControlSize, icons_tabler as ti};
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole, SplitAxis, SplitPaneModel};
-use nanatype_theme::editor::{DraftOrigin, Level};
+use nanatype_theme::editor::{AssetKind, DraftOrigin, Level};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -35,14 +36,11 @@ pub const SIDE_W: f32 = 240.0;
 const SIDE_LIMITS: (f32, f32) = (180.0, 360.0);
 pub const INSPECTOR_W: f32 = 300.0;
 const INSPECTOR_LIMITS: (f32, f32) = (240.0, 440.0);
-/// The toolbar's stage selects.
-const TARGET_W: f32 = 148.0;
-const PRESET_W: f32 = 168.0;
-const SURFACE_W: f32 = 128.0;
-/// The open drawer's height.
+/// The open drawer: default, least and most height.
 const DRAWER_H: f32 = 200.0;
-/// A single-page form (package information, signing) at most this wide.
-const PAGE_W: f32 = kit::PAGE_MAX_W;
+const DRAWER_LIMITS: (f32, f32) = (96.0, 560.0);
+/// The problems the drawer lists before it says how many more there are.
+const PROBLEMS_SHOWN: usize = 200;
 
 /// The workspace showing: the rail's choice, or Files when the package has
 /// nothing for it.
@@ -72,7 +70,7 @@ fn mode_icon(mode: Mode) -> nana_ui::runtime::Icon {
         Mode::Data => ti::DATABASE,
         Mode::Lua => ti::SCRIPT,
         Mode::Package => ti::PACKAGE,
-        Mode::Signing => ti::SHIELD_LOCK,
+        Mode::Signing => ti::ROCKET,
     }
 }
 
@@ -107,49 +105,55 @@ pub(crate) fn spacer() -> AnyView {
 }
 
 /// Open `mode`; choosing the open mode again shows or hides the side panel.
-/// The Lua workspace opens a Lua source when another file is selected.
+/// Each workspace comes back to the file it last showed; the Lua and sounds
+/// workspaces otherwise open one of their own.
 pub fn select_mode(ui: Ui, mode: Mode) -> Option<Msg> {
-    if ui.mode.get_untracked() == mode {
+    let previous = ui.mode.get_untracked();
+    if previous == mode {
         ui.side_open.update(|open| *open = !*open);
-    } else {
-        ui.mode.set(mode);
-        ui.side_open.set(true);
-    }
-    if mode == Mode::Sounds {
-        let standalone = ui.package_editor.with_untracked(|v| {
-            v.as_ref()
-                .is_some_and(|v| v.documents.contains_key("sounds.toml"))
-        });
-        ui.properties_file.set(
-            if standalone {
-                "sounds.toml"
-            } else {
-                "skin.toml"
-            }
-            .into(),
-        );
-        ui.properties_path.set(vec!["sounds".into()]);
-    } else if mode == Mode::Design {
-        ui.properties_file.set(nanatype_theme::MANIFEST.into());
-    }
-    if mode != Mode::Lua {
         return None;
     }
-    ui.package_editor.with_untracked(|v| {
-        let v = v.as_ref()?;
-        let lua = |path: &str| {
-            v.files
-                .iter()
-                .any(|f| f.path == path && f.kind == nanatype_theme::editor::AssetKind::Lua)
-        };
-        if v.selected.as_deref().is_some_and(lua) {
+    let view = ui.package_editor.get_untracked()?;
+    ui.mode_files.update(|m| {
+        m.retain(|(k, _)| *k != previous);
+        if let Some(path) = &view.selected {
+            m.push((previous, path.clone()));
+        }
+    });
+    ui.mode.set(mode);
+    ui.side_open.set(true);
+    match mode {
+        Mode::Sounds => {
+            ui.properties_file
+                .set(modes::sounds::declared_in(&view).into());
+            ui.properties_path.set(vec!["sounds".into()]);
+        }
+        Mode::Design => ui.properties_file.set(nanatype_theme::MANIFEST.into()),
+        _ => {}
+    }
+    let wanted = |f: &nanatype_theme::editor::FileInfo| match mode {
+        Mode::Lua => f.kind == AssetKind::Lua,
+        Mode::Sounds => f.kind == AssetKind::Audio,
+        _ => true,
+    };
+    let fits = |path: &str| view.files.iter().any(|f| f.path == path && wanted(f));
+    let remembered = ui.mode_files.with_untracked(|m| {
+        m.iter()
+            .find(|(k, _)| *k == mode)
+            .map(|(_, path)| path.clone())
+    });
+    let next = remembered.filter(|p| fits(p)).or_else(|| {
+        // Only the workspaces of one kind of file need one of that kind.
+        if !matches!(mode, Mode::Lua | Mode::Sounds) || view.selected.as_deref().is_some_and(fits) {
             return None;
         }
-        v.files
+        view.files
             .iter()
-            .find(|f| f.kind == nanatype_theme::editor::AssetKind::Lua && f.dependency.is_none())
-            .map(|f| Msg::PackageEditor(Action::Select(f.path.clone())))
-    })
+            .find(|f| wanted(f) && f.dependency.is_none())
+            .map(|f| f.path.clone())
+    })?;
+    (view.selected.as_deref() != Some(next.as_str()))
+        .then(|| Msg::PackageEditor(Action::Select(next)))
 }
 
 /// Read the panes' widths back after input routing, so a drag survives
@@ -188,6 +192,7 @@ pub fn editor(ui: Ui) -> AnyView {
             toolbar(ui),
             super::conflicts::view(ui),
             close_prompt(ui),
+            derive_prompt(ui),
             widget(
                 Stack::row(0.)
                     .align(AlignSpec::Stretch)
@@ -197,8 +202,7 @@ pub fn editor(ui: Ui) -> AnyView {
                     .with_layout(|l| l.min_height = Some(LengthSpec::Px(0.))),
             )
             .key("editor-workspace-body")
-            .children((rail(ui), edge(), workspace(ui))),
-            drawer(ui),
+            .children((rail(ui), edge(), body(ui))),
             status_bar(ui),
         ))
         .into_any()
@@ -212,36 +216,43 @@ fn toolbar(ui: Ui) -> AnyView {
             (
                 current(ui),
                 ui.package_editor.with(|v| {
-                    v.as_ref().map(|v| {
-                        (
-                            v.package.clone(),
-                            v.kind,
-                            v.dirty && v.can_revert,
-                            v.report.skin.is_some(),
-                        )
-                    })
+                    v.as_ref()
+                        .map(|v| (v.package.clone(), v.kind, v.dirty && v.can_revert))
                 }),
             )
         },
         move |(mode, state)| {
-            let Some((package, kind, revertible, skin)) = state.clone() else {
+            let Some((package, kind, revertible)) = state.clone() else {
                 return widget(Stack::row(0.)).into_any();
             };
-            toolbar_row(ui, *mode, package, kind, revertible, skin)
+            toolbar_row(ui, *mode, package, kind, revertible)
         },
     )
     .into_any()
 }
 
+/// The project's own commands on the left, the workspace's layout and the
+/// way out on the right. How the stage is looked at belongs to the canvas.
 fn toolbar_row(
     ui: Ui,
     mode: Mode,
     package: String,
     kind: nanatype_theme::editor::ProjectKind,
     revertible: bool,
-    skin: bool,
 ) -> AnyView {
     let open = nana_ui::runtime::view::signal(false);
+    let item = move |key: &'static str, label: String, disabled: bool, action: fn() -> Action| {
+        widget({
+            let mut item = ActionMenuItem::new(label);
+            item.disabled = disabled;
+            item
+        })
+        .key(key)
+        .on_cx(move |_, _: &Activate, cx| {
+            open.set(false);
+            cx.dispatch_program_all(Msg::PackageEditor(action()));
+        })
+    };
     let project = widget(
         ActionMenu::new()
             .trigger(package)
@@ -252,54 +263,62 @@ fn toolbar_row(
     .on(move |e: &PopoverToggled| open.set(e.open))
     .on(move |_: &PopoverClosed| open.set(false))
     .children((
-        widget({
-            let mut item = ActionMenuItem::new(ui.now_t("pkgedit-revert"));
-            item.disabled = !revertible;
-            item
-        })
-        .key("package-editor-revert")
-        .on_cx(move |_, _: &Activate, cx| {
-            open.set(false);
-            cx.dispatch_program_all(Msg::PackageEditor(Action::Revert));
-        }),
-        widget(ActionMenuItem::new(ui.now_t("pkgedit-close")))
-            .key("package-editor-close")
-            .on_cx(move |_, _: &Activate, cx| {
+        item(
+            "package-editor-menu-save",
+            hinted(ui.now_t("pkgedit-save"), "Mod+S"),
+            false,
+            || Action::Save,
+        ),
+        item(
+            "package-editor-menu-export",
+            hinted(ui.now_t("pkgedit-export"), "Mod+E"),
+            false,
+            || Action::Export,
+        ),
+        item(
+            "package-editor-revert",
+            ui.now_t("pkgedit-revert"),
+            !revertible,
+            || Action::Revert,
+        ),
+        // A copy under a new ID is a matter of the whole project.
+        widget(ActionMenuItem::new(ui.now_t("pkgedit-derive-title")))
+            .key("package-editor-menu-derive")
+            .on(move |_: &Activate| {
                 open.set(false);
-                cx.dispatch_program_all(Msg::PackageEditor(Action::Close));
+                ui.derive_open.set(true);
             }),
+        item(
+            "package-editor-close",
+            hinted(ui.now_t("pkgedit-close"), "Mod+W"),
+            false,
+            || Action::Close,
+        ),
     ));
     let history = (
-        widget(tool(ti::ARROW_BACK_UP, ui.now_t("pkgedit-undo")))
-            .key("package-editor-undo")
-            .bind(move |b: &mut IconButton| {
-                b.disabled = !ui
-                    .package_editor
-                    .with(|v| v.as_ref().is_some_and(|v| v.undo))
-            })
-            .on_cx(move |_, _: &Activate, cx| {
-                cx.dispatch_program_all(Msg::PackageEditor(Action::Undo))
-            }),
-        widget(tool(ti::ARROW_FORWARD_UP, ui.now_t("pkgedit-redo")))
-            .key("package-editor-redo")
-            .bind(move |b: &mut IconButton| {
-                b.disabled = !ui
-                    .package_editor
-                    .with(|v| v.as_ref().is_some_and(|v| v.redo))
-            })
-            .on_cx(move |_, _: &Activate, cx| {
-                cx.dispatch_program_all(Msg::PackageEditor(Action::Redo))
-            }),
+        widget(tool(
+            ti::ARROW_BACK_UP,
+            hinted(ui.now_t("pkgedit-undo"), "Mod+Z"),
+        ))
+        .key("package-editor-undo")
+        .bind(move |b: &mut IconButton| {
+            b.disabled = !ui
+                .package_editor
+                .with(|v| v.as_ref().is_some_and(|v| v.undo))
+        })
+        .on_cx(send(|| Action::Undo)),
+        widget(tool(
+            ti::ARROW_FORWARD_UP,
+            hinted(ui.now_t("pkgedit-redo"), "Mod+Shift+Z"),
+        ))
+        .key("package-editor-redo")
+        .bind(move |b: &mut IconButton| {
+            b.disabled = !ui
+                .package_editor
+                .with(|v| v.as_ref().is_some_and(|v| v.redo))
+        })
+        .on_cx(send(|| Action::Redo)),
     );
-    // What the stage shows, for the workspaces that draw it.
-    let stage = (skin && matches!(mode, Mode::Design | Mode::Files | Mode::Sounds)).then(|| {
-        (
-            kit::vrule(),
-            sized(TARGET_W, super::canvas_controls::target(ui)),
-            sized(PRESET_W, super::preview_panel::size_preset(ui)),
-            sized(SURFACE_W, super::preview_panel::surface(ui)),
-        )
-    });
     let layout = match mode {
         Mode::Design => Some(
             widget(tool(ti::LAYOUT_ROWS, ui.now_t("pkgedit-split-source")))
@@ -318,7 +337,7 @@ fn toolbar_row(
                     }
                 }),
         ),
-        Mode::Files => Some(
+        Mode::Files if files_previewable(ui) => Some(
             widget(tool(
                 ti::LAYOUT_SIDEBAR_RIGHT,
                 ui.now_t("pkgedit-files-preview"),
@@ -340,33 +359,50 @@ fn toolbar_row(
         kit::tag(ui.now_t(kind_key(kind))),
         kit::vrule(),
         history,
-        stage,
         spacer(),
         layout,
-        widget(tool(ti::UPLOAD, ui.now_t("pkgedit-export")))
-            .key("package-editor-export")
-            .on_cx(|_, _: &Activate, cx| {
-                cx.dispatch_program_all(Msg::PackageEditor(Action::Export))
-            }),
+        widget(tool(
+            ti::LAYOUT_SIDEBAR,
+            hinted(ui.now_t("pkgedit-side-toggle"), "Mod+B"),
+        ))
+        .key("editor-side-toggle")
+        .bind(move |b: &mut IconButton| b.selected = ui.side_open.get())
+        .on(move |_: &Activate| ui.side_open.update(|s| *s = !*s)),
+        kit::vrule(),
+        widget(tool(
+            ti::UPLOAD,
+            hinted(ui.now_t("pkgedit-export"), "Mod+E"),
+        ))
+        .key("package-editor-export")
+        .on_cx(send(|| Action::Export)),
         // Filled while there is something to save.
-        widget(tool(ti::DEVICE_FLOPPY, ui.now_t("pkgedit-save")))
-            .key("package-editor-save")
-            .bind(move |b: &mut IconButton| {
-                let kind = if ui
-                    .package_editor
-                    .with(|v| v.as_ref().is_some_and(|v| v.dirty))
-                {
-                    ButtonKind::Primary
-                } else {
-                    ButtonKind::Ghost
-                };
-                if b.kind != kind {
-                    b.kind = kind;
-                }
-            })
-            .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::PackageEditor(Action::Save))),
+        widget(tool(
+            ti::DEVICE_FLOPPY,
+            hinted(ui.now_t("pkgedit-save"), "Mod+S"),
+        ))
+        .key("package-editor-save")
+        .bind(move |b: &mut IconButton| {
+            let kind = if ui
+                .package_editor
+                .with(|v| v.as_ref().is_some_and(|v| v.dirty))
+            {
+                ButtonKind::Primary
+            } else {
+                ButtonKind::Ghost
+            };
+            if b.kind != kind {
+                b.kind = kind;
+            }
+        })
+        .on_cx(send(|| Action::Save)),
     ))
     .into_any()
+}
+
+/// The files workspace has a stage to show: the package draws a skin.
+fn files_previewable(ui: Ui) -> bool {
+    ui.package_editor
+        .with(|v| v.as_ref().is_some_and(|v| Mode::Design.available(v)))
 }
 
 fn toolbar_style() -> nana_ui::runtime::NodeStyle {
@@ -419,6 +455,63 @@ fn close_prompt(ui: Ui) -> AnyView {
     .into_any()
 }
 
+/// The new package's ID, asked for under the toolbar: the copy drops the
+/// signature and records where it came from.
+fn derive_prompt(ui: Ui) -> AnyView {
+    dynamic(
+        move || ui.derive_open.get(),
+        move |open| {
+            let package = ui
+                .package_editor
+                .with_untracked(|v| v.as_ref().map(|v| v.package.clone()));
+            let (true, Some(package)) = (*open, package) else {
+                return widget(Stack::column(0.)).into_any();
+            };
+            let id = nana_ui::runtime::view::signal(format!(
+                "{}-copy",
+                package.chars().take(56).collect::<String>()
+            ));
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::CONTROL)
+                    .wrap(true)
+                    .align(AlignSpec::Center)
+                    .padding_step(kit::inset::step::PANEL, kit::inset::step::BAR_Y)
+                    .surface(SemanticColorRole::Surface),
+            )
+            .key("package-editor-derive-prompt")
+            .children((
+                widget(readable(ui.now_t("pkgedit-derive-id"))),
+                super::views::input_box(
+                    kit::field::MD,
+                    widget(kit::text_input(id.get_untracked()).size(ControlSize::Small))
+                        .key("package-editor-derive-id")
+                        .on(move |e: &nana_ui::runtime::TextChanged| id.set(e.value.to_string()))
+                        .on_cx(move |_, e: &nana_ui::runtime::TextSubmitted, cx| {
+                            ui.derive_open.set(false);
+                            cx.dispatch_program_all(Msg::PackageEditor(Action::Derive(
+                                e.value.clone(),
+                            )));
+                        }),
+                ),
+                kit::hint_mark(ui.now_t("pkgedit-derive-hint")),
+                widget(button(ui, "pkgedit-derive").kind(ButtonKind::Primary))
+                    .key("package-editor-derive")
+                    .on_cx(move |_, _: &Activate, cx| {
+                        ui.derive_open.set(false);
+                        cx.dispatch_program_all(Msg::PackageEditor(Action::Derive(
+                            id.get_untracked(),
+                        )));
+                    }),
+                widget(button(ui, "common-cancel"))
+                    .on(move |_: &Activate| ui.derive_open.set(false)),
+            ))
+            .into_any()
+        },
+    )
+    .into_any()
+}
+
 // ---- activity rail -----------------------------------------------------------
 
 /// A full-height hairline between the rail and the workspace.
@@ -435,24 +528,34 @@ fn edge() -> AnyView {
 
 fn rail(ui: Ui) -> AnyView {
     let entry = move |mode: Mode| {
-        widget(tool(mode_icon(mode), ui.now_t(mode_key(mode))).size(ControlSize::Medium))
-            .key(format!("package-editor-mode:{}", mode_key(mode)))
-            .visible(move || {
-                ui.package_editor
-                    .with(|v| v.as_ref().is_some_and(|v| mode.available(v)))
-            })
-            .bind(move |b: &mut IconButton| {
-                let on = current(ui) == mode;
-                if b.selected != on {
-                    b.selected = on;
-                }
-            })
-            .on_cx(move |_, _: &Activate, cx| {
-                if let Some(msg) = select_mode(ui, mode) {
-                    cx.dispatch_program_all(msg);
-                }
-            })
-            .into_any()
+        let number = crate::shortcuts::WORKSPACES
+            .iter()
+            .position(|m| *m == mode)
+            .map_or(0, |i| i + 1);
+        widget(
+            tool(
+                mode_icon(mode),
+                hinted(ui.now_t(mode_key(mode)), &format!("Mod+{number}")),
+            )
+            .size(ControlSize::Medium),
+        )
+        .key(format!("package-editor-mode:{}", mode_key(mode)))
+        .visible(move || {
+            ui.package_editor
+                .with(|v| v.as_ref().is_some_and(|v| mode.available(v)))
+        })
+        .bind(move |b: &mut IconButton| {
+            let on = current(ui) == mode;
+            if b.selected != on {
+                b.selected = on;
+            }
+        })
+        .on_cx(move |_, _: &Activate, cx| {
+            if let Some(msg) = select_mode(ui, mode) {
+                cx.dispatch_program_all(msg);
+            }
+        })
+        .into_any()
     };
     widget(
         Stack::column(0.)
@@ -497,11 +600,46 @@ fn spacer_column() -> AnyView {
 
 // ---- workspace -----------------------------------------------------------------
 
-fn workspace(ui: Ui) -> AnyView {
+/// The workspace over the drawer: one split while the drawer is open, so
+/// the problems and the log take as much height as they are given.
+fn body(ui: Ui) -> AnyView {
+    let node = nana_ui::runtime::view::node_ref();
     widget(Stack::fill_column(0.).with_layout(|l| {
         l.width = Some(LengthSpec::Px(0.));
         l.flex_grow = Some(1.);
         l.min_width = Some(LengthSpec::Px(0.));
+    }))
+    .children(
+        dynamic(
+            move || ui.drawer.get() != Drawer::Closed,
+            move |open| {
+                if !*open {
+                    return workspace(ui);
+                }
+                split(
+                    node,
+                    SplitPaneModel::new(
+                        SplitAxis::Vertical,
+                        DRAWER_H,
+                        DRAWER_LIMITS.0,
+                        DRAWER_LIMITS.1,
+                    )
+                    .with_from_end(true),
+                    "editor-drawer-split",
+                    pane(workspace(ui)),
+                    pane(drawer(ui)),
+                )
+            },
+        )
+        .grow(),
+    )
+    .into_any()
+}
+
+fn workspace(ui: Ui) -> AnyView {
+    widget(Stack::fill_column(0.).with_layout(|l| {
+        l.min_width = Some(LengthSpec::Px(0.));
+        l.min_height = Some(LengthSpec::Px(0.));
     }))
     .children(
         dynamic(
@@ -529,23 +667,29 @@ fn workspace(ui: Ui) -> AnyView {
                         ui,
                         side.map(|_| modes::files::side(ui)),
                         modes::files::center(ui),
-                        preview.then(|| modes::files::preview(ui)),
+                        (*preview && files_previewable(ui)).then(|| modes::files::preview(ui)),
                     ),
                     Mode::Sounds => panes(
                         ui,
                         side.map(|_| modes::sounds::side(ui)),
                         modes::sounds::center(ui),
-                        None,
+                        Some(modes::sounds::inspector(ui)),
                     ),
                     Mode::Lua => panes(
                         ui,
                         side.map(|_| modes::lua::side(ui)),
                         modes::lua::center(ui),
+                        Some(modes::lua::inspector(ui)),
+                    ),
+                    // The list is this workspace's way in: it does not fold.
+                    Mode::Data => panes(
+                        ui,
+                        Some(modes::data::side(ui)),
+                        modes::data::center(ui),
                         None,
                     ),
-                    Mode::Data => page(modes::data::view(ui)),
-                    Mode::Package => page(modes::package::view(ui)),
-                    Mode::Signing => page(modes::signing::view(ui)),
+                    Mode::Package => scroll(modes::package::view(ui)),
+                    Mode::Signing => scroll(modes::signing::view(ui)),
                 }
             },
         )
@@ -629,28 +773,6 @@ pub(crate) fn split(
         .into_any()
 }
 
-/// A scrolling column of at most [`PAGE_W`], for the form workspaces.
-fn page(content: AnyView) -> AnyView {
-    scroll(
-        widget(
-            Stack::column(0.)
-                .width(LengthSpec::Fill)
-                .align(AlignSpec::Center)
-                .padding_step(kit::inset::step::PAGE, kit::inset::step::CARD),
-        )
-        .children(
-            widget(
-                Stack::column(0.)
-                    .gap_step(gap::step::GROUP)
-                    .max_width(PAGE_W)
-                    .width(LengthSpec::Fill),
-            )
-            .children(content),
-        )
-        .into_any(),
-    )
-}
-
 /// Content that scrolls within the remaining height.
 pub(crate) fn scroll(content: AnyView) -> AnyView {
     widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
@@ -728,36 +850,30 @@ fn drawer(ui: Ui) -> AnyView {
                 Drawer::Debug => modes::lua::log(ui),
                 _ => problems(ui),
             };
-            widget(
-                Stack::column(0.)
-                    .height(LengthSpec::Px(DRAWER_H))
-                    .shrink(0.)
-                    .width(LengthSpec::Fill),
-            )
-            .key("package-editor-drawer")
-            .children((
-                kit::rule(),
-                widget(
-                    Stack::row(0.)
-                        .gap_step(gap::step::TIGHT)
-                        .align(AlignSpec::Center)
-                        .padding_xy(gap::CONTROL, gap::HAIR),
-                )
+            widget(Stack::fill_column(0.).surface(SemanticColorRole::Surface))
+                .key("package-editor-drawer")
                 .children((
-                    tab(Drawer::Problems, "pkgedit-problems"),
-                    lua.then(|| tab(Drawer::Debug, "pkgedit-debug-log")),
-                    spacer(),
-                    widget(tool(ti::X, ui.now_t("pkgedit-drawer-close")))
-                        .key("package-editor-drawer-close")
-                        .on(move |_: &Activate| ui.drawer.set(Drawer::Closed)),
-                )),
-                scroll(
-                    widget(Stack::column(0.).padding_xy(gap::CONTROL, 0.))
-                        .children(body)
-                        .into_any(),
-                ),
-            ))
-            .into_any()
+                    widget(
+                        Stack::row(0.)
+                            .gap_step(gap::step::TIGHT)
+                            .align(AlignSpec::Center)
+                            .padding_xy(gap::CONTROL, gap::HAIR),
+                    )
+                    .children((
+                        tab(Drawer::Problems, "pkgedit-problems"),
+                        lua.then(|| tab(Drawer::Debug, "pkgedit-debug-log")),
+                        spacer(),
+                        widget(tool(ti::X, ui.now_t("pkgedit-drawer-close")))
+                            .key("package-editor-drawer-close")
+                            .on(move |_: &Activate| ui.drawer.set(Drawer::Closed)),
+                    )),
+                    scroll(
+                        widget(Stack::column(0.).padding_xy(gap::CONTROL, 0.))
+                            .children(body)
+                            .into_any(),
+                    ),
+                ))
+                .into_any()
         },
     )
     .into_any()
@@ -781,44 +897,63 @@ pub(crate) fn problems(ui: Ui) -> AnyView {
             let Some(view) = view_of(ui) else {
                 return widget(Stack::column(0.)).into_any();
             };
-            let rows = diagnostics(&view)
-                .into_iter()
-                .take(50)
-                .enumerate()
-                .map(|(i, d)| {
-                    let mark = if d.level == Level::Error {
-                        "✕"
-                    } else {
-                        "⚠"
-                    };
-                    let location = format!("{mark} {}:{}:{}", d.path, d.line, d.column);
-                    let key = node_key(
-                        "package-editor-problem",
-                        &format!("{}:{}:{i}", d.path, d.offset),
-                    );
-                    let message = d.message.clone();
-                    widget(
-                        Stack::row(0.0)
-                            .gap_step(nana_ui_core::SpacingStep::Sm)
-                            .align(AlignSpec::Start)
-                            .width(LengthSpec::Fill),
-                    )
-                    .children((
+            let all = diagnostics(&view);
+            let more = all.len().saturating_sub(PROBLEMS_SHOWN);
+            let rows =
+                all.into_iter()
+                    .take(PROBLEMS_SHOWN)
+                    .enumerate()
+                    .map(|(i, d)| {
+                        let error = d.level == Level::Error;
+                        let location = format!("{}:{}:{}", d.path, d.line, d.column);
+                        let key = node_key(
+                            "package-editor-problem",
+                            &format!("{}:{}:{i}", d.path, d.offset),
+                        );
+                        let message = d.message.clone();
+                        // The mark says error or warning by shape and by name.
+                        let mark = if error {
+                            ti::ALERT_CIRCLE
+                        } else {
+                            ti::ALERT_TRIANGLE
+                        };
                         widget(
-                            Button::new(location)
-                                .kind(ButtonKind::Ghost)
-                                .size(ControlSize::Small),
+                            Stack::row(0.0)
+                                .gap_step(gap::step::TIGHT)
+                                .align(AlignSpec::Start)
+                                .width(LengthSpec::Fill),
                         )
-                        .key(key)
-                        .on_cx(move |_, _: &Activate, cx| {
-                            cx.dispatch_program_all(reveal(ui, d.clone()));
-                        }),
-                        widget(Stack::column(0.).shrink(1.).padding_xy(0., gap::TIGHT))
-                            .children(widget(readable(message))),
-                    ))
-                    .into_any()
-                })
-                .collect::<Vec<_>>();
+                        .children((
+                            widget(
+                                Button::new(location)
+                                    .icon(mark)
+                                    .kind(ButtonKind::Ghost)
+                                    .accessible_name(format!(
+                                        "{} {}:{}",
+                                        ui.now_t(if error {
+                                            "pkgedit-problem-error"
+                                        } else {
+                                            "pkgedit-problem-warning"
+                                        }),
+                                        d.path,
+                                        d.line
+                                    ))
+                                    .size(ControlSize::Small),
+                            )
+                            .key(key)
+                            .on_cx(move |_, _: &Activate, cx| {
+                                cx.dispatch_program_all(reveal(ui, d.clone()));
+                            }),
+                            widget(Stack::column(0.).shrink(1.).padding_xy(0., gap::TIGHT))
+                                .children(widget(readable(message).color(if error {
+                                    SemanticColorRole::Danger
+                                } else {
+                                    SemanticColorRole::Text
+                                }))),
+                        ))
+                        .into_any()
+                    })
+                    .collect::<Vec<_>>();
             if rows.is_empty() {
                 return hint(ui.now_t(if view.validating {
                     "pkgedit-validating"
@@ -828,7 +963,12 @@ pub(crate) fn problems(ui: Ui) -> AnyView {
             }
             widget(Stack::column(0.))
                 .key("package-editor-problems")
-                .children(rows)
+                .children((
+                    rows,
+                    (more > 0).then(|| {
+                        hint(ui.tr("pkgedit-problems-more", &[("count", (more as i64).into())]))
+                    }),
+                ))
                 .into_any()
         },
     )
