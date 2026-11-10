@@ -81,12 +81,11 @@ fn avatar_preview(ui: Ui, i: usize) -> AnyView {
 const AVATAR_PREVIEW: f32 = 32.0;
 
 /// Character `i` of `n` on one line: its avatar (pick, clear), name, name
-/// colour (reset), hotkey; then which one is in use, order and remove.
+/// colour (reset); then which one is in use, order and remove.
 fn character_row(ui: Ui, i: usize, n: usize, active: bool) -> Row {
     let c = ui
         .settings
         .with_untracked(|s| s.general.characters[i].clone());
-    let action = Shortcut::Global(GlobalAction::Character(i));
     let has = move |f: fn(&nanatype_settings::Character) -> bool| {
         move || {
             ui.settings
@@ -209,7 +208,6 @@ fn character_row(ui: Ui, i: usize, n: usize, active: bool) -> Row {
                     move || edit_character(i, |c| c.color = None),
                 )),
         )),
-        hotkey_control(ui, action),
         widget(Stack::row(0.0).grow(1.0)),
         widget(
             Stack::row(0.0)
@@ -242,11 +240,8 @@ fn character_row(ui: Ui, i: usize, n: usize, active: bool) -> Row {
         )),
     ));
     Row::inset(
-        widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xs)).children((
-            widget(Stack::column(0.0).padding_step(inset::step::CARD, inset::step::ROW_Y))
-                .children(line),
-            hotkey_issue_line(ui, action),
-        )),
+        widget(Stack::column(0.0).padding_step(inset::step::CARD, inset::step::ROW_Y))
+            .children(line),
     )
 }
 

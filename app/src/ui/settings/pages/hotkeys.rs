@@ -361,8 +361,8 @@ fn phrase_rows(ui: Ui) -> Row {
     ))
 }
 
-/// One row per character; renaming or adding one in Settings › General
-/// rebuilds the list.
+/// Switching characters: next and previous, then one row per character;
+/// renaming or adding one in Settings › Characters rebuilds the list.
 fn character_rows(ui: Ui) -> Row {
     Row::inset(dynamic(
         move || {
@@ -375,9 +375,11 @@ fn character_rows(ui: Ui) -> Row {
             })
         },
         move |names| {
-            let rows: Vec<Row> = (0..names.len())
-                .map(|i| {
-                    let action = Shortcut::Global(GlobalAction::Character(i));
+            let rows: Vec<Row> = CHARACTER_CYCLE
+                .into_iter()
+                .chain((0..names.len()).map(GlobalAction::Character))
+                .map(|action| {
+                    let action = Shortcut::Global(action);
                     let name = ui
                         .settings
                         .with_untracked(|s| action_name(ui.locale.get_untracked(), s, action));
@@ -388,6 +390,11 @@ fn character_rows(ui: Ui) -> Row {
         },
     ))
 }
+
+/// The fixed actions listed with the characters' own keys, not with the
+/// other global hotkeys.
+const CHARACTER_CYCLE: [GlobalAction; 2] =
+    [GlobalAction::NextCharacter, GlobalAction::PrevCharacter];
 
 /// One row per saved profile; saving, renaming or deleting one in
 /// Settings › General rebuilds the list.
@@ -430,6 +437,7 @@ pub(super) fn hotkeys(ui: Ui) -> AnyView {
     let global = rows(
         GlobalAction::ALL
             .into_iter()
+            .filter(|a| !CHARACTER_CYCLE.contains(a))
             .map(Shortcut::Global)
             .collect(),
     );

@@ -89,10 +89,10 @@ Connections go direct when Steam can manage it, otherwise through Steam's relay.
 
 Turning an output off and back on within 5 seconds reuses the original sender, and the OBS picture comes back in a median of about 15–30 ms. For sender lifecycles and measurements with real OBS, see [OBS / Spout output](obs-spout.md).
 
-### Characters
+### Character info
 
-- **Settings › Characters** lists who your lines are said by. Each character has a name, an avatar, a name colour for the name plate (**Use skin colour** goes back to the skin's) and an optional hotkey that switches to it. Add, reorder and remove them; the last one cannot be removed. An empty name hides the name plate. The name and avatar of older versions become the first character.
-- Switch with the character button in the input window's bottom bar (shown once there are two or more), the tray's **Character** submenu, or **Next character**, **Previous character** and each character's own key in **Settings › Hotkeys**. The current character is remembered. Each line records its speaker when sent, so a later switch or rename never changes the history, the saved sessions, what a partner sees or the `speaker` of `line_start` events.
+- **Settings › Character info** lists who your lines are said by. Each character has a name, an avatar, a name colour for the name plate (**Use skin colour** goes back to the skin's). Add, reorder and remove them; the last one cannot be removed. An empty name hides the name plate. The name and avatar of older versions become the first character.
+- Switch with the character button in the input window's bottom bar (shown once there are two or more), the tray's **Character** submenu, or **Next character**, **Previous character** and each character's own key under **Settings › Hotkeys › Character switching**. The current character is remembered. Each line records its speaker when sent, so a later switch or rename never changes the history, the saved sessions, what a partner sees or the `speaker` of `line_start` events.
 - **Settings › Hotkeys** can also bind **Lock/unlock overlays**, **Replay the last line** (plays it on the display again, without sending it to live chat or adding a history row; in a co-op room partners see it replayed too, and hear it again if they read partner lines aloud, unless the line was said before the room) and **Show/hide history**, all unbound by default. The tray's lock and **Replay the last line** items do the same.
 
 ### Text to speech
