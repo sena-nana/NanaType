@@ -600,6 +600,7 @@ pub(crate) mod tests {
                         at: 0,
                         uid: None,
                         reply: None,
+                        event: None,
                     },
                     doc: Document::plain("hi").into(),
                     reveal: None,

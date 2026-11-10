@@ -430,6 +430,7 @@ mod tests {
             at: now,
             uid: None,
             reply: None,
+            event: None,
         };
         let id = LineId::next();
         assert!(n.partner(&all, "b", id, &item, now).is_some());

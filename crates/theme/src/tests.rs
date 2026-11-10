@@ -898,6 +898,70 @@ l = "abc%""#,
 }
 
 #[test]
+fn event_styles_fall_back_field_by_field() {
+    use nanatype_model::EventKind;
+    let plain: Skin = toml::from_str("[meta]\nid = 'plain'").unwrap();
+    assert!(plain.history.event.is_none(), "events look like chat");
+
+    let tmp = tempfile::tempdir().unwrap();
+    write_skin(
+        tmp.path(),
+        r##"[meta]
+id = "events"
+[history.event]
+layout = "card"
+color = "#102030"
+radius = 8
+icon = "★"
+gradient = { angle = 90, stops = [[0, "#102030"], [1, "#203040"]] }
+badge = { color = "accent" }
+[history.event.gift]
+layout = "notice"
+[history.event.super_chat]
+color = "#ffffff"
+price_color = "fill"
+sparkle = true
+"##,
+        &[],
+    );
+    let loaded = load_dir(tmp.path()).unwrap();
+    assert_eq!(loaded.warnings.len(), 1, "{:?}", loaded.warnings);
+    assert_eq!(loaded.warnings[0].field, "history.event.super_chat.sparkle");
+    let events = loaded.skin.history.event.as_ref().unwrap();
+
+    let gift = events.resolve(EventKind::Gift);
+    assert_eq!(gift.layout, Some(HistoryEventLayout::Notice));
+    assert_eq!(gift.radius, Some(8.0));
+    assert_eq!(gift.icon.as_deref(), Some("★"));
+    assert!(gift.shape.gradient.is_some());
+    assert!(gift.badge.is_some());
+
+    // A kind with its own fill does not keep the shared gradient over it.
+    let paid = events.resolve(EventKind::SuperChat);
+    assert_eq!(paid.layout, Some(HistoryEventLayout::Card));
+    assert_eq!(paid.price_color, Some(EventPriceColor::Fill));
+    assert!(paid.shape.gradient.is_none());
+
+    // Kinds without a table, and events of no known kind, use the shared one.
+    assert_eq!(events.resolve(EventKind::Member), events.style);
+    assert_eq!(events.resolve(EventKind::Notice), events.style);
+    assert!(events.style.has_surface());
+    assert!(!HistoryEventStyle::default().has_surface());
+
+    write_skin(
+        tmp.path(),
+        "[meta]\nid = 'events'\n[history.event.member]\nicon = '123456789'\nopacity = 2\n",
+        &[],
+    );
+    let errors = load_dir(tmp.path()).unwrap_err();
+    let fields: Vec<_> = errors.iter().map(|e| e.field.as_str()).collect();
+    assert_eq!(
+        fields,
+        ["history.event.member.icon", "history.event.member.opacity"]
+    );
+}
+
+#[test]
 fn unknown_keys_inside_decor_warn() {
     let tmp = tempfile::tempdir().unwrap();
     write_skin(

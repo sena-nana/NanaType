@@ -263,6 +263,34 @@ stops = [[0.0, "#087fd1"], [1.0, "#249fdf"]]
 color = "#1b2f4b"
 size = 17.0
 
+[history.event]
+layout = "card"
+color = "#ffffff"
+gradient = { angle = 160.0, stops = [[0.0, "#ffffff"], [1.0, "#e3f2fd"]] }
+border_color = "#d7efff"
+border_width = 1.0
+radius = 18.0
+shadows = [{ color = "#0876d026", dx = 0.0, dy = 2.0, blur = 8.0, inset = false, spread = 0.0 }]
+icon = "◆"
+icon_color = "#0876d0"
+badge = { color = "#0876d0", text_color = "#ffffff", radius = 999.0 }
+
+[history.event.gift]
+layout = "notice"
+radius = 999.0
+
+[history.event.super_chat]
+price_color = "badge"
+
+[history.event.member]
+color = "#0876d0"
+gradient = { angle = 90.0, stops = [[0.0, "#087fd1"], [1.0, "#249fdf"]] }
+text_color = "#ffffff"
+name_color = "#ffffff"
+icon = "★"
+icon_color = "#ffffff"
+badge = { color = "#ffffff", text_color = "#0876d0", radius = 999.0 }
+
 [shaders.compact_print]
 animated = false
 intensity = 1.0

@@ -591,6 +591,31 @@ spread = 0.0
 [history.text]
 color = "#1f2a36"
 
+[history.event]
+layout = "card"
+color = "#e8f7fd"
+radius = 14.0
+icon = "◆"
+icon_color = "#137c9a"
+badge = { color = "#137c9a", text_color = "#ffffff", radius = 999.0 }
+
+[history.event.gift]
+layout = "notice"
+color = "#ffffff"
+radius = 999.0
+
+[history.event.super_chat]
+price_color = "fill"
+
+[history.event.member]
+color = "#137c9a"
+gradient = { angle = 135.0, stops = [[0.0, "#137c9a"], [1.0, "#4a56b8"]] }
+text_color = "#ffffff"
+name_color = "#ffffff"
+icon = "★"
+icon_color = "#ffffff"
+badge = { color = "#ffffff", text_color = "#137c9a", radius = 999.0 }
+
 [shaders.artwork]
 animated = true
 intensity = 1.0

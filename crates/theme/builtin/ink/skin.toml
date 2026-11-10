@@ -481,6 +481,33 @@ size = 14.0
 text = "HISTORY"
 weight = 400
 
+[history.event]
+layout = "notice"
+color = "#00000000"
+border_color = "#1e1e1e40"
+border_widths = [1.0, 0.0, 1.0, 0.0]
+radius = 0.0
+icon = "●"
+icon_color = "#b0302a"
+badge = { color = "#b0302a", text_color = "#fbfaf6", radius = 2.0 }
+
+[history.event.super_chat]
+layout = "card"
+color = "#fbfaf6"
+border_color = "#b0302a"
+border_widths = [0.0, 0.0, 0.0, 3.0]
+price_color = "badge"
+
+[history.event.member]
+layout = "card"
+color = "#b0302a"
+border_widths = [0.0, 0.0, 0.0, 0.0]
+text_color = "#fbfaf6"
+name_color = "#fbfaf6"
+icon = "印"
+icon_color = "#fbfaf6"
+badge = { color = "#fbfaf6", text_color = "#b0302a", radius = 2.0 }
+
 [mention]
 fill = "#f4e6e1"
 scale = 0.72

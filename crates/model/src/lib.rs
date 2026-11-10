@@ -38,7 +38,8 @@ pub use link::LinkFault;
 pub use link::{ws_connect, ws_idle};
 pub use skin_param::{ParamValue, valid_param_id};
 pub use source::{
-    ChatRef, ChatRun, ChatUser, HistoryItem, MessageSource, SourceEvent, SourceId, SourceKind,
+    ChatRef, ChatRun, ChatUser, EventInfo, EventKind, HistoryItem, MessageSource, SourceEvent,
+    SourceId, SourceKind,
 };
 pub use style::{
     Continuous, ContinuousKind, Effects, Emphasis, Entrance, EntranceKind, FontSlot, Overflow,

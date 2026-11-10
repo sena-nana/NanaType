@@ -406,6 +406,33 @@ size = 14.0
 text = "HISTORY"
 weight = 600
 
+[history.event]
+layout = "card"
+color = "#221848"
+gradient = { angle = 160.0, stops = [[0.0, "#33256a"], [1.0, "#1b1638"]] }
+border_color = "#c9a35a"
+border_width = 0.8
+radius = 14.0
+icon = "★"
+icon_color = "#e7cc94"
+badge = { color = "#c9a35a", text_color = "#1b1638", radius = 999.0 }
+
+[history.event.gift]
+layout = "notice"
+radius = 999.0
+
+[history.event.super_chat]
+price_color = "border"
+
+[history.event.member]
+color = "#c9a35a"
+gradient = { angle = 160.0, stops = [[0.0, "#e7cc94"], [1.0, "#a8843f"]] }
+text_color = "#1b1638"
+name_color = "#1b1638"
+icon_color = "#1b1638"
+border_color = "#f4eeff"
+badge = { color = "#1b1638", text_color = "#e7cc94", radius = 999.0 }
+
 [shaders.artwork]
 animated = true
 intensity = 1.0

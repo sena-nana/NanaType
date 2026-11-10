@@ -316,6 +316,29 @@ color = "#10206e"
 dx = 1.0
 dy = 1.0
 
+[history.event]
+layout = "card"
+color = "#14257e"
+gradient = { angle = 180.0, stops = [[0.0, "#2a3fb8"], [1.0, "#14257e"]] }
+border_color = "#ffffff"
+border_width = 2.0
+radius = 6.0
+text_scale = 1.0
+icon = "★"
+icon_color = "#ffd45c"
+badge = { color = "#ffd45c", text_color = "#14257e", radius = 2.0 }
+
+[history.event.gift]
+layout = "notice"
+
+[history.event.super_chat]
+price_color = "badge"
+
+[history.event.member]
+color = "#7e1425"
+gradient = { angle = 180.0, stops = [[0.0, "#b82a3f"], [1.0, "#7e1425"]] }
+icon = "♥"
+
 [mention]
 fill = "#4a5cc4"
 scale = 1.0

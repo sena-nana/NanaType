@@ -478,6 +478,7 @@ mod tests {
             at: 1_762_000_000_123,
             uid: None,
             reply: None,
+            event: None,
         }
     }
 

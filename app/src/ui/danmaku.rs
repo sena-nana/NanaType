@@ -896,6 +896,7 @@ mod tests {
                 at: 2,
                 uid: None,
                 reply: None,
+                event: None,
             },
             doc: Arc::new(Document::plain("hello")),
             reveal: None,

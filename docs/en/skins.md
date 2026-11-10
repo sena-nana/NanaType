@@ -178,6 +178,8 @@ The framework default is `none`; every built-in skin turns entrance on.
 
 With reduced motion, messages land in place immediately.
 
+Gifts, Super Chats and memberships are event rows. A skin dresses them in `[history.event]` (a card, a strip or a bubble; an icon, an amount pill, the platform's price colour), with `gift`, `super_chat` and `member` overriding it field by field. A field nobody wrote falls back to the message row, so a skin without the table shows events as chat. All built-in skins have their own event looks.
+
 ## Manifest
 
 ```toml
@@ -370,6 +372,30 @@ size = 18
 [history.chat]                    # live chat rows (appear once Settings › History › Live chat is on)
 text_scale = 0.88                 # chat text size relative to history.text
 bubble_opacity = 0.7              # opacity of the whole chat bubble backing (including gradient, border, shadow and nine-slice image); text stays opaque
+
+[history.event]                   # gift, Super Chat and membership rows; without this table an event row looks exactly like a chat row
+layout = "card"                   # bubble: laid out like a message (default) | card: one card across the row with the avatar, name and amount inside | notice: a strip across the row without an avatar, name and text on one line
+color = "#fff0f5"                 # once any of these surface fields is written the row paints its own surface instead of the message bubble;
+border_color = "#f2c4d5"          # those left out use the bubble's bubble_color, bubble_border, bubble_border_width and bubble_radius
+border_width = 1.5
+radius = 16
+# also gradient, radii, border_widths, border_style, shadows, contour, material and border_material
+padding = [14, 10]                # horizontal vertical; defaults to bubble_padding
+text_color = "#6b2141"            # defaults to history.text; below 4.5:1 against the fill it becomes black or white
+name_color = "#c2416f"            # the name on a card or a notice; in the bubble layout without a name_plate, the name above the bubble too
+icon = "✿"                        # a mark before the text, at most 8 characters, set in fonts.accent
+icon_color = "accent"             # defaults to the name colour
+price_color = "none"              # where the platform's colour for the amount (a Super Chat's price band) goes: none | fill (the whole surface; text turns black or white) | border | badge (the amount pill only)
+opacity = 1.0                     # opacity of the surface; 1 with a surface of its own, else history.chat.bubble_opacity
+text_scale = 0.88                 # defaults to history.chat.text_scale
+badge = { color = "accent", text_color = "#ffffff", radius = 999, border_color = "#ffffff", border_width = 0 }   # the amount pill (¥30); without badge, and unless price_color is badge, no pill is drawn and a Super Chat keeps its amount at the start of its text
+
+[history.event.super_chat]        # per-kind overrides: gift, super_chat (paid messages) and member (memberships)
+price_color = "badge"             # the same fields as [history.event], overriding one by one; a field left out comes from [history.event], and failing that from the message row
+
+[history.event.member]            # a kind that sets color does not inherit the gradient of [history.event]
+color = "accent"
+icon = "★"
 
 [history.reply]                   # for lines replying to chat, a one-line quote above the bubble: avatar · nickname: original (in inline layout, above the whole row, aligned with the text column)
 visible = true
@@ -727,6 +753,7 @@ On import, the whole skin is rejected, with the specific field shown, if any of 
 - a font can't be parsed; a sound isn't WAV / OGG / FLAC / MP3;
 - a color or number is invalid (for example a font size outside 4–400);
 - gradient stops aren't 2–8 or positions decrease; corner radii outside 0–2000, borders outside 0–64; more than 4 shadow layers;
+- an `icon` of `[history.event]` or one of its kinds over 8 characters, `padding` outside 0–1024, `opacity` outside 0–1 or `text_scale` outside 0.3–3;
 - more than 16 decorations, a polygon that isn't 3–8 points, text over 8 characters; tail or `continue` frame counts and speeds out of range; `margin` fills the whole region;
 - a parameter declaration, preset or `{ param = … }` placeholder is invalid, or some value the parameter can take (either end of the range, each option, the longest text, each preset) would push the field it fills out of range (see [Skin parameters](#skin-parameters)).
 

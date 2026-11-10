@@ -4,8 +4,8 @@
 use nanatype_blive::chat::{Author, ChatEvent, Guard};
 use nanatype_i18n::Locale;
 use nanatype_model::{
-    AssetRef, Atom, AtomKind, ChatRef, ChatRun, ChatUser, Document, HistoryItem, Inline, SourceId,
-    SourceKind, Style, TextRun,
+    AssetRef, Atom, AtomKind, ChatRef, ChatRun, ChatUser, Document, EventInfo, EventKind,
+    HistoryItem, Inline, SourceId, SourceKind, Style, TextRun,
 };
 use nanatype_settings::ChatFilter;
 
@@ -379,7 +379,42 @@ impl ChatMessage {
             at: self.at,
             uid: (!self.user.uid.is_empty()).then(|| self.user.uid.clone()),
             reply: None,
+            event: self.event_info(),
         }
+    }
+
+    /// What a history row tells the skin about this event; `None` for chat.
+    pub fn event_info(&self) -> Option<EventInfo> {
+        // Gold coins: 1000 to the yuan. Free gifts name no amount.
+        let coins = |coin: u64| {
+            (coin > 0).then(|| {
+                if coin.is_multiple_of(1000) {
+                    format!("¥{}", coin / 1000)
+                } else {
+                    format!("¥{:.1}", coin as f64 / 1000.0)
+                }
+            })
+        };
+        let rgb = || {
+            paid_color(&self.kind).map(|[r, g, b, _]| {
+                let byte = |v: f32| (v * 255.0).round() as u32;
+                byte(r) << 16 | byte(g) << 8 | byte(b)
+            })
+        };
+        let (kind, amount) = match &self.kind {
+            ChatKind::Text => return None,
+            ChatKind::SuperChat { price } => (EventKind::SuperChat, Some(format!("¥{price}"))),
+            ChatKind::Paid { amount, .. } => (EventKind::SuperChat, Some(amount.clone())),
+            ChatKind::Gift { coin, .. } => (EventKind::Gift, coins(*coin)),
+            ChatKind::Member { coin, .. } => (EventKind::Member, coins(*coin)),
+            ChatKind::GiftMemberships { .. } => (EventKind::Member, None),
+            ChatKind::Notice { .. } => (EventKind::Notice, None),
+        };
+        Some(EventInfo {
+            kind,
+            amount,
+            color: rgb(),
+        })
     }
 }
 
@@ -541,6 +576,26 @@ mod tests {
             ..ChatFilter::default()
         };
         assert!(!gift(1000).passes(&no_gifts));
+
+        // The history row tells the skin what the event is and what it cost.
+        let info = |m: &ChatMessage| m.history_item(Locale::ZhCn).event.unwrap();
+        assert_eq!(info(&gift(0)).kind, EventKind::Gift);
+        assert_eq!(info(&gift(0)).amount, None, "a free gift names no amount");
+        assert_eq!(info(&gift(5000)).amount.as_deref(), Some("¥5"));
+        assert_eq!(info(&gift(100)).amount.as_deref(), Some("¥0.1"));
+        let paid = ChatMessage {
+            kind: ChatKind::SuperChat { price: 30 },
+            ..gift(0)
+        };
+        let paid = info(&paid);
+        assert_eq!(paid.kind, EventKind::SuperChat);
+        assert_eq!(paid.amount.as_deref(), Some("¥30"));
+        assert_eq!(paid.color, Some(0x00e5ff), "the price band's colour");
+        let text = ChatMessage {
+            kind: ChatKind::Text,
+            ..gift(0)
+        };
+        assert_eq!(text.history_item(Locale::ZhCn).event, None);
     }
 
     fn emote(url: &str) -> AssetRef {

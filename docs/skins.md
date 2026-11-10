@@ -119,6 +119,8 @@ coin = "sounds/coin.ogg"
 
 新消息按 `history.entrance` 入场（`slide_up`、`fade`、`slide_left`；`none` 为直接出现），已在屏幕上的消息用同样的 220ms 缓出滑到新位置：新消息把列表顶上去时整体上移，最早一条因显示条数上限移出时下面的消息补上空位。框架默认 `none`，全部内置皮肤均开启入场。减弱动态时消息直接落位。
 
+礼物、醒目留言、上舰等属于事件行。皮肤在 `[history.event]` 里为它们设计单独的样子（卡片、通知条或气泡，标记、金额牌、平台价位色），`gift`、`super_chat`、`member` 可以逐项覆盖；没写的字段回落到消息样式，所以不写这一节的皮肤把事件显示成普通弹幕。全部内置皮肤都有各自的事件样式。
+
 ## 清单
 
 ```toml
@@ -311,6 +313,30 @@ size = 18
 [history.chat]                    # B 站弹幕行（设置 › 历史记录 › 弹幕 打开后出现）
 text_scale = 0.88                 # 弹幕文字相对 history.text 的大小
 bubble_opacity = 0.7              # 整个弹幕气泡底板的不透明度（含渐变、边框、阴影与九宫格图片）；正文保持不透明
+
+[history.event]                   # 礼物、醒目留言、上舰等事件行；不写这一节时事件行与弹幕行完全相同
+layout = "card"                   # bubble：与消息行同样排版（默认） | card：整行宽的卡片，头像、昵称、金额都在卡片内 | notice：整行宽的一条通知，不带头像，昵称与内容同一行
+color = "#fff0f5"                 # 以下外观字段写了任意一个，事件行就画自己的底板而不是消息气泡；
+border_color = "#f2c4d5"          # 没写的那几项沿用气泡的 bubble_color、bubble_border、bubble_border_width、bubble_radius
+border_width = 1.5
+radius = 16
+# 也支持 gradient、radii、border_widths、border_style、shadows、contour、material、border_material
+padding = [14, 10]                # 水平 垂直，默认同 bubble_padding
+text_color = "#6b2141"            # 默认同 history.text；与底色对比不足 4.5:1 时自动改用黑或白
+name_color = "#c2416f"            # 卡片和通知里的昵称；bubble 布局且没有 name_plate 时也用于气泡上方的昵称
+icon = "✿"                        # 正文前的标记，最多 8 个字，用 fonts.accent
+icon_color = "accent"             # 默认同昵称颜色
+price_color = "none"              # 平台按金额给的颜色（醒目留言的价位色）用在哪：none | fill（整块底色，文字自动取黑或白）| border | badge（只染金额牌）
+opacity = 1.0                     # 底板不透明度；有自己的底板时默认 1，否则同 history.chat.bubble_opacity
+text_scale = 0.88                 # 默认同 history.chat.text_scale
+badge = { color = "accent", text_color = "#ffffff", radius = 999, border_color = "#ffffff", border_width = 0 }   # 金额牌（¥30）；不写 badge 且 price_color 不是 badge 时不显示金额牌，醒目留言的金额留在正文开头
+
+[history.event.super_chat]        # 按类别覆盖：gift（礼物）、super_chat（醒目留言等付费留言）、member（上舰、会员）
+price_color = "badge"             # 字段与 [history.event] 相同，逐项覆盖；没写的字段沿用 [history.event]，再没有就回落到消息样式
+
+[history.event.member]            # 换了 color 的类别不继承 [history.event] 的 gradient
+color = "accent"
+icon = "★"
 
 [history.reply]                   # 回复弹幕的台词，气泡上方的一行引用：头像 · 昵称：原文（inline 布局时在整行上方，对齐台词栏）
 visible = true
@@ -572,6 +598,7 @@ NanaUI 一次只用一个字体名，NanaType 会从 `families` 里挑第一个�
 - 字体无法解析；音效不是 WAV / OGG / FLAC / MP3；
 - 颜色或数值不合法（如字号不在 4–400）；
 - 渐变色标不是 2–8 个或位置递减；圆角不在 0–2000、边框不在 0–64；阴影超过 4 层；
+- `[history.event]` 及各类别的 `icon` 超过 8 个字，`padding` 不在 0–1024、`opacity` 不在 0–1、`text_scale` 不在 0.3–3；
 - 装饰超过 16 个、多边形不是 3–8 点、文字超过 8 个字；尾巴、`continue` 的帧数和速度超出范围；`margin` 占满了区域；
 - 参数声明、预设或 `{ param = … }` 占位不合法，或参数可取的某个值（范围两端、每个选项、最长文本、每个预设）会让它填入的字段越界（见[皮肤参数](#皮肤参数)）。
 

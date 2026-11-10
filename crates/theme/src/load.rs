@@ -1250,6 +1250,35 @@ fn validate_shapes(skin: &Skin, out: &mut Vec<SkinDiagnostic>) {
         ));
     }
     check_decor("history.decor", &h.decor, out);
+    for (field, e) in h.event.iter().flat_map(crate::HistoryEvents::styles) {
+        let f = |k: &str| format!("{field}.{k}");
+        check_shape(
+            field,
+            &e.shape,
+            e.radius.unwrap_or(0.0),
+            e.border_width.unwrap_or(0.0),
+            &e.shape.shadows,
+            out,
+        );
+        if e.padding
+            .is_some_and(|p| !p.iter().all(|v| in_range(*v, 0.0, 1024.0)))
+        {
+            out.push(SkinDiagnostic::error(f("padding"), "must be 0–1024"));
+        }
+        if e.icon.as_ref().is_some_and(|i| i.chars().count() > 8) {
+            out.push(SkinDiagnostic::error(f("icon"), "at most 8 characters"));
+        }
+        if e.opacity.is_some_and(|v| !in_range(v, 0.0, 1.0)) {
+            out.push(SkinDiagnostic::error(f("opacity"), "must be 0–1"));
+        }
+        if e.text_scale.is_some_and(|v| !in_range(v, 0.3, 3.0)) {
+            out.push(SkinDiagnostic::error(f("text_scale"), "must be 0.3–3"));
+        }
+        if let Some(b) = &e.badge {
+            check_corners(&f("badge.radius"), [b.radius; 4], out);
+            check_borders(&f("badge.border_width"), [b.border_width; 4], out);
+        }
+    }
 
     let tags = &skin.meta.tags;
     let bad_tag = |t: &String| {

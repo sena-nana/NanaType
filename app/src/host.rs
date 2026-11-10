@@ -2274,6 +2274,7 @@ mod redraw_tests {
                 at: 0,
                 uid: None,
                 reply: None,
+                event: None,
             },
             doc: Arc::new(doc),
             reveal: Some(nanatype_core::Reveal {

@@ -223,6 +223,35 @@ color = "#9b6bff"
 [history.text]
 color = "#f3e9ff"
 
+[history.event]
+layout = "card"
+color = "#1b1128"
+border_color = "#ff4fb8"
+border_width = 1.0
+radius = 12.0
+shadows = [{ color = "#ff4fb866", dx = 0.0, dy = 0.0, blur = 10.0, inset = false, spread = 0.0 }]
+icon = "♪"
+icon_color = "#ff4fb8"
+badge = { color = "#ff4fb8", text_color = "#1b1128", radius = 999.0 }
+
+[history.event.gift]
+layout = "notice"
+radius = 999.0
+border_color = "#9b6bff"
+shadows = [{ color = "#9b6bff66", dx = 0.0, dy = 0.0, blur = 8.0, inset = false, spread = 0.0 }]
+
+[history.event.super_chat]
+price_color = "border"
+
+[history.event.member]
+color = "#5b32b8"
+gradient = { angle = 135.0, stops = [[0.0, "#b0257a"], [1.0, "#5b32b8"]] }
+text_color = "#ffffff"
+name_color = "#ffffff"
+icon = "★"
+icon_color = "#ffffff"
+badge = { color = "#ffffff", text_color = "#5b32b8", radius = 999.0 }
+
 [mention]
 avatar = true
 fill = "#3b1a3c"

@@ -12,7 +12,9 @@ use nana_ui_core::{
     AlignSpec, BackgroundImage, LengthSpec, OverflowSpec, PointerEventsSpec, PositionSpec,
     RadiusTier, TransformOrigin,
 };
-use nanatype_model::{ChatRef, ChatUser, HistoryItem, Rgba8, SourceId, SourceKind};
+use nanatype_model::{
+    ChatRef, ChatUser, EventInfo, EventKind, HistoryItem, Rgba8, SourceId, SourceKind,
+};
 use nanatype_settings::{Settings, SkinPersonalization, SurfacePersonalization};
 use nanatype_theme::Skin;
 
@@ -423,6 +425,7 @@ fn history_row(
             at,
             uid: uid.map(str::to_owned),
             reply: reply.map(Box::new),
+            event: None,
         },
         doc: Arc::new(doc),
         reveal: None,
@@ -447,7 +450,8 @@ fn designed_history(ui: Stage) -> Vec<nanatype_core::HistoryRow> {
         SourceKind::Chat,
     );
     let t0 = 1_700_000_000_000u64;
-    vec![
+    let paid_viewer = viewer.clone();
+    let mut rows = vec![
         history_row(
             0,
             SourceKind::Typewriter,
@@ -529,7 +533,27 @@ fn designed_history(ui: Stage) -> Vec<nanatype_core::HistoryRow> {
             t0 + 580_000,
             ui.now_t("skin-edit-history-member"),
         ),
-    ]
+        history_row(
+            9,
+            SourceKind::Event,
+            paid_viewer,
+            Some("preview-viewer"),
+            None,
+            t0 + 640_000,
+            format!("[b]¥30 [/b]{}", ui.now_t("skin-edit-history-viewer-more")),
+        ),
+    ];
+    // Each event names its kind, so a skin's gift, membership and paid
+    // message looks all show.
+    let event = |kind, amount: Option<&str>, color| EventInfo {
+        kind,
+        amount: amount.map(str::to_owned),
+        color,
+    };
+    rows[7].item.event = Some(event(EventKind::Gift, Some("¥1"), None));
+    rows[8].item.event = Some(event(EventKind::Member, Some("¥138"), None));
+    rows[9].item.event = Some(event(EventKind::SuperChat, Some("¥30"), Some(0x00e5ff)));
+    rows
 }
 
 /// How long one history-sample message stays before the next appears.

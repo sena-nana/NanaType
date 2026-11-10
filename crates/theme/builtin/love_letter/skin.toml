@@ -195,6 +195,36 @@ color = "#4e2a33"
 line_height = 1.600000023841858
 size = 23.0
 
+[history.event]
+layout = "notice"
+color = "#00000000"
+border_color = "#7e1f35"
+border_widths = [0.0, 0.0, 1.0, 0.0]
+border_style = "dotted"
+radius = 0.0
+icon = "♥"
+icon_color = "#7e1f35"
+badge = { color = "#7e1f35", text_color = "#fffbf2", radius = 2.0 }
+
+[history.event.super_chat]
+layout = "card"
+color = "#fffbf2"
+border_width = 1.0
+radius = 2.0
+padding = [18.0, 12.0]
+price_color = "badge"
+
+[history.event.member]
+layout = "card"
+color = "#7e1f35"
+border_width = 0.0
+radius = 2.0
+padding = [18.0, 12.0]
+text_color = "#fffbf2"
+name_color = "#fffbf2"
+icon_color = "#f3c9c9"
+badge = { color = "#fffbf2", text_color = "#7e1f35", radius = 2.0 }
+
 [materials.dissolve]
 params = []
 source = "dissolve.wgsl"

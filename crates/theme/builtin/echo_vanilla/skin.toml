@@ -654,6 +654,29 @@ size = 21.0
 text = "HISTORY"
 weight = 600
 
+[history.event]
+icon = "■"
+icon_color = "#606266"
+
+[history.event.super_chat]
+layout = "card"
+color = "#ffffff"
+border_color = "#606266"
+border_widths = [0.0, 0.0, 0.0, 4.0]
+radius = 0.0
+padding = [14.0, 8.0]
+price_color = "border"
+
+[history.event.member]
+layout = "card"
+color = "#606266"
+radius = 0.0
+padding = [14.0, 8.0]
+text_color = "#ffffff"
+name_color = "#ffffff"
+icon_color = "#ffffff"
+badge = { color = "#ffffff", text_color = "#606266", radius = 2.0 }
+
 [shaders.compact_print]
 animated = false
 intensity = 1.0

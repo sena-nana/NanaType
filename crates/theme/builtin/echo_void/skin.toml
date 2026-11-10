@@ -420,3 +420,26 @@ shadows = []
 
 [history.text]
 line_height = 1.399999976158142
+
+[history.event]
+icon = "◇"
+icon_color = "#888888"
+
+[history.event.super_chat]
+layout = "card"
+color = "#ffffff"
+border_color = "#888888"
+border_width = 1.0
+radius = 2.0
+padding = [12.0, 8.0]
+price_color = "badge"
+
+[history.event.member]
+layout = "card"
+color = "#888888"
+radius = 2.0
+padding = [12.0, 8.0]
+text_color = "#ffffff"
+name_color = "#ffffff"
+icon_color = "#ffffff"
+badge = { color = "#ffffff", text_color = "#555555", radius = 2.0 }

@@ -204,6 +204,28 @@ dy = 1.0
 color = "#29222b99"
 width = 0.699999988079071
 
+[history.event]
+layout = "notice"
+icon = "◇"
+icon_color = "#e5bf83"
+
+[history.event.super_chat]
+color = "#29262bcc"
+border_color = "#e5bf83"
+border_widths = [1.0, 0.0, 1.0, 0.0]
+radius = 0.0
+padding = [16.0, 8.0]
+price_color = "badge"
+
+[history.event.member]
+color = "#29262bcc"
+border_color = "#e5bf83"
+border_widths = [1.0, 0.0, 1.0, 0.0]
+radius = 0.0
+padding = [16.0, 8.0]
+icon = "★"
+badge = { color = "#e5bf83", text_color = "#29262b", radius = 2.0 }
+
 [materials.appear]
 params = []
 source = "appear.wgsl"

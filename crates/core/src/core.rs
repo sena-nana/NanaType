@@ -845,6 +845,7 @@ impl Core {
             at: unix_millis(),
             uid: None,
             reply: line.reply.clone(),
+            event: None,
         }
     }
 

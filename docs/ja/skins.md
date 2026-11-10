@@ -114,6 +114,8 @@ coin = "sounds/coin.ogg"
 
 新しいメッセージは `history.entrance`（`slide_up`、`fade`、`slide_left`。`none` はそのまま表示）で入場し、すでに画面にあるメッセージは同じ 220ms のイーズアウトで新しい位置へ滑ります。新しいメッセージが一覧を押し上げると全体が上へ動き、表示件数の上限で最も古いものが消えると下のメッセージがその空きを埋めます。フレームワークの既定は `none` で、内蔵スキンはすべて入場アニメーションを有効にしています。視差効果を減らす設定では、メッセージは即座に定位置に置かれます。
 
+ギフト、スーパーチャット、メンバー加入はイベント行です。スキンは `[history.event]` で専用の見た目（カード、帯、吹き出し、記号、金額ラベル、プラットフォームの価格色）を指定でき、`gift`、`super_chat`、`member` で項目ごとに上書きできます。書かなかった項目はメッセージ行の見た目に戻るため、この節のないスキンではイベントが通常のコメントとして表示されます。内蔵スキンはすべて独自のイベント表示を持ちます。
+
 ## マニフェスト
 
 ```toml
@@ -306,6 +308,30 @@ size = 18
 [history.chat]                    # B 站コメントの行（設定 › 履歴 › コメント をオンにすると表示）
 text_scale = 0.88                 # history.text に対するコメント文字の大きさ
 bubble_opacity = 0.7              # コメント吹き出しの下地全体の不透明度（グラデーション、縁、影、9 スライス画像を含む）。本文は不透明のまま
+
+[history.event]                   # ギフト、スーパーチャット、メンバー加入などのイベント行。この節を書かなければコメント行と同じ見た目
+layout = "card"                   # bubble：メッセージ行と同じ配置（既定） | card：行いっぱいのカード。アバター、名前、金額をカード内に置く | notice：アバターなしの帯。名前と内容を一行に並べる
+color = "#fff0f5"                 # 以下の外観フィールドを一つでも書くと、吹き出しではなく専用の下地を描く。
+border_color = "#f2c4d5"          # 書かなかった項目は吹き出しの bubble_color、bubble_border、bubble_border_width、bubble_radius を使う
+border_width = 1.5
+radius = 16
+# gradient、radii、border_widths、border_style、shadows、contour、material、border_material も使える
+padding = [14, 10]                # 水平 垂直。既定は bubble_padding
+text_color = "#6b2141"            # 既定は history.text。下地とのコントラストが 4.5:1 未満なら黒か白に切り替える
+name_color = "#c2416f"            # カードと通知の名前。bubble 配置で name_plate がない場合は吹き出し上の名前にも使う
+icon = "✿"                        # 本文の前の記号。最大 8 文字、fonts.accent で描く
+icon_color = "accent"             # 既定は名前の色
+price_color = "none"              # プラットフォームが金額に付ける色（スーパーチャットの価格帯の色）の使い道：none | fill（下地全体。文字は黒か白になる）| border | badge（金額ラベルのみ）
+opacity = 1.0                     # 下地の不透明度。専用の下地があれば既定 1、なければ history.chat.bubble_opacity
+text_scale = 0.88                 # 既定は history.chat.text_scale
+badge = { color = "accent", text_color = "#ffffff", radius = 999, border_color = "#ffffff", border_width = 0 }   # 金額ラベル（¥30）。badge を書かず price_color も badge でなければ表示せず、スーパーチャットの金額は本文の先頭に残る
+
+[history.event.super_chat]        # 種類ごとの上書き：gift（ギフト）、super_chat（有料メッセージ）、member（メンバー加入）
+price_color = "badge"             # フィールドは [history.event] と同じで、項目ごとに上書きする。書かなかった項目は [history.event]、それもなければメッセージ行の見た目になる
+
+[history.event.member]            # color を変えた種類は [history.event] の gradient を引き継がない
+color = "accent"
+icon = "★"
 
 [history.reply]                   # 返信コメントへの台詞。吹き出しの上に一行の引用：アバター · ニックネーム：原文（inline レイアウトでは行全体の上、台詞カラムに揃える）
 visible = true
@@ -564,6 +590,7 @@ NanaUI は一度にひとつのフォント名しか使わないため、NanaTyp
 - フォントを解析できない。効果音が WAV / OGG / FLAC / MP3 でない
 - 色や数値が不正（文字サイズが 4–400 の範囲外など）
 - グラデーションの色標が 2–8 個でない、または位置が減少している。角丸が 0–2000、枠線が 0–64 の範囲外。影が 4 層を超える
+- `[history.event]` と種類ごとの `icon` が 8 文字を超える、`padding` が 0–1024、`opacity` が 0–1、`text_scale` が 0.3–3 の範囲外
 - 装飾が 16 個を超える、多角形が 3–8 点でない、文字が 8 文字を超える。しっぽや `continue` のコマ数・速度が範囲外。`margin` が領域を埋め尽くしている
 - パラメーター宣言、プリセット、`{ param = … }` プレースホルダーが不正、またはパラメーターが取りうる値（範囲の両端、各選択肢、最長のテキスト、各プリセット）が埋め込み先のフィールドを範囲外にする（[スキンパラメーター](#スキンパラメーター)を参照）
 

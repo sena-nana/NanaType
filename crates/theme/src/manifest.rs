@@ -1220,6 +1220,188 @@ impl Default for HistoryChatSpec {
     }
 }
 
+/// Where an event row sits in the list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HistoryEventLayout {
+    /// Laid out like a message: avatar, name, then the bubble.
+    #[default]
+    Bubble,
+    /// One card across the row, with the avatar, name and amount inside it.
+    Card,
+    /// A strip across the row without an avatar: name and text on one line.
+    Notice,
+}
+
+/// Where the platform's colour for an amount (a Super Chat's price band)
+/// goes on an event row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EventPriceColor {
+    /// Nowhere: the skin's own colours only.
+    #[default]
+    None,
+    /// The row's fill; its text turns black or white to stay readable.
+    Fill,
+    Border,
+    /// The amount badge only.
+    Badge,
+}
+
+/// The pill around an event's amount (`¥30`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HistoryEventBadge {
+    pub color: ColorRef,
+    pub text_color: ColorRef,
+    pub radius: f32,
+    pub border_color: Option<ColorRef>,
+    pub border_width: f32,
+}
+
+impl Default for HistoryEventBadge {
+    fn default() -> Self {
+        Self {
+            color: ColorRef::Role(ColorRole::Accent),
+            text_color: ColorRef::Rgba(Rgba8::rgb(255, 255, 255)),
+            radius: 999.0,
+            border_color: None,
+            border_width: 0.0,
+        }
+    }
+}
+
+/// How one kind of event row looks. A field left out falls back: from a
+/// kind's own table to `[history.event]`, and from there to the message row.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HistoryEventStyle {
+    pub layout: Option<HistoryEventLayout>,
+    pub color: Option<ColorRef>,
+    pub border_color: Option<ColorRef>,
+    pub border_width: Option<f32>,
+    pub radius: Option<f32>,
+    /// Horizontal, vertical.
+    pub padding: Option<[f32; 2]>,
+    pub text_color: Option<ColorRef>,
+    pub name_color: Option<ColorRef>,
+    /// A mark before the text.
+    pub icon: Option<String>,
+    pub icon_color: Option<ColorRef>,
+    pub price_color: Option<EventPriceColor>,
+    /// Opacity of the artwork behind the text.
+    pub opacity: Option<f32>,
+    /// Text size relative to the history text.
+    pub text_scale: Option<f32>,
+    pub badge: Option<HistoryEventBadge>,
+    #[serde(flatten)]
+    pub shape: ShapeSpec,
+}
+
+impl HistoryEventStyle {
+    /// Whether the row paints a surface of its own instead of the bubble's.
+    pub fn has_surface(&self) -> bool {
+        self.color.is_some()
+            || self.border_color.is_some()
+            || self.border_width.is_some()
+            || self.radius.is_some()
+            || self.shape != ShapeSpec::default()
+    }
+
+    /// `self` with the fields `over` sets replaced.
+    fn overlaid(&self, over: &Self) -> Self {
+        let base = &self.shape;
+        let top = &over.shape;
+        Self {
+            layout: over.layout.or(self.layout),
+            color: over.color.or(self.color),
+            border_color: over.border_color.or(self.border_color),
+            border_width: over.border_width.or(self.border_width),
+            radius: over.radius.or(self.radius),
+            padding: over.padding.or(self.padding),
+            text_color: over.text_color.or(self.text_color),
+            name_color: over.name_color.or(self.name_color),
+            icon: over.icon.clone().or_else(|| self.icon.clone()),
+            icon_color: over.icon_color.or(self.icon_color),
+            price_color: over.price_color.or(self.price_color),
+            opacity: over.opacity.or(self.opacity),
+            text_scale: over.text_scale.or(self.text_scale),
+            badge: over.badge.clone().or_else(|| self.badge.clone()),
+            shape: ShapeSpec {
+                material: top.material.clone().or_else(|| base.material.clone()),
+                border_material: top
+                    .border_material
+                    .clone()
+                    .or_else(|| base.border_material.clone()),
+                contour: top.contour.or(base.contour),
+                // A kind that recolours its fill does not keep the gradient
+                // painted over the shared one.
+                gradient: top
+                    .gradient
+                    .clone()
+                    .or_else(|| base.gradient.clone().filter(|_| over.color.is_none())),
+                radii: top.radii.or(base.radii.filter(|_| over.radius.is_none())),
+                border_widths: top
+                    .border_widths
+                    .or(base.border_widths.filter(|_| over.border_width.is_none())),
+                border_style: if top.border_style == BorderStyleSpec::default() {
+                    base.border_style
+                } else {
+                    top.border_style
+                },
+                shadows: if top.shadows.is_empty() {
+                    base.shadows.clone()
+                } else {
+                    top.shadows.clone()
+                },
+            },
+        }
+    }
+}
+
+/// `[history.event]`: gifts, paid messages and memberships in the list. Its
+/// own fields dress every event; `gift`, `super_chat` and `member` override
+/// them field by field.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HistoryEvents {
+    #[serde(flatten)]
+    pub style: HistoryEventStyle,
+    pub gift: Option<Box<HistoryEventStyle>>,
+    pub super_chat: Option<Box<HistoryEventStyle>>,
+    pub member: Option<Box<HistoryEventStyle>>,
+}
+
+impl HistoryEvents {
+    /// The tables a skin wrote, with their field prefixes.
+    pub fn styles(&self) -> impl Iterator<Item = (&'static str, &HistoryEventStyle)> {
+        [
+            ("history.event", Some(&self.style)),
+            ("history.event.gift", self.gift.as_deref()),
+            ("history.event.super_chat", self.super_chat.as_deref()),
+            ("history.event.member", self.member.as_deref()),
+        ]
+        .into_iter()
+        .filter_map(|(field, style)| Some((field, style?)))
+    }
+
+    /// The style of one kind of event, its fallbacks to `[history.event]`
+    /// applied.
+    pub fn resolve(&self, kind: nanatype_model::EventKind) -> HistoryEventStyle {
+        use nanatype_model::EventKind;
+        let over = match kind {
+            EventKind::Gift => &self.gift,
+            EventKind::SuperChat => &self.super_chat,
+            EventKind::Member => &self.member,
+            EventKind::Notice => &None,
+        };
+        match over {
+            Some(over) => self.style.overlaid(over),
+            None => self.style.clone(),
+        }
+    }
+}
+
 impl Default for Dialogue {
     fn default() -> Self {
         Self {
@@ -1441,6 +1623,8 @@ pub struct History {
     pub hide_latest: bool,
     /// Live-chat rows.
     pub chat: HistoryChatSpec,
+    /// Gift, paid-message and membership rows; `None` shows them as chat.
+    pub event: Option<HistoryEvents>,
     /// The chat message a row answers, quoted above its bubble.
     pub reply: ReplySpec,
 }
@@ -1489,6 +1673,7 @@ impl Default for History {
             decor: Vec::new(),
             hide_latest: false,
             chat: HistoryChatSpec::default(),
+            event: None,
             reply: ReplySpec::default(),
         }
     }
@@ -1691,7 +1876,20 @@ impl Skin {
                 "history.panel.border_material",
                 &p.shape,
             )
-        }));
+        }))
+        .chain(
+            self.history
+                .event
+                .iter()
+                .flat_map(HistoryEvents::styles)
+                .map(|(_, style)| {
+                    (
+                        "history.event.material",
+                        "history.event.border_material",
+                        &style.shape,
+                    )
+                }),
+        );
         for (fill, border, shape) in shapes {
             if let Some(value) = &shape.material {
                 refs.push((fill, value.as_str()));

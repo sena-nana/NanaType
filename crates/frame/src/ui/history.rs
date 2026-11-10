@@ -20,8 +20,13 @@ use nana_ui_core::{
     OverflowSpec, PointerEventsSpec, PositionSpec,
 };
 use nanatype_core::HistoryRow;
-use nanatype_model::{Document, Entrance, HistoryItem, Inline, LineId, Rgba8, SourceKind, Stroke};
-use nanatype_theme::{AvatarShape, DecorLayer, HistoryEntrance, HistoryLayout, HistoryTitle, Skin};
+use nanatype_model::{
+    Document, Entrance, EventKind, HistoryItem, Inline, LineId, Rgba8, SourceKind, Stroke,
+};
+use nanatype_theme::{
+    AvatarShape, DecorLayer, EventPriceColor, HistoryEntrance, HistoryEventLayout, HistoryLayout,
+    HistoryTitle, Skin,
+};
 
 use super::dialogue::{self, Base, Timing, document};
 use super::surface::{self, Surface};
@@ -174,7 +179,14 @@ fn viewport_height(ui: Stage, skin: &Skin, settings: &nanatype_settings::Setting
 /// Fade the entire bubble artwork as one layer, leaving its text at full
 /// strength. Reserving the artwork's borders in the content padding keeps
 /// image frames, retained contours and ordinary CSS surfaces on the same path.
-fn bubble_view(surface: Surface, opacity: f32, pad: [f32; 2], max: f32, body: AnyView) -> AnyView {
+fn bubble_view(
+    surface: Surface,
+    opacity: f32,
+    pad: [f32; 2],
+    max: f32,
+    stretch: bool,
+    body: AnyView,
+) -> AnyView {
     let widths = surface.frame.as_ref().map_or_else(
         || surface.border.as_ref().map_or([0.0; 4], |b| b.widths),
         |(_, widths)| *widths,
@@ -196,7 +208,11 @@ fn bubble_view(surface: Surface, opacity: f32, pad: [f32; 2], max: f32, body: An
     .children(widget(surface.stack(Stack::fill_column(0.0))));
     widget(
         Stack::column(0.0)
-            .width(LengthSpec::Shrink)
+            .width(if stretch {
+                LengthSpec::Px(max)
+            } else {
+                LengthSpec::Shrink
+            })
             .with_layout(move |l| {
                 l.position = PositionSpec::Relative;
                 l.max_width = Some(LengthSpec::Px(max));
@@ -208,6 +224,213 @@ fn bubble_view(surface: Surface, opacity: f32, pad: [f32; 2], max: f32, body: An
     )
     .children((backdrop, body))
     .into_any()
+}
+
+/// A gift, paid message or membership as the skin dresses it, every
+/// fallback to the message row already applied.
+#[derive(Clone)]
+struct EventLook {
+    layout: HistoryEventLayout,
+    style: nanatype_theme::HistoryEventStyle,
+    /// The colour under the text; the bubble's when the row has no own fill.
+    fill: Rgba8,
+    text: Rgba8,
+    name: Rgba8,
+    icon: Rgba8,
+    opacity: f32,
+    scale: f32,
+    pad: [f32; 2],
+    /// The platform's colour for the amount, where the skin wants it.
+    price: Option<(EventPriceColor, Rgba8)>,
+    /// The amount in its pill: text, fill, lettering.
+    badge: Option<(String, Rgba8, Rgba8)>,
+}
+
+impl EventLook {
+    fn of(skin: &Skin, item: &HistoryItem) -> Option<Self> {
+        let h = &skin.history;
+        if item.kind != SourceKind::Event {
+            return None;
+        }
+        let info = item.event.as_ref();
+        let style = h
+            .event
+            .as_ref()?
+            .resolve(info.map_or(EventKind::Notice, |e| e.kind));
+        let placement = style.price_color.unwrap_or_default();
+        let price = info
+            .and_then(|e| e.color)
+            .filter(|_| placement != EventPriceColor::None)
+            .map(|rgb| Rgba8::rgb((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8));
+        let filled = price.filter(|_| placement == EventPriceColor::Fill);
+        let fill = filled.unwrap_or(style.color.map_or(h.bubble_color, |col| skin.color(col)));
+        // Only a fill that hides what is behind it can be measured against.
+        let opaque = fill.a >= 128;
+        let readable = |wanted: Rgba8, least: f32, otherwise: Rgba8| {
+            if opaque && crate::skin_theme::contrast(wanted, fill) < least {
+                otherwise
+            } else {
+                wanted
+            }
+        };
+        let pick = |col: Option<nanatype_theme::ColorRef>, default: Rgba8| {
+            col.map_or(default, |col| skin.color(col))
+        };
+        let text = readable(
+            pick(style.text_color, h.text.color),
+            4.5,
+            crate::skin_theme::on(fill),
+        );
+        // The skin chose its name and icon colours for its own fill, not
+        // for whichever colour the platform hands over.
+        let on_fill = |wanted: Rgba8| match filled {
+            Some(_) => text,
+            None => readable(wanted, 3.0, text),
+        };
+        let name = on_fill(pick(style.name_color, h.name_color));
+        let icon = on_fill(pick(style.icon_color, name));
+        let badge = info
+            .and_then(|e| e.amount.clone())
+            .filter(|_| style.badge.is_some() || placement == EventPriceColor::Badge)
+            .map(|amount| {
+                let spec = style.badge.clone().unwrap_or_default();
+                let (plate, lettering) = match price {
+                    Some(price) if placement == EventPriceColor::Badge => {
+                        (price, crate::skin_theme::on(price))
+                    }
+                    // On the platform's colour the pill takes the text's.
+                    Some(_) if filled.is_some() => (text, fill),
+                    _ => {
+                        let plate = skin.color(spec.color);
+                        let lettering = skin.color(spec.text_color);
+                        if crate::skin_theme::contrast(lettering, plate) < 4.5 {
+                            (plate, crate::skin_theme::on(plate))
+                        } else {
+                            (plate, lettering)
+                        }
+                    }
+                };
+                (amount, plate, lettering)
+            });
+        Some(Self {
+            layout: style.layout.unwrap_or_default(),
+            fill,
+            text,
+            name,
+            icon,
+            opacity: style
+                .opacity
+                .unwrap_or(if style.has_surface() || filled.is_some() {
+                    1.0
+                } else {
+                    h.chat.bubble_opacity
+                })
+                .clamp(0.0, 1.0),
+            scale: style.text_scale.unwrap_or(h.chat.text_scale),
+            pad: style.padding.unwrap_or(h.bubble_padding),
+            price: price.map(|price| (placement, price)),
+            badge,
+            style,
+        })
+    }
+
+    /// The row's surface, the platform's colour laid where the skin put it.
+    fn surface(&self, skin: &Skin, frame_url: Option<String>) -> Surface {
+        let mut surface = Surface::event(skin, &self.style, frame_url);
+        match self.price {
+            Some((EventPriceColor::Fill, price)) => {
+                if surface.frame.take().is_some() {
+                    surface.radii = [skin.history.bubble_radius; 4];
+                }
+                surface.fill = Some(c(price));
+                surface.gradient = None;
+                surface.material = None;
+            }
+            Some((EventPriceColor::Border, price)) => {
+                surface.frame = None;
+                surface.border_material = None;
+                match &mut surface.border {
+                    Some(border) => border.color = c(price),
+                    None => {
+                        surface.border = Some(surface::Border {
+                            widths: [2.0; 4],
+                            color: c(price),
+                            style: Default::default(),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+        surface
+    }
+
+    /// The row's text as this look shows it: without the amount the badge
+    /// already carries.
+    fn dress(&self, doc: &Document) -> Document {
+        let mut inlines: Vec<Inline> = doc
+            .paragraphs
+            .iter()
+            .flat_map(|p| p.inlines.iter().cloned())
+            .collect();
+        if let Some((amount, ..)) = &self.badge
+            && matches!(inlines.first(), Some(Inline::Text(run)) if run.text.trim_end() == amount)
+        {
+            inlines.remove(0);
+        }
+        if inlines.is_empty() {
+            Document::new()
+        } else {
+            Document::from_inlines(inlines)
+        }
+    }
+
+    fn icon_view(&self, skin: &Skin, size: f32) -> Option<AnyView> {
+        let glyph = self.style.icon.clone().filter(|g| !g.is_empty())?;
+        let mut style = NodeStyle::default();
+        let l = Arc::make_mut(&mut style.layout);
+        l.font_size = Some(size);
+        l.font_family = skin.fonts.accent.families.first().cloned();
+        l.color = Some(c(self.icon));
+        l.white_space_nowrap = true;
+        l.flex_shrink = Some(0.0);
+        Some(widget(Text::new(glyph).decorative().style(style)).into_any())
+    }
+
+    fn badge_view(&self, skin: &Skin, size: f32) -> Option<AnyView> {
+        let (amount, plate, lettering) = self.badge.clone()?;
+        let spec = self.style.badge.clone().unwrap_or_default();
+        let mut style = NodeStyle::default();
+        let l = Arc::make_mut(&mut style.layout);
+        l.font_size = Some(size);
+        l.font_weight = Some(700);
+        l.font_family = skin.fonts.name.families.first().cloned();
+        l.color = Some(c(lettering));
+        l.white_space_nowrap = true;
+        super::tnum(l);
+        let border = spec
+            .border_color
+            .filter(|_| spec.border_width > 0.0 && self.price.is_none())
+            .map(|col| (spec.border_width, c(skin.color(col))));
+        Some(
+            widget(
+                Stack::row(0.0)
+                    .padding_xy((size * 0.6).round(), 1.0)
+                    .with_layout(move |l| {
+                        l.background = Some(c(plate));
+                        l.border_radius = Some(spec.radius);
+                        l.flex_shrink = Some(0.0);
+                        if let Some((width, color)) = border {
+                            l.border_width = Some(width);
+                            l.border_color = Some(color);
+                            l.border_style = Some(nana_ui_core::BorderStyle::Solid);
+                        }
+                    }),
+            )
+            .children(widget(Text::new(amount).style(style)))
+            .into_any(),
+        )
+    }
 }
 
 /// Rows of one speaker this close together share a header.
@@ -419,8 +642,15 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
         return widget(Stack::row(0.0)).into_any();
     };
     let inline = h.layout == HistoryLayout::Inline && col_w >= 160.0;
+    let look = EventLook::of(&skin, &row.item);
+    // A card or a notice is the whole row: it neither groups nor sits in
+    // the name and time columns.
+    let boxed = look
+        .as_ref()
+        .map(|l| l.layout)
+        .filter(|l| *l != HistoryEventLayout::Bubble);
     // Echo-Live's log names every line; bubble lists group.
-    let follows = follows && !inline;
+    let follows = follows && !inline && boxed.is_none();
     let size = h.avatar.size;
     let radius = match h.avatar.shape {
         AvatarShape::Circle => size / 2.0,
@@ -429,10 +659,10 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
     // Chat rows name a saved picture (`blob:…`); the local speaker's avatar
     // is a path or a URL.
     let chat = row.item.kind != SourceKind::Typewriter;
-    let bubble_opacity = if chat {
-        h.chat.bubble_opacity.clamp(0.0, 1.0)
-    } else {
-        1.0
+    let bubble_opacity = match &look {
+        Some(look) => look.opacity,
+        None if chat => h.chat.bubble_opacity.clamp(0.0, 1.0),
+        None => 1.0,
     };
     let quote = row
         .item
@@ -527,6 +757,8 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
         l.color = Some(c(h.name_color));
         if let Some(p) = &h.name_plate {
             l.color = Some(c(skin.color(p.text_color)));
+        } else if let Some(col) = look.as_ref().and_then(|l| l.style.name_color) {
+            l.color = Some(c(skin.color(col)));
         }
         if let Some(stroke) = &h.name_stroke {
             surface::text_stroke(l, stroke);
@@ -578,6 +810,23 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
         };
         widget(Text::new(ui.now_t(key)).style(time_style.clone()))
     });
+    // On a card the name and the time sit on the event's own colour.
+    let card_styles = look.as_ref().map(|look| {
+        let (mut name, mut time) = (name_style.clone(), time_style.clone());
+        let opaque = look.fill.a >= 128;
+        for (style, color) in [(&mut name, look.name), (&mut time, look.text)] {
+            let l = Arc::make_mut(&mut style.layout);
+            l.color = Some(c(color));
+            if opaque {
+                l.paint.text_stroke = None;
+            }
+            l.min_width = Some(LengthSpec::Px(0.0));
+        }
+        // A long name gives way to the amount beside it.
+        Arc::make_mut(&mut name.layout).flex_shrink = Some(1.0);
+        Arc::make_mut(&mut time.layout).opacity = Some(0.7);
+        (name, time)
+    });
     let name = show_name.then(|| {
         let plate = name_plate.clone();
         let max_name = if inline { inline_name_w } else { col_w - 64.0 }.max(32.0);
@@ -610,13 +859,21 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
     let time = show_time
         .then(|| widget(Text::new(local_time(row.item.at, h.time_seconds)).style(time_style)));
 
-    let pad = h.bubble_padding;
+    let pad = look.as_ref().map_or(h.bubble_padding, |l| l.pad);
     let frame_url = h.bubble_frame.as_ref().and_then(|f| {
         ui.asset_urls
             .with_untracked(|m| m.get(&format!("skin:{}", f.image)).cloned())
     });
-    let mut bubble_surface =
-        Surface::bubble(&skin, frame_url).materials(super::materials::enabled(ui));
+    let mut bubble_surface = match &look {
+        Some(look) => look.surface(&skin, frame_url),
+        None => Surface::bubble(&skin, frame_url),
+    }
+    .materials(super::materials::enabled(ui));
+    // How much of what is behind the row its artwork hides.
+    let surface_alpha =
+        f32::from(look.as_ref().map_or(h.bubble_color, |l| l.fill).a) * bubble_opacity;
+    let event_doc = look.as_ref().map(|look| look.dress(&row.doc));
+    let body_look = look.clone();
     if follows {
         // Only a group's first bubble points at the avatar.
         bubble_surface.radii[0] = bubble_surface.radii[0].max(h.bubble_radius);
@@ -652,21 +909,35 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
             let mut base = Base::history(&skin, entrance, ui.reduced_motion.get_untracked());
             base.sticker_scale = ui.settings.with_untracked(|s| s.assets.sticker_scale);
             if row.item.kind != SourceKind::Typewriter {
-                let scale = skin.history.chat.text_scale;
+                let scale = body_look
+                    .as_ref()
+                    .map_or(skin.history.chat.text_scale, |l| l.scale);
                 if scale.is_finite() && scale > 0.0 {
                     base.size *= scale.clamp(0.3, 3.0);
                 }
             }
+            if let Some(look) = body_look.as_ref().filter(|l| l.text != base.color) {
+                base.color = look.text;
+                // An outline or glow drawn for the skin's own ink would
+                // smear a colour chosen for this fill.
+                if look.fill.a >= 128 {
+                    base.stroke = None;
+                    base.shadow = None;
+                }
+            }
+            let dressed = body_look
+                .as_ref()
+                .map(|look| Arc::new(look.dress(&row.doc)));
+            let doc = dressed.as_ref().unwrap_or(&row.doc);
             let timing = match &row.reveal {
                 Some(r) => Timing::Reveal(r.clone()),
                 None => Timing::Static,
             };
-            let see_through =
-                exposed && f32::from(skin.history.bubble_color.a) * bubble_opacity < 128.0;
+            let see_through = exposed && surface_alpha < 128.0;
             let text = if see_through && base.stroke.is_none() {
-                document(ui, &transparent_text(&row.doc, base.color), &base, timing)
+                document(ui, &transparent_text(doc, base.color), &base, timing)
             } else {
-                document(ui, &row.doc, &base, timing)
+                document(ui, doc, &base, timing)
             };
             let translation = row
                 .translation
@@ -711,13 +982,120 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
     } else {
         col_w
     };
-    let bubble = bubble_view(
-        bubble_surface,
-        bubble_opacity,
-        pad,
-        bubble_max,
-        body.into_any(),
-    );
+    let mark_size = (h.text.size * look.as_ref().map_or(1.0, |l| l.scale)).max(9.0);
+    let badge_size = (mark_size * 0.72).max(10.0);
+    let icon = look.as_ref().and_then(|l| l.icon_view(&skin, mark_size));
+    let badge = look.as_ref().and_then(|l| l.badge_view(&skin, badge_size));
+    let has_text = event_doc.as_ref().is_none_or(|doc| !doc.is_blank());
+    let text_slot = |body: AnyView| {
+        widget(Stack::row(0.0).width(LengthSpec::Shrink).with_layout(|l| {
+            l.flex_shrink = Some(1.0);
+            l.min_width = Some(LengthSpec::Px(0.0));
+        }))
+        .children(body)
+        .into_any()
+    };
+    let row_w = col_w + if show_avatar { size + 10.0 } else { 0.0 };
+    if let Some(layout) = boxed {
+        let (name_style, time_style) = card_styles.clone().unwrap_or_default();
+        let content = match layout {
+            HistoryEventLayout::Notice => {
+                let line = widget(Stack::row(6.0).width(LengthSpec::Fill).with_layout(|l| {
+                    l.align_items = AlignSpec::Baseline;
+                    l.min_width = Some(LengthSpec::Px(0.0));
+                }))
+                .children((
+                    icon,
+                    show_name.then(|| {
+                        let mut style = name_style;
+                        Arc::make_mut(&mut style.layout).max_width =
+                            Some(LengthSpec::Px((row_w * 0.4).max(32.0)));
+                        widget(Text::new(row.item.author.clone()).style(style).truncating())
+                    }),
+                    // Takes the spare width, so the amount sits at the right
+                    // edge.
+                    widget(Stack::row(0.0).with_layout(|l| {
+                        l.flex_grow = Some(1.0);
+                        l.flex_shrink = Some(1.0);
+                        l.min_width = Some(LengthSpec::Px(0.0));
+                    }))
+                    .children(has_text.then(|| body.into_any())),
+                    badge,
+                ));
+                bubble_view(
+                    bubble_surface,
+                    bubble_opacity,
+                    pad,
+                    row_w,
+                    true,
+                    line.into_any(),
+                )
+            }
+            _ => {
+                let head = widget(
+                    Stack::row(6.0)
+                        .align(AlignSpec::Center)
+                        .width(LengthSpec::Fill)
+                        .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
+                )
+                .children((
+                    icon,
+                    show_name.then(|| {
+                        widget(
+                            Text::new(row.item.author.clone())
+                                .style(name_style)
+                                .truncating(),
+                        )
+                    }),
+                    // Takes the spare width: the amount and the time sit at
+                    // the right edge.
+                    widget(Stack::row(0.0).with_layout(|l| {
+                        l.flex_grow = Some(1.0);
+                    })),
+                    badge,
+                    (settings.history.show_time && row_w - 2.0 * pad[0] >= 200.0).then(|| {
+                        widget(Text::new(local_time(row.item.at, h.time_seconds)).style(time_style))
+                    }),
+                ));
+                let text = widget(Stack::column(4.0).with_layout(|l| {
+                    l.flex_grow = Some(1.0);
+                    l.flex_shrink = Some(1.0);
+                    l.min_width = Some(LengthSpec::Px(0.0));
+                }))
+                .children((head, has_text.then(|| body.into_any())));
+                let inner = widget(
+                    Stack::row(10.0)
+                        .align(if has_text {
+                            AlignSpec::Start
+                        } else {
+                            AlignSpec::Center
+                        })
+                        .width(LengthSpec::Fill),
+                )
+                .children((show_avatar.then_some(avatar), text));
+                bubble_view(
+                    bubble_surface,
+                    bubble_opacity,
+                    pad,
+                    row_w,
+                    true,
+                    inner.into_any(),
+                )
+            }
+        };
+        return row_frame(ui, &settings, &h, row.item.at, None, content);
+    }
+    let body = if icon.is_some() || badge.is_some() {
+        widget(Stack::row(6.0).width(LengthSpec::Shrink).with_layout(|l| {
+            l.align_items = AlignSpec::Baseline;
+            l.min_width = Some(LengthSpec::Px(0.0));
+        }))
+        .children((icon, badge, has_text.then(|| text_slot(body.into_any()))))
+        .into_any()
+    } else {
+        body.into_any()
+    };
+    let bubble = bubble_view(bubble_surface, bubble_opacity, pad, bubble_max, false, body);
     // Inline rows put the quote on its own line above the whole row (over
     // the text column), so the name, the first line and the time keep
     // sharing a baseline; stacked rows put it straight above the bubble.
@@ -818,8 +1196,22 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
         .into_any()
     };
 
+    // Inline rows drop the empty avatar slot, so the name sits at the edge.
+    let avatar = (show_avatar || !inline).then_some(avatar);
+    row_frame(ui, &settings, &h, row.item.at, avatar, content)
+}
+
+/// A finished row: its avatar slot and content, fading with age when the
+/// user set that.
+fn row_frame(
+    ui: Stage,
+    settings: &nanatype_settings::Settings,
+    h: &nanatype_theme::History,
+    at: u64,
+    avatar: Option<AnyView>,
+    content: AnyView,
+) -> AnyView {
     let fade_after = settings.history.fade_after_s;
-    let at = row.item.at;
     let view = widget(
         Stack::row(10.0)
             .align(AlignSpec::Start)
@@ -834,8 +1226,7 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
         taken = taken.with_layout(|l| l.opacity = Some(opacity));
         *s = taken;
     })
-    // Inline rows drop the empty avatar slot, so the name sits at the edge.
-    .children(((show_avatar || !inline).then_some(avatar), content))
+    .children((avatar, content))
     .into_any();
     if h.row_padding > 0.0 {
         widget(
@@ -1389,6 +1780,7 @@ mod tests {
                 at: 0,
                 uid: None,
                 reply: None,
+                event: None,
             },
             doc: Arc::new(Document::plain(text)),
             reveal: None,
@@ -1516,6 +1908,7 @@ mod tests {
                             opacity,
                             [12.0, 8.0],
                             160.0,
+                            false,
                             content,
                         ))
                     })
@@ -1658,6 +2051,7 @@ mod tests {
             at: at_s * 1000,
             uid: None,
             reply: None,
+            event: None,
         }
     }
 

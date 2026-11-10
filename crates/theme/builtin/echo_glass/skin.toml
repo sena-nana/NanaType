@@ -667,3 +667,27 @@ dy = 0.0
 [history.text.stroke]
 color = "#000000"
 width = 1.0
+
+[history.event]
+icon = "◆"
+icon_color = "#6fb1ff"
+
+[history.event.super_chat]
+layout = "card"
+color = "#00000099"
+border_color = "#ffffff66"
+border_width = 1.0
+radius = 4.0
+padding = [12.0, 8.0]
+price_color = "border"
+
+[history.event.member]
+layout = "card"
+color = "#1a62be"
+gradient = { angle = 90.0, stops = [[0.0, "#1a62be"], [1.0, "#1a62be66"]] }
+radius = 4.0
+padding = [12.0, 8.0]
+text_color = "#ffffff"
+name_color = "#ffffff"
+icon_color = "#ffffff"
+badge = { color = "#ffffff", text_color = "#1a62be", radius = 999.0 }

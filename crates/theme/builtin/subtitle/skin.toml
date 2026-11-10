@@ -179,3 +179,23 @@ color = "#ffffff"
 [history.text.stroke]
 color = "#000000"
 width = 3.0
+
+[history.event]
+layout = "notice"
+icon = "★"
+icon_color = "#ffd27f"
+
+[history.event.super_chat]
+color = "#000000b3"
+radius = 4.0
+padding = [12.0, 6.0]
+price_color = "border"
+
+[history.event.member]
+color = "#000000b3"
+border_color = "#ffd27f"
+border_width = 1.0
+radius = 4.0
+padding = [12.0, 6.0]
+icon = "♥"
+badge = { color = "#ffd27f", text_color = "#1e1e22", radius = 3.0 }

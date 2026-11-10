@@ -277,6 +277,37 @@ color = "#0f380f"
 line_height = 1.5
 size = 24.0
 
+[history.event]
+layout = "card"
+color = "#9bbc0f"
+border_color = "#0f380f"
+border_width = 3.0
+radius = 0.0
+contour = "pixel"
+text_scale = 1.0
+icon = "★"
+icon_color = "#0f380f"
+badge = { color = "#0f380f", text_color = "#9bbc0f", radius = 0.0 }
+
+[history.event.gift]
+layout = "notice"
+color = "#8bac0f"
+
+[history.event.super_chat]
+color = "#306230"
+text_color = "#c4d7a0"
+name_color = "#c4d7a0"
+icon_color = "#c4d7a0"
+badge = { color = "#c4d7a0", text_color = "#0f380f", radius = 0.0 }
+
+[history.event.member]
+color = "#0f380f"
+text_color = "#9bbc0f"
+name_color = "#9bbc0f"
+icon = "♥"
+icon_color = "#9bbc0f"
+badge = { color = "#9bbc0f", text_color = "#0f380f", radius = 0.0 }
+
 [mention]
 avatar = false
 fill = "#8bac0f"

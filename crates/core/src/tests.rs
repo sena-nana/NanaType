@@ -92,6 +92,7 @@ fn echo_removal_cannot_delete_local_typewriter_rows() {
             at: 0,
             uid: Some("7".into()),
             reply: None,
+            event: None,
         }),
         1,
     );
@@ -365,6 +366,7 @@ fn chat_rows_join_the_history_with_their_uid() {
             at: 0,
             uid: Some("42".into()),
             reply: None,
+            event: None,
         }),
         0,
     );
@@ -1299,6 +1301,7 @@ fn chat_rows_take_their_translation_by_key() {
             at: 0,
             uid: None,
             reply: None,
+            event: None,
         }),
         0,
     );

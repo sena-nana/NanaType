@@ -34,6 +34,32 @@ pub enum SourceKind {
     Event,
 }
 
+/// What a paid or membership event is, so a skin can dress each its own way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EventKind {
+    Gift,
+    /// A paid message: a Super Chat, Twitch Bits.
+    SuperChat,
+    /// A membership bought, renewed or given away.
+    Member,
+    /// Anything else the platform announces, in its own words.
+    Notice,
+}
+
+/// The event behind a [`SourceKind::Event`] row.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EventInfo {
+    pub kind: EventKind,
+    /// What was paid, as the row shows it (`¥30`); the row's text may open
+    /// with the same words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub amount: Option<String>,
+    /// The platform's colour for this amount, as `0xRRGGBB`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<u32>,
+}
+
 /// One piece of a live-platform message: text, or an inline platform
 /// picture (emoji, emote) with its alt text.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,6 +132,9 @@ pub struct HistoryItem {
     /// The chat message this row answers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reply: Option<Box<ChatRef>>,
+    /// What an event row is about. Older peers and archives leave it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<EventInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

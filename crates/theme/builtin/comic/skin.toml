@@ -239,6 +239,33 @@ spread = 0.0
 [history.text]
 color = "#111111"
 
+[history.event]
+layout = "card"
+color = "#ffd400"
+border_color = "#000000"
+border_width = 3.0
+radius = 0.0
+shadows = [{ color = "#000000", dx = 4.0, dy = 4.0, blur = 0.0, inset = false, spread = 0.0 }]
+text_color = "#111111"
+name_color = "#111111"
+icon = "★"
+icon_color = "#111111"
+badge = { color = "#111111", text_color = "#ffd400", radius = 0.0 }
+
+[history.event.gift]
+layout = "notice"
+color = "#ffffff"
+
+[history.event.super_chat]
+price_color = "fill"
+
+[history.event.member]
+color = "#e02b20"
+text_color = "#ffffff"
+name_color = "#ffffff"
+icon_color = "#ffd400"
+badge = { color = "#ffd400", text_color = "#111111", radius = 0.0 }
+
 [shaders.compact_print]
 animated = false
 intensity = 1.0

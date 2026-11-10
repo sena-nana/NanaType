@@ -272,6 +272,30 @@ line_height = 1.5
 material = "pencil"
 size = 19.0
 
+[history.event]
+layout = "notice"
+color = "#f3ead2"
+border_color = "#b46a58"
+border_width = 1.5
+border_style = "dashed"
+radius = 10.0
+padding = [16.0, 10.0]
+icon = "★"
+icon_color = "#b46a58"
+badge = { color = "#b46a58", text_color = "#fffbef", radius = 8.0 }
+
+[history.event.super_chat]
+layout = "card"
+price_color = "border"
+
+[history.event.member]
+layout = "card"
+color = "#e4ecd9"
+border_color = "#6f8f72"
+icon = "♥"
+icon_color = "#5d7d60"
+badge = { color = "#6f8f72", text_color = "#fffbef", radius = 8.0 }
+
 [materials.bubble]
 params = [1.0]
 source = "paper.wgsl"

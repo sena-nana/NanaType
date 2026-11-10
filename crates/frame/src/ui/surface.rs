@@ -304,6 +304,27 @@ impl Surface {
         })
     }
 
+    /// An event row: its own surface once the skin gives it any, else the
+    /// message bubble.
+    pub fn event(
+        skin: &Skin,
+        event: &nanatype_theme::HistoryEventStyle,
+        frame_url: Option<String>,
+    ) -> Self {
+        if !event.has_surface() {
+            return Self::bubble(skin, frame_url);
+        }
+        let h = &skin.history;
+        Self::shaped(
+            skin,
+            Some(event.color.unwrap_or(h.bubble_color.into())),
+            &event.shape,
+            event.radius.unwrap_or(h.bubble_radius),
+            event.border_color.or(h.bubble_border.map(ColorRef::from)),
+            event.border_width.unwrap_or(h.bubble_border_width),
+        )
+    }
+
     /// The pill behind a history row's name, when the skin has one.
     pub fn history_name_plate(skin: &Skin) -> Option<Self> {
         let p = skin.history.name_plate.as_ref()?;
