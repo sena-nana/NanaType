@@ -945,7 +945,8 @@ settings-packages = プラグインとパッケージ
 packages-import = パッケージを読み込む
 packages-dependencies = 依存関係
 packages-remove = 削除
-packages-access = プラグインはネットワーク、ユーザーファイル、外部プログラムにアクセスできません。
+packages-remove-confirm = 「{ $name }」を削除しますか？この操作は元に戻せません。
+packages-details = 詳細
 
 # Package provenance and explicit script consent
 package-unspecified = 未提供
@@ -1077,6 +1078,7 @@ workshop-invalid = 使用できません：{ $message }
 workshop-shadowed = { $id } がインストール済みのため使用されていません
 workshop-view = ワークショップで見る
 workshop-download = 再ダウンロード
+workshop-update = 更新
 workshop-unsubscribe = サブスクライブ解除
 workshop-unsubscribe-confirm = 「{ $name }」のサブスクライブを解除しますか？終了後に Steam がファイルを削除します。
 workshop-unsubscribe-failed = サブスクライブを解除できませんでした：{ $message }

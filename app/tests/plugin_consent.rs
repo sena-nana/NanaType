@@ -912,7 +912,7 @@ fn package_metadata_and_signature_states_are_visible_in_every_locale_and_width()
                     "signed",
                     imported.clone(),
                     Ok(Some(seal.clone())),
-                    "package-signature-valid",
+                    "package-source-third-party",
                 ),
                 (
                     "invalid",
@@ -935,6 +935,24 @@ fn package_metadata_and_signature_states_are_visible_in_every_locale_and_width()
                 let mut session = common::session()
                     .themed(false)
                     .mount(width, 1800, move || ui::plugins::settings(ui));
+                // The row is folded until its details are asked for.
+                capture(
+                    &mut session,
+                    &captures,
+                    locale,
+                    width,
+                    &format!("{name}-folded"),
+                );
+                let details = session
+                    .accessibility_dump()
+                    .into_iter()
+                    .find(|n| {
+                        n.agent_path
+                            .as_deref()
+                            .is_some_and(|p| p.ends_with("package-details:example.script"))
+                    })
+                    .unwrap();
+                let _ = session.click_node(details.id).unwrap();
                 capture(&mut session, &captures, locale, width, name);
                 let labels: Vec<_> = session
                     .accessibility_dump()
@@ -954,7 +972,8 @@ fn package_metadata_and_signature_states_are_visible_in_every_locale_and_width()
                     .any(|l| l.contains(&ui.now_t("package-third-party-warning")));
                 assert_eq!(warned, matches!(name, "unsigned" | "signed"), "{name}");
                 if name == "signed" {
-                    assert!(labels.iter().any(|l| l.contains(&fingerprint)));
+                    // The list names the source; the seal's hash stays in the review.
+                    assert!(!labels.iter().any(|l| l.contains(&fingerprint)));
                     assert!(
                         labels
                             .iter()

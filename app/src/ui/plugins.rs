@@ -6,17 +6,22 @@ use crate::{
     ui::Ui,
 };
 use nana_ui::icons_tabler as ti;
-use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
-use nana_ui::runtime::{Activate, Button, Checkbox, Stack, Text, ToggleChanged};
+use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, widget};
+use nana_ui::runtime::{
+    Activate, Button, Checkbox, IconButton, Stack, Switch, Text, ToggleChanged,
+};
 use nana_ui::{ButtonKind, ControlSize};
-use nana_ui_core::{AlignSpec, LengthSpec, RadiusTier, SemanticColorRole};
+use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_plugins::Mount;
 use std::sync::Arc;
 
 /// The script source shown for review before it is trusted.
 const SOURCE_PREVIEW_H: f32 = 160.0;
-/// A package's lead mark on its card.
-const PACKAGE_TILE: f32 = 36.0;
+/// A package's lead mark on its row.
+const PACKAGE_TILE: f32 = 28.0;
+/// The room a row's name and summary ask for before its actions take a
+/// line of their own.
+const IDENTITY_MIN: f32 = 200.0;
 
 pub use nanatype_frame::ui::plugin_view::{
     Provenance, fingerprint, integrity_label, provenance_label,
@@ -50,14 +55,33 @@ pub fn actions(ui: Ui) -> AnyView {
     ))
 }
 
-/// One installed package as a card: what it is and where it comes from on
-/// top, its credits in the middle, what can be done with it at the foot.
-fn package_card(
+/// A row's icon action: `glyph`, named and tipped by `key`.
+fn icon_action(
+    ui: Ui,
+    key: &str,
+    glyph: nana_ui::runtime::Icon,
+    msg: impl Fn() -> Msg + Send + 'static,
+) -> AnyView {
+    widget(
+        IconButton::new(glyph, ui.now_t(key))
+            .size(ControlSize::Small)
+            .with_tooltip(ui.now_t(key)),
+    )
+    .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(msg()))
+    .into_any()
+}
+
+/// One installed package as a row of the list: what it is and where it comes
+/// from on the left, what can be done with it at the top right (update,
+/// export, remove, the on/off switch of a functional package), and its
+/// credits folded away until `open` names it.
+fn package_row(
     ui: Ui,
     row: &crate::plugins::PackageRow,
-    workshop_author: Option<&str>,
+    subscription: Option<&crate::workshop::Row>,
     enabled: bool,
     error: Option<&String>,
+    open: Signal<Vec<String>>,
 ) -> AnyView {
     use nanatype_theme::PackageCapability as Cap;
     let package = &row.manifest;
@@ -84,26 +108,190 @@ fn package_card(
         Provenance::ThirdParty => Tone::Warning,
         Provenance::Tampered => Tone::Danger,
     };
-    // A third-party package may still carry its author's seal: say so under
-    // the warning, which stands either way.
-    let third_party = (provenance == Provenance::ThirdParty).then(|| {
-        let warning = kit::callout(Tone::Warning, ui.now_t("package-third-party-warning"));
-        let seal = matches!(row.integrity, Ok(Some(_)))
-            .then(|| widget(caption(integrity_label(*ui, &row.integrity))));
-        (seal, warning)
-    });
-    let tags: Vec<AnyView> = package
+    // The badge names the source in a word or two; why a seal failed is a
+    // sentence, and goes under the row.
+    let source = match provenance {
+        Provenance::Tampered => ui.now_t("package-integrity-failed"),
+        _ => provenance_label(
+            *ui,
+            provenance,
+            &row.integrity,
+            subscription.and_then(|r| r.author.as_deref()),
+        ),
+    };
+    let tampered = (provenance == Provenance::Tampered)
+        .then(|| kit::callout(Tone::Danger, integrity_label(*ui, &row.integrity)));
+    // "Skin · Function · example.script · 1.0.0": the kinds, then the id.
+    let summary = package
         .capabilities
         .iter()
         .map(|cap| {
-            kit::tag(ui.now_t(match cap {
+            ui.now_t(match cap {
                 Cap::Skin => "packages-kind-skin",
                 Cap::Resources => "packages-kind-resources",
                 Cap::Lua => "packages-kind-function",
                 Cap::Sounds => "packages-kind-sounds",
-            }))
+            })
         })
-        .collect();
+        .chain([id.clone(), package.meta.version.to_string()])
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let identity = widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .align(AlignSpec::Center)
+            .width(LengthSpec::Px(IDENTITY_MIN))
+            .grow(1.0)
+            .shrink(1.0)
+            .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
+    )
+    .children((
+        kit::icon_tile(
+            glyph,
+            PACKAGE_TILE,
+            if enabled { Tone::Accent } else { Tone::Neutral },
+        ),
+        widget(kit::grow_column(gap::HAIR)).children((
+            // A long name is cut before the source badge is.
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .align(AlignSpec::Center)
+                    .width(LengthSpec::Fill)
+                    .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
+            )
+            .children((
+                widget(Text::new(name.clone()).style({
+                    let mut st = Type::Strong.one_line();
+                    Arc::make_mut(&mut st.layout).flex_grow = Some(0.0);
+                    st
+                })),
+                kit::badge(source, source_tone),
+            )),
+            widget(
+                Text::new(summary)
+                    .style(Type::Caption.one_line())
+                    .color(SemanticColorRole::Muted),
+            ),
+        )),
+    ));
+
+    let update = subscription.filter(|r| r.update).map(|r| {
+        let item = r.item;
+        widget(
+            IconButton::new(ti::CLOUD_DOWNLOAD, ui.now_t("workshop-update"))
+                .size(ControlSize::Small)
+                .kind(ButtonKind::Primary)
+                .with_tooltip(ui.now_t("workshop-update")),
+        )
+        .on_cx(move |_, _: &Activate, cx| {
+            cx.dispatch_program_all(Msg::Workshop(WorkshopMsg::Download(item)))
+        })
+        .into_any()
+    });
+    let export = workshop.is_none().then(|| {
+        let id = id.clone();
+        icon_action(ui, "skins-export", ti::FILE_EXPORT, move || {
+            Msg::Skin(SkinMsg::Export(id.clone()))
+        })
+    });
+    // Removing is asked first: the icon is one slip away from the others.
+    let remove = (!builtin).then(|| {
+        let (key, question) = match workshop {
+            Some(_) => ("workshop-unsubscribe", "workshop-unsubscribe-confirm"),
+            None => ("packages-remove", "packages-remove-confirm"),
+        };
+        let remove_id = id.clone();
+        nanatype_frame::ui::controls::confirm(
+            *ui,
+            ui.tr(question, &[("name", name.as_str().into())]),
+            ui.now_t(key),
+            move |armed| {
+                widget(
+                    IconButton::new(ti::TRASH, ui.now_t(key))
+                        .size(ControlSize::Small)
+                        .with_tooltip(ui.now_t(key)),
+                )
+                .on(move |_: &Activate| armed.set(true))
+                .into_any()
+            },
+            move || match workshop {
+                Some(item) => Msg::Workshop(WorkshopMsg::Unsubscribe(item)),
+                None => Msg::Package(PackageMsg::Remove(remove_id.clone())),
+            },
+        )
+    });
+    // On asks for the review, which grants the consent; until it is granted
+    // the switch falls back to off.
+    let toggle = functional.then(|| {
+        let id = id.clone();
+        let label = ui.now_t(if enabled {
+            "packages-disable"
+        } else {
+            "packages-review-enable"
+        });
+        widget(Switch::new("", enabled).accessible_name(label))
+            .key(format!("package-review:{id}"))
+            .bind(move |switch: &mut Switch| {
+                ui.plugin_activation.with(|_| ());
+                ui.plugin_activation_error.with(|_| ());
+                switch.checked = enabled;
+                switch.disabled = !enabled && ui.plugin_activation_busy.get();
+            })
+            .on_cx(move |_, e: &ToggleChanged, cx| {
+                if e.checked == enabled {
+                    return;
+                }
+                cx.dispatch_program_all(Msg::Package(if e.checked {
+                    PackageMsg::RequestActivation(id.clone())
+                } else {
+                    PackageMsg::DisablePlugin(id.clone())
+                }))
+            })
+            .into_any()
+    });
+    let is_open = {
+        let id = id.clone();
+        move || open.with(|o| o.contains(&id))
+    };
+    let fold = {
+        let (id, shown) = (id.clone(), is_open.clone());
+        widget(
+            IconButton::new(ti::CHEVRON_DOWN, ui.now_t("packages-details"))
+                .size(ControlSize::Small)
+                .with_tooltip(ui.now_t("packages-details")),
+        )
+        .key(format!("package-details:{id}"))
+        .bind(move |b: &mut IconButton| {
+            let open = shown();
+            b.selected = open;
+            b.icon = if open {
+                ti::CHEVRON_UP
+            } else {
+                ti::CHEVRON_DOWN
+            };
+        })
+        .on(move |_: &Activate| {
+            open.update(|o| match o.iter().position(|p| *p == id) {
+                Some(at) => {
+                    o.remove(at);
+                }
+                None => o.push(id.clone()),
+            })
+        })
+    };
+    let actions = widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center)
+            .wrap(true)
+            .shrink(1.0)
+            .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
+    )
+    .children((update, export, remove, toggle, fold));
+
+    let third_party = (provenance == Provenance::ThirdParty)
+        .then(|| kit::callout(Tone::Warning, ui.now_t("package-third-party-warning")));
     let dependencies = (!package.dependencies.is_empty()).then(|| {
         widget(caption(format!(
             "{}: {}",
@@ -116,126 +304,53 @@ fn package_card(
                 .join(", ")
         )))
     });
-    let (enable_id, disable_id, export_id, remove_id) =
-        (id.clone(), id.clone(), id.clone(), id.clone());
-    let toggle = functional.then(|| {
-        if enabled {
-            widget(Button::new(ui.now_t("packages-disable")).size(ControlSize::Small))
-                .on_cx(move |_, _: &Activate, cx| {
-                    cx.dispatch_program_all(Msg::Package(PackageMsg::DisablePlugin(
-                        disable_id.clone(),
-                    )))
-                })
-                .into_any()
-        } else {
-            widget(Button::new(ui.now_t("packages-review-enable")).size(ControlSize::Small))
-                .key(format!("package-review:{id}"))
-                .bind(move |button: &mut Button| button.disabled = ui.plugin_activation_busy.get())
-                .on_cx(move |_, _: &Activate, cx| {
-                    cx.dispatch_program_all(Msg::Package(PackageMsg::RequestActivation(
-                        enable_id.clone(),
-                    )));
-                })
-                .into_any()
-        }
-    });
-    widget(kit::card_frame(RadiusTier::Md))
-        .key(id.clone())
+    let details = widget(Stack::column(0.0).gap_step(gap::step::TIGHT))
+        .visible(is_open)
         .children((
-            kit::line(
-                widget(
-                    Stack::row(0.0)
-                        .gap_step(gap::step::GROUP)
-                        .align(AlignSpec::Center),
-                )
-                .children((
-                    kit::icon_tile(
-                        glyph,
-                        PACKAGE_TILE,
-                        if enabled { Tone::Accent } else { Tone::Neutral },
-                    ),
-                    widget(crate::ui::kit::grow_column(gap::HAIR)).children((
-                        widget(readable(name).style(Type::Strong.style())),
-                        widget(
-                            Text::new(format!("{id} · {}", package.meta.version))
-                                .style(Type::Caption.mono())
-                                .color(SemanticColorRole::Muted),
-                        ),
-                    )),
-                )),
-                kit::badge(
-                    provenance_label(*ui, provenance, &row.integrity, workshop_author),
-                    source_tone,
-                ),
-            ),
-            widget(
-                Stack::column(0.0)
-                    .gap_step(gap::step::TIGHT)
-                    .padding_xy(inset::CARD, 0.0)
-                    .with_layout(|l| l.padding_bottom = Some(LengthSpec::Px(inset::ROW_Y))),
-            )
-            .children((
-                widget(Stack::row(0.0).gap_step(gap::step::TIGHT).wrap(true)).children(tags),
-                widget(caption(format!(
-                    "{}: {} · {}: {}",
-                    ui.now_t("package-author"),
-                    provided(ui, &package.meta.author),
-                    ui.now_t("package-created-at"),
-                    provided(ui, &package.created_at)
-                ))),
-                widget(caption(format!(
-                    "{}: {} · {}: {}",
-                    ui.now_t("package-license"),
-                    provided(ui, &package.meta.license),
-                    ui.now_t("package-licensed-to"),
-                    provided(ui, &package.licensed_to)
-                ))),
-                dependencies,
-                third_party,
-                error.map(|e| kit::callout(Tone::Danger, e.clone())),
-            )),
-            kit::rule(),
-            widget(
-                Stack::row(0.0)
-                    .gap_step(gap::step::CONTROL)
-                    .wrap(true)
-                    .padding_step(inset::step::CARD, inset::step::BAR_Y)
-                    .align(AlignSpec::Center)
-                    .justify(nana_ui_core::JustifySpec::End),
-            )
-            .children((
-                (!builtin).then(|| {
-                    let key = match workshop {
-                        Some(_) => "workshop-unsubscribe",
-                        None => "packages-remove",
-                    };
-                    widget(
-                        Button::new(ui.now_t(key))
-                            .kind(ButtonKind::Text)
-                            .size(ControlSize::Small),
-                    )
-                    .on_cx(move |_, _: &Activate, cx| {
-                        cx.dispatch_program_all(match workshop {
-                            Some(item) => Msg::Workshop(WorkshopMsg::Unsubscribe(item)),
-                            None => Msg::Package(PackageMsg::Remove(remove_id.clone())),
-                        })
-                    })
-                }),
-                kit::spacer(),
-                workshop.is_none().then(|| {
-                    widget(Button::new(ui.now_t("skins-export")).size(ControlSize::Small)).on_cx(
-                        move |_, _: &Activate, cx| {
-                            cx.dispatch_program_all(Msg::Skin(SkinMsg::Export(export_id.clone())))
-                        },
-                    )
-                }),
-                toggle,
-            )),
-        ))
-        .into_any()
+            widget(caption(format!(
+                "{}: {} · {}: {}",
+                ui.now_t("package-author"),
+                provided(ui, &package.meta.author),
+                ui.now_t("package-created-at"),
+                provided(ui, &package.created_at)
+            ))),
+            widget(caption(format!(
+                "{}: {} · {}: {}",
+                ui.now_t("package-license"),
+                provided(ui, &package.meta.license),
+                ui.now_t("package-licensed-to"),
+                provided(ui, &package.licensed_to)
+            ))),
+            dependencies,
+            third_party,
+        ));
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::CONTROL)
+            .padding_step(inset::step::CARD, inset::step::BAR_Y),
+    )
+    .key(id)
+    .children((
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
+                .align(AlignSpec::Center)
+                .wrap(true)
+                .width(LengthSpec::Fill)
+                .with_layout(|l| l.row_gap = Some(LengthSpec::Px(gap::TIGHT))),
+        )
+        .children((identity, actions)),
+        tampered,
+        error.map(|e| kit::callout(Tone::Danger, e.clone())),
+        details,
+    ))
+    .into_any()
 }
 
 pub fn settings(ui: Ui) -> AnyView {
+    // Which rows show their credits; kept here so a reload of the list (a
+    // setting changed, a download moved on) leaves them as they were.
+    let open: Signal<Vec<String>> = signal(Vec::new());
     let packages = dynamic(
         move || {
             (
@@ -246,33 +361,31 @@ pub fn settings(ui: Ui) -> AnyView {
             )
         },
         move |(rows, settings, errors, workshop)| {
-            let cards = rows
+            let rows = rows
                 .iter()
                 .map(|row| {
                     let id = &row.manifest.meta.id;
-                    let author = match row.origin {
-                        nanatype_theme::SkinOrigin::Workshop { item, .. } => workshop
-                            .rows
-                            .iter()
-                            .find(|r| r.item == item)
-                            .and_then(|r| r.author.as_deref()),
+                    let subscription = match row.origin {
+                        nanatype_theme::SkinOrigin::Workshop { item, .. } => {
+                            workshop.rows.iter().find(|r| r.item == item)
+                        }
                         _ => None,
                     };
-                    package_card(
+                    let view = package_row(
                         ui,
                         row,
-                        author,
+                        subscription,
                         settings.enabled_plugins.contains(id),
                         errors.get(id),
-                    )
+                        open,
+                    );
+                    (view, None)
                 })
                 .collect::<Vec<_>>();
-            if cards.is_empty() {
+            if rows.is_empty() {
                 return kit::empty_state::<Msg>(ui.now_t("packages-none"), None);
             }
-            widget(Stack::column(0.0).gap_step(gap::step::GROUP))
-                .children(cards)
-                .into_any()
+            kit::section_titled(None, rows)
         },
     );
     let commands = dynamic(
@@ -323,11 +436,8 @@ pub fn settings(ui: Ui) -> AnyView {
         widget(Stack::column(0.0))
             .visible(reviewing)
             .children(activation(ui)),
-        widget(Stack::column(0.0).gap_step(gap::step::CONTROL)).children((
-            overline(ui.now_t("packages-installed")),
-            packages,
-            kit::callout(Tone::Neutral, ui.now_t("packages-access")),
-        )),
+        widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
+            .children((overline(ui.now_t("packages-installed")), packages)),
         widget(Stack::column(0.0))
             .visible(has_commands)
             .children(commands),
@@ -402,7 +512,7 @@ fn reads(ui: Ui, data: &nanatype_theme::DataAccess) -> String {
     }
 }
 pub fn activation(ui: Ui) -> AnyView {
-    let show_source = nana_ui::runtime::view::signal(false);
+    let show_source = signal(false);
     dynamic(
         move || {
             (

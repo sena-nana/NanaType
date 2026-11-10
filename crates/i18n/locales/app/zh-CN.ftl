@@ -945,7 +945,8 @@ settings-packages = 插件与资源包
 packages-import = 导入包
 packages-dependencies = 依赖
 packages-remove = 移除
-packages-access = 插件无法访问网络、用户文件或外部程序。
+packages-remove-confirm = 移除「{ $name }」？此操作无法撤销。
+packages-details = 详情
 
 # Package provenance and explicit script consent
 package-unspecified = 未提供
@@ -1077,6 +1078,7 @@ workshop-invalid = 无法使用：{ $message }
 workshop-shadowed = 与已安装的 { $id } 重名，未启用
 workshop-view = 在创意工坊查看
 workshop-download = 重新下载
+workshop-update = 更新
 workshop-unsubscribe = 取消订阅
 workshop-unsubscribe-confirm = 取消订阅「{ $name }」？Steam 会在退出后删除它的文件。
 workshop-unsubscribe-failed = 取消订阅失败：{ $message }

@@ -954,7 +954,8 @@ settings-packages = Plugins & packages
 packages-import = Import package
 packages-dependencies = Dependencies
 packages-remove = Remove
-packages-access = Plugins cannot access the network, user files or external programs.
+packages-remove-confirm = Remove “{ $name }”? This cannot be undone.
+packages-details = Details
 
 # Package provenance and explicit script consent
 package-unspecified = Not provided
@@ -1086,6 +1087,7 @@ workshop-invalid = Cannot be used: { $message }
 workshop-shadowed = Not used: { $id } is already installed
 workshop-view = View in the Workshop
 workshop-download = Download again
+workshop-update = Update
 workshop-unsubscribe = Unsubscribe
 workshop-unsubscribe-confirm = Unsubscribe from "{ $name }"? Steam deletes its files after you quit.
 workshop-unsubscribe-failed = Could not unsubscribe: { $message }

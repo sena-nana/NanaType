@@ -70,6 +70,8 @@ pub struct Row {
     pub folder: Option<PathBuf>,
     /// The author's Steam name, once Steam has it.
     pub author: Option<String>,
+    /// Installed, with a newer version waiting at Steam.
+    pub update: bool,
 }
 
 /// What the UI shows: availability and every subscription.
@@ -224,6 +226,7 @@ impl Workshop {
                         .and_then(|d| self.authors.get(&d.owner))
                         .filter(|name| !name.is_empty())
                         .cloned(),
+                    update: item.state == ItemState::NeedsUpdate,
                 }
             })
             .collect();
@@ -299,6 +302,7 @@ mod tests {
         assert_eq!((row(1).kind, &row(1).state), (Kind::Skin, &RowState::Ready));
         assert_eq!(row(1).package.as_deref(), Some("ws.skin"));
         assert_eq!(row(2).kind, Kind::SoundPack);
+        assert_eq!((row(1).update, row(2).update), (false, true));
         assert_eq!(
             (row(3).kind, &row(3).state, row(3).title.as_str()),
             (Kind::SoundPack, &RowState::Downloading(Some(50)), "Rain")
