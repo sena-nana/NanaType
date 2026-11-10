@@ -996,7 +996,7 @@ impl App {
                 .into_iter()
                 .flatten()
             {
-                for font in nanatype_theme::BuiltinFonts::embedded().fonts() {
+                for font in nanatype_theme::BuiltinFonts::shipped().fonts() {
                     if font
                         .family()
                         .is_some_and(|f| f.eq_ignore_ascii_case(family))

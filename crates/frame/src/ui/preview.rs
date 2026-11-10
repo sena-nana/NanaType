@@ -927,7 +927,7 @@ impl StageAssets {
         if family.is_empty() || self.fonts.iter().chain(picked.iter()).any(named) {
             return;
         }
-        let Some(font) = nanatype_theme::BuiltinFonts::embedded()
+        let Some(font) = nanatype_theme::BuiltinFonts::shipped()
             .fonts()
             .iter()
             .find(|f| f.family().is_some_and(|g| g.eq_ignore_ascii_case(family)))
@@ -1437,7 +1437,7 @@ mod tests {
         a.pick_family(&own);
         a.pick_family("Arial");
         assert!(a.picked.lock().unwrap().is_empty());
-        if let Some(other) = nanatype_theme::BuiltinFonts::embedded()
+        if let Some(other) = nanatype_theme::BuiltinFonts::shipped()
             .fonts()
             .iter()
             .filter_map(|f| f.family())

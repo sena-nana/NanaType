@@ -18,7 +18,7 @@
 
 ## 文件与许可
 
-- `crates/theme/builtin/<主题>/ornament.svg`：可编辑源，只在仓库保存；构建跳过 SVG 和点文件，不嵌入应用或导出包。
+- `crates/theme/builtin/<主题>/ornament.svg`：可编辑源，只在仓库保存；打包脚本跳过 SVG 和点文件，不进入安装包或导出包。
 - `ornament.png`：两倍尺寸透明纹理，由受限 WGSL 的 `sample0` 读取；哥特为 1024×640 双栏，其余为 512×640。
 - `artwork.wgsl`：绘制底色、框体、材质、光线并合成装饰；没有新增执行权限。
 - `still.png`：同一生产 GPU 代理烘焙的静态完整画面；运行时和 `.ntpkg` 只使用 PNG。

@@ -29,4 +29,12 @@ info_plist_extra = "Info.extra.plist"
 [runtime]
 # Windows ships the same file beside the executable (root_exceptions above);
 # scripts/package-macos.sh stages it.
-resources = [{ source = "../target/licenses/THIRD_PARTY_LICENSES.txt", platforms = ["macos"] }]
+resources = [
+    { source = "../target/licenses/THIRD_PARTY_LICENSES.txt", platforms = ["macos"] },
+    # The built-in skins, read from this folder at run time (not embedded in
+    # the executable); the package scripts stage it from crates/theme/builtin.
+    { source = "../target/skins" },
+    # The fonts the built-in skins name as `builtin:fonts/...`, each with its
+    # licence (docs/fonts.md).
+    { source = "../target/fonts" },
+]

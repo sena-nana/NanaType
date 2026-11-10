@@ -40,4 +40,12 @@ info_plist_extra = "@ROOT@/packaging/Info.extra.plist"
 bin = [
     { source = "@ROOT@/target/steam/libsteam_api.dylib", platforms = ["macos"] },
 ]
-resources = [{ source = "@ROOT@/target/licenses/THIRD_PARTY_LICENSES.txt", platforms = ["macos"] }]
+resources = [
+    { source = "@ROOT@/target/licenses/THIRD_PARTY_LICENSES.txt", platforms = ["macos"] },
+    # The built-in skins as plain files, so a skin change is a small depot
+    # delta; the package scripts stage the folder from crates/theme/builtin.
+    { source = "@ROOT@/target/skins" },
+    # The fonts the built-in skins name as `builtin:fonts/...`, each with its
+    # licence (docs/fonts.md).
+    { source = "@ROOT@/target/fonts" },
+]

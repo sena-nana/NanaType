@@ -103,6 +103,20 @@ if ($env:DXC_DLL) {
     Copy-Item $dxcLicenses (Join-Path $staged "dxc")
 }
 & (Join-Path $PSScriptRoot "package-licenses.ps1") -Staged $staged -Product $Product -Steam:$Steam
+# The built-in skins ship as a folder in the runtime resources, not in the
+# executable (which keeps only the default skin, as a fallback). The SVG design
+# masters and dotfiles stay in the repository: skins load only rendered PNGs.
+$skins = Join-Path $root "target\skins"
+Remove-Item -Recurse -Force $skins -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "crates\theme\builtin") $skins -Recurse
+Get-ChildItem $skins -Recurse -Force -File |
+    Where-Object { $_.Name.StartsWith(".") -or $_.Extension -eq ".svg" } |
+    Remove-Item -Force
+# Their fonts, each with its licence (docs/fonts.md).
+$fonts = Join-Path $root "target\fonts"
+Remove-Item -Recurse -Force $fonts -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force $fonts | Out-Null
+Copy-Item (Join-Path $root "crates\theme\fonts\*") $fonts -Include *.ttf, *.otf, *.LICENSE.txt
 # Outside target/: NanaUI treats executables under a cargo target dir as dev builds.
 $out = Join-Path $root "dist"
 Remove-Item -Recurse -Force $out -ErrorAction SilentlyContinue

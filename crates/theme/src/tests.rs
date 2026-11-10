@@ -2074,7 +2074,7 @@ fn skin_naming_a_missing_builtin_font_loads_and_keeps_its_families() {
 
 #[test]
 fn this_builds_embedded_fonts_parse_and_carry_their_licence() {
-    let fonts = BuiltinFonts::embedded();
+    let fonts = BuiltinFonts::shipped();
     // With the feature every font in fonts/ is embedded; without it, none.
     let embedded: Vec<&str> = fonts.fonts().iter().map(|f| f.path).collect();
     if cfg!(feature = "builtin-fonts") {
@@ -2110,7 +2110,7 @@ fn this_builds_embedded_fonts_parse_and_carry_their_licence() {
 fn the_bundled_fonts_serve_the_skins_that_name_them() {
     const PIXEL: &str = "builtin:fonts/FusionPixel12pxProportionalSC.ttf";
     const WENKAI: &str = "builtin:fonts/LXGWWenKai-Regular.ttf";
-    let fonts = BuiltinFonts::embedded();
+    let fonts = BuiltinFonts::shipped();
     assert!(
         fonts.total_bytes() <= 12 * 1024 * 1024,
         "{} bytes",

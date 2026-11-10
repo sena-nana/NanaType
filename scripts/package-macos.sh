@@ -101,6 +101,18 @@ fi
 # Licences, collected before nana-packager inventories the bundle.
 python3 scripts/macos-licenses.py "$target" target/licenses/THIRD_PARTY_LICENSES.txt "$licences"
 
+# The built-in skins ship as a folder in the bundle's resources, not in the
+# executable (which keeps only the default skin, as a fallback). The SVG design
+# masters and dotfiles stay in the repository: skins load only rendered PNGs.
+rm -rf target/skins
+cp -R crates/theme/builtin target/skins
+find target/skins \( -name '.*' -o -name '*.svg' \) -type f -delete
+# Their fonts, each with its licence (docs/fonts.md).
+rm -rf target/fonts
+mkdir -p target/fonts
+find crates/theme/fonts -maxdepth 1 -type f \
+    \( -name '*.ttf' -o -name '*.otf' -o -name '*.LICENSE.txt' \) -exec cp {} target/fonts/ \;
+
 # Outside target/: NanaUI treats executables under a cargo target dir as dev builds.
 out="$root/dist"
 rm -rf "$out"

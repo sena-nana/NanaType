@@ -1,4 +1,4 @@
-//! Where a skin's files come from: the binary, a folder, or a `.ntpkg` zip.
+//! Where a skin's files come from: memory, a folder, or a `.ntpkg` zip.
 
 use std::collections::BTreeMap;
 use std::fs;

@@ -51,6 +51,7 @@ mod responsive;
 pub use material::*;
 pub use responsive::*;
 mod shader;
+mod shipped;
 pub use shader::*;
 mod sound_pack;
 pub use sound_pack::{
@@ -67,8 +68,8 @@ pub use files::{
     clean_path,
 };
 pub use fonts::{
-    BUILTIN_FONT_PREFIX, BuiltinFont, BuiltinFonts, builtin_font, builtin_path, font_family,
-    font_name, is_builtin_font,
+    BUILTIN_FONT_PREFIX, BuiltinFont, BuiltinFonts, builtin_font, builtin_fonts_dir, builtin_path,
+    font_family, font_name, is_builtin_font,
 };
 pub use geometry::*;
 pub use load::{
@@ -79,6 +80,6 @@ pub use load::{
 pub use manifest::*;
 pub use registry::{
     DEFAULT_SKIN, ExternalProblem, ExternalRoot, ExternalStatus, InstallOutcome, SkinEntry,
-    SkinRegistry,
+    SkinRegistry, builtin_dir,
 };
 pub use toml::Table as TomlTable;

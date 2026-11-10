@@ -56,6 +56,8 @@ The input window's toolbar, status bar and chat panel all use the general palett
 
 Each entry below is a separate skin package living in `crates/theme/builtin/<ID without the nanatype. prefix>/`; its manifest, styling and assets ship with the package.
 
+The built-in skins are not compiled into the executable. They ship as a folder of the package: `runtime/resources/skins/` on Windows and Linux, `NanaType.app/Contents/Resources/skins/` on macOS (the Steam edition too, so changing one skin updates only its own files); the fonts they name are in `fonts/` beside it (see [fonts.md](fonts.md)). The package scripts copy `crates/theme/builtin`, leaving out SVG masters and dotfiles. A development build (`cargo run`, tests) reads `crates/theme/builtin` in the source tree; `NANATYPE_BUILTIN_SKINS` names another folder. The folder is read-only: it is read once at startup, not watched, and nothing is installed into or removed from it; your own skins go in the user skin folder. The default skin, Halo, also has a copy in the executable and cannot be deleted: with its folder or the whole `skins/` gone the program still starts and Halo is still there. Any other built-in skin whose folder is deleted simply leaves the library; reinstalling (on Steam, verifying the integrity of the files) brings it back.
+
 In **Settings › Skins › Preview**, switch between the display box and the history to adjust the body font (dropdown), font size (number box), line height (slider), text color (color picker) and window size, and edit the test text.
 
 Changes show in the preview first; only **Save** writes them to that skin's personal configuration, and saving a different skin does not switch the skin in use.
@@ -746,7 +748,7 @@ Overriding **Box color** in Settings turns off the box's gradient, and overridin
 
 NanaUI uses only one font name at a time, so NanaType picks the first installed font from `families` and puts it first; if none is installed, the system default font is used. A `file` font shipped with the skin always takes priority.
 
-`file = "builtin:fonts/X.ttf"` references a font compiled into the program (`crates/theme/fonts/`, see [fonts.md](fonts.md)); built-in skins bring their fonts this way, and user skins can reference them too. A font is only registered when its skin is selected, and registered just once when several roles or skins share it. If this build doesn't include the font, there's no error — it simply falls back to `families`. The skin library only marks a skin with **Fallback font** when none of its `families` is available (installed, or the Noto Sans SC bundled with NanaUI) and it ships no usable font file either.
+`file = "builtin:fonts/X.ttf"` references a font shipped with the program (`crates/theme/fonts/`, see [fonts.md](fonts.md)); built-in skins bring their fonts this way, and user skins can reference them too. A font is only registered when its skin is selected, and registered just once when several roles or skins share it. If this build doesn't include the font, there's no error — it simply falls back to `families`. The skin library only marks a skin with **Fallback font** when none of its `families` is available (installed, or the Noto Sans SC bundled with NanaUI) and it ships no usable font file either.
 
 Built-in fonts currently shipped (versions, sources and SHA-256 are in [fonts.md](fonts.md)):
 

@@ -1,62 +1,123 @@
-//! Fonts built into the binary for the built-in skins.
+//! Fonts shipped with the app for the built-in skins.
 //!
-//! A skin folder ships its own font files (`file = "fonts/X.ttf"`); a
-//! built-in skin has no folder, so it names an embedded font instead:
-//! `file = "builtin:fonts/X.ttf"`, resolved against `crates/theme/fonts/`.
-//! `build.rs` embeds whatever is there (with the `builtin-fonts` feature),
-//! each font with its licence. A reference to a font this build does not
-//! carry is not an error: the role falls back to its `families`, exactly
-//! as if the skin had named no file.
+//! A skin folder ships its own font files (`file = "fonts/X.ttf"`); the
+//! built-in skins share a few, so they name a shipped font instead:
+//! `file = "builtin:fonts/X.ttf"`. Those live in a folder beside the
+//! executable ([`builtin_fonts_dir`]; `crates/theme/fonts/` in the source
+//! tree), each font with its licence, and are read once, with the
+//! `builtin-fonts` feature. A reference to a font this build does not carry
+//! is not an error: the role falls back to its `families`, exactly as if the
+//! skin had named no file.
+
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use crate::files::clean_path;
 use crate::manifest::FontSpec;
 
-mod generated {
-    include!(concat!(env!("OUT_DIR"), "/builtin_fonts.rs"));
-}
-
 /// What a skin writes before a built-in font's path.
 pub const BUILTIN_FONT_PREFIX: &str = "builtin:";
 
-/// One embedded font and the licence that ships with it.
+/// One shipped font and the licence that ships with it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuiltinFont {
-    /// `fonts/<name>.ttf`, relative to `crates/theme/`.
+    /// `fonts/<name>.ttf`.
     pub path: &'static str,
     pub bytes: &'static [u8],
     pub license: &'static str,
 }
 
-/// A table of embedded fonts; [`BuiltinFonts::embedded`] is this build's.
+/// A table of built-in fonts; [`BuiltinFonts::shipped`] is this process's.
 #[derive(Debug, Clone, Copy)]
 pub struct BuiltinFonts {
     fonts: &'static [BuiltinFont],
     known: &'static [&'static str],
 }
 
+/// The folder the built-in fonts are read from: `NANATYPE_BUILTIN_FONTS`
+/// when set, else `runtime/resources/fonts` beside the executable
+/// (`Contents/Resources/fonts` in a macOS bundle), else, in a development
+/// build, `crates/theme/fonts` of the source tree. `None` when that is not a
+/// folder; every `builtin:` role falls back to its families then.
+pub fn builtin_fonts_dir() -> Option<&'static Path> {
+    static DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+    DIR.get_or_init(|| {
+        crate::shipped::locate(
+            "NANATYPE_BUILTIN_FONTS",
+            "fonts",
+            option_env!("NANATYPE_SOURCE_FONTS"),
+        )
+    })
+    .as_deref()
+}
+
+/// The shipped folder's fonts, read once and kept for the process. A font
+/// without its `<name>.LICENSE.txt` beside it is known but not used: the OFL
+/// requires the licence to travel with the font.
+fn read_shipped() -> (Vec<BuiltinFont>, Vec<&'static str>) {
+    let mut fonts = Vec::new();
+    let mut known = Vec::new();
+    let Some(dir) = builtin_fonts_dir() else {
+        return (fonts, known);
+    };
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_file())
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| {
+            let lower = name.to_ascii_lowercase();
+            lower.ends_with(".ttf") || lower.ends_with(".otf")
+        })
+        .collect();
+    names.sort();
+    for name in names {
+        let path: &'static str = format!("fonts/{name}").leak();
+        known.push(path);
+        if !cfg!(feature = "builtin-fonts") {
+            continue;
+        }
+        let license = dir.join(format!("{}.LICENSE.txt", &name[..name.len() - 4]));
+        if let (Ok(bytes), Ok(license)) = (
+            std::fs::read(dir.join(&name)),
+            std::fs::read_to_string(license),
+        ) {
+            fonts.push(BuiltinFont {
+                path,
+                bytes: bytes.leak(),
+                license: license.leak(),
+            });
+        }
+    }
+    (fonts, known)
+}
+
 impl BuiltinFonts {
     /// A table of `fonts`; `known` are the paths a reference may name even
-    /// when their bytes are not embedded.
+    /// when their bytes are not carried.
     pub const fn new(fonts: &'static [BuiltinFont], known: &'static [&'static str]) -> Self {
         Self { fonts, known }
     }
 
-    /// The fonts this build embeds: empty without the `builtin-fonts`
-    /// feature or when `crates/theme/fonts/` has no fonts.
-    pub const fn embedded() -> Self {
-        Self::new(generated::EMBEDDED, generated::KNOWN)
+    /// The fonts shipped with this build: empty without the `builtin-fonts`
+    /// feature or when the fonts folder is missing or has no fonts.
+    pub fn shipped() -> Self {
+        static SHIPPED: OnceLock<(Vec<BuiltinFont>, Vec<&'static str>)> = OnceLock::new();
+        let (fonts, known) = SHIPPED.get_or_init(read_shipped);
+        Self::new(fonts, known)
     }
 
     pub fn fonts(&self) -> &'static [BuiltinFont] {
         self.fonts
     }
 
-    /// Every font path in `crates/theme/fonts/`, embedded or not.
+    /// Every font path in the fonts folder, carried or not.
     pub fn known(&self) -> &'static [&'static str] {
         self.known
     }
 
-    /// Bytes added to the binary.
+    /// Bytes of font data the table holds.
     pub fn total_bytes(&self) -> usize {
         self.fonts.iter().map(|f| f.bytes.len()).sum()
     }
@@ -67,8 +128,8 @@ impl BuiltinFonts {
         self.fonts.iter().find(|f| f.path == path)
     }
 
-    /// Whether `reference` names a font in `crates/theme/fonts/`, embedded
-    /// or not. An unknown name is most likely a typo.
+    /// Whether `reference` names a font in the fonts folder, carried or
+    /// not. An unknown name is most likely a typo.
     pub fn knows(&self, reference: &str) -> bool {
         builtin_path(reference).is_some_and(|p| {
             self.known.contains(&p.as_str()) || self.fonts.iter().any(|f| f.path == p)
@@ -81,15 +142,15 @@ pub fn is_builtin_font(reference: &str) -> bool {
     reference.starts_with(BUILTIN_FONT_PREFIX)
 }
 
-/// The cleaned path inside `crates/theme/` of a `builtin:` reference.
+/// The cleaned path (`fonts/<name>.ttf`) of a `builtin:` reference.
 pub fn builtin_path(reference: &str) -> Option<String> {
     clean_path(reference.strip_prefix(BUILTIN_FONT_PREFIX)?).ok()
 }
 
-/// This build's bytes for a `builtin:` reference; `None` when the reference
-/// is not one or the font is not embedded, and the role falls back.
+/// The shipped bytes for a `builtin:` reference; `None` when the reference
+/// is not one or the font is not shipped, and the role falls back.
 pub fn builtin_font(reference: &str) -> Option<&'static [u8]> {
-    BuiltinFonts::embedded().resolve(reference).map(|f| f.bytes)
+    BuiltinFonts::shipped().resolve(reference).map(|f| f.bytes)
 }
 
 /// The family a font file registers under: its typographic family name
@@ -143,7 +204,7 @@ impl BuiltinFont {
 
 impl FontSpec {
     /// Whether the role brings a font file that will actually be used: a
-    /// skin file (validated on load), or a built-in font this build embeds.
+    /// skin file (validated on load), or a built-in font this build ships.
     pub fn has_usable_file(&self) -> bool {
         match self.file.as_deref() {
             None => false,

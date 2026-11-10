@@ -1,9 +1,10 @@
 # Built-in skin fonts
 
-Fonts here are embedded in the binary (feature `builtin-fonts`) and named by
-a built-in skin as `file = "builtin:fonts/<name>.ttf"`. Each `<name>.ttf` or
-`<name>.otf` needs its licence beside it as `<name>.LICENSE.txt`, or the
-build fails. See [docs/fonts.md](../../../docs/fonts.md) for why these fonts,
+Fonts here ship as a `fonts` folder beside the executable (not inside it;
+read with the feature `builtin-fonts`) and are named by a built-in skin as
+`file = "builtin:fonts/<name>.ttf"`. Each `<name>.ttf` or `<name>.otf` needs
+its licence beside it as `<name>.LICENSE.txt`, or the font is not used and
+the tests fail. See [docs/fonts.md](../../../docs/fonts.md) for why these fonts,
 how they are subset and the size budget.
 
 A build with no font files here works: skins fall back to their `families`.
@@ -28,7 +29,7 @@ Bold, by Toshi Omagari. Source: [Google Fonts](https://github.com/google/fonts/t
 upstream source commit `9b57a9f9be5ecfe95e7f8c0e6b2b827eedb9ad67`.
 SHA-256: `a35368c814c71c15928ffc60cbac32bc81461f03b895a4a607df9c64b3d1548b`.
 The complete upstream OFL 1.1 and copyright notice are preserved in
-`Tangerine-Bold.LICENSE.txt`, embedded and displayed on the About page.
+`Tangerine-Bold.LICENSE.txt`, shipped beside the font and displayed on the About page.
 Sonnet reuses the existing WenKai subset for Chinese.
 
 ### FusionPixel12pxProportionalSC.ttf

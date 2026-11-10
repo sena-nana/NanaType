@@ -13,9 +13,9 @@ If a built-in skin only named system fonts, any computer without those fonts wou
 
 ## How it works
 
-- Fonts live in `crates/theme/fonts/<name>.ttf` (or `.otf`), and each must sit next to a licence with the same name, `<name>.LICENSE.txt` (the upstream `OFL.txt` copied verbatim, copyright line included). A missing licence fails the build.
-- A skin writes `file = "builtin:fonts/<name>.ttf"`. User skins can reference these too. The path may not leave `crates/theme/`.
-- `build.rs` scans that directory. With the Cargo feature `builtin-fonts` enabled (on by default for the app) it embeds the fonts and licences with `include_bytes!`; otherwise it embeds nothing.
+- Fonts live in `crates/theme/fonts/<name>.ttf` (or `.otf`), and each must sit next to a licence with the same name, `<name>.LICENSE.txt` (the upstream `OFL.txt` copied verbatim, copyright line included). A font without its licence is not used, and the tests fail.
+- A skin writes `file = "builtin:fonts/<name>.ttf"`. User skins can reference these too. The path may not leave the fonts folder.
+- Fonts are not compiled into the executable. The package scripts copy the fonts and licences into the package's `runtime/resources/fonts/` (`Contents/Resources/fonts/` on macOS); with the Cargo feature `builtin-fonts` enabled (on by default for the app) the program reads that folder once, on first use. A development build reads `crates/theme/fonts/` directly, and `NANATYPE_BUILTIN_FONTS` names another folder. A missing folder counts as fonts left out.
 - Fonts are registered with NanaUI only when a skin that uses them is selected (`app/src/skin_fonts.rs`). If the body, name tag and decoration roles, or several skins, share one font, it is registered once, and it is unregistered when you switch to a skin that does not use it. Registration uses the font file's own family name (see the table below), placed first in `families`.
 - A font left out of the current build is not an error; the skin simply falls back to `families`. A name that does not exist in `fonts/` at all produces a warning (most likely a typo).
 - The skin library marks a skin with "Fallback font" only when none of the fonts in `families` is available (installed, or NanaUI's bundled Noto Sans SC) and no bundled font file is available either.
@@ -24,10 +24,11 @@ If a built-in skin only named system fonts, any computer without those fonts wou
 
 | Method | Effect |
 | --- | --- |
-| `cargo build --no-default-features -p nanatype` | Embed no built-in fonts |
-| `NANATYPE_BUILTIN_FONTS_BUDGET_KB=<KiB>` | Size limit, default 12288 (12 MiB). Exceeding it fails the build |
+| `cargo build --no-default-features -p nanatype` | Read no built-in fonts |
 
-Embedding is byte-for-byte, so the binary grows by exactly the total size of the font files in `fonts/` (uncompressed; installer compression recovers some of it). The two pixel/brush fonts currently total 3,595,708 bytes (about 3.4 MiB); the debug `snapshots` example differs by 3,621,376 bytes with `builtin-fonts` on versus off (fonts plus full licence texts and a little code).
+The fonts together must stay within 12 MiB; a test checks it.
+
+The fonts add their own file sizes to the package and nothing to the executable.
 
 ## Bundled fonts
 

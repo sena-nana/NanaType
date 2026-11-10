@@ -21,9 +21,9 @@ required-features = ["updates"]
 
 [features]
 default = ["builtin-fonts", "updates"]
-# Embed crates/theme/fonts/ for the built-in skins (docs/fonts.md). Build
-# with `--no-default-features` to leave them out: those skins then fall
-# back to installed fonts.
+# Use the fonts shipped beside the executable (crates/theme/fonts/) for the
+# built-in skins (docs/fonts.md). Build with `--no-default-features` to
+# ignore them: those skins then fall back to installed fonts.
 builtin-fonts = ["nanatype-frame/builtin-fonts"]
 # The GitHub Releases update check (docs/updates.md). Steam builds update
 # through SteamPipe instead.

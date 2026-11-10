@@ -356,7 +356,7 @@ fn color_field(ui: Ui, id: &str, history: bool, default: Rgba8) -> AnyView {
 /// The body font: the skin's own, the built-in fonts and common system ones.
 fn font_select(ui: Ui, id: &str, history: bool) -> AnyView {
     let mut fonts = vec![SelectOption::new("", ui.now_t("common-skin-default"))];
-    let mut families: Vec<String> = nanatype_theme::BuiltinFonts::embedded()
+    let mut families: Vec<String> = nanatype_theme::BuiltinFonts::shipped()
         .fonts()
         .iter()
         .filter_map(|f| f.family())

@@ -320,7 +320,7 @@ fn licences(ui: Ui) -> Vec<(Row, Shown)> {
         text.extend(licence_lines(licence));
         rows.push(shown_if(licence_panel(text), move || open.get()));
     }
-    if !nanatype_theme::BuiltinFonts::embedded().fonts().is_empty() {
+    if !nanatype_theme::BuiltinFonts::shipped().fonts().is_empty() {
         let open = signal(false);
         rows.push((row(ui, "about-fonts", None, fold_toggle(ui, open)), None));
         rows.push(shown_if(font_licence_panel(ui), move || open.get()));
@@ -400,7 +400,7 @@ fn licence_panel(lines: Vec<AnyView>) -> Row {
 /// licence's full text, in a scrolling panel. Shown under About's
 /// "Open-source fonts" row.
 pub fn font_licence_panel(ui: Ui) -> Row {
-    let fonts = nanatype_theme::BuiltinFonts::embedded().fonts();
+    let fonts = nanatype_theme::BuiltinFonts::shipped().fonts();
     let locale = ui.locale.get_untracked();
     let entries: Vec<AnyView> = fonts
         .iter()

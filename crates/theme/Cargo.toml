@@ -7,9 +7,8 @@ rust-version.workspace = true
 description = "NanaType skin packages: manifest, inheritance, validation, install and export"
 
 [features]
-# Embed the fonts in `fonts/` for `builtin:` font references (docs/fonts.md).
-# Off: nothing is embedded and those roles fall back to their `families`.
-# With no font files in `fonts/` it adds nothing either way.
+# Read the shipped fonts folder for `builtin:` font references (docs/fonts.md).
+# Off: no font is read and those roles fall back to their `families`.
 default = ["builtin-fonts"]
 builtin-fonts = []
 # Package authoring for NanaType Editor: drafts, in-place manifest edits,
@@ -37,10 +36,6 @@ ed25519-dalek.workspace = true
 getrandom.workspace = true
 tempfile.workspace = true
 image = { workspace = true, features = ["png", "jpeg", "gif", "webp"] }
-
-[build-dependencies]
-serde_json.workspace = true
-toml = { workspace = true, features = ["parse", "serde"] }
 
 [dev-dependencies]
 proptest.workspace = true

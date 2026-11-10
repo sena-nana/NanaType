@@ -426,7 +426,7 @@ pub fn load(
     load_impl(files, origin, resolver, app_version, true)
 }
 
-/// Only immutable, embedded catalogue entries may defer GPU preparation.
+/// Only immutable built-in catalogue entries may defer GPU preparation.
 /// User folders and archives always go through the complete validator above.
 pub(crate) fn builtin_preview(
     files: Arc<dyn SkinFiles>,
@@ -768,7 +768,7 @@ pub(crate) fn validate_values(skin: &Skin, app_version: &str, out: &mut Vec<Skin
 fn validate_files(skin: &Skin, files: &dyn SkinFiles, out: &mut Vec<SkinDiagnostic>) {
     for (field, path, kind) in skin.referenced_files() {
         if kind == FileKind::Font && is_builtin_font(path) {
-            validate_builtin_font(field, path, &BuiltinFonts::embedded(), out);
+            validate_builtin_font(field, path, &BuiltinFonts::shipped(), out);
             continue;
         }
         let path = match crate::clean_resource_path(path) {

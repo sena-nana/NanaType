@@ -6,16 +6,16 @@
 
 ## 使用规则
 
-- 字体文件放在 `crates/theme/fonts/`，旁边必须有同名 `<名字>.LICENSE.txt`；缺许可会导致编译失败。
-- 皮肤通过 `file = "builtin:fonts/<名字>.ttf"` 引用，路径不得离开 `crates/theme/`。
-- `build.rs` 在 `builtin-fonts` 开启时用 `include_bytes!` 嵌入字体和许可；`--no-default-features` 可完全不嵌入。
+- 字体文件放在 `crates/theme/fonts/`，旁边必须有同名 `<名字>.LICENSE.txt`；缺许可的字体不会被使用，测试会失败。
+- 皮肤通过 `file = "builtin:fonts/<名字>.ttf"` 引用，路径不得离开字体文件夹。
+- 字体不编译进可执行文件：打包脚本把字体和许可复制到安装包的 `runtime/resources/fonts/`（macOS 为 `Contents/Resources/fonts/`），`builtin-fonts` 开启时程序首次使用时读取一次；开发构建直接读取 `crates/theme/fonts/`，环境变量 `NANATYPE_BUILTIN_FONTS` 可指定其他目录。文件夹缺失时按未随附处理。`--no-default-features` 可完全不读取。
 - 选中皮肤时才向 NanaUI 注册，使用字体文件自己的家族名，并按 `families` 作为首选回落；未随附的字体回落到已安装字体或 NanaUI 的 Noto Sans SC。
 
 ```bash
 cargo build --no-default-features -p nanatype
 ```
 
-体积预算可由 `NANATYPE_BUILTIN_FONTS_BUDGET_KB=<KiB>` 设置，默认 12288 KiB。当前三款字体合计约 3.66 MB。像素字体按 12px 整数倍显示最清楚；`pixel` 与 `rpg` 文字使用 24px、行高 1.5，测试会检查这一点。
+体积预算为 12 MiB，由测试检查。当前三款字体合计约 3.66 MB。像素字体按 12px 整数倍显示最清楚；`pixel` 与 `rpg` 文字使用 24px、行高 1.5，测试会检查这一点。
 
 ## 加入字体
 
