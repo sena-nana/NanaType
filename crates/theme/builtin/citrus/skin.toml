@@ -316,6 +316,8 @@ bubble_color = "#fff6d6"
 bubble_contour = "slant"
 bubble_radius = 3.0
 entrance = "slide_up"
+entrance_ease = "overshoot"
+entrance_ms = 340
 name_color = "#2f6e5c"
 time_color = "#7a6243"
 

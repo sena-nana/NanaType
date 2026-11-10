@@ -208,7 +208,9 @@ bubble_border_width = 1.0
 bubble_color = "#fffdf8f2"
 bubble_contour = "rounded"
 bubble_radii = [0.0, 2.0, 2.0, 0.0]
-entrance = "slide_up"
+entrance = "fade"
+entrance_ease = "smooth"
+entrance_ms = 200
 name_color = "#8a6a3a"
 time_color = "#6e655a"
 

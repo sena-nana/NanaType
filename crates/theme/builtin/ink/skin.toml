@@ -381,11 +381,11 @@ file = "builtin:fonts/LXGWWenKai-Regular.ttf"
 weight = 400
 
 [history]
-bubble_border = "#1e1e1e1a"
-bubble_border_width = 0.800000011920929
-bubble_color = "#fbfaf6f2"
-bubble_radius = 2.0
-entrance = "slide_up"
+bubble_padding = [0.0, 2.0]
+entrance = "fade"
+entrance_ease = "gentle"
+entrance_ms = 520
+gap = 18.0
 name_color = "#1e1e1e"
 name_weight = 400
 time_color = "#6e6a62"
@@ -394,21 +394,6 @@ time_color = "#6e6a62"
 ring_color = "#b0302a"
 ring_width = 2.0
 shape = "square"
-
-[history.bubble_gradient]
-angle = 180.0
-center = [50.0, 50.0]
-circle = false
-kind = "linear"
-stops = [[0.0, "#fcfbf8f5"], [1.0, "#f3f1eaf0"]]
-
-[[history.bubble_shadows]]
-blur = 8.0
-color = "#1e1e1e14"
-dx = 0.0
-dy = 2.0
-inset = false
-spread = 0.0
 
 [[history.decor]]
 anchor = "top_left"
@@ -467,6 +452,11 @@ shadows = []
 [history.reply]
 color = "#6e6a62"
 opacity = 1.0
+
+[history.separator]
+color = "#1e1e1e2e"
+fade = true
+width = 1.0
 
 [history.text]
 color = "#1e1e1e"

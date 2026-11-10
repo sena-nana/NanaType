@@ -209,26 +209,40 @@ families = ["Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun"]
 weight = 900
 
 [history]
-bubble_border = "#ffffff26"
-bubble_border_width = 1.0
-bubble_color = "#0d0d12e6"
-bubble_radius = 2.0
-entrance = "slide_up"
+bubble_padding = [0.0, 2.0]
+entrance = "fade"
+entrance_ease = "gentle"
+entrance_ms = 320
+gap = 18.0
 name_color = "#ffffff"
+name_format = "【{name}】"
+name_size = 15.0
 time_color = "#b8bcc6"
 
 [history.avatar]
-color = "#9aa0ac"
+shape = "none"
 
-[history.bubble_gradient]
+[history.panel]
+color = "#0d0d12d9"
+margin = [0.0, 0.0, 0.0, 0.0]
+padding = [24.0, 14.0, 24.0, 20.0]
+radius = 0.0
+
+[history.panel.gradient]
 angle = 180.0
-center = [50.0, 50.0]
-circle = false
-kind = "linear"
-stops = [[0.0, "#0d0d12cc"], [1.0, "#050507e6"]]
+stops = [[0.0, "#0d0d12b8"], [1.0, "#050507f0"]]
+
+[history.recede]
+floor = 0.55
+step = 0.1
 
 [history.reply]
 color = "#b8bcc6"
+
+[history.separator]
+color = "#ffffff30"
+fade = true
+width = 1.0
 
 [history.text]
 color = "#ffffff"
@@ -262,6 +276,15 @@ icon = "★"
 icon_color = "#e6c98a"
 name_color = "#e6c98a"
 badge = { color = "#e6c98a", text_color = "#0d0d12", radius = 1.0 }
+
+[history.title]
+background = "#00000000"
+color = "#ffffffa6"
+height = 36.0
+padding = 24.0
+size = 12.0
+text = "BACKLOG"
+weight = 400
 
 [mention]
 avatar = true

@@ -346,7 +346,9 @@ bubble_border_width = 1.0
 bubble_color = "#2a1420"
 bubble_contour = "terminal"
 bubble_radius = 3.0
-entrance = "slide_up"
+entrance = "fade"
+entrance_ease = "gentle"
+entrance_ms = 420
 name_color = "#f3e6ec"
 time_color = "#b79aa8"
 

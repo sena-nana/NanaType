@@ -1471,7 +1471,92 @@ pub enum HistoryEntrance {
     #[default]
     SlideUp,
     Fade,
+    /// In from the left edge.
     SlideLeft,
+    /// In from the right edge.
+    SlideRight,
+    /// Down from above, like something let go.
+    Drop,
+    /// Grows out of its lower corner.
+    Pop,
+    /// Lands from slightly larger, like a stamp.
+    Stamp,
+    /// Opens downwards from its top edge, like a folded sheet.
+    Unfold,
+    /// Set down at a slight angle and straightened.
+    Tilt,
+}
+
+/// The curve a new row settles on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HistoryEase {
+    /// Quick out, soft landing.
+    #[default]
+    Smooth,
+    /// Slow at both ends.
+    Gentle,
+    /// Runs a little past its place and settles back.
+    Overshoot,
+    Linear,
+}
+
+/// Where rows sit across the list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HistoryAlign {
+    #[default]
+    Start,
+    /// Name and line centred, like subtitles or verse.
+    Center,
+}
+
+/// A rule in the gap between two speakers' rows.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HistorySeparator {
+    pub color: ColorRef,
+    pub width: f32,
+    /// Space kept clear at both ends.
+    pub inset: f32,
+    /// Fade out towards both ends instead of ending square.
+    pub fade: bool,
+}
+
+impl Default for HistorySeparator {
+    fn default() -> Self {
+        Self {
+            color: ColorRef::Role(ColorRole::Border),
+            width: 1.0,
+            inset: 0.0,
+            fade: false,
+        }
+    }
+}
+
+/// Older rows step back: each row above the newest loses `step` of its
+/// opacity, down to `floor`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HistoryRecede {
+    pub step: f32,
+    pub floor: f32,
+}
+
+impl Default for HistoryRecede {
+    fn default() -> Self {
+        Self {
+            step: 0.12,
+            floor: 0.4,
+        }
+    }
+}
+
+impl HistoryRecede {
+    /// The opacity of the row `rank` places above the newest.
+    pub fn opacity(&self, rank: usize) -> f32 {
+        (1.0 - self.step * rank as f32).clamp(self.floor.clamp(0.0, 1.0), 1.0)
+    }
 }
 
 /// A pill behind the speaker's name in the history list.
@@ -1600,6 +1685,9 @@ pub struct History {
     pub text: TextSpec,
     pub gap: f32,
     pub entrance: HistoryEntrance,
+    /// How long a new row takes to settle, and the rows above it to move.
+    pub entrance_ms: u16,
+    pub entrance_ease: HistoryEase,
     pub time_color: Rgba8,
     pub bubble_gradient: Option<GradientSpec>,
     pub bubble_radii: Option<[f32; 4]>,
@@ -1627,6 +1715,22 @@ pub struct History {
     pub event: Option<HistoryEvents>,
     /// The chat message a row answers, quoted above its bubble.
     pub reply: ReplySpec,
+    /// How a speaker's name is written, `{name}` standing for it:
+    /// `"【{name}】"`, `"{name}@live:~$"`.
+    pub name_format: Option<String>,
+    pub align: HistoryAlign,
+    pub separator: Option<HistorySeparator>,
+    pub recede: Option<HistoryRecede>,
+}
+
+impl History {
+    /// `author` as this skin writes names.
+    pub fn name(&self, author: &str) -> String {
+        match &self.name_format {
+            Some(format) if format.contains("{name}") => format.replace("{name}", author),
+            _ => author.to_owned(),
+        }
+    }
 }
 
 impl Default for History {
@@ -1657,6 +1761,8 @@ impl Default for History {
             },
             gap: 10.0,
             entrance: HistoryEntrance::None,
+            entrance_ms: 220,
+            entrance_ease: HistoryEase::Smooth,
             time_color: Rgba8::rgb(96, 96, 96),
             bubble_gradient: None,
             bubble_radii: None,
@@ -1675,6 +1781,10 @@ impl Default for History {
             chat: HistoryChatSpec::default(),
             event: None,
             reply: ReplySpec::default(),
+            name_format: None,
+            align: HistoryAlign::Start,
+            separator: None,
+            recede: None,
         }
     }
 }

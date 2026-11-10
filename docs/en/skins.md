@@ -170,9 +170,11 @@ If the selected sound pack is deleted, fails to load or isn't visible in the cur
 
 `history.group_speakers` controls whether consecutive messages from the same speaker share a name row. `history.padding` is the left, top, right, bottom padding when there is no panel; `history.margin` is the top, right, bottom, left margin. `history.row_padding` is each row's horizontal padding, and `history.column_inset` is extra width reserved beside the body column. Avatar size and `history.text.size` are set by the skin and overridden by the user's personalization as usual; nothing is rewritten based on a skin ID.
 
-New messages enter according to `history.entrance` (`slide_up`, `fade`, `slide_left`; `none` makes them just appear).
+New messages enter according to `history.entrance`: `slide_up` rises, `fade` fades in, `slide_left` / `slide_right` come in from the left / right, `drop` falls from above, `pop` grows out of its lower corner, `stamp` lands from slightly larger, `unfold` opens downwards from its top edge, and `tilt` is set down at an angle and straightened; `none` makes them just appear. `history.entrance_ms` is how long that takes (220 by default) and `history.entrance_ease` the curve: `smooth` (quick out, soft landing), `gentle` (slow at both ends), `overshoot` (a little past its place and back) or `linear`. Every built-in skin picks the entrance and pace that suit its theme. With reduced motion only the fade remains.
 
-Messages already on screen ease out to their new positions over the same 220ms: the list moves up as a whole when a new message pushes it, and when the oldest message leaves because of the display limit, the ones below fill the gap.
+`history.name_format` changes how a name is written (`"【{name}】"`, `"> {name}"`); names on event cards stay as they are. `history.align = "center"` centres names and lines, for subtitle- or verse-like skins without avatars. `[history.separator]` rules a line between two speakers, for log-style layouts without bubbles. `[history.recede]` lets older messages step back one by one while the newest stays opaque; a search shows them all at full strength.
+
+Messages already on screen move to their new positions over the same time (on the `smooth` curve when the entrance overshoots): the list moves up as a whole when a new message pushes it, and when the oldest message leaves because of the display limit, the ones below fill the gap.
 
 The framework default is `none`; every built-in skin turns entrance on.
 
@@ -345,7 +347,11 @@ bubble_shadows = [{ color = "#00000020", dy = 2, blur = 8, spread = 0 }]  # spre
 bubble_padding = [12, 8]          # bubble padding: horizontal vertical
 bubble_frame = { image = "images/bubble.png", slice = [12, 12, 12, 12] }
 gap = 10                         # spacing guide: stack keeps 12–20px depending on font size; consecutive messages by the same author 8–12px; inline 8–14px
-entrance = "slide_up"             # none | slide_up | fade | slide_left
+entrance = "slide_up"             # none | slide_up | fade | slide_left | slide_right | drop | pop | stamp | unfold | tilt
+entrance_ms = 220                 # how long the entrance takes (ms, 0–2000); rows on screen make room over the same time
+entrance_ease = "smooth"          # smooth | gentle | overshoot | linear
+name_format = "【{name}】"        # how names are written; must contain {name}, at most 32 characters
+align = "start"                   # start | center (name and line centred; not for the inline layout)
 layout = "stack"                  # stack: name and time above the bubble | inline: name, line and time on one row (chat-log style)
                                   # in stack, consecutive messages from the same person within 2 minutes merge: only the first shows avatar, name and time
 name_width = 96                   # name column width for inline; shrinks in narrow windows to keep room for text and @ tags
@@ -368,6 +374,16 @@ color = "#00000026"
 [history.text]
 color = "#3a2230"
 size = 18
+
+[history.separator]               # a rule between two speakers (optional); not drawn inside one speaker's run
+color = "#1e1e1e2e"               # may be a color role; defaults to border
+width = 1
+inset = 0                         # space kept clear at both ends
+fade = true                       # fade out towards both ends
+
+[history.recede]                  # older messages step back one by one (optional)
+step = 0.12                       # opacity lost per row above the newest
+floor = 0.4                       # lowest opacity
 
 [history.chat]                    # live chat rows (appear once Settings › History › Live chat is on)
 text_scale = 0.88                 # chat text size relative to history.text

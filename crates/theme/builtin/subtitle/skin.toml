@@ -160,9 +160,12 @@ scale = 0.83
 text_color = "#ffd27f"
 
 [history]
+align = "center"
 bubble_border_width = 1.0
 bubble_padding = [2.0, 0.0]
-entrance = "slide_up"
+entrance = "fade"
+entrance_ease = "smooth"
+entrance_ms = 160
 name_color = "#ffd27f"
 time_color = "#c8c8d0"
 
@@ -173,7 +176,12 @@ shape = "none"
 color = "#000000"
 width = 2.5
 
+[history.recede]
+floor = 0.35
+step = 0.18
+
 [history.text]
+align = "center"
 color = "#ffffff"
 
 [history.text.stroke]

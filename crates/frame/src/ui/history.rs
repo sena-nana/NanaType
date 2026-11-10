@@ -17,15 +17,15 @@ use nana_ui::runtime::{
 use nana_ui::{ButtonKind, ControlSize};
 use nana_ui_core::{
     AlignSpec, BackgroundImage, CssGradient, Easing, GradientStop, LengthSpec, LinearGradient,
-    OverflowSpec, PointerEventsSpec, PositionSpec,
+    OverflowSpec, PointerEventsSpec, PositionSpec, TransformOrigin,
 };
 use nanatype_core::HistoryRow;
 use nanatype_model::{
     Document, Entrance, EventKind, HistoryItem, Inline, LineId, Rgba8, SourceKind, Stroke,
 };
 use nanatype_theme::{
-    AvatarShape, DecorLayer, EventPriceColor, HistoryEntrance, HistoryEventLayout, HistoryLayout,
-    HistoryTitle, Skin,
+    AvatarShape, DecorLayer, EventPriceColor, HistoryAlign, HistoryEase, HistoryEntrance,
+    HistoryEventLayout, HistoryLayout, HistoryTitle, Skin,
 };
 
 use super::dialogue::{self, Base, Timing, document};
@@ -48,10 +48,14 @@ pub fn local_time(unix_ms: u64, seconds: bool) -> String {
     }
 }
 
-/// How long a new row takes to settle in, and the rows above it to move.
-const ROW_ENTER_MS: u64 = 220;
-/// The curve both ride on.
+/// The curve a row settles on unless the skin picks another.
 const ROW_EASE: Easing = Easing::CubicBezier([0.2, 0.8, 0.2, 1.0]);
+/// Slow at both ends: paper, ink, water.
+const ROW_GENTLE: Easing = Easing::CubicBezier([0.45, 0.05, 0.25, 1.0]);
+/// Past its place by about a tenth, then back.
+const ROW_OVERSHOOT: Easing = Easing::CubicBezier([0.3, 1.45, 0.5, 1.0]);
+/// How long an older row takes to step back when a new one arrives.
+const RECEDE_MS: u64 = 320;
 const ROW_FADE_MS: u64 = 600;
 const FADE_FRAME_SLACK_MS: u64 = 100;
 
@@ -471,21 +475,160 @@ fn follow_ups(rows: &[HistoryRow], shown: &[u64]) -> Vec<u64> {
         .collect()
 }
 
-fn entry_view(ui: Stage, key: u64, first: bool, follows: bool, slide: Option<Slide>) -> AnyView {
-    let gap = if first {
-        0.0
-    } else {
-        ui.skin.with_untracked(|s| row_gap(s, follows))
+/// How a new row arrives, as the skin asked: the transition, and the point
+/// its scale or turn is taken around.
+fn entrance(h: &nanatype_theme::History, reduced: bool) -> Option<(Transition, TransformOrigin)> {
+    let ms = std::time::Duration::from_millis(u64::from(h.entrance_ms.min(2000)));
+    let (ease, settle) = match h.entrance_ease {
+        HistoryEase::Smooth => (ROW_EASE, None),
+        HistoryEase::Gentle => (ROW_GENTLE, None),
+        // The opacity must not pass 1: only the movement overshoots.
+        HistoryEase::Overshoot => (ROW_EASE, Some(ROW_OVERSHOOT)),
+        HistoryEase::Linear => (Easing::Linear, None),
+    };
+    let matrix =
+        |a: f32, b: f32, c: f32, d: f32, e: f32, f: f32| PaintTransform { a, b, c, d, e, f };
+    let side = match h.align {
+        HistoryAlign::Start => 0.0,
+        HistoryAlign::Center => 50.0,
+    };
+    let (from, origin) = match h.entrance {
+        HistoryEntrance::None => return None,
+        // Reduced motion keeps the fade and drops the travel.
+        HistoryEntrance::Fade => (None, [50.0, 50.0]),
+        _ if reduced => (None, [50.0, 50.0]),
+        HistoryEntrance::SlideUp => (Some(rise(16.0)), [50.0, 50.0]),
+        HistoryEntrance::Drop => (Some(rise(-16.0)), [50.0, 50.0]),
+        HistoryEntrance::SlideLeft => (Some(matrix(1.0, 0.0, 0.0, 1.0, -24.0, 0.0)), [50.0, 50.0]),
+        HistoryEntrance::SlideRight => (Some(matrix(1.0, 0.0, 0.0, 1.0, 24.0, 0.0)), [50.0, 50.0]),
+        HistoryEntrance::Pop => (Some(matrix(0.86, 0.0, 0.0, 0.86, 0.0, 0.0)), [side, 100.0]),
+        HistoryEntrance::Stamp => (Some(matrix(1.12, 0.0, 0.0, 1.12, 0.0, 0.0)), [50.0, 50.0]),
+        HistoryEntrance::Unfold => (Some(matrix(1.0, 0.0, 0.0, 0.55, 0.0, 0.0)), [50.0, 0.0]),
+        HistoryEntrance::Tilt => {
+            let (sin, cos) = (-3.0_f32).to_radians().sin_cos();
+            (Some(matrix(cos, sin, -sin, cos, 0.0, 10.0)), [side, 100.0])
+        }
+    };
+    let mut enter = nana_ui::runtime::view::Presence::new(ms)
+        .opacity(0.0)
+        .ease(ease);
+    if let Some(from) = from {
+        enter = enter.transform(from);
+        if let Some(settle) = settle {
+            enter = enter.ease_transform(settle);
+        }
+    }
+    let origin = TransformOrigin {
+        x: LengthSpec::Percent(origin[0]),
+        y: LengthSpec::Percent(origin[1]),
+    };
+    // A dropped row goes at once: the rows below glide into its place.
+    Some((Transition::new().enter(enter), origin))
+}
+
+/// The curve rows already on screen glide on: the skin's, without the
+/// overshoot a whole list would wobble with.
+fn glide_ease(h: &nanatype_theme::History) -> Easing {
+    match h.entrance_ease {
+        HistoryEase::Gentle => ROW_GENTLE,
+        HistoryEase::Linear => Easing::Linear,
+        HistoryEase::Smooth | HistoryEase::Overshoot => ROW_EASE,
+    }
+}
+
+/// The rule between two speakers, in the middle of the gap above a row.
+fn separator_view(skin: &Skin, gap: f32) -> Option<AnyView> {
+    let rule = skin.history.separator.as_ref().filter(|r| r.width > 0.0)?;
+    let color = skin.color(rule.color);
+    let (width, inset, fade) = (rule.width, rule.inset, rule.fade);
+    let clear = Rgba8::rgba(color.r, color.g, color.b, 0);
+    let stop = |position: f32, col: Rgba8| GradientStop {
+        paint_color: None,
+        position,
+        color: c(col),
+    };
+    Some(
+        widget(Stack::row(0.0).with_layout(move |l| {
+            l.position = PositionSpec::Absolute;
+            l.offset_top = Some(LengthSpec::Px(((gap - width) / 2.0).max(0.0)));
+            l.offset_left = Some(LengthSpec::Px(inset));
+            l.offset_right = Some(LengthSpec::Px(inset));
+            l.height = Some(LengthSpec::Px(width));
+            l.pointer_events = Some(PointerEventsSpec::None);
+            if fade {
+                l.paint.background_image = Some(BackgroundImage::Gradient(CssGradient::Linear(
+                    LinearGradient {
+                        angle_deg: 90.0,
+                        stops: vec![
+                            stop(0.0, clear),
+                            stop(0.18, color),
+                            stop(0.82, color),
+                            stop(1.0, clear),
+                        ],
+                    },
+                )));
+            } else {
+                l.background = Some(c(color));
+            }
+        }))
+        .into_any(),
+    )
+}
+
+fn entry_view(
+    ui: Stage,
+    key: u64,
+    first: bool,
+    follows: bool,
+    slide: Option<Slide>,
+    items: Computed<Vec<u64>>,
+) -> AnyView {
+    let skin = ui.skin.get_untracked();
+    let gap = if first { 0.0 } else { row_gap(&skin, follows) };
+    let origin = entrance(&skin.history, false).map(|(_, origin)| origin);
+    let rule = (!first && !follows)
+        .then(|| separator_view(&skin, gap))
+        .flatten();
+    let message = message_view(ui, key, follows);
+    // Older rows step back as new ones arrive; a search shows what it found
+    // at full strength.
+    let message = match skin.history.recede {
+        Some(recede) => widget(Stack::column(0.0).width(LengthSpec::Fill))
+            .bind(move |s: &mut Stack| {
+                let rank = items.with(|shown| {
+                    shown
+                        .iter()
+                        .rev()
+                        .position(|k| *k == key)
+                        .unwrap_or_default()
+                });
+                let opacity = if query(ui).is_some() {
+                    1.0
+                } else {
+                    recede.opacity(rank)
+                };
+                s.layout_mut().opacity = Some(opacity);
+            })
+            .animate([Implicit::new(
+                AnimatableProperty::Opacity,
+                std::time::Duration::from_millis(RECEDE_MS),
+            )
+            .ease(ROW_GENTLE)])
+            .children(message)
+            .into_any(),
+        None => message,
     };
     // The gap is padding, so the row's measured height includes it.
     let row = widget(
         Stack::column(0.0)
             .width(LengthSpec::Fill)
             .with_layout(move |l| {
+                l.position = PositionSpec::Relative;
                 l.padding_top = Some(LengthSpec::Px(gap));
+                l.transform_origin = origin;
             }),
     )
-    .children(message_view(ui, key, follows));
+    .children((rule, message));
     match slide {
         Some(slide) => {
             slide.built(key, gap);
@@ -642,6 +785,7 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
         return widget(Stack::row(0.0)).into_any();
     };
     let inline = h.layout == HistoryLayout::Inline && col_w >= 160.0;
+    let centered = h.align == HistoryAlign::Center && !inline;
     let look = EventLook::of(&skin, &row.item);
     // A card or a notice is the whole row: it neither groups nor sits in
     // the name and time columns.
@@ -851,7 +995,7 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
             }),
         )
         .children(widget(
-            Text::new(row.item.author.clone())
+            Text::new(h.name(&row.item.author))
                 .style(name_style)
                 .truncating(),
         ))
@@ -1106,7 +1250,11 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
                 .width(LengthSpec::Shrink)
                 .with_layout(move |l| {
                     l.max_width = Some(LengthSpec::Px(bubble_max));
-                    l.align_items = AlignSpec::Start;
+                    l.align_items = if centered {
+                        AlignSpec::Center
+                    } else {
+                        AlignSpec::Start
+                    };
                 }),
         )
         .children((q, bubble))
@@ -1179,6 +1327,11 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
                 Stack::row(6.0)
                     .wrap(col_w < 180.0)
                     .align(AlignSpec::Center)
+                    .justify(if centered {
+                        nana_ui_core::JustifySpec::Center
+                    } else {
+                        nana_ui_core::JustifySpec::Start
+                    })
                     .width(LengthSpec::Fill),
             )
             .children((name, role, time))
@@ -1187,17 +1340,22 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
         widget(
             Stack::column(6.0)
                 .width(LengthSpec::Px(col_w))
-                .with_layout(|l| {
+                .with_layout(move |l| {
                     l.min_width = Some(LengthSpec::Px(0.0));
-                    l.align_items = AlignSpec::Start;
+                    l.align_items = if centered {
+                        AlignSpec::Center
+                    } else {
+                        AlignSpec::Start
+                    };
                 }),
         )
         .children((header, bubble))
         .into_any()
     };
 
-    // Inline rows drop the empty avatar slot, so the name sits at the edge.
-    let avatar = (show_avatar || !inline).then_some(avatar);
+    // Inline rows drop the empty avatar slot, so the name sits at the edge;
+    // centred rows drop it so the column is the whole row.
+    let avatar = (show_avatar || !(inline || centered)).then_some(avatar);
     row_frame(ui, &settings, &h, row.item.at, avatar, content)
 }
 
@@ -1416,18 +1574,10 @@ pub fn history_window_with(
     };
     dynamic(key, move |_| {
         let skin = super::materials::render_skin(ui, ui.skin.get_untracked());
-        let ms = std::time::Duration::from_millis(ROW_ENTER_MS);
-        // Reduced motion keeps the fade and drops the travel.
         let reduced = ui.reduced_motion.get_untracked();
-        let transition = match skin.history.entrance {
-            HistoryEntrance::None => None,
-            _ if reduced => Some(Transition::fade(ms)),
-            HistoryEntrance::SlideUp => Some(Transition::slide(0.0, 16.0, ms)),
-            HistoryEntrance::SlideLeft => Some(Transition::slide(-24.0, 0.0, ms)),
-            HistoryEntrance::Fade => Some(Transition::fade(ms)),
-        }
-        // A dropped row goes at once: the rows below glide into its place.
-        .map(|t| t.ease(ROW_EASE).without_leave());
+        let ms = std::time::Duration::from_millis(u64::from(skin.history.entrance_ms.min(2000)));
+        let glide = glide_ease(&skin.history);
+        let transition = entrance(&skin.history, reduced).map(|(transition, _)| transition);
         let slide = transition.is_some().then(|| Slide::new(items));
         let row_slide = slide.clone();
         let list = each(
@@ -1442,7 +1592,7 @@ pub fn history_window_with(
                             follows.with(|f| f.contains(&k)),
                         )
                     },
-                    move |(first, f)| entry_view(ui, k, *first, *f, slide.clone()),
+                    move |(first, f)| entry_view(ui, k, *first, *f, slide.clone(), items),
                 )
             },
         );
@@ -1457,7 +1607,7 @@ pub fn history_window_with(
                     .bind(move |s: &mut Stack| {
                         s.layout_mut().transform = Some(rise(-travel.get()));
                     })
-                    .animate([Implicit::new(AnimatableProperty::Transform, ms).ease(ROW_EASE)])
+                    .animate([Implicit::new(AnimatableProperty::Transform, ms).ease(glide)])
                     .children(list)
                     .into_any()
             }
@@ -2062,8 +2212,10 @@ mod tests {
         let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
         let name = "这是一位名字特别长的观众 A very long viewer name";
         for locale in nanatype_i18n::Locale::ALL {
-            for skin_id in ["nanatype.terminal", "nanatype.vanilla"] {
+            for skin_id in ["nanatype.pixel", "nanatype.vanilla"] {
                 let skin = registry.load(skin_id).unwrap().skin;
+                // As the skin writes it: pixel adds a colon.
+                let written = skin.history.name(name);
                 let (w, h) = (skin.history.width as u32, skin.history.height as u32);
                 let mut settings = nanatype_settings::Settings::default();
                 settings.history.show_time = true;
@@ -2091,7 +2243,7 @@ mod tests {
                         .bounds
                         .clone()
                 };
-                let shown = find(name);
+                let shown = find(&written);
                 let role = find(&ui.now_t("history-role-viewer"));
                 assert!(
                     shown.x + shown.width <= role.x,
@@ -2108,12 +2260,24 @@ mod tests {
         rows: u64,
         visible: u32,
     ) -> (Stage, nana_ui_devtools::agent::RuntimeAgentSession) {
+        motion_log_with(w, h, rows, visible, |_| {})
+    }
+
+    /// [`motion_log`] with the skin's history changed by `dress`.
+    fn motion_log_with(
+        w: u32,
+        h: u32,
+        rows: u64,
+        visible: u32,
+        dress: impl FnOnce(&mut nanatype_theme::History),
+    ) -> (Stage, nana_ui_devtools::agent::RuntimeAgentSession) {
         use nana_ui::runtime::{DocumentId, RuntimeDocument};
         use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
         let mut skin = Skin::default();
         skin.history.entrance = HistoryEntrance::SlideUp;
         skin.history.bubble_color = Rgba8::rgb(220, 30, 30);
         skin.history.group_speakers = false;
+        dress(&mut skin.history);
         let mut settings = nanatype_settings::Settings::default();
         settings.history.show_avatar = false;
         settings.history.show_name = false;
@@ -2208,6 +2372,101 @@ mod tests {
         assert!(
             entering.0 > done[1].0,
             "the new row rises into place: {mid:?} -> {done:?}"
+        );
+    }
+
+    #[test]
+    fn every_entrance_settles_where_a_plain_row_sits() {
+        use HistoryEntrance::*;
+        let rest = |entrance, ease| {
+            let (ui, mut session) = motion_log_with(300, 480, 1, 30, |h| {
+                h.entrance = entrance;
+                h.entrance_ease = ease;
+                h.entrance_ms = 400;
+            });
+            bubbles(&mut session, 5_000);
+            push_row(ui, &mut session, 2, 5_000);
+            let mid = bubbles(&mut session, 5_100);
+            (mid, bubbles(&mut session, 6_000))
+        };
+        let (_, plain) = rest(None, HistoryEase::Smooth);
+        for entrance in [
+            SlideUp, Fade, SlideLeft, SlideRight, Drop, Pop, Stamp, Unfold, Tilt,
+        ] {
+            for ease in [
+                HistoryEase::Smooth,
+                HistoryEase::Gentle,
+                HistoryEase::Overshoot,
+                HistoryEase::Linear,
+            ] {
+                let (mid, done) = rest(entrance, ease);
+                assert_eq!(done, plain, "{entrance:?} {ease:?} rests out of place");
+                assert_ne!(mid, done, "{entrance:?} {ease:?} does not play");
+            }
+        }
+        // A dropped row comes from above, an unfolding one grows downwards.
+        let (mid, done) = rest(Drop, HistoryEase::Smooth);
+        assert!(mid[1].0 < done[1].0, "{mid:?} -> {done:?}");
+        let (mid, done) = rest(Unfold, HistoryEase::Smooth);
+        assert!(mid[1].1 < done[1].1, "{mid:?} -> {done:?}");
+    }
+
+    #[test]
+    fn the_entrance_takes_the_time_the_skin_gives_it() {
+        let playing = |ms, at: u64| {
+            let (ui, mut session) = motion_log_with(300, 480, 1, 30, |h| h.entrance_ms = ms);
+            bubbles(&mut session, 5_000);
+            push_row(ui, &mut session, 2, 5_000);
+            !bubbles(&mut session, 5_000 + at).last().unwrap().2
+        };
+        assert!(!playing(80, 150), "an 80ms entrance is over by 150ms");
+        assert!(
+            playing(600, 150),
+            "a 600ms entrance is still fading at 150ms"
+        );
+    }
+
+    #[test]
+    fn older_rows_step_back_behind_the_newest() {
+        let (ui, mut session) = motion_log_with(300, 480, 2, 30, |h| {
+            h.recede = Some(nanatype_theme::HistoryRecede {
+                step: 0.3,
+                floor: 0.2,
+            });
+        });
+        let before = bubbles(&mut session, 5_000);
+        assert_eq!(
+            before.iter().map(|b| b.2).collect::<Vec<_>>(),
+            [false, true],
+            "only the newest row is at full strength: {before:?}"
+        );
+        push_row(ui, &mut session, 3, 5_000);
+        let done = bubbles(&mut session, 6_000);
+        assert_eq!(
+            done.iter().map(|b| b.2).collect::<Vec<_>>(),
+            [false, false, true],
+            "the row that was newest stepped back: {done:?}"
+        );
+    }
+
+    #[test]
+    fn a_separator_is_ruled_between_rows_only() {
+        let (_, mut session) = motion_log_with(300, 480, 3, 30, |h| {
+            h.separator = Some(nanatype_theme::HistorySeparator {
+                color: nanatype_theme::ColorRef::Rgba(Rgba8::rgb(0, 0, 200)),
+                width: 2.0,
+                inset: 0.0,
+                fade: false,
+            });
+        });
+        let runs = bubbles(&mut session, 5_000);
+        // Three bubbles and the two rules between them.
+        assert_eq!(runs.len(), 5, "{runs:?}");
+        assert_eq!(runs[1].1 - runs[1].0, 2, "{runs:?}");
+        let (above, below) = (runs[1].0 - runs[0].1, runs[2].0 - runs[1].1);
+        assert!(
+            above.abs_diff(below) <= 1,
+            "the rule sits mid-gap: {runs:?}"
         );
     }
 

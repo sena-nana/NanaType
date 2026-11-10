@@ -251,7 +251,7 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
     );
     assert_eq!(
         skin.history.entrance,
-        nanatype_theme::HistoryEntrance::SlideUp
+        nanatype_theme::HistoryEntrance::SlideLeft
     );
     for size in [[300., 240.], [280., 600.], [160., 600.], [400., 401.]] {
         let resolved = nanatype_theme::responsive_dialogue(&skin, size);

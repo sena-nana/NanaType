@@ -296,7 +296,9 @@ bubble_border_width = 0.800000011920929
 bubble_color = "#2a1e52"
 bubble_contour = "orbit"
 bubble_radius = 14.0
-entrance = "slide_up"
+entrance = "fade"
+entrance_ease = "gentle"
+entrance_ms = 420
 name_color = "#e7cc94"
 time_color = "#a99cc8"
 

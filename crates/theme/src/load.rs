@@ -1250,6 +1250,38 @@ fn validate_shapes(skin: &Skin, out: &mut Vec<SkinDiagnostic>) {
         ));
     }
     check_decor("history.decor", &h.decor, out);
+    if h.entrance_ms > 2000 {
+        out.push(SkinDiagnostic::error(
+            "history.entrance_ms",
+            "must be 0–2000",
+        ));
+    }
+    if h.name_format
+        .as_ref()
+        .is_some_and(|f| !f.contains("{name}") || f.chars().count() > 32)
+    {
+        out.push(SkinDiagnostic::error(
+            "history.name_format",
+            "must contain {name} and be at most 32 characters",
+        ));
+    }
+    if h.separator
+        .as_ref()
+        .is_some_and(|s| !in_range(s.width, 0.0, 16.0) || !in_range(s.inset, 0.0, 1024.0))
+    {
+        out.push(SkinDiagnostic::error(
+            "history.separator",
+            "width must be 0–16 and inset 0–1024",
+        ));
+    }
+    if h.recede
+        .is_some_and(|r| !in_range(r.step, 0.0, 1.0) || !in_range(r.floor, 0.0, 1.0))
+    {
+        out.push(SkinDiagnostic::error(
+            "history.recede",
+            "step and floor must be 0–1",
+        ));
+    }
     for (field, e) in h.event.iter().flat_map(crate::HistoryEvents::styles) {
         let f = |k: &str| format!("{field}.{k}");
         check_shape(

@@ -348,6 +348,8 @@ bubble_color = "#0e3a44"
 bubble_contour = "chat"
 bubble_radius = 16.0
 entrance = "slide_up"
+entrance_ease = "gentle"
+entrance_ms = 560
 name_color = "#79d4ce"
 time_color = "#8fc1bd"
 

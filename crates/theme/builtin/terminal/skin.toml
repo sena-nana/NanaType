@@ -226,25 +226,23 @@ families = ["Cascadia Mono", "Consolas", "Sarasa Mono SC", "NSimSun", "Menlo"]
 weight = 700
 
 [history]
-bubble_border = "#ffb00052"
-bubble_border_width = 1.0
-bubble_color = "#0d0a05e6"
-bubble_contour = "terminal"
-bubble_radius = 2.0
-entrance = "slide_up"
+bubble_padding = [0.0, 0.0]
+entrance = "fade"
+entrance_ease = "linear"
+entrance_ms = 70
+gap = 8.0
+layout = "inline"
 name_color = "#ffb000"
+name_format = "> {name}"
 name_size = 17.0
 name_weight = 400
+name_width = 132.0
 time_color = "#a88536"
+time_seconds = true
 time_size = 12.0
 
 [history.avatar]
-color = "#ffb000"
-radius = 0.0
-ring_color = "#ffb000"
-ring_width = 1.0
-shape = "square"
-size = 32.0
+shape = "none"
 
 [history.panel]
 border_color = "#ffb00052"
@@ -289,7 +287,7 @@ icon_color = "#ffb000"
 badge = { color = "#ffb000", text_color = "#0d0a05", radius = 0.0 }
 
 [history.event.gift]
-layout = "bubble"
+layout = "notice"
 icon = "[+]"
 
 [history.event.super_chat]

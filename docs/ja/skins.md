@@ -112,7 +112,11 @@ coin = "sounds/coin.ogg"
 
 `history.group_speakers` は、隣り合う同じ話者のメッセージで名前欄を共有するかどうかを決めます。`history.padding` はパネルがないときの左・上・右・下の内側余白、`history.margin` は上・右・下・左の外側余白です。`history.row_padding` は各行の水平の余白、`history.column_inset` は本文カラムの横に追加で確保する幅です。アバターのサイズと `history.text.size` はスキンが設定し、ユーザーの個人設定で通常どおり上書きされます。スキン ID によって書き換える処理は存在しません。
 
-新しいメッセージは `history.entrance`（`slide_up`、`fade`、`slide_left`。`none` はそのまま表示）で入場し、すでに画面にあるメッセージは同じ 220ms のイーズアウトで新しい位置へ滑ります。新しいメッセージが一覧を押し上げると全体が上へ動き、表示件数の上限で最も古いものが消えると下のメッセージがその空きを埋めます。フレームワークの既定は `none` で、内蔵スキンはすべて入場アニメーションを有効にしています。視差効果を減らす設定では、メッセージは即座に定位置に置かれます。
+新しいメッセージは `history.entrance` で入場します：`slide_up` は下から、`fade` はフェードイン、`slide_left`／`slide_right` は左／右から、`drop` は上から落ち、`pop` は下の角から弾み出て、`stamp` は少し大きい状態から押され、`unfold` は上辺から開き、`tilt` は斜めに置かれてからまっすぐになります。`none` はそのまま表示します。`history.entrance_ms` は入場の長さ（既定 220）、`history.entrance_ease` はカーブです：`smooth`（速く出て柔らかく止まる）、`gentle`（両端がゆっくり）、`overshoot`（少し行き過ぎて戻る）、`linear`。すでに画面にあるメッセージは同じ時間で新しい位置へ滑ります（`overshoot` のときは `smooth`）。
+
+`history.name_format` は名前の書き方を変えます（`"【{name}】"`、`"> {name}"`。イベントカード内の名前はそのまま）。`history.align = "center"` は名前と台詞を中央に寄せます（字幕や詩のようなアバターなしのスキン向け）。`[history.separator]` は話者の間に区切り線を引き、`[history.recede]` は古いメッセージを一件ずつ薄くします（最新は不透明のまま、検索中はすべて元に戻ります）。
+
+新しいメッセージが一覧を押し上げると全体が上へ動き、表示件数の上限で最も古いものが消えると下のメッセージがその空きを埋めます。フレームワークの既定は `none` で、内蔵スキンはそれぞれのテーマに合わせた入場とテンポを選んでいます。視差効果を減らす設定ではフェードだけが残ります。
 
 ギフト、スーパーチャット、メンバー加入はイベント行です。スキンは `[history.event]` で専用の見た目（カード、帯、吹き出し、記号、金額ラベル、プラットフォームの価格色）を指定でき、`gift`、`super_chat`、`member` で項目ごとに上書きできます。書かなかった項目はメッセージ行の見た目に戻るため、この節のないスキンではイベントが通常のコメントとして表示されます。内蔵スキンはすべて独自のイベント表示を持ちます。
 
@@ -281,7 +285,11 @@ bubble_shadows = [{ color = "#00000020", dy = 2, blur = 8, spread = 0 }]  # spre
 bubble_padding = [12, 8]          # 吹き出しの内側余白：水平 垂直
 bubble_frame = { image = "images/bubble.png", slice = [12, 12, 12, 12] }
 gap = 10                         # 間隔の目安：stack は文字サイズに応じて 12–20px、同じ発言者の連続メッセージは 8–12px、inline は 8–14px
-entrance = "slide_up"             # none | slide_up | fade | slide_left
+entrance = "slide_up"             # none | slide_up | fade | slide_left | slide_right | drop | pop | stamp | unfold | tilt
+entrance_ms = 220                 # 入場の長さ（ミリ秒、0–2000）。画面上の行が場所を空ける時間も同じ
+entrance_ease = "smooth"          # smooth | gentle | overshoot | linear
+name_format = "【{name}】"        # 名前の書き方。{name} を必ず含み、32 文字まで
+align = "start"                   # start | center（名前と台詞を中央に。inline では無効）
 layout = "stack"                  # stack：名前と時刻を吹き出しの上に | inline：名前・台詞・時刻を同じ行に（チャットログ風）
                                   # stack では同じ人の 2 分以内の連続メッセージをまとめ、最初の一件だけアバター・名前・時刻を表示
 name_width = 96                   # inline 時の名前欄の幅。狭いウィンドウでは自動で縮め、本文と @ タグの領域を残す
@@ -304,6 +312,16 @@ color = "#00000026"
 [history.text]
 color = "#3a2230"
 size = 18
+
+[history.separator]               # 話者の間の区切り線（任意）。同じ人の連続メッセージの間には引かない
+color = "#1e1e1e2e"               # 色ロールも可。既定は border
+width = 1
+inset = 0                         # 両端の余白
+fade = true                       # 両端をフェードさせる
+
+[history.recede]                  # 古いメッセージを一件ずつ薄くする（任意）
+step = 0.12                       # 一件さかのぼるごとに減る不透明度
+floor = 0.4                       # 最低の不透明度
 
 [history.chat]                    # B 站コメントの行（設定 › 履歴 › コメント をオンにすると表示）
 text_scale = 0.88                 # history.text に対するコメント文字の大きさ

@@ -327,7 +327,9 @@ bubble_border = "#d9a84e70"
 bubble_border_width = 1.0
 bubble_color = "#24140f"
 bubble_radius = 2.0
-entrance = "slide_up"
+entrance = "drop"
+entrance_ease = "overshoot"
+entrance_ms = 320
 name_color = "#f2ce8a"
 time_color = "#c7a88c"
 

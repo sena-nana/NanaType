@@ -962,6 +962,60 @@ sparkle = true
 }
 
 #[test]
+fn history_rows_take_the_skin_s_motion_and_writing() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_skin(
+        tmp.path(),
+        r##"
+[meta]
+id = 'rows'
+[history]
+entrance = 'unfold'
+entrance_ms = 460
+entrance_ease = 'gentle'
+name_format = '【{name}】'
+align = 'center'
+[history.separator]
+color = '#ffffff30'
+fade = true
+[history.recede]
+step = 0.25
+"##,
+        &[],
+    );
+    let h = load_dir(tmp.path()).unwrap().skin.history.clone();
+    assert_eq!(h.entrance, HistoryEntrance::Unfold);
+    assert_eq!((h.entrance_ms, h.entrance_ease), (460, HistoryEase::Gentle));
+    assert_eq!(h.align, HistoryAlign::Center);
+    assert_eq!(h.name("奈奈"), "【奈奈】");
+    assert!(h.separator.as_ref().unwrap().fade);
+    // The newest row is whole; older ones step down to the floor.
+    let recede = h.recede.unwrap();
+    assert_eq!(recede.opacity(0), 1.0);
+    assert_eq!(recede.opacity(1), 0.75);
+    assert_eq!(recede.opacity(9), recede.floor);
+    // A skin that says nothing writes names as they are.
+    assert_eq!(History::default().name("奈奈"), "奈奈");
+
+    write_skin(
+        tmp.path(),
+        "[meta]\nid = 'rows'\n[history]\nentrance_ms = 9000\nname_format = 'nobody'\n[history.separator]\nwidth = 99\n[history.recede]\nfloor = 2\n",
+        &[],
+    );
+    let errors = load_dir(tmp.path()).unwrap_err();
+    let fields: Vec<_> = errors.iter().map(|e| e.field.as_str()).collect();
+    assert_eq!(
+        fields,
+        [
+            "history.entrance_ms",
+            "history.name_format",
+            "history.separator",
+            "history.recede"
+        ]
+    );
+}
+
+#[test]
 fn unknown_keys_inside_decor_warn() {
     let tmp = tempfile::tempdir().unwrap();
     write_skin(

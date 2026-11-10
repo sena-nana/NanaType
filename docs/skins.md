@@ -117,7 +117,9 @@ coin = "sounds/coin.ogg"
 
 `history.group_speakers` 控制相邻同一说话人的消息是否共用姓名栏；`history.padding` 是无面板时的左、上、右、下内边距，`history.margin` 是上、右、下、左外边距；`history.row_padding` 是每行的水平留白，`history.column_inset` 是正文列旁额外预留的宽度。头像尺寸与 `history.text.size` 由皮肤配置，用户个性化设置正常覆盖，不存在按皮肤 ID 改写的流程。
 
-新消息按 `history.entrance` 入场（`slide_up`、`fade`、`slide_left`；`none` 为直接出现），已在屏幕上的消息用同样的 220ms 缓出滑到新位置：新消息把列表顶上去时整体上移，最早一条因显示条数上限移出时下面的消息补上空位。框架默认 `none`，全部内置皮肤均开启入场。减弱动态时消息直接落位。
+新消息按 `history.entrance` 入场：`slide_up` 上移、`fade` 淡入、`slide_left`／`slide_right` 从左／右滑入、`drop` 从上方落下、`pop` 从下角弹出、`stamp` 由大到小盖下、`unfold` 自上沿展开、`tilt` 斜着放下再摆正；`none` 为直接出现。`history.entrance_ms` 是入场时长（默认 220），`history.entrance_ease` 是曲线：`smooth` 快出缓停、`gentle` 两头都慢、`overshoot` 略微冲过再回落、`linear` 匀速。已在屏幕上的消息用同样的时长滑到新位置（`overshoot` 时按 `smooth`）：新消息把列表顶上去时整体上移，最早一条因显示条数上限移出时下面的消息补上空位。框架默认 `none`，全部内置皮肤都按各自主题选了入场方式和节奏（气泡弹出、信纸展开、花灯落下、像素与终端近乎瞬间）。减弱动态时只保留淡入。
+
+`history.name_format` 改写名字的写法（`"【{name}】"`、`"> {name}"`），事件卡片里的昵称不受影响；`history.align = "center"` 把名字和台词居中，适合字幕、诗行这类没有头像的皮肤；`[history.separator]` 在两位说话人之间画一条分隔线，适合没有气泡的记录式排版；`[history.recede]` 让旧消息逐条变淡，最新一条保持不透明，搜索时全部恢复。
 
 礼物、醒目留言、上舰等属于事件行。皮肤在 `[history.event]` 里为它们设计单独的样子（卡片、通知条或气泡，标记、金额牌、平台价位色），`gift`、`super_chat`、`member` 可以逐项覆盖；没写的字段回落到消息样式，所以不写这一节的皮肤把事件显示成普通弹幕。全部内置皮肤都有各自的事件样式。
 
@@ -286,7 +288,11 @@ bubble_shadows = [{ color = "#00000020", dy = 2, blur = 8, spread = 0 }]  # spre
 bubble_padding = [12, 8]          # 气泡内边距：水平 垂直
 bubble_frame = { image = "images/bubble.png", slice = [12, 12, 12, 12] }
 gap = 10                         # 间距参考：stack 按字号控制在 12–20px；同作者连续消息 8–12px；inline 8–14px
-entrance = "slide_up"             # none | slide_up | fade | slide_left
+entrance = "slide_up"             # none | slide_up | fade | slide_left | slide_right | drop | pop | stamp | unfold | tilt
+entrance_ms = 220                 # 入场时长（毫秒，0–2000），屏幕上的消息让位也用它
+entrance_ease = "smooth"          # smooth | gentle | overshoot | linear
+name_format = "【{name}】"        # 名字的写法，必须包含 {name}，最多 32 个字
+align = "start"                   # start | center（名字与台词居中；inline 布局不适用）
 layout = "stack"                  # stack：名字和时间在气泡上方 | inline：名字、台词、时间同一行（聊天记录式）
                                   # stack 下同一人 2 分钟内的连续消息合并：只有第一条显示头像、名字和时间
 name_width = 96                   # inline 时名字栏宽度；窄窗自动缩短，保留正文和 @ 标签空间
@@ -309,6 +315,16 @@ color = "#00000026"
 [history.text]
 color = "#3a2230"
 size = 18
+
+[history.separator]               # 两位说话人之间的分隔线（可选）；同一人的连续消息之间不画
+color = "#1e1e1e2e"               # 可写颜色角色，默认 border
+width = 1
+inset = 0                         # 两端留空
+fade = true                       # 两端渐隐
+
+[history.recede]                  # 旧消息逐条变淡（可选）
+step = 0.12                       # 每往上一条减少的不透明度
+floor = 0.4                       # 最低不透明度
 
 [history.chat]                    # B 站弹幕行（设置 › 历史记录 › 弹幕 打开后出现）
 text_scale = 0.88                 # 弹幕文字相对 history.text 的大小

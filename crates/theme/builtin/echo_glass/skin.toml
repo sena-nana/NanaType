@@ -617,7 +617,9 @@ text_color = "#ffffff"
 
 [history]
 bubble_padding = [0.0, 0.0]
-entrance = "slide_up"
+entrance = "fade"
+entrance_ease = "gentle"
+entrance_ms = 320
 gap = 9.0
 height = 480.0
 hide_latest = true
@@ -653,6 +655,10 @@ center = [50.0, 50.0]
 circle = false
 kind = "linear"
 stops = [[0.0, "#00000099"], [0.15000000596046448, "#00000099"], [1.0, "#00000000"]]
+
+[history.recede]
+floor = 0.55
+step = 0.08
 
 [history.text]
 color = "#ffffff"

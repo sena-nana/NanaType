@@ -247,7 +247,9 @@ bubble_border_width = 1.5
 bubble_color = "#fff0f5f2"
 bubble_contour = "rounded"
 bubble_radius = 16.0
-entrance = "slide_up"
+entrance = "drop"
+entrance_ease = "gentle"
+entrance_ms = 440
 name_color = "#c2416f"
 time_color = "#8e4c68"
 
