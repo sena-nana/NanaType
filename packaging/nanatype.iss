@@ -1,7 +1,7 @@
 ; Inno Setup 6 script: a per-user installer around the nana-packager layout.
 ; Build with scripts/package.ps1, which fills the defines below.
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.2.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\dist\app\NanaType"
