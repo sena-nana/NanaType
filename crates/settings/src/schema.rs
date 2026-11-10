@@ -23,6 +23,8 @@ pub const SKIN_FRAME_RATES: [u32; 2] = [30, 60];
 /// views, 2 adds declared data reads. Older approvals must be reviewed again.
 pub const PLUGIN_CONSENT_POLICY: u32 = 2;
 pub const MAX_ENABLED_PLUGINS: usize = 8;
+/// Packages that can be switched off at once.
+pub const MAX_DISABLED_PACKAGES: usize = 512;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PluginApproval {
@@ -1770,6 +1772,9 @@ pub struct TelegramSettings {
 pub struct Settings {
     /// Explicitly enabled functional packages. Pure skins never start a VM.
     pub enabled_plugins: Vec<String>,
+    /// Packages switched off: their skins and sound packs are not offered
+    /// and their scripts do not run. Other packages may still depend on them.
+    pub disabled_packages: Vec<String>,
     /// Approval binds explicit source trust to exact, reviewed package bytes.
     pub plugin_approvals: BTreeMap<String, PluginApproval>,
     pub schema: u32,
@@ -1800,6 +1805,7 @@ impl Default for Settings {
         Self {
             schema: SETTINGS_SCHEMA,
             enabled_plugins: Vec::new(),
+            disabled_packages: Vec::new(),
             plugin_approvals: BTreeMap::new(),
             general: General::default(),
             playback: PlaybackSettings::default(),
@@ -1923,8 +1929,7 @@ impl Settings {
                 field.clear();
             }
         }
-        let mut plugins = std::collections::BTreeSet::new();
-        self.enabled_plugins.retain(|id| {
+        let package_id = |id: &str| {
             !id.is_empty()
                 && id.len() <= 64
                 && id
@@ -1932,9 +1937,18 @@ impl Settings {
                     .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"._-".contains(&b))
                 && id != "."
                 && id != ".."
-                && plugins.insert(id.clone())
-        });
+        };
+        let mut plugins = std::collections::BTreeSet::new();
+        self.enabled_plugins
+            .retain(|id| package_id(id) && plugins.insert(id.clone()));
         self.enabled_plugins.truncate(MAX_ENABLED_PLUGINS);
+        let mut disabled = std::collections::BTreeSet::new();
+        self.disabled_packages
+            .retain(|id| package_id(id) && disabled.insert(id.clone()));
+        self.disabled_packages.truncate(MAX_DISABLED_PACKAGES);
+        // A package that is off runs nothing.
+        self.enabled_plugins
+            .retain(|id| !self.disabled_packages.contains(id));
         self.plugin_approvals.retain(|id, approval| {
             self.enabled_plugins.contains(id)
                 && approval.is_current()

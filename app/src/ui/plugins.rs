@@ -73,13 +73,13 @@ fn icon_action(
 
 /// One installed package as a row of the list: what it is and where it comes
 /// from on the left, what can be done with it at the top right (update,
-/// export, remove, the on/off switch of a functional package), and its
+/// export, remove, the on/off switch), and its
 /// credits folded away until `open` names it.
 fn package_row(
     ui: Ui,
     row: &crate::plugins::PackageRow,
     subscription: Option<&crate::workshop::Row>,
-    enabled: bool,
+    on: bool,
     error: Option<&String>,
     open: Signal<Vec<String>>,
 ) -> AnyView {
@@ -121,21 +121,23 @@ fn package_row(
     };
     let tampered = (provenance == Provenance::Tampered)
         .then(|| kit::callout(Tone::Danger, integrity_label(*ui, &row.integrity)));
-    // "Skin · Function · example.script · 1.0.0": the kinds, then the id.
-    let summary = package
+    // What the package brings, one label per capability: a package may be
+    // a skin, a sound pack and a script at once.
+    let capabilities: Vec<AnyView> = package
         .capabilities
         .iter()
         .map(|cap| {
-            ui.now_t(match cap {
-                Cap::Skin => "packages-kind-skin",
-                Cap::Resources => "packages-kind-resources",
-                Cap::Lua => "packages-kind-function",
-                Cap::Sounds => "packages-kind-sounds",
-            })
+            widget(Stack::row(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
+                .children(kit::tag(ui.now_t(match cap {
+                    Cap::Skin => "packages-kind-skin",
+                    Cap::Resources => "packages-kind-resources",
+                    Cap::Lua => "packages-kind-function",
+                    Cap::Sounds => "packages-kind-sounds",
+                })))
+                .into_any()
         })
-        .chain([id.clone(), package.meta.version.to_string()])
-        .collect::<Vec<_>>()
-        .join(" · ");
+        .collect();
+    let version = format!("{id} · {}", package.meta.version);
     let identity = widget(
         Stack::row(0.0)
             .gap_step(gap::step::CONTROL)
@@ -149,7 +151,7 @@ fn package_row(
         kit::icon_tile(
             glyph,
             PACKAGE_TILE,
-            if enabled { Tone::Accent } else { Tone::Neutral },
+            if on { Tone::Accent } else { Tone::Neutral },
         ),
         widget(kit::grow_column(gap::HAIR)).children((
             // A long name is cut before the source badge is.
@@ -168,11 +170,22 @@ fn package_row(
                 })),
                 kit::badge(source, source_tone),
             )),
+            // The id is cut before the labels are.
             widget(
-                Text::new(summary)
-                    .style(Type::Caption.one_line())
-                    .color(SemanticColorRole::Muted),
-            ),
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .align(AlignSpec::Center)
+                    .width(LengthSpec::Fill)
+                    .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
+            )
+            .children((
+                capabilities,
+                widget(
+                    Text::new(version)
+                        .style(Type::Caption.one_line())
+                        .color(SemanticColorRole::Muted),
+                ),
+            )),
         )),
     ));
 
@@ -196,7 +209,15 @@ fn package_row(
         })
     });
     // Removing is asked first: the icon is one slip away from the others.
-    let remove = (!builtin).then(|| {
+    // The built-in package cannot go, and its button says so by being off.
+    let remove = if builtin {
+        widget(
+            IconButton::new(ti::TRASH, ui.now_t("packages-remove"))
+                .size(ControlSize::Small)
+                .disabled(true),
+        )
+        .into_any()
+    } else {
         let (key, question) = match workshop {
             Some(_) => ("workshop-unsubscribe", "workshop-unsubscribe-confirm"),
             None => ("packages-remove", "packages-remove-confirm"),
@@ -220,36 +241,35 @@ fn package_row(
                 None => Msg::Package(PackageMsg::Remove(remove_id.clone())),
             },
         )
-    });
-    // On asks for the review, which grants the consent; until it is granted
-    // the switch falls back to off.
-    let toggle = functional.then(|| {
+    };
+    // Every package has the switch. Turning a functional one on asks for
+    // the review, which grants the consent; until then the switch falls
+    // back to off. The built-in package is always on.
+    let toggle = {
         let id = id.clone();
-        let label = ui.now_t(if enabled {
+        let label = ui.now_t(if on {
             "packages-disable"
         } else {
-            "packages-review-enable"
+            "packages-enable"
         });
-        widget(Switch::new("", enabled).accessible_name(label))
+        widget(Switch::new("", on).accessible_name(label))
             .key(format!("package-review:{id}"))
             .bind(move |switch: &mut Switch| {
                 ui.plugin_activation.with(|_| ());
                 ui.plugin_activation_error.with(|_| ());
-                switch.checked = enabled;
-                switch.disabled = !enabled && ui.plugin_activation_busy.get();
+                switch.checked = on;
+                switch.disabled = builtin || (!on && ui.plugin_activation_busy.get());
             })
             .on_cx(move |_, e: &ToggleChanged, cx| {
-                if e.checked == enabled {
-                    return;
+                if e.checked != on {
+                    cx.dispatch_program_all(Msg::Package(PackageMsg::SetEnabled(
+                        id.clone(),
+                        e.checked,
+                    )))
                 }
-                cx.dispatch_program_all(Msg::Package(if e.checked {
-                    PackageMsg::RequestActivation(id.clone())
-                } else {
-                    PackageMsg::DisablePlugin(id.clone())
-                }))
             })
             .into_any()
-    });
+    };
     let is_open = {
         let id = id.clone();
         move || open.with(|o| o.contains(&id))
@@ -375,7 +395,13 @@ pub fn settings(ui: Ui) -> AnyView {
                         ui,
                         row,
                         subscription,
-                        settings.enabled_plugins.contains(id),
+                        // On unless switched off; a script also needs its consent.
+                        !settings.disabled_packages.contains(id)
+                            && (!row
+                                .manifest
+                                .capabilities
+                                .contains(&nanatype_theme::PackageCapability::Lua)
+                                || settings.enabled_plugins.contains(id)),
                         errors.get(id),
                         open,
                     );

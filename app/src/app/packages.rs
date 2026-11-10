@@ -3,6 +3,53 @@ use crate::msg::{Msg, PackageMsg};
 use std::sync::Arc;
 
 impl App {
+    /// Switch package `id` on or off. Off takes its skin and sound pack out
+    /// of the pickers (a choice that named one falls back) and stops its
+    /// script, whose consent goes with it. On brings them back; a script
+    /// still has to be reviewed before it runs. The built-in package stays on.
+    fn set_package_enabled(&mut self, id: String, on: bool) {
+        let Some((manifest, origin)) = self
+            .registry
+            .packages()
+            .into_iter()
+            .find(|(m, _)| m.meta.id == id)
+        else {
+            return;
+        };
+        if origin == nanatype_theme::SkinOrigin::Builtin {
+            return;
+        }
+        let functional = manifest
+            .capabilities
+            .contains(&nanatype_theme::PackageCapability::Lua);
+        if on {
+            self.edit(|s| s.disabled_packages.retain(|p| p != &id));
+            self.refresh_skin_rows();
+            self.sync_tray_skins();
+            if functional {
+                self.package_msg(PackageMsg::RequestActivation(id));
+            }
+            return;
+        }
+        self.plugin_activation.cancel_for(&id, self.ui);
+        self.plugins.stop(&id, self.ui);
+        self.edit(|s| {
+            s.enabled_plugins.retain(|p| p != &id);
+            s.plugin_approvals.remove(&id);
+            if !s.disabled_packages.contains(&id) {
+                s.disabled_packages.push(id.clone());
+            }
+            if s.skin.id == id {
+                s.skin.id = nanatype_theme::DEFAULT_SKIN.into();
+            }
+            if s.sound.pack.as_ref() == Some(&id) {
+                s.sound.pack = None;
+            }
+        });
+        self.refresh_skin_rows();
+        self.sync_tray_skins();
+    }
+
     /// Plugin consent, package removal and plugin traffic.
     pub(super) fn package_msg(&mut self, msg: PackageMsg) {
         match msg {
@@ -77,6 +124,7 @@ impl App {
                     s.plugin_approvals.remove(&id);
                 });
             }
+            PackageMsg::SetEnabled(id, on) => self.set_package_enabled(id, on),
             PackageMsg::Refresh => {
                 self.plugin_activation.cancel(self.ui);
                 self.registry.rescan();
@@ -95,6 +143,7 @@ impl App {
                     self.plugin_activation.cancel(self.ui);
                     self.edit(|s| {
                         s.enabled_plugins.retain(|p| p != &id);
+                        s.disabled_packages.retain(|p| p != &id);
                         s.plugin_approvals.remove(&id);
                         if s.skin.id == id {
                             s.skin.id = nanatype_theme::DEFAULT_SKIN.into();

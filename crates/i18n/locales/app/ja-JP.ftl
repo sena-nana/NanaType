@@ -950,8 +950,8 @@ packages-details = 詳細
 
 # Package provenance and explicit script consent
 package-unspecified = 未提供
-packages-review-enable = 出所を確認して有効化を申請
-packages-disable = 無効化して同意を撤回
+packages-enable = 有効にする
+packages-disable = 無効にする
 packages-consent-required = この内容への出所確認と実行同意がありません。再確認して有効にしてください。
 packages-changed-during-review = 確認中に内容が変更されました。取り消して再確認してください。
 packages-consent-title = スクリプトプラグインの実行同意

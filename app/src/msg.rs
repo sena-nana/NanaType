@@ -524,6 +524,9 @@ pub enum PackageMsg {
     ConfirmActivation,
     CancelActivation,
     DisablePlugin(String),
+    /// Switch a whole package on or off. On asks for the script review of
+    /// a functional package; off hides what it offers and stops its script.
+    SetEnabled(String, bool),
     Refresh,
     Remove(String),
     /// A running plugin's package folder (or a dependency's) changed on disk.

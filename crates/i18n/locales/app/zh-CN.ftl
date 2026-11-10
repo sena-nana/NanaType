@@ -950,8 +950,8 @@ packages-details = 详情
 
 # Package provenance and explicit script consent
 package-unspecified = 未提供
-packages-review-enable = 审查来源并请求启用
-packages-disable = 禁用并撤销同意
+packages-enable = 启用
+packages-disable = 停用
 packages-consent-required = 尚未获得对此版本内容的可信来源确认和运行同意，请重新审查后启用。
 packages-changed-during-review = 包内容已在审查期间变化，请取消并重新请求启用。
 packages-consent-title = 脚本插件启用确认

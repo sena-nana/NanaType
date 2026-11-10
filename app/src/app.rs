@@ -683,12 +683,14 @@ impl App {
                 .collect::<Vec<_>>()
         });
         let locale = self.ui.locale.get_untracked();
-        let rows = crate::ui::skin_rows(&self.registry, locale);
+        let off = &self.settings.disabled_packages;
+        let mut rows = crate::ui::skin_rows(&self.registry, locale);
+        rows.retain(|r| !off.contains(&r.id));
         self.ui.skins.set(Arc::new(rows));
         crate::ui::retire_skin_urls(self.ui, previous);
-        self.ui
-            .sound_packs
-            .set(Arc::new(crate::ui::sound_pack_rows(&self.registry, locale)));
+        let mut packs = crate::ui::sound_pack_rows(&self.registry, locale);
+        packs.retain(|p| !off.contains(&p.id));
+        self.ui.sound_packs.set(Arc::new(packs));
         self.publish_workshop();
         if self.sync_sound_pack() {
             self.apply_skin();

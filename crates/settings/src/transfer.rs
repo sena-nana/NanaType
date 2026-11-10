@@ -35,6 +35,7 @@ pub const PREVIOUS_FILE: &str = "settings.previous.json";
 /// devices, GPU and log choices, update reminders, the active profile).
 const LOCAL: &[&str] = &[
     "/enabled_plugins",
+    "/disabled_packages",
     "/plugin_approvals",
     "/integrations/vts/token",
     "/update/skipped_version",
@@ -394,6 +395,7 @@ pub fn changed_sections(before: &Settings, after: &Settings) -> Vec<&'static str
         "assets",
         "update",
         "enabled_plugins",
+        "disabled_packages",
     ]
     .into_iter()
     .filter(|k| a.get(k) != b.get(k))

@@ -959,8 +959,8 @@ packages-details = Details
 
 # Package provenance and explicit script consent
 package-unspecified = Not provided
-packages-review-enable = Review source and request activation
-packages-disable = Disable and revoke consent
+packages-enable = Turn on
+packages-disable = Turn off
 packages-consent-required = This package content has no trusted-source confirmation and execution consent. Review it before enabling.
 packages-changed-during-review = Package content changed during review. Cancel and request activation again.
 packages-consent-title = Script plugin activation consent
