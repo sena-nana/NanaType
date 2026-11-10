@@ -1,6 +1,6 @@
-//! Steam Workshop on the Skins and Playback pages: a way to browse, and the
-//! subscriptions of each kind with how they stand. Shown only in the Steam
-//! build ([`crate::workshop::View::shown`]).
+//! The Steam Workshop page: a way to browse, and the subscriptions of each
+//! kind with how they stand. Listed only in the Steam build
+//! ([`super::Page::listed`]).
 
 use super::*;
 use crate::msg::WorkshopMsg;
@@ -14,29 +14,23 @@ pub(super) fn browse_button(ui: Ui, tag: Tag) -> AnyView {
     })
 }
 
-/// The page section listing subscriptions of the given kinds; empty while
-/// there are none. `None` outside the Steam build.
-pub(super) fn subscriptions(ui: Ui, kinds: &'static [Kind], tag: Tag) -> Option<AnyView> {
-    if !crate::distribution::STEAM {
-        return None;
-    }
+/// One kind's subscriptions, with a way to find more of it; the list says
+/// so while it is empty.
+fn subscriptions(
+    ui: Ui,
+    title_key: &'static str,
+    kinds: &'static [Kind],
+    tag: Option<Tag>,
+) -> AnyView {
     let list = dynamic(
         move || ui.workshop.get(),
         move |view| {
-            let mut rows: Vec<CardRow> = Vec::new();
-            if let Availability::Unavailable(why) = &view.availability {
-                rows.push(row_text(
-                    ui.now_t("workshop-unavailable"),
-                    Some(why.clone()),
-                    widget(Stack::row(0.0)).into_any(),
-                ));
-            }
-            rows.extend(
-                view.rows
-                    .iter()
-                    .filter(|r| kinds.contains(&r.kind))
-                    .map(|r| subscription(ui, r)),
-            );
+            let mut rows: Vec<CardRow> = view
+                .rows
+                .iter()
+                .filter(|r| kinds.contains(&r.kind))
+                .map(|r| subscription(ui, r))
+                .collect();
             if rows.is_empty() {
                 rows.push(row_text(
                     ui.now_t("workshop-none"),
@@ -47,22 +41,68 @@ pub(super) fn subscriptions(ui: Ui, kinds: &'static [Kind], tag: Tag) -> Option<
             CardRow::inset(widget(Stack::column(0.0)).children(rows))
         },
     );
-    Some(section_with(
-        ui,
-        "workshop-subscriptions",
-        vec![
-            (
-                row(
-                    ui,
-                    "workshop-find",
-                    Some("workshop-find-hint"),
-                    browse_button(ui, tag),
-                ),
-                None,
+    let mut rows = Vec::new();
+    if let Some(tag) = tag {
+        rows.push((
+            row(
+                ui,
+                "workshop-find",
+                Some("workshop-find-hint"),
+                browse_button(ui, tag),
             ),
-            (CardRow::inset(list), None),
-        ],
-    ))
+            None,
+        ));
+    }
+    rows.push((CardRow::inset(list), None));
+    section_with(ui, title_key, rows)
+}
+
+/// The Workshop page: every subscription by what it is, and how it stands.
+/// Outside the Steam build it only says where the Workshop is.
+pub(super) fn workshop(ui: Ui) -> AnyView {
+    if !crate::distribution::STEAM {
+        return section(ui, "", vec![block(hint(ui.now_t("workshop-steam-only")))]);
+    }
+    let unavailable = dynamic(
+        move || ui.workshop.with(|v| v.availability.clone()),
+        move |availability| match availability {
+            Availability::Unavailable(why) => crate::ui::kit::callout(
+                crate::ui::kit::Tone::Warning,
+                format!("{} · {why}", ui.now_t("workshop-unavailable")),
+            )
+            .into_any(),
+            _ => widget(Stack::column(0.0)).into_any(),
+        },
+    );
+    let has_other = move || {
+        ui.workshop
+            .with(|v| v.rows.iter().any(|r| r.kind == Kind::Other))
+    };
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
+        .children((
+            widget(Stack::column(0.0))
+                .visible(move || {
+                    ui.workshop
+                        .with(|v| matches!(v.availability, Availability::Unavailable(_)))
+                })
+                .children(unavailable),
+            subscriptions(ui, "workshop-kind-skins", &[Kind::Skin], Some(Tag::Skins)),
+            subscriptions(
+                ui,
+                "workshop-kind-sounds",
+                &[Kind::SoundPack],
+                Some(Tag::SoundPacks),
+            ),
+            widget(Stack::column(0.0))
+                .visible(has_other)
+                .children(subscriptions(
+                    ui,
+                    "workshop-kind-other",
+                    &[Kind::Other],
+                    None,
+                )),
+        ))
+        .into_any()
 }
 
 fn state_text(ui: Ui, state: &RowState) -> String {

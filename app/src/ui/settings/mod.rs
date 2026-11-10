@@ -52,84 +52,127 @@ pub(crate) fn chat_panel_style(ui: Ui) -> AnyView {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Page {
     General,
+    Profiles,
+    Input,
+    Characters,
+    Assets,
     Speech,
-    Playback,
+    Hotkeys,
     Skins,
-    Packages,
+    Playback,
     Windows,
     History,
-    Hotkeys,
-    Output,
+    Translate,
     Platforms,
+    Output,
     Integrations,
-    Assets,
+    Peer,
+    Workshop,
+    Packages,
     About,
 }
 
 impl Page {
-    pub const ALL: [Self; 13] = [
+    /// Every page, in sidebar order.
+    pub const ALL: [Self; 19] = [
         Self::General,
+        Self::Profiles,
+        Self::Input,
+        Self::Characters,
+        Self::Assets,
         Self::Speech,
-        Self::Playback,
+        Self::Hotkeys,
         Self::Skins,
-        Self::Packages,
+        Self::Playback,
         Self::Windows,
         Self::History,
-        Self::Hotkeys,
-        Self::Output,
+        Self::Translate,
         Self::Platforms,
+        Self::Output,
         Self::Integrations,
-        Self::Assets,
+        Self::Peer,
+        Self::Workshop,
+        Self::Packages,
         Self::About,
     ];
 
     pub fn label_key(self) -> &'static str {
         match self {
             Self::General => "settings-general",
+            Self::Profiles => "settings-profiles",
+            Self::Input => "settings-input",
+            Self::Characters => "settings-characters",
+            Self::Assets => "settings-assets",
             Self::Speech => "settings-voice",
-            Self::Playback => "settings-playback",
+            Self::Hotkeys => "settings-hotkeys",
             Self::Skins => "settings-skins",
-            Self::Packages => "settings-packages",
+            Self::Playback => "settings-playback",
             Self::Windows => "settings-windows",
             Self::History => "settings-history",
-            Self::Hotkeys => "settings-hotkeys",
-            Self::Output => "settings-output",
+            Self::Translate => "translate",
             Self::Platforms => "settings-platforms",
+            Self::Output => "settings-output",
             Self::Integrations => "settings-integrations",
-            Self::Assets => "settings-assets",
+            Self::Peer => "settings-peer",
+            Self::Workshop => "settings-workshop",
+            Self::Packages => "settings-packages",
             Self::About => "settings-about",
         }
+    }
+
+    /// Whether this build lists the page: the Workshop is the Steam build's.
+    pub fn listed(self) -> bool {
+        self != Self::Workshop || crate::distribution::STEAM
     }
 
     fn icon(self) -> nana_ui::runtime::Icon {
         match self {
             Self::General => ti::ADJUSTMENTS,
+            Self::Profiles => ti::BOOKMARKS,
+            Self::Input => ti::FORMS,
+            Self::Characters => ti::USER_CIRCLE,
+            Self::Assets => ti::STICKER,
             Self::Speech => ti::MICROPHONE,
-            Self::Playback => ti::PLAYER_PLAY,
+            Self::Hotkeys => ti::KEYBOARD,
             Self::Skins => ti::PALETTE,
-            Self::Packages => ti::PLUG_CONNECTED,
+            Self::Playback => ti::PLAYER_PLAY,
             Self::Windows => ti::APP_WINDOW,
             Self::History => ti::MESSAGES,
-            Self::Hotkeys => ti::KEYBOARD,
-            Self::Output => ti::BROADCAST,
+            Self::Translate => ti::LANGUAGE,
             Self::Platforms => ti::LIVE_VIEW,
+            Self::Output => ti::BROADCAST,
             Self::Integrations => ti::LINK,
-            Self::Assets => ti::STICKER,
+            Self::Peer => ti::USERS,
+            Self::Workshop => ti::BUILDING_STORE,
+            Self::Packages => ti::PLUG_CONNECTED,
             Self::About => ti::INFO_CIRCLE,
         }
     }
 }
 
-/// The sidebar's groups: a caption key and its pages. About sits apart, at
-/// the foot.
+/// The sidebar's groups, each one kind of thing: a caption key and its
+/// pages. About sits apart, at the foot.
 const GROUPS: &[(&str, &[Page])] = &[
+    ("settings-group-basic", &[Page::General, Page::Profiles]),
     (
-        "settings-group-input",
-        &[Page::General, Page::Speech, Page::Playback, Page::Hotkeys],
+        "settings-group-compose",
+        &[
+            Page::Input,
+            Page::Characters,
+            Page::Assets,
+            Page::Speech,
+            Page::Hotkeys,
+        ],
     ),
     (
         "settings-group-look",
-        &[Page::Skins, Page::Packages, Page::Windows, Page::History],
+        &[
+            Page::Skins,
+            Page::Playback,
+            Page::Windows,
+            Page::History,
+            Page::Translate,
+        ],
     ),
     (
         "settings-group-stream",
@@ -137,9 +180,10 @@ const GROUPS: &[(&str, &[Page])] = &[
             Page::Platforms,
             Page::Output,
             Page::Integrations,
-            Page::Assets,
+            Page::Peer,
         ],
     ),
+    ("settings-group-extend", &[Page::Workshop, Page::Packages]),
 ];
 
 /// One page's row: an icon (muted, accent when selected) and its name, on
@@ -274,7 +318,12 @@ fn sidebar(ui: Ui) -> AnyView {
     let mut items: Vec<AnyView> = Vec::new();
     for (i, (caption, pages)) in GROUPS.iter().enumerate() {
         items.push(nav_caption(ui, caption, i == 0));
-        items.extend(pages.iter().map(|page| nav_row(ui, *page)));
+        items.extend(
+            pages
+                .iter()
+                .filter(|page| page.listed())
+                .map(|page| nav_row(ui, *page)),
+        );
     }
     widget(
         Stack::row(0.0)

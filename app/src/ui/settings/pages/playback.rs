@@ -390,11 +390,6 @@ pub(super) fn playback(ui: Ui) -> AnyView {
                     ),
                 ],
             ),
-            workshop::subscriptions(
-                ui,
-                &[crate::workshop::Kind::SoundPack],
-                crate::workshop::Tag::SoundPacks,
-            ),
         ))
         .into_any()
 }

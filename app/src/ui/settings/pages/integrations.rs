@@ -356,7 +356,6 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                     ),
                 )],
             ),
-            super::translate::translate(ui),
         ))
         .into_any()
 }

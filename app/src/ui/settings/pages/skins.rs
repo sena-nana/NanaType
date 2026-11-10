@@ -77,11 +77,6 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                     Row::inset(list),
                 ],
             ),
-            workshop::subscriptions(
-                ui,
-                &[crate::workshop::Kind::Skin, crate::workshop::Kind::Other],
-                crate::workshop::Tag::Skins,
-            ),
             section(
                 ui,
                 "skins-overrides",

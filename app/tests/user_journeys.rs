@@ -174,7 +174,15 @@ impl Fixture {
 fn speaker_hints_remain_readable_in_all_locales_and_window_sizes() {
     for locale in Locale::ALL {
         for onboarding in [true, false] {
-            let mut f = Fixture::new(locale, onboarding, Page::General);
+            let mut f = Fixture::new(
+                locale,
+                onboarding,
+                if onboarding {
+                    Page::General
+                } else {
+                    Page::Characters
+                },
+            );
             for (w, h) in [(720, 480), (920, 660)] {
                 f.session.set_viewport(w, h, 1.0).unwrap();
                 if onboarding {
@@ -195,7 +203,15 @@ fn speaker_hints_remain_readable_in_all_locales_and_window_sizes() {
 fn the_empty_speaker_field_takes_a_click_typing_and_backspace() {
     let palette = nanatype::ui::kit::theme::palette(false);
     for onboarding in [true, false] {
-        let mut f = Fixture::new(Locale::ZhCn, onboarding, Page::General);
+        let mut f = Fixture::new(
+            Locale::ZhCn,
+            onboarding,
+            if onboarding {
+                Page::General
+            } else {
+                Page::Characters
+            },
+        );
         // The page lists characters; the first one's name is the field.
         let (key, field) = if onboarding {
             ("onboard-speaker", f.field("onboard-speaker"))
@@ -341,7 +357,7 @@ fn sidebar_reaches_every_page_and_new_pages_start_at_the_top() {
         f.ui.draft.set(draft.clone());
         let about_y = f.find("list-item", "settings-about").bounds.y;
         assert!(about_y > 400.0 && about_y < 480.0);
-        for page in Page::ALL {
+        for page in Page::ALL.into_iter().filter(|page| page.listed()) {
             let bottom = if page == Page::About { 480.0 } else { about_y };
             let nav = f.reach(100.0, bottom, |f| f.find("list-item", page.label_key()));
             f.click(&nav);
@@ -367,10 +383,8 @@ fn sidebar_reaches_every_page_and_new_pages_start_at_the_top() {
 #[test]
 fn settings_body_scroll_reaches_and_operates_bottom_controls() {
     for locale in Locale::ALL {
-        for (page, key) in [
-            (Page::General, "general-check-updates"),
-            (Page::History, "history-archive-chat"),
-        ] {
+        {
+            let (page, key) = (Page::History, "history-archive-chat");
             let mut f = Fixture::new(locale, false, page);
             assert!(
                 f.find("text", key).bounds.y > 480.0,
@@ -391,14 +405,9 @@ fn settings_body_scroll_reaches_and_operates_bottom_controls() {
             f.click(&toggle);
             f.apply_edits();
             let s = f.ui.settings.get_untracked();
-            // The lowest switches on General and History are the
-            // (default-on) update check and the (default-off) saving of
-            // viewer chat.
-            assert!(if page == Page::General {
-                !s.general.check_updates
-            } else {
-                s.history.archive.chat
-            });
+            // History's lowest switch is the (default-off) saving of viewer
+            // chat.
+            assert!(s.history.archive.chat);
             f.scroll(650.0, 3000.0);
             let heading = f.find("text", page.label_key()).bounds;
             assert!(heading.y >= 0.0 && heading.y < 100.0);

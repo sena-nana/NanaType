@@ -325,7 +325,7 @@ opacity = 0.8
 [dialogue.reply]                  # 对话框上的回复引用，字段同 [history.reply]
 visible = true                    # 用户也可在 设置 › B 站直播 › 弹幕面板 里关闭
 
-[dialogue.subtitle]               # 台词的翻译字幕（设置 › 联动 › 翻译字幕），在对话框正文下方；历史气泡里的译文也用它
+[dialogue.subtitle]               # 台词的翻译字幕（设置 › 翻译字幕），在对话框正文下方；历史气泡里的译文也用它
 visible = true
 size = 18                         # 默认是正文的 70%（至少 11，不超过正文）
 color = "#5a4a55"                 # 默认同正文，可写颜色角色

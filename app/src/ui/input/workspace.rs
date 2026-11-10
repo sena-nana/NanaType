@@ -633,7 +633,7 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                         l.min_height = Some(LengthSpec::Px(0.0));
                     }))
                     .children(super::super::p2p::card_with_fields(
-                        ui, invitation, password, true,
+                        ui, invitation, password, true, true,
                     )),
                 ),
                 pressed_tool(

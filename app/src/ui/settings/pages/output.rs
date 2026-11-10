@@ -691,7 +691,9 @@ pub(super) fn output(ui: Ui) -> AnyView {
             ui,
             "output-peer-display",
             Some("output-partners-moved"),
-            widget(Stack::row(0.0)).into_any(),
+            tool(ui, ti::USERS, "settings-peer", || {
+                Msg::Window(crate::msg::WindowMsg::SettingsPage(Page::Peer))
+            }),
         ),
         None,
     );

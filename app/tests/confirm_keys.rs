@@ -190,7 +190,7 @@ fn deleting_a_saved_session_confirms_from_the_keyboard() {
 #[test]
 fn resetting_confirms_from_the_keyboard() {
     inline(
-        Page::General,
+        Page::Profiles,
         "backup-reset-button",
         "backup-reset-button",
         |m| matches!(m, Msg::Backup(BackupMsg::Reset)),
@@ -204,7 +204,7 @@ fn resetting_confirms_from_the_keyboard() {
 fn an_armed_confirmation_backs_out_on_esc_and_confirms_on_enter() {
     for (page, trigger, expect) in [
         (
-            Page::General,
+            Page::Profiles,
             "backup-reset-button",
             (|m: &Msg| matches!(m, Msg::Backup(BackupMsg::Reset))) as fn(&Msg) -> bool,
         ),

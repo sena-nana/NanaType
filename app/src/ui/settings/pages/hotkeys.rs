@@ -458,14 +458,14 @@ pub(super) fn hotkeys(ui: Ui) -> AnyView {
                 ui,
                 "hotkeys-characters",
                 "hotkeys-edit-characters",
-                Page::General,
+                Page::Characters,
                 character_rows(ui),
             ),
             jump_section(
                 ui,
                 "hotkeys-profiles",
                 "hotkeys-edit-profiles",
-                Page::General,
+                Page::Profiles,
                 profile_rows(ui),
             ),
         ))

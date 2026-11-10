@@ -384,7 +384,7 @@ opacity = 0.8
 [dialogue.reply]                  # reply quote on the dialogue box, same fields as [history.reply]
 visible = true                    # users can also turn it off in the Chat panel settings
 
-[dialogue.subtitle]               # a line's translation (Settings › Integrations › Translated subtitles), under the text on the dialogue box; history bubbles use it too
+[dialogue.subtitle]               # a line's translation (Settings › Translated subtitles), under the text on the dialogue box; history bubbles use it too
 visible = true
 size = 18                         # defaults to 70% of the text (at least 11, never larger than the text)
 color = "#5a4a55"                 # defaults to the text color, accepts color roles

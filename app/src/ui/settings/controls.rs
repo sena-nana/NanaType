@@ -99,7 +99,10 @@ pub fn links_pulsing(ui: Ui) -> bool {
     };
     !ui.reduced_motion.get_untracked()
         && match ui.page.get_untracked() {
-            super::Page::Integrations | super::Page::Output | super::Page::Platforms => true,
+            super::Page::Integrations
+            | super::Page::Output
+            | super::Page::Platforms
+            | super::Page::Peer => true,
             super::Page::General => guide_links(),
             _ => false,
         }

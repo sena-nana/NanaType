@@ -52,17 +52,33 @@ fn action(stacked: bool) -> Stack {
 pub fn card(ui: Ui) -> AnyView {
     let invitation = signal(String::new());
     let password = signal(String::new());
-    card_with_fields(ui, invitation, password, false)
+    card_with_fields(ui, invitation, password, false, true)
 }
 
+/// The session on the settings' Co-op page: the same card, always open.
+pub fn page(ui: Ui) -> AnyView {
+    let invitation = signal(String::new());
+    let password = signal(String::new());
+    card_with_fields(ui, invitation, password, false, false)
+}
+
+/// `folds` gives the card its collapse toggle (the input window's panel);
+/// without it the card is always open.
 pub(crate) fn card_with_fields(
     ui: Ui,
     invitation: nana_ui::runtime::view::Signal<String>,
     password: nana_ui::runtime::view::Signal<String>,
     stacked: bool,
+    folds: bool,
 ) -> AnyView {
     dynamic(
-        move || (ui.peer_panel.get(), ui.locale.get(), ui.peer.get()),
+        move || {
+            (
+                !folds || ui.peer_panel.get(),
+                ui.locale.get(),
+                ui.peer.get(),
+            )
+        },
         move |(expanded, _, state)| {
             let expanded = *expanded;
             let form_row = || {
@@ -133,19 +149,21 @@ pub(crate) fn card_with_fields(
                         style
                     }),
                 )),
-                kit::tool(
-                    if expanded {
-                        nana_ui::icons_tabler::CHEVRON_UP
-                    } else {
-                        nana_ui::icons_tabler::CHEVRON_DOWN
-                    },
-                    ui.now_t(if expanded {
-                        "peer-collapse"
-                    } else {
-                        "peer-expand"
-                    }),
-                    move || Msg::PeerPanel(!expanded),
-                ),
+                folds.then(|| {
+                    kit::tool(
+                        if expanded {
+                            nana_ui::icons_tabler::CHEVRON_UP
+                        } else {
+                            nana_ui::icons_tabler::CHEVRON_DOWN
+                        },
+                        ui.now_t(if expanded {
+                            "peer-collapse"
+                        } else {
+                            "peer-expand"
+                        }),
+                        move || Msg::PeerPanel(!expanded),
+                    )
+                }),
             ))
             .into_any();
             if !expanded {
@@ -199,6 +217,7 @@ pub(crate) fn card_with_fields(
                                 widget(
                                     kit::text_input(invitation.get_untracked())
                                         .placeholder(ui.now_t("peer-invitation"))
+                                        .accessible_name(ui.now_t("peer-invitation"))
                                         .size(ControlSize::Small),
                                 )
                                 .key("peer-invitation-input")
@@ -226,6 +245,7 @@ pub(crate) fn card_with_fields(
                                     kit::text_input(password.get_untracked())
                                         .secure(true)
                                         .placeholder(ui.now_t("peer-password"))
+                                        .accessible_name(ui.now_t("peer-password"))
                                         .size(ControlSize::Small),
                                 )
                                 .key("peer-password-input")
@@ -261,9 +281,13 @@ pub(crate) fn card_with_fields(
             widget(
                 Stack::column(0.0)
                     .gap_step(gap::step::CONTROL)
-                    .padding(nana_ui::theme::space::SM)
-                    .with_layout(|l| {
-                        l.min_height = Some(LengthSpec::Px(EXPANDED_MIN_H));
+                    .padding(if folds {
+                        nana_ui::theme::space::SM
+                    } else {
+                        0.0
+                    })
+                    .with_layout(move |l| {
+                        l.min_height = folds.then_some(LengthSpec::Px(EXPANDED_MIN_H));
                         l.flex_shrink = Some(0.0);
                     }),
             )

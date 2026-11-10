@@ -440,109 +440,124 @@ fn settings_body(ui: Ui) -> AnyView {
                             },
                         ),
                     ),
+                    toggle_row!(ui, "general-autostart", general.launch_at_login),
                 ],
             ),
             accessibility(ui),
-            characters_section(ui),
-            section_with(
-                ui,
-                "general-input",
-                vec![
-                    (
-                        row(
-                            ui,
-                            "general-presence",
-                            None,
-                            segmented(
-                                ui,
-                                select_keys(
-                                    ui,
-                                    &[
-                                        ("resident", "general-presence-resident"),
-                                        ("summon", "general-presence-summon"),
-                                    ],
-                                ),
-                                |s| match s.general.input_presence {
-                                    InputPresence::Resident => "resident".into(),
-                                    InputPresence::Summon => "summon".into(),
-                                },
-                                |s, v| {
-                                    s.general.input_presence = if v == "summon" {
-                                        InputPresence::Summon
-                                    } else {
-                                        InputPresence::Resident
-                                    }
-                                },
-                            ),
-                        ),
-                        None,
-                    ),
-                    (
-                        row(
-                            ui,
-                            "general-mode",
-                            None,
-                            segmented(
-                                ui,
-                                select_keys(
-                                    ui,
-                                    &[("compose", "mode-compose"), ("mirror", "mode-mirror")],
-                                ),
-                                |s| match s.general.input_mode {
-                                    InputMode::Compose => "compose".into(),
-                                    InputMode::Mirror => "mirror".into(),
-                                },
-                                |s, v| {
-                                    s.general.input_mode = if v == "mirror" {
-                                        InputMode::Mirror
-                                    } else {
-                                        InputMode::Compose
-                                    }
-                                },
-                            ),
-                        ),
-                        None,
-                    ),
-                    shown_if(
-                        row(
-                            ui,
-                            "playback-stagger",
-                            None,
-                            slider(
-                                ui,
-                                (0.0, 120.0, 5.0),
-                                "ms",
-                                |s| f64::from(s.playback.mirror_stagger_ms),
-                                |s, v| s.playback.mirror_stagger_ms = v as u32,
-                            ),
-                        ),
-                        move || mirror(ui),
-                    ),
-                    (
-                        row(
-                            ui,
-                            "general-quick-opacity",
-                            Some("general-quick-opacity-hint"),
-                            percent(
-                                ui,
-                                |s| f64::from(s.general.quick_opacity),
-                                |s, v| s.general.quick_opacity = v as f32,
-                            ),
-                        ),
-                        None,
-                    ),
-                    (quick_preview_row(ui), None),
-                    (
-                        toggle_row!(ui, "general-autostart", general.launch_at_login),
-                        None,
-                    ),
-                ],
-            ),
-            section(ui, "general-profiles", profiles(ui)),
-            section_with(ui, "general-backup", backup(ui)),
             // A Steam build updates through Steam.
             crate::distribution::UPDATES.then(|| section_with(ui, "general-updates", updates(ui))),
         ))
+        .into_any()
+}
+
+/// The characters lines can be said by.
+pub(super) fn characters_page(ui: Ui) -> AnyView {
+    characters_section(ui)
+}
+
+/// Profiles, and carrying the settings to another machine.
+pub(super) fn profiles_page(ui: Ui) -> AnyView {
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
+        .children((
+            section(ui, "general-profiles", profiles(ui)),
+            section_with(ui, "general-backup", backup(ui)),
+        ))
+        .into_any()
+}
+
+/// How the input window is there and how it sends, and the quick bar.
+pub(super) fn input_page(ui: Ui) -> AnyView {
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
+        .children((section_with(
+            ui,
+            "",
+            vec![
+                (
+                    row(
+                        ui,
+                        "general-presence",
+                        None,
+                        segmented(
+                            ui,
+                            select_keys(
+                                ui,
+                                &[
+                                    ("resident", "general-presence-resident"),
+                                    ("summon", "general-presence-summon"),
+                                ],
+                            ),
+                            |s| match s.general.input_presence {
+                                InputPresence::Resident => "resident".into(),
+                                InputPresence::Summon => "summon".into(),
+                            },
+                            |s, v| {
+                                s.general.input_presence = if v == "summon" {
+                                    InputPresence::Summon
+                                } else {
+                                    InputPresence::Resident
+                                }
+                            },
+                        ),
+                    ),
+                    None,
+                ),
+                (
+                    row(
+                        ui,
+                        "general-mode",
+                        None,
+                        segmented(
+                            ui,
+                            select_keys(
+                                ui,
+                                &[("compose", "mode-compose"), ("mirror", "mode-mirror")],
+                            ),
+                            |s| match s.general.input_mode {
+                                InputMode::Compose => "compose".into(),
+                                InputMode::Mirror => "mirror".into(),
+                            },
+                            |s, v| {
+                                s.general.input_mode = if v == "mirror" {
+                                    InputMode::Mirror
+                                } else {
+                                    InputMode::Compose
+                                }
+                            },
+                        ),
+                    ),
+                    None,
+                ),
+                shown_if(
+                    row(
+                        ui,
+                        "playback-stagger",
+                        None,
+                        slider(
+                            ui,
+                            (0.0, 120.0, 5.0),
+                            "ms",
+                            |s| f64::from(s.playback.mirror_stagger_ms),
+                            |s, v| s.playback.mirror_stagger_ms = v as u32,
+                        ),
+                    ),
+                    move || mirror(ui),
+                ),
+                (
+                    row(
+                        ui,
+                        "general-quick-opacity",
+                        Some("general-quick-opacity-hint"),
+                        percent(
+                            ui,
+                            |s| f64::from(s.general.quick_opacity),
+                            |s, v| s.general.quick_opacity = v as f32,
+                        ),
+                    ),
+                    None,
+                ),
+                (quick_preview_row(ui), None),
+            ],
+        ),))
         .into_any()
 }
 

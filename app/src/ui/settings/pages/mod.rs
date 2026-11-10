@@ -22,6 +22,7 @@ mod hotkeys;
 mod integrations;
 mod onboarding;
 mod output;
+mod peer;
 mod platforms;
 mod playback;
 mod profiles;
@@ -84,17 +85,23 @@ use crate::windows::WindowKind;
 pub fn page(ui: Ui, page: Page) -> AnyView {
     let body = match page {
         Page::General => general(ui),
+        Page::Profiles => profiles_page(ui),
+        Page::Input => input_page(ui),
+        Page::Characters => characters_page(ui),
+        Page::Assets => assets(ui),
         Page::Speech => speech::settings(ui),
-        Page::Playback => playback(ui),
+        Page::Hotkeys => hotkeys(ui),
         Page::Skins => skins(ui),
-        Page::Packages => crate::ui::plugins::settings(ui),
+        Page::Playback => playback(ui),
         Page::Windows => windows(ui),
         Page::History => history(ui),
-        Page::Hotkeys => hotkeys(ui),
-        Page::Output => output(ui),
+        Page::Translate => translate::translate(ui),
         Page::Platforms => platforms(ui),
+        Page::Output => output(ui),
         Page::Integrations => integrations(ui),
-        Page::Assets => assets(ui),
+        Page::Peer => peer::peer(ui),
+        Page::Workshop => workshop::workshop(ui),
+        Page::Packages => crate::ui::plugins::settings(ui),
         Page::About => about(ui),
     };
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
@@ -112,6 +119,8 @@ pub fn actions(ui: Ui, page: Page) -> Option<AnyView> {
                 Msg::PickFile(FileTarget::ImportSkin)
             }),
         ))),
+        Page::Workshop => crate::distribution::STEAM
+            .then(|| workshop::browse_button(ui, crate::workshop::Tag::Skins)),
         Page::Packages => Some(crate::ui::plugins::actions(ui)),
         Page::Platforms => Some(tool(ui, ti::MESSAGES, "chat-open-panel", || {
             Msg::Chat(ChatMsg::Show)

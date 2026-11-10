@@ -131,7 +131,7 @@ pub(super) fn translate(ui: Ui) -> AnyView {
     ];
     section_with(
         ui,
-        "translate",
+        "",
         vec![
             (Row::inset(master), None),
             when_on(ui, |s| s.translate.enabled, vec![provider]),
