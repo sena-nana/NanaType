@@ -22,7 +22,7 @@
 
 <p align="center">
   <a href="README.md">简体中文</a> · <b>English</b> · <a href="README.ja.md">日本語</a><br>
-  <sub>The app UI is available in Simplified Chinese, English and Japanese</sub>
+  <sub>The app UI is available in Simplified Chinese, Traditional Chinese, English and Japanese</sub>
 </p>
 
 ---

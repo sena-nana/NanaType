@@ -22,7 +22,7 @@
 
 <p align="center">
   <a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <b>日本語</b><br>
-  <sub>アプリの UI は簡体字中国語・英語・日本語に対応しています</sub>
+  <sub>アプリの UI は簡体字中国語・繁体字中国語・英語・日本語に対応しています</sub>
 </p>
 
 ---

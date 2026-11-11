@@ -4,7 +4,7 @@
 //! into the binary: `locales/<locale>.ftl` holds what both products show,
 //! `locales/app/` only NanaType's (feature `app`) and `locales/editor/` only
 //! NanaType Editor's (feature `editor`), so neither ships the other's strings.
-//! zh-CN is the source of truth: tests require every other locale to define
+//! zh-CN is the source of truth (zh-TW is converted from it): tests require every other locale to define
 //! exactly its keys with the same variables. Lookups fall back from the active
 //! locale to en-US to the key itself, so a missing string is visible rather
 //! than blank. `locales/framework/` translates what NanaUI's own controls say
@@ -25,16 +25,18 @@ use unic_langid::LanguageIdentifier;
 pub enum Locale {
     #[default]
     ZhCn,
+    ZhTw,
     EnUs,
     JaJp,
 }
 
 impl Locale {
-    pub const ALL: [Self; 3] = [Self::ZhCn, Self::EnUs, Self::JaJp];
+    pub const ALL: [Self; 4] = [Self::ZhCn, Self::ZhTw, Self::EnUs, Self::JaJp];
 
     pub fn tag(self) -> &'static str {
         match self {
             Self::ZhCn => "zh-CN",
+            Self::ZhTw => "zh-TW",
             Self::EnUs => "en-US",
             Self::JaJp => "ja-JP",
         }
@@ -44,6 +46,7 @@ impl Locale {
     pub fn native_name(self) -> &'static str {
         match self {
             Self::ZhCn => "简体中文",
+            Self::ZhTw => "繁體中文",
             Self::EnUs => "English",
             Self::JaJp => "日本語",
         }
@@ -62,18 +65,21 @@ impl Locale {
         #[cfg_attr(not(any(feature = "app", feature = "editor")), allow(unused_mut))]
         let mut sources = vec![match self {
             Self::ZhCn => include_str!("../locales/zh-CN.ftl"),
+            Self::ZhTw => include_str!("../locales/zh-TW.ftl"),
             Self::EnUs => include_str!("../locales/en-US.ftl"),
             Self::JaJp => include_str!("../locales/ja-JP.ftl"),
         }];
         #[cfg(feature = "app")]
         sources.push(match self {
             Self::ZhCn => include_str!("../locales/app/zh-CN.ftl"),
+            Self::ZhTw => include_str!("../locales/app/zh-TW.ftl"),
             Self::EnUs => include_str!("../locales/app/en-US.ftl"),
             Self::JaJp => include_str!("../locales/app/ja-JP.ftl"),
         });
         #[cfg(feature = "editor")]
         sources.push(match self {
             Self::ZhCn => include_str!("../locales/editor/zh-CN.ftl"),
+            Self::ZhTw => include_str!("../locales/editor/zh-TW.ftl"),
             Self::EnUs => include_str!("../locales/editor/en-US.ftl"),
             Self::JaJp => include_str!("../locales/editor/ja-JP.ftl"),
         });
@@ -82,8 +88,8 @@ impl Locale {
 
     /// The supported locale for a user who reads `preferred` (BCP-47 tags,
     /// most preferred first), English when none is. A language in the script
-    /// they read wins over one in another script: `zh-TW` then `en` is
-    /// English, `zh-TW` alone Simplified Chinese.
+    /// they read wins over one in another script: `zh-HK` is Traditional
+    /// Chinese, `zh-SG` Simplified.
     pub fn negotiate<T: AsRef<str>>(preferred: &[T]) -> Self {
         nana_ui_platform::negotiate_language(preferred, &Self::ALL.map(Self::tag))
             .and_then(Self::from_tag)
@@ -100,6 +106,7 @@ impl Locale {
     fn framework_source(self) -> Option<&'static str> {
         match self {
             Self::ZhCn => None,
+            Self::ZhTw => Some(include_str!("../locales/framework/zh-TW.ftl")),
             Self::EnUs => Some(include_str!("../locales/framework/en-US.ftl")),
             Self::JaJp => Some(include_str!("../locales/framework/ja-JP.ftl")),
         }
@@ -255,8 +262,8 @@ pub fn framework_id(key: &str) -> String {
 /// NanaUI's Chinese. NanaUI fills `{name}` in its templates itself, so a
 /// Fluent variable is written back as that.
 pub fn framework_strings(locale: Locale) -> Arc<nana_ui_core::FrameworkStrings> {
-    static TABLES: [OnceLock<Arc<nana_ui_core::FrameworkStrings>>; 3] =
-        [OnceLock::new(), OnceLock::new(), OnceLock::new()];
+    static TABLES: [OnceLock<Arc<nana_ui_core::FrameworkStrings>>; Locale::ALL.len()] =
+        [const { OnceLock::new() }; Locale::ALL.len()];
     let index = Locale::ALL.iter().position(|l| *l == locale).unwrap_or(0);
     Arc::clone(TABLES[index].get_or_init(|| {
         let mut strings = nana_ui_core::FrameworkStrings::default();
@@ -359,7 +366,7 @@ mod tests {
     fn every_locale_has_the_source_keys_and_variables() {
         let source = catalog(Locale::ZhCn);
         assert!(!source.is_empty());
-        for locale in [Locale::EnUs, Locale::JaJp] {
+        for locale in [Locale::ZhTw, Locale::EnUs, Locale::JaJp] {
             let other = catalog(locale);
             let missing: Vec<_> = source
                 .iter()
@@ -419,11 +426,14 @@ mod tests {
         assert_eq!(Locale::negotiate(&["ja"]), Locale::JaJp);
         assert_eq!(Locale::negotiate(&["de-DE"]), Locale::EnUs);
         assert_eq!(Locale::negotiate::<&str>(&[]), Locale::EnUs);
-        // Traditional Chinese readers get Simplified only when they read
-        // nothing else NanaType ships.
-        assert_eq!(Locale::negotiate(&["zh_TW"]), Locale::ZhCn);
-        assert_eq!(Locale::negotiate(&["zh-TW", "en"]), Locale::EnUs);
-        assert_eq!(Locale::negotiate(&["zh-Hant-HK", "ja-JP"]), Locale::JaJp);
+        // Chinese goes by script: Taiwan, Hong Kong and Macau read
+        // Traditional, a script tag wins over the region.
+        assert_eq!(Locale::negotiate(&["zh_TW"]), Locale::ZhTw);
+        assert_eq!(Locale::negotiate(&["zh-HK", "en"]), Locale::ZhTw);
+        assert_eq!(Locale::negotiate(&["zh-Hant-HK", "ja-JP"]), Locale::ZhTw);
+        assert_eq!(Locale::negotiate(&["zh-Hant"]), Locale::ZhTw);
+        assert_eq!(Locale::negotiate(&["zh-Hans-TW"]), Locale::ZhCn);
+        assert_eq!(Locale::negotiate(&["zh-CN"]), Locale::ZhCn);
         // A language past the first one counts.
         assert_eq!(Locale::negotiate(&["de-DE", "ja-JP"]), Locale::JaJp);
     }
@@ -449,7 +459,7 @@ mod tests {
             .map(|key| (framework_id(key), braces(chinese.get(key).unwrap())))
             .collect();
         expected.sort();
-        for locale in [Locale::EnUs, Locale::JaJp] {
+        for locale in [Locale::ZhTw, Locale::EnUs, Locale::JaJp] {
             let source = locale.framework_source().expect("translated");
             assert_eq!(
                 catalog_of(vec![source]),
@@ -471,6 +481,9 @@ mod tests {
         let ja = framework_strings(Locale::JaJp);
         assert_eq!(&*ja.toast_close, "通知を閉じる");
         assert_eq!(&*ja.calendar_month, "{month}月");
+        let tw = framework_strings(Locale::ZhTw);
+        assert_eq!(&*tw.window_close, "關閉");
+        assert_eq!(&*tw.diff_accept_line, "接受行{hunk}.{line}");
         // Every string is translated, none left in NanaUI's Chinese except
         // where the languages write it alike.
         let same: Vec<_> = nana_ui_core::FrameworkStrings::KEYS

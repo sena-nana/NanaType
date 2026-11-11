@@ -204,7 +204,7 @@ pub(super) fn actions_width(ui: Ui) -> f32 {
 
 fn action_widths(ui: Ui) -> [f32; 2] {
     match ui.locale.get_untracked() {
-        nanatype_i18n::Locale::ZhCn => [54.0, 54.0],
+        nanatype_i18n::Locale::ZhCn | nanatype_i18n::Locale::ZhTw => [54.0, 54.0],
         nanatype_i18n::Locale::EnUs => [64.0, 80.0],
         nanatype_i18n::Locale::JaJp => [54.0, 90.0],
     }

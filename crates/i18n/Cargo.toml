@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "NanaType UI strings: Fluent bundles for zh-CN, en-US and ja-JP"
+description = "NanaType UI strings: Fluent bundles for zh-CN, zh-TW, en-US and ja-JP"
 
 [features]
 # Each product compiles in its own strings beside the shared ones.
