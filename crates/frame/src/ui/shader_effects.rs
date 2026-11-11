@@ -839,11 +839,13 @@ impl nana_ui::MaterialPolicy for MaterialGate {
         if let Some(generation) = generation {
             state.observe(generation, None);
         }
+        // watch, not draw: NanaUI also asks here before it compiles, and a
+        // compile can outlast HEALTHY_AFTER. The healthy clock starts in charge.
         state.failed.get(&hash).copied().unwrap_or(0) < 2
             && GUARD
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .draw(&hash, Instant::now())
+                .watch(&hash)
     }
     fn charge(&self, generation: Option<DeviceGeneration>, program: u64, pixels: u64) {
         let Some((hash, cost)) = Self::program(program) else {
@@ -854,6 +856,10 @@ impl nana_ui::MaterialPolicy for MaterialGate {
         if let Some(generation) = generation {
             state.last_drawn.insert((generation, hash.clone()), now);
         }
+        GUARD
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .draw(&hash, now);
         state.spend(
             &hash,
             u64::from(cost.max(1)).saturating_mul(pixels),

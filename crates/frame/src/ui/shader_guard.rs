@@ -55,6 +55,22 @@ impl Guard {
         self.record.blocked.contains(hash)
     }
 
+    /// Called when a program is about to be compiled or first seen. Writes it
+    /// down as on trial without counting a healthy draw: compiling can take
+    /// longer than [`HEALTHY_AFTER`].
+    pub(super) fn watch(&mut self, hash: &str) -> bool {
+        if self.is_blocked(hash) {
+            return false;
+        }
+        if self.passed.contains(hash) || self.trials.contains_key(hash) {
+            return true;
+        }
+        if self.record.trial.insert(hash.to_owned()) {
+            self.save();
+        }
+        true
+    }
+
     /// Called before each draw of `hash`; false when it must not draw.
     pub(super) fn draw(&mut self, hash: &str, now: Instant) -> bool {
         if self.is_blocked(hash) {
@@ -154,5 +170,28 @@ mod tests {
             assert!(guard.draw("p", now));
         }
         assert!(guard.passed.contains("p") && guard.record.trial.is_empty());
+    }
+
+    #[test]
+    fn a_slow_compile_does_not_end_a_trial_before_the_first_draw() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("shader-guard.json");
+        let (mut guard, _) = Guard::open(path.clone());
+        let start = Instant::now();
+        assert!(guard.watch("m"));
+        assert!(
+            std::fs::read_to_string(&path).unwrap().contains("m"),
+            "first sighting was not written down"
+        );
+        // A compile longer than HEALTHY_AFTER, then the admit that precedes
+        // the first draw, must leave the program on trial.
+        assert!(guard.watch("m"));
+        assert!(guard.draw("m", start + HEALTHY_AFTER));
+        assert!(
+            guard.record.trial.contains("m"),
+            "the first real draw after a slow compile must still be on trial"
+        );
+        assert!(guard.draw("m", start + HEALTHY_AFTER + Duration::from_secs(2)));
+        assert!(guard.passed.contains("m") && guard.record.trial.is_empty());
     }
 }
