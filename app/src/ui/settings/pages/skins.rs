@@ -9,6 +9,14 @@ const ACCENT_BAR: (f32, f32) = (3.0, 14.0);
 /// A skin's colour swatch in the list.
 const SWATCH: f32 = 14.0;
 
+/// The name plate and ornament scale sliders: 0.25× to 4×.
+const PART_SCALE: (f64, f64, f64) = nanatype_settings::SKIN_PART_SCALE;
+
+/// A scale slider's value as saved: nothing at the skin's own size.
+fn part_scale(v: f64) -> Option<f32> {
+    ((v - 1.0).abs() > 1e-3).then_some(v as f32)
+}
+
 pub(super) fn skins(ui: Ui) -> AnyView {
     let filter: Signal<Option<String>> = signal(None);
     let previewing: Signal<Option<String>> = signal(None);
@@ -90,6 +98,40 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                             fallback.dialogue.nameplate.color,
                             |s| s.skin.overrides.name_color,
                             |s, v| s.skin.overrides.name_color = v,
+                        ),
+                    ),
+                    row(
+                        ui,
+                        "skins-override-name-visible",
+                        None,
+                        switch(
+                            ui,
+                            |s| s.skin.overrides.name_visible != Some(false),
+                            |s, v| s.skin.overrides.name_visible = (!v).then_some(false),
+                        ),
+                    ),
+                    row(
+                        ui,
+                        "skins-override-name-scale",
+                        None,
+                        slider(
+                            ui,
+                            PART_SCALE,
+                            "×",
+                            |s| f64::from(s.skin.overrides.name_scale.unwrap_or(1.0)),
+                            |s, v| s.skin.overrides.name_scale = part_scale(v),
+                        ),
+                    ),
+                    row(
+                        ui,
+                        "skins-override-decor-scale",
+                        None,
+                        slider(
+                            ui,
+                            PART_SCALE,
+                            "×",
+                            |s| f64::from(s.skin.overrides.decor_scale.unwrap_or(1.0)),
+                            |s, v| s.skin.overrides.decor_scale = part_scale(v),
                         ),
                     ),
                     row(

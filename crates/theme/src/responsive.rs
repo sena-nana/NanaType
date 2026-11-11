@@ -104,6 +104,7 @@ pub fn responsive_dialogue(skin: &Skin, [w, h]: [f32; 2]) -> Skin {
     if skin.dialogue.responsive.is_none() {
         return result;
     }
+    let user_scale = skin.decor_scale.unwrap_or(1.0);
     let d = &mut result.dialogue;
     result.decor_indices = d
         .decor
@@ -123,9 +124,14 @@ pub fn responsive_dialogue(skin: &Skin, [w, h]: [f32; 2]) -> Skin {
     d.decor
         .retain(|v| v.min_window.is_none_or(|[mw, mh]| w >= mw && h >= mh));
     for dec in &mut d.decor {
-        let fitted_inset = dec
-            .inset
-            .filter(|_| dec.aspect_ratio.is_some() || dec.max_fraction.is_some());
+        let fitted_inset = dec.inset.filter(|_| dec.fitted_inset());
+        // A sized ornament arrives already scaled, so its cap grows with it;
+        // one fitted to the window is scaled after the fit.
+        let (cap_scale, fit_scale) = if fitted_inset.is_some() {
+            (1.0, user_scale)
+        } else {
+            (user_scale, 1.0)
+        };
         let [mut dw, mut dh] = std::array::from_fn(|i| match dec.size[i] {
             Len::Px(v) => v,
             Len::Percent(v) => v * 0.01 * [w, h][i],
@@ -142,12 +148,14 @@ pub fn responsive_dialogue(skin: &Skin, [w, h]: [f32; 2]) -> Skin {
             }
         }
         if let Some([fw, fh]) = dec.max_fraction {
-            let factor = (w * fw / dw.max(0.001))
-                .min(h * fh / dh.max(0.001))
+            let factor = (w * fw * cap_scale / dw.max(0.001))
+                .min(h * fh * cap_scale / dh.max(0.001))
                 .min(1.0);
             dw *= factor;
             dh *= factor;
         }
+        dw *= fit_scale;
+        dh *= fit_scale;
         dec.size = [Len::Px(dw), Len::Px(dh)];
         if let Some([t, r, b, l]) = fitted_inset {
             dec.anchor = Anchor::TopLeft;

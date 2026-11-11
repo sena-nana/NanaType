@@ -509,6 +509,14 @@ pub struct DecorSpec {
     pub motion: Option<DecorMotionSpec>,
 }
 
+impl DecorSpec {
+    /// Whether the responsive layout sizes this ornament from the window
+    /// (its `inset`) instead of from `size`.
+    pub fn fitted_inset(&self) -> bool {
+        self.inset.is_some() && (self.aspect_ratio.is_some() || self.max_fraction.is_some())
+    }
+}
+
 impl Default for DecorSpec {
     fn default() -> Self {
         Self {
@@ -1887,6 +1895,10 @@ pub struct Skin {
     /// Original declaration indices after responsive visibility filtering.
     #[serde(skip)]
     pub decor_indices: Vec<usize>,
+    /// The user's ornament scale, for ornaments the responsive layout sizes
+    /// from the window; `None` is 1.
+    #[serde(skip)]
+    pub decor_scale: Option<f32>,
     /// Declarative host processing feeding material inputs.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub pipelines: BTreeMap<String, crate::PipelineSpec>,

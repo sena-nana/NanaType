@@ -53,8 +53,31 @@ pub fn with_overrides(skin: &Skin, o: &SkinOverrides) -> Skin {
     if o.overflow_auto_ms.is_some() {
         s.dialogue.overflow_auto_ms = o.overflow_auto_ms;
     }
+    if let Some(k) = o.name_scale {
+        scale_nameplate(&mut s.dialogue.nameplate, k);
+    }
+    if o.name_visible == Some(false) {
+        s.dialogue.nameplate.visible = false;
+    }
+    if let Some(k) = o.decor_scale {
+        s.decor_scale = Some(k);
+        s.dialogue.decor.iter_mut().for_each(|d| scale_decor(d, k));
+    }
     if let Some(responsive) = &mut s.dialogue.responsive {
         for layout in responsive.layouts_mut() {
+            if let Some(plate) = &mut layout.nameplate {
+                if let Some(k) = o.name_scale {
+                    scale_nameplate(plate, k);
+                }
+                if o.name_visible == Some(false) {
+                    plate.visible = false;
+                }
+            }
+            if let Some(k) = o.decor_scale {
+                for d in layout.decor.iter_mut().flatten() {
+                    scale_decor(d, k);
+                }
+            }
             if let Some(c) = o.name_color
                 && let Some(plate) = &mut layout.nameplate
             {
@@ -80,6 +103,66 @@ pub fn with_overrides(skin: &Skin, o: &SkinOverrides) -> Skin {
         }
     }
     s
+}
+
+/// The name plate `k` times its size: its text, padding, corners, borders,
+/// shadows, and its distance from the corner it hangs on.
+fn scale_nameplate(p: &mut nanatype_theme::NameplateSpec, k: f32) {
+    p.size *= k;
+    p.radius *= k;
+    p.border_width *= k;
+    for v in p.padding.iter_mut().chain(&mut p.offset) {
+        *v *= k;
+    }
+    if let Some(frame) = &mut p.frame {
+        frame.scale *= k;
+    }
+    if let Some(stroke) = &mut p.stroke {
+        stroke.width *= k;
+    }
+    if let Some(shadow) = &mut p.text_shadow {
+        shadow.dx *= k;
+        shadow.dy *= k;
+        shadow.blur *= k;
+    }
+    scale_shape(&mut p.shape, k);
+}
+
+/// An ornament `k` times its size, about the point it is anchored by. One
+/// stretched along the box's edges (`inset`) keeps following the box; the
+/// responsive layout scales those it fits to the window.
+fn scale_decor(d: &mut nanatype_theme::DecorSpec, k: f32) {
+    if d.inset.is_some() {
+        return;
+    }
+    for len in &mut d.size {
+        *len = match *len {
+            nanatype_theme::Len::Px(v) => nanatype_theme::Len::Px(v * k),
+            nanatype_theme::Len::Percent(v) => nanatype_theme::Len::Percent(v * k),
+        };
+    }
+    for v in &mut d.offset {
+        *v *= k;
+    }
+    d.radius *= k;
+    d.border_width *= k;
+    d.text_size *= k;
+    scale_shape(&mut d.shape, k);
+}
+
+fn scale_shape(shape: &mut nanatype_theme::ShapeSpec, k: f32) {
+    for v in shape.radii.iter_mut().flatten() {
+        *v *= k;
+    }
+    for v in shape.border_widths.iter_mut().flatten() {
+        *v *= k;
+    }
+    for shadow in &mut shape.shadows {
+        shadow.dx *= k;
+        shadow.dy *= k;
+        shadow.blur *= k;
+        shadow.spread *= k;
+    }
 }
 
 /// Resolve one skin's saved body settings without changing its source manifest.
@@ -321,6 +404,44 @@ pub fn chroma(c: Rgba8) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn name_plate_and_ornaments_scale_and_the_plate_hides() {
+        use nanatype_theme::{DecorSpec, Len};
+        let mut skin = nanatype_theme::Skin::default();
+        skin.dialogue.nameplate.offset = [8.0, -12.0];
+        skin.dialogue.decor = vec![
+            DecorSpec {
+                size: [Len::Px(16.0), Len::Percent(10.0)],
+                offset: [4.0, 2.0],
+                ..Default::default()
+            },
+            DecorSpec {
+                inset: Some([1.0; 4]),
+                ..Default::default()
+            },
+        ];
+        let size = skin.dialogue.nameplate.size;
+        let out = super::with_overrides(
+            &skin,
+            &nanatype_settings::SkinOverrides {
+                name_visible: Some(false),
+                name_scale: Some(2.0),
+                decor_scale: Some(0.5),
+                ..Default::default()
+            },
+        );
+        let plate = &out.dialogue.nameplate;
+        assert!(!plate.visible);
+        assert_eq!(plate.size, size * 2.0);
+        assert_eq!(plate.offset, [16.0, -24.0]);
+        let decor = &out.dialogue.decor;
+        assert_eq!(decor[0].size, [Len::Px(8.0), Len::Percent(5.0)]);
+        assert_eq!(decor[0].offset, [2.0, 1.0]);
+        // One stretched along the box's edges keeps following the box.
+        assert_eq!(decor[1], skin.dialogue.decor[1]);
+        assert_eq!(super::with_overrides(&skin, &Default::default()), skin);
+    }
+
     #[test]
     fn saved_body_settings_are_independent_and_defaults_replace_legacy_overrides() {
         let skin = nanatype_theme::Skin::default();

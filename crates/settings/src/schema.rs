@@ -897,7 +897,18 @@ pub struct SkinOverrides {
     pub overflow: Option<Overflow>,
     /// In page mode, turn a full page on its own after this many ms.
     pub overflow_auto_ms: Option<u32>,
+    /// `Some(false)` hides the dialogue name plate; `None` leaves it to the skin.
+    pub name_visible: Option<bool>,
+    /// The name plate's size as a multiple of the skin's ([`SKIN_PART_SCALE`]).
+    pub name_scale: Option<f32>,
+    /// The dialogue box's ornaments' size as a multiple of the skin's
+    /// ([`SKIN_PART_SCALE`]).
+    pub decor_scale: Option<f32>,
 }
+
+/// The smallest and largest [`SkinOverrides::name_scale`] and
+/// [`SkinOverrides::decor_scale`], and their slider's step.
+pub const SKIN_PART_SCALE: (f64, f64, f64) = (0.25, 4.0, 0.05);
 
 impl SkinOverrides {
     pub fn is_empty(&self) -> bool {
@@ -1979,6 +1990,16 @@ impl Settings {
         }
         if let Some(size) = self.skin.overrides.text_size.as_mut() {
             *size = finite_or(*size, 28.0).clamp(8.0, 200.0);
+        }
+        for scale in [
+            &mut self.skin.overrides.name_scale,
+            &mut self.skin.overrides.decor_scale,
+        ] {
+            *scale = scale
+                .map(|v| {
+                    finite_or(v, 1.0).clamp(SKIN_PART_SCALE.0 as f32, SKIN_PART_SCALE.1 as f32)
+                })
+                .filter(|v| (v - 1.0).abs() > 1e-3);
         }
         for profile in self.skin.personalizations.values_mut() {
             profile.sanitize();
