@@ -1,5 +1,6 @@
 // Skin-owned program; texture 0 is an immutable, layout-local stroke-time map.
-// Alpha holds the threshold (linear). B marks characters with stroke data.
+// Alpha holds the threshold (linear). B marks characters with stroke data; a
+// full threshold keeps one hidden while its strokes are still being mapped.
 fn material(i: MaterialInput) -> vec4<f32> {
     let p = clamp(i.progress, 0., 1.);
     if p <= 0. { return vec4<f32>(1., 1., 1., 0.); }

@@ -151,6 +151,12 @@ impl Packed {
             .clone()
     }
 
+    pub(super) fn contains(&self, character: char) -> bool {
+        self.entries
+            .binary_search_by_key(&character, |e| e.character)
+            .is_ok()
+    }
+
     pub(super) fn glyph(&self, character: char) -> Result<Option<Arc<StrokeGlyph>>, String> {
         let Ok(index) = self
             .entries

@@ -59,6 +59,11 @@ impl StrokeData {
         self.storage.glyph(character).ok().flatten()
     }
 
+    /// Whether `character` has stroke data, from the index alone.
+    pub fn contains(&self, character: char) -> bool {
+        self.storage.contains(character)
+    }
+
     /// Imports validate every block without populating the runtime cache.
     pub fn validate_all(&self) -> Result<(), String> {
         self.storage.validate_all()

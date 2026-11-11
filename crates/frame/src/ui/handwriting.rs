@@ -10,6 +10,11 @@ use std::{
 };
 
 const CELL: usize = 96;
+/// Partial maps go out at most this often while a job works.
+const PUBLISH_EVERY: std::time::Duration = std::time::Duration::from_millis(16);
+/// A stroke glyph whose cell is not stamped yet: hidden until the reveal ends,
+/// so a later partial map never takes back ink an earlier one showed.
+const PENDING: u8 = 255;
 const MAX_SIDE: f32 = nanatype_theme::MAX_PIPELINE_TEXTURE_SIDE as f32;
 type CellKey = ([u8; 32], char);
 static CELLS: LazyLock<Mutex<HashMap<CellKey, Arc<[u8]>>>> = LazyLock::new(Default::default);
@@ -21,6 +26,7 @@ pub(super) struct StrokeJob {
     width: u32,
     height: u32,
     scale: f32,
+    /// In text order, the order glyphs are revealed.
     glyphs: Vec<(char, ttf_parser::Rect, tiny_skia::Transform)>,
 }
 
@@ -72,12 +78,14 @@ pub(super) fn stroke_time_job(
                     };
                     let transform =
                         tiny_skia::Transform::from_row(unit_scale, 0., 0., -unit_scale, x, y);
-                    glyphs.push((character, bbox, transform));
+                    glyphs.push((glyph.cluster, (character, bbox, transform)));
                 }
                 pen += glyph.advance_px;
             }
         }
     }
+    glyphs.sort_by_key(|(cluster, _)| *cluster);
+    let glyphs = glyphs.into_iter().map(|(_, glyph)| glyph).collect();
     Some(StrokeJob {
         data: data.clone(),
         width: (size[0] * scale).ceil().clamp(1., MAX_SIDE) as u32,
@@ -90,7 +98,14 @@ pub(super) fn stroke_time_job(
 impl StrokeJob {
     /// Per-texel writing time: alpha is the threshold, B marks stroke-covered
     /// cells; the extent maps target coordinates onto the texture.
-    pub(super) fn run(self) -> (MaterialTexture, [f32; 4]) {
+    ///
+    /// Glyphs are stamped in reveal order and `publish` receives partial maps
+    /// meanwhile, the first right after the first stroke glyph. Glyphs with
+    /// stroke data not stamped yet are [`PENDING`] in a partial map.
+    pub(super) fn run(
+        self,
+        publish: &mut dyn FnMut(MaterialTexture, [f32; 4]),
+    ) -> (MaterialTexture, [f32; 4]) {
         let Self {
             data,
             width,
@@ -99,6 +114,15 @@ impl StrokeJob {
             glyphs,
         } = self;
         let mut rgba = vec![0; width as usize * height as usize * 4];
+        let extent = [width as f32 / scale, height as f32 / scale, 0., 0.];
+        let mut remaining = 0;
+        for (character, bbox, transform) in &glyphs {
+            if data.contains(*character) {
+                stamp(&mut rgba, width, height, scale, None, *bbox, *transform);
+                remaining += 1;
+            }
+        }
+        let mut published: Option<std::time::Instant> = None;
         for (character, bbox, transform) in glyphs {
             // Ruby, Latin and inline objects have no Hanzi mask and use the normal fade.
             let Some(strokes) = data.glyph(character) else {
@@ -120,14 +144,33 @@ impl StrokeJob {
                     .insert((data.hash, character), cell.clone());
                 cell
             });
-            stamp(&mut rgba, width, height, scale, &cell, bbox, transform);
+            stamp(
+                &mut rgba,
+                width,
+                height,
+                scale,
+                Some(&cell),
+                bbox,
+                transform,
+            );
+            remaining -= 1;
+            if remaining > 0 && published.is_none_or(|at| at.elapsed() >= PUBLISH_EVERY) {
+                publish(
+                    MaterialTexture {
+                        size: [width, height],
+                        rgba: rgba.clone().into(),
+                    },
+                    extent,
+                );
+                published = Some(std::time::Instant::now());
+            }
         }
         (
             MaterialTexture {
                 size: [width, height],
                 rgba: rgba.into(),
             },
-            [width as f32 / scale, height as f32 / scale, 0., 0.],
+            extent,
         )
     }
 }
@@ -137,7 +180,7 @@ fn stamp(
     width: u32,
     height: u32,
     scale: f32,
-    cell: &[u8],
+    cell: Option<&[u8]>,
     bbox: ttf_parser::Rect,
     transform: tiny_skia::Transform,
 ) {
@@ -161,6 +204,11 @@ fn stamp(
     let bh = f32::from(bbox.y_max - bbox.y_min).max(1.);
     for y in y0..y1 {
         for x in x0..x1 {
+            let i = (y as usize * width as usize + x as usize) * 4;
+            let Some(cell) = cell else {
+                out[i..i + 4].copy_from_slice(&[255, 255, 255, PENDING]);
+                continue;
+            };
             let mut p =
                 tiny_skia::Point::from_xy((x as f32 + 0.5) / scale, (y as f32 + 0.5) / scale);
             inverse.map_point(&mut p);
@@ -168,7 +216,6 @@ fn stamp(
                 as usize;
             let v = ((bbox.y_max as f32 - p.y) / bh * CELL as f32).clamp(0., (CELL - 1) as f32)
                 as usize;
-            let i = (y as usize * width as usize + x as usize) * 4;
             out[i..i + 4].copy_from_slice(&[255, 255, 255, cell[v * CELL + u]]);
         }
     }
@@ -285,6 +332,60 @@ fn path(commands: &[StrokeCommand]) -> Option<tiny_skia::Path> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn partial_maps_stamp_in_reveal_order_and_hide_pending_stroke_glyphs() {
+        let bytes = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../theme/builtin/love_letter/strokes.nthz"
+        ))
+        .unwrap();
+        let data = Arc::new(StrokeData::parse(&bytes).unwrap());
+        let bbox = ttf_parser::Rect {
+            x_min: 0,
+            y_min: 0,
+            x_max: 100,
+            y_max: 100,
+        };
+        // Three 100-unit boxes side by side at 0.4 px per unit.
+        let at = |x: f32| tiny_skia::Transform::from_row(0.4, 0., 0., -0.4, x, 40.);
+        let job = StrokeJob {
+            data,
+            width: 120,
+            height: 40,
+            scale: 1.,
+            glyphs: vec![
+                ('你', bbox, at(0.)),
+                ('好', bbox, at(40.)),
+                ('A', bbox, at(80.)),
+            ],
+        };
+        let texels = |rgba: &[u8], x0: usize| -> Vec<u8> {
+            (2..38)
+                .flat_map(|y| (x0 + 2..x0 + 38).map(move |x| (y, x)))
+                .map(|(y, x)| rgba[(y * 120 + x) * 4 + 3])
+                .collect()
+        };
+        let mut partials = Vec::new();
+        let (last, _) = job.run(&mut |texture, _| partials.push(texture));
+        let first = partials
+            .first()
+            .expect("a partial map after the first glyph");
+        assert!(
+            texels(&first.rgba, 0).iter().all(|&a| a <= 250),
+            "你 is stamped"
+        );
+        assert!(
+            texels(&first.rgba, 40).iter().all(|&a| a == PENDING),
+            "好 waits"
+        );
+        assert!(
+            texels(&first.rgba, 80).iter().all(|&a| a == 0),
+            "Latin fades"
+        );
+        assert!(texels(&last.rgba, 40).iter().all(|&a| a <= 250));
+        assert!(last.rgba.chunks(4).all(|t| t[3] != PENDING));
+    }
+
     #[test]
     fn stroke_times_follow_order_and_cover_the_entire_font_rectangle() {
         use StrokeCommand::*;

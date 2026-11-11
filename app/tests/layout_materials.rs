@@ -122,10 +122,25 @@ fn stroke_maps_build_in_the_background_and_keep_the_reveal_clock() {
         builds,
         "nothing is built on the UI thread yet"
     );
-    ui.layout_epoch.update(|e| *e += 1);
-    common::frame(&mut session, ui, base + 80, 80, "ready", CAPTURES);
-    let (size, after) = entrance(&mut session, ui);
-    assert!(size.is_some_and(|s| s != [1, 1]), "map applied: {size:?}");
+    // Partial maps may arrive first; each keeps the clock until the final one.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        ui.layout_epoch.update(|e| *e += 1);
+        common::frame(&mut session, ui, base + 80, 80, "ready", CAPTURES);
+        let (size, partial) = entrance(&mut session, ui);
+        assert!(size.is_some_and(|s| s != [1, 1]), "map applied: {size:?}");
+        assert_eq!(
+            partial, clock,
+            "a partial map keeps the running reveal clock"
+        );
+        if pipeline::builds() > builds {
+            break;
+        }
+        wakes
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .expect("the final map follows its partial maps");
+    }
+    let (_, after) = entrance(&mut session, ui);
     let node = ui.text_node.get_untracked().unwrap();
     let presentation = session
         .document()
@@ -160,6 +175,10 @@ fn stroke_maps_build_in_the_background_and_keep_the_reveal_clock() {
         })
         .collect();
     frames.sort_by(f64::total_cmp);
+    pipeline::settle();
+    // Stable frames queued nothing: no wake after the ones already drained.
+    while wakes.try_recv().is_ok() {}
+    common::frame(&mut session, ui, base + 700, 700, "stable", CAPTURES);
     pipeline::settle();
     assert_eq!(pipeline::builds(), builds + 1);
     assert!(wakes.try_recv().is_err(), "no duplicate background work");

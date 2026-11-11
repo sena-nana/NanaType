@@ -5,9 +5,11 @@
 //! The UI thread only snapshots the layout. With a waker installed (the
 //! application), processors run on a background worker; until the result
 //! arrives the material's placeholder slots give the shader's plain fade, and
-//! the finished map replaces it without restarting the reveal clock. Stale jobs
-//! for a view whose layout has since changed are skipped. Without a waker
-//! (offscreen tests, tools) processors run inline.
+//! the finished map replaces it without restarting the reveal clock. A single
+//! processor may publish partial maps while it works, in reveal order, so the
+//! first glyphs switch to their own material almost at once. Stale jobs for a
+//! view whose layout has since changed are skipped. Without a waker (offscreen
+//! tests, tools) processors run inline.
 use nana_ui::runtime::view::{AnyView, IntoView, NodeRef, Signal, signal, widget};
 use nana_ui::runtime::{
     ComponentView, MutationQueue, NodeKind, RichTextView, SizeChanged, StableNodeId, UiWorld,
@@ -29,13 +31,21 @@ static MAPS: LazyLock<Mutex<HashMap<u64, Weak<nana_ui_core::MaterialInstance>>>>
     LazyLock::new(Default::default);
 /// Finished background results awaiting pickup, newest last; bounded.
 static DONE: LazyLock<Mutex<Vec<(u64, Outputs)>>> = LazyLock::new(Default::default);
+/// The newest partial result of each running job, awaiting pickup; bounded.
+static PARTIAL: LazyLock<Mutex<Vec<(u64, Outputs)>>> = LazyLock::new(Default::default);
+/// Materials built from partial results, shown until the final map arrives.
+static PARTIAL_MAPS: LazyLock<Mutex<HashMap<u64, Weak<nana_ui_core::MaterialInstance>>>> =
+    LazyLock::new(Default::default);
 const MAX_DONE: usize = 8;
 const MAX_DONE_BYTES: usize = 128 * 1024 * 1024;
 static WAKER: OnceLock<Box<dyn Fn() + Send + Sync>> = OnceLock::new();
 static WORKER: OnceLock<mpsc::SyncSender<Job>> = OnceLock::new();
 
 type Outputs = Vec<BTreeMap<&'static str, PortValue>>;
-type Prepared = Box<dyn FnOnce() -> Option<BTreeMap<&'static str, PortValue>> + Send>;
+type Ports = BTreeMap<&'static str, PortValue>;
+/// Receives a processor's partial outputs while it is still working.
+type Publish<'a> = &'a mut dyn FnMut(Ports);
+type Prepared = Box<dyn FnOnce(Publish) -> Option<Ports> + Send>;
 /// Owned by the view; dropping it also invalidates queued and running work.
 type Slot = Arc<Mutex<Option<u64>>>;
 struct Job {
@@ -65,7 +75,15 @@ fn output_bytes(outputs: &Outputs) -> usize {
 }
 
 fn remember(key: u64, outputs: Outputs) {
-    let mut done = DONE.lock().unwrap_or_else(|e| e.into_inner());
+    PARTIAL
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .retain(|(old, _)| *old != key);
+    keep(&DONE, key, outputs);
+}
+
+fn keep(results: &Mutex<Vec<(u64, Outputs)>>, key: u64, outputs: Outputs) {
+    let mut done = results.lock().unwrap_or_else(|e| e.into_inner());
     done.retain(|(old, _)| *old != key);
     done.push((key, outputs));
     while done.len() > MAX_DONE
@@ -88,7 +106,7 @@ pub fn settle() {
         .send(Job {
             slot: None,
             key: 0,
-            nodes: vec![Box::new(move || {
+            nodes: vec![Box::new(move |_| {
                 let _ = done.send(());
                 None
             })],
@@ -107,8 +125,27 @@ fn worker() -> &'static mpsc::SyncSender<Job> {
             .spawn(move || {
                 while let Ok(job) = receive.recv() {
                     if job.current() {
+                        let single = job.nodes.len() == 1;
+                        let (slot, key) = (job.slot.clone(), job.key);
+                        // Partial maps only stand in for a material fed by one processor.
+                        let mut publish = move |ports: Ports| {
+                            if !single {
+                                return;
+                            }
+                            let Some(slot) = slot.as_ref().and_then(Weak::upgrade) else {
+                                return;
+                            };
+                            let wanted = slot.lock().unwrap_or_else(|e| e.into_inner());
+                            if *wanted == Some(key) {
+                                keep(&PARTIAL, key, vec![ports]);
+                                drop(wanted);
+                                if let Some(wake) = WAKER.get() {
+                                    wake();
+                                }
+                            }
+                        };
                         let outputs: Option<Outputs> =
-                            job.nodes.into_iter().map(|run| run()).collect();
+                            job.nodes.into_iter().map(|run| run(&mut publish)).collect();
                         if let Some(slot) = job.slot.as_ref().and_then(Weak::upgrade) {
                             let mut wanted = slot.lock().unwrap_or_else(|e| e.into_inner());
                             // A layout change or unmount during conversion cannot publish.
@@ -310,8 +347,13 @@ fn prepare(
                 return None;
             };
             let job = super::handwriting::stroke_time_job(world, id, text, strokes)?;
-            Some(Box::new(move || {
-                let (time, extent) = job.run();
+            Some(Box::new(move |publish: Publish| {
+                let (time, extent) = job.run(&mut |time, extent| {
+                    publish(BTreeMap::from([
+                        ("time", PortValue::Texture(time)),
+                        ("extent", PortValue::Vec4(extent)),
+                    ]))
+                });
                 Some(BTreeMap::from([
                     ("time", PortValue::Texture(time)),
                     ("extent", PortValue::Vec4(extent)),
@@ -375,6 +417,7 @@ fn build(
             .position(|(k, _)| *k == key)
             .map(|at| done.remove(at).1)
     };
+    let mut partial = false;
     let computed = match finished {
         Some(outputs) => {
             *slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -384,31 +427,55 @@ fn build(
             let background = WAKER.get().is_some();
             let mut wanted = slot.lock().unwrap_or_else(|e| e.into_inner());
             if background && *wanted == Some(key) {
-                return None; // Already queued; its result wakes this view.
-            }
-            *wanted = None;
-            let nodes = material
-                .binding
-                .nodes
-                .iter()
-                .map(|node| prepare(node, world, id, text))
-                .collect::<Option<Vec<Prepared>>>()?;
-            if background {
-                *wanted = Some(key);
-                if worker()
-                    .try_send(Job {
-                        slot: Some(Arc::downgrade(slot)),
-                        key,
-                        nodes,
-                    })
-                    .is_err()
-                {
-                    *wanted = None;
+                // Still working: show its newest partial map, if any.
+                let progress = {
+                    let mut pending = PARTIAL.lock().unwrap_or_else(|e| e.into_inner());
+                    pending
+                        .iter()
+                        .position(|(k, _)| *k == key)
+                        .map(|at| pending.remove(at).1)
+                };
+                match progress {
+                    Some(outputs) => {
+                        partial = true;
+                        outputs
+                    }
+                    None => {
+                        return PARTIAL_MAPS
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .get(&key)
+                            .and_then(MaterialRef::upgrade);
+                    }
                 }
-                return None; // Backpressure keeps the placeholder; never block the UI.
+            } else {
+                *wanted = None;
+                let nodes = material
+                    .binding
+                    .nodes
+                    .iter()
+                    .map(|node| prepare(node, world, id, text))
+                    .collect::<Option<Vec<Prepared>>>()?;
+                if background {
+                    *wanted = Some(key);
+                    if worker()
+                        .try_send(Job {
+                            slot: Some(Arc::downgrade(slot)),
+                            key,
+                            nodes,
+                        })
+                        .is_err()
+                    {
+                        *wanted = None;
+                    }
+                    return None; // Backpressure keeps the placeholder; never block the UI.
+                }
+                drop(wanted);
+                nodes
+                    .into_iter()
+                    .map(|run| run(&mut |_| {}))
+                    .collect::<Option<_>>()?
             }
-            drop(wanted);
-            nodes.into_iter().map(|run| run()).collect::<Option<_>>()?
         }
     };
     let output = |(node, port): (usize, &'static str)| computed.get(node)?.get(port).cloned();
@@ -441,6 +508,14 @@ fn build(
         .clone()
         .with_parameters(Arc::<[[f32; 4]]>::from(parameters))
         .with_textures(Arc::<[MaterialTexture]>::from(textures));
+    let mut partials = PARTIAL_MAPS.lock().unwrap_or_else(|e| e.into_inner());
+    partials.retain(|_, v| v.strong_count() > 0);
+    if partial {
+        partials.insert(key, built.downgrade());
+        return Some(built);
+    }
+    partials.remove(&key);
+    drop(partials);
     let mut cache = MAPS.lock().unwrap_or_else(|e| e.into_inner());
     cache.retain(|_, v| v.strong_count() > 0);
     cache.insert(key, built.downgrade());
@@ -470,7 +545,7 @@ mod tests {
             .try_send(Job {
                 slot: Some(Arc::downgrade(&slot)),
                 key: 1,
-                nodes: vec![Box::new(move || {
+                nodes: vec![Box::new(move |_| {
                     entered.send(()).unwrap();
                     gate.recv_timeout(Duration::from_secs(30)).unwrap();
                     Some(BTreeMap::new())
@@ -485,7 +560,7 @@ mod tests {
             let result = worker().try_send(Job {
                 slot: Some(Arc::downgrade(pending)),
                 key: if i % 2 == 0 { 1 } else { 2 },
-                nodes: vec![Box::new(move || {
+                nodes: vec![Box::new(move |_| {
                     calls.fetch_add(1, Ordering::Relaxed);
                     Some(BTreeMap::new())
                 })],
@@ -510,7 +585,7 @@ mod tests {
             .try_send(Job {
                 slot: Some(Arc::downgrade(&slot)),
                 key: 3,
-                nodes: vec![Box::new(|| Some(BTreeMap::new()))],
+                nodes: vec![Box::new(|_| Some(BTreeMap::new()))],
             })
             .unwrap_or_else(|_| panic!("queue drained"));
         settle();
