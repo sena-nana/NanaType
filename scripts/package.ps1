@@ -72,6 +72,11 @@ if (-not $SkipBuild) {
     }
 }
 $exe = Join-Path $root "target\$Profile\$binary"
+# The `cargo metadata --offline` calls below read the whole locked graph,
+# including crates this build never compiled (other platforms, dev-only):
+# download them all first, or a clean machine such as CI cannot list them.
+cargo fetch --locked
+if ($LASTEXITCODE -ne 0) { throw "cargo fetch failed ($LASTEXITCODE)" }
 
 # DX12 shader compiler shipped beside the exe (open-source DXC, see
 # THIRD_PARTY_NOTICES.md). Set DXC_DLL to an official release's

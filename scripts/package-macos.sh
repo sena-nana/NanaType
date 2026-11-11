@@ -78,6 +78,10 @@ if [ "$build" = 1 ]; then
         cargo build --profile "$profile" -p "$package" --locked $features
 fi
 exe="$root/target/$profile/$binary"
+# The `cargo metadata --offline` calls below read the whole locked graph,
+# including crates this build never compiled (other platforms, dev-only):
+# download them all first, or a clean machine such as CI cannot list them.
+cargo fetch --locked
 
 if [ "$steam" = 1 ]; then
     # libsteam_api.dylib names itself @loader_path/, i.e. beside the
