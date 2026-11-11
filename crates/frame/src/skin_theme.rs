@@ -58,6 +58,7 @@ pub fn with_overrides(skin: &Skin, o: &SkinOverrides) -> Skin {
     }
     if o.name_visible == Some(false) {
         s.dialogue.nameplate.visible = false;
+        s.speaker_decor_hidden = true;
     }
     if let Some(k) = o.decor_scale {
         s.decor_scale = Some(k);
@@ -432,6 +433,7 @@ mod tests {
         );
         let plate = &out.dialogue.nameplate;
         assert!(!plate.visible);
+        assert!(out.speaker_decor_hidden);
         assert_eq!(plate.size, size * 2.0);
         assert_eq!(plate.offset, [16.0, -24.0]);
         let decor = &out.dialogue.decor;

@@ -1254,7 +1254,7 @@ fn shader_layers(ui: Stage, ctx: &BoxCtx, surface: &Surface, layer: DecorLayer) 
         let Some(id) = &dec.shader else {
             continue;
         };
-        if !decor_shown(dec, ctx.source) {
+        if !decor_shown(&ctx.skin, dec, ctx.source) {
             continue;
         }
         let shape =
@@ -1330,7 +1330,9 @@ fn shader_art(ui: Stage, ctx: &BoxCtx, layer: DecorLayer) -> AnyView {
         .decor
         .iter()
         .enumerate()
-        .filter(|(_, d)| d.layer == layer && d.shader.is_some() && decor_shown(d, ctx.source))
+        .filter(|(_, d)| {
+            d.layer == layer && d.shader.is_some() && decor_shown(&ctx.skin, d, ctx.source)
+        })
         .map(|(index, d)| {
             decor_view(
                 ui,
@@ -2068,8 +2070,13 @@ fn decor_view(ui: Stage, ctx: &BoxCtx, dec: &DecorSpec, index: usize) -> AnyView
 }
 
 /// Whether a decor belongs on a box of `source` at all.
-fn decor_shown(dec: &DecorSpec, source: Source) -> bool {
-    dec.when != DecorWhen::Display || source != Source::Draft
+fn decor_shown(skin: &Skin, dec: &DecorSpec, source: Source) -> bool {
+    match dec.when {
+        DecorWhen::Always => true,
+        // The name plate's ornaments leave with a plate the user hid.
+        DecorWhen::Speaker => !skin.speaker_decor_hidden,
+        DecorWhen::Display => source != Source::Draft,
+    }
 }
 
 /// One decoration, absolutely placed on its parent; `visible` hides it.
@@ -2171,7 +2178,7 @@ fn decor_views(ui: Stage, ctx: &BoxCtx, layer: DecorLayer) -> Vec<AnyView> {
         .decor
         .iter()
         .enumerate()
-        .filter(|(_, d)| d.layer == layer && decor_shown(d, ctx.source))
+        .filter(|(_, d)| d.layer == layer && decor_shown(&ctx.skin, d, ctx.source))
         .filter(|(_, d)| d.shader.is_none() || layer == DecorLayer::Below)
         .map(|(index, d)| {
             decor_view(

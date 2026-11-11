@@ -1899,6 +1899,10 @@ pub struct Skin {
     /// from the window; `None` is 1.
     #[serde(skip)]
     pub decor_scale: Option<f32>,
+    /// The user hid the name plate: ornaments shown only with a speaker
+    /// ([`DecorWhen::Speaker`]) go with it.
+    #[serde(skip)]
+    pub speaker_decor_hidden: bool,
     /// Declarative host processing feeding material inputs.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub pipelines: BTreeMap<String, crate::PipelineSpec>,
