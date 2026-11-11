@@ -17,6 +17,48 @@ fn part_scale(v: f64) -> Option<f32> {
     ((v - 1.0).abs() > 1e-3).then_some(v as f32)
 }
 
+/// Whether the dialogue name plate shows, and the name plate's and the box
+/// ornaments' scale, as the Skins page's overrides and the guide's skin step
+/// both show them.
+pub(super) fn part_rows(ui: Ui) -> Vec<Row> {
+    vec![
+        row(
+            ui,
+            "skins-override-name-visible",
+            None,
+            switch(
+                ui,
+                |s| s.skin.overrides.name_visible != Some(false),
+                |s, v| s.skin.overrides.name_visible = (!v).then_some(false),
+            ),
+        ),
+        row(
+            ui,
+            "skins-override-name-scale",
+            None,
+            slider(
+                ui,
+                PART_SCALE,
+                "×",
+                |s| f64::from(s.skin.overrides.name_scale.unwrap_or(1.0)),
+                |s, v| s.skin.overrides.name_scale = part_scale(v),
+            ),
+        ),
+        row(
+            ui,
+            "skins-override-decor-scale",
+            None,
+            slider(
+                ui,
+                PART_SCALE,
+                "×",
+                |s| f64::from(s.skin.overrides.decor_scale.unwrap_or(1.0)),
+                |s, v| s.skin.overrides.decor_scale = part_scale(v),
+            ),
+        ),
+    ]
+}
+
 pub(super) fn skins(ui: Ui) -> AnyView {
     let filter: Signal<Option<String>> = signal(None);
     let previewing: Signal<Option<String>> = signal(None);
@@ -100,40 +142,11 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                             |s, v| s.skin.overrides.name_color = v,
                         ),
                     ),
-                    row(
-                        ui,
-                        "skins-override-name-visible",
-                        None,
-                        switch(
-                            ui,
-                            |s| s.skin.overrides.name_visible != Some(false),
-                            |s, v| s.skin.overrides.name_visible = (!v).then_some(false),
-                        ),
-                    ),
-                    row(
-                        ui,
-                        "skins-override-name-scale",
-                        None,
-                        slider(
-                            ui,
-                            PART_SCALE,
-                            "×",
-                            |s| f64::from(s.skin.overrides.name_scale.unwrap_or(1.0)),
-                            |s, v| s.skin.overrides.name_scale = part_scale(v),
-                        ),
-                    ),
-                    row(
-                        ui,
-                        "skins-override-decor-scale",
-                        None,
-                        slider(
-                            ui,
-                            PART_SCALE,
-                            "×",
-                            |s| f64::from(s.skin.overrides.decor_scale.unwrap_or(1.0)),
-                            |s, v| s.skin.overrides.decor_scale = part_scale(v),
-                        ),
-                    ),
+                    // The name plate and the box's ornaments: the guide's skin step shows these too.
+                ]
+                .into_iter()
+                .chain(part_rows(ui))
+                .chain([
                     row(
                         ui,
                         "skins-override-box",
@@ -197,7 +210,8 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                             edit(|s| s.skin.overrides = Default::default())
                         }),
                     ),
-                ],
+                ])
+                .collect(),
             ),
             section(
                 ui,

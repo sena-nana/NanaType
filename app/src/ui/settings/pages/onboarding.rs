@@ -25,7 +25,8 @@ fn hold_skin_preview(ui: Ui, cx: &mut nana_ui::runtime::ViewContext<'_, Button>)
 }
 
 /// The first-run guide: one card marked by a 3px accent bar, four steps
-/// (language and name, a skin with its live preview, the input mode, the
+/// (language and name, a skin with its name plate and part scales and its
+/// live preview, the input mode, the
 /// common hotkeys and OBS) with Back / Next and a step indicator. Skip or
 /// the last step's "Get started" closes it for good; About opens it again.
 pub(super) fn onboarding(ui: Ui) -> AnyView {
@@ -192,7 +193,7 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
                 speaker_field(ui),
             ),
         ],
-        SKIN_STEP => vec![
+        SKIN_STEP => [
             // Undo sits just before the picker, the choice it undoes.
             row(
                 ui,
@@ -206,6 +207,11 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
                 .children((guide_tools(ui), skin_select(ui)))
                 .into_any(),
             ),
+        ]
+        .into_iter()
+        // The name plate switch and the part scales, as the Skins page has them.
+        .chain(super::skins::part_rows(ui))
+        .chain([
             // Held through the entrance, so that frame does not build the preview.
             Row::inset(dynamic(
                 move || ui.onboard_skin_shown.get(),
@@ -217,7 +223,8 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
                     }
                 },
             )),
-        ],
+        ])
+        .collect(),
         2 => vec![Row::inset(
             widget(
                 Stack::row(0.0)
