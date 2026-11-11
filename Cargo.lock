@@ -3241,7 +3241,7 @@ dependencies = [
 [[package]]
 name = "naga"
 version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
@@ -3254,7 +3254,7 @@ dependencies = [
  "indexmap",
  "libm",
  "log",
- "naga-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "naga-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
  "num-traits",
  "once_cell",
  "rustc-hash 1.1.0",
@@ -3278,7 +3278,7 @@ dependencies = [
 [[package]]
 name = "naga-types"
 version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
@@ -3289,7 +3289,7 @@ dependencies = [
 [[package]]
 name = "nana-app-icon"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "flate2",
  "image",
@@ -3299,7 +3299,7 @@ dependencies = [
 [[package]]
 name = "nana-diagnostics"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "windows-sys 0.61.2",
 ]
@@ -3307,26 +3307,26 @@ dependencies = [
 [[package]]
 name = "nana-frame-exchange"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "nana-gpu",
- "wgpu 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "wgpu 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
 ]
 
 [[package]]
 name = "nana-gpu"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "nana-diagnostics",
- "wgpu 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "wgpu 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
  "windows",
 ]
 
 [[package]]
 name = "nana-icons-tabler"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "nana-ui-core",
 ]
@@ -3334,7 +3334,7 @@ dependencies = [
 [[package]]
 name = "nana-package"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -3348,7 +3348,7 @@ dependencies = [
 [[package]]
 name = "nana-svg-raster"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "resvg",
  "tiny-skia",
@@ -3357,7 +3357,7 @@ dependencies = [
 [[package]]
 name = "nana-text"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "fontdb",
  "harfrust",
@@ -3376,7 +3376,7 @@ dependencies = [
 [[package]]
 name = "nana-ui"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -3386,7 +3386,7 @@ dependencies = [
  "bytemuck",
  "etagere",
  "image",
- "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
  "nana-app-icon",
  "nana-diagnostics",
  "nana-frame-exchange",
@@ -3406,7 +3406,7 @@ dependencies = [
  "serde",
  "serde_json",
  "unicode-segmentation",
- "wgpu 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "wgpu 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
  "windows",
  "winit",
 ]
@@ -3414,7 +3414,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-charts"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "bytemuck",
  "nana-ui-core",
@@ -3423,7 +3423,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-core"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "nana-diagnostics",
  "serde",
@@ -3433,7 +3433,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-css"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "nana-ui-core",
  "serde_json",
@@ -3442,7 +3442,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-devtools"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "image",
  "nana-gpu",
@@ -3454,13 +3454,13 @@ dependencies = [
  "pollster",
  "serde",
  "serde_json",
- "wgpu 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "wgpu 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
 ]
 
 [[package]]
 name = "nana-ui-input"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "nana-diagnostics",
  "nana-ui-core",
@@ -3469,7 +3469,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-platform"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "arboard",
  "jni 0.21.1",
@@ -3489,7 +3489,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-runtime"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "fancy-regex",
  "fixed_decimal",
@@ -3523,7 +3523,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-scene"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "i_overlay",
  "lyon_tessellation",
@@ -3537,7 +3537,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-view-codegen"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "nana-ui-core",
  "nana-ui-css",
@@ -3551,7 +3551,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-view-macros"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "nana-ui-view-codegen",
  "proc-macro-crate",
@@ -3563,12 +3563,12 @@ dependencies = [
 [[package]]
 name = "nana-ui-view-schema"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 
 [[package]]
 name = "nana-window"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "ashpd",
  "async-channel",
@@ -7104,7 +7104,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "arrayvec",
  "bitflags 2.13.2",
@@ -7115,7 +7115,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "js-sys",
  "log",
- "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
  "parking_lot",
  "portable-atomic",
  "profiling",
@@ -7125,9 +7125,9 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "wgpu-core 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
- "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
- "wgpu-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "wgpu-core 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
 ]
 
 [[package]]
@@ -7167,7 +7167,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
@@ -7179,8 +7179,8 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
  "log",
- "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
- "naga-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "naga-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
  "once_cell",
  "parking_lot",
  "portable-atomic",
@@ -7189,12 +7189,12 @@ dependencies = [
  "rustc-hash 1.1.0",
  "smallvec",
  "thiserror 2.0.20",
- "wgpu-core-deps-apple 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
- "wgpu-core-deps-emscripten 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
- "wgpu-core-deps-windows-linux-android 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
- "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
- "wgpu-naga-bridge 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
- "wgpu-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "wgpu-core-deps-apple 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-core-deps-emscripten 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-core-deps-windows-linux-android 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-naga-bridge 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
 ]
 
 [[package]]
@@ -7209,9 +7209,9 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-apple"
 version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
- "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
 ]
 
 [[package]]
@@ -7226,9 +7226,9 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-emscripten"
 version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
- "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
 ]
 
 [[package]]
@@ -7243,9 +7243,9 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-windows-linux-android"
 version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
- "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
 ]
 
 [[package]]
@@ -7307,7 +7307,7 @@ dependencies = [
 [[package]]
 name = "wgpu-hal"
 version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -7327,8 +7327,8 @@ dependencies = [
  "libc",
  "libloading",
  "log",
- "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
- "naga-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "naga-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
  "ndk-sys",
  "objc2 0.6.4",
  "objc2-core-foundation",
@@ -7352,8 +7352,8 @@ dependencies = [
  "wasm-bindgen",
  "wayland-sys",
  "web-sys",
- "wgpu-naga-bridge 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
- "wgpu-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "wgpu-naga-bridge 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
  "windows",
  "windows-core",
  "windows-result",
@@ -7372,10 +7372,10 @@ dependencies = [
 [[package]]
 name = "wgpu-naga-bridge"
 version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
- "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
- "wgpu-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
 ]
 
 [[package]]
@@ -7397,13 +7397,13 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a#78364ca66158422e24a8a9bc48c359b7f190198a"
+source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
  "js-sys",
  "log",
- "naga-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=78364ca66158422e24a8a9bc48c359b7f190198a)",
+ "naga-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
  "raw-window-handle",
  "static_assertions",
  "web-sys",
