@@ -571,6 +571,7 @@ fn header(ui: Ui) -> AnyView {
         let links = [
             ui.status.with(|x| x.blivechat_link),
             ui.status.with(|x| x.laplace_link),
+            ui.status.with(|x| x.comet_link),
             super::twitch::link(&ui.twitch.get().connection),
         ];
         let link = combined_link(&links);
@@ -591,13 +592,25 @@ fn header(ui: Ui) -> AnyView {
                 super::twitch::connection(ui)
             ));
         }
-        if ui.settings.with(|s| s.integrations.blivechat.enabled) {
+        let (blive, laplace, comet) = ui.settings.with(|s| {
+            let i = &s.integrations;
+            let rooms = i.comet_rooms();
+            (
+                i.blivechat_on(),
+                i.laplace_on(),
+                rooms.bilibili || rooms.others,
+            )
+        });
+        if blive {
             let label = ui.now_t("settings-blivechat");
             parts.push(ui.status.with(|s| format!("{label}: {}", s.blivechat)));
         }
-        if ui.settings.with(|s| s.integrations.laplace.enabled) {
+        if laplace {
             let label = ui.now_t("settings-laplace");
             parts.push(ui.status.with(|s| format!("{label}: {}", s.laplace)));
+        }
+        if comet {
+            parts.push(ui.status.with(|s| s.comet.clone()));
         }
         let v = parts.join(" · ");
         if t.value != v {
@@ -699,8 +712,8 @@ fn filters(ui: Ui) -> AnyView {
 
 /// Any chat source has somewhere to read from.
 pub fn chat_configured(s: &Settings) -> bool {
-    s.integrations.blivechat.enabled
-        || s.integrations.laplace.enabled
+    s.integrations.bilibili.enabled
+        || s.integrations.comet.other_platforms
         || (s.integrations.twitch.enabled && !s.integrations.twitch.channel.is_empty())
 }
 

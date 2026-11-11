@@ -120,6 +120,7 @@ pub fn links_pulsing(ui: Ui) -> bool {
             .any(|l| *l == LinkState::Connecting)
                 || s.blivechat_link == crate::ui::danmaku::Link::Connecting
                 || s.laplace_link == crate::ui::danmaku::Link::Connecting
+                || s.comet_link == crate::ui::danmaku::Link::Connecting
         })
 }
 
@@ -157,39 +158,52 @@ pub fn link_badge_by(
     })
 }
 
-/// blivechat's badge (a blivechat server or 彗星号).
-pub fn blivechat_badge(ui: Ui) -> AnyView {
-    chat_badge(ui, |s| (&s.blivechat, s.blivechat_link))
+/// The Bilibili switch's badge: whichever source carries its chat.
+pub fn bilibili_badge(ui: Ui) -> AnyView {
+    chat_badge(ui, move || {
+        use nanatype_settings::{BilibiliLink, BilibiliSource};
+        let b = ui.settings.with(|s| s.integrations.bilibili);
+        ui.status.with(|s| match (b.source, b.link) {
+            (BilibiliSource::Comet, _) => (s.comet.clone(), s.comet_link),
+            (_, BilibiliLink::Laplace) => (s.laplace.clone(), s.laplace_link),
+            (_, BilibiliLink::Blivechat) => (s.blivechat.clone(), s.blivechat_link),
+        })
+    })
 }
 
-/// The LAPLACE Event Bridge's badge.
-pub fn laplace_badge(ui: Ui) -> AnyView {
-    chat_badge(ui, |s| (&s.laplace, s.laplace_link))
+/// The other platforms' badge: the 彗星号 connection while they are read.
+pub fn comet_badge(ui: Ui) -> AnyView {
+    chat_badge(ui, move || {
+        if ui.settings.with(|s| s.integrations.comet.other_platforms) {
+            ui.status.with(|s| (s.comet.clone(), s.comet_link))
+        } else {
+            (String::new(), crate::ui::danmaku::Link::Off)
+        }
+    })
 }
 
-fn chat_badge(ui: Ui, get: fn(&Status) -> (&String, crate::ui::danmaku::Link)) -> AnyView {
+fn chat_badge(
+    ui: Ui,
+    get: impl Fn() -> (String, crate::ui::danmaku::Link) + Send + Sync + Copy + 'static,
+) -> AnyView {
     use crate::ui::danmaku::Link;
     let describe = move || {
         let locale = ui.locale.get();
-        ui.status.with(|s| {
-            let (line, link) = get(s);
-            let text = if line.is_empty() {
-                I18N.t_in(locale, "int-status-off")
-            } else {
-                line.clone()
-            };
-            let tone = match link {
-                Link::Off => StatusTone::Neutral,
-                Link::Connecting => StatusTone::Warning,
-                Link::Connected => StatusTone::Success,
-                Link::Error => StatusTone::Danger,
-            };
-            (text, tone)
-        })
+        let (line, link) = get();
+        let text = if line.is_empty() {
+            I18N.t_in(locale, "int-status-off")
+        } else {
+            line
+        };
+        let tone = match link {
+            Link::Off => StatusTone::Neutral,
+            Link::Connecting => StatusTone::Warning,
+            Link::Connected => StatusTone::Success,
+            Link::Error => StatusTone::Danger,
+        };
+        (text, tone)
     };
-    breathing_badge(ui, describe, move || {
-        ui.status.with(|st| get(st).1 == Link::Connecting)
-    })
+    breathing_badge(ui, describe, move || get().1 == Link::Connecting)
 }
 
 fn breathing_badge(

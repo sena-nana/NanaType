@@ -26,6 +26,9 @@ pub enum RoomLinkError {
     PublicServer,
 }
 
+/// The port blivechat serves on unless told otherwise.
+pub const BLIVECHAT_PORT: u16 = 12450;
+
 /// The public server's site and its API hosts.
 const PUBLIC_HOST: &str = "blive.chat";
 

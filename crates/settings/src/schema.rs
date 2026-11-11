@@ -11,7 +11,7 @@ use nanatype_playback::QueuePolicy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const SETTINGS_SCHEMA: u32 = 7;
+pub const SETTINGS_SCHEMA: u32 = 8;
 /// Most characters a profile keeps.
 pub const MAX_CHARACTERS: usize = 32;
 /// How many steps the first-run guide has.
@@ -1657,15 +1657,35 @@ pub struct TwitchSettings {
     pub channel: String,
 }
 
-/// Where blivechat-protocol chat comes from.
+/// Where Bilibili chat comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum BlivechatSource {
-    /// A blivechat server at `host:port`.
+pub enum BilibiliSource {
+    /// The danmaku page's OBS link: a blivechat room or a LAPLACE bridge.
     #[default]
-    Server,
-    /// The 彗星号 client's own feed on `127.0.0.1:comet_port`.
+    Link,
+    /// The 彗星号 client's Bilibili rooms.
     Comet,
+}
+
+/// Which kind of link the user last pasted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BilibiliLink {
+    /// A blivechat room, in [`BlivechatSettings`].
+    #[default]
+    Blivechat,
+    /// A LAPLACE Event Bridge, in [`LaplaceSettings`].
+    Laplace,
+}
+
+/// Bilibili live chat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BilibiliSettings {
+    pub enabled: bool,
+    pub source: BilibiliSource,
+    pub link: BilibiliLink,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -1677,27 +1697,22 @@ pub enum BliveRoomKind {
     RoomId,
 }
 
-/// Chat over the blivechat protocol: a blivechat server or the 彗星号 client.
+/// A blivechat room, as read from its room link.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BlivechatSettings {
-    pub enabled: bool,
-    pub source: BlivechatSource,
     pub host: String,
     pub port: u16,
     pub room_kind: BliveRoomKind,
     /// The room number when `room_kind` is `RoomId`. An auth code is never
     /// written here.
     pub room_id: String,
-    /// The port the 彗星号 client serves its feed on.
-    pub comet_port: u16,
 }
 
-/// Chat from a LAPLACE Event Bridge.
+/// A LAPLACE Event Bridge.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LaplaceSettings {
-    pub enabled: bool,
     /// The bridge's link without its token (`ws://` or `wss://`), as read
     /// from what the user pasted. The token is kept in the system's secret
     /// store.
@@ -1707,8 +1722,27 @@ pub struct LaplaceSettings {
 impl Default for LaplaceSettings {
     fn default() -> Self {
         Self {
-            enabled: false,
             url: LAPLACE_URL.into(),
+        }
+    }
+}
+
+/// The 彗星号 client on this computer. One connection serves Bilibili (when
+/// [`BilibiliSettings::source`] picks it) and the other platforms.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CometSettings {
+    /// The port the client serves its feed on.
+    pub port: u16,
+    /// Read the rooms it listens to on platforms other than Bilibili.
+    pub other_platforms: bool,
+}
+
+impl Default for CometSettings {
+    fn default() -> Self {
+        Self {
+            port: COMET_PORT,
+            other_platforms: false,
         }
     }
 }
@@ -1722,13 +1756,43 @@ pub const LAPLACE_URL: &str = "ws://127.0.0.1:9696/";
 impl Default for BlivechatSettings {
     fn default() -> Self {
         Self {
-            enabled: false,
-            source: BlivechatSource::default(),
             host: "127.0.0.1".into(),
             port: BLIVECHAT_PORT,
             room_kind: BliveRoomKind::default(),
             room_id: String::new(),
-            comet_port: COMET_PORT,
+        }
+    }
+}
+
+/// Which 彗星号 rooms are read: Bilibili's, the other platforms', or both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CometRooms {
+    pub bilibili: bool,
+    pub others: bool,
+}
+
+impl Integrations {
+    fn bilibili_link(&self, link: BilibiliLink) -> bool {
+        let b = &self.bilibili;
+        b.enabled && b.source == BilibiliSource::Link && b.link == link
+    }
+
+    /// Bilibili chat comes from a blivechat room.
+    pub fn blivechat_on(&self) -> bool {
+        self.bilibili_link(BilibiliLink::Blivechat)
+    }
+
+    /// Bilibili chat comes from a LAPLACE bridge.
+    pub fn laplace_on(&self) -> bool {
+        self.bilibili_link(BilibiliLink::Laplace)
+    }
+
+    /// What the 彗星号 connection is for; it is off when neither is read.
+    pub fn comet_rooms(&self) -> CometRooms {
+        let b = &self.bilibili;
+        CometRooms {
+            bilibili: b.enabled && b.source == BilibiliSource::Comet,
+            others: self.comet.other_platforms,
         }
     }
 }
@@ -1740,8 +1804,10 @@ pub struct Integrations {
     pub osc: OscSettings,
     pub websocket: WsSettings,
     pub chat: ChatSettings,
+    pub bilibili: BilibiliSettings,
     pub blivechat: BlivechatSettings,
     pub laplace: LaplaceSettings,
+    pub comet: CometSettings,
     pub twitch: TwitchSettings,
 }
 
@@ -2093,10 +2159,11 @@ impl Settings {
         if l.port == 0 {
             l.port = BLIVECHAT_PORT;
         }
-        if l.comet_port == 0 || l.comet_port == LEGACY_COMET_RELAY_PORT {
-            l.comet_port = COMET_PORT;
-        }
         l.room_id = l.room_id.trim().chars().take(20).collect();
+        let c = &mut self.integrations.comet;
+        if c.port == 0 || c.port == LEGACY_COMET_RELAY_PORT {
+            c.port = COMET_PORT;
+        }
         let l = &mut self.integrations.laplace;
         l.url = l.url.trim().chars().take(2048).collect();
         if l.url.is_empty() {

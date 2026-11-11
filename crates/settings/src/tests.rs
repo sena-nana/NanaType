@@ -165,8 +165,10 @@ fn retired_direct_chat_settings_are_dropped_but_panel_settings_survive() {
     );
     assert!(settings.integrations.chat.panel_open);
     assert!(!settings.integrations.chat.panel.gift);
+    // The Bilibili switch of today is not the retired direct one.
+    assert!(!settings.integrations.bilibili.enabled);
     let saved = serde_json::to_value(settings).unwrap();
-    assert!(saved["integrations"].get("bilibili").is_none());
+    assert!(saved["integrations"]["bilibili"].get("room").is_none());
     assert!(saved["integrations"].get("douyin").is_none());
     assert!(saved["integrations"].get("youtube").is_none());
 }
@@ -234,9 +236,8 @@ fn legacy_chat_preferences_migrate_without_service_or_auth_code() {
         );
         assert!(settings.integrations.chat.panel_open);
         assert!(!settings.integrations.chat.panel.gift);
-        assert!(settings.integrations.blivechat.enabled);
+        assert!(settings.integrations.blivechat_on());
         assert_eq!(settings.integrations.blivechat.host, "127.0.0.1");
-        assert!(value["integrations"].get("bilibili").is_none());
         assert!(
             !serde_json::to_string(&value)
                 .unwrap()
@@ -1014,31 +1015,47 @@ fn skin_params_round_trip_and_bad_values_never_fail_the_file() {
 #[test]
 fn third_party_chat_defaults_off_and_round_trips_at_schema_2() {
     let old: Settings = serde_json::from_str(r#"{"schema":2}"#).unwrap();
-    let b = &old.integrations.blivechat;
-    assert!(!b.enabled);
-    assert_eq!(b.source, BlivechatSource::Server);
+    let i = &old.integrations;
+    assert_eq!(i.bilibili, BilibiliSettings::default());
+    assert!(!i.bilibili.enabled);
+    assert_eq!(i.bilibili.source, BilibiliSource::Link);
+    let b = &i.blivechat;
     assert_eq!((b.host.as_str(), b.port), ("127.0.0.1", BLIVECHAT_PORT));
-    assert_eq!(b.comet_port, COMET_PORT);
-    assert_eq!(old.integrations.laplace.url, LAPLACE_URL);
+    assert_eq!(i.comet, CometSettings::default());
+    assert_eq!(i.comet.port, COMET_PORT);
+    assert_eq!(i.laplace.url, LAPLACE_URL);
+    assert_eq!(i.comet_rooms(), CometRooms::default());
 
-    let mut value = serde_json::json!({"schema":2,"integrations":{"blivechat":{"enabled":true,"source":"comet","room_kind":"room_id","room_id":"21452505","comet_token":"abc123"}}});
+    let mut value = serde_json::json!({"schema":2,"integrations":{"blivechat":{"enabled":true,"source":"comet","room_kind":"room_id","room_id":"21452505","comet_token":"abc123","comet_port":19500}}});
     assert_eq!(migrate(&mut value).unwrap(), 2);
-    assert_eq!(
-        value["integrations"]["blivechat"]["source"], "comet",
-        "a v2 file keeps its blivechat settings"
-    );
     let settings: Settings = serde_json::from_value(value).unwrap();
-    let b = &settings.integrations.blivechat;
-    assert!(b.enabled);
-    assert_eq!(b.source, BlivechatSource::Comet);
-    assert_eq!(b.room_kind, BliveRoomKind::RoomId);
-    assert_eq!(b.room_id, "21452505");
-    assert!(
-        serde_json::to_value(&settings).unwrap()["integrations"]["blivechat"]
-            .get("comet_token")
-            .is_none(),
-        "the relay's old token is dropped"
+    let i = &settings.integrations;
+    assert!(i.bilibili.enabled);
+    assert_eq!(i.bilibili.source, BilibiliSource::Comet);
+    // 彗星号 read every platform before, and still does.
+    assert_eq!(
+        i.comet,
+        CometSettings {
+            port: 19500,
+            other_platforms: true
+        }
     );
+    assert_eq!(
+        i.comet_rooms(),
+        CometRooms {
+            bilibili: true,
+            others: true
+        }
+    );
+    assert_eq!(i.blivechat.room_kind, BliveRoomKind::RoomId);
+    assert_eq!(i.blivechat.room_id, "21452505");
+    let saved = serde_json::to_value(&settings).unwrap();
+    for gone in ["comet_token", "comet_port", "source", "enabled"] {
+        assert!(
+            saved["integrations"]["blivechat"].get(gone).is_none(),
+            "{gone} is dropped"
+        );
+    }
     assert!(value_has_no_auth_code(&settings));
 }
 
@@ -1054,14 +1071,15 @@ fn third_party_chat_values_are_repaired() {
     let b = &mut s.integrations.blivechat;
     b.host = "  ".into();
     b.port = 0;
-    // The old relay's port is the client's now.
-    b.comet_port = 12451;
     b.room_id = " 42 ".into();
+    // The old relay's port is the client's now.
+    s.integrations.comet.port = 12451;
     s.integrations.laplace.url = "  ".into();
     assert!(s.sanitize());
     let b = &s.integrations.blivechat;
     assert_eq!(b.host, "127.0.0.1");
-    assert_eq!((b.port, b.comet_port), (BLIVECHAT_PORT, COMET_PORT));
+    assert_eq!(b.port, BLIVECHAT_PORT);
+    assert_eq!(s.integrations.comet.port, COMET_PORT);
     assert_eq!(b.room_id, "42");
     assert_eq!(s.integrations.laplace.url, LAPLACE_URL);
 }
@@ -1072,29 +1090,61 @@ fn laplace_leaves_blivechat_for_a_source_of_its_own() {
         "source":"laplace","host":"10.0.0.2","laplace_url":"wss://example.com/"}}});
     assert_eq!(migrate(&mut value).unwrap(), 6);
     let settings: Settings = serde_json::from_value(value).unwrap();
-    let b = &settings.integrations.blivechat;
-    assert!(!b.enabled, "blivechat was not the one in use");
-    assert_eq!(b.source, BlivechatSource::Server);
-    assert_eq!(b.host, "10.0.0.2");
-    let l = &settings.integrations.laplace;
-    assert!(l.enabled);
-    assert_eq!(l.url, "wss://example.com/");
+    let i = &settings.integrations;
+    assert!(i.laplace_on(), "LAPLACE was the one in use");
+    assert!(!i.blivechat_on());
+    assert_eq!(i.blivechat.host, "10.0.0.2");
+    assert_eq!(i.laplace.url, "wss://example.com/");
     assert!(
         serde_json::to_value(&settings).unwrap()["integrations"]["blivechat"]
             .get("laplace_url")
             .is_none()
     );
 
-    // blivechat in use keeps it; the LAPLACE link waits, off.
+    // blivechat in use keeps it; the LAPLACE link waits.
     let mut value = serde_json::json!({"schema":6,"integrations":{"blivechat":{"enabled":true,
-        "source":"comet","laplace_url":"ws://10.0.0.3:9696/"}}});
+        "source":"server","laplace_url":"ws://10.0.0.3:9696/"}}});
     migrate(&mut value).unwrap();
     let settings: Settings = serde_json::from_value(value).unwrap();
     let i = &settings.integrations;
-    assert!(i.blivechat.enabled);
-    assert_eq!(i.blivechat.source, BlivechatSource::Comet);
-    assert!(!i.laplace.enabled);
+    assert!(i.blivechat_on());
+    assert!(!i.laplace_on());
     assert_eq!(i.laplace.url, "ws://10.0.0.3:9696/");
+}
+
+#[test]
+fn bilibili_takes_one_switch_with_its_source_at_schema_8() {
+    let v7 = |integrations: serde_json::Value| {
+        let mut value = serde_json::json!({"schema":7,"integrations":integrations});
+        assert_eq!(migrate(&mut value).unwrap(), 7);
+        let settings: Settings = serde_json::from_value(value.clone()).unwrap();
+        let saved = serde_json::to_value(&settings).unwrap();
+        assert!(saved["integrations"]["laplace"].get("enabled").is_none());
+        settings.integrations
+    };
+    // Both on: one link at a time now, and blivechat stays.
+    let i = v7(serde_json::json!({
+        "blivechat":{"enabled":true,"source":"server","host":"10.0.0.2"},
+        "laplace":{"enabled":true,"url":"ws://10.0.0.3:9696/"}}));
+    assert!(i.blivechat_on());
+    assert!(!i.laplace_on());
+    assert_eq!(i.comet_rooms(), CometRooms::default());
+    // LAPLACE alone.
+    let i = v7(serde_json::json!({
+        "blivechat":{"enabled":false,"source":"comet","comet_port":19401},
+        "laplace":{"enabled":true}}));
+    assert!(i.laplace_on());
+    assert_eq!(i.comet.port, 19401);
+    assert!(!i.comet.other_platforms, "a 彗星号 that was off stays off");
+    // Nothing on.
+    let i = v7(serde_json::json!({"blivechat":{"enabled":false},"laplace":{"enabled":false}}));
+    assert_eq!(i.bilibili, BilibiliSettings::default());
+    assert_eq!(i.comet, CometSettings::default());
+    // A file without the sections.
+    assert_eq!(
+        v7(serde_json::json!({})).bilibili,
+        BilibiliSettings::default()
+    );
 }
 
 #[test]

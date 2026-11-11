@@ -4,13 +4,13 @@
 use super::*;
 use crate::msg::WindowMsg;
 
-use crate::chat::Platform;
+use crate::ui::sources::PlatformTab;
 use nana_ui::runtime::view::segmented_option;
 use nana_ui::runtime::{SegmentedControl, SegmentedOptionChosen};
 
 /// The platform switch.
 fn tabs(ui: Ui) -> AnyView {
-    let options: Vec<AnyView> = Platform::ALL
+    let options: Vec<AnyView> = PlatformTab::ALL
         .iter()
         .copied()
         .map(|platform| {

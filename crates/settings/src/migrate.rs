@@ -168,7 +168,62 @@ pub fn migrate(value: &mut Value) -> Result<u32, MigrateError> {
         }
         obj.insert("schema".into(), json!(7));
     }
+    if from < 8 {
+        bilibili_from_sources(obj);
+        obj.insert("schema".into(), json!(8));
+    }
     Ok(from)
+}
+
+/// v8: one Bilibili switch with its source (the pasted link or 彗星号) in
+/// place of blivechat's and LAPLACE's own switches, and 彗星号 settings of
+/// their own. A 彗星号 that was on keeps reading every platform; when
+/// blivechat and LAPLACE were both on, blivechat stays.
+fn bilibili_from_sources(obj: &mut Map<String, Value>) {
+    let Some(integrations) = obj.get_mut("integrations").and_then(Value::as_object_mut) else {
+        return;
+    };
+    let mut on = |section: &str| {
+        integrations
+            .get_mut(section)
+            .and_then(Value::as_object_mut)
+            .and_then(|o| o.remove("enabled"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    };
+    let blive_on = on("blivechat");
+    let laplace_on = on("laplace");
+    let (source, comet_port) = integrations
+        .get_mut("blivechat")
+        .and_then(Value::as_object_mut)
+        .map(|b| {
+            (
+                b.remove("source")
+                    .and_then(|v| v.as_str().map(str::to_owned)),
+                b.remove("comet_port"),
+            )
+        })
+        .unwrap_or_default();
+    let was_comet = source.as_deref() == Some("comet");
+    let mut bilibili = Map::new();
+    let (enabled, source, link) = match (blive_on, was_comet, laplace_on) {
+        (true, true, _) => (true, "comet", "blivechat"),
+        (true, false, _) => (true, "link", "blivechat"),
+        (false, _, true) => (true, "link", "laplace"),
+        _ => (false, "link", "blivechat"),
+    };
+    bilibili.insert("enabled".into(), json!(enabled));
+    bilibili.insert("source".into(), json!(source));
+    bilibili.insert("link".into(), json!(link));
+    integrations
+        .entry("bilibili")
+        .or_insert(Value::Object(bilibili));
+    let mut comet = Map::new();
+    if let Some(port) = comet_port {
+        comet.insert("port".into(), port);
+    }
+    comet.insert("other_platforms".into(), json!(blive_on && was_comet));
+    integrations.entry("comet").or_insert(Value::Object(comet));
 }
 
 fn take(obj: &mut Map<String, Value>, key: &str) -> Option<Value> {

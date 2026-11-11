@@ -308,7 +308,7 @@ fn summary(event: &ChatEvent) -> Value {
 }
 
 fn comet_event(message: Value) -> ChatEvent {
-    match comet::parse(&message.to_string(), 42) {
+    match comet::parse(&message.to_string(), 42, comet::Rooms::ALL) {
         Some(Incoming::Event(e)) => e,
         other => panic!("not an event: {other:?}"),
     }
@@ -396,13 +396,16 @@ fn comet_messages_without_chat_or_an_id_still_read() {
         let message =
             json!({"type": kind, "platform": "bili", "rid": "1", "data": {"state": "waiting"}});
         assert_eq!(
-            comet::parse(&message.to_string(), 0),
+            comet::parse(&message.to_string(), 0, comet::Rooms::ALL),
             Some(Incoming::Other),
             "{kind}"
         );
     }
-    assert_eq!(comet::parse("pong", 0), Some(Incoming::Heartbeat));
-    assert_eq!(comet::parse("not json", 0), None);
+    assert_eq!(
+        comet::parse("pong", 0, comet::Rooms::ALL),
+        Some(Incoming::Heartbeat)
+    );
+    assert_eq!(comet::parse("not json", 0, comet::Rooms::ALL), None);
     // No id or time: one is made up, and the time is now.
     match comet_event(json!({"type": "Chat", "data": {"id": 1, "content": "嗨"}})) {
         ChatEvent::Text { id, at_ms, .. } => {
@@ -443,7 +446,7 @@ fn the_client_reads_the_comet_feed_and_pings_it() {
     handle.set(Some(BliveConfig {
         host: "127.0.0.1".into(),
         port,
-        join: Join::Comet,
+        join: Join::Comet(comet::Rooms::ALL),
     }));
     for want in ["加密的", "明文的"] {
         match event_rx.recv_timeout(Duration::from_secs(5)).unwrap() {
@@ -726,8 +729,18 @@ fn laplace_links_read_as_pasted() {
         link(
             "https://chat.laplace.live/obs/5146751?connectionMode=direct&loginSyncToken=secret&showGift=true"
         ),
-        Err(laplace::LinkError::DirectPage)
+        Err(laplace::LinkError::AnonymousPage)
     );
+    for open in [
+        "https://chat.laplace.live/obs/CODE1,CODE2?connectionMode=open-platform&showGift=true",
+        "https://chat.laplace.cn/obs/CODE1?showGift=true",
+    ] {
+        assert_eq!(
+            link(open),
+            Err(laplace::LinkError::OpenPlatformPage),
+            "{open}"
+        );
+    }
     // One set to an event fetcher reads as that fetcher, and nothing else of
     // the page's query (its login token among it) is kept.
     assert_eq!(
@@ -810,5 +823,94 @@ fn a_blivechat_room_link_names_its_server_and_room() {
         "file:///C:/blivechat/data/loader.html",
     ] {
         assert_eq!(room(bad), Err(RoomLinkError::Invalid), "{bad:?}");
+    }
+}
+
+#[test]
+fn comet_reads_only_the_platforms_asked_for() {
+    use crate::comet::Rooms;
+    let chat = |platform: Option<&str>| {
+        let mut m = json!({"type": "Chat", "rid": "1",
+            "data": {"msgId": "m", "id": 7, "name": "n", "content": "hi"}});
+        if let Some(p) = platform {
+            m["platform"] = json!(p);
+        }
+        m.to_string()
+    };
+    let read = |text: &str, rooms| matches!(comet::parse(text, 0, rooms), Some(Incoming::Event(_)));
+    let bili_only = Rooms {
+        bilibili: true,
+        others: false,
+    };
+    let others_only = Rooms {
+        bilibili: false,
+        others: true,
+    };
+    for (platform, bili, others) in [
+        (None, true, false),
+        (Some("bili"), true, false),
+        (Some("dou_yin"), false, true),
+        (Some("kuai_shou"), false, true),
+    ] {
+        let text = chat(platform);
+        assert_eq!(read(&text, bili_only), bili, "{platform:?}");
+        assert_eq!(read(&text, others_only), others, "{platform:?}");
+        assert!(read(&text, Rooms::ALL));
+        assert!(!read(&text, Rooms::default()));
+    }
+    // The client's answer is not a platform's.
+    assert_eq!(
+        comet::parse("pong", 0, Rooms::default()),
+        Some(Incoming::Heartbeat)
+    );
+}
+
+#[test]
+fn an_obs_link_reads_as_blivechat_or_laplace() {
+    use crate::obs_link::{ObsLink, ObsLinkError};
+    let parse = ObsLink::parse;
+    assert!(matches!(
+        parse("http://127.0.0.1:12450/room/CODE?roomKeyType=2"),
+        Ok(ObsLink::Blivechat(_))
+    ));
+    assert!(matches!(
+        parse(
+            "https://chat.laplace.live/obs/1?connectionMode=fetcher\
+             &danmakuFetcherApi=https%3A%2F%2Ff.example.com&eventFetcherAuth=k"
+        ),
+        Ok(ObsLink::Laplace(_))
+    ));
+    for bridge in [
+        "ws://localhost:9696",
+        "localhost",
+        "wss://bridge.example.com/",
+    ] {
+        assert!(matches!(parse(bridge), Ok(ObsLink::Laplace(_))), "{bridge}");
+    }
+    for (text, why) in [
+        ("", ObsLinkError::Invalid),
+        ("  ", ObsLinkError::Invalid),
+        ("ftp://example.com", ObsLinkError::Invalid),
+        ("http://localhost:12450/room/abc", ObsLinkError::Invalid),
+        (
+            "file:///C:/blivechat/data/loader.html",
+            ObsLinkError::Invalid,
+        ),
+        ("http://127.0.0.1:12450/", ObsLinkError::BlivechatHome),
+        ("http://localhost:12450", ObsLinkError::BlivechatHome),
+        (
+            "https://blive.chat/room/X?roomKeyType=2",
+            ObsLinkError::BlivechatPublic,
+        ),
+        (
+            "https://chat.laplace.live/obs/1?connectionMode=direct&loginSyncToken=t",
+            ObsLinkError::LaplaceAnonymous,
+        ),
+        (
+            "https://chat.laplace.live/obs/C?connectionMode=open-platform",
+            ObsLinkError::LaplaceOpenPlatform,
+        ),
+    ] {
+        assert_eq!(parse(text), Err(why), "{text:?}");
     }
 }

@@ -479,6 +479,8 @@ pub enum Msg {
     Twitch(TwitchMsg),
     Blive(BliveMsg),
     Laplace(LaplaceMsg),
+    /// The 彗星号 connection reported.
+    Comet(nanatype_blive::BliveEvent),
     Obs(ObsMsg),
     #[cfg(feature = "updates")]
     Update(UpdateMsg),
@@ -623,7 +625,7 @@ pub enum WindowMsg {
     OpenSettings,
     SettingsPage(crate::ui::settings::Page),
     /// The live-platforms page, open at this platform.
-    SettingsPlatform(crate::chat::Platform),
+    SettingsPlatform(crate::ui::sources::PlatformTab),
     /// A second instance asked us to come forward.
     SecondInstance,
     /// The monitor layout was read.
@@ -722,12 +724,10 @@ pub enum TwitchMsg {
 }
 
 pub enum BliveMsg {
-    /// The blivechat or 彗星号 connection reported.
+    /// The blivechat connection reported.
     Event(nanatype_blive::BliveEvent),
-    /// Keep this blivechat 身份码 in the system's secret store; empty forgets it.
-    AuthCode(String),
-    /// A blivechat room link the user pasted (the one its home page gives
-    /// for OBS): its server and room go to the settings, a 身份码 in it to
+    /// A chat page's OBS link the user pasted, blivechat's or LAPLACE's:
+    /// what it connects to goes to the settings, a 身份码 or token in it to
     /// the system's secret store.
     Link(String),
 }
@@ -735,9 +735,6 @@ pub enum BliveMsg {
 pub enum LaplaceMsg {
     /// The LAPLACE Event Bridge connection reported.
     Event(nanatype_blive::BliveEvent),
-    /// A LAPLACE Event Bridge link the user pasted: its address goes to the
-    /// settings, its token (or none) to the system's secret store.
-    Link(String),
 }
 
 pub enum ObsMsg {

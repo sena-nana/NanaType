@@ -102,7 +102,9 @@ impl App {
     }
     fn twitch_login(&mut self) {
         self.twitch_disable_send();
-        self.update(Msg::Window(WindowMsg::SettingsPlatform(Platform::Twitch)));
+        self.update(Msg::Window(WindowMsg::SettingsPlatform(
+            crate::ui::sources::PlatformTab::Twitch,
+        )));
         self.twitch.login();
     }
     fn twitch_toggle(&mut self) {
@@ -114,7 +116,9 @@ impl App {
         if state.can_send() {
             self.ui.twitch.edit(|s| s.confirm = true);
         }
-        self.update(Msg::Window(WindowMsg::SettingsPlatform(Platform::Twitch)));
+        self.update(Msg::Window(WindowMsg::SettingsPlatform(
+            crate::ui::sources::PlatformTab::Twitch,
+        )));
     }
     fn twitch_confirm(&mut self, accept: bool) {
         let state = self.ui.twitch.get_untracked();

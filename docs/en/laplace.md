@@ -33,8 +33,8 @@ First have LAPLACE join your room with your **auth code**, then pick one:
 
 Then in NanaType:
 
-1. **Settings › Live platforms › LAPLACE**: turn receiving on.
-2. Paste the address into **Event Bridge link** and press **Save and connect**. You can paste:
+1. **Settings › Live platforms › Bilibili**: turn receiving on and choose **Chat page link** as the source.
+2. Paste the address into **OBS link** and press **Save and connect**. You can paste:
    - `ws://localhost:9696`, or `ws://localhost:9696/?token=your-token` with a token;
    - a remote Event Fetcher's `wss://…` or `https://…` address;
    - just `host:port`; with no port, 9696 is used;
@@ -45,7 +45,7 @@ The token goes to the system keychain and only the token-free address is kept in
 
 ### Why an OBS link may not connect
 
-A LAPLACE Chat OBS link (`…/obs/<room or auth code>?…`) means the page joins the room itself. It holds no Event Bridge address, only the room number or auth code and LAPLACE's login-sync credential (`loginSyncToken`), so it is refused. Joining by room number (`connectionMode=direct`) is not supported in any case. Join with your auth code, then set up an Event Bridge or Event Fetcher as above.
+A LAPLACE Chat OBS link in Anonymous mode (`connectionMode=direct`) reads Bilibili's non-public web interface, and one in Open Platform mode has the page join the room itself through LAPLACE's servers. Neither holds an Event Bridge address, so both are refused, each with its reason. Join with your auth code, then set up an Event Bridge or Event Fetcher as above.
 
 The `loginSyncToken` in an OBS link is your LAPLACE login credential; do not share it.
 

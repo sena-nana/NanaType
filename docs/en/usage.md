@@ -43,14 +43,19 @@ Both editing modes support scrolling with the wheel / trackpad and PageUp / Page
 
 For protocol, sign-in and rate-limit details, see [Twitch integration](twitch.md).
 
-### blivechat and Comet (彗星号)
+### Bilibili and other platforms
 
-Open **Settings › Live platforms › blivechat**, turn it on and choose a source:
+**Settings › Live platforms** has three tabs at the top: **Bilibili**, **Twitch** and **Other platforms**.
 
-- **blivechat**: run blivechat, set up the room on its home page, copy the room link it makes for OBS, paste it into **Room link** and click **Save and connect**; the room and host are filled in from it. Or enter your Bilibili Open Platform identity code (default host `127.0.0.1:12450`) and click **Save and connect**, or use a room number instead. Only a blivechat on this computer or your own server works, not the public blive.chat server. The identity code is kept in OS-protected storage (Windows DPAPI / macOS Keychain) and never written to the settings file.
-- **彗星号 (Comet)**: open the Comet client and start listening to your room; NanaType connects to it directly (port 19400 by default) and reads its chat, with no plugin. For how it works, see [Comet integration](comet.md).
+On **Bilibili**, turn on **Receive Bilibili chat** and choose a source:
 
-LAPLACE Event Bridge has a page of its own beside it (**Settings › Live platforms › LAPLACE**), switched on separately, so both can be connected at once; see [LAPLACE integration](laplace.md).
+- **Chat page link**: paste the link blivechat or LAPLACE Chat makes for OBS into **OBS link** and click **Save and connect**. NanaType works out which one it is:
+  - blivechat: set up the room on its home page and copy the room link (the release's default `loader.html` link works too). Only a blivechat on this computer or your own server works, not the public blive.chat server.
+  - LAPLACE: paste an OBS link in Event Fetcher mode or an Event Bridge address (such as `ws://localhost:9696`); see [LAPLACE integration](laplace.md). Links in Anonymous or Open Platform mode name nothing to connect to, and you are told to use Event Bridge or Event Fetcher instead.
+  - An auth code or token in the link is kept in OS-protected storage (Windows DPAPI / macOS Keychain); nothing else in it is kept.
+- **彗星号 (Comet)**: open the Comet client and start listening to your rooms; NanaType connects to it directly (port 19400 by default) and reads only its Bilibili rooms here. See [Comet integration](comet.md).
+
+**Other platforms** has 彗星号 alone: turned on, it reads the rooms Comet listens to on Douyin, Kuaishou and other platforms besides Bilibili. Bilibili and the other platforms share one Comet connection and port.
 
 These messages show up in the chat panel, and @-mentions, replies and mixing into history work the same way. With no live room at hand, you can try blivechat mode against the mock server:
 

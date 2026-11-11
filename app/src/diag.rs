@@ -223,6 +223,8 @@ pub static LAPLACE_ERROR: EventDescriptor =
     EventDescriptor::new(CHAT, 104, "chat.laplace_error", Severity::Warn, &[]);
 pub static LAPLACE_FATAL: EventDescriptor =
     EventDescriptor::new(CHAT, 105, "chat.laplace_fatal", Severity::Error, &[]);
+pub static COMET_ERROR: EventDescriptor =
+    EventDescriptor::new(CHAT, 106, "chat.comet_error", Severity::Warn, &[]);
 
 /// One live platform's connection and account, in its own domain. States
 /// are codes (see [`Conn`] and [`Account`]); a room, channel, account name or
@@ -399,6 +401,7 @@ pub static EVENTS: &[&EventDescriptor] = &[
     &LAPLACE_SECRET_FAILED,
     &LAPLACE_ERROR,
     &LAPLACE_FATAL,
+    &COMET_ERROR,
 ];
 
 /// A window's code in event fields.

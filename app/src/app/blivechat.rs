@@ -1,10 +1,9 @@
-//! blivechat-protocol chat: a blivechat server or the 彗星号 client's own
-//! feed.
+//! Bilibili chat from a pasted OBS link, and the blivechat room it may name.
 
 use crate::ui::EditShared;
 
 use nanatype_blive::{BliveConfig, BliveEvent, BliveStatus, BliveUpdate, ChatEvent, Join, RoomKey};
-use nanatype_settings::{BliveRoomKind, BlivechatSource};
+use nanatype_settings::{BilibiliLink, BilibiliSource, BliveRoomKind};
 
 use crate::{app::App, chat::Platform, msg::BliveMsg};
 
@@ -19,66 +18,90 @@ impl App {
     pub(super) fn blivechat_msg(&mut self, msg: BliveMsg) {
         match msg {
             BliveMsg::Event(event) => self.blivechat_event(event),
-            BliveMsg::AuthCode(code) => {
-                self.blivechat_store_auth(&code);
-                let saved = !code.trim().is_empty();
-                self.edit(|s| s.integrations.blivechat.enabled |= saved);
-                self.blivechat_rejoin();
+            BliveMsg::Link(text) => self.bilibili_link(&text),
+        }
+    }
+
+    /// A chat page's OBS link: blivechat's room or LAPLACE's bridge, which
+    /// then carries Bilibili's chat.
+    fn bilibili_link(&mut self, text: &str) {
+        use nanatype_blive::obs_link::{ObsLink, ObsLinkError};
+        let link = match ObsLink::parse(text) {
+            Ok(link) => link,
+            Err(e) => {
+                let text = self.ui.now_t(match e {
+                    ObsLinkError::Invalid => "int-bili-link-invalid",
+                    ObsLinkError::BlivechatHome => "int-bili-link-blivechat-home",
+                    ObsLinkError::BlivechatPublic => "int-bili-link-blivechat-public",
+                    ObsLinkError::LaplaceAnonymous => "int-bili-link-laplace-anonymous",
+                    ObsLinkError::LaplaceOpenPlatform => "int-bili-link-laplace-open-platform",
+                });
+                self.notice(text, true);
+                return;
             }
-            BliveMsg::Link(text) => {
-                use nanatype_blive::room_link::{RoomLink, RoomLinkError};
-                let link = match RoomLink::parse(&text) {
-                    Ok(link) => link,
-                    Err(e) => {
-                        let text = self.ui.now_t(match e {
-                            RoomLinkError::Invalid => "int-blive-link-invalid",
-                            RoomLinkError::PublicServer => "int-blive-link-public",
-                        });
-                        self.notice(text, true);
-                        return;
-                    }
-                };
-                let kind = match &link.room {
+        };
+        let kind = match link {
+            ObsLink::Blivechat(room) => {
+                let room_kind = match &room.room {
                     RoomKey::AuthCode(code) => {
-                        self.blivechat_store_auth(code);
+                        if let Err(e) = self.blivechat_auth.set(code) {
+                            nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 1u64; "{e}");
+                            let text = self.ui.now_t("int-blive-auth-not-stored");
+                            self.notice(text, true);
+                        }
                         BliveRoomKind::AuthCode
                     }
                     RoomKey::RoomId(_) => BliveRoomKind::RoomId,
                 };
                 self.edit(|s| {
                     let b = &mut s.integrations.blivechat;
-                    b.enabled = true;
-                    b.source = BlivechatSource::Server;
-                    b.host = link.host;
-                    b.port = link.port;
-                    b.room_kind = kind;
-                    if let RoomKey::RoomId(id) = link.room {
+                    b.host = room.host;
+                    b.port = room.port;
+                    b.room_kind = room_kind;
+                    if let RoomKey::RoomId(id) = room.room {
                         b.room_id = id.to_string();
                     }
                 });
-                self.blivechat_rejoin();
+                BilibiliLink::Blivechat
             }
-        }
-    }
-
-    fn blivechat_store_auth(&mut self, code: &str) {
-        if let Err(e) = self.blivechat_auth.set(code) {
-            nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 1u64; "{e}");
-            let text = self.ui.now_t("int-blive-auth-not-stored");
-            self.notice(text, true);
-        }
-    }
-
-    /// Join with what was just saved. A changed room key is a new
-    /// configuration; the same one again is a retry after blivechat refused
-    /// it, which is not retried alone.
-    fn blivechat_rejoin(&mut self) {
-        self.blivechat_configure();
-        if matches!(
-            self.ui.blivechat.get_untracked().status,
-            BliveStatus::Fatal(..)
-        ) {
-            self.blivechat.reconnect();
+            ObsLink::Laplace(bridge) => {
+                // A link without a token is a bridge without one.
+                if let Err(e) = self.laplace_token.set(&bridge.token) {
+                    nanatype_diag::report!(crate::diag::LAPLACE_SECRET_FAILED, op = 1u64; "{e}");
+                    let text = self.ui.now_t("int-laplace-token-not-stored");
+                    self.notice(text, true);
+                }
+                self.edit(|s| s.integrations.laplace.url = bridge.address);
+                BilibiliLink::Laplace
+            }
+        };
+        self.edit(|s| {
+            let b = &mut s.integrations.bilibili;
+            b.enabled = true;
+            b.source = BilibiliSource::Link;
+            b.link = kind;
+        });
+        // The same link again is a retry after it was refused, which is not
+        // retried alone.
+        match kind {
+            BilibiliLink::Blivechat => {
+                self.blivechat_configure();
+                if matches!(
+                    self.ui.blivechat.get_untracked().status,
+                    BliveStatus::Fatal(..)
+                ) {
+                    self.blivechat.reconnect();
+                }
+            }
+            BilibiliLink::Laplace => {
+                self.laplace_configure();
+                if matches!(
+                    self.ui.laplace.get_untracked().status,
+                    BliveStatus::Fatal(..)
+                ) {
+                    self.laplace.reconnect();
+                }
+            }
         }
     }
 
@@ -110,32 +133,26 @@ impl App {
 
     /// Connect, reconnect or stop after a settings change.
     pub(super) fn blivechat_configure(&mut self) {
-        let b = &self.settings.integrations.blivechat;
-        let client = match (b.enabled, b.source) {
-            (false, _) => None,
-            (true, BlivechatSource::Comet) => Some(BliveConfig {
-                host: "127.0.0.1".into(),
-                port: b.comet_port,
-                join: Join::Comet,
-            }),
-            (true, BlivechatSource::Server) => {
-                let room = match crate::distribution::blive_room_kind(b) {
-                    BliveRoomKind::AuthCode => {
-                        // Only read the secret store once the code is wanted.
-                        let code = self.blivechat_auth.get();
-                        let saved = code.is_some();
-                        self.ui.blivechat.edit(|s| s.auth_saved = saved);
-                        code.and_then(|code| RoomKey::parse(true, &code))
-                    }
-                    BliveRoomKind::RoomId => RoomKey::parse(false, &b.room_id),
-                };
-                let b = &self.settings.integrations.blivechat;
-                room.map(|room| BliveConfig {
-                    host: b.host.clone(),
-                    port: b.port,
-                    join: Join::Blivechat(room),
-                })
-            }
+        let client = if self.settings.integrations.blivechat_on() {
+            let b = &self.settings.integrations.blivechat;
+            let room = match crate::distribution::blive_room_kind(b) {
+                BliveRoomKind::AuthCode => {
+                    // Only read the secret store once the code is wanted.
+                    let code = self.blivechat_auth.get();
+                    let saved = code.is_some();
+                    self.ui.blivechat.edit(|s| s.auth_saved = saved);
+                    code.and_then(|code| RoomKey::parse(true, &code))
+                }
+                BliveRoomKind::RoomId => RoomKey::parse(false, &b.room_id),
+            };
+            let b = &self.settings.integrations.blivechat;
+            room.map(|room| BliveConfig {
+                host: b.host.clone(),
+                port: b.port,
+                join: Join::Blivechat(room),
+            })
+        } else {
+            None
         };
         let epoch = self.blivechat.epoch();
         let joining = client.is_some();
@@ -173,7 +190,7 @@ impl App {
         let locale = self.ui.locale.get_untracked();
         let state = self.ui.blivechat.get_untracked();
         let (text, link) =
-            crate::ui::link_text::blivechat(locale, &self.settings.integrations.blivechat, &state);
+            crate::ui::link_text::blivechat(locale, &self.settings.integrations, &state);
         self.edit_status(|s| {
             s.blivechat = text.clone();
             s.blivechat_link = link;

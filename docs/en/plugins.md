@@ -63,7 +63,7 @@ return {
 }
 ```
 
-- Events include `init` (`reads` lists the readable data), `data`, `command`, line playback start/end `line_start`/`line_end`, `speaking`, `expression`, `portrait`, `shake`, `vts`, `translation` (a line's translation) and `chat_message` (platform `blivechat`/`twitch`, author, plain text). Event fields are local values the host has already produced; they never contain account credentials.
+- Events include `init` (`reads` lists the readable data), `data`, `command`, line playback start/end `line_start`/`line_end`, `speaking`, `expression`, `portrait`, `shake`, `vts`, `translation` (a line's translation) and `chat_message` (platform `blivechat`/`laplace`/`comet`/`twitch`, author, plain text). Event fields are local values the host has already produced; they never contain account credentials.
 - `commands = {{id = 'reset', label = 'Reset'}}` declares local commands. The host shows an entry for each command and, when it is activated, sends `{type='command', id='reset'}` back to the originating plugin; commands cannot invoke arbitrary app actions.
 - View slots are `display`, `history`, `input` and `panel`, corresponding to the display, history, input content area and the plugin panel. Generic UI still uses its own neutral theme.
 - Components are `column`, `row`, `text`, `button` and `canvas`; every component needs a stable, unique `id`. Lua functions can compose and return these nodes to define reusable components.

@@ -3,12 +3,11 @@
 //! skin renderer itself lives in `nanatype-frame` and reads the [`Stage`]
 //! inside [`Ui`].
 
-pub mod blivechat;
+pub mod bilibili;
 pub mod danmaku;
 pub mod dialogue;
 pub mod history;
 pub mod input;
-pub mod laplace;
 pub mod link_text;
 pub mod p2p;
 pub mod plugins;
@@ -79,12 +78,15 @@ pub struct Status {
     pub vts_hotkeys: Vec<(String, String)>,
     pub osc: LinkState,
     pub ws: LinkState,
-    /// blivechat or 彗星号, likewise.
+    /// A blivechat room, likewise.
     pub blivechat: String,
     pub blivechat_link: danmaku::Link,
     /// The LAPLACE Event Bridge, likewise.
     pub laplace: String,
     pub laplace_link: danmaku::Link,
+    /// The 彗星号 client, likewise.
+    pub comet: String,
+    pub comet_link: danmaku::Link,
     pub spout_display: LinkState,
     /// Each partner seat's sender, in seat order.
     pub spout_partners: Vec<LinkState>,
@@ -202,6 +204,7 @@ pub struct Ui {
     pub twitch: Signal<Arc<crate::app::twitch::State>>,
     pub blivechat: Signal<Arc<crate::app::blivechat::State>>,
     pub laplace: Signal<Arc<crate::app::laplace::State>>,
+    pub comet: Signal<Arc<crate::app::comet::State>>,
     /// The OBS link and its program scene.
     pub obs: Signal<Arc<crate::app::obs::State>>,
     /// Translation keys and the last test.
@@ -210,7 +213,7 @@ pub struct Ui {
     pub update: Signal<Arc<crate::app::update::State>>,
     /// Kept only in memory and cleared after import; never serialized with settings.
     /// The platform the live-platforms settings page shows.
-    pub platform_tab: Signal<crate::chat::Platform>,
+    pub platform_tab: Signal<sources::PlatformTab>,
     /// Actual input client width, published by its layout (also in headless views).
     pub input_width: Signal<f32>,
     pub(crate) input_sidebar_width: Signal<f32>,
@@ -318,6 +321,7 @@ impl Ui {
             twitch: signal(Arc::new(crate::app::twitch::State::default())),
             blivechat: signal(Arc::new(crate::app::blivechat::State::default())),
             laplace: signal(Arc::new(crate::app::laplace::State::default())),
+            comet: signal(Arc::new(crate::app::comet::State::default())),
             obs: signal(Arc::new(crate::app::obs::State::default())),
             translate: signal(Arc::new(crate::app::translate::State::default())),
             #[cfg(feature = "updates")]
@@ -328,7 +332,7 @@ impl Ui {
             input_split: node_ref(),
             input_chat_split: node_ref(),
             peer,
-            platform_tab: signal(crate::chat::Platform::ALL[0]),
+            platform_tab: signal(sources::PlatformTab::ALL[0]),
             peer_panel: signal(true),
             peer_invitation: signal(String::new()),
             peer_popover: signal(false),

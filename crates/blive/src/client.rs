@@ -35,8 +35,9 @@ const RETRY_AFTER_FATAL: Duration = Duration::from_secs(30);
 pub enum Join {
     /// A room on a blivechat server.
     Blivechat(RoomKey),
-    /// Every room the 彗星号 client at `host:port` listens to.
-    Comet,
+    /// The rooms the 彗星号 client at `host:port` listens to, on the
+    /// platforms asked for.
+    Comet(comet::Rooms),
     /// A LAPLACE Event Bridge's feed at `url` (`ws://` or `wss://`, with
     /// its token), from [`crate::laplace::Link::url`].
     Laplace { url: String },
@@ -216,18 +217,20 @@ fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
                 Err(e) => Ended::Dropped(e),
             }
         }
-        Join::Comet => match ws_connect(&config.host, config.port, "/", None, READ_TIMEOUT) {
-            Ok(socket) => Session {
-                feed: Feed::Comet,
-                // A first ping at once: a quiet room still hears back.
-                join: Some(comet::PING.into()),
-                beat: Message::text(comet::PING),
-                beat_every: COMET_PING_EVERY,
-                silence: COMET_SILENCE_LIMIT,
+        Join::Comet(rooms) => {
+            match ws_connect(&config.host, config.port, "/", None, READ_TIMEOUT) {
+                Ok(socket) => Session {
+                    feed: Feed::Comet(*rooms),
+                    // A first ping at once: a quiet room still hears back.
+                    join: Some(comet::PING.into()),
+                    beat: Message::text(comet::PING),
+                    beat_every: COMET_PING_EVERY,
+                    silence: COMET_SILENCE_LIMIT,
+                }
+                .run(socket, stop, emit),
+                Err(e) => Ended::Dropped(e),
             }
-            .run(socket, stop, emit),
-            Err(e) => Ended::Dropped(e),
-        },
+        }
         Join::Laplace { url } => match laplace_connect(url) {
             Ok(socket) => Session {
                 feed: Feed::Laplace,
@@ -277,7 +280,7 @@ fn laplace_connect(url: &str) -> Result<WebSocket<MaybeTlsStream<TcpStream>>, Li
 enum Feed {
     Blivechat,
     Laplace,
-    Comet,
+    Comet(comet::Rooms),
 }
 
 /// How one protocol keeps a joined connection alive.
@@ -323,7 +326,7 @@ impl Session {
             let text = match socket.read() {
                 Ok(Message::Text(text)) => text.as_str().to_owned(),
                 // 彗星号 encrypts its messages.
-                Ok(Message::Binary(frame)) if self.feed == Feed::Comet => {
+                Ok(Message::Binary(frame)) if matches!(self.feed, Feed::Comet(_)) => {
                     match comet::decrypt(&frame) {
                         Some(text) => text,
                         None => continue,
@@ -343,11 +346,11 @@ impl Session {
             let incoming = match self.feed {
                 Feed::Blivechat => protocol::parse(&text),
                 Feed::Laplace => laplace::parse(&text),
-                Feed::Comet => comet::parse(&text, now_ms()),
+                Feed::Comet(rooms) => comet::parse(&text, now_ms(), rooms),
             };
             match incoming {
                 // 彗星号's `pong` is the answer to ours.
-                Some(Incoming::Heartbeat) if self.feed == Feed::Comet => {}
+                Some(Incoming::Heartbeat) if matches!(self.feed, Feed::Comet(_)) => {}
                 Some(Incoming::Heartbeat) => {
                     let answer = if self.feed == Feed::Laplace {
                         let ping: Value = serde_json::from_str(&text).unwrap_or_default();

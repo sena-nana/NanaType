@@ -50,7 +50,7 @@ return {
 }
 ```
 
-- イベントには `init`（`reads` に読み取り可能なデータが列挙される）、`data`、`command`、セリフ再生の開始・終了 `line_start`／`line_end`、`speaking`、`expression`、`portrait`、`shake`、`vts`、`translation`（セリフの翻訳）、`chat_message`（プラットフォーム `blivechat`／`twitch`、投稿者、プレーンテキスト）があります。イベントのフィールドはホストが生成済みのローカルな値で、アカウントの認証情報は含みません。
+- イベントには `init`（`reads` に読み取り可能なデータが列挙される）、`data`、`command`、セリフ再生の開始・終了 `line_start`／`line_end`、`speaking`、`expression`、`portrait`、`shake`、`vts`、`translation`（セリフの翻訳）、`chat_message`（プラットフォーム `blivechat`／`laplace`／`comet`／`twitch`、投稿者、プレーンテキスト）があります。イベントのフィールドはホストが生成済みのローカルな値で、アカウントの認証情報は含みません。
 - `commands = {{id = 'reset', label = 'Reset'}}` でローカルコマンドを宣言します。ホストがコマンドの入口を表示し、実行されると元のプラグインに `{type='command', id='reset'}` を送り返します。コマンドから任意のアプリ操作を呼び出すことはできません。
 - ビューのマウント先は `display`、`history`、`input`、`panel` で、それぞれ表示、履歴、入力のコンテンツ領域、プラグインパネルに対応します。汎用 UI は引き続き独立したニュートラルなテーマを使います。
 - コンポーネントは `column`、`row`、`text`、`button`、`canvas` で、どれにも安定した一意の `id` が必要です。Lua 関数でこれらのノードを組み合わせて返せば、再利用できるコンポーネントを定義できます。

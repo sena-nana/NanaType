@@ -13,35 +13,37 @@ use crate::ui::I18N;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Platform {
-    /// A blivechat server or the 彗星号 client.
+    /// A blivechat server.
     Blivechat,
     /// A LAPLACE Event Bridge.
     Laplace,
+    /// The 彗星号 client: Bilibili's rooms, the other platforms' or both.
+    Comet,
     Twitch,
 }
 impl Platform {
-    /// The sources this build connects to, in settings order.
-    pub const ALL: &[Self] = &[Self::Twitch, Self::Blivechat, Self::Laplace];
     pub fn source(self) -> &'static str {
         match self {
             Self::Blivechat => "blivechat",
             Self::Laplace => "laplace",
+            Self::Comet => "comet",
             Self::Twitch => "twitch",
         }
     }
     /// Downloaded pictures are cached per platform under this prefix.
     pub fn cache_prefix(self) -> &'static str {
         match self {
-            // Both carry Bilibili's pictures, so they share the cache.
-            Self::Blivechat | Self::Laplace => "blive",
+            // All carry Bilibili's pictures, so they share the cache.
+            Self::Blivechat | Self::Laplace | Self::Comet => "blive",
             Self::Twitch => "twitch",
         }
     }
-    /// The settings page title, which doubles as the platform's name.
+    /// The source's name.
     pub fn label_key(self) -> &'static str {
         match self {
             Self::Blivechat => "settings-blivechat",
             Self::Laplace => "settings-laplace",
+            Self::Comet => "settings-comet",
             Self::Twitch => "settings-twitch",
         }
     }

@@ -367,13 +367,18 @@ pub fn assert_consistent(settings: &Settings, status: &Status) {
         ),
         (
             "blivechat",
-            i.blivechat.enabled,
+            i.blivechat_on(),
             status.blivechat_link != danmaku::Link::Off,
         ),
         (
             "LAPLACE",
-            i.laplace.enabled,
+            i.laplace_on(),
             status.laplace_link != danmaku::Link::Off,
+        ),
+        (
+            "彗星号",
+            i.comet_rooms().bilibili || i.comet_rooms().others,
+            status.comet_link != danmaku::Link::Off,
         ),
         (
             "Spout display",

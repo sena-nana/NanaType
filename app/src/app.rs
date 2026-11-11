@@ -3,6 +3,7 @@ mod archive;
 pub mod backup;
 pub mod blivechat;
 mod chat;
+pub mod comet;
 mod editor;
 pub mod laplace;
 mod live;
@@ -126,10 +127,12 @@ pub struct App {
     keys: sounds::Keys,
     pub bridge: BridgeHandle,
     pub twitch: nanatype_twitch::TwitchHandle,
-    /// blivechat or 彗星号.
+    /// A blivechat room.
     pub blivechat: nanatype_blive::BliveHandle,
     /// A LAPLACE Event Bridge.
     pub laplace: nanatype_blive::BliveHandle,
+    /// The 彗星号 client.
+    pub comet: nanatype_blive::BliveHandle,
     /// OBS's program scene, sizing the Spout/Syphon outputs.
     pub obs: nanatype_obs::ObsHandle,
     /// The obs-websocket password.
@@ -363,6 +366,7 @@ impl App {
             twitch: workers.twitch,
             blivechat: workers.blivechat,
             laplace: workers.laplace,
+            comet: workers.comet,
             obs: workers.obs,
             obs_password,
             steam: workers.steam,
@@ -1206,6 +1210,7 @@ impl App {
         self.twitch_configure();
         self.blivechat_configure();
         self.laplace_configure();
+        self.comet_configure();
         self.obs_configure();
         self.edit_status(|s| {
             if !i.vts.enabled {
@@ -2226,6 +2231,7 @@ impl App {
             Msg::Twitch(m) => self.twitch_msg(m),
             Msg::Blive(m) => self.blivechat_msg(m),
             Msg::Laplace(m) => self.laplace_msg(m),
+            Msg::Comet(e) => self.comet_event(e),
             Msg::Obs(m) => self.obs_msg(m),
             Msg::Workshop(m) => self.workshop_msg(m),
             Msg::History(m) => self.history_msg(m),
@@ -2341,6 +2347,7 @@ impl App {
         let epoch = match message.platform {
             crate::chat::Platform::Blivechat => self.blivechat.epoch(),
             crate::chat::Platform::Laplace => self.laplace.epoch(),
+            crate::chat::Platform::Comet => self.comet.epoch(),
             crate::chat::Platform::Twitch => self.twitch.epoch(),
         };
         if message.epoch != 0 && message.epoch != epoch {

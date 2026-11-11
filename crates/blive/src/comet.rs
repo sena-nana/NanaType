@@ -64,15 +64,49 @@ pub fn encrypt(text: &str, nonce: [u8; NONCE_LEN]) -> Vec<u8> {
     frame
 }
 
+/// Which rooms the client's feed is read for: one connection serves
+/// Bilibili and the other platforms, each when asked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Rooms {
+    pub bilibili: bool,
+    pub others: bool,
+}
+
+impl Rooms {
+    pub const ALL: Self = Self {
+        bilibili: true,
+        others: true,
+    };
+
+    pub fn any(self) -> bool {
+        self.bilibili || self.others
+    }
+
+    fn reads(self, platform: &str) -> bool {
+        if platform == BILIBILI {
+            self.bilibili
+        } else {
+            self.others
+        }
+    }
+}
+
+/// How the client names Bilibili; a message without a platform is one.
+const BILIBILI: &str = "bili";
+
 /// Read one message, already decrypted. `None` for text that is not a JSON
-/// message; `pong` reads as [`Incoming::Heartbeat`].
-pub fn parse(text: &str, now_ms: u64) -> Option<Incoming> {
+/// message; `pong` reads as [`Incoming::Heartbeat`], and a message from a
+/// platform `rooms` does not read as [`Incoming::Other`].
+pub fn parse(text: &str, now_ms: u64, rooms: Rooms) -> Option<Incoming> {
     if text.trim() == PONG {
         return Some(Incoming::Heartbeat);
     }
     let m: Value = serde_json::from_str(text).ok()?;
     let kind = m.as_object()?.get("type")?.as_str()?;
-    let platform = m["platform"].as_str().unwrap_or("bili");
+    let platform = m["platform"].as_str().unwrap_or(BILIBILI);
+    if !rooms.reads(platform) {
+        return Some(Incoming::Other);
+    }
     let d = &m["data"];
     let at_ms = match millis(&d["timestamp"]) {
         0 => now_ms,
@@ -136,7 +170,7 @@ fn author(platform: &str, d: &Value, guard: Guard) -> Author {
     let uid = Some(string(&d["id"]))
         .filter(|u| !u.is_empty() && u != "0")
         .map(|u| {
-            if platform == "bili" {
+            if platform == BILIBILI {
                 u
             } else {
                 format!("{platform}:{u}")

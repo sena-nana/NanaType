@@ -11,7 +11,7 @@ use nanatype_blive::{BliveStatus, FatalKind};
 use nanatype_bridge::{BridgeStatus, Sink};
 use nanatype_i18n::Locale;
 use nanatype_model::LinkFault;
-use nanatype_settings::{BliveRoomKind, BlivechatSettings, BlivechatSource, LaplaceSettings};
+use nanatype_settings::{BliveRoomKind, Integrations};
 
 use super::danmaku::Link;
 use super::{I18N, LinkState};
@@ -111,50 +111,59 @@ fn blive(locale: Locale, status: &BliveStatus, room: &str) -> (String, Link) {
     }
 }
 
-/// blivechat's status line and dot: a blivechat server's join, or the
-/// connection to the 彗星号 client.
+/// blivechat's status line and dot: the join of the room the pasted link
+/// named.
 pub fn blivechat(
     locale: Locale,
-    settings: &BlivechatSettings,
+    integrations: &Integrations,
     state: &crate::app::blivechat::State,
 ) -> (String, Link) {
-    if !settings.enabled {
+    if !integrations.blivechat_on() {
         return (I18N.t_in(locale, "int-status-off"), Link::Off);
     }
-    match settings.source {
-        BlivechatSource::Server => {
-            if state.status == BliveStatus::Off {
-                return (I18N.t_in(locale, "chat-status-no-room"), Link::Off);
-            }
-            // Never show the auth code itself.
-            let room = match crate::distribution::blive_room_kind(settings) {
-                BliveRoomKind::RoomId => settings.room_id.clone(),
-                BliveRoomKind::AuthCode => I18N.t_in(locale, "int-blive-auth-code"),
-            };
-            blive(locale, &state.status, &room)
-        }
-        BlivechatSource::Comet => match &state.status {
-            BliveStatus::Connected => (I18N.t_in(locale, "int-comet-connected"), Link::Connected),
-            // Nothing listens: the client is not open.
-            BliveStatus::Error(LinkFault::Refused) => {
-                (I18N.t_in(locale, "int-comet-not-running"), Link::Error)
-            }
-            other => blive(locale, other, ""),
-        },
+    if state.status == BliveStatus::Off {
+        return (I18N.t_in(locale, "chat-status-no-room"), Link::Off);
     }
+    let settings = &integrations.blivechat;
+    // Never show the auth code itself.
+    let room = match crate::distribution::blive_room_kind(settings) {
+        BliveRoomKind::RoomId => settings.room_id.clone(),
+        BliveRoomKind::AuthCode => I18N.t_in(locale, "int-blive-auth-code"),
+    };
+    blive(locale, &state.status, &room)
 }
 
 /// The LAPLACE bridge's status line and dot.
 pub fn laplace(
     locale: Locale,
-    settings: &LaplaceSettings,
+    integrations: &Integrations,
     state: &crate::app::laplace::State,
 ) -> (String, Link) {
-    if !settings.enabled {
+    if !integrations.laplace_on() {
         return (I18N.t_in(locale, "int-status-off"), Link::Off);
     }
     match &state.status {
         BliveStatus::Connected => (I18N.t_in(locale, "int-laplace-connected"), Link::Connected),
+        other => blive(locale, other, ""),
+    }
+}
+
+/// The 彗星号 client's status line and dot.
+pub fn comet(
+    locale: Locale,
+    integrations: &Integrations,
+    state: &crate::app::comet::State,
+) -> (String, Link) {
+    let rooms = integrations.comet_rooms();
+    if !(rooms.bilibili || rooms.others) {
+        return (I18N.t_in(locale, "int-status-off"), Link::Off);
+    }
+    match &state.status {
+        BliveStatus::Connected => (I18N.t_in(locale, "int-comet-connected"), Link::Connected),
+        // Nothing listens: the client is not open.
+        BliveStatus::Error(LinkFault::Refused) => {
+            (I18N.t_in(locale, "int-comet-not-running"), Link::Error)
+        }
         other => blive(locale, other, ""),
     }
 }
@@ -247,38 +256,36 @@ mod tests {
             {
                 texts.push(blive(locale, &status, "1").0);
             }
-            use BlivechatSource::{Comet, Server};
-            for (source, status) in [
-                (Server, BliveStatus::Off),
-                (Server, BliveStatus::Connected),
-                (Comet, BliveStatus::Connecting),
-                (Comet, BliveStatus::Error(LinkFault::Refused)),
-                (Comet, BliveStatus::Connected),
-            ] {
-                let settings = BlivechatSettings {
-                    enabled: true,
-                    source,
-                    ..Default::default()
-                };
+            use nanatype_settings::{BilibiliLink, BilibiliSource};
+            let mut i = Integrations::default();
+            i.bilibili.enabled = true;
+            for status in [BliveStatus::Off, BliveStatus::Connected] {
+                i.bilibili.link = BilibiliLink::Blivechat;
                 let state = crate::app::blivechat::State {
                     status,
                     auth_saved: false,
                 };
-                texts.push(blivechat(locale, &settings, &state).0);
+                texts.push(blivechat(locale, &i, &state).0);
             }
             for status in [
                 BliveStatus::Connected,
                 BliveStatus::Error(LinkFault::Unauthorized),
             ] {
-                let settings = LaplaceSettings {
-                    enabled: true,
-                    ..Default::default()
-                };
+                i.bilibili.link = BilibiliLink::Laplace;
                 let state = crate::app::laplace::State {
                     status,
                     token_saved: false,
                 };
-                texts.push(laplace(locale, &settings, &state).0);
+                texts.push(laplace(locale, &i, &state).0);
+            }
+            i.bilibili.source = BilibiliSource::Comet;
+            for status in [
+                BliveStatus::Connecting,
+                BliveStatus::Error(LinkFault::Refused),
+                BliveStatus::Connected,
+            ] {
+                let state = crate::app::comet::State { status };
+                texts.push(comet(locale, &i, &state).0);
             }
             for status in [
                 WindowOutputStatus::Active {

@@ -1,4 +1,4 @@
-//! Chat from a LAPLACE Event Bridge, a source of its own beside blivechat.
+//! Bilibili chat from a LAPLACE Event Bridge, when the pasted link is one.
 
 use nanatype_blive::{BliveConfig, BliveEvent, BliveStatus, BliveUpdate, Join};
 
@@ -17,33 +17,6 @@ impl App {
     pub(super) fn laplace_msg(&mut self, msg: LaplaceMsg) {
         match msg {
             LaplaceMsg::Event(event) => self.laplace_event(event),
-            LaplaceMsg::Link(text) => {
-                use nanatype_blive::laplace::{Link, LinkError};
-                let link = match Link::parse(&text) {
-                    Ok(link) => link,
-                    Err(e) => {
-                        let text = self.ui.now_t(match e {
-                            LinkError::Invalid => "int-laplace-link-invalid",
-                            LinkError::DirectPage => "int-laplace-link-direct",
-                        });
-                        self.notice(text, true);
-                        return;
-                    }
-                };
-                // A link without a token is a bridge without one.
-                if let Err(e) = self.laplace_token.set(&link.token) {
-                    nanatype_diag::report!(crate::diag::LAPLACE_SECRET_FAILED, op = 1u64; "{e}");
-                    let text = self.ui.now_t("int-laplace-token-not-stored");
-                    self.notice(text, true);
-                }
-                // A new link is a new configuration, so it connects again.
-                self.edit(|s| {
-                    let l = &mut s.integrations.laplace;
-                    l.url = link.address;
-                    l.enabled = true;
-                });
-                self.laplace_configure();
-            }
         }
     }
 
@@ -75,7 +48,7 @@ impl App {
 
     /// Connect, reconnect or stop after a settings change.
     pub(super) fn laplace_configure(&mut self) {
-        let client = if self.settings.integrations.laplace.enabled {
+        let client = if self.settings.integrations.laplace_on() {
             // Only read the secret store once the token is wanted.
             let token = self.laplace_token.get();
             let saved = token.is_some();
@@ -112,7 +85,7 @@ impl App {
         let locale = self.ui.locale.get_untracked();
         let state = self.ui.laplace.get_untracked();
         let (text, link) =
-            crate::ui::link_text::laplace(locale, &self.settings.integrations.laplace, &state);
+            crate::ui::link_text::laplace(locale, &self.settings.integrations, &state);
         self.edit_status(|s| {
             s.laplace = text.clone();
             s.laplace_link = link;

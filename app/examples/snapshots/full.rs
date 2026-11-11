@@ -16,78 +16,95 @@ pub fn capture(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
     links(scene, out);
 }
 
-/// The blivechat page in each source (a server joined by room number and
-/// 彗星号's own feed), then the LAPLACE page with a saved token.
+/// The Bilibili page with each source (a blivechat room joined by room
+/// number, a LAPLACE bridge with a saved token, 彗星号), then the other
+/// platforms' page.
 fn blivechat(scene: &Scene, out: &std::path::Path) {
+    use nanatype::ui::sources::PlatformTab;
     use nanatype_blive::BliveStatus;
-    use nanatype_settings::{BliveRoomKind, BlivechatSource};
+    use nanatype_settings::{BilibiliLink, BilibiliSource, BliveRoomKind};
     let ui = scene.ui;
     let theme = &scene.theme;
     let before_settings = ui.settings.get_untracked();
-    let before_state = ui.blivechat.get_untracked();
+    let before_blive = ui.blivechat.get_untracked();
+    let before_laplace = ui.laplace.get_untracked();
+    let before_comet = ui.comet.get_untracked();
     let before_status = ui.status.get_untracked();
     let before_page = ui.page.get_untracked();
-    ui.platform_tab.set(nanatype::chat::Platform::Blivechat);
+    let before_tab = ui.platform_tab.get_untracked();
     ui.page.set(settings::Page::Platforms);
-    for (name, source) in [
-        ("blive-settings", BlivechatSource::Server),
-        ("comet-settings", BlivechatSource::Comet),
-    ] {
-        let mut s = (*before_settings).clone();
-        let b = &mut s.integrations.blivechat;
-        b.enabled = true;
-        b.source = source;
-        b.room_kind = BliveRoomKind::RoomId;
-        b.room_id = "21452505".into();
-        let state = nanatype::app::blivechat::State {
-            status: BliveStatus::Connected,
-            auth_saved: false,
-        };
-        let mut status = (*before_status).clone();
-        (status.blivechat, status.blivechat_link) =
-            link_text::blivechat(ui.locale.get_untracked(), &s.integrations.blivechat, &state);
-        assert_consistent(&s, &status);
-        ui.settings.set(Arc::new(s));
-        ui.blivechat.set(Arc::new(state));
-        ui.status.set(Arc::new(status));
+    let locale = ui.locale.get_untracked();
+    let shoot = |name: &'static str| {
         shot(name, out, 920, 1100, theme.clone(), |doc, id| {
             doc.context_mut()
                 .mount_view_root(id, move || settings::settings_window(ui))
                 .unwrap();
         });
-    }
-    let before_laplace = ui.laplace.get_untracked();
-    ui.platform_tab.set(nanatype::chat::Platform::Laplace);
-    let mut s = (*before_settings).clone();
-    s.integrations.laplace.enabled = true;
-    let state = nanatype::app::laplace::State {
-        status: BliveStatus::Connected,
-        token_saved: true,
     };
-    let mut status = (*before_status).clone();
-    (status.laplace, status.laplace_link) =
-        link_text::laplace(ui.locale.get_untracked(), &s.integrations.laplace, &state);
-    assert_consistent(&s, &status);
-    ui.settings.set(Arc::new(s));
-    ui.laplace.set(Arc::new(state));
-    ui.status.set(Arc::new(status));
-    shot(
-        "laplace-settings",
-        out,
-        920,
-        1100,
-        theme.clone(),
-        |doc, id| {
-            doc.context_mut()
-                .mount_view_root(id, move || settings::settings_window(ui))
-                .unwrap();
-        },
-    );
+    let shows = |s: nanatype_settings::Settings| {
+        let blive = nanatype::app::blivechat::State {
+            status: BliveStatus::Connected,
+            auth_saved: false,
+        };
+        let laplace = nanatype::app::laplace::State {
+            status: BliveStatus::Connected,
+            token_saved: true,
+        };
+        let comet = nanatype::app::comet::State {
+            status: BliveStatus::Connected,
+        };
+        let mut status = (*before_status).clone();
+        let i = &s.integrations;
+        (status.blivechat, status.blivechat_link) = link_text::blivechat(locale, i, &blive);
+        (status.laplace, status.laplace_link) = link_text::laplace(locale, i, &laplace);
+        (status.comet, status.comet_link) = link_text::comet(locale, i, &comet);
+        assert_consistent(&s, &status);
+        ui.settings.set(Arc::new(s));
+        ui.blivechat.set(Arc::new(blive));
+        ui.laplace.set(Arc::new(laplace));
+        ui.comet.set(Arc::new(comet));
+        ui.status.set(Arc::new(status));
+    };
+    ui.platform_tab.set(PlatformTab::Bilibili);
+    for (name, source, link) in [
+        (
+            "blive-settings",
+            BilibiliSource::Link,
+            BilibiliLink::Blivechat,
+        ),
+        (
+            "laplace-settings",
+            BilibiliSource::Link,
+            BilibiliLink::Laplace,
+        ),
+        (
+            "comet-settings",
+            BilibiliSource::Comet,
+            BilibiliLink::Blivechat,
+        ),
+    ] {
+        let mut s = (*before_settings).clone();
+        let i = &mut s.integrations;
+        i.bilibili.enabled = true;
+        i.bilibili.source = source;
+        i.bilibili.link = link;
+        i.blivechat.room_kind = BliveRoomKind::RoomId;
+        i.blivechat.room_id = "21452505".into();
+        shows(s);
+        shoot(name);
+    }
+    ui.platform_tab.set(PlatformTab::Other);
+    let mut s = (*before_settings).clone();
+    s.integrations.comet.other_platforms = true;
+    shows(s);
+    shoot("other-platforms-settings");
     ui.settings.set(before_settings);
-    ui.blivechat.set(before_state);
+    ui.blivechat.set(before_blive);
     ui.laplace.set(before_laplace);
+    ui.comet.set(before_comet);
     ui.status.set(before_status);
     ui.page.set(before_page);
+    ui.platform_tab.set(before_tab);
 }
 
 /// The partner session: its input panel, both displays and the settings it adds.

@@ -74,8 +74,9 @@ pub fn summary(settings: &nanatype_settings::Settings, locale: &str) -> serde_js
         "skin": settings.skin.id,
         "advanced_effects": settings.skin.advanced_effects,
         "platforms": {
-            "blivechat": i.blivechat.enabled,
-            "laplace": i.laplace.enabled,
+            "blivechat": i.blivechat_on(),
+            "laplace": i.laplace_on(),
+            "comet": i.comet_rooms().bilibili || i.comet_rooms().others,
             "twitch": i.twitch.enabled,
         },
         "outputs": { "vts": i.vts.enabled, "osc": i.osc.enabled, "websocket": i.websocket.enabled },

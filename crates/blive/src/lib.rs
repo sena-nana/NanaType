@@ -13,10 +13,11 @@
 //! thread, with [`Join::Laplace`] in place of a room.
 //!
 //! [`room_link`] reads the room link blivechat gives for OBS into the server
-//! and room to join.
+//! and room to join; [`obs_link`] tells it from LAPLACE's.
 //!
 //! [`comet`] reads the 彗星号 client's own feed (`ws://127.0.0.1:19400/`),
-//! its binary frames decrypted, with [`Join::Comet`].
+//! its binary frames decrypted, with [`Join::Comet`], for Bilibili's rooms,
+//! the other platforms' or both.
 //!
 //! [blivechat]: https://github.com/xfgryujk/blivechat
 
@@ -26,6 +27,7 @@ pub mod chat;
 mod client;
 pub mod comet;
 pub mod laplace;
+pub mod obs_link;
 pub mod protocol;
 pub mod room_link;
 

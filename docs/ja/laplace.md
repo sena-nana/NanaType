@@ -32,8 +32,8 @@ NanaType（crates/blive/src/laplace.rs）→ コメントパネル、履歴
 
 次に NanaType で：
 
-1. **設定 › ライブ配信 › LAPLACE** で受信をオンにします。
-2. **Event Bridge のリンク**にアドレスを貼り付け、**保存して接続**を押します。貼り付けられるもの：
+1. **設定 › ライブ配信 › Bilibili** で受信をオンにし、ソースに **コメントビューアのリンク** を選びます。
+2. **OBS リンク**にアドレスを貼り付け、**保存して接続**を押します。貼り付けられるもの：
    - `ws://localhost:9696`、トークンがあれば `ws://localhost:9696/?token=トークン`
    - リモートの Event Fetcher の `wss://…` または `https://…`
    - `ホスト:ポート` だけ（ポートを省くと 9696）
@@ -44,7 +44,7 @@ NanaType（crates/blive/src/laplace.rs）→ コメントパネル、履歴
 
 ### OBS リンクでつながらない理由
 
-LAPLACE Chat の OBS リンク（`…/obs/ルーム番号または認証コード?…`）は、ページ自身がライブルームにつなぐものです。Event Bridge のアドレスはなく、ルーム番号か認証コードと LAPLACE のログイン同期用の資格情報（`loginSyncToken`）しか含まれないため、受け付けません。ルーム番号での直接接続（`connectionMode=direct`）はそもそも対応していません。認証コードでつないでから、上の手順で Event Bridge か Event Fetcher を使ってください。
+「匿名直結」（`connectionMode=direct`）の OBS リンクは bilibili の Web 版の非公開インターフェースを使い、「オープンプラットフォーム」モードのリンクはページ自身が LAPLACE のサーバー経由でルームにつなぎます。どちらも Event Bridge のアドレスを含まないため受け付けず、それぞれ理由を表示します。認証コードでつないでから、上の手順で Event Bridge か Event Fetcher を使ってください。
 
 OBS リンクの `loginSyncToken` は LAPLACE のログイン情報です。人に渡さないでください。
 

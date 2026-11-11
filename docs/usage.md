@@ -68,16 +68,19 @@ Windows 也可以使用 *Window Capture*，捕获方式选择 *Windows 10 (1903 
 
 登录凭据由系统安全存储保管。协议、限速和失败重试见[Twitch 接入说明](twitch.md)。
 
-### blivechat 与 LAPLACE
+### Bilibili 与其他平台
 
-“设置 › 直播平台”里 blivechat 和 LAPLACE 是两个独立的页面，各自开关，可以同时连接。
+“设置 › 直播平台”顶部分为 **Bilibili**、**Twitch** 和 **其他平台** 三页。
 
-在 **blivechat** 页面开启接收并选择来源：
+**Bilibili** 页开启“接收 B 站弹幕”，再选择来源：
 
-- **blivechat**：运行 blivechat，在它的首页填好房间后复制给 OBS 用的房间链接，粘贴到“房间链接”并点击“保存并连接”，房间和地址会自动填好；也可以手动填写身份码或房间号，默认地址为 `127.0.0.1:12450`。链接里的身份码存进系统钥匙串。只支持本机或自建的 blivechat，不连接 blive.chat 公共服务器。
-- **彗星号**：先打开彗星号并开始监听直播间，NanaType 默认连接端口 `19400`。
+- **弹幕姬链接**：把 blivechat 或 LAPLACE Chat 给 OBS 用的链接粘贴到“OBS 链接”，点击“保存并连接”。NanaType 会自动识别是哪一种：
+  - blivechat：在它的首页填好房间后复制房间链接（也可以是发布版默认的 `loader.html` 链接）。只支持本机或自建的 blivechat，不连接 blive.chat 公共服务器。
+  - LAPLACE：粘贴 Event Fetcher 模式的 OBS 链接，或 Event Bridge 地址（如 `ws://localhost:9696`），详见[LAPLACE 接入说明](laplace.md)。“匿名直连”和“开放平台”模式的链接没有可接入的地址，会提示改用 Event Bridge 或 Event Fetcher。
+  - 链接里的身份码和令牌存进系统钥匙串，其他参数不会保存。
+- **彗星号**：先打开彗星号并开始监听直播间，NanaType 默认连接端口 `19400`，只接收其中 B 站直播间的弹幕。
 
-在 **LAPLACE** 页面开启接收，按[LAPLACE 接入说明](laplace.md)粘贴 Event Bridge 链接。
+**其他平台** 页只有彗星号：开启后接收彗星号正在监听的抖音、快手等非 B 站直播间。B 站和其他平台共用同一条彗星号连接和端口。
 
 消息会出现在弹幕面板，可 @、回复，也可以按设置混入历史记录。详细协议说明见[彗星号](comet.md)和[LAPLACE](laplace.md)。
 

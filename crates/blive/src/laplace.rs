@@ -46,9 +46,12 @@ pub struct Link {
 pub enum LinkError {
     /// Not a `ws`, `wss`, `http` or `https` address.
     Invalid,
-    /// A LAPLACE Chat page that joins the room itself (by room number, which
-    /// is not supported, or by auth code) and so names no bridge to read from.
-    DirectPage,
+    /// A LAPLACE Chat page joining the room anonymously, through Bilibili's
+    /// web interface, which NanaType does not take.
+    AnonymousPage,
+    /// A LAPLACE Chat page joining the room by 身份码 itself, through
+    /// LAPLACE's own servers, so it names no bridge to read from.
+    OpenPlatformPage,
 }
 
 impl Link {
@@ -76,6 +79,8 @@ impl Link {
                 .find(|(k, _)| k == name)
                 .map(|(_, v)| v.trim().to_owned())
         };
+        // LAPLACE's mainland site only joins by 身份码.
+        let open_platform_site = url.host_str() == Some("chat.laplace.cn");
         if query("connectionMode").is_some() || url.path().starts_with("/obs/") {
             return match query("danmakuFetcherApi").filter(|api| !api.is_empty()) {
                 Some(api) => {
@@ -83,7 +88,12 @@ impl Link {
                     link.token = query("eventFetcherAuth").unwrap_or_default();
                     Ok(link)
                 }
-                None => Err(LinkError::DirectPage),
+                None if open_platform_site
+                    || query("connectionMode").as_deref() == Some("open-platform") =>
+                {
+                    Err(LinkError::OpenPlatformPage)
+                }
+                None => Err(LinkError::AnonymousPage),
             };
         }
         let scheme = match url.scheme() {
