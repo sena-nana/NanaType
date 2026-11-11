@@ -3148,14 +3148,17 @@ mod sticker_reveal_tests {
                 clock(session.document_mut(), ms);
                 crate::clock::capture_at(ms, || session.flush().unwrap());
                 let node = ui.text_node.get_untracked().unwrap();
-                let scene = session.document().scene().clone();
+                // The document's own scene, as a window's painter is handed
+                // it. A copy is a new scene to the painter, which then paints
+                // every frame from nothing and cannot show a frame it kept.
+                let scene = session.document().scene();
                 let opacity = scene
                     .primitives()
                     .find(|p| p.node == node && format!("{:?}", p.kind).starts_with("Custom"))
                     .map(|p| p.opacity)
                     .expect("the sticker is laid out");
                 let pixels = painter
-                    .paint(&scene, SIZE, [0.0; 4], Some(&textures), Some(&renderers))
+                    .paint(scene, SIZE, [0.0; 4], Some(&textures), Some(&renderers))
                     .unwrap();
                 let red = pixels
                     .chunks(4)
