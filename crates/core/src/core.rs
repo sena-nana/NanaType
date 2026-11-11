@@ -894,6 +894,11 @@ impl Core {
         let auto = line.meta.auto_advance_ms;
         let units = timeline.unit_count;
         let (player, effects) = Player::start(line.id, timeline, after, auto, now);
+        // In mirror mode a playing line (a quick phrase or a replay as well
+        // as a send) owns the display until new typing replaces it.
+        if self.mode() == InputMode::Mirror {
+            self.mirror_committed = true;
+        }
         self.display.line = Some(line.id);
         self.display.mirror_reveal_ms = None;
         self.display.doc = Arc::new(line.doc.clone());
@@ -1222,7 +1227,17 @@ impl Core {
                     }
                 }
                 PlayerEffect::FadeOut { at_ms, ms } => {
-                    if self.begin_exit(AfterExit::Finish(self.display.line.unwrap()), now, fx) {
+                    // Only the line on screen fades; the player still
+                    // finishes on its own wake either way.
+                    let Some(id) = self
+                        .active
+                        .as_ref()
+                        .map(|a| a.line.id)
+                        .filter(|id| self.display.line == Some(*id))
+                    else {
+                        continue;
+                    };
+                    if self.begin_exit(AfterExit::Finish(id), now, fx) {
                         return;
                     }
                     self.display.fade = Some((at_ms, ms));

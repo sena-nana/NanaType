@@ -1391,3 +1391,20 @@ fn a_line_can_be_said_by_another_character() {
     let fx = core.handle(Cmd::SendMarkup("[speaker=9]x".into()), 40);
     assert_eq!(said_by(&fx).as_deref(), Some("奈奈"));
 }
+
+#[test]
+fn typing_over_a_mirrored_quick_phrase_survives_its_fade() {
+    let mut core = core_with(|s| {
+        s.general.input_mode = InputMode::Mirror;
+        s.playback.after = AfterLine::Fade {
+            delay_ms: 500,
+            per_unit_ms: 0,
+        }
+    });
+    let fx = core.handle(Cmd::SendMarkup("quick".into()), 0);
+    let mut wakes = fx.wakes;
+    let typed = core.handle(Cmd::DraftChanged(Document::plain("嗯")), 50);
+    wakes.extend(typed.wakes);
+    run_until(&mut core, wakes, 100_000);
+    assert_eq!(core.display().doc.plain_text(), "嗯", "the draft stays");
+}
