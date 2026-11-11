@@ -3192,6 +3192,121 @@ mod sticker_reveal_tests {
 }
 
 #[cfg(test)]
+mod reveal_end_tests {
+    use super::*;
+    use nana_ui::runtime::{DocumentId, RuntimeDocument};
+    use nana_ui_devtools::agent::RuntimeAgentSession;
+    use nana_ui_devtools::offscreen::{OffscreenSnapshots, Size};
+
+    const SIZE: Size<u32> = Size {
+        width: 760,
+        height: 220,
+    };
+
+    /// What the display window is left showing once a line of the Subtitle
+    /// skin is in. The skin has no box, so once its line has typed in nothing
+    /// of the scene changes but the glyphs. `typed`: four characters type
+    /// 100 ms apart from 1000 ms with a 120 ms fade; otherwise the line is
+    /// there from the start. A frame every 16 ms, as the window draws them,
+    /// until well after the last character has entered.
+    fn left_on_screen(typed: bool, reduced: bool) -> Vec<u8> {
+        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        let ui = Stage::new(
+            Arc::new(nanatype_settings::Settings::default()),
+            registry.load("nanatype.subtitle").unwrap().skin,
+            nanatype_i18n::Locale::ZhCn,
+        );
+        ui.reduced_motion.set(reduced);
+        ui.display.update(|v| {
+            let v = Arc::make_mut(v);
+            v.empty = false;
+            v.line = Some(nanatype_model::LineId(1));
+            v.doc = Arc::new(nanatype_markup::parse("字幕皮肤").doc);
+            v.entrance = Entrance {
+                kind: EntranceKind::Fade,
+                ms: 120,
+            };
+            v.reveal = if typed {
+                Reveal {
+                    visible_from: 0,
+                    shown: 0,
+                    segment: Some(nanatype_core::SegmentReveal {
+                        origin_ms: 1000,
+                        start: 0,
+                        reveal_ms: Arc::from([0, 100, 200, 300]),
+                    }),
+                    hidden_from: 4,
+                }
+            } else {
+                Reveal::full(4)
+            };
+        });
+        let id = DocumentId::new(1).unwrap();
+        let mut doc = RuntimeDocument::new(id);
+        let clock = |doc: &mut RuntimeDocument, ms: u64| {
+            let t = std::time::Duration::from_millis(ms);
+            doc.context_mut().advance_animations(t);
+            doc.sync_presentation_clock(t);
+        };
+        clock(&mut doc, 1000);
+        crate::clock::capture_at(1000, || {
+            doc.context_mut()
+                .mount_view_root(id, move || dialogue_box(ui, Source::Display, None))
+                .unwrap()
+        });
+        let mut session = RuntimeAgentSession::new(doc, SIZE.width, SIZE.height).unwrap();
+        let mut painter = OffscreenSnapshots::new().unwrap();
+        let renderers = super::super::sweep::renderers();
+        let mut left = Vec::new();
+        for ms in (1000..=1600).step_by(16) {
+            // The host's frame: only the presentation clock moves.
+            session
+                .document_mut()
+                .sync_presentation_clock(std::time::Duration::from_millis(ms));
+            crate::clock::capture_at(ms, || session.flush().unwrap());
+            // The scene itself, as the window's painter is handed it: a
+            // copy would be a new scene to the painter, painted from nothing.
+            let scene = session.document().scene();
+            left = painter
+                .paint(scene, SIZE, [0.0; 4], None, Some(&renderers))
+                .unwrap();
+        }
+        left
+    }
+
+    /// The frame that reaches the reveal's end is the only one that shows the
+    /// last character fully in: left on the frame before it, that character
+    /// is part-way through its fade, or with reduced motion never appears.
+    fn the_typed_line_ends_as_the_whole_line(reduced: bool) {
+        let white = |pixels: &[u8]| {
+            pixels
+                .chunks(4)
+                .filter(|p| p[0] > 235 && p[1] > 235 && p[2] > 235 && p[3] > 235)
+                .count()
+        };
+        let whole = left_on_screen(false, reduced);
+        let typed = left_on_screen(true, reduced);
+        assert!(white(&whole) > 0, "the line is drawn in white");
+        assert_eq!(
+            white(&typed),
+            white(&whole),
+            "reduced motion {reduced}: the last character is not fully in"
+        );
+        assert!(typed == whole);
+    }
+
+    #[test]
+    fn a_typed_line_s_last_character_is_left_fully_drawn() {
+        the_typed_line_ends_as_the_whole_line(false);
+    }
+
+    #[test]
+    fn with_reduced_motion_too() {
+        the_typed_line_ends_as_the_whole_line(true);
+    }
+}
+
+#[cfg(test)]
 mod transition_override_tests {
     use super::*;
     use nana_ui::runtime::{DocumentId, RuntimeDocument};
