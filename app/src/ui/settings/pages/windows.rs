@@ -1,60 +1,16 @@
 use super::*;
 use crate::msg::WindowMsg;
 
-/// The overlay windows, in the matrix's column order.
+/// The overlay windows, one group each, in page order.
 pub(super) const OVERLAYS: [WindowKind; 4] = [
     WindowKind::Display,
     WindowKind::PARTNER,
     WindowKind::History,
     WindowKind::Input,
 ];
-/// Width of the matrix's row labels.
-pub(super) const MATRIX_LABEL_W: f32 = 150.0;
-/// Space between the matrix's columns.
-pub(super) const MATRIX_GAP: f32 = space::MD;
 
-/// A matrix line: a label, then one cell per overlay window. Each cell's
-/// control is named after its line and column ([`cell_name`]).
-pub(super) fn matrix_row(label: AnyView, cells: [AnyView; 4]) -> Row {
-    let cells = cells.map(|cell| {
-        widget(
-            // A quarter of what the label and the gaps leave, so the columns
-            // line up whatever their cells hold.
-            Stack::row(0.0).align(AlignSpec::Center).with_layout(|l| {
-                l.width = Some(crate::ui::surface::calc(
-                    100.0 / 4.0,
-                    -(MATRIX_LABEL_W + 4.0 * MATRIX_GAP) / 4.0 - 0.5,
-                ));
-                l.flex_shrink = Some(0.0);
-                l.min_width = Some(LengthSpec::Px(0.0));
-            }),
-        )
-        .children(cell)
-        .into_any()
-    });
-    Row::inset(
-        widget(
-            Stack::row(MATRIX_GAP)
-                .align(AlignSpec::Center)
-                .width(LengthSpec::Fill)
-                .padding_step(inset::step::CARD, inset::step::ROW_Y),
-        )
-        .children((
-            widget(
-                Stack::row(0.0)
-                    .gap_step(gap::step::TIGHT)
-                    .align(AlignSpec::Center)
-                    .width(LengthSpec::Px(MATRIX_LABEL_W))
-                    .with_layout(|l| l.flex_shrink = Some(0.0)),
-            )
-            .children(label),
-            cells.into_iter().collect::<Vec<_>>(),
-        )),
-    )
-}
-
-/// The column heading of `kind`'s window.
-fn column_key(kind: WindowKind) -> &'static str {
+/// The group title of `kind`'s window.
+fn title_key(kind: WindowKind) -> &'static str {
     match kind {
         WindowKind::Display => "windows-display",
         WindowKind::PeerDisplay(_) => "windows-peer-display",
@@ -63,41 +19,18 @@ fn column_key(kind: WindowKind) -> &'static str {
     }
 }
 
-/// What assistive technology calls a cell: its line's setting and its
-/// column's window ("Always on top: History").
+/// What assistive technology calls a control: its row's setting and its
+/// group's window ("Always on top: History"), as every group repeats the
+/// same row labels.
 pub(super) fn cell_name(ui: Ui, line_key: &str, kind: WindowKind) -> String {
     I18N.tr_in(
         ui.locale.get_untracked(),
         "windows-cell-name",
         &[
             ("setting", ui.now_t(line_key).into()),
-            ("window", ui.now_t(column_key(kind)).into()),
+            ("window", ui.now_t(title_key(kind)).into()),
         ],
     )
-}
-
-/// A row label, with an info mark whose tooltip says what the options do.
-pub(super) fn matrix_label(ui: Ui, key: &str, tip: Option<&str>) -> AnyView {
-    widget(
-        Stack::row(0.0)
-            .gap_step(gap::step::HAIR)
-            .align(AlignSpec::Center),
-    )
-    .children((
-        widget(Text::new(ui.now_t(key)).style(Type::Label.style())),
-        tip.map(|tip| info_tip(ui, tip)),
-    ))
-    .into_any()
-}
-
-/// "—": the setting does not apply to this window.
-pub(super) fn not_applicable() -> AnyView {
-    widget(
-        Text::new("—")
-            .style(Type::Body.style())
-            .color(SemanticColorRole::Faint),
-    )
-    .into_any()
 }
 
 /// A switch bound to one field of `kind`'s overlay settings.
@@ -125,7 +58,7 @@ pub(super) fn overlay_switch(
     .into_any()
 }
 
-/// A select filling its cell, bound to one field of `kind`'s overlay
+/// A select bound to one field of `kind`'s overlay
 /// settings; options are `(value, message key)`.
 pub(super) fn overlay_select(
     ui: Ui,
@@ -140,7 +73,7 @@ pub(super) fn overlay_select(
         .into_iter()
         .map(|(v, l)| SelectOption::new(v, l))
         .collect();
-    widget(Stack::row(0.0).width(LengthSpec::Fill))
+    widget(Stack::row(0.0).width(LengthSpec::Px(field::SM)))
         .children(
             widget(
                 Select::new(Some(read(&ui.settings.get_untracked()).to_owned()))
@@ -166,38 +99,29 @@ pub(super) fn overlay_select(
         .into_any()
 }
 
-/// The overlay windows side by side: one line per setting, one
-/// column per window, "—" where a setting does not apply.
-pub(super) fn windows(ui: Ui) -> AnyView {
-    let header = matrix_row(
-        widget(Stack::row(0.0)).into_any(),
-        OVERLAYS.map(|kind| {
-            widget(
-                Text::new(ui.now_t(column_key(kind)))
-                    .style(Type::Overline.one_line())
-                    .color(SemanticColorRole::Muted),
-            )
-            .into_any()
-        }),
-    );
-    let show = matrix_row(
-        matrix_label(ui, "windows-visible", None),
-        OVERLAYS.map(|kind| {
-            overlay_switch(
-                ui,
-                kind,
-                "windows-visible",
-                |o| o.visible,
-                |o, v| o.visible = v,
-            )
-        }),
-    );
-    let lock = matrix_row(
-        matrix_label(ui, "windows-lock", Some("windows-lock-tip")),
-        OVERLAYS.map(|kind| {
-            if kind == WindowKind::Input {
-                return not_applicable();
-            }
+/// One overlay window's settings as a group: shown, interaction, capture
+/// background, on top, vertical text (the displays only) and its size.
+/// A setting that does not apply to the window is left out.
+fn window_group(ui: Ui, kind: WindowKind) -> AnyView {
+    let overlay = kind != WindowKind::Input;
+    let display = matches!(kind, WindowKind::Display | WindowKind::PeerDisplay(_));
+    let mut rows = vec![row(
+        ui,
+        "windows-visible",
+        None,
+        overlay_switch(
+            ui,
+            kind,
+            "windows-visible",
+            |o| o.visible,
+            |o, v| o.visible = v,
+        ),
+    )];
+    if overlay {
+        rows.push(row(
+            ui,
+            "windows-lock",
+            Some("windows-lock-tip"),
             overlay_select(
                 ui,
                 kind,
@@ -217,15 +141,12 @@ pub(super) fn windows(ui: Ui) -> AnyView {
                         Lock::Interactive
                     }
                 },
-            )
-        }),
-    );
-    let background = matrix_row(
-        matrix_label(ui, "windows-background", Some("windows-background-tip")),
-        OVERLAYS.map(|kind| {
-            if kind == WindowKind::Input {
-                return not_applicable();
-            }
+            ),
+        ));
+        rows.push(row(
+            ui,
+            "windows-background",
+            Some("windows-background-tip"),
             overlay_select(
                 ui,
                 kind,
@@ -247,85 +168,86 @@ pub(super) fn windows(ui: Ui) -> AnyView {
                         CaptureBackground::Transparent
                     }
                 },
-            )
-        }),
-    );
-    let on_top = matrix_row(
-        matrix_label(ui, "windows-on-top", None),
-        OVERLAYS.map(|kind| {
-            overlay_switch(
-                ui,
-                kind,
-                "windows-on-top",
-                |o| o.always_on_top,
-                |o, v| o.always_on_top = v,
-            )
-        }),
-    );
-    let vertical_text = matrix_row(
-        matrix_label(
+            ),
+        ));
+    }
+    rows.push(row(
+        ui,
+        "windows-on-top",
+        None,
+        overlay_switch(
+            ui,
+            kind,
+            "windows-on-top",
+            |o| o.always_on_top,
+            |o, v| o.always_on_top = v,
+        ),
+    ));
+    if display {
+        rows.push(row(
             ui,
             "windows-vertical-text",
             Some("windows-vertical-text-tip"),
-        ),
-        OVERLAYS.map(|kind| {
-            if !matches!(kind, WindowKind::Display | WindowKind::PeerDisplay(_)) {
-                return not_applicable();
-            }
             overlay_switch(
                 ui,
                 kind,
                 "windows-vertical-text",
                 |o| o.vertical_text,
                 |o, v| o.vertical_text = v,
-            )
-        }),
-    );
-    // The size the window was dragged to ("Follow skin" until it is), and
-    // the reset that puts it back where and as big as the skin says.
-    let size = matrix_row(
-        matrix_label(ui, "windows-size", None),
-        OVERLAYS.map(|kind| {
-            let text = move || {
-                let size = ui.settings.with(|s| kind.saved_size(s));
-                match size {
-                    Some([w, h]) => format!("{}×{}", w.round(), h.round()),
-                    None => I18N.t_in(ui.locale.get(), "windows-size-skin"),
-                }
-            };
-            widget(
-                Stack::row(0.0)
-                    .gap_step(gap::step::TIGHT)
-                    .align(AlignSpec::Center)
-                    .width(LengthSpec::Fill),
-            )
-            .children((
-                widget(
-                    Text::new(text())
-                        .style(Type::Small.one_line())
-                        .color(SemanticColorRole::Muted),
-                )
-                .bind(move |t: &mut Text| {
-                    let s = text();
-                    if t.value != s {
-                        t.value = s;
-                    }
-                }),
-                widget(
-                    IconButton::new(ti::RESTORE, ui.now_t("windows-reset"))
-                        .size(ControlSize::Small)
-                        .with_tooltip(ui.now_t("windows-reset")),
-                )
-                .on_cx(move |_, _: &Activate, cx| {
-                    cx.dispatch_program_all(Msg::Window(WindowMsg::Reset(kind)));
-                }),
-            ))
-            .into_any()
-        }),
-    );
-    section(
-        ui,
-        "",
-        vec![header, show, lock, background, on_top, vertical_text, size],
+            ),
+        ));
+    }
+    rows.push(row(ui, "windows-size", None, size_control(ui, kind)));
+    section(ui, title_key(kind), rows)
+}
+
+/// The size the window was dragged to ("Follow skin" until it is), and the
+/// reset that puts it back where and as big as the skin says.
+fn size_control(ui: Ui, kind: WindowKind) -> AnyView {
+    let text = move || {
+        let size = ui.settings.with(|s| kind.saved_size(s));
+        match size {
+            Some([w, h]) => format!("{}×{}", w.round(), h.round()),
+            None => I18N.t_in(ui.locale.get(), "windows-size-skin"),
+        }
+    };
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center),
     )
+    .children((
+        widget(
+            Text::new(text())
+                .style(Type::Small.one_line())
+                .color(SemanticColorRole::Muted),
+        )
+        .bind(move |t: &mut Text| {
+            let s = text();
+            if t.value != s {
+                t.value = s;
+            }
+        }),
+        widget(
+            IconButton::new(ti::RESTORE, ui.now_t("windows-reset"))
+                .size(ControlSize::Small)
+                .with_tooltip(ui.now_t("windows-reset")),
+        )
+        .on_cx(move |_, _: &Activate, cx| {
+            cx.dispatch_program_all(Msg::Window(WindowMsg::Reset(kind)));
+        }),
+    ))
+    .into_any()
+}
+
+/// The overlay windows, one settings group each.
+pub(super) fn windows(ui: Ui) -> AnyView {
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
+        .children(
+            OVERLAYS
+                .into_iter()
+                .map(|kind| window_group(ui, kind))
+                .collect::<Vec<_>>(),
+        )
+        .into_any()
 }

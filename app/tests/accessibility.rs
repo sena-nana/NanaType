@@ -97,7 +97,7 @@ fn a_settings_row_names_its_control_by_its_label() {
 }
 
 #[test]
-fn a_window_matrix_cell_is_named_by_its_line_and_column() {
+fn a_window_setting_is_named_by_its_row_and_window() {
     let ui = Ui::new(
         Arc::new(Settings::default()),
         common::skin("nanatype.halo"),
