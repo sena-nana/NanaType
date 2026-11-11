@@ -130,4 +130,4 @@ Lines a plugin script writes with `nana.log(level, message)` come back over the 
 3. Adds `manifest.json` and `summary.json` (version, build number, edition, OS, language, skin ID, which platforms and outputs are enabled (booleans only), plugin count, and the detailed-logs switch);
 4. Zips it as `dev.sena-nana.nanatype-diagnostics-<时间>.zip` (`<时间>` is a timestamp) in the log directory and opens that directory.
 
-The package stays on your machine; whether to attach it to a bug report is up to you. If the previous run crashed (there is a panic snapshot newer than `diagnostics.crash_seen`), the next launch reminds you once.
+The package stays on your machine; whether to attach it to a bug report is up to you. If the previous run crashed (there is a panic, native crash or unclean-exit snapshot newer than `diagnostics.crash_seen`), the next launch reminds you once.

@@ -891,7 +891,6 @@ impl SceneGpuRenderer for Renderer {
         ];
         let upload: Vec<u8> = values.iter().flat_map(|v| v.to_ne_bytes()).collect();
         let interop = c.gpu.wgpu();
-        let _submission = interop.lock_submission();
         let binding = p.uniforms.binding(
             c.gpu,
             &p.layout,

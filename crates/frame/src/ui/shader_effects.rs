@@ -1413,7 +1413,6 @@ impl State {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        let _submission = gpu.lock_submission();
         let upload = |texture: &wgpu::Texture, size: [u32; 2], bytes: &[u8]| {
             gpu.queue().write_texture(
                 wgpu::TexelCopyTextureInfo {
@@ -1705,7 +1704,6 @@ impl Renderer {
             events,
         );
         let gpu = c.gpu.wgpu();
-        let _submission = gpu.lock_submission();
         let pipeline = &prepared.pipeline;
         let binding = prepared.uniforms.binding(
             c.gpu,
@@ -1810,7 +1808,6 @@ impl Renderer {
         );
         let mut once = super::effect_uniforms::Uniforms::default();
         {
-            let _submission = gpu.lock_submission();
             let binding = once.binding(
                 c.gpu,
                 &prepared.pipeline.layout,
@@ -1890,7 +1887,6 @@ fn copy_rest(
         b.copy_from_slice(&v.to_ne_bytes());
     }
     let gpu = c.gpu.wgpu();
-    let _submission = gpu.lock_submission();
     let binding = frozen.blits.binding(
         c.gpu,
         &blit.layout,

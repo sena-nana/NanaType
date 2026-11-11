@@ -921,7 +921,6 @@ impl SceneGpuRenderer for Renderer {
         let upload = values.map(f32::to_ne_bytes);
         let upload = upload.as_flattened();
         let interop = c.gpu.wgpu();
-        let _submission = interop.lock_submission();
         let binding = p.uniforms.binding(
             c.gpu,
             &p.layout,

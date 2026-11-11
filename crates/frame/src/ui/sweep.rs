@@ -410,7 +410,6 @@ impl SceneGpuRenderer for SweepRenderer {
         ];
         let upload = bytes(&values);
         let interop = context.gpu.wgpu();
-        let _submission = interop.lock_submission();
         let binding = prepared.uniforms.binding(
             context.gpu,
             &prepared.layout,
