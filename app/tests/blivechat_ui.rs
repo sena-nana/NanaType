@@ -164,3 +164,44 @@ fn the_laplace_page_takes_a_pasted_link() {
         );
     }
 }
+
+#[test]
+fn the_server_section_takes_a_pasted_room_link_first() {
+    use nanatype::msg::BliveMsg;
+    for locale in Locale::ALL {
+        let ui = ui(locale, enabled(BlivechatSource::Server));
+        let mut page = session(ui);
+        let label = ui.now_t("int-blive-link");
+        assert_ne!(label, "int-blive-link", "missing translation");
+        let nodes = page.accessibility_dump();
+        assert!(
+            nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some(label.as_str())),
+            "the link row shows in {locale:?}"
+        );
+        // The link's button comes before the auth code's.
+        let save = ui.now_t("int-blive-link-save");
+        let button = nodes
+            .iter()
+            .find(|n| n.role == "button" && n.label.as_deref() == Some(save.as_str()))
+            .expect("a save button");
+        assert!(page.click_node(button.id).unwrap());
+        let messages = page.document_mut().context_mut().take_program_messages();
+        assert!(
+            messages.into_iter().any(|m| m
+                .downcast::<Msg>()
+                .is_ok_and(|m| matches!(*m, Msg::Blive(BliveMsg::Link(_))))),
+            "the link is sent in {locale:?}"
+        );
+
+        let ui = self::ui(locale, enabled(BlivechatSource::Comet));
+        let comet = session(ui).accessibility_dump();
+        assert!(
+            !comet
+                .iter()
+                .any(|n| n.label.as_deref() == Some(label.as_str())),
+            "the link row shows for 彗星号 in {locale:?}"
+        );
+    }
+}

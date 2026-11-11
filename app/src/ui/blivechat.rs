@@ -79,7 +79,13 @@ fn source_choice(ui: Ui) -> AnyView {
 }
 
 fn server_section(ui: Ui) -> AnyView {
-    let mut rows = Vec::new();
+    // The room link blivechat gives for OBS fills everything below at once.
+    let mut rows = vec![row(
+        ui,
+        "int-blive-link",
+        Some("int-blive-link-hint"),
+        link_field(ui),
+    )];
     // Room ids and auth codes are both accepted by blivechat.
     rows.push(row(
         ui,
@@ -135,6 +141,42 @@ fn server_section(ui: Ui) -> AnyView {
         ),
     ]);
     section(ui, "int-blive-section", rows)
+}
+
+/// blivechat's room link, pasted whole. It may carry the 身份码, so it is
+/// hidden while typed and never kept as it is.
+fn link_field(ui: Ui) -> AnyView {
+    let draft = signal(String::new());
+    let save = move || {
+        let link = draft.get_untracked().trim().to_owned();
+        draft.set(String::new());
+        Msg::Blive(BliveMsg::Link(link))
+    };
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center),
+    )
+    .children((
+        widget(Stack::row(0.0).width(LengthSpec::Px(crate::ui::kit::field::SM))).children(
+            widget(
+                kit::text_input("")
+                    .secure(true)
+                    .placeholder(ui.now_t("int-blive-link-placeholder"))
+                    .size(ControlSize::Small),
+            )
+            .bind(move |input: &mut TextInput| {
+                let text = draft.get();
+                if input.state.value.as_ref() != text.as_str() {
+                    input.state.value = text.into();
+                }
+            })
+            .on(move |e: &TextChanged| draft.set(e.value.chars().take(4096).collect()))
+            .on_cx(move |_, _: &TextSubmitted, cx| cx.dispatch_program_all(save())),
+        ),
+        primary(ui, "int-blive-link-save", save),
+    ))
+    .into_any()
 }
 
 /// The room number: typed freely, applied on Enter or with the button so a

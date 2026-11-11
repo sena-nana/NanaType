@@ -20,23 +20,65 @@ impl App {
         match msg {
             BliveMsg::Event(event) => self.blivechat_event(event),
             BliveMsg::AuthCode(code) => {
-                if let Err(e) = self.blivechat_auth.set(&code) {
-                    nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 1u64; "{e}");
-                    let text = self.ui.now_t("int-blive-auth-not-stored");
-                    self.notice(text, true);
-                }
+                self.blivechat_store_auth(&code);
                 let saved = !code.trim().is_empty();
                 self.edit(|s| s.integrations.blivechat.enabled |= saved);
-                // A changed code is a new room key; the same code again is a
-                // retry after blivechat refused it, which is not retried alone.
-                self.blivechat_configure();
-                if matches!(
-                    self.ui.blivechat.get_untracked().status,
-                    BliveStatus::Fatal(..)
-                ) {
-                    self.blivechat.reconnect();
-                }
+                self.blivechat_rejoin();
             }
+            BliveMsg::Link(text) => {
+                use nanatype_blive::room_link::{RoomLink, RoomLinkError};
+                let link = match RoomLink::parse(&text) {
+                    Ok(link) => link,
+                    Err(e) => {
+                        let text = self.ui.now_t(match e {
+                            RoomLinkError::Invalid => "int-blive-link-invalid",
+                            RoomLinkError::PublicServer => "int-blive-link-public",
+                        });
+                        self.notice(text, true);
+                        return;
+                    }
+                };
+                let kind = match &link.room {
+                    RoomKey::AuthCode(code) => {
+                        self.blivechat_store_auth(code);
+                        BliveRoomKind::AuthCode
+                    }
+                    RoomKey::RoomId(_) => BliveRoomKind::RoomId,
+                };
+                self.edit(|s| {
+                    let b = &mut s.integrations.blivechat;
+                    b.enabled = true;
+                    b.source = BlivechatSource::Server;
+                    b.host = link.host;
+                    b.port = link.port;
+                    b.room_kind = kind;
+                    if let RoomKey::RoomId(id) = link.room {
+                        b.room_id = id.to_string();
+                    }
+                });
+                self.blivechat_rejoin();
+            }
+        }
+    }
+
+    fn blivechat_store_auth(&mut self, code: &str) {
+        if let Err(e) = self.blivechat_auth.set(code) {
+            nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 1u64; "{e}");
+            let text = self.ui.now_t("int-blive-auth-not-stored");
+            self.notice(text, true);
+        }
+    }
+
+    /// Join with what was just saved. A changed room key is a new
+    /// configuration; the same one again is a retry after blivechat refused
+    /// it, which is not retried alone.
+    fn blivechat_rejoin(&mut self) {
+        self.blivechat_configure();
+        if matches!(
+            self.ui.blivechat.get_untracked().status,
+            BliveStatus::Fatal(..)
+        ) {
+            self.blivechat.reconnect();
         }
     }
 

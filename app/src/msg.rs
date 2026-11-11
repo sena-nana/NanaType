@@ -726,6 +726,10 @@ pub enum BliveMsg {
     Event(nanatype_blive::BliveEvent),
     /// Keep this blivechat 身份码 in the system's secret store; empty forgets it.
     AuthCode(String),
+    /// A blivechat room link the user pasted (the one its home page gives
+    /// for OBS): its server and room go to the settings, a 身份码 in it to
+    /// the system's secret store.
+    Link(String),
 }
 
 pub enum LaplaceMsg {

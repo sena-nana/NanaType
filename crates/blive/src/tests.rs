@@ -746,3 +746,69 @@ fn laplace_links_read_as_pasted() {
     let l = laplace::Link::parse("ws://h:1").unwrap();
     assert_eq!(l.url().unwrap(), "ws://h:1/", "no token, no query");
 }
+
+#[test]
+fn a_blivechat_room_link_names_its_server_and_room() {
+    use crate::room_link::{RoomLink, RoomLinkError};
+    let room = |text: &str| RoomLink::parse(text);
+    let at = |host: &str, port: u16, room: RoomKey| {
+        Ok(RoomLink {
+            host: host.into(),
+            port,
+            room,
+        })
+    };
+    assert_eq!(
+        room("  http://localhost:12450/room/ABC123DEF?roomKeyType=2&lang=zh&templateUrl=x  "),
+        at("localhost", 12450, RoomKey::AuthCode("ABC123DEF".into()))
+    );
+    assert_eq!(
+        room("http://192.168.1.5:8080/room/5146751?roomKeyType=1"),
+        at("192.168.1.5", 8080, RoomKey::RoomId(5146751))
+    );
+    // blivechat reads a missing type as a room number; port 80 is implied.
+    assert_eq!(
+        room("http://chat.lan/room/42"),
+        at("chat.lan", 80, RoomKey::RoomId(42))
+    );
+    assert_eq!(
+        room("http://[::1]:12450/room/a%20b?roomKeyType=2"),
+        at("::1", 12450, RoomKey::AuthCode("a b".into()))
+    );
+    // The release's loader wraps the room's link.
+    let wrapped = url::Url::parse_with_params(
+        "file:///C:/blivechat/data/loader.html",
+        [(
+            "url",
+            "http://127.0.0.1:12450/room/CODE9?roomKeyType=2&minGiftPrice=0",
+        )],
+    )
+    .unwrap();
+    assert_eq!(
+        room(wrapped.as_str()),
+        at("127.0.0.1", 12450, RoomKey::AuthCode("CODE9".into()))
+    );
+
+    for public in [
+        "https://blive.chat/room/CODE?roomKeyType=2",
+        "http://api1.blive.chat/room/1",
+        "https://loader.example/loader.html?url=https%3A%2F%2Fblive.chat%2Froom%2FX%3FroomKeyType%3D2",
+    ] {
+        assert_eq!(room(public), Err(RoomLinkError::PublicServer), "{public}");
+    }
+    for bad in [
+        "",
+        "12450",
+        "localhost:12450",
+        "http://localhost:12450/",
+        "http://localhost:12450/room/",
+        "http://localhost:12450/room/x/y",
+        "http://localhost:12450/room/abc",
+        "http://localhost:12450/room/0",
+        "https://chat.example/room/1",
+        "ws://localhost:12450/room/1",
+        "file:///C:/blivechat/data/loader.html",
+    ] {
+        assert_eq!(room(bad), Err(RoomLinkError::Invalid), "{bad:?}");
+    }
+}

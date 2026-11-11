@@ -74,7 +74,7 @@ Windows 也可以使用 *Window Capture*，捕获方式选择 *Windows 10 (1903 
 
 在 **blivechat** 页面开启接收并选择来源：
 
-- **blivechat**：运行 blivechat，填写身份码或房间号，点击“保存并连接”。默认地址为 `127.0.0.1:12450`。
+- **blivechat**：运行 blivechat，在它的首页填好房间后复制给 OBS 用的房间链接，粘贴到“房间链接”并点击“保存并连接”，房间和地址会自动填好；也可以手动填写身份码或房间号，默认地址为 `127.0.0.1:12450`。链接里的身份码存进系统钥匙串。只支持本机或自建的 blivechat，不连接 blive.chat 公共服务器。
 - **彗星号**：先打开彗星号并开始监听直播间，NanaType 默认连接端口 `19400`。
 
 在 **LAPLACE** 页面开启接收，按[LAPLACE 接入说明](laplace.md)粘贴 Event Bridge 链接。
