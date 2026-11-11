@@ -976,12 +976,11 @@ packages-consent-reviewing = プラグインの内容を確認しています…
 packages-consent-confirming = 内容と実行同意を照合しています…
 
 # Third-party chat: blivechat, 彗星号 and LAPLACE
-settings-blivechat = 外部コメント
-int-blive = 外部コメントを受信
+settings-blivechat = blivechat
+int-blive = blivechat からコメントを受信
 int-blive-source = 受信元
 int-blive-source-server = blivechat
 int-blive-source-comet = 彗星号
-int-blive-source-laplace = LAPLACE
 int-blive-section = blivechat
 int-blive-room-kind = ルーム
 int-blive-auth-code = 認証コード
@@ -999,7 +998,8 @@ int-comet-port = 彗星号のポート
 int-comet-port-hint = 先に彗星号クライアントを起動してください。NanaType は彗星号が監視しているすべての配信ルームを受信します。既定は 19400 で、彗星号の設定のポートと合わせます
 int-comet-connected = 彗星号 · 接続済み
 int-comet-not-running = 彗星号に接続できません：先に彗星号クライアントを起動してください
-int-laplace-section = LAPLACE Event Bridge
+settings-laplace = LAPLACE
+int-laplace = LAPLACE からコメントを受信
 int-laplace-link = Event Bridge のリンク
 int-laplace-link-hint = Event Bridge のアドレス（例：ws://localhost:9696）か、Event Fetcher モードの LAPLACE Chat OBS リンクを貼り付けます。LAPLACE が認証コードでライブルームにつないでいる場合のみ対応します。トークンはシステムのキーチェーンに保存され、リンクのほかの部分は保存されません
 int-laplace-link-placeholder = リンクを貼り付け

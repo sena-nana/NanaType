@@ -465,11 +465,11 @@ fn newer_schemas_load_read_only() {
     let path = tmp.path().join("settings.json");
     fs::write(
         &path,
-        r#"{ "schema": 7, "general": { "characters": [{ "name": "z" }] } }"#,
+        r#"{ "schema": 99, "general": { "characters": [{ "name": "z" }] } }"#,
     )
     .unwrap();
     let loaded = load_settings(&path, None);
-    assert!(matches!(loaded.note, LoadNote::TooNew { schema: 7 }));
+    assert!(matches!(loaded.note, LoadNote::TooNew { schema: 99 }));
     assert_eq!(loaded.value.general.active_character().name, "z");
 }
 
@@ -1019,7 +1019,7 @@ fn third_party_chat_defaults_off_and_round_trips_at_schema_2() {
     assert_eq!(b.source, BlivechatSource::Server);
     assert_eq!((b.host.as_str(), b.port), ("127.0.0.1", BLIVECHAT_PORT));
     assert_eq!(b.comet_port, COMET_PORT);
-    assert_eq!(b.laplace_url, LAPLACE_URL);
+    assert_eq!(old.integrations.laplace.url, LAPLACE_URL);
 
     let mut value = serde_json::json!({"schema":2,"integrations":{"blivechat":{"enabled":true,"source":"comet","room_kind":"room_id","room_id":"21452505","comet_token":"abc123"}}});
     assert_eq!(migrate(&mut value).unwrap(), 2);
@@ -1057,23 +1057,44 @@ fn third_party_chat_values_are_repaired() {
     // The old relay's port is the client's now.
     b.comet_port = 12451;
     b.room_id = " 42 ".into();
-    b.laplace_url = "  ".into();
+    s.integrations.laplace.url = "  ".into();
     assert!(s.sanitize());
     let b = &s.integrations.blivechat;
     assert_eq!(b.host, "127.0.0.1");
     assert_eq!((b.port, b.comet_port), (BLIVECHAT_PORT, COMET_PORT));
     assert_eq!(b.room_id, "42");
-    assert_eq!(b.laplace_url, LAPLACE_URL);
+    assert_eq!(s.integrations.laplace.url, LAPLACE_URL);
 }
 
 #[test]
-fn a_laplace_source_round_trips() {
-    let value = serde_json::json!({"schema":2,"integrations":{"blivechat":{"enabled":true,
-        "source":"laplace","laplace_url":"wss://example.com/"}}});
+fn laplace_leaves_blivechat_for_a_source_of_its_own() {
+    let mut value = serde_json::json!({"schema":6,"integrations":{"blivechat":{"enabled":true,
+        "source":"laplace","host":"10.0.0.2","laplace_url":"wss://example.com/"}}});
+    assert_eq!(migrate(&mut value).unwrap(), 6);
     let settings: Settings = serde_json::from_value(value).unwrap();
     let b = &settings.integrations.blivechat;
-    assert_eq!(b.source, BlivechatSource::Laplace);
-    assert_eq!(b.laplace_url, "wss://example.com/");
+    assert!(!b.enabled, "blivechat was not the one in use");
+    assert_eq!(b.source, BlivechatSource::Server);
+    assert_eq!(b.host, "10.0.0.2");
+    let l = &settings.integrations.laplace;
+    assert!(l.enabled);
+    assert_eq!(l.url, "wss://example.com/");
+    assert!(
+        serde_json::to_value(&settings).unwrap()["integrations"]["blivechat"]
+            .get("laplace_url")
+            .is_none()
+    );
+
+    // blivechat in use keeps it; the LAPLACE link waits, off.
+    let mut value = serde_json::json!({"schema":6,"integrations":{"blivechat":{"enabled":true,
+        "source":"comet","laplace_url":"ws://10.0.0.3:9696/"}}});
+    migrate(&mut value).unwrap();
+    let settings: Settings = serde_json::from_value(value).unwrap();
+    let i = &settings.integrations;
+    assert!(i.blivechat.enabled);
+    assert_eq!(i.blivechat.source, BlivechatSource::Comet);
+    assert!(!i.laplace.enabled);
+    assert_eq!(i.laplace.url, "ws://10.0.0.3:9696/");
 }
 
 #[test]

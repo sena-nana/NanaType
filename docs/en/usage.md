@@ -43,14 +43,16 @@ Both editing modes support scrolling with the wheel / trackpad and PageUp / Page
 
 For protocol, sign-in and rate-limit details, see [Twitch integration](twitch.md).
 
-### Third-party chat: blivechat and Comet (彗星号)
+### blivechat and Comet (彗星号)
 
-Open **Settings › Third-party chat**, turn it on and choose a source:
+Open **Settings › Live platforms › blivechat**, turn it on and choose a source:
 
 - **blivechat**: run blivechat (default `127.0.0.1:12450`), enter your Bilibili Open Platform identity code and click **Save and connect**, or use a room number instead. The identity code is kept in OS-protected storage (Windows DPAPI / macOS Keychain) and never written to the settings file.
 - **彗星号 (Comet)**: open the Comet client and start listening to your room; NanaType connects to it directly (port 19400 by default) and reads its chat, with no plugin. For how it works, see [Comet integration](comet.md).
 
-Third-party chat messages show up in the chat panel, and @-mentions, replies and mixing into history work the same way. With no live room at hand, you can try blivechat mode against the mock server:
+LAPLACE Event Bridge has a page of its own beside it (**Settings › Live platforms › LAPLACE**), switched on separately, so both can be connected at once; see [LAPLACE integration](laplace.md).
+
+These messages show up in the chat panel, and @-mentions, replies and mixing into history work the same way. With no live room at hand, you can try blivechat mode against the mock server:
 
 ```bash
 cargo run -p nanatype-blive --example mock_blivechat

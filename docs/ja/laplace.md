@@ -32,7 +32,7 @@ NanaType（crates/blive/src/laplace.rs）→ コメントパネル、履歴
 
 次に NanaType で：
 
-1. **設定 › ライブ配信 › 外部コメント**で受信をオンにし、受信元に **LAPLACE** を選びます。
+1. **設定 › ライブ配信 › LAPLACE** で受信をオンにします。
 2. **Event Bridge のリンク**にアドレスを貼り付け、**保存して接続**を押します。貼り付けられるもの：
    - `ws://localhost:9696`、トークンがあれば `ws://localhost:9696/?token=トークン`
    - リモートの Event Fetcher の `wss://…` または `https://…`

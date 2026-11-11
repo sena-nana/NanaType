@@ -13,23 +13,27 @@ use crate::ui::I18N;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Platform {
-    /// A blivechat server, 彗星号 or a LAPLACE bridge.
+    /// A blivechat server or the 彗星号 client.
     Blivechat,
+    /// A LAPLACE Event Bridge.
+    Laplace,
     Twitch,
 }
 impl Platform {
     /// The sources this build connects to, in settings order.
-    pub const ALL: &[Self] = &[Self::Twitch, Self::Blivechat];
+    pub const ALL: &[Self] = &[Self::Twitch, Self::Blivechat, Self::Laplace];
     pub fn source(self) -> &'static str {
         match self {
             Self::Blivechat => "blivechat",
+            Self::Laplace => "laplace",
             Self::Twitch => "twitch",
         }
     }
     /// Downloaded pictures are cached per platform under this prefix.
     pub fn cache_prefix(self) -> &'static str {
         match self {
-            Self::Blivechat => "blive",
+            // Both carry Bilibili's pictures, so they share the cache.
+            Self::Blivechat | Self::Laplace => "blive",
             Self::Twitch => "twitch",
         }
     }
@@ -37,6 +41,7 @@ impl Platform {
     pub fn label_key(self) -> &'static str {
         match self {
             Self::Blivechat => "settings-blivechat",
+            Self::Laplace => "settings-laplace",
             Self::Twitch => "settings-twitch",
         }
     }

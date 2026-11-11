@@ -16,8 +16,8 @@ pub fn capture(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
     links(scene, out);
 }
 
-/// The third-party chat page in every source: a blivechat server joined by
-/// room number, 彗星号's own feed, and a LAPLACE Event Bridge.
+/// The blivechat page in each source (a server joined by room number and
+/// 彗星号's own feed), then the LAPLACE page with a saved token.
 fn blivechat(scene: &Scene, out: &std::path::Path) {
     use nanatype_blive::BliveStatus;
     use nanatype_settings::{BliveRoomKind, BlivechatSource};
@@ -32,7 +32,6 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
     for (name, source) in [
         ("blive-settings", BlivechatSource::Server),
         ("comet-settings", BlivechatSource::Comet),
-        ("laplace-settings", BlivechatSource::Laplace),
     ] {
         let mut s = (*before_settings).clone();
         let b = &mut s.integrations.blivechat;
@@ -43,7 +42,6 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
         let state = nanatype::app::blivechat::State {
             status: BliveStatus::Connected,
             auth_saved: false,
-            laplace_token_saved: source == BlivechatSource::Laplace,
         };
         let mut status = (*before_status).clone();
         (status.blivechat, status.blivechat_link) =
@@ -58,8 +56,36 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
                 .unwrap();
         });
     }
+    let before_laplace = ui.laplace.get_untracked();
+    ui.platform_tab.set(nanatype::chat::Platform::Laplace);
+    let mut s = (*before_settings).clone();
+    s.integrations.laplace.enabled = true;
+    let state = nanatype::app::laplace::State {
+        status: BliveStatus::Connected,
+        token_saved: true,
+    };
+    let mut status = (*before_status).clone();
+    (status.laplace, status.laplace_link) =
+        link_text::laplace(ui.locale.get_untracked(), &s.integrations.laplace, &state);
+    assert_consistent(&s, &status);
+    ui.settings.set(Arc::new(s));
+    ui.laplace.set(Arc::new(state));
+    ui.status.set(Arc::new(status));
+    shot(
+        "laplace-settings",
+        out,
+        920,
+        1100,
+        theme.clone(),
+        |doc, id| {
+            doc.context_mut()
+                .mount_view_root(id, move || settings::settings_window(ui))
+                .unwrap();
+        },
+    );
     ui.settings.set(before_settings);
     ui.blivechat.set(before_state);
+    ui.laplace.set(before_laplace);
     ui.status.set(before_status);
     ui.page.set(before_page);
 }

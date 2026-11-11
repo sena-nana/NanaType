@@ -119,6 +119,7 @@ pub fn links_pulsing(ui: Ui) -> bool {
             .chain(&s.spout_partners)
             .any(|l| *l == LinkState::Connecting)
                 || s.blivechat_link == crate::ui::danmaku::Link::Connecting
+                || s.laplace_link == crate::ui::danmaku::Link::Connecting
         })
 }
 
@@ -156,9 +157,14 @@ pub fn link_badge_by(
     })
 }
 
-/// Third-party chat's badge (blivechat or 彗星号).
+/// blivechat's badge (a blivechat server or 彗星号).
 pub fn blivechat_badge(ui: Ui) -> AnyView {
     chat_badge(ui, |s| (&s.blivechat, s.blivechat_link))
+}
+
+/// The LAPLACE Event Bridge's badge.
+pub fn laplace_badge(ui: Ui) -> AnyView {
+    chat_badge(ui, |s| (&s.laplace, s.laplace_link))
 }
 
 fn chat_badge(ui: Ui, get: fn(&Status) -> (&String, crate::ui::danmaku::Link)) -> AnyView {

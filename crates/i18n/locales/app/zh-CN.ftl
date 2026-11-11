@@ -976,12 +976,11 @@ packages-consent-reviewing = 正在审查插件内容…
 packages-consent-confirming = 正在核对内容并确认同意…
 
 # Third-party chat: blivechat, 彗星号 and LAPLACE
-settings-blivechat = 第三方弹幕
-int-blive = 接收第三方弹幕
+settings-blivechat = blivechat
+int-blive = 接收 blivechat 弹幕
 int-blive-source = 来源
 int-blive-source-server = blivechat
 int-blive-source-comet = 彗星号
-int-blive-source-laplace = LAPLACE
 int-blive-section = blivechat
 int-blive-room-kind = 房间
 int-blive-auth-code = 身份码
@@ -999,7 +998,8 @@ int-comet-port = 彗星号端口
 int-comet-port-hint = 先打开彗星号客户端，NanaType 会接收它监听的所有直播间。默认 19400，与彗星号设置里的端口一致即可
 int-comet-connected = 彗星号 · 已连接
 int-comet-not-running = 未连上彗星号：请先打开彗星号客户端
-int-laplace-section = LAPLACE Event Bridge
+settings-laplace = LAPLACE
+int-laplace = 接收 LAPLACE 弹幕
 int-laplace-link = Event Bridge 链接
 int-laplace-link-hint = 粘贴 Event Bridge 地址（如 ws://localhost:9696），或 Event Fetcher 模式下的 LAPLACE Chat OBS 链接。只支持 LAPLACE 用身份码连接直播间；令牌会存进系统钥匙串，链接里的其他参数不会保存
 int-laplace-link-placeholder = 粘贴链接

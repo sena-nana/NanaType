@@ -211,6 +211,18 @@ pub static BLIVECHAT_ERROR: EventDescriptor =
     EventDescriptor::new(CHAT, 101, "chat.blivechat_error", Severity::Warn, &[]);
 pub static BLIVECHAT_FATAL: EventDescriptor =
     EventDescriptor::new(CHAT, 102, "chat.blivechat_fatal", Severity::Error, &[]);
+pub static LAPLACE_SECRET_FAILED: EventDescriptor = EventDescriptor::new(
+    CHAT,
+    103,
+    "chat.laplace_secret_failed",
+    Severity::Warn,
+    // 0 load, 1 store.
+    &[FieldDescriptor::u64("op")],
+);
+pub static LAPLACE_ERROR: EventDescriptor =
+    EventDescriptor::new(CHAT, 104, "chat.laplace_error", Severity::Warn, &[]);
+pub static LAPLACE_FATAL: EventDescriptor =
+    EventDescriptor::new(CHAT, 105, "chat.laplace_fatal", Severity::Error, &[]);
 
 /// One live platform's connection and account, in its own domain. States
 /// are codes (see [`Conn`] and [`Account`]); a room, channel, account name or
@@ -384,6 +396,9 @@ pub static EVENTS: &[&EventDescriptor] = &[
     &BLIVECHAT_SECRET_FAILED,
     &BLIVECHAT_ERROR,
     &BLIVECHAT_FATAL,
+    &LAPLACE_SECRET_FAILED,
+    &LAPLACE_ERROR,
+    &LAPLACE_FATAL,
 ];
 
 /// A window's code in event fields.

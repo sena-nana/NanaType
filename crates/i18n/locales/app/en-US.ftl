@@ -985,12 +985,11 @@ packages-consent-reviewing = Reviewing plugin content…
 packages-consent-confirming = Checking content and confirming consent…
 
 # Third-party chat: blivechat, 彗星号 and LAPLACE
-settings-blivechat = Third-party chat
-int-blive = Receive third-party chat
+settings-blivechat = blivechat
+int-blive = Receive chat from blivechat
 int-blive-source = Source
 int-blive-source-server = blivechat
 int-blive-source-comet = 彗星号 (Comet)
-int-blive-source-laplace = LAPLACE
 int-blive-section = blivechat
 int-blive-room-kind = Room
 int-blive-auth-code = Auth code
@@ -1008,7 +1007,8 @@ int-comet-port = 彗星号 port
 int-comet-port-hint = Open the 彗星号 client first; NanaType receives every room it listens to. 19400 by default; match the port in 彗星号's settings
 int-comet-connected = 彗星号 · Connected
 int-comet-not-running = Cannot reach 彗星号: open the 彗星号 client first
-int-laplace-section = LAPLACE Event Bridge
+settings-laplace = LAPLACE
+int-laplace = Receive chat from LAPLACE
 int-laplace-link = Event Bridge link
 int-laplace-link-hint = Paste the Event Bridge address (such as ws://localhost:9696) or a LAPLACE Chat OBS link in Event Fetcher mode. Only LAPLACE joining the room with an auth code is supported; the token goes to the system keychain and nothing else in the link is kept
 int-laplace-link-placeholder = Paste the link

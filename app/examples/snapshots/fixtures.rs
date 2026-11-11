@@ -371,6 +371,11 @@ pub fn assert_consistent(settings: &Settings, status: &Status) {
             status.blivechat_link != danmaku::Link::Off,
         ),
         (
+            "LAPLACE",
+            i.laplace.enabled,
+            status.laplace_link != danmaku::Link::Off,
+        ),
+        (
             "Spout display",
             settings.output.display.enabled,
             status.spout_display != LinkState::Off,

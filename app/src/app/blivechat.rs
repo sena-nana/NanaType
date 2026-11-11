@@ -1,5 +1,5 @@
-//! Third-party chat: a blivechat server, the 彗星号 client's own feed, or a
-//! LAPLACE Event Bridge.
+//! blivechat-protocol chat: a blivechat server or the 彗星号 client's own
+//! feed.
 
 use crate::ui::EditShared;
 
@@ -13,8 +13,6 @@ pub struct State {
     pub status: BliveStatus,
     /// A 身份码 is kept in the secret store.
     pub auth_saved: bool,
-    /// A LAPLACE token is kept in the secret store.
-    pub laplace_token_saved: bool,
 }
 
 impl App {
@@ -38,33 +36,6 @@ impl App {
                 ) {
                     self.blivechat.reconnect();
                 }
-            }
-            BliveMsg::LaplaceLink(text) => {
-                use nanatype_blive::laplace::{Link, LinkError};
-                let link = match Link::parse(&text) {
-                    Ok(link) => link,
-                    Err(e) => {
-                        let text = self.ui.now_t(match e {
-                            LinkError::Invalid => "int-laplace-link-invalid",
-                            LinkError::DirectPage => "int-laplace-link-direct",
-                        });
-                        self.notice(text, true);
-                        return;
-                    }
-                };
-                // A link without a token is a bridge without one.
-                if let Err(e) = self.laplace_token.set(&link.token) {
-                    nanatype_diag::report!(crate::diag::BLIVECHAT_SECRET_FAILED, op = 1u64; "{e}");
-                    let text = self.ui.now_t("int-laplace-token-not-stored");
-                    self.notice(text, true);
-                }
-                // A new link is a new configuration, so it connects again.
-                self.edit(|s| {
-                    let b = &mut s.integrations.blivechat;
-                    b.laplace_url = link.address;
-                    b.enabled = true;
-                });
-                self.blivechat_configure();
             }
         }
     }
@@ -91,15 +62,7 @@ impl App {
                     self.notice(text, true);
                 }
             }
-            BliveUpdate::Chat(ChatEvent::DeleteSuperChats { ids }) => {
-                self.chat.retain(|m| {
-                    !(m.platform == Platform::Blivechat
-                        && matches!(m.kind, crate::chat::ChatKind::SuperChat { .. })
-                        && ids.contains(&m.id))
-                });
-                self.publish_chat();
-            }
-            BliveUpdate::Chat(chat) => self.chat_assets.blivechat(event.epoch, chat),
+            BliveUpdate::Chat(chat) => self.blive_chat(Platform::Blivechat, event.epoch, chat),
         }
     }
 
@@ -113,21 +76,6 @@ impl App {
                 port: b.comet_port,
                 join: Join::Comet,
             }),
-            (true, BlivechatSource::Laplace) => {
-                // Only read the secret store once the token is wanted.
-                let token = self.laplace_token.get();
-                let saved = token.is_some();
-                self.ui.blivechat.edit(|s| s.laplace_token_saved = saved);
-                let link = nanatype_blive::laplace::Link {
-                    address: self.settings.integrations.blivechat.laplace_url.clone(),
-                    token: token.unwrap_or_default(),
-                };
-                link.url().map(|url| BliveConfig {
-                    host: String::new(),
-                    port: 0,
-                    join: Join::Laplace { url },
-                })
-            }
             (true, BlivechatSource::Server) => {
                 let room = match crate::distribution::blive_room_kind(b) {
                     BliveRoomKind::AuthCode => {
@@ -160,6 +108,22 @@ impl App {
             });
         }
         self.blivechat_status_line();
+    }
+
+    /// Chat from a blivechat-shaped feed: a withdrawn super chat leaves the
+    /// list, anything else goes to have its pictures saved.
+    pub(super) fn blive_chat(&mut self, platform: Platform, epoch: u64, chat: ChatEvent) {
+        match chat {
+            ChatEvent::DeleteSuperChats { ids } => {
+                self.chat.retain(|m| {
+                    !(m.platform == platform
+                        && matches!(m.kind, crate::chat::ChatKind::SuperChat { .. })
+                        && ids.contains(&m.id))
+                });
+                self.publish_chat();
+            }
+            chat => self.chat_assets.blive(platform, epoch, chat),
+        }
     }
 
     /// Put the status line and the chat panel's dot in step with the state.

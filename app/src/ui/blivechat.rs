@@ -1,10 +1,9 @@
-//! The third-party chat page: a blivechat server, the 彗星号 client, or a
-//! LAPLACE Event Bridge.
+//! The blivechat page: a blivechat server or the 彗星号 client.
 use super::{
     Ui,
     settings::controls::{
-        Row, address, blivechat_badge, block, edit, port, primary, row, section, segmented,
-        select_keys, switch, toggled_section,
+        Row, address, blivechat_badge, edit, port, primary, row, section, segmented, select_keys,
+        switch, toggled_section,
     },
 };
 use crate::msg::{BliveMsg, Msg};
@@ -52,9 +51,6 @@ pub fn settings_page(ui: Ui) -> AnyView {
             widget(Stack::column(0.0))
                 .visible(source_is(ui, BlivechatSource::Comet))
                 .children(comet_section(ui)),
-            widget(Stack::column(0.0))
-                .visible(source_is(ui, BlivechatSource::Laplace))
-                .children(laplace_section(ui)),
         ))
         .into_any()
 }
@@ -67,18 +63,15 @@ fn source_choice(ui: Ui) -> AnyView {
             &[
                 ("server", "int-blive-source-server"),
                 ("comet", "int-blive-source-comet"),
-                ("laplace", "int-blive-source-laplace"),
             ],
         ),
         |s| match s.integrations.blivechat.source {
             BlivechatSource::Server => "server".into(),
             BlivechatSource::Comet => "comet".into(),
-            BlivechatSource::Laplace => "laplace".into(),
         },
         |s, v| {
             s.integrations.blivechat.source = match v {
                 "comet" => BlivechatSource::Comet,
-                "laplace" => BlivechatSource::Laplace,
                 _ => BlivechatSource::Server,
             }
         },
@@ -247,92 +240,4 @@ fn comet_section(ui: Ui) -> AnyView {
             ),
         )],
     )
-}
-
-fn laplace_section(ui: Ui) -> AnyView {
-    // What it connects to, with the token never shown.
-    let saved = widget(
-        Text::new("")
-            .style(Type::Caption.mono())
-            .color(SemanticColorRole::Muted),
-    )
-    .bind(move |t: &mut Text| {
-        let address = ui
-            .settings
-            .with(|s| s.integrations.blivechat.laplace_url.clone());
-        let v = if ui.blivechat.get().laplace_token_saved {
-            let sep = if address.contains('?') { '&' } else { '?' };
-            format!("{address}{sep}token=••••")
-        } else {
-            address
-        };
-        if t.value != v {
-            t.value = v;
-        }
-    });
-    section(
-        ui,
-        "int-laplace-section",
-        vec![
-            row(
-                ui,
-                "int-laplace-link",
-                Some("int-laplace-link-hint"),
-                laplace_link_field(ui),
-            ),
-            // The address is long: on its own line, so the label keeps its width.
-            block(saved),
-        ],
-    )
-}
-
-/// The bridge's link, pasted whole: its token goes to the system's secret
-/// store and only the address to the settings file.
-fn laplace_link_field(ui: Ui) -> AnyView {
-    let draft = signal(String::new());
-    let save = move || {
-        let link = draft.get_untracked().trim().to_owned();
-        draft.set(String::new());
-        Msg::Blive(BliveMsg::LaplaceLink(link))
-    };
-    widget(
-        Stack::row(0.0)
-            .gap_step(gap::step::TIGHT)
-            .align(AlignSpec::Center),
-    )
-    .children((
-        widget(Stack::row(0.0).width(LengthSpec::Px(crate::ui::kit::field::SM))).children(
-            widget(
-                kit::text_input("")
-                    .secure(true)
-                    .placeholder(ui.now_t("int-laplace-link-placeholder"))
-                    .size(ControlSize::Small),
-            )
-            .bind(move |input: &mut TextInput| {
-                let text = draft.get();
-                if input.state.value.as_ref() != text.as_str() {
-                    input.state.value = text.into();
-                }
-            })
-            .on(move |e: &TextChanged| draft.set(e.value.chars().take(2048).collect()))
-            .on_cx(move |_, _: &TextSubmitted, cx| cx.dispatch_program_all(save())),
-        ),
-        primary(ui, "int-laplace-link-save", save),
-        kit::tool(
-            nana_ui::icons_tabler::BOOK,
-            ui.now_t("int-laplace-guide"),
-            move || Msg::OpenUrl(laplace_guide(ui.locale.get_untracked())),
-        ),
-    ))
-    .into_any()
-}
-
-/// How to set up a bridge for NanaType, in the interface's language.
-fn laplace_guide(locale: nanatype_i18n::Locale) -> &'static str {
-    use nanatype_i18n::Locale;
-    match locale {
-        Locale::JaJp => "https://github.com/sena-nana/NanaType/blob/main/docs/ja/laplace.md",
-        Locale::EnUs => "https://github.com/sena-nana/NanaType/blob/main/docs/en/laplace.md",
-        _ => "https://github.com/sena-nana/NanaType/blob/main/docs/laplace.md",
-    }
 }

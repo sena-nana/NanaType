@@ -4,6 +4,7 @@ pub mod backup;
 pub mod blivechat;
 mod chat;
 mod editor;
+pub mod laplace;
 mod live;
 pub mod obs;
 mod packages;
@@ -125,8 +126,10 @@ pub struct App {
     keys: sounds::Keys,
     pub bridge: BridgeHandle,
     pub twitch: nanatype_twitch::TwitchHandle,
-    /// Third-party chat: blivechat, 彗星号 or a LAPLACE bridge.
+    /// blivechat or 彗星号.
     pub blivechat: nanatype_blive::BliveHandle,
+    /// A LAPLACE Event Bridge.
+    pub laplace: nanatype_blive::BliveHandle,
     /// OBS's program scene, sizing the Spout/Syphon outputs.
     pub obs: nanatype_obs::ObsHandle,
     /// The obs-websocket password.
@@ -318,7 +321,7 @@ impl App {
         let laplace_token = secret::LazySecret::new(
             &paths.config,
             "laplace-token",
-            &crate::diag::BLIVECHAT_SECRET_FAILED,
+            &crate::diag::LAPLACE_SECRET_FAILED,
             true,
         );
         let obs_password = secret::LazySecret::new(
@@ -359,6 +362,7 @@ impl App {
             bridge: workers.bridge,
             twitch: workers.twitch,
             blivechat: workers.blivechat,
+            laplace: workers.laplace,
             obs: workers.obs,
             obs_password,
             steam: workers.steam,
@@ -1201,6 +1205,7 @@ impl App {
         }));
         self.twitch_configure();
         self.blivechat_configure();
+        self.laplace_configure();
         self.obs_configure();
         self.edit_status(|s| {
             if !i.vts.enabled {
@@ -2220,6 +2225,7 @@ impl App {
             Msg::Chat(m) => self.chat_msg(m),
             Msg::Twitch(m) => self.twitch_msg(m),
             Msg::Blive(m) => self.blivechat_msg(m),
+            Msg::Laplace(m) => self.laplace_msg(m),
             Msg::Obs(m) => self.obs_msg(m),
             Msg::Workshop(m) => self.workshop_msg(m),
             Msg::History(m) => self.history_msg(m),
@@ -2334,6 +2340,7 @@ impl App {
     fn chat_message(&mut self, message: Arc<ChatMessage>) {
         let epoch = match message.platform {
             crate::chat::Platform::Blivechat => self.blivechat.epoch(),
+            crate::chat::Platform::Laplace => self.laplace.epoch(),
             crate::chat::Platform::Twitch => self.twitch.epoch(),
         };
         if message.epoch != 0 && message.epoch != epoch {

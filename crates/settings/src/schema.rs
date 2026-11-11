@@ -11,7 +11,7 @@ use nanatype_playback::QueuePolicy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const SETTINGS_SCHEMA: u32 = 6;
+pub const SETTINGS_SCHEMA: u32 = 7;
 /// Most characters a profile keeps.
 pub const MAX_CHARACTERS: usize = 32;
 /// How many steps the first-run guide has.
@@ -1657,7 +1657,7 @@ pub struct TwitchSettings {
     pub channel: String,
 }
 
-/// Where third-party chat comes from.
+/// Where blivechat-protocol chat comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BlivechatSource {
@@ -1666,8 +1666,6 @@ pub enum BlivechatSource {
     Server,
     /// The 彗星号 client's own feed on `127.0.0.1:comet_port`.
     Comet,
-    /// A LAPLACE Event Bridge at `laplace_url`.
-    Laplace,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -1679,7 +1677,7 @@ pub enum BliveRoomKind {
     RoomId,
 }
 
-/// Third-party chat over the blivechat protocol.
+/// Chat over the blivechat protocol: a blivechat server or the 彗星号 client.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BlivechatSettings {
@@ -1693,10 +1691,26 @@ pub struct BlivechatSettings {
     pub room_id: String,
     /// The port the 彗星号 client serves its feed on.
     pub comet_port: u16,
-    /// The LAPLACE bridge's link without its token (`ws://` or `wss://`),
-    /// as read from what the user pasted. The token is kept in the system's
-    /// secret store.
-    pub laplace_url: String,
+}
+
+/// Chat from a LAPLACE Event Bridge.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LaplaceSettings {
+    pub enabled: bool,
+    /// The bridge's link without its token (`ws://` or `wss://`), as read
+    /// from what the user pasted. The token is kept in the system's secret
+    /// store.
+    pub url: String,
+}
+
+impl Default for LaplaceSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            url: LAPLACE_URL.into(),
+        }
+    }
 }
 
 pub const BLIVECHAT_PORT: u16 = 12450;
@@ -1715,7 +1729,6 @@ impl Default for BlivechatSettings {
             room_kind: BliveRoomKind::default(),
             room_id: String::new(),
             comet_port: COMET_PORT,
-            laplace_url: LAPLACE_URL.into(),
         }
     }
 }
@@ -1728,6 +1741,7 @@ pub struct Integrations {
     pub websocket: WsSettings,
     pub chat: ChatSettings,
     pub blivechat: BlivechatSettings,
+    pub laplace: LaplaceSettings,
     pub twitch: TwitchSettings,
 }
 
@@ -2083,9 +2097,10 @@ impl Settings {
             l.comet_port = COMET_PORT;
         }
         l.room_id = l.room_id.trim().chars().take(20).collect();
-        l.laplace_url = l.laplace_url.trim().chars().take(2048).collect();
-        if l.laplace_url.is_empty() {
-            l.laplace_url = LAPLACE_URL.into();
+        let l = &mut self.integrations.laplace;
+        l.url = l.url.trim().chars().take(2048).collect();
+        if l.url.is_empty() {
+            l.url = LAPLACE_URL.into();
         }
         *self != before
     }

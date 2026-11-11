@@ -243,13 +243,12 @@ impl ChatAssets {
             .expect("spawn chat ingest");
         Self { tx }
     }
-    /// Third-party chat has no room of its own: a 彗星号 feed can mix rooms.
-    pub fn blivechat(&self, epoch: u64, event: ChatEvent) {
-        let _ = self.tx.send((
-            epoch,
-            String::new(),
-            Incoming::Chat(Platform::Blivechat, event),
-        ));
+    /// blivechat-shaped chat (blivechat, 彗星号, LAPLACE) has no room of its
+    /// own: a 彗星号 feed can mix rooms.
+    pub fn blive(&self, platform: Platform, epoch: u64, event: ChatEvent) {
+        let _ = self
+            .tx
+            .send((epoch, String::new(), Incoming::Chat(platform, event)));
     }
     pub fn twitch(&self, epoch: u64, channel: String, event: nanatype_twitch::ChatEvent) {
         let _ = self.tx.send((epoch, channel, Incoming::Twitch(event)));
@@ -373,10 +372,10 @@ mod tests {
                 let _ = ready.send(a);
             },
         );
-        service.blivechat(0, event(url.clone(), 1));
+        service.blive(Platform::Blivechat, 0, event(url.clone(), 1));
         accepted.recv_timeout(Duration::from_secs(2)).unwrap();
         for n in 2..=20 {
-            service.blivechat(0, event(url.clone(), n));
+            service.blive(Platform::Blivechat, 0, event(url.clone(), n));
         }
         for n in 1..=20 {
             let m = got
@@ -423,7 +422,7 @@ mod tests {
                 let _ = ready.send(a);
             },
         );
-        service.blivechat(0, event(url, 1));
+        service.blive(Platform::Blivechat, 0, event(url, 1));
         let message = got.recv_timeout(Duration::from_secs(2)).unwrap();
         assert_eq!(
             Some(assets.recv_timeout(Duration::from_secs(2)).unwrap()),

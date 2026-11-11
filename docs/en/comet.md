@@ -29,7 +29,7 @@ Chat panel, history
 ## Getting started
 
 1. Open the Comet client and start listening to your room.
-2. In NanaType: **Settings › Third-party chat**, turn it on and choose **彗星号 (Comet)** as the source. The port only needs to match the one in Comet's settings (19400 by default).
+2. In NanaType: **Settings › Live platforms › blivechat**, turn it on and choose **彗星号 (Comet)** as the source. The port only needs to match the one in Comet's settings (19400 by default).
 3. Once the status reads "彗星号 · Connected", chat Comet receives shows up in the chat panel. "Cannot reach 彗星号" means the client is not open, or the port is wrong.
 
 ## Field mapping

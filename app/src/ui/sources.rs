@@ -9,6 +9,7 @@ pub fn platform_page(ui: Ui, platform: Platform) -> AnyView {
     match platform {
         Platform::Twitch => super::twitch::settings_page(ui),
         Platform::Blivechat => super::blivechat::settings_page(ui),
+        Platform::Laplace => super::laplace::settings_page(ui),
     }
 }
 

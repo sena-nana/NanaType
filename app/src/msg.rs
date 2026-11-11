@@ -478,6 +478,7 @@ pub enum Msg {
     Chat(ChatMsg),
     Twitch(TwitchMsg),
     Blive(BliveMsg),
+    Laplace(LaplaceMsg),
     Obs(ObsMsg),
     #[cfg(feature = "updates")]
     Update(UpdateMsg),
@@ -721,13 +722,18 @@ pub enum TwitchMsg {
 }
 
 pub enum BliveMsg {
-    /// The third-party chat connection reported.
+    /// The blivechat or 彗星号 connection reported.
     Event(nanatype_blive::BliveEvent),
     /// Keep this blivechat 身份码 in the system's secret store; empty forgets it.
     AuthCode(String),
+}
+
+pub enum LaplaceMsg {
+    /// The LAPLACE Event Bridge connection reported.
+    Event(nanatype_blive::BliveEvent),
     /// A LAPLACE Event Bridge link the user pasted: its address goes to the
     /// settings, its token (or none) to the system's secret store.
-    LaplaceLink(String),
+    Link(String),
 }
 
 pub enum ObsMsg {

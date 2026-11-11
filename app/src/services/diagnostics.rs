@@ -75,6 +75,7 @@ pub fn summary(settings: &nanatype_settings::Settings, locale: &str) -> serde_js
         "advanced_effects": settings.skin.advanced_effects,
         "platforms": {
             "blivechat": i.blivechat.enabled,
+            "laplace": i.laplace.enabled,
             "twitch": i.twitch.enabled,
         },
         "outputs": { "vts": i.vts.enabled, "osc": i.osc.enabled, "websocket": i.websocket.enabled },

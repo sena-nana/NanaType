@@ -8,6 +8,7 @@ pub mod danmaku;
 pub mod dialogue;
 pub mod history;
 pub mod input;
+pub mod laplace;
 pub mod link_text;
 pub mod p2p;
 pub mod plugins;
@@ -78,9 +79,12 @@ pub struct Status {
     pub vts_hotkeys: Vec<(String, String)>,
     pub osc: LinkState,
     pub ws: LinkState,
-    /// Third-party chat (blivechat or 彗星号), likewise.
+    /// blivechat or 彗星号, likewise.
     pub blivechat: String,
     pub blivechat_link: danmaku::Link,
+    /// The LAPLACE Event Bridge, likewise.
+    pub laplace: String,
+    pub laplace_link: danmaku::Link,
     pub spout_display: LinkState,
     /// Each partner seat's sender, in seat order.
     pub spout_partners: Vec<LinkState>,
@@ -197,6 +201,7 @@ pub struct Ui {
     pub plugin_activation_error: Signal<Option<String>>,
     pub twitch: Signal<Arc<crate::app::twitch::State>>,
     pub blivechat: Signal<Arc<crate::app::blivechat::State>>,
+    pub laplace: Signal<Arc<crate::app::laplace::State>>,
     /// The OBS link and its program scene.
     pub obs: Signal<Arc<crate::app::obs::State>>,
     /// Translation keys and the last test.
@@ -312,6 +317,7 @@ impl Ui {
             speech_edit_pending: signal(false),
             twitch: signal(Arc::new(crate::app::twitch::State::default())),
             blivechat: signal(Arc::new(crate::app::blivechat::State::default())),
+            laplace: signal(Arc::new(crate::app::laplace::State::default())),
             obs: signal(Arc::new(crate::app::obs::State::default())),
             translate: signal(Arc::new(crate::app::translate::State::default())),
             #[cfg(feature = "updates")]

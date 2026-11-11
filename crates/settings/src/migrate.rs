@@ -137,6 +137,37 @@ pub fn migrate(value: &mut Value) -> Result<u32, MigrateError> {
         // The quick input summon shortcut was split from the input shortcut.
         obj.insert("schema".into(), json!(6));
     }
+    if from < 7 {
+        // LAPLACE left blivechat's source switch for a source of its own.
+        if let Some(integrations) = obj.get_mut("integrations").and_then(Value::as_object_mut)
+            && let Some(blive) = integrations
+                .get_mut("blivechat")
+                .and_then(Value::as_object_mut)
+        {
+            let url = blive.remove("laplace_url");
+            let was_laplace = blive.get("source").and_then(Value::as_str) == Some("laplace");
+            let enabled = was_laplace
+                && blive
+                    .get("enabled")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+            if was_laplace {
+                blive.insert("source".into(), json!("server"));
+                blive.insert("enabled".into(), json!(false));
+            }
+            if url.is_some() || was_laplace {
+                let mut laplace = Map::new();
+                laplace.insert("enabled".into(), json!(enabled));
+                if let Some(url) = url {
+                    laplace.insert("url".into(), url);
+                }
+                integrations
+                    .entry("laplace")
+                    .or_insert(Value::Object(laplace));
+            }
+        }
+        obj.insert("schema".into(), json!(7));
+    }
     Ok(from)
 }
 

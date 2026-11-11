@@ -33,7 +33,7 @@ First have LAPLACE join your room with your **auth code**, then pick one:
 
 Then in NanaType:
 
-1. **Settings › Live platforms › Third-party chat**: turn receiving on and choose **LAPLACE** as the source.
+1. **Settings › Live platforms › LAPLACE**: turn receiving on.
 2. Paste the address into **Event Bridge link** and press **Save and connect**. You can paste:
    - `ws://localhost:9696`, or `ws://localhost:9696/?token=your-token` with a token;
    - a remote Event Fetcher's `wss://…` or `https://…` address;

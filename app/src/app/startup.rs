@@ -2,7 +2,7 @@ use super::demo_editor;
 use crate::msg::Msg;
 #[cfg(feature = "updates")]
 use crate::msg::UpdateMsg;
-use crate::msg::{BliveMsg, ChatMsg, ObsMsg, StickerMsg, TwitchMsg, WorkshopMsg};
+use crate::msg::{BliveMsg, ChatMsg, LaplaceMsg, ObsMsg, StickerMsg, TwitchMsg, WorkshopMsg};
 use crate::paths::Paths;
 use crate::scheduler::Scheduler;
 use crate::services::chat_assets::ChatAssets;
@@ -26,6 +26,7 @@ pub(super) struct Workers {
     pub hotkeys: Hotkeys,
     pub twitch: nanatype_twitch::TwitchHandle,
     pub blivechat: nanatype_blive::BliveHandle,
+    pub laplace: nanatype_blive::BliveHandle,
     pub obs: nanatype_obs::ObsHandle,
     pub steam: nanatype_steam::SteamHandle,
     pub sticker_manager: crate::stickers::Manager,
@@ -60,6 +61,9 @@ impl Workers {
             ),
             blivechat: nanatype_blive::BliveHandle::new(forward(&post, |e| {
                 Msg::Blive(BliveMsg::Event(e))
+            })),
+            laplace: nanatype_blive::BliveHandle::new(forward(&post, |e| {
+                Msg::Laplace(LaplaceMsg::Event(e))
             })),
             obs: nanatype_obs::ObsHandle::new(forward(&post, |e| Msg::Obs(ObsMsg::Event(e)))),
             steam: nanatype_steam::SteamHandle::start(

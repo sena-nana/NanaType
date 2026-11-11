@@ -2,6 +2,7 @@ mod common;
 
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nanatype::{
+    chat::Platform,
     msg::Msg,
     ui::{Ui, settings},
 };
@@ -10,8 +11,12 @@ use nanatype_settings::{BlivechatSource, Settings};
 use std::sync::Arc;
 
 fn ui(locale: Locale, settings: Settings) -> Ui {
+    on_tab(locale, settings, Platform::Blivechat)
+}
+
+fn on_tab(locale: Locale, settings: Settings, tab: Platform) -> Ui {
     let ui = Ui::new(Arc::new(settings), common::skin("nanatype.halo"), locale);
-    ui.platform_tab.set(nanatype::chat::Platform::Blivechat);
+    ui.platform_tab.set(tab);
     ui.page.set(settings::Page::Platforms);
     ui
 }
@@ -39,7 +44,7 @@ fn enabled(source: BlivechatSource) -> Settings {
 }
 
 #[test]
-fn the_page_folds_away_while_off_and_names_every_source_in_every_locale() {
+fn the_page_folds_away_while_off_and_names_both_sources_in_every_locale() {
     for locale in Locale::ALL {
         let ui = ui(locale, Settings::default());
         let mut off = session(ui);
@@ -61,11 +66,7 @@ fn the_page_folds_away_while_off_and_names_every_source_in_every_locale() {
         let mut server = session(ui);
         assert!(has_button(&mut server, &ui.now_t("int-blive-auth-save")));
         let nodes = server.accessibility_dump();
-        for key in [
-            "int-blive-source-server",
-            "int-blive-source-comet",
-            "int-blive-source-laplace",
-        ] {
+        for key in ["int-blive-source-server", "int-blive-source-comet"] {
             let label = ui.now_t(key);
             assert!(
                 nodes
@@ -103,9 +104,38 @@ fn the_comet_section_only_asks_for_the_port() {
 }
 
 #[test]
-fn the_laplace_section_takes_a_pasted_link() {
+fn laplace_is_a_platform_of_its_own() {
     for locale in Locale::ALL {
-        let ui = ui(locale, enabled(BlivechatSource::Laplace));
+        let ui = on_tab(locale, Settings::default(), Platform::Laplace);
+        let mut off = session(ui);
+        let save = ui.now_t("int-laplace-link-save");
+        assert!(!has_button(&mut off, &save), "the link shows while off");
+        let switch = ui.now_t("int-laplace");
+        assert_ne!(switch, "int-laplace", "missing translation");
+        let tab = ui.now_t("settings-laplace");
+        assert_ne!(tab, "settings-laplace", "missing translation");
+        let nodes = off.accessibility_dump();
+        assert!(
+            nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some(tab.as_str())),
+            "the LAPLACE tab shows in {locale:?}"
+        );
+        assert!(
+            nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some(switch.as_str())),
+            "the LAPLACE switch shows in {locale:?}"
+        );
+    }
+}
+
+#[test]
+fn the_laplace_page_takes_a_pasted_link() {
+    for locale in Locale::ALL {
+        let mut settings = Settings::default();
+        settings.integrations.laplace.enabled = true;
+        let ui = on_tab(locale, settings, Platform::Laplace);
         let mut session = session(ui);
         let save = ui.now_t("int-laplace-link-save");
         assert_ne!(save, "int-laplace-link-save", "missing translation");

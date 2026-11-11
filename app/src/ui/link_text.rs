@@ -11,7 +11,7 @@ use nanatype_blive::{BliveStatus, FatalKind};
 use nanatype_bridge::{BridgeStatus, Sink};
 use nanatype_i18n::Locale;
 use nanatype_model::LinkFault;
-use nanatype_settings::{BliveRoomKind, BlivechatSettings, BlivechatSource};
+use nanatype_settings::{BliveRoomKind, BlivechatSettings, BlivechatSource, LaplaceSettings};
 
 use super::danmaku::Link;
 use super::{I18N, LinkState};
@@ -111,8 +111,8 @@ fn blive(locale: Locale, status: &BliveStatus, room: &str) -> (String, Link) {
     }
 }
 
-/// Third-party chat's status line and dot: a blivechat server's join, or
-/// the connection to the 彗星号 client or the LAPLACE bridge.
+/// blivechat's status line and dot: a blivechat server's join, or the
+/// connection to the 彗星号 client.
 pub fn blivechat(
     locale: Locale,
     settings: &BlivechatSettings,
@@ -133,10 +133,6 @@ pub fn blivechat(
             };
             blive(locale, &state.status, &room)
         }
-        BlivechatSource::Laplace => match &state.status {
-            BliveStatus::Connected => (I18N.t_in(locale, "int-laplace-connected"), Link::Connected),
-            other => blive(locale, other, ""),
-        },
         BlivechatSource::Comet => match &state.status {
             BliveStatus::Connected => (I18N.t_in(locale, "int-comet-connected"), Link::Connected),
             // Nothing listens: the client is not open.
@@ -145,6 +141,21 @@ pub fn blivechat(
             }
             other => blive(locale, other, ""),
         },
+    }
+}
+
+/// The LAPLACE bridge's status line and dot.
+pub fn laplace(
+    locale: Locale,
+    settings: &LaplaceSettings,
+    state: &crate::app::laplace::State,
+) -> (String, Link) {
+    if !settings.enabled {
+        return (I18N.t_in(locale, "int-status-off"), Link::Off);
+    }
+    match &state.status {
+        BliveStatus::Connected => (I18N.t_in(locale, "int-laplace-connected"), Link::Connected),
+        other => blive(locale, other, ""),
     }
 }
 
@@ -236,15 +247,13 @@ mod tests {
             {
                 texts.push(blive(locale, &status, "1").0);
             }
-            use BlivechatSource::{Comet, Laplace, Server};
+            use BlivechatSource::{Comet, Server};
             for (source, status) in [
                 (Server, BliveStatus::Off),
                 (Server, BliveStatus::Connected),
                 (Comet, BliveStatus::Connecting),
                 (Comet, BliveStatus::Error(LinkFault::Refused)),
                 (Comet, BliveStatus::Connected),
-                (Laplace, BliveStatus::Connected),
-                (Laplace, BliveStatus::Error(LinkFault::Unauthorized)),
             ] {
                 let settings = BlivechatSettings {
                     enabled: true,
@@ -254,9 +263,22 @@ mod tests {
                 let state = crate::app::blivechat::State {
                     status,
                     auth_saved: false,
-                    laplace_token_saved: false,
                 };
                 texts.push(blivechat(locale, &settings, &state).0);
+            }
+            for status in [
+                BliveStatus::Connected,
+                BliveStatus::Error(LinkFault::Unauthorized),
+            ] {
+                let settings = LaplaceSettings {
+                    enabled: true,
+                    ..Default::default()
+                };
+                let state = crate::app::laplace::State {
+                    status,
+                    token_saved: false,
+                };
+                texts.push(laplace(locale, &settings, &state).0);
             }
             for status in [
                 WindowOutputStatus::Active {

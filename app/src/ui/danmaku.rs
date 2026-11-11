@@ -570,6 +570,7 @@ fn header(ui: Ui) -> AnyView {
     let dot = widget(crate::ui::kit::dot_frame()).bind(move |s: &mut Stack| {
         let links = [
             ui.status.with(|x| x.blivechat_link),
+            ui.status.with(|x| x.laplace_link),
             super::twitch::link(&ui.twitch.get().connection),
         ];
         let link = combined_link(&links);
@@ -593,6 +594,10 @@ fn header(ui: Ui) -> AnyView {
         if ui.settings.with(|s| s.integrations.blivechat.enabled) {
             let label = ui.now_t("settings-blivechat");
             parts.push(ui.status.with(|s| format!("{label}: {}", s.blivechat)));
+        }
+        if ui.settings.with(|s| s.integrations.laplace.enabled) {
+            let label = ui.now_t("settings-laplace");
+            parts.push(ui.status.with(|s| format!("{label}: {}", s.laplace)));
         }
         let v = parts.join(" · ");
         if t.value != v {
@@ -695,6 +700,7 @@ fn filters(ui: Ui) -> AnyView {
 /// Any chat source has somewhere to read from.
 pub fn chat_configured(s: &Settings) -> bool {
     s.integrations.blivechat.enabled
+        || s.integrations.laplace.enabled
         || (s.integrations.twitch.enabled && !s.integrations.twitch.channel.is_empty())
 }
 
