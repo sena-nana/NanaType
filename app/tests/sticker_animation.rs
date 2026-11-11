@@ -166,6 +166,16 @@ fn cached_animation_changes_pixels_without_relayout_and_respects_motion_and_visi
             > 1000
     );
     assert_ne!(red, green);
+    // A window that does not paint the sticker (a Spout output reusing its
+    // frame while the editor that shows it is hidden) must not advance it:
+    // each advance queues an upload that only the painting window submits.
+    let other = WindowKind::History.id();
+    playback.prepare(other, &painter.gpu, 1000, false);
+    let held = painter
+        .paint(&scene, size, [0.0; 4], Some(&registry), Some(&renderers))
+        .unwrap();
+    assert_eq!(held, green, "only the painting window advances the frame");
+    playback.discard(other);
     assert_eq!(
         session.document().context().world().layout_generation(),
         layout

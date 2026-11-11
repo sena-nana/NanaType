@@ -199,8 +199,22 @@ impl Playback {
                 HostTextureAlphaMode::Premultiplied,
             );
         }
+        // Only the window being prepared advances what it painted. Another
+        // window's demand is from its last fresh paint and stays put while it
+        // is hidden or reusing a frame; advancing for it would queue uploads
+        // that no submission of this window carries.
+        let painting: HashSet<_> = self
+            .slots
+            .keys()
+            .filter(|slot| {
+                registry
+                    .painted_extent(slot)
+                    .is_some_and(|s| s[0] > 0 && s[1] > 0)
+            })
+            .cloned()
+            .collect();
         for (slot, playing) in &mut self.slots {
-            if !visible.contains(slot) || playing.failed {
+            if !painting.contains(slot) || playing.failed {
                 continue;
             }
             let epoch = *playing.epoch.get_or_insert(now);
