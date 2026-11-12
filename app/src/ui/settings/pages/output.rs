@@ -584,18 +584,6 @@ pub(super) fn obs_password_field(ui: Ui) -> AnyView {
     .into_any()
 }
 
-/// The obs-websocket link's state and its switch.
-pub(super) fn obs_link_control(ui: Ui) -> AnyView {
-    crate::ui::kit::hstack((
-        link_badge(ui, |s| &s.obs),
-        switch(
-            ui,
-            |s| s.output.obs.enabled,
-            |s, v| s.output.obs.enabled = v,
-        ),
-    ))
-}
-
 /// Where the obs-websocket server is, and its password.
 fn obs_link_fields(ui: Ui) -> Vec<Row> {
     vec![
@@ -636,7 +624,17 @@ fn obs_link(ui: Ui) -> AnyView {
     toggled_section(
         ui,
         "output-obs-link",
-        row(ui, "obs-link", Some("obs-link-hint"), obs_link_control(ui)),
+        row_status(
+            ui,
+            "obs-link",
+            Some("obs-link-hint"),
+            link_badge(ui, |s| &s.obs),
+            switch(
+                ui,
+                |s| s.output.obs.enabled,
+                |s, v| s.output.obs.enabled = v,
+            ),
+        ),
         |s| s.output.obs.enabled,
         obs_link_fields(ui),
     )
@@ -720,18 +718,16 @@ pub(super) fn output(ui: Ui) -> AnyView {
         );
         [
             (
-                row(
+                row_status(
                     ui,
                     title,
                     None,
-                    crate::ui::kit::hstack((
-                        link_badge(ui, link),
-                        switch(
-                            ui,
-                            move |s| read(s).enabled,
-                            move |s, v| write(s).enabled = v,
-                        ),
-                    )),
+                    link_badge(ui, link),
+                    switch(
+                        ui,
+                        move |s| read(s).enabled,
+                        move |s, v| write(s).enabled = v,
+                    ),
                 ),
                 None,
             ),
@@ -786,21 +782,18 @@ pub(super) fn output(ui: Ui) -> AnyView {
         .into_any()
 }
 
-/// The GPU to render on, then the scheduling preferences, each hint saying
+/// The GPU to render on, then the scheduling preferences, each notice saying
 /// why it is not in effect when the system refused it.
 fn performance(ui: Ui) -> Vec<Row> {
     let adapter = gpu_adapter(ui);
-    let gpu = row_live_hint(
+    let gpu = row_live_notice(
         ui,
         "output-gpu-high",
+        move || Some(ui.tr("output-gpu-high-hint", &[])),
         move || {
             let refused = ui.settings.with(|s| s.performance.gpu_high)
                 && !ui.status.with(|s| s.performance.gpu_high);
-            Some(if refused {
-                ui.tr("output-not-in-effect", &[])
-            } else {
-                ui.tr("output-gpu-high-hint", &[])
-            })
+            refused.then(|| ui.tr("output-not-in-effect", &[]))
         },
         switch(
             ui,
@@ -808,18 +801,16 @@ fn performance(ui: Ui) -> Vec<Row> {
             |s, v| s.performance.gpu_high = v,
         ),
     );
-    let cpu = row_live_hint(
+    let cpu = row_live_notice(
         ui,
         "output-cpu-high",
+        move || Some(ui.tr("output-cpu-high-hint", &[])),
         move || {
-            let error = ui.status.with(|s| s.performance.cpu.priority_error.clone());
-            Some(match error {
-                Some(error) => {
-                    let error = problem_text(ui, &error);
-                    ui.tr("output-not-in-effect-because", &[("error", error.into())])
-                }
-                None => ui.tr("output-cpu-high-hint", &[]),
-            })
+            let error = ui
+                .status
+                .with(|s| s.performance.cpu.priority_error.clone())?;
+            let error = problem_text(ui, &error);
+            Some(ui.tr("output-not-in-effect-because", &[("error", error.into())]))
         },
         switch(
             ui,
@@ -827,15 +818,15 @@ fn performance(ui: Ui) -> Vec<Row> {
             |s, v| s.performance.cpu_high = v,
         ),
     );
-    let affinity = row_live_hint(
+    let affinity = row_live_notice(
         ui,
         "output-cpu-affinity",
+        move || Some(ui.tr("output-cpu-affinity-hint", &[])),
         move || {
-            let error = ui.status.with(|s| s.performance.cpu.affinity_error.clone());
-            Some(match error {
-                Some(error) => problem_text(ui, &error),
-                None => ui.tr("output-cpu-affinity-hint", &[]),
-            })
+            let error = ui
+                .status
+                .with(|s| s.performance.cpu.affinity_error.clone())?;
+            Some(problem_text(ui, &error))
         },
         switch(
             ui,
@@ -846,8 +837,9 @@ fn performance(ui: Ui) -> Vec<Row> {
     vec![adapter, gpu, cpu, affinity]
 }
 
-/// The GPU choice. The device is created at startup, so the hint says when a
-/// choice waits for a restart, or names the GPU in use.
+/// The GPU choice. The device is created at startup, so the hint names the GPU
+/// in use and the row's notice says when a choice waits for a restart, was not
+/// found, or is overridden by `WGPU_ADAPTER_NAME`.
 fn gpu_adapter(ui: Ui) -> Row {
     let status = ui.status.get_untracked();
     let choice = &status.performance.gpu;
@@ -864,7 +856,7 @@ fn gpu_adapter(ui: Ui) -> Row {
     {
         options.push((saved.clone(), saved));
     }
-    row_live_hint(
+    row_live_notice(
         ui,
         "output-gpu-adapter",
         move || {
@@ -872,20 +864,34 @@ fn gpu_adapter(ui: Ui) -> Row {
             let (choice, running) = ui
                 .status
                 .with(|s| (s.performance.gpu.clone(), s.performance.gpu_running.clone()));
+            let missing = saved
+                .as_ref()
+                .is_some_and(|saved| !choice.adapters.contains(saved));
+            if choice.external || missing {
+                return None;
+            }
+            let name = running.unwrap_or_else(|| "…".into());
+            Some(ui.tr("output-gpu-adapter-hint", &[("name", name.into())]))
+        },
+        move || {
+            let saved = ui.settings.with(|s| s.performance.gpu_adapter.clone());
+            let (choice, running) = ui
+                .status
+                .with(|s| (s.performance.gpu.clone(), s.performance.gpu_running.clone()));
             let name = running.unwrap_or_else(|| "…".into());
             let args = [("name", name.into())];
-            Some(if choice.external {
-                ui.tr("output-gpu-adapter-env", &args)
+            if choice.external {
+                Some(ui.tr("output-gpu-adapter-env", &args))
             } else if saved
                 .as_ref()
                 .is_some_and(|saved| !choice.adapters.contains(saved))
             {
-                ui.tr("output-gpu-adapter-missing", &args)
+                Some(ui.tr("output-gpu-adapter-missing", &args))
             } else if saved != choice.applied {
-                ui.tr("output-gpu-adapter-restart", &[])
+                Some(ui.tr("output-gpu-adapter-restart", &[]))
             } else {
-                ui.tr("output-gpu-adapter-hint", &args)
-            })
+                None
+            }
         },
         select(
             ui,

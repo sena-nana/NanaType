@@ -172,11 +172,11 @@ fn row(ui: Ui, i: usize, item: &crate::completion::Item, glyph: nana_ui::Icon) -
                 item.selected = selected;
             }
         })
-        .leading(
-            widget(IconGlyph::new(glyph).size(icon::MD)).bind(|g: &mut IconGlyph| {
-                g.style.foreground = Some(SemanticColorRole::Muted);
-            }),
-        )
+        .leading(widget(
+            IconGlyph::new(glyph)
+                .size(icon::MD)
+                .role(SemanticColorRole::Muted),
+        ))
         .on_cx(move |_, _: &Activate, cx| {
             cx.dispatch_program_all(Msg::Editor(EditorMsg::Complete(Complete::Accept(Some(i)))))
         })

@@ -30,7 +30,7 @@ toml_edit = { version = "0.25", default-features = false, features = ["parse", "
 zip.workspace = true
 imagesize.workspace = true
 ttf-parser = { workspace = true, features = ["std"] }
-naga = { version = "=30.0.1", features = ["wgsl-in"] }
+naga = { workspace = true, features = ["wgsl-in"] }
 blake3.workspace = true
 ed25519-dalek.workspace = true
 getrandom.workspace = true

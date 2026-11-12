@@ -8,7 +8,7 @@ use nana_ui::runtime::view::{
     AnyView, IntoView, NodeRef, ViewBuilder, node_ref, on_mount, settings_row, widget,
 };
 use nana_ui::runtime::{
-    AppContext, Divider, Entity, MutationQueue, SettingsRow, StableNodeId, Stack,
+    AppContext, Divider, Entity, HintPlacement, MutationQueue, SettingsRow, StableNodeId, Stack,
 };
 use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec, RadiusTier, SemanticColorRole};
 
@@ -205,8 +205,8 @@ pub fn line(left: impl IntoView, right: impl IntoView) -> Row {
 
 /// Label (and detail) on the left, control on the right; stacks when narrow.
 /// `hint_text` is a value under the label (an address, a version); a detail
-/// long enough to read as a paragraph goes in a [`hint_mark`] before the
-/// control instead, so the row stays one line.
+/// long enough to read as a paragraph goes behind the row's help button
+/// instead ([`row_marked`]), so the row stays one line.
 pub fn row_text(label_text: String, hint_text: Option<String>, control: AnyView) -> Row {
     if let Some(text) = hint_text.as_deref().filter(|h| long_hint(h)) {
         return row_marked(label_text, text.to_owned(), control);
@@ -220,30 +220,43 @@ pub fn row_text(label_text: String, hint_text: Option<String>, control: AnyView)
     )
 }
 
-/// A label and its control on one line, what the setting does in a
-/// [`hint_mark`] before the control rather than a line under the label.
+/// A label and its control on one line, what the setting does behind the
+/// row's help button after the label rather than a line under it.
 pub fn row_marked(label_text: String, tip: String, control: AnyView) -> Row {
-    row_text(
-        label_text,
-        None,
-        widget(
-            Stack::row(0.0)
-                .gap_step(gap::step::HAIR)
-                .align(AlignSpec::Center),
-        )
-        .children((hint_mark(tip), control))
-        .into_any(),
+    inset_row(
+        settings_row(label_text)
+            .hint(Some(Arc::<str>::from(tip)))
+            .hint_placement(Some(HintPlacement::Help))
+            .control(control_slot(control))
+            .into_any(),
     )
 }
 
-/// An info mark whose tooltip says what a label leaves out.
-pub fn hint_mark(text: String) -> AnyView {
-    widget(
-        nana_ui::runtime::IconButton::new(nana_ui::icons_tabler::INFO_CIRCLE, text.clone())
-            .size(nana_ui::ControlSize::Small)
-            .kind(nana_ui::ButtonKind::Ghost)
-            .with_tooltip(text),
+/// A row with a status pill or mark on the label's line (after any help
+/// button), so the label gives way first while the control stays by itself.
+pub fn row_accessory(
+    label_text: String,
+    tip: Option<String>,
+    accessory: AnyView,
+    control: AnyView,
+) -> Row {
+    let placement = tip.is_some().then_some(HintPlacement::Help);
+    inset_row(
+        settings_row(label_text)
+            .hint(tip.map(Arc::<str>::from))
+            .hint_placement(placement)
+            .label_accessory(accessory)
+            .control(control_slot(control))
+            .into_any(),
     )
+}
+
+/// A help mark whose tooltip says what a heading or form label leaves out.
+pub fn hint_mark(text: String) -> AnyView {
+    widget(nana_ui::runtime::IconButton::tool(
+        nana_ui::icons_tabler::HELP_CIRCLE,
+        text,
+    ))
     .into_any()
 }
 
@@ -305,6 +318,22 @@ pub fn row_hint_fn(
     )
 }
 
+/// A row whose hint and caution line under the row follow the signals they read.
+pub fn row_notice_fn(
+    label_text: String,
+    hint: impl Fn() -> Option<String> + Send + 'static,
+    notice: impl Fn() -> Option<String> + Send + 'static,
+    control: AnyView,
+) -> Row {
+    inset_row(
+        settings_row(label_text)
+            .hint(move || hint().map(Arc::<str>::from))
+            .notice(move || notice().map(Arc::<str>::from))
+            .control(control_slot(control))
+            .into_any(),
+    )
+}
+
 /// The row's control, in a slot that spaces it from its neighbours. The row
 /// names the slot it is given for assistive technology; the control inside
 /// it is what a screen reader lands on, so it takes the row's label too.
@@ -329,10 +358,13 @@ fn name_slot_controls(cx: &mut AppContext, slot: NodeRef) {
     };
     let world = cx.world();
     let label = world.labelled_by(slot).or_else(|| {
-        let row = world.node(slot)?.parent?;
-        cx.read(Entity::<SettingsRow>::from_stable_id(row), |r| r.label_slot)
-            .ok()
-            .flatten()
+        std::iter::successors(world.node(slot)?.parent, |&id| world.node(id)?.parent).find_map(
+            |row| {
+                cx.read(Entity::<SettingsRow>::from_stable_id(row), |r| r.label_slot)
+                    .ok()
+                    .flatten()
+            },
+        )
     });
     if let Some(label) = label {
         name_controls(cx, slot, label);

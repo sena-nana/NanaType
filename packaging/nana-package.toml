@@ -5,7 +5,7 @@ schema_version = 1
 [application]            # must match the identity marker in the binary
 id = "dev.sena-nana.nanatype"
 name = "NanaType"
-version = "0.2.1"
+version = "0.3.0"
 vendor = "sena-nana"
 
 [executable]

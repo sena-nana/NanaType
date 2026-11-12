@@ -30,7 +30,7 @@ members = [
 default-members = ["app", "editor"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.98"
@@ -60,13 +60,13 @@ nanatype-update = { path = "crates/update" }
 nanatype-steam = { path = "crates/steam" }
 nanatype-frame = { path = "crates/frame" }
 nanatype-scheduling = { path = "crates/scheduling" }
-nana-ui-platform = { git = "https://github.com/sena-nana/NanaUI", rev = "89bd39af27b5bc6948d7943d4abdc019373287a0", default-features = false }
-nana-ui-core = { git = "https://github.com/sena-nana/NanaUI", rev = "89bd39af27b5bc6948d7943d4abdc019373287a0", default-features = false }
-nana-text = { git = "https://github.com/sena-nana/NanaUI", rev = "89bd39af27b5bc6948d7943d4abdc019373287a0" }
+nana-ui-platform = { git = "https://github.com/sena-nana/NanaUI", rev = "730586af4c5fd37e55ccc5013efb27251e76b20a", default-features = false }
+nana-ui-core = { git = "https://github.com/sena-nana/NanaUI", rev = "730586af4c5fd37e55ccc5013efb27251e76b20a", default-features = false }
+nana-text = { git = "https://github.com/sena-nana/NanaUI", rev = "730586af4c5fd37e55ccc5013efb27251e76b20a" }
 # The same source as nana-ui's, so both see one diagnostics runtime.
-nana-diagnostics = { git = "https://github.com/sena-nana/NanaUI", rev = "89bd39af27b5bc6948d7943d4abdc019373287a0" }
-nana-ui-devtools = { git = "https://github.com/sena-nana/NanaUI", rev = "89bd39af27b5bc6948d7943d4abdc019373287a0" }
-nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "89bd39af27b5bc6948d7943d4abdc019373287a0", default-features = false, features = [
+nana-diagnostics = { git = "https://github.com/sena-nana/NanaUI", rev = "730586af4c5fd37e55ccc5013efb27251e76b20a" }
+nana-ui-devtools = { git = "https://github.com/sena-nana/NanaUI", rev = "730586af4c5fd37e55ccc5013efb27251e76b20a" }
+nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "730586af4c5fd37e55ccc5013efb27251e76b20a", default-features = false, features = [
     "hosted",
     "bundled-fonts",
     "wgpu-interop",
@@ -78,9 +78,10 @@ nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "89bd39af27b5bc69
     # may carry an .svg picture. Icons from the icon set do not need it.
     "svg",
 ] }
-# NanaUI's own WGPU. Members name the backends (nanatype-frame does) instead of
-# taking every one through nana-ui's `wgpu-backends`.
-wgpu = { version = "30.0.1", default-features = false }
+# NanaUI's own WGPU and Naga. Members name the backends (nanatype-frame does)
+# instead of taking every one through nana-ui's `wgpu-backends`.
+wgpu = { git = "https://github.com/sena-nana/NanaUI", rev = "730586af4c5fd37e55ccc5013efb27251e76b20a", default-features = false }
+naga = { git = "https://github.com/sena-nana/NanaUI", rev = "730586af4c5fd37e55ccc5013efb27251e76b20a", default-features = false }
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 unicode-segmentation = "1"

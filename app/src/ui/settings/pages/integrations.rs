@@ -201,18 +201,16 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
             toggled_section(
                 ui,
                 "",
-                row(
+                row_status(
                     ui,
                     "int-vts",
                     Some("int-vts-hint"),
-                    crate::ui::kit::hstack((
-                        link_badge(ui, |s| &s.vts),
-                        switch(
-                            ui,
-                            |s| s.integrations.vts.enabled,
-                            |s, v| s.integrations.vts.enabled = v,
-                        ),
-                    )),
+                    link_badge(ui, |s| &s.vts),
+                    switch(
+                        ui,
+                        |s| s.integrations.vts.enabled,
+                        |s, v| s.integrations.vts.enabled = v,
+                    ),
                 ),
                 |s| s.integrations.vts.enabled,
                 vec![
@@ -278,18 +276,16 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
             toggled_section(
                 ui,
                 "",
-                row(
+                row_status(
                     ui,
                     "int-osc",
                     Some("int-osc-hint"),
-                    crate::ui::kit::hstack((
-                        link_badge(ui, |s| &s.osc),
-                        switch(
-                            ui,
-                            |s| s.integrations.osc.enabled,
-                            |s, v| s.integrations.osc.enabled = v,
-                        ),
-                    )),
+                    link_badge(ui, |s| &s.osc),
+                    switch(
+                        ui,
+                        |s| s.integrations.osc.enabled,
+                        |s, v| s.integrations.osc.enabled = v,
+                    ),
                 ),
                 |s| s.integrations.osc.enabled,
                 vec![
@@ -326,18 +322,16 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
             toggled_section(
                 ui,
                 "",
-                row(
+                row_status(
                     ui,
                     "int-ws",
                     Some("int-ws-hint"),
-                    crate::ui::kit::hstack((
-                        link_badge(ui, |s| &s.ws),
-                        switch(
-                            ui,
-                            |s| s.integrations.websocket.enabled,
-                            |s, v| s.integrations.websocket.enabled = v,
-                        ),
-                    )),
+                    link_badge(ui, |s| &s.ws),
+                    switch(
+                        ui,
+                        |s| s.integrations.websocket.enabled,
+                        |s, v| s.integrations.websocket.enabled = v,
+                    ),
                 ),
                 |s| s.integrations.websocket.enabled,
                 vec![row(

@@ -434,14 +434,7 @@ pub fn view(stage: Stage, id: &str, skin: Arc<Skin>) -> Option<AnyView> {
         )
         .children((
             label(ui.now_t("skin-params-title")),
-            widget(
-                nana_ui::runtime::IconButton::new(
-                    nana_ui::icons_tabler::INFO_CIRCLE,
-                    ui.now_t("skin-params-hint"),
-                )
-                .size(ControlSize::Small)
-                .with_tooltip(ui.now_t("skin-params-hint")),
-            ),
+            crate::ui::kit::hint_mark(ui.now_t("skin-params-hint")),
         ))
         .into_any(),
     ];

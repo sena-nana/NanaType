@@ -16,14 +16,12 @@ fn deepl(s: &Settings) -> bool {
 /// Translated subtitles: the switch and its badge, the provider and its
 /// key, the language, which lines and where they show, and a test.
 pub(super) fn translate(ui: Ui) -> AnyView {
-    let master = row(
+    let master = row_status(
         ui,
         "translate-enabled",
         Some("translate-enabled-hint"),
-        kit::hstack((
-            link_badge(ui, |s| &s.translate),
-            switch(ui, |s| s.translate.enabled, |s, v| s.translate.enabled = v),
-        )),
+        link_badge(ui, |s| &s.translate),
+        switch(ui, |s| s.translate.enabled, |s, v| s.translate.enabled = v),
     );
     let provider = row(
         ui,

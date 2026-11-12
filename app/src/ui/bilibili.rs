@@ -3,8 +3,8 @@
 use super::{
     Ui,
     settings::controls::{
-        bilibili_badge, block, comet_badge, port, primary, row, section, segmented, select_keys,
-        switch, toggled_section,
+        bilibili_badge, block, comet_badge, port, primary, row, row_status, section, segmented,
+        select_keys, switch, toggled_section,
     },
 };
 use crate::msg::{BliveMsg, Msg};
@@ -30,18 +30,16 @@ pub fn settings_page(ui: Ui) -> AnyView {
             toggled_section(
                 ui,
                 "",
-                row(
+                row_status(
                     ui,
                     "int-bili",
                     None,
-                    kit::hstack((
-                        bilibili_badge(ui),
-                        switch(
-                            ui,
-                            |s| s.integrations.bilibili.enabled,
-                            |s, v| s.integrations.set_chat_source(ChatSource::Bilibili, v),
-                        ),
-                    )),
+                    bilibili_badge(ui),
+                    switch(
+                        ui,
+                        |s| s.integrations.bilibili.enabled,
+                        |s, v| s.integrations.set_chat_source(ChatSource::Bilibili, v),
+                    ),
                 ),
                 |s| s.integrations.bilibili.enabled,
                 vec![row(ui, "int-bili-source", None, source_choice(ui))],
@@ -84,21 +82,19 @@ pub fn other_platforms_page(ui: Ui) -> AnyView {
     toggled_section(
         ui,
         "",
-        row(
+        row_status(
             ui,
             "int-comet-other",
             Some("int-comet-other-hint"),
-            kit::hstack((
-                comet_badge(ui),
-                switch(
-                    ui,
-                    |s| s.integrations.comet.other_platforms,
-                    |s, v| {
-                        s.integrations
-                            .set_chat_source(ChatSource::OtherPlatforms, v)
-                    },
-                ),
-            )),
+            comet_badge(ui),
+            switch(
+                ui,
+                |s| s.integrations.comet.other_platforms,
+                |s, v| {
+                    s.integrations
+                        .set_chat_source(ChatSource::OtherPlatforms, v)
+                },
+            ),
         ),
         |s| s.integrations.comet.other_platforms,
         vec![row(

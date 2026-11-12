@@ -212,9 +212,9 @@ fn breathing_badge(
     connecting: impl Fn() -> bool + Send + Sync + Copy + 'static,
 ) -> AnyView {
     // The badge is bound in place rather than swapped by `dynamic`: a
-    // switching block builds its branch in a full-width column, which in
-    // this shrink-width row took the whole control slot, squeezing the
-    // label and pushing the switch out of the card.
+    // switching block builds its branch in a full-width column, which in a
+    // shrink-width slot (the row's label accessory or a step row) would
+    // expand across the line and squeeze its neighbours.
     let (text, tone) = describe();
     let badge =
         widget(StatusBadge::new(text, tone).compact(true)).bind(move |b: &mut StatusBadge| {
@@ -244,8 +244,8 @@ fn breathing_badge(
 }
 
 /// Label on the left, control on the right; stacks when narrow. What the
-/// setting does (`hint_key`) is an info mark before the control, so the row
-/// stays one line.
+/// setting does (`hint_key`) sits behind a help button after the label, so
+/// the row stays one line.
 pub fn row(ui: Ui, label_key: &str, hint_key: Option<&str>, control: AnyView) -> Row {
     match hint_key {
         Some(key) => kit::row_marked(ui.now_t(label_key), ui.now_t(key), control),
@@ -253,13 +253,30 @@ pub fn row(ui: Ui, label_key: &str, hint_key: Option<&str>, control: AnyView) ->
     }
 }
 
-/// An info mark whose tooltip carries the detail a label leaves out.
+/// [`row`] with a status badge after its label (and any help button), so the
+/// badge stays with the name while the control sits by itself on the right.
+pub fn row_status(
+    ui: Ui,
+    label_key: &str,
+    hint_key: Option<&str>,
+    badge: AnyView,
+    control: AnyView,
+) -> Row {
+    kit::row_accessory(
+        ui.now_t(label_key),
+        hint_key.map(|k| ui.now_t(k)),
+        badge,
+        control,
+    )
+}
+
+/// A help mark whose tooltip carries the detail a heading leaves out.
 pub fn info_tip(ui: Ui, key: &str) -> AnyView {
     kit::hint_mark(ui.now_t(key))
 }
 
-/// [`row`] with an info mark before its control, for detail worth a look
-/// but not a line of its own.
+/// [`row`] with a help button after its label, for detail worth a look
+/// without taking a line of its own.
 pub fn row_tip(ui: Ui, label_key: &str, tip_key: &str, control: AnyView) -> Row {
     row(ui, label_key, Some(tip_key), control)
 }
@@ -294,6 +311,17 @@ pub fn row_live_hint(
     control: AnyView,
 ) -> Row {
     crate::ui::kit::row_hint_fn(ui.now_t(label_key), hint, control)
+}
+
+/// [`row`] whose hint and caution line under the row follow the signals they read.
+pub fn row_live_notice(
+    ui: Ui,
+    label_key: &str,
+    hint: impl Fn() -> Option<String> + Send + 'static,
+    notice: impl Fn() -> Option<String> + Send + 'static,
+    control: AnyView,
+) -> Row {
+    crate::ui::kit::row_notice_fn(ui.now_t(label_key), hint, notice, control)
 }
 
 /// A setting flag shown as a chip: its label key, then how it is read and

@@ -3215,8 +3215,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 [[package]]
 name = "naga"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a616d2fb8c89516ac2723a581f69d6c18576046bed761bd6b305e5618e6ae130"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
@@ -3229,32 +3228,7 @@ dependencies = [
  "indexmap",
  "libm",
  "log",
- "naga-types 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "num-traits",
- "once_cell",
- "rustc-hash 1.1.0",
- "spirv",
- "thiserror 2.0.20",
- "unicode-ident",
-]
-
-[[package]]
-name = "naga"
-version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
-dependencies = [
- "arrayvec",
- "bit-set 0.10.0",
- "bitflags 2.13.2",
- "cfg-if",
- "cfg_aliases",
- "codespan-reporting",
- "half",
- "hashbrown 0.17.1",
- "indexmap",
- "libm",
- "log",
- "naga-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "naga-types",
  "num-traits",
  "once_cell",
  "rustc-hash 1.1.0",
@@ -3266,19 +3240,7 @@ dependencies = [
 [[package]]
 name = "naga-types"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "590afbf58a6f4f62873cd5cff4468061844bafa1cdf399cc954537c22d768d49"
-dependencies = [
- "hashbrown 0.17.1",
- "indexmap",
- "rustc-hash 1.1.0",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "naga-types"
-version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
@@ -3289,7 +3251,7 @@ dependencies = [
 [[package]]
 name = "nana-app-icon"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "flate2",
  "image",
@@ -3299,7 +3261,7 @@ dependencies = [
 [[package]]
 name = "nana-diagnostics"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "windows-sys 0.61.2",
 ]
@@ -3307,26 +3269,26 @@ dependencies = [
 [[package]]
 name = "nana-frame-exchange"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "nana-gpu",
- "wgpu 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu",
 ]
 
 [[package]]
 name = "nana-gpu"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "nana-diagnostics",
- "wgpu 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu",
  "windows",
 ]
 
 [[package]]
 name = "nana-icons-tabler"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "nana-ui-core",
 ]
@@ -3334,7 +3296,7 @@ dependencies = [
 [[package]]
 name = "nana-package"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -3348,7 +3310,7 @@ dependencies = [
 [[package]]
 name = "nana-svg-raster"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "resvg",
  "tiny-skia",
@@ -3357,7 +3319,7 @@ dependencies = [
 [[package]]
 name = "nana-text"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "fontdb",
  "harfrust",
@@ -3376,7 +3338,7 @@ dependencies = [
 [[package]]
 name = "nana-ui"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -3386,7 +3348,7 @@ dependencies = [
  "bytemuck",
  "etagere",
  "image",
- "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "naga",
  "nana-app-icon",
  "nana-diagnostics",
  "nana-frame-exchange",
@@ -3406,7 +3368,7 @@ dependencies = [
  "serde",
  "serde_json",
  "unicode-segmentation",
- "wgpu 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu",
  "windows",
  "winit",
 ]
@@ -3414,7 +3376,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-charts"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "bytemuck",
  "nana-ui-core",
@@ -3423,7 +3385,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-core"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "nana-diagnostics",
  "serde",
@@ -3433,7 +3395,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-css"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "nana-ui-core",
  "serde_json",
@@ -3442,7 +3404,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-devtools"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "image",
  "nana-gpu",
@@ -3454,13 +3416,13 @@ dependencies = [
  "pollster",
  "serde",
  "serde_json",
- "wgpu 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu",
 ]
 
 [[package]]
 name = "nana-ui-input"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "nana-diagnostics",
  "nana-ui-core",
@@ -3469,7 +3431,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-platform"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "arboard",
  "jni 0.21.1",
@@ -3489,7 +3451,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-runtime"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "fancy-regex",
  "fixed_decimal",
@@ -3523,7 +3485,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-scene"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "i_overlay",
  "lyon_tessellation",
@@ -3537,7 +3499,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-view-codegen"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "nana-ui-core",
  "nana-ui-css",
@@ -3551,7 +3513,7 @@ dependencies = [
 [[package]]
 name = "nana-ui-view-macros"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "nana-ui-view-codegen",
  "proc-macro-crate",
@@ -3563,12 +3525,12 @@ dependencies = [
 [[package]]
 name = "nana-ui-view-schema"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 
 [[package]]
 name = "nana-window"
 version = "0.1.0"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "ashpd",
  "async-channel",
@@ -3628,7 +3590,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "arboard",
  "blake3",
@@ -3698,7 +3660,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-audio"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "cpal",
  "crossbeam-channel",
@@ -3707,7 +3669,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-blive"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "crossbeam-channel",
  "nanatype-model",
@@ -3720,7 +3682,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-bridge"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "crossbeam-channel",
  "nanatype-model",
@@ -3732,7 +3694,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-core"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "nanatype-markup",
  "nanatype-model",
@@ -3745,7 +3707,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-diag"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "log",
  "nana-diagnostics",
@@ -3754,7 +3716,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-editor"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "embed-resource",
@@ -3785,7 +3747,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-frame"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "image",
@@ -3812,13 +3774,13 @@ dependencies = [
  "tiny-skia",
  "ttf-parser",
  "unicode-segmentation",
- "wgpu 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu",
  "windows",
 ]
 
 [[package]]
 name = "nanatype-i18n"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "fluent-bundle",
  "fluent-syntax",
@@ -3829,7 +3791,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-markup"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "nanatype-model",
  "proptest",
@@ -3837,7 +3799,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-model"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "proptest",
  "serde",
@@ -3848,7 +3810,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-obs"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "crossbeam-channel",
@@ -3860,7 +3822,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-p2p"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "blake3",
@@ -3878,7 +3840,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-playback"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "nanatype-markup",
  "nanatype-model",
@@ -3887,7 +3849,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-plugins"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "nanatype-diag",
  "serde",
@@ -3900,14 +3862,14 @@ dependencies = [
 
 [[package]]
 name = "nanatype-scheduling"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "windows",
 ]
 
 [[package]]
 name = "nanatype-secrets"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "security-framework",
  "tempfile",
@@ -3916,7 +3878,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-settings"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "nanatype-model",
@@ -3928,7 +3890,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-speech"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "cc",
  "cpal",
@@ -3944,7 +3906,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-steam"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "crossbeam-channel",
  "nanatype-p2p",
@@ -3954,7 +3916,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-theme"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "ed25519-dalek",
@@ -3962,7 +3924,7 @@ dependencies = [
  "getrandom 0.4.3",
  "image",
  "imagesize",
- "naga 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "naga",
  "nana-ui-core",
  "nanatype-model",
  "nanatype-playback",
@@ -3979,7 +3941,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-translate"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "serde_json",
  "ureq",
@@ -3988,7 +3950,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-tts"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "crossbeam-channel",
  "nanatype-audio",
@@ -4002,7 +3964,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-twitch"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "crossbeam-channel",
  "getrandom 0.4.3",
@@ -4017,7 +3979,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-update"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "crossbeam-channel",
  "ed25519-dalek",
@@ -7081,31 +7043,7 @@ checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 [[package]]
 name = "wgpu"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "527ccdf43dd5b2e8676eed9984ce00e2bbb0a1b85b70c1969dcb6cd2eb55ab9e"
-dependencies = [
- "arrayvec",
- "bitflags 2.13.2",
- "bytemuck",
- "cfg-if",
- "cfg_aliases",
- "document-features",
- "hashbrown 0.17.1",
- "log",
- "portable-atomic",
- "profiling",
- "raw-window-handle",
- "smallvec",
- "static_assertions",
- "wgpu-core 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "wgpu-hal 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "wgpu-types 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "wgpu"
-version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "arrayvec",
  "bitflags 2.13.2",
@@ -7116,7 +7054,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "js-sys",
  "log",
- "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "naga",
  "parking_lot",
  "portable-atomic",
  "profiling",
@@ -7126,16 +7064,15 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "wgpu-core 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "wgpu-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-core",
+ "wgpu-hal",
+ "wgpu-types",
 ]
 
 [[package]]
 name = "wgpu-core"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14c018fce9b6270aa203c2fdd56f3cce996713534bd757e4ea58c8560b121f14"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
@@ -7147,8 +7084,8 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
  "log",
- "naga 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "naga-types 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "naga",
+ "naga-types",
  "once_cell",
  "parking_lot",
  "portable-atomic",
@@ -7157,103 +7094,42 @@ dependencies = [
  "rustc-hash 1.1.0",
  "smallvec",
  "thiserror 2.0.20",
- "wgpu-core-deps-apple 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "wgpu-core-deps-emscripten 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "wgpu-core-deps-windows-linux-android 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "wgpu-hal 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "wgpu-naga-bridge 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "wgpu-types 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "wgpu-core"
-version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
-dependencies = [
- "arrayvec",
- "bit-set 0.10.0",
- "bit-vec 0.9.1",
- "bitflags 2.13.2",
- "bytemuck",
- "cfg_aliases",
- "document-features",
- "hashbrown 0.17.1",
- "indexmap",
- "log",
- "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "naga-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "once_cell",
- "parking_lot",
- "portable-atomic",
- "profiling",
- "raw-window-handle",
- "rustc-hash 1.1.0",
- "smallvec",
- "thiserror 2.0.20",
- "wgpu-core-deps-apple 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "wgpu-core-deps-emscripten 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "wgpu-core-deps-windows-linux-android 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "wgpu-naga-bridge 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "wgpu-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-core-deps-apple",
+ "wgpu-core-deps-emscripten",
+ "wgpu-core-deps-windows-linux-android",
+ "wgpu-hal",
+ "wgpu-naga-bridge",
+ "wgpu-types",
 ]
 
 [[package]]
 name = "wgpu-core-deps-apple"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "061f3d319a40d39d00b1ecc2c33b89fe21d4e6fe01859df3500a3a8ecccd6b68"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
- "wgpu-hal 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "wgpu-core-deps-apple"
-version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
-dependencies = [
- "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-hal",
 ]
 
 [[package]]
 name = "wgpu-core-deps-emscripten"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d98b86cf4abf524a902dd35f18ca6a3f08fc2ae9847c8f10b48e30491b1f0b86"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
- "wgpu-hal 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "wgpu-core-deps-emscripten"
-version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
-dependencies = [
- "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-hal",
 ]
 
 [[package]]
 name = "wgpu-core-deps-windows-linux-android"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7586165fd5f6d881cb9ce4bb71f40d6caab2c0f1837e3fc1d9788a197fb6004f"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
- "wgpu-hal 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "wgpu-core-deps-windows-linux-android"
-version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
-dependencies = [
- "wgpu-hal 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-hal",
 ]
 
 [[package]]
 name = "wgpu-hal"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6b7fb58561a792bc237628ba0792e332de418fefe145f13b5ed8201e6d52f58"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -7273,8 +7149,8 @@ dependencies = [
  "libc",
  "libloading",
  "log",
- "naga 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "naga-types 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "naga",
+ "naga-types",
  "ndk-sys",
  "objc2 0.6.4",
  "objc2-core-foundation",
@@ -7298,63 +7174,8 @@ dependencies = [
  "wasm-bindgen",
  "wayland-sys",
  "web-sys",
- "wgpu-naga-bridge 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "wgpu-types 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "windows",
- "windows-core",
- "windows-result",
-]
-
-[[package]]
-name = "wgpu-hal"
-version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
-dependencies = [
- "android_system_properties",
- "arrayvec",
- "ash",
- "bit-set 0.10.0",
- "bitflags 2.13.2",
- "block2 0.6.2",
- "bytemuck",
- "cfg-if",
- "cfg_aliases",
- "glow",
- "glutin_wgl_sys",
- "gpu-allocator",
- "hashbrown 0.17.1",
- "js-sys",
- "khronos-egl",
- "libc",
- "libloading",
- "log",
- "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "naga-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "ndk-sys",
- "objc2 0.6.4",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "objc2-foundation 0.3.2",
- "objc2-metal 0.3.2",
- "objc2-quartz-core 0.3.2",
- "once_cell",
- "ordered-float",
- "parking_lot",
- "portable-atomic",
- "portable-atomic-util",
- "profiling",
- "range-alloc",
- "raw-window-handle",
- "raw-window-metal",
- "renderdoc-sys",
- "smallvec",
- "static_assertions",
- "thiserror 2.0.20",
- "wasm-bindgen",
- "wayland-sys",
- "web-sys",
- "wgpu-naga-bridge 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "wgpu-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "wgpu-naga-bridge",
+ "wgpu-types",
  "windows",
  "windows-core",
  "windows-result",
@@ -7363,48 +7184,22 @@ dependencies = [
 [[package]]
 name = "wgpu-naga-bridge"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2f62e73117bb7a62bfd9c5a5841438a823f6566c6442a808ee269d2d055c081"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
- "naga 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "wgpu-types 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "wgpu-naga-bridge"
-version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
-dependencies = [
- "naga 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
- "wgpu-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "naga",
+ "wgpu-types",
 ]
 
 [[package]]
 name = "wgpu-types"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99dad6f1fbdbbdb4c278a6508b059d44688f5cebddf78d005a46a31340269286"
+source = "git+https://github.com/sena-nana/NanaUI?rev=730586af4c5fd37e55ccc5013efb27251e76b20a#730586af4c5fd37e55ccc5013efb27251e76b20a"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
  "js-sys",
  "log",
- "naga-types 30.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "raw-window-handle",
- "static_assertions",
- "web-sys",
-]
-
-[[package]]
-name = "wgpu-types"
-version = "30.0.1"
-source = "git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0#89bd39af27b5bc6948d7943d4abdc019373287a0"
-dependencies = [
- "bitflags 2.13.2",
- "bytemuck",
- "js-sys",
- "log",
- "naga-types 30.0.1 (git+https://github.com/sena-nana/NanaUI?rev=89bd39af27b5bc6948d7943d4abdc019373287a0)",
+ "naga-types",
  "raw-window-handle",
  "static_assertions",
  "web-sys",
