@@ -344,12 +344,18 @@ fn accessibility(ui: Ui) -> AnyView {
                     ui,
                     "general-ui-scale",
                     Some("general-ui-scale-hint"),
-                    slider(
+                    select(
                         ui,
-                        (f64::from(lo), f64::from(hi), f64::from(step)),
-                        "%",
-                        |s| f64::from(s.accessibility.ui_scale),
-                        |s, v| s.accessibility.ui_scale = v.round() as u32,
+                        (lo..=hi)
+                            .step_by(step as usize)
+                            .map(|p| (p.to_string(), format!("{p}%")))
+                            .collect(),
+                        |s| s.accessibility.ui_scale.to_string(),
+                        |s, v| {
+                            if let Ok(p) = v.parse() {
+                                s.accessibility.ui_scale = p
+                            }
+                        },
                     ),
                 ),
                 move || !follows(),
