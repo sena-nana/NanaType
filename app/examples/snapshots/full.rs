@@ -85,7 +85,7 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
     ] {
         let mut s = (*before_settings).clone();
         let i = &mut s.integrations;
-        i.bilibili.enabled = true;
+        i.set_chat_source(nanatype_settings::ChatSource::Bilibili, true);
         i.bilibili.source = source;
         i.bilibili.link = link;
         i.blivechat.room_kind = BliveRoomKind::RoomId;
@@ -95,7 +95,8 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
     }
     ui.platform_tab.set(PlatformTab::Other);
     let mut s = (*before_settings).clone();
-    s.integrations.comet.other_platforms = true;
+    s.integrations
+        .set_chat_source(nanatype_settings::ChatSource::OtherPlatforms, true);
     shows(s);
     shoot("other-platforms-settings");
     ui.settings.set(before_settings);

@@ -45,7 +45,7 @@ For protocol, sign-in and rate-limit details, see [Twitch integration](twitch.md
 
 ### Bilibili and other platforms
 
-**Settings › Live platforms** has three tabs at the top: **Bilibili**, **Twitch** and **Other platforms**.
+**Settings › Live platforms** has three tabs at the top: **Bilibili**, **Twitch** and **Other platforms**. One chat source connects at a time: turning one on turns the others off.
 
 On **Bilibili**, turn on **Receive Bilibili chat** and choose a source:
 
@@ -55,7 +55,7 @@ On **Bilibili**, turn on **Receive Bilibili chat** and choose a source:
   - An auth code or token in the link is kept in OS-protected storage (Windows DPAPI / macOS Keychain); nothing else in it is kept.
 - **彗星号 (Comet)**: open the Comet client and start listening to your rooms; NanaType connects to it directly (port 19400 by default) and reads only its Bilibili rooms here. See [Comet integration](comet.md).
 
-**Other platforms** has 彗星号 alone: turned on, it reads the rooms Comet listens to on Douyin, Kuaishou and other platforms besides Bilibili. Bilibili and the other platforms share one Comet connection and port.
+**Other platforms** has 彗星号 alone: turned on, it reads the rooms Comet listens to on Douyin, Kuaishou and other platforms besides Bilibili. Bilibili and the other platforms share Comet's port setting.
 
 These messages show up in the chat panel, and @-mentions, replies and mixing into history work the same way. With no live room at hand, you can try blivechat mode against the mock server:
 

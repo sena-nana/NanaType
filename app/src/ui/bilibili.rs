@@ -13,7 +13,7 @@ use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, signal, widget};
 use nana_ui::runtime::{Stack, Text, TextChanged, TextInput, TextSubmitted};
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
-use nanatype_settings::{BilibiliLink, BilibiliSource, BliveRoomKind, Settings};
+use nanatype_settings::{BilibiliLink, BilibiliSource, BliveRoomKind, ChatSource, Settings};
 
 fn source_is(ui: Ui, source: BilibiliSource) -> impl Fn() -> bool + Send + 'static {
     move || {
@@ -39,7 +39,7 @@ pub fn settings_page(ui: Ui) -> AnyView {
                         switch(
                             ui,
                             |s| s.integrations.bilibili.enabled,
-                            |s, v| s.integrations.bilibili.enabled = v,
+                            |s, v| s.integrations.set_chat_source(ChatSource::Bilibili, v),
                         ),
                     )),
                 ),
@@ -93,7 +93,10 @@ pub fn other_platforms_page(ui: Ui) -> AnyView {
                 switch(
                     ui,
                     |s| s.integrations.comet.other_platforms,
-                    |s, v| s.integrations.comet.other_platforms = v,
+                    |s, v| {
+                        s.integrations
+                            .set_chat_source(ChatSource::OtherPlatforms, v)
+                    },
                 ),
             )),
         ),

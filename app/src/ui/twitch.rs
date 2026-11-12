@@ -248,7 +248,10 @@ pub fn settings_page(ui: Ui) -> AnyView {
                         switch(
                             ui,
                             |s| s.integrations.twitch.enabled,
-                            |s, v| s.integrations.twitch.enabled = v,
+                            |s, v| {
+                                s.integrations
+                                    .set_chat_source(nanatype_settings::ChatSource::Twitch, v)
+                            },
                         ),
                     ),
                 ],

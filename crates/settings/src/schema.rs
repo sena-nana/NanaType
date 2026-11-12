@@ -1795,6 +1795,54 @@ impl Integrations {
             others: self.comet.other_platforms,
         }
     }
+
+    /// The one chat source that is on. Should a file have more (an older
+    /// one, or one edited by hand), the first in settings order wins.
+    pub fn chat_source(&self) -> Option<ChatSource> {
+        ChatSource::ALL
+            .iter()
+            .copied()
+            .find(|&s| self.chat_source_on(s))
+    }
+
+    pub fn chat_source_on(&self, source: ChatSource) -> bool {
+        match source {
+            ChatSource::Bilibili => self.bilibili.enabled,
+            ChatSource::Twitch => self.twitch.enabled,
+            ChatSource::OtherPlatforms => self.comet.other_platforms,
+        }
+    }
+
+    /// Turn `source` on or off. Only one connects at a time, so turning one
+    /// on turns the others off.
+    pub fn set_chat_source(&mut self, source: ChatSource, on: bool) {
+        for s in ChatSource::ALL.iter().copied() {
+            let value = if s == source {
+                on
+            } else {
+                !on && self.chat_source_on(s)
+            };
+            match s {
+                ChatSource::Bilibili => self.bilibili.enabled = value,
+                ChatSource::Twitch => self.twitch.enabled = value,
+                ChatSource::OtherPlatforms => self.comet.other_platforms = value,
+            }
+        }
+    }
+}
+
+/// Where live chat comes from; one at a time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatSource {
+    Bilibili,
+    Twitch,
+    /// 彗星号's rooms on platforms other than Bilibili.
+    OtherPlatforms,
+}
+
+impl ChatSource {
+    /// Settings order.
+    pub const ALL: &[Self] = &[Self::Bilibili, Self::Twitch, Self::OtherPlatforms];
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -1979,6 +2027,9 @@ impl Settings {
     /// Clamp values a hand-edited file could break. Returns whether anything changed.
     pub fn sanitize(&mut self) -> bool {
         let before = self.clone();
+        if let Some(source) = self.integrations.chat_source() {
+            self.integrations.set_chat_source(source, true);
+        }
         self.speech.silence_seconds = self.speech.silence_seconds.clamp(1, 10);
         if self.speech.language.as_ref().is_some_and(|v| {
             v.is_empty()

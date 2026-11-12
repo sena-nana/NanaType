@@ -1032,19 +1032,19 @@ fn third_party_chat_defaults_off_and_round_trips_at_schema_2() {
     let i = &settings.integrations;
     assert!(i.bilibili.enabled);
     assert_eq!(i.bilibili.source, BilibiliSource::Comet);
-    // 彗星号 read every platform before, and still does.
+    // One source at a time: 彗星号 reads Bilibili.
     assert_eq!(
         i.comet,
         CometSettings {
             port: 19500,
-            other_platforms: true
+            other_platforms: false
         }
     );
     assert_eq!(
         i.comet_rooms(),
         CometRooms {
             bilibili: true,
-            others: true
+            others: false
         }
     );
     assert_eq!(i.blivechat.room_kind, BliveRoomKind::RoomId);
@@ -1110,6 +1110,35 @@ fn laplace_leaves_blivechat_for_a_source_of_its_own() {
     assert!(i.blivechat_on());
     assert!(!i.laplace_on());
     assert_eq!(i.laplace.url, "ws://10.0.0.3:9696/");
+}
+
+#[test]
+fn only_one_chat_source_connects_at_a_time() {
+    let mut i = Integrations::default();
+    i.set_chat_source(ChatSource::Bilibili, true);
+    assert_eq!(i.chat_source(), Some(ChatSource::Bilibili));
+    // Turning another on turns the first off.
+    i.set_chat_source(ChatSource::Twitch, true);
+    assert!(!i.bilibili.enabled && i.twitch.enabled);
+    i.set_chat_source(ChatSource::OtherPlatforms, true);
+    assert!(!i.twitch.enabled && i.comet.other_platforms);
+    assert_eq!(i.chat_source(), Some(ChatSource::OtherPlatforms));
+    // Turning it off leaves none.
+    i.set_chat_source(ChatSource::OtherPlatforms, false);
+    assert_eq!(i.chat_source(), None);
+
+    // A file with more than one keeps the first, in settings order.
+    let mut s = Settings::default();
+    s.integrations.twitch.enabled = true;
+    s.integrations.comet.other_platforms = true;
+    assert!(s.sanitize());
+    assert_eq!(s.integrations.chat_source(), Some(ChatSource::Twitch));
+    assert!(!s.integrations.comet.other_platforms);
+    s.integrations.bilibili.enabled = true;
+    assert!(s.sanitize());
+    assert_eq!(s.integrations.chat_source(), Some(ChatSource::Bilibili));
+    assert!(!s.integrations.twitch.enabled);
+    assert!(!s.sanitize(), "one source is already settled");
 }
 
 #[test]

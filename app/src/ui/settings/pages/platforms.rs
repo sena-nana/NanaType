@@ -22,16 +22,28 @@ fn tabs(ui: Ui) -> AnyView {
                 .into_any()
         })
         .collect();
-    widget(Stack::row(0.0))
-        .children(
-            widget(
-                SegmentedControl::new()
-                    .size(ControlSize::Small)
-                    .label(ui.now_t("settings-platforms")),
-            )
-            .children(options),
+    // One source connects at a time: turning one on turns the others off.
+    let note = widget(
+        Text::new(ui.now_t("settings-platforms-one-source"))
+            .style(crate::ui::kit::Type::Small.style())
+            .color(SemanticColorRole::Muted),
+    );
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(nana_ui_core::AlignSpec::Center)
+            .wrap(true),
+    )
+    .children((
+        widget(
+            SegmentedControl::new()
+                .size(ControlSize::Small)
+                .label(ui.now_t("settings-platforms")),
         )
-        .into_any()
+        .children(options),
+        note,
+    ))
+    .into_any()
 }
 
 /// How the chat panel reads, whichever platforms feed it: its style, which

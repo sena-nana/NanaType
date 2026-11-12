@@ -76,8 +76,9 @@ impl App {
             }
         };
         self.edit(|s| {
+            s.integrations
+                .set_chat_source(nanatype_settings::ChatSource::Bilibili, true);
             let b = &mut s.integrations.bilibili;
-            b.enabled = true;
             b.source = BilibiliSource::Link;
             b.link = kind;
         });

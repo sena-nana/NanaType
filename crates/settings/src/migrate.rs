@@ -177,8 +177,8 @@ pub fn migrate(value: &mut Value) -> Result<u32, MigrateError> {
 
 /// v8: one Bilibili switch with its source (the pasted link or 彗星号) in
 /// place of blivechat's and LAPLACE's own switches, and 彗星号 settings of
-/// their own. A 彗星号 that was on keeps reading every platform; when
-/// blivechat and LAPLACE were both on, blivechat stays.
+/// their own. Only one source connects now: when blivechat and LAPLACE were
+/// both on, blivechat stays, and a 彗星号 that was on reads Bilibili.
 fn bilibili_from_sources(obj: &mut Map<String, Value>) {
     let Some(integrations) = obj.get_mut("integrations").and_then(Value::as_object_mut) else {
         return;
@@ -222,7 +222,7 @@ fn bilibili_from_sources(obj: &mut Map<String, Value>) {
     if let Some(port) = comet_port {
         comet.insert("port".into(), port);
     }
-    comet.insert("other_platforms".into(), json!(blive_on && was_comet));
+    comet.insert("other_platforms".into(), json!(false));
     integrations.entry("comet").or_insert(Value::Object(comet));
 }
 

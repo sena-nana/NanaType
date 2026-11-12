@@ -29,7 +29,7 @@ Chat panel, history
 ## Getting started
 
 1. Open the Comet client and start listening to your room.
-2. In NanaType: **Settings › Live platforms › Bilibili**, turn it on and choose **彗星号 (Comet)** as the source; for Douyin, Kuaishou and other non-Bilibili rooms, turn on Comet on the **Other platforms** tab. Both share one connection, and each reads only its own platforms' messages. The port only needs to match the one in Comet's settings (19400 by default).
+2. In NanaType: **Settings › Live platforms › Bilibili**, turn it on and choose **彗星号 (Comet)** as the source; for Douyin, Kuaishou and other non-Bilibili rooms, turn on Comet on the **Other platforms** tab. Both share the port setting; only one can be on at a time, and each reads only its own platforms' messages. The port only needs to match the one in Comet's settings (19400 by default).
 3. Once the status reads "彗星号 · Connected", chat Comet receives shows up in the chat panel. "Cannot reach 彗星号" means the client is not open, or the port is wrong.
 
 ## Field mapping
