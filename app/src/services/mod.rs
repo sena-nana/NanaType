@@ -5,6 +5,7 @@ pub mod overlay_menu;
 pub mod persist;
 pub mod retired;
 pub mod sounds;
+pub mod spout_plugin;
 pub mod steam;
 pub mod tray;
 #[cfg(feature = "updates")]

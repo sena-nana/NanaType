@@ -198,6 +198,9 @@ pub static OBS_SECRET_FAILED: EventDescriptor = EventDescriptor::new(
     // 0 load, 1 store.
     &[FieldDescriptor::u64("op")],
 );
+/// The OBS Spout2 plugin installer could not be downloaded or started.
+pub static SPOUT_PLUGIN_FAILED: EventDescriptor =
+    EventDescriptor::new(OUTPUT, 6, "output.spout_plugin_failed", Severity::Warn, &[]);
 
 pub static BLIVECHAT_SECRET_FAILED: EventDescriptor = EventDescriptor::new(
     CHAT,
@@ -387,6 +390,7 @@ pub static EVENTS: &[&EventDescriptor] = &[
     &BRIDGE_ERROR,
     &OBS_ERROR,
     &OBS_SECRET_FAILED,
+    &SPOUT_PLUGIN_FAILED,
     &AUDIO_RUNNING,
     &AUDIO_FAILED,
     &STEAM_UNAVAILABLE,

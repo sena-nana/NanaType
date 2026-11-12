@@ -11,7 +11,9 @@ use nanatype_obs::{ObsConfig, ObsEvent, ObsItem, ObsScene, ObsStatus, ObsUpdate}
 use nanatype_settings::{Settings, SpoutOutput, fit_output_size};
 
 use crate::app::App;
+use crate::msg::Msg;
 use crate::output::KINDS;
+use crate::services::spout_plugin::{self, State as SpoutPluginState};
 use crate::ui::LinkState;
 use crate::windows::WindowKind;
 
@@ -103,7 +105,48 @@ impl App {
                 self.publish_obs_sizes();
             }
             ObsMsg::FitBounds(kind) => self.obs_fit_bounds(kind),
+            ObsMsg::InstallSpoutPlugin => self.install_spout_plugin(),
+            ObsMsg::SpoutPlugin(event) => self.spout_plugin_event(event),
         }
+    }
+
+    fn install_spout_plugin(&mut self) {
+        if matches!(
+            *self.ui.spout_plugin.get_untracked(),
+            SpoutPluginState::Downloading { .. }
+        ) {
+            return;
+        }
+        self.ui
+            .spout_plugin
+            .set(Arc::new(SpoutPluginState::Downloading {
+                done: 0,
+                total: 0,
+            }));
+        let ctx = self.ctx.clone();
+        spout_plugin::download(
+            self.paths.cache.join("obs-spout2"),
+            &self.settings.update.proxy,
+            move |e| ctx.dispatch(Msg::Obs(ObsMsg::SpoutPlugin(e))),
+        );
+    }
+
+    fn spout_plugin_event(&mut self, event: spout_plugin::Event) {
+        let state = match event {
+            spout_plugin::Event::Progress { done, total } => {
+                SpoutPluginState::Downloading { done, total }
+            }
+            spout_plugin::Event::Done(result) => {
+                match result.and_then(|path| spout_plugin::launch(&path)) {
+                    Ok(()) => SpoutPluginState::Launched,
+                    Err(e) => {
+                        nanatype_diag::report!(crate::diag::SPOUT_PLUGIN_FAILED; "{e}");
+                        SpoutPluginState::Failed(e)
+                    }
+                }
+            }
+        };
+        self.ui.spout_plugin.set(Arc::new(state));
     }
 
     fn obs_event(&mut self, event: ObsEvent) {

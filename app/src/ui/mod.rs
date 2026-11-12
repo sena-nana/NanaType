@@ -207,6 +207,8 @@ pub struct Ui {
     pub comet: Signal<Arc<crate::app::comet::State>>,
     /// The OBS link and its program scene.
     pub obs: Signal<Arc<crate::app::obs::State>>,
+    /// The OBS Spout2 plugin installer download.
+    pub spout_plugin: Signal<Arc<crate::services::spout_plugin::State>>,
     /// Translation keys and the last test.
     pub translate: Signal<Arc<crate::app::translate::State>>,
     #[cfg(feature = "updates")]
@@ -323,6 +325,7 @@ impl Ui {
             laplace: signal(Arc::new(crate::app::laplace::State::default())),
             comet: signal(Arc::new(crate::app::comet::State::default())),
             obs: signal(Arc::new(crate::app::obs::State::default())),
+            spout_plugin: signal(Arc::new(crate::services::spout_plugin::State::default())),
             translate: signal(Arc::new(crate::app::translate::State::default())),
             #[cfg(feature = "updates")]
             update: signal(Arc::new(crate::app::update::State::default())),

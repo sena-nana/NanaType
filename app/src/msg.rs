@@ -745,6 +745,10 @@ pub enum ObsMsg {
     Password(String),
     /// Give this window's OBS source a bounding box at its drawn size.
     FitBounds(crate::windows::WindowKind),
+    /// Download the OBS Spout2 plugin installer, then start it.
+    InstallSpoutPlugin,
+    /// The Spout2 plugin download reported.
+    SpoutPlugin(crate::services::spout_plugin::Event),
 }
 
 #[cfg(feature = "updates")]

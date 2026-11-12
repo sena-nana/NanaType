@@ -133,7 +133,7 @@ pub(super) fn obs_steps(ui: Ui, guide: bool) -> AnyView {
     let steps: Vec<AnyView> = if cfg!(windows) {
         [
             Some(enable()),
-            Some(step(2, body("output-obs-step-plugin"))),
+            Some(step(2, (body("output-obs-step-plugin"), spout_plugin(ui)))),
             Some(step(3, (body("output-obs-step-source"), sender))),
             Some(step(4, body("output-obs-step-alpha"))),
             check(),
@@ -197,6 +197,68 @@ pub(super) fn obs_steps(ui: Ui, guide: bool) -> AnyView {
     }))
     .children((steps, other))
     .into_any()
+}
+
+/// Downloads Off World Live's Spout2 plugin installer and starts it, with
+/// progress on the button and what went wrong beside it.
+fn spout_plugin(ui: Ui) -> AnyView {
+    use crate::services::spout_plugin::State;
+    let label = move |state: &State| -> String {
+        let locale = ui.locale.get();
+        match state {
+            State::Idle => I18N.t_in(locale, "output-obs-plugin-download"),
+            State::Downloading { done, total } => I18N.tr_in(
+                locale,
+                "output-obs-plugin-downloading",
+                &[("percent", (done * 100 / (*total).max(1)).to_string().into())],
+            ),
+            State::Launched => I18N.t_in(locale, "output-obs-plugin-again"),
+            State::Failed(_) => I18N.t_in(locale, "output-obs-plugin-retry"),
+        }
+    };
+    let note = move |state: &State| -> String {
+        let locale = ui.locale.get();
+        match state {
+            State::Launched => I18N.t_in(locale, "output-obs-plugin-launched"),
+            State::Failed(detail) => I18N.tr_in(
+                locale,
+                "output-obs-plugin-failed",
+                &[("detail", detail.as_str().into())],
+            ),
+            _ => String::new(),
+        }
+    };
+    (
+        widget(
+            Button::new(ui.now_t("output-obs-plugin-download"))
+                .icon(ti::DOWNLOAD)
+                .size(ControlSize::Small),
+        )
+        .bind(move |b: &mut Button| {
+            let state = ui.spout_plugin.get();
+            let text = label(&state);
+            if b.label != text {
+                b.label = text;
+            }
+            b.disabled = matches!(*state, State::Downloading { .. });
+        })
+        .on_cx(|_, _: &Activate, cx| {
+            cx.dispatch_program_all(Msg::Obs(ObsMsg::InstallSpoutPlugin));
+        }),
+        widget(
+            Text::new(String::new())
+                .style(Type::Small.style())
+                .color(SemanticColorRole::Muted),
+        )
+        .visible(move || !note(&ui.spout_plugin.get()).is_empty())
+        .bind(move |t: &mut Text| {
+            let text = note(&ui.spout_plugin.get());
+            if t.value != text {
+                t.value = text;
+            }
+        }),
+    )
+        .into_any()
 }
 
 /// How an output's settings are read and written.
