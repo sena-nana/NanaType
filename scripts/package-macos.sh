@@ -140,6 +140,21 @@ stage="$out/dmg"
 mkdir -p "$stage"
 ditto "$app" "$stage/$bundle.app"
 ln -s /Applications "$stage/Applications"
-hdiutil create -quiet -volname "$display" -srcfolder "$stage" -format UDZO -ov "$out/$name.dmg"
+# Not hdiutil -quiet: it closes stderr, so a failure exits with no message.
+# create -srcfolder also fails now and then on hosted macOS runners
+# ("Resource busy"), so flush and try again a few times.
+echo "Creating $out/$name.dmg"
+sync
+i=0
+until hdiutil create -volname "$display" -srcfolder "$stage" -format UDZO -ov "$out/$name.dmg"; do
+    i=$((i + 1))
+    if [ "$i" -ge 5 ]; then
+        echo "hdiutil create failed after $i attempts" >&2
+        exit 1
+    fi
+    echo "hdiutil create failed, retrying ($i)" >&2
+    sleep $((i * 2))
+    sync
+done
 rm -rf "$stage"
 echo "Packaged $display $version into $out"
