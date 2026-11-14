@@ -428,7 +428,6 @@ fn saved_history_lists_sessions_and_acts_on_the_open_one() {
             platform: None,
             text: text.into(),
             markup: None,
-            translation: None,
         };
         let mut view = View {
             sessions: vec![
@@ -511,7 +510,6 @@ fn saved_history_pages_back_through_a_long_session() {
             platform: None,
             text: format!("line {i}"),
             markup: None,
-            translation: None,
         })
         .collect();
     let mut view = View {

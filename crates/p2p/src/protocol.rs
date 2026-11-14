@@ -13,8 +13,6 @@ pub const MAX_FRAME: usize = 8 * 1024 * 1024;
 /// downsampled picture capped at one Steam message, not this source budget.
 pub const MAX_ASSET: usize = 16 * 1024 * 1024;
 pub const MAX_ENTRIES: usize = 1000;
-/// Bytes of one line's translation a partner may send.
-pub const MAX_TRANSLATION: usize = 4096;
 /// Host plus guests. The Steam lobby uses the same cap.
 pub const MAX_MEMBERS: usize = 8;
 /// Serialized budget of one participant's track.
@@ -153,20 +151,7 @@ impl TrackSnapshot {
         {
             *mirror = mirror[..units as usize].into();
         }
-        // A translation is a line of subtitle, not a document.
-        let long = |t: &str| t.len() > MAX_TRANSLATION;
-        if self
-            .display
-            .subtitle
-            .as_ref()
-            .is_some_and(|s| long(&s.text))
-        {
-            self.display.subtitle = None;
-        }
         for row in &mut self.rows {
-            if row.translation.as_deref().is_some_and(long) {
-                row.translation = None;
-            }
             row.item.doc.normalize();
             std::sync::Arc::make_mut(&mut row.doc).normalize();
             let units = row.doc.unit_count() as u32;
@@ -508,17 +493,6 @@ pub fn rebase_display(view: &mut DisplayView, remote_now: u64, now: u64) {
             *ms -= elapsed as u32;
         }
     }
-    if let Some(sub) = &mut view.subtitle {
-        // Already faded in over there: shown as is here.
-        sub.at_ms = if remote_now.saturating_sub(sub.at_ms) >= 1000 {
-            0
-        } else {
-            sub.at_ms
-                .saturating_add(now)
-                .saturating_sub(remote_now)
-                .max(1)
-        };
-    }
     if let Some(shake) = &mut view.shake {
         let elapsed = remote_now.saturating_sub(shake.at_ms);
         if elapsed >= u64::from(shake.ms) {
@@ -604,7 +578,6 @@ pub(crate) mod tests {
                     },
                     doc: Document::plain("hi").into(),
                     reveal: None,
-                    translation: None,
                 })
                 .collect(),
             portraits: Vec::new(),
@@ -616,31 +589,6 @@ pub(crate) mod tests {
             .iter()
             .map(|e| (e.participant.as_str(), e.line.0, e.order))
             .collect()
-    }
-
-    #[test]
-    fn translations_travel_with_the_track_within_limits() {
-        let mut track = track_with(1, &[1, 2]);
-        track.display.subtitle = Some(nanatype_core::Subtitle {
-            text: "Good evening".into(),
-            at_ms: 5,
-        });
-        track.rows[0].translation = Some("Hi".into());
-        track.rows[1].translation = Some("x".repeat(MAX_TRANSLATION + 1).into());
-        let mut back: TrackSnapshot =
-            serde_json::from_value(serde_json::to_value(&track).unwrap()).unwrap();
-        back.validate().unwrap();
-        assert_eq!(back.display.subtitle, track.display.subtitle);
-        assert_eq!(back.rows[0].translation.as_deref(), Some("Hi"));
-        assert_eq!(back.rows[1].translation, None, "over-long is dropped");
-
-        // A subtitle that faded in long ago over there shows at once here.
-        let mut view = back.display.clone();
-        rebase_display(&mut view, 10_000, 50);
-        assert_eq!(view.subtitle.unwrap().at_ms, 0);
-        let mut view = back.display;
-        rebase_display(&mut view, 105, 1_000);
-        assert_eq!(view.subtitle.unwrap().at_ms, 900);
     }
 
     #[test]

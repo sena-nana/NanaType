@@ -9,7 +9,6 @@
 //! `NANATYPE_SNAPSHOT_SKINS_DIR` loads saved `id/skin.toml` manifests for
 //! comparisons of built-in skins (self-contained manifests, no inheritance).
 //! `NANATYPE_SNAPSHOT_APPEARANCE=dark` selects neutral dark application chrome.
-//! `NANATYPE_SNAPSHOT_SUBTITLE=text` gives the sample lines that translation.
 //! `NANATYPE_SNAPSHOT_VERTICAL=1` turns on vertical text for the display.
 //! `NANATYPE_SNAPSHOT_UI_SCALE=150` zooms the settings and input windows to
 //! that UI scale (percent), as the app's windows zoom their content.
@@ -59,22 +58,6 @@ use nanatype_theme::SkinRegistry;
 
 /// The locale this run captures in.
 static LOCALE: std::sync::OnceLock<Locale> = std::sync::OnceLock::new();
-
-/// Settle the scene's subtitles on the session's layout: lay out again when
-/// one moved.
-fn settle_subtitles(session: &mut RuntimeAgentSession) {
-    let Some(ui) = scene::TRACKS.get() else {
-        return;
-    };
-    let world = session.document().context().world();
-    let mut moved = false;
-    for track in std::iter::once(ui).chain((0..nanatype::ui::REMOTE_LANES).map(|i| ui.lane(i))) {
-        moved |= dialogue::settle_subtitle(track, world);
-    }
-    if moved {
-        session.flush().expect("subtitle layout");
-    }
-}
 
 /// A window's document in the run's locale, as the app gives each window
 /// its language: Han glyph forms and what NanaUI's own controls say.
@@ -137,7 +120,6 @@ fn shot(
             session.set_clear(Some([0.0; 4]));
         }
         session.flush().expect("initial snapshot layout");
-        settle_subtitles(&mut session);
         session
             .document_mut()
             .context_mut()

@@ -135,14 +135,6 @@ pub struct TextExit {
     pub ms: u16,
 }
 
-/// A translation of the line on the display, drawn under it.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Subtitle {
-    pub text: Arc<str>,
-    /// When it arrived on the host clock; it fades in from here.
-    pub at_ms: Millis,
-}
-
 /// Everything the typewriter (and the input preview) needs to paint.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DisplayView {
@@ -169,9 +161,6 @@ pub struct DisplayView {
     pub entrance: Entrance,
     /// Nothing is on screen (the box itself is hidden).
     pub empty: bool,
-    /// The line's translation, once it arrives. Older peers omit it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subtitle: Option<Subtitle>,
     /// The line is a replay of one already said: it adds no history row, and
     /// a co-op partner treats it the same. Older peers omit (and ignore) it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -195,7 +184,6 @@ impl DisplayView {
             shake: None,
             entrance,
             empty: true,
-            subtitle: None,
             replay: false,
         }
     }
@@ -225,9 +213,6 @@ pub struct HistoryRow {
     pub doc: Arc<Document>,
     /// `None` is fully shown; `Some` types along with the display.
     pub reveal: Option<Reveal>,
-    /// The row's translation, once it arrives. Older peers omit it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub translation: Option<Arc<str>>,
 }
 
 #[cfg(test)]

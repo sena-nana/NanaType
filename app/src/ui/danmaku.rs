@@ -64,7 +64,6 @@ impl RowSource {
                         doc: Arc::new(item.doc.clone()),
                         item,
                         reveal: None,
-                        translation: None,
                     }
                 })
             }),
@@ -919,7 +918,6 @@ mod tests {
             },
             doc: Arc::new(Document::plain("hello")),
             reveal: None,
-            translation: None,
         }];
         let mut feed = Feed::default();
         let all = feed.update(&chat, &history, &ChatFilter::default());

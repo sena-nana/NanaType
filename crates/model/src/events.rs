@@ -15,18 +15,6 @@ pub enum BridgeEvent {
         markup: String,
         /// The character the line is said by.
         speaker: String,
-        /// The line's translation, when it is already known (a replay or a
-        /// repeated line); otherwise a `translation` event follows.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        translation: Option<String>,
-    },
-    /// A sent line's translation arrived.
-    Translation {
-        /// The `line_start` id it belongs to.
-        id: u64,
-        text: String,
-        /// The language code it is in (`en`, `zh-Hant`).
-        target: String,
     },
     LineEnd {
         id: u64,

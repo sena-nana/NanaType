@@ -24,7 +24,6 @@ pub mod quote;
 pub mod rich;
 pub mod shader_effects;
 mod shader_guard;
-pub mod subtitle;
 pub mod surface;
 pub mod sweep;
 pub mod text_light;
@@ -93,7 +92,6 @@ pub struct PeerLane {
     pub text_scroll: Signal<f32>,
     pub display_size: Signal<[f32; 2]>,
     pub text_area_height: Signal<f32>,
-    pub subtitle_lift: Signal<f32>,
     pub portraits: Signal<Arc<HashMap<String, String>>>,
 }
 
@@ -190,9 +188,6 @@ pub struct Stage {
     pub text_scroll: Signal<f32>,
     pub display_size: Signal<[f32; 2]>,
     pub text_area_height: Signal<f32>,
-    /// How far the subtitle moves back from the foot of the text area to
-    /// sit under the page's last line, read back from the layout by the host.
-    pub subtitle_lift: Signal<f32>,
     /// Views the running plugins mount on the display and history.
     pub plugin_views: Signal<Arc<HashMap<String, nanatype_plugins::PluginUpdate>>>,
 }
@@ -219,7 +214,6 @@ impl Stage {
             text_scroll: signal(0.0),
             display_size: signal([0.0; 2]),
             text_area_height: signal(0.),
-            subtitle_lift: signal(0.),
             portraits: signal(Arc::new(HashMap::new())),
         });
         let peer_display = peer_lanes[0].display;
@@ -271,7 +265,6 @@ impl Stage {
             text_scroll: signal(0.0),
             display_size: signal([0.0; 2]),
             text_area_height: signal(0.),
-            subtitle_lift: signal(0.),
             plugin_views: signal(Arc::new(HashMap::new())),
         }
     }
@@ -296,7 +289,6 @@ impl Stage {
             text_scroll: lane.text_scroll,
             display_size: lane.display_size,
             text_area_height: lane.text_area_height,
-            subtitle_lift: lane.subtitle_lift,
             portraits: lane.portraits,
             track_slot: index + 1,
             ..self

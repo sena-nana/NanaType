@@ -1095,8 +1095,6 @@ pub struct Dialogue {
     pub decor: Vec<DecorSpec>,
     /// The quoted chat message above a line that answers one.
     pub reply: ReplySpec,
-    /// A line's translation, under it; history bubbles use it too.
-    pub subtitle: SubtitleSpec,
     pub sweep: SweepSpec,
 }
 
@@ -1143,45 +1141,6 @@ impl Default for ReplySpec {
             color: None,
             opacity: 0.8,
         }
-    }
-}
-
-/// A line's translation, in a smaller, quieter take on the text it sits
-/// under: that text's fonts, outline, shadow and alignment.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct SubtitleSpec {
-    pub visible: bool,
-    /// Text size; `None` is 70% of the line's text.
-    pub size: Option<f32>,
-    /// Defaults to the text colour.
-    pub color: Option<ColorRef>,
-    /// How far the colour moves toward the box's fill (0 keeps it, 1 is
-    /// the fill), never below 4.5:1 against it.
-    pub muted: f32,
-    /// Space above the subtitle, in pixels.
-    pub gap: f32,
-}
-
-impl Default for SubtitleSpec {
-    fn default() -> Self {
-        Self {
-            visible: true,
-            size: None,
-            color: None,
-            muted: 0.3,
-            gap: 4.0,
-        }
-    }
-}
-
-impl SubtitleSpec {
-    /// The subtitle's size under text of `text_size`.
-    pub fn size_for(&self, text_size: f32) -> f32 {
-        self.size
-            .filter(|s| s.is_finite() && *s > 0.0)
-            .unwrap_or((text_size * 0.7).max(11.0))
-            .min(text_size.max(11.0))
     }
 }
 
@@ -1430,7 +1389,6 @@ impl Default for Dialogue {
             tail: None,
             decor: Vec::new(),
             reply: ReplySpec::default(),
-            subtitle: SubtitleSpec::default(),
             sweep: SweepSpec::default(),
         }
     }

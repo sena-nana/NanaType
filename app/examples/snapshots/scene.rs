@@ -2,13 +2,6 @@
 
 use super::*;
 
-thread_local! {
-    /// The scene's display, whose subtitles settle under their text after a
-    /// layout the way the host moves them.
-    pub static TRACKS: std::cell::Cell<Option<nanatype::ui::Stage>> =
-        const { std::cell::Cell::new(None) };
-}
-
 /// The sample content, settings and fonts every mode captures.
 pub struct Scene {
     pub ui: Ui,
@@ -105,8 +98,6 @@ impl Scene {
         if std::env::var_os("NANATYPE_SNAPSHOT_MATERIALS_OFF").is_some() {
             settings.skin.advanced_effects = false;
         }
-        // Subtitle shots translate, so the display keeps their room.
-        settings.translate.enabled = std::env::var_os("NANATYPE_SNAPSHOT_SUBTITLE").is_some();
         settings.overlays.display.vertical_text =
             std::env::var_os("NANATYPE_SNAPSHOT_VERTICAL").is_some();
         settings.accessibility.ui_scale = ui_scale_percent();
@@ -119,7 +110,6 @@ impl Scene {
             high_contrast,
         });
         let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), locale);
-        TRACKS.set(Some(*ui));
         ui.chrome_dark.set(dark);
         ui.chrome_contrast.set(high_contrast);
         if std::env::var_os("NANATYPE_SNAPSHOT_STATIC").is_some() {
@@ -169,25 +159,6 @@ impl Scene {
         if let Ok(line) = std::env::var("NANATYPE_SNAPSHOT_MARKUP") {
             core.handle(Cmd::SendMarkup(line), 0);
             core.handle(Cmd::Skip, 1);
-        }
-        // `NANATYPE_SNAPSHOT_SUBTITLE=text` translates the line on the
-        // display and every typed row, already faded in.
-        if let Ok(text) = std::env::var("NANATYPE_SNAPSHOT_SUBTITLE") {
-            let lines: Vec<_> = core
-                .history()
-                .iter()
-                .filter_map(|row| row.item.line)
-                .chain(core.display().line)
-                .collect();
-            for line in lines {
-                core.handle(
-                    Cmd::Translated {
-                        line,
-                        text: text.as_str().into(),
-                    },
-                    0,
-                );
-            }
         }
         ui.chat
             .set(Arc::new(chat.iter().cloned().map(Arc::new).collect()));

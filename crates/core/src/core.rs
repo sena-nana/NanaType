@@ -13,7 +13,7 @@ use nanatype_settings::{HistorySync, InputMode, InputPresence, Settings};
 use nanatype_theme::Skin;
 
 use crate::Millis;
-use crate::view::{DisplayView, HistoryRow, Reveal, SegmentReveal, ShakeView, Subtitle};
+use crate::view::{DisplayView, HistoryRow, Reveal, SegmentReveal, ShakeView};
 
 /// Lines kept for Ctrl+↑ recall.
 const RECALL_CAP: usize = 100;
@@ -78,17 +78,6 @@ pub enum Cmd {
     /// Answer a chat message with the next line sent from the editor;
     /// `None` drops the pending reply.
     SetReply(Option<ChatRef>),
-    /// A line's translation arrived: its subtitle while the line is still
-    /// on the display (a newer line drops it), and its history row.
-    Translated {
-        line: LineId,
-        text: Arc<str>,
-    },
-    /// A translation of the history row `key` (live chat).
-    TranslatedRow {
-        key: u64,
-        text: Arc<str>,
-    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -160,8 +149,6 @@ struct Active {
     player: Player,
     /// Player generation; makes epochs unique across lines.
     generation: u64,
-    /// Kept for a history row added once the line is revealed.
-    translation: Option<Arc<str>>,
 }
 
 #[derive(Clone, Default)]
@@ -429,8 +416,6 @@ impl Core {
                 }
             }
             Cmd::ClearDisplay => self.clear_display(now, &mut fx),
-            Cmd::Translated { line, text } => self.translated(line, text, now, &mut fx),
-            Cmd::TranslatedRow { key, text } => self.translated_row(key, text, &mut fx),
             Cmd::Recall(dir) => self.recall(dir, now, &mut fx),
             Cmd::Wake {
                 epoch,
@@ -696,7 +681,6 @@ impl Core {
         self.display.mirror_reveal_ms = mirror_times;
         self.display.fade = None;
         self.display.continue_indicator = false;
-        self.display.subtitle = None;
         self.touch_display(fx);
     }
 
@@ -907,7 +891,6 @@ impl Core {
         self.display.fade = None;
         self.display.text_exit = None;
         self.display.shake = None;
-        self.display.subtitle = None;
         self.display.replay = self.replay == Some(line.id);
         self.display.empty = false;
         self.display.reveal = if animate {
@@ -924,7 +907,6 @@ impl Core {
             line,
             player,
             generation: self.generation,
-            translation: None,
         });
         self.apply_player(effects, now, fx);
         if !animate {
@@ -1249,12 +1231,8 @@ impl Core {
                         && self.replay != Some(id)
                     {
                         let line = active.line.clone();
-                        let translation = active.translation.clone();
                         let item = self.local_item(&line);
                         self.push_row(item, Arc::new(line.doc.without_markers()), None, fx);
-                        if let Some(row) = self.history.back_mut() {
-                            row.translation = translation;
-                        }
                     }
                     self.complete_row(id, fx);
                     fx.events.push(Event::LineRevealed(id));
@@ -1332,41 +1310,11 @@ impl Core {
             item,
             doc,
             reveal,
-            translation: None,
         });
         while self.history.len() > self.settings.history.max_items as usize {
             self.history.pop_front();
         }
         fx.history_changed = true;
-    }
-
-    fn translated(&mut self, line: LineId, text: Arc<str>, now: Millis, fx: &mut Effects) {
-        if let Some(active) = self.active.as_mut().filter(|a| a.line.id == line) {
-            active.translation = Some(text.clone());
-        }
-        if self.display.line == Some(line) && self.retiring.is_none() {
-            self.display.subtitle = Some(Subtitle {
-                text: text.clone(),
-                at_ms: now,
-            });
-            self.touch_display(fx);
-        }
-        if let Some(row) = self
-            .history
-            .iter_mut()
-            .rev()
-            .find(|r| r.item.line == Some(line))
-        {
-            row.translation = Some(text);
-            fx.history_changed = true;
-        }
-    }
-
-    fn translated_row(&mut self, key: u64, text: Arc<str>, fx: &mut Effects) {
-        if let Some(row) = self.history.iter_mut().rev().find(|r| r.key == key) {
-            row.translation = Some(text);
-            fx.history_changed = true;
-        }
     }
 
     fn follow_row(&mut self, reveal: Reveal, fx: &mut Effects) {

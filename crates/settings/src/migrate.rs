@@ -172,6 +172,12 @@ pub fn migrate(value: &mut Value) -> Result<u32, MigrateError> {
         bilibili_from_sources(obj);
         obj.insert("schema".into(), json!(8));
     }
+    if from < 9 {
+        // Translated subtitles were removed; drop the section so `unknown`
+        // neither keeps it nor exports a proxy credential inside it.
+        obj.remove("translate");
+        obj.insert("schema".into(), json!(9));
+    }
     Ok(from)
 }
 

@@ -62,7 +62,6 @@ pub enum Page {
     Playback,
     Windows,
     History,
-    Translate,
     Platforms,
     Output,
     Integrations,
@@ -74,7 +73,7 @@ pub enum Page {
 
 impl Page {
     /// Every page, in sidebar order.
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 18] = [
         Self::General,
         Self::Profiles,
         Self::Input,
@@ -86,7 +85,6 @@ impl Page {
         Self::Playback,
         Self::Windows,
         Self::History,
-        Self::Translate,
         Self::Platforms,
         Self::Output,
         Self::Integrations,
@@ -109,7 +107,6 @@ impl Page {
             Self::Playback => "settings-playback",
             Self::Windows => "settings-windows",
             Self::History => "settings-history",
-            Self::Translate => "translate",
             Self::Platforms => "settings-platforms",
             Self::Output => "settings-output",
             Self::Integrations => "settings-integrations",
@@ -138,7 +135,6 @@ impl Page {
             Self::Playback => ti::PLAYER_PLAY,
             Self::Windows => ti::APP_WINDOW,
             Self::History => ti::MESSAGES,
-            Self::Translate => ti::LANGUAGE,
             Self::Platforms => ti::LIVE_VIEW,
             Self::Output => ti::BROADCAST,
             Self::Integrations => ti::LINK,
@@ -166,13 +162,7 @@ const GROUPS: &[(&str, &[Page])] = &[
     ),
     (
         "settings-group-look",
-        &[
-            Page::Skins,
-            Page::Playback,
-            Page::Windows,
-            Page::History,
-            Page::Translate,
-        ],
+        &[Page::Skins, Page::Playback, Page::Windows, Page::History],
     ),
     (
         "settings-group-stream",

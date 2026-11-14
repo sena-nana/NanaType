@@ -346,16 +346,7 @@ fn viewer(ui: Ui, view: &archive::View, name: &str) -> Row {
                     Type::Caption.view(crate::ui::history::local_time(r.at, true)),
                     Type::Small.view(r.speaker.clone()),
                 )),
-                widget(kit::grow_column(0.0)).children((
-                    saved_body(ui, r),
-                    r.translation.clone().map(|t| {
-                        widget(
-                            Text::new(t)
-                                .style(Type::Small.style())
-                                .color(SemanticColorRole::Muted),
-                        )
-                    }),
-                )),
+                widget(kit::grow_column(0.0)).children((saved_body(ui, r),)),
             ))
             .into_any()
         })

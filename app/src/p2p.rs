@@ -60,7 +60,7 @@ pub struct Session {
     pub local: String,
     pub room: Option<Arc<Room>>,
     pub room_received: Option<std::time::Instant>,
-    pub remote_revision: Vec<(String, u64, Option<LineId>, bool)>,
+    pub remote_revision: Vec<(String, u64, Option<LineId>)>,
     /// Lines sent during this session; earlier ones stay private.
     pub lines: HashSet<LineId>,
     pub revision: u64,
@@ -434,17 +434,6 @@ impl App {
                 }
             }
             seat_names.push(track.map(|track| track.name.clone()).unwrap_or_default());
-            // Their own translation, else one made here.
-            let local_sub = remote_view
-                .line
-                .filter(|_| remote_view.subtitle.is_none())
-                .and_then(|line| self.translate_partner_text(id, line));
-            if let Some((text, at_ms)) = &local_sub {
-                remote_view.subtitle = Some(nanatype_core::Subtitle {
-                    text: text.clone(),
-                    at_ms: *at_ms,
-                });
-            }
             // A replay has no history row to be read from: read it from the
             // display, unless it was already there when the room arrived.
             if remote_view.replay
@@ -454,7 +443,7 @@ impl App {
                 replays.push((id.clone(), line, remote_view.doc.clone()));
             }
             remote_view.line = remote_view.line.map(|line| room.render_id(id, line));
-            let stamp = (id.clone(), revision, remote_view.line, local_sub.is_some());
+            let stamp = (id.clone(), revision, remote_view.line);
             if self.peer.remote_revision.get(index) != Some(&stamp) {
                 remote_view.revision = lane.display.get_untracked().revision + 1;
                 lane.display.set(Arc::new(remote_view));
@@ -516,19 +505,7 @@ impl App {
             if let Some(row) = source_row {
                 let mut row = row.clone();
                 if owner != &self.peer.local {
-                    let theirs = row.translation.is_some();
-                    if !theirs {
-                        row.translation = self
-                            .translate_partner_text(owner, entry.line)
-                            .map(|(text, _)| text);
-                    }
-                    partner_lines.push((
-                        owner.clone(),
-                        entry.line,
-                        row.item.clone(),
-                        row.translation.clone(),
-                        theirs,
-                    ));
+                    partner_lines.push((owner.clone(), entry.line, row.item.clone()));
                 }
                 row.key = entry.order;
                 row.item.line = Some(room.render_id(owner, entry.line));
@@ -578,10 +555,9 @@ impl App {
         for (owner, line, doc) in replays {
             self.tts_partner_replay(&owner, line, &doc);
         }
-        for (owner, line, item, translation, theirs) in partner_lines {
+        for (owner, line, item) in partner_lines {
             self.tts_partner(&owner, line, &item);
-            self.translate_partner(&owner, line, &item, theirs);
-            self.archive_partner(&owner, line, &item, translation.as_deref());
+            self.archive_partner(&owner, line, &item);
         }
     }
 

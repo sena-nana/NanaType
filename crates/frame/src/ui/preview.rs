@@ -429,7 +429,6 @@ fn history_row(
         },
         doc: Arc::new(doc),
         reveal: None,
-        translation: None,
     }
 }
 

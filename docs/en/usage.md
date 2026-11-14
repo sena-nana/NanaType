@@ -2,7 +2,7 @@
 
 # User Guide
 
-> **Purpose:** Set up NanaType for live typing, chat, OBS, voice, translation, history, stickers, and skins.
+> **Purpose:** Set up NanaType for live typing, chat, OBS, voice, history, stickers, and skins.
 >
 > **Start here:** [Basics](#basics) · [OBS](#connecting-to-obs) · [Voice and speech](#text-to-speech) · [History](#saving-and-searching-the-history) · [Accessibility](#accessibility)
 
@@ -112,16 +112,6 @@ Turning an output off and back on within 5 seconds reuses the original sender, a
 - **Type along with the voice** (off by default) makes the typewriter type word by word as the voice says them, each word up to where it is spoken. If the voice gives no word timing within 0.3 seconds (or reading fails or ends), the rest types at its own pace; continue and skip show it at once as always.
 - While reading aloud is on, VTube Studio lip sync (and the `speaking` event) follows the voice instead of the typewriter. When the voice gives word timing, the mouth opens on each word's syllables and closes between words; otherwise it flaps at a steady pace.
 - The switch, default voice, rate, volume and the options are global; each character's voice travels with the characters in a profile.
-
-### Translated subtitles
-
-- **Settings › Translated subtitles › Translate sent lines** (off by default) translates each line into the language under **Translate into** (English by default; any other goes in **Other language code**, such as `pt-BR`); the source language is detected. The translation fades in right under the last line of the current page when it arrives (the box always keeps a line free for it, so paged text never pushes it out), smaller and quieter, in the skin's fonts, outline and shadow. Typing and sending never wait for it, and a late translation of a line that has already been replaced never reaches the box (it still joins the history). Reduced motion shows it without the fade. In vertical text it is a column after (to the left of) the last one.
-- **Service**: **OpenAI-compatible** covers OpenAI, DeepSeek (`https://api.deepseek.com/v1`) and a local Ollama (`http://localhost:11434/v1`) or LM Studio (`http://localhost:1234/v1`): fill in the **Endpoint** (up to `/v1`) and the **Model**; a server on this computer needs no key. The prompt asks for the translation only, short, with names kept, and passes the speaker as context. **DeepL** only needs a key; keys ending in `:fx` use the free API.
-- **API keys** are kept in the system's secret store (Windows Credential Manager / macOS Keychain), never in the settings file or an export. **Proxy** left empty uses the system's; servers on this computer are always reached directly.
-- **Which lines**: **Your lines** is on by default; **Co-op partners' lines** translates only lines a partner sends without a translation of their own (when a partner translates, theirs travels with the line); **Viewer chat** translates chat that joins the history.
-- **Where they show**: **Show on the display** and **Show in the history** are separate. Saved history keeps translations either way: a `.txt` export puts them on the line under the text, an `.srt` export as the subtitle's second line. WebSocket and plugin events: `line_start` carries `translation` when it is already known (a replay or a repeated line); otherwise a `translation` event (`id`, `text`, `target`) follows when it arrives, and OSC sends `/translation`.
-- The last 256 translations are kept in memory, so replays and repeated lines show theirs at once. A request times out after 8 seconds, and newer lines replace older ones still waiting. A failure never holds up sending: the badge on the settings page says why, and each kind of failure shows one notice (**Test** translates a sample line with the current settings).
-- Translation settings are global; profiles do not change them.
 
 ### Saving and searching the history
 

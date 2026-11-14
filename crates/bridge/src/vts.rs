@@ -270,9 +270,7 @@ impl VtsClient {
     pub fn emit(&self, event: &BridgeEvent) {
         if !matches!(
             event,
-            BridgeEvent::Portrait { .. }
-                | BridgeEvent::Shake { .. }
-                | BridgeEvent::Translation { .. }
+            BridgeEvent::Portrait { .. } | BridgeEvent::Shake { .. }
         ) {
             let _ = self.tx.send(Command::Event(event.clone()));
         }

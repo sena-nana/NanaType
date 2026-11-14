@@ -1,6 +1,9 @@
-//! One-time cleanup after the Bilibili web, Douyin and YouTube sources were
-//! removed (settings schema 4): their saved logins and cached pictures stay on
-//! disk otherwise, with nothing left to read or clear them.
+//! One-time cleanup after retired integrations were removed from settings:
+//! - schema 4: Bilibili web, Douyin and YouTube sources (saved logins and cached pictures);
+//! - schema 9: Translated subtitles (OpenAI & DeepL API keys).
+//!
+//! Their saved secrets or cached pictures would stay on disk otherwise, with
+//! nothing left to read or clear them.
 
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -8,32 +11,54 @@ use std::thread;
 use nanatype_secrets::SecretStore;
 use nanatype_settings::LoadNote;
 
-/// The first settings schema written without those sources.
-const REMOVED_IN: u32 = 4;
-/// Secret store names, in the order of the failure event's `what` field.
-const SECRETS: &[&str] = &["bilibili", "douyin"];
+/// The first settings schema written without those chat sources.
+const SOURCES_REMOVED_IN: u32 = 4;
+/// The first settings schema written without translated subtitles.
+const TRANSLATE_REMOVED_IN: u32 = 9;
+/// Secret store names and their failure event `what` codes.
+const ALL_RETIRED_SECRETS: &[(u64, &str)] = &[
+    (0, "bilibili"),
+    (1, "douyin"),
+    (2, "translate-openai"),
+    (3, "translate-deepl"),
+];
+const TRANSLATE_SECRETS: &[(u64, &str)] = &[(2, "translate-openai"), (3, "translate-deepl")];
 /// Chat picture prefixes in the blob folder.
 const PICTURE_PREFIXES: &[&str] = &["bili-", "douyin-", "yt-"];
 
-/// Clean up off the UI thread when the settings came from a build that still
-/// had the sources.
-pub fn start(note: &LoadNote, config: PathBuf, blobs: PathBuf) {
-    if !matches!(note, LoadNote::Migrated { from } if *from < REMOVED_IN) {
-        return;
+fn plan(note: &LoadNote) -> Option<(&'static [(u64, &'static str)], bool)> {
+    match note {
+        LoadNote::Migrated { from } if *from < SOURCES_REMOVED_IN => {
+            Some((ALL_RETIRED_SECRETS, true))
+        }
+        LoadNote::Migrated { from } if *from < TRANSLATE_REMOVED_IN => {
+            Some((TRANSLATE_SECRETS, false))
+        }
+        _ => None,
     }
+}
+
+/// Clean up off the UI thread when the settings came from a build that still
+/// had retired secrets or cached chat pictures.
+pub fn start(note: &LoadNote, config: PathBuf, blobs: PathBuf) {
+    let Some((secrets, pictures)) = plan(note) else {
+        return;
+    };
     let _ = thread::Builder::new()
         .name("nanatype-retired-cleanup".into())
         .spawn(move || {
-            for (what, name) in SECRETS.iter().enumerate() {
+            for &(what, name) in secrets {
                 if let Err(e) = SecretStore::new(&config, name).clear() {
                     nanatype_diag::report!(
                         crate::diag::RETIRED_CLEANUP_FAILED,
-                        what = what as u64;
+                        what = what;
                         "{e}"
                     );
                 }
             }
-            remove_pictures(&blobs);
+            if pictures {
+                remove_pictures(&blobs);
+            }
         });
 }
 
@@ -74,6 +99,20 @@ mod tests {
         assert_eq!(
             left,
             ["0123abcd.png", "blive-avatar-3.png", "twitch-avatar-4.png"]
+        );
+    }
+
+    #[test]
+    fn plans_retired_secrets_by_origin_schema() {
+        assert_eq!(plan(&LoadNote::Loaded), None);
+        assert_eq!(plan(&LoadNote::Migrated { from: 9 }), None);
+        assert_eq!(
+            plan(&LoadNote::Migrated { from: 8 }),
+            Some((TRANSLATE_SECRETS, false))
+        );
+        assert_eq!(
+            plan(&LoadNote::Migrated { from: 3 }),
+            Some((ALL_RETIRED_SECRETS, true))
         );
     }
 }

@@ -102,7 +102,7 @@ constraints = { type = "object", required = ["phrases"], max_depth = 3 }
 插件可以接收：
 
 - 生命周期与数据：`init`、`data`；
-- 播放：`line_start`、`line_end`、`speaking`、`translation`；
+- 播放：`line_start`、`line_end`、`speaking`；
 - 画面与联动：`expression`、`portrait`、`shake`、`vts`；
 - 输入：`command`、`chat_message`（平台、作者和纯文本）。
 

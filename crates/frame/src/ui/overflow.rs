@@ -173,23 +173,6 @@ pub fn scroll_target(lines: &[LineSpan], frontier: usize, viewport: f32) -> f32 
         .max(0.0)
 }
 
-/// Where the last whole line showing ends, from the start of a `viewport`
-/// long box (block axis): lines sit `offset` into it, scrolled back by
-/// `scroll`. A page's subtitle follows it there. `None` with no lines.
-pub fn shown_end(lines: &[LineSpan], offset: f32, scroll: f32, viewport: f32) -> Option<f32> {
-    let first = lines.first()?;
-    let end = lines
-        .iter()
-        .map(|l| (offset + l.top - scroll, offset + l.bottom - scroll))
-        .filter(|(top, bottom)| *top >= -0.5 && *bottom <= viewport + 0.5)
-        .map(|(_, bottom)| bottom)
-        .fold(None, |end: Option<f32>, b| {
-            Some(end.map_or(b, |e| e.max(b)))
-        });
-    // A line taller than the box still ends somewhere: at the box's end.
-    Some(end.unwrap_or_else(|| (offset + first.bottom - scroll).min(viewport)))
-}
-
 /// Units (page-relative) that start a new page when the page is cut into
 /// boxes `viewport` tall, a whole line at a time. Empty when it all fits.
 pub fn page_breaks(lines: &[LineSpan], glyphs: &[Glyph], viewport: f32) -> Vec<u32> {
@@ -473,20 +456,6 @@ mod tests {
             visible_from: 9,
         });
         assert_eq!(f.frame(next, None, end, false), 0.0);
-    }
-
-    #[test]
-    fn the_shown_end_is_the_last_whole_line_in_the_box() {
-        let l = lines(5, 10);
-        // Everything fits: under the last line.
-        assert_eq!(shown_end(&l[..2], 0.0, 0.0, 120.0), Some(80.0));
-        // A page of three whole lines, the rest waiting below.
-        assert_eq!(shown_end(&l, 0.0, 0.0, 130.0), Some(120.0));
-        // Scrolled up a line, and set in from the box's start.
-        assert_eq!(shown_end(&l, 4.0, 40.0, 130.0), Some(124.0));
-        // One line taller than the box ends at the box's end.
-        assert_eq!(shown_end(&l[..1], 0.0, 0.0, 30.0), Some(30.0));
-        assert_eq!(shown_end(&[], 0.0, 0.0, 30.0), None);
     }
 
     #[test]

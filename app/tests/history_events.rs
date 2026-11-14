@@ -40,7 +40,6 @@ fn row(key: u64, author: &str, doc: Document, event: Option<EventInfo>) -> Histo
         },
         doc: Arc::new(doc),
         reveal: None,
-        translation: None,
     }
 }
 

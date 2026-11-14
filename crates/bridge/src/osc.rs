@@ -26,9 +26,6 @@ pub(crate) fn message(prefix: &str, event: &BridgeEvent) -> Option<OscMessage> {
     let (path, args) = match event {
         BridgeEvent::LineStart { text, .. } => ("line", vec![OscType::String(text.clone())]),
         BridgeEvent::LineEnd { .. } => ("line_end", vec![]),
-        BridgeEvent::Translation { text, .. } => {
-            ("translation", vec![OscType::String(text.clone())])
-        }
         BridgeEvent::Expression { name, intensity } => {
             let mut args = vec![OscType::String(name.clone())];
             if let Some(i) = intensity {

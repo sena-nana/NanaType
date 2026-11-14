@@ -29,7 +29,6 @@ mod profiles;
 mod skin_grid;
 mod skins;
 mod speech;
-mod translate;
 mod windows;
 mod workshop;
 
@@ -95,7 +94,6 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
         Page::Playback => playback(ui),
         Page::Windows => windows(ui),
         Page::History => history(ui),
-        Page::Translate => translate::translate(ui),
         Page::Platforms => platforms(ui),
         Page::Output => output(ui),
         Page::Integrations => integrations(ui),
