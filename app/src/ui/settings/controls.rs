@@ -113,6 +113,7 @@ pub fn links_pulsing(ui: Ui) -> bool {
                 &s.ws,
                 &s.spout_display,
                 &s.spout_history,
+                &s.spout_danmaku,
                 &s.obs,
             ]
             .into_iter()

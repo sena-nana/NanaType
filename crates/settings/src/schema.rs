@@ -918,7 +918,7 @@ pub struct OverlaySettings {
 impl Default for OverlaySettings {
     fn default() -> Self {
         Self {
-            visible: true,
+            visible: false,
             lock: Lock::Interactive,
             always_on_top: true,
             background: CaptureBackground::Transparent,
@@ -928,27 +928,53 @@ impl Default for OverlaySettings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+fn default_input_overlay() -> OverlaySettings {
+    OverlaySettings {
+        visible: true,
+        ..OverlaySettings::default()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Overlays {
+    #[serde(default = "default_input_overlay")]
     pub input: OverlaySettings,
     pub display: OverlaySettings,
     pub peer_display: OverlaySettings,
     pub history: OverlaySettings,
+    pub danmaku: OverlaySettings,
+}
+
+impl Default for Overlays {
+    fn default() -> Self {
+        Self {
+            input: default_input_overlay(),
+            display: OverlaySettings::default(),
+            peer_display: OverlaySettings::default(),
+            history: OverlaySettings::default(),
+            danmaku: OverlaySettings::default(),
+        }
+    }
 }
 
 impl Overlays {
-    /// Lock the display, partner and history overlays (clicks pass through
-    /// them), or unlock them all when the display is locked.
+    /// Lock the display, partner, history and danmaku overlays (clicks pass
+    /// through them), or unlock them all when the display is locked.
     pub fn toggle_lock(&mut self) {
         let lock = if self.display.lock == Lock::Locked {
             Lock::Interactive
         } else {
             Lock::Locked
         };
-        self.display.lock = lock;
-        self.peer_display.lock = lock;
-        self.history.lock = lock;
+        for o in [
+            &mut self.display,
+            &mut self.peer_display,
+            &mut self.history,
+            &mut self.danmaku,
+        ] {
+            o.lock = lock;
+        }
     }
 }
 
@@ -1061,6 +1087,9 @@ impl Default for ChatFilter {
 #[serde(default)]
 pub struct HistoryChat {
     pub enabled: bool,
+    /// Show viewer chat in its own overlay window and output instead of
+    /// mixing it into the history log.
+    pub separate: bool,
     pub filter: ChatFilter,
 }
 
@@ -1068,11 +1097,19 @@ impl Default for HistoryChat {
     fn default() -> Self {
         Self {
             enabled: false,
+            separate: false,
             filter: ChatFilter {
                 min_gift_coin: 1,
                 ..ChatFilter::default()
             },
         }
+    }
+}
+
+impl HistoryChat {
+    /// Whether live chat is routed to an overlay (`History` or separate `Danmaku`).
+    pub fn active(&self) -> bool {
+        self.enabled || self.separate
     }
 }
 
@@ -1441,6 +1478,14 @@ pub fn partner_output(index: usize) -> SpoutOutput {
     }
 }
 
+fn default_danmaku_output() -> SpoutOutput {
+    SpoutOutput {
+        enabled: false,
+        name: "NanaType Danmaku".into(),
+        ..SpoutOutput::default()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputSettings {
@@ -1449,6 +1494,8 @@ pub struct OutputSettings {
     /// goes out under that seat's name. Always [`PARTNER_SEATS`] long.
     pub partners: Vec<SpoutOutput>,
     pub history: SpoutOutput,
+    #[serde(default = "default_danmaku_output")]
+    pub danmaku: SpoutOutput,
     pub obs: ObsLink,
     /// The single partner sender of earlier versions, read once into the
     /// first seat by [`Settings::sanitize`].
@@ -1471,6 +1518,7 @@ impl Default for OutputSettings {
                 name: "NanaType History".into(),
                 ..SpoutOutput::default()
             },
+            danmaku: default_danmaku_output(),
             obs: ObsLink::default(),
         }
     }
@@ -2047,6 +2095,7 @@ impl Settings {
             &mut self.overlays.display,
             &mut self.overlays.peer_display,
             &mut self.overlays.history,
+            &mut self.overlays.danmaku,
         ] {
             if let Some([w, h]) = o.size.as_mut() {
                 *w = finite_or(*w, 760.0).clamp(160.0, 8192.0);
@@ -2061,7 +2110,7 @@ impl Settings {
         if let Some(legacy) = o.peer_display.take() {
             o.partners[0] = legacy;
         }
-        for out in [&mut o.display, &mut o.history]
+        for out in [&mut o.display, &mut o.history, &mut o.danmaku]
             .into_iter()
             .chain(o.partners.iter_mut())
         {
@@ -2070,6 +2119,9 @@ impl Settings {
             if let Some([w, h]) = out.size {
                 out.size = fit_output_size(f64::from(w.max(1)), f64::from(h.max(1)));
             }
+        }
+        if o.danmaku.name.is_empty() {
+            o.danmaku.name = default_danmaku_output().name;
         }
         let obs = &mut self.output.obs;
         obs.host = obs.host.trim().chars().take(255).collect();

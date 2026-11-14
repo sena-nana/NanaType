@@ -24,6 +24,8 @@ impl App {
                     self.summoned = !self.summoned;
                 }
                 WindowKind::Settings => self.open_settings(),
+                WindowKind::PeerDisplay(_) if self.peer.handle.is_none() => {}
+                WindowKind::Danmaku if !self.settings.history.chat.separate => {}
                 kind => self.edit(|s| {
                     if let Some(o) = kind.overlay_mut(s) {
                         o.visible = !o.visible;

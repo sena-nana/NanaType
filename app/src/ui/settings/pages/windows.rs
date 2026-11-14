@@ -2,10 +2,11 @@ use super::*;
 use crate::msg::WindowMsg;
 
 /// The overlay windows, one group each, in page order.
-pub(super) const OVERLAYS: [WindowKind; 4] = [
+pub(super) const OVERLAYS: [WindowKind; 5] = [
     WindowKind::Display,
     WindowKind::PARTNER,
     WindowKind::History,
+    WindowKind::Danmaku,
     WindowKind::Input,
 ];
 
@@ -15,6 +16,7 @@ fn title_key(kind: WindowKind) -> &'static str {
         WindowKind::Display => "windows-display",
         WindowKind::PeerDisplay(_) => "windows-peer-display",
         WindowKind::History => "windows-history",
+        WindowKind::Danmaku => "windows-danmaku",
         _ => "windows-input",
     }
 }
@@ -246,7 +248,17 @@ pub(super) fn windows(ui: Ui) -> AnyView {
         .children(
             OVERLAYS
                 .into_iter()
-                .map(|kind| window_group(ui, kind))
+                .map(|kind| {
+                    let group = window_group(ui, kind);
+                    if kind == WindowKind::Danmaku {
+                        widget(Stack::column(0.0))
+                            .visible(move || ui.settings.with(|s| s.history.chat.separate))
+                            .children(group)
+                            .into_any()
+                    } else {
+                        group
+                    }
+                })
                 .collect::<Vec<_>>(),
         )
         .into_any()

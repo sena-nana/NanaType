@@ -592,6 +592,8 @@ impl App {
         } else {
             "Win"
         };
+        let peer_active = self.peer.handle.is_some();
+        let danmaku_separate = s.history.chat.separate;
         tray.show(
             &I18N,
             crate::services::tray::TrayState {
@@ -599,7 +601,11 @@ impl App {
                 speech_active: self.speech.controller.active(),
                 input: windows::desired(WindowKind::Input, &self.skin, s, self.summoned).visible,
                 display: s.overlays.display.visible,
+                peer_display: peer_active && s.overlays.peer_display.visible,
+                peer_active,
                 history: s.overlays.history.visible,
+                danmaku: danmaku_separate && s.overlays.danmaku.visible,
+                danmaku_separate,
                 chat: self.ui.input_dock.with_untracked(|d| d.chat_visible()),
                 locked,
                 continue_key: GlobalAction::Continue.get(s).map(|h| h.label(meta)),
@@ -608,7 +614,8 @@ impl App {
                     mirroring: s.general.input_mode == nanatype_settings::InputMode::Mirror,
                     hidden: !s.overlays.display.visible
                         && !s.overlays.history.visible
-                        && !(self.peer.handle.is_some() && s.overlays.peer_display.visible),
+                        && !(danmaku_separate && s.overlays.danmaku.visible)
+                        && !(peer_active && s.overlays.peer_display.visible),
                     locked,
                 },
             },
@@ -822,7 +829,7 @@ impl App {
         // Pictures of files, pasted images and chat in the current views.
         let mut wanted = doc_assets(self.core.draft());
         wanted.extend(display_assets(self.core.display()));
-        for row in self.core.history() {
+        for row in self.core.history().iter().chain(self.core.danmaku().iter()) {
             wanted.extend(row_assets(&row.item, &row.doc));
         }
         for m in &self.chat {
@@ -1139,7 +1146,11 @@ impl App {
     }
 
     fn apply_saved_sizes(&mut self) {
-        for kind in [WindowKind::Display, WindowKind::History] {
+        for kind in [
+            WindowKind::Display,
+            WindowKind::History,
+            WindowKind::Danmaku,
+        ] {
             if let Some(frame) = self.windows.frame(kind) {
                 let size = self.window_size(kind);
                 self.commands.push(WindowCommand::SetBounds {
@@ -1288,11 +1299,13 @@ impl App {
         let status = |kind| self.spout.status.get(&kind).cloned().unwrap_or_default();
         let display = status(WindowKind::Display);
         let history = status(WindowKind::History);
+        let danmaku = status(WindowKind::Danmaku);
         let seats = WindowKind::PARTNERS.map(status).to_vec();
         self.edit_status(|s| {
             s.spout_display = display;
             s.spout_partners = seats;
             s.spout_history = history;
+            s.spout_danmaku = danmaku;
         });
     }
 
@@ -1387,6 +1400,7 @@ impl App {
             for kind in [
                 WindowKind::Display,
                 WindowKind::History,
+                WindowKind::Danmaku,
                 WindowKind::Settings,
             ]
             .into_iter()
@@ -1435,6 +1449,7 @@ impl App {
         );
         self.apply_effects(fx);
         self.ui.settings.set(Arc::new(self.settings.clone()));
+        self.open_danmaku_window();
         if prev.enabled_plugins != self.settings.enabled_plugins
             || prev.plugin_approvals != self.settings.plugin_approvals
         {
@@ -1500,6 +1515,7 @@ impl App {
                 WindowKind::Display,
                 WindowKind::PARTNER,
                 WindowKind::History,
+                WindowKind::Danmaku,
             ] {
                 if let Some(o) = kind.overlay_mut(&mut s) {
                     o.size = None;
@@ -1641,13 +1657,18 @@ impl App {
             self.ui.display.set(Arc::new(self.shared_display()));
             self.ui.now.set(clock::now_ms());
         }
-        if fx.history_changed {
+        if fx.history_changed || fx.danmaku_changed {
             self.archive_rows();
         }
         if fx.history_changed && self.peer.handle.is_none() {
             self.ui
                 .history
                 .set(Arc::new(self.core.history().iter().cloned().collect()));
+        }
+        if fx.danmaku_changed {
+            self.ui
+                .danmaku
+                .set(Arc::new(self.core.danmaku().iter().cloned().collect()));
         }
         let queued = self.core.queued();
         if self.ui.status.with_untracked(|s| s.queued != queued) {
@@ -1656,8 +1677,10 @@ impl App {
         if fx.reply_changed {
             self.ui.reply.set(self.core.pending_reply().cloned());
         }
-        if fx.display_changed || fx.history_changed {
+        if fx.display_changed || fx.history_changed || fx.danmaku_changed {
             self.refresh_atom_urls();
+        }
+        if fx.display_changed || fx.history_changed {
             self.peer_publish();
             if self.peer.handle.is_some() {
                 self.peer_render();
@@ -1672,6 +1695,9 @@ impl App {
         let mut assets = display_assets(self.core.display());
         assets.extend(doc_assets(self.core.draft()));
         if let Some(row) = self.core.history().back() {
+            assets.extend(row_assets(&row.item, &row.doc));
+        }
+        if let Some(row) = self.core.danmaku().back() {
             assets.extend(row_assets(&row.item, &row.doc));
         }
         self.ensure_urls(assets);
@@ -2340,7 +2366,7 @@ impl App {
         let include = !self.live_chat.echo(&message);
         self.ensure_urls(message_assets(&message));
         let history = &self.settings.history.chat;
-        if include && history.enabled && message.passes(&history.filter) {
+        if include && history.active() && message.passes(&history.filter) {
             let locale = self.ui.locale.get_untracked();
             let item = message.history_item(locale);
             self.tts_chat(&item.doc);
@@ -2548,10 +2574,14 @@ impl App {
                 self.edit(|s| {
                     let show = !(s.overlays.display.visible
                         || s.overlays.history.visible
+                        || (s.history.chat.separate && s.overlays.danmaku.visible)
                         || (peer_active && s.overlays.peer_display.visible));
                     s.overlays.display.visible = show;
                     s.overlays.peer_display.visible = show;
                     s.overlays.history.visible = show;
+                    if s.history.chat.separate {
+                        s.overlays.danmaku.visible = show;
+                    }
                 });
             }
             GlobalAction::Phrase(i) => self.update(Msg::Editor(EditorMsg::InsertPhrase(i))),
@@ -2598,6 +2628,21 @@ impl App {
             .unwrap_or_else(|| windows::size_of(kind, &self.skin, &self.settings))
     }
 
+    pub(crate) fn open_danmaku_window(&mut self) {
+        let kind = WindowKind::Danmaku;
+        if self.settings.history.chat.separate
+            && self.windows.is_open(WindowKind::Input)
+            && self.windows.should_open(kind)
+        {
+            let locale = self.ui.locale.get_untracked();
+            let desc = windows::descriptor(kind, &kind.title(locale), &self.skin, &self.settings);
+            self.commands.push(WindowCommand::Open {
+                id: kind.id(),
+                settings: desc,
+            });
+        }
+    }
+
     /// Native window state for this frame.
     pub fn reconcile_windows(&mut self) -> Vec<WindowCommand> {
         self.sync_quick();
@@ -2610,6 +2655,9 @@ impl App {
                     desired.size = self.window_size(k);
                     // A partner window shows only while someone sits there.
                     if k.seat().is_some_and(|seat| seat >= self.partner_seats()) {
+                        desired.visible = false;
+                    }
+                    if k == WindowKind::Danmaku && !self.settings.history.chat.separate {
                         desired.visible = false;
                     }
                     if k == WindowKind::Quick {

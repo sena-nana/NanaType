@@ -17,7 +17,9 @@ use crate::windows::WindowKind;
 
 const ID_INPUT: &str = "nt.input";
 const ID_DISPLAY: &str = "nt.display";
+const ID_PEER_DISPLAY: &str = "nt.peer-display";
 const ID_HISTORY: &str = "nt.history";
+const ID_DANMAKU: &str = "nt.danmaku";
 const ID_CHAT: &str = "nt.chat";
 const ID_LOCK: &str = "nt.lock";
 const ID_CONTINUE: &str = "nt.continue";
@@ -43,7 +45,11 @@ pub struct TrayState {
     pub locale: Locale,
     pub input: bool,
     pub display: bool,
+    pub peer_display: bool,
+    pub peer_active: bool,
     pub history: bool,
+    pub danmaku: bool,
+    pub danmaku_separate: bool,
     pub chat: bool,
     pub locked: bool,
     /// The continue hotkey's label, if one is bound.
@@ -72,7 +78,9 @@ pub struct Tray {
     drawn: Cell<Badge>,
     input: MenuItem,
     display: MenuItem,
+    peer_display: MenuItem,
     history: MenuItem,
+    danmaku: MenuItem,
     chat: MenuItem,
     lock: MenuItem,
     continue_: MenuItem,
@@ -260,6 +268,17 @@ fn ico_png(ico: &[u8], px: u32) -> Option<&[u8]> {
         .map(|(_, data)| *data)
 }
 
+#[cfg(test)]
+fn output_toggle_id(kind: WindowKind) -> Option<&'static str> {
+    match kind {
+        WindowKind::Display => Some(ID_DISPLAY),
+        WindowKind::PeerDisplay(_) => Some(ID_PEER_DISPLAY),
+        WindowKind::History => Some(ID_HISTORY),
+        WindowKind::Danmaku => Some(ID_DANMAKU),
+        _ => None,
+    }
+}
+
 fn toggle_msg(kind: WindowKind) -> Msg {
     Msg::Window(WindowMsg::Toggle(kind))
 }
@@ -271,7 +290,9 @@ fn menu_message(id: &str) -> Option<Msg> {
     Some(match id {
         ID_INPUT => toggle_msg(WindowKind::Input),
         ID_DISPLAY => toggle_msg(WindowKind::Display),
+        ID_PEER_DISPLAY => toggle_msg(WindowKind::PARTNER),
         ID_HISTORY => toggle_msg(WindowKind::History),
+        ID_DANMAKU => toggle_msg(WindowKind::Danmaku),
         ID_CHAT => Msg::Chat(ChatMsg::Toggle),
         ID_LOCK => Msg::Hotkey(GlobalAction::ToggleLock),
         ID_CONTINUE => Msg::Hotkey(GlobalAction::Continue),
@@ -316,7 +337,9 @@ impl Tray {
         let check = |id: &str| CheckMenuItem::with_id(id, "", true, false, None);
         let input = item(ID_INPUT);
         let display = item(ID_DISPLAY);
+        let peer_display = item(ID_PEER_DISPLAY);
         let history = item(ID_HISTORY);
+        let danmaku = item(ID_DANMAKU);
         let chat = item(ID_CHAT);
         let lock = item(ID_LOCK);
         let continue_ = item(ID_CONTINUE);
@@ -339,7 +362,9 @@ impl Tray {
         menu.append_items(&[
             &input,
             &display,
+            &peer_display,
             &history,
+            &danmaku,
             &chat,
             &lock,
             &PredefinedMenuItem::separator(),
@@ -385,7 +410,9 @@ impl Tray {
             drawn: Cell::new(Badge::default()),
             input,
             display,
+            peer_display,
             history,
+            danmaku,
             chat,
             lock,
             continue_,
@@ -470,12 +497,32 @@ impl Tray {
                 "tray-action-hide-display",
             ));
         }
+        if changed(|s| s.peer_display) {
+            self.peer_display.set_text(label(
+                state.peer_display,
+                "tray-action-show-peer-display",
+                "tray-action-hide-peer-display",
+            ));
+        }
+        if changed(|s| s.peer_active) {
+            self.peer_display.set_enabled(state.peer_active);
+        }
         if changed(|s| s.history) {
             self.history.set_text(label(
                 state.history,
                 "tray-action-show-history",
                 "tray-action-hide-history",
             ));
+        }
+        if changed(|s| s.danmaku) {
+            self.danmaku.set_text(label(
+                state.danmaku,
+                "tray-action-show-danmaku",
+                "tray-action-hide-danmaku",
+            ));
+        }
+        if changed(|s| s.danmaku_separate) {
+            self.danmaku.set_enabled(state.danmaku_separate);
         }
         if changed(|s| s.chat) {
             self.chat.set_text(label(
@@ -635,8 +682,16 @@ mod tests {
             Some(Msg::Window(WindowMsg::Toggle(WindowKind::Display)))
         ));
         assert!(matches!(
+            menu_message(ID_PEER_DISPLAY),
+            Some(Msg::Window(WindowMsg::Toggle(WindowKind::PARTNER)))
+        ));
+        assert!(matches!(
             menu_message(ID_HISTORY),
             Some(Msg::Window(WindowMsg::Toggle(WindowKind::History)))
+        ));
+        assert!(matches!(
+            menu_message(ID_DANMAKU),
+            Some(Msg::Window(WindowMsg::Toggle(WindowKind::Danmaku)))
         ));
         assert!(matches!(
             menu_message("nt.overlay:peer_display:close"),
@@ -669,6 +724,22 @@ mod tests {
             menu_message("nt.profile:p1a"),
             Some(Msg::Profile(ProfileMsg::Switch(id))) if id == "p1a"
         ));
+    }
+
+    #[test]
+    fn every_spout_output_kind_has_a_tray_window_toggle() {
+        for kind in crate::output::KINDS {
+            let id = output_toggle_id(kind)
+                .unwrap_or_else(|| panic!("missing tray window toggle for {kind:?}"));
+            let Some(Msg::Window(WindowMsg::Toggle(target))) = menu_message(id) else {
+                panic!("tray item {id} did not produce WindowMsg::Toggle");
+            };
+            let mut s = Settings::default();
+            let before = kind.overlay(&s).unwrap().visible;
+            let o = target.overlay_mut(&mut s).unwrap();
+            o.visible = !o.visible;
+            assert_ne!(kind.overlay(&s).unwrap().visible, before, "{kind:?}");
+        }
     }
 
     #[test]

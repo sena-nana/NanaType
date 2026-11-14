@@ -5,12 +5,13 @@ use nanatype_settings::{OverlaySettings, Settings};
 use nanatype_theme::Skin;
 
 /// A surface the skin renderer lays out: the dialogue box (local or the
-/// peer's track) or the history panel.
+/// peer's track), the history panel, or the separate viewer danmaku panel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Canvas {
     Display,
     PeerDisplay,
     History,
+    Danmaku,
 }
 
 impl Canvas {
@@ -20,6 +21,7 @@ impl Canvas {
             Self::Display => &s.overlays.display,
             Self::PeerDisplay => &s.overlays.peer_display,
             Self::History => &s.overlays.history,
+            Self::Danmaku => &s.overlays.danmaku,
         }
     }
 
@@ -55,6 +57,12 @@ pub fn size_of(canvas: Canvas, skin: &Skin, s: &Settings) -> (f32, f32) {
             }),
         Canvas::History => profile
             .map_or(s.overlays.history.size, |p| p.history.size)
+            .map(|[w, h]| (w, h))
+            .unwrap_or((skin.history.width, skin.history.height)),
+        Canvas::Danmaku => s
+            .overlays
+            .danmaku
+            .size
             .map(|[w, h]| (w, h))
             .unwrap_or((skin.history.width, skin.history.height)),
     }

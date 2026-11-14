@@ -1787,3 +1787,47 @@ fn retired_translation_section_is_dropped_at_schema_9() {
     assert!(!text.contains("translate"), "{text}");
     assert!(!text.contains("secret"), "{text}");
 }
+
+#[test]
+fn separate_danmaku_defaults_sanitize_and_toggle_lock() {
+    let mut s = Settings::default();
+    assert!(!s.history.chat.separate);
+    assert!(!s.history.chat.active());
+    assert_eq!(s.output.danmaku.name, "NanaType Danmaku");
+    assert!(!s.output.danmaku.enabled);
+    assert_eq!(s.overlays.danmaku.lock, Lock::Interactive);
+
+    s.history.chat.separate = true;
+    assert!(s.history.chat.active());
+
+    s.overlays.danmaku.size = Some([10.0, 99999.0]);
+    s.output.danmaku.name = "   ".into();
+    s.output.danmaku.size = Some([3840, 2160]);
+    assert!(s.sanitize());
+    assert_eq!(s.overlays.danmaku.size, Some([160.0, 8192.0]));
+    assert_eq!(s.output.danmaku.name, "NanaType Danmaku");
+    assert_eq!(s.output.danmaku.size, Some([1920, 1080]));
+
+    s.overlays.toggle_lock();
+    assert_eq!(s.overlays.display.lock, Lock::Locked);
+    assert_eq!(s.overlays.peer_display.lock, Lock::Locked);
+    assert_eq!(s.overlays.history.lock, Lock::Locked);
+    assert_eq!(s.overlays.danmaku.lock, Lock::Locked);
+    s.overlays.toggle_lock();
+    assert_eq!(s.overlays.danmaku.lock, Lock::Interactive);
+}
+
+#[test]
+fn default_overlays_keep_only_input_visible() {
+    for s in [
+        Settings::default(),
+        serde_json::from_str::<Settings>("{}").unwrap(),
+        serde_json::from_str::<Settings>(r#"{"schema":2,"overlays":{"display":{}}}"#).unwrap(),
+    ] {
+        assert!(s.overlays.input.visible);
+        assert!(!s.overlays.display.visible);
+        assert!(!s.overlays.peer_display.visible);
+        assert!(!s.overlays.history.visible);
+        assert!(!s.overlays.danmaku.visible);
+    }
+}

@@ -70,15 +70,25 @@ impl App {
     /// or dropping rows past its cap never reaches the file.
     pub(super) fn archive_rows(&mut self) {
         let seen = self.archive.seen;
-        let fresh: Vec<Record> = self
+        let mut rows: Vec<_> = self
             .core
             .history()
             .iter()
+            .chain(self.core.danmaku().iter())
             .filter(|row| seen.is_none_or(|k| row.key > k))
+            .collect();
+        rows.sort_by_key(|row| row.key);
+        let fresh: Vec<Record> = rows
+            .into_iter()
             .filter(|row| self.archive_wants(&row.item))
             .map(|row| Record::of(&row.item, false))
             .collect();
-        if let Some(newest) = self.core.history().back().map(|r| r.key) {
+        if let Some(newest) = [self.core.history().back(), self.core.danmaku().back()]
+            .into_iter()
+            .flatten()
+            .map(|r| r.key)
+            .max()
+        {
             self.archive.seen = Some(seen.map_or(newest, |k| k.max(newest)));
         }
         for record in fresh {

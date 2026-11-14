@@ -26,6 +26,8 @@ pub enum WindowKind {
     /// has its own Spout/Syphon output.
     PeerDisplay(u8),
     History,
+    /// Viewer danmaku & events log shown when `history.chat.separate` is on.
+    Danmaku,
     Settings,
     /// The summon hotkey's one-line plain-text bar.
     Quick,
@@ -42,7 +44,13 @@ pub const QUICK_SIZE: (f32, f32) = (640.0, 56.0);
 pub const OVERLAY_MIN: (f64, f64) = (160.0, 96.0);
 
 impl WindowKind {
-    pub const OVERLAYS: [Self; 4] = [Self::Input, Self::Display, Self::PARTNER, Self::History];
+    pub const OVERLAYS: [Self; 5] = [
+        Self::Input,
+        Self::Display,
+        Self::PARTNER,
+        Self::History,
+        Self::Danmaku,
+    ];
 
     /// The first partner seat, standing in for every partner window where they
     /// share settings (the overlay switches, the windows page).
@@ -75,13 +83,14 @@ impl WindowKind {
             Self::PeerDisplay(0) => WindowId(6),
             Self::PeerDisplay(seat) => WindowId(7 + u64::from(seat)),
             Self::History => WindowId(3),
+            Self::Danmaku => WindowId(14),
             Self::Settings => WindowId(4),
             Self::Quick => WindowId(7),
         }
     }
 
     /// Windows the app manages, in reconcile order.
-    pub const ALL: [Self; 5 + PARTNER_SEATS] = [
+    pub const ALL: [Self; 6 + PARTNER_SEATS] = [
         Self::Input,
         Self::Display,
         Self::PeerDisplay(0),
@@ -92,6 +101,7 @@ impl WindowKind {
         Self::PeerDisplay(5),
         Self::PeerDisplay(6),
         Self::History,
+        Self::Danmaku,
         Self::Settings,
         Self::Quick,
     ];
@@ -112,6 +122,7 @@ impl WindowKind {
             Self::PeerDisplay(5) => "nt.peer-display-6",
             Self::PeerDisplay(_) => "nt.peer-display-7",
             Self::History => "nt.history",
+            Self::Danmaku => "nt.danmaku",
             Self::Settings => "nt.settings",
             Self::Quick => "nt.quick",
         }
@@ -130,6 +141,7 @@ impl WindowKind {
             Self::PeerDisplay(5) => "peer_display_6",
             Self::PeerDisplay(_) => "peer_display_7",
             Self::History => "history",
+            Self::Danmaku => "danmaku",
             Self::Settings => "settings",
             Self::Quick => "quick",
         }
@@ -141,6 +153,7 @@ impl WindowKind {
             Self::Display => "window-display",
             Self::PeerDisplay(_) => "window-peer-display",
             Self::History => "window-history",
+            Self::Danmaku => "window-danmaku",
             Self::Settings => "window-settings",
             Self::Quick => "window-quick",
         }
@@ -162,6 +175,7 @@ impl WindowKind {
             Self::Display => Some(Canvas::Display),
             Self::PeerDisplay(_) => Some(Canvas::PeerDisplay),
             Self::History => Some(Canvas::History),
+            Self::Danmaku => Some(Canvas::Danmaku),
             Self::Input | Self::Settings | Self::Quick => None,
         }
     }
@@ -180,6 +194,7 @@ impl WindowKind {
             Self::Display => Some(&mut s.overlays.display),
             Self::PeerDisplay(_) => Some(&mut s.overlays.peer_display),
             Self::History => Some(&mut s.overlays.history),
+            Self::Danmaku => Some(&mut s.overlays.danmaku),
             Self::Settings | Self::Quick => None,
         }
     }
@@ -369,7 +384,10 @@ pub fn descriptor(kind: WindowKind, title: &str, skin: &Skin, s: &Settings) -> W
             // there. A small floor still stops a resize from collapsing it.
             if matches!(
                 kind,
-                WindowKind::Display | WindowKind::PeerDisplay(_) | WindowKind::History
+                WindowKind::Display
+                    | WindowKind::PeerDisplay(_)
+                    | WindowKind::History
+                    | WindowKind::Danmaku
             ) {
                 d.minimum_size = OVERLAY_MIN;
             }
@@ -417,7 +435,10 @@ pub fn desired(kind: WindowKind, skin: &Skin, s: &Settings, input_summoned: bool
         resizable: matches!(kind, WindowKind::Input | WindowKind::Settings)
             || matches!(
                 kind,
-                WindowKind::History | WindowKind::Display | WindowKind::PeerDisplay(_)
+                WindowKind::History
+                    | WindowKind::Danmaku
+                    | WindowKind::Display
+                    | WindowKind::PeerDisplay(_)
             ) && lock != Lock::Locked,
         size: size_of(kind, skin, s),
     }
@@ -428,7 +449,12 @@ pub fn desired(kind: WindowKind, skin: &Skin, s: &Settings, input_summoned: bool
 pub fn pins_size(kind: WindowKind, resizable: bool) -> bool {
     match kind {
         WindowKind::Input | WindowKind::Settings => false,
-        WindowKind::Display | WindowKind::PeerDisplay(_) | WindowKind::History if resizable => {
+        WindowKind::Display
+        | WindowKind::PeerDisplay(_)
+        | WindowKind::History
+        | WindowKind::Danmaku
+            if resizable =>
+        {
             false
         }
         _ => true,
@@ -549,6 +575,7 @@ impl WindowManager {
                 (x + (w - sw) / 2.0 + step, y + h * 0.28 - sh / 2.0 + step)
             }
             WindowKind::History => (x + w - sw - margin, y + (h - sh) / 2.0),
+            WindowKind::Danmaku => (x + margin, y + (h - sh) / 2.0),
             WindowKind::Settings => (x + (w - sw) / 2.0, y + (h - sh) / 2.0),
             WindowKind::Quick => (x + (w - sw) / 2.0, y + h * 0.25),
         };
@@ -749,6 +776,7 @@ mod tests {
             WindowKind::Display,
             WindowKind::PARTNER,
             WindowKind::History,
+            WindowKind::Danmaku,
         ] {
             assert_eq!(zoom(kind, &s, Some(2.0)), 1.0);
             assert_eq!(minimum_size(kind, 1.5), None);
@@ -850,13 +878,16 @@ mod tests {
     fn default_overlays_receive_gestures_and_keep_user_sizes() {
         let skin = skin();
         let s = Settings::default();
+        assert!(desired(WindowKind::Input, &skin, &s, false).visible);
         for kind in [
             WindowKind::Display,
             WindowKind::PARTNER,
             WindowKind::History,
+            WindowKind::Danmaku,
         ] {
             assert_eq!(kind.overlay(&s).unwrap().lock, Lock::Interactive);
             let d = desired(kind, &skin, &s, false);
+            assert!(!d.visible);
             assert!(!d.passthrough);
             assert!(d.resizable);
             assert!(!pins_size(kind, d.resizable));
@@ -950,6 +981,7 @@ mod tests {
     fn local_and_partner_windows_have_independent_layouts() {
         let skin = skin();
         let mut s = Settings::default();
+        s.overlays.display.visible = true;
         s.overlays.display.size = Some([760.0, 200.0]);
         s.overlays.display.lock = Lock::Locked;
         s.overlays.peer_display.size = Some([500.0, 300.0]);
@@ -995,8 +1027,10 @@ mod tests {
     fn a_live_resize_is_not_overwritten() {
         assert!(!pins_size(WindowKind::Display, true));
         assert!(!pins_size(WindowKind::History, true));
+        assert!(!pins_size(WindowKind::Danmaku, true));
         assert!(pins_size(WindowKind::Display, false));
         assert!(pins_size(WindowKind::History, false));
+        assert!(pins_size(WindowKind::Danmaku, false));
         assert!(!pins_size(WindowKind::Input, false));
         assert!(!pins_size(WindowKind::Input, true));
     }
@@ -1004,11 +1038,14 @@ mod tests {
     #[test]
     fn broadcast_windows_can_shrink_below_the_descriptor_default() {
         let skin = skin();
-        let s = Settings::default();
+        let mut s = Settings::default();
+        s.overlays.danmaku.size = Some([320.0, 540.0]);
+        assert_eq!(size_of(WindowKind::Danmaku, &skin, &s), (320.0, 540.0));
         for kind in [
             WindowKind::Display,
             WindowKind::PARTNER,
             WindowKind::History,
+            WindowKind::Danmaku,
         ] {
             assert_eq!(
                 descriptor(kind, kind.key(), &skin, &s).minimum_size,

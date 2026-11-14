@@ -41,16 +41,21 @@ impl LiveChat {
 
 impl App {
     pub(super) fn live_record_row(&mut self, message: &ChatMessage) {
-        if let Some(row) = self.core.history().back() {
+        if let Some(newest) = [self.core.history().back(), self.core.danmaku().back()]
+            .into_iter()
+            .flatten()
+            .map(|r| r.key)
+            .max()
+        {
             self.live_chat
                 .rows
-                .insert((message.platform, message.id.clone()), row.key);
+                .insert((message.platform, message.id.clone()), newest);
         }
-        let oldest = self
-            .core
-            .history()
-            .front()
+        let oldest = [self.core.history().front(), self.core.danmaku().front()]
+            .into_iter()
+            .flatten()
             .map(|r| r.key)
+            .min()
             .unwrap_or(u64::MAX);
         self.live_chat.rows.retain(|_, row| *row >= oldest);
     }

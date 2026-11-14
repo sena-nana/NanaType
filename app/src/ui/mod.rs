@@ -91,6 +91,7 @@ pub struct Status {
     /// Each partner seat's sender, in seat order.
     pub spout_partners: Vec<LinkState>,
     pub spout_history: LinkState,
+    pub spout_danmaku: LinkState,
     /// The obs-websocket link.
     pub obs: LinkState,
     pub notices: Vec<Notice>,

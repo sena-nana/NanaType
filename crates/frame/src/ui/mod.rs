@@ -107,8 +107,11 @@ pub struct Stage {
     pub settings: Signal<Arc<Settings>>,
     /// Unsaved personalization fields of the skin previews, by skin id.
     pub skin_drafts: Signal<HashMap<String, preview::Draft>>,
+    pub log_canvas: Canvas,
     pub history_width: Signal<f32>,
     pub history_height: Signal<f32>,
+    pub danmaku_width: Signal<f32>,
+    pub danmaku_height: Signal<f32>,
     pub skin: Signal<Arc<Skin>>,
     /// Resolved application appearance, independent of the selected skin.
     pub chrome_dark: Signal<bool>,
@@ -153,6 +156,11 @@ pub struct Stage {
     /// The search field, which takes the caret as it unfolds.
     pub history_search_field: NodeRef,
     pub history_index: Computed<Arc<HashMap<u64, usize>>>,
+    pub danmaku_now: Signal<u64>,
+    pub danmaku: Signal<Arc<Vec<HistoryRow>>>,
+    pub danmaku_search: Signal<Option<String>>,
+    pub danmaku_search_field: NodeRef,
+    pub danmaku_index: Computed<Arc<HashMap<u64, usize>>>,
     /// The draft being typed, and the editor around it.
     pub draft: Signal<Arc<Document>>,
     pub source: Signal<Source>,
@@ -204,6 +212,12 @@ impl Stage {
                 history.with(|rows| rows.iter().enumerate().map(|(i, r)| (r.key, i)).collect()),
             )
         });
+        let danmaku = signal(Arc::new(Vec::<HistoryRow>::new()));
+        let danmaku_index = computed(move || {
+            Arc::new(
+                danmaku.with(|rows| rows.iter().enumerate().map(|(i, r)| (r.key, i)).collect()),
+            )
+        });
         let speaker = settings.general.active_character().speaker();
         let preview_name = speaker.name.clone();
         let entrance_view = Arc::new(DisplayView::empty(entrance));
@@ -225,8 +239,11 @@ impl Stage {
             locale: signal(locale),
             settings: signal(settings),
             skin_drafts: signal(HashMap::new()),
+            log_canvas: Canvas::History,
             history_width: signal(0.0),
             history_height: signal(0.0),
+            danmaku_width: signal(0.0),
+            danmaku_height: signal(0.0),
             skin: signal(skin),
             display: signal(Arc::new(DisplayView::empty(entrance))),
             preview_display: signal(Arc::new(DisplayView::empty(entrance))),
@@ -246,6 +263,11 @@ impl Stage {
             history_search: signal(None),
             history_search_field: node_ref(),
             history_index,
+            danmaku_now: signal(crate::clock::now_ms()),
+            danmaku,
+            danmaku_search: signal(None),
+            danmaku_search_field: node_ref(),
+            danmaku_index,
             draft: signal(Arc::new(Document::new())),
             source: signal(Source::default()),
             editor_value: signal(nana_ui_core::RichText::new("")),
@@ -298,6 +320,22 @@ impl Stage {
     /// The first remote person's track: their display, clock and text nodes.
     pub fn remote(self) -> Self {
         self.lane(0)
+    }
+
+    /// View of this state whose history log draws the separate viewer danmaku
+    /// buffer on [`Canvas::Danmaku`].
+    pub fn danmaku_log(self) -> Self {
+        Self {
+            log_canvas: Canvas::Danmaku,
+            history: self.danmaku,
+            history_index: self.danmaku_index,
+            history_now: self.danmaku_now,
+            history_width: self.danmaku_width,
+            history_height: self.danmaku_height,
+            history_search: self.danmaku_search,
+            history_search_field: self.danmaku_search_field,
+            ..self
+        }
     }
 
     /// How the application's own chrome paints now (tracked): its colours.

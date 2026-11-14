@@ -47,6 +47,8 @@ pub struct Host {
     quick_field: Option<Entity<nana_ui::runtime::TextInput>>,
     /// The history window's search was open at the last look.
     history_search_open: bool,
+    /// The danmaku window's search was open at the last look.
+    danmaku_search_open: bool,
     /// The `@` / `/` list was placed from a stale layout: lay out once
     /// more. Retries are bounded, should the texts never agree.
     completion_unsettled: bool,
@@ -118,7 +120,7 @@ fn skin_fps(ui: crate::ui::Ui) -> u32 {
 fn max_frame_rate(kind: Option<WindowKind>) -> Option<NonZeroU32> {
     match kind? {
         WindowKind::Input => NonZeroU32::new(INPUT_FPS),
-        WindowKind::History => NonZeroU32::new(HISTORY_FPS),
+        WindowKind::History | WindowKind::Danmaku => NonZeroU32::new(HISTORY_FPS),
         WindowKind::Display
         | WindowKind::PeerDisplay(_)
         | WindowKind::Settings
@@ -242,11 +244,21 @@ fn frame_policy(
             };
             (tracks[0].now, typing, movement, next_at, skin_fps)
         }
-        Some(WindowKind::History) => {
-            let fade = history::fade_schedule(*ui, now);
-            let compositor = history_compositor_needs_tick(*ui, now);
+        Some(WindowKind::History | WindowKind::Danmaku) => {
+            if kind == Some(WindowKind::Danmaku)
+                && !ui.settings.with_untracked(|s| s.history.chat.separate)
+            {
+                return FramePolicy::default();
+            }
+            let stage = if kind == Some(WindowKind::Danmaku) {
+                ui.danmaku_log()
+            } else {
+                *ui
+            };
+            let fade = history::fade_schedule(stage, now);
+            let compositor = history_compositor_needs_tick(stage, now);
             (
-                ui.history_now,
+                stage.history_now,
                 fade.animating || compositor,
                 false,
                 fade.next_at,
@@ -455,6 +467,13 @@ impl Host {
         if let Some(doc) = self.docs.get_mut(&WindowKind::History.id()) {
             history::focus_search(*self.app.ui, doc, &mut self.history_search_open);
         }
+        if let Some(doc) = self.docs.get_mut(&WindowKind::Danmaku.id()) {
+            history::focus_search(
+                self.app.ui.danmaku_log(),
+                doc,
+                &mut self.danmaku_search_open,
+            );
+        }
         let locale = self.app.ui.locale.get_untracked();
         // The app's reduce-motion setting wins over the system's in every
         // window's runtime, so view transitions and toasts land at once too.
@@ -623,6 +642,11 @@ impl Host {
             WindowKind::History => {
                 context
                     .mount_view_root(doc_id, move || history::history_window(ui))
+                    .map_err(err)?;
+            }
+            WindowKind::Danmaku => {
+                context
+                    .mount_view_root(doc_id, move || history::danmaku_window(ui))
                     .map_err(err)?;
             }
             WindowKind::Settings => {
@@ -814,6 +838,7 @@ impl Host {
                 });
             }
         }
+        self.app.open_danmaku_window();
     }
 }
 
@@ -1283,6 +1308,7 @@ impl RuntimeProgram for Host {
             editor_menu: None,
             quick_field: None,
             history_search_open: false,
+            danmaku_search_open: false,
             completion_unsettled: false,
             completion_retries: COMPLETION_RETRIES,
             editor_fx: None,
@@ -1425,6 +1451,7 @@ impl RuntimeProgram for Host {
                         WindowKind::Display
                             | WindowKind::PeerDisplay(_)
                             | WindowKind::History
+                            | WindowKind::Danmaku
                             | WindowKind::Quick
                     ) {
                         self.app
@@ -1466,7 +1493,10 @@ impl RuntimeProgram for Host {
                     if unlocked
                         && matches!(
                             kind,
-                            WindowKind::Display | WindowKind::PeerDisplay(_) | WindowKind::History
+                            WindowKind::Display
+                                | WindowKind::PeerDisplay(_)
+                                | WindowKind::History
+                                | WindowKind::Danmaku
                         )
                         && ((current.0 - w).abs() > 1.0 || (current.1 - h).abs() > 1.0)
                     {
@@ -1636,13 +1666,23 @@ impl RuntimeProgram for Host {
         if key.state != KeyState::Pressed {
             return Ok(RuntimeProgramUpdate::default());
         }
-        // Esc folds the history window's search and shows the whole log again.
-        if WindowKind::from_id(id) == Some(WindowKind::History)
-            && chord_of(key) == Hotkey::bare("Escape")
-            && self.app.ui.history_search.with_untracked(Option::is_some)
-        {
-            self.app.ui.history_search.set(None);
-            return Ok(self.finish());
+        // Esc folds the history or danmaku window's search and shows the whole log again.
+        if chord_of(key) == Hotkey::bare("Escape") {
+            match WindowKind::from_id(id) {
+                Some(WindowKind::History)
+                    if self.app.ui.history_search.with_untracked(Option::is_some) =>
+                {
+                    self.app.ui.history_search.set(None);
+                    return Ok(self.finish());
+                }
+                Some(WindowKind::Danmaku)
+                    if self.app.ui.danmaku_search.with_untracked(Option::is_some) =>
+                {
+                    self.app.ui.danmaku_search.set(None);
+                    return Ok(self.finish());
+                }
+                _ => {}
+            }
         }
         if let Some(target) = self.app.ui.recording.get_untracked() {
             let code = key.physical.0.as_ref();
@@ -2405,9 +2445,74 @@ mod redraw_tests {
         }
         assert_eq!(rate(Some(WindowKind::Input)), Some(INPUT_FPS));
         assert_eq!(rate(Some(WindowKind::History)), Some(HISTORY_FPS));
+        assert_eq!(rate(Some(WindowKind::Danmaku)), Some(HISTORY_FPS));
         assert_eq!(rate(Some(WindowKind::Settings)), None);
         assert_eq!(rate(Some(WindowKind::Quick)), None);
         assert_eq!(rate(None), None);
+    }
+
+    #[test]
+    fn danmaku_frame_policy_is_ondemand_when_idle_or_separate_is_off() {
+        let now = 10_000;
+        let mut settings = nanatype_settings::Settings::default();
+        settings.history.fade_after_s = None;
+        let ui = crate::ui::Ui::new(
+            Arc::new(settings.clone()),
+            Arc::new(nanatype_theme::Skin::default()),
+            nanatype_i18n::Locale::ZhCn,
+        );
+        let follow = overflow::Follow::default();
+        let pager = overflow::Pager::default();
+        assert!(matches!(
+            frame_policy(ui, Some(WindowKind::Danmaku), now, &follow, &[], &pager).demand,
+            FrameDemand::OnDemand
+        ));
+        settings.history.chat.separate = true;
+        settings.history.fade_after_s = Some(5);
+        ui.settings.set(Arc::new(settings));
+        let unix_now = crate::clock::unix_of(now);
+        let doc = nanatype_model::Document::plain("danmaku");
+        ui.danmaku.set(Arc::new(vec![nanatype_core::HistoryRow {
+            key: 1,
+            item: nanatype_model::HistoryItem {
+                source: nanatype_model::SourceId::local(),
+                kind: nanatype_model::SourceKind::Chat,
+                line: None,
+                author: "Viewer".into(),
+                avatar: None,
+                doc: doc.clone(),
+                at: unix_now,
+                uid: None,
+                reply: None,
+                event: None,
+            },
+            doc: Arc::new(doc),
+            reveal: None,
+        }]));
+        let scheduled = frame_policy(ui, Some(WindowKind::Danmaku), now, &follow, &[], &pager);
+        assert!(matches!(scheduled.demand, FrameDemand::At(_)));
+        // While fade itself is running, Danmaku asks for frames; once separate turns off, it returns to OnDemand.
+        let fading = frame_policy(
+            ui,
+            Some(WindowKind::Danmaku),
+            now + 5_100,
+            &follow,
+            &[],
+            &pager,
+        );
+        assert!(fading.tick_clock);
+        assert!(matches!(fading.demand, FrameDemand::Continuous(_)));
+        ui.settings.update(|s| Arc::make_mut(s).history.chat.separate = false);
+        let disabled = frame_policy(
+            ui,
+            Some(WindowKind::Danmaku),
+            now + 5_100,
+            &follow,
+            &[],
+            &pager,
+        );
+        assert!(!disabled.tick_clock);
+        assert!(matches!(disabled.demand, FrameDemand::OnDemand));
     }
 
     #[test]

@@ -129,18 +129,22 @@ pub(super) fn history(ui: Ui) -> AnyView {
                     ),
                 ],
             ),
-            // The filters only mean something while chat joins the history.
+            // The filters apply while chat joins the history or its own overlay.
             section_with(
                 ui,
                 "history-chat",
                 vec![
                     (
-                        toggle_row!(ui, "history-chat-show", history.chat.enabled),
+                        toggle_row!(ui, "history-chat-separate", history.chat.separate),
                         None,
+                    ),
+                    shown_if(
+                        toggle_row!(ui, "history-chat-show", history.chat.enabled),
+                        move || ui.settings.with(|s| !s.history.chat.separate),
                     ),
                     when_on(
                         ui,
-                        |s| s.history.chat.enabled,
+                        |s| s.history.chat.active(),
                         vec![
                             row(
                                 ui,
@@ -188,6 +192,29 @@ pub(super) fn history(ui: Ui) -> AnyView {
                                 ),
                             ),
                         ],
+                    ),
+                    shown_if(
+                        row(
+                            ui,
+                            "danmaku-session",
+                            None,
+                            confirm(
+                                *ui,
+                                ui.now_t("danmaku-clear-confirm"),
+                                ui.now_t("danmaku-clear"),
+                                move |armed| {
+                                    widget(
+                                        IconButton::new(ti::ERASER, ui.now_t("danmaku-clear"))
+                                            .size(ControlSize::Small)
+                                            .with_tooltip(ui.now_t("danmaku-clear")),
+                                    )
+                                    .on(move |_: &Activate| armed.set(true))
+                                    .into_any()
+                                },
+                                || Msg::Core(nanatype_core::Cmd::ClearDanmaku),
+                            ),
+                        ),
+                        move || ui.settings.with(|s| s.history.chat.separate),
                     ),
                     (
                         toggle_row!(ui, "history-show-quote", history.show_quote),

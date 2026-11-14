@@ -12,15 +12,15 @@ use std::sync::Arc;
 /// Narrower than this, a text of a few characters reads as a column.
 const MIN_TEXT_W: f32 = 120.0;
 
-#[test]
-fn settings_rows_leave_their_copy_room() {
+fn check_pages(pages: &[settings::Page], configure: impl Fn(&mut Settings)) {
     let mut bad = Vec::new();
     for locale in Locale::ALL {
         // The window's narrowest, and a roomier one.
         for width in [720u32, 920] {
-            for page in settings::Page::ALL {
+            for &page in pages {
                 let mut s = Settings::default();
                 s.general.onboarding_done = true;
+                configure(&mut s);
                 let ui = Ui::new(Arc::new(s), common::skin("nanatype.halo"), locale);
                 ui.page.set(page);
                 let mut session =
@@ -63,4 +63,24 @@ fn settings_rows_leave_their_copy_room() {
         }
     }
     assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+#[test]
+fn settings_rows_leave_their_copy_room() {
+    check_pages(&settings::Page::ALL, |_| {});
+}
+
+#[test]
+fn separate_danmaku_settings_rows_leave_their_copy_room() {
+    check_pages(
+        &[
+            settings::Page::History,
+            settings::Page::Windows,
+            settings::Page::Output,
+        ],
+        |s| {
+            s.history.chat.separate = true;
+            s.output.danmaku.enabled = true;
+        },
+    );
 }

@@ -396,6 +396,7 @@ pub fn window(kind: WindowKind) -> u64 {
         WindowKind::PeerDisplay(0) => 2,
         WindowKind::PeerDisplay(seat) => 5 + u64::from(seat),
         WindowKind::History => 3,
+        WindowKind::Danmaku => 12,
         WindowKind::Settings => 4,
         WindowKind::Quick => 5,
     }

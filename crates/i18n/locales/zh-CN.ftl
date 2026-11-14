@@ -25,6 +25,7 @@ windows-display = 展示框
 windows-history = 历史记录
 display-placeholder = 台词会显示在这里 · 锁定窗口后隐藏此框
 history-placeholder = 历史记录会显示在这里 · 锁定窗口后隐藏此框
+danmaku-placeholder = 暂无弹幕
 
 ## 通用
 common-cancel = 取消

@@ -13,9 +13,10 @@ use crate::{
 };
 
 const PREFIX: &str = "nt.overlay:";
-const WINDOWS: [WindowKind; 2 + nanatype_settings::PARTNER_SEATS] = [
+const WINDOWS: [WindowKind; 3 + nanatype_settings::PARTNER_SEATS] = [
     WindowKind::Display,
     WindowKind::History,
+    WindowKind::Danmaku,
     WindowKind::PeerDisplay(0),
     WindowKind::PeerDisplay(1),
     WindowKind::PeerDisplay(2),
@@ -41,10 +42,11 @@ pub enum Action {
     Name,
     Time,
     ClearHistory,
+    ClearDanmaku,
 }
 
 impl Action {
-    const FIXED: [Self; 13] = [
+    const FIXED: [Self; 14] = [
         Self::AdjustSkin,
         Self::VerticalText,
         Self::OnTop,
@@ -58,6 +60,7 @@ impl Action {
         Self::Name,
         Self::Time,
         Self::ClearHistory,
+        Self::ClearDanmaku,
     ];
 
     fn key(&self) -> &str {
@@ -76,6 +79,7 @@ impl Action {
             Self::Name => "name",
             Self::Time => "time",
             Self::ClearHistory => "clear-history",
+            Self::ClearDanmaku => "clear-danmaku",
         }
     }
 
@@ -116,6 +120,7 @@ impl Action {
             Self::Name => Msg::Edit(Box::new(|s| s.history.show_name = !s.history.show_name)),
             Self::Time => Msg::Edit(Box::new(|s| s.history.show_time = !s.history.show_time)),
             Self::ClearHistory => Msg::Core(Cmd::ClearHistory),
+            Self::ClearDanmaku => Msg::Core(Cmd::ClearDanmaku),
         }
     }
 }
@@ -144,6 +149,7 @@ pub(crate) struct Snapshot {
     peer_active: bool,
     connected: bool,
     history_empty: bool,
+    danmaku_empty: bool,
 }
 
 impl Snapshot {
@@ -163,6 +169,7 @@ impl Snapshot {
             connected: !peer.active
                 || matches!(peer.status, nanatype_p2p::Status::Connected { .. }),
             history_empty: ui.history.get_untracked().is_empty(),
+            danmaku_empty: ui.danmaku.get_untracked().is_empty(),
         })
     }
 
@@ -181,10 +188,13 @@ impl Snapshot {
             Action::VerticalText => {
                 matches!(self.kind, WindowKind::Display | WindowKind::PeerDisplay(_))
             }
-            Action::Avatar | Action::Name | Action::Time => self.kind == WindowKind::History,
+            Action::Avatar | Action::Name | Action::Time => {
+                matches!(self.kind, WindowKind::History | WindowKind::Danmaku)
+            }
             Action::ClearHistory => {
                 self.kind == WindowKind::History && !self.peer_active && !self.history_empty
             }
+            Action::ClearDanmaku => self.kind == WindowKind::Danmaku && !self.danmaku_empty,
             _ => true,
         }
     }
@@ -223,7 +233,7 @@ impl Snapshot {
                 self.item(&menu, action, key, None)?;
             }
             menu.append(&PredefinedMenuItem::separator())?;
-        } else if self.kind == WindowKind::History {
+        } else if matches!(self.kind, WindowKind::History | WindowKind::Danmaku) {
             let h = &self.settings.history;
             for (action, key, checked) in [
                 (Action::Avatar, "history-avatar", h.show_avatar),
@@ -232,16 +242,13 @@ impl Snapshot {
             ] {
                 self.item(&menu, action, key, Some(checked))?;
             }
-            let clear = Submenu::new(
-                self.text("history-clear"),
-                self.enabled(&Action::ClearHistory),
-            );
-            self.item(
-                &clear,
-                Action::ClearHistory,
-                "overlay-menu-confirm-clear",
-                None,
-            )?;
+            let (clear_key, clear_action) = if self.kind == WindowKind::Danmaku {
+                ("danmaku-clear", Action::ClearDanmaku)
+            } else {
+                ("history-clear", Action::ClearHistory)
+            };
+            let clear = Submenu::new(self.text(clear_key), self.enabled(&clear_action));
+            self.item(&clear, clear_action, "overlay-menu-confirm-clear", None)?;
             menu.append(&clear)?;
             menu.append(&PredefinedMenuItem::separator())?;
         }
@@ -354,9 +361,13 @@ mod tests {
     fn fixture() -> Ui {
         let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
         let skin = registry.load(nanatype_theme::DEFAULT_SKIN).unwrap().skin;
-        let mut core = nanatype_core::Core::new(Settings::default(), skin.clone());
+        let mut settings = Settings::default();
+        for kind in WINDOWS {
+            kind.overlay_mut(&mut settings).unwrap().visible = true;
+        }
+        let mut core = nanatype_core::Core::new(settings.clone(), skin.clone());
         core.handle(Cmd::SendMarkup("History".into()), 0);
-        let ui = Ui::new(Arc::new(Settings::default()), skin, Locale::ZhCn);
+        let ui = Ui::new(Arc::new(settings), skin, Locale::ZhCn);
         ui.history
             .set(Arc::new(core.history().iter().cloned().collect()));
         let mut skins = crate::ui::skin_rows(&registry, Locale::ZhCn);
@@ -376,11 +387,15 @@ mod tests {
         for kind in WindowKind::ALL {
             assert_eq!(enabled(kind, Action::Close), WINDOWS.contains(&kind));
             assert_eq!(enabled(kind, Action::Continue), kind == WindowKind::Display);
-            assert_eq!(enabled(kind, Action::Avatar), kind == WindowKind::History);
+            assert_eq!(
+                enabled(kind, Action::Avatar),
+                matches!(kind, WindowKind::History | WindowKind::Danmaku)
+            );
             assert_eq!(
                 enabled(kind, Action::ClearHistory),
                 kind == WindowKind::History
             );
+            assert!(!enabled(kind, Action::ClearDanmaku));
         }
         assert!(!enabled(
             WindowKind::Display,
@@ -395,10 +410,15 @@ mod tests {
         assert!(!enabled(WindowKind::Display, Action::Continue));
         assert!(!enabled(WindowKind::Display, Action::Skip));
         assert!(enabled(WindowKind::Display, Action::ClearDisplay));
+        let danmaku_row = ui.history.get_untracked()[0].clone();
+        ui.danmaku.set(Arc::new(vec![danmaku_row]));
         ui.peer.update(|p| Arc::make_mut(p).active = true);
         assert!(!enabled(WindowKind::Display, Action::ClearDisplay));
         assert!(!enabled(WindowKind::History, Action::ClearHistory));
         assert!(enabled(WindowKind::History, Action::Avatar));
+        assert!(enabled(WindowKind::Danmaku, Action::ClearDanmaku));
+        ui.danmaku.set(Arc::new(Vec::new()));
+        assert!(!enabled(WindowKind::Danmaku, Action::ClearDanmaku));
         ui.peer.update(|p| Arc::make_mut(p).active = false);
         ui.history.set(Arc::new(Vec::new()));
         assert!(!enabled(WindowKind::History, Action::ClearHistory));
@@ -427,6 +447,9 @@ mod tests {
                 );
             }
             let mut settings = Settings::default();
+            for w in WINDOWS {
+                w.overlay_mut(&mut settings).unwrap().visible = true;
+            }
             for action in [
                 Action::OnTop,
                 Action::Lock,
@@ -478,7 +501,10 @@ mod tests {
                     .collect();
                 assert!(leaves.iter().any(|i| matches!(i, MenuItemKind::Check(i) if i.id().0 == Action::Skin(ui.settings.get_untracked().skin.id.clone()).id(kind) && i.is_checked())));
                 assert!(leaves.iter().any(|i| matches!(i, MenuItemKind::Check(i) if i.id().0.ends_with("skin:broken:skin") && !i.is_enabled() && i.text() == "Broken && skin")));
-                assert_eq!(leaves.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if i.id().0 == Action::ClearHistory.id(kind) && i.text() == ui.now_t("overlay-menu-confirm-clear"))), kind == WindowKind::History);
+                assert_eq!(
+                    leaves.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if (i.id().0 == Action::ClearHistory.id(kind) || i.id().0 == Action::ClearDanmaku.id(kind)) && i.text() == ui.now_t("overlay-menu-confirm-clear"))),
+                    matches!(kind, WindowKind::History | WindowKind::Danmaku)
+                );
                 assert!(!items.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if i.id().0 == Action::ClearHistory.id(kind))));
                 assert_eq!(items.iter().any(|i| matches!(i, MenuItemKind::Check(i) if i.id().0 == Action::VerticalText.id(kind) && !i.is_checked())), matches!(kind, WindowKind::Display | WindowKind::PeerDisplay(_)));
             }

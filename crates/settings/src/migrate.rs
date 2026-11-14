@@ -243,7 +243,7 @@ fn v0_to_v1(old: &mut Map<String, Value>) -> Map<String, Value> {
     let mut skin = Map::new();
     let mut hotkeys = Map::new();
     let mut output = json!({ "display": {}, "history": {} });
-    let mut overlays = json!({ "input": {}, "display": {}, "history": {} });
+    let mut overlays = json!({ "input": { "visible": true }, "display": {}, "history": {} });
     let mut assets = Map::new();
 
     if let Some(Value::String(theme)) = take(old, "theme") {

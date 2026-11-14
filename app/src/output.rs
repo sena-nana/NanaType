@@ -57,6 +57,7 @@ pub fn settings_for(kind: WindowKind, s: &Settings) -> Option<&SpoutOutput> {
         WindowKind::Display => Some(&s.output.display),
         WindowKind::PeerDisplay(seat) => s.output.partners.get(usize::from(seat)),
         WindowKind::History => Some(&s.output.history),
+        WindowKind::Danmaku => Some(&s.output.danmaku),
         _ => None,
     }
 }
@@ -66,13 +67,15 @@ pub fn settings_for_mut(kind: WindowKind, s: &mut Settings) -> Option<&mut Spout
         WindowKind::Display => Some(&mut s.output.display),
         WindowKind::PeerDisplay(seat) => s.output.partners.get_mut(usize::from(seat)),
         WindowKind::History => Some(&mut s.output.history),
+        WindowKind::Danmaku => Some(&mut s.output.danmaku),
         _ => None,
     }
 }
 
-pub const KINDS: [WindowKind; 2 + nanatype_settings::PARTNER_SEATS] = [
+pub const KINDS: [WindowKind; 3 + nanatype_settings::PARTNER_SEATS] = [
     WindowKind::Display,
     WindowKind::History,
+    WindowKind::Danmaku,
     WindowKind::PeerDisplay(0),
     WindowKind::PeerDisplay(1),
     WindowKind::PeerDisplay(2),
@@ -83,10 +86,14 @@ pub const KINDS: [WindowKind; 2 + nanatype_settings::PARTNER_SEATS] = [
 ];
 
 /// Whether `kind`'s window has someone to show: always, except a partner seat
-/// nobody sits in. `partners` is how many seats are live (none without a
-/// co-op session).
-fn seated(kind: WindowKind, partners: usize) -> bool {
-    kind.seat().is_none_or(|seat| seat < partners)
+/// nobody sits in or the separate danmaku window while `separate` is off.
+/// `partners` is how many seats are live (none without a co-op session).
+fn active_window(kind: WindowKind, s: &Settings, partners: usize) -> bool {
+    match kind {
+        WindowKind::PeerDisplay(seat) => usize::from(seat) < partners,
+        WindowKind::Danmaku => s.history.chat.separate,
+        _ => true,
+    }
 }
 
 pub fn name_conflicts(kind: WindowKind, s: &Settings) -> bool {
@@ -95,7 +102,7 @@ pub fn name_conflicts(kind: WindowKind, s: &Settings) -> bool {
     };
     KINDS
         .into_iter()
-        .filter(|other| *other != kind)
+        .filter(|other| *other != kind && (*other != WindowKind::Danmaku || s.history.chat.separate))
         .filter_map(|other| settings_for(other, s))
         .any(|other| {
             output.enabled
@@ -120,7 +127,8 @@ pub(crate) enum ResolvedOutput<'a> {
 /// Configuration, sender lifetime and frame delivery share this decision.
 /// Enabled names remain reserved even while their seat is empty.
 pub(crate) fn resolve(kind: WindowKind, s: &Settings, partners: usize) -> ResolvedOutput<'_> {
-    let Some(out) = settings_for(kind, s).filter(|o| o.enabled && seated(kind, partners)) else {
+    let Some(out) = settings_for(kind, s).filter(|o| o.enabled && active_window(kind, s, partners))
+    else {
         return ResolvedOutput::Off;
     };
     if !(cfg!(windows) || cfg!(target_os = "macos")) {
@@ -318,13 +326,13 @@ fn can_pause(kind: WindowKind, previous: &SpoutOutput, s: &Settings, partners: u
         return false;
     };
     !out.enabled
-        && seated(kind, partners)
+        && active_window(kind, s, partners)
         && out.name == previous.name
         && out.extent() == previous.extent()
         && out.straight_alpha == previous.straight_alpha
         && !KINDS
             .into_iter()
-            .filter(|k| *k != kind)
+            .filter(|k| *k != kind && (*k != WindowKind::Danmaku || s.history.chat.separate))
             .filter_map(|k| settings_for(k, s))
             .any(|other| other.enabled && other.name.trim() == previous.name.trim())
 }
@@ -1128,5 +1136,40 @@ mod tests {
         ));
         s.output.partners[0].enabled = false;
         assert!(!name_conflicts(WindowKind::Display, &s));
+    }
+
+    #[test]
+    fn separate_danmaku_output_follows_separate_mode() {
+        if !(cfg!(windows) || cfg!(target_os = "macos")) {
+            return;
+        }
+        let mut s = Settings::default();
+        s.output.danmaku.enabled = true;
+        let mut outputs = Spout::default();
+        outputs.sync(&s, Locale::ZhCn, 0);
+        assert!(matches!(
+            outputs.status[&WindowKind::Danmaku],
+            LinkState::Off
+        ));
+        assert!(config(WindowKind::Danmaku, &s).is_none());
+
+        s.history.chat.separate = true;
+        outputs.sync(&s, Locale::ZhCn, 0);
+        assert!(matches!(
+            outputs.status[&WindowKind::Danmaku],
+            LinkState::Connecting
+        ));
+        assert!(config(WindowKind::Danmaku, &s).is_some());
+
+        // Turning separate off stops the sender and disables warm pause.
+        let prev = s.output.danmaku.clone();
+        s.history.chat.separate = false;
+        s.output.danmaku.enabled = false;
+        assert!(!can_pause(WindowKind::Danmaku, &prev, &s, 0));
+        outputs.sync(&s, Locale::ZhCn, 0);
+        assert!(matches!(
+            outputs.status[&WindowKind::Danmaku],
+            LinkState::Off
+        ));
     }
 }

@@ -75,6 +75,7 @@ pub enum Cmd {
     /// A row from another message source (live chat).
     External(HistoryItem),
     ClearHistory,
+    ClearDanmaku,
     /// Answer a chat message with the next line sent from the editor;
     /// `None` drops the pending reply.
     SetReply(Option<ChatRef>),
@@ -140,6 +141,7 @@ pub struct Effects {
     pub hide_input: bool,
     pub display_changed: bool,
     pub history_changed: bool,
+    pub danmaku_changed: bool,
     /// The pending reply changed (set, dropped, or used by a send).
     pub reply_changed: bool,
 }
@@ -186,6 +188,7 @@ pub struct Core {
     queue: LineQueue,
     display: DisplayView,
     history: VecDeque<HistoryRow>,
+    danmaku: VecDeque<HistoryRow>,
     next_row: u64,
     sent: VecDeque<Draft>,
     recall: Option<usize>,
@@ -233,6 +236,7 @@ impl Core {
             generation: 0,
             cue_epoch: None,
             history: VecDeque::new(),
+            danmaku: VecDeque::new(),
             next_row: 1,
             sent: VecDeque::new(),
             recall: None,
@@ -278,6 +282,10 @@ impl Core {
 
     pub fn history(&self) -> &VecDeque<HistoryRow> {
         &self.history
+    }
+
+    pub fn danmaku(&self) -> &VecDeque<HistoryRow> {
+        &self.danmaku
     }
 
     /// The chat message the next sent line answers.
@@ -491,9 +499,12 @@ impl Core {
             }
             Cmd::Replay => self.replay(now, &mut fx),
             Cmd::RemoveHistoryRows(keys) => {
-                self.history
-                    .retain(|row| row.item.source.is_local() || !keys.contains(&row.key));
-                fx.history_changed = true;
+                if retain_non_local(&mut self.history, &keys) {
+                    fx.history_changed = true;
+                }
+                if retain_non_local(&mut self.danmaku, &keys) {
+                    fx.danmaku_changed = true;
+                }
             }
             Cmd::SetSkin(skin) => {
                 self.skin = skin;
@@ -511,11 +522,23 @@ impl Core {
             }
             Cmd::External(item) => {
                 let doc = Arc::new(item.doc.without_markers());
-                self.push_row(item, doc, None, &mut fx);
+                if self.settings.history.chat.separate {
+                    self.push_danmaku(item, doc, &mut fx);
+                } else {
+                    self.push_row(item, doc, None, &mut fx);
+                }
             }
             Cmd::ClearHistory => {
-                self.history.clear();
-                fx.history_changed = true;
+                if !self.history.is_empty() {
+                    self.history.clear();
+                    fx.history_changed = true;
+                }
+            }
+            Cmd::ClearDanmaku => {
+                if !self.danmaku.is_empty() {
+                    self.danmaku.clear();
+                    fx.danmaku_changed = true;
+                }
             }
             Cmd::SetReply(reply) => {
                 if reply != self.reply {
@@ -536,13 +559,45 @@ impl Core {
 
     fn set_settings(&mut self, settings: Settings, now: Millis, fx: &mut Effects) {
         let mode_changed = settings.general.input_mode != self.settings.general.input_mode;
-        let cap = settings.history.max_items as usize;
+        let was_separate = self.settings.history.chat.separate;
+        let cap = settings.history.max_items.max(1) as usize;
         self.settings = settings;
         self.refresh_params();
         self.display.entrance = self.entrance();
-        while self.history.len() > cap {
-            self.history.pop_front();
+        if !was_separate && self.settings.history.chat.separate {
+            let mut kept = VecDeque::with_capacity(self.history.len());
+            let mut moved = Vec::new();
+            for row in self.history.drain(..) {
+                if row.item.source.is_local() {
+                    kept.push_back(row);
+                } else {
+                    moved.push(row);
+                }
+            }
+            self.history = kept;
+            if !moved.is_empty() {
+                self.danmaku.extend(moved);
+                self.danmaku.make_contiguous().sort_by_key(|r| r.key);
+                fx.history_changed = true;
+                fx.danmaku_changed = true;
+            }
+        } else if was_separate
+            && !self.settings.history.chat.separate
+            && !self.danmaku.is_empty()
+        {
+            let moved = std::mem::take(&mut self.danmaku);
+            fx.danmaku_changed = true;
+            if self.settings.history.chat.enabled {
+                self.history.extend(moved);
+                self.history.make_contiguous().sort_by_key(|r| r.key);
+                fx.history_changed = true;
+            }
+        }
+        if cap_rows(&mut self.history, cap) {
             fx.history_changed = true;
+        }
+        if cap_rows(&mut self.danmaku, cap) {
+            fx.danmaku_changed = true;
         }
         if mode_changed {
             self.retiring = None;
@@ -1303,18 +1358,44 @@ impl Core {
         reveal: Option<Reveal>,
         fx: &mut Effects,
     ) {
-        let key = self.next_row;
-        self.next_row += 1;
+        let key = self.take_row_key();
         self.history.push_back(HistoryRow {
             key,
             item,
             doc,
             reveal,
         });
-        while self.history.len() > self.settings.history.max_items as usize {
-            self.history.pop_front();
-        }
+        cap_rows(
+            &mut self.history,
+            self.settings.history.max_items.max(1) as usize,
+        );
         fx.history_changed = true;
+    }
+
+    fn push_danmaku(
+        &mut self,
+        item: HistoryItem,
+        doc: Arc<nanatype_model::Document>,
+        fx: &mut Effects,
+    ) {
+        let key = self.take_row_key();
+        self.danmaku.push_back(HistoryRow {
+            key,
+            item,
+            doc,
+            reveal: None,
+        });
+        cap_rows(
+            &mut self.danmaku,
+            self.settings.history.max_items.max(1) as usize,
+        );
+        fx.danmaku_changed = true;
+    }
+
+    fn take_row_key(&mut self) -> u64 {
+        let key = self.next_row;
+        self.next_row += 1;
+        key
     }
 
     fn follow_row(&mut self, reveal: Reveal, fx: &mut Effects) {
@@ -1361,4 +1442,19 @@ impl Core {
         });
         fx.history_changed = true;
     }
+}
+
+fn cap_rows(rows: &mut VecDeque<HistoryRow>, cap: usize) -> bool {
+    let mut trimmed = false;
+    while rows.len() > cap {
+        rows.pop_front();
+        trimmed = true;
+    }
+    trimmed
+}
+
+fn retain_non_local(rows: &mut VecDeque<HistoryRow>, keys: &[u64]) -> bool {
+    let before = rows.len();
+    rows.retain(|row| row.item.source.is_local() || !keys.contains(&row.key));
+    rows.len() != before
 }

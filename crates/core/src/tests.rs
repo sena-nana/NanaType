@@ -1296,3 +1296,99 @@ fn typing_over_a_mirrored_quick_phrase_survives_its_fade() {
     run_until(&mut core, wakes, 100_000);
     assert_eq!(core.display().doc.plain_text(), "嗯", "the draft stays");
 }
+
+fn chat_item(text: &str, at: u64) -> nanatype_model::HistoryItem {
+    nanatype_model::HistoryItem {
+        source: nanatype_model::SourceId("blivechat".into()),
+        kind: nanatype_model::SourceKind::Chat,
+        line: None,
+        author: "viewer".into(),
+        avatar: None,
+        doc: Document::plain(text),
+        at,
+        uid: Some("42".into()),
+        reply: None,
+        event: None,
+    }
+}
+
+#[test]
+fn separate_danmaku_routes_external_rows_and_isolates_max_items() {
+    let mut settings = Settings::default();
+    settings.history.sync = HistorySync::OnSubmit;
+    settings.history.max_items = 3;
+    settings.history.chat.separate = true;
+    let mut core = Core::new(settings.clone(), skin());
+
+    type_and_send(&mut core, "host-1", 0);
+    type_and_send(&mut core, "host-2", 1);
+    for i in 0..8 {
+        let fx = core.handle(Cmd::External(chat_item(&format!("chat-{i}"), i)), 10 + i);
+        assert!(!fx.history_changed);
+        assert!(fx.danmaku_changed);
+    }
+
+    let history_texts: Vec<_> = core.history().iter().map(|r| r.doc.plain_text()).collect();
+    let danmaku_texts: Vec<_> = core.danmaku().iter().map(|r| r.doc.plain_text()).collect();
+    assert_eq!(history_texts, ["host-1", "host-2"]);
+    assert_eq!(danmaku_texts, ["chat-5", "chat-6", "chat-7"]);
+
+    // Echo removal works on danmaku rows, and ClearDanmaku clears only danmaku.
+    let drop_key = core.danmaku()[1].key;
+    let fx = core.handle(Cmd::RemoveHistoryRows(vec![drop_key]), 30);
+    assert!(!fx.history_changed);
+    assert!(fx.danmaku_changed);
+    let danmaku_texts: Vec<_> = core.danmaku().iter().map(|r| r.doc.plain_text()).collect();
+    assert_eq!(danmaku_texts, ["chat-5", "chat-7"]);
+
+    let fx = core.handle(Cmd::ClearDanmaku, 31);
+    assert!(fx.danmaku_changed);
+    assert!(!fx.history_changed);
+    assert!(core.danmaku().is_empty());
+    assert_eq!(core.history().len(), 2);
+}
+
+#[test]
+fn toggling_separate_danmaku_migrates_rows_and_preserves_keys() {
+    let mut settings = Settings::default();
+    settings.history.sync = HistorySync::OnSubmit;
+    settings.history.chat.enabled = true;
+    settings.history.chat.separate = false;
+    let mut core = Core::new(settings.clone(), skin());
+
+    type_and_send(&mut core, "host-1", 0);
+    core.handle(Cmd::External(chat_item("chat-1", 1)), 1);
+    let chat_key = core.history().back().unwrap().key;
+    type_and_send(&mut core, "host-2", 2);
+
+    // Turning separate ON moves existing viewer rows out of history into danmaku.
+    settings.history.chat.separate = true;
+    let fx = core.handle(Cmd::SetSettings(Box::new(settings.clone())), 3);
+    assert!(fx.history_changed);
+    assert!(fx.danmaku_changed);
+    let history_texts: Vec<_> = core.history().iter().map(|r| r.doc.plain_text()).collect();
+    let danmaku_keys: Vec<_> = core.danmaku().iter().map(|r| r.key).collect();
+    assert_eq!(history_texts, ["host-1", "host-2"]);
+    assert_eq!(danmaku_keys, [chat_key]);
+
+    // Turning separate OFF while history.chat.enabled is ON restores rows sorted by key.
+    settings.history.chat.separate = false;
+    let fx = core.handle(Cmd::SetSettings(Box::new(settings.clone())), 4);
+    assert!(fx.history_changed);
+    assert!(fx.danmaku_changed);
+    assert!(core.danmaku().is_empty());
+    let history_texts: Vec<_> = core.history().iter().map(|r| r.doc.plain_text()).collect();
+    assert_eq!(history_texts, ["host-1", "chat-1", "host-2"]);
+
+    // Turning separate ON then OFF while history.chat.enabled is OFF drops moved rows cleanly.
+    settings.history.chat.separate = true;
+    core.handle(Cmd::SetSettings(Box::new(settings.clone())), 5);
+    settings.history.chat.separate = false;
+    settings.history.chat.enabled = false;
+    let fx = core.handle(Cmd::SetSettings(Box::new(settings)), 6);
+    assert!(fx.danmaku_changed);
+    assert!(!fx.history_changed);
+    assert!(core.danmaku().is_empty());
+    let history_texts: Vec<_> = core.history().iter().map(|r| r.doc.plain_text()).collect();
+    assert_eq!(history_texts, ["host-1", "host-2"]);
+}

@@ -167,7 +167,7 @@ fn viewport_width(ui: Stage, skin: &Skin, settings: &nanatype_settings::Settings
     if measured > 0.0 {
         measured
     } else {
-        crate::canvas::size_of(crate::canvas::Canvas::History, skin, settings).0
+        crate::canvas::size_of(ui.log_canvas, skin, settings).0
     }
 }
 
@@ -176,7 +176,7 @@ fn viewport_height(ui: Stage, skin: &Skin, settings: &nanatype_settings::Setting
     if measured > 0.0 {
         measured
     } else {
-        crate::canvas::size_of(crate::canvas::Canvas::History, skin, settings).1
+        crate::canvas::size_of(ui.log_canvas, skin, settings).1
     }
 }
 
@@ -945,15 +945,19 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
     let show_time =
         settings.history.show_time && !follows && (!inline || inline_time_fits(&h, col_w));
     let inline_name_w = inline_name_width(&h, col_w, show_time);
-    // Who is talking, once live chat shares the list.
-    let role = (show_name && !inline && (chat || settings.history.chat.enabled)).then(|| {
-        let key = if chat {
-            "history-role-viewer"
-        } else {
-            "history-role-host"
-        };
-        widget(Text::new(ui.now_t(key)).style(time_style.clone()))
-    });
+    // Who is talking, once live chat shares the history list.
+    let role = (show_name
+        && !inline
+        && ui.log_canvas == crate::canvas::Canvas::History
+        && (chat || (settings.history.chat.enabled && !settings.history.chat.separate)))
+        .then(|| {
+            let key = if chat {
+                "history-role-viewer"
+            } else {
+                "history-role-host"
+            };
+            widget(Text::new(ui.now_t(key)).style(time_style.clone()))
+        });
     // On a card the name and the time sit on the event's own colour.
     let card_styles = look.as_ref().map(|look| {
         let (mut name, mut time) = (name_style.clone(), time_style.clone());
@@ -1383,7 +1387,7 @@ fn selection(ui: Stage) -> Selection {
         .with(|s| (s.history.visible_items as usize, s.history.hide_latest));
     let hide = hide.resolve(ui.skin.with(|s| s.history.hide_latest));
     let mut hidden = [None; super::TRACK_SLOTS];
-    if hide {
+    if hide && ui.log_canvas == crate::canvas::Canvas::History {
         if ui.peer_active.get() {
             hidden[0] = ui.peer_local_line.get();
             let count = super::remote_bands(ui.peer_seats.get());
@@ -1405,11 +1409,28 @@ fn selected_rows(rows: &[HistoryRow], selection: Selection) -> impl Iterator<Ite
         .take(selection.visible)
 }
 
+/// Whether `canvas` offers its search: while it takes clicks, and not while it
+/// is sent to OBS over Spout/Syphon, whose picture is that same window's. So
+/// the broadcast never shows a filtered log or the field.
+pub fn search_allowed_for(
+    canvas: crate::canvas::Canvas,
+    s: &nanatype_settings::Settings,
+) -> bool {
+    match canvas {
+        crate::canvas::Canvas::Danmaku => {
+            s.overlays.danmaku.lock != nanatype_settings::Lock::Locked && !s.output.danmaku.enabled
+        }
+        _ => {
+            s.overlays.history.lock != nanatype_settings::Lock::Locked && !s.output.history.enabled
+        }
+    }
+}
+
 /// Whether the history window offers its search: while it takes clicks, and
 /// not while it is sent to OBS over Spout/Syphon, whose picture is this same
 /// window's. So the broadcast never shows a filtered log or the field.
 pub fn search_allowed(s: &nanatype_settings::Settings) -> bool {
-    s.overlays.history.lock != nanatype_settings::Lock::Locked && !s.output.history.enabled
+    search_allowed_for(crate::canvas::Canvas::History, s)
 }
 
 /// The search that filters the window now, lowercased; `None` shows all.
@@ -1417,7 +1438,11 @@ fn query(ui: Stage) -> Option<String> {
     let q = ui
         .history_search
         .with(|q| q.as_deref().map(|q| q.trim().to_lowercase()))?;
-    (!q.is_empty() && ui.settings.with(|s| search_allowed(s))).then_some(q)
+    (!q.is_empty()
+        && ui
+            .settings
+            .with(|s| search_allowed_for(ui.log_canvas, s)))
+    .then_some(q)
 }
 
 /// A row whose text or speaker contains `q` (already lowercased).
@@ -1494,11 +1519,12 @@ struct LogSettings {
 }
 
 impl LogSettings {
-    fn of(s: &Arc<nanatype_settings::Settings>) -> Self {
+    fn of(canvas: crate::canvas::Canvas, s: &Arc<nanatype_settings::Settings>) -> Self {
+        let overlay = canvas.overlay(s);
         Self {
             history: s.history.clone(),
-            lock: s.overlays.history.lock,
-            size: s.overlays.history.size,
+            lock: overlay.lock,
+            size: overlay.size,
             entrance: s.playback.entrance,
             typing: s.playback.typing,
             advanced_effects: s.skin.advanced_effects,
@@ -1536,7 +1562,7 @@ pub fn history_window_with(
         let skin = ui.skin.get();
         (
             Arc::as_ptr(&skin) as usize,
-            ui.settings.with(LogSettings::of),
+            ui.settings.with(|s| LogSettings::of(ui.log_canvas, s)),
             ui.locale.get(),
             ui.reduced_motion.get(),
             ui.history_width.get(),
@@ -1598,7 +1624,7 @@ pub fn history_window_with(
         let panel_surface = Surface::history_panel(&skin);
         let unlocked = ui
             .settings
-            .with_untracked(|x| x.overlays.history.lock != nanatype_settings::Lock::Locked);
+            .with_untracked(|x| ui.log_canvas.overlay(x).lock != nanatype_settings::Lock::Locked);
         let decor = |layer: DecorLayer| -> Vec<AnyView> {
             h.decor
                 .iter()
@@ -1651,12 +1677,12 @@ pub fn history_window_with(
             // An empty log is invisible without a panel: outline the window
             // while it can be dragged, as the display window does.
             unlocked.then(|| {
-                dialogue::empty_placeholder(
-                    ui,
-                    "history-empty-placeholder",
-                    "history-placeholder",
-                    move || log_presence(ui),
-                )
+                let (id, key) = if ui.log_canvas == crate::canvas::Canvas::Danmaku {
+                    ("danmaku-empty-placeholder", "danmaku-placeholder")
+                } else {
+                    ("history-empty-placeholder", "history-placeholder")
+                };
+                dialogue::empty_placeholder(ui, id, key, move || log_presence(ui))
             }),
             widget(
                 Surface::optional_stack(panel_surface.as_ref(), Stack::fill_column(0.0))
@@ -1743,7 +1769,10 @@ fn search_bar(ui: Stage) -> AnyView {
             }),
     );
     layer
-        .visible(move || ui.settings.with(|s| search_allowed(s)))
+        .visible(move || {
+            ui.settings
+                .with(|s| search_allowed_for(ui.log_canvas, s))
+        })
         .children(
             cluster.children((
                 widget(Stack::row(0.0).width(LengthSpec::Px(160.0)))
@@ -2569,5 +2598,122 @@ mod tests {
         assert_eq!(follow_ups(&rows, &shown), [1]);
         // The first shown row always has its header.
         assert_eq!(follow_ups(&rows, &shown[1..]), Vec::<u64>::new());
+    }
+
+    #[test]
+    fn danmaku_log_renders_separately_and_hides_role_badges() {
+        use nana_ui::runtime::{DocumentId, RuntimeDocument};
+        use nana_ui_devtools::agent::RuntimeAgentSession;
+
+        let mut settings = nanatype_settings::Settings::default();
+        settings.history.show_time = true;
+        settings.history.chat.separate = true;
+        settings.output.danmaku.enabled = true;
+        assert!(search_allowed_for(
+            crate::canvas::Canvas::History,
+            &settings
+        ));
+        assert!(!search_allowed_for(
+            crate::canvas::Canvas::Danmaku,
+            &settings
+        ));
+        settings.output.danmaku.enabled = false;
+        assert!(search_allowed_for(
+            crate::canvas::Canvas::Danmaku,
+            &settings
+        ));
+
+        let skin = Arc::new(Skin::default());
+        let ui = Stage::new(
+            Arc::new(settings.clone()),
+            skin.clone(),
+            nanatype_i18n::Locale::ZhCn,
+        );
+
+        // Empty danmaku stage uses the danmaku placeholder.
+        let id = DocumentId::new(1).unwrap();
+        let mut doc = RuntimeDocument::new(id);
+        let danmaku_ui = ui.danmaku_log();
+        doc.context_mut()
+            .mount_view_root(id, move || history_window_with(danmaku_ui, true, || ().into_any()))
+            .unwrap();
+        let mut session = RuntimeAgentSession::new(doc, 400, 600).unwrap();
+        session.flush().unwrap();
+        let placeholder = ui.now_t("danmaku-placeholder");
+        assert!(
+            session
+                .accessibility_dump()
+                .iter()
+                .any(|n| n.label.as_deref() == Some(placeholder.as_str())),
+            "expected danmaku placeholder when empty"
+        );
+
+        // Populated danmaku log shows viewer messages without role badges, even when host history has its own rows.
+        ui.settings.update(|s| {
+            let mut next = (**s).clone();
+            next.history.fade_after_s = None;
+            *s = Arc::new(next);
+        });
+        ui.history.set(Arc::new(vec![HistoryRow {
+            key: 1,
+            item: item("HostPerson", SourceKind::Typewriter, 10),
+            doc: Arc::new(Document::plain("host line")),
+            reveal: None,
+        }]));
+        ui.danmaku.set(Arc::new(vec![HistoryRow {
+            key: 2,
+            item: item("ViewerPerson", SourceKind::Chat, 20),
+            doc: Arc::new(Document::plain("viewer danmaku")),
+            reveal: None,
+        }]));
+        ui.danmaku_search.set(Some("viewer".into()));
+        assert_eq!(visible_keys(danmaku_ui), [2]);
+        assert_eq!(visible_keys(ui), [1]);
+        session.flush().unwrap();
+        let nodes = session.accessibility_dump();
+        let viewer_name = skin.history.name("ViewerPerson");
+        let host_name = skin.history.name("HostPerson");
+        assert!(
+            nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some(viewer_name.as_str())),
+            "expected danmaku author in accessibility tree: {nodes:?}"
+        );
+        assert!(
+            !nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some(host_name.as_str())),
+            "host history row leaked into danmaku log"
+        );
+        let viewer_role = ui.now_t("history-role-viewer");
+        assert!(
+            !nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some(viewer_role.as_str())),
+            "role badge should be hidden in separate danmaku log"
+        );
+
+        // When `separate == true`, Canvas::History shows the host row without a role badge.
+        let mut hist_doc = RuntimeDocument::new(id);
+        hist_doc
+            .context_mut()
+            .mount_view_root(id, move || history_window(ui))
+            .unwrap();
+        let mut hist_session = RuntimeAgentSession::new(hist_doc, 400, 600).unwrap();
+        hist_session.flush().unwrap();
+        let hist_nodes = hist_session.accessibility_dump();
+        assert!(
+            hist_nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some(host_name.as_str())),
+            "expected host row in history window"
+        );
+        let host_role = ui.now_t("history-role-host");
+        assert!(
+            !hist_nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some(host_role.as_str())),
+            "host role badge should be hidden when separate mode is active"
+        );
     }
 }

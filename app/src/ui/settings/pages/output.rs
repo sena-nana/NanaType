@@ -643,17 +643,23 @@ fn obs_link(ui: Ui) -> AnyView {
 pub(super) fn output(ui: Ui) -> AnyView {
     // One card for every window's sender: a window's row leads, and its
     // sender's details fold away with its switch.
-    let spout = |kind: WindowKind, title: &'static str| -> [(Row, Shown); 2] {
+    let spout = |kind: WindowKind,
+                 title: &'static str,
+                 when: Option<fn(&Settings) -> bool>|
+     -> [(Row, Shown); 2] {
         let link: fn(&crate::ui::Status) -> &LinkState = match kind {
             WindowKind::Display => |s| &s.spout_display,
+            WindowKind::Danmaku => |s| &s.spout_danmaku,
             _ => |s| &s.spout_history,
         };
         let read: Read = match kind {
             WindowKind::Display => |s| &s.output.display,
+            WindowKind::Danmaku => |s| &s.output.danmaku,
             _ => |s| &s.output.history,
         };
         let write: Write = match kind {
             WindowKind::Display => |s| &mut s.output.display,
+            WindowKind::Danmaku => |s| &mut s.output.danmaku,
             _ => |s| &mut s.output.history,
         };
         // The sender's name is fixed: shown only so the user knows which one
@@ -716,21 +722,22 @@ pub(super) fn output(ui: Ui) -> AnyView {
                 move |s, v| write(s).straight_alpha = v,
             ),
         );
-        [
-            (
-                row_status(
-                    ui,
-                    title,
-                    None,
-                    link_badge(ui, link),
-                    switch(
-                        ui,
-                        move |s| read(s).enabled,
-                        move |s, v| write(s).enabled = v,
-                    ),
-                ),
-                None,
+        let header = row_status(
+            ui,
+            title,
+            None,
+            link_badge(ui, link),
+            switch(
+                ui,
+                move |s| read(s).enabled,
+                move |s, v| write(s).enabled = v,
             ),
+        );
+        [
+            match when {
+                Some(pred) => shown_if(header, move || ui.settings.with(|s| pred(s))),
+                None => (header, None),
+            },
             shown_if(
                 Row::inset(widget(Stack::column(0.0)).children((
                     name,
@@ -738,7 +745,10 @@ pub(super) fn output(ui: Ui) -> AnyView {
                     below_divider(size),
                     below_divider(straight),
                 ))),
-                move || ui.settings.with(|s| read(s).enabled),
+                move || {
+                    ui.settings
+                        .with(|s| when.is_none_or(|pred| pred(s)) && read(s).enabled)
+                },
             ),
         ]
     };
@@ -756,8 +766,13 @@ pub(super) fn output(ui: Ui) -> AnyView {
         None,
     );
     let senders = [
-        spout(WindowKind::Display, "output-display"),
-        spout(WindowKind::History, "output-history"),
+        spout(WindowKind::Display, "output-display", None),
+        spout(WindowKind::History, "output-history", None),
+        spout(
+            WindowKind::Danmaku,
+            "output-danmaku",
+            Some(|s| s.history.chat.separate),
+        ),
     ]
     .into_iter()
     .flatten()

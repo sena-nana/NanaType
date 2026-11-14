@@ -9,7 +9,10 @@ fn interactive(kind: WindowKind, lock: Lock, handled: bool) -> bool {
         && !handled
         && matches!(
             kind,
-            WindowKind::Display | WindowKind::PeerDisplay(_) | WindowKind::History
+            WindowKind::Display
+                | WindowKind::PeerDisplay(_)
+                | WindowKind::History
+                | WindowKind::Danmaku
         )
 }
 
@@ -127,7 +130,10 @@ mod tests {
                     let allowed = lock != Lock::Locked
                         && matches!(
                             kind,
-                            WindowKind::Display | WindowKind::PeerDisplay(_) | WindowKind::History
+                            WindowKind::Display
+                                | WindowKind::PeerDisplay(_)
+                                | WindowKind::History
+                                | WindowKind::Danmaku
                         );
                     assert_eq!(
                         command(kind, lock, payload, false, Some(FRAME)).is_some(),
@@ -153,7 +159,10 @@ mod tests {
                 let allowed = lock == Lock::Interactive
                     && matches!(
                         kind,
-                        WindowKind::Display | WindowKind::PeerDisplay(_) | WindowKind::History
+                        WindowKind::Display
+                            | WindowKind::PeerDisplay(_)
+                            | WindowKind::History
+                            | WindowKind::Danmaku
                     );
                 assert_eq!(
                     menu_position(kind, lock, &payload, false),
@@ -270,6 +279,7 @@ mod tests {
             WindowKind::Display,
             WindowKind::PARTNER,
             WindowKind::History,
+            WindowKind::Danmaku,
         ] {
             let mut settings = nanatype_settings::Settings::default();
             let lock = kind.overlay(&settings).unwrap().lock;
@@ -290,8 +300,9 @@ mod tests {
             let ui = Ui::new(Arc::new(settings), skin, nanatype_i18n::Locale::ZhCn);
             ui.display.set(Arc::new(core.display().clone()));
             ui.peer_display.set(ui.display.get_untracked());
-            ui.history
-                .set(Arc::new(core.history().iter().cloned().collect()));
+            let rows: Arc<Vec<_>> = Arc::new(core.history().iter().cloned().collect());
+            ui.history.set(rows.clone());
+            ui.danmaku.set(rows);
             let id = DocumentId::new(1).unwrap();
             let mut doc = RuntimeDocument::new(id);
             doc.context_mut()
@@ -301,6 +312,7 @@ mod tests {
                         WindowKind::PeerDisplay(_) => {
                             dialogue::display_window(ui.remote()).into_any()
                         }
+                        WindowKind::Danmaku => history::danmaku_window(ui).into_any(),
                         _ => history::history_window(ui).into_any(),
                     }
                 })
