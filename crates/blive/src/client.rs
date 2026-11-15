@@ -7,7 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
-use nanatype_model::{LinkFault, ws_connect, ws_idle};
+use nanatype_model::{LinkFault, tcp_connect_timeout, ws_connect, ws_idle};
 use serde_json::Value;
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{Message, WebSocket};
@@ -247,20 +247,17 @@ fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
 
 /// Open a LAPLACE bridge's `ws://` or `wss://` link.
 fn laplace_connect(url: &str) -> Result<WebSocket<MaybeTlsStream<TcpStream>>, LinkFault> {
-    use std::net::ToSocketAddrs;
     let io = |e: std::io::Error| LinkFault::from_io(&e);
     let parsed = url::Url::parse(url).map_err(|e| LinkFault::Other(e.to_string()))?;
-    let host = parsed.host_str().unwrap_or_default().to_owned();
+    let host = parsed
+        .host_str()
+        .unwrap_or_default()
+        .trim_start_matches('[')
+        .trim_end_matches(']');
     let port = parsed
         .port_or_known_default()
         .unwrap_or(laplace::DEFAULT_PORT);
-    let unresolved = || LinkFault::Unresolved(host.clone());
-    let addr = (host.as_str(), port)
-        .to_socket_addrs()
-        .map_err(|_| unresolved())?
-        .next()
-        .ok_or_else(unresolved)?;
-    let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(5)).map_err(io)?;
+    let stream = tcp_connect_timeout(host, port, Duration::from_secs(5))?;
     stream
         .set_read_timeout(Some(Duration::from_secs(10)))
         .map_err(io)?;

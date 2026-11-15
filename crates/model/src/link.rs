@@ -86,6 +86,34 @@ pub fn ws_idle(e: &tungstenite::Error) -> bool {
     ))
 }
 
+/// Connect to the first reachable address resolved from `(host, port)`,
+/// waiting up to `timeout` per address.
+pub fn tcp_connect_timeout(
+    host: &str,
+    port: u16,
+    timeout: std::time::Duration,
+) -> Result<std::net::TcpStream, LinkFault> {
+    use std::net::{TcpStream, ToSocketAddrs};
+    let unresolved = || LinkFault::Unresolved(host.to_owned());
+    let addrs: Vec<_> = (host, port)
+        .to_socket_addrs()
+        .map_err(|_| unresolved())?
+        .collect();
+    if addrs.is_empty() {
+        return Err(unresolved());
+    }
+    let mut last_err = None;
+    for addr in addrs {
+        match TcpStream::connect_timeout(&addr, timeout) {
+            Ok(stream) => return Ok(stream),
+            Err(e) => last_err = Some(e),
+        }
+    }
+    Err(LinkFault::from_io(
+        last_err.as_ref().expect("addrs is non-empty"),
+    ))
+}
+
 /// Open a plain `ws://host:port{path}` client. The handshake reads with
 /// `handshake_timeout` (none blocks); the socket then reads with
 /// `read_timeout`, so a session loop can poll between frames.
@@ -97,18 +125,14 @@ pub fn ws_connect(
     handshake_timeout: Option<std::time::Duration>,
     read_timeout: std::time::Duration,
 ) -> Result<tungstenite::WebSocket<std::net::TcpStream>, LinkFault> {
-    use std::net::{TcpStream, ToSocketAddrs};
     let io = |e: io::Error| LinkFault::from_io(&e);
-    let unresolved = || LinkFault::Unresolved(host.to_owned());
-    let addr = (host, port)
-        .to_socket_addrs()
-        .map_err(|_| unresolved())?
-        .next()
-        .ok_or_else(unresolved)?;
-    let stream =
-        TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(2)).map_err(io)?;
+    let stream = tcp_connect_timeout(host, port, std::time::Duration::from_secs(2))?;
     stream.set_read_timeout(handshake_timeout).map_err(io)?;
-    let url = format!("ws://{host}:{port}{path}");
+    let url = if host.contains(':') && !host.starts_with('[') {
+        format!("ws://[{host}]:{port}{path}")
+    } else {
+        format!("ws://{host}:{port}{path}")
+    };
     let (socket, _) = tungstenite::client(url, stream).map_err(LinkFault::from_handshake)?;
     socket
         .get_ref()
@@ -156,5 +180,26 @@ mod tests {
             LinkFault::from_io(&e(io::ErrorKind::PermissionDenied)),
             LinkFault::Other("x".into())
         );
+    }
+
+    #[cfg(feature = "ws")]
+    #[test]
+    fn ws_connect_falls_back_to_ipv4_localhost() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind ipv4 loopback");
+        let port = listener.local_addr().expect("local addr").port();
+        let server = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept");
+            let mut ws = tungstenite::accept(stream).expect("ws accept");
+            let _ = ws.close(None);
+        });
+        let socket = ws_connect(
+            "localhost",
+            port,
+            "/api/chat",
+            Some(std::time::Duration::from_secs(2)),
+            std::time::Duration::from_millis(100),
+        );
+        assert!(socket.is_ok(), "ws_connect failed: {socket:?}");
+        server.join().expect("server thread");
     }
 }

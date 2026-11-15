@@ -33,7 +33,7 @@ pub use document::{
 pub use envelope::{DOCUMENT_FORMAT, DOCUMENT_VERSION, DocumentEnvelope, EnvelopeError};
 pub use events::BridgeEvent;
 pub use line::{AfterLine, Line, LineId, LineMeta, Speaker, unix_millis};
-pub use link::LinkFault;
+pub use link::{LinkFault, tcp_connect_timeout};
 #[cfg(feature = "ws")]
 pub use link::{ws_connect, ws_idle};
 pub use skin_param::{ParamValue, valid_param_id};
