@@ -133,7 +133,7 @@ fn main() {
             trials.push(serde_json::json!({"cpu_flush_median_ms": times[times.len()/2],
                 "cpu_flush_p95_ms": times[times.len()*95/100], "compositor_active_ticks": active,
                 "layout_revision_changes": layout_changes,
-                "work_counters": format!("{:?}", session.document().context().last_work_counters())}));
+                "text_work_counters": format!("{:?}", session.document().context().world().last_text_work_counters())}));
         }
         cases.push(serde_json::json!({"scenario": name, "trials": trials}));
     }

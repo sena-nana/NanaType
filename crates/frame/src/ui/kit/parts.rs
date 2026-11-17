@@ -21,7 +21,7 @@ use super::tokens::{DOT, Tone, Type, gap, inset};
 /// log line never widens its column.
 pub fn wrap_anywhere(style: &mut NodeStyle) {
     let layout = Arc::make_mut(&mut style.layout);
-    layout.overflow_wrap = Some(nana_ui_core::OverflowWrapSpec::Anywhere);
+    layout.text_ext.overflow_wrap = Some(nana_ui_core::OverflowWrapSpec::Anywhere);
     layout.white_space = nana_ui_core::WhiteSpaceSpec::PreWrap;
 }
 

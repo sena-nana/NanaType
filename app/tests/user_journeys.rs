@@ -4,7 +4,7 @@ mod common;
 
 use std::{sync::Arc, time::Duration};
 
-use nana_ui::runtime::{ComponentGeometry, StableNodeId};
+use nana_ui::runtime::{StableNodeId, TextInputGeometry};
 use nana_ui_devtools::agent::{
     A11yFilter, AccessibilityDumpNode, AgentSession, RuntimeAgentSession,
 };
@@ -224,12 +224,12 @@ fn the_empty_speaker_field_takes_a_click_typing_and_backspace() {
         let id = StableNodeId::new(field.id).unwrap();
         let world = f.session.document().context().world();
         assert_eq!(world.focused(f.session.document().document()), Some(id));
-        let Some(ComponentGeometry::TextInput {
+        let Some(TextInputGeometry {
             caret,
             background,
             border,
             ..
-        }) = world.component_geometry(id)
+        }) = world.text_input_geometry(id)
         else {
             panic!("{key}: the focused field has no geometry");
         };

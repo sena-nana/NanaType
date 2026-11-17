@@ -117,7 +117,7 @@ pub fn preview(ui: Ui) -> AnyView {
                     widget(kit::Type::Body.text(ui.now_t("skin-edit-sample")))
                         .bind(move |t: &mut nana_ui::runtime::Text| {
                             let l = std::sync::Arc::make_mut(&mut t.style.layout);
-                            l.font_family = Some(family.clone());
+                            l.text_ext.font_family = Some(family.clone());
                             l.font_size = Some(24.);
                         })
                         .key("editor-asset-font")

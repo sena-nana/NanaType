@@ -1747,7 +1747,7 @@ impl RuntimeProgram for Host {
     ) -> RuntimeProgramUpdate {
         crate::ui::collect_effect_garbage();
         if let Some(perf) = &mut self.perf {
-            perf.frame(id, false, self.docs.get(&id));
+            perf.frame(id, false, self.docs.get(&id), context.presentation_work());
         }
         // The skin step (and the skins page) asked while this frame was
         // built. Sending now keeps font registration off the layout that
@@ -1777,7 +1777,12 @@ impl RuntimeProgram for Host {
             return;
         };
         if let Some(perf) = &mut self.perf {
-            perf.frame(id, true, self.docs.get(&id));
+            perf.frame(
+                id,
+                true,
+                self.docs.get(&id),
+                nana_ui::PresentationWork::default(),
+            );
         }
         if let Some((key, detail)) = self.app.spout.frame(kind, out, frame, context.gpu()) {
             nanatype_diag::report!(crate::diag::SPOUT_FAILED, window = crate::diag::window(kind); "{detail}");
@@ -2502,7 +2507,8 @@ mod redraw_tests {
         );
         assert!(fading.tick_clock);
         assert!(matches!(fading.demand, FrameDemand::Continuous(_)));
-        ui.settings.update(|s| Arc::make_mut(s).history.chat.separate = false);
+        ui.settings
+            .update(|s| Arc::make_mut(s).history.chat.separate = false);
         let disabled = frame_policy(
             ui,
             Some(WindowKind::Danmaku),

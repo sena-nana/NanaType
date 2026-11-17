@@ -119,7 +119,7 @@ fn quote_view_on(
             .flatten();
         l.font_size = Some(size);
         l.font_weight = Some(weight);
-        l.font_family = if name {
+        l.text_ext.font_family = if name {
             &skin.fonts.name
         } else {
             &skin.fonts.body
@@ -173,10 +173,10 @@ fn quote_view_on(
                 l.flex_shrink = Some(0.0);
                 l.min_width = Some(LengthSpec::Px(0.0));
                 // A 3px accent rule down the left marks the line as a quote.
-                l.border_top_width = Some(0.0);
-                l.border_right_width = Some(0.0);
-                l.border_bottom_width = Some(0.0);
-                l.border_left_width = Some(3.0);
+                l.border_sides.top_width = Some(0.0);
+                l.border_sides.right_width = Some(0.0);
+                l.border_sides.bottom_width = Some(0.0);
+                l.border_sides.left_width = Some(3.0);
                 l.border_color = Some(bar);
                 l.border_style = Some(nana_ui_core::BorderStyle::Solid);
                 l.padding_left = Some(LengthSpec::Px((size * 0.5).round().max(6.0)));
@@ -200,8 +200,8 @@ fn quote_view_on(
             l.min_height = Some(LengthSpec::Px(0.));
             l.margin_bottom = Some(LengthSpec::Px(if v { 0. } else { 4. }));
             l.margin_left = Some(LengthSpec::Px(if v { 6. } else { 0. }));
-            l.border_left_width = Some(if v { 0. } else { 3. });
-            l.border_right_width = Some(if v { 3. } else { 0. });
+            l.border_sides.left_width = Some(if v { 0. } else { 3. });
+            l.border_sides.right_width = Some(if v { 3. } else { 0. });
             l.padding_left = Some(LengthSpec::Px(if v {
                 0.
             } else {
@@ -247,9 +247,9 @@ fn quote_view_on(
             } else {
                 nana_ui_core::WritingModeSpec::HorizontalTb
             });
-            l.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
+            l.text_ext.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
             l.width = v.then_some(LengthSpec::Px((size * 1.4).round()));
-            l.height = v.then_some(LengthSpec::Min2(
+            l.height = v.then_some(LengthSpec::min2(
                 nana_ui_core::LengthAtom::Px(name_height),
                 nana_ui_core::LengthAtom::Percent(30.),
             ));
@@ -302,7 +302,7 @@ fn quote_view_on(
                 } else {
                     nana_ui_core::WritingModeSpec::HorizontalTb
                 });
-                l.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
+                l.text_ext.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
                 l.height = v.then_some(LengthSpec::Fill);
                 l.min_height = Some(LengthSpec::Px(0.));
             }),

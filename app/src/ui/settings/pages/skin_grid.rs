@@ -433,7 +433,7 @@ fn part_view(part: &Part) -> AnyView {
         let mut style = NodeStyle::default();
         let l = Arc::make_mut(&mut style.layout);
         l.font_size = Some(g.size);
-        l.font_family = g.family.clone();
+        l.text_ext.font_family = g.family.clone();
         l.font_weight = Some(g.weight);
         l.color = Some(g.color);
         l.white_space_nowrap = true;
@@ -544,8 +544,8 @@ pub fn miniature(t: &Thumb) -> AnyView {
                     l.offset_top = Some(LengthSpec::Px(0.0));
                     l.overflow_x = OverflowSpec::Visible;
                     l.overflow_y = OverflowSpec::Visible;
-                    l.transform = Some(affine(0.0, 0.0, 0.0, scale));
-                    l.transform_origin = Some(TransformOrigin {
+                    l.transforms.transform = Some(affine(0.0, 0.0, 0.0, scale));
+                    l.transforms.origin = Some(TransformOrigin {
                         x: LengthSpec::Px(0.0),
                         y: LengthSpec::Px(0.0),
                     });

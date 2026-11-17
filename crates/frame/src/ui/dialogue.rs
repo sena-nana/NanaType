@@ -223,10 +223,10 @@ impl Base {
         l.paint.text_material = self.material.clone();
         l.font_size = Some(self.size);
         l.font_weight = Some(self.weight);
-        l.font_family = self.family.clone();
-        l.letter_spacing = Some(self.letter_spacing);
+        l.text_ext.font_family = self.family.clone();
+        l.text_ext.letter_spacing = Some(self.letter_spacing);
         l.white_space = nana_ui_core::WhiteSpaceSpec::PreWrap;
-        l.overflow_wrap = Some(nana_ui_core::OverflowWrapSpec::Anywhere);
+        l.text_ext.overflow_wrap = Some(nana_ui_core::OverflowWrapSpec::Anywhere);
         l.min_width = Some(LengthSpec::Px(0.0));
         l.color = Some(c(self.color));
         l.line_height = Some(nana_ui_core::LineHeightSpec::Absolute(
@@ -240,7 +240,7 @@ impl Base {
         }
         // Look ahead when breaking, so a paragraph does not end on a lone
         // character (`text-wrap-style: pretty`).
-        l.text_typography.wrap_style = Some(nana_ui_core::TextWrapStyleSpec::Pretty);
+        l.text_ext.text_typography.wrap_style = Some(nana_ui_core::TextWrapStyleSpec::Pretty);
         st.text_horizontal_alignment = match self.align {
             TextAlign::Start => TextHorizontalAlignment::Start,
             TextAlign::Center => TextHorizontalAlignment::Center,
@@ -427,7 +427,7 @@ fn document_on(
             .as_ref()
             .and_then(|p| super::rich::glyph_resampling(doc, p))
         {
-            Arc::make_mut(&mut view.style.layout).transform = Some(t);
+            Arc::make_mut(&mut view.style.layout).transforms.transform = Some(t);
         }
     }
     let doc = doc.clone();
@@ -442,7 +442,7 @@ fn document_on(
             } else {
                 nana_ui_core::WritingModeSpec::HorizontalTb
             });
-            l.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
+            l.text_ext.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
             l.height = vertical.then(|| LengthSpec::Px(ui.text_area_height.get().max(1.)));
             l.width = Some(LengthSpec::Fill);
             l.flex_shrink = Some(0.0);
@@ -954,7 +954,7 @@ fn box_view(ui: Stage, ctx: BoxCtx, content: AnyView) -> impl IntoView {
         l.min_width = Some(LengthSpec::Px(0.0));
         l.min_height = Some(LengthSpec::Px(0.0));
         let cap = |v| match v {
-            LengthSpec::Px(px) if source != Source::Draft => LengthSpec::Min2(
+            LengthSpec::Px(px) if source != Source::Draft => LengthSpec::min2(
                 nana_ui_core::LengthAtom::Px(px),
                 nana_ui_core::LengthAtom::Percent(20.0),
             ),
@@ -1020,7 +1020,8 @@ fn box_view(ui: Stage, ctx: BoxCtx, content: AnyView) -> impl IntoView {
             let dy = dy + rise;
             restyle(s, |l| {
                 l.opacity = Some(opacity);
-                l.transform = (dx != 0.0 || dy != 0.0).then_some(affine(dx, dy, 0.0, 1.0));
+                l.transforms.transform =
+                    (dx != 0.0 || dy != 0.0).then_some(affine(dx, dy, 0.0, 1.0));
             });
         });
     }
@@ -1058,7 +1059,7 @@ fn box_view(ui: Stage, ctx: BoxCtx, content: AnyView) -> impl IntoView {
                 // Keep an editable column when their input window is narrow.
                 let horizontal = |px| {
                     if source == Source::Draft {
-                        LengthSpec::Min2(
+                        LengthSpec::min2(
                             nana_ui_core::LengthAtom::Px(px),
                             nana_ui_core::LengthAtom::Percent(30.0),
                         )
@@ -1102,7 +1103,7 @@ fn box_view(ui: Stage, ctx: BoxCtx, content: AnyView) -> impl IntoView {
                     });
                     l.flex_reverse = vertical;
                     let cap = |px, percent| {
-                        LengthSpec::Min2(
+                        LengthSpec::min2(
                             nana_ui_core::LengthAtom::Px(px),
                             nana_ui_core::LengthAtom::Percent(percent),
                         )
@@ -1120,7 +1121,7 @@ fn box_view(ui: Stage, ctx: BoxCtx, content: AnyView) -> impl IntoView {
                     l.padding_right = Some(if vertical {
                         LengthSpec::Px(padding[2])
                     } else if material_padding {
-                        LengthSpec::Min2(
+                        LengthSpec::min2(
                             nana_ui_core::LengthAtom::Px(padding[2]),
                             nana_ui_core::LengthAtom::Percent(18.),
                         )
@@ -1514,7 +1515,7 @@ fn text_port(ui: Stage, source: Source, content: AnyView) -> AnyView {
         let vertical = vertical_text(ui);
         restyle(s, |l| {
             l.height = vertical.then_some(LengthSpec::Percent(100.0));
-            l.transform = (y != 0.0).then(|| {
+            l.transforms.transform = (y != 0.0).then(|| {
                 if vertical {
                     affine(y, 0.0, 0.0, 1.0)
                 } else {
@@ -1654,7 +1655,7 @@ fn plate_label_style(ui: Stage, skin: &Skin) -> NodeStyle {
         .flatten();
     l.font_size = Some(p.size);
     l.font_weight = Some(skin.fonts.name.weight);
-    l.font_family = skin.fonts.name.families.first().cloned();
+    l.text_ext.font_family = skin.fonts.name.families.first().cloned();
     l.color = Some(c(p.text_color));
     l.white_space_nowrap = true;
     if let Some(stroke) = &p.stroke {
@@ -1716,7 +1717,7 @@ fn column_nameplate(ui: Stage, ctx: &BoxCtx) -> AnyView {
                     l.max_height = Some(LengthSpec::Percent(100.0));
                     l.margin_left = Some(LengthSpec::Px(gap));
                     l.pointer_events = Some(PointerEventsSpec::None);
-                    l.transform = (rotate != 0.0).then(|| affine(0.0, 0.0, rotate, 1.0));
+                    l.transforms.transform = (rotate != 0.0).then(|| affine(0.0, 0.0, rotate, 1.0));
                 });
         })
         .children(widget(Text::new("")).bind(move |t: &mut Text| {
@@ -1726,7 +1727,7 @@ fn column_nameplate(ui: Stage, ctx: &BoxCtx) -> AnyView {
                 let mut st = plate_label_style(ui, &skin);
                 let l = Arc::make_mut(&mut st.layout);
                 l.writing_mode = Some(nana_ui_core::WritingModeSpec::VerticalRl);
-                l.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
+                l.text_ext.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
                 // A long name ends in an ellipsis at the foot of the column.
                 l.max_height = Some(LengthSpec::Px(
                     (ui.text_area_height.get() - 2.0 * p.padding[0]).max(p.size),
@@ -1794,7 +1795,7 @@ fn nameplate(ui: Stage, ctx: &BoxCtx) -> AnyView {
     if vertical {
         let l = Arc::make_mut(&mut st.layout);
         l.writing_mode = Some(nana_ui_core::WritingModeSpec::VerticalRl);
-        l.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
+        l.text_ext.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
         l.white_space_nowrap = true;
         l.max_height = Some(LengthSpec::Px(
             (ui.display_size.get_untracked()[1] * 0.25).max(p.size),
@@ -1810,7 +1811,7 @@ fn nameplate(ui: Stage, ctx: &BoxCtx) -> AnyView {
                 plate
                     .stack(Stack::row(0.0).padding_xy(p.padding[0], p.padding[1]))
                     .with_layout(move |l| {
-                        l.transform = Some(affine(ox, oy, rotate, 1.0));
+                        l.transforms.transform = Some(affine(ox, oy, rotate, 1.0));
                         if right_clearance > 0.0 || source != Source::Draft {
                             // The offset toward the far edge comes out of the room.
                             let inward = if anchor_frac(anchor)[0] >= 1.0 {
@@ -2022,7 +2023,7 @@ where
         let l = Arc::make_mut(&mut st.layout);
         l.font_size = Some(dec.text_size);
         l.font_weight = Some(font.weight);
-        l.font_family = font.families.first().cloned();
+        l.text_ext.font_family = font.families.first().cloned();
         l.color = Some(c(skin.color(dec.text_color)));
         l.white_space_nowrap = true;
         l.line_height = Some(nana_ui_core::LineHeightSpec::Absolute(dec.text_size * 1.2));
@@ -2185,8 +2186,10 @@ fn continue_indicator_on(ui: Stage, ctx: &BoxCtx, animate: bool) -> impl IntoVie
     };
     let [ox, oy] = cs.offset;
     let (motion, bob, period) = (cs.motion, cs.bob_px, cs.period_s);
-    let mut mark =
-        widget(Stack::row(0.0).with_layout(move |l| l.transform = Some(affine(ox, oy, 0.0, 1.0))));
+    let mut mark = widget(
+        Stack::row(0.0)
+            .with_layout(move |l| l.transforms.transform = Some(affine(ox, oy, 0.0, 1.0))),
+    );
     if animate && motion != ContinueMotion::None {
         let node = nana_ui::runtime::view::node_ref();
         super::motion::periodic(node, period, move |t| {

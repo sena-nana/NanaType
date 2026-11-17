@@ -793,7 +793,10 @@ fn skin_preview_refreshes_without_resetting_either_editor() {
                 Some(LengthSpec::Px(np.padding[0]))
             );
             assert_eq!(name.font_size, Some(np.size));
-            assert_eq!(name.font_family, skin.fonts.name.families.first().cloned());
+            assert_eq!(
+                name.text_ext.font_family,
+                skin.fonts.name.families.first().cloned()
+            );
             assert_eq!(name.color, Some(crate::ui::c(np.text_color)));
             let p = &skin.dialogue.portrait;
             let portrait = layout(&f, "dialogue-portrait");

@@ -1473,9 +1473,9 @@ pub fn input_window(ui: Ui) -> WithRefs<impl IntoView, (EditorRef, SourceRef, To
                     let l = s.layout_mut();
                     l.width = Some(LengthSpec::Px(w));
                     l.height = Some(LengthSpec::Px(h));
-                    l.transform = is_preview()
+                    l.transforms.transform = is_preview()
                         .then(|| super::surface::affine(0.0, 0.0, 0.0, preview_scale()));
-                    l.transform_origin = Some(nana_ui_core::TransformOrigin {
+                    l.transforms.origin = Some(nana_ui_core::TransformOrigin {
                         x: LengthSpec::Px(0.0),
                         y: LengthSpec::Px(0.0),
                     });

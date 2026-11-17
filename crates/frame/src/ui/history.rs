@@ -394,7 +394,7 @@ impl EventLook {
         let mut style = NodeStyle::default();
         let l = Arc::make_mut(&mut style.layout);
         l.font_size = Some(size);
-        l.font_family = skin.fonts.accent.families.first().cloned();
+        l.text_ext.font_family = skin.fonts.accent.families.first().cloned();
         l.color = Some(c(self.icon));
         l.white_space_nowrap = true;
         l.flex_shrink = Some(0.0);
@@ -408,7 +408,7 @@ impl EventLook {
         let l = Arc::make_mut(&mut style.layout);
         l.font_size = Some(size);
         l.font_weight = Some(700);
-        l.font_family = skin.fonts.name.families.first().cloned();
+        l.text_ext.font_family = skin.fonts.name.families.first().cloned();
         l.color = Some(c(lettering));
         l.white_space_nowrap = true;
         super::tnum(l);
@@ -625,7 +625,7 @@ fn entry_view(
             .with_layout(move |l| {
                 l.position = PositionSpec::Relative;
                 l.padding_top = Some(LengthSpec::Px(gap));
-                l.transform_origin = origin;
+                l.transforms.origin = origin;
             }),
     )
     .children((rule, message));
@@ -834,7 +834,7 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
         let l = Arc::make_mut(&mut initial_style.layout);
         l.font_size = Some(h.name_size.min(size * 0.7));
         l.font_weight = Some(h.name_weight);
-        l.font_family = skin.fonts.name.families.first().cloned();
+        l.text_ext.font_family = skin.fonts.name.families.first().cloned();
         l.color = Some(c(
             if crate::skin_theme::contrast(h.text.color, fill) >= 4.5 {
                 h.text.color
@@ -897,7 +897,7 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
             .flatten();
         l.font_size = Some(h.name_size);
         l.font_weight = Some(h.name_weight);
-        l.font_family = skin.fonts.name.families.first().cloned();
+        l.text_ext.font_family = skin.fonts.name.families.first().cloned();
         l.color = Some(c(h.name_color));
         if let Some(p) = &h.name_plate {
             l.color = Some(c(skin.color(p.text_color)));
@@ -927,7 +927,7 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
         let l = Arc::make_mut(&mut time_style.layout);
         l.font_size = Some(time_size(&h));
         l.font_weight = Some(skin.fonts.body.weight);
-        l.font_family = skin.fonts.body.families.first().cloned();
+        l.text_ext.font_family = skin.fonts.body.families.first().cloned();
         l.color = Some(c(h.time_color));
         if exposed {
             surface::text_stroke(
@@ -1412,10 +1412,7 @@ fn selected_rows(rows: &[HistoryRow], selection: Selection) -> impl Iterator<Ite
 /// Whether `canvas` offers its search: while it takes clicks, and not while it
 /// is sent to OBS over Spout/Syphon, whose picture is that same window's. So
 /// the broadcast never shows a filtered log or the field.
-pub fn search_allowed_for(
-    canvas: crate::canvas::Canvas,
-    s: &nanatype_settings::Settings,
-) -> bool {
+pub fn search_allowed_for(canvas: crate::canvas::Canvas, s: &nanatype_settings::Settings) -> bool {
     match canvas {
         crate::canvas::Canvas::Danmaku => {
             s.overlays.danmaku.lock != nanatype_settings::Lock::Locked && !s.output.danmaku.enabled
@@ -1438,11 +1435,7 @@ fn query(ui: Stage) -> Option<String> {
     let q = ui
         .history_search
         .with(|q| q.as_deref().map(|q| q.trim().to_lowercase()))?;
-    (!q.is_empty()
-        && ui
-            .settings
-            .with(|s| search_allowed_for(ui.log_canvas, s)))
-    .then_some(q)
+    (!q.is_empty() && ui.settings.with(|s| search_allowed_for(ui.log_canvas, s))).then_some(q)
 }
 
 /// A row whose text or speaker contains `q` (already lowercased).
@@ -1602,7 +1595,7 @@ pub fn history_window_with(
                 let travel = slide.travel;
                 widget(Stack::column(0.0).width(LengthSpec::Fill))
                     .bind(move |s: &mut Stack| {
-                        s.layout_mut().transform = Some(rise(-travel.get()));
+                        s.layout_mut().transforms.transform = Some(rise(-travel.get()));
                     })
                     .animate([Implicit::new(AnimatableProperty::Transform, ms).ease(glide)])
                     .children(list)
@@ -1729,7 +1722,8 @@ pub fn history_window_with(
                                 .children(
                                     content
                                         .bind(move |s: &mut Stack| {
-                                            s.layout_mut().transform = Some(rise(travel.get()));
+                                            s.layout_mut().transforms.transform =
+                                                Some(rise(travel.get()));
                                         })
                                         .on(move |e: &SizeChanged| slide.content_laid_out(e.height))
                                         .children(list),
@@ -1769,10 +1763,7 @@ fn search_bar(ui: Stage) -> AnyView {
             }),
     );
     layer
-        .visible(move || {
-            ui.settings
-                .with(|s| search_allowed_for(ui.log_canvas, s))
-        })
+        .visible(move || ui.settings.with(|s| search_allowed_for(ui.log_canvas, s)))
         .children(
             cluster.children((
                 widget(Stack::row(0.0).width(LengthSpec::Px(160.0)))
@@ -1868,7 +1859,7 @@ fn title_view(skin: &Skin, t: &HistoryTitle) -> AnyView {
         let l = Arc::make_mut(&mut st.layout);
         l.font_size = Some(t.size);
         l.font_weight = Some(t.weight);
-        l.font_family = skin.fonts.name.families.first().cloned();
+        l.text_ext.font_family = skin.fonts.name.families.first().cloned();
         l.color = Some(c(t.color));
         l.white_space_nowrap = true;
     }
@@ -2635,7 +2626,9 @@ mod tests {
         let mut doc = RuntimeDocument::new(id);
         let danmaku_ui = ui.danmaku_log();
         doc.context_mut()
-            .mount_view_root(id, move || history_window_with(danmaku_ui, true, || ().into_any()))
+            .mount_view_root(id, move || {
+                history_window_with(danmaku_ui, true, || ().into_any())
+            })
             .unwrap();
         let mut session = RuntimeAgentSession::new(doc, 400, 600).unwrap();
         session.flush().unwrap();

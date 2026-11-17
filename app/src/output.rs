@@ -102,7 +102,9 @@ pub fn name_conflicts(kind: WindowKind, s: &Settings) -> bool {
     };
     KINDS
         .into_iter()
-        .filter(|other| *other != kind && (*other != WindowKind::Danmaku || s.history.chat.separate))
+        .filter(|other| {
+            *other != kind && (*other != WindowKind::Danmaku || s.history.chat.separate)
+        })
         .filter_map(|other| settings_for(other, s))
         .any(|other| {
             output.enabled

@@ -29,6 +29,7 @@ framework-diagram-label = Diagram
 framework-diagram-summary = { $nodes } nodes, { $edges } connections
 framework-file-tab-close = Close file
 framework-color-field-label = Color
+framework-color-field-eyedropper = Pick color
 framework-path-field-label = Path
 framework-path-field-browse = Browse
 framework-range-field-reset = Reset to default

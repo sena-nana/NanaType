@@ -34,6 +34,7 @@ framework-size-field-width = 寬度
 framework-size-field-height = 高度
 framework-size-field-presets = 預設尺寸
 framework-color-field-label = 顏色
+framework-color-field-eyedropper = 吸取顏色
 framework-path-field-label = 路徑
 framework-path-field-browse = 瀏覽
 framework-browser-view-label = 網頁

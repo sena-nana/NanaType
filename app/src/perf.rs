@@ -11,8 +11,9 @@ struct Window {
     presented_after_6s: u64,
     outputs_after_6s: u64,
     revision: Option<u64>,
+    layout_generation: Option<u64>,
     text_shaped: u64,
-    layout_nodes: u64,
+    layout_passes: u64,
     draw_calls: Option<u64>,
     upload_bytes: Option<u64>,
     samples: Vec<f64>,
@@ -54,7 +55,13 @@ impl Recorder {
             window.spout_ms.push(ms);
         }
     }
-    pub fn frame(&mut self, id: WindowId, output: bool, doc: Option<&RuntimeDocument>) {
+    pub fn frame(
+        &mut self,
+        id: WindowId,
+        output: bool,
+        doc: Option<&RuntimeDocument>,
+        presentation: nana_ui::PresentationWork,
+    ) {
         // Discard startup and initial pipeline compilation consistently.
         if self.started.elapsed().as_millis() < 2000 {
             return;
@@ -73,15 +80,27 @@ impl Recorder {
             }
             if let Some(doc) = doc {
                 let cx = doc.context();
-                let work = cx.last_work_counters();
                 let revision = cx.world().pending_work_revision();
                 if window.revision != Some(revision) {
                     window.revision = Some(revision);
-                    window.text_shaped += work.text_shaped as u64;
-                    window.layout_nodes += work.layout_nodes as u64;
+                    if cx
+                        .last_frame_profile()
+                        .stage(nana_ui_core::FrameStage::TextShape)
+                        .is_some_and(|s| s.status == nana_ui::runtime::StageStatus::Ran)
+                    {
+                        window.text_shaped +=
+                            cx.world().last_text_work_counters().text_nodes_shaped as u64;
+                    }
+                    let layout_gen = cx.world().layout_generation();
+                    if window.layout_generation != Some(layout_gen) {
+                        window.layout_generation = Some(layout_gen);
+                        window.layout_passes += 1;
+                    }
                 }
-                sum(&mut window.draw_calls, work.draw_calls);
-                sum(&mut window.upload_bytes, work.gpu_upload_bytes);
+            }
+            if !output {
+                sum(&mut window.draw_calls, presentation.draw_calls);
+                sum(&mut window.upload_bytes, presentation.gpu_upload_bytes);
             }
         }
     }
@@ -108,7 +127,7 @@ impl Drop for Recorder {
                 "prepare_to_callback_p99_ms":quantile(&w.samples,99),"prepare_to_callback_max_ms":w.samples.last(),"frames_over_33ms":slow,
                 "spout_sent":w.spout_sent,"spout_skipped":w.spout_skipped,
                 "spout_send_median_ms":quantile(&w.spout_ms,50),"spout_send_max_ms":w.spout_ms.last(),
-                "text_shaped":w.text_shaped,"layout_nodes":w.layout_nodes,"draw_calls":w.draw_calls,"gpu_upload_bytes":w.upload_bytes})
+                "text_shaped":w.text_shaped,"layout_passes":w.layout_passes,"draw_calls":w.draw_calls,"gpu_upload_bytes":w.upload_bytes})
         }).collect();
         let report = serde_json::json!({"schema":1,"warmup_ms":2000,"elapsed_ms":self.started.elapsed().as_millis(),"windows":windows,
             "measurement":"Native frame/output callbacks. Prepare-to-callback is host wall time, not a GPU timestamp. Missing GPU counters are null. See gpu_perf for GPU timestamps."});

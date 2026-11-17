@@ -133,10 +133,10 @@ pub fn text_shadow(l: &mut LayoutStyle, s: &SkinShadow) {
 }
 
 fn set_border_widths(l: &mut LayoutStyle, [t, r, b, left]: [f32; 4]) {
-    l.border_top_width = Some(t);
-    l.border_right_width = Some(r);
-    l.border_bottom_width = Some(b);
-    l.border_left_width = Some(left);
+    l.border_sides.top_width = Some(t);
+    l.border_sides.right_width = Some(r);
+    l.border_sides.bottom_width = Some(b);
+    l.border_sides.left_width = Some(left);
 }
 
 impl Surface {
@@ -457,7 +457,8 @@ impl Surface {
                         .collect(),
                 )
             });
-        l.transform = (self.rotate_deg != 0.0).then(|| affine(0.0, 0.0, self.rotate_deg, 1.0));
+        l.transforms.transform =
+            (self.rotate_deg != 0.0).then(|| affine(0.0, 0.0, self.rotate_deg, 1.0));
         l.opacity = self.opacity;
     }
 
@@ -581,10 +582,7 @@ pub fn calc(percent: f32, px: f32) -> LengthSpec {
     } else if px == 0.0 {
         LengthSpec::Percent(percent)
     } else {
-        LengthSpec::CalcPercentOffset {
-            percent,
-            offset_px: px,
-        }
+        LengthSpec::percent_offset(percent, px)
     }
 }
 
@@ -706,7 +704,7 @@ mod tests {
         let mut layout = LayoutStyle::default();
         framed.apply(&mut layout);
         assert_eq!(layout.paint.box_shadows, framed.shadows);
-        assert_eq!(layout.border_top_width, Some(0.));
+        assert_eq!(layout.border_sides.top_width, Some(0.));
         let (image, _) = framed.frame.as_ref().unwrap();
         assert_eq!(image.tiles(24., 24., 100., 80.)[0].dest_w, 8.);
         let mut ordinary_frame = skin.clone();
@@ -892,8 +890,8 @@ mod tests {
         surface.apply(&mut layout);
         assert!(matches!(surface.route(), SurfaceRoute::Contour(_)));
         assert!(layout.paint.border_image.is_none());
-        assert_eq!(layout.border_top_width, Some(0.0));
-        assert!(layout.transform.is_none() && layout.opacity.is_none());
+        assert_eq!(layout.border_sides.top_width, Some(0.0));
+        assert!(layout.transforms.transform.is_none() && layout.opacity.is_none());
         assert!(surface.contour_path([100.0, 50.0]).is_some());
         surface.contour = None;
         assert_eq!(surface.route(), SurfaceRoute::Style);

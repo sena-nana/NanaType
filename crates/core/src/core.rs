@@ -581,10 +581,7 @@ impl Core {
                 fx.history_changed = true;
                 fx.danmaku_changed = true;
             }
-        } else if was_separate
-            && !self.settings.history.chat.separate
-            && !self.danmaku.is_empty()
-        {
+        } else if was_separate && !self.settings.history.chat.separate && !self.danmaku.is_empty() {
             let moved = std::mem::take(&mut self.danmaku);
             fx.danmaku_changed = true;
             if self.settings.history.chat.enabled {

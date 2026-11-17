@@ -29,6 +29,7 @@ framework-diagram-label = 図
 framework-diagram-summary = { $nodes } 個のノード、{ $edges } 本の接続
 framework-file-tab-close = ファイルを閉じる
 framework-color-field-label = 色
+framework-color-field-eyedropper = 色をスポイト
 framework-path-field-label = パス
 framework-path-field-browse = 参照
 framework-range-field-reset = デフォルトに戻す

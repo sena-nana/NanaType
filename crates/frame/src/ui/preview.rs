@@ -1054,8 +1054,8 @@ fn scaled_stage(
                 l.offset_left = Some(LengthSpec::Px(0.0));
                 l.offset_top = Some(LengthSpec::Px(0.0));
                 l.pointer_events = Some(PointerEventsSpec::None);
-                l.transform = Some(super::surface::affine(0.0, 0.0, 0.0, scale));
-                l.transform_origin = Some(TransformOrigin {
+                l.transforms.transform = Some(super::surface::affine(0.0, 0.0, 0.0, scale));
+                l.transforms.origin = Some(TransformOrigin {
                     x: LengthSpec::Px(0.0),
                     y: LengthSpec::Px(0.0),
                 });
@@ -1205,8 +1205,9 @@ pub fn stage_view_options(
                             l.offset_left = Some(LengthSpec::Px(0.0));
                             l.offset_top = Some(LengthSpec::Px(0.0));
                             l.pointer_events = Some(PointerEventsSpec::None);
-                            l.transform = Some(super::surface::affine(0.0, 0.0, 0.0, scale));
-                            l.transform_origin = Some(TransformOrigin {
+                            l.transforms.transform =
+                                Some(super::surface::affine(0.0, 0.0, 0.0, scale));
+                            l.transforms.origin = Some(TransformOrigin {
                                 x: LengthSpec::Px(0.0),
                                 y: LengthSpec::Px(0.0),
                             });

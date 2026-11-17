@@ -635,11 +635,11 @@ pub fn vertical_extent(
     use nana_ui::runtime::{TextShaper, nana_font_family};
     let l = &node.layout;
     let base = TextStyle {
-        font_family: l.font_family.as_deref().map(nana_font_family),
+        font_family: l.text_ext.font_family.as_deref().map(nana_font_family),
         font_size_px: l.font_size.unwrap_or(16.),
         font_weight: l.font_weight.unwrap_or(400),
         line_height: l.line_height,
-        letter_spacing_px: l.letter_spacing.unwrap_or(0.),
+        letter_spacing_px: l.text_ext.letter_spacing.unwrap_or(0.),
         language: nana_text::font::LanguageTag::new(locale.tag()),
         ..Default::default()
     };
@@ -745,7 +745,8 @@ pub fn vertical_extent(
     };
     nana_ui::runtime::apply_used_typography(
         &mut constraints,
-        l.text_typography
+        l.text_ext
+            .text_typography
             .used(matches!(locale, Locale::ZhCn | Locale::JaJp)),
     );
     let engine = nana_ui::NanaTextShaper::default()

@@ -76,13 +76,20 @@ fn frame(
         for (i, doc) in docs.iter_mut().enumerate() {
             doc.document_mut()
                 .sync_presentation_clock(Duration::from_millis(ms));
+            let prev_layout = doc.document().context().world().layout_generation();
             let before = Instant::now();
             let update = doc.flush().unwrap();
             stages[i * 4] = before.elapsed().as_secs_f64() * 1000.;
             if !update.is_idle() {
-                let work = doc.document().context().last_work_counters();
-                shaped += work.text_shaped;
-                layouts += work.layout_nodes;
+                let cx = doc.document().context();
+                if cx
+                    .last_frame_profile()
+                    .stage(nana_ui_core::FrameStage::TextShape)
+                    .is_some_and(|s| s.status == nana_ui::runtime::StageStatus::Ran)
+                {
+                    shaped += cx.world().last_text_work_counters().text_nodes_shaped;
+                }
+                layouts += usize::from(update.layout_generation != prev_layout);
             }
             for (o, painter) in painters.iter_mut().enumerate() {
                 let (w, h) = targets[i * 3 + o].size();

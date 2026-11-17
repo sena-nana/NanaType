@@ -170,7 +170,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 489 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 455 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -190,9 +190,8 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - adler2 2.0.1 — <https://github.com/oyvindln/adler2>
 
-### Apache-2.0 (10)
+### Apache-2.0 (9)
 
-- calendrical_calculations 0.2.4 — <https://github.com/unicode-org/icu4x>
 - codespan-reporting 0.13.1 — <https://github.com/brendanzab/codespan>
 - cpal 0.18.2 — <https://github.com/RustAudio/cpal>
 - glutin_wgl_sys 0.6.1 — <https://github.com/rust-windowing/glutin>
@@ -221,10 +220,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - moxcms 0.8.1 — <https://github.com/awxkee/moxcms>
 - pxfm 0.1.30 — <https://github.com/awxkee/pxfm>
 
-### Apache-2.0 OR BSL-1.0 (1)
-
-- ryu 1.0.23 — <https://github.com/dtolnay/ryu>
-
 ### Apache-2.0 OR CC0-1.0 OR MIT-0 (1)
 
 - constant_time_eq 0.4.2 — <https://github.com/cesarb/constant_time_eq>
@@ -237,7 +232,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - rustls 0.23.46 — <https://github.com/rustls/rustls>
 
-### Apache-2.0 OR MIT (295)
+### Apache-2.0 OR MIT (284)
 
 - accesskit 0.25.1 — <https://github.com/AccessKit/accesskit>
 - accesskit_consumer 0.39.1 — <https://github.com/AccessKit/accesskit>
@@ -256,8 +251,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - base64 0.22.1 — <https://github.com/marshallpierce/rust-base64>
 - base64 0.23.1 — <https://github.com/marshallpierce/rust-base64>
 - bit-set 0.10.0 — <https://github.com/contain-rs/bit-set>
-- bit-set 0.8.0 — <https://github.com/contain-rs/bit-set>
-- bit-vec 0.8.0 — <https://github.com/contain-rs/bit-vec>
 - bit-vec 0.9.1 — <https://github.com/contain-rs/bit-vec>
 - bitflags 1.3.2 — <https://github.com/bitflags/bitflags>
 - bitflags 2.13.2 — <https://github.com/bitflags/bitflags>
@@ -345,7 +338,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - http 1.5.0 — <https://github.com/hyperium/http>
 - httparse 1.10.1 — <https://github.com/seanmonstar/httparse>
 - hybrid-array 0.4.15 — <https://github.com/RustCrypto/hybrid-array>
-- i_overlay 9.0.0 — <https://github.com/iShape-Rust/iOverlay>
 - idna 1.1.0 — <https://github.com/servo/rust-url>
 - idna_adapter 1.2.2 — <https://github.com/hsivonen/idna_adapter>
 - image 0.25.10 — <https://github.com/image-rs/image>
@@ -387,7 +379,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - nana-svg-raster 0.1.0 — <https://github.com/sena-nana/NanaUI>
 - nana-text 0.1.0 — <https://github.com/sena-nana/NanaUI>
 - nana-ui 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-ui-charts 0.1.0 — <https://github.com/sena-nana/NanaUI>
 - nana-ui-core 0.1.0 — <https://github.com/sena-nana/NanaUI>
 - nana-ui-css 0.1.0 — <https://github.com/sena-nana/NanaUI>
 - nana-ui-input 0.1.0 — <https://github.com/sena-nana/NanaUI>
@@ -422,8 +413,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - proc-macro-crate 3.5.0 — <https://github.com/bkchr/proc-macro-crate>
 - proc-macro2 1.0.107 — <https://github.com/dtolnay/proc-macro2>
 - profiling 1.0.18 — <https://github.com/aclysma/profiling>
-- psm 0.1.32 — <https://github.com/rust-lang/stacker>
-- qrcode 0.14.1 — <https://github.com/kennytm/qrcode-rust>
 - quick-error 2.0.1 — <http://github.com/tailhook/quick-error>
 - quote 1.0.47 — <https://github.com/dtolnay/quote>
 - rand 0.10.3 — <https://github.com/rust-random/rand>
@@ -431,8 +420,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - range-alloc 0.1.5 — <https://github.com/gfx-rs/range-alloc>
 - rasterlottie 0.2.4 — <https://github.com/neodyland/rasterlottie>
 - read-fonts 0.41.0 — <https://github.com/googlefonts/fontations>
-- regex-automata 0.4.18 — <https://github.com/rust-lang/regex>
-- regex-syntax 0.8.11 — <https://github.com/rust-lang/regex>
 - renderdoc-sys 1.1.0 — <https://github.com/ebkalderon/renderdoc-rs>
 - resolv-conf 0.7.6 — <https://github.com/hickory-dns/resolv-conf>
 - resvg 0.48.1 — <https://github.com/linebender/resvg>
@@ -463,11 +450,9 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - smol_str 0.3.6 — <https://github.com/rust-lang/rust-analyzer/tree/master/lib/smol_str>
 - socket2 0.6.5 — <https://github.com/rust-lang/socket2>
 - stable_deref_trait 1.2.1 — <https://github.com/storyyeller/stable_deref_trait>
-- stacker 0.1.25 — <https://github.com/rust-lang/stacker>
 - static_assertions 1.1.0 — <https://github.com/nvzqz/static-assertions-rs>
 - strength_reduce 0.2.4 — <http://github.com/ejmahler/strength_reduce>
 - svgtypes 0.16.1 — <https://github.com/linebender/svgtypes>
-- swash 0.2.10 — <https://github.com/dfrg/swash>
 - syn 1.0.109 — <https://github.com/dtolnay/syn>
 - syn 2.0.119 — <https://github.com/dtolnay/syn>
 - syn 3.0.6 — <https://github.com/dtolnay/syn>
@@ -531,7 +516,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - windows-sys 0.61.2 — <https://github.com/microsoft/windows-rs>
 - windows-threading 0.2.1 — <https://github.com/microsoft/windows-rs>
 - windows-version 0.1.7 — <https://github.com/microsoft/windows-rs>
-- yazi 0.2.1 — <https://github.com/dfrg/yazi>
 - zeno 0.3.3 — <https://github.com/dfrg/zeno>
 - zeroize 1.9.0 — <https://github.com/RustCrypto/utils>
 
@@ -621,27 +605,22 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - rustls-webpki 0.103.15 — <https://github.com/rustls/webpki>
 - untrusted 0.9.0 — <https://github.com/briansmith/untrusted>
 
-### MIT (53)
+### MIT (48)
 
+- bincode 1.3.3 — <https://github.com/servo/bincode>
 - bytes 1.12.1 — <https://github.com/tokio-rs/bytes>
 - color_quant 1.1.0 — <https://github.com/image-rs/color_quant>
-- core_maths 0.1.1 — <https://github.com/robertbastian/core_maths>
 - data-encoding 2.11.1 — <https://github.com/ia0/data-encoding>
 - ebml-iterable 0.7.1 — <https://github.com/austinleroy/ebml-iterable>
 - ebml-iterable-specification 0.4.0 — <https://github.com/austinleroy/ebml-iterable>
 - ebml-iterable-specification-derive 0.4.0 — <https://github.com/austinleroy/ebml-iterable>
 - extended 0.1.0 — <https://github.com/depp/extended-rs>
-- fancy-regex 0.16.2 — <https://github.com/fancy-regex/fancy-regex>
 - fax 0.2.7 — <https://github.com/pdf-rs/fax>
 - float-cmp 0.9.0 — <https://github.com/mikedilger/float-cmp>
 - float_next_after 1.0.0 — <https://gitlab.com/bronsonbdevost/next_afterf>
 - fontdb 0.24.0 — <https://github.com/RazrFalcon/fontdb>
 - generic-array 0.14.7 — <https://github.com/fizyk20/generic-array>
 - harfrust 0.12.0 — <https://github.com/harfbuzz/harfrust>
-- i_float 5.0.0 — <https://github.com/iShape-Rust/iFloat>
-- i_key_sort 0.11.0 — <https://github.com/iShape-Rust/iKeySort>
-- i_shape 5.0.0 — <https://github.com/iShape-Rust/i_shape>
-- i_tree 0.19.0 — <https://github.com/iShape-Rust/iTree>
 - imagesize 0.15.0 — <https://github.com/Roughsketch/imagesize>
 - libm 0.2.16 — <https://github.com/rust-lang/compiler-builtins>
 - libwebp-sys 0.9.6 — <https://github.com/NoXF/libwebp-sys>
@@ -677,9 +656,8 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - zip 9.1.3 — <https://github.com/zip-rs/zip2>
 - zmij 1.0.23 — <https://github.com/dtolnay/zmij>
 
-### MIT OR Unlicense (13)
+### MIT OR Unlicense (12)
 
-- aho-corasick 1.1.5 — <https://github.com/BurntSushi/aho-corasick>
 - byteorder 1.5.0 — <https://github.com/BurntSushi/byteorder>
 - byteorder-lite 0.1.0 — <https://github.com/image-rs/byteorder-lite>
 - jiff 0.2.38 — <https://github.com/BurntSushi/jiff>
@@ -706,30 +684,15 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - symphonia-metadata 0.5.5 — <https://github.com/pdeljanov/Symphonia>
 - symphonia-utils-xiph 0.5.5 — <https://github.com/pdeljanov/Symphonia>
 
-### Unicode-3.0 (33)
+### Unicode-3.0 (18)
 
-- fixed_decimal 0.7.2 — <https://github.com/unicode-org/icu4x>
-- icu_calendar 2.3.0 — <https://github.com/unicode-org/icu4x>
-- icu_calendar_data 2.3.0 — <https://github.com/unicode-org/icu4x>
 - icu_collections 2.3.0 — <https://github.com/unicode-org/icu4x>
-- icu_datetime 2.3.0 — <https://github.com/unicode-org/icu4x>
-- icu_datetime_data 2.3.0 — <https://github.com/unicode-org/icu4x>
-- icu_decimal 2.3.0 — <https://github.com/unicode-org/icu4x>
-- icu_decimal_data 2.3.0 — <https://github.com/unicode-org/icu4x>
 - icu_locale_core 2.3.0 — <https://github.com/unicode-org/icu4x>
-- icu_locale_fallback 2.3.0 — <https://github.com/unicode-org/icu4x>
-- icu_locale_fallback_data 2.3.0 — <https://github.com/unicode-org/icu4x>
 - icu_normalizer 2.3.0 — <https://github.com/unicode-org/icu4x>
 - icu_normalizer_data 2.3.0 — <https://github.com/unicode-org/icu4x>
-- icu_pattern 0.5.0 — <https://github.com/unicode-org/icu4x>
-- icu_plurals 2.3.0 — <https://github.com/unicode-org/icu4x>
-- icu_plurals_data 2.3.0 — <https://github.com/unicode-org/icu4x>
 - icu_properties 2.3.0 — <https://github.com/unicode-org/icu4x>
 - icu_properties_data 2.3.0 — <https://github.com/unicode-org/icu4x>
 - icu_provider 2.3.1 — <https://github.com/unicode-org/icu4x>
-- icu_time 2.3.0 — <https://github.com/unicode-org/icu4x>
-- icu_time_data 2.3.1 — <https://github.com/unicode-org/icu4x>
-- ixdtf 0.6.6 — <https://github.com/unicode-org/icu4x>
 - litemap 0.8.3 — <https://github.com/unicode-org/icu4x>
 - potential_utf 0.1.6 — <https://github.com/unicode-org/icu4x>
 - tinystr 0.8.4 — <https://github.com/unicode-org/icu4x>

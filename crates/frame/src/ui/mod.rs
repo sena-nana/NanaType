@@ -51,12 +51,12 @@ pub const MONO: &str = "Cascadia Mono, Consolas, JetBrains Mono, monospace";
 /// Tabular figures (`tnum`), for numbers that change in place (fields,
 /// slider readouts, counts and times) so the digits do not jitter.
 pub fn tnum(l: &mut nana_ui_core::LayoutStyle) {
-    l.font_features = Some(vec![nana_ui_core::FontFeatureSetting::new(*b"tnum", 1)]);
+    l.text_ext.font_features = Some(vec![nana_ui_core::FontFeatureSetting::new(*b"tnum", 1)]);
 }
 
 /// [`MONO`] with tabular figures, for a field holding a literal value.
 pub fn mono(l: &mut nana_ui_core::LayoutStyle) {
-    l.font_family = Some(MONO.into());
+    l.text_ext.font_family = Some(MONO.into());
     tnum(l);
 }
 

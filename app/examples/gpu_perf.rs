@@ -314,11 +314,18 @@ fn main() {
                         session
                             .document_mut()
                             .sync_presentation_clock(Duration::from_millis(ms));
+                        let prev_layout = session.document().context().world().layout_generation();
                         let update = session.flush().unwrap();
                         if frame >= 60 && !update.is_idle() {
-                            let w = session.document().context().last_work_counters();
-                            shaped += w.text_shaped;
-                            layouts += w.layout_nodes;
+                            let cx = session.document().context();
+                            if cx
+                                .last_frame_profile()
+                                .stage(nana_ui_core::FrameStage::TextShape)
+                                .is_some_and(|s| s.status == nana_ui::runtime::StageStatus::Ran)
+                            {
+                                shaped += cx.world().last_text_work_counters().text_nodes_shaped;
+                            }
+                            layouts += usize::from(update.layout_generation != prev_layout);
                         }
                         if frame == 0
                             || name.starts_with("shader_")
@@ -426,7 +433,7 @@ fn main() {
                 "index_slots_drawn": text_after.text_index_slots_drawn - text_before.text_index_slots_drawn,
                 "pipeline_draws": text_after.text_pipeline_draws - text_before.text_pipeline_draws,
             });
-            trials.push(serde_json::json!({"text":text,"cpu_record_submit":distribution(cpu),"gpu_timestamp":distribution(gpu_times),"rendered_targets":rendered,"text_shaped":shaped,"layout_nodes":layouts,"draw_calls":draws,"upload_bytes":uploaded,"max_scene_primitives":primitives}));
+            trials.push(serde_json::json!({"text":text,"cpu_record_submit":distribution(cpu),"gpu_timestamp":distribution(gpu_times),"rendered_targets":rendered,"text_shaped":shaped,"layout_passes":layouts,"draw_calls":draws,"upload_bytes":uploaded,"max_scene_primitives":primitives}));
         }
         cases.push(serde_json::json!({"scenario":name,"trials":trials,"shader_cache":nanatype::ui::shader_effects::cache_stats(),"shader_errors":nanatype::ui::shader_effects::take_notices()}));
     }
