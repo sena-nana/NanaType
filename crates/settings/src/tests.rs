@@ -419,10 +419,6 @@ fn files_from_before_chat_settings_get_their_defaults() {
     let s: Settings = serde_json::from_str(json).unwrap();
     let b = &s.integrations.chat;
     assert!(b.quote_on_display && b.panel.text && b.panel.gift);
-    assert!(
-        !s.history.chat.enabled,
-        "chat stays out of history until asked"
-    );
     assert_eq!(
         s.history.chat.filter.min_gift_coin, 1,
         "no free gifts in history"
@@ -751,23 +747,6 @@ fn geometry_restores_per_layout_and_falls_back_to_a_connected_monitor() {
     );
     let p = store.restore(&laptop, "history").unwrap();
     assert!(p.x + p.w <= 1920.0 && p.y + p.h <= 1040.0);
-}
-
-#[test]
-fn only_a_new_installation_enables_chat_history() {
-    let tmp = tempfile::tempdir().unwrap();
-    let path = tmp.path().join("settings.json");
-    assert!(load_settings(&path, None).value.history.chat.enabled);
-    for json in [
-        r#"{"schema":1}"#,
-        r#"{"schema":1,"history":{"chat":{"enabled":false}}}"#,
-        "broken json",
-    ] {
-        fs::write(&path, json).unwrap();
-        assert!(!load_settings(&path, None).value.history.chat.enabled);
-    }
-    fs::write(&path, r#"{"schema":1,"history":{"chat":{"enabled":true}}}"#).unwrap();
-    assert!(load_settings(&path, None).value.history.chat.enabled);
 }
 
 #[test]
@@ -1792,13 +1771,11 @@ fn retired_translation_section_is_dropped_at_schema_9() {
 fn separate_danmaku_defaults_sanitize_and_toggle_lock() {
     let mut s = Settings::default();
     assert!(!s.history.chat.separate);
-    assert!(!s.history.chat.active());
     assert_eq!(s.output.danmaku.name, "NanaType Danmaku");
     assert!(!s.output.danmaku.enabled);
     assert_eq!(s.overlays.danmaku.lock, Lock::Interactive);
 
     s.history.chat.separate = true;
-    assert!(s.history.chat.active());
 
     s.overlays.danmaku.size = Some([10.0, 99999.0]);
     s.output.danmaku.name = "   ".into();

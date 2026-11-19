@@ -1352,7 +1352,6 @@ fn separate_danmaku_routes_external_rows_and_isolates_max_items() {
 fn toggling_separate_danmaku_migrates_rows_and_preserves_keys() {
     let mut settings = Settings::default();
     settings.history.sync = HistorySync::OnSubmit;
-    settings.history.chat.enabled = true;
     settings.history.chat.separate = false;
     let mut core = Core::new(settings.clone(), skin());
 
@@ -1371,24 +1370,12 @@ fn toggling_separate_danmaku_migrates_rows_and_preserves_keys() {
     assert_eq!(history_texts, ["host-1", "host-2"]);
     assert_eq!(danmaku_keys, [chat_key]);
 
-    // Turning separate OFF while history.chat.enabled is ON restores rows sorted by key.
+    // Turning separate OFF restores rows sorted by key.
     settings.history.chat.separate = false;
-    let fx = core.handle(Cmd::SetSettings(Box::new(settings.clone())), 4);
+    let fx = core.handle(Cmd::SetSettings(Box::new(settings)), 4);
     assert!(fx.history_changed);
     assert!(fx.danmaku_changed);
     assert!(core.danmaku().is_empty());
     let history_texts: Vec<_> = core.history().iter().map(|r| r.doc.plain_text()).collect();
     assert_eq!(history_texts, ["host-1", "chat-1", "host-2"]);
-
-    // Turning separate ON then OFF while history.chat.enabled is OFF drops moved rows cleanly.
-    settings.history.chat.separate = true;
-    core.handle(Cmd::SetSettings(Box::new(settings.clone())), 5);
-    settings.history.chat.separate = false;
-    settings.history.chat.enabled = false;
-    let fx = core.handle(Cmd::SetSettings(Box::new(settings)), 6);
-    assert!(fx.danmaku_changed);
-    assert!(!fx.history_changed);
-    assert!(core.danmaku().is_empty());
-    let history_texts: Vec<_> = core.history().iter().map(|r| r.doc.plain_text()).collect();
-    assert_eq!(history_texts, ["host-1", "host-2"]);
 }

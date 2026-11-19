@@ -694,7 +694,6 @@ chat-status-retrying = 切断されました。再接続中：{ $message }
 history-chat = コメント
 history-chat-separate = コメントを独立表示
 history-chat-separate-hint = 有効にすると履歴には配信者のメッセージのみを表示し、視聴者コメント用のウィンドウと出力を個別に表示します
-history-chat-show = 履歴にコメントを表示
 danmaku-session = 現在のコメント
 danmaku-clear = コメントを消去
 danmaku-clear-confirm = 現在表示中のコメントをすべて消去しますか？

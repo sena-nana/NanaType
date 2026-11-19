@@ -136,7 +136,6 @@ pub fn run(
             let (scene, core) = setup(registry, work, skin_id, locale, |s| {
                 s.integrations.twitch.enabled = true;
                 s.integrations.twitch.channel = "nana_ch".into();
-                s.history.chat.enabled = true;
             });
             twitch(scene, core, out, work, l)
         }

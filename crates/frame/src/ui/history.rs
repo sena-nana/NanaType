@@ -949,7 +949,7 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
     let role = (show_name
         && !inline
         && ui.log_canvas == crate::canvas::Canvas::History
-        && (chat || (settings.history.chat.enabled && !settings.history.chat.separate)))
+        && (chat || !settings.history.chat.separate))
         .then(|| {
             let key = if chat {
                 "history-role-viewer"

@@ -584,11 +584,9 @@ impl Core {
         } else if was_separate && !self.settings.history.chat.separate && !self.danmaku.is_empty() {
             let moved = std::mem::take(&mut self.danmaku);
             fx.danmaku_changed = true;
-            if self.settings.history.chat.enabled {
-                self.history.extend(moved);
-                self.history.make_contiguous().sort_by_key(|r| r.key);
-                fx.history_changed = true;
-            }
+            self.history.extend(moved);
+            self.history.make_contiguous().sort_by_key(|r| r.key);
+            fx.history_changed = true;
         }
         if cap_rows(&mut self.history, cap) {
             fx.history_changed = true;

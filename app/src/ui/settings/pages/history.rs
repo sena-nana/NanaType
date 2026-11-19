@@ -138,60 +138,56 @@ pub(super) fn history(ui: Ui) -> AnyView {
                         toggle_row!(ui, "history-chat-separate", history.chat.separate),
                         None,
                     ),
-                    shown_if(
-                        toggle_row!(ui, "history-chat-show", history.chat.enabled),
-                        move || ui.settings.with(|s| !s.history.chat.separate),
+                    (
+                        row(
+                            ui,
+                            "chat-filter-kinds",
+                            None,
+                            chip_toggles(
+                                ui,
+                                &[
+                                    (
+                                        "chat-filter-text",
+                                        |s| s.history.chat.filter.text,
+                                        |s, v| s.history.chat.filter.text = v,
+                                    ),
+                                    (
+                                        "chat-filter-super-chat",
+                                        |s| s.history.chat.filter.super_chat,
+                                        |s, v| s.history.chat.filter.super_chat = v,
+                                    ),
+                                    (
+                                        "chat-filter-gift",
+                                        |s| s.history.chat.filter.gift,
+                                        |s, v| s.history.chat.filter.gift = v,
+                                    ),
+                                    (
+                                        "chat-filter-member",
+                                        |s| s.history.chat.filter.member,
+                                        |s, v| s.history.chat.filter.member = v,
+                                    ),
+                                ],
+                            ),
+                        ),
+                        None,
                     ),
-                    when_on(
-                        ui,
-                        |s| s.history.chat.active(),
-                        vec![
-                            row(
+                    (
+                        row(
+                            ui,
+                            "chat-min-gift",
+                            None,
+                            number_unit(
                                 ui,
-                                "chat-filter-kinds",
-                                None,
-                                chip_toggles(
-                                    ui,
-                                    &[
-                                        (
-                                            "chat-filter-text",
-                                            |s| s.history.chat.filter.text,
-                                            |s, v| s.history.chat.filter.text = v,
-                                        ),
-                                        (
-                                            "chat-filter-super-chat",
-                                            |s| s.history.chat.filter.super_chat,
-                                            |s, v| s.history.chat.filter.super_chat = v,
-                                        ),
-                                        (
-                                            "chat-filter-gift",
-                                            |s| s.history.chat.filter.gift,
-                                            |s, v| s.history.chat.filter.gift = v,
-                                        ),
-                                        (
-                                            "chat-filter-member",
-                                            |s| s.history.chat.filter.member,
-                                            |s, v| s.history.chat.filter.member = v,
-                                        ),
-                                    ],
-                                ),
+                                (0.0, 10000.0),
+                                "unit-yuan",
+                                |s| f64::from(s.history.chat.filter.min_gift_coin) / 1000.0,
+                                |s, v| {
+                                    s.history.chat.filter.min_gift_coin =
+                                        (v * 1000.0).round() as u32
+                                },
                             ),
-                            row(
-                                ui,
-                                "chat-min-gift",
-                                None,
-                                number_unit(
-                                    ui,
-                                    (0.0, 10000.0),
-                                    "unit-yuan",
-                                    |s| f64::from(s.history.chat.filter.min_gift_coin) / 1000.0,
-                                    |s, v| {
-                                        s.history.chat.filter.min_gift_coin =
-                                            (v * 1000.0).round() as u32
-                                    },
-                                ),
-                            ),
-                        ],
+                        ),
+                        None,
                     ),
                     shown_if(
                         row(

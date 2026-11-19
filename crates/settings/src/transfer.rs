@@ -391,13 +391,9 @@ pub fn changed_sections(before: &Settings, after: &Settings) -> Vec<&'static str
 }
 
 impl Settings {
-    /// A new installation's settings. Older files and recovery keep the
-    /// historical defaults; only a fresh start shows both sides of the
-    /// conversation in the history.
+    /// A new installation's settings.
     pub fn fresh() -> Self {
-        let mut s = Self::default();
-        s.history.chat.enabled = true;
-        s
+        Self::default()
     }
 
     /// Everything back to [`Self::fresh`], but for credentials, the language

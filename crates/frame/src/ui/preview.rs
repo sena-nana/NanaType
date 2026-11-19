@@ -349,7 +349,6 @@ fn sample_stage(
     settings.overlays.history.lock = nanatype_settings::Lock::Locked;
     settings.history.hide_latest = nanatype_settings::HideLatest::Never;
     settings.history.fade_after_s = None;
-    settings.history.chat.enabled = true;
     settings.history.show_time = true;
     let skin = Arc::new(crate::skin_theme::prepare(
         &crate::skin_theme::personalized(base, &settings, id),

@@ -88,7 +88,6 @@ impl Scene {
         settings.general.characters[0].name = "奈奈".into();
         settings.skin.id = skin_id.to_owned();
         settings.history.show_time = true;
-        settings.history.chat.enabled = true;
         let dark = std::env::var("NANATYPE_SNAPSHOT_APPEARANCE").is_ok_and(|v| v == "dark");
         settings.skin.chrome = if dark {
             nanatype_settings::ChromeMode::Dark

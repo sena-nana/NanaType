@@ -2366,7 +2366,7 @@ impl App {
         let include = !self.live_chat.echo(&message);
         self.ensure_urls(message_assets(&message));
         let history = &self.settings.history.chat;
-        if include && history.active() && message.passes(&history.filter) {
+        if include && message.passes(&history.filter) {
             let locale = self.ui.locale.get_untracked();
             let item = message.history_item(locale);
             self.tts_chat(&item.doc);

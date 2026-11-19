@@ -1086,7 +1086,6 @@ impl Default for ChatFilter {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HistoryChat {
-    pub enabled: bool,
     /// Show viewer chat in its own overlay window and output instead of
     /// mixing it into the history log.
     pub separate: bool,
@@ -1096,20 +1095,12 @@ pub struct HistoryChat {
 impl Default for HistoryChat {
     fn default() -> Self {
         Self {
-            enabled: false,
             separate: false,
             filter: ChatFilter {
                 min_gift_coin: 1,
                 ..ChatFilter::default()
             },
         }
-    }
-}
-
-impl HistoryChat {
-    /// Whether live chat is routed to an overlay (`History` or separate `Danmaku`).
-    pub fn active(&self) -> bool {
-        self.enabled || self.separate
     }
 }
 

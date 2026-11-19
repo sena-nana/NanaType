@@ -700,7 +700,6 @@ chat-status-retrying = Disconnected, retrying: { $message }
 history-chat = Live chat
 history-chat-separate = Separate live chat display
 history-chat-separate-hint = Show only streamer messages in history, with a separate window and output for viewer chat
-history-chat-show = Show live chat in history
 danmaku-session = Current live chat
 danmaku-clear = Clear live chat
 danmaku-clear-confirm = Clear all displayed live chat?

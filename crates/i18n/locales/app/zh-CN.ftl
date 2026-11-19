@@ -694,7 +694,6 @@ chat-status-retrying = 连接断开，正在重试：{ $message }
 history-chat = 弹幕
 history-chat-separate = 弹幕独立显示
 history-chat-separate-hint = 开启后，历史记录只显示主播发的消息，并单独提供弹幕窗口和输出显示观众弹幕
-history-chat-show = 在历史记录中显示弹幕
 danmaku-session = 当前弹幕
 danmaku-clear = 清空弹幕
 danmaku-clear-confirm = 清空当前显示的全部弹幕？
