@@ -3310,7 +3310,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "arboard",
  "blake3",
@@ -3379,7 +3379,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-audio"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cpal",
  "crossbeam-channel",
@@ -3388,7 +3388,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-blive"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "crossbeam-channel",
  "nanatype-model",
@@ -3401,7 +3401,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-bridge"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "crossbeam-channel",
  "nanatype-model",
@@ -3413,7 +3413,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nanatype-markup",
  "nanatype-model",
@@ -3426,7 +3426,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-diag"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "nana-diagnostics",
@@ -3435,7 +3435,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-editor"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "blake3",
  "embed-resource",
@@ -3466,7 +3466,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-frame"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "blake3",
  "image",
@@ -3499,7 +3499,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-i18n"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "fluent-bundle",
  "fluent-syntax",
@@ -3510,7 +3510,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-markup"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nanatype-model",
  "proptest",
@@ -3518,7 +3518,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-model"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "proptest",
  "serde",
@@ -3529,7 +3529,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-obs"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64 0.22.1",
  "crossbeam-channel",
@@ -3541,7 +3541,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-p2p"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64 0.22.1",
  "blake3",
@@ -3559,7 +3559,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-playback"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nanatype-markup",
  "nanatype-model",
@@ -3568,7 +3568,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-plugins"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nanatype-diag",
  "serde",
@@ -3581,14 +3581,14 @@ dependencies = [
 
 [[package]]
 name = "nanatype-scheduling"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "windows",
 ]
 
 [[package]]
 name = "nanatype-secrets"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "security-framework",
  "tempfile",
@@ -3597,7 +3597,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-settings"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64 0.22.1",
  "nanatype-model",
@@ -3609,7 +3609,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-speech"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cc",
  "cpal",
@@ -3625,7 +3625,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-steam"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "crossbeam-channel",
  "nanatype-p2p",
@@ -3635,7 +3635,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-theme"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "blake3",
  "ed25519-dalek",
@@ -3660,7 +3660,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-tts"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "crossbeam-channel",
  "nanatype-audio",
@@ -3674,7 +3674,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-twitch"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "crossbeam-channel",
  "getrandom 0.4.3",
@@ -3689,7 +3689,7 @@ dependencies = [
 
 [[package]]
 name = "nanatype-update"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "crossbeam-channel",
  "ed25519-dalek",
