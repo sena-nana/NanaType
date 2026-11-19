@@ -43,10 +43,14 @@ impl RoomLink {
         if host == PUBLIC_HOST || host.ends_with(".blive.chat") {
             return Err(RoomLinkError::PublicServer);
         }
-        let key = url
-            .path()
-            .strip_prefix("/room/")
-            .filter(|k| !k.is_empty() && !k.contains('/'));
+        // Only plain blivechat servers are reached; one behind TLS is not.
+        let key = (url.scheme() == "http")
+            .then(|| {
+                url.path()
+                    .strip_prefix("/room/")
+                    .filter(|k| !k.is_empty() && !k.contains('/'))
+            })
+            .flatten();
         let Some(key) = key else {
             // A loader page carries the room's own link.
             let inner = url
@@ -58,8 +62,7 @@ impl RoomLink {
                 _ => Err(RoomLinkError::Invalid),
             };
         };
-        // Only plain blivechat servers are reached; one behind TLS is not.
-        if url.scheme() != "http" || host.is_empty() {
+        if host.is_empty() {
             return Err(RoomLinkError::Invalid);
         }
         let key = percent_decode(key).ok_or(RoomLinkError::Invalid)?;

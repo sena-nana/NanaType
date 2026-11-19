@@ -106,6 +106,14 @@ impl Link {
             return Err(LinkError::Invalid);
         }
         if bare && url.port().is_none() {
+            // Do not read a bare 身份码 or room number as a hostname.
+            let authority = text.split(['/', '?', '#']).next().unwrap_or("");
+            if !authority.eq_ignore_ascii_case("localhost")
+                && !authority.contains('.')
+                && !authority.starts_with('[')
+            {
+                return Err(LinkError::Invalid);
+            }
             url.set_port(Some(DEFAULT_PORT))
                 .map_err(|_| LinkError::Invalid)?;
         }

@@ -163,7 +163,7 @@ fn link_field(ui: Ui) -> AnyView {
             .bind(move |input: &mut TextInput| {
                 let text = draft.get();
                 if input.state.value.as_ref() != text.as_str() {
-                    input.state.value = text.into();
+                    input.state.replace_value(text);
                 }
             })
             .on(move |e: &TextChanged| draft.set(e.value.chars().take(4096).collect()))

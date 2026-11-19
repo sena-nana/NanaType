@@ -1,5 +1,6 @@
 mod common;
 
+use nana_ui::runtime::{StableNodeId, TextSelection};
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nanatype::{
     msg::{BliveMsg, Msg},
@@ -159,5 +160,83 @@ fn the_other_platforms_only_have_comet() {
         let ui = on_tab(locale, s, PlatformTab::Other);
         let mut on = session(ui);
         assert!(has_label(&mut on, &ui.now_t("int-comet-port")));
+    }
+}
+
+#[test]
+fn submitting_an_obs_link_clears_the_field_without_invalid_state() {
+    let ui = on_tab(
+        Locale::ZhCn,
+        bilibili(BilibiliSource::Link),
+        PlatformTab::Bilibili,
+    );
+    let save_label = ui.now_t("int-bili-link-save");
+    let mut page = session(ui);
+
+    let input = page
+        .accessibility_dump()
+        .into_iter()
+        .find(|n| n.role == "text-input")
+        .expect("OBS link text-input");
+    let node_id = StableNodeId::new(input.id).unwrap();
+    let input_x = input.bounds.x + input.bounds.width / 2.0;
+    let input_y = input.bounds.y + input.bounds.height / 2.0;
+
+    let first = "file:///C:/blive/loader.html?url=http%3A%2F%2Flocalhost%3A12450%2Froom%2F42";
+    page.click_xy(input_x, input_y).unwrap();
+    assert_eq!(
+        page.document()
+            .context()
+            .world()
+            .focused(page.document().document()),
+        Some(node_id)
+    );
+    page.type_text(first).unwrap();
+    let sent = click(&mut page, &save_label);
+    page.flush().unwrap();
+
+    let first_links: Vec<_> = sent
+        .into_iter()
+        .filter_map(|m| match m {
+            Msg::Blive(BliveMsg::Link(link)) => Some(link),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(first_links, vec![first.to_owned()]);
+    {
+        let world = page.document().context().world();
+        let state = world.text_input(node_id).expect("text input state");
+        assert_eq!(state.value, "");
+        assert_eq!(state.selection, TextSelection::caret(0));
+        assert!(state.selection.is_valid_for(state.value));
+    }
+
+    let second = "http://127.0.0.1:12450/room/99";
+    page.click_xy(input_x, input_y).unwrap();
+    assert_eq!(
+        page.document()
+            .context()
+            .world()
+            .focused(page.document().document()),
+        Some(node_id)
+    );
+    page.type_text(second).unwrap();
+    let sent = click(&mut page, &save_label);
+    page.flush().unwrap();
+
+    let second_links: Vec<_> = sent
+        .into_iter()
+        .filter_map(|m| match m {
+            Msg::Blive(BliveMsg::Link(link)) => Some(link),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(second_links, vec![second.to_owned()]);
+    {
+        let world = page.document().context().world();
+        let state = world.text_input(node_id).expect("text input state");
+        assert_eq!(state.value, "");
+        assert_eq!(state.selection, TextSelection::caret(0));
+        assert!(state.selection.is_valid_for(state.value));
     }
 }

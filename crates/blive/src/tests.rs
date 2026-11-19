@@ -720,8 +720,24 @@ fn laplace_links_read_as_pasted() {
     );
     // A bare address is a local bridge on its usual port.
     assert_eq!(link("localhost"), pair("ws://localhost:9696/", ""));
+    assert_eq!(link("127.0.0.1"), pair("ws://127.0.0.1:9696/", ""));
+    assert_eq!(link("[::1]"), pair("ws://[::1]:9696/", ""));
+    assert_eq!(
+        link("bridge.example.com"),
+        pair("ws://bridge.example.com:9696/", "")
+    );
+    assert_eq!(link("myhost:9696"), pair("ws://myhost:9696/", ""));
     assert_eq!(link("192.168.1.5:9697"), pair("ws://192.168.1.5:9697/", ""));
-    for bad in ["", "   ", "ftp://host", "ws://", "not a link at all"] {
+    for bad in [
+        "",
+        "   ",
+        "ftp://host",
+        "ws://",
+        "not a link at all",
+        "AUTH123456789",
+        "21452505",
+        "12450",
+    ] {
         assert_eq!(link(bad), Err(laplace::LinkError::Invalid), "{bad:?}");
     }
     // A LAPLACE Chat OBS link reading Bilibili itself names no bridge.
@@ -801,6 +817,21 @@ fn a_blivechat_room_link_names_its_server_and_room() {
         room(wrapped.as_str()),
         at("127.0.0.1", 12450, RoomKey::AuthCode("CODE9".into()))
     );
+    // Windows release loader URL with percent-encoded non-ASCII path segments and localhost.
+    assert_eq!(
+        room(
+            "file:///C:/Users/Administrator/Videos/%E7%9B%B4%E6%92%AD%E7%B4%A0%E6%9D%90/blivechat-1.10.4-windows-x64/blivechat/data/loader.html?url=http%3A%2F%2Flocalhost%3A12450%2Froom%2FAUTH123456789%3FroomKeyType%3D2%26showGiftName%3Dtrue%26showDebugMessages%3Dtrue%26lang%3Dzh"
+        ),
+        at(
+            "localhost",
+            12450,
+            RoomKey::AuthCode("AUTH123456789".into())
+        )
+    );
+    assert_eq!(
+        room("file:///room/loader.html?url=http%3A%2F%2Flocalhost%3A12450%2Froom%2F42"),
+        at("localhost", 12450, RoomKey::RoomId(42))
+    );
 
     for public in [
         "https://blive.chat/room/CODE?roomKeyType=2",
@@ -868,11 +899,22 @@ fn comet_reads_only_the_platforms_asked_for() {
 #[test]
 fn an_obs_link_reads_as_blivechat_or_laplace() {
     use crate::obs_link::{ObsLink, ObsLinkError};
+    use crate::room_link::RoomLink;
     let parse = ObsLink::parse;
     assert!(matches!(
         parse("http://127.0.0.1:12450/room/CODE?roomKeyType=2"),
         Ok(ObsLink::Blivechat(_))
     ));
+    assert_eq!(
+        parse(
+            "file:///C:/Users/Administrator/Videos/%E7%9B%B4%E6%92%AD%E7%B4%A0%E6%9D%90/blivechat-1.10.4-windows-x64/blivechat/data/loader.html?url=http%3A%2F%2Flocalhost%3A12450%2Froom%2FAUTH123456789%3FroomKeyType%3D2%26showGiftName%3Dtrue%26showDebugMessages%3Dtrue%26lang%3Dzh"
+        ),
+        Ok(ObsLink::Blivechat(RoomLink {
+            host: "localhost".into(),
+            port: 12450,
+            room: RoomKey::AuthCode("AUTH123456789".into()),
+        }))
+    );
     assert!(matches!(
         parse(
             "https://chat.laplace.live/obs/1?connectionMode=fetcher\
@@ -892,6 +934,8 @@ fn an_obs_link_reads_as_blivechat_or_laplace() {
         ("  ", ObsLinkError::Invalid),
         ("ftp://example.com", ObsLinkError::Invalid),
         ("http://localhost:12450/room/abc", ObsLinkError::Invalid),
+        ("AUTH123456789", ObsLinkError::Invalid),
+        ("21452505", ObsLinkError::Invalid),
         (
             "file:///C:/blivechat/data/loader.html",
             ObsLinkError::Invalid,

@@ -87,7 +87,7 @@ pub fn ws_idle(e: &tungstenite::Error) -> bool {
 }
 
 /// Connect to the first reachable address resolved from `(host, port)`,
-/// waiting up to `timeout` per address.
+/// trying IPv4 addresses before IPv6 and waiting up to `timeout` per address.
 pub fn tcp_connect_timeout(
     host: &str,
     port: u16,
@@ -95,13 +95,16 @@ pub fn tcp_connect_timeout(
 ) -> Result<std::net::TcpStream, LinkFault> {
     use std::net::{TcpStream, ToSocketAddrs};
     let unresolved = || LinkFault::Unresolved(host.to_owned());
-    let addrs: Vec<_> = (host, port)
+    let mut addrs: Vec<_> = (host, port)
         .to_socket_addrs()
         .map_err(|_| unresolved())?
         .collect();
     if addrs.is_empty() {
         return Err(unresolved());
     }
+    // Prefer IPv4 first: Windows resolves `localhost` to `[::1]` ahead of
+    // `127.0.0.1` and stalls ~2s before refusing an IPv4-only server.
+    addrs.sort_by_key(|a| a.is_ipv6());
     let mut last_err = None;
     for addr in addrs {
         match TcpStream::connect_timeout(&addr, timeout) {
@@ -126,7 +129,9 @@ pub fn ws_connect(
     read_timeout: std::time::Duration,
 ) -> Result<tungstenite::WebSocket<std::net::TcpStream>, LinkFault> {
     let io = |e: io::Error| LinkFault::from_io(&e);
-    let stream = tcp_connect_timeout(host, port, std::time::Duration::from_secs(2))?;
+    // Windows loopback refusal (WSAECONNREFUSED) can take just over 2s; keep
+    // the connect budget above that so a closed port reports `Refused`.
+    let stream = tcp_connect_timeout(host, port, std::time::Duration::from_secs(5))?;
     stream.set_read_timeout(handshake_timeout).map_err(io)?;
     let url = if host.contains(':') && !host.starts_with('[') {
         format!("ws://[{host}]:{port}{path}")
@@ -200,6 +205,49 @@ mod tests {
             std::time::Duration::from_millis(100),
         );
         assert!(socket.is_ok(), "ws_connect failed: {socket:?}");
+        server.join().expect("server thread");
+    }
+
+    #[cfg(feature = "ws")]
+    #[test]
+    fn ws_connect_supports_ipv6_loopback() {
+        use std::net::ToSocketAddrs;
+        let Ok(listener) = std::net::TcpListener::bind("[::1]:0") else {
+            return;
+        };
+        let port = listener.local_addr().expect("local addr").port();
+        let localhost_has_v6 = ("localhost", port)
+            .to_socket_addrs()
+            .is_ok_and(|addrs| addrs.into_iter().any(|addr| addr.is_ipv6()));
+        let accepts = if localhost_has_v6 { 2 } else { 1 };
+        let server = std::thread::spawn(move || {
+            for _ in 0..accepts {
+                let (stream, _) = listener.accept().expect("accept");
+                let mut ws = tungstenite::accept(stream).expect("ws accept");
+                let _ = ws.close(None);
+            }
+        });
+        let socket = ws_connect(
+            "::1",
+            port,
+            "/api/chat",
+            Some(std::time::Duration::from_secs(2)),
+            std::time::Duration::from_millis(100),
+        );
+        assert!(socket.is_ok(), "ws_connect(::1) failed: {socket:?}");
+        if localhost_has_v6 {
+            let socket = ws_connect(
+                "localhost",
+                port,
+                "/api/chat",
+                Some(std::time::Duration::from_secs(2)),
+                std::time::Duration::from_millis(100),
+            );
+            assert!(
+                socket.is_ok(),
+                "ws_connect(localhost->::1) failed: {socket:?}"
+            );
+        }
         server.join().expect("server thread");
     }
 }
