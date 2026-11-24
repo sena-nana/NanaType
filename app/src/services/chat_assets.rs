@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -13,15 +13,68 @@ use nanatype_model::AssetRef;
 
 const AVATAR_TTL: Duration = Duration::from_secs(3 * 24 * 3600);
 const RETRY_AFTER: Duration = Duration::from_secs(10 * 60);
+const META_RECHECK: Duration = Duration::from_secs(60);
+const MAX_META_CACHE: usize = 4096;
 const TIMEOUT: Duration = Duration::from_secs(4);
 const MAX_BYTES: u64 = 4 * 1024 * 1024;
 const AVATAR_PX: u32 = 128;
 const EMOTE_PX: u32 = 160;
 const WORKERS: usize = 4;
+const PROFILE_QUEUE: usize = 32;
 /// Downloaded viewer and peer pictures unused this long are deleted at start.
 /// Pasted images share the folder but are history content and never pruned.
 const CACHE_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 3600);
 const CACHE_PREFIXES: &[&str] = &["blive-", "twitch-", "p2p-"];
+
+fn shared_agent() -> &'static ureq::Agent {
+    static AGENT: LazyLock<ureq::Agent> = LazyLock::new(|| {
+        ureq::Agent::config_builder()
+            .timeout_global(Some(TIMEOUT))
+            .user_agent(concat!("NanaType/", env!("CARGO_PKG_VERSION")))
+            .build()
+            .into()
+    });
+    &AGENT
+}
+
+struct ProfileJob {
+    url: String,
+    path: PathBuf,
+    asset: AssetRef,
+    ready: Box<dyn Fn(AssetRef) + Send>,
+}
+
+struct ProfilePool {
+    tx: Sender<ProfileJob>,
+    inflight: Arc<Mutex<HashSet<PathBuf>>>,
+}
+
+fn profile_pool() -> &'static ProfilePool {
+    static POOL: LazyLock<ProfilePool> = LazyLock::new(|| {
+        let (tx, rx) = bounded::<ProfileJob>(PROFILE_QUEUE);
+        let inflight = Arc::new(Mutex::new(HashSet::<PathBuf>::new()));
+        let inflight_worker = inflight.clone();
+        thread::Builder::new()
+            .name("nanatype-profile-avatar".into())
+            .spawn(move || {
+                let agent = shared_agent();
+                for job in rx {
+                    let ok = job.path.exists()
+                        || download_image(agent, &job.url, &job.path, AVATAR_PX).is_ok();
+                    inflight_worker
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .remove(&job.path);
+                    if ok {
+                        (job.ready)(job.asset);
+                    }
+                }
+            })
+            .expect("spawn profile avatar worker");
+        ProfilePool { tx, inflight }
+    });
+    &POOL
+}
 
 /// Remove stale downloaded pictures; a later message downloads them again.
 fn prune_cache(dir: &Path) {
@@ -29,7 +82,7 @@ fn prune_cache(dir: &Path) {
         let name = entry.file_name();
         let name = name.to_string_lossy();
         if CACHE_PREFIXES.iter().any(|p| name.starts_with(p))
-            && file_age(&entry.path()).is_some_and(|age| age > CACHE_MAX_AGE)
+            && file_modified(&entry.path()).is_some_and(|modified| age_of(modified) > CACHE_MAX_AGE)
         {
             let _ = std::fs::remove_file(entry.path());
         }
@@ -49,13 +102,26 @@ pub fn cache_profile_avatar(
     let name = format!("twitch-profile-{uid}-{:016x}", fnv(url));
     let asset = AssetRef::Blob(name.clone());
     let result = asset.clone();
-    let url = url.to_owned();
-    thread::spawn(move || {
-        let path = dir.join(format!("{name}.png"));
-        if path.exists() || Saver::new().download(&url, &path, AVATAR_PX).is_ok() {
-            ready(asset);
+    let path = dir.join(format!("{name}.png"));
+    let pool = profile_pool();
+    {
+        let mut inflight = pool.inflight.lock().unwrap_or_else(|e| e.into_inner());
+        if !inflight.insert(path.clone()) {
+            return Some(result);
         }
-    });
+    }
+    let job = ProfileJob {
+        url: url.to_owned(),
+        path: path.clone(),
+        asset,
+        ready: Box::new(ready),
+    };
+    if pool.tx.try_send(job).is_err() {
+        pool.inflight
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&path);
+    }
     Some(result)
 }
 
@@ -115,23 +181,61 @@ impl Job {
     }
 }
 
+struct CachedMeta {
+    path: PathBuf,
+    modified: SystemTime,
+    checked_at: Instant,
+}
+
 #[derive(Default)]
 struct Requests {
     pending: HashSet<String>,
     failed: HashMap<String, Instant>,
+    meta: HashMap<String, CachedMeta>,
 }
 impl Requests {
+    fn record_meta(&mut self, name: String, path: PathBuf, modified: SystemTime) {
+        if self.meta.len() >= MAX_META_CACHE {
+            self.meta
+                .retain(|_, entry| entry.checked_at.elapsed() < META_RECHECK);
+            if self.meta.len() >= MAX_META_CACHE {
+                self.meta.clear();
+            }
+        }
+        self.meta.insert(
+            name,
+            CachedMeta {
+                path,
+                modified,
+                checked_at: Instant::now(),
+            },
+        );
+    }
+
     fn reserve(&mut self, job: &Job, dir: &Path) -> bool {
         if self.pending.contains(&job.name)
             || self
                 .failed
                 .get(&job.url)
                 .is_some_and(|at| at.elapsed() < RETRY_AFTER)
-            || file_age(&dir.join(format!("{}.png", job.name)))
-                .is_some_and(|age| job.ttl.is_none_or(|ttl| age < ttl))
         {
             return false;
         }
+        let path = dir.join(format!("{}.png", job.name));
+        if let Some(entry) = self.meta.get(&job.name)
+            && entry.path == path
+            && entry.checked_at.elapsed() < META_RECHECK
+            && job.ttl.is_none_or(|ttl| age_of(entry.modified) < ttl)
+        {
+            return false;
+        }
+        if let Some(modified) = file_modified(&path)
+            && job.ttl.is_none_or(|ttl| age_of(modified) < ttl)
+        {
+            self.record_meta(job.name.clone(), path, modified);
+            return false;
+        }
+        self.meta.remove(&job.name);
         self.pending.insert(job.name.clone());
         true
     }
@@ -161,16 +265,21 @@ impl ChatAssets {
             thread::Builder::new()
                 .name(format!("nanatype-chat-image-{n}"))
                 .spawn(move || {
-                    let saver = Saver::new();
+                    let agent = shared_agent();
                     for job in work {
                         let path = dir.join(format!("{}.png", job.name));
-                        let result = saver.download(&job.url, &path, job.px);
+                        let result = download_image(agent, &job.url, &path, job.px);
                         {
                             let mut state = requests.lock().unwrap();
                             state.pending.remove(&job.name);
-                            if result.is_err() {
-                                state.failed.retain(|_, at| at.elapsed() < RETRY_AFTER);
-                                state.failed.insert(job.url.clone(), Instant::now());
+                            match &result {
+                                Ok(()) => {
+                                    state.record_meta(job.name.clone(), path, SystemTime::now());
+                                }
+                                Err(_) => {
+                                    state.failed.retain(|_, at| at.elapsed() < RETRY_AFTER);
+                                    state.failed.insert(job.url.clone(), Instant::now());
+                                }
                             }
                         }
                         match result {
@@ -255,56 +364,50 @@ impl ChatAssets {
     }
 }
 
-struct Saver {
-    agent: ureq::Agent,
-}
-impl Saver {
-    fn new() -> Self {
-        Self {
-            agent: ureq::Agent::config_builder()
-                .timeout_global(Some(TIMEOUT))
-                .user_agent(concat!("NanaType/", env!("CARGO_PKG_VERSION")))
-                .build()
-                .into(),
-        }
+fn download_image(agent: &ureq::Agent, url: &str, path: &Path, px: u32) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("unsupported image URL".into());
     }
-    fn download(&self, url: &str, path: &Path, px: u32) -> Result<(), String> {
-        if !(url.starts_with("https://") || url.starts_with("http://")) {
-            return Err("unsupported image URL".into());
-        }
-        let mut response = self.agent.get(url).call().map_err(|e| e.to_string())?;
-        let bytes = response
-            .body_mut()
-            .with_config()
-            .limit(MAX_BYTES)
-            .read_to_vec()
-            .map_err(|e| e.to_string())?;
-        let image = crate::assets::decode_image(&bytes, 4096, 64 * 1024 * 1024)
-            .map_err(|e| e.to_string())?;
+    let mut response = agent.get(url).call().map_err(|e| e.to_string())?;
+    let bytes = response
+        .body_mut()
+        .with_config()
+        .limit(MAX_BYTES)
+        .read_to_vec()
+        .map_err(|e| e.to_string())?;
+    let image =
+        crate::assets::decode_image(&bytes, 4096, 64 * 1024 * 1024).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(path.parent().ok_or("image has no parent")?)
+        .map_err(|e| e.to_string())?;
+    // Written aside and moved in, so a reader never sees half a file.
+    let partial = path.with_extension("part");
+    if image.width() <= px
+        && image.height() <= px
+        && image::guess_format(&bytes).ok() == Some(image::ImageFormat::Png)
+    {
+        std::fs::write(&partial, &bytes).map_err(|e| e.to_string())?;
+    } else {
         let image = if image.width() > px || image.height() > px {
             image.thumbnail(px, px)
         } else {
             image
         };
-        std::fs::create_dir_all(path.parent().ok_or("image has no parent")?)
-            .map_err(|e| e.to_string())?;
-        // Written aside and moved in, so a reader never sees half a file.
-        let partial = path.with_extension("part");
         image
             .into_rgba8()
             .save_with_format(&partial, image::ImageFormat::Png)
             .map_err(|e| e.to_string())?;
-        std::fs::rename(&partial, path).map_err(|e| e.to_string())
     }
+    std::fs::rename(&partial, path).map_err(|e| e.to_string())
 }
 
-fn file_age(path: &Path) -> Option<Duration> {
-    let modified = std::fs::metadata(path).ok()?.modified().ok()?;
-    Some(
-        SystemTime::now()
-            .duration_since(modified)
-            .unwrap_or(Duration::ZERO),
-    )
+fn file_modified(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path).ok()?.modified().ok()
+}
+
+fn age_of(modified: SystemTime) -> Duration {
+    SystemTime::now()
+        .duration_since(modified)
+        .unwrap_or(Duration::ZERO)
 }
 
 fn fnv(text: &str) -> u64 {
@@ -452,5 +555,44 @@ mod tests {
         state.failed.clear();
         std::fs::write(dir.join("blive-face-42.png"), b"cached").unwrap();
         assert!(!state.reserve(&job, &dir));
+        // Hot authors hit the in-memory metadata cache without re-statting disk.
+        std::fs::remove_file(dir.join("blive-face-42.png")).unwrap();
+        assert!(!state.reserve(&job, &dir));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn profile_avatar_uses_bounded_pool_and_caches_file() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/profile", listener.local_addr().unwrap());
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::RgbaImage::from_pixel(8, 8, image::Rgba([20, 120, 220, 255]))
+            .write_to(&mut png, image::ImageFormat::Png)
+            .unwrap();
+        let bytes = png.into_inner();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let _ = stream.read(&mut [0; 2048]);
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                bytes.len()
+            )
+            .unwrap();
+            stream.write_all(&bytes).unwrap();
+        });
+        let dir = scratch("profile");
+        let (tx, rx) = unbounded();
+        let asset = cache_profile_avatar(dir.clone(), "twitch-99", &url, move |a| {
+            let _ = tx.send(a);
+        })
+        .unwrap();
+        assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), asset);
+        let AssetRef::Blob(name) = asset else {
+            panic!("expected blob asset");
+        };
+        assert!(dir.join(format!("{name}.png")).is_file());
+        server.join().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
