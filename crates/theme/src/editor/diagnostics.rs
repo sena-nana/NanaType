@@ -158,6 +158,27 @@ pub fn locate(project: &PackageProject, diagnostic: &SkinDiagnostic) -> SourceDi
             DiagnosticTarget::Manifest { file, keys } => {
                 let path = project_path(file);
                 let text = project.text(&path).unwrap_or("");
+                if path == PACKAGE_MANIFEST
+                    && field == PACKAGE_MANIFEST
+                    && let [k0, data_path] = keys.as_slice()
+                    && k0 == "data"
+                    && let Ok(manifest) = project.manifest()
+                    && let Some((id, _)) = manifest
+                        .data
+                        .into_iter()
+                        .find(|(_, d)| d.path == *data_path)
+                {
+                    let key_refs = ["data", id.as_str()];
+                    let span = key_span(text, &key_refs).unwrap_or(0..0);
+                    return located(
+                        &path,
+                        text,
+                        span.start,
+                        span.len().max(1),
+                        level,
+                        format!("data.{id}: {}", diagnostic.message),
+                    );
+                }
                 let key_refs: Vec<&str> = keys.iter().map(String::as_str).collect();
                 let span = key_span(text, &key_refs).unwrap_or(0..0);
                 return located(
