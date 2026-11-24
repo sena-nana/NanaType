@@ -18,6 +18,33 @@ const POST_INTERVAL: Duration = Duration::from_millis(33);
 /// a canvas at the protocol budget repaints about six times a second, because
 /// the host paints it on the UI thread.
 const PAINT_COST_STEP: usize = 512;
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
+/// Log-worthy slow call threshold vs true hang deadline (above the ~550 ms Wasm
+/// fuel + epoch ceiling, below the 2 s worker failure expectation).
+const SLOW_CALL_WARN: Duration = Duration::from_millis(250);
+const CALL_TIMEOUT: Duration = Duration::from_millis(1500);
+
+fn recv_response(
+    responses: &mpsc::Receiver<WorkerResponse>,
+    deadline: Instant,
+) -> std::io::Result<WorkerResponse> {
+    let total = deadline.saturating_duration_since(Instant::now());
+    match responses.recv_timeout(total.min(SLOW_CALL_WARN)) {
+        Ok(response) => Ok(response),
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(std::io::Error::other("plugin response timed out"));
+            }
+            responses
+                .recv_timeout(remaining)
+                .map_err(|_| std::io::Error::other("plugin response timed out"))
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err(std::io::Error::other("plugin worker exited"))
+        }
+    }
+}
 
 fn pace(posted: &WorkerResponse) -> Duration {
     match posted {
@@ -190,7 +217,7 @@ impl PluginProcess {
                 let mut started = false;
                 let run = || -> std::io::Result<()> {
                     write_message(&mut input, &WorkerRequest::Init { source })?;
-                    match responses.recv_timeout(Duration::from_secs(15)) {
+                    match responses.recv_timeout(STARTUP_TIMEOUT) {
                         Ok(WorkerResponse::Ready) => {
                             started = true;
                             nanatype_diag::event!(
@@ -207,6 +234,7 @@ impl PluginProcess {
                         }
                         Err(_) => return Err(std::io::Error::other("plugin startup timed out")),
                     }
+                    let mut call_deadline = Instant::now() + CALL_TIMEOUT;
                     write_message(&mut input, &WorkerRequest::Event { event: init })?;
                     // Views are complete snapshots: while events are queued the
                     // supervisor keeps the worker busy and posts only the newest
@@ -215,9 +243,7 @@ impl PluginProcess {
                     let mut interval = POST_INTERVAL;
                     let mut rounds = 0;
                     loop {
-                        let mut response = responses
-                            .recv_timeout(Duration::from_millis(200))
-                            .map_err(|_| std::io::Error::other("plugin response timed out"))?;
+                        let mut response = recv_response(&responses, call_deadline)?;
                         let (requests, lines, dropped) = match &mut response {
                             WorkerResponse::Update {
                                 requests,
@@ -242,17 +268,17 @@ impl PluginProcess {
                         }
                         // The worker checked them too; a mismatch means it is not ours.
                         crate::validate_requests(&requests).map_err(std::io::Error::other)?;
-                        // Superseded by the next response when more work follows.
-                        let mut pending = Some(response);
                         // Chained requests are answered without waiting for the UI;
                         // beyond the round budget they are dropped until the next event.
                         if !requests.is_empty() && rounds < MAX_DATA_ROUNDS {
                             rounds += 1;
                             let results =
                                 bound_replies(requests.iter().map(|r| answer(r)).collect());
+                            call_deadline = Instant::now() + CALL_TIMEOUT;
                             write_message(&mut input, &WorkerRequest::Data { results })?;
                             continue;
                         }
+                        let mut pending = Some(response);
                         if last_post.elapsed() >= interval
                             && let Some(view) = pending.take()
                         {
@@ -264,20 +290,27 @@ impl PluginProcess {
                             Ok(event) => Some(event),
                             Err(mpsc::TryRecvError::Empty) => {
                                 if let Some(view) = pending.take() {
-                                    std::thread::sleep(
-                                        interval.saturating_sub(last_post.elapsed()),
-                                    );
-                                    interval = pace(&view);
-                                    post(view);
-                                    last_post = std::time::Instant::now();
+                                    let remaining = interval.saturating_sub(last_post.elapsed());
+                                    match events.recv_timeout(remaining) {
+                                        Ok(event) => Some(event),
+                                        Err(mpsc::RecvTimeoutError::Timeout) => {
+                                            interval = pace(&view);
+                                            post(view);
+                                            last_post = std::time::Instant::now();
+                                            events.recv().ok()
+                                        }
+                                        Err(mpsc::RecvTimeoutError::Disconnected) => None,
+                                    }
+                                } else {
+                                    events.recv().ok()
                                 }
-                                events.recv().ok()
                             }
                             Err(mpsc::TryRecvError::Disconnected) => None,
                         };
                         match next {
                             Some(event) => {
                                 rounds = 0;
+                                call_deadline = Instant::now() + CALL_TIMEOUT;
                                 write_message(&mut input, &event)?
                             }
                             None => break,

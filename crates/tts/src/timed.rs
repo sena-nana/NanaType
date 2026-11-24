@@ -47,6 +47,18 @@ impl Timed {
         self.playing.is_some() || !self.queue.is_empty()
     }
 
+    pub fn next_deadline(&self) -> Option<Instant> {
+        if let Some(p) = &self.playing {
+            let end = p.since + p.clip.length;
+            let next_word = p.clip.words.get(p.said).map(|w| p.since + w.at);
+            Some(next_word.map_or(end, |w| w.min(end)))
+        } else if !self.queue.is_empty() {
+            Some(Instant::now())
+        } else {
+            None
+        }
+    }
+
     /// Report what was heard by `now`: start the next clip when one ends
     /// (`start` plays it, `done` lets its sound go), its words as their
     /// moment comes.

@@ -15,9 +15,9 @@ mod timed;
 
 pub use text::{speakable, speakable_units};
 
-use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
+use crossbeam_channel::{Receiver, Sender, after, bounded, select};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// An installed voice.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,6 +77,10 @@ pub(crate) trait Engine {
     fn poll(&mut self, out: &mut dyn FnMut(Event));
     /// Something is queued or being said, so the worker keeps polling.
     fn busy(&self) -> bool;
+    /// When the worker next needs to poll if no wake signal arrives.
+    fn next_poll(&self, _now: Instant) -> Option<Duration> {
+        None
+    }
 }
 
 enum Command {
@@ -170,9 +174,9 @@ fn clamp_or(v: f32, lo: f32, hi: f32, fallback: f32) -> f32 {
 }
 
 #[allow(unused_variables)]
-fn engine(audio: Option<nanatype_audio::AudioHandle>) -> Option<Box<dyn Engine>> {
+fn engine(audio: Option<nanatype_audio::AudioHandle>, wake: Sender<()>) -> Option<Box<dyn Engine>> {
     #[cfg(target_os = "macos")]
-    return Some(Box::new(macos::Mac::new()));
+    return Some(Box::new(macos::Mac::new(wake)));
     #[cfg(windows)]
     return onecore::System::new(audio).map(|e| Box::new(e) as Box<dyn Engine>);
     #[cfg(not(any(target_os = "macos", windows)))]
@@ -194,16 +198,24 @@ pub(crate) fn merge_voices(first: Vec<Voice>, second: Vec<Voice>) -> Vec<Voice> 
 }
 
 fn run(rx: Receiver<Command>, deliver: Deliver, audio: Option<nanatype_audio::AudioHandle>) {
-    let mut engine = engine(audio);
+    let (wake_tx, wake_rx) = bounded::<()>(1);
+    let mut engine = engine(audio, wake_tx);
     // Said or queued and not reported finished yet, oldest first.
     let mut open: Vec<u64> = Vec::new();
     loop {
         let busy = engine.as_ref().is_some_and(|e| e.busy()) || !open.is_empty();
         let command = if busy {
-            match rx.recv_timeout(POLL) {
-                Ok(c) => Some(c),
-                Err(RecvTimeoutError::Timeout) => None,
-                Err(RecvTimeoutError::Disconnected) => break,
+            let wait = engine
+                .as_ref()
+                .and_then(|e| e.next_poll(Instant::now()))
+                .unwrap_or(POLL);
+            select! {
+                recv(rx) -> res => match res {
+                    Ok(c) => Some(c),
+                    Err(_) => break,
+                },
+                recv(wake_rx) -> _ => None,
+                recv(after(wait)) -> _ => None,
             }
         } else {
             match rx.recv() {

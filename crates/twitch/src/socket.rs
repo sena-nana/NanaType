@@ -2,6 +2,7 @@
 use crate::{
     Event, Room,
     irc::{self, Incoming},
+    reader::ReaderCancel,
 };
 use std::{
     net::{TcpStream, ToSocketAddrs},
@@ -14,6 +15,14 @@ type Socket = WebSocket<MaybeTlsStream<TcpStream>>;
 const PING_EVERY: Duration = Duration::from_secs(60);
 const SILENCE: Duration = Duration::from_secs(90);
 const JOIN_DEADLINE: Duration = Duration::from_secs(15);
+
+fn tcp_stream(socket: &Socket) -> Option<&TcpStream> {
+    match socket.get_ref() {
+        MaybeTlsStream::Plain(stream) => Some(stream),
+        MaybeTlsStream::Rustls(stream) => Some(&stream.sock),
+        _ => None,
+    }
+}
 
 fn connect(endpoint: &str) -> Result<Socket, String> {
     let request = endpoint
@@ -42,13 +51,7 @@ fn connect(endpoint: &str) -> Result<Socket, String> {
         .max_frame_size(Some(1 << 20));
     let (socket, _) = tungstenite::client_tls_with_config(request, stream, Some(config), None)
         .map_err(|_| "transport-connect-failed")?;
-    let tcp = match socket.get_ref() {
-        MaybeTlsStream::Plain(stream) => Some(stream),
-        MaybeTlsStream::Rustls(stream) => Some(&stream.sock),
-        _ => None,
-    };
-    if let Some(tcp) = tcp {
-        let _ = tcp.set_read_timeout(Some(Duration::from_millis(100)));
+    if let Some(tcp) = tcp_stream(&socket) {
         let _ = tcp.set_write_timeout(Some(Duration::from_secs(2)));
     }
     Ok(socket)
@@ -61,15 +64,22 @@ fn say(socket: &mut Socket, line: &str) -> Result<(), String> {
 }
 
 /// Join `channel` and deliver its chat until the connection ends. `Ok` means
-/// Twitch asked us to reconnect.
+/// Twitch asked us to reconnect (or the connection was cancelled).
 pub(crate) fn run(
     endpoint: &str,
     channel: &str,
-    current: &dyn Fn() -> bool,
+    cancel: &ReaderCancel,
     joined: &mut dyn FnMut(Room),
     emit: &dyn Fn(Event),
 ) -> Result<(), String> {
+    if cancel.is_cancelled() {
+        return Ok(());
+    }
     let mut socket = connect(endpoint)?;
+    let _socket_guard = cancel.attach_socket(tcp_stream(&socket).and_then(|s| s.try_clone().ok()));
+    if cancel.is_cancelled() {
+        return Ok(());
+    }
     say(&mut socket, "CAP REQ :twitch.tv/tags twitch.tv/commands")?;
     say(&mut socket, &format!("NICK {}", irc::anonymous_nick()))?;
     say(&mut socket, &format!("JOIN #{channel}"))?;
@@ -77,7 +87,7 @@ pub(crate) fn run(
     let mut heard = Instant::now();
     let mut pinged = Instant::now();
     let mut room = false;
-    while current() {
+    while !cancel.is_cancelled() {
         if pinged.elapsed() >= PING_EVERY {
             say(&mut socket, "PING :nanatype")?;
             pinged = Instant::now();
@@ -88,12 +98,36 @@ pub(crate) fn run(
         if !room && started.elapsed() >= JOIN_DEADLINE {
             return Err("channel-unavailable".into());
         }
+        let next_deadline = (pinged + PING_EVERY).min(heard + SILENCE);
+        let next_deadline = if room {
+            next_deadline
+        } else {
+            next_deadline.min(started + JOIN_DEADLINE)
+        };
+        let wait = next_deadline
+            .saturating_duration_since(Instant::now())
+            .max(Duration::from_millis(1));
+        if let Some(tcp) = tcp_stream(&socket) {
+            let _ = tcp.set_read_timeout(Some(wait));
+        }
         let text = match socket.read() {
             Ok(Message::Text(text)) => text,
-            Ok(Message::Close(_)) => return Err("disconnected".into()),
+            Ok(Message::Close(_)) => {
+                return if cancel.is_cancelled() {
+                    Ok(())
+                } else {
+                    Err("disconnected".into())
+                };
+            }
             Ok(_) => continue,
             Err(error) if nanatype_model::ws_idle(&error) => continue,
-            Err(_) => return Err("disconnected".into()),
+            Err(_) => {
+                return if cancel.is_cancelled() {
+                    Ok(())
+                } else {
+                    Err("disconnected".into())
+                };
+            }
         };
         heard = Instant::now();
         for raw in text.split("\r\n").filter(|l| !l.is_empty()) {

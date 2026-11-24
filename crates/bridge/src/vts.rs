@@ -15,12 +15,16 @@
 //! VTube Studio is closed.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::net::{SocketAddr, TcpStream};
+use std::io::Write as _;
+use std::net::{Shutdown, SocketAddr, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crossbeam_channel::{Receiver, Sender, unbounded};
+use crossbeam_channel::{Receiver, Sender, after, select, unbounded};
 use nanatype_model::{LinkFault, VtsAction, VtsReset};
+use serde::Serialize;
 use serde_json::{Value, json};
 use tungstenite::{Message, WebSocket};
 
@@ -33,6 +37,8 @@ pub const PLUGIN_DEVELOPER: &str = "sena-nana";
 /// held. VTube Studio hands a parameter back to tracking a second after the
 /// last injection.
 const INJECT_EVERY: Duration = Duration::from_millis(33);
+const ACTIVE_READ: Duration = Duration::from_millis(16);
+const IDLE_MAX: Duration = Duration::from_millis(500);
 
 /// Drive a mouth parameter while the speaker is talking.
 #[derive(Debug, Clone, PartialEq)]
@@ -70,10 +76,68 @@ enum Command {
     RefreshHotkeys,
 }
 
+struct StopSignal {
+    stopped: AtomicBool,
+    socket: Mutex<Option<TcpStream>>,
+}
+
+struct SocketGuard(Arc<StopSignal>);
+
+impl Drop for SocketGuard {
+    fn drop(&mut self) {
+        *self.0.socket.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+}
+
+impl StopSignal {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            stopped: AtomicBool::new(false),
+            socket: Mutex::new(None),
+        })
+    }
+
+    fn is_stopped(&self) -> bool {
+        self.stopped.load(Ordering::Acquire)
+    }
+
+    fn cancel(&self) {
+        self.stopped.store(true, Ordering::Release);
+        let stream = self
+            .socket
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|s| s.try_clone().ok());
+        if let Some(stream) = stream {
+            let _ = stream.shutdown(Shutdown::Both);
+        }
+    }
+
+    fn attach(self: &Arc<Self>, stream: Option<TcpStream>) -> SocketGuard {
+        let mut slot = self.socket.lock().unwrap_or_else(|e| e.into_inner());
+        if self.is_stopped() {
+            if let Some(stream) = stream {
+                let _ = stream.shutdown(Shutdown::Both);
+            }
+        } else {
+            *slot = stream;
+        }
+        SocketGuard(Arc::clone(self))
+    }
+}
+
 pub(crate) struct VtsClient {
     config: VtsConfig,
     tx: Sender<Command>,
-    _stop: Sender<()>,
+    stop: Arc<StopSignal>,
+    _stop_tx: Sender<()>,
+}
+
+impl Drop for VtsClient {
+    fn drop(&mut self) {
+        self.stop.cancel();
+    }
 }
 
 pub(crate) fn request(kind: &str, id: &str, data: Value) -> String {
@@ -243,15 +307,18 @@ impl VtsClient {
     pub fn start(config: VtsConfig, status: StatusFn) -> Self {
         let (tx, rx) = unbounded();
         let (stop_tx, stop_rx) = unbounded::<()>();
+        let stop = StopSignal::new();
+        let worker_stop = Arc::clone(&stop);
         let cfg = config.clone();
         thread::Builder::new()
             .name("nanatype-vts".into())
-            .spawn(move || Client::new(cfg, status).run(rx, stop_rx))
+            .spawn(move || Client::new(cfg, status, worker_stop).run(rx, stop_rx))
             .expect("spawn vts thread");
         Self {
             config,
             tx,
-            _stop: stop_tx,
+            stop,
+            _stop_tx: stop_tx,
         }
     }
 
@@ -300,35 +367,111 @@ fn connect(port: u16) -> Result<WebSocket<TcpStream>, LinkFault> {
     stream.set_write_timeout(timeout).map_err(io)?;
     let (socket, _) =
         tungstenite::client(format!("ws://{addr}"), stream).map_err(LinkFault::from_handshake)?;
-    // Short reads keep events (and the mouth) on time.
     socket
         .get_ref()
-        .set_read_timeout(Some(Duration::from_millis(10)))
+        .set_read_timeout(Some(ACTIVE_READ))
         .map_err(io)?;
     Ok(socket)
+}
+
+#[derive(Serialize)]
+struct ParamValue<'a> {
+    id: &'a str,
+    value: f32,
+}
+
+struct InjectParams<'a> {
+    mouth: Option<(&'a str, f32)>,
+    holds: &'a [Hold],
+}
+
+impl Serialize for InjectParams<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeSeq;
+        let len = usize::from(self.mouth.is_some()) + self.holds.len();
+        let mut seq = serializer.serialize_seq(Some(len))?;
+        if let Some((id, value)) = self.mouth {
+            seq.serialize_element(&ParamValue { id, value })?;
+        }
+        for h in self.holds {
+            seq.serialize_element(&ParamValue {
+                id: &h.name,
+                value: h.value,
+            })?;
+        }
+        seq.end()
+    }
+}
+
+#[derive(Serialize)]
+struct InjectData<'a> {
+    #[serde(rename = "faceFound")]
+    face_found: bool,
+    mode: &'static str,
+    #[serde(rename = "parameterValues")]
+    parameter_values: InjectParams<'a>,
+}
+
+#[derive(Serialize)]
+struct InjectEnvelope<'a> {
+    #[serde(rename = "apiName")]
+    api_name: &'static str,
+    #[serde(rename = "apiVersion")]
+    api_version: &'static str,
+    #[serde(rename = "requestID")]
+    request_id: &'a str,
+    #[serde(rename = "messageType")]
+    message_type: &'static str,
+    data: InjectData<'a>,
+}
+
+fn format_inject_into(buf: &mut Vec<u8>, counter: u64, mouth: Option<(&str, f32)>, holds: &[Hold]) {
+    let mut id_buf = [0u8; 24];
+    let mut cur = &mut id_buf[..];
+    let _ = write!(cur, "nt-{counter}");
+    let remaining = cur.len();
+    let id_len = id_buf.len() - remaining;
+    let request_id = std::str::from_utf8(&id_buf[..id_len]).unwrap_or("nt-0");
+    buf.clear();
+    let envelope = InjectEnvelope {
+        api_name: "VTubeStudioPublicAPI",
+        api_version: "1.0",
+        request_id,
+        message_type: "InjectParameterDataRequest",
+        data: InjectData {
+            face_found: false,
+            mode: "set",
+            parameter_values: InjectParams { mouth, holds },
+        },
+    };
+    let _ = serde_json::to_writer(&mut *buf, &envelope);
 }
 
 struct Client {
     config: VtsConfig,
     status: StatusFn,
+    stop: Arc<StopSignal>,
     session: Option<Session>,
     avatar: Avatar,
     next_attempt: Instant,
     /// Asked for while disconnected; sent once connected.
     want_token: bool,
     counter: u64,
+    inject_buf: Vec<u8>,
 }
 
 impl Client {
-    fn new(config: VtsConfig, status: StatusFn) -> Self {
+    fn new(config: VtsConfig, status: StatusFn, stop: Arc<StopSignal>) -> Self {
         Self {
             config,
             status,
+            stop,
             session: None,
             avatar: Avatar::default(),
             next_attempt: Instant::now(),
             want_token: false,
             counter: 0,
+            inject_buf: Vec::with_capacity(512),
         }
     }
 
@@ -336,6 +479,10 @@ impl Client {
     fn send(&mut self, kind: &str, data: Value) {
         self.counter += 1;
         let text = request(kind, &format!("nt-{}", self.counter), data);
+        self.send_text(&text);
+    }
+
+    fn send_text(&mut self, text: &str) {
         let Some(s) = self.session.as_mut() else {
             return;
         };
@@ -382,8 +529,13 @@ impl Client {
     }
 
     fn run(mut self, rx: Receiver<Command>, stop: Receiver<()>) {
+        let mut _socket_guard = None;
+        let mut idle_wait = ACTIVE_READ;
         loop {
-            if stop.try_recv() != Err(crossbeam_channel::TryRecvError::Empty) {
+            if self.stop.is_stopped()
+                || stop.try_recv() != Err(crossbeam_channel::TryRecvError::Empty)
+            {
+                _socket_guard = None;
                 if let Some(mut s) = self.session.take() {
                     let _ = s.socket.close(None);
                     let _ = s.socket.flush();
@@ -391,30 +543,39 @@ impl Client {
                 return;
             }
             if self.session.is_none() {
-                if Instant::now() < self.next_attempt {
-                    // Events are dropped while disconnected; requests wait.
-                    if let Ok(cmd) = rx.recv_timeout(Duration::from_millis(200)) {
-                        match cmd {
-                            Command::RequestToken => {
+                _socket_guard = None;
+                let now = Instant::now();
+                if now < self.next_attempt {
+                    // Events are dropped while disconnected; requests wait with 0 Hz idle wakeup.
+                    let wait = self.next_attempt.saturating_duration_since(now);
+                    select! {
+                        recv(stop) -> _ => return,
+                        recv(rx) -> res => match res {
+                            Ok(Command::RequestToken) => {
                                 self.want_token = true;
                                 self.next_attempt = Instant::now();
                             }
-                            Command::RefreshHotkeys => self.next_attempt = Instant::now(),
-                            Command::Config(c) => self.configure(c),
-                            Command::Event(e) => self.track_offline(&e),
-                            Command::Word(_) => {}
-                        }
+                            Ok(Command::RefreshHotkeys) => self.next_attempt = Instant::now(),
+                            Ok(Command::Config(c)) => self.configure(c),
+                            Ok(Command::Event(e)) => self.track_offline(&e),
+                            Ok(Command::Word(_)) => {}
+                            Err(_) => return,
+                        },
+                        recv(after(wait)) -> _ => {}
                     }
                     continue;
                 }
                 (self.status)(BridgeStatus::Connecting(Sink::Vts));
                 match connect(self.config.port) {
                     Ok(socket) => {
+                        let clone = socket.get_ref().try_clone().ok();
                         self.session = Some(Session {
                             socket,
                             authenticated: false,
                             hotkeys: Vec::new(),
                         });
+                        idle_wait = ACTIVE_READ;
+                        _socket_guard = Some(self.stop.attach(clone));
                         if self.want_token {
                             self.want_token = false;
                             self.request_token();
@@ -430,6 +591,7 @@ impl Client {
                 }
             }
             while let Ok(cmd) = rx.try_recv() {
+                idle_wait = ACTIVE_READ;
                 match cmd {
                     Command::RequestToken => self.request_token(),
                     Command::RefreshHotkeys if self.authenticated() => {
@@ -453,9 +615,39 @@ impl Client {
                     break;
                 }
             }
+            if self.session.is_none() {
+                continue;
+            }
             self.inject();
-            self.read();
+            let timeout = self.read_timeout(idle_wait);
+            if let Some(s) = self.session.as_mut() {
+                let _ = s.socket.get_ref().set_read_timeout(Some(timeout));
+            }
+            if self.read() {
+                idle_wait = ACTIVE_READ;
+            } else if !self.is_active() {
+                idle_wait = (idle_wait * 2).min(IDLE_MAX);
+            }
         }
+    }
+
+    fn is_active(&self) -> bool {
+        !self.authenticated()
+            || self.avatar.speaking.is_some()
+            || self.avatar.close_mouth
+            || !self.avatar.holds.is_empty()
+    }
+
+    fn read_timeout(&self, idle_wait: Duration) -> Duration {
+        if !self.is_active() {
+            return idle_wait;
+        }
+        let now = Instant::now();
+        let next_inject = self
+            .avatar
+            .next_inject
+            .map_or(Duration::ZERO, |t| t.saturating_duration_since(now));
+        next_inject.clamp(Duration::from_millis(1), ACTIVE_READ)
     }
 
     fn configure(&mut self, config: VtsConfig) {
@@ -545,7 +737,7 @@ impl Client {
         }
     }
 
-    /// Inject the mouth and held parameters when due.
+    /// Inject the mouth and held parameters when due without `json!()` heap allocations.
     fn inject(&mut self) {
         if !self.authenticated() {
             return;
@@ -557,8 +749,7 @@ impl Client {
             return;
         }
         a.next_inject = Some(now + INJECT_EVERY);
-        let mut values = Vec::new();
-        if let Some(lip) = &self.config.lip_sync {
+        let mouth_param = self.config.lip_sync.as_ref().and_then(|lip| {
             if let Some(since) = a.speaking {
                 // Closed between words; flapping again if the words stop
                 // coming for longer than a pause while it still talks.
@@ -567,43 +758,60 @@ impl Client {
                     Some((t, w)) if t < w.secs + 0.8 => word_mouth(t, w.secs, w.chars),
                     _ => mouth(now.duration_since(since).as_secs_f32()),
                 };
-                values.push(json!({ "id": lip.param, "value": value * lip.amp }));
+                Some((lip.param.as_str(), value * lip.amp))
             } else if a.close_mouth {
-                values.push(json!({ "id": lip.param, "value": 0.0 }));
+                Some((lip.param.as_str(), 0.0))
+            } else {
+                None
             }
-        }
+        });
         a.close_mouth = false;
-        // Every hold is sent at least once, even a `ms=0` one.
-        for h in &a.holds {
-            values.push(json!({ "id": h.name, "value": h.value }));
-        }
-        a.holds.retain(|h| h.until > now);
-        if !values.is_empty() {
-            self.send(
-                "InjectParameterDataRequest",
-                json!({ "faceFound": false, "mode": "set", "parameterValues": values }),
-            );
+        let has_params = mouth_param.is_some() || !a.holds.is_empty();
+        if has_params {
+            self.counter += 1;
+            format_inject_into(&mut self.inject_buf, self.counter, mouth_param, &a.holds);
+            a.holds.retain(|h| h.until > now);
+            if let Ok(text) = std::str::from_utf8(&self.inject_buf) {
+                let Some(s) = self.session.as_mut() else {
+                    return;
+                };
+                if let Err(e) = s.socket.send(Message::text(text)) {
+                    self.drop_session(LinkFault::from_ws(&e));
+                }
+            }
+        } else {
+            a.holds.retain(|h| h.until > now);
         }
     }
 
-    fn read(&mut self) {
+    fn read(&mut self) -> bool {
         let Some(s) = self.session.as_mut() else {
-            return;
+            return false;
         };
         match s.socket.read() {
             Ok(Message::Text(text)) => {
                 if let Ok(v) = serde_json::from_str::<Value>(&text) {
                     self.response(&v);
                 }
+                true
             }
-            Ok(Message::Close(_)) => self.drop_session(LinkFault::Closed),
-            Ok(_) => {}
+            Ok(Message::Close(_)) => {
+                self.drop_session(LinkFault::Closed);
+                false
+            }
+            Ok(_) => true,
             Err(tungstenite::Error::Io(e))
                 if matches!(
                     e.kind(),
                     std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-                ) => {}
-            Err(e) => self.drop_session(LinkFault::from_ws(&e)),
+                ) =>
+            {
+                false
+            }
+            Err(e) => {
+                self.drop_session(LinkFault::from_ws(&e));
+                false
+            }
         }
     }
 
@@ -788,5 +996,31 @@ mod tests {
     fn mapping_keys_fold_case_and_spaces() {
         assert_eq!(mapping_key(" Big  Grin "), "big__grin");
         assert_eq!(mapping_key("smile"), "smile");
+    }
+
+    #[test]
+    fn inject_buffer_matches_api_envelope_without_json_macro() {
+        let mut buf = Vec::new();
+        let holds = vec![Hold {
+            name: "EyeOpen".into(),
+            value: 0.25,
+            until: Instant::now(),
+        }];
+        format_inject_into(&mut buf, 42, Some(("MouthOpen", 0.5)), &holds);
+        let actual: Value = serde_json::from_slice(&buf).unwrap();
+        let expected: Value = serde_json::from_str(&request(
+            "InjectParameterDataRequest",
+            "nt-42",
+            json!({
+                "faceFound": false,
+                "mode": "set",
+                "parameterValues": [
+                    { "id": "MouthOpen", "value": 0.5 },
+                    { "id": "EyeOpen", "value": 0.25 }
+                ]
+            }),
+        ))
+        .unwrap();
+        assert_eq!(actual, expected);
     }
 }

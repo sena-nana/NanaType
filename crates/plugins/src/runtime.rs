@@ -3,10 +3,14 @@ use crate::{
     DataReply, DataRequest, MAX_DATA_EVENT_BYTES, MAX_DATA_REQUESTS, MAX_DATA_RESULT_BYTES,
     MAX_MESSAGE_BYTES, MAX_SCRIPT_BYTES, PluginLog, PluginUpdate,
 };
-use std::{collections::BTreeSet, sync::OnceLock};
+use std::{
+    collections::BTreeSet,
+    sync::{Arc, Condvar, Mutex, OnceLock},
+    time::Duration,
+};
 use wasmtime::{
-    Caller, Config, Engine, Extern, ExternType, Instance, Linker, Module, Store, StoreLimits,
-    StoreLimitsBuilder, TypedFunc, Val,
+    Caller, Config, Engine, Extern, ExternType, Instance, Linker, Memory, Module, Store,
+    StoreLimits, StoreLimitsBuilder, TypedFunc, Val,
 };
 use wasmtime::{Result, bail, format_err};
 
@@ -18,6 +22,7 @@ const FUEL: u64 = 20_000_000;
 /// own budget so the plugin's compute limit stays `FUEL`.
 const READ_FUEL: u64 = 50_000_000;
 const MEMORY: usize = 32 * 1024 * 1024;
+const INITIAL_SCRATCH: usize = 4096;
 
 #[derive(Debug)]
 struct LuaLongjmp;
@@ -28,8 +33,11 @@ impl std::fmt::Display for LuaLongjmp {
 }
 impl std::error::Error for LuaLongjmp {}
 
-/// Raw Lua C API entry points used to read results without running Lua.
+/// Raw Lua C API entry points used to push events and read results without
+/// per-event Lua parsing or compilation.
 struct Api {
+    malloc: TypedFunc<i32, i32>,
+    free: TypedFunc<i32, ()>,
     kind: TypedFunc<(i32, i32), i32>,
     next: TypedFunc<(i32, i32), i32>,
     rawlen: TypedFunc<(i32, i32), i64>,
@@ -41,11 +49,24 @@ struct Api {
     tolstring: TypedFunc<(i32, i32, i32), i32>,
     absindex: TypedFunc<(i32, i32), i32>,
     settop: TypedFunc<(i32, i32), ()>,
+    checkstack: TypedFunc<(i32, i32), i32>,
+    pushvalue: TypedFunc<(i32, i32), ()>,
     pushnil: TypedFunc<i32, ()>,
+    pushboolean: TypedFunc<(i32, i32), ()>,
+    pushinteger: TypedFunc<(i32, i64), ()>,
+    pushnumber: TypedFunc<(i32, f64), ()>,
+    pushlstring: TypedFunc<(i32, i32, i32), i32>,
+    createtable: TypedFunc<(i32, i32, i32), ()>,
+    rawset: TypedFunc<(i32, i32), ()>,
+    rawseti: TypedFunc<(i32, i32, i64), ()>,
+    pcallk: TypedFunc<(i32, i32, i32, i32, i32, i32), i32>,
 }
+
 impl Api {
     fn new(instance: &Instance, store: &mut Store<StoreLimits>) -> Result<Self> {
         Ok(Self {
+            malloc: instance.get_typed_func(&mut *store, "malloc")?,
+            free: instance.get_typed_func(&mut *store, "free")?,
             kind: instance.get_typed_func(&mut *store, "lua_type")?,
             next: instance.get_typed_func(&mut *store, "lua_next")?,
             rawlen: instance.get_typed_func(&mut *store, "lua_rawlen")?,
@@ -57,7 +78,17 @@ impl Api {
             tolstring: instance.get_typed_func(&mut *store, "lua_tolstring")?,
             absindex: instance.get_typed_func(&mut *store, "lua_absindex")?,
             settop: instance.get_typed_func(&mut *store, "lua_settop")?,
+            checkstack: instance.get_typed_func(&mut *store, "lua_checkstack")?,
+            pushvalue: instance.get_typed_func(&mut *store, "lua_pushvalue")?,
             pushnil: instance.get_typed_func(&mut *store, "lua_pushnil")?,
+            pushboolean: instance.get_typed_func(&mut *store, "lua_pushboolean")?,
+            pushinteger: instance.get_typed_func(&mut *store, "lua_pushinteger")?,
+            pushnumber: instance.get_typed_func(&mut *store, "lua_pushnumber")?,
+            pushlstring: instance.get_typed_func(&mut *store, "lua_pushlstring")?,
+            createtable: instance.get_typed_func(&mut *store, "lua_createtable")?,
+            rawset: instance.get_typed_func(&mut *store, "lua_rawset")?,
+            rawseti: instance.get_typed_func(&mut *store, "lua_rawseti")?,
+            pcallk: instance.get_typed_func(&mut *store, "lua_pcallk")?,
         })
     }
 }
@@ -73,8 +104,13 @@ const MAX_RESULT_DEPTH: usize = 40;
 pub struct LuaSandbox {
     store: Store<StoreLimits>,
     instance: Instance,
+    memory: Memory,
     api: Api,
     state: i32,
+    len_ptr: i32,
+    scratch_ptr: i32,
+    scratch_cap: usize,
+    epoch_gate: Arc<EpochGate>,
     /// Data request tokens awaiting an answer from the host.
     pending: BTreeSet<u32>,
 }
@@ -93,26 +129,82 @@ pub struct Dispatch {
     pub dropped_logs: u32,
 }
 
-fn engine() -> Result<&'static (Engine, Module)> {
-    static ENGINE: OnceLock<std::result::Result<(Engine, Module), String>> = OnceLock::new();
+struct EpochGate {
+    active_calls: Mutex<usize>,
+    wake: Condvar,
+}
+
+struct EpochGuard(Arc<EpochGate>);
+impl EpochGuard {
+    fn enter(gate: Arc<EpochGate>) -> Self {
+        {
+            let mut active = gate.active_calls.lock().unwrap_or_else(|e| e.into_inner());
+            *active += 1;
+            if *active == 1 {
+                gate.wake.notify_one();
+            }
+        }
+        Self(gate)
+    }
+}
+impl Drop for EpochGuard {
+    fn drop(&mut self) {
+        let mut active = self
+            .0
+            .active_calls
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *active = active.saturating_sub(1);
+    }
+}
+
+struct Runtime {
+    engine: Engine,
+    module: Module,
+    epoch_gate: Arc<EpochGate>,
+}
+
+fn engine() -> Result<&'static Runtime> {
+    static ENGINE: OnceLock<std::result::Result<Runtime, String>> = OnceLock::new();
     ENGINE
         .get_or_init(|| {
-            let build = || -> Result<(Engine, Module)> {
+            let build = || -> Result<Runtime> {
                 let mut config = Config::new();
                 config.consume_fuel(true);
                 config.epoch_interruption(true);
                 let engine = Engine::new(&config)?;
                 let module = fixed_module(&engine)?;
+                let epoch_gate = Arc::new(EpochGate {
+                    active_calls: Mutex::new(0),
+                    wake: Condvar::new(),
+                });
                 let clock = engine.clone();
+                let gate = epoch_gate.clone();
                 std::thread::Builder::new()
                     .name("plugin-deadline".into())
                     .spawn(move || {
                         loop {
-                            std::thread::sleep(std::time::Duration::from_millis(2));
-                            clock.increment_epoch();
+                            let mut active =
+                                gate.active_calls.lock().unwrap_or_else(|e| e.into_inner());
+                            while *active == 0 {
+                                active = gate.wake.wait(active).unwrap_or_else(|e| e.into_inner());
+                            }
+                            let (next, _) = gate
+                                .wake
+                                .wait_timeout(active, Duration::from_millis(2))
+                                .unwrap_or_else(|e| e.into_inner());
+                            let tick = *next > 0;
+                            drop(next);
+                            if tick {
+                                clock.increment_epoch();
+                            }
                         }
                     })?;
-                Ok((engine, module))
+                Ok(Runtime {
+                    engine,
+                    module,
+                    epoch_gate,
+                })
             };
             build().map_err(|e| e.to_string())
         })
@@ -141,19 +233,20 @@ impl LuaSandbox {
         if source.len() > MAX_SCRIPT_BYTES || source.as_bytes().first() == Some(&0x1b) {
             bail!("only bounded Lua source is accepted");
         }
-        let (engine, module) = engine()?;
+        let runtime = engine()?;
+        let _epoch = EpochGuard::enter(runtime.epoch_gate.clone());
         let limits = StoreLimitsBuilder::new()
             .memory_size(MEMORY)
             .instances(1)
             .tables(1)
             .memories(1)
             .build();
-        let mut store = Store::new(engine, limits);
+        let mut store = Store::new(&runtime.engine, limits);
         store.limiter(|s| s);
         store.set_fuel(FUEL * 5)?;
         store.set_epoch_deadline(250);
-        let mut linker = Linker::new(engine);
-        for import in module.imports() {
+        let mut linker = Linker::new(&runtime.engine);
+        for import in runtime.module.imports() {
             let ExternType::Func(ty) = import.ty() else {
                 bail!("unexpected interpreter import");
             };
@@ -232,7 +325,7 @@ impl LuaSandbox {
                 },
             )?;
         }
-        let instance = linker.instantiate(&mut store, module)?;
+        let instance = linker.instantiate(&mut store, &runtime.module)?;
         instance
             .get_typed_func::<(), ()>(&mut store, "emscripten_stack_init")?
             .call(&mut store, ())?;
@@ -245,12 +338,25 @@ impl LuaSandbox {
         if state == 0 {
             bail!("Lua allocation failed");
         }
+        let memory = instance
+            .get_memory(&mut store, "memory")
+            .ok_or_else(|| format_err!("missing interpreter memory"))?;
         let api = Api::new(&instance, &mut store)?;
+        let len_ptr = api.malloc.call(&mut store, 4)?;
+        let scratch_ptr = api.malloc.call(&mut store, INITIAL_SCRATCH as i32)?;
+        if len_ptr == 0 || scratch_ptr == 0 {
+            bail!("interpreter memory exhausted");
+        }
         let mut vm = Self {
             store,
             instance,
+            memory,
             api,
             state,
+            len_ptr,
+            scratch_ptr,
+            scratch_cap: INITIAL_SCRATCH,
+            epoch_gate: runtime.epoch_gate.clone(),
             pending: BTreeSet::new(),
         };
         for (name, global) in [
@@ -273,7 +379,8 @@ impl LuaSandbox {
         vm.eval(&format!("{PRELUDE}\nreturn ''"))?;
         let script = format!("local plugin=(function()\n{source}\nend)()\n{BOOTSTRAP}");
         if execute {
-            vm.eval(&script)?;
+            // Leaves the precompiled `__nana_dispatch` closure at stack index 1.
+            vm.call(&script)?;
         } else {
             vm.load(source)?;
         }
@@ -281,36 +388,26 @@ impl LuaSandbox {
     }
     fn allocate(&mut self, bytes: &[u8], zero: bool) -> Result<i32> {
         let len = bytes.len() + usize::from(zero);
-        let p = self
-            .instance
-            .get_typed_func::<i32, i32>(&mut self.store, "malloc")?
-            .call(&mut self.store, len as i32)?;
+        let p = self.api.malloc.call(&mut self.store, len as i32)?;
         if p == 0 {
             bail!("interpreter memory exhausted");
         }
-        let memory = self
-            .instance
-            .get_memory(&mut self.store, "memory")
-            .ok_or_else(|| format_err!("missing interpreter memory"))?;
-        memory.write(&mut self.store, p as usize, bytes)?;
+        self.memory.write(&mut self.store, p as usize, bytes)?;
         if zero {
-            memory.write(&mut self.store, p as usize + bytes.len(), &[0])?;
+            self.memory
+                .write(&mut self.store, p as usize + bytes.len(), &[0])?;
         }
         Ok(p)
     }
     fn free(&mut self, p: i32) -> Result<()> {
-        self.instance
-            .get_typed_func::<i32, ()>(&mut self.store, "free")?
-            .call(&mut self.store, p)?;
+        self.api.free.call(&mut self.store, p)?;
         Ok(())
     }
-    /// Load and run `source`, leaving its single result on the Lua stack.
+    /// Load `source`, leaving its compiled chunk on the Lua stack.
     fn load(&mut self, source: &str) -> Result<()> {
         self.store.set_fuel(FUEL)?;
         self.store.set_epoch_deadline(25);
-        self.instance
-            .get_typed_func::<(i32, i32), ()>(&mut self.store, "lua_settop")?
-            .call(&mut self.store, (self.state, 0))?;
+        self.api.settop.call(&mut self.store, (self.state, 0))?;
         let pointer = self.allocate(source.as_bytes(), false)?;
         let name = self.allocate(b"plugin", true)?;
         let mode = self.allocate(b"t", true)?;
@@ -333,8 +430,8 @@ impl LuaSandbox {
     fn call(&mut self, source: &str) -> Result<()> {
         self.load(source)?;
         let status = self
-            .instance
-            .get_typed_func::<(i32, i32, i32, i32, i32, i32), i32>(&mut self.store, "lua_pcallk")?
+            .api
+            .pcallk
             .call(&mut self.store, (self.state, 0, 1, 0, 0, 0))?;
         if status != 0 {
             let detail = self.error_detail()?;
@@ -344,46 +441,169 @@ impl LuaSandbox {
     }
     fn eval(&mut self, source: &str) -> Result<String> {
         self.call(source)?;
-        let length = self.allocate(&[0; 4], false)?;
         let p = self
-            .instance
-            .get_typed_func::<(i32, i32, i32), i32>(&mut self.store, "lua_tolstring")?
-            .call(&mut self.store, (self.state, -1, length))?;
+            .api
+            .tolstring
+            .call(&mut self.store, (self.state, -1, self.len_ptr))?;
         if p == 0 {
-            self.free(length)?;
             return Ok(String::new());
         }
-        let memory = self.instance.get_memory(&mut self.store, "memory").unwrap();
         let mut n = [0; 4];
-        memory.read(&self.store, length as usize, &mut n)?;
+        self.memory
+            .read(&self.store, self.len_ptr as usize, &mut n)?;
         let n = u32::from_le_bytes(n) as usize;
         if n > MAX_MESSAGE_BYTES {
             bail!("plugin result too large");
         }
         let mut bytes = vec![0; n];
-        memory.read(&self.store, p as usize, &mut bytes)?;
-        self.free(length)?;
+        self.memory.read(&self.store, p as usize, &mut bytes)?;
         Ok(String::from_utf8(bytes)?)
     }
     fn error_detail(&mut self) -> Result<String> {
-        let length = self.allocate(&[0; 4], false)?;
         let p = self
-            .instance
-            .get_typed_func::<(i32, i32, i32), i32>(&mut self.store, "lua_tolstring")?
-            .call(&mut self.store, (self.state, -1, length))?;
-        let memory = self
-            .instance
-            .get_memory(&mut self.store, "memory")
-            .ok_or_else(|| format_err!("missing memory"))?;
+            .api
+            .tolstring
+            .call(&mut self.store, (self.state, -1, self.len_ptr))?;
         let mut bytes = [0; 4];
-        memory.read(&self.store, length as usize, &mut bytes)?;
+        self.memory
+            .read(&self.store, self.len_ptr as usize, &mut bytes)?;
         let count = (u32::from_le_bytes(bytes) as usize).min(4096);
         let mut detail = vec![0; count];
         if p != 0 {
-            memory.read(&self.store, p as usize, &mut detail)?;
+            self.memory.read(&self.store, p as usize, &mut detail)?;
         }
-        self.free(length)?;
         Ok(String::from_utf8_lossy(&detail).into_owned())
+    }
+    fn push_str(&mut self, s: &str) -> Result<()> {
+        let bytes = s.as_bytes();
+        if bytes.is_empty() {
+            self.api
+                .pushlstring
+                .call(&mut self.store, (self.state, self.scratch_ptr, 0))?;
+            return Ok(());
+        }
+        if bytes.len() > self.scratch_cap {
+            if bytes.len() > MAX_MESSAGE_BYTES {
+                bail!("event too large");
+            }
+            let new_cap = bytes.len().next_power_of_two().min(MAX_MESSAGE_BYTES);
+            let new_ptr = self.api.malloc.call(&mut self.store, new_cap as i32)?;
+            if new_ptr == 0 {
+                bail!("interpreter memory exhausted");
+            }
+            self.api.free.call(&mut self.store, self.scratch_ptr)?;
+            self.scratch_ptr = new_ptr;
+            self.scratch_cap = new_cap;
+        }
+        self.memory
+            .write(&mut self.store, self.scratch_ptr as usize, bytes)?;
+        self.api.pushlstring.call(
+            &mut self.store,
+            (self.state, self.scratch_ptr, bytes.len() as i32),
+        )?;
+        Ok(())
+    }
+    fn push_value(
+        &mut self,
+        value: &serde_json::Value,
+        depth: usize,
+        bytes: &mut usize,
+    ) -> Result<()> {
+        use serde_json::Value;
+        if depth >= MAX_RESULT_DEPTH {
+            bail!("event nesting limit");
+        }
+        match value {
+            Value::Null => {
+                *bytes += 4;
+                if *bytes > MAX_MESSAGE_BYTES {
+                    bail!("event too large");
+                }
+                self.api.pushnil.call(&mut self.store, self.state)?;
+            }
+            Value::Bool(b) => {
+                *bytes += 5;
+                if *bytes > MAX_MESSAGE_BYTES {
+                    bail!("event too large");
+                }
+                self.api
+                    .pushboolean
+                    .call(&mut self.store, (self.state, i32::from(*b)))?;
+            }
+            Value::Number(n) => {
+                *bytes += 8;
+                if *bytes > MAX_MESSAGE_BYTES {
+                    bail!("event too large");
+                }
+                if let Some(i) = n.as_i64() {
+                    self.api
+                        .pushinteger
+                        .call(&mut self.store, (self.state, i))?;
+                } else if let Some(u) = n.as_u64() {
+                    if let Ok(i) = i64::try_from(u) {
+                        self.api
+                            .pushinteger
+                            .call(&mut self.store, (self.state, i))?;
+                    } else {
+                        self.api
+                            .pushnumber
+                            .call(&mut self.store, (self.state, u as f64))?;
+                    }
+                } else if let Some(f) = n.as_f64() {
+                    self.api.pushnumber.call(&mut self.store, (self.state, f))?;
+                }
+            }
+            Value::String(s) => {
+                *bytes += s.len() + 2;
+                if *bytes > MAX_MESSAGE_BYTES {
+                    bail!("event too large");
+                }
+                self.push_str(s)?;
+            }
+            Value::Array(a) => {
+                *bytes += 2;
+                if *bytes > MAX_MESSAGE_BYTES {
+                    bail!("event too large");
+                }
+                if self.api.checkstack.call(&mut self.store, (self.state, 4))? == 0 {
+                    bail!("Lua stack exhausted");
+                }
+                self.api.createtable.call(
+                    &mut self.store,
+                    (self.state, a.len().min(i32::MAX as usize) as i32, 0),
+                )?;
+                for (i, item) in a.iter().enumerate() {
+                    *bytes += 1;
+                    self.push_value(item, depth + 1, bytes)?;
+                    self.api
+                        .rawseti
+                        .call(&mut self.store, (self.state, -2, (i + 1) as i64))?;
+                }
+            }
+            Value::Object(o) => {
+                *bytes += 2;
+                if *bytes > MAX_MESSAGE_BYTES {
+                    bail!("event too large");
+                }
+                if self.api.checkstack.call(&mut self.store, (self.state, 4))? == 0 {
+                    bail!("Lua stack exhausted");
+                }
+                self.api.createtable.call(
+                    &mut self.store,
+                    (self.state, 0, o.len().min(i32::MAX as usize) as i32),
+                )?;
+                for (k, v) in o {
+                    *bytes += k.len() + 3;
+                    if *bytes > MAX_MESSAGE_BYTES {
+                        bail!("event too large");
+                    }
+                    self.push_str(k)?;
+                    self.push_value(v, depth + 1, bytes)?;
+                    self.api.rawset.call(&mut self.store, (self.state, -3))?;
+                }
+            }
+        }
+        Ok(())
     }
     /// Dispatch a host event and return the view; data requests are dropped.
     pub fn event(&mut self, event: &serde_json::Value) -> Result<PluginUpdate> {
@@ -413,23 +633,33 @@ impl LuaSandbox {
         self.run(&serde_json::json!({"type": "data", "results": results}))
     }
     fn run(&mut self, event: &serde_json::Value) -> Result<Dispatch> {
-        let source = format!("return __nana_dispatch({})", lua_value(event));
-        if source.len() > MAX_MESSAGE_BYTES {
-            bail!("event too large");
+        let _epoch = EpochGuard::enter(self.epoch_gate.clone());
+        self.store.set_fuel(FUEL)?;
+        self.store.set_epoch_deadline(25);
+        // Stack slot 1 holds the precompiled `__nana_dispatch` closure.
+        self.api.settop.call(&mut self.store, (self.state, 1))?;
+        self.api.pushvalue.call(&mut self.store, (self.state, 1))?;
+        let mut bytes = 0usize;
+        self.push_value(event, 0, &mut bytes)?;
+        let status = self
+            .api
+            .pcallk
+            .call(&mut self.store, (self.state, 1, 1, 0, 0, 0))?;
+        if status != 0 {
+            let detail = self.error_detail()?;
+            self.api.settop.call(&mut self.store, (self.state, 1))?;
+            bail!("Lua execution failed: {detail}");
         }
-        self.call(&source)?;
         self.store.set_fuel(READ_FUEL)?;
         // Host work bounded by value count, not plugin time: a wider window.
         self.store.set_epoch_deadline(250);
-        let length = self.allocate(&[0; 4], false)?;
         let mut walk = Walk {
             values: 0,
             bytes: 0,
-            length,
+            length: self.len_ptr,
         };
         let value = self.read(-1, 0, None, &mut walk);
-        self.free(length)?;
-        self.api.settop.call(&mut self.store, (self.state, 0))?;
+        self.api.settop.call(&mut self.store, (self.state, 1))?;
         let dispatch: Dispatch = serde_json::from_value(value?)?;
         dispatch.update.validate().map_err(|e| format_err!(e))?;
         crate::validate_requests(&dispatch.requests).map_err(|e| format_err!(e))?;
@@ -529,59 +759,16 @@ impl LuaSandbox {
             .api
             .tolstring
             .call(&mut self.store, (self.state, index, walk.length))?;
-        let memory = self
-            .instance
-            .get_memory(&mut self.store, "memory")
-            .ok_or_else(|| format_err!("missing interpreter memory"))?;
         let mut n = [0; 4];
-        memory.read(&self.store, walk.length as usize, &mut n)?;
+        self.memory
+            .read(&self.store, walk.length as usize, &mut n)?;
         let n = u32::from_le_bytes(n) as usize;
         walk.bytes += n + 2;
         if walk.bytes > MAX_MESSAGE_BYTES {
             bail!("plugin result too large");
         }
         let mut bytes = vec![0; n];
-        memory.read(&self.store, p as usize, &mut bytes)?;
+        self.memory.read(&self.store, p as usize, &mut bytes)?;
         String::from_utf8(bytes).map_err(|_| format_err!("strings must be UTF-8"))
-    }
-}
-
-fn lua_value(value: &serde_json::Value) -> String {
-    match value {
-        serde_json::Value::Null => "nil".into(),
-        serde_json::Value::Bool(b) => b.to_string(),
-        serde_json::Value::Number(n) => n.to_string(),
-        serde_json::Value::String(s) => {
-            // Inside a quoted Lua string only quotes, backslashes and control
-            // bytes need escapes; UTF-8 passes through, so the source stays
-            // about the size of the event's JSON.
-            let mut out = String::with_capacity(s.len() + 2);
-            out.push('"');
-            for c in s.chars() {
-                match c {
-                    '"' => out.push_str("\\\""),
-                    '\\' => out.push_str("\\\\"),
-                    c if c.is_ascii_control() => out.push_str(&format!("\\{:03}", c as u8)),
-                    c => out.push(c),
-                }
-            }
-            out.push('"');
-            out
-        }
-        serde_json::Value::Array(a) => format!(
-            "{{{}}}",
-            a.iter().map(lua_value).collect::<Vec<_>>().join(",")
-        ),
-        serde_json::Value::Object(o) => format!(
-            "{{{}}}",
-            o.iter()
-                .map(|(k, v)| format!(
-                    "[{}]={}",
-                    lua_value(&serde_json::Value::String(k.clone())),
-                    lua_value(v)
-                ))
-                .collect::<Vec<_>>()
-                .join(",")
-        ),
     }
 }

@@ -1,6 +1,7 @@
 assert(type(plugin) == 'table', 'plugin must return a table')
--- The host reads the returned table through the C API; nothing is encoded here.
-function __nana_dispatch(event)
+-- The host pushes event values onto the Lua stack and calls this precompiled
+-- dispatcher directly, then reads the returned table through the C API.
+local function __nana_dispatch(event)
   if event.type == 'data' then
     local results = {}
     for _, r in ipairs(event.results or {}) do
@@ -22,4 +23,4 @@ function __nana_dispatch(event)
   __nana_log.lines, __nana_log.dropped = {}, 0
   return {update = update, requests = requests, logs = logs, dropped_logs = dropped}
 end
-return ''
+return __nana_dispatch

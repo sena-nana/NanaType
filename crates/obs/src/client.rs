@@ -1,8 +1,9 @@
 //! The connection thread: identify, follow the program scene, reconnect.
 
 use std::collections::HashMap;
-use std::net::TcpStream;
-use std::sync::Arc;
+use std::net::{Shutdown, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -16,6 +17,9 @@ use crate::protocol::{self, Incoming, ObsItem};
 const RETRY_AFTER: Duration = Duration::from_secs(3);
 /// Hello and Identified come at once; anything slower is not obs-websocket.
 const HANDSHAKE_LIMIT: Duration = Duration::from_secs(5);
+/// Adaptive socket poll interval bounds while connected.
+const IDLE_MIN: Duration = Duration::from_millis(20);
+const IDLE_MAX: Duration = Duration::from_millis(500);
 /// A drag sends a transform per frame: report once it rests this long…
 const SETTLE: Duration = Duration::from_millis(300);
 /// …or at least this often while it goes on.
@@ -79,9 +83,67 @@ enum Command {
 type DeliverFn = Arc<dyn Fn(ObsEvent) + Send + Sync>;
 type EmitFn = Box<dyn Fn(ObsUpdate) + Send>;
 
+struct StopSignal {
+    stopped: AtomicBool,
+    socket: Mutex<Option<TcpStream>>,
+}
+
+struct SocketGuard<'a>(&'a StopSignal);
+
+impl Drop for SocketGuard<'_> {
+    fn drop(&mut self) {
+        *self.0.socket.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+}
+
+impl StopSignal {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            stopped: AtomicBool::new(false),
+            socket: Mutex::new(None),
+        })
+    }
+
+    fn is_stopped(&self) -> bool {
+        self.stopped.load(Ordering::Acquire)
+    }
+
+    fn cancel(&self) {
+        self.stopped.store(true, Ordering::Release);
+        let stream = self
+            .socket
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|s| s.try_clone().ok());
+        if let Some(stream) = stream {
+            let _ = stream.shutdown(Shutdown::Both);
+        }
+    }
+
+    fn attach(&self, stream: Option<TcpStream>) -> SocketGuard<'_> {
+        let mut slot = self.socket.lock().unwrap_or_else(|e| e.into_inner());
+        if self.is_stopped() {
+            if let Some(stream) = stream {
+                let _ = stream.shutdown(Shutdown::Both);
+            }
+        } else {
+            *slot = stream;
+        }
+        SocketGuard(self)
+    }
+}
+
 struct Running {
     config: ObsConfig,
     commands: Sender<Command>,
+    stop: Arc<StopSignal>,
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        self.stop.cancel();
+    }
 }
 
 /// Owns the connection thread. Dropping it (or `set(None)`) stops the thread.
@@ -120,14 +182,17 @@ impl ObsHandle {
             return;
         };
         let (tx, rx) = unbounded();
+        let stop = StopSignal::new();
+        let worker_stop = Arc::clone(&stop);
         let cfg = config.clone();
         thread::Builder::new()
             .name("nanatype-obs".into())
-            .spawn(move || run(cfg, rx, emit))
+            .spawn(move || run(cfg, rx, worker_stop, emit))
             .expect("spawn obs-websocket thread");
         self.running = Some(Running {
             config,
             commands: tx,
+            stop,
         });
     }
 
@@ -150,10 +215,13 @@ enum Ended {
     Fatal(ObsStatus),
 }
 
-fn run(config: ObsConfig, commands: Receiver<Command>, emit: EmitFn) {
+fn run(config: ObsConfig, commands: Receiver<Command>, stop: Arc<StopSignal>, emit: EmitFn) {
     loop {
+        if stop.is_stopped() {
+            return;
+        }
         emit(ObsUpdate::Status(ObsStatus::Connecting));
-        let ended = session(&config, &commands, &emit);
+        let ended = session(&config, &commands, &stop, &emit);
         emit(ObsUpdate::Scene(None));
         match ended {
             Ended::Stopped => return,
@@ -322,16 +390,19 @@ fn handshake(
     socket: &mut WebSocket<TcpStream>,
     config: &ObsConfig,
     commands: &Receiver<Command>,
+    stop: &StopSignal,
 ) -> Result<(), Ended> {
     let until = Instant::now() + HANDSHAKE_LIMIT;
     let mut identified = false;
     while !identified {
-        if commands_closed(commands) {
+        if stop.is_stopped() || commands_closed(commands) {
             return Err(Ended::Stopped);
         }
-        if Instant::now() >= until {
+        let left = until.saturating_duration_since(Instant::now());
+        if left.is_zero() {
             return Err(Ended::Dropped(LinkFault::TimedOut));
         }
+        let _ = socket.get_ref().set_read_timeout(Some(left));
         match socket.read() {
             Ok(Message::Text(text)) => match protocol::parse(text.as_str()) {
                 Some(Incoming::Hello(hello)) => {
@@ -345,6 +416,9 @@ fn handshake(
                 _ => {}
             },
             Ok(Message::Close(frame)) => {
+                if stop.is_stopped() {
+                    return Err(Ended::Stopped);
+                }
                 let code = frame.map(|f| u16::from(f.code));
                 return Err(if code == Some(protocol::CLOSE_AUTH_FAILED) {
                     Ended::Fatal(ObsStatus::AuthFailed)
@@ -354,7 +428,13 @@ fn handshake(
             }
             Ok(_) => {}
             Err(e) if ws_idle(&e) => {}
-            Err(e) => return Err(Ended::Dropped(LinkFault::from_ws(&e))),
+            Err(e) => {
+                return Err(if stop.is_stopped() {
+                    Ended::Stopped
+                } else {
+                    Ended::Dropped(LinkFault::from_ws(&e))
+                });
+            }
         }
     }
     Ok(())
@@ -371,18 +451,24 @@ fn commands_closed(commands: &Receiver<Command>) -> bool {
     }
 }
 
-fn session(config: &ObsConfig, commands: &Receiver<Command>, emit: &EmitFn) -> Ended {
+fn session(
+    config: &ObsConfig,
+    commands: &Receiver<Command>,
+    stop: &StopSignal,
+    emit: &EmitFn,
+) -> Ended {
     let mut socket = match ws_connect(
         &config.host,
         config.port,
         "",
         Some(Duration::from_secs(2)),
-        Duration::from_millis(100),
+        HANDSHAKE_LIMIT,
     ) {
         Ok(socket) => socket,
         Err(e) => return Ended::Dropped(e),
     };
-    if let Err(ended) = handshake(&mut socket, config, commands) {
+    let _socket_guard = stop.attach(socket.get_ref().try_clone().ok());
+    if let Err(ended) = handshake(&mut socket, config, commands, stop) {
         let _ = socket.close(None);
         let _ = socket.flush();
         return ended;
@@ -399,27 +485,67 @@ fn session(config: &ObsConfig, commands: &Receiver<Command>, emit: &EmitFn) -> E
     };
     let result = (|| -> Result<Ended, LinkFault> {
         s.refresh()?;
+        let mut idle_wait = IDLE_MIN;
         loop {
+            let mut active = false;
             loop {
                 match commands.try_recv() {
-                    Ok(command) => s.command(command)?,
+                    Ok(command) => {
+                        active = true;
+                        s.command(command)?;
+                    }
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => return Ok(Ended::Stopped),
                 }
             }
-            if s.report.is_some_and(|(at, _)| Instant::now() >= at) {
-                s.report_now();
+            if stop.is_stopped() {
+                return Ok(Ended::Stopped);
             }
+            let now = Instant::now();
+            if let Some((at, _)) = s.report
+                && now >= at
+            {
+                s.report_now();
+                active = true;
+            }
+            if active {
+                idle_wait = IDLE_MIN;
+            }
+            let timeout = match s.report {
+                Some((at, _)) => at
+                    .saturating_duration_since(now)
+                    .max(Duration::from_millis(1))
+                    .min(idle_wait),
+                None => idle_wait,
+            };
+            let _ = s.socket.get_ref().set_read_timeout(Some(timeout));
             match s.socket.read() {
                 Ok(Message::Text(text)) => {
+                    idle_wait = IDLE_MIN;
                     if let Some(message) = protocol::parse(text.as_str()) {
                         s.incoming(message)?;
                     }
                 }
-                Ok(Message::Close(_)) => return Err(LinkFault::Closed),
-                Ok(_) => {}
-                Err(e) if ws_idle(&e) => {}
-                Err(e) => return Err(LinkFault::from_ws(&e)),
+                Ok(Message::Close(_)) => {
+                    return if stop.is_stopped() {
+                        Ok(Ended::Stopped)
+                    } else {
+                        Err(LinkFault::Closed)
+                    };
+                }
+                Ok(_) => {
+                    idle_wait = IDLE_MIN;
+                }
+                Err(e) if ws_idle(&e) => {
+                    idle_wait = (idle_wait * 2).min(IDLE_MAX);
+                }
+                Err(e) => {
+                    return if stop.is_stopped() {
+                        Ok(Ended::Stopped)
+                    } else {
+                        Err(LinkFault::from_ws(&e))
+                    };
+                }
             }
         }
     })();
