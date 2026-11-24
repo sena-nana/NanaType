@@ -1,10 +1,15 @@
 //! Character substitution over retained native text geometry. Only draw uniforms
 //! change during an animation; shaping, wrapping and the document remain intact.
 use super::Stage;
-use nana_ui::runtime::view::{AnyView, IntoView, NodeRef, signal, widget};
+use super::effect_uniforms::{Scales, Uniforms, f32_bytes, output_key};
+use super::effects::{
+    LruMap, Outline, PlacementCache, Registry, bind_overlay_layer, capture_text_bounds, linear,
+    overlay_scale_and_crop, parse_resource_id, style_overlay_gpu, wrap_text_overlay,
+};
+use nana_ui::runtime::view::{AnyView, NodeRef, signal};
 use nana_ui::runtime::{
-    ComponentView, CustomRenderNode, GpuView, MutationQueue, NodeKind, SizeChanged, StableNodeId,
-    Stack, TextShaper, UiWorld,
+    ComponentView, CustomRenderNode, GpuView, MutationQueue, NodeKind, StableNodeId, TextShaper,
+    UiWorld,
 };
 use nana_ui::{
     DeviceGeneration, GpuTextureFormat, SceneGpuNode, SceneGpuPassContext, SceneGpuPrepareContext,
@@ -12,8 +17,7 @@ use nana_ui::{
     ScenePresentationProfile, wgpu,
 };
 use nana_ui_core::{
-    LengthSpec, MaterialProgram, MaterialRef, PointerEventsSpec, PositionSpec, PresentationMask,
-    PresentationMaskSpace, TextTransitions,
+    MaterialProgram, MaterialRef, PresentationMask, PresentationMaskSpace, TextTransitions,
 };
 use nanatype_theme::ScrambleSpec;
 use std::{
@@ -26,7 +30,9 @@ use unicode_segmentation::UnicodeSegmentation;
 const RENDERER: &str = "nanatype.text-scramble";
 const ATLAS_CELL: [u32; 2] = [40, 64];
 const ATLAS_COLUMNS: u32 = 16;
-static LIVE: LazyLock<super::effects::Registry<Scramble>> = LazyLock::new(Default::default);
+static LIVE: LazyLock<Registry<Scramble>> = LazyLock::new(Default::default);
+static MONO_FONT: LazyLock<Mutex<Option<nana_text::font::FontData>>> =
+    LazyLock::new(Default::default);
 
 pub fn transitions(
     spec: &ScrambleSpec,
@@ -84,7 +90,7 @@ pub fn object_exit(exit: (u64, u16), preview: bool) -> PresentationMask {
 }
 
 fn exit_mask((at, ms): (u64, u16), preview: bool, objects: bool) -> PresentationMask {
-    let now = crate::clock::now_ms();
+    let now = crate::clock::frame_ms();
     let (delay, elapsed) = if preview {
         (at.saturating_sub(now), 0)
     } else {
@@ -107,6 +113,24 @@ fn exit_mask((at, ms): (u64, u16), preview: bool, objects: bool) -> Presentation
     }
 }
 
+fn monospace_font() -> Option<nana_text::font::FontData> {
+    if let Some(cached) = MONO_FONT.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        return Some(cached.clone());
+    }
+    let engine = nana_ui::NanaTextShaper::default().text_engine()?;
+    let mut engine = engine.lock().unwrap_or_else(|e| e.into_inner());
+    // Resolve the platform's real monospace face through NanaText, including
+    // its bundled fallback, rather than depending on a Windows font path.
+    let query = nana_text::font::FontQuery {
+        families: nana_text::font::FamilyList::parse_css("Consolas, Menlo, monospace"),
+        ..Default::default()
+    };
+    let selected = engine.fonts_mut().select(&query);
+    let data = selected.chain().find_map(|f| engine.fonts().face_data(f))?;
+    *MONO_FONT.lock().unwrap_or_else(|e| e.into_inner()) = Some(data.clone());
+    Some(data)
+}
+
 #[derive(Debug, Default)]
 struct Geometry {
     revision: u64,
@@ -118,6 +142,7 @@ struct Geometry {
     origin: [f32; 2],
     size: [f32; 2],
 }
+
 struct Scramble {
     id: u64,
     ui: Stage,
@@ -131,16 +156,19 @@ struct Scramble {
     preview: bool,
     geometry: Mutex<Geometry>,
 }
+
 impl std::fmt::Debug for Scramble {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Scramble").field("id", &self.id).finish()
     }
 }
+
 impl Drop for Scramble {
     fn drop(&mut self) {
         LIVE.remove(self.id);
     }
 }
+
 impl Scramble {
     fn active(&self, now: u64) -> bool {
         if self.preview && (!self.ui.shader_preview.get_untracked() || !self.ui.live_preview.get())
@@ -164,30 +192,10 @@ impl Scramble {
     }
 
     fn capture(&self, world: &UiWorld, layer: StableNodeId) {
-        let Some(text) = self.text.get_untracked() else {
+        let Some((layout, origin, size)) = capture_text_bounds(world, self.text, layer) else {
             return;
         };
-        let Some((_, layout)) = world.text_layout(text) else {
-            return;
-        };
-        let (Some(tb), Some(lb)) = (world.layout_box(text), world.layout_box(layer)) else {
-            return;
-        };
-        let Some(engine) = nana_ui::NanaTextShaper::default().text_engine() else {
-            return;
-        };
-        let mut engine = engine.lock().unwrap_or_else(|e| e.into_inner());
-        let mut cells = Vec::new();
-
-        // Resolve the platform's real monospace face through NanaText, including
-        // its bundled fallback, rather than depending on a Windows font path.
-        let query = nana_text::font::FontQuery {
-            families: nana_text::font::FamilyList::parse_css("Consolas, Menlo, monospace"),
-            ..Default::default()
-        };
-        let selected = engine.fonts_mut().select(&query);
-        let data = selected.chain().find_map(|f| engine.fonts().face_data(f));
-        let Some(data) = data else {
+        let Some(data) = monospace_font() else {
             return;
         };
         let Some((atlas, atlas_size)) =
@@ -200,14 +208,14 @@ impl Scramble {
         // (combining marks, variation selectors, ZWJ emoji).
         let mut slots: HashMap<usize, [f32; 4]> = HashMap::new();
         let vertical = layout.is_vertical();
+        let physical_w = layout.physical_size().0;
         for line in &layout.lines {
+            let centre = layout.physical_x_of_block(line.metrics.baseline_y_px, physical_w);
             for run in layout.line_runs(line) {
                 if run.is_object() {
                     continue;
                 }
                 let mut pen = run.origin_x_px;
-                let centre = layout
-                    .physical_x_of_block(line.metrics.baseline_y_px, layout.physical_size().0);
                 for glyph in &run.glyphs {
                     let byte = glyph.cluster as usize;
                     if let Some(index) = self
@@ -254,6 +262,7 @@ impl Scramble {
         slots.sort_unstable_by_key(|(i, _)| *i);
         let ranks = permutation(slots.len(), self.seed);
         let total = slots.len().max(1) as f32;
+        let mut cells = Vec::with_capacity(slots.len());
         for ((index, rect), rank) in slots.into_iter().zip(ranks) {
             let at = self.times[index].2.unwrap_or(0);
             let at = if at == 0 {
@@ -274,8 +283,6 @@ impl Scramble {
             ]);
         }
         // An identical re-projection keeps the revision and the GPU upload.
-        let origin = [tb.x - lb.x, tb.y - lb.y];
-        let size = [lb.width, lb.height];
         let mut hash = blake3::Hasher::new();
         for v in origin.iter().chain(&size).chain(cells.iter().flatten()) {
             hash.update(&v.to_bits().to_le_bytes());
@@ -298,22 +305,26 @@ impl Scramble {
 
 type Atlas = (Arc<Vec<u8>>, [u32; 2]);
 
-/// The atlas depends only on the face and alphabet; rasterize it once.
+type AtlasKey = (usize, u32, String);
+type AtlasCache = Mutex<LruMap<AtlasKey, Atlas>>;
+
+/// The atlas depends only on the face and alphabet; rasterize it once (1-byte R8).
 fn cached_atlas(bytes: &[u8], index: u32, alphabet: &str) -> Option<Atlas> {
-    type Cache = Mutex<HashMap<(usize, u32, String), Atlas>>;
-    static CACHE: LazyLock<Cache> = LazyLock::new(Default::default);
+    static CACHE: LazyLock<AtlasCache> = LazyLock::new(|| Mutex::new(LruMap::new(8)));
     let key = (bytes.as_ptr() as usize, index, alphabet.to_owned());
-    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(atlas) = cache.get(&key) {
-        return Some(atlas.clone());
+    {
+        let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(atlas) = cache.get(&key) {
+            return Some(atlas.clone());
+        }
     }
     let face = ttf_parser::Face::parse(bytes, index).ok()?;
     let (pixels, size) = atlas(&face, alphabet);
-    if cache.len() >= 8 {
-        cache.clear();
-    }
     let entry = (Arc::new(pixels), size);
-    cache.insert(key, entry.clone());
+    CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(key, entry.clone());
     Some(entry)
 }
 
@@ -339,6 +350,7 @@ fn hash(mut x: u32) -> u32 {
     x = x.wrapping_mul(0x846ca68b);
     x ^ (x >> 16)
 }
+
 fn permutation(n: usize, mut seed: u32) -> Vec<usize> {
     let mut order: Vec<_> = (0..n).collect();
     for i in (1..n).rev() {
@@ -363,7 +375,7 @@ fn atlas(face: &ttf_parser::Face<'_>, alphabet: &str) -> (Vec<u8>, [u32; 2]) {
         let Some(id) = face.glyph_index(ch) else {
             continue;
         };
-        let mut outline = super::effects::Outline(tiny_skia::PathBuilder::new());
+        let mut outline = Outline(tiny_skia::PathBuilder::new());
         let Some(bounds) = face.outline_glyph(id, &mut outline) else {
             continue;
         };
@@ -392,7 +404,14 @@ fn atlas(face: &ttf_parser::Face<'_>, alphabet: &str) -> (Vec<u8>, [u32; 2]) {
             None,
         );
     }
-    (pixmap.take(), size)
+    let r8: Vec<u8> = pixmap
+        .data()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|p| p[3])
+        .collect();
+    (r8, size)
 }
 
 #[derive(Clone)]
@@ -401,11 +420,13 @@ struct ScrambleView {
     scramble: Arc<Scramble>,
     size: [u32; 2],
 }
+
 impl PartialEq for ScrambleView {
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base && self.scramble.id == other.scramble.id && self.size == other.size
     }
 }
+
 impl ComponentView for ScrambleView {
     fn share_layouts(&mut self, share: &mut dyn FnMut(&mut Arc<nana_ui_core::LayoutStyle>)) {
         self.base.share_layouts(share);
@@ -442,7 +463,8 @@ pub fn wrap(
         exit,
         preview,
     } = schedule;
-    let text = if exit.is_none_or(|(at, _)| crate::clock::now_ms() < at) {
+    let now = crate::clock::frame_ms();
+    let text = if exit.is_none_or(|(at, _)| now < at) {
         let lock_times: Vec<_> = at_ms
             .iter()
             .map(|t| {
@@ -495,7 +517,7 @@ pub fn wrap(
         spec,
         color,
         // Keep GPU times close to zero even after days of mirror editing.
-        born: crate::clock::now_ms().saturating_sub(2000),
+        born: now.saturating_sub(2000),
         times: value
             .grapheme_indices(true)
             .zip(at_ms.iter().copied())
@@ -516,43 +538,29 @@ pub fn wrap(
     LIVE.insert(id, &scramble);
     let size = signal([0u32; 2]);
     let mut base = GpuView::new(id);
-    let l = Arc::make_mut(&mut base.style.layout);
-    l.position = PositionSpec::Absolute;
-    l.offset_left = Some(LengthSpec::Px(0.));
-    l.offset_top = Some(LengthSpec::Px(0.));
-    l.width = Some(LengthSpec::Percent(100.));
-    l.height = Some(LengthSpec::Percent(100.));
-    l.pointer_events = Some(PointerEventsSpec::None);
-    let layer = widget(ScrambleView {
-        base,
-        scramble,
-        size: [0; 2],
-    })
-    .on(move |e: &SizeChanged| {
-        size.set_if_changed([e.width.to_bits(), e.height.to_bits()]);
-    })
-    .bind(move |v: &mut ScrambleView| {
-        v.size = size.get();
-    });
-    widget(Stack::column(0.).width(LengthSpec::Fill).with_layout(|l| {
-        l.position = PositionSpec::Relative;
-        l.min_width = Some(LengthSpec::Px(0.));
-    }))
-    .bind(move |v: &mut Stack| {
-        let [w, h] = ui.display_size.get();
-        let height = (h > w && w > 0.).then(|| LengthSpec::Px(ui.text_area_height.get().max(1.)));
-        super::restyle(v, |l| l.height = height);
-    })
-    .children((text, objects, layer))
-    .into_any()
+    style_overlay_gpu(&mut base, 0.);
+    let layer = bind_overlay_layer(
+        ScrambleView {
+            base,
+            scramble,
+            size: [0; 2],
+        },
+        size,
+        move |v: &mut ScrambleView| {
+            v.size = size.get();
+        },
+    );
+    wrap_text_overlay(ui, text, objects, layer)
 }
 
 pub fn animating(ui: Stage, now: u64) -> bool {
     track_animating(ui, now, false)
 }
+
 pub fn preview_animating(ui: Stage, now: u64) -> bool {
     track_animating(ui, now, true)
 }
+
 fn track_animating(ui: Stage, now: u64, preview: bool) -> bool {
     LIVE.snapshot().into_iter().any(|s| {
         s.preview == preview
@@ -564,15 +572,18 @@ fn track_animating(ui: Stage, now: u64, preview: bool) -> bool {
             && s.active(now)
     })
 }
+
 pub fn register(registry: &mut SceneGpuRendererRegistry) {
     registry.insert(RENDERER, SHARED.clone());
 }
+
 pub fn collect_garbage() {
     let mut state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
     state.prepared.retain(|_, p| p.scramble.strong_count() > 0);
     state.scales.retain(|(_, id, _)| LIVE.contains(*id));
-    state.placements.retain(|(_, id, _), _| LIVE.contains(*id));
+    state.placements.retain_live(&LIVE);
 }
+
 pub fn cache_counts() -> (usize, usize) {
     let state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
     (
@@ -583,15 +594,17 @@ pub fn cache_counts() -> (usize, usize) {
 
 type PipelineKey = (DeviceGeneration, GpuTextureFormat, ScenePresentationProfile);
 type PreparedKey = (PipelineKey, u64, u64);
+
 #[derive(Debug)]
 struct Pipeline {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
 }
+
 #[derive(Debug)]
 struct Prepared {
     scramble: Weak<Scramble>,
-    uniforms: super::effect_uniforms::Uniforms,
+    uniforms: Uniforms,
     layout: wgpu::BindGroupLayout,
     atlas: wgpu::TextureView,
     sampler: wgpu::Sampler,
@@ -600,18 +613,31 @@ struct Prepared {
     count: u32,
     bytes: usize,
 }
-type Placements = HashMap<(DeviceGeneration, u64, [u32; 2]), ([f32; 2], [f32; 2])>;
-#[derive(Debug, Default)]
+
+#[derive(Debug)]
 struct State {
-    pipelines: HashMap<PipelineKey, Pipeline>,
-    prepared: HashMap<PreparedKey, Prepared>,
-    scales: super::effect_uniforms::Scales,
-    placements: Placements,
+    pipelines: LruMap<PipelineKey, Pipeline>,
+    prepared: LruMap<PreparedKey, Prepared>,
+    scales: Scales,
+    placements: PlacementCache,
 }
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            pipelines: LruMap::new(16),
+            prepared: LruMap::new(32),
+            scales: Scales::default(),
+            placements: PlacementCache::default(),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 struct Renderer {
     state: Mutex<State>,
 }
+
 static SHARED: LazyLock<Arc<Renderer>> = LazyLock::new(|| Arc::new(Renderer::default()));
 
 impl State {
@@ -631,17 +657,18 @@ impl State {
             return self.prepared.get_mut(&key);
         }
         self.prepared.retain(|_, p| p.scramble.strong_count() > 0);
-        if self.prepared.len() >= 32
-            || self.prepared.values().map(|p| p.bytes).sum::<usize>() > 32 * 1024 * 1024
+        let instance_bytes = geometry.cells.len() * 32;
+        let needed_bytes = instance_bytes + geometry.atlas.len();
+        while self.prepared.len() >= 32
+            || self.prepared.values().map(|p| p.bytes).sum::<usize>() + needed_bytes
+                > 32 * 1024 * 1024
         {
-            self.prepared.clear();
-        }
-        if self.pipelines.len() >= 16 && !self.pipelines.contains_key(&pk) {
-            self.pipelines.clear();
-            self.prepared.clear();
+            if self.prepared.evict_oldest().is_none() {
+                break;
+            }
         }
         let device = c.gpu.wgpu().device();
-        let pipeline = self.pipelines.entry(pk).or_insert_with(|| {
+        if !self.pipelines.contains_key(&pk) {
             let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some(RENDERER),
                 entries: &[
@@ -675,7 +702,14 @@ impl State {
             });
             let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some(RENDERER),
-                source: wgpu::ShaderSource::Wgsl(include_str!("text_scramble.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(
+                    format!(
+                        "{}\n{}",
+                        super::effects::FULLSCREEN_QUAD_WGSL,
+                        include_str!("text_scramble.wgsl")
+                    )
+                    .into(),
+                ),
             });
             let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some(RENDERER),
@@ -712,15 +746,16 @@ impl State {
                 multiview_mask: None,
                 cache: None,
             });
-            Pipeline { pipeline, layout }
-        });
+            self.pipelines.insert(pk, Pipeline { pipeline, layout });
+        }
+        let pipeline = self.pipelines.get(&pk)?;
         let texture = c
             .gpu
             .create_texture(&nana_ui::GpuTextureDescriptor {
                 label: Some("scramble monospace atlas"),
                 width: geometry.atlas_size[0],
                 height: geometry.atlas_size[1],
-                format: GpuTextureFormat::RGBA8_UNORM,
+                format: GpuTextureFormat::R8_UNORM,
                 usage: nana_ui::GpuTextureUsages::SAMPLED | nana_ui::GpuTextureUsages::COPY_DST,
             })
             .ok()?;
@@ -734,7 +769,7 @@ impl State {
                     height: geometry.atlas_size[1],
                 },
                 &geometry.atlas,
-                geometry.atlas_size[0] * 4,
+                geometry.atlas_size[0],
             )
             .ok()?;
         let data: Vec<u8> = geometry
@@ -776,15 +811,11 @@ impl State {
         self.prepared.get_mut(&key)
     }
 }
+
 fn material(node: &SceneGpuNode) -> Option<Arc<Scramble>> {
-    LIVE.get(
-        node.custom
-            .resource
-            .strip_prefix("nanatype.text-scramble:")?
-            .parse()
-            .ok()?,
-    )
+    LIVE.get(parse_resource_id(&node.custom.resource, RENDERER)?)
 }
+
 impl SceneGpuRenderer for Renderer {
     fn preparation_version(&self, node: &CustomRenderNode) -> Option<u64> {
         Some(node.revision)
@@ -798,13 +829,7 @@ impl SceneGpuRenderer for Renderer {
             state
                 .scales
                 .record(c.gpu.generation(), s.id, c.dest_size, c.scale_factor);
-            if state.placements.len() >= 128 {
-                state.placements.clear();
-            }
-            state.placements.insert(
-                (c.gpu.generation(), s.id, c.dest_size),
-                ([c.bounds.x, c.bounds.y], [c.bounds.width, c.bounds.height]),
-            );
+            state.placements.record(s.id, &c);
         }
     }
     fn render(&self, node: &SceneGpuNode, mut c: SceneGpuRenderContext<'_>) {
@@ -830,32 +855,20 @@ impl SceneGpuRenderer for Renderer {
         let Some(s) = material(node) else {
             return true;
         };
-        let now = crate::clock::now_ms();
+        let now = crate::clock::frame_ms();
         if !s.active(now) || c.bounds.width == 0 || c.bounds.height == 0 {
             return true;
         }
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let dpi = state.scales.get(c.gpu.generation(), s.id, c.dest_size);
-        let (position, extent) = state
-            .placements
-            .get(&(c.gpu.generation(), s.id, c.dest_size))
-            .copied()
-            .unwrap_or((
-                [c.bounds.x as f32 / dpi, c.bounds.y as f32 / dpi],
-                [c.bounds.width as f32 / dpi, c.bounds.height as f32 / dpi],
-            ));
+        let (_, position, extent) = state.placements.get(s.id, &c, dpi);
         let (origin, size) = {
             let g = s.geometry.lock().unwrap_or_else(|e| e.into_inner());
             (g.origin, g.size)
         };
-        let scale = extent[0] * dpi / size[0].max(1.);
-        if !scale.is_finite() || scale <= 0. {
+        let Some((scale, crop)) = overlay_scale_and_crop(&c, dpi, position, extent, size) else {
             return true;
-        }
-        let crop = [
-            (c.bounds.x as f32 - position[0] * dpi) / scale,
-            (c.bounds.y as f32 - position[1] * dpi) / scale,
-        ];
+        };
         let Some(p) = state.prepare_cells(&s, &c) else {
             return true;
         };
@@ -872,9 +885,9 @@ impl SceneGpuRenderer for Renderer {
             c.bounds.height as f32,
             scale,
             node.opacity,
-            super::effects::linear(s.color.r),
-            super::effects::linear(s.color.g),
-            super::effects::linear(s.color.b),
+            linear(s.color.r),
+            linear(s.color.g),
+            linear(s.color.b),
             f32::from(s.color.a) / 255.,
             now.saturating_sub(s.born) as f32,
             f32::from(s.spec.entrance_ms),
@@ -889,14 +902,14 @@ impl SceneGpuRenderer for Renderer {
             s.spec.alphabet.len() as f32,
             (s.seed & 0xffff) as f32,
         ];
-        let upload: Vec<u8> = values.iter().flat_map(|v| v.to_ne_bytes()).collect();
+        let upload: [u8; 96] = f32_bytes(&values);
         let interop = c.gpu.wgpu();
         let binding = p.uniforms.binding(
             c.gpu,
             &p.layout,
             std::slice::from_ref(&p.atlas),
             &p.sampler,
-            super::effect_uniforms::output_key(&c, scale),
+            output_key(&c, scale),
             upload.len(),
             None,
         );
@@ -948,14 +961,13 @@ mod tests {
             .unwrap();
         let face = ttf_parser::Face::parse(data.bytes(), data.index()).unwrap();
         let alphabet = ScrambleSpec::default().alphabet;
-        let (rgba, size) = atlas(&face, &alphabet);
+        let (r8, size) = atlas(&face, &alphabet);
         for (i, ch) in alphabet.chars().enumerate() {
             let mut covered = false;
             for y in 0..64 {
                 for x in 0..40 {
-                    let at =
-                        ((i as u32 / 16 * 64 + y) * size[0] + i as u32 % 16 * 40 + x) as usize * 4;
-                    let alpha = rgba[at + 3];
+                    let at = ((i as u32 / 16 * 64 + y) * size[0] + i as u32 % 16 * 40 + x) as usize;
+                    let alpha = r8[at];
                     covered |= alpha > 0;
                     if x == 0 || x == 39 || y == 0 || y == 63 {
                         assert_eq!(alpha, 0, "{ch}: ink touches the atlas cell edge");

@@ -20,6 +20,17 @@ pub struct GpuChoice {
 
 static CHOICE: OnceLock<GpuChoice> = OnceLock::new();
 
+/// Hardware GPU selection preference without mutating process environment.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AdapterPreference {
+    pub name: Option<String>,
+}
+
+/// The hardware GPUs available to render on, without mutating environment.
+pub fn available_adapters() -> Vec<String> {
+    adapters()
+}
+
 /// Hands the saved GPU to the renderer, when it is still present.
 ///
 /// # Safety

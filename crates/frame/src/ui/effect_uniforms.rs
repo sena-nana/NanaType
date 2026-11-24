@@ -72,6 +72,18 @@ pub(super) fn output_key(c: &SceneGpuPassContext<'_>, scale: f32) -> OutputKey {
     ]
 }
 
+/// Encode `N` `f32` values into a fixed stack `[u8; B]` array (zero heap allocation).
+pub(super) fn f32_bytes<const N: usize, const B: usize>(values: &[f32; N]) -> [u8; B] {
+    const {
+        assert!(B == N * 4);
+    }
+    let mut bytes = [0u8; B];
+    for (dest, value) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(values) {
+        dest.copy_from_slice(&value.to_ne_bytes());
+    }
+    bytes
+}
+
 #[derive(Debug)]
 pub(super) struct Binding {
     pub buffer: wgpu::Buffer,
@@ -117,7 +129,11 @@ impl Uniforms {
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
-            let mut entries = vec![
+            debug_assert!(
+                !textures.is_empty() && (slots.is_none() || textures.len() <= 3),
+                "effect_uniforms layout supports 1..=3 textures alongside slots at binding 5"
+            );
+            let mut entries = [
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: buffer.as_entire_binding(),
@@ -130,23 +146,38 @@ impl Uniforms {
                     binding: 2,
                     resource: wgpu::BindingResource::Sampler(sampler),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&textures[0]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(&textures[0]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: buffer.as_entire_binding(),
+                },
             ];
+            let mut count = 3;
             for (i, texture) in textures.iter().enumerate().skip(1) {
-                entries.push(wgpu::BindGroupEntry {
+                entries[count] = wgpu::BindGroupEntry {
                     binding: i as u32 + 2,
                     resource: wgpu::BindingResource::TextureView(texture),
-                });
+                };
+                count += 1;
             }
             if let Some(slots) = slots {
-                entries.push(wgpu::BindGroupEntry {
+                entries[count] = wgpu::BindGroupEntry {
                     binding: 5,
                     resource: slots.as_entire_binding(),
-                });
+                };
+                count += 1;
             }
             let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("effect output binding"),
                 layout,
-                entries: &entries,
+                entries: &entries[..count],
             });
             self.entries.push((key, size, Binding { buffer, group }));
         }

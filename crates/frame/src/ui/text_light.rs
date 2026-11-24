@@ -1,24 +1,28 @@
 //! Finite light attached to retained text geometry. Raster data is immutable
 //! between layout changes; animated frames upload only the clock uniforms.
 use super::Stage;
-use nana_ui::runtime::view::{AnyView, IntoView, NodeRef, signal, widget};
+use super::effect_uniforms::{Uniforms, f32_bytes, output_key};
+use super::effects::{
+    LruMap, Outline, PlacementCache, Registry, bind_overlay_layer, capture_text_bounds,
+    compiler_pool, linear, overlay_scale_and_crop, parse_resource_id, style_overlay_gpu,
+    wrap_text_overlay,
+};
+use nana_ui::runtime::view::{AnyView, NodeRef, signal};
 use nana_ui::runtime::{
-    ComponentView, CustomRenderNode, GpuView, MutationQueue, NodeKind, SizeChanged, StableNodeId,
-    Stack, TextShaper, UiWorld,
+    ComponentView, CustomRenderNode, GpuView, MutationQueue, NodeKind, StableNodeId, TextShaper,
+    UiWorld,
 };
 use nana_ui::{
     DeviceGeneration, GpuTextureFormat, SceneGpuNode, SceneGpuPassContext, SceneGpuPrepareContext,
     SceneGpuRenderContext, SceneGpuRenderer, SceneGpuRendererRegistry, ScenePass,
     ScenePresentationProfile, wgpu,
 };
-use nana_ui_core::{LengthSpec, PointerEventsSpec, PositionSpec};
 use nanatype_theme::TextLightSpec;
-use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, OnceLock, Weak};
 
 const RENDERER: &str = "nanatype.text-light";
 const HIDDEN: u32 = 0xff_ffff;
-static LIVE: LazyLock<super::effects::Registry<Light>> = LazyLock::new(Default::default);
+static LIVE: LazyLock<Registry<Light>> = LazyLock::new(Default::default);
 
 #[derive(Debug, Default)]
 struct Geometry {
@@ -26,10 +30,11 @@ struct Geometry {
     /// Hash of what the paths were built from; an identical re-projection
     /// keeps the revision, and with it the rasterized masks.
     key: Option<blake3::Hash>,
-    paths: Vec<(tiny_skia::Path, u32)>,
+    paths: Arc<[(tiny_skia::Path, u32)]>,
     origin: [f32; 2],
     size: [f32; 2],
 }
+
 struct Light {
     id: u64,
     ui: Stage,
@@ -42,16 +47,19 @@ struct Light {
     preview: bool,
     geometry: Mutex<Geometry>,
 }
+
 impl std::fmt::Debug for Light {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TextLight").field("id", &self.id).finish()
     }
 }
+
 impl Drop for Light {
     fn drop(&mut self) {
         LIVE.remove(self.id);
     }
 }
+
 impl Light {
     fn active(&self, now: u64) -> bool {
         if self.preview && (!self.ui.shader_preview.get_untracked() || !self.ui.live_preview.get())
@@ -70,6 +78,7 @@ impl Light {
             at.is_some_and(|t| t > 0 && now >= t && now < t + u64::from(self.entrance_ms))
         })
     }
+
     fn time(&self, byte: usize) -> u32 {
         let end = self.times.partition_point(|(b, _)| *b <= byte);
         let at = end.checked_sub(1).and_then(|i| self.times[i].1);
@@ -79,14 +88,9 @@ impl Light {
             Some(at) => (at.saturating_sub(self.born) + 1).min(u64::from(HIDDEN - 1)) as u32,
         }
     }
+
     fn capture(&self, world: &UiWorld, layer: StableNodeId) {
-        let Some(text) = self.text.get_untracked() else {
-            return;
-        };
-        let Some((_, layout)) = world.text_layout(text) else {
-            return;
-        };
-        let (Some(tb), Some(lb)) = (world.layout_box(text), world.layout_box(layer)) else {
+        let Some((layout, origin, size)) = capture_text_bounds(world, self.text, layer) else {
             return;
         };
         let Some(engine) = nana_ui::NanaTextShaper::default().text_engine() else {
@@ -99,7 +103,9 @@ impl Light {
         let mut faces = Vec::new();
         let mut placed: Vec<Placed> = Vec::new();
         let vertical = layout.is_vertical();
+        let physical_w = layout.physical_size().0;
         for line in &layout.lines {
+            let centre = layout.physical_x_of_block(line.metrics.baseline_y_px, physical_w);
             for run in layout.line_runs(line) {
                 if run.is_object() {
                     continue;
@@ -113,8 +119,6 @@ impl Light {
                 let scale = run.font_size_px / f32::from(face.units_per_em());
                 faces.push(data.clone());
                 let font = faces.len() - 1;
-                let centre = layout
-                    .physical_x_of_block(line.metrics.baseline_y_px, layout.physical_size().0);
                 let sideways = vertical && run.orientation == nana_text::RunOrientation::Sideways;
                 let mut pen = run.origin_x_px;
                 for glyph in &run.glyphs {
@@ -186,8 +190,6 @@ impl Light {
                 }
             }
         }
-        let origin = [tb.x - lb.x, tb.y - lb.y];
-        let size = [lb.width, lb.height];
         let faces: Vec<_> = faces.iter().map(|d| (d.bytes(), d.index())).collect();
         let key = placement_key(origin, size, &faces, &placed);
         let mut geometry = self.geometry.lock().unwrap_or_else(|e| e.into_inner());
@@ -197,7 +199,7 @@ impl Light {
         geometry.key = Some(key);
         geometry.origin = origin;
         geometry.size = size;
-        geometry.paths = outline_all(&faces, &placed);
+        geometry.paths = outline_all(&faces, &placed).into();
         geometry.revision += 1;
     }
 }
@@ -250,7 +252,7 @@ fn outline_all(faces: &Faces<'_>, placed: &[Placed]) -> Vec<(tiny_skia::Path, u3
         let Some((_, face)) = &face else {
             continue;
         };
-        let mut outline = super::effects::Outline(tiny_skia::PathBuilder::new());
+        let mut outline = Outline(tiny_skia::PathBuilder::new());
         face.outline_glyph(ttf_parser::GlyphId(p.glyph), &mut outline);
         if let Some(path) = outline
             .0
@@ -269,11 +271,13 @@ struct LightView {
     light: Arc<Light>,
     size: [u32; 2],
 }
+
 impl PartialEq for LightView {
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base && self.light.id == other.light.id && self.size == other.size
     }
 }
+
 impl ComponentView for LightView {
     fn share_layouts(&mut self, share: &mut dyn FnMut(&mut Arc<nana_ui_core::LayoutStyle>)) {
         self.base.share_layouts(share);
@@ -318,6 +322,7 @@ pub fn wrap(
         preview,
     } = schedule;
     let id = LIVE.next_id();
+    let frame = crate::clock::frame_ms();
     let light = Arc::new(Light {
         id,
         ui,
@@ -329,8 +334,8 @@ pub fn wrap(
             .copied()
             .filter(|t| *t > 0)
             .min()
-            .unwrap_or_else(crate::clock::now_ms)
-            .min(crate::clock::now_ms()),
+            .unwrap_or(frame)
+            .min(frame),
         times: super::overflow::glyphs(value, at_ms)
             .into_iter()
             .map(|g| (g.byte, g.at))
@@ -343,36 +348,19 @@ pub fn wrap(
     LIVE.insert(id, &light);
     let size = signal([0u32; 2]);
     let mut base = GpuView::new(id);
-    let l = Arc::make_mut(&mut base.style.layout);
-    let pad = light.spec.radius * 2.;
-    l.position = PositionSpec::Absolute;
-    l.offset_left = Some(LengthSpec::Px(-pad));
-    l.offset_top = Some(LengthSpec::Px(-pad));
-    l.width = Some(super::surface::calc(100., pad * 2.));
-    l.height = Some(super::surface::calc(100., pad * 2.));
-    l.pointer_events = Some(PointerEventsSpec::None);
-    let layer = widget(LightView {
-        base,
-        light,
-        size: [0; 2],
-    })
-    .on(move |e: &SizeChanged| {
-        size.set_if_changed([e.width.to_bits(), e.height.to_bits()]);
-    })
-    .bind(move |v: &mut LightView| {
-        v.size = size.get();
-    });
-    widget(Stack::column(0.).width(LengthSpec::Fill).with_layout(|l| {
-        l.position = PositionSpec::Relative;
-        l.min_width = Some(LengthSpec::Px(0.));
-    }))
-    .bind(move |v: &mut Stack| {
-        let [w, h] = ui.display_size.get();
-        let height = (h > w && w > 0.).then(|| LengthSpec::Px(ui.text_area_height.get().max(1.)));
-        super::restyle(v, |l| l.height = height);
-    })
-    .children((text, layer))
-    .into_any()
+    style_overlay_gpu(&mut base, light.spec.radius * 2.);
+    let layer = bind_overlay_layer(
+        LightView {
+            base,
+            light,
+            size: [0; 2],
+        },
+        size,
+        move |v: &mut LightView| {
+            v.size = size.get();
+        },
+    );
+    wrap_text_overlay(ui, text, None, layer)
 }
 
 /// Snapshot the registry first: reading signals (or dropping the last strong
@@ -388,20 +376,28 @@ fn track_animating(ui: Stage, now: u64, preview: bool) -> bool {
             && l.active(now)
     })
 }
+
 pub fn animating(ui: Stage, now: u64) -> bool {
     track_animating(ui, now, false)
 }
+
 pub fn preview_animating(ui: Stage, now: u64) -> bool {
     track_animating(ui, now, true)
 }
+
 pub fn register(registry: &mut SceneGpuRendererRegistry) {
     registry.insert(RENDERER, SHARED.clone());
 }
+
 pub fn collect_garbage() {
     let mut state = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
     state.masks.retain(|_, m| m.light.strong_count() > 0);
-    state.placements.retain(|(_, id, _), _| LIVE.contains(*id));
+    state
+        .pending_masks
+        .retain(|(id, _, _, _), _| LIVE.contains(*id));
+    state.placements.retain_live(&LIVE);
 }
+
 pub fn cache_counts() -> (usize, usize) {
     let s = SHARED.state.lock().unwrap_or_else(|e| e.into_inner());
     (s.masks.len(), s.masks.values().map(|p| p.bytes).sum())
@@ -422,15 +418,23 @@ pub fn cache_counts_for(ui: Stage) -> (usize, usize) {
 
 type PipelineKey = (DeviceGeneration, GpuTextureFormat, ScenePresentationProfile);
 type MaskKey = (PipelineKey, u64, u64, [u32; 2], u32);
+type PendingMaskKey = (u64, u64, [u32; 2], u32);
+
+struct RasterResult {
+    data: Vec<u8>,
+    glow_data: Vec<u8>,
+}
+
 #[derive(Debug)]
 struct Pipeline {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
 }
+
 #[derive(Debug)]
 struct Prepared {
     light: Weak<Light>,
-    uniforms: super::effect_uniforms::Uniforms,
+    uniforms: Uniforms,
     layout: wgpu::BindGroupLayout,
     mask: wgpu::TextureView,
     glow: wgpu::TextureView,
@@ -438,33 +442,51 @@ struct Prepared {
     pipeline: wgpu::RenderPipeline,
     bytes: usize,
 }
-type Placements = HashMap<(DeviceGeneration, u64, [u32; 2]), (f32, [f32; 2], [f32; 2])>;
-#[derive(Debug, Default)]
+
 struct State {
-    pipelines: HashMap<PipelineKey, Arc<OnceLock<Pipeline>>>,
-    masks: HashMap<MaskKey, Prepared>,
-    placements: Placements,
+    pipelines: LruMap<PipelineKey, Arc<OnceLock<Pipeline>>>,
+    masks: LruMap<MaskKey, Prepared>,
+    pending_masks: LruMap<PendingMaskKey, Arc<OnceLock<RasterResult>>>,
+    placements: PlacementCache,
 }
-#[derive(Debug, Default)]
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            pipelines: LruMap::new(16),
+            masks: LruMap::new(16),
+            pending_masks: LruMap::new(16),
+            placements: PlacementCache::default(),
+        }
+    }
+}
+
+#[derive(Default)]
 struct Renderer {
     state: Mutex<State>,
 }
+
+impl std::fmt::Debug for Renderer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TextLightRenderer")
+    }
+}
+
 static SHARED: LazyLock<Arc<Renderer>> = LazyLock::new(|| Arc::new(Renderer::default()));
 
-fn raster(geometry: &Geometry, size: [u32; 2], scale: f32) -> Vec<u8> {
+fn raster(
+    paths: &[(tiny_skia::Path, u32)],
+    origin: [f32; 2],
+    size: [u32; 2],
+    scale: f32,
+) -> Vec<u8> {
     let [w, h] = size;
     let mut out = vec![0; w as usize * h as usize * 4];
     let mut paint = tiny_skia::Paint::default();
     paint.set_color_rgba8(255, 255, 255, 255);
-    let transform = tiny_skia::Transform::from_row(
-        scale,
-        0.,
-        0.,
-        scale,
-        geometry.origin[0] * scale,
-        geometry.origin[1] * scale,
-    );
-    for (path, time) in &geometry.paths {
+    let transform =
+        tiny_skia::Transform::from_row(scale, 0., 0., scale, origin[0] * scale, origin[1] * scale);
+    for (path, time) in paths {
         if *time == HIDDEN {
             continue;
         }
@@ -572,52 +594,52 @@ fn glow_mask(data: &[u8], size: [u32; 2], radius: f32) -> Vec<u8> {
     out
 }
 
+fn rasterize_pair(
+    paths: &[(tiny_skia::Path, u32)],
+    origin: [f32; 2],
+    size: [u32; 2],
+    scale: f32,
+    blur_radius: f32,
+) -> RasterResult {
+    let data = raster(paths, origin, size, scale);
+    let glow_data = glow_mask(&data, size, blur_radius);
+    RasterResult { data, glow_data }
+}
+
 impl State {
-    fn prepare_mask(
+    fn upload_mask(
         &mut self,
         light: &Arc<Light>,
         c: &SceneGpuPassContext<'_>,
         scale: f32,
         size: [u32; 2],
+        revision: u64,
+        rasterized: &RasterResult,
     ) -> Option<&mut Prepared> {
-        let geometry = light.geometry.lock().unwrap_or_else(|e| e.into_inner());
-        if geometry.paths.is_empty() {
-            return None;
-        }
         let pk = (c.gpu.generation(), c.target_format, c.presentation);
-        if size[0] > 4096 || size[1] > 4096 || u64::from(size[0]) * u64::from(size[1]) > 4_194_304 {
-            return None;
-        }
-        let key = (pk, light.id, geometry.revision, size, scale.to_bits());
+        let key = (pk, light.id, revision, size, scale.to_bits());
         if self.masks.contains_key(&key) {
             return self.masks.get_mut(&key);
         }
         self.masks.retain(|_, p| p.light.strong_count() > 0);
-        if self.masks.len() >= 16
-            || self.masks.values().map(|p| p.bytes).sum::<usize>()
-                + size[0] as usize * size[1] as usize * 8
-                > 64 * 1024 * 1024
+        let needed_bytes = rasterized.data.len() + rasterized.glow_data.len();
+        while self.masks.len() >= 16
+            || self.masks.values().map(|p| p.bytes).sum::<usize>() + needed_bytes > 64 * 1024 * 1024
         {
-            self.masks.clear();
-        }
-        if self.pipelines.len() >= 16 && !self.pipelines.contains_key(&pk) {
-            self.pipelines.clear();
-            self.masks.clear();
+            if self.masks.evict_oldest().is_none() {
+                break;
+            }
         }
         let device = c.gpu.wgpu().device();
-        let compile = self
-            .pipelines
-            .entry(pk)
-            .or_insert_with(|| {
-                let off_thread = OFF_THREAD.load(std::sync::atomic::Ordering::Relaxed);
-                compile(device, c.target_format.wgpu(), off_thread)
-            })
-            .clone();
-        // Still compiling: this frame goes without its light.
+        let compile = if let Some(slot) = self.pipelines.get(&pk) {
+            slot.clone()
+        } else {
+            let off_thread = OFF_THREAD.load(std::sync::atomic::Ordering::Relaxed);
+            let slot = compile(device, c.target_format.wgpu(), off_thread);
+            self.pipelines.insert(pk, slot.clone());
+            slot
+        };
         let pipeline = compile.get()?;
-        let data = raster(&geometry, size, scale);
-        let glow_data = glow_mask(&data, size, light.spec.radius * scale * 0.35);
-        let bytes = data.len() * 2;
         let texture = c
             .gpu
             .create_texture(&nana_ui::GpuTextureDescriptor {
@@ -647,7 +669,7 @@ impl State {
                     width: size[0],
                     height: size[1],
                 },
-                &glow_data,
+                &rasterized.glow_data,
                 size[0] * 4,
             )
             .ok()?;
@@ -660,12 +682,12 @@ impl State {
                     width: size[0],
                     height: size[1],
                 },
-                &data,
+                &rasterized.data,
                 size[0] * 4,
             )
             .ok()?;
         if let Some(work) = c.gpu_work {
-            work.record_upload(bytes);
+            work.record_upload(needed_bytes);
             work.record_realloc();
         }
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -684,23 +706,25 @@ impl State {
                 glow: glow_texture.wgpu_view().clone(),
                 sampler,
                 pipeline: pipeline.pipeline.clone(),
-                bytes,
+                bytes: needed_bytes,
             },
         );
         self.masks.get_mut(&key)
     }
 }
-/// Compile the light's pipeline off the UI thread from now on: the driver
-/// takes a noticeable moment the first time a light is drawn, and that frame
-/// would stall every window. For the hosted app, whose frames keep coming
-/// while a light plays; offscreen renders compile on the frame that draws it.
+
+/// Compile the light's pipeline and rasterize masks off the UI/render thread
+/// from now on: the driver and CPU blur take a noticeable moment the first
+/// time a light is drawn, and that frame would stall every window. For the
+/// hosted app, whose frames keep coming while a light plays; offscreen renders
+/// build synchronously on the frame that draws it.
 pub fn compile_off_thread() {
     OFF_THREAD.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 static OFF_THREAD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// The pipeline for `format`, ready now or, `off_thread`, once its thread
-/// finishes.
+/// The pipeline for `format`, ready now or, when `off_thread`, compiled on the
+/// shared 2-worker pool.
 fn compile(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
@@ -709,14 +733,10 @@ fn compile(
     let slot = Arc::new(OnceLock::new());
     if off_thread {
         let (done, device) = (Arc::clone(&slot), device.clone());
-        let spawned = std::thread::Builder::new()
-            .name("nanatype.text-light-compile".into())
-            .spawn(move || {
-                let _ = done.set(build_pipeline(&device, format));
-            });
-        if spawned.is_ok() {
-            return slot;
-        }
+        compiler_pool().submit(move || {
+            let _ = done.set(build_pipeline(&device, format));
+        });
+        return slot;
     }
     let _ = slot.set(build_pipeline(device, format));
     slot
@@ -766,7 +786,14 @@ fn build_pipeline(device: &wgpu::Device, format: wgpu::TextureFormat) -> Pipelin
     });
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("text light"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("text_light.wgsl").into()),
+        source: wgpu::ShaderSource::Wgsl(
+            format!(
+                "{}\n{}",
+                super::effects::FULLSCREEN_QUAD_WGSL,
+                include_str!("text_light.wgsl")
+            )
+            .into(),
+        ),
     });
     let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("text light"),
@@ -802,14 +829,9 @@ fn build_pipeline(device: &wgpu::Device, format: wgpu::TextureFormat) -> Pipelin
 }
 
 fn material(node: &SceneGpuNode) -> Option<Arc<Light>> {
-    LIVE.get(
-        node.custom
-            .resource
-            .strip_prefix("nanatype.text-light:")?
-            .parse()
-            .ok()?,
-    )
+    LIVE.get(parse_resource_id(&node.custom.resource, RENDERER)?)
 }
+
 impl SceneGpuRenderer for Renderer {
     fn preparation_version(&self, node: &CustomRenderNode) -> Option<u64> {
         Some(node.revision)
@@ -819,18 +841,11 @@ impl SceneGpuRenderer for Renderer {
     }
     fn prepare(&self, node: &SceneGpuNode, c: SceneGpuPrepareContext<'_>) {
         if let Some(light) = material(node) {
-            let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-            if state.placements.len() >= 128 {
-                state.placements.clear();
-            }
-            state.placements.insert(
-                (c.gpu.generation(), light.id, c.dest_size),
-                (
-                    c.scale_factor,
-                    [c.bounds.x, c.bounds.y],
-                    [c.bounds.width, c.bounds.height],
-                ),
-            );
+            self.state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .placements
+                .record(light.id, &c);
         }
     }
     fn render(&self, node: &SceneGpuNode, mut c: SceneGpuRenderContext<'_>) {
@@ -856,37 +871,108 @@ impl SceneGpuRenderer for Renderer {
         let Some(light) = material(node) else {
             return true;
         };
-        let now = crate::clock::now_ms();
+        let now = crate::clock::frame_ms();
         if !light.active(now) || c.bounds.width == 0 || c.bounds.height == 0 {
             return true;
         }
-        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        let (dpi, position, extent) = state
-            .placements
-            .get(&(c.gpu.generation(), light.id, c.dest_size))
-            .copied()
-            .unwrap_or((
-                1.,
-                [c.bounds.x as f32, c.bounds.y as f32],
-                [c.bounds.width as f32, c.bounds.height as f32],
-            ));
-        let (origin, logical_size) = {
+        let (revision, paths, origin, logical_size) = {
             let geometry = light.geometry.lock().unwrap_or_else(|e| e.into_inner());
-            (geometry.origin, geometry.size)
+            (
+                geometry.revision,
+                geometry.paths.clone(),
+                geometry.origin,
+                geometry.size,
+            )
         };
-        let scale = extent[0] * dpi / logical_size[0].max(1.);
-        if !scale.is_finite() || scale <= 0. {
+        if paths.is_empty() {
             return true;
         }
-        let crop = [
-            (c.bounds.x as f32 - position[0] * dpi) / scale,
-            (c.bounds.y as f32 - position[1] * dpi) / scale,
-        ];
-        let size = [
-            (extent[0] * dpi).ceil().max(1.) as u32,
-            (extent[1] * dpi).ceil().max(1.) as u32,
-        ];
-        let Some(p) = state.prepare_mask(&light, &c, scale, size) else {
+        let pk = (c.gpu.generation(), c.target_format, c.presentation);
+        let (scale, crop, size, cached_or_pending) = {
+            let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            let (dpi, position, extent) = state.placements.get(light.id, &c, 1.);
+            let Some((scale, crop)) =
+                overlay_scale_and_crop(&c, dpi, position, extent, logical_size)
+            else {
+                return true;
+            };
+            let size = [
+                (extent[0] * dpi).ceil().max(1.) as u32,
+                (extent[1] * dpi).ceil().max(1.) as u32,
+            ];
+            if size[0] > 4096
+                || size[1] > 4096
+                || u64::from(size[0]) * u64::from(size[1]) > 4_194_304
+            {
+                return true;
+            }
+            let mask_key = (pk, light.id, revision, size, scale.to_bits());
+            let has_mask = state.masks.contains_key(&mask_key);
+            if has_mask {
+                (scale, crop, size, Some(None))
+            } else {
+                let off_thread = OFF_THREAD.load(std::sync::atomic::Ordering::Relaxed);
+                // Kick off pipeline compilation eagerly so it overlaps with rasterization.
+                if !state.pipelines.contains_key(&pk) {
+                    let slot = compile(c.gpu.wgpu().device(), c.target_format.wgpu(), off_thread);
+                    state.pipelines.insert(pk, slot);
+                }
+                if off_thread {
+                    let pkey = (light.id, revision, size, scale.to_bits());
+                    let slot = if let Some(existing) = state.pending_masks.get(&pkey) {
+                        existing.clone()
+                    } else {
+                        let slot = Arc::new(OnceLock::new());
+                        state.pending_masks.insert(pkey, slot.clone());
+                        let done = Arc::clone(&slot);
+                        let blur = light.spec.radius * scale * 0.35;
+                        let paths = paths.clone();
+                        compiler_pool().submit(move || {
+                            let res = rasterize_pair(&paths, origin, size, scale, blur);
+                            let _ = done.set(res);
+                        });
+                        slot
+                    };
+                    if slot.get().is_some() {
+                        (scale, crop, size, Some(Some(slot)))
+                    } else {
+                        return true;
+                    }
+                } else {
+                    (scale, crop, size, None)
+                }
+            }
+        };
+
+        // Outside SHARED.state lock: build synchronous raster result if off_thread was disabled.
+        let inline_raster = match cached_or_pending {
+            Some(Some(_)) | Some(None) => None,
+            None => Some(rasterize_pair(
+                &paths,
+                origin,
+                size,
+                scale,
+                light.spec.radius * scale * 0.35,
+            )),
+        };
+
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mask_key = (pk, light.id, revision, size, scale.to_bits());
+        let p = if state.masks.contains_key(&mask_key) {
+            state.masks.get_mut(&mask_key)
+        } else if let Some(ref res) = inline_raster {
+            state.upload_mask(&light, &c, scale, size, revision, res)
+        } else {
+            let pkey = (light.id, revision, size, scale.to_bits());
+            let Some(slot) = state.pending_masks.get(&pkey).cloned() else {
+                return true;
+            };
+            let Some(res) = slot.get() else {
+                return true;
+            };
+            state.upload_mask(&light, &c, scale, size, revision, res)
+        };
+        let Some(p) = p else {
             return true;
         };
         let exit = light
@@ -905,9 +991,9 @@ impl SceneGpuRenderer for Renderer {
             c.bounds.height as f32,
             scale,
             node.opacity * light.spec.intensity,
-            super::effects::linear(color.r),
-            super::effects::linear(color.g),
-            super::effects::linear(color.b),
+            linear(color.r),
+            linear(color.g),
+            linear(color.b),
             f32::from(color.a) / 255.,
             now.saturating_sub(light.born) as f32,
             f32::from(light.entrance_ms.max(1)),
@@ -918,19 +1004,18 @@ impl SceneGpuRenderer for Renderer {
             crop[0],
             crop[1],
         ];
-        let upload = values.map(f32::to_ne_bytes);
-        let upload = upload.as_flattened();
+        let upload: [u8; 80] = f32_bytes(&values);
         let interop = c.gpu.wgpu();
         let binding = p.uniforms.binding(
             c.gpu,
             &p.layout,
             &[p.mask.clone(), p.glow.clone()],
             &p.sampler,
-            super::effect_uniforms::output_key(&c, scale),
+            output_key(&c, scale),
             upload.len(),
             None,
         );
-        interop.queue().write_buffer(&binding.buffer, 0, upload);
+        interop.queue().write_buffer(&binding.buffer, 0, &upload);
         if let Some(work) = c.gpu_work {
             work.record_upload(upload.len());
             work.record_draw_call();

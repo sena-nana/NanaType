@@ -1,6 +1,6 @@
 //! Retained path painter for all skin surfaces. Geometry lives in theme;
 //! this adapter records it once per resolved surface/size/theme, not per frame.
-use super::{Surface, SurfaceRoute};
+use super::{Surface, SurfaceKind};
 use nana_ui::runtime::{
     FillRule, Gradient, LineCap, LineJoin, PaintContext, PaintPath, PaintShadow, Painter,
     StrokeStyle,
@@ -15,11 +15,8 @@ pub struct SurfacePainter {
 }
 impl SurfacePainter {
     pub fn new(surface: Surface) -> Self {
-        // Debug's float representation round-trips all resolved values. Keep
-        // this fingerprint at construction so cache lookups allocate nothing.
-        // It also includes newly added Surface fields automatically.
         let mut hash = std::collections::hash_map::DefaultHasher::new();
-        format!("{surface:?}").hash(&mut hash);
+        surface.hash(&mut hash);
         Self {
             surface,
             key: hash.finish(),
@@ -205,8 +202,8 @@ impl Painter for SurfacePainter {
         cx.save();
         cx.translate(bounds.x, bounds.y);
         let s = &self.surface;
-        match s.route() {
-            SurfaceRoute::Motif(motif) => {
+        match s.kind() {
+            SurfaceKind::Motif(motif) => {
                 for part in motif_paths(motif, size) {
                     let path = paint_path(&part.path);
                     cx.save();
@@ -232,11 +229,11 @@ impl Painter for SurfacePainter {
                     cx.restore();
                 }
             }
-            SurfaceRoute::Contour(_) => {
+            SurfaceKind::Contour(_) => {
                 let path = paint_path(&s.contour_path(size).expect("contour route"));
                 self.surface_path(cx, &path, size);
             }
-            SurfaceRoute::Frame | SurfaceRoute::Style => {}
+            SurfaceKind::Frame { .. } | SurfaceKind::StyledBox => {}
         }
         cx.restore();
         // No draw_default(): the path replaces the node's rectangular paint.

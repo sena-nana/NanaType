@@ -1,8 +1,10 @@
-//! A cached coverage mask and one in-pass draw, under the dialogue's text.
+//! A cached R8 coverage mask and one in-pass draw, under the dialogue's text.
 //! The host owns the device, submission and output targets. Only 48 uniform
 //! bytes change on an animated frame; the retained node and mask stay put.
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex, Weak};
+use std::time::SystemTime;
 
 use nana_ui::runtime::view::{AnyView, IntoView, widget};
 use nana_ui::runtime::{
@@ -16,7 +18,9 @@ use nana_ui::{
 use nana_ui_core::{LengthSpec, PointerEventsSpec, PositionSpec};
 use nanatype_theme::{ShapeCommand, SweepSpec};
 
-use super::surface::{Surface, SurfaceRoute};
+use super::effect_uniforms::f32_bytes;
+use super::effects::{DeviceGenerations, LruMap, linear};
+use super::surface::{Surface, SurfaceKind};
 
 pub(super) fn effective(spec: &SweepSpec) -> bool {
     spec.enabled && spec.intensity > 0.0 && spec.color.a > 0
@@ -129,12 +133,22 @@ struct Prepared {
     pipeline: wgpu::RenderPipeline,
     mask_bytes: usize,
 }
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct State {
-    generations: Vec<DeviceGeneration>,
+    generations: DeviceGenerations,
     pipelines: HashMap<PipelineKey, Pipeline>,
-    masks: HashMap<MaskKey, Prepared>,
+    masks: LruMap<MaskKey, Prepared>,
     scales: super::effect_uniforms::Scales,
+}
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            generations: DeviceGenerations::default(),
+            pipelines: HashMap::new(),
+            masks: LruMap::new(32),
+            scales: super::effect_uniforms::Scales::default(),
+        }
+    }
 }
 #[derive(Debug, Default)]
 struct SweepRenderer {
@@ -153,21 +167,13 @@ pub fn cache_counts() -> (usize, usize, usize) {
     (state.pipelines.len(), state.masks.len(), state.scales.len())
 }
 
-fn bytes(values: &[f32; 12]) -> [u8; 48] {
-    let mut bytes = [0; 48];
-    for (dest, value) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(values) {
-        dest.copy_from_slice(&value.to_ne_bytes());
-    }
-    bytes
-}
-use super::effects::linear;
-
 impl State {
     fn prepare_mask(
         &mut self,
         material: &Arc<Material>,
         context: &SceneGpuPassContext<'_>,
         scale: f32,
+        mask: Vec<u8>,
     ) -> Option<&mut Prepared> {
         let pipeline_key = (
             context.gpu.generation(),
@@ -175,41 +181,29 @@ impl State {
             context.presentation,
         );
         let extent = [context.bounds.width.max(1), context.bounds.height.max(1)];
-        let max = context
-            .gpu
-            .wgpu()
-            .device()
-            .limits()
-            .max_texture_dimension_2d;
-        if extent[0] > max || extent[1] > max {
-            return None;
-        }
-        // Coverage depends on size and DPI, not the destination viewport.
         let key = (pipeline_key, material.id, extent, scale.to_bits());
         if self.masks.contains_key(&key) {
             return self.masks.get_mut(&key);
         }
         self.masks
             .retain(|_, value| value.material.strong_count() > 0);
-        // Bound stale resize/scale variants without growing during a long session.
-        if self.masks.len() >= 32
-            || self.masks.values().map(|m| m.mask_bytes).sum::<usize>()
-                + extent[0] as usize * extent[1] as usize * 4
+        // Evict LRU entries instead of clearing the whole cache at once.
+        let mask_bytes = mask.len();
+        while self.masks.len() >= 32
+            || self.masks.values().map(|m| m.mask_bytes).sum::<usize>() + mask_bytes
                 > 64 * 1024 * 1024
         {
-            self.masks.clear();
-        }
-        let generation = context.gpu.generation();
-        if !self.generations.contains(&generation) {
-            self.generations.push(generation);
-            if self.generations.len() > 4 {
-                let retired = self.generations.remove(0);
-                self.pipelines.retain(|(g, _, _), _| *g != retired);
-                self.masks.retain(|((g, _, _), _, _, _), _| *g != retired);
+            if self.masks.evict_oldest().is_none() {
+                break;
             }
         }
+        let generation = context.gpu.generation();
+        if let Some(retired) = self.generations.touch(generation) {
+            self.pipelines.retain(|(g, _, _), _| *g != retired);
+            self.masks.retain(|((g, _, _), _, _, _), _| *g != retired);
+        }
         self.scales
-            .retain(|(g, id, _)| self.generations.contains(g) && MATERIALS.contains(*id));
+            .retain(|(g, id, _)| self.generations.contains(*g) && MATERIALS.contains(*id));
         let device = context.gpu.wgpu().device();
         let pipeline = self.pipelines.entry(pipeline_key).or_insert_with(|| {
             let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -245,7 +239,14 @@ impl State {
             });
             let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("dialogue sweep"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("sweep.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(
+                    format!(
+                        "{}\n{}",
+                        super::effects::FULLSCREEN_QUAD_WGSL,
+                        include_str!("sweep.wgsl")
+                    )
+                    .into(),
+                ),
             });
             let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("dialogue sweep"),
@@ -279,8 +280,6 @@ impl State {
             });
             Pipeline { pipeline, layout }
         });
-        let mask = coverage(&material.surface, extent, scale);
-        let mask_bytes = mask.len();
         if let Some(work) = context.gpu_work {
             work.record_upload(mask_bytes);
             work.record_realloc();
@@ -291,7 +290,7 @@ impl State {
                 label: Some("dialogue sweep coverage"),
                 width: extent[0],
                 height: extent[1],
-                format: GpuTextureFormat::RGBA8_UNORM,
+                format: GpuTextureFormat::R8_UNORM,
                 usage: nana_ui::GpuTextureUsages::SAMPLED | nana_ui::GpuTextureUsages::COPY_DST,
             })
             .ok()?;
@@ -306,7 +305,7 @@ impl State {
                     height: extent[1],
                 },
                 &mask,
-                extent[0] * 4,
+                extent[0],
             )
             .ok()?;
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -317,15 +316,19 @@ impl State {
         });
         let layout = pipeline.layout.clone();
         let pipeline = pipeline.pipeline.clone();
-        Some(self.masks.entry(key).or_insert_with(|| Prepared {
-            material: Arc::downgrade(material),
-            uniforms: Default::default(),
-            layout,
-            mask: texture.wgpu_view().clone(),
-            sampler,
-            pipeline,
-            mask_bytes,
-        }))
+        self.masks.insert(
+            key,
+            Prepared {
+                material: Arc::downgrade(material),
+                uniforms: Default::default(),
+                layout,
+                mask: texture.wgpu_view().clone(),
+                sampler,
+                pipeline,
+                mask_bytes,
+            },
+        );
+        self.masks.get_mut(&key)
     }
 }
 
@@ -379,17 +382,45 @@ impl SceneGpuRenderer for SweepRenderer {
         if context.bounds.width == 0 || context.bounds.height == 0 {
             return true;
         }
-        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        let scale = state
-            .scales
-            .get(context.gpu.generation(), material.id, context.dest_size);
-        // Too large for the device or a lost device: draw nothing this frame.
-        let Some(prepared) = state.prepare_mask(&material, &context, scale) else {
+        let extent = [context.bounds.width.max(1), context.bounds.height.max(1)];
+        let max = context
+            .gpu
+            .wgpu()
+            .device()
+            .limits()
+            .max_texture_dimension_2d;
+        if extent[0] > max || extent[1] > max {
             return true;
+        }
+        let pipeline_key = (
+            context.gpu.generation(),
+            context.target_format,
+            context.presentation,
+        );
+        let (scale, needs_coverage) = {
+            let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            let scale = state
+                .scales
+                .get(context.gpu.generation(), material.id, context.dest_size);
+            let key = (pipeline_key, material.id, extent, scale.to_bits());
+            (scale, !state.masks.contains_key(&key))
+        };
+        // Compute coverage (including any image decode / 9-slice CPU loop) outside SHARED.state lock.
+        let built_mask = needs_coverage.then(|| coverage(&material.surface, extent, scale));
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let key = (pipeline_key, material.id, extent, scale.to_bits());
+        let prepared = if let Some(prepared) = state.masks.get_mut(&key) {
+            prepared
+        } else {
+            let mask = built_mask.unwrap_or_else(|| coverage(&material.surface, extent, scale));
+            let Some(prepared) = state.prepare_mask(&material, &context, scale, mask) else {
+                return true;
+            };
+            prepared
         };
         let c = material.spec.color;
         let phase = if material.animated {
-            (crate::clock::now_ms() as f64 / 1000.0 / f64::from(material.spec.period_s)).fract()
+            (crate::clock::frame_ms() as f64 / 1000.0 / f64::from(material.spec.period_s)).fract()
                 as f32
         } else {
             0.5
@@ -408,7 +439,7 @@ impl SceneGpuRenderer for SweepRenderer {
             linear(c.b),
             f32::from(c.a) / 255.0,
         ];
-        let upload = bytes(&values);
+        let upload: [u8; 48] = f32_bytes(&values);
         let interop = context.gpu.wgpu();
         let binding = prepared.uniforms.binding(
             context.gpu,
@@ -432,10 +463,11 @@ impl SceneGpuRenderer for SweepRenderer {
     }
 }
 
-/// Static alpha coverage, built once per physical size and surface revision.
+/// Static single-channel R8 alpha coverage, built once per physical size and surface revision.
 pub(super) fn coverage(surface: &Surface, size: [u32; 2], scale: f32) -> Vec<u8> {
     coverage_for(surface, size, scale, false)
 }
+
 pub(super) fn coverage_for(
     surface: &Surface,
     size: [u32; 2],
@@ -444,11 +476,11 @@ pub(super) fn coverage_for(
 ) -> Vec<u8> {
     let [w, h] = size;
     let logical = [w as f32 / scale, h as f32 / scale];
-    if surface.route() == SurfaceRoute::Frame {
+    if let SurfaceKind::Frame { widths, .. } = surface.kind() {
         // A failed image decode must not fall through to a rectangular mask.
-        let mut mask = frame_coverage(surface, size, scale)
-            .unwrap_or_else(|| vec![0; w as usize * h as usize * 4]);
-        if stroke_only && let Some((_, widths)) = &surface.frame {
+        let mut mask =
+            frame_coverage(surface, size, scale).unwrap_or_else(|| vec![0; (w * h) as usize]);
+        if stroke_only {
             let [top, right, bottom, left] = widths.map(|v| v * scale);
             for y in 0..h {
                 for x in 0..w {
@@ -457,7 +489,7 @@ pub(super) fn coverage_for(
                         && y as f32 >= top
                         && (y as f32) < h as f32 - bottom
                     {
-                        mask[((y * w + x) * 4 + 3) as usize] = 0;
+                        mask[(y * w + x) as usize] = 0;
                     }
                 }
             }
@@ -492,7 +524,7 @@ pub(super) fn coverage_for(
             );
             Some(p.take())
         });
-    let mut out = vec![0; w as usize * h as usize * 4];
+    let mut out = vec![0; (w * h) as usize];
     let mut pixmap = tiny_skia::Pixmap::new(w, h).expect("positive sweep size");
     let mut paint = tiny_skia::Paint::default();
     paint.set_color_rgba8(255, 255, 255, 255);
@@ -523,8 +555,6 @@ pub(super) fn coverage_for(
             pixmap.fill_path(path, &paint, fill_rule(even_odd), transform, None);
         }
         for (i, (target, mask)) in out
-            .as_chunks_mut::<4>()
-            .0
             .iter_mut()
             .zip(pixmap.data().as_chunks::<4>().0.iter())
             .enumerate()
@@ -545,10 +575,10 @@ pub(super) fn coverage_for(
                 .as_ref()
                 .map_or(1.0, |p| f32::from(p[i * 4 + 3]) / 255.0);
             let alpha = (f32::from(mask[3]) / 255.0 * opacity * ink * clip).clamp(0.0, 1.0);
-            target[3] = (alpha * 255.0 + f32::from(target[3]) * (1.0 - alpha)).round() as u8;
+            *target = (alpha * 255.0 + f32::from(*target) * (1.0 - alpha)).round() as u8;
         }
     };
-    if let SurfaceRoute::Motif(motif) = surface.route() {
+    if let SurfaceKind::Motif(motif) = surface.kind() {
         for part in nanatype_theme::motif_paths(motif, logical) {
             let mut builder = tiny_skia::PathBuilder::new();
             append_path(&mut builder, &part.path);
@@ -674,26 +704,85 @@ fn gradient_alpha(stops: &[nana_ui_core::GradientStop], t: f32) -> f32 {
     stops.last().unwrap().color[3]
 }
 
+#[derive(Clone)]
+struct CachedAlpha {
+    len: u64,
+    modified: Option<SystemTime>,
+    width: u32,
+    height: u32,
+    alpha: Arc<[u8]>,
+}
+
+static FRAME_ALPHA_CACHE: LazyLock<Mutex<LruMap<PathBuf, CachedAlpha>>> =
+    LazyLock::new(|| Mutex::new(LruMap::new(16)));
+
+enum AlphaLookup {
+    Loaded(CachedAlpha),
+    Oversized,
+    Missing,
+}
+
+fn load_frame_alpha(path: &Path) -> AlphaLookup {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return AlphaLookup::Missing;
+    };
+    let len = meta.len();
+    if len > crate::media::MAX_FILE_BYTES {
+        return AlphaLookup::Oversized;
+    }
+    let modified = meta.modified().ok();
+    {
+        let mut cache = FRAME_ALPHA_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(entry) = cache.get(&path.to_path_buf())
+            && entry.len == len
+            && entry.modified == modified
+        {
+            return AlphaLookup::Loaded(entry.clone());
+        }
+    }
+    let Ok(dimensions) = imagesize::size(path) else {
+        return AlphaLookup::Missing;
+    };
+    if dimensions.width > nanatype_theme::MAX_IMAGE_SIDE
+        || dimensions.height > nanatype_theme::MAX_IMAGE_SIDE
+    {
+        return AlphaLookup::Oversized;
+    }
+    let Ok(decoded) = image::open(path) else {
+        return AlphaLookup::Missing;
+    };
+    let rgba = decoded.to_rgba8();
+    let (width, height) = (rgba.width(), rgba.height());
+    let alpha: Arc<[u8]> = rgba.pixels().map(|p| p[3]).collect::<Vec<u8>>().into();
+    let entry = CachedAlpha {
+        len,
+        modified,
+        width,
+        height,
+        alpha,
+    };
+    FRAME_ALPHA_CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(path.to_path_buf(), entry.clone());
+    AlphaLookup::Loaded(entry)
+}
+
 fn frame_coverage(surface: &Surface, size: [u32; 2], scale: f32) -> Option<Vec<u8>> {
     let (frame, widths) = surface.frame.as_ref()?;
     let nana_ui_core::BackgroundImage::Url { url, .. } = &frame.source else {
         return None;
     };
     let path = crate::assets::file_path(url)?;
-    let path = path.as_path();
-    // These are already resolved media-library URLs. Keep the decoder limits
-    // identical to the product image boundary; a missing frame emits no light.
-    if std::fs::metadata(path).ok()?.len() > crate::media::MAX_FILE_BYTES {
-        return Some(vec![0; (size[0] * size[1] * 4) as usize]);
+    let image = match load_frame_alpha(path.as_path()) {
+        AlphaLookup::Loaded(img) => img,
+        AlphaLookup::Oversized => return Some(vec![0; (size[0] * size[1]) as usize]),
+        AlphaLookup::Missing => return None,
+    };
+    if image.width == 0 || image.height == 0 {
+        return None;
     }
-    let dimensions = imagesize::size(path).ok()?;
-    if dimensions.width > nanatype_theme::MAX_IMAGE_SIDE
-        || dimensions.height > nanatype_theme::MAX_IMAGE_SIDE
-    {
-        return Some(vec![0; (size[0] * size[1] * 4) as usize]);
-    }
-    let image = image::open(path).ok()?.to_rgba8();
-    let (iw, ih) = (image.width() as f32, image.height() as f32);
+    let (iw, ih) = (image.width as f32, image.height as f32);
     let slices = [
         frame.slice[0].to_px(ih),
         frame.slice[1].to_px(iw),
@@ -712,9 +801,8 @@ fn frame_coverage(surface: &Surface, size: [u32; 2], scale: f32) -> Option<Vec<u
                 + (value - near) / (extent - near - far).max(0.001) * (src - snear - sfar).max(0.0)
         }
     };
-    let mut out = vec![0; (size[0] * size[1] * 4) as usize];
-    for y in 0..size[1] {
-        for x in 0..size[0] {
+    let xs: Vec<(u32, bool)> = (0..size[0])
+        .map(|x| {
             let sx = axis(
                 (x as f32 + 0.5) / scale,
                 size[0] as f32 / scale,
@@ -724,6 +812,12 @@ fn frame_coverage(surface: &Surface, size: [u32; 2], scale: f32) -> Option<Vec<u
                 slices[3],
                 slices[1],
             );
+            let center = sx >= slices[3] && sx < iw - slices[1];
+            ((sx.floor() as u32).min(image.width - 1), center)
+        })
+        .collect();
+    let ys: Vec<(u32, bool)> = (0..size[1])
+        .map(|y| {
             let sy = axis(
                 (y as f32 + 0.5) / scale,
                 size[1] as f32 / scale,
@@ -733,13 +827,17 @@ fn frame_coverage(surface: &Surface, size: [u32; 2], scale: f32) -> Option<Vec<u
                 slices[0],
                 slices[2],
             );
-            let center =
-                sx >= slices[3] && sx < iw - slices[1] && sy >= slices[0] && sy < ih - slices[2];
-            if frame.fill || !center {
-                out[((y * size[0] + x) * 4 + 3) as usize] = image.get_pixel(
-                    (sx.floor() as u32).min(image.width() - 1),
-                    (sy.floor() as u32).min(image.height() - 1),
-                )[3];
+            let center = sy >= slices[0] && sy < ih - slices[2];
+            ((sy.floor() as u32).min(image.height - 1), center)
+        })
+        .collect();
+    let mut out = vec![0; (size[0] * size[1]) as usize];
+    for (y, &(sy, y_center)) in ys.iter().enumerate() {
+        let src_row = &image.alpha[(sy * image.width) as usize..][..image.width as usize];
+        let dst_row = &mut out[y * size[0] as usize..][..size[0] as usize];
+        for (x, &(sx, x_center)) in xs.iter().enumerate() {
+            if frame.fill || !(x_center && y_center) {
+                dst_row[x] = src_row[sx as usize];
             }
         }
     }
@@ -764,8 +862,8 @@ mod tests {
             ..Default::default()
         };
         let masked = coverage(&surface, [100, 60], 1.0);
-        assert!(masked.as_chunks::<4>().0.iter().any(|p| p[3] > 0));
-        assert_eq!(masked[3], 0);
+        assert!(masked.iter().any(|&a| a > 0));
+        assert_eq!(masked[0], 0);
         surface.contour = None;
         surface.polygon = None;
         assert_eq!(masked, coverage(&surface, [100, 60], 1.0));
@@ -831,12 +929,6 @@ mod tests {
             assert!(coverage(&surface, size, scale).iter().all(|b| *b == 0));
         }
         surface.frame = None;
-        assert!(
-            coverage(&surface, [80, 40], 1.0)
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .any(|p| p[3] > 0)
-        );
+        assert!(coverage(&surface, [80, 40], 1.0).iter().any(|&a| a > 0));
     }
 }

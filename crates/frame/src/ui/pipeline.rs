@@ -389,7 +389,7 @@ fn build(
     for line in &layout.lines {
         line.metrics.baseline_y_px.to_bits().hash(&mut hasher);
         for run in layout.line_runs(line) {
-            format!("{:?}", run.font).hash(&mut hasher);
+            run.font.hash(&mut hasher);
             run.font_size_px.to_bits().hash(&mut hasher);
             run.origin_x_px.to_bits().hash(&mut hasher);
             for g in &run.glyphs {
