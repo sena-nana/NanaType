@@ -13,7 +13,6 @@
 #![forbid(unsafe_code)]
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
@@ -32,6 +31,15 @@ pub enum Locale {
 
 impl Locale {
     pub const ALL: [Self; 4] = [Self::ZhCn, Self::ZhTw, Self::EnUs, Self::JaJp];
+
+    const fn index(self) -> usize {
+        match self {
+            Self::ZhCn => 0,
+            Self::ZhTw => 1,
+            Self::EnUs => 2,
+            Self::JaJp => 3,
+        }
+    }
 
     pub fn tag(self) -> &'static str {
         match self {
@@ -151,7 +159,7 @@ num_arg!(u8, u16, u32, u64, usize, i32, i64, f32, f64);
 
 pub struct I18n {
     locale: Locale,
-    bundles: HashMap<Locale, FluentBundle<FluentResource>>,
+    bundles: [OnceLock<FluentBundle<FluentResource>>; Locale::ALL.len()],
 }
 
 impl fmt::Debug for I18n {
@@ -184,8 +192,12 @@ impl I18n {
     pub fn new(locale: Locale) -> Self {
         Self {
             locale,
-            bundles: Locale::ALL.into_iter().map(|l| (l, bundle(l))).collect(),
+            bundles: [const { OnceLock::new() }; Locale::ALL.len()],
         }
+    }
+
+    fn bundle_for(&self, locale: Locale) -> &FluentBundle<FluentResource> {
+        self.bundles[locale.index()].get_or_init(|| bundle(locale))
     }
 
     pub fn locale(&self) -> Locale {
@@ -211,10 +223,10 @@ impl I18n {
     }
 
     pub fn tr_in(&self, locale: Locale, key: &str, args: &[(&str, Arg<'_>)]) -> String {
-        let mut fluent = FluentArgs::new();
+        let mut fluent = FluentArgs::with_capacity(args.len());
         for (name, value) in args {
             match value {
-                Arg::Str(s) => fluent.set(*name, FluentValue::from(s.to_string())),
+                Arg::Str(s) => fluent.set(*name, FluentValue::from(&**s)),
                 Arg::Num(n) => fluent.set(*name, FluentValue::from(*n)),
             }
         }
@@ -222,7 +234,7 @@ impl I18n {
     }
 
     pub fn has(&self, key: &str) -> bool {
-        self.bundles[&self.locale].has_message(key)
+        self.bundle_for(self.locale).has_message(key)
     }
 
     fn format_in(&self, locale: Locale, key: &str, args: Option<&FluentArgs<'_>>) -> String {
@@ -231,7 +243,7 @@ impl I18n {
             None => (key, None),
         };
         for locale in [locale, Locale::EnUs] {
-            let bundle = &self.bundles[&locale];
+            let bundle = self.bundle_for(locale);
             let Some(message) = bundle.get_message(message_key) else {
                 continue;
             };
@@ -264,7 +276,7 @@ pub fn framework_id(key: &str) -> String {
 pub fn framework_strings(locale: Locale) -> Arc<nana_ui_core::FrameworkStrings> {
     static TABLES: [OnceLock<Arc<nana_ui_core::FrameworkStrings>>; Locale::ALL.len()] =
         [const { OnceLock::new() }; Locale::ALL.len()];
-    let index = Locale::ALL.iter().position(|l| *l == locale).unwrap_or(0);
+    let index = locale.index();
     Arc::clone(TABLES[index].get_or_init(|| {
         let mut strings = nana_ui_core::FrameworkStrings::default();
         if locale.framework_source().is_none() {
@@ -390,7 +402,11 @@ mod tests {
     #[test]
     fn lookups_format_and_fall_back() {
         let mut i18n = I18n::new(Locale::EnUs);
+        // Bundles initialize lazily per locale.
+        assert!(i18n.bundles.iter().all(|slot| slot.get().is_none()));
         assert_eq!(i18n.t("common-cancel"), "Cancel");
+        assert!(i18n.bundles[Locale::EnUs.index()].get().is_some());
+        assert!(i18n.bundles[Locale::ZhCn.index()].get().is_none());
         assert_eq!(
             i18n.tr("marker-wait", &[("ms", 500.into())]),
             MARKER_WAIT_EN

@@ -327,3 +327,46 @@ fn paragraph_attributes_survive_document_operations_and_old_json() {
     let old: Document = serde_json::from_str(r#"{"paragraphs":[{"inlines":[]}]}"#).unwrap();
     assert_eq!(old.paragraphs[0].align, None);
 }
+
+#[test]
+fn unit_slices_match_units_and_support_diff_comparison() {
+    let prev = Document::from_inlines(vec![
+        Inline::text("e\u{301}x"),
+        Inline::Marker(Marker::Wait { ms: 200 }),
+        Inline::Ruby(RubyGroup {
+            base: TextRun::plain("漢字"),
+            annotation: "かんじ".into(),
+        }),
+        Inline::Atom(Atom {
+            kind: AtomKind::Sticker,
+            asset: "lib:cats/hi".parse().unwrap(),
+            height_em: 1.0,
+            alt: "[hi]".into(),
+            effects: Effects::default(),
+        }),
+    ]);
+    let next = Document::from_inlines(vec![
+        Inline::text("e\u{301}\nx"),
+        Inline::Ruby(RubyGroup {
+            base: TextRun::plain("漢字"),
+            annotation: "かんじ".into(),
+        }),
+    ]);
+
+    let units = prev.units();
+    let slices = prev.unit_slices();
+    assert_eq!(slices.len(), prev.unit_count());
+    assert_eq!(slices.len(), units.len());
+    for (unit, slice) in units.iter().zip(&slices) {
+        assert_eq!(&slice.unit, unit);
+        assert_eq!(slice.text, prev.unit_text(unit));
+        assert_eq!(slice.class(), unit.class());
+    }
+
+    let next_slices = next.unit_slices();
+    // Unit 0 matches in paragraph and content; unit 1 ('x') moved to para 1.
+    assert!(slices[0].same(&next_slices[0]));
+    assert!(!slices[1].same(&next_slices[1]));
+    assert!(slices[1].same_content(&next_slices[1]));
+    assert!(slices[2].same_content(&next_slices[2]));
+}

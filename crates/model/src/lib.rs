@@ -28,7 +28,7 @@ pub use chars::{CharClass, PunctKind, classify, is_cjk_grapheme};
 pub use color::{ParseColorError, Rgba8};
 pub use document::{
     AssetRef, Atom, AtomKind, Document, Inline, Item, MAX_UNITS, Marker, Mention, Paragraph,
-    ParagraphAlign, RubyGroup, TextRun, Unit, UnitKind, VtsAction, VtsReset,
+    ParagraphAlign, RubyGroup, TextRun, Unit, UnitKind, UnitSlice, VtsAction, VtsReset,
 };
 pub use envelope::{DOCUMENT_FORMAT, DOCUMENT_VERSION, DocumentEnvelope, EnvelopeError};
 pub use events::BridgeEvent;

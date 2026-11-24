@@ -15,6 +15,9 @@ struct SpanTag {
 
 fn style_tags(run: &TextRun) -> Vec<SpanTag> {
     let s = &run.style;
+    if s.is_plain() {
+        return Vec::new();
+    }
     let mut tags = Vec::new();
     let mut push = |open: String, name: &'static str| {
         tags.push(SpanTag {
@@ -61,6 +64,9 @@ fn style_tags(run: &TextRun) -> Vec<SpanTag> {
 }
 
 fn effect_tags(effects: &Effects, pace: Option<&nanatype_model::Pace>) -> Vec<SpanTag> {
+    if effects.is_none() && pace.is_none_or(|p| p.is_inherit()) {
+        return Vec::new();
+    }
     let mut tags = Vec::new();
     for c in &effects.continuous {
         tags.push(SpanTag {
@@ -99,6 +105,9 @@ fn effect_tags(effects: &Effects, pace: Option<&nanatype_model::Pace>) -> Vec<Sp
 }
 
 fn run_tags(run: &TextRun) -> Vec<SpanTag> {
+    if run.style.is_plain() && run.effects.is_none() && run.pace.is_inherit() {
+        return Vec::new();
+    }
     let mut tags = style_tags(run);
     tags.extend(effect_tags(&run.effects, Some(&run.pace)));
     tags
@@ -131,14 +140,13 @@ impl Writer {
         }
     }
 
-    fn text(&mut self, text: &str) {
-        for c in text.chars() {
-            if c == '[' {
-                self.out.push_str("[[");
-            } else {
-                self.out.push(c);
-            }
+    fn text(&mut self, mut text: &str) {
+        while let Some(pos) = text.find('[') {
+            self.out.push_str(&text[..pos]);
+            self.out.push_str("[[");
+            text = &text[pos + 1..];
         }
+        self.out.push_str(text);
     }
 }
 

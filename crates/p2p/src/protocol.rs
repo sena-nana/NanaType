@@ -1,9 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Write;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use nanatype_core::{DisplayView, HistoryRow, Reveal};
-use nanatype_model::LineId;
+use nanatype_model::{AssetRef, Document, Inline, LineId};
 use serde::{Deserialize, Serialize};
+
+use crate::picture::Role;
 
 pub const VERSION: u32 = 5;
 /// A room password, in characters. Empty means the invite itself is enough.
@@ -22,8 +25,25 @@ pub const MAX_TRACK: usize = MAX_FRAME / (MAX_MEMBERS * 2);
 /// their lines are still in the shared history.
 pub const MAX_TRACKS: usize = 32;
 
+struct ByteCounter(usize);
+
+impl Write for ByteCounter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0 += buf.len();
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 fn json_len<T: Serialize>(value: &T) -> usize {
-    serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
+    let mut counter = ByteCounter(0);
+    match serde_json::to_writer(&mut counter, value) {
+        Ok(()) => counter.0,
+        Err(_) => usize::MAX,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,6 +191,229 @@ impl TrackSnapshot {
             return Err("Session state exceeds limits".into());
         }
         Ok(())
+    }
+
+    pub(crate) fn asset_roles(&self) -> BTreeMap<String, Role> {
+        let mut roles = BTreeMap::new();
+        self.visit_assets(|reference, role| match roles.get(reference) {
+            Some(Role::Picture) => {}
+            _ => {
+                roles.insert(reference.to_owned(), role);
+            }
+        });
+        roles
+    }
+
+    pub(crate) fn asset_hashes(&self) -> BTreeSet<String> {
+        let mut hashes = BTreeSet::new();
+        self.visit_assets(|reference, _| {
+            if let Some(hash) = reference.strip_prefix("blob:p2p-")
+                && valid_hash(hash)
+            {
+                hashes.insert(hash.to_owned());
+            }
+        });
+        hashes
+    }
+
+    pub(crate) fn visit_assets(&self, mut f: impl FnMut(&str, Role)) {
+        fn visit_asset_ref(asset: &AssetRef, role: Role, f: &mut impl FnMut(&str, Role)) {
+            if let AssetRef::Blob(rest) = asset {
+                // Fast path avoids formatting `"blob:{rest}"` into a String.
+                if let Some(hash) = rest.strip_prefix("p2p-")
+                    && valid_hash(hash)
+                {
+                    let mut buf = [0u8; 73];
+                    buf[..9].copy_from_slice(b"blob:p2p-");
+                    buf[9..].copy_from_slice(hash.as_bytes());
+                    if let Ok(s) = std::str::from_utf8(&buf) {
+                        f(s, role);
+                        return;
+                    }
+                }
+            }
+            f(&asset.to_string(), role);
+        }
+
+        fn visit_doc(doc: &Document, f: &mut impl FnMut(&str, Role)) {
+            for paragraph in &doc.paragraphs {
+                for inline in &paragraph.inlines {
+                    match inline {
+                        Inline::Atom(atom) => visit_asset_ref(&atom.asset, Role::Picture, f),
+                        Inline::Mention(mention) => {
+                            if let Some(avatar) = &mention.user.avatar {
+                                visit_asset_ref(avatar, Role::Avatar, f);
+                            }
+                        }
+                        Inline::Text(_) | Inline::Ruby(_) | Inline::Marker(_) => {}
+                    }
+                }
+            }
+        }
+
+        if let Some(avatar) = &self.display.speaker.avatar {
+            f(avatar, Role::Avatar);
+        }
+        visit_doc(&self.display.doc, &mut f);
+        if let Some(reply) = &self.display.reply
+            && let Some(avatar) = &reply.user.avatar
+        {
+            visit_asset_ref(avatar, Role::Avatar, &mut f);
+        }
+        for row in &self.rows {
+            if let Some(avatar) = &row.item.avatar {
+                f(avatar, Role::Avatar);
+            }
+            if let Some(reply) = &row.item.reply
+                && let Some(avatar) = &reply.user.avatar
+            {
+                visit_asset_ref(avatar, Role::Avatar, &mut f);
+            }
+            visit_doc(&row.item.doc, &mut f);
+            visit_doc(&row.doc, &mut f);
+        }
+        for portrait in &self.portraits {
+            visit_asset_ref(&portrait.asset, Role::Picture, &mut f);
+        }
+    }
+
+    pub(crate) fn sanitize_assets(&mut self) {
+        self.rewrite_and_sanitize_assets(None);
+    }
+
+    pub(crate) fn rewrite_and_sanitize_assets(
+        &mut self,
+        replacements: Option<&BTreeMap<String, String>>,
+    ) {
+        if let Some(avatar) = &mut self.display.speaker.avatar {
+            if let Some(map) = replacements
+                && let Some(hash) = map.get(avatar.as_str())
+            {
+                *avatar = format!("blob:p2p-{hash}");
+            }
+            if !is_p2p_blob_str(avatar) {
+                self.display.speaker.avatar = None;
+            }
+        }
+        if doc_needs_asset_update(&self.display.doc, replacements) {
+            rewrite_doc(
+                std::sync::Arc::make_mut(&mut self.display.doc),
+                replacements,
+            );
+        }
+        if let Some(reply) = &mut self.display.reply {
+            rewrite_opt_asset(&mut reply.user.avatar, replacements);
+        }
+        for row in &mut self.rows {
+            if let Some(avatar) = &mut row.item.avatar {
+                if let Some(map) = replacements
+                    && let Some(hash) = map.get(avatar.as_str())
+                {
+                    *avatar = format!("blob:p2p-{hash}");
+                }
+                if !is_p2p_blob_str(avatar) {
+                    row.item.avatar = None;
+                }
+            }
+            if let Some(reply) = &mut row.item.reply {
+                rewrite_opt_asset(&mut reply.user.avatar, replacements);
+            }
+            if doc_needs_asset_update(&row.item.doc, replacements) {
+                rewrite_doc(&mut row.item.doc, replacements);
+            }
+            if doc_needs_asset_update(&row.doc, replacements) {
+                rewrite_doc(std::sync::Arc::make_mut(&mut row.doc), replacements);
+            }
+        }
+        for portrait in &mut self.portraits {
+            rewrite_req_asset(&mut portrait.asset, replacements);
+        }
+    }
+}
+
+fn is_p2p_blob_str(s: &str) -> bool {
+    s.strip_prefix("blob:p2p-").is_some_and(valid_hash)
+}
+
+fn is_p2p_blob_ref(asset: &AssetRef) -> bool {
+    matches!(asset, AssetRef::Blob(rest) if rest.strip_prefix("p2p-").is_some_and(valid_hash))
+}
+
+fn missing_blob() -> AssetRef {
+    AssetRef::Blob("p2p-missing".into())
+}
+
+fn asset_replacement(
+    asset: &AssetRef,
+    replacements: Option<&BTreeMap<String, String>>,
+) -> Option<AssetRef> {
+    let map = replacements?;
+    if map.is_empty() {
+        return None;
+    }
+    map.get(&asset.to_string())
+        .map(|hash| AssetRef::Blob(format!("p2p-{hash}")))
+}
+
+fn rewrite_opt_asset(slot: &mut Option<AssetRef>, replacements: Option<&BTreeMap<String, String>>) {
+    let Some(asset) = slot else { return };
+    if let Some(next) = asset_replacement(asset, replacements) {
+        *asset = next;
+    }
+    if !is_p2p_blob_ref(asset) {
+        *slot = None;
+    }
+}
+
+fn rewrite_req_asset(asset: &mut AssetRef, replacements: Option<&BTreeMap<String, String>>) {
+    if let Some(next) = asset_replacement(asset, replacements) {
+        *asset = next;
+    }
+    if !is_p2p_blob_ref(asset) {
+        *asset = missing_blob();
+    }
+}
+
+fn doc_needs_asset_update(doc: &Document, replacements: Option<&BTreeMap<String, String>>) -> bool {
+    let has_replacements = replacements.is_some_and(|m| !m.is_empty());
+    for paragraph in &doc.paragraphs {
+        for inline in &paragraph.inlines {
+            match inline {
+                Inline::Atom(atom) => {
+                    if !is_p2p_blob_ref(&atom.asset)
+                        || (has_replacements
+                            && asset_replacement(&atom.asset, replacements).is_some())
+                    {
+                        return true;
+                    }
+                }
+                Inline::Mention(mention) => {
+                    if let Some(avatar) = &mention.user.avatar
+                        && (!is_p2p_blob_ref(avatar)
+                            || (has_replacements
+                                && asset_replacement(avatar, replacements).is_some()))
+                    {
+                        return true;
+                    }
+                }
+                Inline::Text(_) | Inline::Ruby(_) | Inline::Marker(_) => {}
+            }
+        }
+    }
+    false
+}
+
+fn rewrite_doc(doc: &mut Document, replacements: Option<&BTreeMap<String, String>>) {
+    for paragraph in &mut doc.paragraphs {
+        for inline in &mut paragraph.inlines {
+            match inline {
+                Inline::Atom(atom) => rewrite_req_asset(&mut atom.asset, replacements),
+                Inline::Mention(mention) => {
+                    rewrite_opt_asset(&mut mention.user.avatar, replacements)
+                }
+                Inline::Text(_) | Inline::Ruby(_) | Inline::Marker(_) => {}
+            }
+        }
     }
 }
 
@@ -368,13 +611,17 @@ impl Room {
     }
 
     pub fn asset_hashes(&self) -> BTreeSet<String> {
-        let value = serde_json::to_value(self).expect("room");
-        asset_references(&value)
-            .into_iter()
-            .filter_map(|reference| reference.strip_prefix("blob:p2p-"))
-            .filter(|hash| valid_hash(hash))
-            .map(str::to_owned)
-            .collect()
+        let mut hashes = BTreeSet::new();
+        for track in self.tracks.values() {
+            track.visit_assets(|reference, _| {
+                if let Some(hash) = reference.strip_prefix("blob:p2p-")
+                    && valid_hash(hash)
+                {
+                    hashes.insert(hash.to_owned());
+                }
+            });
+        }
+        hashes
     }
 }
 
@@ -543,6 +790,49 @@ pub(crate) enum Frame {
     Leave,
     /// The room already has `MAX_MEMBERS` people.
     Full,
+}
+
+impl Frame {
+    pub(crate) fn sanitize_assets(&mut self) {
+        match self {
+            Self::Welcome { room, .. } | Self::Room { room, .. } => {
+                for track in room.tracks.values_mut() {
+                    track.sanitize_assets();
+                }
+            }
+            Self::Track { track, .. } | Self::PeerTrack { track, .. } => {
+                track.sanitize_assets();
+            }
+            Self::Hello { .. } | Self::Ping(_) | Self::Pong(_) | Self::Leave | Self::Full => {}
+        }
+    }
+}
+
+/// Borrowed counterpart of [`Frame`] variants that carry [`Room`] or
+/// [`TrackSnapshot`], avoiding per-recipient deep clones when broadcasting.
+#[derive(Serialize)]
+pub(crate) enum FrameRef<'a> {
+    Welcome {
+        room: &'a Room,
+        #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+        previews: &'a BTreeMap<String, String>,
+    },
+    Track {
+        track: &'a TrackSnapshot,
+        #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+        previews: &'a BTreeMap<String, String>,
+    },
+    PeerTrack {
+        participant: &'a str,
+        track: &'a TrackSnapshot,
+        #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+        previews: &'a BTreeMap<String, String>,
+    },
+    Room {
+        room: &'a Room,
+        #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+        previews: &'a BTreeMap<String, String>,
+    },
 }
 
 #[cfg(test)]

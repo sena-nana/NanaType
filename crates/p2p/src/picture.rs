@@ -73,12 +73,14 @@ pub(crate) fn wire_kind(bytes: &[u8]) -> Option<Kind> {
 }
 
 /// How each resource string in a track should be scaled.
+#[cfg(test)]
 pub(crate) fn roles(value: &serde_json::Value) -> std::collections::BTreeMap<String, Role> {
     let mut roles = std::collections::BTreeMap::new();
     walk(value, &mut roles);
     roles
 }
 
+#[cfg(test)]
 fn walk(value: &serde_json::Value, roles: &mut std::collections::BTreeMap<String, Role>) {
     match value {
         serde_json::Value::Object(object) => {
@@ -102,6 +104,7 @@ fn walk(value: &serde_json::Value, roles: &mut std::collections::BTreeMap<String
     }
 }
 
+#[cfg(test)]
 fn note(roles: &mut std::collections::BTreeMap<String, Role>, reference: &str, role: Role) {
     match roles.get(reference) {
         Some(Role::Picture) => {}

@@ -5,7 +5,9 @@
 //! Warn and up normally, Info and up with detailed logs. HTTP and TLS stacks
 //! log request details below Error, so they are held to Error.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Duration;
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
@@ -36,11 +38,37 @@ const ERROR_ONLY: &[&str] = &[
 
 /// One record per crate per interval.
 const INTERVAL: Duration = Duration::from_secs(1);
-/// Crates hash into this many budgets; a collision only shares one.
-const SLOTS: usize = 32;
 
-static BUDGETS: [Throttle; SLOTS] = [const { Throttle::new() }; SLOTS];
-static SUPPRESSED_COUNT: [AtomicU64; SLOTS] = [const { AtomicU64::new(0) }; SLOTS];
+struct CrateBudget {
+    throttle: Throttle,
+    suppressed: AtomicU64,
+}
+
+impl CrateBudget {
+    fn new() -> Self {
+        Self {
+            throttle: Throttle::new(),
+            suppressed: AtomicU64::new(0),
+        }
+    }
+}
+
+fn budget_for(crate_name: &str) -> Arc<CrateBudget> {
+    static BUDGETS: OnceLock<RwLock<HashMap<Box<str>, Arc<CrateBudget>>>> = OnceLock::new();
+    let map = BUDGETS.get_or_init(|| RwLock::new(HashMap::new()));
+    {
+        let guard = map.read().unwrap_or_else(|e| e.into_inner());
+        if let Some(budget) = guard.get(crate_name) {
+            return Arc::clone(budget);
+        }
+    }
+    let mut guard = map.write().unwrap_or_else(|e| e.into_inner());
+    Arc::clone(
+        guard
+            .entry(crate_name.into())
+            .or_insert_with(|| Arc::new(CrateBudget::new())),
+    )
+}
 
 struct Bridge {
     level: LevelFilter,
@@ -72,12 +100,6 @@ fn max_level(crate_name: &str, level: LevelFilter) -> LevelFilter {
     }
 }
 
-fn slot(crate_name: &str) -> usize {
-    // FNV-1a: stable and cheap; the budget only needs a spread.
-    let hash = nanatype_model::codec::fnv1a64(crate_name.as_bytes());
-    (hash % SLOTS as u64) as usize
-}
-
 fn descriptor(level: Level) -> &'static EventDescriptor {
     match level {
         Level::Error => &EXTERNAL_ERROR,
@@ -100,12 +122,12 @@ impl Log for Bridge {
             return;
         }
         let name = crate_of(record.target());
-        let slot = slot(name);
-        if !BUDGETS[slot].allow(INTERVAL) {
-            SUPPRESSED_COUNT[slot].fetch_add(1, Ordering::Relaxed);
+        let budget = budget_for(name);
+        if !budget.throttle.allow(INTERVAL) {
+            budget.suppressed.fetch_add(1, Ordering::Relaxed);
             return;
         }
-        let suppressed = SUPPRESSED_COUNT[slot].swap(0, Ordering::Relaxed);
+        let suppressed = budget.suppressed.swap(0, Ordering::Relaxed);
         let message = redact::text(&record.args().to_string());
         fault!(*event, suppressed = suppressed; "{name}: {message}");
     }
@@ -152,8 +174,19 @@ mod tests {
     }
 
     #[test]
-    fn slots_are_stable() {
-        assert_eq!(slot("wgpu_core"), slot("wgpu_core"));
-        assert!(slot("iroh") < SLOTS);
+    fn budgets_are_stable_and_collision_free() {
+        let a = budget_for("wgpu_core");
+        let a_again = budget_for("wgpu_core");
+        let b = budget_for("iroh");
+        assert!(Arc::ptr_eq(&a, &a_again));
+        assert!(!Arc::ptr_eq(&a, &b));
+
+        // Even crates with the same FNV-1a mod 32 residue get independent budgets.
+        let c1 = budget_for("crate_a");
+        let c2 = budget_for("crate_a_collision_check");
+        assert!(!Arc::ptr_eq(&c1, &c2));
+        assert!(c1.throttle.allow(INTERVAL));
+        assert!(c2.throttle.allow(INTERVAL));
+        assert!(!c1.throttle.allow(INTERVAL));
     }
 }
