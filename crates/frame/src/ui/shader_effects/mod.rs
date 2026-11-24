@@ -590,7 +590,7 @@ mod tests {
             v.continue_indicator = true;
         });
         assert_eq!(event_values(ui, Source::Display, 2000), [0., 1., 0., 1.]);
-        ui.peer_display.update(|v| {
+        ui.peer_lanes[0].display.update(|v| {
             let v = Arc::make_mut(v);
             v.empty = false;
             v.line = Some(nanatype_model::LineId(900));

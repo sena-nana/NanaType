@@ -15,7 +15,7 @@ pub trait Capture {
 }
 impl<C: ComponentView, K> Capture for El<C, K> {
     fn editor_part(self, ui: Stage, key: impl Into<String>) -> Self {
-        if ui.editor_nodes.is_none() {
+        if ui.preview_options.geometry_capture.is_none() {
             return self;
         }
         let node = node_ref();
@@ -25,7 +25,7 @@ impl<C: ComponentView, K> Capture for El<C, K> {
 }
 /// Register an existing motion reference without replacing its mounted node.
 pub fn track(ui: Stage, key: impl Into<String>, node: NodeRef) {
-    let Some(nodes) = ui.editor_nodes else {
+    let Some(nodes) = ui.preview_options.geometry_capture else {
         return;
     };
     let key = key.into();
@@ -42,7 +42,7 @@ pub fn track(ui: Stage, key: impl Into<String>, node: NodeRef) {
 }
 
 pub fn collect(ui: Stage, cx: &AppContext) -> Vec<Part> {
-    let Some(nodes) = ui.editor_nodes else {
+    let Some(nodes) = ui.preview_options.geometry_capture else {
         return Vec::new();
     };
     let entries = nodes.with_untracked(|m| {

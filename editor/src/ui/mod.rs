@@ -138,7 +138,11 @@ impl Ui {
             stage.skin.get_untracked(),
             locale,
         );
-        host.editor_nodes = Some(signal(Default::default()));
+        host.preview_options = nanatype_frame::ui::PreviewOptions {
+            custom_speaker_name: true,
+            show_portrait: true,
+            geometry_capture: Some(signal(Default::default())),
+        };
         host.locale = stage.locale;
         host.now = stage.now;
         host.chrome_dark = stage.chrome_dark;

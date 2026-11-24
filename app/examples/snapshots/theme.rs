@@ -101,7 +101,7 @@ pub fn audit(
     };
     if period_ms > 0 {
         let frames = if period_ms == 24000 { 16 } else { 8 };
-        ui.peer_display.set(ui.display.get_untracked());
+        ui.peer_lanes[0].display.set(ui.display.get_untracked());
         for i in 0..=frames {
             ui.now.set(120_000 + i * period_ms / frames);
             ui.peer_now.set(120_000 + i * period_ms / frames);

@@ -299,7 +299,7 @@ mod tests {
             }
             let ui = Ui::new(Arc::new(settings), skin, nanatype_i18n::Locale::ZhCn);
             ui.display.set(Arc::new(core.display().clone()));
-            ui.peer_display.set(ui.display.get_untracked());
+            ui.peer_lanes[0].display.set(ui.display.get_untracked());
             let rows: Arc<Vec<_>> = Arc::new(core.history().iter().cloned().collect());
             ui.history.set(rows.clone());
             ui.danmaku.set(rows);

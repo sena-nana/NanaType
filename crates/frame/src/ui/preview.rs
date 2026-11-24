@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, Weak};
 
 use nana_ui::runtime::view::{
-    AnyView, IntoView, RaisedSurfacePainter, Signal, dynamic, watch_effect, widget,
+    AnyView, IntoView, RaisedSurfacePainter, Signal, computed, dynamic, widget,
 };
 use nana_ui::runtime::{Stack, Text};
 use nana_ui_core::{
@@ -332,7 +332,7 @@ fn sample_stage(
     // The input window draws its box from the display profile, with the
     // skin preview on and the sample speaker in the name plate.
     settings.general.input_skin_preview = true;
-    let name = if ui.editor_nodes.is_some() {
+    let name = if ui.preview_options.custom_speaker_name {
         ui.preview_name.get_untracked()
     } else {
         ui.now_t("skins-preview-name")
@@ -360,9 +360,9 @@ fn sample_stage(
     let display = crate::canvas::size_of(crate::canvas::Canvas::Display, &skin, &settings);
     let history = crate::canvas::size_of(crate::canvas::Canvas::History, &skin, &settings);
     let mut preview = Stage::new(settings, skin.clone(), ui.locale.get_untracked());
-    preview.editor_nodes = ui.editor_nodes;
+    preview.preview_options = ui.preview_options;
     preview.asset_urls.set(urls.clone());
-    if ui.editor_nodes.is_some() {
+    if ui.preview_options.show_portrait {
         let mut portraits = HashMap::new();
         if let Some(path) = &skin.dialogue.portrait.image
             && let Some(url) = urls.get(&format!("skin:{path}"))
@@ -713,17 +713,24 @@ fn playback_rows(
         .collect()
 }
 
-/// Show the script one message at a time while a preview is on screen.
+/// Show the script one message at a time while a preview is on screen via a
+/// lazy `Computed`, so rebuilding previews never leaks a `watch_effect`.
 /// Reduced motion, and any preview that is not live, keeps the whole log.
-fn play_history(ui: Stage, script: Arc<Vec<nanatype_core::HistoryRow>>) {
-    watch_effect(move || {
-        let (step, _) = ui.preview_playback.get();
-        let rows = if ui.live_preview.get() && !ui.reduced_motion.get() {
-            playback_rows(&script, step)
+fn play_history(ui: &mut Stage, script: Arc<Vec<nanatype_core::HistoryRow>>) {
+    let playback = ui.preview_playback;
+    let live_preview = ui.live_preview;
+    let reduced_motion = ui.reduced_motion;
+    let rows = computed(move || {
+        let (step, _) = playback.get();
+        if live_preview.get() && !reduced_motion.get() {
+            Arc::new(playback_rows(&script, step))
         } else {
-            (*script).clone()
-        };
-        ui.history.set(Arc::new(rows));
+            script.clone()
+        }
+    });
+    ui.history_rows = rows;
+    ui.history_index = computed(move || {
+        Arc::new(rows.with(|rows| rows.iter().enumerate().map(|(i, r)| (r.key, i)).collect()))
     });
 }
 
@@ -732,7 +739,7 @@ fn display_view(ready: &SampleStage, ui: Stage, text: &str) -> AnyView {
         skin: ready.skin.clone(),
         urls: ready.urls.clone(),
         source: dialogue::Source::Preview,
-        preview_name: if ui.editor_nodes.is_some() {
+        preview_name: if ui.preview_options.custom_speaker_name {
             ui.preview_name.get_untracked()
         } else {
             ui.now_t("skins-preview-name")
@@ -750,14 +757,14 @@ pub fn sample(
     surface: Surface,
     urls: Arc<HashMap<String, String>>,
 ) -> Option<(AnyView, [f32; 2])> {
-    let ready = sample_stage(ui, base, id, draft, urls)?;
+    let mut ready = sample_stage(ui, base, id, draft, urls)?;
     let (view, size) = if surface == Surface::History {
         let mut rows = designed_history(ui);
         if let Some(row) = rows.first_mut() {
             let doc = nanatype_markup::parse(&draft.history.text).doc;
             row.item.doc = doc;
         }
-        play_history(ready.preview, Arc::new(rows));
+        play_history(&mut ready.preview, Arc::new(rows));
         (
             history::history_window(ready.preview).into_any(),
             ready.history,
@@ -797,8 +804,8 @@ fn sample_both(
     draft: &Draft,
     urls: Arc<HashMap<String, String>>,
 ) -> Option<(AnyView, AnyView, [f32; 2], [f32; 2])> {
-    let ready = sample_stage(ui, base, id, draft, urls)?;
-    play_history(ready.preview, Arc::new(designed_history(ui)));
+    let mut ready = sample_stage(ui, base, id, draft, urls)?;
+    play_history(&mut ready.preview, Arc::new(designed_history(ui)));
     let display = display_view(&ready, ui, &draft.display.text);
     let history = history::history_window(ready.preview).into_any();
     Some((display, history, ready.display, ready.history))

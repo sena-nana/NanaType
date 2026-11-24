@@ -70,12 +70,32 @@ pub struct Source {
     pub revision: u64,
 }
 
+/// Explicit preview capabilities replacing implicit `editor_nodes.is_some()` checks.
+#[derive(Clone, Copy, Default)]
+pub struct PreviewOptions {
+    pub custom_speaker_name: bool,
+    pub show_portrait: bool,
+    pub geometry_capture: Option<editor_geometry::Nodes>,
+}
+
+/// Frame scheduling demand reported by a scene (`dialogue` or `history`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SceneFrameDemand {
+    /// Whether the scene's animation clock must advance on this frame.
+    pub tick_clock: bool,
+    /// Whether visual-only render effects need frames even when the scene's own
+    /// clock does not advance.
+    pub render_only: bool,
+    /// Earliest scheduled wakeup timestamp on the host monotonic clock (ms).
+    pub next_at: Option<u64>,
+}
+
 /// Local display plus one lane for every other person in an eight-person room.
 pub const REMOTE_LANES: usize = 7;
 pub const TRACK_SLOTS: usize = REMOTE_LANES + 1;
 
 /// How many remote lanes are live. Before a room snapshot (`seats == 0`) lane
-/// 0 still carries `peer_display`.
+/// 0 still carries the first remote track.
 pub fn remote_bands(seats: usize) -> usize {
     match seats.min(REMOTE_LANES) {
         0 => 1,
@@ -87,6 +107,7 @@ pub fn remote_bands(seats: usize) -> usize {
 #[derive(Clone, Copy)]
 pub struct PeerLane {
     pub display: Signal<Arc<DisplayView>>,
+    pub track: dialogue::DisplayTrackState,
     pub text_node: NodeRef,
     pub text_port: NodeRef,
     pub text_scroll: Signal<f32>,
@@ -101,7 +122,7 @@ pub struct PeerLane {
 /// per sample, so a preview never writes the live draft, history or display.
 #[derive(Clone, Copy)]
 pub struct Stage {
-    pub editor_nodes: Option<editor_geometry::Nodes>,
+    pub preview_options: PreviewOptions,
     pub speaker: Signal<nanatype_model::Speaker>,
     pub locale: Signal<Locale>,
     pub settings: Signal<Arc<Settings>>,
@@ -118,6 +139,8 @@ pub struct Stage {
     /// The application's own windows paint in high contrast (never a skin).
     pub chrome_contrast: Signal<bool>,
     pub display: Signal<Arc<DisplayView>>,
+    /// Owned per-track presence/exit state for `display` (pure reactive reads).
+    pub track: dialogue::DisplayTrackState,
     /// A private display snapshot used by isolated skin previews. It keeps
     /// the preview on the same dialogue renderer without touching the live
     /// typewriter state.
@@ -127,14 +150,11 @@ pub struct Stage {
     pub preview_text_exit_ms: Signal<u16>,
     /// Speaker label used by the isolated display preview.
     pub preview_name: Signal<String>,
-    /// Lane 0 of [`Self::peer_lanes`]. Kept so existing writers still reach
-    /// the first remote person.
-    pub peer_display: Signal<Arc<DisplayView>>,
     /// How many remote people the partner window is showing, in seat order.
-    /// Zero means the room snapshot has not arrived: one box if `peer_display`
+    /// Zero means the room snapshot has not arrived: one box if lane 0
     /// has a line, otherwise none.
     pub peer_seats: Signal<usize>,
-    /// Remote lanes, in seat order. Lane 0 is `peer_display`.
+    /// Remote lanes, in seat order.
     pub peer_lanes: [PeerLane; REMOTE_LANES],
     /// A remote participant's track is shown (it hides their latest line
     /// from the history like the local one).
@@ -150,6 +170,9 @@ pub struct Stage {
     pub peer_now: Signal<u64>,
     pub history_now: Signal<u64>,
     pub history: Signal<Arc<Vec<HistoryRow>>>,
+    /// Reactive row source read by the history renderer (equals `history` in the
+    /// app, or a `Computed` playback view in previews).
+    pub history_rows: Computed<Arc<Vec<HistoryRow>>>,
     /// The history window's search: `None` while folded away. It filters
     /// that window only, and only while [`history::search_allowed`].
     pub history_search: Signal<Option<String>>,
@@ -158,6 +181,7 @@ pub struct Stage {
     pub history_index: Computed<Arc<HashMap<u64, usize>>>,
     pub danmaku_now: Signal<u64>,
     pub danmaku: Signal<Arc<Vec<HistoryRow>>>,
+    pub danmaku_rows: Computed<Arc<Vec<HistoryRow>>>,
     pub danmaku_search: Signal<Option<String>>,
     pub danmaku_search_field: NodeRef,
     pub danmaku_index: Computed<Arc<HashMap<u64, usize>>>,
@@ -207,22 +231,28 @@ impl Stage {
             ms: 0,
         };
         let history = signal(Arc::new(Vec::<HistoryRow>::new()));
+        let history_rows = computed(move || history.get());
         let history_index = computed(move || {
             Arc::new(
-                history.with(|rows| rows.iter().enumerate().map(|(i, r)| (r.key, i)).collect()),
+                history_rows
+                    .with(|rows| rows.iter().enumerate().map(|(i, r)| (r.key, i)).collect()),
             )
         });
         let danmaku = signal(Arc::new(Vec::<HistoryRow>::new()));
+        let danmaku_rows = computed(move || danmaku.get());
         let danmaku_index = computed(move || {
             Arc::new(
-                danmaku.with(|rows| rows.iter().enumerate().map(|(i, r)| (r.key, i)).collect()),
+                danmaku_rows
+                    .with(|rows| rows.iter().enumerate().map(|(i, r)| (r.key, i)).collect()),
             )
         });
         let speaker = settings.general.active_character().speaker();
         let preview_name = speaker.name.clone();
         let entrance_view = Arc::new(DisplayView::empty(entrance));
+        let track = dialogue::DisplayTrackState::new(entrance_view.clone());
         let peer_lanes = std::array::from_fn(|_| PeerLane {
             display: signal(entrance_view.clone()),
+            track: dialogue::DisplayTrackState::new(entrance_view.clone()),
             text_node: node_ref(),
             text_port: node_ref(),
             text_scroll: signal(0.0),
@@ -230,9 +260,8 @@ impl Stage {
             text_area_height: signal(0.),
             portraits: signal(Arc::new(HashMap::new())),
         });
-        let peer_display = peer_lanes[0].display;
         Self {
-            editor_nodes: None,
+            preview_options: PreviewOptions::default(),
             speaker: signal(speaker),
             chrome_dark: signal(crate::skin_theme::dark_mode(
                 settings.accessibility.chrome,
@@ -248,11 +277,11 @@ impl Stage {
             danmaku_width: signal(0.0),
             danmaku_height: signal(0.0),
             skin: signal(skin),
-            display: signal(Arc::new(DisplayView::empty(entrance))),
+            display: signal(entrance_view),
+            track,
             preview_display: signal(Arc::new(DisplayView::empty(entrance))),
             preview_text_exit_ms: signal(0),
             preview_name: signal(preview_name),
-            peer_display,
             peer_seats: signal(0),
             peer_lanes,
             peer_active: computed(|| false),
@@ -263,11 +292,13 @@ impl Stage {
             peer_now: signal(crate::clock::now_ms()),
             history_now: signal(crate::clock::now_ms()),
             history,
+            history_rows,
             history_search: signal(None),
             history_search_field: node_ref(),
             history_index,
             danmaku_now: signal(crate::clock::now_ms()),
             danmaku,
+            danmaku_rows,
             danmaku_search: signal(None),
             danmaku_search_field: node_ref(),
             danmaku_index,
@@ -308,6 +339,7 @@ impl Stage {
         let lane = self.peer_lanes[index];
         Self {
             display: lane.display,
+            track: lane.track,
             now: self.peer_now,
             text_node: lane.text_node,
             text_port: lane.text_port,
@@ -331,6 +363,7 @@ impl Stage {
         Self {
             log_canvas: Canvas::Danmaku,
             history: self.danmaku,
+            history_rows: self.danmaku_rows,
             history_index: self.danmaku_index,
             history_now: self.danmaku_now,
             history_width: self.danmaku_width,

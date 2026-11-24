@@ -84,10 +84,29 @@ fn history_renders_yen_emoji_and_inline_picture() {
 
     let mut session = common::session()
         .themed(false)
-        .mount(796, 260, move || history::history_window(ui).into_any());
+        .mount_at(100_000, 796, 260, move || {
+            history::history_window(ui).into_any()
+        });
     session.set_gpu_renderers(nanatype::ui::sweep::renderers());
     session.flush().unwrap();
-    let (_, rgba) = session.screenshot_rgba().unwrap();
+    let (_, rgba0) = session.screenshot_rgba().unwrap();
+    let has_comp = session
+        .document()
+        .context()
+        .world()
+        .presentation_store()
+        .has_class(nana_ui_core::motion::AnimationClass::Compositor);
+    let comp_tick = session.document().scene().compositor_needs_tick();
+    session
+        .document_mut()
+        .sync_presentation_clock(std::time::Duration::from_millis(500));
+    let (_, rgba1) = session.screenshot_rgba().unwrap();
+    eprintln!(
+        "has_comp={has_comp} comp_tick={comp_tick} pink0={} pink_sync={}",
+        pink_text_pixels(&rgba0),
+        pink_text_pixels(&rgba1)
+    );
+    let rgba = rgba0;
     assert!(
         pixels_matching(&rgba, [250, 30, 30]) > 200,
         "inline history picture did not render"

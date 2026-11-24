@@ -131,7 +131,9 @@ fn p2p(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
         0,
     );
     peer_core.handle(Cmd::Skip, 1);
-    ui.peer_display.set(Arc::new(peer_core.display().clone()));
+    ui.peer_lanes[0]
+        .display
+        .set(Arc::new(peer_core.display().clone()));
     ui.peer.set(Arc::new(nanatype::p2p::SessionUi {
         active: true,
         host: true,

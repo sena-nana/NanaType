@@ -29,12 +29,12 @@ pub fn peer_window(ui: Ui, seat: usize) -> impl IntoView {
                 (
                     ui.peer.with(|state| state.active),
                     ui.peer_seats.get(),
-                    ui.peer_display.with(|view| view.empty),
+                    ui.peer_lanes[0].display.with(|view| view.empty),
                 )
             },
             move |(active, seats, legacy_empty)| {
                 // Before a room snapshot, and in tests, the first seat shows
-                // whatever `peer_display` has.
+                // whatever the first remote lane has.
                 let seated = if *seats == 0 {
                     seat == 0 && !legacy_empty
                 } else {

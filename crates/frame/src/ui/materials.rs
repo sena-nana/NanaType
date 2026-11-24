@@ -12,16 +12,6 @@ static INSTANCES: LazyLock<Mutex<HashMap<blake3::Hash, Weak<MaterialInstance>>>>
 pub fn enabled(ui: Stage) -> bool {
     ui.settings.with(|s| s.skin.advanced_effects)
 }
-/// Preserve the manifest and fallback artwork while disabling every material
-/// slot together, including panels, nameplates and decorations.
-pub fn render_skin(ui: Stage, skin: Arc<Skin>) -> Arc<Skin> {
-    if enabled(ui) || skin.material_programs.is_empty() {
-        return skin;
-    }
-    let mut fallback = (*skin).clone();
-    fallback.material_programs.clear();
-    Arc::new(fallback)
-}
 pub fn resolve(skin: &Skin, name: Option<&str>) -> Option<MaterialRef> {
     let name = name?;
     let spec = skin.materials.get(name)?;
@@ -76,7 +66,12 @@ mod tests {
         assert!(!super::super::shader_effects::animating(ui));
         ui.reduced_motion.set(true);
         assert!(enabled(ui));
-        assert!(!render_skin(ui, skin.clone()).material_programs.is_empty());
+        assert!(
+            super::super::surface::Surface::dialogue_box(&skin, None)
+                .materials(enabled(ui))
+                .material
+                .is_some()
+        );
         assert!(
             super::super::dialogue::Base::editor(&skin)
                 .material
@@ -85,6 +80,11 @@ mod tests {
         ui.settings
             .update(|s| Arc::make_mut(s).skin.advanced_effects = false);
         assert!(!enabled(ui));
-        assert!(render_skin(ui, skin).material_programs.is_empty());
+        assert!(
+            super::super::surface::Surface::dialogue_box(&skin, None)
+                .materials(enabled(ui))
+                .material
+                .is_none()
+        );
     }
 }
