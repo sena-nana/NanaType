@@ -1,77 +1,30 @@
-//! Package editor sessions: drafts, background validation, signing and an
-//! isolated Lua debugger. Views read [`EditorView`] snapshots. Nothing here
-//! changes the active skin, installed packages, consent or running plugins.
+//! Package editor sessions: drafts, cached manifest/pipeline state, signing,
+//! undo/redo history, and isolated Lua debugging. Views read [`EditorView`] snapshots.
 use crate::history::{Change, Forms, History};
-use nanatype_plugins::{PluginUpdate, WorkerResponse};
+use nanatype_plugins::WorkerResponse;
 use nanatype_theme::editor::{
-    self, DraftInfo, DraftOrigin, FileInfo, Level, Metadata, ProjectKind, SourceDiagnostic,
+    self, DraftInfo, DraftOrigin, FileInfo, Metadata, ProjectKind, SourceDiagnostic,
 };
 use nanatype_theme::{
-    DataSpec, PACKAGE_MANIFEST, PackageCapability, PackageProject, PipelineSpec, SealIdentity,
-    SealStatus, Skin, SkinFiles, SkinRegistry,
+    DataSpec, MANIFEST, PACKAGE_MANIFEST, PackageCapability, PackageManifest, PackageProject,
+    PipelineSpec, SOUNDS_MANIFEST, SealIdentity, SealStatus, SkinFiles, SkinRegistry,
 };
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicU64, Ordering},
     },
 };
 
+pub use crate::debugger::{DebugView, Debugger, sample_events};
+pub use crate::keys::{KeyStore, MemoryKeys, SecretKeys};
+pub use crate::validation::{Report, validate, validate_with_worker};
+
 static NEXT: AtomicU64 = AtomicU64::new(1);
 fn next() -> u64 {
     NEXT.fetch_add(1, Ordering::Relaxed)
-}
-
-/// Where the host keeps the package signing key. The key never enters a
-/// package, a log, the resource interface or a plugin process.
-pub trait KeyStore: Send + Sync {
-    fn load(&self) -> Result<Option<SealIdentity>, String>;
-    fn save(&self, identity: &SealIdentity) -> Result<(), String>;
-}
-
-/// The platform's protected storage (`crates/secrets`).
-pub struct SecretKeys(nanatype_secrets::SecretStore);
-impl SecretKeys {
-    pub fn new(directory: &Path) -> Self {
-        Self(nanatype_secrets::SecretStore::new(
-            directory,
-            "package-signing",
-        ))
-    }
-}
-impl KeyStore for SecretKeys {
-    fn load(&self) -> Result<Option<SealIdentity>, String> {
-        match self.0.load().map_err(|e| e.to_string())? {
-            None => Ok(None),
-            Some(bytes) => <[u8; 32]>::try_from(bytes.as_slice())
-                .map(|b| Some(SealIdentity::from_bytes(b)))
-                .map_err(|_| "stored signing key is malformed".to_owned()),
-        }
-    }
-    fn save(&self, identity: &SealIdentity) -> Result<(), String> {
-        self.0
-            .save(&identity.secret_bytes())
-            .map_err(|e| e.to_string())
-    }
-}
-
-/// In-memory keys, for tests and platforms without protected storage.
-#[derive(Default)]
-pub struct MemoryKeys(Mutex<Option<[u8; 32]>>);
-impl KeyStore for MemoryKeys {
-    fn load(&self) -> Result<Option<SealIdentity>, String> {
-        Ok(self
-            .0
-            .lock()
-            .map_err(|e| e.to_string())?
-            .map(SealIdentity::from_bytes))
-    }
-    fn save(&self, identity: &SealIdentity) -> Result<(), String> {
-        *self.0.lock().map_err(|e| e.to_string())? = Some(identity.secret_bytes());
-        Ok(())
-    }
 }
 
 /// The workspace the activity rail shows. A mode the package lacks the
@@ -123,165 +76,6 @@ impl Mode {
         } else {
             Mode::Files
         }
-    }
-}
-
-/// The result of one background validation: located diagnostics and, for a
-/// valid skin, what the preview renders.
-#[derive(Clone, Default)]
-pub struct Report {
-    pub pipelines: Arc<Vec<(String, Result<PipelineSpec, String>)>>,
-    pub properties: Arc<nanatype_theme::TomlTable>,
-    pub references: Arc<Vec<editor::Reference>>,
-    pub inventory: Arc<Vec<FileInfo>>,
-    pub diagnostics: Vec<SourceDiagnostic>,
-    pub skin: Option<Arc<Skin>>,
-    pub files: Option<Arc<dyn SkinFiles>>,
-    pub urls: Arc<HashMap<String, String>>,
-}
-impl Report {
-    pub fn errors(&self) -> usize {
-        self.diagnostics
-            .iter()
-            .filter(|d| d.level == Level::Error)
-            .count()
-    }
-}
-
-/// Validate exactly like an import: syntax of every local text file, then
-/// the dependency closure, signatures, skin and data. Nothing executes.
-pub fn validate(registry: &SkinRegistry, project: &PackageProject) -> Report {
-    let mut report = Report {
-        pipelines: Arc::new(editor::pipelines(project)),
-        references: Arc::new(editor::references(project)),
-        inventory: Arc::new(editor::inventory(project)),
-        ..Report::default()
-    };
-    let manifest = project.manifest().ok();
-    for (path, bytes) in &project.files {
-        if path.starts_with("dependencies/") {
-            continue;
-        }
-        if let Ok(text) = std::str::from_utf8(bytes) {
-            let format = manifest
-                .as_ref()
-                .and_then(|m| m.data.values().find(|d| d.path == *path))
-                .map(|d| d.format);
-            report
-                .diagnostics
-                .extend(editor::check_source(path, text, format));
-        }
-    }
-    match registry.inspect_project(project) {
-        Ok((files, skin)) => {
-            if let Some(loaded) = skin {
-                report
-                    .diagnostics
-                    .extend(loaded.warnings.iter().map(|w| editor::locate(project, w)));
-                report.urls = Arc::new(nanatype_frame::assets::skin_preview_urls(
-                    &loaded.skin,
-                    &*files,
-                ));
-                report.properties = loaded.authored.clone();
-                report.skin = Some(loaded.skin);
-            }
-            report.files = Some(files);
-        }
-        Err(errors) => {
-            if report.diagnostics.iter().all(|d| d.level != Level::Error) {
-                report
-                    .diagnostics
-                    .extend(errors.iter().map(|e| editor::locate(project, e)));
-            }
-        }
-    }
-    report
-}
-
-/// Import checks plus compiler diagnostics. User code is never evaluated here.
-pub fn validate_with_worker(
-    registry: &SkinRegistry,
-    project: &PackageProject,
-    executable: &Path,
-) -> Report {
-    let mut report = validate(registry, project);
-    if let Some(entry) = project.manifest().ok().and_then(|m| m.lua.map(|l| l.entry))
-        && let Some(source) = project
-            .files
-            .get(&entry)
-            .and_then(|b| std::str::from_utf8(b).ok())
-        && let Err(message) =
-            nanatype_plugins::check_source_in_worker(executable, source.to_owned())
-    {
-        let line = message
-            .split_once("\"plugin\"]:")
-            .and_then(|(_, s)| s.split(':').next()?.parse::<usize>().ok())
-            .unwrap_or(1)
-            .min(source.lines().count().max(1));
-        let offset = source
-            .split_inclusive('\n')
-            .take(line.saturating_sub(1))
-            .map(str::len)
-            .sum();
-        report.diagnostics.push(SourceDiagnostic {
-            path: entry,
-            line,
-            column: 1,
-            offset,
-            len: 1,
-            level: Level::Error,
-            message,
-        });
-    }
-    report
-}
-
-/// What the debug panel shows. Its views never reach the real plugin slots.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct DebugView {
-    pub trusted: bool,
-    pub running: bool,
-    pub replaying: bool,
-    pub update: Option<PluginUpdate>,
-    pub error: Option<String>,
-    /// Where in the entry file the error happened, when Lua says so.
-    pub location: Option<SourceDiagnostic>,
-    /// Recent events sent and results received, newest last.
-    pub log: Vec<String>,
-}
-
-const LOG_LINES: usize = 40;
-
-/// A script under test, in its own sandboxed worker process.
-struct Debugger {
-    /// The project digest the user trusted; any edit revokes it.
-    trusted: Option<String>,
-    generation: u64,
-    process: Option<nanatype_frame::plugin_host::Worker>,
-    view: DebugView,
-    events: std::collections::VecDeque<serde_json::Value>,
-}
-impl Debugger {
-    fn new() -> Self {
-        Self {
-            trusted: None,
-            generation: 0,
-            process: None,
-            view: DebugView::default(),
-            events: Default::default(),
-        }
-    }
-    fn stop(&mut self) {
-        self.process = None;
-        self.generation = 0;
-        self.view.running = false;
-        self.view.replaying = false;
-        self.events.clear();
-    }
-    fn log(&mut self, line: String) {
-        self.view.log.push(line.chars().take(400).collect());
-        let excess = self.view.log.len().saturating_sub(LOG_LINES);
-        self.view.log.drain(..excess);
     }
 }
 
@@ -343,7 +137,7 @@ pub struct Session {
     pub last_changed: u64,
     pub recovered_version: u64,
     pub recovering: bool,
-    pub recovery_epoch: Arc<AtomicU64>,
+    recovery_epoch: Arc<AtomicU64>,
     preview_stale: bool,
     pub info: DraftInfo,
     pub project: PackageProject,
@@ -364,6 +158,12 @@ pub struct Session {
     stale: bool,
     debugger: Debugger,
     confirm_close: bool,
+    // Incremental caches refreshed only when the corresponding file changes.
+    manifest: Option<PackageManifest>,
+    metadata: Option<Metadata>,
+    data: Arc<BTreeMap<String, DataSpec>>,
+    pipelines: Arc<Vec<(String, Result<PipelineSpec, String>)>>,
+    documents: Arc<BTreeMap<String, String>>,
 }
 
 pub fn now_s() -> u64 {
@@ -374,6 +174,55 @@ pub fn now_s() -> u64 {
 
 fn draft_id(package: &str) -> String {
     format!("{package}-{}-{}", now_s(), next())
+}
+
+/// Compare a single file across two snapshots using cached BLAKE3 digests when
+/// lengths match.
+fn file_differs(a: &PackageProject, b: &PackageProject, path: &str) -> bool {
+    match (a.files.get(path), b.files.get(path)) {
+        (None, None) => false,
+        (Some(ab), Some(bb)) => {
+            ab.len() != bb.len() || a.cached_hash(path).ok() != b.cached_hash(path).ok()
+        }
+        _ => true,
+    }
+}
+
+fn compute_dirty_files(project: &PackageProject, baseline: &PackageProject) -> BTreeSet<String> {
+    project
+        .files
+        .keys()
+        .chain(baseline.files.keys())
+        .filter(|p| file_differs(project, baseline, p))
+        .cloned()
+        .collect()
+}
+
+fn build_documents(project: &PackageProject) -> Arc<BTreeMap<String, String>> {
+    Arc::new(
+        [PACKAGE_MANIFEST, MANIFEST, SOUNDS_MANIFEST]
+            .into_iter()
+            .filter_map(|p| {
+                project
+                    .files
+                    .get(p)
+                    .and_then(|b| std::str::from_utf8(b).ok())
+                    .map(|t| (p.into(), t.into()))
+            })
+            .collect(),
+    )
+}
+
+fn inline_pipelines(project: &PackageProject) -> Arc<Vec<(String, Result<PipelineSpec, String>)>> {
+    if project
+        .files
+        .get(MANIFEST)
+        .is_some_and(|b| b.len() <= 64 * 1024)
+    {
+        Arc::new(editor::pipelines(project))
+    } else {
+        Arc::default()
+    }
 }
 
 /// Opening never runs anything: it reads, checks budgets and lists files.
@@ -470,6 +319,16 @@ impl Session {
             .files
             .contains_key(PACKAGE_MANIFEST)
             .then(|| PACKAGE_MANIFEST.to_owned());
+        let manifest = project.manifest().ok();
+        let metadata = manifest.as_ref().map(Metadata::of);
+        let data = Arc::new(
+            manifest
+                .as_ref()
+                .map(|m| m.data.clone())
+                .unwrap_or_default(),
+        );
+        let pipelines = inline_pipelines(&project);
+        let documents = build_documents(&project);
         let mut session = Self {
             id: next(),
             version: next(),
@@ -489,7 +348,7 @@ impl Session {
                 origin: origin.clone(),
                 saved_at: 0,
             },
-            identity: project.manifest().ok().map(|m| m.meta.id),
+            identity: manifest.as_ref().map(|m| m.meta.id.clone()),
             disk: matches!(&origin, DraftOrigin::Directory { .. }).then(|| project.clone()),
             saved: if unsaved {
                 PackageProject::default()
@@ -509,16 +368,35 @@ impl Session {
             stale: true,
             debugger: Debugger::new(),
             confirm_close: false,
+            manifest,
+            metadata,
+            data,
+            pipelines,
+            documents,
         };
         session.refresh();
         session
     }
 
-    /// Recompute the file list and the seal after a structural change.
-    fn refresh(&mut self) {
-        if let Ok(manifest) = self.project.manifest() {
-            self.identity = Some(manifest.meta.id);
+    fn set_manifest_cache(&mut self, manifest: Option<PackageManifest>) {
+        if let Some(ref m) = manifest {
+            self.identity = Some(m.meta.id.clone());
         }
+        self.metadata = manifest.as_ref().map(Metadata::of);
+        self.data = Arc::new(
+            manifest
+                .as_ref()
+                .map(|m| m.data.clone())
+                .unwrap_or_default(),
+        );
+        self.manifest = manifest;
+    }
+
+    /// Recompute the file list, caches, and the seal after a structural change.
+    fn refresh(&mut self) {
+        self.set_manifest_cache(self.project.manifest().ok());
+        self.pipelines = inline_pipelines(&self.project);
+        self.documents = build_documents(&self.project);
         self.files = Arc::new(editor::inventory_unhashed(&self.project, &self.files));
         self.seal = nanatype_theme::verify_integrity(&self.project).map_err(|e| e.to_string());
         if self
@@ -529,43 +407,46 @@ impl Session {
             self.selected = Some(PACKAGE_MANIFEST.into());
             self.revision = next();
         }
-        self.dirty_files = self
-            .project
-            .files
-            .keys()
-            .chain(self.disk_baseline().files.keys())
-            .filter(|p| self.project.files.get(*p) != self.disk_baseline().files.get(*p))
-            .cloned()
-            .collect();
+        let baseline = self.disk.as_ref().unwrap_or(&self.saved);
+        self.dirty_files = compute_dirty_files(&self.project, baseline);
         self.changed();
     }
 
     /// Content changed: revalidate, and revoke a debug trust bound to the old
     /// content (stopping its worker).
     fn changed(&mut self) {
-        self.debugger.view.location = None;
-        self.debugger.view.error = None;
         self.stale = true;
         self.preview_stale = true;
         self.version = next();
         self.last_changed = nanatype_frame::clock::now_ms();
         self.recovery_epoch.store(self.version, Ordering::Release);
-        // No rehash per keystroke: any change revokes the trust.
-        if self.debugger.trusted.is_some() {
-            self.debugger.trusted = None;
-            if self.debugger.process.is_some() {
-                self.debugger.stop();
-                self.debugger.log("■ stopped: the package changed".into());
-            }
+        self.debugger.on_project_changed();
+    }
+
+    pub fn recovery_token(&self) -> Arc<AtomicU64> {
+        self.recovery_epoch.clone()
+    }
+
+    pub fn cancel_recovery(&self) {
+        self.recovery_epoch.store(0, Ordering::Release);
+    }
+
+    pub fn mark_recovery_clean(&mut self) -> Option<String> {
+        if !self.dirty() && (self.recovered_version != 0 || self.recovering) {
+            self.recovered_version = 0;
+            self.recovering = false;
+            self.recovery_epoch.store(0, Ordering::Release);
+            Some(self.info.id.clone())
+        } else {
+            None
         }
     }
 
     pub fn dirty(&self) -> bool {
-        self.forms.keys().any(|k| !k.ends_with(".editing")) || !self.dirty_files.is_empty()
+        !self.forms.is_empty() || !self.dirty_files.is_empty()
     }
 
     pub fn view(&self, key: Option<&SealIdentity>, key_checked: bool) -> EditorView {
-        let manifest = self.project.manifest().ok();
         let (text, editable, format) = match self.selected.as_ref().and_then(|p| {
             let row = self.files.iter().find(|f| &f.path == p)?;
             let bytes = self.project.files.get(p)?;
@@ -584,29 +465,14 @@ impl Session {
             }
             _ => Vec::new(),
         };
-        if let Some(location) = &self.debugger.view.location
+        if let Some(location) = self.debugger.location()
             && self.selected.as_ref() == Some(&location.path)
         {
             syntax.push(location.clone());
         }
         EditorView {
             conflicts: Arc::new(self.conflicts.clone()),
-            documents: Arc::new(
-                [
-                    PACKAGE_MANIFEST,
-                    nanatype_theme::MANIFEST,
-                    nanatype_theme::SOUNDS_MANIFEST,
-                ]
-                .into_iter()
-                .filter_map(|p| {
-                    self.project
-                        .files
-                        .get(p)
-                        .and_then(|b| std::str::from_utf8(b).ok())
-                        .map(|t| (p.into(), t.into()))
-                })
-                .collect(),
-            ),
+            documents: self.documents.clone(),
             properties: self.report.properties.clone(),
             session: self.id,
             version: self.version,
@@ -615,14 +481,17 @@ impl Session {
             redo: self.history.available().1,
             saving: self.saving,
             preview_stale: self.preview_stale,
-            package: manifest
+            package: self
+                .manifest
                 .as_ref()
                 .map_or_else(|| self.info.package.clone(), |m| m.meta.id.clone()),
-            kind: manifest
+            kind: self
+                .manifest
                 .as_ref()
                 .map_or(ProjectKind::Mixed, ProjectKind::of),
             origin: self.info.origin.clone(),
-            derived_from: manifest
+            derived_from: self
+                .manifest
                 .as_ref()
                 .map(|m| m.derived_from.clone())
                 .unwrap_or_default(),
@@ -641,27 +510,19 @@ impl Session {
             seal: self.seal.clone(),
             key: key.map(SealIdentity::fingerprint),
             key_checked,
-            metadata: manifest.as_ref().map(Metadata::of),
-            data: Arc::new(
-                manifest
-                    .as_ref()
-                    .map(|m| m.data.clone())
-                    .unwrap_or_default(),
-            ),
+            metadata: self.metadata.clone(),
+            data: self.data.clone(),
             pipelines: if self
                 .project
                 .files
-                .get(nanatype_theme::MANIFEST)
+                .get(MANIFEST)
                 .is_some_and(|b| b.len() > 64 * 1024)
             {
                 self.report.pipelines.clone()
             } else {
-                Arc::new(editor::pipelines(&self.project))
+                self.pipelines.clone()
             },
-            debug: DebugView {
-                trusted: self.debugger.trusted.is_some(),
-                ..self.debugger.view.clone()
-            },
+            debug: self.debugger.view(),
             confirm_close: self.confirm_close,
         }
     }
@@ -687,15 +548,13 @@ impl Session {
         if !self.files.iter().any(|f| f.path == path && f.editable) {
             return Err("file is protected; create an unsigned copy to edit it".into());
         }
-        let identity = if path == PACKAGE_MANIFEST {
-            nanatype_theme::PackageManifest::parse(text)
-                .ok()
-                .map(|m| m.meta.id)
+        let parsed_manifest = if path == PACKAGE_MANIFEST {
+            PackageManifest::parse(text).ok()
         } else {
             None
         };
-        if let (Some(expected), Some(next)) = (&self.identity, &identity)
-            && expected != next
+        if let (Some(expected), Some(next_manifest)) = (&self.identity, &parsed_manifest)
+            && expected != &next_manifest.meta.id
         {
             return Err("package ID changes require a derived copy".into());
         }
@@ -719,9 +578,7 @@ impl Session {
             .files
             .insert(path.into(), text.as_bytes().to_vec())
             .expect("checked existing file");
-        if identity.is_some() {
-            self.identity = identity;
-        }
+        self.project.invalidate_hashes();
         self.history.push(Change::text(
             path,
             before,
@@ -737,8 +594,16 @@ impl Session {
             row.hash.clear();
         }
         if path == PACKAGE_MANIFEST {
+            self.set_manifest_cache(parsed_manifest);
             // Declarations may have changed; asset hashes have not.
             self.files = Arc::new(editor::inventory_unhashed(&self.project, &self.files));
+        } else if path == MANIFEST {
+            self.pipelines = inline_pipelines(&self.project);
+        }
+        if matches!(path, PACKAGE_MANIFEST | MANIFEST | SOUNDS_MANIFEST) {
+            let mut docs = (*self.documents).clone();
+            docs.insert(path.into(), text.into());
+            self.documents = Arc::new(docs);
         }
         if self.project.files.get(path) == self.disk_baseline().files.get(path) {
             self.dirty_files.remove(path);
@@ -914,6 +779,9 @@ impl Session {
             self.project = before;
             return Err(e.to_string());
         }
+        if before.files == self.project.files {
+            return Ok(());
+        }
         self.history.push(Change::between(
             &before,
             &self.project,
@@ -950,6 +818,7 @@ impl Session {
         }
         self.apply(|p| {
             p.files.remove(nanatype_theme::INTEGRITY_FILE);
+            p.invalidate_hashes();
             Ok(())
         })
     }
@@ -963,8 +832,8 @@ impl Session {
     pub fn save(&mut self, dir: &Path) -> Result<(), String> {
         self.ensure_forms_applied()?;
         self.info.saved_at = now_s();
-        if let Ok(m) = self.project.manifest() {
-            self.info.package = m.meta.id;
+        if let Some(m) = &self.manifest {
+            self.info.package = m.meta.id.clone();
         }
         editor::save_draft(dir, &self.info, &self.project).map_err(|e| e.to_string())?;
         self.saved = self.project.clone();
@@ -999,6 +868,7 @@ impl Session {
             true
         }
     }
+
     pub fn cancel_close(&mut self) {
         self.confirm_close = false;
     }
@@ -1013,6 +883,7 @@ impl Session {
         self.ticket = next();
         Some((self.ticket, self.project.clone()))
     }
+
     /// A finished validation; a newer edit makes another one due.
     pub fn validated(&mut self, ticket: u64, report: Arc<Report>) {
         if ticket != self.ticket {
@@ -1047,6 +918,7 @@ impl Session {
             None
         }
     }
+
     pub fn disk_baseline(&self) -> &PackageProject {
         self.disk.as_ref().unwrap_or(&self.saved)
     }
@@ -1067,6 +939,7 @@ impl Session {
         self.revision = next();
         self.refresh();
     }
+
     pub fn resolve_conflict(&mut self, path: &str, keep: bool) -> Result<(), String> {
         if !self.conflicts.contains(path) {
             return Err("this conflict is no longer current".into());
@@ -1079,6 +952,7 @@ impl Session {
                 } else {
                     p.files.remove(path);
                 }
+                p.invalidate_hashes();
                 Ok(())
             })?;
         }
@@ -1086,8 +960,9 @@ impl Session {
         self.changed();
         Ok(())
     }
+
     pub fn ensure_forms_applied(&self) -> Result<(), String> {
-        if let (Some(expected), Ok(manifest)) = (&self.identity, self.project.manifest())
+        if let (Some(expected), Some(manifest)) = (&self.identity, &self.manifest)
             && *expected != manifest.meta.id
         {
             return Err("package ID changes require a derived copy".into());
@@ -1095,12 +970,13 @@ impl Session {
         if !self.conflicts.is_empty() {
             return Err("resolve disk conflicts before saving or exporting".into());
         }
-        if self.forms.keys().all(|k| k.ends_with(".editing")) {
+        if self.forms.is_empty() {
             Ok(())
         } else {
             Err("Apply or discard the pending form changes before saving or exporting.".into())
         }
     }
+
     pub fn buffer(&mut self, key: String, value: Option<serde_json::Value>) {
         let before = self.forms.clone();
         if let Some(value) = value {
@@ -1115,14 +991,15 @@ impl Session {
             self.forms.clone(),
         ));
         self.last_changed = nanatype_frame::clock::now_ms();
-        self.recovery_epoch.store(self.version, Ordering::Release);
         self.version = next();
         self.recovery_epoch.store(self.version, Ordering::Release);
     }
+
     pub fn applied_forms(&mut self, prefix: &str) {
         self.discard_forms(prefix);
         self.history.after_forms(self.forms.clone());
     }
+
     pub fn discard_forms(&mut self, prefix: &str) {
         let count = self.forms.len();
         self.forms.retain(|k, _| !k.starts_with(prefix));
@@ -1133,10 +1010,12 @@ impl Session {
             self.recovery_epoch.store(self.version, Ordering::Release);
         }
     }
+
     pub fn recovery_at(&self) -> Option<u64> {
         (self.dirty() && !self.recovering && self.recovered_version != self.version)
             .then_some(self.last_changed + 2000)
     }
+
     pub fn recovery(&self) -> crate::recovery::Snapshot {
         crate::recovery::Snapshot {
             info: self.info.clone(),
@@ -1148,6 +1027,7 @@ impl Session {
             identity: self.identity.clone(),
         }
     }
+
     pub fn restore(snapshot: crate::recovery::Snapshot) -> Self {
         let mut s = Self::new(
             &snapshot.info.package,
@@ -1167,6 +1047,7 @@ impl Session {
         s.refresh();
         s
     }
+
     pub fn undo(&mut self) {
         for row in Arc::make_mut(&mut self.files) {
             row.hash.clear();
@@ -1175,6 +1056,7 @@ impl Session {
         self.revision = next();
         self.refresh();
     }
+
     pub fn redo(&mut self) {
         for row in Arc::make_mut(&mut self.files) {
             row.hash.clear();
@@ -1183,6 +1065,7 @@ impl Session {
         self.revision = next();
         self.refresh();
     }
+
     pub fn validation_at(&self) -> Option<u64> {
         (self.stale && !self.validating).then_some(
             if self.report.files.is_none() && self.ticket == 0 {
@@ -1192,6 +1075,7 @@ impl Session {
             },
         )
     }
+
     pub fn saved_snapshot(&mut self, info: DraftInfo, project: PackageProject) {
         self.info = info;
         if self.directory().is_some() {
@@ -1200,210 +1084,49 @@ impl Session {
         self.saved = project;
         self.stored = true;
         self.saving = false;
-        self.dirty_files = self
-            .project
-            .files
-            .keys()
-            .chain(self.disk_baseline().files.keys())
-            .filter(|p| self.project.files.get(*p) != self.disk_baseline().files.get(*p))
-            .cloned()
-            .collect();
+        let baseline = self.disk.as_ref().unwrap_or(&self.saved);
+        self.dirty_files = compute_dirty_files(&self.project, baseline);
+        if !self.dirty() {
+            self.confirm_close = false;
+        }
     }
 
     // ---- isolated Lua debugging ---------------------------------------------
 
-    /// Trust is bound to this exact content and needs a fresh confirmation
-    /// after any edit.
     pub fn trust(&mut self, trusted: bool) {
-        self.debugger.trusted = trusted.then(|| self.project.digest());
-        if !trusted {
-            self.debugger.stop();
-        }
+        self.debugger.trust(&self.project, trusted);
     }
 
-    /// Start the script in its own sandboxed worker. Data answers come from
-    /// this snapshot only; results stay in the editor.
     pub fn start_debug(
         &mut self,
         executable: &Path,
         post: impl Fn(u64, WorkerResponse) + Send + Sync + 'static,
     ) -> Result<(), String> {
-        let digest = self.project.digest();
-        if self.debugger.trusted.as_deref() != Some(digest.as_str()) {
-            return Err("confirm that you trust this script first".into());
-        }
-        let manifest = self.project.manifest().map_err(|e| e.to_string())?;
-        let entry = manifest.entry().ok_or("the package has no Lua entry")?;
-        let bytes = self.project.files.get(entry).ok_or("missing Lua source")?;
-        if bytes.len() > nanatype_plugins::MAX_SCRIPT_BYTES {
-            return Err("plugin source exceeds budget".into());
-        }
-        let source = String::from_utf8(bytes.clone()).map_err(|e| e.to_string())?;
-        let data = Arc::new(
-            nanatype_theme::DataAccess::for_plugin(&self.project, &manifest)
-                .map_err(|e| e.to_string())?,
-        );
-        let reads: Vec<_> = data.disclosures().map(|d| d.reference.clone()).collect();
-        let answer = nanatype_frame::plugin_host::data_answer(data);
-        self.debugger.stop();
-        let generation = next();
-        self.debugger.process = Some(nanatype_frame::plugin_host::Worker::spawn(
-            executable,
-            source,
-            serde_json::json!({"type": "init", "reads": reads}),
-            answer,
-            move |response| post(generation, response),
-        )?);
-        self.debugger.generation = generation;
-        self.debugger.view = DebugView {
-            running: true,
-            log: std::mem::take(&mut self.debugger.view.log),
-            ..Default::default()
-        };
-        self.debugger.log("▶ init".into());
-        Ok(())
+        self.debugger.start(&self.project, executable, next(), post)
     }
 
     pub fn stop_debug(&mut self) {
-        if self.debugger.process.is_some() {
-            self.debugger.stop();
-            self.debugger.log("■ stopped".into());
-        }
+        self.debugger.stop();
     }
 
     pub fn debug_event(&mut self, event: serde_json::Value) -> Result<(), String> {
-        if self.debugger.view.replaying {
-            return Err("wait for the current replay to finish".into());
-        }
-        self.send_debug_event(event)
+        self.debugger.event(event)
     }
+
     pub fn debug_sequence(&mut self, events: Vec<serde_json::Value>) -> Result<(), String> {
-        if self.debugger.view.update.is_none() || !self.debugging() || self.debugger.view.replaying
-        {
-            return Err("wait for the debugger to be ready".into());
-        }
-        if events.is_empty()
-            || events.len() > 32
-            || events
-                .iter()
-                .any(|e| !e.get("type").is_some_and(|v| v.is_string()))
-        {
-            return Err("expected 1–32 event objects with a string type".into());
-        }
-        self.debugger.events = events.into();
-        self.debugger.view.replaying = true;
-        self.replay_next()
-    }
-    fn replay_next(&mut self) -> Result<(), String> {
-        if let Some(event) = self.debugger.events.pop_front() {
-            self.send_debug_event(event)
-        } else {
-            self.debugger.view.replaying = false;
-            Ok(())
-        }
-    }
-    fn send_debug_event(&mut self, event: serde_json::Value) -> Result<(), String> {
-        let process = self
-            .debugger
-            .process
-            .as_ref()
-            .ok_or("the script is not running")?;
-        let line = format!("→ {event}");
-        process.event(event).map_err(|e| e.to_string())?;
-        self.debugger.log(line);
-        Ok(())
+        self.debugger.sequence(events)
     }
 
     pub fn clear_debug(&mut self) {
-        self.debugger.view.error = None;
-        self.debugger.view.location = None;
-        self.debugger.view.log.clear();
+        self.debugger.clear();
     }
 
-    /// A result from the debug worker; stale generations are ignored.
     pub fn debug_result(&mut self, generation: u64, response: &WorkerResponse) {
-        if generation == 0 || generation != self.debugger.generation {
-            return;
-        }
-        match response {
-            WorkerResponse::Ready => {}
-            WorkerResponse::Update { update, .. } => match update.validate() {
-                Ok(()) => {
-                    self.debugger.log(format!(
-                        "← {} view(s), {} command(s)",
-                        update.views.len(),
-                        update.commands.len()
-                    ));
-                    self.debugger.view.update = Some(update.clone());
-                    if self.debugger.view.replaying
-                        && let Err(e) = self.replay_next()
-                    {
-                        self.debug_failed(e);
-                    }
-                }
-                Err(error) => self.debug_failed(error),
-            },
-            WorkerResponse::Error { message } => self.debug_failed(message.clone()),
-            // What the script wrote with `nana.log`, every level: this is the
-            // author's own console.
-            WorkerResponse::Log { lines, dropped } => {
-                for line in lines {
-                    let level = ["debug", "info", "warn", "error"]
-                        .get(usize::from(line.level))
-                        .unwrap_or(&"error");
-                    self.debugger.log(format!("▸ {level}: {}", line.message));
-                }
-                if *dropped > 0 {
-                    self.debugger
-                        .log(format!("▸ {dropped} more line(s) over the budget"));
-                }
-            }
-        }
+        self.debugger.result(&self.project, generation, response);
     }
-    fn debug_failed(&mut self, message: String) {
-        self.debugger.log(format!("✕ {message}"));
-        self.debugger.view.location = self.lua_location(&message);
-        self.debugger.view.error = Some(message);
-        self.debugger.stop();
-    }
-    /// The script is loaded as the chunk `plugin`, so `[string "plugin"]:N:`
-    /// is line N of the entry file.
-    fn lua_location(&self, message: &str) -> Option<SourceDiagnostic> {
-        let (_, rest) = message.split_once("\"plugin\"]:")?;
-        // The worker wraps the source in one line: `local plugin=(function()`.
-        let line = rest
-            .split(':')
-            .next()?
-            .trim()
-            .parse::<usize>()
-            .ok()?
-            .checked_sub(1)
-            .filter(|l| *l > 0)?;
-        let entry = self.project.manifest().ok()?.lua?.entry;
-        let text = std::str::from_utf8(self.project.files.get(&entry)?).ok()?;
-        // An unclosed block is reported on the wrapper's closing line.
-        let line = line.min(text.split('\n').count());
-        let offset: usize = text
-            .split_inclusive('\n')
-            .take(line.saturating_sub(1))
-            .map(str::len)
-            .sum();
-        let len = text[offset.min(text.len())..]
-            .find('\n')
-            .unwrap_or(text.len() - offset.min(text.len()))
-            .max(1);
-        Some(SourceDiagnostic {
-            path: entry,
-            offset,
-            len,
-            line,
-            column: 1,
-            level: Level::Error,
-            message: message.to_owned(),
-        })
-    }
+
     pub fn debugging(&self) -> bool {
-        self.debugger.process.is_some()
+        self.debugger.running()
     }
 }
 
@@ -1427,35 +1150,6 @@ pub fn export(
     Ok(path.to_owned())
 }
 
-/// Sample events the debug panel can send, as the host would produce them.
-pub fn sample_events(text: &str) -> Vec<(&'static str, serde_json::Value)> {
-    let markup = nanatype_markup::serialize(&nanatype_markup::parse(text).doc);
-    let bridge = |e: nanatype_model::BridgeEvent| serde_json::to_value(e).unwrap_or_default();
-    vec![
-        (
-            "line_start",
-            bridge(nanatype_model::BridgeEvent::LineStart {
-                id: 1,
-                text: text.into(),
-                markup,
-                speaker: "Nana".into(),
-            }),
-        ),
-        (
-            "line_end",
-            bridge(nanatype_model::BridgeEvent::LineEnd { id: 1 }),
-        ),
-        (
-            "speaking",
-            bridge(nanatype_model::BridgeEvent::Speaking { speaking: true }),
-        ),
-        (
-            "chat_message",
-            serde_json::json!({"type": "chat_message", "platform": "blivechat", "author": "viewer", "text": text}),
-        ),
-    ]
-}
-
 /// Drafts and the signing key for one profile.
 pub struct Editor {
     pub drafts: PathBuf,
@@ -1465,6 +1159,7 @@ pub struct Editor {
     pub key_checked: bool,
     pub session: Option<Session>,
 }
+
 impl Editor {
     pub fn new(drafts: PathBuf, keys: Arc<dyn KeyStore>) -> Self {
         Self {
@@ -1537,10 +1232,12 @@ pub enum Action {
         value: Option<String>,
         unbind: bool,
     },
-    ProjectPrepared {
+    TxFinished {
         session: u64,
-        version: u64,
+        tx_id: u64,
         prefix: String,
+        rename: Option<(crate::ui::DataTarget, crate::ui::DataTarget)>,
+        refresh_asset: bool,
         result: Result<PackageProject, String>,
     },
     Recoveries(Vec<DraftInfo>),
@@ -1634,6 +1331,6 @@ pub enum Action {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        self.recovery_epoch.store(0, Ordering::Release);
+        self.cancel_recovery();
     }
 }

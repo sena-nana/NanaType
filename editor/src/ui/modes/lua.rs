@@ -22,12 +22,13 @@ use std::sync::Arc;
 /// The debugger beside the source: trust, the run tools, test events and
 /// what the plugin returned. Its log is the drawer's second page.
 pub fn inspector(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     let running = move || {
-        ui.package_editor
+        proj.package_editor
             .with(|v| v.as_ref().is_some_and(|v| v.debug.running))
     };
     let trusted = move || {
-        ui.package_editor
+        proj.package_editor
             .with(|v| v.as_ref().is_some_and(|v| v.debug.trusted))
     };
     let tools = (
@@ -39,7 +40,7 @@ pub fn inspector(ui: Ui) -> AnyView {
         .bind(move |b: &mut IconButton| b.disabled = !trusted())
         .on_cx(move |_, _: &Activate, cx| {
             // A run is watched in its log.
-            ui.drawer.set(Drawer::Debug);
+            proj.drawer.set(Drawer::Debug);
             cx.dispatch_program_all(Msg::PackageEditor(Action::DebugStart));
         }),
         widget(tool(
@@ -67,10 +68,11 @@ pub fn inspector(ui: Ui) -> AnyView {
 }
 
 fn controls(ui: Ui) -> AnyView {
-    let custom = ui.debug_custom;
+    let proj = ui.proj();
+    let custom = proj.debug_custom;
     dynamic(
         move || {
-            ui.package_editor.with(|v| {
+            proj.package_editor.with(|v| {
                 v.as_ref().map(|v| {
                     (
                         v.kind,
@@ -99,7 +101,7 @@ fn controls(ui: Ui) -> AnyView {
                     widget(Button::new(name).size(ControlSize::Small))
                         .key(format!("package-editor-event:{name}"))
                         .bind(move |b: &mut Button| {
-                            b.disabled = !ui
+                            b.disabled = !proj
                                 .package_editor
                                 .with(|v| v.as_ref().is_some_and(|v| v.debug.running))
                         })
@@ -256,7 +258,7 @@ fn controls(ui: Ui) -> AnyView {
                             .disabled(!debug.running || debug.replaying || debug.update.is_none())
                             .on_cx(move |_, _: &Activate, cx| {
                                 match serde_json::from_str::<Vec<serde_json::Value>>(
-                                    &ui.debug_sequence.get_untracked(),
+                                    &proj.debug_sequence.get_untracked(),
                                 ) {
                                     Ok(events) => cx.dispatch_program_all(Msg::PackageEditor(
                                         Action::DebugSequence(events),
@@ -269,11 +271,11 @@ fn controls(ui: Ui) -> AnyView {
                             }),
                         widget({
                             let mut area =
-                                kit::text_area(ui.debug_sequence.get_untracked()).height(88.);
+                                kit::text_area(proj.debug_sequence.get_untracked()).height(88.);
                             crate::ui::mono(Arc::make_mut(&mut area.style.layout));
                             area
                         })
-                        .on(move |e: &TextChanged| ui.debug_sequence.set(e.value.to_string())),
+                        .on(move |e: &TextChanged| proj.debug_sequence.set(e.value.to_string())),
                     ),
                     rows::group(
                         ui.now_t("pkgedit-debug-output"),
@@ -302,22 +304,23 @@ fn controls(ui: Ui) -> AnyView {
 
 /// The debugger's log, filtered: the drawer's second page.
 pub fn log(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     widget(Stack::column(0.).gap_step(gap::step::TIGHT))
         .children((
             input_box(
                 field::MD,
                 widget(
-                    kit::text_input(ui.debug_filter.get_untracked())
+                    kit::text_input(proj.debug_filter.get_untracked())
                         .placeholder(ui.now_t("pkgedit-log-filter"))
                         .size(ControlSize::Small),
                 )
-                .on(move |e: &TextChanged| ui.debug_filter.set(e.value.to_string())),
+                .on(move |e: &TextChanged| proj.debug_filter.set(e.value.to_string())),
             ),
             dynamic(
                 move || {
                     (
-                        ui.debug_filter.get(),
-                        ui.package_editor
+                        proj.debug_filter.get(),
+                        proj.package_editor
                             .with(|v| v.as_ref().map(|v| v.debug.log.clone())),
                     )
                 },

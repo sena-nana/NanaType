@@ -15,21 +15,25 @@ pub struct Edit {
     pub delta: [f32; 2],
     pub resize: bool,
 }
+
 pub struct Drag {
     start: [f32; 2],
     scale: f32,
     edit: Edit,
     skin: Arc<Skin>,
 }
+
 fn point(rect: [f32; 4], p: [f32; 2]) -> bool {
     p[0] >= rect[0] && p[1] >= rect[1] && p[0] <= rect[0] + rect[2] && p[1] <= rect[1] + rect[3]
 }
+
 fn resized(len: Len, delta: f32, axis: f32) -> Len {
     match len {
         Len::Px(v) => Len::Px((v + delta).max(1.)),
         Len::Percent(v) => Len::Percent((v + delta / axis.max(1.) * 100.).max(0.1)),
     }
 }
+
 pub fn preview(skin: &Skin, edit: &Edit) -> Result<Skin, String> {
     let mut skin = nanatype_theme::layout_dialogue(skin, edit.size);
     skin.dialogue.responsive = skin
@@ -90,6 +94,7 @@ pub fn preview(skin: &Skin, edit: &Edit) -> Result<Skin, String> {
     }
     Ok(skin)
 }
+
 pub fn commit(
     project: &mut PackageProject,
     skin: &Skin,
@@ -99,7 +104,6 @@ pub fn commit(
     let mut next = project.clone();
     let before = nanatype_theme::layout_dialogue(skin, edit.size);
     let after = preview(skin, edit)?;
-    let effective = editor::skin_properties(&before).map_err(|e| e.to_string())?;
     let mut inherited = editor::authored_layout(authored, edit.size);
     // Seed the selected layer once, preserving the full authored array and its bindings.
     if edit.target != ["dialogue".to_owned()]
@@ -114,34 +118,74 @@ pub fn commit(
         }
         nanatype_theme::deep_merge(&mut inherited, &layer);
     }
-    let updated = editor::skin_properties(&after).map_err(|e| e.to_string())?;
-    let mut source = vec!["dialogue".into()];
-    source.extend(edit.element.split('.').map(str::to_owned));
-    let mut destination = edit.target.clone();
-    destination.extend(edit.element.split('.').map(str::to_owned));
-    let fields = if edit.element.starts_with("decor.") {
-        &["offset", "size", "inset"][..]
-    } else {
-        &["offset"][..]
-    };
-    for &field in fields {
-        let mut p = source.clone();
-        p.push(field.into());
-        let value = editor::value_at(&updated, &p);
-        if value == editor::value_at(&effective, &p) {
-            continue;
-        }
-        let mut target = destination.clone();
+    let patch_field = |next: &mut PackageProject,
+                       field: &str,
+                       value: Option<PropertyValue>|
+     -> Result<(), String> {
+        let mut target = edit.target.clone();
+        target.extend(edit.element.split('.').map(str::to_owned));
         target.push(field.into());
         editor::set_declaration(
-            &mut next,
+            next,
             "skin.toml",
             &target,
-            value.map(editor::literal).as_deref(),
+            value.as_ref().map(editor::literal).as_deref(),
             Some(&inherited),
             false,
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())
+    };
+    if let Some(index) = edit
+        .element
+        .strip_prefix("decor.")
+        .and_then(|s| s.parse::<usize>().ok())
+    {
+        let prev = before
+            .dialogue
+            .decor
+            .get(index)
+            .ok_or("decoration no longer exists")?;
+        let curr = after
+            .dialogue
+            .decor
+            .get(index)
+            .ok_or("decoration no longer exists")?;
+        if prev.offset != curr.offset {
+            let val = PropertyValue::try_from(curr.offset).map_err(|e| e.to_string())?;
+            patch_field(&mut next, "offset", Some(val))?;
+        }
+        if prev.size != curr.size {
+            let val = PropertyValue::try_from(curr.size).map_err(|e| e.to_string())?;
+            patch_field(&mut next, "size", Some(val))?;
+        }
+        if prev.inset != curr.inset {
+            let val = curr
+                .inset
+                .map(PropertyValue::try_from)
+                .transpose()
+                .map_err(|e| e.to_string())?;
+            patch_field(&mut next, "inset", val)?;
+        }
+    } else {
+        let (prev_offset, curr_offset) = match edit.element.as_str() {
+            "nameplate" => (
+                before.dialogue.nameplate.offset,
+                after.dialogue.nameplate.offset,
+            ),
+            "portrait" => (
+                before.dialogue.portrait.offset,
+                after.dialogue.portrait.offset,
+            ),
+            "continue" => (
+                before.dialogue.continue_.offset,
+                after.dialogue.continue_.offset,
+            ),
+            _ => return Err("select an editable element".into()),
+        };
+        if prev_offset != curr_offset {
+            let val = PropertyValue::try_from(curr_offset).map_err(|e| e.to_string())?;
+            patch_field(&mut next, "offset", Some(val))?;
+        }
     }
     *project = next;
     Ok(())
@@ -150,47 +194,65 @@ pub fn commit(
 /// Refuse a gesture hidden by another responsive override. The committed
 /// renderer must reproduce the feedback shown during the gesture.
 pub fn check_result(before: &Skin, after: &Skin, edit: &Edit) -> Result<(), String> {
-    fn part(skin: &Skin, element: &str) -> Option<PropertyValue> {
-        let mut path = vec!["dialogue".into()];
-        if let Some(index) = element
-            .strip_prefix("decor.")
-            .and_then(|s| s.parse::<usize>().ok())
-        {
-            let index = if skin.dialogue.responsive.is_some() {
-                skin.decor_indices.iter().position(|v| *v == index)?
+    fn decor_matches(a: &Skin, b: &Skin, index: usize) -> bool {
+        let idx = |s: &Skin| {
+            if s.dialogue.responsive.is_some() {
+                s.decor_indices.iter().position(|v| *v == index)
             } else {
-                index
-            };
-            path.extend(["decor".into(), index.to_string()]);
-        } else {
-            path.push(element.into());
+                Some(index)
+            }
+        };
+        match (
+            idx(a).and_then(|i| a.dialogue.decor.get(i)),
+            idx(b).and_then(|i| b.dialogue.decor.get(i)),
+        ) {
+            (Some(x), Some(y)) => x == y,
+            (None, None) => true,
+            _ => false,
         }
-        editor::value_at(&editor::skin_properties(skin).ok()?, &path).cloned()
     }
     let expected = nanatype_theme::responsive_dialogue(&preview(before, edit)?, edit.size);
     let actual = nanatype_theme::responsive_dialogue(after, edit.size);
-    if part(&expected, &edit.element) != part(&actual, &edit.element) {
+    let matched = if let Some(index) = edit
+        .element
+        .strip_prefix("decor.")
+        .and_then(|s| s.parse::<usize>().ok())
+    {
+        decor_matches(&expected, &actual, index)
+    } else {
+        match edit.element.as_str() {
+            "nameplate" => expected.dialogue.nameplate == actual.dialogue.nameplate,
+            "portrait" => expected.dialogue.portrait == actual.dialogue.portrait,
+            "continue" => expected.dialogue.continue_ == actual.dialogue.continue_,
+            _ => false,
+        }
+    };
+    if !matched {
         return Err("the selected layer is overridden at this preview size; select the matching orientation or breakpoint layer".into());
     }
     Ok(())
 }
 
 pub fn input(ui: Ui, event: &InputPayload, drag: &mut Option<Drag>) -> Option<Action> {
-    if !ui.canvas_enabled.get_untracked() {
+    let proj = ui.proj();
+    if !proj.canvas_enabled.get_untracked() {
         return None;
     }
-    let view = ui.package_editor.get_untracked()?;
+    let view = proj.package_editor.get_untracked()?;
     if view.validating || view.preview_stale {
         *drag = None;
-        ui.canvas_preview.set(None);
+        proj.canvas_preview.set(None);
         return None;
     }
     let skin = view.report.skin.clone()?;
-    let geometry = ui.canvas_geometry.get_untracked();
+    let geometry = proj.canvas_geometry.get_untracked();
     let rect = geometry.iter().find(|p| p.key == "canvas")?.rect;
-    let size =
-        super::ui::preview::draft(ui.preview_host, &skin.meta.id, Some(skin.dialogue.overscan))
-            .display;
+    let size = super::ui::preview::draft(
+        proj.preview_host,
+        &skin.meta.id,
+        Some(skin.dialogue.overscan),
+    )
+    .display;
     let size = [
         size.width
             .parse()
@@ -201,7 +263,7 @@ pub fn input(ui: Ui, event: &InputPayload, drag: &mut Option<Drag>) -> Option<Ac
     ];
     let make = |element: String, delta: [f32; 2], resize: bool| Edit {
         element,
-        target: ui.canvas_target.get_untracked(),
+        target: proj.canvas_target.get_untracked(),
         size,
         delta,
         resize,
@@ -209,12 +271,12 @@ pub fn input(ui: Ui, event: &InputPayload, drag: &mut Option<Drag>) -> Option<Ac
     match event {
         InputPayload::Pointer(p) => match p.phase {
             PointerPhase::Down if p.button == 0 => {
-                ui.canvas_focus.set(point(rect, [p.x, p.y]));
-                if !ui.canvas_focus.get_untracked() {
+                proj.canvas_focus.set(point(rect, [p.x, p.y]));
+                if !proj.canvas_focus.get_untracked() {
                     return None;
                 }
-                ui.preview_mode.set(0);
-                let selected = ui
+                proj.preview_mode.set(0);
+                let selected = proj
                     .canvas_selection
                     .get_untracked()
                     .and_then(|key| geometry.iter().find(|part| part.key == key));
@@ -238,7 +300,7 @@ pub fn input(ui: Ui, event: &InputPayload, drag: &mut Option<Drag>) -> Option<Ac
                         .filter(|part| part.key != "canvas" && point(part.rect, [p.x, p.y]))
                         .min_by(|a, b| (a.rect[2] * a.rect[3]).total_cmp(&(b.rect[2] * b.rect[3])))
                 };
-                ui.canvas_selection.set(part.map(|p| p.key.clone()));
+                proj.canvas_selection.set(part.map(|p| p.key.clone()));
                 if let Some(part) = part {
                     *drag = Some(Drag {
                         start: [p.x, p.y],
@@ -252,7 +314,7 @@ pub fn input(ui: Ui, event: &InputPayload, drag: &mut Option<Drag>) -> Option<Ac
                 if let Some(d) = drag.as_mut() {
                     d.edit.delta = [(p.x - d.start[0]) / d.scale, (p.y - d.start[1]) / d.scale];
                     if let Ok(skin) = preview(&d.skin, &d.edit) {
-                        ui.canvas_preview.set(Some(Arc::new(skin)));
+                        proj.canvas_preview.set(Some(Arc::new(skin)));
                     }
                 }
             }
@@ -261,19 +323,21 @@ pub fn input(ui: Ui, event: &InputPayload, drag: &mut Option<Drag>) -> Option<Ac
                     if d.edit.delta.iter().any(|v| v.abs() > 0.01) {
                         return Some(Action::CanvasEdit(d.edit));
                     }
-                    ui.canvas_preview.set(None);
+                    proj.canvas_preview.set(None);
                 }
             }
             PointerPhase::Cancel => {
                 *drag = None;
-                ui.canvas_preview.set(None);
+                proj.canvas_preview.set(None);
             }
             _ => {}
         },
-        InputPayload::Key(k) if k.state == KeyState::Pressed && ui.canvas_focus.get_untracked() => {
+        InputPayload::Key(k)
+            if k.state == KeyState::Pressed && proj.canvas_focus.get_untracked() =>
+        {
             if k.logical.0 == "Escape" {
                 *drag = None;
-                ui.canvas_preview.set(None);
+                proj.canvas_preview.set(None);
                 return None;
             }
             let step = if k.modifiers.shift { 10. } else { 1. };
@@ -284,7 +348,7 @@ pub fn input(ui: Ui, event: &InputPayload, drag: &mut Option<Drag>) -> Option<Ac
                 "ArrowDown" => [0., step],
                 _ => return None,
             };
-            return ui
+            return proj
                 .canvas_selection
                 .get_untracked()
                 .map(|key| Action::CanvasEdit(make(key, delta, false)));

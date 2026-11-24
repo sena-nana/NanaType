@@ -11,10 +11,12 @@
 pub mod app;
 pub mod asset;
 pub mod canvas;
+pub mod debugger;
 pub mod diag;
 pub mod directory;
 mod history;
 pub mod host;
+pub mod keys;
 pub mod msg;
 #[cfg(target_os = "macos")]
 mod open_documents;
@@ -22,6 +24,7 @@ pub mod recovery;
 pub mod session;
 pub mod shortcuts;
 pub mod ui;
+pub mod validation;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -80,7 +83,6 @@ pub fn run() -> ExitCode {
         version: env!("CARGO_PKG_VERSION"),
         vendor: "sena-nana",
     );
-    let launch = Launch::from_args(std::env::args().skip(1));
     // Its minimum grows with NanaType's UI scale (the window zooms its
     // content once it is up), so nothing in it is laid out too small.
     let zoom = nanatype_settings::peek_accessibility(&launch.paths().settings()).zoom(None);

@@ -458,8 +458,8 @@ fn the_editor_fits_narrow_widths_in_every_language_and_works_from_the_keyboard()
                     Arc::new(Default::default()),
                     locale,
                 );
-                ui.package_editor.set(Some(view.clone()));
-                ui.mode.set(tab);
+                ui.proj().package_editor.set(Some(view.clone()));
+                ui.proj().mode.set(tab);
                 let mut agent = common::session()
                     .themed(false)
                     .mount(width, height, move || body(ui, height));
@@ -528,8 +528,8 @@ fn the_editor_fits_narrow_widths_in_every_language_and_works_from_the_keyboard()
         Arc::new(Default::default()),
         Locale::EnUs,
     );
-    ui.package_editor.set(Some(view.clone()));
-    ui.mode.set(Mode::Files);
+    ui.proj().package_editor.set(Some(view.clone()));
+    ui.proj().mode.set(Mode::Files);
     let mut agent = common::session().themed(false).mount(960, 660, move || {
         ui::window::editor_window(ui, nana_ui::runtime::view::entity_ref())
     });
@@ -576,7 +576,7 @@ fn the_editor_fits_narrow_widths_in_every_language_and_works_from_the_keyboard()
         "case-insensitive search finds `accent`"
     );
     // A problem row in the drawer reveals its location in the source.
-    ui.drawer.set(ui::Drawer::Problems);
+    ui.proj().drawer.set(ui::Drawer::Problems);
     agent.flush().unwrap();
     let problem = agent
         .accessibility_dump()
@@ -625,7 +625,7 @@ fn protected_sources_show_read_only_and_drafts_never_touch_installed_packages() 
         Arc::new(Default::default()),
         Locale::ZhCn,
     );
-    ui.package_editor.set(Some(view));
+    ui.proj().package_editor.set(Some(view));
     let mut agent = common::session()
         .themed(false)
         .mount(960, 660, move || body(ui, 660));
@@ -683,9 +683,10 @@ fn skin_previews_reuse_the_real_renderer_without_touching_the_active_skin() {
             Locale::ZhCn,
         );
         let active = ui.skin.get_untracked();
-        ui.package_editor.set(Some(view.clone()));
-        ui.mode.set(Mode::Design);
-        ui.package_editor_surface
+        ui.proj().package_editor.set(Some(view.clone()));
+        ui.proj().mode.set(Mode::Design);
+        ui.proj()
+            .package_editor_surface
             .set(ui::preview::Surface::of(history));
         let mut agent = common::session()
             .themed(false)
@@ -862,8 +863,8 @@ fn data_and_pipeline_forms_write_in_place_and_refuse_invalid_edits() {
         Arc::new(Default::default()),
         Locale::ZhCn,
     );
-    ui.package_editor.set(Some(view));
-    ui.mode.set(Mode::Data);
+    ui.proj().package_editor.set(Some(view));
+    ui.proj().mode.set(Mode::Data);
     let mut agent = common::session()
         .themed(false)
         .mount(1280, 1400, move || body(ui, 1400));
@@ -907,8 +908,8 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
                 Arc::new(Default::default()),
                 locale,
             );
-            ui.package_editor.set(Some(view.clone()));
-            ui.mode.set(Mode::Data);
+            ui.proj().package_editor.set(Some(view.clone()));
+            ui.proj().mode.set(Mode::Data);
             let mut agent = common::session()
                 .themed(false)
                 .mount(width, height, move || body(ui, height));
@@ -984,8 +985,8 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
         Arc::new(Default::default()),
         Locale::EnUs,
     );
-    ui.package_editor.set(Some(view));
-    ui.mode.set(Mode::Data);
+    ui.proj().package_editor.set(Some(view));
+    ui.proj().mode.set(Mode::Data);
     let mut agent = common::session()
         .themed(false)
         .mount(960, 1700, move || body(ui, 1700));
@@ -1032,11 +1033,14 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
         "package-editor-data-constraints",
         "{\"typo\": 1}",
     );
+    messages(&mut agent);
     click_key(&mut agent, "package-editor-data-apply");
+    let msgs = messages(&mut agent);
     assert!(
-        messages(&mut agent)
-            .iter()
-            .all(|m| matches!(m, Msg::Notice { error: true, .. }))
+        !msgs.is_empty()
+            && msgs
+                .iter()
+                .all(|m| matches!(m, Msg::Notice { error: true, .. }))
     );
     // A declared pipeline is written field by field: Enter sends the edited
     // input binding.
@@ -1067,9 +1071,10 @@ fn the_forms_send_their_values_and_fit_every_width_and_language() {
         Some("pkg:other.pack/strokes")
     );
     // Declared JSON is formattable even with a text filename.
-    ui.package_editor
+    ui.proj()
+        .package_editor
         .set(Some(Arc::new(session.view(None, false))));
-    ui.mode.set(Mode::Files);
+    ui.proj().mode.set(Mode::Files);
     click_key(&mut agent, "package-editor-format");
     assert!(
         messages(&mut agent)
@@ -1108,9 +1113,11 @@ fn the_input_preview_draws_the_draft_skin_without_touching_the_input_window() {
                 ui.settings.get_untracked(),
                 ui.editor_value.get_untracked(),
             );
-            ui.package_editor.set(Some(view.clone()));
-            ui.mode.set(Mode::Design);
-            ui.package_editor_surface.set(ui::preview::Surface::Input);
+            ui.proj().package_editor.set(Some(view.clone()));
+            ui.proj().mode.set(Mode::Design);
+            ui.proj()
+                .package_editor_surface
+                .set(ui::preview::Surface::Input);
             let mut agent = common::session()
                 .themed(false)
                 .mount(width, 900, move || body(ui, 900));
@@ -1161,7 +1168,7 @@ fn the_input_preview_draws_the_draft_skin_without_touching_the_input_window() {
                 sent.iter()
                     .all(|m| m.downcast_ref::<Msg>().is_none_or(|m| matches!(
                         m,
-                        Msg::PackageEditor(Action::SetDeclaration { .. })
+                        Msg::PackageEditor(Action::SetDeclaration { .. } | Action::Buffer { .. })
                     ))),
                 "the sample editor sends nothing"
             );
@@ -1200,8 +1207,10 @@ fn launcher_lists_installed_packages_to_edit_or_copy() {
                 Arc::new(Default::default()),
                 locale,
             );
-            ui.packages.set(rows.clone());
-            ui.data_dir.set("/data/dev.sena-nana.nanatype".into());
+            ui.global.packages.set(rows.clone());
+            ui.global
+                .data_dir
+                .set("/data/dev.sena-nana.nanatype".into());
             let mut agent = common::session().themed(false).mount(width, 900, move || {
                 ui::window::editor_window(ui, nana_ui::runtime::view::entity_ref())
             });
@@ -1303,8 +1312,8 @@ fn the_sound_table_binds_events_to_the_packs_own_files() {
             Arc::new(Default::default()),
             Locale::ZhCn,
         );
-        ui.package_editor.set(Some(view.clone()));
-        ui.mode.set(Mode::Sounds);
+        ui.proj().package_editor.set(Some(view.clone()));
+        ui.proj().mode.set(Mode::Sounds);
         let mut agent = common::session()
             .themed(false)
             .mount(width, 800, move || body(ui, 800));

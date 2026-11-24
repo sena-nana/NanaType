@@ -56,8 +56,8 @@ fn every_editor_control_is_named() {
                 Arc::new(Default::default()),
                 locale,
             );
-            ui.package_editor.set(Some(view.clone()));
-            ui.mode.set(mode);
+            ui.proj().package_editor.set(Some(view.clone()));
+            ui.proj().mode.set(mode);
             let mut agent = common::session().themed(false).mount(1280, 800, move || {
                 ui::window::editor_window(ui, nana_ui::runtime::view::entity_ref())
             });

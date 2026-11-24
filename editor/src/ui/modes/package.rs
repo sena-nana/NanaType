@@ -8,13 +8,13 @@ use crate::ui::kit::{self, Type, gap};
 use crate::ui::rows;
 use crate::ui::shell::tool;
 use crate::ui::views::*;
-use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, widget};
+use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, widget};
 use nana_ui::runtime::{
     Activate, Checkbox, Select, SelectChanged, SelectOption, Stack, Text, TextChanged,
     TextSubmitted, ToggleChanged,
 };
 use nana_ui::{ControlSize, icons_tabler as ti};
-use nana_ui_core::{AlignSpec, LengthSpec};
+use nana_ui_core::LengthSpec;
 use nanatype_theme::editor::{AssetKind, Metadata};
 use nanatype_theme::{PACKAGE_MANIFEST, PackageCapability};
 use std::collections::BTreeMap;
@@ -24,9 +24,10 @@ use std::sync::Arc;
 pub(crate) type Apply = Arc<dyn Fn() -> Option<Msg> + Send + Sync>;
 
 pub fn view(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     dynamic(
         move || {
-            ui.package_editor.with(|v| {
+            proj.package_editor.with(|v| {
                 v.as_ref().map(|v| {
                     (
                         v.metadata.clone(),
@@ -53,7 +54,7 @@ pub fn view(ui: Ui) -> AnyView {
 }
 
 pub(crate) fn form_editable(ui: Ui, file: &str) -> bool {
-    ui.package_editor.with_untracked(|v| {
+    ui.proj().package_editor.with_untracked(|v| {
         v.as_ref()
             .is_some_and(|v| v.files.iter().any(|f| f.path == file && f.editable))
     })
@@ -61,8 +62,12 @@ pub(crate) fn form_editable(ui: Ui, file: &str) -> bool {
 
 /// A one-line field of a form: typing stays in `value`; Enter and leaving
 /// the field send what `apply` makes of the form.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn text_field(
     key: String,
+    session: u64,
+    form_key: String,
+    initial: String,
     label: String,
     value: Signal<String>,
     placeholder: &str,
@@ -84,7 +89,11 @@ pub(crate) fn text_field(
         })
         .key(key)
         .bind(move |a: &mut nana_ui::runtime::TextInput| sync_text(&mut a.state, value.get()))
-        .on(move |e: &TextChanged| value.set(e.value.to_string()))
+        .on_cx(move |_, e: &TextChanged, cx| {
+            let s = e.value.to_string();
+            value.set(s.clone());
+            cx.dispatch_program_all(buffer_msg(session, &form_key, &s, &initial));
+        })
         .on_cx(move |_, _: &TextSubmitted, cx| {
             if let Some(msg) = apply() {
                 cx.dispatch_program_all(msg);
@@ -95,15 +104,17 @@ pub(crate) fn text_field(
 }
 
 fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
+    let session = view.session;
     let editable = view
         .files
         .iter()
         .any(|f| f.path == PACKAGE_MANIFEST && f.editable);
+    let tags_init = metadata.tags.join(", ");
     let name = buffer(ui, "metadata.name", metadata.name.clone());
     let description = buffer(ui, "metadata.description", metadata.description.clone());
     let min_app = buffer(ui, "metadata.min_app", metadata.min_app.clone());
     let base = buffer(ui, "metadata.base", metadata.base.clone());
-    let tags = buffer(ui, "metadata.tags", metadata.tags.join(", "));
+    let tags = buffer(ui, "metadata.tags", tags_init.clone());
     let version = buffer(ui, "metadata.version", metadata.version.clone());
     let author = buffer(ui, "metadata.author", metadata.author.clone());
     let created = buffer(ui, "metadata.created", metadata.created_at.clone());
@@ -114,8 +125,6 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
     let preview = buffer(ui, "metadata.preview", metadata.preview.clone());
     let capabilities = buffer(ui, "metadata.capabilities", metadata.capabilities.clone());
     let dependencies = buffer(ui, "metadata.dependency_map", metadata.dependencies.clone());
-    // The last form sent, so Enter followed by leaving the field writes once.
-    let sent = signal(None::<Metadata>);
     let current = metadata.clone();
     let apply: Apply = Arc::new(move || {
         let next = Metadata {
@@ -139,31 +148,38 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
             capabilities: capabilities.get_untracked(),
             dependencies: dependencies.get_untracked(),
         };
-        if next == current || sent.with_untracked(|s| s.as_ref() == Some(&next)) {
+        if next == current {
             return None;
         }
-        sent.set(Some(next.clone()));
         Some(Msg::PackageEditor(Action::ApplyMetadata(next)))
     });
-    let text_row = |key: &str, value: Signal<String>, placeholder: &str| {
-        rows::row(
-            ui.now_t(key),
-            text_field(
-                format!("package-editor-field:{key}"),
+    let text_row =
+        |key: &str, form_key: &str, initial: String, value: Signal<String>, placeholder: &str| {
+            rows::row(
                 ui.now_t(key),
-                value,
-                placeholder,
-                editable,
-                apply.clone(),
-            ),
-        )
-    };
+                text_field(
+                    format!("package-editor-field:{key}"),
+                    session,
+                    form_key.to_owned(),
+                    initial,
+                    ui.now_t(key),
+                    value,
+                    placeholder,
+                    editable,
+                    apply.clone(),
+                ),
+            )
+        };
     // One row per language, under the name's and the description's captions.
-    let localized = |key: &'static str, values: Signal<BTreeMap<String, String>>| {
+    let localized = |key: &'static str,
+                     form_key: &'static str,
+                     initial_map: BTreeMap<String, String>,
+                     values: Signal<BTreeMap<String, String>>| {
         ["zh-CN", "en-US", "ja-JP"]
             .into_iter()
             .map(|locale| {
                 let (enter, leave) = (apply.clone(), apply.clone());
+                let initial_map = initial_map.clone();
                 rows::row(
                     locale.to_owned(),
                     on_blur(
@@ -179,10 +195,17 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
                             input
                         })
                         .key(format!("editor-meta-{key}-{locale}"))
-                        .on(move |e: &TextChanged| {
+                        .on_cx(move |_, e: &TextChanged, cx| {
                             values.update(|v| {
                                 v.insert(locale.into(), e.value.to_string());
-                            })
+                            });
+                            let next_map = values.get_untracked();
+                            cx.dispatch_program_all(buffer_msg(
+                                session,
+                                form_key,
+                                &next_map,
+                                &initial_map,
+                            ));
                         })
                         .on_cx(move |_, _: &TextSubmitted, cx| {
                             if let Some(msg) = enter() {
@@ -197,6 +220,7 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
     };
     let capability_box = |cap: PackageCapability, key: &'static str| {
         let apply = apply.clone();
+        let initial_caps = metadata.capabilities.clone();
         widget(
             Checkbox::new(
                 ui.now_t(key),
@@ -213,6 +237,13 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
                     c.push(cap);
                 }
             });
+            let next_caps = capabilities.get_untracked();
+            cx.dispatch_program_all(buffer_msg(
+                session,
+                "metadata.capabilities",
+                &next_caps,
+                &initial_caps,
+            ));
             if let Some(msg) = apply() {
                 cx.dispatch_program_all(msg);
             }
@@ -233,6 +264,7 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
             metadata.preview.clone(),
         ));
     }
+    let initial_preview = metadata.preview.clone();
     let cover = widget(
         Select::new(Some(metadata.preview.clone()))
             .options(covers)
@@ -243,18 +275,27 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
     .on_cx({
         let apply = apply.clone();
         move |_, e: &SelectChanged, cx| {
-            preview.set(e.value.to_string());
+            let s = e.value.to_string();
+            preview.set(s.clone());
+            cx.dispatch_program_all(buffer_msg(
+                session,
+                "metadata.preview",
+                &s,
+                &initial_preview,
+            ));
             if let Some(msg) = apply() {
                 cx.dispatch_program_all(msg);
             }
         }
     });
+    let initial_deps = metadata.dependencies.clone();
     let dependency_rows = metadata
         .dependencies
         .iter()
         .map(|(id, version)| {
             let remove = id.clone();
             let apply = apply.clone();
+            let initial_deps = initial_deps.clone();
             rows::item(
                 None,
                 widget(Text::new(format!("{id}@{version}")).style(Type::Small.mono())),
@@ -265,6 +306,13 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
                             dependencies.update(|d| {
                                 d.remove(&remove);
                             });
+                            let next_deps = dependencies.get_untracked();
+                            cx.dispatch_program_all(buffer_msg(
+                                session,
+                                "metadata.dependency_map",
+                                &next_deps,
+                                &initial_deps,
+                            ));
                             if let Some(msg) = apply() {
                                 cx.dispatch_program_all(msg);
                             }
@@ -273,10 +321,12 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
             )
         })
         .collect::<Vec<_>>();
-    let picker = dynamic(move || ui.packages.get(), {
+    let picker = dynamic(move || ui.global.packages.get(), {
         let apply = apply.clone();
+        let initial_deps = initial_deps.clone();
         move |packages: &Arc<Vec<nanatype_frame::packages::PackageRow>>| {
             let apply = apply.clone();
+            let initial_deps = initial_deps.clone();
             widget(
                 Select::new(None::<String>)
                     .size(ControlSize::Small)
@@ -299,6 +349,13 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
                     dependencies.update(|d| {
                         d.insert(id.to_owned(), version.to_owned());
                     });
+                    let next_deps = dependencies.get_untracked();
+                    cx.dispatch_program_all(buffer_msg(
+                        session,
+                        "metadata.dependency_map",
+                        &next_deps,
+                        &initial_deps,
+                    ));
                     if let Some(msg) = apply() {
                         cx.dispatch_program_all(msg);
                     }
@@ -316,31 +373,84 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
                 (),
                 (
                     rows::fact_mono(ui.now_t("pkgedit-id"), view.package.clone()),
-                    text_row("pkgedit-version", version, "1.0.0"),
-                    text_row("package-author", author, ""),
-                    text_row("package-created-at", created, "YYYY-MM-DD"),
-                    text_row("package-licensed-to", licensed_to, ""),
-                    text_row("package-license", license, "MIT"),
+                    text_row(
+                        "pkgedit-version",
+                        "metadata.version",
+                        metadata.version.clone(),
+                        version,
+                        "1.0.0",
+                    ),
+                    text_row(
+                        "package-author",
+                        "metadata.author",
+                        metadata.author.clone(),
+                        author,
+                        "",
+                    ),
+                    text_row(
+                        "package-created-at",
+                        "metadata.created",
+                        metadata.created_at.clone(),
+                        created,
+                        "YYYY-MM-DD",
+                    ),
+                    text_row(
+                        "package-licensed-to",
+                        "metadata.licensed_to",
+                        metadata.licensed_to.clone(),
+                        licensed_to,
+                        "",
+                    ),
+                    text_row(
+                        "package-license",
+                        "metadata.license",
+                        metadata.license.clone(),
+                        license,
+                        "MIT",
+                    ),
                 ),
             ),
             rows::group(
                 ui.now_t("pkgedit-name"),
                 (),
-                localized("pkgedit-name", name),
+                localized("pkgedit-name", "metadata.name", metadata.name.clone(), name),
             ),
             rows::group(
                 ui.now_t("pkgedit-description"),
                 (),
-                localized("pkgedit-description", description),
+                localized(
+                    "pkgedit-description",
+                    "metadata.description",
+                    metadata.description.clone(),
+                    description,
+                ),
             ),
             rows::group(
                 ui.now_t("pkgedit-group-listing"),
                 (),
                 (
-                    text_row("pkgedit-min-app", min_app, "0.1.0"),
-                    text_row("pkgedit-base", base, "nanatype.halo"),
+                    text_row(
+                        "pkgedit-min-app",
+                        "metadata.min_app",
+                        metadata.min_app.clone(),
+                        min_app,
+                        "0.1.0",
+                    ),
+                    text_row(
+                        "pkgedit-base",
+                        "metadata.base",
+                        metadata.base.clone(),
+                        base,
+                        "nanatype.halo",
+                    ),
                     rows::row(ui.now_t("pkgedit-cover"), cover),
-                    text_row("pkgedit-tags", tags, "minimal, cute"),
+                    text_row(
+                        "pkgedit-tags",
+                        "metadata.tags",
+                        tags_init,
+                        tags,
+                        "minimal, cute",
+                    ),
                 ),
             ),
             rows::group(
@@ -348,34 +458,36 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
                 kit::hint_mark(ui.now_t("pkgedit-capabilities")),
                 widget(
                     Stack::row(0.)
-                        .gap_step(gap::step::GROUP)
+                        .gap_step(gap::step::CONTROL)
                         .wrap(true)
-                        .align(AlignSpec::Center),
+                        .width(LengthSpec::Fill),
                 )
                 .children((
                     capability_box(PackageCapability::Skin, "packages-kind-skin"),
                     capability_box(PackageCapability::Resources, "packages-kind-resources"),
-                    capability_box(PackageCapability::Lua, "packages-kind-function"),
+                    capability_box(PackageCapability::Lua, "packages-kind-lua"),
                     capability_box(PackageCapability::Sounds, "packages-kind-sounds"),
                 )),
             ),
             rows::group(
-                ui.now_t("pkgedit-dependencies-title"),
+                ui.now_t("pkgedit-dependencies"),
                 kit::hint_mark(ui.now_t("pkgedit-dependencies-hint")),
                 (
-                    widget(Stack::column(0.).gap_step(gap::step::HAIR))
-                        .key("package-editor-dependencies")
-                        .children(dependency_rows),
-                    rows::row(ui.now_t("pkgedit-dependency-add"), picker),
+                    dependency_rows
+                        .is_empty()
+                        .then(|| hint(ui.now_t("pkgedit-dependencies-none"))),
+                    dependency_rows,
+                    picker,
                 ),
             ),
         ),
     )
 }
 
-pub(crate) fn notice(ui: Ui, key: &str, detail: impl std::fmt::Display) -> Msg {
+/// An inline error notice from form validation.
+pub(crate) fn notice(ui: Ui, key: &str, error: impl std::fmt::Display) -> Msg {
     Msg::Notice {
-        text: format!("{}: {detail}", ui.now_t(key)),
+        text: format!("{}: {error}", ui.now_t(key)),
         error: true,
     }
 }

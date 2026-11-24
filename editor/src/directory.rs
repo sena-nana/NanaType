@@ -188,6 +188,7 @@ pub fn merge(
             conflicts.insert(key);
         }
     }
+    local.invalidate_hashes();
     conflicts
 }
 

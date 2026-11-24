@@ -13,7 +13,7 @@ fn target_options(ui: Ui) -> Vec<SelectOption> {
         SelectOption::new("landscape", ui.now_t("pkgedit-landscape")),
         SelectOption::new("portrait", ui.now_t("pkgedit-portrait")),
     ];
-    ui.package_editor.with(|v| {
+    ui.proj().package_editor.with(|v| {
         if let Some(view) = v
             && let Some(skin) = &view.report.skin
             && let Some(spec) = &skin.dialogue.responsive
@@ -38,6 +38,7 @@ fn target_options(ui: Ui) -> Vec<SelectOption> {
 /// Which declaration layer canvas gestures write: base, an orientation or a
 /// breakpoint rule.
 pub fn target(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     widget(Select::new(Some("base")).size(ControlSize::Small))
         .key("editor-layout-target")
         .bind(move |s: &mut Select| {
@@ -45,7 +46,7 @@ pub fn target(ui: Ui) -> AnyView {
             if s.options != options {
                 s.options = options;
             }
-            let target = ui.canvas_target.get();
+            let target = proj.canvas_target.get();
             let key = if target.len() == 1 {
                 "base"
             } else if target.len() == 3 {
@@ -72,11 +73,11 @@ pub fn target(ui: Ui) -> AnyView {
                     "layout".into(),
                 ],
             };
-            ui.canvas_target.set(target);
+            proj.canvas_target.set(target);
             if e.value.as_ref() == "portrait" {
-                ui.preview_size.set(["300".into(), "600".into()]);
+                proj.preview_size.set(["300".into(), "600".into()]);
             } else if e.value.as_ref() == "landscape" {
-                ui.preview_size.set(["800".into(), "240".into()]);
+                proj.preview_size.set(["800".into(), "240".into()]);
             }
         })
         .into_any()
@@ -84,8 +85,9 @@ pub fn target(ui: Ui) -> AnyView {
 
 /// The layers the current preview size applies, later ones on top.
 fn matched_text(ui: Ui) -> String {
-    let size = ui.preview_size.get();
-    let Some(skin) = ui
+    let proj = ui.proj();
+    let size = proj.preview_size.get();
+    let Some(skin) = proj
         .package_editor
         .with(|v| v.as_ref().and_then(|v| v.report.skin.clone()))
     else {
@@ -146,10 +148,11 @@ pub fn matched(ui: Ui) -> AnyView {
 pub fn overlay(ui: Ui) -> AnyView {
     dynamic(
         move || {
+            let proj = ui.project.get();
             (
-                ui.canvas_enabled.get(),
-                ui.canvas_selection.get(),
-                ui.canvas_geometry.get(),
+                proj.canvas_enabled.get(),
+                proj.canvas_selection.get(),
+                proj.canvas_geometry.get(),
             )
         },
         move |(enabled, key, parts)| {

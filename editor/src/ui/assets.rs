@@ -13,20 +13,21 @@ use nana_ui_core::{
 /// The selected asset: an image on a checkerboard with its nine-slice
 /// guides, a font's sample, or a sound's transport.
 pub fn preview(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     dynamic(
         move || {
-            ui.asset
+            proj.asset
                 .with(|a| a.as_ref().map(|a| std::sync::Arc::as_ptr(a) as usize))
         },
         move |_| {
-            let Some(asset) = ui.asset.get_untracked() else {
+            let Some(asset) = proj.asset.get_untracked() else {
                 return widget(Stack::column(0.)).into_any();
             };
             let mut children = Vec::new();
             if let Some(url) = asset.image.clone() {
                 let width = signal(300_f32);
                 let dimensions = asset.dimensions.unwrap_or([1, 1]);
-                let slice = ui.package_editor.with_untracked(|v| {
+                let slice = proj.package_editor.with_untracked(|v| {
                     v.as_ref().and_then(|v| {
                         v.report
                             .references
@@ -147,7 +148,7 @@ pub fn preview(ui: Ui) -> AnyView {
 fn player(ui: Ui, facts: String) -> AnyView {
     use nana_ui::runtime::{RangeChanged, RangeField, RangeInput};
     let mut volume = RangeField::new(
-        f64::from(ui.audio_gain.get_untracked()) * 100.,
+        f64::from(ui.global.audio_gain.get_untracked()) * 100.,
         0.,
         100.,
         1.,
@@ -185,8 +186,8 @@ fn player(ui: Ui, facts: String) -> AnyView {
         }),
         widget(volume.accessible_name(ui.now_t("pkgedit-volume")))
             .key("editor-asset-volume")
-            .on(move |e: &RangeInput| ui.audio_gain.set((e.value / 100.) as f32))
-            .on(move |e: &RangeChanged| ui.audio_gain.set((e.value / 100.) as f32)),
+            .on(move |e: &RangeInput| ui.global.audio_gain.set((e.value / 100.) as f32))
+            .on(move |e: &RangeChanged| ui.global.audio_gain.set((e.value / 100.) as f32)),
         hint(facts),
     ))
     .into_any()

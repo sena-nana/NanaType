@@ -1,23 +1,25 @@
 //! The editor's state and what each message does to it. Opening, validation,
-//! saving and export run off the UI thread; scripts only run in the
-//! debugger's isolated worker.
+//! saving, export and serialized edits run off the UI thread; scripts only run
+//! in the debugger's isolated worker.
+
+mod dialogs;
+mod worker;
 
 use std::collections::HashMap;
 use std::{path::PathBuf, sync::Arc};
 
 use nana_ui::{CompiledTheme, RuntimeProgramContext};
-use nana_ui_core::{FileDialogKind, FileDialogRequest, FileFilter};
-use nana_ui_platform::WindowId;
 use nana_ui_platform::host::WindowCommand;
 use nanatype_frame::paths::Paths;
-use nanatype_frame::plugin_host::background;
 use nanatype_frame::ui::feedback::ToastRequest;
 use nanatype_frame::ui::kit::theme::Chrome;
 use nanatype_theme::SkinRegistry;
 
 use crate::msg::{FileTarget, Msg};
 use crate::session::{self as pe, Action, Editor, SecretKeys, Session};
-use crate::ui::Ui;
+use crate::ui::{DataTarget, Ui};
+
+use worker::{DirectorySync, EditTx, OpenGate, TransactionQueue};
 
 pub struct App {
     pub ctx: RuntimeProgramContext<Msg>,
@@ -42,7 +44,7 @@ pub struct App {
     next_dialog: u64,
     /// The newest package listing; older ones that finish later are dropped.
     listing: u64,
-    opening: u64,
+    open_gate: OpenGate,
     pending: Option<Transition>,
     key_loading: bool,
     pub exit_requested: bool,
@@ -50,31 +52,16 @@ pub struct App {
     conflict_copy: Option<(u64, u64, String, Vec<u8>)>,
     replace_path: Option<(u64, u64, String)>,
     watch: Option<crate::directory::Watch>,
-    /// Edits being prepared off the UI thread. Save waits for them, so a
-    /// field left by pressing Save is written first.
-    preparing: std::cell::Cell<usize>,
-    save_pending: bool,
+    tx_queue: TransactionQueue,
     /// The sound to play once its preview is decoded.
     audition: Option<String>,
-    scanning_directory: bool,
-    scan_again: bool,
+    dir_sync: DirectorySync,
 }
 
 enum Transition {
     Close,
     Exit,
     Open(Box<Session>),
-}
-
-fn read_asset(path: PathBuf) -> Result<Vec<u8>, String> {
-    use std::io::Read;
-    let mut bytes = Vec::new();
-    std::fs::File::open(path)
-        .map_err(|e| e.to_string())?
-        .take(nanatype_theme::MAX_FILE_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|e| e.to_string())?;
-    Ok(bytes)
 }
 
 impl App {
@@ -101,14 +88,10 @@ impl App {
         let system_high_contrast = ctx.high_contrast();
         let chrome = Chrome::of(&settings, system_dark, system_high_contrast);
         let ui = Ui::new(Arc::new(settings), loaded.skin, locale);
-        let post = ctx.clone();
-        ui.post.set(Some(Arc::new(move |a| {
-            post.dispatch(Msg::PackageEditor(a))
-        })));
         ui.chrome_dark.set(chrome.dark);
         ui.chrome_contrast.set(chrome.high_contrast);
         ui.reduced_motion.set(ctx.reduced_motion());
-        ui.data_dir.set(paths.data.clone());
+        ui.global.data_dir.set(paths.data.clone());
         let post = ctx.clone();
         nanatype_frame::ui::pipeline::set_waker(move || post.dispatch(Msg::LayoutMaterialsReady));
         let mut app = Self {
@@ -130,7 +113,7 @@ impl App {
             dialogs: HashMap::new(),
             next_dialog: 1,
             listing: 0,
-            opening: 0,
+            open_gate: OpenGate::default(),
             pending: None,
             key_loading: false,
             exit_requested: false,
@@ -138,31 +121,29 @@ impl App {
             conflict_copy: None,
             replace_path: None,
             watch: None,
-            preparing: Default::default(),
-            save_pending: false,
+            tx_queue: TransactionQueue::default(),
             audition: None,
-            scanning_directory: false,
-            scan_again: false,
+            dir_sync: DirectorySync::Idle,
         };
         app.editor_list_drafts();
-        app.list_recoveries();
+        worker::list_recoveries(&app);
         // The registry was just scanned: only list it.
-        app.list_packages();
+        worker::list_packages(&mut app);
         app
     }
 
     pub fn update(&mut self, msg: Msg) {
         match msg {
             Msg::PackageEditor(action) => self.package_editor_msg(action),
-            Msg::PickFile(target) => self.pick(target),
+            Msg::PickFile(target) => dialogs::pick(self, target),
             Msg::Notice { text, error } => self.notice(text, error),
             Msg::RefreshPackages => {
                 self.registry.rescan();
-                self.list_packages();
+                worker::list_packages(self);
             }
             Msg::PackagesListed { ticket, rows } => {
                 if ticket == self.listing {
-                    self.ui.packages.set_if_changed(rows);
+                    self.ui.global.packages.set_if_changed(rows);
                 }
             }
             Msg::OpenFolder(path) => nanatype_frame::shell::reveal(&path),
@@ -204,17 +185,6 @@ impl App {
         }
     }
 
-    /// List the packages with their signature status; hashing runs off the
-    /// UI thread.
-    fn list_packages(&mut self) {
-        self.listing += 1;
-        let (ticket, registry) = (self.listing, self.registry.clone());
-        background("package-list", &self.ctx, move || Msg::PackagesListed {
-            ticket,
-            rows: Arc::new(nanatype_frame::packages::package_rows(&registry)),
-        });
-    }
-
     pub fn notice(&mut self, text: String, error: bool) {
         if error {
             nanatype_diag::report!(crate::diag::ERROR_NOTICE; "{text}");
@@ -223,143 +193,34 @@ impl App {
     }
 
     pub fn pick(&mut self, target: FileTarget) {
-        let id = self.next_dialog;
-        self.next_dialog += 1;
-        self.dialogs.insert(id, target);
-        let t = |k: &str| self.ui.now_t(k);
-        let package = FileFilter::new("NanaType package", ["ntpkg", "zip"]);
-        let request = match target {
-            FileTarget::SaveConflict => {
-                FileDialogRequest::new(id, FileDialogKind::SaveFile).title(t("pkgedit-save-copy"))
-            }
-            FileTarget::OpenDirectory => FileDialogRequest::new(id, FileDialogKind::PickFolder)
-                .title(t("pkgedit-open-directory")),
-            FileTarget::EditPackage => FileDialogRequest::new(id, FileDialogKind::OpenFile)
-                .title(t("pkgedit-open-file"))
-                .filters([package]),
-            FileTarget::ExportProject => FileDialogRequest::new(id, FileDialogKind::SaveFile)
-                .title(t("pkgedit-export"))
-                .filters([package])
-                .file_name(format!(
-                    "{}.ntpkg",
-                    self.ui
-                        .package_editor
-                        .with_untracked(|v| v.as_ref().map(|v| v.package.clone()))
-                        .unwrap_or_default()
-                )),
-            FileTarget::ImportProjectAsset | FileTarget::ReplaceProjectAsset => {
-                FileDialogRequest::new(
-                    id,
-                    if target == FileTarget::ImportProjectAsset {
-                        FileDialogKind::OpenFiles
-                    } else {
-                        FileDialogKind::OpenFile
-                    },
-                )
-                .title(t("pkgedit-import"))
-                .filters([FileFilter::new(
-                    t("pkgedit-import"),
-                    nanatype_theme::editor::IMPORT_EXTENSIONS.iter().copied(),
-                )])
-            }
-        };
-        self.commands.push(WindowCommand::OpenFileDialog {
-            id: WindowId::PRIMARY,
-            request,
-        });
+        dialogs::pick(self, target);
     }
 
     pub fn file_chosen(&mut self, request: u64, paths: Vec<PathBuf>) {
-        let Some(target) = self.dialogs.remove(&request) else {
+        dialogs::file_chosen(self, request, paths);
+    }
+
+    fn enqueue_edit(&mut self, op: EditTx) {
+        let Some(s) = &self.package_editor.session else {
             return;
         };
-        if target == FileTarget::ImportProjectAsset {
-            for path in paths {
-                self.editor_import(path);
-            }
-            return;
-        }
-        let Some(path) = paths.into_iter().next() else {
-            if target == FileTarget::SaveConflict {
-                self.conflict_copy = None;
-            }
-            if target == FileTarget::ReplaceProjectAsset {
-                self.replace_path = None;
-            }
+        self.tx_queue.enqueue_edit(s.id, op);
+        worker::pump(self);
+    }
+
+    fn enqueue_save(&mut self) {
+        let Some(s) = &self.package_editor.session else {
             return;
         };
-        match target {
-            FileTarget::SaveConflict => {
-                if let Some((session, version, name, bytes)) = self.conflict_copy.take() {
-                    let source = self
-                        .package_editor
-                        .session
-                        .as_ref()
-                        .filter(|s| s.id == session && s.version == version)
-                        .and_then(|s| s.directory())
-                        .map(|root| root.join(&name));
-                    let installed = self.paths.packages();
-                    if source.is_none() {
-                        return;
-                    }
-                    background("editor-conflict-copy", &self.ctx, move || {
-                        let result = (|| {
-                            use std::io::Write;
-                            crate::directory::check_copy_destination(
-                                &path,
-                                source.as_deref(),
-                                &installed,
-                            )?;
-                            let parent = path.parent().ok_or("missing destination directory")?;
-                            let mut file = tempfile::NamedTempFile::new_in(parent)
-                                .map_err(|e| e.to_string())?;
-                            file.write_all(&bytes).map_err(|e| e.to_string())?;
-                            file.as_file().sync_all().map_err(|e| e.to_string())?;
-                            file.persist(path).map_err(|e| e.to_string())?;
-                            Ok(())
-                        })();
-                        Msg::PackageEditor(Action::ConflictCopied {
-                            session,
-                            version,
-                            path: name,
-                            result,
-                        })
-                    });
-                }
-            }
-            FileTarget::OpenDirectory | FileTarget::EditPackage => self.editor_open_archive(path),
-            FileTarget::ExportProject => self.editor_export(path),
-            FileTarget::ImportProjectAsset => self.editor_import(path),
-            FileTarget::ReplaceProjectAsset => {
-                if let Some((session, version, target)) = self.replace_path.take() {
-                    let Some(s) = &self.package_editor.session else {
-                        return;
-                    };
-                    if s.id != session || s.version != version {
-                        return;
-                    }
-                    self.prepare_project(
-                        "editor-replace-asset",
-                        String::new(),
-                        move |project, _| {
-                            nanatype_theme::editor::replace_asset(
-                                project,
-                                &target,
-                                read_asset(path)?,
-                            )
-                            .map_err(|e| e.to_string())
-                        },
-                    );
-                }
-            }
-        }
+        self.tx_queue.enqueue_save(s.id);
+        worker::pump(self);
     }
 
     fn package_editor_msg(&mut self, action: Action) {
         match action {
             Action::ReloadDirectory => {
                 if let Some(s) = &self.package_editor.session {
-                    self.poll_directory(s.id);
+                    worker::poll_directory(self, s.id);
                 }
             }
             Action::DebugSequence(events) => self.editor_try(|s| s.debug_sequence(events)),
@@ -381,66 +242,42 @@ impl App {
                 if view.validating || view.preview_stale || view.report.skin.is_none() {
                     return;
                 }
-                let mut path = target;
-                path.push("decor".into());
-                let raw = s
-                    .project
-                    .files
-                    .get("skin.toml")
-                    .and_then(|b| std::str::from_utf8(b).ok())
-                    .and_then(|t| nanatype_theme::editor::parse_document(t).ok());
-                let properties = view.properties;
-                let mut values = raw
-                    .as_ref()
-                    .and_then(|t| nanatype_theme::editor::value_at(t, &path))
-                    .or_else(|| nanatype_theme::editor::value_at(&properties, &path))
-                    .and_then(nanatype_theme::editor::PropertyValue::as_array)
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        let size = self.ui.preview_size.get_untracked();
-                        let size = [
-                            size[0].parse().unwrap_or(800.),
-                            size[1].parse().unwrap_or(240.),
-                        ];
-                        let props = nanatype_theme::editor::authored_layout(&properties, size);
-                        nanatype_theme::editor::value_at(
-                            &props,
-                            &["dialogue".into(), "decor".into()],
-                        )
-                        .and_then(nanatype_theme::editor::PropertyValue::as_array)
-                        .cloned()
-                        .unwrap_or_default()
-                    });
                 let index = element
                     .strip_prefix("decor.")
                     .and_then(|s| s.parse::<usize>().ok());
-                match (operation.as_str(), index) {
-                    ("add", _) => {
-                        let spec = nanatype_theme::editor::parse_document(
-                            "value={size=[48,48],color='#85a8ff',radius=8}",
-                        )
-                        .unwrap();
-                        values.push(spec["value"].clone());
-                    }
-                    ("duplicate", Some(i)) if i < values.len() => {
-                        values.insert(i + 1, values[i].clone())
-                    }
-                    ("remove", Some(i)) if i < values.len() => {
-                        values.remove(i);
-                    }
-                    ("up", Some(i)) if i + 1 < values.len() => values.swap(i, i + 1),
-                    ("down", Some(i)) if i > 0 && i < values.len() => values.swap(i, i - 1),
+                let op = match (operation.as_str(), index) {
+                    ("add", _) => nanatype_theme::editor::DecorListOp::Add,
+                    ("duplicate", Some(i)) => nanatype_theme::editor::DecorListOp::Duplicate(i),
+                    ("remove", Some(i)) => nanatype_theme::editor::DecorListOp::Remove(i),
+                    ("up", Some(i)) => nanatype_theme::editor::DecorListOp::MoveUp(i),
+                    ("down", Some(i)) => nanatype_theme::editor::DecorListOp::MoveDown(i),
                     _ => return,
-                }
-                self.package_editor_msg(Action::SetDeclaration {
-                    file: "skin.toml".into(),
-                    path,
-                    value: Some(nanatype_theme::editor::literal(
-                        &nanatype_theme::editor::PropertyValue::Array(values),
-                    )),
-                    // Structural operations preserve the remaining raw bindings;
-                    // duplicating/removing an element deliberately changes their count.
-                    unbind: true,
+                };
+                let inherited = view.properties;
+                let size = self.ui.proj().preview_size.get_untracked();
+                let fallback_size = [
+                    size[0].parse().unwrap_or(800.),
+                    size[1].parse().unwrap_or(240.),
+                ];
+                self.enqueue_edit(EditTx {
+                    name: "editor-canvas-list",
+                    prefix: "canvas.".into(),
+                    rename: None,
+                    refresh_asset: false,
+                    apply: Box::new(move |project, registry| {
+                        let changed = nanatype_theme::editor::apply_decor_list(
+                            project,
+                            &target,
+                            Some(&inherited),
+                            fallback_size,
+                            op,
+                        )
+                        .map_err(|e| e.to_string())?;
+                        if changed {
+                            worker::inspect_strict(registry, project)?;
+                        }
+                        Ok(())
+                    }),
                 });
             }
             Action::CanvasEdit(edit) => {
@@ -449,17 +286,19 @@ impl App {
                 };
                 let view = s.view(None, false);
                 if view.validating || view.preview_stale {
-                    self.ui.canvas_preview.set(None);
+                    self.ui.proj().canvas_preview.set(None);
                     return;
                 }
                 let Some(skin) = view.report.skin.clone() else {
                     return;
                 };
                 let authored = view.properties;
-                self.prepare_project(
-                    "editor-canvas",
-                    "canvas.".into(),
-                    move |project, registry| {
+                self.enqueue_edit(EditTx {
+                    name: "editor-canvas",
+                    prefix: "canvas.".into(),
+                    rename: None,
+                    refresh_asset: false,
+                    apply: Box::new(move |project, registry| {
                         crate::canvas::commit(project, &skin, &authored, &edit)?;
                         let (_, loaded) = registry.inspect_project(project).map_err(|e| {
                             e.iter()
@@ -471,8 +310,8 @@ impl App {
                             crate::canvas::check_result(&skin, &loaded.skin, &edit)?;
                         }
                         Ok(())
-                    },
-                );
+                    }),
+                });
             }
             Action::CopyConflict(path) => {
                 if let Some(s) = &self.package_editor.session
@@ -510,9 +349,15 @@ impl App {
                 Ok(())
             }),
             Action::RenameFile { from, to } => {
-                self.prepare_project("editor-rename", String::new(), move |project, _| {
-                    nanatype_theme::editor::rename_asset(project, &from, &to)
-                        .map_err(|e| e.to_string())
+                self.enqueue_edit(EditTx {
+                    name: "editor-rename",
+                    prefix: String::new(),
+                    rename: None,
+                    refresh_asset: true,
+                    apply: Box::new(move |project, _| {
+                        nanatype_theme::editor::rename_asset(project, &from, &to)
+                            .map_err(|e| e.to_string())
+                    }),
                 });
             }
             Action::ReplaceFile => {
@@ -543,13 +388,13 @@ impl App {
                     .as_ref()
                     .is_some_and(|s| s.version != version)
                 {
-                    self.prepare_asset(&path);
+                    worker::prepare_asset(self, &path);
                     return;
                 }
                 let audition = self.audition.take().is_some_and(|a| a == path);
                 match result {
                     Ok(asset) => {
-                        self.ui.asset.set(Some(asset));
+                        self.ui.proj().asset.set(Some(asset));
                         if audition {
                             self.package_editor_msg(Action::PlayAsset);
                         }
@@ -558,7 +403,7 @@ impl App {
                 }
             }
             Action::PlayAsset => {
-                if let Some(asset) = self.ui.asset.get_untracked()
+                if let Some(asset) = self.ui.proj().asset.get_untracked()
                     && let Some(pcm) = asset.pcm.clone()
                 {
                     if let Some(old) = self.audio.take() {
@@ -573,7 +418,7 @@ impl App {
                         })
                     });
                     audio.cancel(1);
-                    audio.set_master(self.ui.audio_gain.get_untracked().clamp(0., 1.));
+                    audio.set_master(self.ui.global.audio_gain.get_untracked().clamp(0., 1.));
                     audio.load("editor.preview".into(), pcm);
                     audio.play(nanatype_audio::Voice {
                         sound: "editor.preview".into(),
@@ -592,7 +437,7 @@ impl App {
             Action::ResolveConflict { path, keep } => {
                 self.editor_try(|s| s.resolve_conflict(&path, keep))
             }
-            Action::DirectoryPoll(session) => self.poll_directory(session),
+            Action::DirectoryPoll(session) => worker::poll_directory(self, session),
             Action::DirectoryScanned {
                 session,
                 version,
@@ -606,15 +451,13 @@ impl App {
                 {
                     return;
                 }
-                self.scanning_directory = false;
-                if self
+                let stale = self
                     .package_editor
                     .session
                     .as_ref()
                     .is_some_and(|s| s.version != version || s.saving)
-                {
-                    self.scan_again = true;
-                } else {
+                    || self.tx_queue.is_busy();
+                if !stale {
                     match result {
                         Ok(project) => {
                             if self
@@ -629,15 +472,14 @@ impl App {
                         Err(e) => self.notice(e, true),
                     }
                 }
-                if self.scan_again
+                if self.dir_sync.finish_scan(stale)
                     && self
                         .package_editor
                         .session
                         .as_ref()
                         .is_some_and(|s| !s.saving)
                 {
-                    self.scan_again = false;
-                    self.poll_directory(session);
+                    worker::poll_directory(self, session);
                 }
             }
             Action::SetDeclaration {
@@ -651,33 +493,36 @@ impl App {
                 };
                 let inherited = s.view(None, false).properties;
                 let prefix = format!("properties.{file}:{path:?}");
-                self.prepare_project("editor-property", prefix, move |project, registry| {
-                    nanatype_theme::editor::set_declaration(
-                        project,
-                        &file,
-                        &path,
-                        value.as_deref(),
-                        Some(&inherited),
-                        unbind,
-                    )
-                    .map_err(|e| e.to_string())?;
-                    registry.inspect_project(project).map_err(|e| {
-                        e.iter()
-                            .map(|e| format!("{}: {}", e.field, e.message))
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    })?;
-                    Ok(())
+                self.enqueue_edit(EditTx {
+                    name: "editor-property",
+                    prefix,
+                    rename: None,
+                    refresh_asset: false,
+                    apply: Box::new(move |project, registry| {
+                        nanatype_theme::editor::set_declaration(
+                            project,
+                            &file,
+                            &path,
+                            value.as_deref(),
+                            Some(&inherited),
+                            unbind,
+                        )
+                        .map_err(|e| e.to_string())?;
+                        worker::inspect_strict(registry, project)
+                    }),
                 });
             }
-            Action::ProjectPrepared {
+            Action::TxFinished {
                 session,
-                version,
+                tx_id,
                 prefix,
+                rename,
+                refresh_asset,
                 result,
             } => {
-                self.preparing.set(self.preparing.get().saturating_sub(1));
-                let save = self.preparing.get() == 0 && std::mem::take(&mut self.save_pending);
+                if prefix == "canvas." {
+                    self.ui.proj().canvas_preview.set(None);
+                }
                 if self
                     .package_editor
                     .session
@@ -686,23 +531,51 @@ impl App {
                 {
                     return;
                 }
-                self.project_prepared(version, prefix, result);
-                if save {
-                    self.editor_save();
-                    self.editor_publish();
+                let ok = result.is_ok();
+                if !self.tx_queue.finish_edit(tx_id, ok) {
+                    return;
                 }
+                match result {
+                    Ok(project) => {
+                        let mut applied = false;
+                        self.editor_try(|s| {
+                            s.replace_project(project)?;
+                            if !prefix.is_empty() {
+                                s.applied_forms(&prefix);
+                            }
+                            applied = true;
+                            Ok(())
+                        });
+                        if applied {
+                            if let Some((from, to)) = rename {
+                                let target = self.ui.proj().data_target;
+                                if target.with_untracked(|t| t.as_ref() == Some(&from)) {
+                                    target.set(Some(to));
+                                }
+                            }
+                            if refresh_asset {
+                                worker::prepare_current_asset(self);
+                            }
+                        }
+                    }
+                    Err(e) => self.notice(e, true),
+                }
+                worker::pump(self);
+                self.editor_publish();
             }
             Action::Audition(path) => {
                 self.audition = Some(path.clone());
                 self.editor_with(|s| s.select(&path));
-                self.prepare_asset(&path);
+                worker::prepare_asset(self, &path);
             }
-            Action::Recoveries(rows) => self.ui.recoveries.set(Arc::new(rows)),
+            Action::Recoveries(rows) => self.ui.global.recoveries.set(Arc::new(rows)),
             Action::RestoreRecovery(id) => {
                 let root = self.package_editor.drafts.clone();
-                self.open_session(move || crate::recovery::load(&root, &id).map(Session::restore));
+                worker::open_session(self, move || {
+                    crate::recovery::load(&root, &id).map(Session::restore)
+                });
             }
-            Action::DiscardRecovery(id) => self.remove_recovery(id),
+            Action::DiscardRecovery(id) => worker::remove_recovery(self, id),
             Action::RecoveryWritten {
                 session,
                 version,
@@ -734,7 +607,7 @@ impl App {
             }
             Action::DiscardForms(prefix) => self.editor_with(|s| s.discard_forms(&prefix)),
             Action::Exit => {
-                self.opening += 1;
+                self.open_gate.cancel();
                 self.transition(Transition::Exit);
             }
             Action::SaveFinished {
@@ -751,32 +624,41 @@ impl App {
                 {
                     return;
                 }
+                self.tx_queue.finish_save();
                 if let Some(s) = &mut self.package_editor.session {
                     s.saving = false;
                 }
+                let pending = self.pending.take();
                 match result {
                     Ok(()) => {
                         let s = self.package_editor.session.as_mut().unwrap();
                         s.saved_snapshot(info, project);
                         let clean = !s.dirty();
                         if clean {
-                            s.recovery_epoch
-                                .store(0, std::sync::atomic::Ordering::Release);
+                            s.cancel_recovery();
                             let id = s.info.id.clone();
-                            self.remove_recovery(id);
+                            worker::remove_recovery(self, id);
+                        } else {
+                            s.cancel_close();
                         }
                         self.notice(self.ui.now_t("pkgedit-saved"), false);
                         self.editor_list_drafts();
-                        if clean && let Some(next) = self.pending.take() {
+                        if clean && let Some(next) = pending {
                             self.finish_transition(next);
                         }
                     }
-                    Err(e) => self.notice(e, true),
+                    Err(e) => {
+                        if let Some(s) = &mut self.package_editor.session {
+                            s.cancel_close();
+                        }
+                        self.notice(e, true);
+                    }
                 }
+                let rescan = self.dir_sync.finish_save();
+                worker::pump(self);
                 self.editor_publish();
-                if self.scan_again {
-                    self.scan_again = false;
-                    self.poll_directory(session);
+                if rescan {
+                    worker::poll_directory(self, session);
                 }
             }
             Action::KeyLoaded(result) => {
@@ -810,28 +692,28 @@ impl App {
                 }
             }
             Action::New { kind, id } => {
-                self.opening += 1;
+                self.open_gate.cancel();
                 let result = pe::create(kind, id.trim()).map(Box::new);
                 self.editor_opened(result);
             }
             Action::OpenInstalled(id) => {
                 let registry = self.registry.clone();
-                self.open_session(move || pe::open_installed(&registry, &id));
+                worker::open_session(self, move || pe::open_installed(&registry, &id));
             }
             Action::CopyInstalled(id) => {
                 let registry = self.registry.clone();
-                self.open_session(move || {
+                worker::open_session(self, move || {
                     let new_id = pe::copy_id(&registry, &id);
                     pe::copy_installed(&registry, &id, &new_id)
                 });
             }
             Action::OpenDraft(id) => {
                 let dir = self.package_editor.drafts.clone();
-                self.open_session(move || pe::open_draft(&dir, &id));
+                worker::open_session(self, move || pe::open_draft(&dir, &id));
             }
             Action::Opened(result) => self.editor_opened(result),
             Action::OpenFinished { ticket, result } => {
-                if ticket == self.opening {
+                if self.open_gate.is_current(ticket) {
                     self.editor_opened(result);
                 }
             }
@@ -843,7 +725,10 @@ impl App {
                     .is_some_and(|s| s.info.id == id);
                 match nanatype_theme::editor::discard_draft(&self.package_editor.drafts, &id) {
                     Ok(()) if open => {
+                        self.tx_queue.clear();
+                        self.dir_sync.reset();
                         self.package_editor.session = None;
+                        self.ui.reset_project();
                         self.editor_publish();
                     }
                     Ok(()) => {}
@@ -851,25 +736,25 @@ impl App {
                 }
                 self.editor_list_drafts();
             }
-            Action::Drafts(drafts) => self.ui.package_drafts.set(Arc::new(drafts)),
+            Action::Drafts(drafts) => self.ui.global.package_drafts.set(Arc::new(drafts)),
             Action::Close => {
-                self.opening += 1;
+                self.open_gate.cancel();
                 self.transition(Transition::Close);
             }
             Action::ConfirmClose { save } => {
                 if save {
-                    self.editor_save();
+                    self.enqueue_save();
                 } else if let Some(next) = self.pending.take() {
                     self.finish_transition(next);
                 }
             }
             Action::CancelClose => {
-                self.opening += 1;
+                self.open_gate.cancel();
                 self.pending = None;
                 self.editor_with(Session::cancel_close);
             }
             Action::Save => {
-                self.editor_save();
+                self.enqueue_save();
                 self.editor_publish();
             }
             Action::Revert => self.editor_with(Session::revert),
@@ -890,7 +775,7 @@ impl App {
             },
             Action::Select(path) => {
                 self.editor_with(|s| s.select(&path));
-                self.prepare_asset(&path);
+                worker::prepare_asset(self, &path);
             }
             Action::Edit { path, text } => {
                 if text.len() > nanatype_theme::editor::MAX_EDIT_BYTES {
@@ -919,42 +804,82 @@ impl App {
                     Ok(())
                 });
                 if removed {
-                    self.prepare_current_asset();
+                    worker::prepare_current_asset(self);
                 }
             }
             Action::Validated { ticket, report } => {
                 self.editor_with(|s| s.validated(ticket, report));
             }
             Action::ApplyMetadata(metadata) => {
-                self.prepare_project(
-                    "editor-metadata",
-                    "metadata.".into(),
-                    move |project, registry| {
+                self.enqueue_edit(EditTx {
+                    name: "editor-metadata",
+                    prefix: "metadata.".into(),
+                    rename: None,
+                    refresh_asset: false,
+                    apply: Box::new(move |project, registry| {
                         nanatype_theme::editor::apply_metadata(project, &metadata)
                             .map_err(|e| e.to_string())?;
                         let _ = nanatype_theme::editor::bundle_dependencies(project, registry);
                         Ok(())
-                    },
-                );
+                    }),
+                });
             }
-            Action::ApplyData { previous, entry } => self.editor_try(|s| {
-                s.apply_data(
-                    previous.as_deref(),
-                    entry.as_ref().map(|(id, d)| (id.as_str(), d)),
-                )?;
-                s.applied_forms("data.");
-                Ok(())
-            }),
-            Action::ApplyPipeline { previous, entry } => self.editor_try(|s| {
-                s.apply_pipeline(
-                    previous.as_deref(),
-                    entry.as_ref().map(|(name, p)| (name.as_str(), p)),
-                )?;
-                s.applied_forms("pipeline.");
-                Ok(())
-            }),
-            Action::LoadKey => self.load_key(false),
-            Action::CreateKey => self.load_key(true),
+            Action::ApplyData { previous, entry } => {
+                let rename = previous
+                    .as_ref()
+                    .zip(entry.as_ref())
+                    .and_then(|(from, (to, _))| {
+                        (from != to).then(|| {
+                            (
+                                DataTarget::Data(Some(from.clone())),
+                                DataTarget::Data(Some(to.clone())),
+                            )
+                        })
+                    });
+                self.enqueue_edit(EditTx {
+                    name: "editor-data",
+                    prefix: "data.".into(),
+                    rename,
+                    refresh_asset: false,
+                    apply: Box::new(move |project, _| {
+                        nanatype_theme::editor::apply_data(
+                            project,
+                            previous.as_deref(),
+                            entry.as_ref().map(|(id, d)| (id.as_str(), d)),
+                        )
+                        .map_err(|e| e.to_string())
+                    }),
+                });
+            }
+            Action::ApplyPipeline { previous, entry } => {
+                let rename = previous
+                    .as_ref()
+                    .zip(entry.as_ref())
+                    .and_then(|(from, (to, _))| {
+                        (from != to).then(|| {
+                            (
+                                DataTarget::Pipeline(Some(from.clone())),
+                                DataTarget::Pipeline(Some(to.clone())),
+                            )
+                        })
+                    });
+                self.enqueue_edit(EditTx {
+                    name: "editor-pipeline",
+                    prefix: "pipeline.".into(),
+                    rename,
+                    refresh_asset: false,
+                    apply: Box::new(move |project, _| {
+                        nanatype_theme::editor::apply_pipeline(
+                            project,
+                            previous.as_deref(),
+                            entry.as_ref().map(|(name, p)| (name.as_str(), p)),
+                        )
+                        .map_err(|e| e.to_string())
+                    }),
+                });
+            }
+            Action::LoadKey => worker::load_key(self, false),
+            Action::CreateKey => worker::load_key(self, true),
             Action::Sign(protected) => {
                 let Some(key) = self.package_editor.key.clone() else {
                     return;
@@ -969,12 +894,12 @@ impl App {
                 let Some(s) = &self.package_editor.session else {
                     return;
                 };
-                if s.forms.keys().any(|k| !k.ends_with(".editing")) {
+                if !s.forms.is_empty() {
                     self.notice(self.ui.now_t("pkgedit-pending-forms"), true);
                     return;
                 }
                 let project = s.project.clone();
-                self.open_session(move || pe::derived(&project, id.trim()));
+                worker::open_session(self, move || pe::derived(&project, id.trim()));
             }
             Action::Trust(trusted) => self.editor_with(|s| s.trust(trusted)),
             Action::DebugStart => {
@@ -999,25 +924,6 @@ impl App {
         }
     }
 
-    fn load_key(&mut self, create: bool) {
-        if self.key_loading {
-            return;
-        }
-        self.key_loading = true;
-        let keys = self.package_editor.keys.clone();
-        background("editor-key", &self.ctx, move || {
-            Msg::PackageEditor(Action::KeyLoaded((|| {
-                let key = keys.load()?;
-                if key.is_some() || !create {
-                    return Ok(key);
-                }
-                let key = nanatype_theme::SealIdentity::generate().map_err(|e| e.to_string())?;
-                keys.save(&key)?;
-                Ok(Some(key))
-            })()))
-        });
-    }
-
     fn transition(&mut self, next: Transition) {
         if let Some(s) = &mut self.package_editor.session
             && !s.request_close()
@@ -1031,35 +937,20 @@ impl App {
 
     fn finish_transition(&mut self, next: Transition) {
         if let Some(s) = &self.package_editor.session {
-            s.recovery_epoch
-                .store(0, std::sync::atomic::Ordering::Release);
-            self.remove_recovery(s.info.id.clone());
+            s.cancel_recovery();
+            worker::remove_recovery(self, s.info.id.clone());
         }
         self.dialogs.clear();
         self.conflict_copy = None;
         self.replace_path = None;
-        self.ui.properties_file.set("skin.toml".into());
-        self.ui.properties_path.set(Vec::new());
-        self.ui.file_target.set(String::new());
-        self.ui.preview_host.skin_drafts.set(Default::default());
-        self.ui.preview_simulate.set(false);
-        self.ui.preview_size.set(Default::default());
-        self.ui.preview_mode.set(0);
-        self.ui.preview_viewport.set(Default::default());
-        self.ui.canvas_target.set(vec!["dialogue".into()]);
-        self.ui.canvas_enabled.set(false);
-        self.ui.source_views.set(Default::default());
-        self.ui.canvas_preview.set(None);
-        self.ui.canvas_selection.set(None);
-        self.ui.canvas_geometry.set(Vec::new());
-        self.ui.asset.set(None);
+        self.tx_queue.clear();
         if let Some(audio) = self.audio.take() {
             audio.stop();
         }
         self.watch = None;
-        self.scanning_directory = false;
-        self.scan_again = false;
+        self.dir_sync.reset();
         self.package_editor.session = None;
+        let project_ui = self.ui.reset_project();
         match next {
             Transition::Close => {}
             Transition::Exit => self.exit_requested = true,
@@ -1075,11 +966,11 @@ impl App {
                     }
                 }
                 self.package_editor.session = Some(*session);
-                self.ui.mode.set(pe::Mode::Design);
-                self.ui
-                    .side_open
-                    .set(self.ui.workspace_width.get_untracked() >= crate::ui::shell::COMPACT);
-                self.poll_directory(id);
+                project_ui.mode.set(pe::Mode::Design);
+                project_ui.side_open.set(
+                    self.ui.global.workspace_width.get_untracked() >= crate::ui::shell::COMPACT,
+                );
+                worker::poll_directory(self, id);
             }
         }
         self.editor_publish();
@@ -1098,261 +989,12 @@ impl App {
 
     pub fn editor_open_archive(&mut self, path: PathBuf) {
         let (installed, data) = (self.paths.packages(), self.paths.data.clone());
-        self.open_session(move || {
+        worker::open_session(self, move || {
             if path.is_dir() {
                 pe::open_directory(&path, &installed, &data)
             } else {
                 pe::open_archive(&path)
             }
-        });
-    }
-
-    /// All asynchronous opens share cancellation and the unsaved-change flow.
-    fn open_session(&mut self, open: impl FnOnce() -> Result<Session, String> + Send + 'static) {
-        self.opening += 1;
-        let ticket = self.opening;
-        background("package-editor-open", &self.ctx, move || {
-            Msg::PackageEditor(Action::OpenFinished {
-                ticket,
-                result: open().map(Box::new),
-            })
-        });
-    }
-
-    /// Prepare one transaction off-thread; ProjectPrepared rejects stale results.
-    /// Take an edit prepared off the UI thread, unless the project moved on.
-    fn project_prepared(
-        &mut self,
-        version: u64,
-        prefix: String,
-        result: Result<nanatype_theme::PackageProject, String>,
-    ) {
-        if prefix == "canvas." {
-            self.ui.canvas_preview.set(None);
-        }
-        if self
-            .package_editor
-            .session
-            .as_ref()
-            .is_some_and(|s| s.version != version)
-        {
-            self.notice(self.ui.now_t("pkgedit-operation-stale"), true);
-            return;
-        }
-        match result {
-            Ok(project) => {
-                let refresh_asset = prefix.is_empty();
-                self.editor_try(|s| {
-                    s.replace_project(project)?;
-                    if !prefix.is_empty() {
-                        s.applied_forms(&prefix);
-                    }
-                    Ok(())
-                });
-                if refresh_asset {
-                    self.prepare_current_asset();
-                }
-            }
-            Err(e) => self.notice(e, true),
-        }
-    }
-
-    fn prepare_project(
-        &self,
-        name: &'static str,
-        prefix: String,
-        apply: impl FnOnce(&mut nanatype_theme::PackageProject, &SkinRegistry) -> Result<(), String>
-        + Send
-        + 'static,
-    ) {
-        let Some(s) = &self.package_editor.session else {
-            return;
-        };
-        let (session, version, mut project, registry) =
-            (s.id, s.version, s.project.clone(), self.registry.clone());
-        self.preparing.set(self.preparing.get() + 1);
-        background(name, &self.ctx, move || {
-            let result = apply(&mut project, &registry).map(|()| project);
-            Msg::PackageEditor(Action::ProjectPrepared {
-                session,
-                version,
-                prefix,
-                result,
-            })
-        });
-    }
-
-    /// Validate the whole package and its dependency closure, then write it.
-    fn editor_export(&mut self, path: PathBuf) {
-        let Some(session) = &self.package_editor.session else {
-            return;
-        };
-        if let Err(e) = session.ensure_forms_applied() {
-            self.notice(e, true);
-            return;
-        }
-        let project = session.project.clone();
-        let registry = self.registry.clone();
-        background("package-editor-export", &self.ctx, move || {
-            Msg::PackageEditor(Action::Exported((|| {
-                let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-                let report = pe::validate_with_worker(&registry, &project, &exe);
-                if report.errors() > 0 {
-                    return Err(report
-                        .diagnostics
-                        .iter()
-                        .filter(|d| d.level == nanatype_theme::editor::Level::Error)
-                        .map(|d| format!("{}:{}: {}", d.path, d.line, d.message))
-                        .collect::<Vec<_>>()
-                        .join("\n"));
-                }
-                pe::export(&registry, &project, &path)
-            })()))
-        });
-    }
-
-    fn editor_import(&mut self, path: PathBuf) {
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let Some(s) = self.package_editor.session.as_ref() else {
-            return;
-        };
-        let session = s.id;
-        let folder = s.import_folder(&name);
-        background("editor-import", &self.ctx, move || {
-            let result = read_asset(path);
-            Msg::PackageEditor(Action::Imported {
-                session,
-                folder,
-                name,
-                result,
-            })
-        });
-    }
-
-    fn editor_save(&mut self) {
-        let Some(s) = &mut self.package_editor.session else {
-            return;
-        };
-        if s.saving {
-            return;
-        }
-        if self.preparing.get() > 0 {
-            self.save_pending = true;
-            return;
-        }
-        if let Err(e) = s.ensure_forms_applied() {
-            self.notice(e, true);
-            return;
-        }
-        s.saving = true;
-        let (session, project, mut info) = (s.id, s.project.clone(), s.info.clone());
-        info.saved_at = pe::now_s();
-        if let Ok(m) = project.manifest() {
-            info.package = m.meta.id;
-        }
-        let dir = self.package_editor.drafts.clone();
-        let baseline = s.disk_baseline().clone();
-        let target = s.directory().map(PathBuf::from);
-        let (installed, data) = (self.paths.packages(), self.paths.data.clone());
-        background("editor-save", &self.ctx, move || {
-            let result = if let Some(root) = target {
-                crate::directory::save(&root, &installed, &data, &baseline, &project)
-            } else {
-                nanatype_theme::editor::save_draft(&dir, &info, &project).map_err(|e| e.to_string())
-            };
-            Msg::PackageEditor(Action::SaveFinished {
-                session,
-                info,
-                project,
-                result,
-            })
-        });
-        self.editor_publish();
-    }
-
-    fn prepare_current_asset(&mut self) {
-        if let Some(path) = self
-            .package_editor
-            .session
-            .as_ref()
-            .and_then(|s| s.selected_path().map(str::to_owned))
-        {
-            self.prepare_asset(&path);
-        }
-    }
-
-    fn prepare_asset(&mut self, path: &str) {
-        self.ui.asset.set(None);
-        if let Some(audio) = self.audio.take() {
-            audio.stop();
-        }
-        let Some(s) = &self.package_editor.session else {
-            return;
-        };
-        let Some(bytes) = s.project.files.get(path) else {
-            return;
-        };
-        let (kind, _) = nanatype_theme::editor::describe(path, bytes);
-        if !matches!(
-            kind,
-            nanatype_theme::editor::AssetKind::Image
-                | nanatype_theme::editor::AssetKind::Font
-                | nanatype_theme::editor::AssetKind::Audio
-        ) {
-            return;
-        }
-        let (session, version, path, bytes) = (s.id, s.version, path.to_owned(), bytes.clone());
-        background("editor-asset-preview", &self.ctx, move || {
-            let result = crate::asset::prepare(&path, bytes).map(Arc::new);
-            Msg::PackageEditor(Action::AssetPrepared {
-                session,
-                version,
-                path,
-                result,
-            })
-        });
-    }
-
-    fn poll_directory(&mut self, id: u64) {
-        let Some(s) = &self.package_editor.session else {
-            return;
-        };
-        if s.id != id {
-            return;
-        }
-        let Some(root) = s.directory().map(PathBuf::from) else {
-            return;
-        };
-        if s.saving || self.scanning_directory {
-            self.scan_again = true;
-            return;
-        }
-        self.scanning_directory = true;
-        let (session, version, installed) = (s.id, s.version, self.paths.packages());
-        background("editor-directory-scan", &self.ctx, move || {
-            Msg::PackageEditor(Action::DirectoryScanned {
-                session,
-                version,
-                result: crate::directory::read(&root, &installed),
-            })
-        });
-    }
-
-    fn list_recoveries(&self) {
-        let root = self.package_editor.drafts.clone();
-        background("editor-recoveries", &self.ctx, move || {
-            Msg::PackageEditor(Action::Recoveries(crate::recovery::list(&root)))
-        });
-    }
-
-    fn remove_recovery(&self, id: String) {
-        let root = self.package_editor.drafts.clone();
-        background("editor-discard-recovery", &self.ctx, move || {
-            let _ = crate::recovery::remove(&root, &id);
-            Msg::PackageEditor(Action::Recoveries(crate::recovery::list(&root)))
         });
     }
 
@@ -1362,26 +1004,13 @@ impl App {
             .as_ref()
             .and_then(|s| s.validation_at().into_iter().chain(s.recovery_at()).min())
     }
+
     pub fn maintenance(&mut self) {
         let now = nanatype_frame::clock::now_ms();
-        if let Some(s) = &mut self.package_editor.session
+        if let Some(s) = &self.package_editor.session
             && s.recovery_at().is_some_and(|at| at <= now)
         {
-            s.recovering = true;
-            let (session, version, epoch, snapshot, root) = (
-                s.id,
-                s.version,
-                s.recovery_epoch.clone(),
-                s.recovery(),
-                self.package_editor.drafts.clone(),
-            );
-            background("editor-recovery", &self.ctx, move || {
-                Msg::PackageEditor(Action::RecoveryWritten {
-                    session,
-                    version,
-                    result: crate::recovery::write(&root, snapshot, &epoch, version),
-                })
-            });
+            worker::write_recovery(self);
         }
         if self.maintenance_at().is_some_and(|at| at <= now) {
             self.editor_publish();
@@ -1389,10 +1018,7 @@ impl App {
     }
 
     pub fn editor_list_drafts(&mut self) {
-        let dir = self.package_editor.drafts.clone();
-        background("package-drafts", &self.ctx, move || {
-            Msg::PackageEditor(Action::Drafts(nanatype_theme::editor::list_drafts(&dir)))
-        });
+        worker::list_drafts(self);
     }
 
     fn editor_with(&mut self, f: impl FnOnce(&mut Session)) {
@@ -1413,45 +1039,35 @@ impl App {
 
     /// Push the view and start a background validation when one is due.
     fn editor_publish(&mut self) {
-        let Some(session) = &mut self.package_editor.session else {
-            if self.ui.package_editor.with_untracked(Option::is_some) {
-                self.ui.package_editor.set(None);
-            }
-            return;
-        };
-        let clean_recovery =
-            if !session.dirty() && (session.recovered_version != 0 || session.recovering) {
-                session.recovered_version = 0;
-                session
-                    .recovery_epoch
-                    .store(0, std::sync::atomic::Ordering::Release);
-                Some(session.info.id.clone())
-            } else {
-                None
-            };
-        if session
-            .validation_at()
-            .is_some_and(|at| at <= nanatype_frame::clock::now_ms())
-            && let Some((ticket, project)) = session.validation_due()
+        let proj = self.ui.proj();
+        let mut validation = None;
+        let clean_recovery;
+        let view;
         {
-            let registry = self.registry.clone();
-            background("package-editor-check", &self.ctx, move || {
-                Msg::PackageEditor(Action::Validated {
-                    ticket,
-                    report: Arc::new(match std::env::current_exe() {
-                        Ok(exe) => pe::validate_with_worker(&registry, &project, &exe),
-                        Err(_) => pe::validate(&registry, &project),
-                    }),
-                })
-            });
+            let Some(session) = &mut self.package_editor.session else {
+                if proj.package_editor.with_untracked(Option::is_some) {
+                    proj.package_editor.set(None);
+                }
+                return;
+            };
+            clean_recovery = session.mark_recovery_clean();
+            if session
+                .validation_at()
+                .is_some_and(|at| at <= nanatype_frame::clock::now_ms())
+            {
+                validation = session.validation_due();
+            }
+            view = session.view(
+                self.package_editor.key.as_ref(),
+                self.package_editor.key_checked,
+            );
         }
-        let view = session.view(
-            self.package_editor.key.as_ref(),
-            self.package_editor.key_checked,
-        );
-        self.ui.package_editor.set(Some(Arc::new(view)));
+        if let Some((ticket, project)) = validation {
+            worker::run_validation(self, ticket, project);
+        }
+        proj.package_editor.set(Some(Arc::new(view)));
         if let Some(id) = clean_recovery {
-            self.remove_recovery(id);
+            worker::remove_recovery(self, id);
         }
     }
 }

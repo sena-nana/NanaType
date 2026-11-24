@@ -63,26 +63,32 @@ fn main() {
         Arc::new(Default::default()),
         locale,
     );
-    ui.package_editor.set(Some(Arc::new(s.view(None, false))));
-    ui.mode.set(Mode::Design);
+    ui.proj()
+        .package_editor
+        .set(Some(Arc::new(s.view(None, false))));
+    ui.proj().mode.set(Mode::Design);
 
     capture(&dir, ui, |f| match f {
         30 => {
-            ui.canvas_selection.set(Some("nameplate".into()));
+            ui.proj().canvas_selection.set(Some("nameplate".into()));
             true
         }
         60 => {
             s.edit("skin.toml", &SKIN.replacen(PLATE, PLATE_EDITED, 1))
                 .unwrap();
             validate(&registry, &mut s);
-            ui.package_editor.set(Some(Arc::new(s.view(None, false))));
+            ui.proj()
+                .package_editor
+                .set(Some(Arc::new(s.view(None, false))));
             true
         }
         90 => {
             s.select("skin.toml");
-            ui.package_editor.set(Some(Arc::new(s.view(None, false))));
+            ui.proj()
+                .package_editor
+                .set(Some(Arc::new(s.view(None, false))));
             let _ = ui::modes::design::select(ui, vec!["dialogue".into(), "nameplate".into()]);
-            ui.split_source.set(true);
+            ui.proj().split_source.set(true);
             true
         }
         _ => f == 0,
@@ -164,11 +170,14 @@ fn lua(out: &Path, registry: &SkinRegistry, locale: Locale) {
         Arc::new(Default::default()),
         locale,
     );
-    ui.package_editor.set(Some(view(&s, "start", &mut log)));
-    ui.mode.set(Mode::Lua);
+    ui.proj()
+        .package_editor
+        .set(Some(view(&s, "start", &mut log)));
+    ui.proj().mode.set(Mode::Lua);
     capture(&dir, ui, |f| {
         if PLAYS.contains(&f) {
-            ui.package_editor
+            ui.proj()
+                .package_editor
                 .set(Some(view(&s, "line_start", &mut log)));
             return true;
         }

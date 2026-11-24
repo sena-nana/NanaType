@@ -66,6 +66,7 @@ impl Change {
                 }
             }
         }
+        project.invalidate_hashes();
         *forms = if forward {
             self.after.clone()
         } else {

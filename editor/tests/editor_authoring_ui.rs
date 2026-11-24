@@ -26,16 +26,18 @@ fn canvas_geometry_comes_from_the_real_renderer_and_drag_commits_once() {
         Arc::new(Default::default()),
         Locale::ZhCn,
     );
-    ui.package_editor.set(Some(view.clone()));
-    ui.mode.set(Mode::Design);
+    ui.proj().package_editor.set(Some(view.clone()));
+    ui.proj().mode.set(Mode::Design);
     let mut agent = common::session().themed(false).mount(1440, 1100, move || {
         widget(Stack::column(0.).height(LengthSpec::Px(1100.)))
             .children((ui::views::editor(ui), ui::canvas_controls::overlay(ui)))
             .into_any()
     });
     agent.flush().unwrap();
-    let geometry =
-        nanatype_frame::ui::editor_geometry::collect(ui.preview_host, agent.document().context());
+    let geometry = nanatype_frame::ui::editor_geometry::collect(
+        ui.proj().preview_host,
+        agent.document().context(),
+    );
     let canvas = geometry
         .iter()
         .find(|p| p.key == "canvas")
@@ -52,8 +54,8 @@ fn canvas_geometry_comes_from_the_real_renderer_and_drag_commits_once() {
         .or_else(|| geometry.iter().find(|p| p.key == "nameplate"))
         .expect("editable rendered parts")
         .clone();
-    ui.canvas_geometry.set(geometry);
-    ui.canvas_selection.set(Some(selected.key.clone()));
+    ui.proj().canvas_geometry.set(geometry);
+    ui.proj().canvas_selection.set(Some(selected.key.clone()));
     agent.flush().unwrap();
     let x = selected.rect[0] + selected.rect[2] * 0.5;
     let y = selected.rect[1] + selected.rect[3] * 0.5;
@@ -71,7 +73,7 @@ fn canvas_geometry_comes_from_the_real_renderer_and_drag_commits_once() {
         &pointer(nana_ui_platform::PointerPhase::Move, x + 12., y + 8.),
         &mut drag,
     );
-    assert!(ui.canvas_preview.get_untracked().is_some());
+    assert!(ui.proj().canvas_preview.get_untracked().is_some());
     assert_eq!(
         session.project.files, project.files,
         "dragging only changes the private preview"
@@ -261,12 +263,12 @@ fn authoring_panels_fit_each_language_and_keep_preview_overrides_private() {
                     locale,
                 );
                 let settings = ui.settings.get_untracked();
-                ui.package_editor.set(Some(view.clone()));
-                ui.mode.set(tab);
-                ui.preview_size.set(["300".into(), "600".into()]);
+                ui.proj().package_editor.set(Some(view.clone()));
+                ui.proj().mode.set(tab);
+                ui.proj().preview_size.set(["300".into(), "600".into()]);
                 if tab == Mode::Sounds {
-                    ui.properties_file.set("skin.toml".into());
-                    ui.properties_path.set(vec!["sounds".into()]);
+                    ui.proj().properties_file.set("skin.toml".into());
+                    ui.proj().properties_path.set(vec!["sounds".into()]);
                 }
                 let mut agent = common::session().themed(false).mount(width, 1100, move || {
                     widget(Stack::column(0.).height(LengthSpec::Px(1100.)))
@@ -279,7 +281,7 @@ fn authoring_panels_fit_each_language_and_keep_preview_overrides_private() {
                         locale.tag().to_lowercase()
                     )))
                     .unwrap();
-                assert_eq!(ui.workspace_width.get_untracked(), width as f32);
+                assert_eq!(ui.global.workspace_width.get_untracked(), width as f32);
                 if matches!(tab, Mode::Design | Mode::Files) {
                     assert!(
                         agent.accessibility_dump().iter().any(|n| n
@@ -397,9 +399,12 @@ fn buffered_boolean_controls_match_pending_values_after_tab_switches() {
         Arc::new(Default::default()),
         Locale::ZhCn,
     );
-    ui.package_editor.set(Some(Arc::new(s.view(None, false))));
-    ui.mode.set(Mode::Design);
-    ui.properties_path
+    ui.proj()
+        .package_editor
+        .set(Some(Arc::new(s.view(None, false))));
+    ui.proj().mode.set(Mode::Design);
+    ui.proj()
+        .properties_path
         .set(vec!["dialogue".into(), "nameplate".into()]);
     let mut agent = common::session().themed(false).mount(1440, 1100, move || {
         widget(Stack::column(0.).height(LengthSpec::Px(1100.))).children(ui::views::editor(ui))
@@ -428,13 +433,13 @@ fn buffered_boolean_controls_match_pending_values_after_tab_switches() {
         ),
         Some(false)
     );
-    ui.mode.set(Mode::Package);
+    ui.proj().mode.set(Mode::Package);
     agent.flush().unwrap();
     assert_eq!(
         checked(&agent, "package-editor-cap:packages-kind-sounds"),
         Some(true)
     );
-    ui.mode.set(Mode::Design);
+    ui.proj().mode.set(Mode::Design);
     agent.flush().unwrap();
     assert_eq!(
         checked(
@@ -470,9 +475,12 @@ fn a_parameter_binding_can_be_created_from_a_constant_in_the_property_panel() {
         Arc::new(Default::default()),
         Locale::ZhCn,
     );
-    ui.package_editor.set(Some(Arc::new(s.view(None, false))));
-    ui.mode.set(Mode::Design);
-    ui.properties_path
+    ui.proj()
+        .package_editor
+        .set(Some(Arc::new(s.view(None, false))));
+    ui.proj().mode.set(Mode::Design);
+    ui.proj()
+        .properties_path
         .set(vec!["dialogue".into(), "text".into()]);
     let mut agent = common::session().themed(false).mount(1280, 1100, move || {
         widget(Stack::column(0.).height(LengthSpec::Px(1100.))).children(ui::views::editor(ui))
@@ -547,32 +555,34 @@ fn a_layer_selects_its_part_its_properties_and_its_source() {
         Arc::new(Default::default()),
         Locale::EnUs,
     );
-    ui.package_editor.set(Some(Arc::new(s.view(None, false))));
-    ui.mode.set(Mode::Design);
-    ui.split_source.set(true);
+    ui.proj()
+        .package_editor
+        .set(Some(Arc::new(s.view(None, false))));
+    ui.proj().mode.set(Mode::Design);
+    ui.proj().split_source.set(true);
     let mut agent = common::session().themed(false).mount(1440, 1000, move || {
         widget(Stack::column(0.).height(LengthSpec::Px(1000.))).children(ui::views::editor(ui))
     });
     agent.flush().unwrap();
     // A part picked on the canvas selects its layer too.
-    ui.canvas_selection.set(Some("portrait".into()));
+    ui.proj().canvas_selection.set(Some("portrait".into()));
     agent.flush().unwrap();
     assert_eq!(
-        ui.properties_path.get_untracked(),
+        ui.proj().properties_path.get_untracked(),
         vec!["dialogue".to_owned(), "portrait".to_owned()]
     );
     assert!(
-        ui.canvas_enabled.get_untracked(),
+        ui.proj().canvas_enabled.get_untracked(),
         "the design canvas takes gestures"
     );
     let reveal = ui::modes::design::select(ui, vec!["dialogue".into(), "nameplate".into()]);
     agent.flush().unwrap();
     assert_eq!(
-        ui.properties_path.get_untracked(),
+        ui.proj().properties_path.get_untracked(),
         vec!["dialogue".to_owned(), "nameplate".to_owned()]
     );
     assert_eq!(
-        ui.canvas_selection.get_untracked().as_deref(),
+        ui.proj().canvas_selection.get_untracked().as_deref(),
         Some("nameplate")
     );
     let offset = source.find("[dialogue.nameplate]").unwrap();
