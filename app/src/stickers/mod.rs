@@ -113,7 +113,12 @@ struct Job {
     root: PathBuf,
     generation: u64,
     download: Option<Preset>,
+    verify_source: bool,
     cancelled: Arc<AtomicBool>,
+}
+enum WorkerCmd {
+    Process(Job),
+    Prune,
 }
 struct Pending {
     generation: u64,
@@ -126,7 +131,7 @@ pub struct Manager {
     pub loaded: HashMap<PathBuf, Prepared>,
     jobs: HashMap<PathBuf, Pending>,
     next: u64,
-    tx: Sender<Job>,
+    tx: Sender<WorkerCmd>,
 }
 
 /// Canonical identity, with the Win32 long-path prefix removed. Missing preset
@@ -169,50 +174,54 @@ pub fn add_folders(dirs: &mut Vec<String>, paths: &[PathBuf]) {
 impl Manager {
     pub fn new(data: &Path, post: impl Fn(Event) + Send + 'static) -> Self {
         let root = data.join("media/stickers");
-        let (tx, rx) = unbounded::<Job>();
+        let (tx, rx) = unbounded::<WorkerCmd>();
         std::thread::Builder::new()
             .name("nanatype-stickers".into())
             .spawn(move || {
                 // Off the UI thread: deleting a previous generation can be slow.
                 let cache = cache::open(&root);
-                for job in rx {
-                    if job.cancelled.load(Ordering::Relaxed) {
-                        continue;
-                    }
-                    let progress = |phase| {
-                        post(Event::Progress {
-                            root: job.root.clone(),
-                            generation: job.generation,
-                            phase,
-                        })
-                    };
-                    let result = (|| {
-                        if let Some(preset) = job.download {
-                            download(preset, &job.root, &job.cancelled, &progress)?;
+                for cmd in rx {
+                    match cmd {
+                        WorkerCmd::Prune => {
+                            let _ = cache::prune(&cache);
                         }
-                        let definition = definition::load(&job.root)?;
-                        let mut images = Vec::new();
-                        for (i, entry) in definition.entries.iter().enumerate() {
+                        WorkerCmd::Process(job) => {
                             if job.cancelled.load(Ordering::Relaxed) {
-                                return Err("Cancelled".into());
+                                continue;
                             }
-                            progress(Phase::Processing(i, definition.entries.len()));
-                            let source =
-                                definition::contained(&job.root, &job.root.join(&entry.path))?;
-                            images.push(
-                                cache::prepare(&source, &cache, &job.cancelled)
-                                    .map_err(|e| format!("{}: {e}", entry.path.display()))?,
-                            );
+                            let progress = |phase| {
+                                post(Event::Progress {
+                                    root: job.root.clone(),
+                                    generation: job.generation,
+                                    phase,
+                                })
+                            };
+                            let result = (|| {
+                                if let Some(preset) = job.download {
+                                    download(preset, &job.root, &job.cancelled, &progress)?;
+                                }
+                                let definition = definition::load(&job.root)?;
+                                let entry_paths: Vec<PathBuf> =
+                                    definition.entries.iter().map(|e| e.path.clone()).collect();
+                                let total = entry_paths.len();
+                                let images = cache::prepare_pack(
+                                    &job.root,
+                                    &entry_paths,
+                                    &cache,
+                                    job.verify_source,
+                                    &job.cancelled,
+                                    |i, _| progress(Phase::Processing(i, total)),
+                                )?;
+                                Ok(Prepared { definition, images })
+                            })();
+                            if !job.cancelled.load(Ordering::Relaxed) {
+                                post(Event::Done {
+                                    root: job.root,
+                                    generation: job.generation,
+                                    result,
+                                });
+                            }
                         }
-                        cache::prune(&cache)?;
-                        Ok(Prepared { definition, images })
-                    })();
-                    if !job.cancelled.load(Ordering::Relaxed) {
-                        post(Event::Done {
-                            root: job.root,
-                            generation: job.generation,
-                            result,
-                        });
                     }
                 }
             })
@@ -239,7 +248,8 @@ impl Manager {
         }
     }
 
-    pub fn sync(&mut self, dirs: &[String]) {
+    fn sync_inner(&mut self, dirs: &[String]) -> bool {
+        let mut changed = false;
         let desired: HashSet<_> = dirs.iter().map(|d| folder(Path::new(d))).collect();
         let remove: Vec<_> = self
             .rows
@@ -252,7 +262,7 @@ impl Manager {
             .map(|r| r.root.clone())
             .collect();
         for root in remove {
-            self.remove(&root);
+            changed |= self.remove_inner(&root);
         }
         for root in desired {
             if !self.rows.iter().any(|r| r.root == root) {
@@ -276,18 +286,25 @@ impl Manager {
                 .iter()
                 .any(|r| r.root == root && r.phase == Phase::NotDownloaded)
             {
-                self.start(&root, None);
+                changed |= self.enqueue_job(&root, None, false);
             }
+        }
+        changed
+    }
+
+    pub fn sync(&mut self, dirs: &[String]) {
+        if self.sync_inner(dirs) {
+            let _ = self.tx.send(WorkerCmd::Prune);
         }
     }
 
-    pub fn start(&mut self, root: &Path, download: Option<Preset>) {
+    fn enqueue_job(&mut self, root: &Path, download: Option<Preset>, verify_source: bool) -> bool {
         let root = folder(root);
         if self.jobs.contains_key(&root) {
-            return;
+            return false;
         }
         let Some(row) = self.rows.iter_mut().find(|r| r.root == root) else {
-            return;
+            return false;
         };
         row.phase = if download.is_some() {
             Phase::Downloading(0, 0)
@@ -304,23 +321,34 @@ impl Manager {
                 download: download.is_some(),
             },
         );
-        let _ = self.tx.send(Job {
+        let _ = self.tx.send(WorkerCmd::Process(Job {
             root,
             generation: self.next,
             download,
+            verify_source,
             cancelled,
-        });
+        }));
+        true
+    }
+
+    pub fn start(&mut self, root: &Path, download: Option<Preset>) {
+        if self.enqueue_job(root, download, false) {
+            let _ = self.tx.send(WorkerCmd::Prune);
+        }
     }
 
     pub fn rebuild(&mut self, dirs: &[String]) {
-        self.sync(dirs);
+        let mut changed = self.sync_inner(dirs);
         for root in dirs
             .iter()
             .map(|d| folder(Path::new(d)))
             .collect::<HashSet<_>>()
         {
             self.cancel(&root);
-            self.start(&root, None);
+            changed |= self.enqueue_job(&root, None, true);
+        }
+        if changed {
+            let _ = self.tx.send(WorkerCmd::Prune);
         }
     }
 
@@ -330,22 +358,35 @@ impl Manager {
         }
     }
 
-    pub fn remove(&mut self, root: &Path) {
+    fn remove_inner(&mut self, root: &Path) -> bool {
         let root = folder(root);
+        let was_loaded = self.loaded.remove(&root).is_some();
+        let was_pending = self.jobs.contains_key(&root);
         self.cancel(&root);
-        self.loaded.remove(&root);
+        let mut modified = was_loaded || was_pending;
         self.rows.retain_mut(|r| {
             if r.root != root {
                 return true;
             }
             if r.preset.is_some() {
+                if r.phase != Phase::NotDownloaded || r.count != 0 {
+                    modified = true;
+                }
                 r.phase = Phase::NotDownloaded;
                 r.count = 0;
                 true
             } else {
+                modified = true;
                 false
             }
         });
+        modified
+    }
+
+    pub fn remove(&mut self, root: &Path) {
+        if self.remove_inner(root) {
+            let _ = self.tx.send(WorkerCmd::Prune);
+        }
     }
 
     /// Stale generations (including a removed/reimported directory) never publish.

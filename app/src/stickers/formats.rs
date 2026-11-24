@@ -390,8 +390,9 @@ pub(crate) mod tests {
                     assert!(p[0] > 245 && p[1] < 10 && p[2] < 10, "{p:?}");
                     assert_eq!(p[3], 128);
                     assert_eq!(first.get_pixel(0, 0).0[3], 0);
-                    let second = image::open(cached.frame_path(1)).unwrap().into_rgba8();
-                    assert!(second.get_pixel(2, 0).0[1] > 245);
+                    let second = cache::read_premultiplied_frame(&cached, 1).unwrap();
+                    let s_px = &second[2 * 4..2 * 4 + 4];
+                    assert!(s_px[1] > 245, "{s_px:?}");
                 }
                 _ => unreachable!(),
             }
