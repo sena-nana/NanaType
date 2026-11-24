@@ -1,5 +1,6 @@
 use super::*;
-use crate::SealIdentity;
+use crate::{DataFormat, DataSpec, PipelineSpec, SealIdentity};
+use std::{collections::BTreeSet, path::Path};
 
 fn registry(dir: &Path) -> SkinRegistry {
     SkinRegistry::new(Some(dir.join("installed")), "1.0.0")
@@ -522,4 +523,145 @@ fn pipeline_forms_write_valid_declarations_and_refuse_new_errors() {
         .seal(&key, &BTreeSet::from([MANIFEST.to_owned()]))
         .unwrap();
     assert!(apply_pipeline(&mut sealed, None, Some(("p", &original))).is_err());
+}
+
+#[test]
+fn table_range_tracks_nested_tables_arrays_and_strings_accurately() {
+    let path = |s: &str| s.split('.').map(str::to_owned).collect::<Vec<_>>();
+    let text = "\
+id = 1
+[dialogue]
+x = 1
+[dialogue.nameplate] # tag
+size = 2
+[dialogue.nameplate.shadow]
+blur = 1
+[dialogue.portrait]
+size = 3
+";
+    let range = table_range(text, &path("dialogue.nameplate")).unwrap();
+    assert_eq!(
+        &text[range.0..range.1],
+        "[dialogue.nameplate] # tag\nsize = 2\n[dialogue.nameplate.shadow]\nblur = 1\n"
+    );
+    let range = table_range(text, &path("dialogue.portrait")).unwrap();
+    assert_eq!(&text[range.0..range.1], "[dialogue.portrait]\nsize = 3\n");
+    assert!(table_range(text, &path("dialogue.text")).is_none());
+
+    let decor = "\
+[[dialogue.decor]]
+text = 'a'
+[[dialogue.decor]]
+text = 'b'
+[chrome]
+";
+    let range = table_range(decor, &path("dialogue.decor.0")).unwrap();
+    assert_eq!(&decor[range.0..range.1], "[[dialogue.decor]]\ntext = 'a'\n");
+    let range = table_range(decor, &path("dialogue.decor.1")).unwrap();
+    assert_eq!(&decor[range.0..range.1], "[[dialogue.decor]]\ntext = 'b'\n");
+
+    let tricky = "\
+[dialogue.nameplate]
+label = \"# not a comment\"
+code = \"\"\"
+[dialogue.portrait]
+fake = 1
+\"\"\"
+[dialogue.portrait]
+size = 4
+";
+    let range = table_range(tricky, &path("dialogue.nameplate")).unwrap();
+    assert_eq!(
+        &tricky[range.0..range.1],
+        "[dialogue.nameplate]\nlabel = \"# not a comment\"\ncode = \"\"\"\n[dialogue.portrait]\nfake = 1\n\"\"\"\n"
+    );
+}
+
+#[test]
+fn decor_list_operations_add_duplicate_reorder_and_remove() {
+    let mut project = template(ProjectKind::Skin, "editor.decor-ops").unwrap();
+    let target = vec!["dialogue".to_owned()];
+
+    assert!(apply_decor_list(&mut project, &target, None, [800., 240.], DecorListOp::Add).unwrap());
+    assert!(
+        apply_decor_list(
+            &mut project,
+            &target,
+            None,
+            [800., 240.],
+            DecorListOp::Duplicate(0)
+        )
+        .unwrap()
+    );
+    let doc = parse_document(project.text(MANIFEST).unwrap()).unwrap();
+    let arr = value_at(&doc, &["dialogue".into(), "decor".into()])
+        .and_then(PropertyValue::as_array)
+        .unwrap();
+    assert_eq!(arr.len(), 2);
+
+    // Mutate item 1 so MoveDown/MoveUp order is observable.
+    set_declaration(
+        &mut project,
+        MANIFEST,
+        &[
+            "dialogue".into(),
+            "decor".into(),
+            "1".into(),
+            "radius".into(),
+        ],
+        Some("16"),
+        None,
+        true,
+    )
+    .unwrap();
+    assert!(
+        apply_decor_list(
+            &mut project,
+            &target,
+            None,
+            [800., 240.],
+            DecorListOp::MoveUp(0)
+        )
+        .unwrap()
+    );
+    let doc = parse_document(project.text(MANIFEST).unwrap()).unwrap();
+    assert_eq!(
+        value_at(
+            &doc,
+            &[
+                "dialogue".into(),
+                "decor".into(),
+                "0".into(),
+                "radius".into(),
+            ]
+        )
+        .and_then(PropertyValue::as_integer),
+        Some(16)
+    );
+
+    assert!(
+        !apply_decor_list(
+            &mut project,
+            &target,
+            None,
+            [800., 240.],
+            DecorListOp::Remove(99)
+        )
+        .unwrap()
+    );
+    assert!(
+        apply_decor_list(
+            &mut project,
+            &target,
+            None,
+            [800., 240.],
+            DecorListOp::Remove(0)
+        )
+        .unwrap()
+    );
+    let doc = parse_document(project.text(MANIFEST).unwrap()).unwrap();
+    let arr = value_at(&doc, &["dialogue".into(), "decor".into()])
+        .and_then(PropertyValue::as_array)
+        .unwrap();
+    assert_eq!(arr.len(), 1);
 }

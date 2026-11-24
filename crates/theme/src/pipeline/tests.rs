@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
-    BaseResolver, DataValue, DirFiles, SkinOrigin, SkinRegistry, TomlTable, ZipFiles, load,
+    BaseResolver, DataValue, DirFiles, Severity, SkinOrigin, SkinRegistry, TomlTable, ZipFiles,
+    load,
 };
 
 struct Offline;

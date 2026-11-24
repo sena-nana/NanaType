@@ -51,14 +51,25 @@ pub fn builtin_fonts_dir() -> Option<&'static Path> {
     .as_deref()
 }
 
+struct OwnedBuiltinFont {
+    path: String,
+    bytes: Vec<u8>,
+    license: String,
+}
+
+struct OwnedShipped {
+    fonts: Vec<OwnedBuiltinFont>,
+    known: Vec<String>,
+}
+
 /// The shipped folder's fonts, read once and kept for the process. A font
 /// without its `<name>.LICENSE.txt` beside it is known but not used: the OFL
 /// requires the licence to travel with the font.
-fn read_shipped() -> (Vec<BuiltinFont>, Vec<&'static str>) {
+fn read_shipped() -> OwnedShipped {
     let mut fonts = Vec::new();
     let mut known = Vec::new();
     let Some(dir) = builtin_fonts_dir() else {
-        return (fonts, known);
+        return OwnedShipped { fonts, known };
     };
     let mut names: Vec<String> = std::fs::read_dir(dir)
         .into_iter()
@@ -73,8 +84,8 @@ fn read_shipped() -> (Vec<BuiltinFont>, Vec<&'static str>) {
         .collect();
     names.sort();
     for name in names {
-        let path: &'static str = format!("fonts/{name}").leak();
-        known.push(path);
+        let path = format!("fonts/{name}");
+        known.push(path.clone());
         if !cfg!(feature = "builtin-fonts") {
             continue;
         }
@@ -83,14 +94,14 @@ fn read_shipped() -> (Vec<BuiltinFont>, Vec<&'static str>) {
             std::fs::read(dir.join(&name)),
             std::fs::read_to_string(license),
         ) {
-            fonts.push(BuiltinFont {
+            fonts.push(OwnedBuiltinFont {
                 path,
-                bytes: bytes.leak(),
-                license: license.leak(),
+                bytes,
+                license,
             });
         }
     }
-    (fonts, known)
+    OwnedShipped { fonts, known }
 }
 
 impl BuiltinFonts {
@@ -103,8 +114,22 @@ impl BuiltinFonts {
     /// The fonts shipped with this build: empty without the `builtin-fonts`
     /// feature or when the fonts folder is missing or has no fonts.
     pub fn shipped() -> Self {
-        static SHIPPED: OnceLock<(Vec<BuiltinFont>, Vec<&'static str>)> = OnceLock::new();
-        let (fonts, known) = SHIPPED.get_or_init(read_shipped);
+        static OWNED: OnceLock<OwnedShipped> = OnceLock::new();
+        static FONTS: OnceLock<Vec<BuiltinFont>> = OnceLock::new();
+        static KNOWN: OnceLock<Vec<&'static str>> = OnceLock::new();
+        let owned = OWNED.get_or_init(read_shipped);
+        let fonts = FONTS.get_or_init(|| {
+            owned
+                .fonts
+                .iter()
+                .map(|f| BuiltinFont {
+                    path: &f.path,
+                    bytes: &f.bytes,
+                    license: &f.license,
+                })
+                .collect()
+        });
+        let known = KNOWN.get_or_init(|| owned.known.iter().map(String::as_str).collect());
         Self::new(fonts, known)
     }
 

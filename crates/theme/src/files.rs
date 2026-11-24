@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 /// Largest single file a skin may carry.
 pub const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
@@ -111,6 +111,9 @@ pub trait SkinFiles: Send + Sync + std::fmt::Debug {
     fn exists(&self, path: &str) -> bool {
         self.read(path).is_ok()
     }
+    fn hash_file(&self, path: &str) -> Result<[u8; 32], FileError> {
+        Ok(*blake3::hash(&self.read(path)?).as_bytes())
+    }
     /// A real directory on disk when there is one (for hot reload and "open folder").
     fn root(&self) -> Option<&Path> {
         None
@@ -143,6 +146,14 @@ impl SkinFiles for MemoryFiles {
             .map(|b| b.len() as u64)
             .ok_or(FileError::Missing(path))
     }
+    fn exists(&self, path: &str) -> bool {
+        clean_path(path).is_ok_and(|p| self.files.contains_key(&p))
+    }
+    fn hash_file(&self, path: &str) -> Result<[u8; 32], FileError> {
+        let path = clean_path(path)?;
+        let bytes = self.files.get(&path).ok_or(FileError::Missing(path))?;
+        Ok(*blake3::hash(bytes).as_bytes())
+    }
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
         let path = clean_path(path)?;
         self.files
@@ -159,35 +170,51 @@ impl SkinFiles for MemoryFiles {
 #[derive(Debug)]
 pub struct DirFiles {
     root: PathBuf,
+    canonical_root: OnceLock<PathBuf>,
 }
 
 impl DirFiles {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: root.into(),
+            canonical_root: OnceLock::new(),
+        }
     }
-}
 
-impl SkinFiles for DirFiles {
-    fn file_len(&self, path: &str) -> Result<u64, FileError> {
+    fn resolve_path(&self, path: &str) -> Result<(String, PathBuf), FileError> {
         let path = clean_path(path)?;
-        let root = fs::canonicalize(&self.root).map_err(|_| FileError::Missing(path.clone()))?;
+        let root = if let Some(root) = self.canonical_root.get() {
+            root
+        } else {
+            let root =
+                fs::canonicalize(&self.root).map_err(|_| FileError::Missing(path.clone()))?;
+            let _ = self.canonical_root.set(root);
+            self.canonical_root
+                .get()
+                .expect("canonical_root initialized")
+        };
         let full =
             fs::canonicalize(root.join(&path)).map_err(|_| FileError::Missing(path.clone()))?;
         if !full.starts_with(root) {
             return Err(FileError::UnsafePath(path));
         }
+        Ok((path, full))
+    }
+}
+
+impl SkinFiles for DirFiles {
+    fn file_len(&self, path: &str) -> Result<u64, FileError> {
+        let (_, full) = self.resolve_path(path)?;
         fs::metadata(full)
             .map(|m| m.len())
             .map_err(|e| FileError::Io(e.to_string()))
     }
+    fn exists(&self, path: &str) -> bool {
+        self.resolve_path(path)
+            .is_ok_and(|(_, full)| full.is_file())
+    }
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
-        let path = clean_path(path)?;
-        let root = fs::canonicalize(&self.root).map_err(|_| FileError::Missing(path.clone()))?;
-        let full =
-            fs::canonicalize(root.join(&path)).map_err(|_| FileError::Missing(path.clone()))?;
-        if !full.starts_with(&root) {
-            return Err(FileError::UnsafePath(path));
-        }
+        let (path, full) = self.resolve_path(path)?;
         let meta = fs::metadata(&full).map_err(|_| FileError::Missing(path.clone()))?;
         if meta.len() > MAX_FILE_BYTES {
             return Err(FileError::TooLarge {
@@ -232,8 +259,8 @@ impl SkinFiles for DirFiles {
 #[derive(Debug)]
 pub struct ZipFiles {
     archive: Mutex<zip::ZipArchive<fs::File>>,
-    /// Archives may wrap everything in one top-level folder.
-    prefix: String,
+    /// Clean relative path -> (archive entry name, declared size).
+    entries: BTreeMap<String, (String, u64)>,
 }
 
 impl ZipFiles {
@@ -282,7 +309,7 @@ impl ZipFiles {
                 });
             }
             total += entry.size();
-            names.push(name);
+            names.push((raw, name, entry.size()));
         }
         if total > MAX_PACKAGE_BYTES {
             return Err(FileError::TooLarge {
@@ -290,21 +317,31 @@ impl ZipFiles {
                 bytes: total,
             });
         }
-        let prefix = if names.iter().any(|n| n == crate::PACKAGE_MANIFEST) {
+        let prefix = if names.iter().any(|(_, n, _)| n == crate::PACKAGE_MANIFEST) {
             String::new()
         } else {
             names
                 .iter()
-                .find_map(|n| {
+                .find_map(|(_, n, _)| {
                     n.strip_suffix(crate::PACKAGE_MANIFEST)
                         .filter(|p| p.matches('/').count() == 1)
                 })
                 .unwrap_or_default()
                 .to_owned()
         };
+        let mut entries = BTreeMap::new();
+        for (raw, norm, size) in names {
+            if let Some(rel) = norm.strip_prefix(&prefix)
+                && !rel.ends_with('/')
+                && !rel.is_empty()
+                && let Ok(clean) = clean_path(rel)
+            {
+                entries.insert(clean, (raw, size));
+            }
+        }
         Ok(Self {
             archive: Mutex::new(archive),
-            prefix,
+            entries,
         })
     }
 }
@@ -312,18 +349,24 @@ impl ZipFiles {
 impl SkinFiles for ZipFiles {
     fn file_len(&self, path: &str) -> Result<u64, FileError> {
         let path = clean_path(path)?;
-        self.archive
-            .lock()
-            .expect("zip lock")
-            .by_name(&format!("{}{path}", self.prefix))
-            .map(|entry| entry.size())
-            .map_err(|_| FileError::Missing(path))
+        self.entries
+            .get(&path)
+            .map(|(_, size)| *size)
+            .ok_or(FileError::Missing(path))
+    }
+    fn exists(&self, path: &str) -> bool {
+        clean_path(path).is_ok_and(|p| self.entries.contains_key(&p))
     }
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
         let path = clean_path(path)?;
+        let raw_name = self
+            .entries
+            .get(&path)
+            .map(|(raw, _)| raw.as_str())
+            .ok_or_else(|| FileError::Missing(path.clone()))?;
         let mut archive = self.archive.lock().expect("zip lock");
         let mut entry = archive
-            .by_name(&format!("{}{path}", self.prefix))
+            .by_name(raw_name)
             .map_err(|_| FileError::Missing(path.clone()))?;
         // `open` budgeted the declared sizes, and the decoder does not enforce
         // them: an entry inflating past its declaration would let an archive
@@ -350,14 +393,6 @@ impl SkinFiles for ZipFiles {
     }
 
     fn list(&self) -> Vec<String> {
-        let archive = self.archive.lock().expect("zip lock");
-        let mut out: Vec<String> = archive
-            .file_names()
-            // Opening refused every name that does not decode.
-            .filter_map(|n| Some(n.ok()?.strip_prefix(&self.prefix)?.to_owned()))
-            .filter(|n| !n.ends_with('/') && !n.is_empty())
-            .collect();
-        out.sort();
-        out
+        self.entries.keys().cloned().collect()
     }
 }

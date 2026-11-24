@@ -36,13 +36,24 @@ impl PartialEq for StrokeData {
 
 impl StrokeData {
     pub fn parse(bytes: &[u8]) -> Result<Self, String> {
+        Self::parse_inner(bytes, None)
+    }
+
+    pub(crate) fn parse_with_hash(bytes: &[u8], hash: [u8; 32]) -> Result<Self, String> {
+        Self::parse_inner(bytes, Some(hash))
+    }
+
+    fn parse_inner(bytes: &[u8], hash: Option<[u8; 32]>) -> Result<Self, String> {
         if bytes.len() > 32 * 1024 * 1024 {
             return Err("stroke data exceeds 32 MiB".into());
         }
         if !bytes.starts_with(packed::MAGIC) {
             return Err("stroke data requires the NTHZ v1 binary container".into());
         }
-        packed::Packed::parse(bytes)
+        match hash {
+            Some(hash) => packed::Packed::parse_with_hash(bytes, hash),
+            None => packed::Packed::parse(bytes),
+        }
     }
 
     pub fn len(&self) -> usize {

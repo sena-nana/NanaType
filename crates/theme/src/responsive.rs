@@ -71,8 +71,127 @@ impl ResponsiveDialogue {
     }
 }
 
+/// Lightweight resolved dialogue and ornament layout without cloning the full
+/// [`Skin`] or its GPU assets.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedDialogue {
+    pub dialogue: Dialogue,
+    /// Original declaration indices after responsive visibility filtering.
+    pub decor_indices: Vec<usize>,
+    pub portrait: bool,
+}
+
+impl ResolvedDialogue {
+    /// Full authored dialogue artwork, either a static plate or a live effect.
+    pub fn has_dialogue_artwork(&self) -> bool {
+        self.dialogue
+            .box_
+            .frame
+            .as_ref()
+            .is_some_and(|f| !f.layout_inset)
+            || self
+                .dialogue
+                .shader_effects
+                .iter()
+                .any(|e| e.target == crate::ShaderTarget::Artwork)
+    }
+}
+
 pub fn dialogue_is_portrait(skin: &Skin, [w, h]: [f32; 2]) -> bool {
     skin.dialogue.responsive.is_some() && w > 0.0 && h > w
+}
+
+impl Skin {
+    /// Resolve dialogue layout and responsive ornaments for `size` without
+    /// cloning the full [`Skin`], [`History`], or GPU shader/material payloads.
+    pub fn resolve_dialogue(&self, (w, h): (f32, f32)) -> ResolvedDialogue {
+        let portrait = dialogue_is_portrait(self, [w, h]);
+        let mut d = self.dialogue.clone();
+        let Some(spec) = &self.dialogue.responsive else {
+            let decor_indices = (0..d.decor.len()).collect();
+            return ResolvedDialogue {
+                dialogue: d,
+                decor_indices,
+                portrait: false,
+            };
+        };
+        if portrait {
+            spec.portrait.apply_to(&mut d);
+        } else {
+            spec.landscape.apply_to(&mut d);
+        }
+        for rule in &spec.rules {
+            if w <= rule.max_width
+                && h <= rule.max_height
+                && rule.portrait.is_none_or(|v| v == portrait)
+            {
+                rule.layout.apply_to(&mut d);
+            }
+        }
+        let user_scale = self.decor_scale.unwrap_or(1.0);
+        let decor_indices = d
+            .decor
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.min_window.is_none_or(|[mw, mh]| w >= mw && h >= mh))
+            .map(|(i, _)| i)
+            .collect();
+        // Nine-slice corners shrink uniformly only when their opposing cuts cannot fit.
+        if let Some(frame) = &mut d.box_.frame {
+            let [t, r, b, l] = frame.slice.map(|v| v as f32);
+            let scale = (w / (r + l).max(1.0))
+                .min(h / (t + b).max(1.0))
+                .min(frame.scale);
+            frame.scale = scale.max(0.001);
+        }
+        d.decor
+            .retain(|v| v.min_window.is_none_or(|[mw, mh]| w >= mw && h >= mh));
+        for dec in &mut d.decor {
+            let fitted_inset = dec.inset.filter(|_| dec.fitted_inset());
+            // A sized ornament arrives already scaled, so its cap grows with it;
+            // one fitted to the window is scaled after the fit.
+            let (cap_scale, fit_scale) = if fitted_inset.is_some() {
+                (1.0, user_scale)
+            } else {
+                (user_scale, 1.0)
+            };
+            let [mut dw, mut dh] = std::array::from_fn(|i| match dec.size[i] {
+                Len::Px(v) => v,
+                Len::Percent(v) => v * 0.01 * [w, h][i],
+            });
+            if let Some([t, r, b, l]) = fitted_inset {
+                dw = (w - l - r).max(0.0);
+                dh = (h - t - b).max(0.0);
+            }
+            if let Some(ratio) = dec.aspect_ratio {
+                if dw / dh.max(0.001) > ratio {
+                    dw = dh * ratio;
+                } else {
+                    dh = dw / ratio;
+                }
+            }
+            if let Some([fw, fh]) = dec.max_fraction {
+                let factor = (w * fw * cap_scale / dw.max(0.001))
+                    .min(h * fh * cap_scale / dh.max(0.001))
+                    .min(1.0);
+                dw *= factor;
+                dh *= factor;
+            }
+            dw *= fit_scale;
+            dh *= fit_scale;
+            dec.size = [Len::Px(dw), Len::Px(dh)];
+            if let Some([t, r, b, l]) = fitted_inset {
+                dec.anchor = Anchor::TopLeft;
+                dec.offset = [l + ((w - l - r) - dw) * 0.5, t + ((h - t - b) - dh) * 0.5];
+                dec.inset = None;
+            }
+        }
+        ResolvedDialogue {
+            dialogue: d,
+            decor_indices,
+            portrait,
+        }
+    }
 }
 
 /// Size is the actual client area, before the settings preview's paint transform.
@@ -100,69 +219,13 @@ pub fn layout_dialogue(skin: &Skin, [w, h]: [f32; 2]) -> Skin {
 }
 
 pub fn responsive_dialogue(skin: &Skin, [w, h]: [f32; 2]) -> Skin {
-    let mut result = layout_dialogue(skin, [w, h]);
+    let mut result = skin.clone();
     if skin.dialogue.responsive.is_none() {
         return result;
     }
-    let user_scale = skin.decor_scale.unwrap_or(1.0);
-    let d = &mut result.dialogue;
-    result.decor_indices = d
-        .decor
-        .iter()
-        .enumerate()
-        .filter(|(_, v)| v.min_window.is_none_or(|[mw, mh]| w >= mw && h >= mh))
-        .map(|(i, _)| i)
-        .collect();
-    // Nine-slice corners shrink uniformly only when their opposing cuts cannot fit.
-    if let Some(frame) = &mut d.box_.frame {
-        let [t, r, b, l] = frame.slice.map(|v| v as f32);
-        let scale = (w / (r + l).max(1.0))
-            .min(h / (t + b).max(1.0))
-            .min(frame.scale);
-        frame.scale = scale.max(0.001);
-    }
-    d.decor
-        .retain(|v| v.min_window.is_none_or(|[mw, mh]| w >= mw && h >= mh));
-    for dec in &mut d.decor {
-        let fitted_inset = dec.inset.filter(|_| dec.fitted_inset());
-        // A sized ornament arrives already scaled, so its cap grows with it;
-        // one fitted to the window is scaled after the fit.
-        let (cap_scale, fit_scale) = if fitted_inset.is_some() {
-            (1.0, user_scale)
-        } else {
-            (user_scale, 1.0)
-        };
-        let [mut dw, mut dh] = std::array::from_fn(|i| match dec.size[i] {
-            Len::Px(v) => v,
-            Len::Percent(v) => v * 0.01 * [w, h][i],
-        });
-        if let Some([t, r, b, l]) = fitted_inset {
-            dw = (w - l - r).max(0.0);
-            dh = (h - t - b).max(0.0);
-        }
-        if let Some(ratio) = dec.aspect_ratio {
-            if dw / dh.max(0.001) > ratio {
-                dw = dh * ratio;
-            } else {
-                dh = dw / ratio;
-            }
-        }
-        if let Some([fw, fh]) = dec.max_fraction {
-            let factor = (w * fw * cap_scale / dw.max(0.001))
-                .min(h * fh * cap_scale / dh.max(0.001))
-                .min(1.0);
-            dw *= factor;
-            dh *= factor;
-        }
-        dw *= fit_scale;
-        dh *= fit_scale;
-        dec.size = [Len::Px(dw), Len::Px(dh)];
-        if let Some([t, r, b, l]) = fitted_inset {
-            dec.anchor = Anchor::TopLeft;
-            dec.offset = [l + ((w - l - r) - dw) * 0.5, t + ((h - t - b) - dh) * 0.5];
-            dec.inset = None;
-        }
-    }
+    let resolved = skin.resolve_dialogue((w, h));
+    result.dialogue = resolved.dialogue;
+    result.decor_indices = resolved.decor_indices;
     result
 }
 
@@ -347,5 +410,30 @@ mod tests {
             responsive_dialogue(&skin, [160., 1200.]).dialogue.padding,
             [8.; 4]
         );
+    }
+
+    #[test]
+    fn resolve_dialogue_matches_full_clone_helper_and_tracks_decor_indices() {
+        let registry = SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
+        for entry in registry.entries() {
+            let skin = registry.load(&entry.id).unwrap().skin;
+            for size in [[920., 220.], [300., 1200.], [160., 96.]] {
+                let resolved = skin.resolve_dialogue((size[0], size[1]));
+                let cloned = responsive_dialogue(&skin, size);
+                assert_eq!(resolved.dialogue, cloned.dialogue, "{} {size:?}", entry.id);
+                assert_eq!(
+                    resolved.portrait,
+                    size[1] > size[0],
+                    "{} {size:?}",
+                    entry.id
+                );
+                assert_eq!(resolved.decor_indices.len(), resolved.dialogue.decor.len());
+                assert!(
+                    resolved.decor_indices.windows(2).all(|w| w[0] < w[1]),
+                    "{} {size:?}",
+                    entry.id
+                );
+            }
+        }
     }
 }

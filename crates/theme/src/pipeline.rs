@@ -1,7 +1,7 @@
 //! Declarative host processing. Registered processors turn declared data and
 //! explicit render context into material textures and uniforms; there are no
 //! expressions, dynamic parsers or scripts, and nothing here starts Lua.
-use crate::{DataFormat, LoadedData, Severity, Skin, SkinDiagnostic, SkinFiles};
+use crate::{DataFormat, LoadedData, Skin, SkinDiagnostic, SkinFiles};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -215,13 +215,8 @@ impl Skin {
 /// Check the declarations against `signatures` without loading data.
 pub(crate) fn validate(skin: &Skin, signatures: &[ProcessorSignature]) -> Vec<SkinDiagnostic> {
     let mut out = Vec::new();
-    let mut error = |field: String, message: String| {
-        out.push(SkinDiagnostic {
-            severity: Severity::Error,
-            field,
-            message,
-        })
-    };
+    let mut error =
+        |field: String, message: String| out.push(SkinDiagnostic::error(field, message));
     let lookup = |name: &str, version: u32| {
         signatures
             .iter()
@@ -408,11 +403,10 @@ pub(crate) fn validate(skin: &Skin, signatures: &[ProcessorSignature]) -> Vec<Sk
     }
     for name in skin.pipelines.keys() {
         if !used.contains(name.as_str()) {
-            out.push(SkinDiagnostic {
-                severity: Severity::Warning,
-                field: format!("pipelines.{name}"),
-                message: "no material uses this pipeline".into(),
-            });
+            out.push(SkinDiagnostic::warning(
+                format!("pipelines.{name}"),
+                "no material uses this pipeline",
+            ));
         }
     }
     out
@@ -554,11 +548,7 @@ pub(crate) fn bind(
             Ok(binding) => {
                 bindings.insert(material.clone(), Arc::new(binding));
             }
-            Err((field, message)) => out.push(SkinDiagnostic {
-                severity: Severity::Error,
-                field,
-                message,
-            }),
+            Err((field, message)) => out.push(SkinDiagnostic::error(field, message)),
         }
     }
     skin.material_bindings = bindings;

@@ -30,29 +30,95 @@ pub enum Severity {
     Error,
 }
 
+/// Structured source target for a diagnostic, avoiding message scraping in editors.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DiagnosticTarget {
+    /// A key path inside a manifest file (`skin.toml`, `package.toml`, `sounds.toml`).
+    Manifest { file: String, keys: Vec<String> },
+    /// A 1-based line and column inside a source file (e.g. WGSL or TOML).
+    Source {
+        file: String,
+        line: usize,
+        column: usize,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkinDiagnostic {
     pub severity: Severity,
     /// Dotted manifest path (`dialogue.box.frame`) or a file path.
     pub field: String,
     pub message: String,
+    pub target: Option<DiagnosticTarget>,
+}
+
+fn default_target(field: &str) -> Option<DiagnosticTarget> {
+    if field.is_empty() {
+        return None;
+    }
+    if let Some(rest) = field.strip_prefix("data.") {
+        return Some(DiagnosticTarget::Manifest {
+            file: crate::PACKAGE_MANIFEST.into(),
+            keys: vec![
+                "data".into(),
+                rest.rsplit('/').next().unwrap_or(rest).into(),
+            ],
+        });
+    }
+    if let Some(rest) = field.strip_prefix("lua.") {
+        return Some(DiagnosticTarget::Manifest {
+            file: crate::PACKAGE_MANIFEST.into(),
+            keys: vec!["lua".into(), rest.into()],
+        });
+    }
+    if let Some(rest) = field.strip_prefix("meta.") {
+        return Some(DiagnosticTarget::Manifest {
+            file: crate::PACKAGE_MANIFEST.into(),
+            keys: rest.split('.').map(str::to_owned).collect(),
+        });
+    }
+    if field == crate::PACKAGE_MANIFEST || field == MANIFEST || field == crate::SOUNDS_MANIFEST {
+        return Some(DiagnosticTarget::Manifest {
+            file: field.into(),
+            keys: Vec::new(),
+        });
+    }
+    Some(DiagnosticTarget::Manifest {
+        file: MANIFEST.into(),
+        keys: field
+            .split(['.', '['])
+            .map(|k| k.trim_end_matches(']').to_owned())
+            .filter(|k| !k.is_empty())
+            .collect(),
+    })
 }
 
 impl SkinDiagnostic {
     pub(crate) fn error(field: impl Into<String>, message: impl Into<String>) -> Self {
+        let field = field.into();
+        let target = default_target(&field);
         Self {
             severity: Severity::Error,
-            field: field.into(),
+            field,
             message: message.into(),
+            target,
         }
     }
 
     pub(crate) fn warning(field: impl Into<String>, message: impl Into<String>) -> Self {
+        let field = field.into();
+        let target = default_target(&field);
         Self {
             severity: Severity::Warning,
-            field: field.into(),
+            field,
             message: message.into(),
+            target,
         }
+    }
+
+    pub(crate) fn with_target(mut self, target: DiagnosticTarget) -> Self {
+        self.target = Some(target);
+        self
     }
 }
 
@@ -83,11 +149,39 @@ pub struct LayeredFiles {
 }
 
 impl SkinFiles for LayeredFiles {
+    fn file_len(&self, path: &str) -> Result<u64, FileError> {
+        let mut last = FileError::Missing(path.to_owned());
+        for layer in &self.layers {
+            match layer.file_len(path) {
+                Ok(len) => return Ok(len),
+                Err(FileError::Missing(p)) => last = FileError::Missing(p),
+                Err(e) => return Err(e),
+            }
+        }
+        Err(last)
+    }
+
+    fn exists(&self, path: &str) -> bool {
+        self.layers.iter().any(|l| l.exists(path))
+    }
+
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
         let mut last = FileError::Missing(path.to_owned());
         for layer in &self.layers {
             match layer.read(path) {
                 Ok(bytes) => return Ok(bytes),
+                Err(FileError::Missing(p)) => last = FileError::Missing(p),
+                Err(e) => return Err(e),
+            }
+        }
+        Err(last)
+    }
+
+    fn hash_file(&self, path: &str) -> Result<[u8; 32], FileError> {
+        let mut last = FileError::Missing(path.to_owned());
+        for layer in &self.layers {
+            match layer.hash_file(path) {
+                Ok(hash) => return Ok(hash),
                 Err(FileError::Missing(p)) => last = FileError::Missing(p),
                 Err(e) => return Err(e),
             }
@@ -135,28 +229,60 @@ impl BaseResolver for () {
     }
 }
 
-pub fn read_manifest(files: &dyn SkinFiles) -> Result<Table, SkinDiagnostic> {
-    let mut table = if let Some(table) = files.cached_skin_manifest() {
-        table.clone()
-    } else {
-        let bytes = files
-            .read(MANIFEST)
-            .map_err(|e| SkinDiagnostic::error(MANIFEST, e.to_string()))?;
-        if bytes.len() > 512 * 1024 {
-            return Err(SkinDiagnostic::error(
-                MANIFEST,
-                "skin manifest exceeds 512 KiB",
-            ));
+pub(crate) fn read_skin_table(files: &dyn SkinFiles) -> Result<Table, SkinDiagnostic> {
+    if let Some(table) = files.cached_skin_manifest() {
+        return Ok(table.clone());
+    }
+    let bytes = files
+        .read(MANIFEST)
+        .map_err(|e| SkinDiagnostic::error(MANIFEST, e.to_string()))?;
+    if bytes.len() > 512 * 1024 {
+        return Err(SkinDiagnostic::error(
+            MANIFEST,
+            "skin manifest exceeds 512 KiB",
+        ));
+    }
+    let text = String::from_utf8(bytes)
+        .map_err(|_| SkinDiagnostic::error(MANIFEST, "skin.toml is not UTF-8"))?;
+    text.parse::<Table>().map_err(|e| {
+        let mut diag = SkinDiagnostic::error(MANIFEST, e.to_string().trim().to_owned());
+        if let Some(span) = e.span() {
+            let before = &text[..span.start.min(text.len())];
+            let line = before.matches('\n').count() + 1;
+            let column = before
+                .rsplit_once('\n')
+                .map_or(before, |(_, l)| l)
+                .chars()
+                .count()
+                + 1;
+            diag = diag.with_target(DiagnosticTarget::Source {
+                file: MANIFEST.into(),
+                line,
+                column,
+            });
         }
-        let text = String::from_utf8(bytes)
-            .map_err(|_| SkinDiagnostic::error(MANIFEST, "skin.toml is not UTF-8"))?;
-        text.parse::<Table>()
-            .map_err(|e| SkinDiagnostic::error(MANIFEST, e.to_string().trim().to_owned()))?
-    };
-    if files.cached_package_manifest().is_some() || files.exists(crate::PACKAGE_MANIFEST) {
-        let package = crate::PackageManifest::read(files)
-            .map_err(|e| SkinDiagnostic::error(crate::PACKAGE_MANIFEST, e.to_string()))?;
-        let meta = Value::try_from(package.meta)
+        diag
+    })
+}
+
+pub(crate) fn read_package_meta(
+    files: &dyn SkinFiles,
+) -> Result<Option<crate::Meta>, SkinDiagnostic> {
+    if let Some(package) = files.cached_package_manifest() {
+        return Ok(Some(package.meta.clone()));
+    }
+    if !files.exists(crate::PACKAGE_MANIFEST) {
+        return Ok(None);
+    }
+    let package = crate::PackageManifest::read(files)
+        .map_err(|e| SkinDiagnostic::error(crate::PACKAGE_MANIFEST, e.to_string()))?;
+    Ok(Some(package.meta))
+}
+
+pub fn read_manifest(files: &dyn SkinFiles) -> Result<Table, SkinDiagnostic> {
+    let mut table = read_skin_table(files)?;
+    if let Some(meta) = read_package_meta(files)? {
+        let meta = Value::try_from(meta)
             .map_err(|e| SkinDiagnostic::error(crate::PACKAGE_MANIFEST, e.to_string()))?;
         table.insert("meta".into(), meta);
     }
@@ -284,6 +410,14 @@ fn prune_responsive(dialogue: &mut Table) {
 /// removing defaults from a partial child would change inheritance (in
 /// particular explicit empty arrays).
 pub fn standalone_manifest(skin: &Skin) -> Result<Table, toml::ser::Error> {
+    standalone_manifest_inner(skin, true)
+}
+
+pub(crate) fn standalone_skin_manifest(skin: &Skin) -> Result<Table, toml::ser::Error> {
+    standalone_manifest_inner(skin, false)
+}
+
+fn standalone_manifest_inner(skin: &Skin, include_meta: bool) -> Result<Table, toml::ser::Error> {
     fn prune(table: &mut Table, defaults: &Table) {
         table.retain(|key, value| {
             let Some(default) = defaults.get(key) else {
@@ -305,6 +439,9 @@ pub fn standalone_manifest(skin: &Skin) -> Result<Table, toml::ser::Error> {
         unreachable!()
     };
     crate::params::restore_placeholders(&mut table, &resolved.param_sites);
+    if !include_meta {
+        table.remove("meta");
+    }
     if let Some(Value::Table(dialogue)) = table.get_mut("dialogue") {
         prune_responsive(dialogue);
     }
@@ -408,14 +545,6 @@ fn unknown_in_value(raw: &Value, known: &Value, field: &str, out: &mut Vec<SkinD
     }
 }
 
-pub(crate) fn version_tuple(v: &str) -> Option<(u32, u32, u32)> {
-    let mut parts = v.trim().split(['.', '-', '+']);
-    let major = parts.next()?.parse().ok()?;
-    let minor = parts.next().unwrap_or("0").parse().ok()?;
-    let patch = parts.next().unwrap_or("0").parse().ok()?;
-    Some((major, minor, patch))
-}
-
 /// Load and validate. `app_version` is this build's version (`CARGO_PKG_VERSION`).
 pub fn load(
     files: Arc<dyn SkinFiles>,
@@ -426,14 +555,14 @@ pub fn load(
     load_impl(files, origin, resolver, app_version, true)
 }
 
-/// Only immutable built-in catalogue entries may defer GPU preparation.
-/// User folders and archives always go through the complete validator above.
-pub(crate) fn builtin_preview(
+/// Defer GPU program compilation/texture decoding until selection.
+pub(crate) fn load_preview(
     files: Arc<dyn SkinFiles>,
+    origin: SkinOrigin,
     resolver: &dyn BaseResolver,
     app_version: &str,
 ) -> Result<LoadedSkin, Vec<SkinDiagnostic>> {
-    load_impl(files, SkinOrigin::Builtin, resolver, app_version, false)
+    load_impl(files, origin, resolver, app_version, false)
 }
 
 fn load_impl(
@@ -443,13 +572,17 @@ fn load_impl(
     app_version: &str,
     prepare_shaders: bool,
 ) -> Result<LoadedSkin, Vec<SkinDiagnostic>> {
-    let raw = read_manifest(&*files).map_err(|d| vec![d])?;
+    let raw = read_skin_table(&*files).map_err(|d| vec![d])?;
+    let own_meta = read_package_meta(&*files).map_err(|d| vec![d])?;
     let mut diagnostics = Vec::new();
 
     // Inheritance: collect the base chain, then merge from the root down.
     let mut chain = vec![raw.clone()];
     let mut layers = vec![files.clone()];
-    let mut next = base_id(&raw);
+    let mut next = own_meta
+        .as_ref()
+        .and_then(|m| m.base.clone())
+        .or_else(|| base_id(&raw));
     let mut seen = Vec::new();
     while let Some(id) = next.take() {
         if seen.contains(&id) || seen.len() >= MAX_BASE_DEPTH {
@@ -480,8 +613,26 @@ fn load_impl(
     for table in chain.iter().rev() {
         deep_merge(&mut merged, table);
     }
-    // The pack's identity is its own, never inherited.
-    if let Some(Value::Table(meta)) = merged.get_mut("meta") {
+    if let Some(meta) = &own_meta {
+        let mut own = Value::try_from(meta)
+            .ok()
+            .and_then(|v| match v {
+                Value::Table(t) => Some(t),
+                _ => None,
+            })
+            .unwrap_or_default();
+        if let Some(Value::Table(base_meta)) = merged.get("meta") {
+            for (k, v) in base_meta {
+                if !matches!(
+                    k.as_str(),
+                    "id" | "version" | "name" | "description" | "author" | "license" | "preview"
+                ) {
+                    own.entry(k.clone()).or_insert_with(|| v.clone());
+                }
+            }
+        }
+        merged.insert("meta".into(), Value::Table(own));
+    } else if let Some(Value::Table(meta)) = merged.get_mut("meta") {
         let own = raw.get("meta").and_then(Value::as_table);
         for key in [
             "id",
@@ -525,10 +676,17 @@ fn load_impl(
     let mut skin: Skin = match Value::Table(merged).try_into() {
         Ok(skin) => skin,
         Err(e) => {
-            return Err(vec![SkinDiagnostic::error(
-                MANIFEST,
-                e.to_string().trim().to_owned(),
-            )]);
+            let msg = e.to_string().trim().to_owned();
+            let mut diag = SkinDiagnostic::error(MANIFEST, msg.clone());
+            if let Some(key) = msg.rsplit('`').nth(1)
+                && !key.is_empty()
+            {
+                diag = diag.with_target(DiagnosticTarget::Manifest {
+                    file: MANIFEST.into(),
+                    keys: key.split('.').map(str::to_owned).collect(),
+                });
+            }
+            return Err(vec![diag]);
         }
     };
     if let Ok(Value::Table(known)) = Value::try_from(&skin) {
@@ -552,8 +710,8 @@ fn load_impl(
     diagnostics.extend(crate::pipeline::validate(&skin, crate::PROCESSORS));
     if prepare_shaders {
         crate::pipeline::bind(&mut skin, &*files, true, &mut diagnostics);
-        crate::shader::load_shaders(&mut skin, &*files, &mut diagnostics);
-        crate::material::load_materials(&mut skin, &*files, &mut diagnostics);
+        crate::wgsl::load_shaders(&mut skin, &*files, &mut diagnostics);
+        crate::wgsl::load_materials(&mut skin, &*files, &mut diagnostics);
     }
     if diagnostics.iter().any(|d| d.severity == Severity::Error) {
         diagnostics.sort_by_key(|d| std::cmp::Reverse(d.severity));
@@ -581,19 +739,16 @@ pub(crate) fn validate_values(skin: &Skin, app_version: &str, out: &mut Vec<Skin
             ),
         ));
     }
-    let id_ok = !meta.id.is_empty()
-        && meta.id.len() <= 64
-        && meta
-            .id
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '-' | '_'));
-    if !id_ok {
+    if !crate::package::valid_id(&meta.id) {
         out.push(SkinDiagnostic::error(
             "meta.id",
             "id must be 1–64 characters of a-z, 0-9, `.`, `-` or `_`",
         ));
     }
-    match (version_tuple(&meta.min_app), version_tuple(app_version)) {
+    match (
+        crate::package::version_tuple(&meta.min_app),
+        crate::package::version_tuple(app_version),
+    ) {
         (Some(need), Some(have)) if need > have => out.push(SkinDiagnostic::error(
             "meta.min_app",
             format!("needs NanaType {} or newer", meta.min_app),
@@ -601,11 +756,12 @@ pub(crate) fn validate_values(skin: &Skin, app_version: &str, out: &mut Vec<Skin
         (None, _) => out.push(SkinDiagnostic::error("meta.min_app", "not a version")),
         _ => {}
     }
-    if version_tuple(&meta.version).is_none() {
+    if crate::package::version_tuple(&meta.version).is_none() {
         out.push(SkinDiagnostic::warning("meta.version", "not a version"));
     }
 
     let d = &skin.dialogue;
+    let in_range = |v: f32, lo: f32, hi: f32| v.is_finite() && (lo..=hi).contains(&v);
     if let Some(spec) = &d.responsive {
         if spec.rules.len() > 16 {
             out.push(SkinDiagnostic::error(
@@ -631,10 +787,9 @@ pub(crate) fn validate_values(skin: &Skin, app_version: &str, out: &mut Vec<Skin
                     "must be finite and within 0–4096",
                 ));
             }
-            let mut variant = skin.clone();
-            variant.dialogue.responsive = None;
-            layout.apply_to(&mut variant.dialogue);
-            let v = &variant.dialogue;
+            let mut v = d.clone();
+            v.responsive = None;
+            layout.apply_to(&mut v);
             if !in_range(v.nameplate.size, 4.0, 400.0)
                 || !in_range(v.continue_.size, 4.0, 400.0)
                 || !in_range(v.box_.width_fraction, 0.1, 1.0)
@@ -654,10 +809,9 @@ pub(crate) fn validate_values(skin: &Skin, app_version: &str, out: &mut Vec<Skin
                     "invalid label, portrait or box dimensions",
                 ));
             }
-            validate_shapes(&variant, out);
+            validate_dialogue_shapes(&v, out);
         }
     }
-    let in_range = |v: f32, lo: f32, hi: f32| v.is_finite() && (lo..=hi).contains(&v);
     if !in_range(d.region[0], 160.0, 4096.0) || !in_range(d.region[1], 60.0, 4096.0) {
         out.push(SkinDiagnostic::error(
             "dialogue.region",
@@ -1070,8 +1224,7 @@ fn check_decor(field: &str, decor: &[DecorSpec], out: &mut Vec<SkinDiagnostic>) 
 
 /// Ranges of the drawn-shape fields: gradients, corners, borders, shadows,
 /// the tail, decorations, the continue indicator and the history panel.
-fn validate_shapes(skin: &Skin, out: &mut Vec<SkinDiagnostic>) {
-    let d = &skin.dialogue;
+fn validate_dialogue_shapes(d: &crate::manifest::Dialogue, out: &mut Vec<SkinDiagnostic>) {
     let b = &d.box_;
     check_shape(
         "dialogue.box",
@@ -1154,6 +1307,10 @@ fn validate_shapes(skin: &Skin, out: &mut Vec<SkinDiagnostic>) {
             "must be 1–1024",
         ));
     }
+}
+
+fn validate_shapes(skin: &Skin, out: &mut Vec<SkinDiagnostic>) {
+    validate_dialogue_shapes(&skin.dialogue, out);
 
     let h = &skin.history;
     if !h

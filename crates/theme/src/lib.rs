@@ -24,7 +24,6 @@ mod handwriting;
 pub use handwriting::{StrokeCommand, StrokeData, StrokeGlyph};
 mod load;
 mod manifest;
-mod material;
 mod pipeline;
 pub use pipeline::{
     BoundInput, BoundNode, MAX_PIPELINE_TEXTURE_SIDE, MaterialBinding, PROCESSORS, ParamSig,
@@ -48,11 +47,10 @@ pub use project::{
 };
 mod registry;
 mod responsive;
-pub use material::*;
 pub use responsive::*;
-mod shader;
 mod shipped;
-pub use shader::*;
+mod wgsl;
+pub use wgsl::*;
 mod sound_pack;
 pub use sound_pack::{
     LoadedSoundPack, SOUNDS_MANIFEST, SoundPackEntry, layer as layer_sounds, read_sounds,
@@ -73,8 +71,8 @@ pub use fonts::{
 };
 pub use geometry::*;
 pub use load::{
-    BaseResolver, LoadedSkin, MANIFEST, MAX_DECOR, MAX_IMAGE_SIDE, MAX_SHADOWS, MAX_STOPS,
-    SKIN_TAGS, Severity, SkinDiagnostic, SkinOrigin, deep_merge, load, read_manifest,
+    BaseResolver, DiagnosticTarget, LoadedSkin, MANIFEST, MAX_DECOR, MAX_IMAGE_SIDE, MAX_SHADOWS,
+    MAX_STOPS, SKIN_TAGS, Severity, SkinDiagnostic, SkinOrigin, deep_merge, load, read_manifest,
     standalone_manifest,
 };
 pub use manifest::*;

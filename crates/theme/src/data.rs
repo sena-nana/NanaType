@@ -78,6 +78,27 @@ pub struct JsonConstraints {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub number_range: Option<[f64; 2]>,
 }
+impl std::hash::Hash for JsonConstraints {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.root.hash(state);
+        self.required.hash(state);
+        self.max_depth.hash(state);
+        self.max_items.hash(state);
+        self.max_string.hash(state);
+        self.number_range
+            .map(|[a, b]| {
+                let norm = |v: f64| {
+                    if v == 0.0 {
+                        0.0f64.to_bits()
+                    } else {
+                        v.to_bits()
+                    }
+                };
+                [norm(a), norm(b)]
+            })
+            .hash(state);
+    }
+}
 impl JsonConstraints {
     fn depth(&self) -> usize {
         self.max_depth.unwrap_or(32) as usize
@@ -295,16 +316,13 @@ pub fn parse_data(spec: &DataSpec, bytes: &[u8], full: bool) -> Result<Arc<Loade
     }
     let hash = *blake3::hash(bytes).as_bytes();
     let constraints = spec.constraints.clone().unwrap_or_default();
-    let key = (
-        hash,
-        spec.format,
-        spec.format_version,
-        u64::from_le_bytes(
-            blake3::hash(format!("{constraints:?}").as_bytes()).as_bytes()[..8]
-                .try_into()
-                .unwrap(),
-        ),
-    );
+    let constraints_hash = {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        constraints.hash(&mut hasher);
+        hasher.finish()
+    };
+    let key = (hash, spec.format, spec.format_version, constraints_hash);
     if let Some(data) = CACHE
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -325,7 +343,7 @@ pub fn parse_data(spec: &DataSpec, bytes: &[u8], full: bool) -> Result<Arc<Loade
             DataValue::Json(value)
         }
         DataFormat::Nthz => {
-            let strokes = StrokeData::parse(bytes)?;
+            let strokes = StrokeData::parse_with_hash(bytes, hash)?;
             if full {
                 strokes.validate_all()?;
             }
@@ -680,6 +698,9 @@ impl SkinFiles for Bundled<'_> {
         self.files
             .file_len(&format!("{}{}", self.prefix, crate::clean_path(path)?))
     }
+    fn exists(&self, path: &str) -> bool {
+        crate::clean_path(path).is_ok_and(|p| self.files.exists(&format!("{}{}", self.prefix, p)))
+    }
     fn list(&self) -> Vec<String> {
         self.files
             .files
@@ -697,19 +718,27 @@ impl DataAccess {
         let reads = manifest.lua.as_ref().map_or(&[][..], |l| &l.reads[..]);
         let mut items = BTreeMap::new();
         let mut total = 0u64;
+        let mut owners: HashMap<Option<&str>, (PackageManifest, Option<crate::SealStatus>)> =
+            HashMap::new();
         for reference in reads {
             let (package, id) = split_reference(reference)?;
+            let dep = package.filter(|p| *p != manifest.meta.id);
             let owner = package.unwrap_or(&manifest.meta.id).to_owned();
             let files = Bundled {
                 files: snapshot,
-                prefix: match package {
-                    Some(package) if package != manifest.meta.id => {
-                        format!("dependencies/{package}/")
-                    }
-                    _ => String::new(),
-                },
+                prefix: dep.map_or_else(String::new, |p| format!("dependencies/{p}/")),
             };
-            let owner_manifest = PackageManifest::read(&files).map_err(|e| e.to_string())?;
+            let (owner_manifest, seal) = match owners.entry(dep) {
+                std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    let owner_manifest = match dep {
+                        None => manifest.clone(),
+                        Some(_) => PackageManifest::read(&files).map_err(|e| e.to_string())?,
+                    };
+                    let seal = crate::verify_integrity(&files).map_err(|e| e.to_string())?;
+                    entry.insert((owner_manifest, seal))
+                }
+            };
             let spec = owner_manifest
                 .data
                 .get(id)
@@ -721,8 +750,8 @@ impl DataAccess {
                 return Err(format!("{reference}: data exceeds the read budget"));
             }
             let bytes: Arc<[u8]> = files.read(&spec.path).map_err(|e| e.to_string())?.into();
-            let protected = crate::verify_integrity(&files)
-                .map_err(|e| e.to_string())?
+            let protected = seal
+                .as_ref()
                 .is_some_and(|seal| seal.protected.contains(&spec.path));
             let disclosure = DataDisclosure {
                 reference: reference.clone(),

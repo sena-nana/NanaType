@@ -74,7 +74,7 @@ pub struct SealStatus {
     pub editable: BTreeSet<String>,
 }
 pub fn verify_integrity(files: &dyn SkinFiles) -> Result<Option<SealStatus>, FileError> {
-    if !files.list().iter().any(|p| p == INTEGRITY_FILE) {
+    if !files.exists(INTEGRITY_FILE) {
         return Ok(None);
     }
     if files.file_len(INTEGRITY_FILE)? > 512 * 1024 {
@@ -115,7 +115,8 @@ pub fn verify_integrity(files: &dyn SkinFiles) -> Result<Option<SealStatus>, Fil
         if files.file_len(path)? > crate::MAX_FILE_BYTES {
             return Err(error("protected file exceeds budget"));
         }
-        if blake3::hash(&files.read(path)?).to_hex().as_str() != expected {
+        let actual_hash = blake3::Hash::from_bytes(files.hash_file(path)?);
+        if actual_hash.to_hex().as_str() != expected {
             return Err(error(format!("protected file was modified: {path}")));
         }
     }
@@ -126,29 +127,88 @@ pub fn verify_integrity(files: &dyn SkinFiles) -> Result<Option<SealStatus>, Fil
     }))
 }
 
+#[derive(Debug, Default)]
+struct HashCache(std::sync::Mutex<BTreeMap<String, [u8; 32]>>);
+
+impl Clone for HashCache {
+    fn clone(&self) -> Self {
+        Self(std::sync::Mutex::new(
+            self.0.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+        ))
+    }
+}
+
 /// Immutable, bounded snapshots avoid authorisation/read time-of-check races.
 #[derive(Debug, Clone, Default)]
 pub struct PackageProject {
     pub files: BTreeMap<String, Vec<u8>>,
+    hashes: HashCache,
 }
 impl SkinFiles for PackageProject {
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
-        self.files
-            .get(&clean_path(path)?)
-            .cloned()
-            .ok_or_else(|| FileError::Missing(path.into()))
+        self.slice(path).map(<[u8]>::to_vec)
     }
     fn file_len(&self, path: &str) -> Result<u64, FileError> {
-        self.files
-            .get(&clean_path(path)?)
-            .map(|b| b.len() as u64)
-            .ok_or_else(|| FileError::Missing(path.into()))
+        self.slice(path).map(|b| b.len() as u64)
+    }
+    fn exists(&self, path: &str) -> bool {
+        clean_path(path).is_ok_and(|p| self.files.contains_key(&p))
+    }
+    fn hash_file(&self, path: &str) -> Result<[u8; 32], FileError> {
+        let bytes = self.slice(path)?;
+        Ok(*blake3::hash(bytes).as_bytes())
     }
     fn list(&self) -> Vec<String> {
         self.files.keys().cloned().collect()
     }
 }
 impl PackageProject {
+    /// Borrow a file's raw bytes without copying.
+    pub fn slice(&self, path: &str) -> Result<&[u8], FileError> {
+        let clean = clean_path(path)?;
+        self.files
+            .get(&clean)
+            .map(Vec::as_slice)
+            .ok_or_else(|| FileError::Missing(path.into()))
+    }
+
+    /// Borrow a UTF-8 file's text without copying.
+    pub fn text(&self, path: &str) -> Result<&str, FileError> {
+        std::str::from_utf8(self.slice(path)?).map_err(error)
+    }
+
+    /// Cached BLAKE3 digest of `path`, populated lazily on first query and
+    /// updated by [`PackageProject::set`]. Note: callers mutating `files`
+    /// directly should call [`PackageProject::invalidate_hashes`].
+    pub fn cached_hash(&self, path: &str) -> Result<[u8; 32], FileError> {
+        let clean = clean_path(path)?;
+        if let Some(hash) = self
+            .hashes
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&clean)
+            .copied()
+        {
+            return Ok(hash);
+        }
+        let hash = *blake3::hash(self.slice(&clean)?).as_bytes();
+        self.hashes
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(clean, hash);
+        Ok(hash)
+    }
+
+    /// Clear cached file hashes (call after direct mutations to `files`).
+    pub fn invalidate_hashes(&self) {
+        self.hashes
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+    }
     pub fn capture(files: &dyn SkinFiles) -> Result<Self, FileError> {
         let project = Self::read_all(files)?;
         verify_integrity(&project)?;
@@ -220,6 +280,11 @@ impl PackageProject {
             }
             return Err(error);
         }
+        self.hashes
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&path);
         Ok(())
     }
     pub fn check_budget(&self) -> Result<(), FileError> {
@@ -274,6 +339,11 @@ impl PackageProject {
             INTEGRITY_FILE.into(),
             serde_json::to_vec_pretty(&seal).map_err(error)?,
         );
+        self.hashes
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(INTEGRITY_FILE);
         verify_integrity(self)?.ok_or_else(|| error("seal was not created"))
     }
     pub fn export(&self, dest: &Path) -> Result<(), FileError> {
@@ -315,11 +385,15 @@ impl PackageProject {
 mod tests {
     use super::*;
     fn project() -> PackageProject {
-        PackageProject { files:BTreeMap::from([
-        (PACKAGE_MANIFEST.into(),b"format=1\nschema=3\nid='mixed.test'\nversion='1.0.0'\ncapabilities=['skin','resources','lua']\nauthor='Author'\ncreated_at='2026-10-19'\nlicensed_to='Studio'\n[lua]\nentry='main.lua'\n".to_vec()),
-        ("skin.toml".into(),b"[chrome]\naccent='#123456'\n".to_vec()),
-        ("main.lua".into(),b"return {}".to_vec()),
-        ("notes.txt".into(),b"editable".to_vec())]) }
+        PackageProject {
+            files: BTreeMap::from([
+                (PACKAGE_MANIFEST.into(),b"format=1\nschema=3\nid='mixed.test'\nversion='1.0.0'\ncapabilities=['skin','resources','lua']\nauthor='Author'\ncreated_at='2026-10-19'\nlicensed_to='Studio'\n[lua]\nentry='main.lua'\n".to_vec()),
+                ("skin.toml".into(),b"[chrome]\naccent='#123456'\n".to_vec()),
+                ("main.lua".into(),b"return {}".to_vec()),
+                ("notes.txt".into(),b"editable".to_vec()),
+            ]),
+            ..Default::default()
+        }
     }
     #[test]
     fn selective_seals_detect_tampering_and_preserve_editable_files() {
