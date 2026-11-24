@@ -50,6 +50,10 @@ struct Metadata {
 
 impl Packed {
     pub(super) fn parse(bytes: &[u8]) -> Result<StrokeData, String> {
+        Self::parse_with_hash(bytes, *blake3::hash(bytes).as_bytes())
+    }
+
+    pub(super) fn parse_with_hash(bytes: &[u8], hash: [u8; 32]) -> Result<StrokeData, String> {
         let mut reader = Reader { bytes, at: 8 };
         let metadata_len = reader.u32()? as usize;
         let count = reader.u32()? as usize;
@@ -120,7 +124,7 @@ impl Packed {
             }
         }
         Ok(StrokeData {
-            hash: *blake3::hash(bytes).as_bytes(),
+            hash,
             format: metadata.format,
             notice: metadata.notice,
             source: metadata.source,

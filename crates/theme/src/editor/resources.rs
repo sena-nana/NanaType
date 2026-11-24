@@ -1,5 +1,6 @@
 //! Known manifest references are rewritten structurally; program text is only disclosed.
 use super::*;
+use crate::clean_path;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reference {
     pub file: String,
@@ -57,12 +58,7 @@ pub fn references(project: &PackageProject) -> Vec<Reference> {
     }
     let mut out = Vec::new();
     for file in [PACKAGE_MANIFEST, MANIFEST, crate::SOUNDS_MANIFEST] {
-        if let Some(table) = project
-            .files
-            .get(file)
-            .and_then(|b| std::str::from_utf8(b).ok())
-            .and_then(|s| parse_document(s).ok())
-        {
+        if let Some(table) = project.text(file).ok().and_then(|s| parse_document(s).ok()) {
             walk(
                 file,
                 &PropertyValue::Table(table),
@@ -135,9 +131,7 @@ pub fn rename_asset(project: &mut PackageProject, from: &str, to: &str) -> Resul
         .files
         .remove(from)
         .ok_or_else(|| error("missing source file"))?;
-    let (folder, name) = to.rsplit_once('/').unwrap_or(("", to.as_str()));
-    let mut probe = PackageProject::default();
-    import_asset(&mut probe, folder, name, bytes.clone())?;
+    super::inventory::validate_import_content(&to, &bytes)?;
     next.set(&to, bytes)?;
     *project = next;
     Ok(())
@@ -150,9 +144,12 @@ pub fn replace_asset(
     if !project.files.contains_key(path) {
         return Err(error("missing target file"));
     }
-    let (folder, name) = path.rsplit_once('/').unwrap_or(("", path));
-    let mut probe = PackageProject::default();
-    import_asset(&mut probe, folder, name, bytes.clone())?;
+    if [PACKAGE_MANIFEST, INTEGRITY_FILE, MANIFEST].contains(&path)
+        || path.starts_with("dependencies/")
+    {
+        return Err(error("reserved package path"));
+    }
+    super::inventory::validate_import_content(path, &bytes)?;
     project.set(path, bytes)
 }
 pub fn create_file(project: &mut PackageProject, path: &str) -> Result<(), FileError> {

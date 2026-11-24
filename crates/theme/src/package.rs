@@ -16,6 +16,17 @@ pub enum PackageCapability {
     Sounds,
 }
 
+impl PackageCapability {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Skin => "skin",
+            Self::Resources => "resources",
+            Self::Lua => "lua",
+            Self::Sounds => "sounds",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PackageManifest {
     pub format: u32,
@@ -94,38 +105,41 @@ impl PackageManifest {
     pub(crate) fn validate_content(&self, files: &dyn SkinFiles) -> Result<(), FileError> {
         let invalid = |message: &str| FileError::Io(format!("package.toml: {message}"));
         let has = |c| self.capabilities.contains(&c);
-        // Listing, not reading: payloads stay unread until budgets are checked.
-        let listed = files.list();
-        let exists = |path: &str| listed.iter().any(|p| p == path);
-        if has(PackageCapability::Skin) != exists(crate::load::MANIFEST) {
-            return Err(invalid(
-                "the skin capability and skin.toml must appear together",
-            ));
-        }
-        if has(PackageCapability::Sounds) != exists(crate::SOUNDS_MANIFEST) {
-            return Err(invalid(
-                "the sounds capability and sounds.toml must appear together",
-            ));
-        }
-        if let Some(entry) = self.entry()
-            && !exists(entry)
-        {
-            return Err(invalid("the Lua entry does not exist"));
-        }
-        for (id, spec) in &self.data {
-            if !exists(&spec.path) {
-                return Err(invalid(&format!("data.{id} file does not exist")));
+        if has(PackageCapability::Resources) {
+            // Listing, not reading: payloads stay unread until budgets are checked.
+            let listed = files.list();
+            let has_path = |path: &str| {
+                listed.binary_search_by(|p| p.as_str().cmp(path)).is_ok()
+                    || listed.iter().any(|p| p == path)
+            };
+            if has(PackageCapability::Skin) != has_path(crate::load::MANIFEST) {
+                return Err(invalid(
+                    "the skin capability and skin.toml must appear together",
+                ));
             }
-            let bytes = files.file_len(&spec.path)?;
-            if bytes > spec.format.max_raw() {
-                return Err(FileError::TooLarge {
-                    path: spec.path.clone(),
-                    bytes,
-                });
+            if has(PackageCapability::Sounds) != has_path(crate::SOUNDS_MANIFEST) {
+                return Err(invalid(
+                    "the sounds capability and sounds.toml must appear together",
+                ));
             }
-        }
-        if has(PackageCapability::Resources)
-            && !listed.iter().any(|path| {
+            if let Some(entry) = self.entry()
+                && !has_path(entry)
+            {
+                return Err(invalid("the Lua entry does not exist"));
+            }
+            for (id, spec) in &self.data {
+                if !has_path(&spec.path) {
+                    return Err(invalid(&format!("data.{id} file does not exist")));
+                }
+                let bytes = files.file_len(&spec.path)?;
+                if bytes > spec.format.max_raw() {
+                    return Err(FileError::TooLarge {
+                        path: spec.path.clone(),
+                        bytes,
+                    });
+                }
+            }
+            if !listed.iter().any(|path| {
                 !path.starts_with("pkg:")
                     && !path.starts_with("dependencies/")
                     && ![
@@ -136,9 +150,37 @@ impl PackageManifest {
                     ]
                     .contains(&path.as_str())
                     && self.entry() != Some(path)
-            })
+            }) {
+                return Err(invalid("the resources capability needs resource files"));
+            }
+            return Ok(());
+        }
+        if has(PackageCapability::Skin) != files.exists(crate::load::MANIFEST) {
+            return Err(invalid(
+                "the skin capability and skin.toml must appear together",
+            ));
+        }
+        if has(PackageCapability::Sounds) != files.exists(crate::SOUNDS_MANIFEST) {
+            return Err(invalid(
+                "the sounds capability and sounds.toml must appear together",
+            ));
+        }
+        if let Some(entry) = self.entry()
+            && !files.exists(entry)
         {
-            return Err(invalid("the resources capability needs resource files"));
+            return Err(invalid("the Lua entry does not exist"));
+        }
+        for (id, spec) in &self.data {
+            if !files.exists(&spec.path) {
+                return Err(invalid(&format!("data.{id} file does not exist")));
+            }
+            let bytes = files.file_len(&spec.path)?;
+            if bytes > spec.format.max_raw() {
+                return Err(FileError::TooLarge {
+                    path: spec.path.clone(),
+                    bytes,
+                });
+            }
         }
         Ok(())
     }
@@ -162,7 +204,7 @@ impl PackageManifest {
         {
             return Err(invalid("derived_from must be `package-id@x.y.z`"));
         }
-        if crate::load::version_tuple(&self.meta.min_app).is_none() {
+        if version_tuple(&self.meta.min_app).is_none() {
             return Err(invalid("invalid min_app version"));
         }
         if self.format != PACKAGE_FORMAT || self.meta.schema != crate::SKIN_SCHEMA {
@@ -293,13 +335,21 @@ pub fn valid_id(id: &str) -> bool {
         && clean_path(id).is_ok()
 }
 
-fn exact_version(version: &str) -> bool {
+pub(crate) fn exact_version(version: &str) -> bool {
     let parts: Vec<_> = version.split('.').collect();
     version.len() <= 32
         && parts.len() == 3
         && parts
             .iter()
             .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
+pub(crate) fn version_tuple(v: &str) -> Option<(u32, u32, u32)> {
+    let mut parts = v.trim().split(['.', '-', '+']);
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next().unwrap_or("0").parse().ok()?;
+    let patch = parts.next().unwrap_or("0").parse().ok()?;
+    Some((major, minor, patch))
 }
 
 /// Validate a manifest resource reference; filesystem paths use `clean_path`.
@@ -327,6 +377,9 @@ impl SkinFiles for PrefixFiles {
     fn file_len(&self, path: &str) -> Result<u64, FileError> {
         self.files
             .file_len(&format!("{}/{}", self.prefix, clean_path(path)?))
+    }
+    fn exists(&self, path: &str) -> bool {
+        clean_path(path).is_ok_and(|p| self.files.exists(&format!("{}/{p}", self.prefix)))
     }
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
         self.files
@@ -357,6 +410,13 @@ impl SkinFiles for NamespaceFiles {
         } else {
             self.files
                 .file_len(&format!("pkg:{}/{}", self.id, clean_path(path)?))
+        }
+    }
+    fn exists(&self, path: &str) -> bool {
+        if path.starts_with("pkg:") {
+            self.files.exists(path)
+        } else {
+            clean_path(path).is_ok_and(|p| self.files.exists(&format!("pkg:{}/{p}", self.id)))
         }
     }
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
@@ -409,6 +469,25 @@ impl SkinFiles for PackageFiles {
             self.local.file_len(&path)
         }
     }
+    fn exists(&self, path: &str) -> bool {
+        let Ok(path) = clean_resource_path(path) else {
+            return false;
+        };
+        if let Some(rest) = path.strip_prefix("pkg:") {
+            let Some((id, relative)) = rest.split_once('/') else {
+                return false;
+            };
+            if id == self.manifest.meta.id {
+                self.local.exists(relative)
+            } else {
+                self.dependencies
+                    .get(id)
+                    .is_some_and(|dep| dep.exists(relative))
+            }
+        } else {
+            self.local.exists(&path)
+        }
+    }
     fn read(&self, path: &str) -> Result<Vec<u8>, FileError> {
         let clean = clean_resource_path(path)?;
         if let Some(rest) = clean.strip_prefix("pkg:") {
@@ -422,6 +501,21 @@ impl SkinFiles for PackageFiles {
                 .read(rel)
         } else {
             self.local.read(&clean)
+        }
+    }
+    fn hash_file(&self, path: &str) -> Result<[u8; 32], FileError> {
+        let clean = clean_resource_path(path)?;
+        if let Some(rest) = clean.strip_prefix("pkg:") {
+            let (id, rel) = rest.split_once('/').unwrap();
+            if id == self.manifest.meta.id {
+                return self.local.hash_file(rel);
+            }
+            self.dependencies
+                .get(id)
+                .ok_or_else(|| FileError::Missing(format!("undeclared dependency {id}")))?
+                .hash_file(rel)
+        } else {
+            self.local.hash_file(&clean)
         }
     }
     fn list(&self) -> Vec<String> {
@@ -456,51 +550,142 @@ impl SkinFiles for PackageFiles {
     }
 }
 
-/// Qualify inherited file references with their original package owner.
-pub(crate) fn qualify_resources(table: &mut toml::Table, owner: &str) {
-    /// Keys whose string (or string array) value is a file reference.
-    const FILE_KEYS: &[&str] = &[
-        "file",
-        "latin_file",
-        "source",
-        "image",
-        "background",
-        "preview",
-        "data",
-        "textures",
-        "files",
-        "open",
-        "advance",
-    ];
-    /// Tables whose every string value is a file reference.
-    const FILE_MAPS: &[&str] = &["variants", "se"];
-    fn visit(value: &mut toml::Value, key: &str, in_map: bool, owner: &str) {
-        match value {
-            toml::Value::String(s) if in_map || FILE_KEYS.contains(&key) => {
-                if !s.is_empty()
-                    && !s.starts_with('#')
-                    && !s.starts_with("builtin:")
-                    && !s.starts_with("pkg:")
-                {
-                    *s = format!("pkg:{owner}/{s}");
-                }
+fn qualify_path(s: &mut String, owner: &str) {
+    if !s.is_empty() && !s.starts_with('#') && !s.starts_with("builtin:") && !s.starts_with("pkg:")
+    {
+        *s = format!("pkg:{owner}/{s}");
+    }
+}
+
+fn qualify_str_field(table: &mut toml::Table, key: &str, owner: &str) {
+    if let Some(toml::Value::String(s)) = table.get_mut(key) {
+        qualify_path(s, owner);
+    }
+}
+
+fn qualify_str_array(table: &mut toml::Table, key: &str, owner: &str) {
+    if let Some(toml::Value::Array(items)) = table.get_mut(key) {
+        for item in items {
+            if let toml::Value::String(s) = item {
+                qualify_path(s, owner);
             }
-            toml::Value::Table(t) => {
-                let map = FILE_MAPS.contains(&key);
-                for (k, v) in t {
-                    visit(v, k, map, owner);
-                }
-            }
-            toml::Value::Array(a) => {
-                for v in a {
-                    visit(v, key, in_map, owner);
-                }
-            }
-            _ => {}
         }
     }
-    for (key, value) in table {
-        visit(value, key, false, owner);
+}
+
+fn qualify_str_map(table: &mut toml::Table, key: &str, owner: &str) {
+    if let Some(toml::Value::Table(map)) = table.get_mut(key) {
+        for (_, value) in map.iter_mut() {
+            if let toml::Value::String(s) = value {
+                qualify_path(s, owner);
+            }
+        }
+    }
+}
+
+fn qualify_frame(table: &mut toml::Table, key: &str, owner: &str) {
+    if let Some(toml::Value::Table(frame)) = table.get_mut(key) {
+        qualify_str_field(frame, "image", owner);
+    }
+}
+
+fn qualify_decor_array(table: &mut toml::Table, owner: &str) {
+    if let Some(toml::Value::Array(decor)) = table.get_mut("decor") {
+        for item in decor {
+            if let toml::Value::Table(entry) = item {
+                qualify_str_field(entry, "image", owner);
+            }
+        }
+    }
+}
+
+fn qualify_dialogue_layout(layout: &mut toml::Table, owner: &str) {
+    for part in ["box", "nameplate"] {
+        if let Some(toml::Value::Table(t)) = layout.get_mut(part) {
+            qualify_frame(t, "frame", owner);
+        }
+    }
+    if let Some(toml::Value::Table(portrait)) = layout.get_mut("portrait") {
+        qualify_str_field(portrait, "image", owner);
+        qualify_str_map(portrait, "variants", owner);
+    }
+    if let Some(toml::Value::Table(cont)) = layout.get_mut("continue") {
+        qualify_str_field(cont, "image", owner);
+    }
+    qualify_decor_array(layout, owner);
+}
+
+/// Qualify inherited file references with their original package owner using
+/// typed manifest paths rather than wildcard key tables.
+pub(crate) fn qualify_resources(table: &mut toml::Table, owner: &str) {
+    if let Some(toml::Value::Table(meta)) = table.get_mut("meta") {
+        qualify_str_field(meta, "preview", owner);
+    }
+    if let Some(toml::Value::Table(fonts)) = table.get_mut("fonts") {
+        for role in ["body", "name", "accent", "latin"] {
+            if let Some(toml::Value::Table(spec)) = fonts.get_mut(role) {
+                qualify_str_field(spec, "file", owner);
+            }
+        }
+    }
+    for group in ["shaders", "materials"] {
+        if let Some(toml::Value::Table(specs)) = table.get_mut(group) {
+            for (_, spec) in specs.iter_mut() {
+                if let Some(spec) = spec.as_table_mut() {
+                    qualify_str_field(spec, "source", owner);
+                    qualify_str_array(spec, "textures", owner);
+                }
+            }
+        }
+    }
+    if let Some(toml::Value::Table(pipelines)) = table.get_mut("pipelines") {
+        for (_, pipeline) in pipelines.iter_mut() {
+            if let Some(inputs) = pipeline
+                .as_table_mut()
+                .and_then(|p| p.get_mut("inputs"))
+                .and_then(toml::Value::as_table_mut)
+            {
+                for (_, port) in inputs.iter_mut() {
+                    if let Some(port) = port.as_table_mut() {
+                        qualify_str_field(port, "data", owner);
+                    }
+                }
+            }
+        }
+    }
+    if let Some(toml::Value::Table(dialogue)) = table.get_mut("dialogue") {
+        qualify_str_field(dialogue, "background", owner);
+        qualify_dialogue_layout(dialogue, owner);
+        if let Some(toml::Value::Table(responsive)) = dialogue.get_mut("responsive") {
+            for key in ["landscape", "portrait"] {
+                if let Some(toml::Value::Table(layout)) = responsive.get_mut(key) {
+                    qualify_dialogue_layout(layout, owner);
+                }
+            }
+            if let Some(toml::Value::Array(rules)) = responsive.get_mut("rules") {
+                for rule in rules {
+                    if let Some(layout) = rule
+                        .as_table_mut()
+                        .and_then(|r| r.get_mut("layout"))
+                        .and_then(toml::Value::as_table_mut)
+                    {
+                        qualify_dialogue_layout(layout, owner);
+                    }
+                }
+            }
+        }
+    }
+    if let Some(toml::Value::Table(history)) = table.get_mut("history") {
+        qualify_frame(history, "bubble_frame", owner);
+        qualify_decor_array(history, owner);
+    }
+    if let Some(toml::Value::Table(sounds)) = table.get_mut("sounds") {
+        qualify_str_field(sounds, "open", owner);
+        qualify_str_field(sounds, "advance", owner);
+        qualify_str_map(sounds, "se", owner);
+        if let Some(toml::Value::Table(typing)) = sounds.get_mut("typing") {
+            qualify_str_array(typing, "files", owner);
+        }
     }
 }
 

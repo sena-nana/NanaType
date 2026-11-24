@@ -19,6 +19,9 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::load::{SkinDiagnostic, validate_values};
 use crate::manifest::{ColorRef, ColorRole, Localized, Skin, localized};
 
+mod patch;
+use patch::PatchField;
+
 pub const MAX_PARAMS: usize = 64;
 const MAX_PRESETS: usize = 32;
 const MAX_GROUPS: usize = 16;
@@ -851,31 +854,20 @@ pub fn retain_valid(skin: &Skin, values: &mut BTreeMap<String, ParamValue>) {
     });
 }
 
-/// `skin` with `values` written into its param sites.
+/// `skin` with `values` written directly into its typed param sites without
+/// round-tripping through `toml::Value`.
 fn apply(skin: &Skin, values: &BTreeMap<String, Resolved>) -> Result<Skin, String> {
     let mut out = skin.clone();
-    if !skin.param_sites.is_empty() {
-        let Value::Table(mut table) = Value::try_from(skin).map_err(|e| e.to_string())? else {
-            unreachable!("a skin serializes to a table")
+    for site in skin.param_sites.iter() {
+        let Some(value) = values.get(&site.param) else {
+            continue;
         };
-        for site in skin.param_sites.iter() {
-            let Some(value) = values.get(&site.param) else {
-                continue;
-            };
-            if !assign(&mut table, &site.path, value.leaf(site.integer)) {
-                return Err(format!(
-                    "{}: the field no longer exists",
-                    path_string(&site.path)
-                ));
-            }
+        if out.patch(&site.path, value, site.integer).is_err() {
+            return Err(format!(
+                "{}: the field no longer exists",
+                path_string(&site.path)
+            ));
         }
-        out = Value::Table(table)
-            .try_into()
-            .map_err(|e: toml::de::Error| e.to_string().trim().to_owned())?;
-        out.material_bindings = skin.material_bindings.clone();
-        out.material_programs = skin.material_programs.clone();
-        out.shader_programs = skin.shader_programs.clone();
-        out.param_sites = skin.param_sites.clone();
     }
     out.param_values = Arc::new(values.clone());
     Ok(out)

@@ -11,8 +11,8 @@ use toml::Table;
 
 use crate::files::{DirFiles, FileError, MemoryFiles, SkinFiles, ZipFiles, clean_path};
 use crate::load::{
-    BaseResolver, LoadedSkin, MANIFEST, Severity, SkinDiagnostic, SkinOrigin, builtin_preview,
-    load, read_manifest,
+    BaseResolver, LoadedSkin, MANIFEST, Severity, SkinDiagnostic, SkinOrigin, load, load_preview,
+    read_package_meta, read_skin_table,
 };
 use crate::manifest::{Localized, Skin};
 use crate::package::{NamespaceFiles, PackageFiles, PrefixFiles, qualify_resources};
@@ -139,6 +139,12 @@ impl SkinFiles for BuiltinPackage {
     fn file_len(&self, path: &str) -> Result<u64, FileError> {
         self.files.file_len(path)
     }
+    fn exists(&self, path: &str) -> bool {
+        self.files.exists(path)
+    }
+    fn hash_file(&self, path: &str) -> Result<[u8; 32], FileError> {
+        self.files.hash_file(path)
+    }
     /// Without the dotfiles and SVG design masters the source tree keeps
     /// beside the rendered PNGs: skins load neither, and exports leave them.
     fn list(&self) -> Vec<String> {
@@ -257,6 +263,7 @@ pub struct SkinRegistry {
     app_version: String,
     entries: Vec<SkinEntry>,
     sound_packs: Vec<SoundPackEntry>,
+    packages: Vec<(PackageManifest, SkinOrigin)>,
     external: Vec<ExternalRoot>,
     /// Package id → the external folder providing it, as of the last scan.
     external_index: BTreeMap<String, ExternalRoot>,
@@ -270,18 +277,31 @@ impl BaseResolver for ScopedResolver {
             files: self.0.clone(),
             id: id.into(),
         });
-        let mut table = read_manifest(&*files).ok()?;
+        let mut table = read_skin_table(&*files).ok()?;
+        if let Ok(Some(meta)) = read_package_meta(&*files)
+            && let Some(base) = meta.base
+        {
+            let entry = table
+                .entry("meta")
+                .or_insert_with(|| toml::Value::Table(Table::new()));
+            if let Some(m) = entry.as_table_mut() {
+                m.insert("base".into(), toml::Value::String(base));
+            }
+        }
         qualify_resources(&mut table, id);
         Some((table, files))
     }
 }
 
 fn diagnostics(error: FileError) -> Vec<SkinDiagnostic> {
-    vec![SkinDiagnostic {
-        severity: Severity::Error,
-        field: PACKAGE_MANIFEST.into(),
-        message: error.to_string(),
-    }]
+    let mut diag = SkinDiagnostic::error(PACKAGE_MANIFEST, error.to_string());
+    if let FileError::TooLarge { path, .. } = error {
+        diag = diag.with_target(crate::DiagnosticTarget::Manifest {
+            file: PACKAGE_MANIFEST.into(),
+            keys: vec!["data".into(), path],
+        });
+    }
+    vec![diag]
 }
 
 pub(crate) fn bundled_path(path: &str) -> Result<String, FileError> {
@@ -312,6 +332,7 @@ impl SkinRegistry {
             app_version: app_version.into(),
             entries: Vec::new(),
             sound_packs: Vec::new(),
+            packages: Vec::new(),
             external: Vec::new(),
             external_index: BTreeMap::new(),
             external_status: Vec::new(),
@@ -358,12 +379,14 @@ impl SkinRegistry {
 
     /// Index the external folders: built-ins, then the user's folder, then
     /// the lowest item id keep an id; the rest are reported as shadowed.
-    fn index_external(&mut self) {
+    fn index_external(&mut self) -> Vec<(PackageManifest, Arc<dyn SkinFiles>, SkinOrigin)> {
         let mut index = BTreeMap::new();
         let mut status = Vec::new();
+        let mut found = Vec::new();
         for root in &self.external {
-            let id = match PackageManifest::read(&DirFiles::new(&root.folder)) {
-                Ok(package) => package.meta.id,
+            let files: Arc<dyn SkinFiles> = Arc::new(DirFiles::new(&root.folder));
+            let package = match PackageManifest::read(&*files) {
+                Ok(package) => package,
                 Err(e) => {
                     status.push(ExternalStatus {
                         item: root.item,
@@ -373,10 +396,12 @@ impl SkinRegistry {
                     continue;
                 }
             };
+            let id = package.meta.id.clone();
             let shadowed =
                 is_builtin_id(&id) || self.user_folder(&id).is_some() || index.contains_key(&id);
             if !shadowed {
                 index.insert(id.clone(), root.clone());
+                found.push((package, files, Self::external_origin(root)));
             }
             status.push(ExternalStatus {
                 item: root.item,
@@ -386,6 +411,7 @@ impl SkinRegistry {
         }
         self.external_index = index;
         self.external_status = status;
+        found
     }
 
     pub fn entries(&self) -> &[SkinEntry] {
@@ -424,35 +450,7 @@ impl SkinRegistry {
 
     /// All installed package capabilities, including packages without a skin.
     pub fn packages(&self) -> Vec<(PackageManifest, SkinOrigin)> {
-        let mut packages = Vec::new();
-        for builtin in builtins() {
-            if let Ok(package) = PackageManifest::read(&*builtin_files(builtin)) {
-                packages.push((package, SkinOrigin::Builtin));
-            }
-        }
-        if let Some(dir) = &self.user_dir
-            && let Ok(entries) = fs::read_dir(dir)
-        {
-            let mut paths: Vec<_> = entries
-                .flatten()
-                .map(|e| e.path())
-                .filter(|p| p.is_dir())
-                .collect();
-            paths.sort();
-            for path in paths {
-                if let Ok(package) = PackageManifest::read(&DirFiles::new(&path))
-                    && !is_builtin_id(&package.meta.id)
-                {
-                    packages.push((package, SkinOrigin::Directory(path)));
-                }
-            }
-        }
-        for root in self.external_index.values() {
-            if let Ok(package) = PackageManifest::read(&DirFiles::new(&root.folder)) {
-                packages.push((package, Self::external_origin(root)));
-            }
-        }
-        packages
+        self.packages.clone()
     }
 
     pub fn package_files(&self, id: &str) -> Result<Arc<dyn SkinFiles>, FileError> {
@@ -516,11 +514,10 @@ impl SkinRegistry {
             crate::data::resolve_data(&*files, &reference)
                 .and_then(|(spec, path)| crate::data::load_data(&*files, &spec, &path, true))
                 .map_err(|e| {
-                    vec![SkinDiagnostic {
-                        severity: Severity::Error,
-                        field: format!("data.{reference}"),
-                        message: format!("{reference}: {e}"),
-                    }]
+                    vec![SkinDiagnostic::error(
+                        format!("data.{reference}"),
+                        format!("{reference}: {e}"),
+                    )]
                 })?;
         }
         if let Some(entry) = package.entry() {
@@ -529,11 +526,10 @@ impl SkinRegistry {
                 || source.first() == Some(&0x1b)
                 || std::str::from_utf8(&source).is_err()
             {
-                return Err(vec![SkinDiagnostic {
-                    severity: Severity::Error,
-                    field: "lua.entry".into(),
-                    message: "plugin entry must be bounded UTF-8 Lua source".into(),
-                }]);
+                return Err(vec![SkinDiagnostic::error(
+                    "lua.entry",
+                    "plugin entry must be bounded UTF-8 Lua source",
+                )]);
             }
         }
         Ok((files, skin))
@@ -580,8 +576,8 @@ impl SkinRegistry {
             let package = PackageManifest::read(&*files)?;
             package.validate_content(&*files)?;
             if let (Some(required), Some(current)) = (
-                crate::load::version_tuple(&package.meta.min_app),
-                crate::load::version_tuple(&registry.app_version),
+                crate::package::version_tuple(&package.meta.min_app),
+                crate::package::version_tuple(&registry.app_version),
             ) && required > current
             {
                 return Err(FileError::Io(format!(
@@ -691,11 +687,18 @@ impl SkinRegistry {
         Ok(files)
     }
 
-    /// Re-read the user folder. Built-ins always come first.
+    /// Re-read the user and external folders in a single pass shared across
+    /// skins, sound packs, and package listings.
     pub fn rescan(&mut self) {
-        self.index_external();
+        let external_packages = self.index_external();
         let mut entries = Vec::new();
+        let mut sound_packs = Vec::new();
+        let mut packages = Vec::new();
+
         for b in builtins() {
+            if let Ok(package) = PackageManifest::read(&*builtin_files(b)) {
+                packages.push((package, SkinOrigin::Builtin));
+            }
             // Built-in packages do not change during this process. Keep both
             // their static catalogue and any lazily prepared GPU programs.
             entries.push(match self.entry(&b.id) {
@@ -703,81 +706,118 @@ impl SkinRegistry {
                 None => self.describe(b.id.clone(), builtin_files(b), SkinOrigin::Builtin),
             });
         }
+
+        struct UserFolder {
+            package: Option<PackageManifest>,
+            folder_id: String,
+            files: Arc<dyn SkinFiles>,
+            origin: SkinOrigin,
+        }
+        let mut user_folders: Vec<UserFolder> = Vec::new();
         if let Some(dir) = &self.user_dir
             && let Ok(read) = fs::read_dir(dir)
         {
             let mut folders: Vec<PathBuf> = read
                 .flatten()
                 .map(|e| e.path())
-                .filter(|p| p.join(MANIFEST).is_file())
+                .filter(|p| p.is_dir())
                 .collect();
             folders.sort();
             for folder in folders {
-                let id = folder
+                let files: Arc<dyn SkinFiles> = Arc::new(DirFiles::new(folder.clone()));
+                let package = PackageManifest::read(&*files).ok();
+                if let Some(pkg) = &package
+                    && is_builtin_id(&pkg.meta.id)
+                {
+                    continue;
+                }
+                let folder_id = folder
                     .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_default();
-                if is_builtin_id(&id) {
-                    continue;
-                }
-                let files = Arc::new(DirFiles::new(folder.clone()));
-                entries.push(self.describe(id, files, SkinOrigin::Directory(folder)));
+                let origin = SkinOrigin::Directory(folder);
+                user_folders.push(UserFolder {
+                    package,
+                    folder_id,
+                    files,
+                    origin,
+                });
             }
         }
-        for (id, root) in &self.external_index {
-            if root.folder.join(MANIFEST).is_file() {
-                let files = Arc::new(DirFiles::new(root.folder.clone()));
-                entries.push(self.describe(id.clone(), files, Self::external_origin(root)));
-            }
-        }
-        self.entries = entries;
-        self.sound_packs = self.scan_sound_packs();
-    }
 
-    fn scan_sound_packs(&self) -> Vec<SoundPackEntry> {
-        let mut folders: Vec<(PathBuf, SkinOrigin)> = self
-            .user_dir
-            .as_ref()
-            .and_then(|dir| fs::read_dir(dir).ok())
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.join(PACKAGE_MANIFEST).is_file())
-            .map(|p| (p.clone(), SkinOrigin::Directory(p)))
-            .collect();
-        folders.sort_by(|a, b| a.0.cmp(&b.0));
-        folders.extend(
-            self.external_index
-                .values()
-                .map(|r| (r.folder.clone(), Self::external_origin(r))),
-        );
-        let mut packs = Vec::new();
-        for (folder, origin) in folders {
-            let files: Arc<dyn SkinFiles> = Arc::new(DirFiles::new(folder.clone()));
-            let Ok(package) = PackageManifest::read(&*files) else {
-                continue;
-            };
-            if !package.capabilities.contains(&PackageCapability::Sounds)
-                || is_builtin_id(&package.meta.id)
-            {
-                continue;
+        for UserFolder {
+            package,
+            folder_id,
+            files,
+            origin,
+        } in user_folders
+        {
+            if let Some(pkg) = package {
+                let has_skin =
+                    pkg.capabilities.contains(&PackageCapability::Skin) || files.exists(MANIFEST);
+                let has_sounds = pkg.capabilities.contains(&PackageCapability::Sounds);
+                let id = pkg.meta.id.clone();
+                let version = pkg.meta.version.clone();
+                let name = pkg.meta.name.clone();
+                let author = pkg.meta.author.clone();
+                packages.push((pkg, origin.clone()));
+                if has_skin {
+                    entries.push(self.describe(id.clone(), files.clone(), origin.clone()));
+                }
+                if has_sounds {
+                    let (pack, errors) = match self.read_sound_pack(files) {
+                        Ok(pack) => (Some(pack), Vec::new()),
+                        Err(errors) => (None, errors),
+                    };
+                    sound_packs.push(SoundPackEntry {
+                        pack,
+                        errors,
+                        id,
+                        version,
+                        name,
+                        author,
+                        origin,
+                    });
+                }
+            } else if files.exists(MANIFEST) && !is_builtin_id(&folder_id) {
+                // Legacy/broken skin folder without a valid package.toml still
+                // surfaces its diagnostic entry.
+                entries.push(self.describe(folder_id, files, origin));
             }
-            let (pack, errors) = match self.read_sound_pack(files) {
-                Ok(pack) => (Some(pack), Vec::new()),
-                Err(errors) => (None, errors),
-            };
-            packs.push(SoundPackEntry {
-                pack,
-                errors,
-                id: package.meta.id,
-                version: package.meta.version,
-                name: package.meta.name,
-                author: package.meta.author,
-                origin,
-            });
         }
-        packs
+
+        for (pkg, files, origin) in external_packages {
+            let has_skin =
+                pkg.capabilities.contains(&PackageCapability::Skin) || files.exists(MANIFEST);
+            let has_sounds = pkg.capabilities.contains(&PackageCapability::Sounds);
+            let id = pkg.meta.id.clone();
+            let version = pkg.meta.version.clone();
+            let name = pkg.meta.name.clone();
+            let author = pkg.meta.author.clone();
+            packages.push((pkg, origin.clone()));
+            if has_skin {
+                entries.push(self.describe(id.clone(), files.clone(), origin.clone()));
+            }
+            if has_sounds {
+                let (pack, errors) = match self.read_sound_pack(files) {
+                    Ok(pack) => (Some(pack), Vec::new()),
+                    Err(errors) => (None, errors),
+                };
+                sound_packs.push(SoundPackEntry {
+                    pack,
+                    errors,
+                    id,
+                    version,
+                    name,
+                    author,
+                    origin,
+                });
+            }
+        }
+
+        self.entries = entries;
+        self.sound_packs = sound_packs;
+        self.packages = packages;
     }
 
     fn describe(&self, id: String, files: Arc<dyn SkinFiles>, origin: SkinOrigin) -> SkinEntry {
@@ -786,31 +826,21 @@ impl SkinRegistry {
             .map_err(diagnostics)
             .and_then(|files| {
                 let resolver = ScopedResolver(files.clone());
-                if origin == SkinOrigin::Builtin {
-                    builtin_preview(files, &resolver, &self.app_version)
-                } else {
-                    load(files, origin.clone(), &resolver, &self.app_version)
-                }
+                load_preview(files, origin.clone(), &resolver, &self.app_version)
             });
         match result {
-            Ok(loaded) => {
-                let prepared = Arc::new(OnceLock::new());
-                if origin != SkinOrigin::Builtin {
-                    let _ = prepared.set(Ok(loaded.clone()));
-                }
-                SkinEntry {
-                    id: loaded.skin.meta.id.clone(),
-                    version: loaded.skin.meta.version.clone(),
-                    name: loaded.skin.meta.name.clone(),
-                    author: loaded.skin.meta.author.clone(),
-                    origin,
-                    errors: Vec::new(),
-                    warnings: loaded.warnings,
-                    skin: Some(loaded.skin),
-                    files: Some(loaded.files),
-                    prepared,
-                }
-            }
+            Ok(loaded) => SkinEntry {
+                id: loaded.skin.meta.id.clone(),
+                version: loaded.skin.meta.version.clone(),
+                name: loaded.skin.meta.name.clone(),
+                author: loaded.skin.meta.author.clone(),
+                origin,
+                errors: Vec::new(),
+                warnings: loaded.warnings,
+                skin: Some(loaded.skin),
+                files: Some(loaded.files),
+                prepared: Arc::new(OnceLock::new()),
+            },
             Err(errors) => SkinEntry {
                 id,
                 version: String::new(),
@@ -833,49 +863,55 @@ impl SkinRegistry {
         }
     }
 
+    fn prepare_entry(entry: &SkinEntry) -> Result<LoadedSkin, Vec<SkinDiagnostic>> {
+        entry
+            .prepared
+            .get_or_init(|| {
+                if !entry.loads() {
+                    return Err(entry.errors.clone());
+                }
+                let files = entry.files.clone().expect("valid catalogue has files");
+                let skin = entry.skin.clone().expect("valid catalogue has a skin");
+                let mut warnings = entry.warnings.clone();
+                let skin = if skin.shaders.is_empty()
+                    && skin.materials.is_empty()
+                    && skin.pipelines.is_empty()
+                {
+                    skin
+                } else {
+                    // The immutable manifest/resources already passed the
+                    // catalogue validator; prepare only its GPU payload now.
+                    let mut resolved = (*skin).clone();
+                    crate::pipeline::bind(&mut resolved, &*files, false, &mut warnings);
+                    crate::wgsl::load_shaders(&mut resolved, &*files, &mut warnings);
+                    crate::wgsl::load_materials(&mut resolved, &*files, &mut warnings);
+                    if warnings.iter().any(|d| d.severity == Severity::Error) {
+                        warnings.sort_by_key(|d| std::cmp::Reverse(d.severity));
+                        return Err(warnings);
+                    }
+                    Arc::new(resolved)
+                };
+                Ok(LoadedSkin {
+                    #[cfg(feature = "editor")]
+                    authored: Arc::new(read_skin_table(&*files).unwrap_or_default()),
+                    skin,
+                    files,
+                    origin: entry.origin.clone(),
+                    warnings,
+                })
+            })
+            .clone()
+    }
+
     pub fn load(&self, id: &str) -> Result<LoadedSkin, Vec<SkinDiagnostic>> {
         if let Some(entry) = self.entry(id).filter(|e| e.is_builtin()) {
-            return entry
-                .prepared
-                .get_or_init(|| {
-                    if !entry.loads() {
-                        return Err(entry.errors.clone());
-                    }
-                    let files = entry.files.clone().expect("valid catalogue has files");
-                    let skin = entry.skin.clone().expect("valid catalogue has a skin");
-                    let mut warnings = entry.warnings.clone();
-                    let skin = if skin.shaders.is_empty() && skin.materials.is_empty() {
-                        skin
-                    } else {
-                        // The immutable manifest/resources already passed the
-                        // catalogue validator; prepare only its GPU payload now.
-                        let mut resolved = (*skin).clone();
-                        crate::pipeline::bind(&mut resolved, &*files, false, &mut warnings);
-                        crate::shader::load_shaders(&mut resolved, &*files, &mut warnings);
-                        crate::material::load_materials(&mut resolved, &*files, &mut warnings);
-                        if warnings.iter().any(|d| d.severity == Severity::Error) {
-                            warnings.sort_by_key(|d| std::cmp::Reverse(d.severity));
-                            return Err(warnings);
-                        }
-                        Arc::new(resolved)
-                    };
-                    Ok(LoadedSkin {
-                        #[cfg(feature = "editor")]
-                        authored: Arc::new(read_manifest(&*files).unwrap_or_default()),
-                        skin,
-                        files,
-                        origin: SkinOrigin::Builtin,
-                        warnings,
-                    })
-                })
-                .clone();
+            return Self::prepare_entry(entry);
         }
         let files = self.files_for(id).ok_or_else(|| {
-            vec![SkinDiagnostic {
-                severity: Severity::Error,
-                field: "meta.id".into(),
-                message: format!("skin `{id}` is not installed"),
-            }]
+            vec![SkinDiagnostic::error(
+                "meta.id",
+                format!("skin `{id}` is not installed"),
+            )]
         })?;
         let origin = match self.user_folder(id) {
             Some(dir) if !is_builtin_id(id) => SkinOrigin::Directory(dir),
@@ -888,15 +924,12 @@ impl SkinRegistry {
         load(files, origin, &resolver, &self.app_version)
     }
 
-    /// Reuse this scan's validated snapshot. UI selection and watcher reloads
-    /// use this path; `load` explicitly revalidates mutable authoring folders.
+    /// Reuse this scan's validated snapshot and prepare GPU programs lazily.
+    /// UI selection and watcher reloads use this path; `load` explicitly
+    /// revalidates mutable authoring folders.
     pub fn load_scanned(&self, id: &str) -> Result<LoadedSkin, Vec<SkinDiagnostic>> {
-        if let Some(entry) = self.entry(id).filter(|e| !e.is_builtin()) {
-            return entry.prepared.get().cloned().unwrap_or_else(|| {
-                let mut diagnostics = entry.errors.clone();
-                diagnostics.extend(entry.warnings.clone());
-                Err(diagnostics)
-            });
+        if let Some(entry) = self.entry(id) {
+            return Self::prepare_entry(entry);
         }
         self.load(id)
     }
@@ -939,11 +972,10 @@ impl SkinRegistry {
     /// Validate an archive without installing it.
     pub fn inspect_archive(&self, archive: &Path) -> Result<LoadedSkin, Vec<SkinDiagnostic>> {
         let files = ZipFiles::open(archive).map_err(|e| {
-            vec![SkinDiagnostic {
-                severity: Severity::Error,
-                field: archive.display().to_string(),
-                message: e.to_string(),
-            }]
+            vec![SkinDiagnostic::error(
+                archive.display().to_string(),
+                e.to_string(),
+            )]
         })?;
         let files = self.resolve_package(Arc::new(files)).map_err(diagnostics)?;
         let resolver = ScopedResolver(files.clone());
@@ -958,13 +990,7 @@ impl SkinRegistry {
     /// Validate, then unpack into `<user_dir>/<id>`. The previous copy is
     /// replaced only after the new one is completely written.
     pub fn install(&mut self, archive: &Path) -> Result<InstallOutcome, Vec<SkinDiagnostic>> {
-        let err = |field: &str, message: String| {
-            vec![SkinDiagnostic {
-                severity: Severity::Error,
-                field: field.to_owned(),
-                message,
-            }]
-        };
+        let err = |field: &str, message: String| vec![SkinDiagnostic::error(field, message)];
         let files = self.inspect_package_archive(archive)?;
         let package = PackageManifest::read(&*files).map_err(diagnostics)?;
         let id = package.meta.id.clone();
@@ -1021,9 +1047,8 @@ impl SkinRegistry {
         let manifest = if package.capabilities.contains(&PackageCapability::Skin) {
             let loaded = self.load(id).map_err(|e| FileError::Io(format!("{e:?}")))?;
             package.meta.base = None;
-            let mut compact = crate::load::standalone_manifest(&loaded.skin)
+            let compact = crate::load::standalone_skin_manifest(&loaded.skin)
                 .map_err(|e| FileError::Io(e.to_string()))?;
-            compact.remove("meta");
             Some(toml::to_string(&compact).map_err(|e| FileError::Io(e.to_string()))?)
         } else {
             None
@@ -1063,30 +1088,13 @@ impl SkinRegistry {
         name: &Localized,
         overrides: &Table,
     ) -> Result<PathBuf, Vec<SkinDiagnostic>> {
-        let err = |message: String| {
-            vec![SkinDiagnostic {
-                severity: Severity::Error,
-                field: "meta.id".into(),
-                message,
-            }]
-        };
+        let err = |message: String| vec![SkinDiagnostic::error("meta.id", message)];
         let Some(user_dir) = self.user_dir.clone() else {
             return Err(err("no user skin folder".into()));
         };
         if self.entry(new_id).is_some() {
             return Err(err(format!("`{new_id}` already exists")));
         }
-        let mut table = overrides.clone();
-        let mut meta = Table::new();
-        meta.insert("id".into(), new_id.into());
-        meta.insert("version".into(), "1.0.0".into());
-        meta.insert("base".into(), base.into());
-        let mut names = Table::new();
-        for (k, v) in name {
-            names.insert(k.clone(), v.clone().into());
-        }
-        meta.insert("name".into(), names.into());
-        table.insert("meta".into(), meta.into());
         if !crate::package::valid_id(new_id) {
             return Err(err("invalid package ID".into()));
         }
@@ -1094,11 +1102,14 @@ impl SkinRegistry {
             .files_for(base)
             .ok_or_else(|| err("missing base package".into()))?;
         let parent = PackageManifest::read(&*parent_files).map_err(|e| err(e.to_string()))?;
-        let mut metadata: crate::Meta = table["meta"]
-            .clone()
-            .try_into()
-            .map_err(|e: toml::de::Error| err(e.to_string()))?;
-        metadata.schema = crate::SKIN_SCHEMA;
+        let metadata = crate::Meta {
+            schema: crate::SKIN_SCHEMA,
+            id: new_id.to_owned(),
+            version: "1.0.0".into(),
+            base: Some(base.to_owned()),
+            name: name.clone(),
+            ..Default::default()
+        };
         let package = PackageManifest {
             format: crate::PACKAGE_FORMAT,
             meta: metadata,
@@ -1111,6 +1122,7 @@ impl SkinRegistry {
             licensed_to: String::new(),
             derived_from: String::new(),
         };
+        let mut table = overrides.clone();
         table.remove("meta");
         let dir = user_dir.join(new_id);
         fs::create_dir_all(&dir).map_err(|e| err(e.to_string()))?;
