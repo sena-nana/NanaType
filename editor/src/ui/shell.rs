@@ -31,6 +31,7 @@ pub fn minimum_size(zoom: f32) -> (f64, f64) {
     let [w, h] = MIN_SIZE.map(|v| f64::from((v * zoom).round()));
     (w, h)
 }
+
 /// Side panel and inspector: default, least and most width.
 pub const SIDE_W: f32 = 240.0;
 const SIDE_LIMITS: (f32, f32) = (180.0, 360.0);
@@ -45,8 +46,9 @@ const PROBLEMS_SHOWN: usize = 200;
 /// The workspace showing: the rail's choice, or Files when the package has
 /// nothing for it.
 pub fn current(ui: Ui) -> Mode {
-    let mode = ui.mode.get();
-    ui.package_editor
+    let proj = ui.proj();
+    let mode = proj.mode.get();
+    proj.package_editor
         .with(|v| v.as_ref().map_or(mode, |v| mode.effective(v)))
 }
 
@@ -93,42 +95,32 @@ pub(crate) fn sized(width: f32, control: impl IntoView) -> AnyView {
     .into_any()
 }
 
-/// A flexible gap that pushes what follows to the row's end.
-pub(crate) fn spacer() -> AnyView {
-    widget(
-        Stack::row(0.)
-            .grow(1.)
-            .shrink(1.)
-            .min_width(LengthSpec::Px(0.)),
-    )
-    .into_any()
-}
-
 /// Open `mode`; choosing the open mode again shows or hides the side panel.
 /// Each workspace comes back to the file it last showed; the Lua and sounds
 /// workspaces otherwise open one of their own.
 pub fn select_mode(ui: Ui, mode: Mode) -> Option<Msg> {
-    let previous = ui.mode.get_untracked();
+    let proj = ui.proj();
+    let previous = proj.mode.get_untracked();
     if previous == mode {
-        ui.side_open.update(|open| *open = !*open);
+        proj.side_open.update(|open| *open = !*open);
         return None;
     }
-    let view = ui.package_editor.get_untracked()?;
-    ui.mode_files.update(|m| {
+    let view = proj.package_editor.get_untracked()?;
+    proj.mode_files.update(|m| {
         m.retain(|(k, _)| *k != previous);
         if let Some(path) = &view.selected {
             m.push((previous, path.clone()));
         }
     });
-    ui.mode.set(mode);
-    ui.side_open.set(true);
+    proj.mode.set(mode);
+    proj.side_open.set(true);
     match mode {
         Mode::Sounds => {
-            ui.properties_file
+            proj.properties_file
                 .set(modes::sounds::declared_in(&view).into());
-            ui.properties_path.set(vec!["sounds".into()]);
+            proj.properties_path.set(vec!["sounds".into()]);
         }
-        Mode::Design => ui.properties_file.set(nanatype_theme::MANIFEST.into()),
+        Mode::Design => proj.properties_file.set(nanatype_theme::MANIFEST.into()),
         _ => {}
     }
     let wanted = |f: &nanatype_theme::editor::FileInfo| match mode {
@@ -137,7 +129,7 @@ pub fn select_mode(ui: Ui, mode: Mode) -> Option<Msg> {
         _ => true,
     };
     let fits = |path: &str| view.files.iter().any(|f| f.path == path && wanted(f));
-    let remembered = ui.mode_files.with_untracked(|m| {
+    let remembered = proj.mode_files.with_untracked(|m| {
         m.iter()
             .find(|(k, _)| *k == mode)
             .map(|(_, path)| path.clone())
@@ -159,9 +151,10 @@ pub fn select_mode(ui: Ui, mode: Mode) -> Option<Msg> {
 /// Read the panes' widths back after input routing, so a drag survives
 /// the workspace being rebuilt for another mode.
 pub fn sync_widths(ui: Ui, cx: &nana_ui::runtime::AppContext) {
+    let proj = ui.proj();
     for (node, width) in [
-        (ui.side_split, ui.side_width),
-        (ui.inspector_split, ui.inspector_width),
+        (proj.side_split, ui.global.side_width),
+        (proj.inspector_split, ui.global.inspector_width),
     ] {
         let Some(id) = node.get_untracked() else {
             continue;
@@ -174,19 +167,20 @@ pub fn sync_widths(ui: Ui, cx: &nana_ui::runtime::AppContext) {
 }
 
 pub fn editor(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     // Gestures and geometry belong to the design canvas.
     watch_effect(move || {
-        ui.canvas_enabled
+        proj.canvas_enabled
             .set_if_changed(current(ui) == Mode::Design);
     });
     widget(Stack::fill_column(0.0).with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))))
         .key("package-editor")
         .on(move |e: &SizeChanged| {
-            let was = ui.workspace_width.get_untracked();
+            let was = ui.global.workspace_width.get_untracked();
             if (was < COMPACT) != (e.width < COMPACT) {
-                ui.side_open.set(e.width >= COMPACT);
+                proj.side_open.set(e.width >= COMPACT);
             }
-            ui.workspace_width.set_if_changed(e.width);
+            ui.global.workspace_width.set_if_changed(e.width);
         })
         .children((
             toolbar(ui),
@@ -211,11 +205,12 @@ pub fn editor(ui: Ui) -> AnyView {
 // ---- toolbar ---------------------------------------------------------------
 
 fn toolbar(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     dynamic(
         move || {
             (
                 current(ui),
-                ui.package_editor.with(|v| {
+                proj.package_editor.with(|v| {
                     v.as_ref()
                         .map(|v| (v.package.clone(), v.kind, v.dirty && v.can_revert))
                 }),
@@ -240,6 +235,7 @@ fn toolbar_row(
     kind: nanatype_theme::editor::ProjectKind,
     revertible: bool,
 ) -> AnyView {
+    let proj = ui.proj();
     let open = nana_ui::runtime::view::signal(false);
     let item = move |key: &'static str, label: String, disabled: bool, action: fn() -> Action| {
         widget({
@@ -286,7 +282,7 @@ fn toolbar_row(
             .key("package-editor-menu-derive")
             .on(move |_: &Activate| {
                 open.set(false);
-                ui.derive_open.set(true);
+                proj.derive_open.set(true);
             }),
         item(
             "package-editor-close",
@@ -302,7 +298,7 @@ fn toolbar_row(
         ))
         .key("package-editor-undo")
         .bind(move |b: &mut IconButton| {
-            b.disabled = !ui
+            b.disabled = !proj
                 .package_editor
                 .with(|v| v.as_ref().is_some_and(|v| v.undo))
         })
@@ -313,7 +309,7 @@ fn toolbar_row(
         ))
         .key("package-editor-redo")
         .bind(move |b: &mut IconButton| {
-            b.disabled = !ui
+            b.disabled = !proj
                 .package_editor
                 .with(|v| v.as_ref().is_some_and(|v| v.redo))
         })
@@ -323,13 +319,13 @@ fn toolbar_row(
         Mode::Design => Some(
             widget(tool(ti::LAYOUT_ROWS, ui.now_t("pkgedit-split-source")))
                 .key("editor-split-source")
-                .bind(move |b: &mut IconButton| b.selected = ui.split_source.get())
+                .bind(move |b: &mut IconButton| b.selected = proj.split_source.get())
                 .on_cx(move |_, _: &Activate, cx| {
-                    let open = !ui.split_source.get_untracked();
-                    ui.split_source.set(open);
+                    let open = !proj.split_source.get_untracked();
+                    proj.split_source.set(open);
                     if open {
                         // Open the skin's source at the selected layer.
-                        let path = ui.properties_path.get_untracked();
+                        let path = proj.properties_path.get_untracked();
                         let msg = modes::design::select(ui, path).unwrap_or_else(|| {
                             Msg::PackageEditor(Action::Select(nanatype_theme::MANIFEST.into()))
                         });
@@ -343,8 +339,8 @@ fn toolbar_row(
                 ui.now_t("pkgedit-files-preview"),
             ))
             .key("editor-files-preview")
-            .bind(move |b: &mut IconButton| b.selected = ui.files_preview.get())
-            .on(move |_: &Activate| ui.files_preview.update(|s| *s = !*s)),
+            .bind(move |b: &mut IconButton| b.selected = proj.files_preview.get())
+            .on(move |_: &Activate| proj.files_preview.update(|s| *s = !*s)),
         ),
         _ => None,
     };
@@ -359,15 +355,15 @@ fn toolbar_row(
         kit::tag(ui.now_t(kind_key(kind))),
         kit::vrule(),
         history,
-        spacer(),
+        kit::spacer(),
         layout,
         widget(tool(
             ti::LAYOUT_SIDEBAR,
             hinted(ui.now_t("pkgedit-side-toggle"), "Mod+B"),
         ))
         .key("editor-side-toggle")
-        .bind(move |b: &mut IconButton| b.selected = ui.side_open.get())
-        .on(move |_: &Activate| ui.side_open.update(|s| *s = !*s)),
+        .bind(move |b: &mut IconButton| b.selected = proj.side_open.get())
+        .on(move |_: &Activate| proj.side_open.update(|s| *s = !*s)),
         kit::vrule(),
         widget(tool(
             ti::UPLOAD,
@@ -382,7 +378,7 @@ fn toolbar_row(
         ))
         .key("package-editor-save")
         .bind(move |b: &mut IconButton| {
-            let kind = if ui
+            let kind = if proj
                 .package_editor
                 .with(|v| v.as_ref().is_some_and(|v| v.dirty))
             {
@@ -401,7 +397,8 @@ fn toolbar_row(
 
 /// The files workspace has a stage to show: the package draws a skin.
 fn files_previewable(ui: Ui) -> bool {
-    ui.package_editor
+    ui.proj()
+        .package_editor
         .with(|v| v.as_ref().is_some_and(|v| Mode::Design.available(v)))
 }
 
@@ -416,9 +413,10 @@ fn toolbar_style() -> nana_ui::runtime::NodeStyle {
 }
 
 fn close_prompt(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     dynamic(
         move || {
-            ui.package_editor
+            proj.package_editor
                 .with(|v| v.as_ref().is_some_and(|v| v.confirm_close))
         },
         move |open| {
@@ -458,10 +456,11 @@ fn close_prompt(ui: Ui) -> AnyView {
 /// The new package's ID, asked for under the toolbar: the copy drops the
 /// signature and records where it came from.
 fn derive_prompt(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     dynamic(
-        move || ui.derive_open.get(),
+        move || proj.derive_open.get(),
         move |open| {
-            let package = ui
+            let package = proj
                 .package_editor
                 .with_untracked(|v| v.as_ref().map(|v| v.package.clone()));
             let (true, Some(package)) = (*open, package) else {
@@ -488,7 +487,7 @@ fn derive_prompt(ui: Ui) -> AnyView {
                         .key("package-editor-derive-id")
                         .on(move |e: &nana_ui::runtime::TextChanged| id.set(e.value.to_string()))
                         .on_cx(move |_, e: &nana_ui::runtime::TextSubmitted, cx| {
-                            ui.derive_open.set(false);
+                            proj.derive_open.set(false);
                             cx.dispatch_program_all(Msg::PackageEditor(Action::Derive(
                                 e.value.clone(),
                             )));
@@ -498,13 +497,13 @@ fn derive_prompt(ui: Ui) -> AnyView {
                 widget(button(ui, "pkgedit-derive").kind(ButtonKind::Primary))
                     .key("package-editor-derive")
                     .on_cx(move |_, _: &Activate, cx| {
-                        ui.derive_open.set(false);
+                        proj.derive_open.set(false);
                         cx.dispatch_program_all(Msg::PackageEditor(Action::Derive(
                             id.get_untracked(),
                         )));
                     }),
                 widget(button(ui, "common-cancel"))
-                    .on(move |_: &Activate| ui.derive_open.set(false)),
+                    .on(move |_: &Activate| proj.derive_open.set(false)),
             ))
             .into_any()
         },
@@ -527,6 +526,7 @@ fn edge() -> AnyView {
 }
 
 fn rail(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     let entry = move |mode: Mode| {
         let number = crate::shortcuts::WORKSPACES
             .iter()
@@ -541,7 +541,7 @@ fn rail(ui: Ui) -> AnyView {
         )
         .key(format!("package-editor-mode:{}", mode_key(mode)))
         .visible(move || {
-            ui.package_editor
+            proj.package_editor
                 .with(|v| v.as_ref().is_some_and(|v| mode.available(v)))
         })
         .bind(move |b: &mut IconButton| {
@@ -603,6 +603,7 @@ fn spacer_column() -> AnyView {
 /// The workspace over the drawer: one split while the drawer is open, so
 /// the problems and the log take as much height as they are given.
 fn body(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     let node = nana_ui::runtime::view::node_ref();
     widget(Stack::fill_column(0.).with_layout(|l| {
         l.width = Some(LengthSpec::Px(0.));
@@ -611,7 +612,7 @@ fn body(ui: Ui) -> AnyView {
     }))
     .children(
         dynamic(
-            move || ui.drawer.get() != Drawer::Closed,
+            move || proj.drawer.get() != Drawer::Closed,
             move |open| {
                 if !*open {
                     return workspace(ui);
@@ -637,6 +638,7 @@ fn body(ui: Ui) -> AnyView {
 }
 
 fn workspace(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     widget(Stack::fill_column(0.).with_layout(|l| {
         l.min_width = Some(LengthSpec::Px(0.));
         l.min_height = Some(LengthSpec::Px(0.));
@@ -646,9 +648,9 @@ fn workspace(ui: Ui) -> AnyView {
             move || {
                 (
                     current(ui),
-                    ui.side_open.get(),
-                    ui.files_preview.get(),
-                    ui.package_editor.with(Option::is_some),
+                    proj.side_open.get(),
+                    proj.files_preview.get(),
+                    proj.package_editor.with(Option::is_some),
                 )
             },
             move |(mode, side, preview, open)| {
@@ -710,12 +712,13 @@ pub(crate) fn pane(content: impl IntoView) -> AnyView {
 
 /// Side panel | centre | inspector, the sides resizable.
 fn panes(ui: Ui, side: Option<AnyView>, center: AnyView, inspector: Option<AnyView>) -> AnyView {
+    let proj = ui.proj();
     let rest = match inspector {
         Some(inspector) => split(
-            ui.inspector_split,
+            proj.inspector_split,
             SplitPaneModel::new(
                 SplitAxis::Horizontal,
-                ui.inspector_width.get_untracked(),
+                ui.global.inspector_width.get_untracked(),
                 INSPECTOR_LIMITS.0,
                 INSPECTOR_LIMITS.1,
             )
@@ -731,10 +734,10 @@ fn panes(ui: Ui, side: Option<AnyView>, center: AnyView, inspector: Option<AnyVi
     };
     match side {
         Some(side) => split(
-            ui.side_split,
+            proj.side_split,
             SplitPaneModel::new(
                 SplitAxis::Horizontal,
-                ui.side_width.get_untracked(),
+                ui.global.side_width.get_untracked(),
                 SIDE_LIMITS.0,
                 SIDE_LIMITS.1,
             ),
@@ -824,11 +827,12 @@ fn diagnostics(view: &EditorView) -> Vec<nanatype_theme::editor::SourceDiagnosti
 }
 
 fn drawer(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     dynamic(
         move || {
             (
-                ui.drawer.get(),
-                ui.package_editor
+                proj.drawer.get(),
+                proj.package_editor
                     .with(|v| v.as_ref().is_some_and(|v| Mode::Lua.available(v))),
             )
         },
@@ -843,7 +847,7 @@ fn drawer(ui: Ui) -> AnyView {
                     ButtonKind::Ghost
                 }))
                 .key(format!("package-editor-drawer:{key}"))
-                .on(move |_: &Activate| ui.drawer.set(which))
+                .on(move |_: &Activate| proj.drawer.set(which))
                 .into_any()
             };
             let body = match drawer {
@@ -862,10 +866,10 @@ fn drawer(ui: Ui) -> AnyView {
                     .children((
                         tab(Drawer::Problems, "pkgedit-problems"),
                         lua.then(|| tab(Drawer::Debug, "pkgedit-debug-log")),
-                        spacer(),
+                        kit::spacer(),
                         widget(tool(ti::X, ui.now_t("pkgedit-drawer-close")))
                             .key("package-editor-drawer-close")
-                            .on(move |_: &Activate| ui.drawer.set(Drawer::Closed)),
+                            .on(move |_: &Activate| proj.drawer.set(Drawer::Closed)),
                     )),
                     scroll(
                         widget(Stack::column(0.).padding_xy(gap::CONTROL, 0.))
@@ -881,9 +885,10 @@ fn drawer(ui: Ui) -> AnyView {
 
 /// Located diagnostics; each jumps to its file and line.
 pub(crate) fn problems(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     dynamic(
         move || {
-            ui.package_editor.with(|v| {
+            proj.package_editor.with(|v| {
                 v.as_ref().map(|v| {
                     (
                         Arc::as_ptr(&v.report) as usize,
@@ -978,8 +983,9 @@ pub(crate) fn problems(ui: Ui) -> AnyView {
 /// Show a located diagnostic's source: beside the canvas when it is split,
 /// otherwise in the files workspace.
 pub(crate) fn reveal(ui: Ui, at: nanatype_theme::editor::SourceDiagnostic) -> Msg {
-    if !(current(ui) == Mode::Design && ui.split_source.get_untracked()) {
-        ui.mode.set(Mode::Files);
+    let proj = ui.proj();
+    if !(current(ui) == Mode::Design && proj.split_source.get_untracked()) {
+        proj.mode.set(Mode::Files);
     }
     Msg::PackageEditor(Action::Reveal(at))
 }
@@ -1031,9 +1037,10 @@ fn status_text(ui: Ui, view: &EditorView) -> String {
 }
 
 fn status_bar(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     dynamic(
         move || {
-            ui.package_editor.with(|v| {
+            proj.package_editor.with(|v| {
                 v.as_ref().map(|v| {
                     (
                         origin_text(ui, v),
@@ -1052,7 +1059,7 @@ fn status_bar(ui: Ui) -> AnyView {
             };
             let toggle = move |which: Drawer| {
                 move |_: &Activate| {
-                    ui.drawer.update(|d| {
+                    proj.drawer.update(|d| {
                         *d = if *d == which { Drawer::Closed } else { which };
                     })
                 }

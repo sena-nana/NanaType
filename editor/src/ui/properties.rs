@@ -1,7 +1,12 @@
 //! The inspector: the declared table the layer tree selects, one compact row
 //! per value, written when Enter is pressed or focus leaves it. The source
 //! remains authoritative and is one click away.
-use super::{Ui, controls::hint, kit, views::buffer};
+use super::{
+    Ui,
+    controls::hint,
+    kit,
+    views::{buffer, buffer_msg},
+};
 use crate::session::EditorView;
 use crate::{msg::Msg, session::Action};
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
@@ -11,6 +16,7 @@ use nana_ui::runtime::{
 };
 use nana_ui::{ButtonKind, ControlSize, icons_tabler as ti};
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
+pub use nanatype_theme::editor::table_range;
 use nanatype_theme::{
     MANIFEST, PACKAGE_MANIFEST, TomlTable,
     editor::{self, PropertyValue as Value},
@@ -58,72 +64,16 @@ pub fn effective(view: &EditorView, file: &str) -> Result<(TomlTable, TomlTable)
     Ok((effective, local))
 }
 
-/// Byte range of the source block that declares `path`: its `[a.b]` header
-/// (or the n-th `[[a.b]]`) through its sub-tables, up to the next table.
-pub fn table_range(text: &str, path: &[String]) -> Option<(usize, usize)> {
-    let (name, nth) = match path.last().and_then(|s| s.parse::<usize>().ok()) {
-        Some(i) if path.len() > 1 => (path[..path.len() - 1].join("."), Some(i)),
-        _ => (path.join("."), None),
-    };
-    let header = |line: &str| -> Option<(String, bool)> {
-        let line = line.split('#').next()?.trim();
-        let array = line.starts_with("[[") && line.ends_with("]]");
-        let inner = if array {
-            line.get(2..line.len() - 2)?
-        } else if line.starts_with('[') && line.ends_with(']') && line.len() > 2 {
-            line.get(1..line.len() - 1)?
-        } else {
-            return None;
-        };
-        let inner = inner
-            .split('.')
-            .map(|p| p.trim().trim_matches('"').trim_matches('\''))
-            .collect::<Vec<_>>();
-        inner
-            .iter()
-            .all(|p| {
-                !p.is_empty()
-                    && p.chars()
-                        .all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | ' '))
-            })
-            .then(|| (inner.join("."), array))
-    };
-    let mut offset = 0;
-    let mut start = None;
-    let mut seen = 0;
-    for line in text.split_inclusive('\n') {
-        if let Some((found, array)) = header(line) {
-            match start {
-                None => {
-                    if found == name && array == nth.is_some() {
-                        if nth.is_none_or(|n| n == seen) {
-                            start = Some(offset);
-                        }
-                        seen += 1;
-                    }
-                }
-                Some(begin) => {
-                    let nested = found.starts_with(&format!("{name}.")) && !(found == name);
-                    if !nested {
-                        return Some((begin, offset));
-                    }
-                }
-            }
-        }
-        offset += line.len();
-    }
-    start.map(|begin| (begin, text.len()))
-}
-
 pub fn inspector(ui: Ui) -> AnyView {
-    let file = ui.properties_file;
-    let path = ui.properties_path;
+    let proj = ui.proj();
+    let file = proj.properties_file;
+    let path = proj.properties_path;
     dynamic(
         move || {
             (
                 file.get(),
                 path.get(),
-                ui.package_editor.with(|v| {
+                proj.package_editor.with(|v| {
                     v.as_ref().map(|v| {
                         (
                             v.documents.clone(),
@@ -135,7 +85,7 @@ pub fn inspector(ui: Ui) -> AnyView {
             )
         },
         move |(file, path_value, _)| {
-            let Some(view) = ui.package_editor.get_untracked() else {
+            let Some(view) = proj.package_editor.get_untracked() else {
                 return hint(String::new());
             };
             if !view.documents.contains_key(file) {
@@ -204,7 +154,7 @@ pub fn inspector(ui: Ui) -> AnyView {
 
 /// The table's name, where it sits, and the way back up.
 fn title(ui: Ui, file: &str, path_value: &[String], editable: bool, view: &EditorView) -> AnyView {
-    let path = ui.properties_path;
+    let path = ui.proj().properties_path;
     let name = path_value
         .last()
         .cloned()
@@ -261,9 +211,12 @@ fn add_field(
     table: &TomlTable,
     editable: bool,
 ) -> AnyView {
+    let session = super::views::view_of(ui).map_or(0, |v| v.session);
     let prefix = format!("properties.new.{file}:{path_value:?}.");
-    let name = buffer(ui, format!("{prefix}name"), String::new());
-    let value = buffer(ui, format!("{prefix}value"), String::from("\"\""));
+    let name_key = format!("{prefix}name");
+    let value_key = format!("{prefix}value");
+    let name = buffer(ui, &name_key, String::new());
+    let value = buffer(ui, &value_key, String::from("\"\""));
     let open = signal(false);
     let mut templates_row = Vec::new();
     if file == MANIFEST && path_value == ["params".to_owned()] {
@@ -320,7 +273,22 @@ fn add_field(
             .is_some_and(|p| matches!(p.as_str(), "param_groups" | "presets"))
     {
         let preset = path_value.last().is_some_and(|p| p == "presets");
-        templates_row.push(widget(button(ui,"pkgedit-template")).on(move |_:&Activate|{name.set(if preset{"new_preset"}else{"new_group"}.into());value.set(if preset{"{name={zh-CN='新预设',en-US='New preset',ja-JP='新しいプリセット'},values={}}"}else{"{name={zh-CN='新分组',en-US='New group',ja-JP='新しいグループ'},order=0}"}.into());open.set(true);}).into_any());
+        templates_row.push(
+            widget(button(ui, "pkgedit-template"))
+                .on(move |_: &Activate| {
+                    name.set(if preset { "new_preset" } else { "new_group" }.into());
+                    value.set(
+                        if preset {
+                            "{name={zh-CN='新预设',en-US='New preset',ja-JP='新しいプリセット'},values={}}"
+                        } else {
+                            "{name={zh-CN='新分组',en-US='New group',ja-JP='新しいグループ'},order=0}"
+                        }
+                        .into(),
+                    );
+                    open.set(true);
+                })
+                .into_any(),
+        );
     }
     let occupied = table.keys().cloned().collect::<Vec<_>>();
     let target = path_value.to_vec();
@@ -335,6 +303,8 @@ fn add_field(
             let occupied = occupied.clone();
             let f = f.clone();
             let mut target = target.clone();
+            let name_key = name_key.clone();
+            let value_key = value_key.clone();
             widget(Stack::column(0.).gap_step(kit::gap::step::TIGHT))
                 .children((
                     hint(ui.now_t("pkgedit-add-property-hint")),
@@ -346,12 +316,25 @@ fn add_field(
                     .bind(move |a: &mut nana_ui::runtime::TextInput| {
                         super::views::sync_text(&mut a.state, name.get())
                     })
-                    .on(move |e: &TextChanged| name.set(e.value.to_string())),
+                    .on_cx(move |_, e: &TextChanged, cx| {
+                        let s = e.value.to_string();
+                        name.set(s.clone());
+                        cx.dispatch_program_all(buffer_msg(session, &name_key, &s, &String::new()));
+                    }),
                     widget(kit::text_area(value.get_untracked()).height(NEW_VALUE_H))
                         .bind(move |a: &mut nana_ui::runtime::TextArea| {
                             super::views::sync_text(&mut a.state, value.get())
                         })
-                        .on(move |e: &TextChanged| value.set(e.value.to_string())),
+                        .on_cx(move |_, e: &TextChanged, cx| {
+                            let s = e.value.to_string();
+                            value.set(s.clone());
+                            cx.dispatch_program_all(buffer_msg(
+                                session,
+                                &value_key,
+                                &s,
+                                &String::from("\"\""),
+                            ));
+                        }),
                     widget(button(ui, "pkgedit-add").disabled(!editable)).on_cx(
                         move |_, _: &Activate, cx| {
                             let key = name.get_untracked();
@@ -408,6 +391,7 @@ fn reveal_source(ui: Ui, file: &str, path_value: &[String], view: &EditorView) -
         .then(|| table_range(&text, path_value))
         .flatten()?;
     let file = file.to_owned();
+    let proj = ui.proj();
     Some(
         widget(super::shell::tool(
             ti::CODE,
@@ -416,7 +400,7 @@ fn reveal_source(ui: Ui, file: &str, path_value: &[String], view: &EditorView) -
         .key("editor-section-reveal")
         .on_cx(move |_, _: &Activate, cx| {
             let (line, column) = editor::line_column(&text, start);
-            ui.split_source.set(true);
+            proj.split_source.set(true);
             cx.dispatch_program_all(super::shell::reveal(
                 ui,
                 editor::SourceDiagnostic {
@@ -456,13 +440,15 @@ pub(crate) fn property(
     editable: bool,
     label_w: f32,
 ) -> AnyView {
+    let session = super::views::view_of(ui).map_or(0, |v| v.session);
     let bound =
         editor::bound_at(local, path) || matches!(value,Value::Table(t) if t.contains_key("param"));
     let text = match value {
         Value::String(s) => s.clone(),
         _ => editor::literal(value),
     };
-    let raw = buffer(ui, format!("properties.{file}:{path:?}"), text.clone());
+    let form_key = format!("properties.{file}:{path:?}");
+    let raw = buffer(ui, &form_key, text.clone());
     let unbind = signal(false);
     let string = matches!(value, Value::String(_));
     let key = format!("editor-property:{file}:{}", path.join("."));
@@ -479,20 +465,14 @@ pub(crate) fn property(
             })
         }
     };
-    // What Enter or leaving the field writes: nothing while the text is
-    // what the source already says.
-    let sent = signal(None::<String>);
     let typed = {
         let commit = commit.clone();
+        let original = original.clone();
         move || {
             let value = raw.get_untracked();
-            if value == original && !unbind.get_untracked()
-                || sent.with_untracked(|s| s.as_ref() == Some(&value))
-            {
+            if value == original && !unbind.get_untracked() {
                 return None;
             }
-            // Enter and then leaving the field writes once.
-            sent.set(Some(value.clone()));
             Some(commit(if string {
                 serde_json::to_string(&value).unwrap_or_default()
             } else {
@@ -502,6 +482,8 @@ pub(crate) fn property(
     };
     let scrub = number(value).filter(|_| !bound);
     let control = if let Value::Boolean(b) = value {
+        let form_key = form_key.clone();
+        let initial = original.clone();
         widget(
             Checkbox::new(caption, raw.get_untracked().parse().unwrap_or(*b)).disabled(!editable),
         )
@@ -510,14 +492,18 @@ pub(crate) fn property(
         .on_cx({
             let commit = commit.clone();
             move |_, e: &ToggleChanged, cx| {
-                raw.set(e.checked.to_string());
-                cx.dispatch_program_all(commit(e.checked.to_string()));
+                let s = e.checked.to_string();
+                raw.set(s.clone());
+                cx.dispatch_program_all(buffer_msg(session, &form_key, &s, &initial));
+                cx.dispatch_program_all(commit(s));
             }
         })
         .into_any()
-    } else if let Some((initial, whole)) = scrub {
+    } else if let Some((initial_num, whole)) = scrub {
         let commit = commit.clone();
-        let mut field = ScrubField::new(initial)
+        let form_key = form_key.clone();
+        let initial = original.clone();
+        let mut field = ScrubField::new(initial_num)
             .range(-1.0e6, 1.0e6)
             .step(if whole { 1.0 } else { 0.1 })
             .precision(if whole { 0 } else { 2 })
@@ -533,6 +519,7 @@ pub(crate) fn property(
                     format!("{}", (e.value * 100.).round() / 100.)
                 };
                 raw.set(value.clone());
+                cx.dispatch_program_all(buffer_msg(session, &form_key, &value, &initial));
                 cx.dispatch_program_all(commit(value));
             })
             .into_any()
@@ -546,13 +533,19 @@ pub(crate) fn property(
             l.min_width = Some(LengthSpec::Px(0.));
         }
         let (enter, leave) = (typed.clone(), typed.clone());
+        let form_key = form_key.clone();
+        let initial = original.clone();
         super::views::on_blur(
             widget(input)
                 .key(key)
                 .bind(move |a: &mut nana_ui::runtime::TextInput| {
                     super::views::sync_text(&mut a.state, raw.get())
                 })
-                .on(move |e: &TextChanged| raw.set(e.value.to_string()))
+                .on_cx(move |_, e: &TextChanged, cx| {
+                    let s = e.value.to_string();
+                    raw.set(s.clone());
+                    cx.dispatch_program_all(buffer_msg(session, &form_key, &s, &initial));
+                })
                 .on_cx(move |_, _: &nana_ui::runtime::TextSubmitted, cx| {
                     if let Some(msg) = enter() {
                         cx.dispatch_program_all(msg);
@@ -565,6 +558,8 @@ pub(crate) fn property(
         .as_str()
         .and_then(|s| s.parse::<nanatype_model::Rgba8>().ok())
         .map(|c| {
+            let form_key = form_key.clone();
+            let initial = original.clone();
             widget(
                 ColorField::new([
                     c.r as f32 / 255.,
@@ -589,6 +584,7 @@ pub(crate) fn property(
                     let c = e.value.map(|x| (x.clamp(0., 1.) * 255.).round() as u8);
                     let hex = nanatype_model::Rgba8::rgba(c[0], c[1], c[2], c[3]).to_hex();
                     raw.set(hex.clone());
+                    cx.dispatch_program_all(buffer_msg(session, &form_key, &hex, &initial));
                     cx.dispatch_program_all(commit(
                         serde_json::to_string(&hex).unwrap_or_default(),
                     ));
@@ -603,7 +599,7 @@ pub(crate) fn property(
     let reset_f = file.to_owned();
     let reset_p = path.to_vec();
     let present = editor::value_at(local, path).is_some();
-    let parameters = ui.package_editor.with_untracked(|v| {
+    let parameters = ui.proj().package_editor.with_untracked(|v| {
         v.as_ref()
             .and_then(|v| v.report.skin.as_ref())
             .map(|s| s.params.keys().cloned().collect::<Vec<_>>())
@@ -617,13 +613,8 @@ pub(crate) fn property(
                 "params" | "param_groups" | "presets" | "param_checks" | "meta"
             )
         });
-    let binding_id = bindable.then(|| {
-        buffer(
-            ui,
-            format!("properties.{file}:{path:?}.binding"),
-            String::new(),
-        )
-    });
+    let binding_key = format!("properties.{file}:{path:?}.binding");
+    let binding_id = bindable.then(|| buffer(ui, &binding_key, String::new()));
     let linking = signal(false);
     let label = widget(
         Stack::row(0.)
@@ -684,6 +675,7 @@ pub(crate) fn property(
         let bind_path = path.to_vec();
         let file = file.to_owned();
         let path = path.to_vec();
+        let binding_key = binding_key.clone();
         dynamic(
             move || linking.get() || id.with(|v| !v.is_empty()),
             move |shown| {
@@ -692,6 +684,7 @@ pub(crate) fn property(
                 }
                 let bind_file = bind_file.clone();
                 let bind_path = bind_path.clone();
+                let binding_key = binding_key.clone();
                 widget(
                     Stack::row(0.)
                         .wrap(true)
@@ -718,7 +711,16 @@ pub(crate) fn property(
                         s.value =
                             id.with(|v| (!v.is_empty()).then(|| Arc::<str>::from(v.as_str())));
                     })
-                    .on(move |e: &SelectChanged| id.set(e.value.to_string())),
+                    .on_cx(move |_, e: &SelectChanged, cx| {
+                        let s = e.value.to_string();
+                        id.set(s.clone());
+                        cx.dispatch_program_all(buffer_msg(
+                            session,
+                            &binding_key,
+                            &s,
+                            &String::new(),
+                        ));
+                    }),
                     widget(button(ui, "pkgedit-bind"))
                         .key(format!("editor-property-bind:{file}:{}", path.join(".")))
                         .bind(move |b: &mut Button| {

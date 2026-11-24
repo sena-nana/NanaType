@@ -143,10 +143,11 @@ fn slot(
 
 /// The events and what plays on each.
 pub fn center(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     scroll(
         dynamic(
             move || {
-                ui.package_editor.with(|v| {
+                proj.package_editor.with(|v| {
                     v.as_ref().map(|v| {
                         (
                             v.revision,
@@ -487,9 +488,10 @@ fn effects(
 
 /// The selected file: its player, and the events that name it.
 pub fn inspector(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     let body = dynamic(
         move || {
-            ui.package_editor.with(|v| {
+            proj.package_editor.with(|v| {
                 v.as_ref()
                     .map(|v| (v.selected.clone(), Arc::as_ptr(&v.report) as usize))
             })

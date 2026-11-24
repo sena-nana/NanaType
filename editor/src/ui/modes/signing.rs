@@ -15,9 +15,10 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 pub fn view(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     dynamic(
         move || {
-            ui.package_editor.with(|v| {
+            proj.package_editor.with(|v| {
                 v.as_ref().map(|v| {
                     (
                         format!("{:?}", v.seal),
@@ -55,7 +56,7 @@ pub fn view(ui: Ui) -> AnyView {
                 (errors > 0).then(|| {
                     widget(button(ui, "pkgedit-problems").kind(ButtonKind::Ghost))
                         .key("package-editor-publish-problems")
-                        .on(move |_: &Activate| ui.drawer.set(Drawer::Problems))
+                        .on(move |_: &Activate| proj.drawer.set(Drawer::Problems))
                 }),
             );
             // 2. The seal as it stands, and this computer's key.
@@ -127,13 +128,13 @@ pub fn view(ui: Ui) -> AnyView {
                         widget(Checkbox::new(path.clone(), manifest).disabled(manifest))
                             .key(node_key("package-editor-protect", path))
                             .bind(move |c: &mut Checkbox| {
-                                let on = manifest || ui.protect.with(|p| p.contains(&bound));
+                                let on = manifest || proj.protect.with(|p| p.contains(&bound));
                                 if c.checked != on {
                                     c.checked = on;
                                 }
                             })
                             .on(move |e: &ToggleChanged| {
-                                ui.protect.update(|p| {
+                                proj.protect.update(|p| {
                                     if e.checked {
                                         p.insert(toggled.clone());
                                     } else {
@@ -151,10 +152,10 @@ pub fn view(ui: Ui) -> AnyView {
                         kit::hint_mark(ui.now_t("pkgedit-protect")),
                         widget(tool(ti::CHECKS, ui.now_t("pkgedit-protect-all")))
                             .key("package-editor-protect-all")
-                            .on(move |_: &Activate| ui.protect.set(every.clone())),
+                            .on(move |_: &Activate| proj.protect.set(every.clone())),
                         widget(tool(ti::SQUARE, ui.now_t("pkgedit-protect-none")))
                             .key("package-editor-protect-none")
-                            .on(move |_: &Activate| ui.protect.set(BTreeSet::new())),
+                            .on(move |_: &Activate| proj.protect.set(BTreeSet::new())),
                     ),
                     (
                         widget(Stack::column(0.).gap_step(gap::step::HAIR)).children(boxes),
@@ -164,7 +165,7 @@ pub fn view(ui: Ui) -> AnyView {
                                 .bind(move |b: &mut Button| b.disabled = !can_sign)
                                 .on_cx(send(move || {
                                     // Only files that are still there.
-                                    Action::Sign(ui.protect.with_untracked(|p| {
+                                    Action::Sign(proj.protect.with_untracked(|p| {
                                         p.intersection(&all).cloned().collect()
                                     }))
                                 })),

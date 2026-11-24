@@ -18,8 +18,15 @@ const START_W: f32 = 300.0;
 
 pub fn editor_window(ui: Ui, toasts: EntityRef<ToastStack>) -> impl IntoView {
     let body = dynamic(
-        move || (ui.package_editor.with(Option::is_some), ui.locale.get()),
-        move |(editing, _)| {
+        move || {
+            let proj = ui.project.get();
+            (
+                proj.id,
+                proj.package_editor.with(Option::is_some),
+                ui.locale.get(),
+            )
+        },
+        move |(_, editing, _)| {
             if *editing {
                 return super::views::editor(ui);
             }
@@ -113,7 +120,8 @@ fn data_dir(ui: Ui) -> AnyView {
                     "editor-data-dir",
                     &[(
                         "path",
-                        ui.data_dir
+                        ui.global
+                            .data_dir
                             .with_untracked(|d| d.display().to_string())
                             .into(),
                     )],
@@ -126,7 +134,7 @@ fn data_dir(ui: Ui) -> AnyView {
                 .size(ControlSize::Small),
         )
         .on_cx(move |_, _: &Activate, cx| {
-            cx.dispatch_program_all(Msg::OpenFolder(ui.data_dir.get_untracked()));
+            cx.dispatch_program_all(Msg::OpenFolder(ui.global.data_dir.get_untracked()));
         }),
     ))
     .into_any()
@@ -135,7 +143,7 @@ fn data_dir(ui: Ui) -> AnyView {
 /// NanaType's installed packages, each to edit (user packages) or copy.
 fn installed(ui: Ui) -> AnyView {
     let rows = dynamic(
-        move || ui.packages.get(),
+        move || ui.global.packages.get(),
         move |rows| {
             if rows.is_empty() {
                 return super::kit::empty_state(

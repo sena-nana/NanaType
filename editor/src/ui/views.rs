@@ -5,7 +5,7 @@ use crate::session::{Action, EditorView};
 use crate::ui::Ui;
 use crate::ui::controls::{confirm, hint, label};
 use crate::ui::kit::{self, Type, gap};
-use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, watch_effect, widget};
+use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, widget};
 use nana_ui::runtime::{
     Activate, Button, Select, SelectChanged, SelectOption, Stack, Text, TextChanged, ViewContext,
 };
@@ -58,38 +58,33 @@ pub(crate) fn sync_text(state: &mut nana_ui::runtime::TextInputState, value: Str
     }
 }
 
-/// A form value belongs to the session, including invalid text and hidden panels.
+/// Initialize a form draft signal from the session's persisted `forms` map.
 pub(crate) fn buffer<T>(ui: Ui, key: impl Into<String>, initial: T) -> Signal<T>
 where
-    T: Clone + PartialEq + serde::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static,
+    T: Clone + serde::de::DeserializeOwned + Send + Sync + 'static,
 {
     let key = key.into();
-    let view = view_of(ui);
-    let session = view.as_ref().map_or(0, |v| v.session);
-    let restored = view
+    let restored = view_of(ui)
         .and_then(|v| v.forms.get(&key).cloned())
         .and_then(|v| serde_json::from_value(v).ok())
-        .unwrap_or_else(|| initial.clone());
-    let value = signal(restored.clone());
-    let mut previous = restored;
-    watch_effect(move || {
-        let current = value.get();
-        if current != previous {
-            previous = current.clone();
-            if let Some(post) = ui.post.get_untracked() {
-                post(Action::Buffer {
-                    session,
-                    key: key.clone(),
-                    value: if current == initial {
-                        None
-                    } else {
-                        serde_json::to_value(current).ok()
-                    },
-                });
-            }
-        }
-    });
-    value
+        .unwrap_or(initial);
+    signal(restored)
+}
+
+/// Build an explicit `Action::Buffer` message for a user form edit.
+pub(crate) fn buffer_msg<T>(session: u64, key: &str, value: &T, initial: &T) -> Msg
+where
+    T: PartialEq + serde::Serialize,
+{
+    Msg::PackageEditor(Action::Buffer {
+        session,
+        key: key.to_owned(),
+        value: if value == initial {
+            None
+        } else {
+            serde_json::to_value(value).ok()
+        },
+    })
 }
 
 /// `YYYY-MM-DD HH:MM` in local time.
@@ -159,7 +154,7 @@ pub(crate) fn kind_key(kind: ProjectKind) -> &'static str {
 }
 
 pub(crate) fn view_of(ui: Ui) -> Option<Arc<EditorView>> {
-    ui.package_editor.get_untracked()
+    ui.proj().package_editor.get_untracked()
 }
 
 // ---- launcher ----------------------------------------------------------------
@@ -279,7 +274,7 @@ pub fn launcher(ui: Ui) -> AnyView {
                 "editor-open-directory",
             )),
             dynamic(
-                move || ui.recoveries.get(),
+                move || ui.global.recoveries.get(),
                 move |rows| {
                     widget(Stack::column(0.).gap_step(gap::step::CONTROL))
                         .key("editor-recoveries")
@@ -325,7 +320,7 @@ pub fn launcher(ui: Ui) -> AnyView {
 /// Saved drafts, each to open or discard.
 pub fn drafts(ui: Ui) -> AnyView {
     dynamic(
-        move || ui.package_drafts.get(),
+        move || ui.global.package_drafts.get(),
         move |drafts| {
             if drafts.is_empty() {
                 return hint(ui.now_t("pkgedit-drafts-none"));

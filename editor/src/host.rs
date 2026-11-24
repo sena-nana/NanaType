@@ -66,6 +66,37 @@ impl Host {
         }
     }
 
+    /// Snapshot only `(TextSelection, scroll_offset)` on tab/selection/mode switch,
+    /// avoiding cloning the full `TextArea` on every input event.
+    fn snapshot_source_cursor(&self) {
+        let proj = self.app.ui.proj();
+        let Some(doc) = &self.doc else {
+            return;
+        };
+        let Some(id) = proj.source_node.get_untracked() else {
+            return;
+        };
+        let Some(entity) = doc.context().view_entity::<nana_ui::runtime::TextArea>(id) else {
+            return;
+        };
+        let Ok(cursor) = doc
+            .context()
+            .read(entity, |area| (area.state.selection, area.scroll_offset))
+        else {
+            return;
+        };
+        if let Some(path) = proj
+            .package_editor
+            .with_untracked(|v| v.as_ref().and_then(|v| v.selected.clone()))
+        {
+            proj.source_cursors.with_untracked(|m| {
+                if let Ok(mut map) = m.lock() {
+                    map.insert(path, cursor);
+                }
+            });
+        }
+    }
+
     /// A toast that times out or is closed comes back as [`Msg::ToastDismissed`].
     fn show_toasts(&mut self) {
         let requests = std::mem::take(&mut self.app.toasts);
@@ -90,6 +121,7 @@ impl Host {
         use crate::shortcuts::Command;
         use crate::ui::{Drawer, shell};
         let ui = self.app.ui;
+        let proj = ui.proj();
         match command {
             Command::Save | Command::Export => {
                 // Leaving the field writes what was typed in it; the save
@@ -104,34 +136,41 @@ impl Host {
                     Action::Export
                 }));
             }
-            Command::Undo => self.app.update(Msg::PackageEditor(Action::Undo)),
-            Command::Redo => self.app.update(Msg::PackageEditor(Action::Redo)),
+            Command::Undo => {
+                self.snapshot_source_cursor();
+                self.app.update(Msg::PackageEditor(Action::Undo));
+            }
+            Command::Redo => {
+                self.snapshot_source_cursor();
+                self.app.update(Msg::PackageEditor(Action::Redo));
+            }
             Command::Find => {
                 let mode = shell::current(ui);
                 let source = matches!(mode, Mode::Files | Mode::Lua)
-                    || mode == Mode::Design && ui.split_source.get_untracked();
+                    || mode == Mode::Design && proj.split_source.get_untracked();
                 if !source {
-                    ui.mode.set(Mode::Files);
+                    self.snapshot_source_cursor();
+                    proj.mode.set(Mode::Files);
                 }
-                ui.find_open.set(true);
+                proj.find_open.set(true);
                 self.focus_search = true;
             }
             Command::Dismiss => {
-                ui.find_open.set_if_changed(false);
+                proj.find_open.set_if_changed(false);
             }
             Command::Workspace(mode) => {
-                let open = ui
+                let open = proj
                     .package_editor
                     .with_untracked(|v| v.as_ref().is_some_and(|v| mode.available(v)));
-                if open
-                    && shell::current(ui) != mode
-                    && let Some(msg) = shell::select_mode(ui, mode)
-                {
-                    self.app.update(msg);
+                if open && shell::current(ui) != mode {
+                    self.snapshot_source_cursor();
+                    if let Some(msg) = shell::select_mode(ui, mode) {
+                        self.app.update(msg);
+                    }
                 }
             }
-            Command::ToggleSide => ui.side_open.update(|open| *open = !*open),
-            Command::ToggleProblems => ui.drawer.update(|d| {
+            Command::ToggleSide => proj.side_open.update(|open| *open = !*open),
+            Command::ToggleProblems => proj.drawer.update(|d| {
                 *d = if *d == Drawer::Problems {
                     Drawer::Closed
                 } else {
@@ -140,7 +179,7 @@ impl Host {
             }),
             Command::Close => self.app.update(Msg::PackageEditor(Action::Close)),
             Command::DebugStart | Command::DebugStop => {
-                let lua = ui
+                let lua = proj
                     .package_editor
                     .with_untracked(|v| v.as_ref().is_some_and(|v| Mode::Lua.available(v)));
                 if lua {
@@ -164,7 +203,7 @@ impl Host {
         let Some(doc) = &mut self.doc else {
             return;
         };
-        let Some(target) = self.app.ui.search_field.get_untracked() else {
+        let Some(target) = self.app.ui.proj().search_field.get_untracked() else {
             return;
         };
         self.focus_search = false;
@@ -233,6 +272,21 @@ impl RuntimeProgram for Host {
     }
 
     fn update(&mut self, message: Msg, _: &RuntimeProgramContext<Msg>) -> RuntimeProgramUpdate {
+        if matches!(
+            &message,
+            Msg::PackageEditor(
+                Action::Select(_)
+                    | Action::Reveal(_)
+                    | Action::Audition(_)
+                    | Action::Format
+                    | Action::ReplaceText { .. }
+                    | Action::Undo
+                    | Action::Redo
+                    | Action::Revert
+            )
+        ) {
+            self.snapshot_source_cursor();
+        }
         match message {
             Msg::ToastDismissed(toast) => {
                 if let (Some(stack), Some(doc)) = (self.toasts, self.doc.as_mut()) {
@@ -304,8 +358,9 @@ impl RuntimeProgram for Host {
             WindowEvent::FocusChanged { focused: false, .. }
             | WindowEvent::VisibilityChanged { hidden: true, .. } => {
                 self.canvas_drag = None;
-                self.app.ui.canvas_preview.set(None);
-                self.app.ui.canvas_focus.set(false);
+                let proj = self.app.ui.proj();
+                proj.canvas_preview.set(None);
+                proj.canvas_focus.set(false);
             }
             WindowEvent::CloseRequested { .. } => {
                 self.app.update(Msg::PackageEditor(Action::Exit));
@@ -350,9 +405,10 @@ impl RuntimeProgram for Host {
         context: &RuntimeProgramContext<Msg>,
     ) -> Result<RuntimeProgramUpdate, FrameworkError> {
         let ui = self.app.ui;
+        let proj = ui.proj();
         if let nana_ui_platform::InputPayload::Key(key) = &input.event.payload
             && !input.disposition.prevent_default
-            && ui.package_editor.with_untracked(Option::is_some)
+            && proj.package_editor.with_untracked(Option::is_some)
         {
             let typing = self
                 .doc
@@ -362,17 +418,6 @@ impl RuntimeProgram for Host {
                 self.run(command, context)?;
             }
         }
-        if let Some(doc) = &self.doc
-            && let Some(id) = ui.source_node.get_untracked()
-            && let Some(entity) = doc.context().view_entity::<nana_ui::runtime::TextArea>(id)
-            && let Ok(area) = doc.context().read(entity, Clone::clone)
-            && let Some(view) = ui.package_editor.get_untracked()
-            && let Some(path) = &view.selected
-        {
-            ui.source_views.update(|m| {
-                m.insert(path.clone(), area);
-            });
-        }
         if let Some(doc) = &self.doc {
             crate::ui::shell::sync_widths(ui, doc.context());
         }
@@ -380,8 +425,8 @@ impl RuntimeProgram for Host {
         {
             self.app.update(Msg::PackageEditor(action));
         }
-        if matches!(&input.event.payload,nana_ui_platform::InputPayload::Pointer(p) if p.phase==nana_ui_platform::PointerPhase::Down)
-            && ui.canvas_focus.get_untracked()
+        if matches!(&input.event.payload, nana_ui_platform::InputPayload::Pointer(p) if p.phase == nana_ui_platform::PointerPhase::Down)
+            && proj.canvas_focus.get_untracked()
             && let Some(doc) = &mut self.doc
         {
             let id = doc.document();
@@ -401,14 +446,13 @@ impl RuntimeProgram for Host {
     ) -> RuntimeProgramUpdate {
         nanatype_frame::ui::collect_effect_garbage();
         self.focus_search_field();
-        if self.app.ui.canvas_enabled.get_untracked()
+        let proj = self.app.ui.proj();
+        if proj.canvas_enabled.get_untracked()
             && let Some(doc) = &self.doc
         {
-            let parts = nanatype_frame::ui::editor_geometry::collect(
-                self.app.ui.preview_host,
-                doc.context(),
-            );
-            self.app.ui.canvas_geometry.set_if_changed(parts);
+            let parts =
+                nanatype_frame::ui::editor_geometry::collect(proj.preview_host, doc.context());
+            proj.canvas_geometry.set_if_changed(parts);
         }
         self.finish()
     }
@@ -417,7 +461,7 @@ impl RuntimeProgram for Host {
         if self.previewing {
             FrameDemand::Continuous(NonZeroU32::new(30).expect("non-zero"))
         } else if let Some(at) = crate::ui::preview::playback_deadline(
-            self.app.ui.preview_host,
+            self.app.ui.proj().preview_host,
             nanatype_frame::clock::now_ms(),
         )
         .into_iter()
@@ -434,10 +478,10 @@ impl RuntimeProgram for Host {
         self.app.maintenance();
         let now = nanatype_frame::clock::now_ms();
         nanatype_frame::clock::begin_frame(now);
-        let ui = self.app.ui.preview_host;
-        crate::ui::preview::tick_history_playback(ui, now);
-        crate::ui::preview::tick_sample_playback(ui, now);
-        self.previewing = crate::ui::preview::animating(self.app.ui.preview_host, now);
+        let preview_host = self.app.ui.proj().preview_host;
+        crate::ui::preview::tick_history_playback(preview_host, now);
+        crate::ui::preview::tick_sample_playback(preview_host, now);
+        self.previewing = crate::ui::preview::animating(preview_host, now);
         if self.previewing {
             self.app.ui.now.set_if_changed(now);
         }

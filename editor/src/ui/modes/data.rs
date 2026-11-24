@@ -10,7 +10,7 @@ use crate::ui::rows;
 use crate::ui::shell::{panel_header, scroll, tool};
 use crate::ui::views::*;
 use crate::ui::{DataTarget, Ui};
-use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, widget};
+use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, widget};
 use nana_ui::runtime::{
     Activate, Button, Select, SelectChanged, SelectOption, Stack, Text, TextChanged,
 };
@@ -24,7 +24,7 @@ const FORMATS: [DataFormat; 3] = [DataFormat::Text, DataFormat::Json, DataFormat
 
 /// What the page is rebuilt for.
 fn revision(ui: Ui) -> Option<(u64, usize, usize)> {
-    ui.package_editor.with(|v| {
+    ui.proj().package_editor.with(|v| {
         v.as_ref().map(|v| {
             (
                 v.revision,
@@ -55,9 +55,8 @@ fn entry(
     detail: String,
     broken: bool,
 ) -> AnyView {
-    let selected = ui
-        .data_target
-        .with_untracked(|t| t.as_ref() == Some(&target));
+    let data_target = ui.proj().data_target;
+    let selected = data_target.with_untracked(|t| t.as_ref() == Some(&target));
     widget({
         let mut button = Button::new(format!("{name}  ·  {detail}"))
             .accessible_name(name)
@@ -81,21 +80,23 @@ fn entry(
         button
     })
     .key(key)
-    .on(move |_: &Activate| ui.data_target.set(Some(target.clone())))
+    .on(move |_: &Activate| data_target.set(Some(target.clone())))
     .into_any()
 }
 
 fn add(ui: Ui, label: &str, key: &'static str, target: DataTarget) -> AnyView {
+    let data_target = ui.proj().data_target;
     widget(tool(ti::PLUS, ui.now_t(label)))
         .key(key)
-        .on(move |_: &Activate| ui.data_target.set(Some(target.clone())))
+        .on(move |_: &Activate| data_target.set(Some(target.clone())))
         .into_any()
 }
 
 /// The declared data and pipelines, each group with its add tool.
 pub fn side(ui: Ui) -> AnyView {
+    let data_target = ui.proj().data_target;
     let list = dynamic(
-        move || (revision(ui), ui.data_target.get()),
+        move || (revision(ui), data_target.get()),
         move |_| {
             let Some(view) = view_of(ui) else {
                 return widget(Stack::column(0.)).into_any();
@@ -195,31 +196,14 @@ pub fn side(ui: Ui) -> AnyView {
 
 /// The selected entry's form.
 pub fn center(ui: Ui) -> AnyView {
+    let data_target = ui.proj().data_target;
     scroll(
         dynamic(
-            move || (revision(ui), ui.data_target.get()),
+            move || (revision(ui), data_target.get()),
             move |(_, target)| {
                 let Some(view) = view_of(ui) else {
                     return widget(Stack::column(0.)).into_any();
                 };
-                let declared = |t: &DataTarget| match t {
-                    DataTarget::Data(Some(id)) => view.data.contains_key(id),
-                    DataTarget::Pipeline(Some(name)) => {
-                        view.pipelines.iter().any(|(n, _)| n == name)
-                    }
-                    _ => true,
-                };
-                // An entry renamed away: go where it went.
-                if let Some(at) = target
-                    && !declared(at)
-                    && let Some((from, to)) = ui.data_follow.get_untracked()
-                    && from == *at
-                    && declared(&to)
-                {
-                    ui.data_follow.set(None);
-                    ui.data_target.set(Some(to));
-                    return widget(Stack::column(0.)).into_any();
-                }
                 match target {
                     Some(DataTarget::Data(previous))
                         if previous
@@ -248,6 +232,7 @@ pub fn center(ui: Ui) -> AnyView {
 
 /// The form's title: what is edited, and Remove for a declared entry.
 fn heading(ui: Ui, title: String, remove: Option<Action>) -> AnyView {
+    let data_target = ui.proj().data_target;
     widget(
         Stack::row(0.)
             .gap_step(gap::step::CONTROL)
@@ -275,7 +260,7 @@ fn heading(ui: Ui, title: String, remove: Option<Action>) -> AnyView {
                         .into_any()
                 },
                 move || {
-                    ui.data_target.set(None);
+                    data_target.set(None);
                     match action.lock().ok().and_then(|mut a| a.take()) {
                         Some(action) => Msg::PackageEditor(action),
                         None => Msg::LayoutMaterialsReady,
@@ -300,58 +285,65 @@ fn create(ui: Ui, key: &'static str, apply: Apply) -> AnyView {
     )
 }
 
-/// A multi-line value written when focus leaves it.
-fn area(
+struct AreaForm<'a> {
     key: &'static str,
+    session: u64,
+    form_key: String,
+    initial: String,
     label: String,
     value: Signal<String>,
-    placeholder: &str,
+    placeholder: &'a str,
     editable: bool,
     apply: Apply,
-) -> AnyView {
+}
+
+/// A multi-line value written when focus leaves it.
+fn area(form: AreaForm<'_>) -> AnyView {
     on_blur(
         widget(
-            kit::text_area(value.get_untracked())
-                .read_only(!editable)
-                .label(label)
-                .placeholder(placeholder.to_owned())
+            kit::text_area(form.value.get_untracked())
+                .read_only(!form.editable)
+                .label(form.label)
+                .placeholder(form.placeholder.to_owned())
                 .height(FORM_TEXT_H),
         )
-        .key(key)
-        .on(move |e: &TextChanged| value.set(e.value.to_string())),
-        move || apply(),
+        .key(form.key)
+        .on_cx(move |_, e: &TextChanged, cx| {
+            let s = e.value.to_string();
+            form.value.set(s.clone());
+            cx.dispatch_program_all(buffer_msg(form.session, &form.form_key, &s, &form.initial));
+        }),
+        move || (form.apply)(),
     )
 }
 
 fn data_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView {
     let editable = form_editable(ui, PACKAGE_MANIFEST);
+    let session = view.session;
     let scope = format!("data.{}.", previous.as_deref().unwrap_or("@new"));
     let current = previous.as_ref().and_then(|id| view.data.get(id)).cloned();
-    let text = |name: &str, initial: String| buffer(ui, format!("{scope}{name}"), initial);
     let spec = current.clone();
     let field = |f: fn(&DataSpec) -> String| spec.as_ref().map(f).unwrap_or_default();
-    let id = text("id", previous.clone().unwrap_or_default());
-    let path = text("path", field(|c| c.path.clone()));
-    let format = buffer(
-        ui,
-        format!("{scope}format"),
-        current.as_ref().map_or(DataFormat::Text, |c| c.format),
-    );
-    let version = text(
-        "version",
-        current.as_ref().map_or(1, |c| c.format_version).to_string(),
-    );
-    let source = text("source", field(|c| c.source.clone()));
-    let license = text("license", field(|c| c.license.clone()));
-    let constraints = text(
-        "constraints",
-        current
-            .as_ref()
-            .and_then(|c| c.constraints.as_ref())
-            .and_then(|c| serde_json::to_string(c).ok())
-            .unwrap_or_default(),
-    );
-    let sent = signal(None::<(String, DataSpec)>);
+    let id_init = previous.clone().unwrap_or_default();
+    let path_init = field(|c| c.path.clone());
+    let format_init = current.as_ref().map_or(DataFormat::Text, |c| c.format);
+    let version_init = current.as_ref().map_or(1, |c| c.format_version).to_string();
+    let source_init = field(|c| c.source.clone());
+    let license_init = field(|c| c.license.clone());
+    let constraints_init = current
+        .as_ref()
+        .and_then(|c| c.constraints.as_ref())
+        .and_then(|c| serde_json::to_string(c).ok())
+        .unwrap_or_default();
+
+    let id = buffer(ui, format!("{scope}id"), id_init.clone());
+    let path = buffer(ui, format!("{scope}path"), path_init.clone());
+    let format = buffer(ui, format!("{scope}format"), format_init);
+    let version = buffer(ui, format!("{scope}version"), version_init.clone());
+    let source = buffer(ui, format!("{scope}source"), source_init.clone());
+    let license = buffer(ui, format!("{scope}license"), license_init.clone());
+    let constraints = buffer(ui, format!("{scope}constraints"), constraints_init.clone());
+
     let declared = previous.clone().zip(current.clone());
     let new = previous.is_none();
     let write: Apply = {
@@ -384,18 +376,8 @@ fn data_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView {
                     constraints: parsed,
                 },
             );
-            if declared.as_ref() == Some(&next)
-                || sent.with_untracked(|s| s.as_ref() == Some(&next))
-            {
+            if declared.as_ref() == Some(&next) {
                 return None;
-            }
-            sent.set(Some(next.clone()));
-            if let Some(from) = &previous {
-                // The form follows the entry through a rename, once it is written.
-                ui.data_follow.set(Some((
-                    DataTarget::Data(Some(from.clone())),
-                    DataTarget::Data(Some(next.0.clone())),
-                )));
             }
             Some(Msg::PackageEditor(Action::ApplyData {
                 previous: previous.clone(),
@@ -409,11 +391,14 @@ fn data_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView {
     } else {
         write.clone()
     };
-    let row = |key: &str, value: Signal<String>, placeholder: &str| {
+    let row = |key: &str, name: &str, initial: String, value: Signal<String>, placeholder: &str| {
         rows::row(
             ui.now_t(key),
             text_field(
                 format!("package-editor-field:{key}"),
+                session,
+                format!("{scope}{name}"),
+                initial,
                 ui.now_t(key),
                 value,
                 placeholder,
@@ -429,6 +414,7 @@ fn data_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView {
         )
     });
     let problem = previous.as_ref().and_then(|id| data_problem(view, id));
+    let format_key = format!("{scope}format");
     rows::form(
         "package-editor-data-form",
         (
@@ -457,8 +443,14 @@ fn data_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView {
                 ui.now_t("pkgedit-data"),
                 (),
                 (
-                    row("pkgedit-data-id", id, "notes"),
-                    row("pkgedit-data-path", path, "data/notes.txt"),
+                    row("pkgedit-data-id", "id", id_init, id, "notes"),
+                    row(
+                        "pkgedit-data-path",
+                        "path",
+                        path_init,
+                        path,
+                        "data/notes.txt",
+                    ),
                     bytes.map(|b| rows::fact(ui.now_t("pkgedit-file-size"), b)),
                     rows::row(
                         ui.now_t("pkgedit-data-format"),
@@ -480,6 +472,12 @@ fn data_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView {
                                 if let Some(f) = FORMATS.into_iter().find(|f| f.name() == &*e.value)
                                 {
                                     format.set(f);
+                                    cx.dispatch_program_all(buffer_msg(
+                                        session,
+                                        &format_key,
+                                        &f,
+                                        &format_init,
+                                    ));
                                     if let Some(msg) = apply() {
                                         cx.dispatch_program_all(msg);
                                     }
@@ -487,22 +485,37 @@ fn data_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView {
                             }
                         }),
                     ),
-                    row("pkgedit-data-version", version, "1"),
-                    row("package-data-source", source, ""),
-                    row("package-data-license", license, "CC0-1.0"),
+                    row(
+                        "pkgedit-data-version",
+                        "version",
+                        version_init,
+                        version,
+                        "1",
+                    ),
+                    row("package-data-source", "source", source_init, source, ""),
+                    row(
+                        "package-data-license",
+                        "license",
+                        license_init,
+                        license,
+                        "CC0-1.0",
+                    ),
                 ),
             ),
             rows::group(
                 ui.now_t("pkgedit-data-constraints"),
                 kit::hint_mark(ui.now_t("pkgedit-data-constraints-hint")),
-                area(
-                    "package-editor-data-constraints",
-                    ui.now_t("pkgedit-data-constraints"),
-                    constraints,
-                    "{\"type\": \"object\", \"required\": [\"items\"]}",
+                area(AreaForm {
+                    key: "package-editor-data-constraints",
+                    session,
+                    form_key: format!("{scope}constraints"),
+                    initial: constraints_init,
+                    label: ui.now_t("pkgedit-data-constraints"),
+                    value: constraints,
+                    placeholder: "{\"type\": \"object\", \"required\": [\"items\"]}",
                     editable,
-                    apply.clone(),
-                ),
+                    apply: apply.clone(),
+                }),
             ),
             (new && editable).then(|| create(ui, "package-editor-data-apply", write)),
         ),
@@ -542,6 +555,7 @@ fn processor_key(name: &str, version: u32) -> String {
 
 fn pipeline_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView {
     let editable = form_editable(ui, MANIFEST);
+    let session = view.session;
     let scope = format!("pipeline.{}.", previous.as_deref().unwrap_or("@new"));
     let declared = previous
         .as_ref()
@@ -564,46 +578,36 @@ fn pipeline_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView
     }
     let current = declared.and_then(Result::ok);
     let first = &nanatype_theme::PROCESSORS[0];
-    let name = buffer(
-        ui,
-        format!("{scope}name"),
-        previous.clone().unwrap_or_default(),
+    let name_init = previous.clone().unwrap_or_default();
+    let processor_init = current.as_ref().map_or_else(
+        || (first.name.to_owned(), first.version),
+        |c| (c.processor.clone(), c.version),
     );
-    let processor = buffer(
-        ui,
-        format!("{scope}processor"),
-        current.as_ref().map_or_else(
-            || (first.name.to_owned(), first.version),
-            |c| (c.processor.clone(), c.version),
-        ),
-    );
-    let inputs = buffer(
-        ui,
-        format!("{scope}inputs"),
-        current
-            .as_ref()
-            .map(|c| {
-                c.inputs
-                    .iter()
-                    .map(|(k, v)| (k.clone(), port_text(v)))
-                    .collect::<BTreeMap<_, _>>()
-            })
-            .unwrap_or_default(),
-    );
-    let params = buffer(
-        ui,
-        format!("{scope}params"),
-        current
-            .as_ref()
-            .map(|c| {
-                c.params
-                    .iter()
-                    .map(|(k, v)| format!("{k} = {v}"))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            })
-            .unwrap_or_default(),
-    );
+    let inputs_init = current
+        .as_ref()
+        .map(|c| {
+            c.inputs
+                .iter()
+                .map(|(k, v)| (k.clone(), port_text(v)))
+                .collect::<BTreeMap<_, _>>()
+        })
+        .unwrap_or_default();
+    let params_init = current
+        .as_ref()
+        .map(|c| {
+            c.params
+                .iter()
+                .map(|(k, v)| format!("{k} = {v}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_default();
+
+    let name = buffer(ui, format!("{scope}name"), name_init.clone());
+    let processor = buffer(ui, format!("{scope}processor"), processor_init.clone());
+    let inputs = buffer(ui, format!("{scope}inputs"), inputs_init.clone());
+    let params = buffer(ui, format!("{scope}params"), params_init.clone());
+
     let mut processors = nanatype_theme::PROCESSORS
         .iter()
         .map(|p| {
@@ -619,7 +623,6 @@ fn pipeline_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView
         // An unregistered processor stays visible so the form shows the truth.
         processors.push(SelectOption::new(selected.clone(), selected.clone()));
     }
-    let sent = signal(None::<(String, PipelineSpec)>);
     let before = previous.clone().zip(current.clone());
     let new = previous.is_none();
     let write: Apply = {
@@ -660,16 +663,8 @@ fn pipeline_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView
                     params: parsed,
                 },
             );
-            if before.as_ref() == Some(&next) || sent.with_untracked(|s| s.as_ref() == Some(&next))
-            {
+            if before.as_ref() == Some(&next) {
                 return None;
-            }
-            sent.set(Some(next.clone()));
-            if let Some(from) = &previous {
-                ui.data_follow.set(Some((
-                    DataTarget::Pipeline(Some(from.clone())),
-                    DataTarget::Pipeline(Some(next.0.clone())),
-                )));
             }
             Some(Msg::PackageEditor(Action::ApplyPipeline {
                 previous: previous.clone(),
@@ -683,10 +678,12 @@ fn pipeline_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView
         write.clone()
     };
     let port_apply = apply.clone();
+    let inputs_key = format!("{scope}inputs");
+    let processor_key_str = format!("{scope}processor");
     let ports = dynamic(move || processor.get(), {
         let apply = port_apply;
-        move |(name, version): &(String, u32)| {
-            let Some(signature) = nanatype_theme::processor(name, *version) else {
+        move |(proc_name, proc_version): &(String, u32)| {
+            let Some(signature) = nanatype_theme::processor(proc_name, *proc_version) else {
                 return hint(ui.now_t("pkgedit-pipeline-unknown"));
             };
             let fields = signature
@@ -698,6 +695,8 @@ fn pipeline_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView
                         inputs.with_untracked(|m| m.get(&input).cloned().unwrap_or_default());
                     let (enter, leave) = (apply.clone(), apply.clone());
                     let port = input.clone();
+                    let inputs_key = inputs_key.clone();
+                    let inputs_init = inputs_init.clone();
                     rows::row(
                         input.clone(),
                         on_blur(
@@ -712,10 +711,17 @@ fn pipeline_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView
                                 field
                             })
                             .key(format!("package-editor-pipeline-input:{input}"))
-                            .on(move |e: &TextChanged| {
+                            .on_cx(move |_, e: &TextChanged, cx| {
                                 inputs.update(|m| {
                                     m.insert(port.clone(), e.value.to_string());
-                                })
+                                });
+                                let next_map = inputs.get_untracked();
+                                cx.dispatch_program_all(buffer_msg(
+                                    session,
+                                    &inputs_key,
+                                    &next_map,
+                                    &inputs_init,
+                                ));
                             })
                             .on_cx(
                                 move |_, _: &nana_ui::runtime::TextSubmitted, cx| {
@@ -771,6 +777,9 @@ fn pipeline_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView
                         ui.now_t("pkgedit-pipeline-name"),
                         text_field(
                             "package-editor-field:pkgedit-pipeline-name".into(),
+                            session,
+                            format!("{scope}name"),
+                            name_init,
                             ui.now_t("pkgedit-pipeline-name"),
                             name,
                             "stroke_map",
@@ -793,7 +802,14 @@ fn pipeline_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView
                                 if let Some((n, v)) = e.value.rsplit_once('@')
                                     && let Ok(v) = v.parse()
                                 {
-                                    processor.set((n.to_owned(), v));
+                                    let next_proc = (n.to_owned(), v);
+                                    processor.set(next_proc.clone());
+                                    cx.dispatch_program_all(buffer_msg(
+                                        session,
+                                        &processor_key_str,
+                                        &next_proc,
+                                        &processor_init,
+                                    ));
                                     if let Some(msg) = apply() {
                                         cx.dispatch_program_all(msg);
                                     }
@@ -811,14 +827,17 @@ fn pipeline_form(ui: Ui, view: &EditorView, previous: Option<String>) -> AnyView
             rows::group(
                 ui.now_t("pkgedit-pipeline-params-title"),
                 kit::hint_mark(ui.now_t("pkgedit-pipeline-params")),
-                area(
-                    "package-editor-pipeline-params",
-                    ui.now_t("pkgedit-pipeline-params-title"),
-                    params,
-                    "name = 1.0",
+                area(AreaForm {
+                    key: "package-editor-pipeline-params",
+                    session,
+                    form_key: format!("{scope}params"),
+                    initial: params_init,
+                    label: ui.now_t("pkgedit-pipeline-params-title"),
+                    value: params,
+                    placeholder: "name = 1.0",
                     editable,
-                    apply.clone(),
-                ),
+                    apply: apply.clone(),
+                }),
             ),
             (new && editable).then(|| create(ui, "package-editor-pipeline-apply", write)),
         ),

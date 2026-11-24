@@ -11,16 +11,94 @@ use crate::ui::views::*;
 use nana_ui::runtime::IconButton;
 use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, watch_effect, widget};
 use nana_ui::runtime::{
-    Activate, Button, CodeEditing, ScrollAxes, ScrollView, Stack, Text, TextArea, TextChanged,
-    TextDiagnosticSeverity, TextDiagnosticSpan, TextMatchSpan, TextSelection, TextSubmitted,
-    TreeSelectionChanged, TreeView,
+    Activate, Button, CodeEditing, FocusWithinChanged, ScrollAxes, ScrollView, Stack, Text,
+    TextArea, TextChanged, TextDiagnosticSeverity, TextDiagnosticSpan, TextMatchSpan,
+    TextSelection, TextSubmitted, TreeSelectionChanged, TreeView,
 };
 use nana_ui::{ButtonKind, ControlSize, icons_tabler as ti};
 use nana_ui_core::{AlignSpec, LengthSpec, TreeNode};
 use nanatype_theme::PACKAGE_MANIFEST;
 use nanatype_theme::editor::{AssetKind, DraftOrigin, FileInfo, Level};
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+/// Cached search matches keyed by `(Arc<str> pointer, revision, query)` so
+/// search counters, step buttons, and `TextArea` bindings never re-scan
+/// unchanged text.
+#[derive(Default)]
+struct MatchCache {
+    text: Option<Arc<str>>,
+    revision: u64,
+    query: String,
+    spans: Arc<Vec<(usize, usize)>>,
+}
+
+type SharedMatchCache = Arc<Mutex<MatchCache>>;
+
+fn memo_matches(
+    cache: &SharedMatchCache,
+    text: Option<&Arc<str>>,
+    revision: u64,
+    query: &str,
+) -> Arc<Vec<(usize, usize)>> {
+    if query.is_empty() {
+        return Arc::default();
+    }
+    if let Ok(guard) = cache.lock()
+        && guard.revision == revision
+        && guard.query == query
+        && match (&guard.text, text) {
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        }
+    {
+        return guard.spans.clone();
+    }
+    let spans: Arc<Vec<(usize, usize)>> = Arc::new(
+        text.map(|t| nanatype_theme::editor::find_matches(t, query))
+            .unwrap_or_default(),
+    );
+    if let Ok(mut guard) = cache.lock() {
+        guard.text = text.cloned();
+        guard.revision = revision;
+        guard.query = query.to_owned();
+        guard.spans = spans.clone();
+    }
+    spans
+}
+
+fn format_references(ui: Ui, view: &EditorView, path: &str, with_kind: bool) -> Vec<String> {
+    view.report
+        .references
+        .iter()
+        .filter(|r| r.target == path)
+        .map(|r| {
+            if with_kind {
+                format!(
+                    "{}: {} {}",
+                    r.file,
+                    r.path.join("."),
+                    ui.now_t(if r.automatic {
+                        "pkgedit-reference-auto"
+                    } else {
+                        "pkgedit-reference-manual"
+                    })
+                )
+            } else {
+                format!("{}: {}", r.file, r.path.join("."))
+            }
+        })
+        .collect()
+}
+
+fn clamp_char_boundary(text: &str, offset: usize) -> usize {
+    let mut i = offset.min(text.len());
+    while i > 0 && !text.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
+}
 
 // ---- files -----------------------------------------------------------------
 
@@ -106,7 +184,7 @@ enum Naming {
 
 /// The folder a new file starts in: the selected file's.
 fn folder_of(ui: Ui) -> String {
-    ui.package_editor.with_untracked(|v| {
+    ui.proj().package_editor.with_untracked(|v| {
         v.as_ref()
             .and_then(|v| v.selected.as_deref())
             .and_then(|p| p.rsplit_once('/'))
@@ -120,13 +198,14 @@ fn folder_of(ui: Ui) -> String {
 /// replace and remove. New and rename ask for the path in one row, written
 /// with Enter.
 pub fn side(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     let naming = signal(None::<Naming>);
-    let target = ui.file_target;
+    let target = proj.file_target;
     let tools = dynamic(
         move || {
             (
                 removable(ui),
-                ui.package_editor.with(|v| {
+                proj.package_editor.with(|v| {
                     v.as_ref()
                         .map(|v| matches!(v.origin, DraftOrigin::Directory { .. }))
                 }),
@@ -205,27 +284,9 @@ pub fn side(ui: Ui) -> AnyView {
             let submit = mode.clone();
             // What a rename touches, before it is done.
             let references = match &mode {
-                Naming::Rename(path) => ui.package_editor.with_untracked(|v| {
-                    v.as_ref().map(|v| {
-                        v.report
-                            .references
-                            .iter()
-                            .filter(|r| r.target == *path)
-                            .map(|r| {
-                                format!(
-                                    "{}: {} {}",
-                                    r.file,
-                                    r.path.join("."),
-                                    ui.now_t(if r.automatic {
-                                        "pkgedit-reference-auto"
-                                    } else {
-                                        "pkgedit-reference-manual"
-                                    })
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                }),
+                Naming::Rename(path) => proj
+                    .package_editor
+                    .with_untracked(|v| v.as_ref().map(|v| format_references(ui, v, path, true))),
                 Naming::New => None,
             };
             widget(
@@ -313,10 +374,11 @@ pub fn side(ui: Ui) -> AnyView {
 /// The files opened in this project, as tabs: the one showing, and the
 /// others a click away.
 fn tabs(ui: Ui) -> AnyView {
-    let open: Signal<Vec<String>> = ui.open_files;
+    let proj = ui.proj();
+    let open: Signal<Vec<String>> = proj.open_files;
     // Selecting a file opens its tab; a file that is gone loses it.
     watch_effect(move || {
-        let Some((selected, files)) = ui.package_editor.with(|v| {
+        let Some((selected, files)) = proj.package_editor.with(|v| {
             v.as_ref().map(|v| {
                 (
                     v.selected.clone(),
@@ -342,7 +404,7 @@ fn tabs(ui: Ui) -> AnyView {
         move || {
             (
                 open.get(),
-                ui.package_editor
+                proj.package_editor
                     .with(|v| v.as_ref().and_then(|v| v.selected.clone())),
             )
         },
@@ -403,19 +465,26 @@ fn tabs(ui: Ui) -> AnyView {
 /// The selected file: the open tabs, its path bar, find and replace when
 /// asked for, and the source or the binary file's facts.
 pub fn center(ui: Ui) -> AnyView {
-    let search: Search = (ui.search_query, ui.search_index);
+    let proj = ui.proj();
+    let search: Search = (proj.search_query, proj.search_index);
+    let match_cache: SharedMatchCache = Arc::new(Mutex::new(MatchCache::default()));
     widget(
         Stack::fill_column(0.)
             .gap_step(gap::step::TIGHT)
             .padding_xy(gap::CONTROL, gap::TIGHT),
     )
     .key("package-editor-source-pane")
-    .children((tabs(ui), toolbar(ui, search), source(ui, search)))
+    .children((
+        tabs(ui),
+        toolbar(ui, search, match_cache.clone()),
+        source(ui, search, match_cache),
+    ))
     .into_any()
 }
 
 /// The live stage beside the source.
 pub fn preview(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     widget(Stack::fill_column(0.))
         .key("package-editor-files-preview")
         .children((
@@ -423,7 +492,7 @@ pub fn preview(ui: Ui) -> AnyView {
             crate::ui::shell::scroll(
                 dynamic(
                     move || {
-                        ui.package_editor
+                        proj.package_editor
                             .with(|v| v.as_ref().is_some_and(|v| v.report.skin.is_some()))
                     },
                     move |skin| {
@@ -442,9 +511,10 @@ pub fn preview(ui: Ui) -> AnyView {
 
 /// The files `keep` admits, as a tree; selecting one opens it.
 pub(crate) fn file_tree(ui: Ui, keep: fn(&FileInfo) -> bool, key: &'static str) -> AnyView {
+    let proj = ui.proj();
     dynamic(
         move || {
-            ui.package_editor.with(|v| {
+            proj.package_editor.with(|v| {
                 v.as_ref().map(|v| {
                     (
                         v.files
@@ -499,7 +569,7 @@ pub(crate) fn file_tree(ui: Ui, keep: fn(&FileInfo) -> bool, key: &'static str) 
 /// The selected file, when it can be removed: not a dependency, not
 /// protected, not the manifest, and the package unsigned.
 fn removable(ui: Ui) -> Option<String> {
-    ui.package_editor.with(|v| {
+    ui.proj().package_editor.with(|v| {
         v.as_ref().and_then(|v| {
             let path = v.selected.clone()?;
             let file = v.files.iter().find(|f| f.path == path)?;
@@ -519,16 +589,9 @@ fn remove_button(ui: Ui, path: String) -> AnyView {
         format!(
             "{}\n{}",
             ui.now_t("pkgedit-remove-question"),
-            ui.package_editor.with_untracked(|v| v
+            ui.proj().package_editor.with_untracked(|v| v
                 .as_ref()
-                .map(|v| v
-                    .report
-                    .references
-                    .iter()
-                    .filter(|r| r.target == path)
-                    .map(|r| format!("{}: {}", r.file, r.path.join(".")))
-                    .collect::<Vec<_>>()
-                    .join("\n"))
+                .map(|v| format_references(ui, v, &path, false).join("\n"))
                 .unwrap_or_default())
         ),
         ui.now_t("pkgedit-remove"),
@@ -542,15 +605,11 @@ fn remove_button(ui: Ui, path: String) -> AnyView {
     )
 }
 
-/// Byte ranges of every case-insensitive (ASCII) match of `needle`.
-fn matches(text: &str, needle: &str) -> Vec<(usize, usize)> {
-    nanatype_theme::editor::find_matches(text, needle)
-}
-
-fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
+fn toolbar(ui: Ui, (query, current): Search, match_cache: SharedMatchCache) -> AnyView {
+    let proj = ui.proj();
     let path_line = dynamic(
         move || {
-            ui.package_editor.with(|v| {
+            proj.package_editor.with(|v| {
                 v.as_ref().map(|v| {
                     let ext = v
                         .files
@@ -602,27 +661,39 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
                         hinted(ui.now_t("pkgedit-search"), "Mod+F"),
                     ))
                     .key("package-editor-find")
-                    .bind(move |b: &mut IconButton| b.selected = ui.find_open.get())
-                    .on(move |_: &Activate| ui.find_open.update(|o| *o = !*o))
+                    .bind(move |b: &mut IconButton| b.selected = proj.find_open.get())
+                    .on(move |_: &Activate| proj.find_open.update(|o| *o = !*o))
                 }),
             ))
             .into_any()
         },
     );
-    let count = move || {
-        ui.package_editor.with_untracked(|v| {
-            v.as_ref()
-                .and_then(|v| v.text.as_ref())
-                .map(|t| matches(t, &query.get_untracked()).len())
-                .unwrap_or(0)
-        })
+    let count = {
+        let match_cache = match_cache.clone();
+        move || {
+            proj.package_editor.with_untracked(|v| {
+                v.as_ref()
+                    .map(|v| {
+                        memo_matches(
+                            &match_cache,
+                            v.text.as_ref(),
+                            v.revision,
+                            &query.get_untracked(),
+                        )
+                        .len()
+                    })
+                    .unwrap_or(0)
+            })
+        }
     };
     let find = dynamic(
-        move || ui.find_open.get(),
+        move || proj.find_open.get(),
         move |open| {
             if !*open {
                 return widget(Stack::row(0.)).into_any();
             }
+            let match_cache_count = match_cache.clone();
+            let count = count.clone();
             widget(
                 Stack::row(0.)
                     .wrap(true)
@@ -640,7 +711,7 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
                             .size(ControlSize::Small),
                     )
                     .key("package-editor-search")
-                    .node_ref(ui.search_field)
+                    .node_ref(proj.search_field)
                     .on(move |e: &TextChanged| {
                         query.set(e.value.to_string());
                         current.set(0);
@@ -652,9 +723,17 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
                     .key("package-editor-search-count")
                     .bind(move |t: &mut Text| {
                         let q = query.get();
-                        let n = ui.package_editor.with(|v| {
+                        let n = proj.package_editor.with(|v| {
                             v.as_ref()
-                                .and_then(|v| v.text.as_ref().map(|t| matches(t, &q).len()))
+                                .map(|v| {
+                                    memo_matches(
+                                        &match_cache_count,
+                                        v.text.as_ref(),
+                                        v.revision,
+                                        &q,
+                                    )
+                                    .len()
+                                })
                                 .unwrap_or(0)
                         });
                         let value = if q.is_empty() {
@@ -681,17 +760,17 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
                 input_box(
                     field::SM,
                     widget(
-                        kit::text_input(ui.search_replacement.get_untracked())
+                        kit::text_input(proj.search_replacement.get_untracked())
                             .placeholder(ui.now_t("pkgedit-replacement"))
                             .label(ui.now_t("pkgedit-replacement"))
                             .size(ControlSize::Small),
                     )
-                    .on(move |e: &TextChanged| ui.search_replacement.set(e.value.to_string())),
+                    .on(move |e: &TextChanged| proj.search_replacement.set(e.value.to_string())),
                 ),
                 widget(button(ui, "pkgedit-replace-one").kind(ButtonKind::Ghost)).on_cx(send(
                     move || Action::ReplaceText {
                         needle: query.get_untracked(),
-                        replacement: ui.search_replacement.get_untracked(),
+                        replacement: proj.search_replacement.get_untracked(),
                         index: current.get_untracked(),
                         all: false,
                     },
@@ -699,15 +778,15 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
                 widget(button(ui, "pkgedit-replace-all").kind(ButtonKind::Ghost)).on_cx(send(
                     move || Action::ReplaceText {
                         needle: query.get_untracked(),
-                        replacement: ui.search_replacement.get_untracked(),
+                        replacement: proj.search_replacement.get_untracked(),
                         index: 0,
                         all: true,
                     },
                 )),
-                spacer_row(),
+                kit::spacer(),
                 widget(tool(ti::X, ui.now_t("pkgedit-drawer-close")))
                     .key("package-editor-find-close")
-                    .on(move |_: &Activate| ui.find_open.set(false)),
+                    .on(move |_: &Activate| proj.find_open.set(false)),
             ))
             .into_any()
         },
@@ -717,16 +796,6 @@ fn toolbar(ui: Ui, (query, current): Search) -> AnyView {
         .into_any()
 }
 
-fn spacer_row() -> AnyView {
-    widget(
-        Stack::row(0.)
-            .grow(1.)
-            .shrink(1.)
-            .min_width(LengthSpec::Px(0.)),
-    )
-    .into_any()
-}
-
 fn severity(level: Level) -> TextDiagnosticSeverity {
     match level {
         Level::Error => TextDiagnosticSeverity::Error,
@@ -734,10 +803,11 @@ fn severity(level: Level) -> TextDiagnosticSeverity {
     }
 }
 
-fn source(ui: Ui, (query, current): Search) -> AnyView {
+fn source(ui: Ui, (query, current): Search, match_cache: SharedMatchCache) -> AnyView {
+    let proj = ui.proj();
     dynamic(
         move || {
-            ui.package_editor.with(|v| {
+            proj.package_editor.with(|v| {
                 v.as_ref()
                     .map(|v| (v.selected.clone(), v.editable, v.revision, v.text.is_some()))
             })
@@ -754,11 +824,15 @@ fn source(ui: Ui, (query, current): Search) -> AnyView {
                 .line_numbers(true)
                 .read_only(!editable)
                 .label(path.clone());
-            if let Some(saved) = ui.source_views.with_untracked(|m| m.get(&path).cloned()) {
-                if saved.state.value.as_str() == text.as_ref() {
-                    area.state = saved.state;
-                }
-                area.scroll_offset = saved.scroll_offset;
+            if let Some((selection, scroll_offset)) = proj
+                .source_cursors
+                .with_untracked(|m| m.lock().ok().and_then(|map| map.get(&path).copied()))
+            {
+                area.state.selection = TextSelection::new(
+                    clamp_char_boundary(&text, selection.anchor),
+                    clamp_char_boundary(&text, selection.focus),
+                );
+                area.scroll_offset = scroll_offset;
             }
             let ext = view
                 .files
@@ -787,17 +861,19 @@ fn source(ui: Ui, (query, current): Search) -> AnyView {
                 area.state.selection = TextSelection::new(start, end);
             }
             let edit_path = path.clone();
+            let blur_path = path.clone();
             let span_path = path.clone();
             let applied_jump = std::cell::Cell::new(view.jump.map(|j| j.0));
             // The search step last moved to; typing must not move the caret.
             let applied_search = std::cell::RefCell::new((String::new(), 0usize));
+            let match_cache = match_cache.clone();
             widget(area)
-                .node_ref(ui.source_node)
+                .node_ref(proj.source_node)
                 .key(node_key("package-editor-source", &path))
                 .bind(move |a: &mut TextArea| {
-                    let (diagnostics, jump, text) = ui.package_editor.with(|v| {
+                    let (diagnostics, jump, text, rev) = proj.package_editor.with(|v| {
                         let Some(v) = v.as_ref() else {
-                            return (Vec::new(), None, None);
+                            return (Vec::new(), None, None, 0);
                         };
                         let spans = v
                             .syntax
@@ -813,7 +889,7 @@ fn source(ui: Ui, (query, current): Search) -> AnyView {
                                     .with_message(d.message.clone())
                             })
                             .collect::<Vec<_>>();
-                        (spans, v.jump, v.text.clone())
+                        (spans, v.jump, v.text.clone(), v.revision)
                     });
                     if *a.diagnostics != *diagnostics {
                         a.diagnostics = diagnostics.into();
@@ -826,15 +902,12 @@ fn source(ui: Ui, (query, current): Search) -> AnyView {
                     }
                     let query = query.get();
                     let step = current.get();
-                    let found = text
-                        .as_deref()
-                        .map(|t| matches(t, &query))
-                        .unwrap_or_default();
+                    let found = memo_matches(&match_cache, text.as_ref(), rev, &query);
                     let current = step % found.len().max(1);
                     let spans = found
-                        .into_iter()
+                        .iter()
                         .enumerate()
-                        .map(|(i, (offset, length))| TextMatchSpan {
+                        .map(|(i, &(offset, length))| TextMatchSpan {
                             offset,
                             length,
                             current: i == current,
@@ -851,7 +924,27 @@ fn source(ui: Ui, (query, current): Search) -> AnyView {
                         a.match_spans = spans.into();
                     }
                 })
-                .on_cx(move |_, e: &TextChanged, cx| {
+                .on_cx(move |area: &mut TextArea, e: &FocusWithinChanged, _| {
+                    if !e.focused {
+                        proj.source_cursors.with_untracked(|m| {
+                            if let Ok(mut map) = m.lock() {
+                                map.insert(
+                                    blur_path.clone(),
+                                    (area.state.selection, area.scroll_offset),
+                                );
+                            }
+                        });
+                    }
+                })
+                .on_cx(move |area: &mut TextArea, e: &TextChanged, cx| {
+                    proj.source_cursors.with_untracked(|m| {
+                        if let Ok(mut map) = m.lock() {
+                            map.insert(
+                                edit_path.clone(),
+                                (area.state.selection, area.scroll_offset),
+                            );
+                        }
+                    });
                     cx.dispatch_program_all(Msg::PackageEditor(Action::Edit {
                         path: edit_path.clone(),
                         text: e.value.to_string(),

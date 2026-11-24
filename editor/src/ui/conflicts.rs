@@ -8,9 +8,10 @@ fn small(label: String) -> Button {
 }
 
 pub fn view(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     dynamic(
         move || {
-            ui.package_editor
+            proj.package_editor
                 .with(|v| v.as_ref().map(|v| v.conflicts.clone()).unwrap_or_default())
         },
         move |conflicts| {

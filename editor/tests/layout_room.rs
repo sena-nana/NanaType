@@ -32,8 +32,8 @@ fn the_chrome_fits_the_window() {
                     Arc::new(Default::default()),
                     locale,
                 );
-                ui.package_editor.set(Some(view.clone()));
-                ui.mode.set(mode);
+                ui.proj().package_editor.set(Some(view.clone()));
+                ui.proj().mode.set(mode);
                 let mut agent = common::session().themed(false).mount(w, h, move || {
                     ui::window::editor_window(ui, nana_ui::runtime::view::entity_ref())
                 });

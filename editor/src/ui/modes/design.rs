@@ -203,13 +203,14 @@ fn layers(ui: Ui, table: &TomlTable, selected: &[String]) -> Vec<TreeNode<Arc<st
 /// Select a layer: the inspector follows, the canvas selects the part it
 /// draws, and a split source scrolls to its table.
 pub fn select(ui: Ui, path: Vec<String>) -> Option<Msg> {
-    ui.properties_file.set(MANIFEST.into());
-    ui.properties_path.set(path.clone());
-    ui.canvas_selection.set(part_of(&path));
-    if !ui.split_source.get_untracked() {
+    let proj = ui.proj();
+    proj.properties_file.set(MANIFEST.into());
+    proj.properties_path.set(path.clone());
+    proj.canvas_selection.set(part_of(&path));
+    if !proj.split_source.get_untracked() {
         return None;
     }
-    let text = ui
+    let text = proj
         .package_editor
         .with_untracked(|v| v.as_ref().and_then(|v| v.documents.get(MANIFEST).cloned()))?;
     let (start, _) = properties::table_range(&text, &path)?;
@@ -229,25 +230,26 @@ pub fn select(ui: Ui, path: Vec<String>) -> Option<Msg> {
 
 /// Decoration operations on the selected part, or adding one.
 fn decor_tools(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     let op = move |icon, label: &str, operation: &'static str, needs: bool| {
         widget(tool(icon, ui.now_t(label)))
             .key(format!("editor-layer-{operation}"))
             .bind(move |b: &mut IconButton| {
                 b.disabled = needs
-                    && !ui
+                    && !proj
                         .canvas_selection
                         .with(|s| s.as_ref().is_some_and(|s| s.starts_with("decor.")))
             })
             .on_cx(move |_, _: &Activate, cx| {
                 let element = if needs {
-                    ui.canvas_selection.get_untracked().unwrap_or_default()
+                    proj.canvas_selection.get_untracked().unwrap_or_default()
                 } else {
                     String::new()
                 };
                 cx.dispatch_program_all(Msg::PackageEditor(Action::CanvasList {
                     element,
                     operation: operation.into(),
-                    target: ui.canvas_target.get_untracked(),
+                    target: proj.canvas_target.get_untracked(),
                 }))
             })
             .into_any()
@@ -268,11 +270,12 @@ fn decor_tools(ui: Ui) -> AnyView {
 }
 
 pub fn side(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     let tree = dynamic(
         move || {
             (
-                ui.properties_path.get(),
-                ui.package_editor.with(|v| {
+                proj.properties_path.get(),
+                proj.package_editor.with(|v| {
                     v.as_ref().map(|v| {
                         (
                             v.documents.get(MANIFEST).cloned(),
@@ -283,7 +286,7 @@ pub fn side(ui: Ui) -> AnyView {
             )
         },
         move |(selected, _)| {
-            let Some(view) = ui.package_editor.get_untracked() else {
+            let Some(view) = proj.package_editor.get_untracked() else {
                 return widget(Stack::column(0.)).into_any();
             };
             let table = match properties::effective(&view, MANIFEST) {
@@ -339,6 +342,7 @@ pub fn side(ui: Ui) -> AnyView {
 /// The stage on the neutral canvas under its strip: everything about how
 /// the skin is looked at, in one place.
 fn canvas(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     let strip = widget(
         Toolbar::new()
             .chrome(false)
@@ -390,7 +394,7 @@ fn canvas(ui: Ui) -> AnyView {
         )
         .children(dynamic(
             move || {
-                ui.package_editor
+                proj.package_editor
                     .with(|v| v.as_ref().is_some_and(|v| v.report.skin.is_some()))
             },
             move |skin| {
@@ -408,18 +412,21 @@ fn canvas(ui: Ui) -> AnyView {
 }
 
 pub fn center(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     // A part picked on the canvas selects its layer.
     watch_effect(move || {
-        if let Some(path) = ui.canvas_selection.get().as_deref().and_then(path_of)
-            && !ui.properties_path.with_untracked(|p| p.starts_with(&path))
+        if let Some(path) = proj.canvas_selection.get().as_deref().and_then(path_of)
+            && !proj
+                .properties_path
+                .with_untracked(|p| p.starts_with(&path))
         {
-            ui.properties_file.set(MANIFEST.into());
-            ui.properties_path.set(path);
+            proj.properties_file.set(MANIFEST.into());
+            proj.properties_path.set(path);
         }
     });
     let split = node_ref();
     dynamic(
-        move || ui.split_source.get(),
+        move || proj.split_source.get(),
         move |split_source| {
             if !*split_source {
                 return canvas(ui);

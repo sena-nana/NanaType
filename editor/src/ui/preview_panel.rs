@@ -3,8 +3,8 @@
 //! stage itself, drawn through the skin renderer on a private [`Stage`].
 //!
 //! [`Stage`]: super::Stage
-use super::{Ui, controls::hint, kit, preview};
-use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, watch_effect, widget};
+use super::{ProjectUi, Ui, controls::hint, kit, preview};
+use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
 use nana_ui::runtime::{
     Activate, Checkbox, Popover, PopoverClosed, PopoverToggled, Select, SelectChanged,
     SelectOption, Stack, TextChanged, ToggleChanged,
@@ -50,6 +50,7 @@ fn bound_select(
 
 /// Display, history or input box.
 pub fn surface(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     let surfaces = [
         preview::Surface::Display,
         preview::Surface::History,
@@ -65,7 +66,7 @@ pub fn surface(ui: Ui) -> AnyView {
         move || {
             surfaces
                 .iter()
-                .position(|s| *s == ui.package_editor_surface.get())
+                .position(|s| *s == proj.package_editor_surface.get())
                 .unwrap_or(0)
                 .to_string()
         },
@@ -73,7 +74,7 @@ pub fn surface(ui: Ui) -> AnyView {
             if let Ok(i) = value.parse::<usize>()
                 && let Some(s) = surfaces.get(i)
             {
-                ui.package_editor_surface.set(*s);
+                proj.package_editor_surface.set(*s);
             }
         },
     )
@@ -81,6 +82,7 @@ pub fn surface(ui: Ui) -> AnyView {
 
 /// Landscape, portrait, narrow, the skin's own size, or what was typed.
 pub fn size_preset(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     let mut options = PRESETS
         .iter()
         .map(|(key, [w, h])| SelectOption::new(*key, format!("{} {w}×{h}", ui.now_t(key))))
@@ -94,7 +96,7 @@ pub fn size_preset(ui: Ui) -> AnyView {
         "editor-preview-preset",
         options,
         move || {
-            let size = ui.preview_size.get();
+            let size = proj.preview_size.get();
             if size.iter().all(|v| v.trim().is_empty()) {
                 return "default".into();
             }
@@ -106,9 +108,9 @@ pub fn size_preset(ui: Ui) -> AnyView {
         },
         move |value| {
             if value == "default" {
-                ui.preview_size.set(Default::default());
+                proj.preview_size.set(Default::default());
             } else if let Some((_, [w, h])) = PRESETS.iter().find(|(k, _)| *k == value) {
-                ui.preview_size.set([(*w).into(), (*h).into()]);
+                proj.preview_size.set([(*w).into(), (*h).into()]);
             }
         },
     )
@@ -116,6 +118,7 @@ pub fn size_preset(ui: Ui) -> AnyView {
 
 /// The stage's logical width and height.
 fn dimensions(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     widget(
         Stack::row(0.)
             .gap_step(kit::gap::step::TIGHT)
@@ -127,7 +130,7 @@ fn dimensions(ui: Ui) -> AnyView {
                 widget(Stack::row(0.).width(LengthSpec::Px(DIMENSION_W)))
                     .children(
                         widget(
-                            kit::text_input(ui.preview_size.get_untracked()[i].clone())
+                            kit::text_input(proj.preview_size.get_untracked()[i].clone())
                                 .placeholder(ui.now_t(if i == 0 {
                                     "pkgedit-width"
                                 } else {
@@ -137,13 +140,14 @@ fn dimensions(ui: Ui) -> AnyView {
                         )
                         .key(format!("editor-preview-dimension-{i}"))
                         .bind(move |input: &mut nana_ui::runtime::TextInput| {
-                            let value = ui.preview_size.get()[i].clone();
+                            let value = proj.preview_size.get()[i].clone();
                             if input.state.value.as_str() != value {
                                 input.state = nana_ui::runtime::TextInputState::new(value);
                             }
                         })
                         .on(move |e: &TextChanged| {
-                            ui.preview_size.update(|size| size[i] = e.value.to_string())
+                            proj.preview_size
+                                .update(|size| size[i] = e.value.to_string())
                         }),
                     )
                     .into_any()
@@ -155,6 +159,7 @@ fn dimensions(ui: Ui) -> AnyView {
 
 /// Static, playing, reduced motion, or without advanced effects.
 pub fn motion(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     bound_select(
         "editor-preview-mode",
         [
@@ -167,10 +172,10 @@ pub fn motion(ui: Ui) -> AnyView {
         .enumerate()
         .map(|(i, k)| SelectOption::new(i.to_string(), ui.now_t(k)))
         .collect(),
-        move || ui.preview_mode.get().to_string(),
+        move || proj.preview_mode.get().to_string(),
         move |value| {
             if let Ok(mode) = value.parse() {
-                ui.preview_mode.set(mode);
+                proj.preview_mode.set(mode);
             }
         },
     )
@@ -178,12 +183,13 @@ pub fn motion(ui: Ui) -> AnyView {
 
 /// Play the entrance again.
 pub fn replay(ui: Ui) -> AnyView {
-    let host = ui.preview_host;
+    let proj = ui.proj();
+    let host = proj.preview_host;
     widget(super::shell::tool(ti::REFRESH, ui.now_t("pkgedit-replay")))
         .key("editor-preview-replay")
         .on(move |_: &Activate| {
-            ui.preview_mode.set(0);
-            ui.preview_mode.set(1);
+            proj.preview_mode.set(0);
+            proj.preview_mode.set(1);
             host.preview_playback.set((0, 0));
             host.shader_preview.set(false);
             host.shader_preview.set(true);
@@ -193,6 +199,7 @@ pub fn replay(ui: Ui) -> AnyView {
 
 /// Fit the stage, or a fixed zoom.
 pub fn zoom(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     bound_select(
         "editor-preview-zoom",
         [
@@ -204,18 +211,22 @@ pub fn zoom(ui: Ui) -> AnyView {
         .map(|(v, k)| SelectOption::new(v, if v == "fit" { ui.now_t(k) } else { k.into() }))
         .to_vec(),
         move || {
-            ui.preview_viewport
+            proj.preview_viewport
                 .get()
                 .zoom
                 .map(|z| z.to_string())
                 .unwrap_or_else(|| "fit".into())
         },
-        move |value| ui.preview_viewport.update(|v| v.zoom = value.parse().ok()),
+        move |value| {
+            proj.preview_viewport
+                .update(|v| v.zoom = value.parse().ok())
+        },
     )
 }
 
 /// Checkerboard, white or dark behind the skin.
 fn background(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     bound_select(
         "editor-preview-background",
         ["pkgedit-checker", "pkgedit-white", "pkgedit-dark"]
@@ -223,9 +234,9 @@ fn background(ui: Ui) -> AnyView {
             .enumerate()
             .map(|(i, k)| SelectOption::new(i.to_string(), ui.now_t(k)))
             .collect(),
-        move || ui.preview_viewport.get().background.to_string(),
+        move || proj.preview_viewport.get().background.to_string(),
         move |value| {
-            ui.preview_viewport
+            proj.preview_viewport
                 .update(|v| v.background = value.parse().unwrap_or(0))
         },
     )
@@ -234,8 +245,9 @@ fn background(ui: Ui) -> AnyView {
 /// Less-used stage options behind one button: a typed size, what is behind
 /// the skin, the sample line and the personal NanaType settings.
 pub fn settings(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     let open = signal(false);
-    let host = ui.preview_host;
+    let host = proj.preview_host;
     widget(
         Popover::new()
             .trigger_icon(ti::ADJUSTMENTS, ui.now_t("pkgedit-stage-settings"))
@@ -259,13 +271,13 @@ pub fn settings(ui: Ui) -> AnyView {
             sample(ui),
             widget(Checkbox::new(
                 ui.now_t("pkgedit-simulate"),
-                ui.preview_simulate.get_untracked(),
+                proj.preview_simulate.get_untracked(),
             ))
             .key("editor-preview-simulate")
-            .bind(move |c: &mut Checkbox| c.checked = ui.preview_simulate.get())
+            .bind(move |c: &mut Checkbox| c.checked = proj.preview_simulate.get())
             .on(move |e: &ToggleChanged| {
                 host.skin_drafts.set(Default::default());
-                ui.preview_simulate.set(e.checked);
+                proj.preview_simulate.set(e.checked);
             }),
         )),
     )
@@ -274,6 +286,7 @@ pub fn settings(ui: Ui) -> AnyView {
 
 /// The sample speaker and text the stage shows.
 fn sample(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     widget(
         Stack::column(0.)
             .gap_step(kit::gap::step::TIGHT)
@@ -281,29 +294,30 @@ fn sample(ui: Ui) -> AnyView {
     )
     .children((
         widget(
-            kit::text_input(ui.preview_speaker.get_untracked())
+            kit::text_input(proj.preview_speaker.get_untracked())
                 .placeholder(ui.now_t("pkgedit-speaker"))
                 .size(ControlSize::Small),
         )
         .key("editor-preview-speaker")
-        .on(move |e: &TextChanged| ui.preview_speaker.set(e.value.to_string())),
-        widget(kit::text_area(ui.preview_text.get_untracked()).height(SAMPLE_H))
+        .on(move |e: &TextChanged| proj.preview_speaker.set(e.value.to_string())),
+        widget(kit::text_area(proj.preview_text.get_untracked()).height(SAMPLE_H))
             .key("editor-preview-text")
-            .on(move |e: &TextChanged| ui.preview_text.set(e.value.to_string())),
+            .on(move |e: &TextChanged| proj.preview_text.set(e.value.to_string())),
     ))
     .into_any()
 }
 
 /// The parameter test values of the draft skin, never written to it.
 pub fn params(ui: Ui) -> AnyView {
-    let host = ui.preview_host;
+    let proj = ui.proj();
+    let host = proj.preview_host;
     dynamic(
         move || {
-            ui.package_editor
+            proj.package_editor
                 .with(|v| v.as_ref().map(|v| Arc::as_ptr(&v.report) as usize))
         },
         move |_| {
-            ui.package_editor
+            proj.package_editor
                 .get_untracked()
                 .and_then(|v| v.report.skin.clone())
                 .and_then(|skin| {
@@ -316,8 +330,9 @@ pub fn params(ui: Ui) -> AnyView {
 }
 
 fn size_error(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     dynamic(
-        move || ui.preview_size.get(),
+        move || proj.preview_size.get(),
         move |size| {
             if size.iter().enumerate().any(|(i, v)| {
                 !v.trim().is_empty()
@@ -342,6 +357,7 @@ fn size_error(ui: Ui) -> AnyView {
 
 /// Shown while the stage draws an older skin than the source.
 pub fn stale(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     widget(
         nana_ui::runtime::Button::new(ui.now_t("pkgedit-preview-stale"))
             .icon(ti::CLOCK_PAUSE)
@@ -350,30 +366,97 @@ pub fn stale(ui: Ui) -> AnyView {
     )
     .key("editor-preview-stale")
     .visible(move || {
-        ui.package_editor
+        proj.package_editor
             .with(|v| v.as_ref().is_some_and(|v| v.preview_stale))
     })
     .into_any()
 }
 
+/// Synchronize editor preview options onto the isolated `preview_host` `Stage`
+/// before building `stage_view_options`, eliminating reactive `watch_effect` ping-pong.
+fn sync_preview_host(ui: Ui, proj: ProjectUi, base: &nanatype_theme::Skin) {
+    let host = proj.preview_host;
+    let mut settings = if proj.preview_simulate.get_untracked() {
+        (*ui.settings.get_untracked()).clone()
+    } else {
+        nanatype_settings::Settings::default()
+    };
+    let mode = proj.preview_mode.get_untracked();
+    settings.skin.motion = mode == 1;
+    settings.skin.advanced_effects = mode != 3;
+    let mut draft =
+        preview::Draft::load(&settings, &base.meta.id, host, Some(base.dialogue.overscan));
+    if let Some(current) = host
+        .skin_drafts
+        .with_untracked(|m| m.get(&base.meta.id).cloned())
+    {
+        draft.params = current.params;
+    }
+    let size = proj.preview_size.get_untracked();
+    for pane in [&mut draft.display, &mut draft.history] {
+        pane.width = size[0].clone();
+        pane.height = size[1].clone();
+    }
+    if draft.profile(base).is_err() {
+        let previous = host
+            .skin_drafts
+            .with_untracked(|m| m.get(&base.meta.id).cloned());
+        for pane in [&mut draft.display, &mut draft.history] {
+            pane.width = previous
+                .as_ref()
+                .map(|d| d.display.width.clone())
+                .unwrap_or_default();
+            pane.height = previous
+                .as_ref()
+                .map(|d| d.display.height.clone())
+                .unwrap_or_default();
+        }
+    }
+    let text = proj.preview_text.get_untracked();
+    draft.display.text = text.clone();
+    draft.history.text = text;
+    host.preview_name
+        .set_if_changed(proj.preview_speaker.get_untracked());
+    host.reduced_motion
+        .set_if_changed(mode == 2 || ui.reduced_motion.get_untracked());
+    host.shader_preview.set_if_changed(mode == 1);
+    host.settings.set(Arc::new(settings));
+    if host
+        .skin_drafts
+        .with_untracked(|m| m.get(&base.meta.id) != Some(&draft))
+    {
+        host.skin_drafts.update(|m| {
+            m.insert(base.meta.id.clone(), draft);
+        });
+    }
+}
+
 /// The draft skin on its private stage, `width` wide.
 pub fn stage(ui: Ui) -> AnyView {
+    let proj = ui.proj();
     let width = signal(560_f32);
-    let host = ui.preview_host;
+    let host = proj.preview_host;
     let prepared = signal(None::<(usize, nanatype_i18n::Locale, Arc<preview::StageAssets>)>);
     let stage = dynamic(
         move || {
             (
-                ui.canvas_preview
+                proj.canvas_preview
                     .with(|s| s.as_ref().map(|s| Arc::as_ptr(s) as usize)),
-                ui.package_editor
+                proj.package_editor
                     .with(|v| v.as_ref().map(|v| Arc::as_ptr(&v.report) as usize)),
-                ui.package_editor_surface.get(),
+                proj.package_editor_surface.get(),
                 ui.locale.get(),
+                proj.preview_simulate.get(),
+                ui.settings.with(|s| Arc::as_ptr(s) as usize),
+                proj.preview_mode.get(),
+                proj.preview_size.get(),
+                proj.preview_text.get(),
+                proj.preview_speaker.get(),
+                ui.reduced_motion.get(),
             )
         },
-        move |(_, _, surface, _)| {
-            let Some(view) = ui.package_editor.get_untracked() else {
+        move |(_, _, surface, ..)| {
+            let Some(view) = proj.package_editor.get_untracked() else {
                 return widget(Stack::column(0.)).into_any();
             };
             let (Some(skin), Some(files)) = (view.report.skin.clone(), view.report.files.clone())
@@ -395,65 +478,12 @@ pub fn stage(ui: Ui) -> AnyView {
                 prepared.set(Some((key, locale, assets.clone())));
                 assets
             });
-            let assets = ui
+            let assets = proj
                 .canvas_preview
                 .get_untracked()
                 .map(|skin| Arc::new(assets.with_dialogue(skin.dialogue.clone())))
                 .unwrap_or(assets);
-            let base = assets.base.clone();
-            watch_effect(move || {
-                let mut settings = if ui.preview_simulate.get() {
-                    (*ui.settings.get()).clone()
-                } else {
-                    nanatype_settings::Settings::default()
-                };
-                let mode = ui.preview_mode.get();
-                settings.skin.motion = mode == 1;
-                settings.skin.advanced_effects = mode != 3;
-                let mut draft = preview::Draft::load(
-                    &settings,
-                    &base.meta.id,
-                    host,
-                    Some(base.dialogue.overscan),
-                );
-                if let Some(current) = host
-                    .skin_drafts
-                    .with_untracked(|m| m.get(&base.meta.id).cloned())
-                {
-                    draft.params = current.params;
-                }
-                let size = ui.preview_size.get();
-                for pane in [&mut draft.display, &mut draft.history] {
-                    pane.width = size[0].clone();
-                    pane.height = size[1].clone();
-                }
-                if draft.profile(&base).is_err() {
-                    let previous = host
-                        .skin_drafts
-                        .with_untracked(|m| m.get(&base.meta.id).cloned());
-                    for pane in [&mut draft.display, &mut draft.history] {
-                        pane.width = previous
-                            .as_ref()
-                            .map(|d| d.display.width.clone())
-                            .unwrap_or_default();
-                        pane.height = previous
-                            .as_ref()
-                            .map(|d| d.display.height.clone())
-                            .unwrap_or_default();
-                    }
-                }
-                let text = ui.preview_text.get();
-                draft.display.text = text.clone();
-                draft.history.text = text;
-                host.preview_name.set(ui.preview_speaker.get());
-                host.reduced_motion
-                    .set(mode == 2 || ui.reduced_motion.get());
-                host.shader_preview.set(mode == 1);
-                host.settings.set(Arc::new(settings));
-                host.skin_drafts.update(|m| {
-                    m.insert(base.meta.id.clone(), draft);
-                });
-            });
+            sync_preview_host(ui, proj, &assets.base);
             preview::stage_view_options(
                 host,
                 assets,
@@ -461,7 +491,7 @@ pub fn stage(ui: Ui) -> AnyView {
                 *surface,
                 width,
                 "skin-preview-box",
-                Some(ui.preview_viewport),
+                Some(proj.preview_viewport),
             )
         },
     );
