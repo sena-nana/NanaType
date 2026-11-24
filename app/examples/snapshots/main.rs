@@ -44,8 +44,10 @@ use nana_ui::runtime::{DocumentId, RuntimeDocument};
 use nana_ui_devtools::agent::{AgentSession, RuntimeAgentSession};
 use nanatype::assets::AssetLibrary;
 use nanatype::chat::{ChatKind, ChatMessage};
+use nanatype::output::OutputStatuses;
 use nanatype::ui::{
-    LinkState, Status, StickerRow, Ui, danmaku, dialogue, history, input, link_text, settings,
+    BliveFeedKind, BliveFeedState, ChatSourceUi, LinkState, LinkStatus, StickerRow, Ui, danmaku,
+    dialogue, history, input, link_text, settings,
 };
 use nanatype_blive::chat::Guard;
 use nanatype_bridge::{BridgeStatus, Sink};

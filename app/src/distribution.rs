@@ -1,6 +1,5 @@
 //! What this build ships. Steam updates through SteamPipe while the regular
 //! build uses the GitHub Releases updater.
-use nanatype_settings::{BliveRoomKind, BlivechatSettings};
 
 /// Built for Steam: Workshop content, no self-update.
 pub const STEAM: bool = cfg!(feature = "steam");
@@ -13,8 +12,3 @@ pub const LICENSE_TEXT: &str = concat!(
     "\n",
     include_str!("../../LICENSE-MIT")
 );
-
-/// How blivechat joins a room.
-pub fn blive_room_kind(settings: &BlivechatSettings) -> BliveRoomKind {
-    settings.room_kind
-}

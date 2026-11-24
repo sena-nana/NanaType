@@ -69,7 +69,7 @@ pub(super) fn vts_map_row(ui: Ui, key: String, options: Vec<SelectOption>) -> Ro
 pub(super) fn vts_mapping(ui: Ui) -> Row {
     let authorized = move || {
         ui.settings.with(|s| s.integrations.vts.token.is_some())
-            && ui.status.with(|s| s.vts != LinkState::NeedsAuth)
+            && ui.links.with(|s| s.vts != LinkState::NeedsAuth)
     };
     let header = widget(
         Stack::bar(0.0)
@@ -99,7 +99,7 @@ pub(super) fn vts_mapping(ui: Ui) -> Row {
             widget(Stack::row(0.0))
                 .visible(move || {
                     !authorized()
-                        && (ui.status.with(|s| !s.vts_hotkeys.is_empty())
+                        && (ui.links.with(|s| !s.vts_hotkeys.is_empty())
                             || ui
                                 .settings
                                 .with(|s| !s.integrations.vts.expressions.is_empty()))
@@ -115,7 +115,7 @@ pub(super) fn vts_mapping(ui: Ui) -> Row {
     ));
     let table = dynamic(
         move || {
-            let (hotkeys, connected) = ui.status.with(|s| {
+            let (hotkeys, connected) = ui.links.with(|s| {
                 (
                     s.vts_hotkeys.clone(),
                     matches!(s.vts, LinkState::Connected(_)),

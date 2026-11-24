@@ -340,9 +340,7 @@ fn seat_outputs(ui: Ui, state: &SessionUi) -> AnyView {
                     layout.overflow_x = nana_ui_core::OverflowSpec::Hidden;
                     style
                 }))),
-                crate::ui::settings::controls::link_badge_by(ui, move |s| {
-                    s.spout_partners.get(seat).cloned().unwrap_or_default()
-                }),
+                crate::ui::settings::controls::output_badge(ui, move |s| s.partner(seat)),
                 widget(
                     IconButton::new(ti::COPY, copy.clone())
                         .size(ControlSize::Small)

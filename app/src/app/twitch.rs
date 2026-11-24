@@ -2,7 +2,7 @@ use crate::ui::EditShared;
 use crate::{
     app::App,
     chat::Platform,
-    msg::{ChatMsg, Msg, TwitchMsg, WindowMsg},
+    msg::{ChatMsg, Msg, TwitchMsg},
 };
 use nanatype_core::Event as CoreEvent;
 use nanatype_model::{Document, outgoing};
@@ -61,7 +61,7 @@ impl App {
             TwitchMsg::Event(event) => self.twitch_event(event),
             TwitchMsg::Login => self.twitch_login(),
             TwitchMsg::CancelLogin => {
-                self.twitch.cancel_login();
+                self.integrations.twitch.cancel_login();
                 self.twitch_disable_send();
             }
             TwitchMsg::OpenActivation => {
@@ -72,23 +72,23 @@ impl App {
                 }
             }
             TwitchMsg::Refresh => {
-                self.twitch.refresh();
+                self.integrations.twitch.refresh();
                 self.twitch_disable_send();
             }
             TwitchMsg::Logout => {
-                self.twitch.logout();
+                self.integrations.twitch.logout();
                 self.twitch_disable_send();
                 self.ui.twitch.edit(|s| s.avatar = None);
             }
             TwitchMsg::SendToggle => self.twitch_toggle(),
             TwitchMsg::SendConfirm(accept) => self.twitch_confirm(accept),
-            TwitchMsg::Retry(line) => self.twitch.retry(line),
-            TwitchMsg::SkipFailed(line) => self.twitch.skip_failed(line),
+            TwitchMsg::Retry(line) => self.integrations.twitch.retry(line),
+            TwitchMsg::SkipFailed(line) => self.integrations.twitch.skip_failed(line),
         }
     }
 
     fn twitch_disable_send(&mut self) {
-        self.twitch.set_sending(false);
+        self.integrations.twitch.set_sending(false);
         self.ui.twitch.edit(|s| {
             s.sending = false;
             s.confirm = false;
@@ -99,13 +99,15 @@ impl App {
                 }
             }
         });
+        self.sync_draft_policy();
     }
     fn twitch_login(&mut self) {
         self.twitch_disable_send();
-        self.update(Msg::Window(WindowMsg::SettingsPlatform(
-            crate::ui::sources::PlatformTab::Twitch,
-        )));
-        self.twitch.login();
+        self.ui
+            .platform_tab
+            .set_if_changed(crate::ui::sources::PlatformTab::Twitch);
+        self.open_settings_page(crate::ui::settings::Page::Platforms);
+        self.integrations.twitch.login();
     }
     fn twitch_toggle(&mut self) {
         let state = self.ui.twitch.get_untracked();
@@ -116,9 +118,10 @@ impl App {
         if state.can_send() {
             self.ui.twitch.edit(|s| s.confirm = true);
         }
-        self.update(Msg::Window(WindowMsg::SettingsPlatform(
-            crate::ui::sources::PlatformTab::Twitch,
-        )));
+        self.ui
+            .platform_tab
+            .set_if_changed(crate::ui::sources::PlatformTab::Twitch);
+        self.open_settings_page(crate::ui::settings::Page::Platforms);
     }
     fn twitch_confirm(&mut self, accept: bool) {
         let state = self.ui.twitch.get_untracked();
@@ -126,9 +129,10 @@ impl App {
             return;
         }
         let mut state = (*state).clone();
-        let result = state.confirm_sending(self.core.draft(), accept);
-        self.twitch.set_sending(state.sending);
+        let result = state.confirm_sending(self.session.core.draft(), accept);
+        self.integrations.twitch.set_sending(state.sending);
         self.ui.twitch.set(Arc::new(state));
+        self.sync_draft_policy();
         if result.is_err() {
             self.notice(self.ui.now_t("chat-images-unavailable"), true);
         }
@@ -140,7 +144,7 @@ impl App {
         if let CoreEvent::LineSubmitted(line) = event {
             match outgoing::plain_text(&line.doc) {
                 Ok(text) => {
-                    if !self.twitch.send(line.id, text) {
+                    if !self.integrations.twitch.send(line.id, text) {
                         self.notice(self.ui.now_t("chat-queue-full"), true);
                     }
                 }
@@ -150,12 +154,12 @@ impl App {
     }
     pub(super) fn twitch_configure(&mut self) {
         let settings = &self.settings.integrations.twitch;
-        let epoch = self.twitch.epoch();
-        self.twitch.set(nanatype_twitch::Config {
+        let epoch = self.integrations.twitch.epoch();
+        self.integrations.twitch.set(nanatype_twitch::Config {
             enabled: settings.enabled,
             channel: settings.channel.clone(),
         });
-        if self.twitch.epoch() != epoch {
+        if self.integrations.twitch.epoch() != epoch {
             self.twitch_disable_send();
         }
     }
@@ -164,7 +168,7 @@ impl App {
         if let Event::Delivery(delivery) = &session.event {
             self.live_sent(&delivery.receipts);
         }
-        if session.epoch != self.twitch.epoch() {
+        if session.epoch != self.integrations.twitch.epoch() {
             return;
         }
         match session.event {
@@ -183,7 +187,7 @@ impl App {
                 }
                 if let AccountState::Ready(profile) = &account {
                     let asset = crate::services::chat_assets::cache_profile_avatar(
-                        self.paths.blobs(),
+                        self.shell.paths.blobs(),
                         &format!("twitch-{}", profile.user_id),
                         &profile.avatar,
                         {
@@ -214,7 +218,9 @@ impl App {
             }
             Event::Chat { channel, event } => {
                 crate::diag::TWITCH_LIVE.chat();
-                self.chat_assets.twitch(session.epoch, channel, event)
+                self.integrations
+                    .chat_assets
+                    .twitch(session.epoch, channel, event)
             }
             Event::Deleted { channel, id } => self.live_deleted(Platform::Twitch, &channel, &id),
             Event::Delivery(delivery) => {

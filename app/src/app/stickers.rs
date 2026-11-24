@@ -9,13 +9,13 @@ impl App {
             StickerMsg::ImportFolders(paths) => self.import_sticker_folders(paths),
             StickerMsg::Telegram(command) => {
                 if matches!(command, crate::stickers::telegram::Command::Cancel) {
-                    let _ = self.telegram.send(command);
+                    let _ = self.media.telegram.send(command);
                 } else if !self.ui.telegram.with_untracked(|s| s.busy) {
                     let mut state = (*self.ui.telegram.get_untracked()).clone();
                     state.busy = true;
                     state.error = None;
                     self.ui.telegram.set(Arc::new(state));
-                    if let Err(error) = self.telegram.send(command) {
+                    if let Err(error) = self.media.telegram.send(command) {
                         let mut state = (*self.ui.telegram.get_untracked()).clone();
                         state.busy = false;
                         state.error = Some(error);
@@ -32,13 +32,14 @@ impl App {
                 }
             },
             StickerMsg::AssetsChanged => {
-                self.sticker_manager
+                self.media
+                    .sticker_manager
                     .rebuild(&self.settings.assets.sticker_dirs);
                 self.publish_sticker_packs();
             }
             StickerMsg::Event(event) => {
                 let completed = matches!(&event, crate::stickers::Event::Done { .. });
-                if let Some(root) = self.sticker_manager.accept(event) {
+                if let Some(root) = self.media.sticker_manager.accept(event) {
                     let path = root.display().to_string();
                     if !self
                         .settings
@@ -58,22 +59,24 @@ impl App {
             }
             StickerMsg::Download(preset) => {
                 if let Some(root) = self
+                    .media
                     .sticker_manager
                     .rows
                     .iter()
                     .find(|r| r.preset == Some(preset))
                     .map(|r| r.root.clone())
                 {
-                    self.sticker_manager.start(&root, Some(preset));
+                    self.media.sticker_manager.start(&root, Some(preset));
                     self.publish_sticker_packs();
                 }
             }
             StickerMsg::Retry(root) => {
-                self.sticker_manager.start(&root, None);
+                self.media.sticker_manager.start(&root, None);
                 self.publish_sticker_packs();
             }
             StickerMsg::Repository(root) => {
                 if let Some(url) = self
+                    .media
                     .sticker_manager
                     .rows
                     .iter()
@@ -87,7 +90,7 @@ impl App {
                 }
             }
             StickerMsg::Remove(root) => {
-                self.sticker_manager.remove(&root);
+                self.media.sticker_manager.remove(&root);
                 self.edit(|s| {
                     s.assets
                         .sticker_dirs

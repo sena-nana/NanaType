@@ -1,4 +1,5 @@
 //! General's profiles and backup sections, and the import confirmation.
+use super::assets::remove_button;
 use super::*;
 use crate::msg::{BackupMsg, ProfileMsg};
 use nana_ui::runtime::{ConfirmDialog, ConfirmIntent, DialogCloseRequested};

@@ -4,6 +4,7 @@
 //! allowed to read; [`nanatype_frame::media`] makes one for pictures
 //! outside its base.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -39,6 +40,7 @@ impl Sticker {
 #[derive(Debug, Default)]
 pub struct AssetLibrary {
     pub stickers: Vec<Sticker>,
+    sticker_index: HashMap<(String, String), usize>,
     blob_dir: PathBuf,
 }
 
@@ -51,6 +53,7 @@ impl AssetLibrary {
     pub fn new(blob_dir: PathBuf) -> Self {
         Self {
             stickers: Vec::new(),
+            sticker_index: HashMap::new(),
             blob_dir,
         }
     }
@@ -69,7 +72,22 @@ impl AssetLibrary {
         }
         out.sort_by(|a, b| (&a.lib, &a.name).cmp(&(&b.lib, &b.name)));
         out.dedup_by(|a, b| a.lib == b.lib && a.name == b.name);
+        self.sticker_index = out
+            .iter()
+            .enumerate()
+            .map(|(i, s)| ((s.lib.clone(), s.name.clone()), i))
+            .collect();
         self.stickers = out;
+    }
+
+    /// Replace the active sticker list and rebuild the O(1) lookup index.
+    pub fn set_stickers(&mut self, stickers: Vec<Sticker>) {
+        self.sticker_index = stickers
+            .iter()
+            .enumerate()
+            .map(|(i, s)| ((s.lib.clone(), s.name.clone()), i))
+            .collect();
+        self.stickers = stickers;
     }
 
     pub fn resolve(&self, asset: &AssetRef, skin: Option<&LoadedSkin>) -> Option<PathBuf> {
@@ -98,9 +116,9 @@ impl AssetLibrary {
                 Some((path, Some(self.blob_dir.clone())))
             }
             AssetRef::Library { lib, name } => self
-                .stickers
-                .iter()
-                .find(|s| &s.lib == lib && &s.name == name)
+                .sticker_index
+                .get(&(lib.clone(), name.clone()))
+                .and_then(|&idx| self.stickers.get(idx))
                 .map(|s| (s.path.clone(), Some(s.root.clone()))),
             AssetRef::Skin(path) => {
                 let skin = skin?;
@@ -115,7 +133,11 @@ impl AssetLibrary {
     /// A URL NanaUI will load for `asset`, or `None` when it cannot be shown.
     pub fn url(&self, asset: &AssetRef, skin: Option<&LoadedSkin>) -> Option<String> {
         if let AssetRef::Skin(path) = asset {
-            return skin_image_urls(&*skin?.files, vec![path.clone()]).remove(&asset.to_string());
+            if !is_image(Path::new(path)) {
+                return None;
+            }
+            let bytes = skin?.files.read(path).ok()?;
+            return media::global()?.bytes_url(path, &bytes);
         }
         let (path, root) = self.locate(asset, skin)?;
         media::url(&path, root.as_deref())

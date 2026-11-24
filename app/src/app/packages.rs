@@ -9,6 +9,7 @@ impl App {
     /// still has to be reviewed before it runs. The built-in package stays on.
     fn set_package_enabled(&mut self, id: String, on: bool) {
         let Some((manifest, origin)) = self
+            .appearance
             .registry
             .packages()
             .into_iter()
@@ -31,8 +32,8 @@ impl App {
             }
             return;
         }
-        self.plugin_activation.cancel_for(&id, self.ui);
-        self.plugins.stop(&id, self.ui);
+        self.integrations.plugin_activation.cancel_for(&id, self.ui);
+        self.integrations.plugins.stop(&id, self.ui);
         self.edit(|s| {
             s.enabled_plugins.retain(|p| p != &id);
             s.plugin_approvals.remove(&id);
@@ -54,24 +55,33 @@ impl App {
     pub(super) fn package_msg(&mut self, msg: PackageMsg) {
         match msg {
             PackageMsg::RequestActivation(id) => {
-                let ticket = self.plugin_activation.request(id.clone(), self.ui);
+                let ticket = self
+                    .integrations
+                    .plugin_activation
+                    .request(id.clone(), self.ui);
                 self.review_plugin(ticket, id);
             }
-            PackageMsg::CancelActivation => self.plugin_activation.cancel(self.ui),
+            PackageMsg::CancelActivation => self.integrations.plugin_activation.cancel(self.ui),
             PackageMsg::ConfirmActivation => {
-                if let Some((ticket, reviewed)) = self.plugin_activation.confirm(self.ui) {
+                if let Some((ticket, reviewed)) =
+                    self.integrations.plugin_activation.confirm(self.ui)
+                {
                     self.review_plugin(ticket, reviewed.id.clone());
                 }
             }
             PackageMsg::ReviewReady { ticket, result } => {
-                match self.plugin_activation.complete(ticket, result, self.ui) {
+                match self
+                    .integrations
+                    .plugin_activation
+                    .complete(ticket, result, self.ui)
+                {
                     Ok(Some(current)) => {
                         let unchanged = self.settings.enabled_plugins.contains(&current.id)
                             && crate::plugins::approval_matches(
                                 &current,
                                 self.settings.plugin_approvals.get(&current.id),
                             );
-                        self.plugins.stop(&current.id, self.ui);
+                        self.integrations.plugins.stop(&current.id, self.ui);
                         self.edit(|s| {
                             if !s.enabled_plugins.contains(&current.id) {
                                 s.enabled_plugins.push(current.id.clone());
@@ -87,8 +97,8 @@ impl App {
                         });
                         // Reconfirming identical bytes must also restart a stopped or failed worker.
                         if unchanged {
-                            self.plugins.sync(
-                                &self.registry,
+                            self.integrations.plugins.sync(
+                                &self.appearance.registry,
                                 &self.settings.enabled_plugins,
                                 &self.settings.plugin_approvals,
                                 self.ctx.clone(),
@@ -100,15 +110,19 @@ impl App {
                     Err(error) => self.notice(error, true),
                 }
             }
-            PackageMsg::PluginsReviewed { ticket, reviews } => self.plugins.start_reviewed(
-                ticket,
-                reviews,
-                &self.settings.enabled_plugins,
-                &self.settings.plugin_approvals,
-                self.ctx.clone(),
-                self.ui,
-            ),
-            PackageMsg::Listed { ticket, rows } => self.plugins.listed(ticket, rows, self.ui),
+            PackageMsg::PluginsReviewed { ticket, reviews } => {
+                self.integrations.plugins.start_reviewed(
+                    ticket,
+                    reviews,
+                    &self.settings.enabled_plugins,
+                    &self.settings.plugin_approvals,
+                    self.ctx.clone(),
+                    self.ui,
+                )
+            }
+            PackageMsg::Listed { ticket, rows } => {
+                self.integrations.plugins.listed(ticket, rows, self.ui)
+            }
             PackageMsg::Installed(result) => self.package_installed(result),
             PackageMsg::Exported(result) => {
                 if let Err(e) = result {
@@ -117,8 +131,8 @@ impl App {
                 }
             }
             PackageMsg::DisablePlugin(id) => {
-                self.plugin_activation.cancel_for(&id, self.ui);
-                self.plugins.stop(&id, self.ui);
+                self.integrations.plugin_activation.cancel_for(&id, self.ui);
+                self.integrations.plugins.stop(&id, self.ui);
                 self.edit(|s| {
                     s.enabled_plugins.retain(|v| v != &id);
                     s.plugin_approvals.remove(&id);
@@ -126,21 +140,21 @@ impl App {
             }
             PackageMsg::SetEnabled(id, on) => self.set_package_enabled(id, on),
             PackageMsg::Refresh => {
-                self.plugin_activation.cancel(self.ui);
-                self.registry.rescan();
+                self.integrations.plugin_activation.cancel(self.ui);
+                self.appearance.registry.rescan();
                 self.refresh_skin_rows();
-                self.plugins = Default::default();
-                self.plugins.sync(
-                    &self.registry,
+                self.integrations.plugins = Default::default();
+                self.integrations.plugins.sync(
+                    &self.appearance.registry,
                     &self.settings.enabled_plugins,
                     &self.settings.plugin_approvals,
                     self.ctx.clone(),
                     self.ui,
                 );
             }
-            PackageMsg::Remove(id) => match self.registry.remove(&id) {
+            PackageMsg::Remove(id) => match self.appearance.registry.remove(&id) {
                 Ok(()) => {
-                    self.plugin_activation.cancel(self.ui);
+                    self.integrations.plugin_activation.cancel(self.ui);
                     self.edit(|s| {
                         s.enabled_plugins.retain(|p| p != &id);
                         s.disabled_packages.retain(|p| p != &id);
@@ -150,13 +164,15 @@ impl App {
                         }
                     });
                     self.refresh_skin_rows();
-                    self.plugins.refresh(&self.registry, &self.ctx);
+                    self.integrations
+                        .plugins
+                        .refresh(&self.appearance.registry, &self.ctx);
                 }
                 Err(error) => self.notice(error.to_string(), true),
             },
             PackageMsg::PluginPackagesChanged => {
-                let registry = self.registry.clone();
-                let ids = self.plugins.running();
+                let registry = self.appearance.registry.clone();
+                let ids = self.integrations.plugins.running();
                 crate::plugins::background("plugin-review", &self.ctx, move || {
                     Msg::Package(PackageMsg::PluginPackagesReviewed(
                         crate::plugins::review_digests(&registry, &ids),
@@ -164,13 +180,16 @@ impl App {
                 });
             }
             PackageMsg::PluginPackagesReviewed(reviewed) => {
-                self.plugins.revalidate(&reviewed, self.ui)
+                self.integrations.plugins.revalidate(&reviewed, self.ui)
             }
             PackageMsg::PluginResult {
                 id,
                 generation,
                 response,
-            } => self.plugins.receive(&id, generation, &response, self.ui),
+            } => self
+                .integrations
+                .plugins
+                .receive(&id, generation, &response, self.ui),
             PackageMsg::PluginCommand { id, command } => {
                 let allowed = self.ui.plugin_views.with_untracked(|views| {
                     views
@@ -179,18 +198,19 @@ impl App {
                 });
                 if allowed {
                     let _ = self
+                        .integrations
                         .plugins
                         .event(&id, serde_json::json!({"type":"command","id":command}));
                 }
             }
             PackageMsg::PluginInput { id, event } => {
-                let _ = self.plugins.event(&id, event);
+                let _ = self.integrations.plugins.event(&id, event);
             }
         }
     }
 
     fn review_plugin(&mut self, ticket: u64, id: String) {
-        let registry = self.registry.clone();
+        let registry = self.appearance.registry.clone();
         if let Err(error) = crate::plugins::try_background("plugin-review", &self.ctx, move || {
             Msg::Package(PackageMsg::ReviewReady {
                 ticket,

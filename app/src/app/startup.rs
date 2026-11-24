@@ -1,8 +1,9 @@
+use super::blive_feeds::BliveFeedManager;
 use super::demo_editor;
 use crate::msg::Msg;
 #[cfg(feature = "updates")]
 use crate::msg::UpdateMsg;
-use crate::msg::{BliveMsg, ChatMsg, LaplaceMsg, ObsMsg, StickerMsg, TwitchMsg, WorkshopMsg};
+use crate::msg::{ChatMsg, ObsMsg, StickerMsg, TwitchMsg, WorkshopMsg};
 use crate::paths::Paths;
 use crate::scheduler::Scheduler;
 use crate::services::chat_assets::ChatAssets;
@@ -25,9 +26,7 @@ pub(super) struct Workers {
     pub chat_assets: ChatAssets,
     pub hotkeys: Hotkeys,
     pub twitch: nanatype_twitch::TwitchHandle,
-    pub blivechat: nanatype_blive::BliveHandle,
-    pub laplace: nanatype_blive::BliveHandle,
-    pub comet: nanatype_blive::BliveHandle,
+    pub blive: BliveFeedManager,
     pub obs: nanatype_obs::ObsHandle,
     pub steam: nanatype_steam::SteamHandle,
     pub sticker_manager: crate::stickers::Manager,
@@ -60,13 +59,21 @@ impl Workers {
                 paths.config.clone(),
                 forward(&post, |e| Msg::Twitch(TwitchMsg::Event(e))),
             ),
-            blivechat: nanatype_blive::BliveHandle::new(forward(&post, |e| {
-                Msg::Blive(BliveMsg::Event(e))
-            })),
-            laplace: nanatype_blive::BliveHandle::new(forward(&post, |e| {
-                Msg::Laplace(LaplaceMsg::Event(e))
-            })),
-            comet: nanatype_blive::BliveHandle::new(forward(&post, Msg::Comet)),
+            blive: BliveFeedManager::new(
+                post.clone(),
+                super::secret::LazySecret::new(
+                    &paths.config,
+                    "blivechat-auth",
+                    &crate::diag::BLIVECHAT_SECRET_FAILED,
+                    true,
+                ),
+                super::secret::LazySecret::new(
+                    &paths.config,
+                    "laplace-token",
+                    &crate::diag::LAPLACE_SECRET_FAILED,
+                    true,
+                ),
+            ),
             obs: nanatype_obs::ObsHandle::new(forward(&post, |e| Msg::Obs(ObsMsg::Event(e)))),
             steam: nanatype_steam::SteamHandle::start(
                 steam,

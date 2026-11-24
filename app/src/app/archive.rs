@@ -1,7 +1,7 @@
 //! Saved history: lines appended to the session's file as they reach the
 //! history (through the persist worker), and the Settings › History viewer's
 //! listing, loading, export and deletion on background threads.
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -12,14 +12,17 @@ use crate::archive::{self, Format, Record};
 use crate::msg::{FileTarget, HistoryMsg, Msg};
 use crate::plugins::background;
 
+const MAX_ARCHIVE_PARTNERS: usize = 4096;
+
 #[derive(Default)]
 pub(super) struct Archive {
     /// This session's file, named once its first line is saved.
     file: Option<PathBuf>,
     /// The newest history row already looked at.
     seen: Option<u64>,
-    /// Partner lines already saved, by owner and line.
+    /// Partner lines already saved, by owner and line (FIFO-bounded).
     partners: HashSet<(String, LineId)>,
+    partner_order: VecDeque<(String, LineId)>,
     /// The session a save dialog is open for.
     export: Option<String>,
 }
@@ -30,7 +33,7 @@ fn offset() -> i64 {
 
 impl App {
     fn archive_dir(&self) -> PathBuf {
-        self.paths.data.join(archive::DIR)
+        self.shell.paths.data.join(archive::DIR)
     }
 
     /// Delete sessions past the retention, then list the rest.
@@ -57,24 +60,25 @@ impl App {
 
     fn archive_save(&mut self, record: Record) {
         let dir = self.archive_dir();
-        let file = self.archive.file.get_or_insert_with(|| {
+        let file = self.session.archive.file.get_or_insert_with(|| {
             dir.join(format!(
                 "{}.jsonl",
                 archive::session_name(record.at, offset())
             ))
         });
-        self.persist.append(file.clone(), record.line());
+        self.shell.persist.append(file.clone(), record.line());
     }
 
     /// Save the history rows added since the last call. Clearing the history
     /// or dropping rows past its cap never reaches the file.
     pub(super) fn archive_rows(&mut self) {
-        let seen = self.archive.seen;
+        let seen = self.session.archive.seen;
         let mut rows: Vec<_> = self
+            .session
             .core
             .history()
             .iter()
-            .chain(self.core.danmaku().iter())
+            .chain(self.session.core.danmaku().iter())
             .filter(|row| seen.is_none_or(|k| row.key > k))
             .collect();
         rows.sort_by_key(|row| row.key);
@@ -83,13 +87,16 @@ impl App {
             .filter(|row| self.archive_wants(&row.item))
             .map(|row| Record::of(&row.item, false))
             .collect();
-        if let Some(newest) = [self.core.history().back(), self.core.danmaku().back()]
-            .into_iter()
-            .flatten()
-            .map(|r| r.key)
-            .max()
+        if let Some(newest) = [
+            self.session.core.history().back(),
+            self.session.core.danmaku().back(),
+        ]
+        .into_iter()
+        .flatten()
+        .map(|r| r.key)
+        .max()
         {
-            self.archive.seen = Some(seen.map_or(newest, |k| k.max(newest)));
+            self.session.archive.seen = Some(seen.map_or(newest, |k| k.max(newest)));
         }
         for record in fresh {
             self.archive_save(record);
@@ -102,7 +109,13 @@ impl App {
             return;
         }
         let key = (owner.to_owned(), line);
-        if self.archive.partners.insert(key) {
+        if self.session.archive.partners.insert(key.clone()) {
+            self.session.archive.partner_order.push_back(key);
+            while self.session.archive.partner_order.len() > MAX_ARCHIVE_PARTNERS {
+                if let Some(evicted) = self.session.archive.partner_order.pop_front() {
+                    self.session.archive.partners.remove(&evicted);
+                }
+            }
             self.archive_save(Record::of(item, true));
         }
     }
@@ -140,17 +153,29 @@ impl App {
                 let dir = self.archive_dir();
                 background("history-load", &self.ctx, move || {
                     let records = archive::load(&dir, &name).map_err(|e| e.to_string());
-                    Msg::History(HistoryMsg::Loaded { name, records })
+                    let assets = records
+                        .as_deref()
+                        .map(archive::record_assets)
+                        .unwrap_or_default();
+                    Msg::History(HistoryMsg::Loaded {
+                        name,
+                        records,
+                        assets,
+                    })
                 });
             }
-            HistoryMsg::Loaded { name, records } => match records {
+            HistoryMsg::Loaded {
+                name,
+                records,
+                assets,
+            } => match records {
                 Ok(records) => {
                     let mut view = (*self.ui.archive.get_untracked()).clone();
                     view.open(name, records);
                     self.ui.archive.set(Arc::new(view));
                     // Archived rich records can reference cached chat images;
-                    // publish their URLs before the Settings viewer renders.
-                    self.refresh_assets();
+                    // resolve the pre-extracted URLs before the viewer renders.
+                    self.media.ensure_urls(assets, self.ui);
                 }
                 Err(message) => {
                     let text = self
@@ -161,7 +186,7 @@ impl App {
             },
             HistoryMsg::Export(format) => {
                 if let Some(name) = self.ui.archive.get_untracked().open.clone() {
-                    self.archive.export = Some(name);
+                    self.session.archive.export = Some(name);
                     self.pick(FileTarget::ExportHistory(format));
                 }
             }
@@ -184,8 +209,8 @@ impl App {
                     return;
                 };
                 // The next line starts a new file rather than reviving this one.
-                if self.archive.file.as_ref() == Some(&path) {
-                    self.archive.file = None;
+                if self.session.archive.file.as_ref() == Some(&path) {
+                    self.session.archive.file = None;
                 }
                 background("history-delete", &self.ctx, move || {
                     if let Err(e) = std::fs::remove_file(&path) {
@@ -204,13 +229,13 @@ impl App {
 
     /// The save dialog of a history export: the open session's file name.
     pub(super) fn archive_export_name(&self, format: Format) -> String {
-        let name = self.archive.export.clone().unwrap_or_default();
+        let name = self.session.archive.export.clone().unwrap_or_default();
         format!("NanaType {name}.{}", format.ext())
     }
 
     /// Write the session the dialog was opened for to `path`.
     pub(super) fn archive_export(&mut self, format: Format, path: PathBuf) {
-        let Some(name) = self.archive.export.take() else {
+        let Some(name) = self.session.archive.export.take() else {
             return;
         };
         let dir = self.archive_dir();

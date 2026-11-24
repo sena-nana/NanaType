@@ -1,3 +1,4 @@
+use super::hotkeys::{hotkey_control, hotkey_issue_line};
 use super::*;
 use crate::msg::StickerMsg;
 use crate::ui::kit;

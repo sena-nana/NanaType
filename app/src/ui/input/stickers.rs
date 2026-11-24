@@ -40,6 +40,15 @@ pub(super) fn panel(ui: Ui) -> AnyView {
     let query = signal(String::new());
     let selected = signal(String::new());
     let hovered = signal(false);
+    let haystacks = nana_ui::runtime::view::computed(move || {
+        ui.stickers.with(|rows| {
+            rows.iter()
+                .map(|s| {
+                    format!("{}\0{}\0{}\0{}", s.name, s.lib, s.asset, s.pack_title).to_lowercase()
+                })
+                .collect::<Vec<_>>()
+        })
+    });
     let target = entity_ref::<Stack>();
     nana_ui::runtime::view::on_mount(move |cx| {
         if let Some(target) = target.get() {
@@ -72,54 +81,53 @@ pub(super) fn panel(ui: Ui) -> AnyView {
             }
             let q = q.to_lowercase();
             let series = effective_series(series, &stickers);
-            let cells: Vec<AnyView> = stickers
-                .iter()
-                .filter(|s| series.is_empty() || s.lib == series)
-                .filter(|s| {
-                    q.is_empty()
-                        || s.name.to_lowercase().contains(&q)
-                        || s.lib.to_lowercase().contains(&q)
-                        || s.asset.to_lowercase().contains(&q)
-                        || s.pack_title.to_lowercase().contains(&q)
-                })
-                .map(|s| {
-                    let url = s.url.clone();
-                    let asset: Option<AssetRef> = s.asset.parse().ok();
-                    let height_em = s.height_em;
-                    let image = crate::stickers::cache::lookup(&url);
-                    let thumbnail = image.as_ref().map(|c| c.thumbnail()).unwrap_or(url);
-                    let animation = image.filter(|c| c.animated());
-                    let content = animation.map(|c| {
-                        widget(nana_ui::runtime::Thumbnail::new(c.slot()).size(ControlSize::Large))
+            let cells: Vec<AnyView> = haystacks.with(|hs| {
+                stickers
+                    .iter()
+                    .zip(hs.iter())
+                    .filter(|(s, _)| series.is_empty() || s.lib == series)
+                    .filter(|(_, haystack)| q.is_empty() || haystack.contains(&q))
+                    .map(|(s, _)| {
+                        let url = s.url.clone();
+                        let asset: Option<AssetRef> = s.asset.parse().ok();
+                        let height_em = s.height_em;
+                        let image = crate::stickers::cache::lookup(&url);
+                        let thumbnail = image.as_ref().map(|c| c.thumbnail()).unwrap_or(url);
+                        let animation = image.filter(|c| c.animated());
+                        let content = animation.map(|c| {
+                            widget(
+                                nana_ui::runtime::Thumbnail::new(c.slot()).size(ControlSize::Large),
+                            )
                             .into_any()
-                    });
-                    widget(image_button(
-                        s.name.clone(),
-                        if content.is_some() {
-                            String::new()
-                        } else {
-                            thumbnail
-                        },
-                    ))
-                    .children(content)
-                    .bind(move |b: &mut Button| {
-                        b.disabled = crate::ui::sources::plain_text_only(ui)
+                        });
+                        widget(image_button(
+                            s.name.clone(),
+                            if content.is_some() {
+                                String::new()
+                            } else {
+                                thumbnail
+                            },
+                        ))
+                        .children(content)
+                        .bind(move |b: &mut Button| {
+                            b.disabled = crate::ui::sources::plain_text_only(ui)
+                        })
+                        .on_cx(move |_, _: &Activate, cx| {
+                            if let Some(asset) = asset.clone() {
+                                cx.dispatch_program_all(act(Tool::Insert(Inline::Atom(Atom {
+                                    kind: AtomKind::Sticker,
+                                    asset,
+                                    height_em,
+                                    alt: String::new(),
+                                    effects: Default::default(),
+                                }))));
+                            }
+                        })
+                        .into_any()
                     })
-                    .on_cx(move |_, _: &Activate, cx| {
-                        if let Some(asset) = asset.clone() {
-                            cx.dispatch_program_all(act(Tool::Insert(Inline::Atom(Atom {
-                                kind: AtomKind::Sticker,
-                                asset,
-                                height_em,
-                                alt: String::new(),
-                                effects: Default::default(),
-                            }))));
-                        }
-                    })
-                    .into_any()
-                })
-                .chain(std::iter::once(image_tile(ui)))
-                .collect();
+                    .chain(std::iter::once(image_tile(ui)))
+                    .collect()
+            });
             widget(
                 Stack::row(0.0)
                     .gap_step(gap::step::TIGHT)

@@ -8,11 +8,11 @@ use tray_icon::menu::{CheckMenuItem, ContextMenu, MenuItem, PredefinedMenuItem, 
 
 use crate::{
     msg::{Msg, NoticeSource, WindowMsg},
+    services::tray::{MenuAction, clear_overlay_actions, register_menu_action},
     ui::{I18N, SkinRow, Ui},
     windows::WindowKind,
 };
 
-const PREFIX: &str = "nt.overlay:";
 const WINDOWS: [WindowKind; 3 + nanatype_settings::PARTNER_SEATS] = [
     WindowKind::Display,
     WindowKind::History,
@@ -46,6 +46,7 @@ pub enum Action {
 }
 
 impl Action {
+    #[cfg(test)]
     const FIXED: [Self; 14] = [
         Self::AdjustSkin,
         Self::VerticalText,
@@ -62,35 +63,6 @@ impl Action {
         Self::ClearHistory,
         Self::ClearDanmaku,
     ];
-
-    fn key(&self) -> &str {
-        match self {
-            Self::Skin(id) => id,
-            Self::AdjustSkin => "adjust-skin",
-            Self::VerticalText => "vertical-text",
-            Self::OnTop => "on-top",
-            Self::Lock => "lock",
-            Self::Reset => "reset",
-            Self::Close => "close",
-            Self::Continue => "continue",
-            Self::Skip => "skip",
-            Self::ClearDisplay => "clear-display",
-            Self::Avatar => "avatar",
-            Self::Name => "name",
-            Self::Time => "time",
-            Self::ClearHistory => "clear-history",
-            Self::ClearDanmaku => "clear-danmaku",
-        }
-    }
-
-    fn id(&self, kind: WindowKind) -> String {
-        let skin = if matches!(self, Self::Skin(_)) {
-            "skin:"
-        } else {
-            ""
-        };
-        format!("{PREFIX}{}:{skin}{}", kind.key(), self.key())
-    }
 
     pub(crate) fn message(self, kind: WindowKind) -> Msg {
         match self {
@@ -123,20 +95,6 @@ impl Action {
             Self::ClearDanmaku => Msg::Core(Cmd::ClearDanmaku),
         }
     }
-}
-
-/// Decode only this menu's namespace; skin IDs may themselves contain colons.
-pub(crate) fn message(id: &str) -> Option<Msg> {
-    let (window, key) = id.strip_prefix(PREFIX)?.split_once(':')?;
-    let kind = WINDOWS.into_iter().find(|kind| kind.key() == window)?;
-    let action = match key.strip_prefix("skin:") {
-        Some("") => return None,
-        Some(id) => Action::Skin(id.to_owned()),
-        None => Action::FIXED
-            .into_iter()
-            .find(|action| action.key() == key)?,
-    };
-    Some(Msg::Window(WindowMsg::OverlayAction(kind, action)))
 }
 
 /// Owned state crosses to the native thread. App rechecks these availability
@@ -210,18 +168,28 @@ impl Snapshot {
         key: &str,
         checked: Option<bool>,
     ) -> Result<(), tray_icon::menu::Error> {
-        let id = action.id(self.kind);
         let enabled = self.enabled(&action);
         let label = self.text(key);
+        let overlay_action = MenuAction::Overlay {
+            kind: self.kind,
+            action,
+        };
         match checked {
             Some(checked) => {
-                menu.append(&CheckMenuItem::with_id(id, label, enabled, checked, None))
+                let item = CheckMenuItem::new(label, enabled, checked, None);
+                register_menu_action(item.id(), overlay_action);
+                menu.append(&item)
             }
-            None => menu.append(&MenuItem::with_id(id, label, enabled, None)),
+            None => {
+                let item = MenuItem::new(label, enabled, None);
+                register_menu_action(item.id(), overlay_action);
+                menu.append(&item)
+            }
         }
     }
 
     fn native(&self) -> Result<Submenu, tray_icon::menu::Error> {
+        clear_overlay_actions();
         // A Submenu is a context menu on both Windows and macOS.
         let menu = Submenu::new("", true);
         if self.kind == WindowKind::Display {
@@ -255,13 +223,20 @@ impl Snapshot {
         let skins = Submenu::new(self.text("overlay-menu-skin"), !self.skins.is_empty());
         for skin in self.skins.iter() {
             let action = Action::Skin(skin.id.clone());
-            skins.append(&CheckMenuItem::with_id(
-                action.id(self.kind),
+            let item = CheckMenuItem::new(
                 skin.name.replace('&', "&&"),
                 self.enabled(&action),
                 skin.id == self.settings.skin.id,
                 None,
-            ))?;
+            );
+            register_menu_action(
+                item.id(),
+                MenuAction::Overlay {
+                    kind: self.kind,
+                    action,
+                },
+            );
+            skins.append(&item)?;
         }
         menu.append(&skins)?;
         self.item(&menu, Action::AdjustSkin, "overlay-menu-adjust-skin", None)?;
@@ -442,8 +417,12 @@ mod tests {
                 .into_iter()
                 .chain([Action::Skin("custom:skin".into())])
             {
+                let menu_action = MenuAction::Overlay {
+                    kind,
+                    action: action.clone(),
+                };
                 assert!(
-                    matches!(message(&action.id(kind)), Some(Msg::Window(WindowMsg::OverlayAction(target, decoded))) if target == kind && decoded == action)
+                    matches!(menu_action.into_msg(), Msg::Window(WindowMsg::OverlayAction(target, decoded)) if target == kind && decoded == action)
                 );
             }
             let mut settings = Settings::default();
@@ -471,15 +450,6 @@ mod tests {
                 assert_eq!(o.vertical_text, same);
             }
         }
-        for id in [
-            "nt.display",
-            "nt.skin:nanatype.halo",
-            "nt.overlay:input:close",
-            "nt.overlay:history:unknown",
-            "nt.overlay:display:skin:",
-        ] {
-            assert!(message(id).is_none(), "{id}");
-        }
     }
 
     #[cfg(windows)]
@@ -493,20 +463,24 @@ mod tests {
                 let menu = Snapshot::new(kind, ui).unwrap().native().unwrap();
                 let items = menu.items();
                 assert!(items.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if i.text() == ui.now_t("overlay-menu-close"))));
-                assert!(items.iter().any(|i| matches!(i, MenuItemKind::Check(i) if i.id().0 == Action::OnTop.id(kind) && i.is_checked())));
+                assert!(items.iter().any(|i| matches!(i, MenuItemKind::Check(i) if registered_action(i.id()) == Some(MenuAction::Overlay { kind, action: Action::OnTop }) && i.is_checked())));
                 let leaves: Vec<_> = items
                     .iter()
                     .filter_map(|i| i.as_submenu())
                     .flat_map(|s| s.items())
                     .collect();
-                assert!(leaves.iter().any(|i| matches!(i, MenuItemKind::Check(i) if i.id().0 == Action::Skin(ui.settings.get_untracked().skin.id.clone()).id(kind) && i.is_checked())));
-                assert!(leaves.iter().any(|i| matches!(i, MenuItemKind::Check(i) if i.id().0.ends_with("skin:broken:skin") && !i.is_enabled() && i.text() == "Broken && skin")));
+                let active_skin = ui.settings.get_untracked().skin.id.clone();
+                assert!(leaves.iter().any(|i| matches!(i, MenuItemKind::Check(i) if registered_action(i.id()) == Some(MenuAction::Overlay { kind, action: Action::Skin(active_skin.clone()) }) && i.is_checked())));
+                assert!(leaves.iter().any(|i| matches!(i, MenuItemKind::Check(i) if registered_action(i.id()) == Some(MenuAction::Overlay { kind, action: Action::Skin("broken:skin".into()) }) && !i.is_enabled() && i.text() == "Broken && skin")));
                 assert_eq!(
-                    leaves.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if (i.id().0 == Action::ClearHistory.id(kind) || i.id().0 == Action::ClearDanmaku.id(kind)) && i.text() == ui.now_t("overlay-menu-confirm-clear"))),
+                    leaves.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if matches!(registered_action(i.id()), Some(MenuAction::Overlay { kind: k, action: Action::ClearHistory | Action::ClearDanmaku }) if k == kind) && i.text() == ui.now_t("overlay-menu-confirm-clear"))),
                     matches!(kind, WindowKind::History | WindowKind::Danmaku)
                 );
-                assert!(!items.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if i.id().0 == Action::ClearHistory.id(kind))));
-                assert_eq!(items.iter().any(|i| matches!(i, MenuItemKind::Check(i) if i.id().0 == Action::VerticalText.id(kind) && !i.is_checked())), matches!(kind, WindowKind::Display | WindowKind::PeerDisplay(_)));
+                assert!(!items.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if registered_action(i.id()) == Some(MenuAction::Overlay { kind, action: Action::ClearHistory }))));
+                assert_eq!(
+                    items.iter().any(|i| matches!(i, MenuItemKind::Check(i) if registered_action(i.id()) == Some(MenuAction::Overlay { kind, action: Action::VerticalText }) && !i.is_checked())),
+                    matches!(kind, WindowKind::Display | WindowKind::PeerDisplay(_))
+                );
             }
         }
     }

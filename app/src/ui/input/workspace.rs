@@ -1,6 +1,7 @@
 //! The input sidebar beside the fixed-size stream preview: a rail of panels
 //! (controls, stickers, phrases, chat) at the window's edge, with live chat
 //! optionally pinned above the insert panels.
+use super::toolbar::{TARGET, menu, tool, tool_button};
 use super::*;
 use crate::msg::{ChatMsg, EditorMsg, SpeechMsg, StickerMsg, WindowMsg};
 use crate::ui::kit::{gap, inset};

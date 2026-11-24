@@ -128,6 +128,50 @@ impl Outputs {
     }
 }
 
+impl super::OutputTransport for Outputs {
+    fn sync(
+        &mut self,
+        _s: &nanatype_settings::Settings,
+        _runtime_sizes: &super::config::RuntimeOutputSizes,
+        _partners: usize,
+        live: &[(WindowKind, &nanatype_settings::SpoutOutput)],
+    ) {
+        let pairs: Vec<(WindowKind, String)> = live
+            .iter()
+            .map(|(kind, out)| (*kind, out.name.clone()))
+            .collect();
+        Outputs::sync(self, &pairs);
+    }
+
+    fn publish(
+        &mut self,
+        kind: WindowKind,
+        out: &nanatype_settings::SpoutOutput,
+        _runtime_size: Option<[u32; 2]>,
+        frame: &WindowOutputFrame,
+        gpu: &GpuContext,
+    ) -> super::PublishOutcome {
+        super::PublishOutcome {
+            error: Outputs::publish(self, kind, &out.name, gpu, frame),
+            perf: None,
+        }
+    }
+
+    fn status_override(
+        &self,
+        kind: WindowKind,
+        base: &crate::ui::LinkState,
+        locale: nanatype_i18n::Locale,
+    ) -> Option<crate::ui::LinkState> {
+        if let crate::ui::LinkState::Connected(_) = base
+            && let Some(key) = self.failure(kind)
+        {
+            return Some(crate::ui::link_text::spout_send(locale, key));
+        }
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

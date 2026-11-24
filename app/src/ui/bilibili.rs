@@ -7,7 +7,7 @@ use super::{
         select_keys, switch, toggled_section,
     },
 };
-use crate::msg::{BliveMsg, Msg};
+use crate::msg::{BliveFeedMsg, Msg};
 use crate::ui::kit::{self, Type, gap};
 use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, signal, widget};
@@ -145,7 +145,7 @@ fn link_field(ui: Ui) -> AnyView {
     let save = move || {
         let link = draft.get_untracked().trim().to_owned();
         draft.set(String::new());
-        Msg::Blive(BliveMsg::Link(link))
+        Msg::BliveFeed(BliveFeedMsg::Link(link))
     };
     widget(
         Stack::row(0.0)
@@ -187,8 +187,12 @@ fn saved_link(ui: Ui) -> AnyView {
             .color(SemanticColorRole::Muted),
     )
     .bind(move |t: &mut Text| {
-        let auth_saved = ui.blivechat.get().auth_saved;
-        let token_saved = ui.laplace.get().token_saved;
+        let (auth_saved, token_saved) = ui.chat_source.with(|cs| {
+            (
+                cs.get(crate::ui::BliveFeedKind::Blivechat).secret_saved,
+                cs.get(crate::ui::BliveFeedKind::Laplace).secret_saved,
+            )
+        });
         let auth = ui.now_t("int-blive-auth-code");
         let v = ui.settings.with(|s| {
             saved_link_text(s, auth_saved.then_some(auth.as_str()), token_saved)
@@ -208,7 +212,7 @@ fn saved_link_text(s: &Settings, auth: Option<&str>, token_saved: bool) -> Optio
     match i.bilibili.link {
         BilibiliLink::Blivechat => {
             let b = &i.blivechat;
-            let room = match crate::distribution::blive_room_kind(b) {
+            let room = match b.room_kind {
                 BliveRoomKind::AuthCode => auth?.to_owned(),
                 BliveRoomKind::RoomId if !b.room_id.is_empty() => b.room_id.clone(),
                 _ => return None,

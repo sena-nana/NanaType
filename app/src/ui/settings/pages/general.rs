@@ -1,3 +1,4 @@
+use super::assets::remove_button;
 use super::*;
 
 /// While the first-run guide is open it asks for the language and name
@@ -9,7 +10,7 @@ pub(super) fn general(ui: Ui) -> AnyView {
             if *done {
                 settings_body(ui)
             } else {
-                onboarding(ui)
+                super::onboarding::onboarding(ui)
             }
         },
     )
@@ -460,8 +461,8 @@ pub(super) fn characters_page(ui: Ui) -> AnyView {
 pub(super) fn profiles_page(ui: Ui) -> AnyView {
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
-            section(ui, "general-profiles", profiles(ui)),
-            section_with(ui, "general-backup", backup(ui)),
+            section(ui, "general-profiles", super::profiles::profiles(ui)),
+            section_with(ui, "general-backup", super::profiles::backup(ui)),
         ))
         .into_any()
 }

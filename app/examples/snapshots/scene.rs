@@ -162,9 +162,11 @@ impl Scene {
         ui.chat
             .set(Arc::new(chat.iter().cloned().map(Arc::new).collect()));
         ui.reply.set(Some(chat[1].quote(locale)));
-        let status = (*ui.status.get_untracked()).clone();
-        assert_consistent(&settings, &status);
-        ui.status.set(Arc::new(status));
+        let links = (*ui.links.get_untracked()).clone();
+        let output_status = (*ui.output_status.get_untracked()).clone();
+        let chat_source = (*ui.chat_source.get_untracked()).clone();
+        assert_consistent(&settings, &links, &output_status, &chat_source);
+        ui.links.set(Arc::new(links));
 
         let draft = "[at=1002 name=路过的猫 avatar=blob:blive-face-1002] [b]粗体[/b]和[shake]抖动[/shake]，[wait=500]然后[pause]继续。[sticker=nana/heart][se=coin]";
         let parsed = parse(draft);

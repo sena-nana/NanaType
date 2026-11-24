@@ -26,10 +26,7 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
     let ui = scene.ui;
     let theme = &scene.theme;
     let before_settings = ui.settings.get_untracked();
-    let before_blive = ui.blivechat.get_untracked();
-    let before_laplace = ui.laplace.get_untracked();
-    let before_comet = ui.comet.get_untracked();
-    let before_status = ui.status.get_untracked();
+    let before_chat = ui.chat_source.get_untracked();
     let before_page = ui.page.get_untracked();
     let before_tab = ui.platform_tab.get_untracked();
     ui.page.set(settings::Page::Platforms);
@@ -42,28 +39,37 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
         });
     };
     let shows = |s: nanatype_settings::Settings| {
-        let blive = nanatype::app::blivechat::State {
-            status: BliveStatus::Connected,
-            auth_saved: false,
-        };
-        let laplace = nanatype::app::laplace::State {
-            status: BliveStatus::Connected,
-            token_saved: true,
-        };
-        let comet = nanatype::app::comet::State {
-            status: BliveStatus::Connected,
-        };
-        let mut status = (*before_status).clone();
+        let mut chat = (*before_chat).clone();
         let i = &s.integrations;
-        (status.blivechat, status.blivechat_link) = link_text::blivechat(locale, i, &blive);
-        (status.laplace, status.laplace_link) = link_text::laplace(locale, i, &laplace);
-        (status.comet, status.comet_link) = link_text::comet(locale, i, &comet);
-        assert_consistent(&s, &status);
+        let mut blive = BliveFeedState {
+            status: BliveStatus::Connected,
+            secret_saved: false,
+            ..Default::default()
+        };
+        (blive.text, blive.link) = link_text::blivechat(locale, i, &blive);
+        let mut laplace = BliveFeedState {
+            status: BliveStatus::Connected,
+            secret_saved: true,
+            ..Default::default()
+        };
+        (laplace.text, laplace.link) = link_text::laplace(locale, i, &laplace);
+        let mut comet = BliveFeedState {
+            status: BliveStatus::Connected,
+            secret_saved: false,
+            ..Default::default()
+        };
+        (comet.text, comet.link) = link_text::comet(locale, i, &comet);
+        *chat.get_mut(BliveFeedKind::Blivechat) = blive;
+        *chat.get_mut(BliveFeedKind::Laplace) = laplace;
+        *chat.get_mut(BliveFeedKind::Comet) = comet;
+        assert_consistent(
+            &s,
+            &ui.links.get_untracked(),
+            &ui.output_status.get_untracked(),
+            &chat,
+        );
         ui.settings.set(Arc::new(s));
-        ui.blivechat.set(Arc::new(blive));
-        ui.laplace.set(Arc::new(laplace));
-        ui.comet.set(Arc::new(comet));
-        ui.status.set(Arc::new(status));
+        ui.chat_source.set(Arc::new(chat));
     };
     ui.platform_tab.set(PlatformTab::Bilibili);
     for (name, source, link) in [
@@ -100,10 +106,7 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
     shows(s);
     shoot("other-platforms-settings");
     ui.settings.set(before_settings);
-    ui.blivechat.set(before_blive);
-    ui.laplace.set(before_laplace);
-    ui.comet.set(before_comet);
-    ui.status.set(before_status);
+    ui.chat_source.set(before_chat);
     ui.page.set(before_page);
     ui.platform_tab.set(before_tab);
 }
@@ -201,12 +204,12 @@ fn p2p(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
     enabled_output.output.partners[0].enabled = true;
     enabled_output.output.history.enabled = true;
     ui.settings.set(Arc::new(enabled_output));
-    let before_output_status = ui.status.get_untracked();
+    let before_output_status = ui.output_status.get_untracked();
     let mut output_status = (*before_output_status).clone();
-    output_status.spout_display = LinkState::Connecting;
-    output_status.spout_partners = vec![LinkState::Connecting; nanatype_settings::PARTNER_SEATS];
-    output_status.spout_history = LinkState::Connecting;
-    ui.status.set(Arc::new(output_status));
+    output_status.display = LinkState::Connecting;
+    output_status.partners = vec![LinkState::Connecting; nanatype_settings::PARTNER_SEATS];
+    output_status.history = LinkState::Connecting;
+    ui.output_status.set(Arc::new(output_status));
     ui.page.set(settings::Page::Output);
     shot(
         "p2p-settings-Output-enabled",
@@ -221,7 +224,7 @@ fn p2p(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
         },
     );
     ui.settings.set(before_output);
-    ui.status.set(before_output_status);
+    ui.output_status.set(before_output_status);
     ui.peer.set(Arc::new(nanatype::p2p::SessionUi::default()));
     ui.peer_panel.set(false);
 }
@@ -570,17 +573,15 @@ fn empty_input(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
             .unwrap();
     });
     // The footer's status badges: a line waiting its turn, then mirror mode.
-    let before_status = ui.status.get_untracked();
+    let before_queued = ui.queued.get_untracked();
     let before_settings = ui.settings.get_untracked();
-    let mut queued = (*before_status).clone();
-    queued.queued = 2;
-    ui.status.set(Arc::new(queued));
+    ui.queued.set(2);
     shot("input-queued", out, iw, ih, theme.clone(), |doc, id| {
         doc.context_mut()
             .mount_view_root(id, move || input::input_window(ui))
             .unwrap();
     });
-    ui.status.set(before_status);
+    ui.queued.set(before_queued);
     let mut mirror = (*before_settings).clone();
     mirror.general.input_mode = nanatype_settings::InputMode::Mirror;
     ui.settings.set(Arc::new(mirror));
@@ -607,7 +608,7 @@ fn links(scene: &Scene, out: &std::path::Path) {
     on.integrations.websocket.enabled = true;
     on.output.display.enabled = true;
     on.output.history.enabled = true;
-    let status = reported(
+    let (links, outputs) = reported(
         locale,
         &[
             BridgeStatus::VtsNeedsToken,
@@ -625,9 +626,10 @@ fn links(scene: &Scene, out: &std::path::Path) {
             },
         ],
     );
-    assert_consistent(&on, &status);
+    assert_consistent(&on, &links, &outputs, &ui.chat_source.get_untracked());
     ui.settings.set(Arc::new(on));
-    ui.status.set(Arc::new(status));
+    ui.links.set(Arc::new(links));
+    ui.output_status.set(Arc::new(outputs));
     for page in [settings::Page::Integrations, settings::Page::Output] {
         ui.page.set(page);
         shot(
@@ -674,15 +676,15 @@ fn links(scene: &Scene, out: &std::path::Path) {
         })),
         password_saved: true,
     };
-    let mut status = (*ui.status.get_untracked()).clone();
-    status.obs = LinkState::Connected(nanatype::ui::I18N.tr_in(
+    let mut links = (*ui.links.get_untracked()).clone();
+    links.obs = LinkState::Connected(nanatype::ui::I18N.tr_in(
         locale,
         "obs-status-connected",
         &[("scene", "直播".into())],
     ));
     ui.obs.set(Arc::new(state));
     ui.settings.set(Arc::new(on));
-    ui.status.set(Arc::new(status));
+    ui.links.set(Arc::new(links));
     ui.page.set(settings::Page::Output);
     shot(
         "settings-Output-obs",
@@ -724,7 +726,7 @@ fn links(scene: &Scene, out: &std::path::Path) {
         },
     ];
     // The other links stay on, and say so.
-    let mut status = reported(
+    let (mut links, outputs) = reported(
         locale,
         &[
             BridgeStatus::Connected(Sink::Vts),
@@ -743,14 +745,15 @@ fn links(scene: &Scene, out: &std::path::Path) {
             },
         ],
     );
-    status.vts_hotkeys = vec![
+    links.vts_hotkeys = vec![
         ("hk-1".into(), "Smile".into()),
         ("hk-2".into(), "Angry Face".into()),
         ("hk-3".into(), "Heart Eyes".into()),
     ];
-    assert_consistent(&on, &status);
+    assert_consistent(&on, &links, &outputs, &ui.chat_source.get_untracked());
     ui.settings.set(Arc::new(on));
-    ui.status.set(Arc::new(status));
+    ui.links.set(Arc::new(links));
+    ui.output_status.set(Arc::new(outputs));
     for page in [settings::Page::Integrations, settings::Page::Assets] {
         ui.page.set(page);
         shot(

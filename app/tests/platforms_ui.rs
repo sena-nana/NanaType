@@ -3,7 +3,7 @@ mod common;
 use nana_ui::runtime::{StableNodeId, TextSelection};
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nanatype::{
-    msg::{BliveMsg, Msg},
+    msg::{BliveFeedMsg, Msg},
     ui::{Ui, settings, sources::PlatformTab},
 };
 use nanatype_i18n::Locale;
@@ -112,7 +112,7 @@ fn the_bilibili_page_takes_a_pasted_obs_link() {
         let sent = click(&mut page, &ui.now_t("int-bili-link-save"));
         assert!(
             sent.iter()
-                .any(|m| matches!(m, Msg::Blive(BliveMsg::Link(_)))),
+                .any(|m| matches!(m, Msg::BliveFeed(BliveFeedMsg::Link(_)))),
             "the link is sent in {locale:?}"
         );
         let sent = click(&mut page, &ui.now_t("int-laplace-guide"));
@@ -198,7 +198,7 @@ fn submitting_an_obs_link_clears_the_field_without_invalid_state() {
     let first_links: Vec<_> = sent
         .into_iter()
         .filter_map(|m| match m {
-            Msg::Blive(BliveMsg::Link(link)) => Some(link),
+            Msg::BliveFeed(BliveFeedMsg::Link(link)) => Some(link),
             _ => None,
         })
         .collect();
@@ -227,7 +227,7 @@ fn submitting_an_obs_link_clears_the_field_without_invalid_state() {
     let second_links: Vec<_> = sent
         .into_iter()
         .filter_map(|m| match m {
-            Msg::Blive(BliveMsg::Link(link)) => Some(link),
+            Msg::BliveFeed(BliveFeedMsg::Link(link)) => Some(link),
             _ => None,
         })
         .collect();

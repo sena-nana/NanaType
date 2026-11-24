@@ -59,6 +59,7 @@ pub struct Speech {
     pub controller: Controller,
     pub service: Service,
     pub(super) state: State,
+    pub(crate) session_draft_version: u64,
     model_cancel: Option<Arc<AtomicBool>>,
 }
 impl Speech {
@@ -77,6 +78,7 @@ impl Speech {
                 post(Msg::Speech(SpeechMsg::Event(g, e)))
             }),
             state,
+            session_draft_version: 0,
             model_cancel: None,
         }
     }
@@ -91,57 +93,71 @@ impl Drop for Speech {
 }
 impl App {
     pub(crate) fn publish_speech(&mut self) {
-        let c = &self.speech.controller;
-        self.speech.state.phase = c.phase;
-        self.speech.state.partial.clone_from(&c.partial);
-        self.speech.state.remaining = c.remaining;
-        if self.ui.speech.with_untracked(|s| **s != self.speech.state) {
-            self.ui.speech.set(Arc::new(self.speech.state.clone()));
+        let c = &self.session.speech.controller;
+        self.session.speech.state.phase = c.phase;
+        self.session.speech.state.partial.clone_from(&c.partial);
+        self.session.speech.state.remaining = c.remaining;
+        if self
+            .ui
+            .speech
+            .with_untracked(|s| **s != self.session.speech.state)
+        {
+            self.ui
+                .speech
+                .set(Arc::new(self.session.speech.state.clone()));
             self.sync_tray();
         }
     }
     fn start_speech(&mut self) {
-        if self.ui.composing.get_untracked() {
-            self.speech.state.error = Some(nanatype_speech::Error::key("speech-finish-edit"));
+        if self.draft.fence.is_composing() {
+            self.session.speech.state.error =
+                Some(nanatype_speech::Error::key("speech-finish-edit"));
             self.publish_speech();
             return;
         }
-        let generation = self.speech.controller.start(!self.core.draft().is_blank());
-        self.ui.speech_edit_pending.set(false);
-        self.speech.state.error = None;
-        self.speech.state.backend = None;
+        let generation = self
+            .session
+            .speech
+            .controller
+            .start(!self.session.core.draft().is_blank());
+        self.session.speech.session_draft_version = self.draft.version();
+        self.session.speech.state.error = None;
+        self.session.speech.state.backend = None;
         let language = self
             .settings
             .speech
             .language
             .clone()
             .unwrap_or_else(|| self.ui.locale.get_untracked().tag().to_string());
-        self.speech
+        self.session
+            .speech
             .service
             .start(self.settings.speech.clone(), language, generation);
         self.schedule_speech_tick(generation);
         self.publish_speech();
     }
     fn schedule_speech_tick(&self, generation: u64) {
-        self.scheduler.post_after(
+        self.session.scheduler.post_after(
             Duration::from_millis(250),
-            Msg::Speech(SpeechMsg::Tick(generation, self.speech.controller.revision)),
+            Msg::Speech(SpeechMsg::Tick(
+                generation,
+                self.session.speech.controller.revision,
+            )),
         );
     }
     /// Called synchronously by input routing as well as semantic edit messages.
     pub(crate) fn speech_user_edit(&mut self) {
-        if self.speech.controller.active()
-            && (self.speech.controller.running() || !self.speech.service.stopped())
+        if self.session.speech.controller.active()
+            && (self.session.speech.controller.running() || !self.session.speech.service.stopped())
         {
-            self.speech.service.stop();
-            self.speech.controller.pause();
-            self.speech.state.error = None;
+            self.session.speech.service.stop();
+            self.session.speech.controller.pause();
+            self.session.speech.state.error = None;
             self.publish_speech();
         }
-        self.ui.speech_edit_pending.set(false);
     }
     pub(crate) fn speech_sent(&mut self, automatic: bool) {
-        if !self.speech.controller.active() {
+        if !self.session.speech.controller.active() {
             return;
         }
         // Auto-send already established that the preceding utterances were final.
@@ -149,13 +165,14 @@ impl App {
         let pending = if automatic {
             0
         } else {
-            self.speech.service.activity().pending
+            self.session.speech.service.activity().pending
         };
-        if !self.speech.service.stopped()
-            && !self.ui.speech_edit_pending.get_untracked()
-            && self.speech.controller.continue_after_send(pending)
+        if !self.session.speech.service.stopped()
+            && !self.draft.fence.is_composing()
+            && self.session.speech.controller.continue_after_send(pending)
         {
-            self.schedule_speech_tick(self.speech.controller.generation);
+            self.session.speech.session_draft_version = self.draft.version();
+            self.schedule_speech_tick(self.session.speech.controller.generation);
             self.publish_speech();
         } else {
             self.start_speech();
@@ -168,14 +185,14 @@ impl App {
     }
     pub(crate) fn install_speech_model(&mut self, source: Option<PathBuf>) {
         // A cancelled operation keeps this slot until it finishes removing its staging file.
-        if self.speech.model_cancel.is_some() {
+        if self.session.speech.model_cancel.is_some() {
             return;
         }
         self.speech_user_edit();
         let cancel = Arc::new(AtomicBool::new(false));
-        self.speech.model_cancel = Some(cancel.clone());
-        self.speech.state.model = ModelState::Working(0);
-        let directory = self.speech.service.directory().to_owned();
+        self.session.speech.model_cancel = Some(cancel.clone());
+        self.session.speech.state.model = ModelState::Working(0);
+        let directory = self.session.speech.service.directory().to_owned();
         let progress = self.ctx.clone();
         if let Err(e) =
             crate::plugins::try_background("nanatype-speech-model", &self.ctx, move || {
@@ -193,10 +210,10 @@ impl App {
     pub(super) fn speech_msg(&mut self, msg: SpeechMsg) {
         match msg {
             SpeechMsg::Toggle => {
-                if self.speech.controller.active() {
-                    self.speech.service.stop();
-                    self.speech.controller.stop();
-                    self.speech.state.error = None;
+                if self.session.speech.controller.active() {
+                    self.session.speech.service.stop();
+                    self.session.speech.controller.stop();
+                    self.session.speech.state.error = None;
                 } else {
                     self.start_speech();
                 }
@@ -204,80 +221,90 @@ impl App {
             SpeechMsg::Resume => self.start_speech(),
             SpeechMsg::Edit => self.speech_user_edit(),
             SpeechMsg::Refresh => self.speech_inventory(),
-            SpeechMsg::Inventory(inventory) => self.speech.state.inventory = inventory,
+            SpeechMsg::Inventory(inventory) => self.session.speech.state.inventory = inventory,
             SpeechMsg::Event(generation, event) => {
-                if generation != self.speech.controller.generation
-                    || !self.speech.controller.running()
+                if generation != self.session.speech.controller.generation
+                    || !self.session.speech.controller.running()
                 {
                     return;
                 }
-                // An editor event has already arrived but its program message is still queued.
-                if self.ui.speech_edit_pending.get_untracked() || self.ui.composing.get_untracked()
+                // A draft mutation or active IME composition fences off dictation writes.
+                if !self
+                    .draft
+                    .fence
+                    .allows_dictation(self.session.speech.session_draft_version)
                 {
                     self.speech_user_edit();
                     return;
                 }
                 match event {
                     Event::Ready(backend) => {
-                        self.speech.state.backend = Some(backend);
-                        self.speech.controller.phase = Phase::Listening;
+                        self.session.speech.state.backend = Some(backend);
+                        self.session.speech.controller.phase = Phase::Listening;
                     }
-                    Event::Pending(id) => self.speech.controller.pending(id),
+                    Event::Pending(id) => self.session.speech.controller.pending(id),
                     Event::Partial(id, text) => {
                         let _ = id;
-                        self.speech.controller.partial = text;
+                        self.session.speech.controller.partial = text;
                     }
                     Event::Final(id, text) => {
-                        for text in self.speech.controller.final_text(id, text) {
-                            let doc = append_plain(self.core.draft(), &text);
+                        for text in self.session.speech.controller.final_text(id, text) {
+                            let doc = append_plain(self.session.core.draft(), &text);
                             self.set_source(
-                                nanatype_markup::serialize_line(&doc, &self.core.draft_meta()),
+                                nanatype_markup::serialize_line(
+                                    &doc,
+                                    &self.session.core.draft_meta(),
+                                ),
                                 true,
                             );
                         }
+                        self.session.speech.session_draft_version = self.draft.version();
                     }
                     Event::Error(error) => {
                         if error.key == "speech-model-invalid" {
-                            self.speech.state.model =
+                            self.session.speech.state.model =
                                 ModelState::Error("speech-model-invalid".into());
                         }
-                        self.speech.service.stop();
-                        self.speech.controller.fail();
-                        self.speech.state.error = Some(error);
+                        self.session.speech.service.stop();
+                        self.session.speech.controller.fail();
+                        self.session.speech.state.error = Some(error);
                     }
                 }
             }
             SpeechMsg::Tick(generation, revision) => {
-                if generation != self.speech.controller.generation
-                    || revision != self.speech.controller.revision
-                    || !self.speech.controller.running()
+                if generation != self.session.speech.controller.generation
+                    || revision != self.session.speech.controller.revision
+                    || !self.session.speech.controller.running()
                 {
                     return;
                 }
-                if self.ui.speech_edit_pending.get_untracked() || self.ui.composing.get_untracked()
+                if !self
+                    .draft
+                    .fence
+                    .allows_dictation(self.session.speech.session_draft_version)
                 {
                     self.speech_user_edit();
                     return;
                 }
                 // A worker failure invalidates auto-send before its error message reaches UI.
-                if self.speech.service.stopped() {
+                if self.session.speech.service.stopped() {
                     return;
                 }
-                let send = self.speech.controller.tick(
+                let send = self.session.speech.controller.tick(
                     self.settings.speech.mode,
                     self.settings.speech.silence_seconds,
                     Instant::now(),
-                    self.speech.service.activity(),
+                    self.session.speech.service.activity(),
                 );
                 if send {
                     // run() performs all existing synchronization/peer validation. A successful
                     // send advances the draft revision while keeping idle capture alive.
                     self.run_command(nanatype_core::Cmd::Send, true);
-                    if self.speech.controller.generation == generation
-                        && self.speech.controller.revision == revision
+                    if self.session.speech.controller.generation == generation
+                        && self.session.speech.controller.revision == revision
                     {
-                        self.speech.service.stop();
-                        self.speech.controller.pause();
+                        self.session.speech.service.stop();
+                        self.session.speech.controller.pause();
                     }
                 } else {
                     self.schedule_speech_tick(generation);
@@ -285,31 +312,31 @@ impl App {
             }
             SpeechMsg::ModelDownload => self.install_speech_model(None),
             SpeechMsg::ModelCancel => {
-                if let Some(cancel) = &self.speech.model_cancel {
+                if let Some(cancel) = &self.session.speech.model_cancel {
                     cancel.store(true, Ordering::Release);
                 }
             }
             SpeechMsg::ModelDelete => {
-                if self.speech.model_cancel.is_some() {
+                if self.session.speech.model_cancel.is_some() {
                     return;
                 }
                 self.speech_user_edit();
-                self.speech.state.model =
-                    match std::fs::remove_file(self.speech.service.model_path()) {
+                self.session.speech.state.model =
+                    match std::fs::remove_file(self.session.speech.service.model_path()) {
                         Ok(()) => ModelState::Missing,
                         Err(e) if e.kind() == std::io::ErrorKind::NotFound => ModelState::Missing,
                         Err(e) => ModelState::Error(e.to_string()),
                     };
             }
             SpeechMsg::ModelProgress(percent) => {
-                self.speech.state.model = ModelState::Working(percent);
+                self.session.speech.state.model = ModelState::Working(percent);
             }
             SpeechMsg::ModelDone(result) => {
-                self.speech.model_cancel = None;
-                self.speech.state.model = match result {
+                self.session.speech.model_cancel = None;
+                self.session.speech.state.model = match result {
                     Ok(()) => ModelState::Ready,
                     Err(e) if e == "speech-cancelled" => {
-                        if self.speech.service.model_path().is_file() {
+                        if self.session.speech.service.model_path().is_file() {
                             ModelState::Ready
                         } else {
                             ModelState::Missing

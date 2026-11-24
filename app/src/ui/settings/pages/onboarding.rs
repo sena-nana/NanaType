@@ -1,3 +1,5 @@
+use super::hotkeys::{hotkey_control, hotkey_issue_caption};
+use super::output::{display_source, obs_address, obs_password_field, obs_steps};
 use super::*;
 use crate::msg::WindowMsg;
 use crate::ui::settings::preview::{guide_save, guide_tools};
@@ -15,13 +17,6 @@ pub(super) const ONBOARD_STEPS: u8 = nanatype_settings::ONBOARDING_STEPS;
 fn go_to(ui: Ui, cx: &mut nana_ui::runtime::ViewContext<'_, Button>, n: u8) {
     ui.onboard_step.set(n);
     cx.dispatch_program_all(edit(move |s| s.general.onboarding_step = n));
-}
-
-/// The skin step draws its selector first. The preview follows once the
-/// entrance has had its time, so the entrance does not build it.
-fn hold_skin_preview(ui: Ui, cx: &mut nana_ui::runtime::ViewContext<'_, Button>) {
-    ui.onboard_skin_shown.set(false);
-    cx.dispatch_program_all(Msg::HoldOnboardPreview);
 }
 
 /// The first-run guide: one card marked by a 3px accent bar, four steps
@@ -84,9 +79,6 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
             if n == SKIN_STEP {
                 ui.shader_preview.set(false);
             }
-            if n == SKIN_STEP + 1 {
-                hold_skin_preview(ui, cx);
-            }
             go_to(ui, cx, n.saturating_sub(1));
         }),
         widget(Stack::row(0.0).grow(1.0)),
@@ -122,9 +114,6 @@ pub(super) fn onboarding(ui: Ui) -> AnyView {
                         cx.dispatch_program_all(msg);
                     }
                     ui.shader_preview.set(false);
-                }
-                if n + 1 == SKIN_STEP {
-                    hold_skin_preview(ui, cx);
                 }
                 go_to(ui, cx, n + 1);
             }
@@ -211,19 +200,9 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
         .into_iter()
         // The name plate switch and the part scales, as the Skins page has them.
         .chain(super::skins::part_rows(ui))
-        .chain([
-            // Held through the entrance, so that frame does not build the preview.
-            Row::inset(dynamic(
-                move || ui.onboard_skin_shown.get(),
-                move |shown| {
-                    if *shown {
-                        block(crate::ui::settings::preview::guide_view(ui))
-                    } else {
-                        block(hint(ui.now_t("skin-preview-loading")))
-                    }
-                },
-            )),
-        ])
+        .chain([Row::inset(block(crate::ui::settings::preview::guide_view(
+            ui,
+        )))])
         .collect(),
         2 => vec![Row::inset(
             widget(

@@ -111,11 +111,11 @@ pub fn summary(ui: crate::ui::Ui, p: &Pending) -> String {
 
 impl App {
     fn previous_path(&self) -> PathBuf {
-        self.paths.config.join(PREVIOUS_FILE)
+        self.shell.paths.config.join(PREVIOUS_FILE)
     }
 
     fn profile_dir(&self) -> PathBuf {
-        self.paths.config.join(PROFILE_DIR)
+        self.shell.paths.config.join(PROFILE_DIR)
     }
 
     /// Read the profiles and whether a backup is there.
@@ -124,7 +124,7 @@ impl App {
         for problem in skipped {
             nanatype_diag::report!(crate::diag::PERSIST_FAILED; "profile skipped: {problem}");
         }
-        self.backup.profiles = profiles;
+        self.shell.backup.profiles = profiles;
         let has_previous = self.previous_path().exists();
         self.edit_backup_view(|v| v.has_previous = has_previous);
         self.sync_profiles();
@@ -138,17 +138,19 @@ impl App {
 
     /// Settings from a newer NanaType are read-only: nothing replaces them.
     fn refuse_readonly(&mut self) -> bool {
-        if self.readonly_settings {
+        if self.shell.readonly_settings {
             let text = self.ui.now_t("err-settings-newer");
             self.notice(text, true);
         }
-        self.readonly_settings
+        self.shell.readonly_settings
     }
 
     /// Keep the settings as they are now, then put `next` in their place.
     fn replace_settings(&mut self, next: Settings) {
-        self.persist.json(self.previous_path(), &self.settings);
-        self.backup.previous = Some(Box::new(self.settings.clone()));
+        self.shell
+            .persist
+            .json(self.previous_path(), &self.settings);
+        self.shell.backup.previous = Some(Box::new(self.settings.clone()));
         self.edit_backup_view(|v| v.has_previous = true);
         self.apply_settings(next);
         self.sync_profiles();
@@ -207,11 +209,11 @@ impl App {
                     self.notice(text, false);
                     return;
                 }
-                self.backup.pending = Some(incoming);
+                self.shell.backup.pending = Some(incoming);
                 self.edit_backup_view(|v| v.pending = Some(pending));
             }
             BackupMsg::Confirm(accept) => {
-                let incoming = self.backup.pending.take();
+                let incoming = self.shell.backup.pending.take();
                 self.edit_backup_view(|v| v.pending = None);
                 let Some(incoming) = incoming.filter(|_| accept) else {
                     return;
@@ -219,10 +221,10 @@ impl App {
                 let merged = incoming.merge(&self.settings);
                 let geometry = incoming.geometry.clone().map(Box::new);
                 if incoming.avatars.is_empty() {
-                    self.update(Msg::Backup(BackupMsg::Unpacked(Box::new(merged), geometry)));
+                    self.finish_backup_unpack(merged, geometry);
                     return;
                 }
-                let dir = self.paths.data.join(AVATAR_DIR);
+                let dir = self.shell.paths.data.join(AVATAR_DIR);
                 background("settings-avatars", &self.ctx, move || {
                     let mut merged = merged;
                     let now = nanatype_model::unix_millis();
@@ -233,13 +235,7 @@ impl App {
                 });
             }
             BackupMsg::Unpacked(settings, geometry) => {
-                self.replace_settings(*settings);
-                if let Some(geometry) = geometry {
-                    self.windows.replace_geometry(*geometry);
-                    self.save_geometry();
-                }
-                let text = self.ui.now_t("backup-imported");
-                self.notice(text, false);
+                self.finish_backup_unpack(*settings, geometry);
             }
             BackupMsg::Reset => {
                 if self.refuse_readonly() {
@@ -254,8 +250,8 @@ impl App {
                 if self.refuse_readonly() {
                     return;
                 }
-                if let Some(previous) = self.backup.previous.take() {
-                    self.update(Msg::Backup(BackupMsg::Restored(Ok(previous))));
+                if let Some(previous) = self.shell.backup.previous.take() {
+                    self.finish_backup_restore(Ok(previous));
                     return;
                 }
                 let path = self.previous_path();
@@ -270,14 +266,32 @@ impl App {
                     Msg::Backup(BackupMsg::Restored(result))
                 });
             }
-            BackupMsg::Restored(Ok(previous)) => {
+            BackupMsg::Restored(result) => {
+                self.finish_backup_restore(result);
+            }
+        }
+    }
+
+    fn finish_backup_unpack(&mut self, settings: Settings, geometry: Option<Box<GeometryStore>>) {
+        self.replace_settings(settings);
+        if let Some(geometry) = geometry {
+            self.shell.windows.replace_geometry(*geometry);
+            self.save_geometry();
+        }
+        let text = self.ui.now_t("backup-imported");
+        self.notice(text, false);
+    }
+
+    fn finish_backup_restore(&mut self, result: Result<Box<Settings>, String>) {
+        match result {
+            Ok(previous) => {
                 // The settings restored over are kept in turn: restoring
                 // again goes back.
                 self.replace_settings(*previous);
                 let text = self.ui.now_t("backup-restored");
                 self.notice(text, false);
             }
-            BackupMsg::Restored(Err(message)) => {
+            Err(message) => {
                 let text = self.ui.tr("backup-failed", &[("message", message.into())]);
                 self.notice(text, true);
             }
@@ -296,7 +310,7 @@ impl App {
     /// Write an export to `path`, reading avatars off the UI thread.
     pub(super) fn settings_export(&mut self, path: PathBuf) {
         let settings = self.settings.clone();
-        let geometry: GeometryStore = self.windows.geometry.clone();
+        let geometry: GeometryStore = self.shell.windows.geometry.clone();
         let options = self.ui.backup.get_untracked().options;
         background("settings-export", &self.ctx, move || {
             let exported = nanatype_settings::export(
@@ -328,7 +342,7 @@ impl App {
     // ---- profiles -------------------------------------------------------------
 
     fn save_profile(&self, profile: &Profile) {
-        self.persist.json(
+        self.shell.persist.json(
             Profile::path(&self.profile_dir(), &profile.id),
             &profile.file(nanatype_model::unix_millis()),
         );
@@ -336,14 +350,14 @@ impl App {
 
     fn new_profile_id(&self) -> String {
         nanatype_settings::new_profile_id(nanatype_model::unix_millis(), |id| {
-            self.backup.profiles.iter().any(|p| p.id == id)
+            self.shell.backup.profiles.iter().any(|p| p.id == id)
         })
     }
 
     /// Save the current settings into profile `id`; returns its name.
     fn store_profile(&mut self, id: &str) -> Option<String> {
         let settings = nanatype_settings::profile_sections(&self.settings);
-        let p = self.backup.profiles.iter_mut().find(|p| p.id == id)?;
+        let p = self.shell.backup.profiles.iter_mut().find(|p| p.id == id)?;
         p.settings = settings;
         let p = p.clone();
         self.save_profile(&p);
@@ -354,6 +368,7 @@ impl App {
     /// the profiles.
     fn sync_profiles(&mut self) {
         let list: Vec<(String, String)> = self
+            .shell
             .backup
             .profiles
             .iter()
@@ -363,7 +378,7 @@ impl App {
         if keys != self.settings.hotkeys.profiles {
             self.edit(move |s| s.hotkeys.profiles = keys);
         }
-        if let Some(tray) = &mut self.tray {
+        if let Some(tray) = &mut self.shell.tray {
             tray.set_profiles(&list, self.settings.general.profile.as_deref());
         }
         self.edit_backup_view(|v| v.profiles = list);
@@ -374,7 +389,7 @@ impl App {
         if !name.is_empty() {
             return name;
         }
-        let n = self.backup.profiles.len() as u64 + 1;
+        let n = self.shell.backup.profiles.len() as u64 + 1;
         self.ui.tr("profile-unnamed", &[("n", n.into())])
     }
 
@@ -385,7 +400,7 @@ impl App {
                 let name = self.profile_name(&name);
                 let profile = Profile::capture(id.clone(), name, &self.settings);
                 self.save_profile(&profile);
-                self.backup.profiles.push(profile);
+                self.shell.backup.profiles.push(profile);
                 // The settings in use are now this profile's.
                 self.edit(move |s| s.general.profile = Some(id));
                 self.sync_profiles();
@@ -397,48 +412,10 @@ impl App {
                 }
             }
             ProfileMsg::Switch(id) => {
-                if self.refuse_readonly() {
-                    return;
-                }
-                let Some(target) = self.backup.profiles.iter().find(|p| p.id == id).cloned() else {
-                    return;
-                };
-                // What changed under the active profile goes back into it.
-                if let Some(active) = self.settings.general.profile.clone()
-                    && active != id
-                {
-                    self.store_profile(&active);
-                }
-                let mut next = target.apply(&self.settings);
-                next.general.profile = Some(id);
-                // Hotkeys the profile brings that clash stay unregistered
-                // (`hotkey_bindings`); say which, once.
-                let brought: Vec<String> = GlobalAction::new_clashes(&self.settings, &next)
-                    .into_iter()
-                    .map(|action| {
-                        crate::ui::settings::action_name(
-                            self.ui.locale.get_untracked(),
-                            &next,
-                            Shortcut::Global(action),
-                        )
-                    })
-                    .collect();
-                self.apply_settings(next);
-                self.sync_profiles();
-                let text = self
-                    .ui
-                    .tr("profile-switched", &[("name", target.name.into())]);
-                self.notice(text, false);
-                if !brought.is_empty() {
-                    let names = brought.join(&self.ui.now_t("peer-name-separator"));
-                    let text = self
-                        .ui
-                        .tr("profile-hotkeys-clash", &[("names", names.into())]);
-                    self.notice(text, true);
-                }
+                self.switch_profile(id);
             }
             ProfileMsg::Next => {
-                let profiles = &self.backup.profiles;
+                let profiles = &self.shell.backup.profiles;
                 if profiles.is_empty() {
                     return;
                 }
@@ -448,11 +425,11 @@ impl App {
                     .position(|p| Some(p.id.as_str()) == active)
                     .map_or(0, |i| (i + 1) % profiles.len());
                 let id = profiles[next].id.clone();
-                self.update(Msg::Profile(ProfileMsg::Switch(id)));
+                self.switch_profile(id);
             }
             ProfileMsg::Rename { id, name } => {
                 let name = self.profile_name(&name);
-                if let Some(p) = self.backup.profiles.iter_mut().find(|p| p.id == id) {
+                if let Some(p) = self.shell.backup.profiles.iter_mut().find(|p| p.id == id) {
                     p.name = name;
                     let p = p.clone();
                     self.save_profile(&p);
@@ -460,7 +437,7 @@ impl App {
                 }
             }
             ProfileMsg::Duplicate(id) => {
-                let Some(source) = self.backup.profiles.iter().find(|p| p.id == id) else {
+                let Some(source) = self.shell.backup.profiles.iter().find(|p| p.id == id) else {
                     return;
                 };
                 let name = self.ui.tr(
@@ -474,22 +451,74 @@ impl App {
                 };
                 self.save_profile(&copy);
                 let at = self
+                    .shell
                     .backup
                     .profiles
                     .iter()
                     .position(|p| p.id == id)
-                    .map_or(self.backup.profiles.len(), |i| i + 1);
-                self.backup.profiles.insert(at, copy);
+                    .map_or(self.shell.backup.profiles.len(), |i| i + 1);
+                self.shell.backup.profiles.insert(at, copy);
                 self.sync_profiles();
             }
             ProfileMsg::Delete(id) => {
-                self.backup.profiles.retain(|p| p.id != id);
-                self.persist.remove(Profile::path(&self.profile_dir(), &id));
+                self.shell.backup.profiles.retain(|p| p.id != id);
+                self.shell
+                    .persist
+                    .remove(Profile::path(&self.profile_dir(), &id));
                 if self.settings.general.profile.as_deref() == Some(id.as_str()) {
                     self.edit(|s| s.general.profile = None);
                 }
                 self.sync_profiles();
             }
+        }
+    }
+
+    fn switch_profile(&mut self, id: String) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let Some(target) = self
+            .shell
+            .backup
+            .profiles
+            .iter()
+            .find(|p| p.id == id)
+            .cloned()
+        else {
+            return;
+        };
+        // What changed under the active profile goes back into it.
+        if let Some(active) = self.settings.general.profile.clone()
+            && active != id
+        {
+            self.store_profile(&active);
+        }
+        let mut next = target.apply(&self.settings);
+        next.general.profile = Some(id);
+        // Hotkeys the profile brings that clash stay unregistered
+        // (`hotkey_bindings`); say which, once.
+        let brought: Vec<String> = GlobalAction::new_clashes(&self.settings, &next)
+            .into_iter()
+            .map(|action| {
+                crate::ui::settings::action_name(
+                    self.ui.locale.get_untracked(),
+                    &next,
+                    Shortcut::Global(action),
+                )
+            })
+            .collect();
+        self.apply_settings(next);
+        self.sync_profiles();
+        let text = self
+            .ui
+            .tr("profile-switched", &[("name", target.name.into())]);
+        self.notice(text, false);
+        if !brought.is_empty() {
+            let names = brought.join(&self.ui.now_t("peer-name-separator"));
+            let text = self
+                .ui
+                .tr("profile-hotkeys-clash", &[("names", names.into())]);
+            self.notice(text, true);
         }
     }
 }

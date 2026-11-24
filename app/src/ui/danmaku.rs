@@ -50,22 +50,90 @@ pub(super) enum RowSource {
     History(u64),
 }
 impl RowSource {
-    pub(super) fn get(self, ui: Ui) -> Option<nanatype_core::HistoryRow> {
+    fn chat_at(ui: Ui, seq: u64) -> Option<usize> {
+        ui.chat_index.with(|index| index.get(&seq).copied())
+    }
+
+    fn history_at(ui: Ui, key: u64) -> Option<usize> {
+        ui.history_index.with(|index| index.get(&key).copied())
+    }
+
+    fn with_doc<R>(self, ui: Ui, f: impl FnOnce(&nanatype_model::Document) -> R) -> Option<R> {
         match self {
             Self::History(key) => {
-                let at = ui.history_index.with(|index| index.get(&key).copied())?;
-                ui.history.with_untracked(|rows| rows.get(at).cloned())
+                let at = Self::history_at(ui, key)?;
+                ui.history
+                    .with_untracked(|rows| rows.get(at).map(|r| f(r.doc())))
             }
-            Self::Chat(seq) => ui.chat.with_untracked(|rows| {
-                rows.iter().find(|m| m.seq == seq).map(|m| {
-                    let item = m.history_item(ui.locale.get_untracked());
-                    nanatype_core::HistoryRow {
-                        key: seq,
-                        item,
-                        reveal: None,
+            Self::Chat(seq) => {
+                let at = Self::chat_at(ui, seq)?;
+                let locale = ui.locale.get_untracked();
+                ui.chat.with_untracked(|rows| {
+                    rows.get(at).map(|m| {
+                        if matches!(m.kind, crate::chat::ChatKind::Text) {
+                            f(&m.doc)
+                        } else {
+                            let doc = m.display_doc(locale);
+                            f(&doc)
+                        }
+                    })
+                })
+            }
+        }
+    }
+}
+
+struct CompactMeta {
+    author: String,
+    at: u64,
+    avatar: Option<String>,
+    reply: Option<(String, String)>,
+    metadata: Option<String>,
+}
+
+fn compact_meta(ui: Ui, source: RowSource) -> Option<CompactMeta> {
+    match source {
+        RowSource::History(key) => {
+            let at = RowSource::history_at(ui, key)?;
+            ui.history.with_untracked(|rows| {
+                rows.get(at).map(|row| CompactMeta {
+                    author: row.item.author.clone(),
+                    at: row.item.at,
+                    avatar: row.item.avatar.clone(),
+                    reply: row
+                        .item
+                        .reply
+                        .as_ref()
+                        .map(|r| (r.user.name.clone(), r.text.clone())),
+                    metadata: None,
+                })
+            })
+        }
+        RowSource::Chat(seq) => {
+            let at = RowSource::chat_at(ui, seq)?;
+            ui.chat.with_untracked(|rows| {
+                rows.get(at).map(|m| {
+                    let mut labels = vec![ui.now_t(m.platform.label_key())];
+                    if m.owner {
+                        labels.push(ui.now_t("chat-room-owner"));
+                    } else if m.admin {
+                        labels.push(ui.now_t("chat-moderator"));
+                    }
+                    if m.guard != nanatype_blive::chat::Guard::None {
+                        labels.push(ui.now_t(crate::chat::guard_key(m.guard)));
+                    }
+                    if m.medal_level > 0 && !m.medal_name.is_empty() {
+                        labels.push(format!("{} {}", m.medal_name, m.medal_level));
+                    }
+                    CompactMeta {
+                        author: m.user.name.clone(),
+                        at: m.at,
+                        avatar: m.user.avatar.as_ref().map(ToString::to_string),
+                        reply: None,
+                        metadata: (!labels.is_empty()).then(|| labels.join(" · ")),
                     }
                 })
-            }),
+            })
         }
     }
 }
@@ -116,12 +184,11 @@ fn row_view(ui: Ui, source: RowSource, width: f32) -> AnyView {
     let hovered = signal(false);
     let focused = signal(false);
     let paid = match source {
-        RowSource::Chat(seq) => ui.chat.with_untracked(|rows| {
-            rows.iter()
-                .find(|m| m.seq == seq)
-                .and_then(|m| crate::chat::paid_color(&m.kind))
+        RowSource::Chat(seq) => RowSource::chat_at(ui, seq).and_then(|at| {
+            ui.chat
+                .with_untracked(|rows| rows.get(at).and_then(|m| crate::chat::paid_color(&m.kind)))
         }),
-        _ => None,
+        RowSource::History(_) => None,
     };
     let content = dynamic(
         move || ui.settings.with(|s| s.integrations.chat.panel_style),
@@ -295,7 +362,7 @@ fn row_actions(
 /// A small avatar and a single header above full-width, freely wrapping text.
 /// Controls occupy only the header, leaving the body available for reading.
 fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyView>) -> AnyView {
-    let Some(row) = source.get(ui) else {
+    let Some(row) = compact_meta(ui, source) else {
         return widget(Stack::row(0.0)).into_any();
     };
     let host = matches!(source, RowSource::History(_));
@@ -337,9 +404,7 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
                 }),
         )
         .children(widget(
-            Text::new(row.item.author.clone())
-                .style(name_style)
-                .truncating(),
+            Text::new(row.author.clone()).style(name_style).truncating(),
         )),
         host.then(|| {
             widget(
@@ -351,52 +416,29 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
         widget(Stack::spacer()),
         show_time.then(|| {
             widget(
-                Text::new(history::local_hm(row.item.at))
+                Text::new(history::local_hm(row.at))
                     .style(Type::Micro.style())
                     .color(SemanticColorRole::Faint),
             )
         }),
         actions,
     ));
-    let metadata = match source {
-        RowSource::Chat(seq) => ui.chat.with_untracked(|rows| {
-            rows.iter().find(|m| m.seq == seq).and_then(|m| {
-                let mut labels = vec![ui.now_t(m.platform.label_key())];
-                if m.owner {
-                    labels.push(ui.now_t("chat-room-owner"));
-                } else if m.admin {
-                    labels.push(ui.now_t("chat-moderator"));
-                }
-                if m.guard != nanatype_blive::chat::Guard::None {
-                    labels.push(ui.now_t(crate::chat::guard_key(m.guard)));
-                }
-                if m.medal_level > 0 && !m.medal_name.is_empty() {
-                    labels.push(format!("{} {}", m.medal_name, m.medal_level));
-                }
-                (!labels.is_empty()).then(|| {
-                    widget(
-                        Text::new(labels.join(" · "))
-                            .style(Type::Micro.style())
-                            .color(SemanticColorRole::Muted)
-                            .truncating(),
-                    )
-                })
-            })
-        }),
-        _ => None,
-    };
-    let quote = row.item.reply.as_ref().map(|r| {
+    let metadata = row.metadata.map(|label| {
+        widget(
+            Text::new(label)
+                .style(Type::Micro.style())
+                .color(SemanticColorRole::Muted)
+                .truncating(),
+        )
+    });
+    let quote = row.reply.as_ref().map(|(name, text)| {
         let mut st = Type::Micro.style();
         Arc::make_mut(&mut st.layout).max_width = Some(LengthSpec::Px(col_w));
         widget(
-            Text::new(format!(
-                "↪ {}：{}",
-                r.user.name,
-                r.text.replace(['\r', '\n'], " ")
-            ))
-            .style(st)
-            .color(SemanticColorRole::Muted)
-            .truncating(),
+            Text::new(format!("↪ {name}：{}", text.replace(['\r', '\n'], " ")))
+                .style(st)
+                .color(SemanticColorRole::Muted)
+                .truncating(),
         )
     });
     let chrome = ui.chrome_untracked();
@@ -433,22 +475,23 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
                 ui.history.get();
             }
         }
-        let Some(row) = source.get(ui) else {
-            return;
-        };
         let look = Look {
             sticker_scale: ui.settings.with(|s| s.assets.sticker_scale),
             ..look.clone()
         };
-        let rich = to_rich(
-            row.doc(),
-            &Env {
-                look: &look,
-                urls: &ui.asset_urls.get(),
-                editor: false,
-                locale: ui.locale.get(),
-            },
-        );
+        let Some(rich) = source.with_doc(ui, |doc| {
+            to_rich(
+                doc,
+                &Env {
+                    look: &look,
+                    urls: &ui.asset_urls.get(),
+                    editor: false,
+                    locale: ui.locale.get(),
+                },
+            )
+        }) else {
+            return;
+        };
         if v.value != rich {
             v.value = rich;
         }
@@ -462,8 +505,8 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
     .children((
         asset_avatar(
             *ui,
-            row.item.avatar.clone(),
-            &row.item.author,
+            row.avatar.clone(),
+            &row.author,
             AVATAR,
             colors.accent.as_rgba_array(),
         ),
@@ -566,12 +609,14 @@ pub fn combined_link(links: &[Link]) -> Link {
 /// filter popover and the pin.
 fn header(ui: Ui) -> AnyView {
     let dot = widget(crate::ui::kit::dot_frame()).bind(move |s: &mut Stack| {
-        let links = [
-            ui.status.with(|x| x.blivechat_link),
-            ui.status.with(|x| x.laplace_link),
-            ui.status.with(|x| x.comet_link),
-            super::twitch::link(&ui.twitch.get().connection),
-        ];
+        let links = ui.chat_source.with(|cs| {
+            [
+                cs.get(crate::ui::BliveFeedKind::Blivechat).link,
+                cs.get(crate::ui::BliveFeedKind::Laplace).link,
+                cs.get(crate::ui::BliveFeedKind::Comet).link,
+                super::twitch::link(&ui.twitch.get().connection),
+            ]
+        });
         let link = combined_link(&links);
         *s = crate::ui::kit::dot_frame().surface(link.tone().role());
     });
@@ -599,17 +644,25 @@ fn header(ui: Ui) -> AnyView {
                 rooms.bilibili || rooms.others,
             )
         });
-        if blive {
-            let label = ui.now_t("settings-blivechat");
-            parts.push(ui.status.with(|s| format!("{label}: {}", s.blivechat)));
-        }
-        if laplace {
-            let label = ui.now_t("settings-laplace");
-            parts.push(ui.status.with(|s| format!("{label}: {}", s.laplace)));
-        }
-        if comet {
-            parts.push(ui.status.with(|s| s.comet.clone()));
-        }
+        ui.chat_source.with(|cs| {
+            if blive {
+                let label = ui.now_t("settings-blivechat");
+                parts.push(format!(
+                    "{label}: {}",
+                    cs.get(crate::ui::BliveFeedKind::Blivechat).text
+                ));
+            }
+            if laplace {
+                let label = ui.now_t("settings-laplace");
+                parts.push(format!(
+                    "{label}: {}",
+                    cs.get(crate::ui::BliveFeedKind::Laplace).text
+                ));
+            }
+            if comet {
+                parts.push(cs.get(crate::ui::BliveFeedKind::Comet).text.clone());
+            }
+        });
         let v = parts.join(" · ");
         if t.value != v {
             t.value = v;
