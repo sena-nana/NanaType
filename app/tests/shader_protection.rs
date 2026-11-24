@@ -200,6 +200,7 @@ fn over_budget_and_crashed_programs_stop_drawing_until_effects_are_retried() {
         let hash = skin.shader_programs["p"].hash.clone();
         let (_, mut session) = mount(&skin);
         assert!(centre(&mut session)[1] > 240, "the program never drew");
+        shader_effects::flush_guard();
         assert!(read().contains(&hash), "first draws were not written down");
 
         // Relaunch without a clean exit.
@@ -262,6 +263,7 @@ fn over_budget_and_crashed_programs_stop_drawing_until_effects_are_retried() {
         let hash = skin.material_programs["m"].hash.clone();
         let mut session = mount_material(&skin);
         assert!(centre(&mut session)[1] > 240, "the material never drew");
+        shader_effects::flush_guard();
         assert!(read().contains(&hash), "first draws were not written down");
         shader_effects::init_guard(record.clone());
         assert!(notices_mention("was running when"));
