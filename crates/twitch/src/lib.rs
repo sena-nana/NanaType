@@ -1,10 +1,13 @@
 //! Twitch live chat. Reading joins the channel's IRC anonymously; sending
 //! signs in with the OAuth device flow and posts through Helix.
 mod api;
+mod auth;
 mod credentials;
 pub mod diag;
 mod handle;
 mod irc;
+mod reader;
+mod sender;
 mod socket;
 
 pub use handle::TwitchHandle;

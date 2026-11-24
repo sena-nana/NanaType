@@ -2,14 +2,19 @@
 //! `{"type":"expression","name":"smile","intensity":null}`.
 
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
-use crossbeam_channel::{Receiver, Sender, unbounded};
+use crossbeam_channel::{Receiver, Sender, after, never, select, unbounded};
 use nanatype_model::LinkFault;
 use tungstenite::{Message, WebSocket};
 
 use crate::{BridgeEvent, BridgeStatus, Sink, StatusFn};
+
+const CLIENT_POLL_MIN: Duration = Duration::from_millis(50);
+const CLIENT_POLL_MAX: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WsConfig {
@@ -19,21 +24,33 @@ pub struct WsConfig {
 pub(crate) struct WsServer {
     config: WsConfig,
     tx: Sender<String>,
+    stopped: Arc<AtomicBool>,
     _stop: Sender<()>,
+}
+
+impl Drop for WsServer {
+    fn drop(&mut self) {
+        self.stopped.store(true, Ordering::Release);
+        let addr = SocketAddr::from(([127, 0, 0, 1], self.config.port));
+        let _ = TcpStream::connect_timeout(&addr, Duration::from_millis(50));
+    }
 }
 
 impl WsServer {
     pub fn start(config: WsConfig, status: StatusFn) -> Self {
         let (tx, rx) = unbounded::<String>();
         let (stop_tx, stop_rx) = unbounded::<()>();
+        let stopped = Arc::new(AtomicBool::new(false));
+        let worker_stopped = Arc::clone(&stopped);
         let port = config.port;
         thread::Builder::new()
             .name("nanatype-ws".into())
-            .spawn(move || run(port, rx, stop_rx, status))
+            .spawn(move || run(port, rx, stop_rx, worker_stopped, status))
             .expect("spawn ws thread");
         Self {
             config,
             tx,
+            stopped,
             _stop: stop_tx,
         }
     }
@@ -49,7 +66,13 @@ impl WsServer {
     }
 }
 
-fn run(port: u16, rx: Receiver<String>, stop: Receiver<()>, status: StatusFn) {
+fn run(
+    port: u16,
+    rx: Receiver<String>,
+    stop: Receiver<()>,
+    stopped: Arc<AtomicBool>,
+    status: StatusFn,
+) {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = match TcpListener::bind(addr) {
         Ok(l) => l,
@@ -63,40 +86,82 @@ fn run(port: u16, rx: Receiver<String>, stop: Receiver<()>, status: StatusFn) {
             return;
         }
     };
-    let _ = listener.set_nonblocking(true);
+    let (client_tx, client_rx) = unbounded::<WebSocket<TcpStream>>();
+    let accept_stopped = Arc::clone(&stopped);
+    let _ = thread::Builder::new()
+        .name("nanatype-ws-accept".into())
+        .spawn(move || {
+            while let Ok((stream, _)) = listener.accept() {
+                if accept_stopped.load(Ordering::Acquire) {
+                    break;
+                }
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                if let Ok(ws) = tungstenite::accept(stream) {
+                    let _ = ws.get_ref().set_nonblocking(true);
+                    if client_tx.send(ws).is_err() {
+                        break;
+                    }
+                }
+            }
+        });
     status(BridgeStatus::Connected(Sink::WebSocket));
     let mut clients: Vec<WebSocket<TcpStream>> = Vec::new();
     let mut reported = usize::MAX;
+    let mut poll_wait = CLIENT_POLL_MIN;
     loop {
-        if stop.try_recv() != Err(crossbeam_channel::TryRecvError::Empty) {
-            for mut c in clients {
-                let _ = c.close(None);
+        if clients.len() != reported {
+            reported = clients.len();
+            status(BridgeStatus::Clients(reported));
+        }
+        let timer = if clients.is_empty() {
+            never()
+        } else {
+            after(poll_wait)
+        };
+        select! {
+            recv(stop) -> _ => {
+                for mut c in clients {
+                    let _ = c.close(None);
+                }
+                return;
             }
-            return;
+            recv(client_rx) -> res => match res {
+                Ok(ws) => {
+                    clients.push(ws);
+                    while let Ok(ws) = client_rx.try_recv() {
+                        clients.push(ws);
+                    }
+                    poll_wait = CLIENT_POLL_MIN;
+                }
+                Err(_) => return,
+            },
+            recv(rx) -> res => match res {
+                Ok(first) => {
+                    if clients.is_empty() {
+                        while rx.try_recv().is_ok() {}
+                        continue;
+                    }
+                    let mut batch = vec![first];
+                    batch.extend(rx.try_iter());
+                    clients.retain_mut(|c| {
+                        batch
+                            .iter()
+                            .all(|m| c.send(Message::text(m.clone())).is_ok())
+                    });
+                    poll_wait = CLIENT_POLL_MIN;
+                }
+                Err(_) => return,
+            },
+            recv(timer) -> _ => {}
         }
-        while let Ok((stream, _)) = listener.accept() {
-            let _ = stream.set_nonblocking(false);
-            let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-            if let Ok(ws) = tungstenite::accept(stream) {
-                let _ = ws
-                    .get_ref()
-                    .set_read_timeout(Some(Duration::from_millis(1)));
-                clients.push(ws);
-            }
-        }
-        if let Ok(first) = rx.recv_timeout(Duration::from_millis(50)) {
-            let mut batch = vec![first];
-            batch.extend(rx.try_iter());
-            clients.retain_mut(|c| {
-                batch
-                    .iter()
-                    .all(|m| c.send(Message::text(m.clone())).is_ok())
-            });
-        }
-        // Read (and discard) client frames so pings are answered and closes noticed.
+        // Read (and discard) client frames non-blockingly so pings are answered and closes noticed.
+        let mut saw_frame = false;
         clients.retain_mut(|c| match c.read() {
             Ok(Message::Close(_)) => false,
-            Ok(_) => true,
+            Ok(_) => {
+                saw_frame = true;
+                true
+            }
             Err(tungstenite::Error::Io(e))
                 if matches!(
                     e.kind(),
@@ -107,9 +172,10 @@ fn run(port: u16, rx: Receiver<String>, stop: Receiver<()>, status: StatusFn) {
             }
             Err(_) => false,
         });
-        if clients.len() != reported {
-            reported = clients.len();
-            status(BridgeStatus::Clients(reported));
+        if saw_frame {
+            poll_wait = CLIENT_POLL_MIN;
+        } else {
+            poll_wait = (poll_wait * 2).min(CLIENT_POLL_MAX);
         }
     }
 }
@@ -117,7 +183,6 @@ fn run(port: u16, rx: Receiver<String>, stop: Receiver<()>, status: StatusFn) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
     #[test]
     fn clients_receive_broadcast_json() {

@@ -1,12 +1,12 @@
 //! The connection thread: join, keep alive, reconnect.
 
 use std::io::{Read, Write};
-use std::net::TcpStream;
-use std::sync::Arc;
+use std::net::{Shutdown, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
 use nanatype_model::{LinkFault, tcp_connect_timeout, ws_connect, ws_idle};
 use serde_json::Value;
 use tungstenite::stream::MaybeTlsStream;
@@ -25,8 +25,8 @@ const LAPLACE_SILENCE_LIMIT: Duration = Duration::from_secs(60);
 /// 彗星号 answers each `ping` with `pong`.
 const COMET_PING_EVERY: Duration = Duration::from_secs(10);
 const COMET_SILENCE_LIMIT: Duration = Duration::from_secs(30);
-/// Reads wait this long, so the loop can poll between frames.
-const READ_TIMEOUT: Duration = Duration::from_millis(100);
+/// Initial handshake read timeout; active sessions set read_timeout to the next deadline.
+const HANDSHAKE_READ_TIMEOUT: Duration = Duration::from_secs(5);
 const RETRY_AFTER: Duration = Duration::from_secs(3);
 const RETRY_AFTER_FATAL: Duration = Duration::from_secs(30);
 
@@ -84,9 +84,93 @@ type DeliverFn = Arc<dyn Fn(BliveEvent) + Send + Sync>;
 /// Reports one update under the epoch of the thread that made it.
 type EmitFn = Box<dyn Fn(BliveUpdate) + Send>;
 
+struct StopSignal {
+    stopped: AtomicBool,
+    wake: Condvar,
+    socket: Mutex<Option<TcpStream>>,
+}
+
+struct SocketGuard<'a>(&'a StopSignal);
+
+impl Drop for SocketGuard<'_> {
+    fn drop(&mut self) {
+        *self.0.socket.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+}
+
+impl StopSignal {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            stopped: AtomicBool::new(false),
+            wake: Condvar::new(),
+            socket: Mutex::new(None),
+        })
+    }
+
+    fn is_stopped(&self) -> bool {
+        self.stopped.load(Ordering::Acquire)
+    }
+
+    fn cancel(&self) {
+        self.stopped.store(true, Ordering::Release);
+        let stream = self
+            .socket
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|s| s.try_clone().ok());
+        if let Some(stream) = stream {
+            let _ = stream.shutdown(Shutdown::Both);
+        }
+        self.wake.notify_all();
+    }
+
+    fn attach(&self, stream: Option<TcpStream>) -> SocketGuard<'_> {
+        let mut slot = self.socket.lock().unwrap_or_else(|e| e.into_inner());
+        if self.is_stopped() {
+            if let Some(stream) = stream {
+                let _ = stream.shutdown(Shutdown::Both);
+            }
+        } else {
+            *slot = stream;
+        }
+        SocketGuard(self)
+    }
+
+    /// Sleep until `until`, waking early when stopped. Returns `true` if stopped.
+    fn wait(&self, until: Instant) -> bool {
+        let mut guard = self.socket.lock().unwrap_or_else(|e| e.into_inner());
+        while !self.is_stopped() {
+            let left = until.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return false;
+            }
+            let (next, _) = self
+                .wake
+                .wait_timeout(guard, left)
+                .unwrap_or_else(|e| e.into_inner());
+            guard = next;
+        }
+        true
+    }
+
+    fn wait_forever(&self) {
+        let mut guard = self.socket.lock().unwrap_or_else(|e| e.into_inner());
+        while !self.is_stopped() {
+            guard = self.wake.wait(guard).unwrap_or_else(|e| e.into_inner());
+        }
+    }
+}
+
 struct Running {
     config: BliveConfig,
-    _stop: Sender<()>,
+    stop: Arc<StopSignal>,
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        self.stop.cancel();
+    }
 }
 
 /// Owns the connection thread. Dropping it (or `set(None)`) stops the thread.
@@ -124,43 +208,30 @@ impl BliveHandle {
             emit(BliveUpdate::Status(BliveStatus::Off));
             return;
         };
-        let (stop_tx, stop_rx) = unbounded::<()>();
+        let stop = StopSignal::new();
+        let worker_stop = Arc::clone(&stop);
         let cfg = config.clone();
         thread::Builder::new()
             .name("nanatype-blive".into())
-            .spawn(move || run(cfg, stop_rx, emit))
+            .spawn(move || run(cfg, worker_stop, emit))
             .expect("spawn blivechat thread");
-        self.running = Some(Running {
-            config,
-            _stop: stop_tx,
-        });
+        self.running = Some(Running { config, stop });
     }
 
     /// Join again with the same configuration (after an auth code error,
     /// which is not retried on its own).
     pub fn reconnect(&mut self) {
         if let Some(running) = self.running.take() {
-            self.set(Some(running.config));
+            let config = running.config.clone();
+            drop(running);
+            self.set(Some(config));
         }
     }
 }
 
-pub(crate) fn stopped(stop: &Receiver<()>) -> bool {
-    stop.try_recv() != Err(TryRecvError::Empty)
-}
-
-/// Sleep until `until`, waking early when stopped.
-fn wait(stop: &Receiver<()>, until: Instant) -> bool {
-    let left = until.saturating_duration_since(Instant::now());
-    !matches!(
-        stop.recv_timeout(left),
-        Err(crossbeam_channel::RecvTimeoutError::Timeout)
-    )
-}
-
-fn run(config: BliveConfig, stop: Receiver<()>, emit: EmitFn) {
+fn run(config: BliveConfig, stop: Arc<StopSignal>, emit: EmitFn) {
     loop {
-        if stopped(&stop) {
+        if stop.is_stopped() {
             return;
         }
         emit(BliveUpdate::Status(BliveStatus::Connecting));
@@ -182,7 +253,7 @@ fn run(config: BliveConfig, stop: Receiver<()>, emit: EmitFn) {
                     message,
                 )));
                 // Wait for a new configuration.
-                let _ = stop.recv();
+                stop.wait_forever();
                 return;
             }
             Ended::Fatal(kind, message) => {
@@ -190,7 +261,7 @@ fn run(config: BliveConfig, stop: Receiver<()>, emit: EmitFn) {
                 RETRY_AFTER_FATAL
             }
         };
-        if wait(&stop, Instant::now() + retry) {
+        if stop.wait(Instant::now() + retry) {
             return;
         }
     }
@@ -202,10 +273,36 @@ enum Ended {
     Fatal(FatalKind, String),
 }
 
-fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
+trait SocketTcp {
+    fn tcp(&self) -> Option<&TcpStream>;
+}
+
+impl SocketTcp for TcpStream {
+    fn tcp(&self) -> Option<&TcpStream> {
+        Some(self)
+    }
+}
+
+impl SocketTcp for MaybeTlsStream<TcpStream> {
+    fn tcp(&self) -> Option<&TcpStream> {
+        match self {
+            MaybeTlsStream::Plain(s) => Some(s),
+            MaybeTlsStream::Rustls(s) => Some(&s.sock),
+            _ => None,
+        }
+    }
+}
+
+fn session(config: &BliveConfig, stop: &StopSignal, emit: &EmitFn) -> Ended {
     match &config.join {
         Join::Blivechat(room) => {
-            match ws_connect(&config.host, config.port, "/api/chat", None, READ_TIMEOUT) {
+            match ws_connect(
+                &config.host,
+                config.port,
+                "/api/chat",
+                None,
+                HANDSHAKE_READ_TIMEOUT,
+            ) {
                 Ok(socket) => Session {
                     feed: Feed::Blivechat,
                     join: Some(protocol::join_message(room)),
@@ -218,7 +315,7 @@ fn session(config: &BliveConfig, stop: &Receiver<()>, emit: &EmitFn) -> Ended {
             }
         }
         Join::Comet(rooms) => {
-            match ws_connect(&config.host, config.port, "/", None, READ_TIMEOUT) {
+            match ws_connect(&config.host, config.port, "/", None, HANDSHAKE_READ_TIMEOUT) {
                 Ok(socket) => Session {
                     feed: Feed::Comet(*rooms),
                     // A first ping at once: a quiet room still hears back.
@@ -263,12 +360,6 @@ fn laplace_connect(url: &str) -> Result<WebSocket<MaybeTlsStream<TcpStream>>, Li
         .map_err(io)?;
     let (socket, _) = tungstenite::client_tls_with_config(url, stream, None, None)
         .map_err(LinkFault::from_handshake)?;
-    let tcp = match socket.get_ref() {
-        MaybeTlsStream::Plain(s) => s,
-        MaybeTlsStream::Rustls(s) => &s.sock,
-        _ => return Err(LinkFault::Other("unsupported stream".into())),
-    };
-    tcp.set_read_timeout(Some(READ_TIMEOUT)).map_err(io)?;
     Ok(socket)
 }
 
@@ -291,34 +382,54 @@ struct Session {
 }
 
 impl Session {
-    fn run<S: Read + Write>(
+    fn run<S: Read + Write + SocketTcp>(
         self,
         mut socket: WebSocket<S>,
-        stop: &Receiver<()>,
+        stop: &StopSignal,
         emit: &EmitFn,
     ) -> Ended {
+        let _guard = stop.attach(socket.get_ref().tcp().and_then(|s| s.try_clone().ok()));
+        if stop.is_stopped() {
+            let _ = socket.close(None);
+            return Ended::Stopped;
+        }
         if let Some(join) = self.join
             && let Err(e) = socket.send(Message::text(join))
         {
-            return Ended::Dropped(LinkFault::from_ws(&e));
+            return if stop.is_stopped() {
+                Ended::Stopped
+            } else {
+                Ended::Dropped(LinkFault::from_ws(&e))
+            };
         }
         emit(BliveUpdate::Status(BliveStatus::Connected));
         let mut last_sent = Instant::now();
         let mut last_heard = Instant::now();
         loop {
-            if stopped(stop) {
+            if stop.is_stopped() {
                 let _ = socket.close(None);
                 let _ = socket.flush();
                 return Ended::Stopped;
             }
             if last_sent.elapsed() >= self.beat_every {
                 if let Err(e) = socket.send(self.beat.clone()) {
-                    return Ended::Dropped(LinkFault::from_ws(&e));
+                    return if stop.is_stopped() {
+                        Ended::Stopped
+                    } else {
+                        Ended::Dropped(LinkFault::from_ws(&e))
+                    };
                 }
                 last_sent = Instant::now();
             }
             if last_heard.elapsed() >= self.silence {
                 return Ended::Dropped(LinkFault::Silent);
+            }
+            let next_deadline = (last_sent + self.beat_every).min(last_heard + self.silence);
+            let wait = next_deadline
+                .saturating_duration_since(Instant::now())
+                .max(Duration::from_millis(1));
+            if let Some(tcp) = socket.get_ref().tcp() {
+                let _ = tcp.set_read_timeout(Some(wait));
             }
             let text = match socket.read() {
                 Ok(Message::Text(text)) => text.as_str().to_owned(),
@@ -330,14 +441,24 @@ impl Session {
                     }
                 }
                 Ok(Message::Close(_)) => {
-                    return Ended::Dropped(LinkFault::Closed);
+                    return if stop.is_stopped() {
+                        Ended::Stopped
+                    } else {
+                        Ended::Dropped(LinkFault::Closed)
+                    };
                 }
                 Ok(_) => {
                     last_heard = Instant::now();
                     continue;
                 }
                 Err(e) if ws_idle(&e) => continue,
-                Err(e) => return Ended::Dropped(LinkFault::from_ws(&e)),
+                Err(e) => {
+                    return if stop.is_stopped() {
+                        Ended::Stopped
+                    } else {
+                        Ended::Dropped(LinkFault::from_ws(&e))
+                    };
+                }
             };
             last_heard = Instant::now();
             let incoming = match self.feed {

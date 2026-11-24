@@ -98,7 +98,7 @@ pub enum Sent {
 pub(crate) type Reply = (u16, Value);
 
 /// The wire, so the worker can be driven without a network in tests.
-pub(crate) trait Http: Send {
+pub(crate) trait Http: Send + Sync {
     fn form(&self, url: &str, form: &[(&str, &str)]) -> Result<Reply, ApiError>;
     fn get(&self, url: &str, auth: &str) -> Result<Reply, ApiError>;
     fn post(&self, url: &str, auth: &str, body: &Value) -> Result<Reply, ApiError>;

@@ -30,6 +30,7 @@ const ICE_ALL: i32 = 0x7fff_ffff;
 /// still queued. 16 MiB holds a whole session frame (8 MiB at most) plus two
 /// pictures (512 KiB each) before the pump has to hold chunks back.
 const SEND_BUFFER: i32 = 16 * 1024 * 1024;
+#[allow(clippy::unnecessary_cast)]
 const RELAYED: i32 = steamworks::sys::k_nSteamNetworkConnectionInfoFlags_Relayed as i32;
 
 struct Request {
@@ -260,37 +261,39 @@ fn poll_accepts(
     let Some(listen) = listen else {
         return;
     };
-    if !accepts.iter().any(|job| job.port == port) {
-        return;
-    }
-    match listen.try_receive_event() {
-        Some(ListenSocketEvent::Connecting(request)) => {
-            let _ = request.accept();
-        }
-        Some(ListenSocketEvent::Connected(event)) => {
-            let remote_id = event
-                .remote()
-                .steam_id()
-                .map(|id| id.raw().to_string())
-                .unwrap_or_default();
-            let conn = event.take_connection();
-            if remote_id.is_empty() {
-                end(conn);
-                return;
+    while accepts.iter().any(|job| job.port == port) {
+        let Some(event) = listen.try_receive_event() else {
+            break;
+        };
+        match event {
+            ListenSocketEvent::Connecting(request) => {
+                let _ = request.accept();
             }
-            let Some(index) = accepts.iter().position(|job| job.port == port) else {
-                end(conn);
-                return;
-            };
-            let job = accepts.remove(index);
-            if job.cancel.load(Ordering::Relaxed) {
-                end(conn);
-                let _ = job.reply.send(Err("Connection cancelled".into()));
-                return;
+            ListenSocketEvent::Connected(event) => {
+                let remote_id = event
+                    .remote()
+                    .steam_id()
+                    .map(|id| id.raw().to_string())
+                    .unwrap_or_default();
+                let conn = event.take_connection();
+                if remote_id.is_empty() {
+                    end(conn);
+                    continue;
+                }
+                let Some(index) = accepts.iter().position(|job| job.port == port) else {
+                    end(conn);
+                    continue;
+                };
+                let job = accepts.remove(index);
+                if job.cancel.load(Ordering::Relaxed) {
+                    end(conn);
+                    let _ = job.reply.send(Err("Connection cancelled".into()));
+                    continue;
+                }
+                let _ = job.reply.send(Ok(attach(client.clone(), conn, remote_id)));
             }
-            let _ = job.reply.send(Ok(attach(client.clone(), conn, remote_id)));
+            ListenSocketEvent::Disconnected(_) => {}
         }
-        Some(ListenSocketEvent::Disconnected(_)) | None => {}
     }
 }
 
@@ -332,6 +335,10 @@ fn attach(
     }
 }
 
+const IDLE_MIN: Duration = Duration::from_millis(2);
+const IDLE_MAX: Duration = Duration::from_millis(50);
+const STATE_CHECK_EVERY: Duration = Duration::from_millis(100);
+
 fn pump(
     client: Client,
     mut conn: steamworks::networking_sockets::NetConnection,
@@ -344,19 +351,28 @@ fn pump(
     let mut asm = Assembler::new();
     let mut next_id = 1u32;
     let mut last_route = Instant::now() - Duration::from_secs(2);
+    let mut last_state_check = Instant::now();
+    let mut idle_wait = IDLE_MIN;
     // Chunks Steam refused because its send buffer was full, oldest first.
     // Nothing new is chunked until they are all handed over, so each lane
     // keeps its order and a Close still follows everything queued before it.
-    let mut pending: VecDeque<(i32, Vec<u8>)> = VecDeque::new();
+    let mut pending: VecDeque<(i32, Arc<[u8]>)> = VecDeque::new();
     loop {
-        if closed(&conn) {
-            break;
+        if last_state_check.elapsed() >= STATE_CHECK_EVERY {
+            last_state_check = Instant::now();
+            if closed(&conn) {
+                break;
+            }
         }
+        let mut active = false;
         let mut stop = false;
         loop {
             match flush(&utils, &sockets, &conn, &mut pending) {
-                Ok(true) => {}
-                Ok(false) => break,
+                Ok(flushed_all) => {
+                    if !flushed_all {
+                        break;
+                    }
+                }
                 Err(_) => {
                     stop = true;
                     break;
@@ -369,12 +385,15 @@ fn pump(
                 }
                 Err(mpsc::error::TryRecvError::Empty) => break,
                 Ok(msg) => {
+                    active = true;
                     if let Some(packet) = as_packet(msg) {
                         let channel = lane(&packet);
                         match chunks(next_id, &packet) {
                             Ok(parts) => {
                                 next_id = next_id.wrapping_add(1);
-                                pending.extend(parts.into_iter().map(|part| (channel, part)));
+                                pending.extend(
+                                    parts.into_iter().map(|part| (channel, Arc::from(part))),
+                                );
                             }
                             Err(_) => {
                                 stop = true;
@@ -392,6 +411,10 @@ fn pump(
             Ok(messages) => messages,
             Err(_) => break,
         };
+        let received_count = messages.len();
+        if received_count > 0 {
+            active = true;
+        }
         let mut failed = false;
         for message in messages {
             match asm.push(message.data()) {
@@ -423,7 +446,15 @@ fn pump(
                 .unwrap_or(0);
             let _ = route.send(RouteSnap { name, rtt_ms });
         }
-        thread::sleep(Duration::from_millis(2));
+        if active || received_count == 32 {
+            idle_wait = IDLE_MIN;
+            if received_count == 32 {
+                continue;
+            }
+        } else {
+            idle_wait = (idle_wait * 2).min(IDLE_MAX);
+        }
+        thread::sleep(idle_wait);
     }
     let _ = inbound_tx.send(Inbound::Closed);
     end(conn);
@@ -453,10 +484,10 @@ fn flush(
     utils: &steamworks::networking_utils::NetworkingUtils,
     sockets: &steamworks::networking_sockets::NetworkingSockets,
     conn: &steamworks::networking_sockets::NetConnection,
-    pending: &mut VecDeque<(i32, Vec<u8>)>,
+    pending: &mut VecDeque<(i32, Arc<[u8]>)>,
 ) -> Result<bool, String> {
     while let Some((channel, bytes)) = pending.front() {
-        match send_message(utils, sockets, conn, *channel, bytes.clone()) {
+        match send_message(utils, sockets, conn, *channel, bytes) {
             Ok(()) => {
                 pending.pop_front();
             }
@@ -467,22 +498,24 @@ fn flush(
     Ok(true)
 }
 
-/// Steam takes ownership of the bytes even when it refuses them, which is why
-/// [`flush`] passes a copy and keeps the original until the send succeeds.
+/// Copies `bytes` into a Steam-allocated message buffer so `flush` keeps its
+/// `Arc<[u8]>` without cloning on `LimitExceeded`.
 fn send_message(
     utils: &steamworks::networking_utils::NetworkingUtils,
     sockets: &steamworks::networking_sockets::NetworkingSockets,
     conn: &steamworks::networking_sockets::NetConnection,
     channel: i32,
-    bytes: Vec<u8>,
+    bytes: &[u8],
 ) -> Result<(), SteamError> {
-    let mut message = utils.allocate_message(0);
+    let mut message = utils.allocate_message(bytes.len());
     message.set_connection(conn);
     message.set_send_flags(SendFlags::RELIABLE_NO_NAGLE);
     message.set_channel(channel);
-    message
-        .set_data(bytes)
-        .map_err(|_| SteamError::InvalidParameter)?;
+    if !bytes.is_empty() {
+        message
+            .copy_data_into_buffer(bytes)
+            .map_err(|_| SteamError::InvalidParameter)?;
+    }
     sockets
         .send_messages(std::iter::once(message))
         .into_iter()
@@ -520,12 +553,16 @@ fn route_name(info: &steamworks::networking_types::NetConnectionInfo) -> &'stati
     use std::mem::{align_of, size_of};
     type Info = steamworks::networking_types::NetConnectionInfo;
     type Raw = steamworks::sys::SteamNetConnectionInfo_t;
-    if size_of::<Info>() != size_of::<Raw>() || align_of::<Info>() != align_of::<Raw>() {
+    const _: () = assert!(size_of::<Info>() == size_of::<Raw>());
+    const _: () = assert!(align_of::<Info>() == align_of::<Raw>());
+    // SAFETY: `steamworks 0.13.1` wraps `SteamNetConnectionInfo_t` as the sole
+    // field of `NetConnectionInfo` (size and alignment asserted at compile time),
+    // and we cross-check `m_nUserData` against the safe accessor before reading
+    // the relay flag and POP relay ID.
+    let raw = unsafe { std::ptr::read((info as *const Info).cast::<Raw>()) };
+    if raw.m_nUserData != info.user_data() {
         return "steam";
     }
-    // `NetConnectionInfo` is a newtype around the C struct. The crate keeps
-    // the relay flag private, and that flag is what distinguishes SDR.
-    let raw = unsafe { &*(info as *const Info as *const Raw) };
     if (raw.m_nFlags & RELAYED) != 0 || raw.m_idPOPRelay != 0 {
         "relay"
     } else {

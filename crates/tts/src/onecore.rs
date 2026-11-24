@@ -81,6 +81,13 @@ impl Engine for System {
         self.sapi.as_ref().is_some_and(Sapi::busy)
             || self.onecore.as_ref().is_some_and(OneCore::busy)
     }
+
+    fn next_poll(&self, now: Instant) -> Option<Duration> {
+        if self.sapi.as_ref().is_some_and(Sapi::busy) {
+            return Some(crate::POLL);
+        }
+        self.onecore.as_ref().and_then(|o| o.next_poll(now))
+    }
 }
 
 pub(crate) struct OneCore {
@@ -266,6 +273,15 @@ impl Engine for OneCore {
 
     fn busy(&self) -> bool {
         self.timed.busy() || !self.failed.is_empty()
+    }
+
+    fn next_poll(&self, now: Instant) -> Option<Duration> {
+        if !self.failed.is_empty() {
+            return Some(Duration::ZERO);
+        }
+        self.timed
+            .next_deadline()
+            .map(|at| at.saturating_duration_since(now))
     }
 }
 

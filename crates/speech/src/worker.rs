@@ -4,7 +4,7 @@ use crate::{
     model,
     native::{self, Native, NativeEvent},
 };
-use crossbeam_channel::{Receiver, Sender, TrySendError, bounded};
+use crossbeam_channel::{Receiver, Sender, TrySendError, after, bounded, select};
 use nanatype_settings::{SpeechBackend, SpeechSettings};
 use rubato::{FftFixedInOut, Resampler};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -210,6 +210,8 @@ pub(crate) fn run(
     let mut raw = VecDeque::<f32>::new();
     let mut normalized = VecDeque::<f32>::new();
     let mut preroll = VecDeque::<f32>::new();
+    let mut resampler_in = vec![0.0f32; resampler.input_frames_max()];
+    let mut resampler_out = vec![vec![0.0f32; resampler.output_frames_max()]];
     let mut vad = webrtc_vad::Vad::new_with_rate_and_mode(
         webrtc_vad::SampleRate::Rate16kHz,
         webrtc_vad::VadMode::Aggressive,
@@ -237,21 +239,26 @@ pub(crate) fn run(
                 return Err(Error::key("speech-recognition-timeout"));
             }
         }
-        while let Ok(event) = results.try_recv() {
+        let drain_result = |event: NativeEvent,
+                            pending: &mut BTreeSet<u64>,
+                            current: &mut Option<Chunk>,
+                            voiced: &mut usize,
+                            native_tasks: &mut BTreeMap<u64, (Native, Option<Instant>)>|
+         -> Result<()> {
             if !pending.contains(&event.id) {
-                continue;
+                return Ok(());
             }
             if event.kind == 0 {
                 deliver(generation, Event::Partial(event.id, event.text));
-                continue;
+                return Ok(());
             }
             if event.kind == 2 {
                 return Err(Error::key("speech-system-error"));
             }
             pending.remove(&event.id);
             if current.as_ref().is_some_and(|chunk| chunk.id == event.id) {
-                current = None;
-                voiced = 0;
+                *current = None;
+                *voiced = 0;
             }
             native_tasks.remove(&event.id);
             {
@@ -259,11 +266,40 @@ pub(crate) fn run(
                 a.pending = a.pending.saturating_sub(1);
             }
             deliver(generation, Event::Final(event.id, event.text));
+            Ok(())
+        };
+        while let Ok(event) = results.try_recv() {
+            drain_result(
+                event,
+                &mut pending,
+                &mut current,
+                &mut voiced,
+                &mut native_tasks,
+            )?;
         }
-        let (samples, captured_at) = match capture.samples.recv_timeout(Duration::from_millis(20)) {
-            Ok(samples) => samples,
-            Err(crossbeam_channel::RecvTimeoutError::Timeout) => continue,
-            Err(_) => return Err(Error::key("speech-device-error")),
+        let watchdog = if native_tasks.is_empty() {
+            Duration::from_millis(250)
+        } else {
+            Duration::from_millis(50)
+        };
+        let (samples, captured_at) = select! {
+            recv(results) -> res => {
+                if let Ok(event) = res {
+                    drain_result(
+                        event,
+                        &mut pending,
+                        &mut current,
+                        &mut voiced,
+                        &mut native_tasks,
+                    )?;
+                }
+                continue;
+            }
+            recv(capture.samples) -> res => match res {
+                Ok(samples) => samples,
+                Err(_) => return Err(Error::key("speech-device-error")),
+            },
+            recv(after(watchdog)) -> _ => continue,
         };
         last_capture = captured_at;
         if captured_at.elapsed() > Duration::from_millis(250) {
@@ -271,18 +307,31 @@ pub(crate) fn run(
         }
         raw.extend(samples);
         while raw.len() >= resampler.input_frames_next() {
-            let input: Vec<f32> = raw.drain(..resampler.input_frames_next()).collect();
-            let output = resampler
-                .process(&[input], None)
+            let needed = resampler.input_frames_next();
+            if needed > resampler_in.len() {
+                resampler_in.resize(needed, 0.0);
+            }
+            for (dst, src) in resampler_in[..needed].iter_mut().zip(raw.drain(..needed)) {
+                *dst = src;
+            }
+            let out_needed = resampler.output_frames_next();
+            if out_needed > resampler_out[0].len() {
+                resampler_out[0].resize(out_needed, 0.0);
+            }
+            let (_, out_len) = resampler
+                .process_into_buffer(&[&resampler_in[..needed]], &mut resampler_out, None)
                 .map_err(|e| Error::detail("speech-device-error", e))?;
-            normalized.extend(output.into_iter().next().unwrap_or_default());
+            normalized.extend(&resampler_out[0][..out_len]);
         }
         while normalized.len() >= FRAME {
-            let frame: Vec<f32> = normalized.drain(..FRAME).collect();
-            let pcm: Vec<i16> = frame
-                .iter()
-                .map(|v| (v.clamp(-1.0, 1.0) * 32767.0) as i16)
-                .collect();
+            let mut frame = [0.0f32; FRAME];
+            for (dst, src) in frame.iter_mut().zip(normalized.drain(..FRAME)) {
+                *dst = src;
+            }
+            let mut pcm = [0i16; FRAME];
+            for (dst, &v) in pcm.iter_mut().zip(frame.iter()) {
+                *dst = (v.clamp(-1.0, 1.0) * 32767.0) as i16;
+            }
             let voice = vad
                 .is_voice_segment(&pcm)
                 .map_err(|_| Error::key("speech-device-error"))?;

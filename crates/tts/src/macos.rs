@@ -1,6 +1,7 @@
 //! AVSpeechSynthesizer. Its delegate is called on the main run loop, so it only
 //! queues what happened; the worker turns that into events when it polls.
 use crate::{Engine, Event, Utterance, Voice, utf16_range};
+use crossbeam_channel::Sender;
 use objc2::rc::{Retained, autoreleasepool};
 use objc2::runtime::ProtocolObject;
 use objc2::{AnyThread, DefinedClass, define_class, msg_send, sel};
@@ -19,8 +20,11 @@ enum Raw {
     Finished,
 }
 
-/// Delegate calls, keyed by the utterance's address.
-type Inbox = Mutex<Vec<(usize, Raw)>>;
+/// Delegate calls, keyed by the utterance's address, plus a wakeup channel.
+struct Inbox {
+    events: Mutex<Vec<(usize, Raw)>>,
+    wake: Sender<()>,
+}
 
 define_class!(
     // SAFETY: NSObject has no subclassing requirements and Delegate has no Drop.
@@ -60,19 +64,30 @@ define_class!(
 );
 
 impl Delegate {
-    fn create() -> Retained<Self> {
-        let this = Self::alloc().set_ivars(Mutex::new(Vec::new()));
+    fn create(wake: Sender<()>) -> Retained<Self> {
+        let this = Self::alloc().set_ivars(Inbox {
+            events: Mutex::new(Vec::new()),
+            wake,
+        });
         unsafe { msg_send![super(this), init] }
     }
     fn push(&self, utterance: &AVSpeechUtterance, raw: Raw) {
         let key = utterance as *const AVSpeechUtterance as usize;
         self.ivars()
+            .events
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push((key, raw));
+        let _ = self.ivars().wake.try_send(());
     }
     fn take(&self) -> Vec<(usize, Raw)> {
-        std::mem::take(&mut *self.ivars().lock().unwrap_or_else(|e| e.into_inner()))
+        std::mem::take(
+            &mut *self
+                .ivars()
+                .events
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()),
+        )
     }
 }
 
@@ -96,10 +111,10 @@ pub(crate) struct Mac {
 }
 
 impl Mac {
-    pub fn new() -> Self {
+    pub fn new(wake: Sender<()>) -> Self {
         autoreleasepool(|_| {
             let synth = unsafe { AVSpeechSynthesizer::new() };
-            let delegate = Delegate::create();
+            let delegate = Delegate::create(wake);
             unsafe { synth.setDelegate(Some(ProtocolObject::from_ref(&*delegate))) };
             Self {
                 synth,
@@ -252,6 +267,12 @@ impl Engine for Mac {
 
     fn busy(&self) -> bool {
         !self.pending.is_empty()
+    }
+
+    fn next_poll(&self, _now: Instant) -> Option<Duration> {
+        // Delegate callbacks wake the worker directly; keep a bounded fallback
+        // only for environments without a main run loop (`IDLE_GRACE`).
+        Some(Duration::from_millis(300))
     }
 }
 
