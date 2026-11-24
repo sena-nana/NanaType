@@ -21,7 +21,7 @@ flowchart TD
 
 ## 帧需求与时钟
 
-`frame_policy` 在查询与准备帧时都读取最新状态，不跨回调缓存。对话框入退场、震屏、继续图使用本地/伙伴 `now`；跟随滚动和分页按需连续刷新；字形揭示与循环效果由 NanaUI presentation clock；历史淡出使用 `history_now`；输入/设置脉动各自请求 30 FPS。
+`frame_policy` 在查询与准备帧时都读取最新状态，不跨回调缓存；展示与历史侧的场景帧需求由 `crates/frame` 的 `dialogue::frame_demand` 与 `history::frame_demand` 统一计算，帧时钟支持 RAII `clock::FrameScope`（及兼容的 `clock::begin_frame`）。对话框入退场、震屏、继续图使用本地/伙伴 `now`；跟随滚动和分页按需连续刷新；字形揭示与循环效果由 NanaUI presentation clock；历史淡出使用 `history_now`；输入/设置脉动各自请求 30 FPS。皮肤着色器保护与编译由 `shader_effects` 内的统一状态机 `ShaderPolicyState`、持久化 2 线程 `CompilerPool` 与异步去抖 `GuardWriter` 承担。
 
 活动字形存在时窗口可请求 120Hz 合成帧，展示与伙伴不设上限，输入/历史取 60，皮肤本身仍按 30/60 FPS；上限减少采样次数，不减慢绝对时间动效。文字之前没有宿主纹理或自定义 GPU 节点时，稳定背景可复用、每帧只重画文字。历史从最新记录向前选可见条目，排除隐藏台词；淡出 600ms，调度保留 100ms 余量。
 
@@ -29,9 +29,9 @@ Windows 移动/缩放时，`LiveSizeMove` 用 16ms 定时器唤醒宿主事件�
 
 ## 表面与输出
 
-表面优先级为九宫格、图案、轮廓、普通样式；对话框只解析一次，尾巴和扫光复用表面。普通背景/图片/圆角/边框走框架；图案与复杂轮廓走 retained Painter。切换表面清除上一次图片、边框、阴影和变换字段。
+表面优先级（`SurfaceKind`）为九宫格、图案、轮廓、普通样式；对话框通过 `Skin::resolve_dialogue` / `skin_theme::resolve_dialogue` 按尺寸一次性解析布局与覆盖项，不再整份克隆 `Skin`，尾巴和扫光复用表面。普通背景/图片/圆角/边框走框架；图案与复杂轮廓走 retained Painter。切换表面清除上一次图片、边框、阴影和变换字段。
 
-扫光启用且强度/颜色有效时才创建 GPU 节点；九宫格读取/解码失败使用透明遮罩，不退化成矩形光斑。编辑预览和减少动态效果静止。输出资格由 `output::resolve` 统一判断：关闭、伙伴不存在、不支持平台、空名称和名称冲突分别给出状态；资格恢复或改名会释放旧发送端，过期 Runtime 回调不能覆盖当前错误。
+扫光启用且强度/颜色有效时才创建 GPU 节点；九宫格读取/解码失败使用透明遮罩，不退化成矩形光斑。编辑预览由显式 `PreviewOptions` 控制，与减少动态效果一同保持静止。输出资格由 `output::resolve` 统一判断，后端发送通过 `OutputTransport`（`output/{config,mod,spout,syphon}.rs`）隔离：关闭、伙伴不存在、不支持平台、空名称和名称冲突分别给出状态；资格恢复或改名会释放旧发送端，过期 Runtime 回调不能覆盖当前错误。
 
 ## 验证
 
