@@ -333,7 +333,7 @@ fn main() {
     );
     core.handle(Cmd::Skip, 1);
     ui.display.set(Arc::new(core.display().clone()));
-    ui.peer_display.set(ui.display.get_untracked());
+    ui.peer_lanes[0].display.set(ui.display.get_untracked());
     ui.history
         .set(Arc::new(core.history().iter().cloned().collect()));
     let g = gpu();

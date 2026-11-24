@@ -56,7 +56,9 @@ fn separate_scenes_keep_self_and_partner_content_when_roles_change() {
     );
     partner.handle(Cmd::Skip, 1);
     ui.display.set(Arc::new(own.display().clone()));
-    ui.peer_display.set(Arc::new(partner.display().clone()));
+    ui.peer_lanes[0]
+        .display
+        .set(Arc::new(partner.display().clone()));
     ui.now.set(100_000);
     ui.peer_now.set(100_000); // The host advances each display clock independently.
     let out =

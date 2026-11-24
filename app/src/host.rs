@@ -2148,7 +2148,7 @@ mod redraw_tests {
             nanatype_i18n::Locale::ZhCn,
         );
         ui.display.update(|view| Arc::make_mut(view).empty = false);
-        ui.peer_display.set(ui.display.get_untracked());
+        ui.peer_lanes[0].display.set(ui.display.get_untracked());
         ui.now.set(123);
         ui.peer_now.set(456);
         let follow = overflow::Follow::default();

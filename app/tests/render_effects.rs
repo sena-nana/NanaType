@@ -32,7 +32,7 @@ fn combined_effects_keep_ruby_objects_and_partner_animation_without_layout() {
         core.handle(Cmd::SendMarkup(markup.into()), 0);
         core.handle(Cmd::Skip, 1);
         ui.display.set(Arc::new(core.display().clone()));
-        ui.peer_display.set(ui.display.get_untracked());
+        ui.peer_lanes[0].display.set(ui.display.get_untracked());
         ui.now.set(100_000);
         ui.peer_now.set(100_000);
         let mut session = common::session().mount_at(100_000, 796, 236, move || {

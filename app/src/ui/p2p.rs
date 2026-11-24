@@ -410,7 +410,8 @@ pub(crate) fn waiting_room(ui: Ui) -> AnyView {
     dynamic(
         move || {
             let state = ui.peer.get();
-            let empty = ui.peer_seats.get() == 0 && ui.peer_display.with(|view| view.empty);
+            let empty =
+                ui.peer_seats.get() == 0 && ui.peer_lanes[0].display.with(|view| view.empty);
             (state, empty, ui.locale.get())
         },
         move |(state, empty, _)| {

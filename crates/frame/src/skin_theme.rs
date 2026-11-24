@@ -62,48 +62,60 @@ pub fn with_overrides(skin: &Skin, o: &SkinOverrides) -> Skin {
     }
     if let Some(k) = o.decor_scale {
         s.decor_scale = Some(k);
-        s.dialogue.decor.iter_mut().for_each(|d| scale_decor(d, k));
-    }
-    if let Some(responsive) = &mut s.dialogue.responsive {
-        for layout in responsive.layouts_mut() {
-            if let Some(plate) = &mut layout.nameplate {
-                if let Some(k) = o.name_scale {
-                    scale_nameplate(plate, k);
-                }
-                if o.name_visible == Some(false) {
-                    plate.visible = false;
-                }
-            }
-            if let Some(k) = o.decor_scale {
-                for d in layout.decor.iter_mut().flatten() {
-                    scale_decor(d, k);
-                }
-            }
-            if let Some(c) = o.name_color
-                && let Some(plate) = &mut layout.nameplate
-            {
-                plate.color = c;
-                plate.shape.gradient = None;
-            }
-            if let Some(c) = o.accent
-                && let Some(mark) = &mut layout.continue_
-            {
-                mark.color = c;
-            }
-            if let Some(c) = o.box_color {
-                if let Some(b) = &mut layout.box_ {
-                    b.color = c;
-                    b.shape.gradient = None;
-                    b.shape.material = None;
-                    b.frame = None;
-                }
-                if let Some(effects) = &mut layout.shader_effects {
-                    effects.retain(|e| e.target != nanatype_theme::ShaderTarget::Artwork);
-                }
-            }
+        if s.dialogue.responsive.is_none() {
+            s.dialogue.decor.iter_mut().for_each(|d| scale_decor(d, k));
         }
     }
     s
+}
+
+/// Resolve dialogue layout for `size` via [`Skin::resolve_dialogue`] and apply
+/// user overrides once after layout selection, without cloning the full [`Skin`]
+/// or looping over `responsive.layouts_mut()`.
+pub fn resolve_dialogue(
+    skin: &Skin,
+    size: (f32, f32),
+    o: &SkinOverrides,
+) -> nanatype_theme::ResolvedDialogue {
+    let mut resolved = skin.resolve_dialogue(size);
+    let nameplate_from_responsive = skin.dialogue.responsive.as_ref().is_some_and(|spec| {
+        let portrait = nanatype_theme::dialogue_is_portrait(skin, [size.0, size.1]);
+        let variant = if portrait {
+            &spec.portrait
+        } else {
+            &spec.landscape
+        };
+        variant.nameplate.is_some()
+            || spec.rules.iter().any(|rule| {
+                size.0 <= rule.max_width
+                    && size.1 <= rule.max_height
+                    && rule.portrait.is_none_or(|v| v == portrait)
+                    && rule.layout.nameplate.is_some()
+            })
+    });
+    let d = &mut resolved.dialogue;
+    if let Some(c) = o.box_color {
+        d.box_.color = c;
+        d.box_.shape.gradient = None;
+        d.box_.shape.material = None;
+        d.box_.frame = None;
+        d.shader_effects
+            .retain(|e| e.target != nanatype_theme::ShaderTarget::Artwork);
+    }
+    if let Some(c) = o.name_color {
+        d.nameplate.color = c;
+        d.nameplate.shape.gradient = None;
+    }
+    if let Some(c) = o.accent {
+        d.continue_.color = c;
+    }
+    if o.name_visible == Some(false) {
+        d.nameplate.visible = false;
+    }
+    if nameplate_from_responsive && let Some(k) = o.name_scale {
+        scale_nameplate(&mut d.nameplate, k);
+    }
+    resolved
 }
 
 /// The name plate `k` times its size: its text, padding, corners, borders,

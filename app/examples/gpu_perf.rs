@@ -95,7 +95,7 @@ fn session(registry: &SkinRegistry, name: &'static str, track: usize) -> (Ui, Ru
                 }
             });
         }
-        ui.peer_display.set(ui.display.get_untracked());
+        ui.peer_lanes[0].display.set(ui.display.get_untracked());
         ui.history
             .set(Arc::new(core.history().iter().cloned().collect()));
         let id = DocumentId::new((track + 1) as u64).unwrap();

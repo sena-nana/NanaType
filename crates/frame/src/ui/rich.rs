@@ -523,8 +523,8 @@ fn badge_icon_paths(source: &str, width: f32, round: bool) -> Option<String> {
 /// one reveal/object unit by drawing its vertical badge as a contained SVG.
 /// Ordinary text still uses native vertical shaping and punctuation.
 pub fn vertical_objects(rich: &mut RichText, look: &Look, max_inline: f32) {
-    static CACHE: LazyLock<Mutex<HashMap<blake3::Hash, RichObject>>> =
-        LazyLock::new(Default::default);
+    static CACHE: LazyLock<Mutex<super::effects::LruMap<blake3::Hash, RichObject>>> =
+        LazyLock::new(|| Mutex::new(super::effects::LruMap::new(128)));
     let objects = rich.objects().to_vec();
     for (offset, mut object) in objects {
         match &object.content {
@@ -607,9 +607,6 @@ pub fn vertical_objects(rich: &mut RichText, look: &Look, max_inline: f32) {
                 )
                 .descent(width * 0.5);
                 let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-                if cache.len() >= 128 {
-                    cache.clear();
-                }
                 cache.insert(key, object.clone());
             }
             RichObjectContent::Image { .. } | RichObjectContent::HostTexture { .. } => {
@@ -766,44 +763,154 @@ pub fn vertical_extent(
         .max(1.)
 }
 
-// ---- interned attribute combinations -----------------------------------
+// ---- effect palettes & editor interned attributes -----------------------
 
-static ATTRS: LazyLock<Mutex<Vec<(Effects, Pace)>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+/// Per-document palette of distinct `(Effects, Pace)` combinations.
+///
+/// Rendered documents (`RichTextView`) use a local `EffectPalette` instead of a
+/// process-global append-only table, so `RichSpanStyle.effect` indices stay
+/// local to one `RichText` (typically 0-4 entries) with zero global locks,
+/// zero `u16` wraparound, and zero full-history effect-table rebuilds.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct EffectPalette {
+    entries: Vec<(Effects, Pace)>,
+}
 
-/// The span `effect` index for these effects and pacing (`None` = plain).
+impl EffectPalette {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn index(&mut self, effects: &Effects, pace: Pace) -> Option<u16> {
+        if effects.is_none() && pace.is_inherit() {
+            return None;
+        }
+        if let Some(i) = self
+            .entries
+            .iter()
+            .position(|(e, p)| e == effects && *p == pace)
+        {
+            return u16::try_from(i).ok();
+        }
+        let next = u16::try_from(self.entries.len()).ok()?;
+        self.entries.push((effects.clone(), pace));
+        Some(next)
+    }
+
+    pub fn get(&self, index: u16) -> Option<&(Effects, Pace)> {
+        self.entries.get(usize::from(index))
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub fn chains(&self, defaults: &EffectDefaults, reduced: bool) -> Arc<[GlyphEffectChain]> {
+        if self.entries.is_empty() {
+            return Arc::from([]);
+        }
+        self.entries
+            .iter()
+            .map(|(effects, _)| build_effect_chain(effects, defaults, reduced))
+            .collect()
+    }
+}
+
+fn build_effect_chain(
+    effects: &Effects,
+    defaults: &EffectDefaults,
+    reduced: bool,
+) -> GlyphEffectChain {
+    GlyphEffectChain::new(if reduced {
+        Vec::new()
+    } else {
+        effects
+            .continuous
+            .iter()
+            .map(|e| glyph_effect(e, defaults))
+            .filter(GlyphEffect::is_effective)
+            .collect()
+    })
+}
+
+/// Editor-only `(Effects, Pace)` table shared across `RichTextEditor` commands,
+/// `to_rich(..., editor: true)`, and `from_rich`. Display/history/preview views
+/// use per-document [`EffectPalette`]s and never touch this table.
+#[derive(Default)]
+struct EditorAttrs {
+    entries: Vec<(Effects, Pace)>,
+}
+
+impl EditorAttrs {
+    fn intern(&mut self, effects: &Effects, pace: Pace) -> Option<u16> {
+        if effects.is_none() && pace.is_inherit() {
+            return None;
+        }
+        if let Some(i) = self
+            .entries
+            .iter()
+            .position(|(e, p)| e == effects && *p == pace)
+        {
+            return Some(i as u16);
+        }
+        // Never wrap past `u16::MAX` (would alias an unrelated earlier effect).
+        let idx = u16::try_from(self.entries.len()).unwrap_or(u16::MAX);
+        if usize::from(idx) == self.entries.len() {
+            self.entries.push((effects.clone(), pace));
+        }
+        Some(idx)
+    }
+
+    fn intern_any(&mut self, effects: &Effects, pace: Pace) -> u16 {
+        if let Some(i) = self.intern(effects, pace) {
+            return i;
+        }
+        if let Some(i) = self
+            .entries
+            .iter()
+            .position(|(e, p)| e.is_none() && p.is_inherit())
+        {
+            return i as u16;
+        }
+        let idx = u16::try_from(self.entries.len()).unwrap_or(u16::MAX);
+        if usize::from(idx) == self.entries.len() {
+            self.entries.push((Effects::default(), Pace::Inherit));
+        }
+        idx
+    }
+}
+
+static EDITOR_ATTRS: LazyLock<Mutex<EditorAttrs>> = LazyLock::new(Default::default);
+
+/// The editor span `effect` index for these effects and pacing (`None` = plain).
 pub fn attr_index(effects: &Effects, pace: Pace) -> Option<u16> {
     if effects.is_none() && pace.is_inherit() {
         return None;
     }
-    let mut table = ATTRS.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(i) = table.iter().position(|(e, p)| e == effects && *p == pace) {
-        return Some(i as u16);
-    }
-    table.push((effects.clone(), pace));
-    Some((table.len() - 1) as u16)
+    EDITOR_ATTRS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .intern(effects, pace)
 }
 
 /// Like [`attr_index`] but always an index, so a toolbar can switch a span
 /// back to no effect (span fields can only be overlaid, not removed).
 pub fn attr_index_any(effects: &Effects, pace: Pace) -> u16 {
-    if let Some(i) = attr_index(effects, pace) {
-        return i;
-    }
-    let mut table = ATTRS.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(i) = table
-        .iter()
-        .position(|(e, p)| e.is_none() && p.is_inherit())
-    {
-        return i as u16;
-    }
-    table.push((Effects::default(), Pace::Inherit));
-    (table.len() - 1) as u16
+    EDITOR_ATTRS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .intern_any(effects, pace)
 }
 
 pub fn attr_of(index: u16) -> (Effects, Pace) {
-    ATTRS
+    EDITOR_ATTRS
         .lock()
         .unwrap_or_else(|e| e.into_inner())
+        .entries
         .get(usize::from(index))
         .cloned()
         .unwrap_or((Effects::default(), Pace::Inherit))
@@ -835,9 +942,13 @@ fn glyph_effect(e: &nanatype_model::Continuous, d: &EffectDefaults) -> GlyphEffe
     }
 }
 
-/// Monotonic version of the append-only attribute table.
+/// Monotonic version of the editor attribute table.
 pub fn attr_version() -> usize {
-    ATTRS.lock().unwrap_or_else(|e| e.into_inner()).len()
+    EDITOR_ATTRS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .entries
+        .len()
 }
 
 struct CachedEffects {
@@ -846,40 +957,28 @@ struct CachedEffects {
     reduced: bool,
     effects: Arc<[GlyphEffectChain]>,
 }
-static EFFECTS: Mutex<Vec<CachedEffects>> = Mutex::new(Vec::new());
+static EDITOR_EFFECTS: Mutex<Vec<CachedEffects>> = Mutex::new(Vec::new());
 
-/// Each attribute slot names all its continuous effects, or an empty chain.
-/// Pacing and entrance metadata must never keep a window awake.
+/// Editor effect chains for `RichTextEditor`. Rendered views use
+/// [`to_rich_with_palette`] + [`EffectPalette::chains`] directly.
 pub fn effect_table(defaults: &EffectDefaults, reduced: bool) -> Arc<[GlyphEffectChain]> {
-    let table = ATTRS.lock().unwrap_or_else(|e| e.into_inner());
-    let mut cache = EFFECTS.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(found) = cache
-        .iter()
-        .find(|c| c.version == table.len() && c.defaults == *defaults && c.reduced == reduced)
-    {
+    let table = EDITOR_ATTRS.lock().unwrap_or_else(|e| e.into_inner());
+    let mut cache = EDITOR_EFFECTS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(found) = cache.iter().find(|c| {
+        c.version == table.entries.len() && c.defaults == *defaults && c.reduced == reduced
+    }) {
         return found.effects.clone();
     }
     let effects: Arc<[GlyphEffectChain]> = table
+        .entries
         .iter()
-        .map(|(effects, _)| {
-            GlyphEffectChain::new(if reduced {
-                Vec::new()
-            } else {
-                effects
-                    .continuous
-                    .iter()
-                    .map(|e| glyph_effect(e, defaults))
-                    .filter(GlyphEffect::is_effective)
-                    .collect()
-            })
-        })
+        .map(|(effects, _)| build_effect_chain(effects, defaults, reduced))
         .collect();
-    // Bound old revisions and hot-reloaded palettes, while keeping both motion preferences.
     if cache.len() >= 8 {
         cache.remove(0);
     }
     cache.push(CachedEffects {
-        version: table.len(),
+        version: table.entries.len(),
         defaults: defaults.clone(),
         reduced,
         effects: effects.clone(),
@@ -889,45 +988,182 @@ pub fn effect_table(defaults: &EffectDefaults, reduced: bool) -> Arc<[GlyphEffec
 
 // ---- inline objects ------------------------------------------------------
 
-/// Ids for inlines that ride in rich text as objects. Equal inlines share an
-/// id; only the newest [`MAX_OBJECTS`] are kept, which is far more than any
-/// editor or visible list holds at once (a long stream interns every avatar,
-/// emote and mention it shows).
+fn hash_f32<H: std::hash::Hasher>(v: f32, state: &mut H) {
+    use std::hash::Hash;
+    (if v == 0.0 { 0.0f32 } else { v }).to_bits().hash(state);
+}
+
+fn hash_effects<H: std::hash::Hasher>(e: &Effects, state: &mut H) {
+    use std::hash::Hash;
+    e.continuous.len().hash(state);
+    for c in &e.continuous {
+        (c.kind as u8).hash(state);
+        hash_f32(c.amp, state);
+        hash_f32(c.speed, state);
+    }
+    e.entrance.is_some().hash(state);
+    if let Some(en) = e.entrance {
+        (en.kind as u8).hash(state);
+        en.ms.hash(state);
+    }
+    e.emphasis.map(|em| em.ms).hash(state);
+}
+
+fn hash_pace<H: std::hash::Hasher>(p: Pace, state: &mut H) {
+    use std::hash::Hash;
+    std::mem::discriminant(&p).hash(state);
+    match p {
+        Pace::Inherit | Pace::Instant => {}
+        Pace::Scale(s) => hash_f32(s, state),
+        Pace::FixedMs(ms) => ms.hash(state),
+    }
+}
+
+fn hash_style<H: std::hash::Hasher>(s: &Style, state: &mut H) {
+    use std::hash::Hash;
+    s.color.hash(state);
+    s.size.is_some().hash(state);
+    if let Some(sz) = s.size {
+        std::mem::discriminant(&sz).hash(state);
+        match sz {
+            Size::Em(v) | Size::Px(v) => hash_f32(v, state),
+        }
+    }
+    s.bold.hash(state);
+    s.italic.hash(state);
+    s.underline.hash(state);
+    s.strike.hash(state);
+    s.stroke.is_some().hash(state);
+    if let Some(st) = s.stroke {
+        st.color.hash(state);
+        hash_f32(st.width_px, state);
+    }
+    s.shadow.is_some().hash(state);
+    if let Some(sh) = s.shadow {
+        sh.color.hash(state);
+        hash_f32(sh.dx, state);
+        hash_f32(sh.dy, state);
+        hash_f32(sh.blur, state);
+    }
+    s.font.hash(state);
+}
+
+fn hash_text_run<H: std::hash::Hasher>(r: &TextRun, state: &mut H) {
+    use std::hash::Hash;
+    r.text.hash(state);
+    hash_style(&r.style, state);
+    hash_effects(&r.effects, state);
+    hash_pace(r.pace, state);
+}
+
+fn hash_marker<H: std::hash::Hasher>(m: &Marker, state: &mut H) {
+    use std::hash::Hash;
+    std::mem::discriminant(m).hash(state);
+    match m {
+        Marker::Wait { ms } => ms.hash(state),
+        Marker::Pause { auto_ms } => auto_ms.hash(state),
+        Marker::Page => {}
+        Marker::Sound { sound, gain } => {
+            sound.hash(state);
+            hash_f32(*gain, state);
+        }
+        Marker::Expression { name, intensity } => {
+            name.hash(state);
+            intensity.is_some().hash(state);
+            if let Some(v) = intensity {
+                hash_f32(*v, state);
+            }
+        }
+        Marker::Portrait { variant } => variant.hash(state),
+        Marker::ScreenShake { amp, ms } => {
+            hash_f32(*amp, state);
+            ms.hash(state);
+        }
+        Marker::Vts(action) => {
+            std::mem::discriminant(action).hash(state);
+            match action {
+                nanatype_model::VtsAction::Hotkey { hotkey } => hotkey.hash(state),
+                nanatype_model::VtsAction::Expression { file, active, fade } => {
+                    file.hash(state);
+                    active.hash(state);
+                    fade.is_some().hash(state);
+                    if let Some(f) = fade {
+                        hash_f32(*f, state);
+                    }
+                }
+                nanatype_model::VtsAction::Param { name, value, ms } => {
+                    name.hash(state);
+                    hash_f32(*value, state);
+                    ms.hash(state);
+                }
+            }
+        }
+    }
+}
+
+/// Structural 64-bit hash of an [`Inline`] with zero JSON/BLAKE3 allocation.
+pub fn hash_inline(inline: &Inline) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    std::mem::discriminant(inline).hash(&mut h);
+    match inline {
+        Inline::Text(r) => hash_text_run(r, &mut h),
+        Inline::Ruby(r) => {
+            hash_text_run(&r.base, &mut h);
+            r.annotation.hash(&mut h);
+        }
+        Inline::Atom(a) => {
+            a.kind.hash(&mut h);
+            a.asset.hash(&mut h);
+            hash_f32(a.height_em, &mut h);
+            a.alt.hash(&mut h);
+            hash_effects(&a.effects, &mut h);
+        }
+        Inline::Mention(m) => {
+            m.user.uid.hash(&mut h);
+            m.user.name.hash(&mut h);
+            m.user.avatar.hash(&mut h);
+            hash_effects(&m.effects, &mut h);
+        }
+        Inline::Marker(m) => hash_marker(m, &mut h),
+    }
+    h.finish()
+}
+
+/// Non-lossy intern table for editor inline objects (`Atom`, `Mention`,
+/// `Marker`). Stored as `Arc<Inline>` keyed by structural hash + equality so
+/// `from_rich` round-trips never lose inlines due to cache eviction, and display/
+/// history rendering never pollutes or locks it.
 #[derive(Default)]
 struct Objects {
     next: u64,
-    by_id: std::collections::BTreeMap<u64, (blake3::Hash, Inline)>,
-    by_key: HashMap<blake3::Hash, u64>,
+    by_id: HashMap<u64, Arc<Inline>>,
+    by_hash: HashMap<u64, Vec<(u64, Arc<Inline>)>>,
 }
-
-const MAX_OBJECTS: usize = 4096;
 
 static OBJECTS: LazyLock<Mutex<Objects>> = LazyLock::new(Default::default);
 
-fn object_key(inline: &Inline) -> blake3::Hash {
-    blake3::hash(&serde_json::to_vec(inline).unwrap_or_default())
-}
-
 impl Objects {
     fn intern(&mut self, inline: &Inline) -> u64 {
-        let key = object_key(inline);
-        if let Some(id) = self.by_key.get(&key) {
+        let key = hash_inline(inline);
+        if let Some(bucket) = self.by_hash.get(&key)
+            && let Some((id, _)) = bucket
+                .iter()
+                .find(|(_, existing)| existing.as_ref() == inline)
+        {
             return *id;
         }
         self.next += 1;
         let id = self.next;
-        self.by_key.insert(key, id);
-        self.by_id.insert(id, (key, inline.clone()));
-        while self.by_id.len() > MAX_OBJECTS {
-            if let Some((_, (old, _))) = self.by_id.pop_first() {
-                self.by_key.remove(&old);
-            }
-        }
+        let shared = Arc::new(inline.clone());
+        self.by_id.insert(id, Arc::clone(&shared));
+        self.by_hash.entry(key).or_default().push((id, shared));
         id
     }
 }
 
-/// An object id for an atom, mention or marker; equal inlines share one id.
+/// An object id for an atom, mention or marker in the editor; equal inlines
+/// share one id and are retained without lossy eviction.
 pub fn object_id(inline: &Inline) -> u64 {
     OBJECTS
         .lock()
@@ -935,19 +1171,24 @@ pub fn object_id(inline: &Inline) -> u64 {
         .intern(inline)
 }
 
-fn object_of(id: u64) -> Option<Inline> {
+fn object_of(id: u64) -> Option<Arc<Inline>> {
     OBJECTS
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .by_id
         .get(&id)
-        .map(|(_, inline)| inline.clone())
+        .cloned()
 }
 
-/// Width over height of an image file, cached.
+/// Width over height of an image file, cached in a bounded LRU.
 fn aspect(url: &str) -> f32 {
-    static CACHE: LazyLock<Mutex<HashMap<String, f32>>> = LazyLock::new(Default::default);
-    if let Some(a) = CACHE.lock().unwrap_or_else(|e| e.into_inner()).get(url) {
+    static CACHE: LazyLock<Mutex<super::effects::LruMap<String, f32>>> =
+        LazyLock::new(|| Mutex::new(super::effects::LruMap::new(4096)));
+    if let Some(a) = CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&url.to_owned())
+    {
         return *a;
     }
     let a = crate::assets::file_path(url)
@@ -955,11 +1196,10 @@ fn aspect(url: &str) -> f32 {
         .map(|s| s.width as f32 / s.height.max(1) as f32)
         .filter(|a| a.is_finite() && *a > 0.0)
         .unwrap_or(1.0);
-    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if cache.len() >= 4096 {
-        cache.clear();
-    }
-    cache.insert(url.to_owned(), a);
+    CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(url.to_owned(), a);
     a
 }
 
@@ -976,7 +1216,13 @@ fn bold_weight(look: &Look) -> u16 {
     700.max(look.weight + 200).min(900)
 }
 
-fn span_style(style: &Style, effects: &Effects, pace: Pace, look: &Look) -> RichSpanStyle {
+fn span_style(
+    style: &Style,
+    effects: &Effects,
+    pace: Pace,
+    look: &Look,
+    effect_idx: impl FnOnce(&Effects, Pace) -> Option<u16>,
+) -> RichSpanStyle {
     let mut s = RichSpanStyle::new();
     if let Some(c) = style.color {
         s = s.color(color(c));
@@ -1039,7 +1285,7 @@ fn span_style(style: &Style, effects: &Effects, pace: Pace, look: &Look) -> Rich
             color(sh.color),
         ));
     }
-    if let Some(i) = attr_index(effects, pace) {
+    if let Some(i) = effect_idx(effects, pace) {
         s = s.effect(i);
     }
     s
@@ -1081,12 +1327,43 @@ pub struct Env<'a> {
     pub locale: Locale,
 }
 
+/// Convert `doc` into [`RichText`] alongside its local [`EffectPalette`],
+/// without touching global editor effect or object tables.
+pub fn to_rich_with_palette(doc: &Document, env: &Env<'_>) -> (RichText, EffectPalette) {
+    let mut palette = EffectPalette::new();
+    let rich = build_rich(doc, env, |effects, pace| palette.index(effects, pace));
+    (rich, palette)
+}
+
+/// Convert `doc` into [`RichText`]. When `env.editor` is `true`, effects and
+/// inline objects are interned in the editor tables so [`from_rich`] restores
+/// them losslessly; rendered views (`env.editor == false`) use a local palette
+/// and structural object hashes without touching global tables.
 pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
+    if env.editor {
+        build_rich(doc, env, attr_index)
+    } else {
+        to_rich_with_palette(doc, env).0
+    }
+}
+
+fn build_rich(
+    doc: &Document,
+    env: &Env<'_>,
+    mut intern_effect: impl FnMut(&Effects, Pace) -> Option<u16>,
+) -> RichText {
     let mut b = RichText::builder();
     // Byte length so far, to style objects after building.
     let mut len = 0usize;
     let mut object_spans: Vec<(usize, RichSpanStyle)> = Vec::new();
     let replacement = nana_ui_core::OBJECT_REPLACEMENT.len_utf8();
+    let inline_id = |inline: &Inline| {
+        if env.editor {
+            object_id(inline)
+        } else {
+            hash_inline(inline)
+        }
+    };
     for (pi, para) in doc.paragraphs.iter().enumerate() {
         if pi > 0 {
             b.plain("\n");
@@ -1095,7 +1372,13 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
         for inline in &para.inlines {
             match inline {
                 Inline::Text(run) => {
-                    let s = span_style(&run.style, &run.effects, run.pace, env.look);
+                    let s = span_style(
+                        &run.style,
+                        &run.effects,
+                        run.pace,
+                        env.look,
+                        &mut intern_effect,
+                    );
                     let styled = run.style.bold.is_some() || run.effects.emphasis.is_some();
                     if let Some((family, weight)) = &env.look.latin
                         && run.style.font.is_none()
@@ -1135,12 +1418,18 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
                     len += run.text.len();
                 }
                 Inline::Ruby(r) => {
-                    let s = span_style(&r.base.style, &r.base.effects, r.base.pace, env.look);
+                    let s = span_style(
+                        &r.base.style,
+                        &r.base.effects,
+                        r.base.pace,
+                        env.look,
+                        &mut intern_effect,
+                    );
                     b.styled_ruby(&r.base.text, r.annotation.clone(), s);
                     len += r.base.text.len();
                 }
                 Inline::Atom(a) => {
-                    let id = object_id(inline);
+                    let id = inline_id(inline);
                     // Stickers follow the user's size, in line heights; other
                     // pictures keep their own height.
                     let h = if a.kind == nanatype_model::AtomKind::Sticker {
@@ -1175,7 +1464,13 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
                         }
                         None => RichObject::chip(id, a.alt.clone(), 5),
                     };
-                    let s = span_style(&Style::default(), &a.effects, Pace::Inherit, env.look);
+                    let s = span_style(
+                        &Style::default(),
+                        &a.effects,
+                        Pace::Inherit,
+                        env.look,
+                        &mut intern_effect,
+                    );
                     if !s.is_empty() {
                         object_spans.push((len, s));
                     }
@@ -1183,8 +1478,14 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
                     len += replacement;
                 }
                 Inline::Mention(m) => {
-                    let id = object_id(inline);
-                    let mut s = span_style(&Style::default(), &m.effects, Pace::Inherit, env.look);
+                    let id = inline_id(inline);
+                    let mut s = span_style(
+                        &Style::default(),
+                        &m.effects,
+                        Pace::Inherit,
+                        env.look,
+                        &mut intern_effect,
+                    );
                     // The label is a solid pill: the line's drop shadow
                     // under its glyphs only blurs them (rpg). A clear
                     // shadow of its own instead; not in the editor, whose
@@ -1204,7 +1505,7 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
                 }
                 Inline::Marker(m) => {
                     if env.editor {
-                        let id = object_id(inline);
+                        let id = inline_id(inline);
                         let label = super::editor_view::marker_label(m, env.locale);
                         b.object(env.look.mention.markers.object(id, label, ChipKind::of(m)));
                         len += replacement;
@@ -1227,7 +1528,11 @@ pub fn to_rich(doc: &Document, env: &Env<'_>) -> RichText {
 
 // ---- rich text → document -------------------------------------------------
 
-fn style_back(s: Option<&RichSpanStyle>, look: &Look) -> (Style, Effects, Pace) {
+fn style_back(
+    s: Option<&RichSpanStyle>,
+    look: &Look,
+    resolve_effect: &impl Fn(u16) -> (Effects, Pace),
+) -> (Style, Effects, Pace) {
     let Some(s) = s else {
         return (Style::default(), Effects::default(), Pace::Inherit);
     };
@@ -1242,7 +1547,7 @@ fn style_back(s: Option<&RichSpanStyle>, look: &Look) -> (Style, Effects, Pace) 
         .size_em
         .map(Size::Em)
         .or_else(|| s.shape.size_px.map(Size::Px));
-    let (effects, pace) = s.effect.map(attr_of).unwrap_or_default();
+    let (effects, pace) = s.effect.map(resolve_effect).unwrap_or_default();
     // Emphasis draws bold by itself; only a weight it would not pick is a `[b]`.
     if let Some(w) = s.shape.weight
         && !(effects.emphasis.is_some() && w == bold_weight(look))
@@ -1297,6 +1602,21 @@ fn style_back(s: Option<&RichSpanStyle>, look: &Look) -> (Style, Effects, Pace) 
 
 /// The document an editor holds. Exact inverse of [`to_rich`] for the editor.
 pub fn from_rich(rich: &RichText, look: &Look) -> Document {
+    from_rich_with(rich, look, &attr_of)
+}
+
+/// Inverse of [`to_rich_with_palette`].
+pub fn from_rich_with_palette(rich: &RichText, look: &Look, palette: &EffectPalette) -> Document {
+    from_rich_with(rich, look, &|idx| {
+        palette.get(idx).cloned().unwrap_or_default()
+    })
+}
+
+fn from_rich_with(
+    rich: &RichText,
+    look: &Look,
+    resolve_effect: &impl Fn(u16) -> (Effects, Pace),
+) -> Document {
     let text = rich.text();
     let objects: HashMap<usize, &RichObject> =
         rich.objects().iter().map(|(o, ob)| (*o, ob)).collect();
@@ -1333,25 +1653,34 @@ pub fn from_rich(rich: &RichText, look: &Look) -> Document {
             continue;
         }
         if let Some(object) = objects.get(&pos) {
-            let inline = object_of(object.id).or_else(|| match &object.content {
-                RichObjectContent::Image { source } => Some(Inline::Atom(nanatype_model::Atom {
-                    kind: nanatype_model::AtomKind::Image,
-                    asset: nanatype_model::AssetRef::File(
-                        crate::assets::file_path(source).map_or_else(
-                            || source.to_string(),
-                            |p| p.to_string_lossy().into_owned(),
-                        ),
-                    ),
-                    height_em: object.height_px / look.size.max(1.0),
-                    alt: String::new(),
-                    effects: Effects::default(),
-                })),
-                _ => None,
-            });
+            let inline =
+                object_of(object.id)
+                    .map(|arc| (*arc).clone())
+                    .or_else(|| match &object.content {
+                        RichObjectContent::Image { source } => {
+                            Some(Inline::Atom(nanatype_model::Atom {
+                                kind: nanatype_model::AtomKind::Image,
+                                asset: nanatype_model::AssetRef::File(
+                                    crate::assets::file_path(source).map_or_else(
+                                        || source.to_string(),
+                                        |p| p.to_string_lossy().into_owned(),
+                                    ),
+                                ),
+                                height_em: object.height_px / look.size.max(1.0),
+                                alt: String::new(),
+                                effects: Effects::default(),
+                            }))
+                        }
+                        _ => None,
+                    });
             if let Some(mut inline) = inline {
                 match &mut inline {
-                    Inline::Atom(a) => a.effects = style_back(rich.style_at(pos), look).1,
-                    Inline::Mention(m) => m.effects = style_back(rich.style_at(pos), look).1,
+                    Inline::Atom(a) => {
+                        a.effects = style_back(rich.style_at(pos), look, resolve_effect).1
+                    }
+                    Inline::Mention(m) => {
+                        m.effects = style_back(rich.style_at(pos), look, resolve_effect).1
+                    }
                     _ => {}
                 }
                 current.inlines.push(inline);
@@ -1360,7 +1689,7 @@ pub fn from_rich(rich: &RichText, look: &Look) -> Document {
             continue;
         }
         if let Some((range, annotation)) = rubies.iter().find(|(r, _)| r.start == pos) {
-            let (style, effects, pace) = style_back(rich.style_at(pos), look);
+            let (style, effects, pace) = style_back(rich.style_at(pos), look, resolve_effect);
             current.inlines.push(Inline::Ruby(RubyGroup {
                 base: TextRun {
                     text: text[range.clone()].to_owned(),
@@ -1378,7 +1707,7 @@ pub fn from_rich(rich: &RichText, look: &Look) -> Document {
             .copied()
             .find(|e| *e > pos)
             .unwrap_or(text.len());
-        let (style, effects, pace) = style_back(rich.style_at(pos), look);
+        let (style, effects, pace) = style_back(rich.style_at(pos), look, resolve_effect);
         current.inlines.push(Inline::Text(TextRun {
             text: text[pos..end].to_owned(),
             style,
@@ -1531,16 +1860,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn object_ids_dedupe_and_stay_bounded() {
+    fn object_ids_dedupe_without_evicting_editor_inlines() {
         let mut objects = Objects::default();
         let a = objects.intern(&Inline::text("a"));
         assert_eq!(objects.intern(&Inline::text("a")), a);
-        for n in 0..MAX_OBJECTS + 8 {
+        for n in 0..4104 {
             objects.intern(&Inline::text(format!("object-{n}")));
         }
-        assert_eq!(objects.by_id.len(), MAX_OBJECTS);
-        assert_eq!(objects.by_key.len(), MAX_OBJECTS);
-        assert!(!objects.by_id.contains_key(&a));
+        assert!(objects.by_id.contains_key(&a));
+        assert_eq!(objects.by_id[&a].as_ref(), &Inline::text("a"));
+    }
+
+    #[test]
+    fn local_effect_palette_scopes_indices_per_document() {
+        let look = look();
+        let urls = HashMap::new();
+        let env = Env {
+            look: &look,
+            urls: &urls,
+            editor: false,
+            locale: Locale::ZhCn,
+        };
+        let doc =
+            nanatype_markup::parse("[wave]波浪[/wave]普通[shake]抖动[/shake][wave]再波[/wave]").doc;
+        let before_editor_attrs = attr_version();
+        let (rich, palette) = to_rich_with_palette(&doc, &env);
+        assert_eq!(attr_version(), before_editor_attrs);
+        assert_eq!(palette.len(), 2);
+        assert_eq!(from_rich_with_palette(&rich, &look, &palette), doc);
+        let chains = palette.chains(&EffectDefaults::default(), false);
+        assert_eq!(chains.len(), 2);
+        assert_eq!(
+            palette.chains(&EffectDefaults::default(), true)[0].0.len(),
+            0
+        );
     }
 
     #[test]
@@ -1629,9 +1982,8 @@ mod tests {
             locale: Locale::ZhCn,
         };
         let chains = |doc: &Document, reduced: bool| {
-            // Interning happens while the document becomes rich text.
-            to_rich(doc, &env);
-            GlyphPresentation::chains(effect_table(&defaults, reduced), None)
+            let (_, palette) = to_rich_with_palette(doc, &env);
+            GlyphPresentation::chains(palette.chains(&defaults, reduced), None)
         };
         let pulse = nanatype_markup::parse("[pulse]脉动 Pulse[/pulse]").doc;
         let wave = nanatype_markup::parse("[wave]波浪 Wave[/wave]").doc;
@@ -1648,8 +2000,8 @@ mod tests {
             pulse_amount: 0.0,
             ..EffectDefaults::default()
         };
-        to_rich(&pulse, &env);
-        let none = GlyphPresentation::chains(effect_table(&still, false), None);
+        let (_, palette) = to_rich_with_palette(&pulse, &env);
+        let none = GlyphPresentation::chains(palette.chains(&still, false), None);
         assert_eq!(glyph_resampling(&pulse, &none), None);
         // A pop entrance grows each glyph from half its size.
         let plain = nanatype_markup::parse("出现 Appear").doc;
