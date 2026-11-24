@@ -53,7 +53,7 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
         let root = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
         root.reduced_motion.set(reduced);
         let ui = if remote { root.remote() } else { root };
-        let mut core = Core::new(settings, skin.clone());
+        let mut core = Core::from_settings(&settings, &skin);
         let base = 100_000;
         core.handle(Cmd::SendMarkup("[speed=90ms]情书写给你，喜欢你的心，永远温柔。\n[b]想念[/b] Love ♡ [color=#A96077]喜欢[/color] 龘🙂[/speed]".into()),base);
         ui.display.set(Arc::new(core.display().clone()));
@@ -138,7 +138,7 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
         let wake = fx
             .wakes
             .iter()
-            .find(|w| w.reason == nanatype_playback::WakeReason::PresentationDone)
+            .find(|w| w.reason == nanatype_playback::WakeReason::ExitDone)
             .copied();
         ui.display.set(Arc::new(core.display().clone()));
         let mut exit_start = Vec::new();

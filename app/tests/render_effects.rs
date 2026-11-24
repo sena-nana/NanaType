@@ -28,7 +28,7 @@ fn combined_effects_keep_ruby_objects_and_partner_animation_without_layout() {
         let skin = common::skin("nanatype.vanilla");
         let settings = Settings::default();
         let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-        let mut core = Core::new(settings, skin);
+        let mut core = Core::from_settings(&settings, &skin);
         core.handle(Cmd::SendMarkup(markup.into()), 0);
         core.handle(Cmd::Skip, 1);
         ui.display.set(Arc::new(core.display().clone()));
@@ -75,7 +75,7 @@ fn finite_reveals_and_history_presence_stop_requesting_frames() {
             let settings = Settings::default();
             let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
             ui.reduced_motion.set(reduced);
-            let mut core = Core::new(settings, skin);
+            let mut core = Core::from_settings(&settings, &skin);
             core.handle(Cmd::SendMarkup(markup.into()), 0);
             ui.display.set(Arc::new(core.display().clone()));
             ui.history
@@ -118,7 +118,7 @@ fn ornaments_animate_without_runtime_work_and_stop_when_reduced_or_cleared() {
     let skin = registry.load("nanatype.sakura").unwrap().skin;
     let settings = Settings::default();
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-    let mut core = Core::new(settings, skin.clone());
+    let mut core = Core::from_settings(&settings, &skin);
     core.handle(Cmd::SendMarkup("静止台词，装饰仍在动".into()), 0);
     core.handle(Cmd::Skip, 1);
     ui.display.set(Arc::new(core.display().clone()));
@@ -178,7 +178,7 @@ fn chat_materializes_the_viewport_and_keeps_scrolling_available() {
     let mut settings = Settings::default();
     settings.history.max_items = 1000;
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-    let mut core = Core::new(settings, skin);
+    let mut core = Core::from_settings(&settings, &skin);
     for i in 0..1000 {
         core.handle(
             Cmd::SendMarkup(format!("消息 {i} {}", "长文本 ".repeat(i % 6 + 1))),

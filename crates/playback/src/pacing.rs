@@ -1,6 +1,8 @@
 use nanatype_model::{CharClass, Pace, PunctKind};
 use serde::{Deserialize, Serialize};
 
+use crate::timeline::{Cue, CueKind};
+
 /// Extra pause after punctuation, on top of the base delay.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -111,5 +113,61 @@ impl Default for TypingSoundRule {
             min_interval_ms: 30,
             variants: 1,
         }
+    }
+}
+
+/// Shared typing-click emitter for both compiled timelines and live mirror mode.
+#[derive(Debug, Clone)]
+pub struct TypingClickFilter {
+    rule: TypingSoundRule,
+    eligible: u32,
+    last_click: Option<u32>,
+    variant: u8,
+}
+
+impl TypingClickFilter {
+    pub fn new(rule: TypingSoundRule) -> Self {
+        Self {
+            rule,
+            eligible: 0,
+            last_click: None,
+            variant: 0,
+        }
+    }
+
+    /// Reset the minimum-interval gate (e.g. at a pause or page boundary).
+    pub fn reset_interval(&mut self) {
+        self.last_click = None;
+    }
+
+    /// Advance the filter for `unit` of `class` revealed at `at_ms`.
+    pub fn next(&mut self, unit: u32, class: CharClass, at_ms: u32) -> Option<Cue> {
+        if !self.rule.enabled
+            || (self.rule.skip_space && class == CharClass::Space)
+            || (self.rule.skip_punct && matches!(class, CharClass::Punct(_)))
+        {
+            return None;
+        }
+        let due = self
+            .eligible
+            .is_multiple_of(u32::from(self.rule.every_n.max(1)));
+        self.eligible += 1;
+        let spaced = self
+            .last_click
+            .is_none_or(|t| at_ms.saturating_sub(t) >= u32::from(self.rule.min_interval_ms));
+        if !due || !spaced {
+            return None;
+        }
+        let variant = self.variant;
+        self.variant = (self.variant + 1) % self.rule.variants.max(1);
+        self.last_click = Some(at_ms);
+        Some(Cue {
+            at_ms,
+            kind: CueKind::TypeSound {
+                unit,
+                variant,
+                seed: unit.wrapping_mul(0x9E37_79B9),
+            },
+        })
     }
 }

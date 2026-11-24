@@ -54,15 +54,6 @@ const INTEGRATIONS: &[&str] = &["/integrations", "/output/obs", "/assets/telegra
 /// Proxies whose `user:password@` is dropped from exports.
 const PROXIES: &[&str] = &["/update/proxy", "/assets/telegram/proxy"];
 
-/// What "reset to defaults" keeps: credentials, the language and the
-/// finished first-run guide.
-const KEPT_ON_RESET: &[&str] = &[
-    "/integrations/vts/token",
-    "/general/locale",
-    "/general/onboarding_done",
-    "/diagnostics/crash_seen",
-];
-
 /// What a profile holds: how a stream looks, sounds and reads — the
 /// characters, playback, sounds, the skin and its adjustments, the overlay
 /// windows (visibility, lock, size; not their positions on screen), the
@@ -82,13 +73,8 @@ pub const PROFILE_SCOPE: &[&str] = &[
 ];
 
 /// Inside [`PROFILE_SCOPE`] but global all the same: the output device, the
-/// saved history, the settings window's own look and skin hot reload.
-const PROFILE_EXCEPT: &[&str] = &[
-    "/sound/device",
-    "/history/archive",
-    "/skin/chrome",
-    "/skin/hot_reload",
-];
+/// saved history and skin hot reload.
+const PROFILE_EXCEPT: &[&str] = &["/sound/device", "/history/archive", "/skin/hot_reload"];
 
 /// What an export carries besides the settings themselves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -318,16 +304,26 @@ impl Incoming {
     /// keeping this install's credentials and computer-bound state, and its
     /// integrations when the file has none.
     pub fn merge(&self, current: &Settings) -> Settings {
-        let here = to_value(current);
-        let mut next = self.settings.clone();
-        let mut keep: Vec<&str> = LOCAL.to_vec();
+        let mut next: Settings = serde_json::from_value(self.settings.clone()).unwrap_or_default();
+        next.enabled_plugins = current.enabled_plugins.clone();
+        next.disabled_packages = current.disabled_packages.clone();
+        next.plugin_approvals = current.plugin_approvals.clone();
+        next.integrations.vts.token = current.integrations.vts.token.clone();
+        next.update.skipped_version = current.update.skipped_version.clone();
+        next.update.last_check = current.update.last_check;
+        next.diagnostics = current.diagnostics.clone();
+        next.performance = current.performance.clone();
+        next.sound.device = current.sound.device.clone();
+        next.speech.device = current.speech.device.clone();
+        next.general.profile = current.general.profile.clone();
         if !self.includes.integrations {
-            keep.extend(INTEGRATIONS);
+            next.integrations = current.integrations.clone();
+            next.output.obs = current.output.obs.clone();
+            next.assets.telegram = current.assets.telegram.clone();
         }
-        for path in keep {
-            graft(&mut next, &here, path);
-        }
-        from_value(next)
+        next.sanitize();
+        next.schema = SETTINGS_SCHEMA;
+        next
     }
 
     /// Write the embedded avatars into `dir` and point their characters at
@@ -367,44 +363,68 @@ impl Incoming {
 
 /// The settings sections that differ, by their key in settings.json.
 pub fn changed_sections(before: &Settings, after: &Settings) -> Vec<&'static str> {
-    let (a, b) = (to_value(before), to_value(after));
-    [
-        "general",
-        "playback",
-        "sound",
-        "speech",
-        "tts",
-        "skin",
-        "overlays",
-        "history",
-        "hotkeys",
-        "output",
-        "integrations",
-        "assets",
-        "update",
-        "enabled_plugins",
-        "disabled_packages",
-    ]
-    .into_iter()
-    .filter(|k| a.get(k) != b.get(k))
-    .collect()
+    let mut sections = Vec::new();
+    if before.general != after.general {
+        sections.push("general");
+    }
+    if before.playback != after.playback {
+        sections.push("playback");
+    }
+    if before.sound != after.sound {
+        sections.push("sound");
+    }
+    if before.speech != after.speech {
+        sections.push("speech");
+    }
+    if before.tts != after.tts {
+        sections.push("tts");
+    }
+    if before.skin != after.skin {
+        sections.push("skin");
+    }
+    if before.overlays != after.overlays {
+        sections.push("overlays");
+    }
+    if before.history != after.history {
+        sections.push("history");
+    }
+    if before.hotkeys != after.hotkeys {
+        sections.push("hotkeys");
+    }
+    if before.output != after.output {
+        sections.push("output");
+    }
+    if before.integrations != after.integrations {
+        sections.push("integrations");
+    }
+    if before.assets != after.assets {
+        sections.push("assets");
+    }
+    if before.update != after.update {
+        sections.push("update");
+    }
+    if before.accessibility != after.accessibility {
+        sections.push("accessibility");
+    }
+    if before.enabled_plugins != after.enabled_plugins {
+        sections.push("enabled_plugins");
+    }
+    if before.disabled_packages != after.disabled_packages {
+        sections.push("disabled_packages");
+    }
+    sections
 }
 
 impl Settings {
-    /// A new installation's settings.
-    pub fn fresh() -> Self {
-        Self::default()
-    }
-
-    /// Everything back to [`Self::fresh`], but for credentials, the language
+    /// Everything back to defaults, but for credentials, the language
     /// and the finished first-run guide.
     pub fn reset_from(&self) -> Self {
-        let here = to_value(self);
-        let mut next = to_value(&Self::fresh());
-        for path in KEPT_ON_RESET {
-            graft(&mut next, &here, path);
-        }
-        from_value(next)
+        let mut next = Self::default();
+        next.integrations.vts.token = self.integrations.vts.token.clone();
+        next.general.locale = self.general.locale.clone();
+        next.general.onboarding_done = self.general.onboarding_done;
+        next.diagnostics.crash_seen = self.diagnostics.crash_seen;
+        next
     }
 }
 

@@ -13,7 +13,7 @@ fn frames(markup: &str, offsets: &[u64]) -> Vec<Vec<u8>> {
     let skin = common::skin("nanatype.vanilla");
     let settings = Settings::default();
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-    let mut core = Core::new(settings, skin);
+    let mut core = Core::from_settings(&settings, &skin);
     core.handle(Cmd::SendMarkup(markup.into()), 0);
     core.handle(Cmd::Skip, 1);
     ui.display.set(Arc::new(core.display().clone()));

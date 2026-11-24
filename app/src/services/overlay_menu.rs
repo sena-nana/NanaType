@@ -365,7 +365,7 @@ mod tests {
         for kind in WINDOWS {
             kind.overlay_mut(&mut settings).unwrap().visible = true;
         }
-        let mut core = nanatype_core::Core::new(settings.clone(), skin.clone());
+        let mut core = nanatype_core::Core::from_settings(&settings, &skin);
         core.handle(Cmd::SendMarkup("History".into()), 0);
         let ui = Ui::new(Arc::new(settings), skin, Locale::ZhCn);
         ui.history

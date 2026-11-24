@@ -11,7 +11,6 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use std::collections::HashMap;
-use unicode_segmentation::UnicodeSegmentation;
 
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{
@@ -328,21 +327,6 @@ fn document_on(
             }
         }
     }
-    if base.scramble.is_some()
-        && !base.light_preview
-        && let Some(plan) = &mut reveal
-        && let Some(times) = &drawn_untracked_for(ui, source).mirror_reveal_ms
-    {
-        let mut unit = 0;
-        for (i, g) in rich.text().graphemes(true).enumerate() {
-            if g != "\n" {
-                if plan.at_ms[i].is_some() {
-                    plan.at_ms[i] = times.get(unit).copied();
-                }
-                unit += 1;
-            }
-        }
-    }
     let scramble_plan = base
         .scramble
         .clone()
@@ -400,8 +384,9 @@ fn document_on(
                 std::time::Duration::ZERO,
                 if base.masks.exit.is_some() || base.light_exit.is_some() {
                     drawn_untracked_for(ui, source)
-                        .text_exit
-                        .map_or_else(crate::clock::frame_ms, |e| e.at_ms)
+                        .exit
+                        .and_then(|e| e.presentation())
+                        .map_or_else(crate::clock::frame_ms, |(at_ms, _)| at_ms)
                 } else {
                     crate::clock::frame_ms()
                 },
@@ -882,6 +867,7 @@ pub fn preview_box(ui: Stage, ctx: BoxCtx, doc: &Document) -> AnyView {
                 start: 0,
                 reveal_ms: (0..units).map(|i| i * 65).collect::<Vec<_>>().into(),
             }),
+            unit_times: None,
         }
     } else {
         Reveal::full(units)
@@ -1179,7 +1165,8 @@ fn box_view(ui: Stage, ctx: BoxCtx, content: AnyView) -> impl IntoView {
 /// then its entrance, exit and `[fade]`.
 fn box_presence(ui: Stage, view: &DisplayView, now: u64, reduced: bool) -> (f32, f32) {
     let fade = view
-        .fade
+        .exit
+        .and_then(|e| e.fade())
         .map(|(at, ms)| 1.0 - (now.saturating_sub(at) as f32 / ms.max(1) as f32).clamp(0.0, 1.0))
         .unwrap_or(1.0);
     let (shown, rise) = stage(ui.track_slot).presence(now, reduced);
@@ -1548,8 +1535,8 @@ fn content(ui: Stage, source: Source) -> impl IntoView {
             let mut base = Base::dialogue(&skin, view.entrance, reduced);
             base.sticker_scale = ui.settings.with_untracked(|s| s.assets.sticker_scale);
             base.light_preview = source == Source::Preview;
-            if let Some(exit) = view.text_exit {
-                base.light_exit = Some((exit.at_ms, exit.ms));
+            if let Some((at_ms, ms)) = view.exit.and_then(|e| e.presentation()) {
+                base.light_exit = Some((at_ms, ms));
                 // Layout-dependent masks encode partially drawn glyphs. Keep
                 // that ink frozen while it leaves; dropping the mask would
                 // replace unfinished strokes with the whole glyph. Other
@@ -1557,14 +1544,14 @@ fn content(ui: Stage, source: Source) -> impl IntoView {
                 if base.layout_material.is_none() {
                     base.masks.entrance = None;
                 }
-                let elapsed = crate::clock::now_ms().saturating_sub(exit.at_ms);
+                let elapsed = crate::clock::now_ms().saturating_sub(at_ms);
                 if let Some(spec) = &skin.dialogue.reveal.exit {
                     // Rebase the remaining duration when the presentation is mounted.
                     base.masks.exit = skin_mask(
                         &skin,
                         spec.material.as_deref(),
                         spec.scope,
-                        u64::from(exit.ms).saturating_sub(elapsed),
+                        u64::from(ms).saturating_sub(elapsed),
                     );
                 }
                 base.masks.freeze_reveal = Some(std::time::Duration::ZERO);
@@ -2269,12 +2256,12 @@ pub fn display_animating(ui: Stage, now: u64) -> bool {
     if view.empty {
         return false;
     }
-    if let Some(exit) = view.text_exit
-        && now < exit.at_ms + u64::from(exit.ms)
+    if let Some((at_ms, ms)) = view.exit.and_then(|e| e.presentation())
+        && now < at_ms + u64::from(ms)
     {
         return true;
     }
-    if let Some((at, ms)) = view.fade
+    if let Some((at, ms)) = view.exit.and_then(|e| e.fade())
         && now <= at + u64::from(ms) + 50
     {
         return true;
@@ -2828,6 +2815,7 @@ mod sticker_reveal_tests {
                     start: 0,
                     reveal_ms: Arc::from([0, 100, 200, 300, 400]),
                 }),
+                unit_times: None,
                 hidden_from: 5,
             };
         });
@@ -2946,6 +2934,7 @@ mod reveal_end_tests {
                         start: 0,
                         reveal_ms: Arc::from([0, 100, 200, 300]),
                     }),
+                    unit_times: None,
                     hidden_from: 4,
                 }
             } else {

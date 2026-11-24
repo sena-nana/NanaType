@@ -13,8 +13,8 @@ pub mod wire;
 pub use link::{Carrier, Inbound, Outbound, Pipe, RouteSnap};
 pub use protocol::MAX_ENTRIES as HISTORY_LIMIT;
 pub use protocol::{
-    Entry, Invite, MAX_MEMBERS, PASSWORD_MAX, PortraitAsset, Room, TrackSnapshot, asset_references,
-    rebase_display, rebase_row, room_password, session_picture,
+    Entry, Invite, MAX_MEMBERS, PASSWORD_MAX, PortraitAsset, Room, TrackSnapshot, WireDisplay,
+    asset_references, rebase_display, rebase_row, room_password, session_picture,
 };
 pub use transport::{Config, Event, PeerHandle, Resources, Status};
 pub use wire::{Assembler, Packet, chunks};

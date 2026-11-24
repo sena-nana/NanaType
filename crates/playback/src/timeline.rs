@@ -4,7 +4,7 @@ use std::sync::Arc;
 use nanatype_model::{CharClass, Document, Item, Marker, VtsAction};
 use serde::{Deserialize, Serialize};
 
-use crate::{PacingParams, TypingSoundRule};
+use crate::{PacingParams, TypingClickFilter, TypingSoundRule};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "cue", rename_all = "snake_case")]
@@ -239,9 +239,7 @@ const SPEAKING_TAIL_MS: u32 = 80;
 pub fn compile(doc: &Document, pacing: &PacingParams, sound: &TypingSoundRule) -> Timeline {
     let mut segments = Vec::new();
     let mut ordinal: u32 = 0;
-    let mut eligible: u32 = 0;
-    let mut last_click: Option<u32> = None;
-    let mut variant: u8 = 0;
+    let mut clicks = TypingClickFilter::new(*sound);
     let mut d = Draft {
         units: Vec::new(),
         cues: Vec::new(),
@@ -298,26 +296,8 @@ pub fn compile(doc: &Document, pacing: &PacingParams, sound: &TypingSoundRule) -
                 d.speaking = true;
             }
             d.units.push(d.clock);
-            let clicks = sound.enabled
-                && !(sound.skip_space && class == CharClass::Space)
-                && !(sound.skip_punct && matches!(class, CharClass::Punct(_)));
-            if clicks {
-                let due = eligible.is_multiple_of(u32::from(sound.every_n.max(1)));
-                eligible += 1;
-                let spaced = last_click
-                    .is_none_or(|t| d.clock.saturating_sub(t) >= u32::from(sound.min_interval_ms));
-                if due && spaced {
-                    d.cues.push(Cue {
-                        at_ms: d.clock,
-                        kind: CueKind::TypeSound {
-                            unit: ordinal,
-                            variant,
-                            seed: ordinal.wrapping_mul(0x9E37_79B9),
-                        },
-                    });
-                    variant = (variant + 1) % sound.variants.max(1);
-                    last_click = Some(d.clock);
-                }
+            if let Some(cue) = clicks.next(ordinal, class, d.clock) {
+                d.cues.push(cue);
             }
             pending_delay = pacing.delay_ms(class, unit.pace).saturating_add(emphasis);
             ordinal += 1;
@@ -338,7 +318,7 @@ pub fn compile(doc: &Document, pacing: &PacingParams, sound: &TypingSoundRule) -
                         ordinal,
                         &mut segments,
                     );
-                    last_click = None;
+                    clicks.reset_interval();
                 }
                 Marker::Page => {
                     d.clock = at;
@@ -350,7 +330,7 @@ pub fn compile(doc: &Document, pacing: &PacingParams, sound: &TypingSoundRule) -
                         &mut segments,
                     );
                     d.visible_from = ordinal;
-                    last_click = None;
+                    clicks.reset_interval();
                 }
                 Marker::Sound { sound, gain } => d.cues.push(Cue {
                     at_ms: at,

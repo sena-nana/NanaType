@@ -175,7 +175,7 @@ pub fn load_settings(path: &Path, legacy: Option<&Path>) -> Loaded<Settings> {
         legacy.to_path_buf()
     } else {
         return Loaded {
-            value: Settings::fresh(),
+            value: Settings::default(),
             note: LoadNote::Fresh,
         };
     };

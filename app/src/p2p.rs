@@ -610,10 +610,11 @@ pub(crate) fn session_display(
     lines: Option<&HashSet<LineId>>,
 ) -> DisplayView {
     match (display.line, lines) {
-        (Some(id), Some(lines)) if !lines.contains(&id) => DisplayView {
-            revision: display.revision,
-            ..DisplayView::empty(display.entrance)
-        },
+        (Some(id), Some(lines)) if !lines.contains(&id) => {
+            let mut empty = DisplayView::empty(display.entrance);
+            empty.revision = display.revision;
+            empty
+        }
         _ => display.clone(),
     }
 }
@@ -656,7 +657,7 @@ mod tests {
             .load("nanatype.halo")
             .unwrap()
             .skin;
-        Core::new(settings, skin)
+        Core::from_settings(&settings, &skin)
     }
 
     /// Type and send, recording the line the way the session does.
@@ -687,17 +688,19 @@ mod tests {
         );
         // On the wire it is one more field, which older peers skip; a line
         // that is no replay leaves it out.
-        let wire = serde_json::to_value(&display).unwrap();
+        let wire = serde_json::to_value(nanatype_p2p::WireDisplay::from(&display)).unwrap();
         assert_eq!(wire["replay"], true);
         let mut old = wire.clone();
         old.as_object_mut().unwrap().remove("replay");
-        let read: DisplayView = serde_json::from_value(old).unwrap();
+        let read: DisplayView = serde_json::from_value::<nanatype_p2p::WireDisplay>(old)
+            .unwrap()
+            .into();
         assert!(!read.replay);
         run(&mut core, &mut lines, Cmd::Skip, 30_010);
         send(&mut core, &mut lines, "next", 40_000);
         run(&mut core, &mut lines, Cmd::Continue, 60_000);
         assert_eq!(core.display().doc.plain_text(), "next");
-        let wire = serde_json::to_value(core.display()).unwrap();
+        let wire = serde_json::to_value(nanatype_p2p::WireDisplay::from(core.display())).unwrap();
         assert!(wire.get("replay").is_none());
     }
 
@@ -718,7 +721,7 @@ mod tests {
         let rows = session_rows(core.history(), lines);
         (
             display.doc.plain_text(),
-            rows.iter().map(|row| row.doc.plain_text()).collect(),
+            rows.iter().map(|row| row.doc().plain_text()).collect(),
         )
     }
 

@@ -49,7 +49,7 @@ fn scramble_renders_locks_and_retires_without_relayout() {
                 "lib:ml/test".into(),
                 picture_url.clone(),
             )])));
-        let mut core = Core::new(settings, skin.clone());
+        let mut core = Core::from_settings(&settings, &skin);
         core.handle(
             Cmd::SendMarkup(
                 "[speed=15ms]模型正在学习 ML 2026\n[ruby=しゅうそく]收敛[/ruby] é 👩‍💻 [sticker=ml/test h=1] [at=1 name=奈奈][/speed]"
@@ -133,7 +133,7 @@ fn scramble_renders_locks_and_retires_without_relayout() {
         let wake = fx
             .wakes
             .iter()
-            .find(|w| w.reason == nanatype_playback::WakeReason::PresentationDone)
+            .find(|w| w.reason == nanatype_playback::WakeReason::ExitDone)
             .copied();
         assert_eq!(wake.is_some(), enabled && !reduced);
         ui.display.set(Arc::new(core.display().clone()));
@@ -275,7 +275,7 @@ fn portrait_long_names_keep_their_own_rail_and_history_keeps_the_same_frame() {
         let name = "奈奈 / Machine Learning · 一个很长的姓名";
         settings.general.characters[0].name = name.into();
         let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-        let mut core = Core::new(settings, skin.clone());
+        let mut core = Core::from_settings(&settings, &skin);
         core.handle(
             Cmd::SendMarkup("模型正在学习，文字保持清晰。".into()),
             100_000,
@@ -378,7 +378,7 @@ fn clipped_mirror_middle_edits_leave_the_unchanged_suffix_visible() {
     let mut settings = Settings::default();
     settings.general.input_mode = nanatype_settings::InputMode::Mirror;
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-    let mut core = Core::new(settings, skin);
+    let mut core = Core::from_settings(&settings, &skin);
     core.handle(
         Cmd::DraftChanged(nanatype_model::Document::plain("11111")),
         100_000,

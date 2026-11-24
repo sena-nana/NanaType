@@ -234,7 +234,10 @@ impl Stage {
         Self {
             editor_nodes: None,
             speaker: signal(speaker),
-            chrome_dark: signal(crate::skin_theme::dark_mode(settings.skin.chrome, false)),
+            chrome_dark: signal(crate::skin_theme::dark_mode(
+                settings.accessibility.chrome,
+                false,
+            )),
             chrome_contrast: signal(settings.accessibility.high_contrast(false)),
             locale: signal(locale),
             settings: signal(settings),

@@ -1,10 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
+use std::sync::Arc;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use nanatype_core::{DisplayView, HistoryRow, Reveal};
-use nanatype_model::{AssetRef, Document, Inline, LineId};
-use serde::{Deserialize, Serialize};
+use nanatype_core::{DisplayExit, DisplayView, HistoryRow, Reveal, SegmentReveal, ShakeView};
+use nanatype_model::{AssetRef, ChatRef, Document, Entrance, HistoryItem, Inline, LineId, Speaker};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::picture::Role;
 
@@ -140,13 +141,194 @@ pub struct Entry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct WireReveal {
+    visible_from: u32,
+    shown: u32,
+    segment: Option<SegmentReveal>,
+    hidden_from: u32,
+}
+
+impl From<&Reveal> for WireReveal {
+    fn from(reveal: &Reveal) -> Self {
+        Self {
+            visible_from: reveal.visible_from,
+            shown: reveal.shown,
+            segment: reveal.segment.clone(),
+            hidden_from: reveal.hidden_from,
+        }
+    }
+}
+
+impl WireReveal {
+    fn into_reveal(self, unit_times: Option<Arc<[u64]>>) -> Reveal {
+        Reveal {
+            visible_from: self.visible_from,
+            shown: self.shown,
+            segment: self.segment,
+            unit_times,
+            hidden_from: self.hidden_from,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct WireTextExit {
+    at_ms: u64,
+    ms: u16,
+}
+
+/// Wire representation of [`DisplayView`] preserving the `VERSION = 5` schema.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WireDisplay {
+    pub revision: u64,
+    pub line: Option<LineId>,
+    pub doc: Arc<Document>,
+    pub speaker: Speaker,
+    pub reply: Option<ChatRef>,
+    reveal: WireReveal,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mirror_reveal_ms: Option<Arc<[u64]>>,
+    #[serde(default)]
+    text_exit: Option<WireTextExit>,
+    pub portrait: Option<String>,
+    pub continue_indicator: bool,
+    pub fade: Option<(u64, u32)>,
+    pub shake: Option<ShakeView>,
+    pub entrance: Entrance,
+    pub empty: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub replay: bool,
+}
+
+impl From<&DisplayView> for WireDisplay {
+    fn from(view: &DisplayView) -> Self {
+        let (text_exit, fade) = match view.exit {
+            Some(DisplayExit::Presentation { at_ms, ms }) => {
+                (Some(WireTextExit { at_ms, ms }), None)
+            }
+            Some(DisplayExit::Fade { at_ms, ms }) => (None, Some((at_ms, ms))),
+            None => (None, None),
+        };
+        Self {
+            revision: view.revision,
+            line: view.line,
+            doc: view.doc.clone(),
+            speaker: view.speaker.clone(),
+            reply: view.reply.clone(),
+            reveal: WireReveal::from(&view.reveal),
+            mirror_reveal_ms: view.reveal.unit_times.clone(),
+            text_exit,
+            portrait: view.portrait.clone(),
+            continue_indicator: view.continue_indicator,
+            fade,
+            shake: view.shake,
+            entrance: view.entrance,
+            empty: view.empty,
+            replay: view.replay,
+        }
+    }
+}
+
+impl From<WireDisplay> for DisplayView {
+    fn from(wire: WireDisplay) -> Self {
+        let mut view = DisplayView::empty(wire.entrance);
+        view.revision = wire.revision;
+        view.line = wire.line;
+        view.doc = wire.doc;
+        view.speaker = wire.speaker;
+        view.reply = wire.reply;
+        view.reveal = wire.reveal.into_reveal(wire.mirror_reveal_ms);
+        view.exit = wire
+            .text_exit
+            .map(|e| DisplayExit::Presentation {
+                at_ms: e.at_ms,
+                ms: e.ms,
+            })
+            .or_else(|| wire.fade.map(|(at_ms, ms)| DisplayExit::Fade { at_ms, ms }));
+        view.portrait = wire.portrait;
+        view.continue_indicator = wire.continue_indicator;
+        view.shake = wire.shake;
+        view.empty = wire.empty;
+        view.replay = wire.replay;
+        view
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WireHistoryRow {
+    key: u64,
+    item: HistoryItem,
+    doc: Arc<Document>,
+    reveal: Option<WireReveal>,
+}
+
+impl From<&HistoryRow> for WireHistoryRow {
+    fn from(row: &HistoryRow) -> Self {
+        Self {
+            key: row.key,
+            item: row.item.clone(),
+            doc: Arc::new(row.item.doc.clone()),
+            reveal: row.reveal.as_ref().map(WireReveal::from),
+        }
+    }
+}
+
+impl From<WireHistoryRow> for HistoryRow {
+    fn from(wire: WireHistoryRow) -> Self {
+        Self {
+            key: wire.key,
+            item: wire.item,
+            reveal: wire.reveal.map(|r| r.into_reveal(None)),
+        }
+    }
+}
+
+mod wire_display {
+    use super::*;
+
+    pub(super) fn serialize<S: Serializer>(
+        view: &DisplayView,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        WireDisplay::from(view).serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<DisplayView, D::Error> {
+        WireDisplay::deserialize(deserializer).map(DisplayView::from)
+    }
+}
+
+mod wire_rows {
+    use super::*;
+
+    pub(super) fn serialize<S: Serializer>(
+        rows: &[HistoryRow],
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        let wire: Vec<WireHistoryRow> = rows.iter().map(WireHistoryRow::from).collect();
+        wire.serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Vec<HistoryRow>, D::Error> {
+        Vec::<WireHistoryRow>::deserialize(deserializer)
+            .map(|wire| wire.into_iter().map(HistoryRow::from).collect())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrackSnapshot {
     pub revision: u64,
     pub captured_ms: u64,
     /// Time spent waiting at intermediate peers, excluding network transit.
     pub age_ms: u64,
     pub name: String,
+    #[serde(with = "wire_display")]
     pub display: DisplayView,
+    #[serde(with = "wire_rows")]
     pub rows: Vec<HistoryRow>,
     #[serde(default)]
     pub portraits: Vec<PortraitAsset>,
@@ -164,17 +346,12 @@ impl TrackSnapshot {
             return Err("Session state exceeds limits".into());
         }
         std::sync::Arc::make_mut(&mut self.display.doc).normalize();
+        self.display.invalidate_page_cache();
         let units = self.display.doc.unit_count() as u32;
         self.display.reveal.clamp(units);
-        if let Some(mirror) = &mut self.display.mirror_reveal_ms
-            && mirror.len() > units as usize
-        {
-            *mirror = mirror[..units as usize].into();
-        }
         for row in &mut self.rows {
             row.item.doc.normalize();
-            std::sync::Arc::make_mut(&mut row.doc).normalize();
-            let units = row.doc.unit_count() as u32;
+            let units = row.doc().unit_count() as u32;
             if let Some(reveal) = &mut row.reveal {
                 reveal.clamp(units);
             }
@@ -183,7 +360,7 @@ impl TrackSnapshot {
         let mut size = json_len(self);
         let mut drop = 0;
         while size > MAX_TRACK && drop < self.rows.len() {
-            size = size.saturating_sub(json_len(&self.rows[drop]) + 1);
+            size = size.saturating_sub(json_len(&WireHistoryRow::from(&self.rows[drop])) + 1);
             drop += 1;
         }
         self.rows.drain(..drop);
@@ -270,7 +447,6 @@ impl TrackSnapshot {
                 visit_asset_ref(avatar, Role::Avatar, &mut f);
             }
             visit_doc(&row.item.doc, &mut f);
-            visit_doc(&row.doc, &mut f);
         }
         for portrait in &self.portraits {
             visit_asset_ref(&portrait.asset, Role::Picture, &mut f);
@@ -320,9 +496,6 @@ impl TrackSnapshot {
             }
             if doc_needs_asset_update(&row.item.doc, replacements) {
                 rewrite_doc(&mut row.item.doc, replacements);
-            }
-            if doc_needs_asset_update(&row.doc, replacements) {
-                rewrite_doc(std::sync::Arc::make_mut(&mut row.doc), replacements);
             }
         }
         for portrait in &mut self.portraits {
@@ -703,24 +876,21 @@ fn rebase_reveal(reveal: &mut Reveal, remote_now: u64, now: u64) {
 }
 
 pub fn rebase_display(view: &mut DisplayView, remote_now: u64, now: u64) {
-    if let Some(exit) = &mut view.text_exit {
+    if let Some(DisplayExit::Presentation { at_ms, ms }) = &mut view.exit {
         // A peer may have a younger clock. Freeze the visible prefix, and
         // never interpret the sender's absolute deadline on the local clock.
+        let cutoff = *at_ms;
         let first_hidden = (view.reveal.visible_from..view.reveal.hidden_from)
-            .find(|u| view.reveal.unit_at(*u).is_none_or(|at| at > exit.at_ms))
+            .find(|u| view.reveal.unit_at(*u).is_none_or(|at| at > cutoff))
             .unwrap_or(view.reveal.hidden_from);
         view.reveal.hidden_from = first_hidden;
         view.reveal.shown = first_hidden;
         view.reveal.segment = None;
-        exit.ms = exit.ms.saturating_sub(
-            remote_now
-                .saturating_sub(exit.at_ms)
-                .min(u64::from(u16::MAX)) as u16,
-        );
-        exit.at_ms = now;
+        *ms = ms.saturating_sub(remote_now.saturating_sub(cutoff).min(u64::from(u16::MAX)) as u16);
+        *at_ms = now;
     }
     rebase_reveal(&mut view.reveal, remote_now, now);
-    if let Some(times) = &mut view.mirror_reveal_ms {
+    if let Some(times) = &mut view.reveal.unit_times {
         // Zero is the already-shown sentinel; real stamps move onto our clock.
         *times = times
             .iter()
@@ -730,13 +900,13 @@ pub fn rebase_display(view: &mut DisplayView, remote_now: u64, now: u64) {
             })
             .collect();
     }
-    if let Some((at, ms)) = &mut view.fade {
-        let elapsed = remote_now.saturating_sub(*at);
+    if let Some(DisplayExit::Fade { at_ms, ms }) = &mut view.exit {
+        let elapsed = remote_now.saturating_sub(*at_ms);
         if elapsed >= u64::from(*ms) {
             view.empty = true;
-            view.fade = None;
+            view.exit = None;
         } else {
-            *at = now;
+            *at_ms = now;
             *ms -= elapsed as u32;
         }
     }
@@ -866,7 +1036,6 @@ pub(crate) mod tests {
                         reply: None,
                         event: None,
                     },
-                    doc: Document::plain("hi").into(),
                     reveal: None,
                 })
                 .collect(),
@@ -949,8 +1118,9 @@ pub(crate) mod tests {
             shown: u32::MAX,
             hidden_from: u32::MAX,
             segment: None,
+            unit_times: None,
         };
-        display.text_exit = Some(nanatype_core::TextExit { at_ms: 0, ms: 100 });
+        display.exit = Some(DisplayExit::Presentation { at_ms: 0, ms: 100 });
         let mut track = TrackSnapshot {
             revision: 1,
             captured_ms: 0,
@@ -989,12 +1159,12 @@ pub(crate) mod tests {
             kind: nanatype_model::EntranceKind::None,
             ms: 0,
         });
-        view.mirror_reveal_ms = Some(std::sync::Arc::from([0u64, 1000, 1040]));
+        view.reveal.unit_times = Some(std::sync::Arc::from([0u64, 1000, 1040]));
         rebase_display(&mut view, 1100, 10);
-        assert_eq!(view.mirror_reveal_ms.as_deref(), Some(&[0u64, 1, 1][..]));
-        view.mirror_reveal_ms = Some(std::sync::Arc::from([1200u64]));
+        assert_eq!(view.reveal.unit_times.as_deref(), Some(&[0u64, 1, 1][..]));
+        view.reveal.unit_times = Some(std::sync::Arc::from([1200u64]));
         rebase_display(&mut view, 1100, 5000);
-        assert_eq!(view.mirror_reveal_ms.as_deref(), Some(&[5100u64][..]));
+        assert_eq!(view.reveal.unit_times.as_deref(), Some(&[5100u64][..]));
     }
     #[test]
     fn rebasing_a_retirement_keeps_a_finite_local_deadline_and_frozen_prefix() {
@@ -1012,15 +1182,16 @@ pub(crate) mod tests {
                 start: 0,
                 reveal_ms: vec![0, 100, 200].into(),
             }),
+            unit_times: None,
         };
-        view.text_exit = Some(nanatype_core::TextExit {
+        view.exit = Some(DisplayExit::Presentation {
             at_ms: 1150,
             ms: 320,
         });
         rebase_display(&mut view, 1250, 10);
         assert_eq!(
-            view.text_exit,
-            Some(nanatype_core::TextExit { at_ms: 10, ms: 220 })
+            view.exit,
+            Some(DisplayExit::Presentation { at_ms: 10, ms: 220 })
         );
         assert_eq!(view.reveal.hidden_from, 2);
         assert_eq!(view.reveal.unit_at(1), Some(0));
@@ -1038,6 +1209,44 @@ pub(crate) mod tests {
         rebase_reveal(&mut reveal, 1100, 10);
         assert_eq!(reveal.unit_at(0), Some(10));
         assert_eq!(reveal.unit_at(2), Some(60));
+    }
+
+    #[test]
+    fn wire_track_snapshot_preserves_v5_schema_round_trip() {
+        let mut track = track_with(7, &[1]);
+        track.display.empty = false;
+        track.display.replay = true;
+        track.display.reveal.unit_times = Some(Arc::from([0u64, 1200]));
+        track.display.exit = Some(DisplayExit::Presentation {
+            at_ms: 1500,
+            ms: 280,
+        });
+        let value = serde_json::to_value(&track).unwrap();
+        assert_eq!(value["display"]["replay"], true);
+        assert_eq!(
+            value["display"]["mirror_reveal_ms"],
+            serde_json::json!([0, 1200])
+        );
+        assert_eq!(
+            value["display"]["text_exit"],
+            serde_json::json!({"at_ms": 1500, "ms": 280})
+        );
+        assert!(value["display"]["fade"].is_null());
+        assert!(value["rows"][0]["doc"].is_object());
+        let decoded: TrackSnapshot = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            decoded.display.reveal.unit_times.as_deref(),
+            Some(&[0u64, 1200][..])
+        );
+        assert_eq!(
+            decoded.display.exit,
+            Some(DisplayExit::Presentation {
+                at_ms: 1500,
+                ms: 280
+            })
+        );
+        assert!(decoded.display.replay);
+        assert_eq!(decoded.rows[0].doc(), &Document::plain("hi"));
     }
     #[test]
     fn a_password_stays_out_of_the_shared_invite() {

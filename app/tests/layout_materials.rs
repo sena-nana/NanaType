@@ -90,7 +90,7 @@ fn stroke_maps_build_in_the_background_and_keep_the_reveal_clock() {
     settings.skin.id = "nanatype.love_letter".into();
     settings.playback.punctuation_pauses = false;
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-    let mut core = Core::new(settings, skin);
+    let mut core = Core::from_settings(&settings, &skin);
     let base = 100_000;
     core.handle(
         Cmd::SendMarkup(

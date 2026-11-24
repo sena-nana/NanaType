@@ -170,7 +170,7 @@ fn history_compositor_needs_tick(ui: crate::ui::Stage, now: u64) -> bool {
         rows.iter().any(|row| {
             let entrance_ms = if reduced {
                 0
-            } else if let Some(tagged) = row.doc.entrance() {
+            } else if let Some(tagged) = row.doc().entrance() {
                 // Match dialogue::document_on: explicit markup wins, but a
                 // zero-duration skin entrance still disables its transition.
                 if skin_ms == 0 { 0 } else { tagged.ms }
@@ -741,7 +741,7 @@ impl Host {
     ) {
         let view = ui.display.get_untracked();
         // Retirement freezes the visible viewport as well as the glyph clock.
-        if view.text_exit.is_some() {
+        if view.exit.and_then(|e| e.presentation()).is_some() {
             return;
         }
         let mut mode = if remote {
@@ -1559,7 +1559,7 @@ impl RuntimeProgram for Host {
             WindowEvent::AppearanceChanged { appearance, .. } => {
                 self.app.system_dark =
                     matches!(appearance, nana_ui_platform::SystemAppearance::Dark);
-                if self.app.settings.skin.chrome == nanatype_settings::ChromeMode::System {
+                if self.app.settings.accessibility.chrome == nanatype_settings::ChromeMode::System {
                     self.app.refresh_theme();
                 }
             }
@@ -2242,6 +2242,7 @@ mod redraw_tests {
                     start: 0,
                     reveal_ms: Arc::from([0, 100]),
                 }),
+                unit_times: None,
                 hidden_from: 2,
             };
         });
@@ -2280,6 +2281,7 @@ mod redraw_tests {
                 start: 0,
                 reveal_ms: Arc::from([0, 100]),
             }),
+            unit_times: None,
             hidden_from: 2,
         };
         assert!(history_reveal_animating(&reveal, now, 200));
@@ -2312,13 +2314,12 @@ mod redraw_tests {
                 line: None,
                 author: "Nana".into(),
                 avatar: None,
-                doc: doc.clone(),
+                doc,
                 at: 0,
                 uid: None,
                 reply: None,
                 event: None,
             },
-            doc: Arc::new(doc),
             reveal: Some(nanatype_core::Reveal {
                 visible_from: 0,
                 shown: 0,
@@ -2327,6 +2328,7 @@ mod redraw_tests {
                     start: 0,
                     reveal_ms: Arc::from([0, 100]),
                 }),
+                unit_times: None,
                 hidden_from: 2,
             }),
         }]));
@@ -2358,7 +2360,10 @@ mod redraw_tests {
         ui.display.update(|d| {
             let d = Arc::make_mut(d);
             d.empty = false;
-            d.fade = Some((now, 100));
+            d.exit = Some(nanatype_core::DisplayExit::Fade {
+                at_ms: now,
+                ms: 100,
+            });
         });
         let mut follow = overflow::Follow::default();
         let peer_follow = overflow::Follow::default();
@@ -2485,13 +2490,12 @@ mod redraw_tests {
                 line: None,
                 author: "Viewer".into(),
                 avatar: None,
-                doc: doc.clone(),
+                doc,
                 at: unix_now,
                 uid: None,
                 reply: None,
                 event: None,
             },
-            doc: Arc::new(doc),
             reveal: None,
         }]));
         let scheduled = frame_policy(ui, Some(WindowKind::Danmaku), now, &follow, &[], &pager);

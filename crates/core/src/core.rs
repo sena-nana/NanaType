@@ -6,20 +6,18 @@ use nanatype_model::{
     SourceId, SourceKind, Speaker, VtsAction, unix_millis,
 };
 use nanatype_playback::{
-    Cue, CueKind, LineQueue, PacingParams, Phase, Player, PlayerEffect, QueueDecision, Timeline,
-    TypingSoundRule, WakeReason, compile, mirror_delta, mirror_offsets,
+    Cue, CueKind, ExitStyle, LineQueue, PacingParams, Phase, Player, PlayerEffect, QueueDecision,
+    QueuePolicy, TypingClickFilter, TypingSoundRule, WakeReason, compile, mirror_delta,
+    mirror_matches, mirror_offsets,
 };
 use nanatype_settings::{HistorySync, InputMode, InputPresence, Settings};
 use nanatype_theme::Skin;
 
 use crate::Millis;
-use crate::view::{DisplayView, HistoryRow, Reveal, SegmentReveal, ShakeView};
-
-/// Lines kept for Ctrl+↑ recall.
-const RECALL_CAP: usize = 100;
-
-/// Click variants the host provides when a skin has no typing sounds.
-pub const DEFAULT_TYPING_VARIANTS: u8 = 3;
+use crate::config::{CoreConfig, SkinCapabilities};
+use crate::draft::{Draft, DraftBox};
+use crate::feed::MessageFeed;
+use crate::view::{DisplayExit, DisplayView, HistoryRow, Reveal, SegmentReveal, ShakeView};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
@@ -63,10 +61,10 @@ pub enum Cmd {
     },
     /// A timed cue reached its moment (portrait, shake, expression, speaking).
     CueFired(CueKind),
-    SetSettings(Box<Settings>),
+    SetConfig(Box<CoreConfig>),
     /// Effective accessibility preference, including the operating system.
     SetReducedMotion(bool),
-    SetSkin(Arc<Skin>),
+    SetSkin(Box<SkinCapabilities>),
     SetSpeaker(Option<Speaker>),
     /// Show the last sent line again, as it was said. It is not sent
     /// anywhere else and adds no history row.
@@ -136,8 +134,8 @@ pub struct Effects {
     pub cancel_epochs: Vec<u64>,
     pub events: Vec<Event>,
     pub ui_sounds: Vec<UiSound>,
-    /// Replace the editor content.
-    pub replace_draft: Option<Document>,
+    /// Replace the editor content and its header metadata atomically.
+    pub replace_draft: Option<Draft>,
     pub hide_input: bool,
     pub display_changed: bool,
     pub history_changed: bool,
@@ -147,59 +145,47 @@ pub struct Effects {
 }
 
 struct Active {
-    line: Line,
+    /// `None` when retiring an uncommitted mirror draft.
+    line: Option<Line>,
     player: Player,
     /// Player generation; makes epochs unique across lines.
     generation: u64,
 }
 
-#[derive(Clone, Default)]
-struct Draft {
-    doc: Document,
-    meta: LineMeta,
+impl Active {
+    fn line_id(&self) -> LineId {
+        self.line
+            .as_ref()
+            .map_or_else(|| self.player.line(), |l| l.id)
+    }
 }
 
-enum AfterExit {
-    Clear,
-    Line(Line),
-    Advance,
-    Wake { epoch: u64, reason: WakeReason },
-    Finish(LineId),
-}
-struct Retiring {
-    epoch: u64,
-    next: AfterExit,
+enum DisplayOwner {
+    Empty,
+    MirrorDraft {
+        doc: Arc<Document>,
+        timestamps: Option<Arc<[Millis]>>,
+    },
+    Playback(Box<Active>),
 }
 
 pub struct Core {
-    retiring: Option<Retiring>,
-    retirement_serial: u64,
-    bypass_exit: bool,
     reduced_motion: bool,
-    settings: Settings,
-    skin: Arc<Skin>,
+    config: CoreConfig,
+    skin: SkinCapabilities,
     pacing: PacingParams,
     sound_rule: TypingSoundRule,
-    draft: Document,
-    active: Option<Active>,
+    drafts: DraftBox,
+    owner: DisplayOwner,
+    pending_line: Option<Line>,
     generation: u64,
     /// Epoch of the last scheduled cue batch (for cancellation).
     cue_epoch: Option<u64>,
     queue: LineQueue,
     display: DisplayView,
-    history: VecDeque<HistoryRow>,
-    danmaku: VecDeque<HistoryRow>,
-    next_row: u64,
-    sent: VecDeque<Draft>,
-    recall: Option<usize>,
-    /// Draft stashed when recall started.
-    stash: Option<Draft>,
-    /// Mirror mode: the committed line stays until typing starts again.
-    mirror_committed: bool,
+    feed: MessageFeed,
     /// The last speaking cue fired was a start (avatars' mouths are moving).
     speaking: bool,
-    /// Line meta typed in the markup source, for the next send.
-    draft_meta: LineMeta,
     /// The chat message the next sent line answers.
     reply: Option<ChatRef>,
     speaker_override: Option<Speaker>,
@@ -216,59 +202,53 @@ fn global(generation: u64, epoch: u64) -> u64 {
 }
 
 impl Core {
-    pub fn new(settings: Settings, skin: Arc<Skin>) -> Self {
-        let mut core = Self {
-            retiring: None,
-            retirement_serial: 0,
-            bypass_exit: false,
+    pub fn new(config: CoreConfig, skin: SkinCapabilities) -> Self {
+        let pacing = config.pacing(&skin);
+        let sound_rule = config.sound_rule(&skin);
+        let queue = LineQueue::new(config.playback.queue);
+        let feed = MessageFeed::new(config.history_cap, config.separate_danmaku);
+        let entrance = config.entrance_for(&Document::new(), &skin);
+        Self {
             reduced_motion: false,
-            pacing: PacingParams::default(),
-            sound_rule: TypingSoundRule::default(),
-            queue: LineQueue::new(settings.playback.queue),
-            display: DisplayView::empty(Entrance {
-                kind: EntranceKind::None,
-                ms: 0,
-            }),
-            settings,
+            config,
             skin,
-            draft: Document::new(),
-            active: None,
+            pacing,
+            sound_rule,
+            drafts: DraftBox::default(),
+            owner: DisplayOwner::Empty,
+            pending_line: None,
             generation: 0,
             cue_epoch: None,
-            history: VecDeque::new(),
-            danmaku: VecDeque::new(),
-            next_row: 1,
-            sent: VecDeque::new(),
-            recall: None,
-            stash: None,
-            mirror_committed: false,
+            queue,
+            display: DisplayView::empty(entrance),
+            feed,
             speaking: false,
-            draft_meta: LineMeta::default(),
             reply: None,
             speaker_override: None,
             last_sent: None,
             replay: None,
             replay_of: None,
-        };
-        core.refresh_params();
-        core.display.entrance = core.entrance();
-        core
+        }
     }
 
-    pub fn settings(&self) -> &Settings {
-        &self.settings
+    pub fn from_settings(settings: &Settings, skin: &Skin) -> Self {
+        Self::new(CoreConfig::from(settings), SkinCapabilities::from(skin))
     }
 
-    pub fn skin(&self) -> &Arc<Skin> {
+    pub fn config(&self) -> &CoreConfig {
+        &self.config
+    }
+
+    pub fn skin(&self) -> &SkinCapabilities {
         &self.skin
     }
 
     pub fn draft(&self) -> &Document {
-        &self.draft
+        self.drafts.doc()
     }
 
     pub fn draft_meta(&self) -> LineMeta {
-        self.draft_meta.clone()
+        self.drafts.meta().clone()
     }
 
     /// The sent line that `line` replays, when it is the last replay.
@@ -281,11 +261,11 @@ impl Core {
     }
 
     pub fn history(&self) -> &VecDeque<HistoryRow> {
-        &self.history
+        &self.feed.history
     }
 
     pub fn danmaku(&self) -> &VecDeque<HistoryRow> {
-        &self.danmaku
+        &self.feed.danmaku
     }
 
     /// The chat message the next sent line answers.
@@ -298,80 +278,52 @@ impl Core {
     }
 
     pub fn phase(&self) -> Option<Phase> {
-        if self.retiring.is_some() {
-            return Some(Phase::Fading);
+        match &self.owner {
+            DisplayOwner::Playback(a) => Some(a.player.phase()),
+            _ => None,
         }
-        self.active.as_ref().map(|a| a.player.phase())
     }
 
     pub fn mode(&self) -> InputMode {
-        self.settings.general.input_mode
+        self.config.input_mode
+    }
+
+    fn active(&self) -> Option<&Active> {
+        match &self.owner {
+            DisplayOwner::Playback(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    fn active_mut(&mut self) -> Option<&mut Active> {
+        match &mut self.owner {
+            DisplayOwner::Playback(a) => Some(a),
+            _ => None,
+        }
     }
 
     fn refresh_params(&mut self) {
-        let p = &self.settings.playback;
-        self.pacing = self
-            .skin
-            .pacing(p.speed_scale, p.punctuation_pauses, p.typing);
-        self.sound_rule = self.skin.sounds.typing.rule(self.settings.sound.typing);
-        if self.skin.sounds.typing.files.is_empty() {
-            // The host synthesizes a default set of clicks.
-            self.sound_rule.variants = DEFAULT_TYPING_VARIANTS;
-        }
-        self.queue.policy = p.queue;
+        self.pacing = self.config.pacing(&self.skin);
+        self.sound_rule = self.config.sound_rule(&self.skin);
+        self.queue.policy = self.config.playback.queue;
     }
 
-    /// How the line on the display enters: its own `[fade]` / `[pop]` /
-    /// `[slide]` tags first, then the playback setting, then the skin.
     fn entrance(&self) -> Entrance {
-        if let Some(entrance) = self.display.doc.entrance() {
-            return entrance;
-        }
-        let skin = &self.skin.dialogue.reveal.entrance;
-        let kind = self.settings.playback.entrance.unwrap_or(skin.kind);
-        Entrance {
-            kind,
-            ms: if kind == EntranceKind::None {
-                0
-            } else {
-                skin.ms.max(1)
-            },
-        }
+        self.config.entrance_for(&self.display.doc, &self.skin)
     }
 
-    fn speaker(&self) -> Speaker {
-        if let Some(speaker) = &self.speaker_override {
-            let mut speaker = speaker.clone();
-            speaker.portrait = self.display.portrait.clone();
-            return speaker;
-        }
-        Speaker {
-            portrait: self.display.portrait.clone(),
-            ..self.settings.general.active_character().speaker()
-        }
-    }
-
-    /// Who says a line with `meta`: the character its `speaker` names, or
-    /// the usual speaker when it names none (or one not found).
     fn speaker_for(&self, meta: &LineMeta) -> Speaker {
-        match meta
-            .speaker
-            .as_deref()
-            .and_then(|key| self.settings.general.character_named(key))
-        {
-            Some(character) => Speaker {
-                portrait: self.display.portrait.clone(),
-                ..character.speaker()
-            },
-            None => self.speaker(),
-        }
+        self.config.speaker_for(
+            meta,
+            self.speaker_override.as_ref(),
+            self.display.portrait.clone(),
+        )
     }
 
     /// In mirror mode the draft on the display follows a speaker change.
     fn refresh_draft_speaker(&mut self, fx: &mut Effects) {
-        if self.mode() == InputMode::Mirror && !self.mirror_committed && self.display.line.is_none()
-        {
-            let speaker = self.speaker_for(&self.draft_meta);
+        if matches!(self.owner, DisplayOwner::MirrorDraft { .. }) {
+            let speaker = self.speaker_for(self.drafts.meta());
             if self.display.speaker != speaker {
                 self.display.speaker = speaker;
                 self.touch_display(fx);
@@ -389,7 +341,7 @@ impl Core {
         match cmd {
             Cmd::DraftChanged(doc) => self.draft_changed(doc, now, &mut fx),
             Cmd::DraftMeta(meta) => {
-                self.draft_meta = meta;
+                self.drafts.set_meta(meta);
                 self.refresh_draft_speaker(&mut fx);
             }
             Cmd::PageBreaks { line, breaks } => self.page_breaks(line, &breaks, now, &mut fx),
@@ -407,68 +359,12 @@ impl Core {
                     self.submit(line, now, &mut fx);
                 }
             }
-            Cmd::Continue | Cmd::Skip if self.retiring.is_some() => self.finish_exit(now, &mut fx),
             Cmd::Continue => self.continue_key(now, &mut fx),
-            Cmd::Skip => {
-                if let Some(active) = self.active.as_mut()
-                    && matches!(active.player.phase(), Phase::Revealing | Phase::Gated)
-                {
-                    let effects = active.player.finish_reveal(now);
-                    self.cancel_cues(&mut fx);
-                    self.apply_player(effects, now, &mut fx);
-                    self.display.entrance = Entrance {
-                        kind: EntranceKind::None,
-                        ms: 0,
-                    };
-                    self.touch_display(&mut fx);
-                }
-            }
+            Cmd::Skip => self.skip_key(now, &mut fx),
             Cmd::ClearDisplay => self.clear_display(now, &mut fx),
             Cmd::Recall(dir) => self.recall(dir, now, &mut fx),
-            Cmd::Wake {
-                epoch,
-                reason: WakeReason::PresentationDone,
-            } => {
-                if self.retiring.as_ref().is_some_and(|r| r.epoch == epoch) {
-                    self.finish_exit(now, &mut fx);
-                }
-            }
             Cmd::Wake { epoch, reason } => {
-                if self.retiring.is_some() {
-                    return fx;
-                }
-                // The timeline ends a segment when its last unit *starts*
-                // to enter. Hold the end until that unit has finished, so a
-                // gate, `after=`, the next line or an exit (which freezes
-                // the reveal) never catches it half drawn.
-                let intro_ms = self.intro_ms();
-                if reason == WakeReason::SegmentEnd
-                    && intro_ms > 0
-                    && self.active.as_ref().is_some_and(|a| {
-                        a.generation == epoch >> 32 && a.player.epoch() == epoch & 0xffff_ffff
-                    })
-                {
-                    let end = self.display.reveal.settles_at(intro_ms);
-                    if let Some(at_ms) = end.filter(|end| now < *end) {
-                        fx.wakes.push(Wake {
-                            epoch,
-                            reason,
-                            at_ms,
-                        });
-                        return fx;
-                    }
-                }
-                if reason == WakeReason::AutoContinue
-                    && self.active.as_ref().is_some_and(|a| {
-                        a.generation == epoch >> 32
-                            && a.player.epoch() == epoch & 0xffff_ffff
-                            && a.player.next_clears_page()
-                    })
-                    && self.begin_exit(AfterExit::Wake { epoch, reason }, now, &mut fx)
-                {
-                    return fx;
-                }
-                let Some(active) = self.active.as_mut() else {
+                let Some(active) = self.active_mut() else {
                     return fx;
                 };
                 if epoch >> 32 != active.generation {
@@ -478,76 +374,23 @@ impl Core {
                 self.apply_player(effects, now, &mut fx);
             }
             Cmd::CueFired(kind) => self.cue_fired(kind, now, &mut fx),
-            Cmd::SetSettings(settings) => {
-                self.set_settings(*settings, now, &mut fx);
-                if self.retiring.is_some() && !self.transitions_enabled() {
-                    self.finish_exit(now, &mut fx);
-                }
-            }
-            Cmd::SetReducedMotion(reduced) => {
-                if self.reduced_motion != reduced {
-                    self.touch_display(&mut fx);
-                }
-                self.reduced_motion = reduced;
-                if reduced && self.retiring.is_some() {
-                    self.finish_exit(now, &mut fx);
-                }
-            }
+            Cmd::SetConfig(config) => self.set_config(*config, now, &mut fx),
+            Cmd::SetReducedMotion(reduced) => self.set_reduced_motion(reduced, now, &mut fx),
+            Cmd::SetSkin(skin) => self.set_skin(*skin, now, &mut fx),
             Cmd::SetSpeaker(speaker) => {
                 self.speaker_override = speaker;
                 self.refresh_draft_speaker(&mut fx);
             }
             Cmd::Replay => self.replay(now, &mut fx),
-            Cmd::RemoveHistoryRows(keys) => {
-                if retain_non_local(&mut self.history, &keys) {
-                    fx.history_changed = true;
-                }
-                if retain_non_local(&mut self.danmaku, &keys) {
-                    fx.danmaku_changed = true;
-                }
-            }
-            Cmd::SetSkin(skin) => {
-                self.skin = skin;
-                self.refresh_params();
-                self.display.entrance = self.entrance();
-                if let Some(p) = &self.display.portrait
-                    && !self.skin.dialogue.portrait.variants.contains_key(p)
-                {
-                    self.display.portrait = None;
-                }
-                self.touch_display(&mut fx);
-                if self.retiring.is_some() {
-                    self.finish_exit(now, &mut fx);
-                }
-            }
-            Cmd::External(item) => {
-                let doc = Arc::new(item.doc.without_markers());
-                if self.settings.history.chat.separate {
-                    self.push_danmaku(item, doc, &mut fx);
-                } else {
-                    self.push_row(item, doc, None, &mut fx);
-                }
-            }
-            Cmd::ClearHistory => {
-                if !self.history.is_empty() {
-                    self.history.clear();
-                    fx.history_changed = true;
-                }
-            }
-            Cmd::ClearDanmaku => {
-                if !self.danmaku.is_empty() {
-                    self.danmaku.clear();
-                    fx.danmaku_changed = true;
-                }
-            }
+            Cmd::RemoveHistoryRows(keys) => self.feed.remove_non_local(&keys, &mut fx),
+            Cmd::External(item) => self.feed.push_external(item, &mut fx),
+            Cmd::ClearHistory => self.feed.clear_history(&mut fx),
+            Cmd::ClearDanmaku => self.feed.clear_danmaku(&mut fx),
             Cmd::SetReply(reply) => {
                 if reply != self.reply {
                     self.reply = reply;
                     fx.reply_changed = true;
-                    if self.mode() == InputMode::Mirror
-                        && self.display.line.is_none()
-                        && !self.mirror_committed
-                    {
+                    if matches!(self.owner, DisplayOwner::MirrorDraft { .. }) {
                         self.display.reply = self.reply.clone();
                         self.touch_display(&mut fx);
                     }
@@ -557,245 +400,279 @@ impl Core {
         fx
     }
 
-    fn set_settings(&mut self, settings: Settings, now: Millis, fx: &mut Effects) {
-        let mode_changed = settings.general.input_mode != self.settings.general.input_mode;
-        let was_separate = self.settings.history.chat.separate;
-        let cap = settings.history.max_items.max(1) as usize;
-        self.settings = settings;
+    fn set_config(&mut self, next: CoreConfig, now: Millis, fx: &mut Effects) {
+        if next == self.config {
+            return;
+        }
+        let prev = std::mem::replace(&mut self.config, next);
+        let mode_changed = self.config.input_mode != prev.input_mode;
         self.refresh_params();
-        self.display.entrance = self.entrance();
-        if !was_separate && self.settings.history.chat.separate {
-            let mut kept = VecDeque::with_capacity(self.history.len());
-            let mut moved = Vec::new();
-            for row in self.history.drain(..) {
-                if row.item.source.is_local() {
-                    kept.push_back(row);
-                } else {
-                    moved.push(row);
-                }
-            }
-            self.history = kept;
-            if !moved.is_empty() {
-                self.danmaku.extend(moved);
-                self.danmaku.make_contiguous().sort_by_key(|r| r.key);
-                fx.history_changed = true;
-                fx.danmaku_changed = true;
-            }
-        } else if was_separate && !self.settings.history.chat.separate && !self.danmaku.is_empty() {
-            let moved = std::mem::take(&mut self.danmaku);
-            fx.danmaku_changed = true;
-            self.history.extend(moved);
-            self.history.make_contiguous().sort_by_key(|r| r.key);
-            fx.history_changed = true;
+
+        if self.config.history_cap != prev.history_cap
+            || self.config.separate_danmaku != prev.separate_danmaku
+        {
+            self.feed
+                .reconfigure(self.config.history_cap, self.config.separate_danmaku, fx);
         }
-        if cap_rows(&mut self.history, cap) {
-            fx.history_changed = true;
-        }
-        if cap_rows(&mut self.danmaku, cap) {
-            fx.danmaku_changed = true;
-        }
+
         if mode_changed {
-            self.retiring = None;
-            self.display.text_exit = None;
             self.queue.clear();
+            self.pending_line = None;
             self.stop_player(fx);
-            self.mirror_committed = false;
             if self.mode() == InputMode::Mirror {
-                let draft = self.draft.clone();
+                let draft = self.drafts.doc().clone();
                 self.show_mirror(draft, &Document::new(), now, fx);
             } else {
+                self.owner = DisplayOwner::Empty;
                 self.blank_display(fx);
             }
+            return;
         }
-        self.refresh_draft_speaker(fx);
-        self.touch_display(fx);
+
+        let new_entrance = self.entrance();
+        if self.display.entrance != new_entrance {
+            self.display.entrance = new_entrance;
+            if !self.display.empty {
+                self.touch_display(fx);
+            }
+        }
+
+        if self.config.characters != prev.characters
+            || self.config.active_character != prev.active_character
+        {
+            self.refresh_draft_speaker(fx);
+        }
+
+        let motion_changed = self.config.playback.reduced_motion != prev.playback.reduced_motion
+            || self.config.advanced_effects != prev.advanced_effects;
+        if motion_changed && !self.display.empty {
+            self.touch_display(fx);
+        }
+
+        self.sync_active_profile(now, fx);
+    }
+
+    fn set_reduced_motion(&mut self, reduced: bool, now: Millis, fx: &mut Effects) {
+        if self.reduced_motion == reduced {
+            return;
+        }
+        self.reduced_motion = reduced;
+        if !self.display.empty {
+            self.touch_display(fx);
+        }
+        self.sync_active_profile(now, fx);
+    }
+
+    fn set_skin(&mut self, skin: SkinCapabilities, now: Millis, fx: &mut Effects) {
+        if skin == self.skin {
+            return;
+        }
+        self.skin = skin;
+        self.refresh_params();
+        let new_entrance = self.entrance();
+        let mut changed = false;
+        if self.display.entrance != new_entrance {
+            self.display.entrance = new_entrance;
+            changed = true;
+        }
+        if let Some(p) = &self.display.portrait
+            && !self.skin.portrait_variants.contains(p)
+        {
+            self.display.portrait = None;
+            changed = true;
+        }
+        if changed || !self.display.empty {
+            self.touch_display(fx);
+        }
+        if let Some(active) = self.active_mut() {
+            if active.player.phase() == Phase::Exiting {
+                let effects = active.player.finish_exit(now);
+                self.apply_player(effects, now, fx);
+            } else {
+                self.sync_active_profile(now, fx);
+            }
+        }
+    }
+
+    fn sync_active_profile(&mut self, now: Millis, fx: &mut Effects) {
+        let Some(active) = self.active() else {
+            return;
+        };
+        let meta = active
+            .line
+            .as_ref()
+            .map(|l| l.meta.clone())
+            .unwrap_or_default();
+        let doc = active
+            .line
+            .as_ref()
+            .map(|l| l.doc.clone())
+            .unwrap_or_else(|| (*self.display.doc).clone());
+        let entrance = self.config.entrance_for(&doc, &self.skin);
+        let profile =
+            self.config
+                .playback_profile(&meta, &doc, entrance, &self.skin, self.reduced_motion);
+        if let Some(active) = self.active_mut() {
+            let effects = active.player.set_profile(profile, now);
+            if !effects.is_empty() {
+                self.apply_player(effects, now, fx);
+            }
+        }
     }
 
     // ---- drafting -------------------------------------------------------
 
     fn draft_changed(&mut self, doc: Document, now: Millis, fx: &mut Effects) {
-        let doc = doc.normalized();
-        if doc == self.draft {
+        let Some((previous, doc)) = self.drafts.set_doc(doc) else {
             return;
-        }
-        let previous = std::mem::replace(&mut self.draft, doc.clone());
-        if self.recall.is_some() && Some(&doc) != self.recalled_doc() {
-            // Typing after a recall keeps the recalled text as a new draft.
-            self.recall = None;
-            self.stash = None;
-        }
+        };
         if self.mode() != InputMode::Mirror {
             return;
         }
-        if self.mirror_committed {
-            if doc.is_blank() {
-                return;
+        match &self.owner {
+            DisplayOwner::Playback(_) => {
+                if doc.is_blank() {
+                    return;
+                }
+                self.pending_line = None;
+                self.stop_player(fx);
+                self.show_mirror(doc, &Document::new(), now, fx);
             }
-            self.mirror_committed = false;
-            self.stop_player(fx);
-            self.show_mirror(doc, &Document::new(), now, fx);
-        } else {
-            self.show_mirror(doc, &previous, now, fx);
+            DisplayOwner::Empty | DisplayOwner::MirrorDraft { .. } => {
+                self.show_mirror(doc, &previous, now, fx);
+            }
         }
     }
 
-    /// Mirror the draft: unchanged units stay, appended units ripple in.
+    /// Mirror the draft: unchanged units stay, newly added units ripple in.
     fn show_mirror(&mut self, doc: Document, previous: &Document, now: Millis, fx: &mut Effects) {
-        self.retiring = None;
-        self.display.text_exit = None;
-        let units = doc.unit_count() as u32;
-        let prev_shown = if self.display.line.is_none() && !self.display.empty {
-            previous
-        } else {
-            &Document::new()
-        };
-        let delta = mirror_delta(prev_shown, &doc);
-        let mirror_times = self.skin.dialogue.reveal.scramble.as_ref().map(|_| {
-            let matches = nanatype_playback::mirror_matches(prev_shown, &doc);
-            let added = matches.iter().filter(|m| m.is_none()).count() as u32;
-            let mut offsets =
-                mirror_offsets(added, self.settings.playback.mirror_stagger_ms, 240).into_iter();
-            matches
-                .into_iter()
-                .map(|m| {
-                    m.map(|i| {
-                        self.display
-                            .mirror_reveal_ms
-                            .as_ref()
-                            .and_then(|t| t.get(i))
-                            .copied()
-                            .unwrap_or(0)
-                    })
-                    .unwrap_or_else(|| now.max(1) + u64::from(offsets.next().unwrap_or(0)))
-                })
-                .collect::<Arc<[u64]>>()
-        });
-        let offsets = mirror_offsets(
-            delta.appended,
-            self.settings.playback.mirror_stagger_ms,
-            240,
-        );
-        let reveal = if delta.appended == 0 {
-            Reveal::full(units)
-        } else {
-            Reveal {
-                visible_from: 0,
-                shown: delta.common_prefix,
-                segment: Some(SegmentReveal {
-                    origin_ms: now,
-                    start: delta.common_prefix,
-                    reveal_ms: offsets.iter().copied().collect(),
-                }),
-                hidden_from: units,
+        let (prev_shown, prev_times) = match &self.owner {
+            DisplayOwner::MirrorDraft { timestamps, .. } if !self.display.empty => {
+                (previous, timestamps.as_deref())
             }
+            _ => (&Document::new(), None),
         };
-        if self.sound_rule.enabled && delta.appended > 0 {
-            let doc_units = doc.units();
-            let mut cues = Vec::new();
-            let mut last: Option<u32> = None;
-            for (i, at) in offsets.iter().enumerate() {
-                let unit = delta.common_prefix + i as u32;
-                let class = doc_units[unit as usize].class();
-                let skip = matches!(class, nanatype_model::CharClass::Space)
-                    || (self.sound_rule.skip_punct
-                        && matches!(class, nanatype_model::CharClass::Punct(_)));
-                let spaced =
-                    last.is_none_or(|t| at - t >= u32::from(self.sound_rule.min_interval_ms));
-                if !skip && spaced {
-                    cues.push(Cue {
-                        at_ms: *at,
-                        kind: CueKind::TypeSound {
-                            unit,
-                            variant: (unit % u32::from(self.sound_rule.variants.max(1))) as u8,
-                            seed: unit.wrapping_mul(0x9E37_79B9),
-                        },
-                    });
-                    last = Some(*at);
+        let units = doc.unit_count() as u32;
+        let stagger_ms = self.config.playback.mirror_stagger_ms;
+        let mut click_filter = TypingClickFilter::new(self.sound_rule);
+        let mut cues = Vec::new();
+
+        let (reveal, unit_times) = if self.skin.scramble_intro_ms.is_some() {
+            let matches = mirror_matches(prev_shown, &doc);
+            let added = matches.iter().filter(|m| m.is_none()).count() as u32;
+            let mut offsets = mirror_offsets(added, stagger_ms, 240).into_iter();
+            let doc_units = (self.sound_rule.enabled && added > 0).then(|| doc.units());
+            let times: Arc<[Millis]> = matches
+                .into_iter()
+                .enumerate()
+                .map(|(u, matched)| match matched {
+                    Some(prev_i) => prev_times.and_then(|t| t.get(prev_i)).copied().unwrap_or(0),
+                    None => {
+                        let off = offsets.next().unwrap_or(0);
+                        if let Some(ref du) = doc_units
+                            && let Some(cue) = click_filter.next(u as u32, du[u].class(), off)
+                        {
+                            cues.push(cue);
+                        }
+                        now.max(1) + u64::from(off)
+                    }
+                })
+                .collect();
+            let reveal = Reveal {
+                visible_from: 0,
+                shown: 0,
+                segment: None,
+                unit_times: Some(times.clone()),
+                hidden_from: units,
+            };
+            (reveal, Some(times))
+        } else {
+            let delta = mirror_delta(prev_shown, &doc);
+            let offsets = mirror_offsets(delta.appended, stagger_ms, 240);
+            if self.sound_rule.enabled && delta.appended > 0 {
+                let doc_units = doc.units();
+                for (i, &at) in offsets.iter().enumerate() {
+                    let u = delta.common_prefix + i as u32;
+                    if let Some(cue) = click_filter.next(u, doc_units[u as usize].class(), at) {
+                        cues.push(cue);
+                    }
                 }
             }
-            if !cues.is_empty() {
-                fx.cues.push(CueBatch {
-                    epoch: 0,
-                    origin_ms: now,
-                    cues: cues.into(),
-                });
-            }
+            let reveal = if delta.appended == 0 {
+                Reveal::full(units)
+            } else {
+                Reveal {
+                    visible_from: 0,
+                    shown: delta.common_prefix,
+                    segment: Some(SegmentReveal {
+                        origin_ms: now,
+                        start: delta.common_prefix,
+                        reveal_ms: offsets.into(),
+                    }),
+                    unit_times: None,
+                    hidden_from: units,
+                }
+            };
+            (reveal, None)
+        };
+
+        if !cues.is_empty() {
+            fx.cues.push(CueBatch {
+                epoch: 0,
+                origin_ms: now,
+                cues: cues.into(),
+            });
         }
+
+        let doc = Arc::new(doc);
+        let empty = doc.is_blank();
+        let entrance = self.config.entrance_for(&doc, &self.skin);
         self.display.line = None;
-        self.display.empty = doc.is_blank();
-        self.display.doc = Arc::new(doc);
-        self.display.entrance = self.entrance();
-        self.display.speaker = self.speaker_for(&self.draft_meta);
+        self.display.empty = empty;
+        self.display.doc = doc.clone();
+        self.display.invalidate_page_cache();
+        self.display.entrance = entrance;
+        self.display.speaker = self.speaker_for(self.drafts.meta());
         self.display.reply = self.reply.clone();
         self.display.reveal = reveal;
-        self.display.mirror_reveal_ms = mirror_times;
-        self.display.fade = None;
+        self.display.exit = None;
         self.display.continue_indicator = false;
+        self.display.replay = false;
+        self.owner = if empty {
+            DisplayOwner::Empty
+        } else {
+            DisplayOwner::MirrorDraft {
+                doc,
+                timestamps: unit_times,
+            }
+        };
         self.touch_display(fx);
     }
 
-    fn recalled_doc(&self) -> Option<&Document> {
-        self.recall
-            .and_then(|i| self.sent.get(i))
-            .map(|draft| &draft.doc)
-    }
-
     fn recall(&mut self, dir: i32, now: Millis, fx: &mut Effects) {
-        if self.sent.is_empty() {
+        let Some((previous, draft)) = self.drafts.recall(dir) else {
             return;
-        }
-        let last = self.sent.len() - 1;
-        let next = match (self.recall, dir.signum()) {
-            (None, -1) => Some(last),
-            (None, _) => return,
-            (Some(i), -1) => Some(i.saturating_sub(1)),
-            (Some(i), _) if i >= last => None,
-            (Some(i), _) => Some(i + 1),
         };
-        if self.recall.is_none() {
-            self.stash = Some(Draft {
-                doc: self.draft.clone(),
-                meta: self.draft_meta.clone(),
-            });
-        }
-        self.recall = next;
-        let draft = match next {
-            Some(i) => self.sent[i].clone(),
-            None => self.stash.take().unwrap_or_default(),
-        };
-        let previous = std::mem::replace(&mut self.draft, draft.doc.clone());
-        self.draft_meta = draft.meta;
         if self.mode() == InputMode::Mirror {
-            self.mirror_committed = false;
+            self.pending_line = None;
             self.stop_player(fx);
             self.show_mirror(draft.doc.clone(), &previous, now, fx);
         }
-        fx.replace_draft = Some(draft.doc);
+        fx.replace_draft = Some(draft);
     }
 
     // ---- sending --------------------------------------------------------
 
     fn send(&mut self, now: Millis, fx: &mut Effects) {
-        let doc = self.draft.clone();
-        if doc.is_blank() {
+        let Some(draft) = self.drafts.take_for_send() else {
             return;
-        }
-        self.sent.push_back(Draft {
-            doc: doc.clone(),
-            meta: self.draft_meta.clone(),
-        });
-        while self.sent.len() > RECALL_CAP {
-            self.sent.pop_front();
-        }
-        self.recall = None;
-        self.stash = None;
-        self.draft = Document::new();
-        fx.replace_draft = Some(Document::new());
-        if self.settings.general.input_presence == InputPresence::Summon {
+        };
+        fx.replace_draft = Some(Draft::default());
+        if self.config.input_presence == InputPresence::Summon {
             fx.hide_input = true;
         }
-        let mut line = Line::new(doc, self.speaker_for(&self.draft_meta));
-        line.meta = std::mem::take(&mut self.draft_meta);
+        let mut line = Line::new(draft.doc, self.speaker_for(&draft.meta));
+        line.meta = draft.meta;
         line.reply = self.reply.take().map(Box::new);
         fx.reply_changed |= line.reply.is_some();
         if self.mode() == InputMode::Mirror {
@@ -807,14 +684,16 @@ impl Core {
 
     /// Mirror mode send: the line is already on screen; record it and run the
     /// after-line behaviour.
-    fn commit_mirror(&mut self, line: Line, now: Millis, fx: &mut Effects) {
+    fn commit_mirror(&mut self, mut line: Line, now: Millis, fx: &mut Effects) {
+        if line.meta == LineMeta::default() {
+            line.meta.auto_advance_ms = self.config.playback.auto_advance_ms;
+        }
         fx.events.push(Event::LineSubmitted(line.clone()));
         self.last_sent = Some(line.clone());
-        self.mirror_committed = true;
-        let doc = Arc::new(line.doc.without_markers());
         let item = self.local_item(&line);
-        self.push_row(item, doc, None, fx);
+        self.feed.push_history(item, None, fx);
         fx.events.push(Event::LineStarted(line.clone()));
+
         let instant = PacingParams {
             typing: false,
             ..self.pacing
@@ -827,7 +706,26 @@ impl Core {
                 ..self.sound_rule
             },
         ));
-        self.start_player(line, timeline, now, fx, false);
+        let units = timeline.unit_count;
+        self.stop_player(fx);
+        self.generation += 1;
+        let entrance = self.config.entrance_for(&line.doc, &self.skin);
+        let profile = self.config.playback_profile(
+            &line.meta,
+            &line.doc,
+            entrance,
+            &self.skin,
+            self.reduced_motion,
+        );
+        let (player, effects) = Player::start_completed(line.id, timeline, profile, now);
+        self.install_display_for_line(&line, entrance, Reveal::full(units));
+        self.owner = DisplayOwner::Playback(Box::new(Active {
+            line: Some(line),
+            player,
+            generation: self.generation,
+        }));
+        self.apply_player(effects, now, fx);
+        self.touch_display(fx);
     }
 
     fn submit(&mut self, line: Line, now: Millis, fx: &mut Effects) {
@@ -849,15 +747,21 @@ impl Core {
     }
 
     fn enqueue(&mut self, line: Line, now: Millis, fx: &mut Effects) {
-        let busy = self.retiring.is_some()
-            || self
-                .active
-                .as_ref()
-                .is_some_and(|a| matches!(a.player.phase(), Phase::Revealing | Phase::Gated));
+        let busy = self.active().is_some_and(|a| {
+            matches!(
+                a.player.phase(),
+                Phase::Revealing | Phase::Settling | Phase::Gated | Phase::Exiting
+            )
+        });
         match self.queue.submit(line, busy) {
             QueueDecision::StartNow(line) => self.start_line(line, now, fx),
             QueueDecision::FinishCurrentThenStart(line) => {
-                if let Some(active) = self.active.as_mut() {
+                if let Some(active) = self.active_mut()
+                    && matches!(
+                        active.player.phase(),
+                        Phase::Revealing | Phase::Settling | Phase::Gated
+                    )
+                {
                     let effects = active.player.finish_reveal(now);
                     self.cancel_cues(fx);
                     self.apply_player(effects, now, fx);
@@ -884,83 +788,131 @@ impl Core {
     }
 
     fn start_line(&mut self, mut line: Line, now: Millis, fx: &mut Effects) {
-        if let Some(retiring) = &mut self.retiring {
-            retiring.next = AfterExit::Line(line);
-            return;
-        }
-        if self.begin_exit(AfterExit::Line(line.clone()), now, fx) {
+        if self.begin_exit_on_display(now, fx) {
+            self.pending_line = Some(line);
             return;
         }
         if line.meta == LineMeta::default() {
-            line.meta.auto_advance_ms = self.settings.playback.auto_advance_ms;
+            line.meta.auto_advance_ms = self.config.playback.auto_advance_ms;
         }
         let timeline = Arc::new(compile(&line.doc, &self.pacing, &self.sound_rule));
-        let sync = self.settings.history.sync;
+        let sync = self.config.history_sync;
         if sync != HistorySync::OnComplete && self.replay != Some(line.id) {
-            let doc = Arc::new(line.doc.without_markers());
             let item = self.local_item(&line);
             let reveal = (sync == HistorySync::Reveal).then_some(Reveal {
                 visible_from: 0,
                 shown: 0,
                 segment: None,
+                unit_times: None,
                 hidden_from: 0,
             });
-            self.push_row(item, doc, reveal, fx);
+            self.feed.push_history(item, reveal, fx);
         }
         fx.events.push(Event::LineStarted(line.clone()));
-        if self.skin.sounds.open.is_some() {
+        if self.skin.has_open_sound {
             fx.ui_sounds.push(UiSound::Open);
         }
-        self.start_player(line, timeline, now, fx, true);
-    }
 
-    fn start_player(
-        &mut self,
-        line: Line,
-        timeline: Arc<Timeline>,
-        now: Millis,
-        fx: &mut Effects,
-        animate: bool,
-    ) {
         self.stop_player(fx);
         self.generation += 1;
-        let after = line.meta.after.unwrap_or(self.settings.playback.after);
-        let auto = line.meta.auto_advance_ms;
-        let units = timeline.unit_count;
-        let (player, effects) = Player::start(line.id, timeline, after, auto, now);
-        // In mirror mode a playing line (a quick phrase or a replay as well
-        // as a send) owns the display until new typing replaces it.
-        if self.mode() == InputMode::Mirror {
-            self.mirror_committed = true;
-        }
-        self.display.line = Some(line.id);
-        self.display.mirror_reveal_ms = None;
-        self.display.doc = Arc::new(line.doc.clone());
-        self.display.speaker = line.speaker.clone();
-        self.display.reply = line.reply.as_deref().cloned();
-        self.display.fade = None;
-        self.display.text_exit = None;
-        self.display.shake = None;
-        self.display.replay = self.replay == Some(line.id);
-        self.display.empty = false;
-        self.display.reveal = if animate {
+        let entrance = self.config.entrance_for(&line.doc, &self.skin);
+        let profile = self.config.playback_profile(
+            &line.meta,
+            &line.doc,
+            entrance,
+            &self.skin,
+            self.reduced_motion,
+        );
+        let (player, effects) = Player::start(line.id, timeline, profile, now);
+        self.install_display_for_line(
+            &line,
+            entrance,
             Reveal {
                 visible_from: 0,
                 shown: 0,
                 segment: None,
+                unit_times: None,
                 hidden_from: 0,
-            }
-        } else {
-            Reveal::full(units)
-        };
-        self.active = Some(Active {
-            line,
+            },
+        );
+        self.owner = DisplayOwner::Playback(Box::new(Active {
+            line: Some(line),
             player,
             generation: self.generation,
-        });
+        }));
         self.apply_player(effects, now, fx);
-        if !animate {
-            self.display.reveal = Reveal::full(units);
+    }
+
+    fn install_display_for_line(&mut self, line: &Line, entrance: Entrance, reveal: Reveal) {
+        self.display.line = Some(line.id);
+        self.display.doc = Arc::new(line.doc.clone());
+        self.display.invalidate_page_cache();
+        self.display.speaker = line.speaker.clone();
+        self.display.reply = line.reply.as_deref().cloned();
+        self.display.exit = None;
+        self.display.shake = None;
+        self.display.entrance = entrance;
+        self.display.replay = self.replay == Some(line.id);
+        self.display.empty = false;
+        self.display.reveal = reveal;
+        self.display.sync_page_cache();
+    }
+
+    /// If the display holds non-blank content and the skin uses a presentation
+    /// exit, start an exit in `Player` and return `true`.
+    fn begin_exit_on_display(&mut self, now: Millis, fx: &mut Effects) -> bool {
+        if self.display.empty || self.display.doc.is_blank() {
+            return false;
+        }
+        let ExitStyle::Presentation { ms } =
+            self.config.exit_style(&self.skin, self.reduced_motion)
+        else {
+            return false;
+        };
+        if ms == 0 {
+            return false;
+        }
+        match &mut self.owner {
+            DisplayOwner::Empty => false,
+            DisplayOwner::MirrorDraft { doc, .. } => {
+                let id = LineId::next();
+                let timeline = Arc::new(compile(
+                    doc,
+                    &PacingParams {
+                        typing: false,
+                        ..self.pacing
+                    },
+                    &TypingSoundRule {
+                        enabled: false,
+                        ..self.sound_rule
+                    },
+                ));
+                let entrance = self.config.entrance_for(doc, &self.skin);
+                let profile = self.config.playback_profile(
+                    &LineMeta::default(),
+                    doc,
+                    entrance,
+                    &self.skin,
+                    self.reduced_motion,
+                );
+                self.generation += 1;
+                let (player, effects) = Player::start_exiting(id, timeline, profile, now);
+                self.owner = DisplayOwner::Playback(Box::new(Active {
+                    line: None,
+                    player,
+                    generation: self.generation,
+                }));
+                self.apply_player(effects, now, fx);
+                true
+            }
+            DisplayOwner::Playback(active) => {
+                let (exiting, effects) = active.player.begin_exit(now);
+                if exiting {
+                    self.cancel_cues(fx);
+                    self.apply_player(effects, now, fx);
+                }
+                exiting
+            }
         }
     }
 
@@ -973,16 +925,19 @@ impl Core {
     }
 
     fn page_breaks(&mut self, line: LineId, breaks: &[u32], now: Millis, fx: &mut Effects) {
-        if self.retiring.is_some() {
+        if self.skin.overflow != Overflow::Page || self.mode() == InputMode::Mirror {
             return;
         }
-        if self.skin.dialogue.overflow != Overflow::Page || self.mode() == InputMode::Mirror {
-            return;
-        }
-        let auto_ms = self.skin.dialogue.overflow_auto_ms;
-        let Some(active) = self.active.as_mut().filter(|a| a.line.id == line) else {
+        let auto_ms = self.skin.overflow_auto_ms;
+        let Some(active) = self
+            .active_mut()
+            .filter(|a| a.line.as_ref().is_some_and(|l| l.id == line))
+        else {
             return;
         };
+        if active.player.phase() == Phase::Exiting {
+            return;
+        }
         let (touched, effects) = active.player.paginate(breaks, auto_ms, now);
         if touched && let Some(epoch) = self.cue_epoch.take() {
             // Rescheduled from the same origin: talking carries on.
@@ -999,12 +954,15 @@ impl Core {
         fx: &mut Effects,
         f: impl FnOnce(&mut Player) -> (bool, Vec<PlayerEffect>),
     ) {
-        if self.retiring.is_some() {
-            return;
-        }
-        let Some(active) = self.active.as_mut().filter(|a| a.line.id == line) else {
+        let Some(active) = self
+            .active_mut()
+            .filter(|a| a.line.as_ref().is_some_and(|l| l.id == line))
+        else {
             return;
         };
+        if active.player.phase() == Phase::Exiting {
+            return;
+        }
         let (touched, effects) = f(&mut active.player);
         if touched && let Some(epoch) = self.cue_epoch.take() {
             fx.cancel_epochs.push(epoch);
@@ -1020,9 +978,12 @@ impl Core {
     }
 
     fn stop_player(&mut self, fx: &mut Effects) {
-        if let Some(active) = self.active.take() {
+        let prev = std::mem::replace(&mut self.owner, DisplayOwner::Empty);
+        if let DisplayOwner::Playback(active) = prev {
             self.cancel_cues(fx);
-            self.complete_row(active.line.id, fx);
+            if let Some(line) = active.line {
+                self.feed.complete_row(line.id, fx);
+            }
             if self.display.continue_indicator {
                 self.display.continue_indicator = false;
             }
@@ -1039,147 +1000,49 @@ impl Core {
         self.touch_display(fx);
     }
 
-    /// How long a revealed unit takes to finish entering, as the display
-    /// draws it: the line's entrance, or the skin's scramble when that is
-    /// longer; nothing under reduced motion.
-    fn intro_ms(&self) -> u64 {
-        if self.settings.playback.reduced_motion || self.reduced_motion {
-            return 0;
-        }
-        let mut ms = u64::from(self.display.entrance.ms);
-        if self.transitions_enabled()
-            && self.settings.playback.entrance.is_none()
-            && self.display.doc.entrance().is_none()
-            && let Some(scramble) = &self.skin.dialogue.reveal.scramble
-        {
-            // Substitution, then the glyph's brief flash (text_scramble.rs).
-            ms = ms.max(u64::from(scramble.entrance_ms) + 45);
-        }
-        ms
-    }
-
-    fn transitions_enabled(&self) -> bool {
-        self.settings.skin.advanced_effects
-            && !self.settings.playback.reduced_motion
-            && !self.reduced_motion
-    }
-    fn begin_exit(&mut self, next: AfterExit, now: Millis, fx: &mut Effects) -> bool {
-        if self.bypass_exit
-            || self.display.empty
-            || self.display.doc.is_blank()
-            || !self.transitions_enabled()
-        {
-            return false;
-        }
-        let Some(ms) = self
-            .skin
-            .dialogue
-            .reveal
-            .scramble
-            .as_ref()
-            .map(|s| s.exit_ms)
-            .or_else(|| {
-                self.skin
-                    .dialogue
-                    .reveal
-                    .exit
-                    .as_ref()
-                    .filter(|e| e.ms > 0)
-                    .filter(|e| {
-                        e.material
-                            .as_ref()
-                            .is_some_and(|m| self.skin.material_programs.contains_key(m))
-                    })
-                    .map(|e| e.ms)
-            })
-        else {
-            return false;
-        };
-        self.cancel_cues(fx);
-        self.display.text_exit = Some(crate::view::TextExit { at_ms: now, ms });
-        self.display.fade = None;
-        self.display.continue_indicator = false;
-        self.retirement_serial += 1;
-        let epoch = (1u64 << 63) | self.retirement_serial;
-        self.retiring = Some(Retiring { epoch, next });
-        fx.wakes.push(Wake {
-            epoch,
-            at_ms: now + u64::from(ms),
-            reason: WakeReason::PresentationDone,
-        });
-        self.touch_display(fx);
-        true
-    }
-    fn finish_exit(&mut self, now: Millis, fx: &mut Effects) {
-        let Some(retiring) = self.retiring.take() else {
-            return;
-        };
-        self.bypass_exit = true;
-        self.display.text_exit = None;
-        match retiring.next {
-            AfterExit::Clear => self.clear_display(now, fx),
-            AfterExit::Line(line) => self.start_line(line, now, fx),
-            AfterExit::Advance => self.continue_key(now, fx),
-            AfterExit::Wake { epoch, reason } => {
-                if let Some(a) = self.active.as_mut().filter(|a| a.generation == epoch >> 32) {
-                    let effects = a.player.on_wake(epoch & 0xffff_ffff, reason, now);
-                    self.apply_player(effects, now, fx);
-                }
-            }
-            AfterExit::Finish(id) => {
-                self.apply_player(vec![PlayerEffect::LineFinished(id)], now, fx)
-            }
-        }
-        self.bypass_exit = false;
-        self.touch_display(fx);
-    }
     fn clear_display(&mut self, now: Millis, fx: &mut Effects) {
         self.queue.clear();
-        if let Some(r) = self.retiring.as_mut() {
-            r.next = AfterExit::Clear;
-            return;
-        }
-        if self.begin_exit(AfterExit::Clear, now, fx) {
+        self.pending_line = None;
+        if self.begin_exit_on_display(now, fx) {
             return;
         }
         self.stop_player(fx);
-        self.mirror_committed = false;
         self.blank_display(fx);
     }
 
     fn continue_key(&mut self, now: Millis, fx: &mut Effects) {
-        if self
-            .active
-            .as_ref()
-            .is_some_and(|a| a.player.next_clears_page())
-            && self.begin_exit(AfterExit::Advance, now, fx)
-        {
-            return;
-        }
-        let Some(active) = self.active.as_mut() else {
-            return;
-        };
-        match active.player.phase() {
-            Phase::Revealing => {
-                let (_, effects) = active.player.advance(now);
-                self.cancel_cues(fx);
-                self.apply_player(effects, now, fx);
-                self.display.entrance = Entrance {
-                    kind: EntranceKind::None,
-                    ms: 0,
-                };
-                self.touch_display(fx);
+        let phase = self.active().map(|a| a.player.phase());
+        match phase {
+            Some(Phase::Exiting) => {
+                if let Some(active) = self.active_mut() {
+                    let effects = active.player.finish_exit(now);
+                    self.apply_player(effects, now, fx);
+                }
             }
-            Phase::Gated => {
-                let (_, effects) = active.player.advance(now);
-                if self.skin.sounds.advance.is_some() {
+            Some(Phase::Revealing | Phase::Settling) => {
+                if let Some(active) = self.active_mut() {
+                    let (_, effects) = active.player.advance(now);
+                    self.cancel_cues(fx);
+                    self.apply_player(effects, now, fx);
+                    self.display.entrance = Entrance {
+                        kind: EntranceKind::None,
+                        ms: 0,
+                    };
+                    self.touch_display(fx);
+                }
+            }
+            Some(Phase::Gated) => {
+                if self.skin.has_advance_sound {
                     fx.ui_sounds.push(UiSound::Advance);
                 }
-                self.apply_player(effects, now, fx);
+                if let Some(active) = self.active_mut() {
+                    let (_, effects) = active.player.advance(now);
+                    self.apply_player(effects, now, fx);
+                }
             }
-            Phase::Done | Phase::Fading | Phase::Finished => {
+            _ => {
                 if let Some(next) = self.queue.pop_next() {
-                    if self.skin.sounds.advance.is_some() {
+                    if self.skin.has_advance_sound {
                         fx.ui_sounds.push(UiSound::Advance);
                     }
                     self.start_line(next, now, fx);
@@ -1188,10 +1051,33 @@ impl Core {
         }
     }
 
+    fn skip_key(&mut self, now: Millis, fx: &mut Effects) {
+        let Some(active) = self.active_mut() else {
+            return;
+        };
+        match active.player.phase() {
+            Phase::Exiting => {
+                let effects = active.player.finish_exit(now);
+                self.apply_player(effects, now, fx);
+            }
+            Phase::Revealing | Phase::Settling | Phase::Gated => {
+                let effects = active.player.finish_reveal(now);
+                self.cancel_cues(fx);
+                self.apply_player(effects, now, fx);
+                self.display.entrance = Entrance {
+                    kind: EntranceKind::None,
+                    ms: 0,
+                };
+                self.touch_display(fx);
+            }
+            _ => {}
+        }
+    }
+
     // ---- player effects -------------------------------------------------
 
     fn apply_player(&mut self, effects: Vec<PlayerEffect>, now: Millis, fx: &mut Effects) {
-        let Some(generation) = self.active.as_ref().map(|a| a.generation) else {
+        let Some(generation) = self.active().map(|a| a.generation) else {
             return;
         };
         for effect in effects {
@@ -1202,13 +1088,11 @@ impl Core {
                     reveal_ms,
                     ..
                 } => {
-                    let tl = self
-                        .active
-                        .as_ref()
-                        .expect("active")
-                        .player
-                        .timeline()
-                        .clone();
+                    let Some(active) = self.active() else {
+                        continue;
+                    };
+                    let tl = active.player.timeline().clone();
+                    let line_id = active.line_id();
                     let s = &tl.segments[seg];
                     // A schedule shorter than the segment (typing that waits
                     // for speech) hides the units it leaves out.
@@ -1221,12 +1105,14 @@ impl Core {
                             start: s.units.start,
                             reveal_ms,
                         }),
+                        unit_times: None,
                         hidden_from,
                     };
                     self.display.reveal = reveal.clone();
+                    self.display.sync_page_cache();
                     self.display.entrance = self.entrance();
-                    self.display.fade = None;
-                    self.follow_row(reveal, fx);
+                    self.display.exit = None;
+                    self.feed.follow_row(line_id, reveal, fx);
                     self.touch_display(fx);
                 }
                 PlayerEffect::ScheduleCues {
@@ -1258,46 +1144,41 @@ impl Core {
                         self.touch_display(fx);
                     }
                 }
-                PlayerEffect::FadeOut { at_ms, ms } => {
-                    // Only the line on screen fades; the player still
-                    // finishes on its own wake either way.
-                    let Some(id) = self
-                        .active
-                        .as_ref()
-                        .map(|a| a.line.id)
-                        .filter(|id| self.display.line == Some(*id))
-                    else {
-                        continue;
+                PlayerEffect::StartExit { at_ms, style } => {
+                    let exit = match style {
+                        ExitStyle::Instant => continue,
+                        ExitStyle::Fade { ms } => DisplayExit::Fade { at_ms, ms },
+                        ExitStyle::Presentation { ms } => DisplayExit::Presentation { at_ms, ms },
                     };
-                    if self.begin_exit(AfterExit::Finish(id), now, fx) {
-                        return;
-                    }
-                    self.display.fade = Some((at_ms, ms));
+                    self.display.exit = Some(exit);
+                    self.display.continue_indicator = false;
                     self.touch_display(fx);
                 }
                 PlayerEffect::LineRevealed(id) => {
-                    if self.settings.history.sync == HistorySync::OnComplete
-                        && let Some(active) = &self.active
+                    if self.config.history_sync == HistorySync::OnComplete
+                        && let Some(active) = self.active()
+                        && let Some(line) = active.line.clone()
                         && self.replay != Some(id)
                     {
-                        let line = active.line.clone();
                         let item = self.local_item(&line);
-                        self.push_row(item, Arc::new(line.doc.without_markers()), None, fx);
+                        self.feed.push_history(item, None, fx);
                     }
-                    self.complete_row(id, fx);
+                    self.feed.complete_row(id, fx);
                     fx.events.push(Event::LineRevealed(id));
                 }
                 PlayerEffect::LineFinished(id) => {
-                    if self.begin_exit(AfterExit::Finish(id), now, fx) {
-                        return;
-                    }
                     self.set_speaking(false, fx);
-                    fx.events.push(Event::LineFinished(id));
-                    self.active = None;
+                    let was_committed_line =
+                        matches!(&self.owner, DisplayOwner::Playback(a) if a.line.is_some());
+                    if was_committed_line {
+                        fx.events.push(Event::LineFinished(id));
+                    }
+                    self.owner = DisplayOwner::Empty;
                     self.cue_epoch = None;
-                    self.mirror_committed = false;
                     self.blank_display(fx);
-                    if self.queue.policy == nanatype_playback::QueuePolicy::Queue
+                    if let Some(next) = self.pending_line.take() {
+                        self.start_line(next, now, fx);
+                    } else if self.queue.policy == QueuePolicy::Queue
                         && let Some(next) = self.queue.pop_next()
                     {
                         self.start_line(next, now, fx);
@@ -1317,7 +1198,7 @@ impl Core {
     fn cue_fired(&mut self, kind: CueKind, now: Millis, fx: &mut Effects) {
         match kind {
             CueKind::Expression { name, intensity } => {
-                if self.skin.dialogue.portrait.variants.contains_key(&name) {
+                if self.skin.portrait_variants.contains(&name) {
                     self.display.portrait = Some(name.clone());
                     self.touch_display(fx);
                 }
@@ -1343,113 +1224,4 @@ impl Core {
             CueKind::TypeSound { .. } | CueKind::Sound { .. } => {}
         }
     }
-
-    // ---- history --------------------------------------------------------
-
-    fn push_row(
-        &mut self,
-        item: HistoryItem,
-        doc: Arc<nanatype_model::Document>,
-        reveal: Option<Reveal>,
-        fx: &mut Effects,
-    ) {
-        let key = self.take_row_key();
-        self.history.push_back(HistoryRow {
-            key,
-            item,
-            doc,
-            reveal,
-        });
-        cap_rows(
-            &mut self.history,
-            self.settings.history.max_items.max(1) as usize,
-        );
-        fx.history_changed = true;
-    }
-
-    fn push_danmaku(
-        &mut self,
-        item: HistoryItem,
-        doc: Arc<nanatype_model::Document>,
-        fx: &mut Effects,
-    ) {
-        let key = self.take_row_key();
-        self.danmaku.push_back(HistoryRow {
-            key,
-            item,
-            doc,
-            reveal: None,
-        });
-        cap_rows(
-            &mut self.danmaku,
-            self.settings.history.max_items.max(1) as usize,
-        );
-        fx.danmaku_changed = true;
-    }
-
-    fn take_row_key(&mut self) -> u64 {
-        let key = self.next_row;
-        self.next_row += 1;
-        key
-    }
-
-    fn follow_row(&mut self, reveal: Reveal, fx: &mut Effects) {
-        let Some(id) = self.active.as_ref().map(|a| a.line.id) else {
-            return;
-        };
-        if let Some(row) = self
-            .history
-            .iter_mut()
-            .rev()
-            .find(|r| r.item.line == Some(id))
-            && row.reveal.is_some()
-        {
-            // Paging clears the display, but history keeps the whole line.
-            row.reveal = Some(Reveal {
-                visible_from: 0,
-                ..reveal
-            });
-            fx.history_changed = true;
-        }
-    }
-
-    fn complete_row(&mut self, id: LineId, fx: &mut Effects) {
-        let Some(row) = self
-            .history
-            .iter_mut()
-            .rev()
-            .find(|r| r.item.line == Some(id))
-        else {
-            return;
-        };
-        let Some(reveal) = row.reveal.clone() else {
-            return;
-        };
-        let units = row.doc.unit_count() as u32;
-        if reveal.is_full(units) {
-            return;
-        }
-        // Let the running animation finish; nothing stays hidden any more.
-        row.reveal = reveal.segment.is_some().then_some(Reveal {
-            visible_from: 0,
-            hidden_from: units,
-            ..reveal
-        });
-        fx.history_changed = true;
-    }
-}
-
-fn cap_rows(rows: &mut VecDeque<HistoryRow>, cap: usize) -> bool {
-    let mut trimmed = false;
-    while rows.len() > cap {
-        rows.pop_front();
-        trimmed = true;
-    }
-    trimmed
-}
-
-fn retain_non_local(rows: &mut VecDeque<HistoryRow>, keys: &[u64]) -> bool {
-    let before = rows.len();
-    rows.retain(|row| row.item.source.is_local() || !keys.contains(&row.key));
-    rows.len() != before
 }

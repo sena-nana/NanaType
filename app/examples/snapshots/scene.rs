@@ -89,7 +89,7 @@ impl Scene {
         settings.skin.id = skin_id.to_owned();
         settings.history.show_time = true;
         let dark = std::env::var("NANATYPE_SNAPSHOT_APPEARANCE").is_ok_and(|v| v == "dark");
-        settings.skin.chrome = if dark {
+        settings.accessibility.chrome = if dark {
             nanatype_settings::ChromeMode::Dark
         } else {
             nanatype_settings::ChromeMode::Light
@@ -131,7 +131,7 @@ impl Scene {
             ));
         }
 
-        let mut core = Core::new(settings.clone(), skin.clone());
+        let mut core = Core::from_settings(&settings, &skin);
         for line in [
             "大家好！今天也来[b]打字[/b]啦～",
             "[color=#e8505b]红色[/color]、[wave]波浪[/wave]和[ruby=かんじ]漢字[/ruby]注音。[stroke=#e86a92,3][color=#ffffff]描边文字[/color][/stroke][shadow=#0876d0,0,0,8]发光[/shadow]",

@@ -61,7 +61,6 @@ impl RowSource {
                     let item = m.history_item(ui.locale.get_untracked());
                     nanatype_core::HistoryRow {
                         key: seq,
-                        doc: Arc::new(item.doc.clone()),
                         item,
                         reveal: None,
                     }
@@ -442,7 +441,7 @@ fn compact_message(ui: Ui, source: RowSource, width: f32, actions: Option<AnyVie
             ..look.clone()
         };
         let rich = to_rich(
-            &row.doc,
+            row.doc(),
             &Env {
                 look: &look,
                 urls: &ui.asset_urls.get(),
@@ -916,7 +915,6 @@ mod tests {
                 reply: None,
                 event: None,
             },
-            doc: Arc::new(Document::plain("hello")),
             reveal: None,
         }];
         let mut feed = Feed::default();

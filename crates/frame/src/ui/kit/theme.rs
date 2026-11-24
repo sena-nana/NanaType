@@ -37,7 +37,7 @@ impl Chrome {
     /// The chrome `settings` ask for, given what the system reports.
     pub fn of(settings: &nanatype_settings::Settings, system_dark: bool, system_hc: bool) -> Self {
         Self {
-            dark: crate::skin_theme::dark_mode(settings.skin.chrome, system_dark),
+            dark: crate::skin_theme::dark_mode(settings.accessibility.chrome, system_dark),
             high_contrast: settings.accessibility.high_contrast(system_hc),
         }
     }

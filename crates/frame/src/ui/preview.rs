@@ -426,7 +426,6 @@ fn history_row(
             reply: reply.map(Box::new),
             event: None,
         },
-        doc: Arc::new(doc),
         reveal: None,
     }
 }
@@ -616,8 +615,8 @@ fn sample_playing(ui: Stage) -> Option<Arc<nanatype_core::DisplayView>> {
 }
 
 fn phase_end(view: &nanatype_core::DisplayView, now: u64) -> u64 {
-    if let Some(exit) = view.text_exit {
-        return exit.at_ms.saturating_add(u64::from(exit.ms));
+    if let Some((at_ms, ms)) = view.exit.and_then(|e| e.presentation()) {
+        return at_ms.saturating_add(u64::from(ms));
     }
     if view.empty {
         return now;
@@ -643,7 +642,7 @@ pub fn tick_sample_playback(ui: Stage, now: u64) -> Option<u64> {
     let mut next = (*view).clone();
     if view.empty {
         next.empty = false;
-        next.text_exit = None;
+        next.exit = None;
         next.line = Some(super::dialogue::fresh_preview_line());
         if let Some(seg) = next.reveal.segment.as_mut() {
             seg.origin_ms = now;
@@ -652,13 +651,13 @@ pub fn tick_sample_playback(ui: Stage, now: u64) -> Option<u64> {
         return sample_shown_until(&ui.preview_display.get_untracked());
     }
     let exit_ms = ui.preview_text_exit_ms.get_untracked();
-    if view.text_exit.is_some() || exit_ms == 0 {
-        next.text_exit = None;
+    if view.exit.and_then(|e| e.presentation()).is_some() || exit_ms == 0 {
+        next.exit = None;
         next.empty = true;
         revise(ui, next);
         return Some(now);
     }
-    next.text_exit = Some(nanatype_core::TextExit {
+    next.exit = Some(nanatype_core::DisplayExit::Presentation {
         at_ms: now,
         ms: exit_ms,
     });
@@ -756,8 +755,7 @@ pub fn sample(
         let mut rows = designed_history(ui);
         if let Some(row) = rows.first_mut() {
             let doc = nanatype_markup::parse(&draft.history.text).doc;
-            row.item.doc = doc.clone();
-            row.doc = Arc::new(doc);
+            row.item.doc = doc;
         }
         play_history(ready.preview, Arc::new(rows));
         (
@@ -1514,6 +1512,7 @@ mod tests {
                 start: 0,
                 reveal_ms: Arc::from([0u32, 65, 130]),
             }),
+            unit_times: None,
         };
         ui.preview_display.set(Arc::new(view));
         let end = origin + 130 + SAMPLE_HOLD_MS;
@@ -1538,13 +1537,13 @@ mod tests {
         );
         let next = ui.preview_display.get_untracked();
         assert!(!next.empty);
-        assert!(next.text_exit.is_none());
+        assert!(next.exit.is_none());
         assert_eq!(next.reveal.segment.as_ref().unwrap().origin_ms, end);
         assert!(next.line.is_some());
 
         ui.preview_text_exit_ms.set(700);
         let mut again = (*ui.preview_display.get_untracked()).clone();
-        again.text_exit = None;
+        again.exit = None;
         again.empty = false;
         again.reveal.segment.as_mut().unwrap().origin_ms = origin;
         ui.preview_display.set(Arc::new(again));
@@ -1552,8 +1551,8 @@ mod tests {
         let leaving = ui.preview_display.get_untracked();
         assert!(!leaving.empty);
         assert_eq!(
-            leaving.text_exit,
-            Some(nanatype_core::TextExit {
+            leaving.exit,
+            Some(nanatype_core::DisplayExit::Presentation {
                 at_ms: end,
                 ms: 700
             })
@@ -1561,7 +1560,7 @@ mod tests {
         assert_eq!(leaving.reveal.segment.as_ref().unwrap().origin_ms, origin);
         assert_eq!(tick_sample_playback(ui, end + 700), Some(end + 700));
         assert!(ui.preview_display.get_untracked().empty);
-        assert!(ui.preview_display.get_untracked().text_exit.is_none());
+        assert!(ui.preview_display.get_untracked().exit.is_none());
 
         ui.shader_preview.set(false);
         assert!(tick_sample_playback(ui, end + 10_000).is_none());

@@ -32,13 +32,12 @@ fn row(key: u64, author: &str, doc: Document, event: Option<EventInfo>) -> Histo
             line: None,
             author: author.into(),
             avatar: None,
-            doc: doc.clone(),
+            doc,
             at: 1_700_000_000_000 + key * 200_000,
             uid: Some(format!("viewer-{key}")),
             reply: None,
             event,
         },
-        doc: Arc::new(doc),
         reveal: None,
     }
 }

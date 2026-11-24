@@ -43,8 +43,8 @@ fn separate_scenes_keep_self_and_partner_content_when_roles_change() {
     let skin = common::skin("nanatype.halo");
     let settings = Settings::default();
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-    let mut own = Core::new(settings.clone(), skin.clone());
-    let mut partner = Core::new(settings, skin.clone());
+    let mut own = Core::from_settings(&settings, &skin);
+    let mut partner = Core::from_settings(&settings, &skin);
     own.handle(
         Cmd::SendMarkup("[color=#d00050]SELF SELF SELF[/color]".into()),
         0,
@@ -86,7 +86,7 @@ fn separate_scenes_keep_self_and_partner_content_when_roles_change() {
             "self leaked into partner source"
         );
     }
-    let mut second = Core::new(Settings::default(), skin);
+    let mut second = Core::from_settings(&Settings::default(), &skin);
     second.handle(
         Cmd::SendMarkup("[color=#20a040]SECOND SECOND[/color]".into()),
         0,

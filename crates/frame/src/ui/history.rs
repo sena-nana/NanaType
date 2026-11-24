@@ -1020,7 +1020,7 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
     // How much of what is behind the row its artwork hides.
     let surface_alpha =
         f32::from(look.as_ref().map_or(h.bubble_color, |l| l.fill).a) * bubble_opacity;
-    let event_doc = look.as_ref().map(|look| look.dress(&row.doc));
+    let event_doc = look.as_ref().map(|look| look.dress(row.doc()));
     let body_look = look.clone();
     if follows {
         // Only a group's first bubble points at the avatar.
@@ -1071,10 +1071,8 @@ fn message_view(ui: Stage, key: u64, follows: bool) -> AnyView {
                     base.shadow = None;
                 }
             }
-            let dressed = body_look
-                .as_ref()
-                .map(|look| Arc::new(look.dress(&row.doc)));
-            let doc = dressed.as_ref().unwrap_or(&row.doc);
+            let dressed = body_look.as_ref().map(|look| look.dress(row.doc()));
+            let doc = dressed.as_ref().unwrap_or_else(|| row.doc());
             let timing = match &row.reveal {
                 Some(r) => Timing::Reveal(r.clone()),
                 None => Timing::Static,
@@ -1440,7 +1438,7 @@ fn query(ui: Stage) -> Option<String> {
 
 /// A row whose text or speaker contains `q` (already lowercased).
 pub fn row_matches(row: &HistoryRow, q: &str) -> bool {
-    row.item.author.to_lowercase().contains(q) || row.doc.plain_text().to_lowercase().contains(q)
+    row.item.author.to_lowercase().contains(q) || row.doc().plain_text().to_lowercase().contains(q)
 }
 
 fn visible_keys(ui: Stage) -> Vec<u64> {
@@ -1923,7 +1921,6 @@ mod tests {
                 reply: None,
                 event: None,
             },
-            doc: Arc::new(Document::plain(text)),
             reveal: None,
         };
         let rows: Vec<HistoryRow> = (0..40)
@@ -2115,7 +2112,6 @@ mod tests {
         HistoryRow {
             key,
             item,
-            doc: Arc::new(Document::new()),
             reveal: None,
         }
     }
@@ -2209,10 +2205,11 @@ mod tests {
                 let mut settings = nanatype_settings::Settings::default();
                 settings.history.show_time = true;
                 let ui = super::super::Stage::new(Arc::new(settings), skin, locale);
+                let mut row_item = item(name, SourceKind::Chat, 100);
+                row_item.doc = Document::plain("求个自我介绍～");
                 ui.history.set(Arc::new(vec![HistoryRow {
                     key: 1,
-                    item: item(name, SourceKind::Chat, 100),
-                    doc: Arc::new(Document::plain("求个自我介绍～")),
+                    item: row_item,
                     reveal: None,
                 }]));
                 let id = DocumentId::new(1).unwrap();
@@ -2297,7 +2294,6 @@ mod tests {
         item.doc = Document::plain("第一行文字\n第二行文字");
         HistoryRow {
             key,
-            doc: Arc::new(item.doc.clone()),
             item,
             reveal: None,
         }
@@ -2579,7 +2575,6 @@ mod tests {
         .map(|(i, item)| HistoryRow {
             key: i as u64,
             item,
-            doc: Arc::new(nanatype_model::Document::new()),
             reveal: None,
         })
         .collect();
@@ -2647,16 +2642,18 @@ mod tests {
             next.history.fade_after_s = None;
             *s = Arc::new(next);
         });
+        let mut host_item = item("HostPerson", SourceKind::Typewriter, 10);
+        host_item.doc = Document::plain("host line");
         ui.history.set(Arc::new(vec![HistoryRow {
             key: 1,
-            item: item("HostPerson", SourceKind::Typewriter, 10),
-            doc: Arc::new(Document::plain("host line")),
+            item: host_item,
             reveal: None,
         }]));
+        let mut viewer_item = item("ViewerPerson", SourceKind::Chat, 20);
+        viewer_item.doc = Document::plain("viewer danmaku");
         ui.danmaku.set(Arc::new(vec![HistoryRow {
             key: 2,
-            item: item("ViewerPerson", SourceKind::Chat, 20),
-            doc: Arc::new(Document::plain("viewer danmaku")),
+            item: viewer_item,
             reveal: None,
         }]));
         ui.danmaku_search.set(Some("viewer".into()));

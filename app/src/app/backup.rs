@@ -56,6 +56,7 @@ pub struct Pending {
 fn section_key(section: &str) -> &'static str {
     match section {
         "general" => "backup-section-general",
+        "accessibility" => "general-accessibility",
         "playback" => "backup-section-playback",
         "sound" => "backup-section-sound",
         "speech" => "backup-section-speech",

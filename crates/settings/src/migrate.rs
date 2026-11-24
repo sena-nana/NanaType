@@ -3,7 +3,9 @@
 
 use serde_json::{Map, Value, json};
 
-use crate::schema::SETTINGS_SCHEMA;
+use crate::schema::{COMET_PORT, SETTINGS_SCHEMA};
+
+const LEGACY_COMET_RELAY_PORT: u64 = 12451;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MigrateError {
@@ -178,7 +180,48 @@ pub fn migrate(value: &mut Value) -> Result<u32, MigrateError> {
         obj.remove("translate");
         obj.insert("schema".into(), json!(9));
     }
+    if from < 10 {
+        v9_to_v10(obj);
+        obj.insert("schema".into(), json!(10));
+    }
     Ok(from)
+}
+
+fn v9_to_v10(obj: &mut Map<String, Value>) {
+    if let Some(integrations) = obj.get_mut("integrations").and_then(Value::as_object_mut) {
+        if let Some(chat) = integrations.get_mut("chat").and_then(Value::as_object_mut) {
+            chat.remove("panel_open");
+        }
+        if let Some(comet) = integrations.get_mut("comet").and_then(Value::as_object_mut)
+            && comet.get("port").and_then(Value::as_u64) == Some(LEGACY_COMET_RELAY_PORT)
+        {
+            comet.insert("port".into(), json!(COMET_PORT));
+        }
+    }
+    if let Some(output) = obj.get_mut("output").and_then(Value::as_object_mut)
+        && let Some(legacy) = output.remove("peer_display")
+    {
+        match output.get_mut("partners").and_then(Value::as_array_mut) {
+            Some(partners) if partners.is_empty() => partners.push(legacy),
+            Some(partners) => partners[0] = legacy,
+            None => {
+                output.insert("partners".into(), Value::Array(vec![legacy]));
+            }
+        }
+    }
+    if let Some(skin) = obj.get_mut("skin").and_then(Value::as_object_mut)
+        && let Some(chrome) = skin.remove("chrome")
+    {
+        let acc = obj
+            .entry("accessibility")
+            .or_insert_with(|| Value::Object(Map::new()));
+        if !acc.is_object() {
+            *acc = Value::Object(Map::new());
+        }
+        if let Some(acc) = acc.as_object_mut() {
+            acc.entry("chrome").or_insert(chrome);
+        }
+    }
 }
 
 /// v8: one Bilibili switch with its source (the pasted link or 彗星号) in
@@ -353,7 +396,7 @@ fn v0_to_v1(old: &mut Map<String, Value>) -> Map<String, Value> {
     }
 
     let mut out = Map::new();
-    out.insert("schema".into(), SETTINGS_SCHEMA.into());
+    out.insert("schema".into(), 1.into());
     out.insert("general".into(), general.into());
     out.insert("playback".into(), playback.into());
     out.insert("sound".into(), sound.into());

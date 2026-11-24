@@ -59,7 +59,7 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
         let root = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
         root.reduced_motion.set(reduced);
         let ui = if remote { root.remote() } else { root };
-        let mut core = Core::new(settings, skin.clone());
+        let mut core = Core::from_settings(&settings, &skin);
         core.handle(
             Cmd::SendMarkup("[speed=50ms]瞬息已是夜晚 A sonnet\n星光写成了诗 Light[/speed]".into()),
             base,
@@ -124,7 +124,7 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
         let wake = fx
             .wakes
             .iter()
-            .find(|w| w.reason == nanatype_playback::WakeReason::PresentationDone)
+            .find(|w| w.reason == nanatype_playback::WakeReason::ExitDone)
             .copied();
         assert_eq!(wake.is_some(), enabled && !reduced);
         ui.display.set(Arc::new(core.display().clone()));
@@ -215,7 +215,7 @@ fn sonnet_scrolling_reuses_glyph_masks_and_layout_during_retirement() {
     let skin = common::skin("nanatype.sonnet");
     let settings = Settings::default();
     let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-    let mut core = Core::new(settings, skin);
+    let mut core = Core::from_settings(&settings, &skin);
     core.handle(
         Cmd::SendMarkup("窗外星光写成诗句。 A sonnet.\n".repeat(14)),
         100_000,

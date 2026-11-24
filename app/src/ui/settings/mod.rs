@@ -254,7 +254,7 @@ fn theme_toggle(ui: Ui) -> AnyView {
     .on_cx(move |_, _: &Activate, cx| {
         let dark = ui.chrome_dark.get_untracked();
         cx.dispatch_program_all(controls::edit(move |s| {
-            s.skin.chrome = if dark {
+            s.accessibility.chrome = if dark {
                 nanatype_settings::ChromeMode::Light
             } else {
                 nanatype_settings::ChromeMode::Dark

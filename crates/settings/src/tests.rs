@@ -163,12 +163,12 @@ fn retired_direct_chat_settings_are_dropped_but_panel_settings_survive() {
         settings.integrations.chat.panel_style,
         ChatPanelStyle::History
     );
-    assert!(settings.integrations.chat.panel_open);
     assert!(!settings.integrations.chat.panel.gift);
     // The Bilibili switch of today is not the retired direct one.
     assert!(!settings.integrations.bilibili.enabled);
     let saved = serde_json::to_value(settings).unwrap();
     assert!(saved["integrations"]["bilibili"].get("room").is_none());
+    assert!(saved["integrations"]["chat"].get("panel_open").is_none());
     assert!(saved["integrations"].get("douyin").is_none());
     assert!(saved["integrations"].get("youtube").is_none());
 }
@@ -234,7 +234,6 @@ fn legacy_chat_preferences_migrate_without_service_or_auth_code() {
             settings.integrations.chat.panel_style,
             ChatPanelStyle::History
         );
-        assert!(settings.integrations.chat.panel_open);
         assert!(!settings.integrations.chat.panel.gift);
         assert!(settings.integrations.blivechat_on());
         assert_eq!(settings.integrations.blivechat.host, "127.0.0.1");
@@ -265,7 +264,6 @@ fn chat_panel_style_defaults_and_round_trips_without_a_schema_change() {
         assert_eq!(json["integrations"]["chat"]["panel_style"], wire);
         let loaded = load_settings(&path, None).value;
         assert_eq!(loaded.integrations.chat.panel_style, style);
-        assert!(loaded.integrations.chat.panel_open);
         assert_eq!(loaded.schema, SETTINGS_SCHEMA);
     }
 }
@@ -545,6 +543,7 @@ fn accessibility_defaults_load_into_older_files_and_stay_global() {
             contrast: ContrastMode::On,
             ui_scale: 150,
             ui_scale_follows_system: true,
+            ..Default::default()
         },
         ..Default::default()
     };
@@ -773,12 +772,13 @@ fn old_settings_preserve_local_output_and_add_disabled_partner_output() {
 
 #[test]
 fn the_single_partner_sender_moves_into_the_first_seat() {
-    let mut s: Settings = serde_json::from_str(
-        r#"{"output":{"peer_display":{"enabled":true,"name":"Old Partner","size":[640,360]}}}"#,
-    )
-    .unwrap();
-    assert!(s.sanitize());
-    assert!(s.output.peer_display.is_none());
+    let mut value = serde_json::json!({
+        "schema": 9,
+        "output": { "peer_display": { "enabled": true, "name": "Old Partner", "size": [640, 360] } }
+    });
+    assert_eq!(migrate(&mut value).unwrap(), 9);
+    let mut s: Settings = serde_json::from_value(value).unwrap();
+    s.sanitize();
     assert!(s.output.partners[0].enabled);
     assert_eq!(s.output.partners[0].name, "Old Partner");
     assert_eq!(s.output.partners[0].size, Some([640, 360]));
@@ -868,7 +868,7 @@ fn obs_link_round_trips_without_the_runtime_size() {
 
 #[test]
 fn application_appearance_accepts_legacy_skin_and_round_trips() {
-    assert_eq!(Settings::default().skin.chrome, ChromeMode::System);
+    assert_eq!(Settings::default().accessibility.chrome, ChromeMode::System);
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("settings.json");
     for (old, mode, saved) in [
@@ -877,16 +877,19 @@ fn application_appearance_accepts_legacy_skin_and_round_trips() {
         ("light", ChromeMode::Light, "light"),
         ("dark", ChromeMode::Dark, "dark"),
     ] {
-        let value = serde_json::json!({"schema": SETTINGS_SCHEMA, "skin": {"id": "nanatype.night", "chrome": old}});
+        // Legacy v9 settings with `skin.chrome` migrate into `accessibility.chrome`.
+        let value =
+            serde_json::json!({"schema": 9, "skin": {"id": "nanatype.night", "chrome": old}});
         fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
         let loaded = load_settings(&path, None);
-        assert!(matches!(loaded.note, LoadNote::Loaded));
-        assert_eq!(loaded.value.skin.chrome, mode);
+        assert!(matches!(loaded.note, LoadNote::Migrated { from: 9 }));
+        assert_eq!(loaded.value.accessibility.chrome, mode);
         assert_eq!(loaded.value.skin.id, "nanatype.night");
         save_json(&path, &loaded.value).unwrap();
         let saved_value: serde_json::Value =
             serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        assert_eq!(saved_value["skin"]["chrome"], saved);
+        assert!(saved_value["skin"].get("chrome").is_none());
+        assert_eq!(saved_value["accessibility"]["chrome"], saved);
         assert_eq!(load_settings(&path, None).value, loaded.value);
     }
 }
@@ -1051,8 +1054,7 @@ fn third_party_chat_values_are_repaired() {
     b.host = "  ".into();
     b.port = 0;
     b.room_id = " 42 ".into();
-    // The old relay's port is the client's now.
-    s.integrations.comet.port = 12451;
+    s.integrations.comet.port = 0;
     s.integrations.laplace.url = "  ".into();
     assert!(s.sanitize());
     let b = &s.integrations.blivechat;
@@ -1490,7 +1492,7 @@ fn the_active_character_survives_a_restart() {
 
 /// Settings that touch every kind of section an export or profile handles.
 fn busy_settings() -> Settings {
-    let mut s = Settings::fresh();
+    let mut s = Settings::default();
     s.general.locale = Some("ja-JP".into());
     s.general.characters[0].name = "Nana".into();
     s.playback.speed_scale = 1.5;
@@ -1532,7 +1534,7 @@ fn export_then_import_round_trips_without_credentials() {
     assert_eq!(incoming.exported_at, Some(7));
     // Onto a fresh install: everything travels but the credentials and
     // this computer's devices.
-    let mut other = Settings::fresh();
+    let mut other = Settings::default();
     other.integrations.vts.token = Some("theirs".into());
     let merged = incoming.merge(&other);
     assert_eq!(merged.playback, s.playback);
@@ -1567,7 +1569,7 @@ fn integrations_and_window_positions_are_optional() {
     assert_eq!(envelope.geometry, Some(geometry));
     let text = serde_json::to_string(&envelope).unwrap();
     let incoming = parse_import(&text).unwrap();
-    let mut here = Settings::fresh();
+    let mut here = Settings::default();
     here.integrations.twitch.channel = "mine".into();
     let merged = incoming.merge(&here);
     assert_eq!(
@@ -1593,7 +1595,7 @@ fn avatars_travel_inside_the_export() {
     let tmp = tempfile::tempdir().unwrap();
     let avatar = tmp.path().join("face.png");
     fs::write(&avatar, b"not really a png").unwrap();
-    let mut s = Settings::fresh();
+    let mut s = Settings::default();
     s.general.characters[0].avatar = Some(avatar.display().to_string());
     s.general.characters.push(Character {
         avatar: Some(tmp.path().join("gone.png").display().to_string()),
@@ -1609,7 +1611,7 @@ fn avatars_travel_inside_the_export() {
     assert_eq!(exported.missing_avatars, 1);
     let text = serde_json::to_string(&exported.envelope).unwrap();
     let incoming = parse_import(&text).unwrap();
-    let mut merged = incoming.merge(&Settings::fresh());
+    let mut merged = incoming.merge(&Settings::default());
     let dir = tmp.path().join("avatars");
     assert_eq!(incoming.unpack_avatars(&dir, &mut merged, 9).unwrap(), 1);
     let placed = merged.general.characters[0].avatar.clone().unwrap();
@@ -1623,7 +1625,7 @@ fn older_imports_migrate_and_newer_ones_are_refused() {
         {"schema":4,"general":{"speaker_name":"Old","onboarding_done":true}}}"#;
     let incoming = parse_import(v4).unwrap();
     assert_eq!(incoming.from_schema, 4);
-    let merged = incoming.merge(&Settings::fresh());
+    let merged = incoming.merge(&Settings::default());
     assert_eq!(merged.general.characters[0].name, "Old");
     assert_eq!(merged.schema, SETTINGS_SCHEMA);
     // A bare settings.json from the very first build.
@@ -1667,7 +1669,7 @@ fn reset_keeps_credentials_and_language() {
     assert_eq!(reset.integrations.vts.token.as_deref(), Some("vts-secret"));
     assert_eq!(reset.general.locale.as_deref(), Some("ja-JP"));
     assert!(reset.general.onboarding_done);
-    let mut expected = Settings::fresh();
+    let mut expected = Settings::default();
     expected.integrations.vts.token = s.integrations.vts.token.clone();
     expected.general.locale = s.general.locale.clone();
     expected.general.onboarding_done = true;
@@ -1692,7 +1694,7 @@ fn switching_profiles_changes_only_profile_sections() {
     here.general.locale = Some("en-US".into());
     here.sound.device = Some("Headset".into());
     here.history.archive.keep_days = 3;
-    here.skin.chrome = ChromeMode::Dark;
+    here.accessibility.chrome = ChromeMode::Dark;
     let switched = profile.apply(&here);
     assert_eq!(switched.skin.id, "nanatype.parchment");
     assert_eq!(switched.playback.speed_scale, 0.5);
@@ -1705,7 +1707,7 @@ fn switching_profiles_changes_only_profile_sections() {
     assert_eq!(switched.integrations, here.integrations);
     assert_eq!(switched.sound.device, here.sound.device);
     assert_eq!(switched.history.archive, here.history.archive);
-    assert_eq!(switched.skin.chrome, ChromeMode::Dark);
+    assert_eq!(switched.accessibility.chrome, ChromeMode::Dark);
     assert_eq!(
         changed_sections(&here, &switched),
         vec!["general", "playback", "sound", "skin", "assets"]
@@ -1717,7 +1719,7 @@ fn profiles_are_saved_and_listed_from_their_folder() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path().join(PROFILE_DIR);
     let a = Profile::capture("pa".into(), "杂谈".into(), &busy_settings());
-    let b = Profile::capture("pb".into(), "歌回".into(), &Settings::fresh());
+    let b = Profile::capture("pb".into(), "歌回".into(), &Settings::default());
     for p in [&a, &b] {
         save_json(&Profile::path(&dir, &p.id), &p.file(1)).unwrap();
     }
@@ -1748,7 +1750,7 @@ fn retired_translation_section_is_dropped_at_schema_9() {
         "future_feature": { "x": 1 }
     });
     assert_eq!(migrate(&mut value), Ok(8));
-    assert_eq!(value["schema"], 9);
+    assert_eq!(value["schema"], SETTINGS_SCHEMA);
     assert!(value.get("translate").is_none());
 
     let settings: Settings = serde_json::from_value(value).unwrap();
@@ -1807,4 +1809,53 @@ fn default_overlays_keep_only_input_visible() {
         assert!(!s.overlays.history.visible);
         assert!(!s.overlays.danmaku.visible);
     }
+}
+
+#[test]
+fn accessibility_changes_are_reported_by_changed_sections_and_preserved_on_import() {
+    let mut imported = Settings::default();
+    imported.accessibility.ui_scale = 150;
+    imported.accessibility.contrast = ContrastMode::On;
+    imported.accessibility.chrome = ChromeMode::Dark;
+    let exported = export(
+        &imported,
+        &GeometryStore::default(),
+        ExportOptions::default(),
+        "1.0",
+        1,
+    );
+    let text = serde_json::to_string(&exported.envelope).unwrap();
+    let incoming = parse_import(&text).unwrap();
+    let current = Settings::default();
+    let merged = incoming.merge(&current);
+    assert_eq!(merged.accessibility, imported.accessibility);
+    assert_eq!(changed_sections(&current, &merged), vec!["accessibility"]);
+}
+
+#[test]
+fn v9_to_v10_migration_retires_dead_fields_and_moves_chrome() {
+    let mut value = serde_json::json!({
+        "schema": 9,
+        "skin": { "id": "nanatype.night", "chrome": "dark" },
+        "output": { "peer_display": { "enabled": true, "name": "LegacySeat" } },
+        "integrations": {
+            "chat": { "panel_open": true, "quote_on_display": false },
+            "comet": { "port": 12451 }
+        }
+    });
+    assert_eq!(migrate(&mut value), Ok(9));
+    assert_eq!(value["schema"], 10);
+    assert!(value["skin"].get("chrome").is_none());
+    assert_eq!(value["accessibility"]["chrome"], "dark");
+    assert!(value["output"].get("peer_display").is_none());
+    assert!(value["integrations"]["chat"].get("panel_open").is_none());
+    assert_eq!(value["integrations"]["comet"]["port"], COMET_PORT);
+
+    let mut settings: Settings = serde_json::from_value(value).unwrap();
+    settings.sanitize();
+    assert!(!settings.sanitize());
+    assert_eq!(settings.accessibility.chrome, ChromeMode::Dark);
+    assert_eq!(settings.output.partners[0].name, "LegacySeat");
+    assert!(!settings.integrations.chat.quote_on_display);
+    assert_eq!(settings.integrations.comet.port, COMET_PORT);
 }
