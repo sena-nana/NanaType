@@ -809,13 +809,10 @@ pub(super) fn message_view(
                         l.flex_grow = Some(1.0);
                     })),
                     badge,
-                    (settings.history.show_time && (cw + avatar_extra) - 2.0 * pad[0] >= 200.0)
-                        .then(|| {
-                            widget(
-                                Text::new(local_time(row.item.at, h.time_seconds))
-                                    .style(time_style),
-                            )
-                        }),
+                    settings.history.show_time.then(|| {
+                        widget(Text::new(local_time(row.item.at, h.time_seconds)).style(time_style))
+                            .visible(move || (col_w.get() + avatar_extra) - 2.0 * pad[0] >= 200.0)
+                    }),
                 ));
                 let text = widget(Stack::column(4.0).with_layout(|l| {
                     l.flex_grow = Some(1.0);

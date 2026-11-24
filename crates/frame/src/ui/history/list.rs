@@ -599,7 +599,7 @@ fn search_bar(ui: Stage) -> AnyView {
                     .visible(open)
                     .children(
                         widget(
-                            TextInput::new("")
+                            super::super::kit::text_input("")
                                 .placeholder(ui.now_t("history-search-placeholder"))
                                 .label(label.clone())
                                 .size(ControlSize::Small),
