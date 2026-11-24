@@ -10,12 +10,11 @@ pub const FADE_OUT_MS: u32 = 450;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WakeReason {
     SegmentEnd,
+    Settled,
     AutoContinue,
     AfterLine,
-    FadeDone,
+    ExitDone,
     AutoAdvance,
-    /// Consumer-owned presentation deadline; the player does not schedule it.
-    PresentationDone,
     /// Typing waits for speech: no word came in time, so it types on its own.
     SpeechTimeout,
 }
@@ -55,15 +54,57 @@ impl Speech {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ExitStyle {
+    #[default]
+    Instant,
+    Fade {
+        ms: u32,
+    },
+    /// Skin scramble or material exit.
+    Presentation {
+        ms: u16,
+    },
+}
+
+/// Timing and exit behaviour for one playing line, resolved from settings and skin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlaybackProfile {
+    /// Glyph entrance / scramble settle duration held at segment end.
+    pub intro_ms: u32,
+    pub exit: ExitStyle,
+    pub after: AfterLine,
+    pub auto_advance_ms: Option<u32>,
+}
+
+impl PlaybackProfile {
+    pub fn new(after: AfterLine, auto_advance_ms: Option<u32>) -> Self {
+        Self {
+            intro_ms: 0,
+            exit: ExitStyle::Instant,
+            after,
+            auto_advance_ms,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     Revealing,
+    /// Waiting for the last revealed glyph's entrance/scramble to settle.
+    Settling,
     /// Waiting at a pause or page marker for the continue key.
     Gated,
-    /// Fully revealed; holding or counting down to a fade.
+    /// Fully revealed; holding or counting down to an exit.
     Done,
-    Fading,
+    Exiting,
     Finished,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExitAction {
+    PageNext(usize),
+    FinishLine,
 }
 
 /// Instructions for the host. Each is idempotent for its `epoch`; a newer
@@ -94,14 +135,14 @@ pub enum PlayerEffect {
         reason: WakeReason,
     },
     ContinueIndicator(bool),
-    /// Start the fade-out animation.
-    FadeOut {
+    /// Start the exit animation (fade-out or skin presentation exit).
+    StartExit {
         at_ms: u64,
-        ms: u32,
+        style: ExitStyle,
     },
     /// Every unit of the line is visible.
     LineRevealed(LineId),
-    /// The line left the box (fade or clear finished).
+    /// The line left the box (exit or clear finished).
     LineFinished(LineId),
     /// `auto_advance_ms` elapsed: start the next queued line if any.
     AutoAdvance(LineId),
@@ -117,12 +158,17 @@ pub struct RevealSnapshot {
     pub opacity: f32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {
     Revealing {
         seg: usize,
         origin: u64,
         skipped: bool,
+        last_unit_at: Option<u64>,
+    },
+    Settling {
+        seg: usize,
+        until: u64,
     },
     Gated {
         seg: usize,
@@ -130,9 +176,10 @@ enum State {
     Done {
         at: u64,
     },
-    Fading {
+    Exiting {
         at: u64,
-        ms: u32,
+        style: ExitStyle,
+        next: ExitAction,
     },
     Finished,
 }
@@ -140,8 +187,7 @@ enum State {
 pub struct Player {
     line: LineId,
     timeline: Arc<Timeline>,
-    after: AfterLine,
-    auto_advance_ms: Option<u32>,
+    profile: PlaybackProfile,
     state: State,
     epoch: u64,
     /// `LineRevealed` went out (a line paged after it was done keeps it).
@@ -153,34 +199,91 @@ pub struct Player {
     paged: Vec<u32>,
     /// Typing follows speech ([`Self::follow_speech`]).
     speech: Option<Speech>,
-    /// The current segment's reveal offsets while speech paces it.
-    paced: Option<Arc<[u32]>>,
 }
 
 impl Player {
     pub fn start(
         line: LineId,
         timeline: Arc<Timeline>,
-        after: AfterLine,
-        auto_advance_ms: Option<u32>,
+        profile: PlaybackProfile,
         now: u64,
     ) -> (Self, Vec<PlayerEffect>) {
-        let mut player = Self {
+        let mut player = Self::raw(line, timeline, profile);
+        let mut out = Vec::new();
+        player.enter_segment(0, now, &mut out);
+        (player, out)
+    }
+
+    /// Start a line that is already on screen (live-mirror send): skips segment
+    /// reveal and enters [`Phase::Done`] directly.
+    pub fn start_completed(
+        line: LineId,
+        timeline: Arc<Timeline>,
+        profile: PlaybackProfile,
+        now: u64,
+    ) -> (Self, Vec<PlayerEffect>) {
+        let mut player = Self::raw(line, timeline, profile);
+        let mut out = Vec::new();
+        let pending: Vec<Cue> = player
+            .timeline
+            .segments
+            .iter()
+            .flat_map(|s| s.cues.iter())
+            .filter(|c| c.kind.survives_skip())
+            .cloned()
+            .collect();
+        if !pending.is_empty() {
+            out.push(PlayerEffect::FireNow { cues: pending });
+        }
+        player.enter_done(now, &mut out);
+        (player, out)
+    }
+
+    /// Start directly in [`Phase::Exiting`] (e.g. retiring an uncommitted mirror draft).
+    pub fn start_exiting(
+        line: LineId,
+        timeline: Arc<Timeline>,
+        profile: PlaybackProfile,
+        now: u64,
+    ) -> (Self, Vec<PlayerEffect>) {
+        let mut player = Self::raw(line, timeline, profile);
+        player.revealed = true;
+        player.state = State::Done { at: now };
+        let (_, out) = player.begin_exit(now);
+        (player, out)
+    }
+
+    fn raw(line: LineId, timeline: Arc<Timeline>, profile: PlaybackProfile) -> Self {
+        Self {
             line,
             timeline,
-            after,
-            auto_advance_ms,
+            profile,
             state: State::Finished,
             epoch: 0,
             revealed: false,
             skipped_to_end: false,
             paged: Vec::new(),
             speech: None,
-            paced: None,
-        };
+        }
+    }
+
+    /// Update the profile mid-line (e.g. when reduced motion or skin effects change).
+    pub fn set_profile(&mut self, profile: PlaybackProfile, now: u64) -> Vec<PlayerEffect> {
+        self.profile = profile;
         let mut out = Vec::new();
-        player.enter_segment(0, now, &mut out);
-        (player, out)
+        match self.state {
+            State::Settling { seg, .. } if self.profile.intro_ms == 0 => {
+                self.end_segment(seg, now, &mut out);
+            }
+            State::Exiting {
+                style: ExitStyle::Presentation { .. },
+                ..
+            } if !matches!(self.profile.exit, ExitStyle::Presentation { ms } if ms > 0) => {
+                out = self.finish_exit(now);
+            }
+            _ => {}
+        }
+        out
     }
 
     /// Passing this gate retires the current visible page.
@@ -194,6 +297,7 @@ impl Player {
             false
         }
     }
+
     pub fn line(&self) -> LineId {
         self.line
     }
@@ -209,9 +313,10 @@ impl Player {
     pub fn phase(&self) -> Phase {
         match self.state {
             State::Revealing { .. } => Phase::Revealing,
+            State::Settling { .. } => Phase::Settling,
             State::Gated { .. } => Phase::Gated,
             State::Done { .. } => Phase::Done,
-            State::Fading { .. } => Phase::Fading,
+            State::Exiting { .. } => Phase::Exiting,
             State::Finished => Phase::Finished,
         }
     }
@@ -219,7 +324,13 @@ impl Player {
     /// Current segment index (the last one once done).
     pub fn segment(&self) -> usize {
         match self.state {
-            State::Revealing { seg, .. } | State::Gated { seg } => seg,
+            State::Revealing { seg, .. } | State::Settling { seg, .. } | State::Gated { seg } => {
+                seg
+            }
+            State::Exiting {
+                next: ExitAction::PageNext(next_seg),
+                ..
+            } => next_seg.saturating_sub(1),
             _ => self.timeline.last_segment(),
         }
     }
@@ -230,8 +341,7 @@ impl Player {
     }
 
     fn enter_segment(&mut self, seg: usize, now: u64, out: &mut Vec<PlayerEffect>) {
-        self.paced = None;
-        if let Some(speech) = &mut self.speech {
+        if let Some(mut speech) = self.speech.take() {
             // Words said while the box waited show as the segment starts.
             let units = self.timeline.segments[seg].units.clone();
             let said = units
@@ -246,17 +356,26 @@ impl Player {
                 seg,
                 origin: now,
                 skipped: false,
+                last_unit_at: None,
             };
             out.push(PlayerEffect::ContinueIndicator(false));
-            self.retime(seg, now, now, out);
+            self.retime(&speech, seg, now, now, out);
+            self.speech = Some(speech);
             return;
         }
         let epoch = self.bump();
         let segment = &self.timeline.segments[seg];
+        let last_unit_at = segment
+            .reveal_ms
+            .iter()
+            .max()
+            .copied()
+            .map(|off| now.saturating_add(u64::from(off)));
         self.state = State::Revealing {
             seg,
             origin: now,
             skipped: false,
+            last_unit_at,
         };
         out.push(PlayerEffect::ContinueIndicator(false));
         out.push(PlayerEffect::ShowSegment {
@@ -277,6 +396,30 @@ impl Player {
             at_ms: now + u64::from(segment.duration_ms),
             reason: WakeReason::SegmentEnd,
         });
+    }
+
+    fn settle_or_end(
+        &mut self,
+        seg: usize,
+        last_unit_at: Option<u64>,
+        now: u64,
+        out: &mut Vec<PlayerEffect>,
+    ) {
+        if self.profile.intro_ms > 0
+            && let Some(until) = last_unit_at
+                .map(|at| at.saturating_add(u64::from(self.profile.intro_ms)))
+                .filter(|&until| now < until)
+        {
+            let epoch = self.bump();
+            self.state = State::Settling { seg, until };
+            out.push(PlayerEffect::WakeAt {
+                epoch,
+                at_ms: until,
+                reason: WakeReason::Settled,
+            });
+            return;
+        }
+        self.end_segment(seg, now, out);
     }
 
     fn end_segment(&mut self, seg: usize, now: u64, out: &mut Vec<PlayerEffect>) {
@@ -308,7 +451,7 @@ impl Player {
             out.push(PlayerEffect::LineRevealed(self.line));
         }
         let units = self.timeline.unit_count;
-        match self.after {
+        match self.profile.after {
             AfterLine::Hold => {}
             AfterLine::Fade {
                 delay_ms,
@@ -324,13 +467,112 @@ impl Player {
                 reason: WakeReason::AfterLine,
             }),
         }
-        if let Some(ms) = self.auto_advance_ms {
+        if let Some(ms) = self.profile.auto_advance_ms {
             out.push(PlayerEffect::WakeAt {
                 epoch,
                 at_ms: now + u64::from(ms),
                 reason: WakeReason::AutoAdvance,
             });
         }
+    }
+
+    fn start_exit(
+        &mut self,
+        at: u64,
+        style: ExitStyle,
+        next: ExitAction,
+        out: &mut Vec<PlayerEffect>,
+    ) {
+        let dur_ms = match style {
+            ExitStyle::Instant => {
+                match next {
+                    ExitAction::PageNext(seg) => self.enter_segment(seg, at, out),
+                    ExitAction::FinishLine => self.finish(out),
+                }
+                return;
+            }
+            ExitStyle::Fade { ms } => u64::from(ms),
+            ExitStyle::Presentation { ms } => u64::from(ms),
+        };
+        let epoch = self.bump();
+        self.state = State::Exiting { at, style, next };
+        out.push(PlayerEffect::ContinueIndicator(false));
+        out.push(PlayerEffect::StartExit { at_ms: at, style });
+        out.push(PlayerEffect::WakeAt {
+            epoch,
+            at_ms: at.saturating_add(dur_ms),
+            reason: WakeReason::ExitDone,
+        });
+    }
+
+    fn advance_from_gate(&mut self, seg: usize, now: u64, out: &mut Vec<PlayerEffect>) {
+        let clears_page = self
+            .timeline
+            .segments
+            .get(seg + 1)
+            .is_some_and(|next| next.visible_from != self.timeline.segments[seg].visible_from);
+        if clears_page
+            && let ExitStyle::Presentation { ms } = self.profile.exit
+            && ms > 0
+            && self.timeline.segments[seg].units.end > self.timeline.segments[seg].visible_from
+        {
+            self.start_exit(
+                now,
+                ExitStyle::Presentation { ms },
+                ExitAction::PageNext(seg + 1),
+                out,
+            );
+            return;
+        }
+        self.enter_segment(seg + 1, now, out);
+    }
+
+    /// Begin a presentation exit to retire the current line (used by `ClearDisplay`
+    /// and `Replace`). Returns `true` if a finite presentation exit started (the
+    /// caller should wait for [`WakeReason::ExitDone`]), or `false` if the line
+    /// finished immediately.
+    pub fn begin_exit(&mut self, now: u64) -> (bool, Vec<PlayerEffect>) {
+        let mut out = Vec::new();
+        if let State::Exiting {
+            at,
+            style: ExitStyle::Presentation { ms },
+            ..
+        } = self.state
+        {
+            self.state = State::Exiting {
+                at,
+                style: ExitStyle::Presentation { ms },
+                next: ExitAction::FinishLine,
+            };
+            return (true, out);
+        }
+        if let ExitStyle::Presentation { ms } = self.profile.exit
+            && ms > 0
+            && !matches!(self.state, State::Finished)
+        {
+            self.start_exit(
+                now,
+                ExitStyle::Presentation { ms },
+                ExitAction::FinishLine,
+                &mut out,
+            );
+            return (true, out);
+        }
+        self.finish(&mut out);
+        (false, out)
+    }
+
+    /// Complete an active [`Phase::Exiting`] immediately (e.g. on user skip or
+    /// settings change).
+    pub fn finish_exit(&mut self, now: u64) -> Vec<PlayerEffect> {
+        let mut out = Vec::new();
+        if let State::Exiting { next, .. } = self.state {
+            match next {
+                ExitAction::PageNext(seg) => self.enter_segment(seg, now, &mut out),
+                ExitAction::FinishLine => self.finish(&mut out),
+            }
+        }
+        out
     }
 
     /// A scheduled wake arrived. Stale epochs are ignored.
@@ -340,35 +582,51 @@ impl Player {
             return out;
         }
         match (self.state, reason) {
+            (
+                State::Revealing {
+                    seg,
+                    skipped: false,
+                    last_unit_at,
+                    ..
+                },
+                WakeReason::SegmentEnd,
+            ) => self.settle_or_end(seg, last_unit_at, now, &mut out),
             (State::Revealing { seg, .. }, WakeReason::SegmentEnd) => {
                 self.end_segment(seg, now, &mut out)
             }
-            (State::Gated { seg }, WakeReason::AutoContinue) => {
-                self.enter_segment(seg + 1, now, &mut out)
+            (State::Settling { seg, .. }, WakeReason::Settled) => {
+                self.end_segment(seg, now, &mut out)
             }
-            (State::Done { .. }, WakeReason::AfterLine) => match self.after {
+            (State::Gated { seg }, WakeReason::AutoContinue) => {
+                self.advance_from_gate(seg, now, &mut out)
+            }
+            (State::Done { .. }, WakeReason::AfterLine) => match self.profile.after {
                 AfterLine::Fade { .. } => {
-                    let epoch = self.bump();
-                    self.state = State::Fading {
-                        at: now,
-                        ms: FADE_OUT_MS,
+                    let style = match self.profile.exit {
+                        ExitStyle::Presentation { ms } if ms > 0 => ExitStyle::Presentation { ms },
+                        _ => ExitStyle::Fade { ms: FADE_OUT_MS },
                     };
-                    out.push(PlayerEffect::FadeOut {
-                        at_ms: now,
-                        ms: FADE_OUT_MS,
-                    });
-                    out.push(PlayerEffect::WakeAt {
-                        epoch,
-                        at_ms: now + u64::from(FADE_OUT_MS),
-                        reason: WakeReason::FadeDone,
-                    });
+                    self.start_exit(now, style, ExitAction::FinishLine, &mut out);
                 }
-                _ => self.finish(&mut out),
+                AfterLine::Clear { .. } => match self.profile.exit {
+                    ExitStyle::Presentation { ms } if ms > 0 => {
+                        self.start_exit(
+                            now,
+                            ExitStyle::Presentation { ms },
+                            ExitAction::FinishLine,
+                            &mut out,
+                        );
+                    }
+                    _ => self.finish(&mut out),
+                },
+                AfterLine::Hold => {}
             },
             (State::Done { .. }, WakeReason::AutoAdvance) => {
                 out.push(PlayerEffect::AutoAdvance(self.line))
             }
-            (State::Fading { .. }, WakeReason::FadeDone) => self.finish(&mut out),
+            (State::Exiting { .. }, WakeReason::ExitDone) => {
+                out = self.finish_exit(now);
+            }
             (_, WakeReason::SpeechTimeout) if self.speech.as_ref().is_some_and(|s| !s.heard) => {
                 out = self.speech_ended(now).1;
             }
@@ -387,6 +645,7 @@ impl Player {
             seg,
             origin,
             skipped: false,
+            ..
         } = self.state
         else {
             return (false, out);
@@ -407,11 +666,12 @@ impl Player {
                 release[s.units.start as usize + i] = Some(origin + u64::from(*at));
             }
         }
-        self.speech = Some(Speech {
+        let speech = Speech {
             release,
             heard: false,
-        });
-        self.retime(seg, origin, now, &mut out);
+        };
+        self.retime(&speech, seg, origin, now, &mut out);
+        self.speech = Some(speech);
         out.push(PlayerEffect::WakeAt {
             epoch: self.epoch,
             at_ms: now + u64::from(SPEECH_WAIT_MS),
@@ -423,23 +683,26 @@ impl Player {
     /// Speech reached unit `through` of the line (exclusive): type up to it.
     pub fn speech_reached(&mut self, through: u32, now: u64) -> (bool, Vec<PlayerEffect>) {
         let mut out = Vec::new();
-        let Some(speech) = &mut self.speech else {
+        let Some(mut speech) = self.speech.take() else {
             return (false, out);
         };
         speech.heard = true;
         speech.release(through, now);
-        match self.state {
+        let res = match self.state {
             State::Revealing {
                 seg,
                 origin,
                 skipped: false,
+                ..
             } => {
-                self.retime(seg, origin, now, &mut out);
+                self.retime(&speech, seg, origin, now, &mut out);
                 (true, out)
             }
             // Waiting at a gate: the next segment picks the words up.
             _ => (false, out),
-        }
+        };
+        self.speech = Some(speech);
+        res
     }
 
     /// Speech is over (or never came): the rest types at its own pace.
@@ -452,9 +715,9 @@ impl Player {
             seg,
             origin,
             skipped: false,
+            ..
         } = self.state
         else {
-            self.paced = None;
             return (false, out);
         };
         // Resume the line's own rhythm from the first unit still waiting,
@@ -474,19 +737,21 @@ impl Player {
                 speech.release[start + i] = Some(typed + natural);
             }
         }
-        self.speech = Some(speech);
-        self.retime(seg, origin, now, &mut out);
-        self.speech = None;
+        self.retime(&speech, seg, origin, now, &mut out);
         (true, out)
     }
 
     /// Re-issue segment `seg` (begun at `origin`) on speech's schedule: the
     /// units released so far and their cues; the end once all are out.
-    fn retime(&mut self, seg: usize, origin: u64, now: u64, out: &mut Vec<PlayerEffect>) {
+    fn retime(
+        &mut self,
+        speech: &Speech,
+        seg: usize,
+        origin: u64,
+        now: u64,
+        out: &mut Vec<PlayerEffect>,
+    ) {
         let epoch = self.bump();
-        let Some(speech) = &self.speech else {
-            return;
-        };
         let s = &self.timeline.segments[seg];
         let start = s.units.start as usize;
         // Released units are a prefix: the rest stays hidden.
@@ -498,6 +763,21 @@ impl Player {
         let last = s.reveal_ms.last().copied().unwrap_or(0);
         let tail = s.duration_ms.saturating_sub(last);
         let end = all.then(|| offsets.last().copied().unwrap_or(0).saturating_add(tail));
+        let last_unit_at = all
+            .then(|| {
+                offsets
+                    .iter()
+                    .max()
+                    .copied()
+                    .map(|off| origin.saturating_add(u64::from(off)))
+            })
+            .flatten();
+        self.state = State::Revealing {
+            seg,
+            origin,
+            skipped: false,
+            last_unit_at,
+        };
         // A cue keeps its place in the text: the unit it sounds with (the
         // first one not before it), or the end.
         let elapsed = now.saturating_sub(origin);
@@ -520,7 +800,6 @@ impl Player {
             })
             .collect();
         let offsets: Arc<[u32]> = offsets.into();
-        self.paced = Some(offsets.clone());
         out.push(PlayerEffect::ShowSegment {
             epoch,
             seg,
@@ -549,8 +828,9 @@ impl Player {
         out.push(PlayerEffect::LineFinished(self.line));
     }
 
-    /// The continue key. While revealing it completes the segment; at a gate
-    /// it starts the next segment. Returns `true` when it did something.
+    /// The continue key. While revealing or settling it completes the segment;
+    /// at a gate it starts the next segment; while exiting it completes the exit.
+    /// Returns `true` when it did something.
     pub fn advance(&mut self, now: u64) -> (bool, Vec<PlayerEffect>) {
         let mut out = Vec::new();
         match self.state {
@@ -558,10 +838,15 @@ impl Player {
                 self.skip_segment(seg, origin, now, &mut out);
                 (true, out)
             }
-            State::Gated { seg } => {
-                self.enter_segment(seg + 1, now, &mut out);
+            State::Settling { seg, .. } => {
+                self.skip_segment(seg, now, now, &mut out);
                 (true, out)
             }
+            State::Gated { seg } => {
+                self.advance_from_gate(seg, now, &mut out);
+                (true, out)
+            }
+            State::Exiting { .. } => (true, self.finish_exit(now)),
             _ => (false, out),
         }
     }
@@ -571,7 +856,6 @@ impl Player {
     fn skip_segment(&mut self, seg: usize, origin: u64, now: u64, out: &mut Vec<PlayerEffect>) {
         // Skipped by hand: the rest of the line types on its own.
         self.speech = None;
-        self.paced = None;
         let epoch = self.bump();
         let segment = &self.timeline.segments[seg];
         let elapsed = now.saturating_sub(origin);
@@ -585,6 +869,7 @@ impl Player {
             seg,
             origin: now,
             skipped: true,
+            last_unit_at: None,
         };
         out.push(PlayerEffect::ShowSegment {
             epoch,
@@ -604,7 +889,6 @@ impl Player {
     pub fn finish_reveal(&mut self, now: u64) -> Vec<PlayerEffect> {
         let mut out = Vec::new();
         self.speech = None;
-        self.paced = None;
         let last = self.timeline.last_segment();
         let segments = &self.timeline.segments;
         let (seg, elapsed) = match self.state {
@@ -612,8 +896,11 @@ impl Player {
                 seg,
                 origin,
                 skipped: false,
+                ..
             } => (seg, now.saturating_sub(origin)),
-            State::Revealing { seg, .. } | State::Gated { seg } => (seg, u64::MAX),
+            State::Revealing { seg, .. } | State::Settling { seg, .. } | State::Gated { seg } => {
+                (seg, u64::MAX)
+            }
             _ => (last, u64::MAX),
         };
         let pending: Vec<Cue> = segments[seg]
@@ -652,7 +939,9 @@ impl Player {
         // Breaks may land from the start of the segment on (from the page's
         // start for a line already done).
         let (seg, from) = match self.state {
-            State::Revealing { seg, .. } | State::Gated { seg } => (seg, segments[seg].units.start),
+            State::Revealing { seg, .. } | State::Settling { seg, .. } | State::Gated { seg } => {
+                (seg, segments[seg].units.start)
+            }
             State::Done { .. } if !self.skipped_to_end => {
                 let seg = self.timeline.last_segment();
                 (seg, segments[seg].visible_from)
@@ -688,7 +977,9 @@ impl Player {
                 seg,
                 origin,
                 skipped,
+                ..
             } => self.repage_current(seg, origin, skipped, now, out),
+            State::Settling { seg, .. } => self.repage_current(seg, 0, false, now, out),
             State::Gated { seg } => {
                 // A pause that became a page may now turn on its own.
                 self.gate(seg, now, &mut out);
@@ -708,15 +999,22 @@ impl Player {
         now: u64,
         mut out: Vec<PlayerEffect>,
     ) -> (bool, Vec<PlayerEffect>) {
-        if self.speech.is_some() && !skipped {
+        if !skipped && let Some(speech) = self.speech.take() {
             // The cut segment keeps following speech.
-            self.retime(seg, origin, now, &mut out);
+            self.retime(&speech, seg, origin, now, &mut out);
+            self.speech = Some(speech);
             return (true, out);
         }
         let elapsed = now.saturating_sub(origin);
         let epoch = self.bump();
         let s = &self.timeline.segments[seg];
         let cut = u64::from(s.duration_ms);
+        let last_unit_at = s
+            .reveal_ms
+            .iter()
+            .max()
+            .copied()
+            .map(|off| origin.saturating_add(u64::from(off)));
         out.push(PlayerEffect::ShowSegment {
             epoch,
             seg,
@@ -728,6 +1026,12 @@ impl Player {
             },
         });
         if !skipped && elapsed < cut {
+            self.state = State::Revealing {
+                seg,
+                origin,
+                skipped: false,
+                last_unit_at,
+            };
             let cues: Vec<Cue> = s.cues_after(elapsed).cloned().collect();
             if !cues.is_empty() {
                 out.push(PlayerEffect::ScheduleCues {
@@ -761,7 +1065,11 @@ impl Player {
             .cloned()
             .collect();
         next.cues = cues.into();
-        self.end_segment(seg, now, &mut out);
+        if !skipped {
+            self.settle_or_end(seg, last_unit_at, now, &mut out);
+        } else {
+            self.end_segment(seg, now, &mut out);
+        }
         (true, out)
     }
 
@@ -807,24 +1115,41 @@ impl Player {
                 seg,
                 origin,
                 skipped,
+                ..
             } => {
                 let s = &tl.segments[seg];
-                let elapsed = now.saturating_sub(origin);
-                let reveal = self.paced.as_ref().unwrap_or(&s.reveal_ms);
                 let shown = if skipped {
                     s.reveal_ms.len()
+                } else if let Some(speech) = &self.speech {
+                    (0..s.reveal_ms.len())
+                        .map_while(|i| speech.release[s.units.start as usize + i])
+                        .filter(|&at| at <= now)
+                        .count()
                 } else {
-                    reveal.iter().filter(|t| u64::from(**t) <= elapsed).count()
+                    let elapsed = now.saturating_sub(origin);
+                    s.reveal_ms
+                        .iter()
+                        .filter(|t| u64::from(**t) <= elapsed)
+                        .count()
                 };
                 (seg, s.units.start + shown as u32)
             }
-            State::Gated { seg } => (seg, tl.segments[seg].units.end),
+            State::Settling { seg, .. } | State::Gated { seg } => (seg, tl.segments[seg].units.end),
+            State::Exiting {
+                next: ExitAction::PageNext(next_seg),
+                ..
+            } => {
+                let seg = next_seg.saturating_sub(1);
+                (seg, tl.segments[seg].units.end)
+            }
             _ => (tl.last_segment(), tl.unit_count),
         };
         let opacity = match self.state {
-            State::Fading { at, ms } => {
-                1.0 - (now.saturating_sub(at) as f32 / ms.max(1) as f32).clamp(0.0, 1.0)
-            }
+            State::Exiting {
+                at,
+                style: ExitStyle::Fade { ms },
+                ..
+            } => 1.0 - (now.saturating_sub(at) as f32 / ms.max(1) as f32).clamp(0.0, 1.0),
             State::Finished => 0.0,
             _ => 1.0,
         };

@@ -67,7 +67,7 @@ fn setup(
     }
     edit(&mut s);
     let ui = scene.ui;
-    let core = Core::new(s.clone(), scene.skin.clone());
+    let core = Core::from_settings(&s, &scene.skin);
     ui.settings.set(Arc::new(s));
     ui.history.set(Arc::new(Vec::new()));
     ui.display.set(Arc::new(core.display().clone()));
@@ -383,7 +383,7 @@ fn room(scene: Scene, core: Core, out: &Path, l: &Lines) {
         .map(|name| {
             let mut s = (*ui.settings.get_untracked()).clone();
             s.general.characters[0].name = (*name).into();
-            Core::new(s, scene.skin.clone())
+            Core::from_settings(&s, &scene.skin)
         })
         .collect();
     let mut rig = Rig::new("room", out, ui, core, scene.theme.clone());
@@ -659,7 +659,7 @@ fn backdrops(registry: &SkinRegistry, out: &Path, work: &Path, locale: Locale) {
         let mut skin = scene.ui.skin.get_untracked();
         Arc::make_mut(&mut skin).dialogue.region = [960.0, 540.0];
         scene.ui.skin.set(skin.clone());
-        let core = Core::new(scene.ui.settings.get_untracked().as_ref().clone(), skin);
+        let core = Core::from_settings(&scene.ui.settings.get_untracked(), &skin);
         let short: &'static str =
             Box::leak(format!("bg-{}", id.trim_start_matches("nanatype.")).into());
         let mut rig = Rig::new("backdrop", out, scene.ui, core, scene.theme.clone());

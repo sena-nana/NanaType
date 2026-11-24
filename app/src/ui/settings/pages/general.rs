@@ -427,13 +427,13 @@ fn settings_body(ui: Ui) -> AnyView {
                                     ("dark", "general-appearance-dark"),
                                 ],
                             ),
-                            |s| match s.skin.chrome {
+                            |s| match s.accessibility.chrome {
                                 ChromeMode::System => "system".into(),
                                 ChromeMode::Light => "light".into(),
                                 ChromeMode::Dark => "dark".into(),
                             },
                             |s, v| {
-                                s.skin.chrome = match v {
+                                s.accessibility.chrome = match v {
                                     "light" => ChromeMode::Light,
                                     "dark" => ChromeMode::Dark,
                                     _ => ChromeMode::System,

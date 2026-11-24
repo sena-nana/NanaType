@@ -111,8 +111,7 @@ pub(super) fn ui(
     // First run with this sidebar: pin chat where a source is set up, or
     // where the old chat window was open.
     let input_dock = geometry.input_dock.unwrap_or_else(|| InputDockLayout {
-        chat_pinned: crate::ui::danmaku::chat_configured(settings)
-            || settings.integrations.chat.panel_open,
+        chat_pinned: crate::ui::danmaku::chat_configured(settings),
         ..Default::default()
     });
     ui.input_dock.set(input_dock.normalized());
@@ -120,8 +119,10 @@ pub(super) fn ui(
         .set(nanatype_settings::input_sidebar_width(
             geometry.input_sidebar_width,
         ));
-    ui.chrome_dark
-        .set(skin_theme::dark_mode(settings.skin.chrome, system_dark));
+    ui.chrome_dark.set(skin_theme::dark_mode(
+        settings.accessibility.chrome,
+        system_dark,
+    ));
     ui.chrome_contrast
         .set(settings.accessibility.high_contrast(ctx.high_contrast()));
     ui.system_reduced_motion.set(ctx.reduced_motion());

@@ -57,12 +57,12 @@ fn history_renders_yen_emoji_and_inline_picture() {
     // Keep the text in a saturated colour so a missing fallback glyph cannot
     // be mistaken for a successful render merely because the row is present.
     let markup = "[color=#d00050]¥100 😀[/color] [img=blob:history-red alt=red]";
-    let mut core = Core::new(settings, skin);
+    let mut core = Core::from_settings(&settings, &skin);
     core.handle(Cmd::SendMarkup(markup.into()), 0);
     core.handle(Cmd::Skip, 1);
     assert_eq!(core.history().len(), 1, "the line should enter history");
-    assert!(core.history()[0].doc.plain_text().contains('¥'));
-    assert!(core.history()[0].doc.plain_text().contains('😀'));
+    assert!(core.history()[0].doc().plain_text().contains('¥'));
+    assert!(core.history()[0].doc().plain_text().contains('😀'));
 
     // A data URL is deliberately used here: it exercises the history atom's
     // URL lookup without depending on a machine-local asset or media mirror.

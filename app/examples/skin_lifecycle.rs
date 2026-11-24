@@ -326,7 +326,7 @@ fn main() {
     let base = registry.load("nanatype.halo").unwrap();
     let settings = Arc::new(nanatype_settings::Settings::default());
     let ui = Ui::new(settings.clone(), base.skin.clone(), Locale::ZhCn);
-    let mut core = Core::new((*settings).clone(), base.skin);
+    let mut core = Core::from_settings(&settings, &base.skin);
     core.handle(
         Cmd::SendMarkup("切换与多输出压力测试 Rendering stress".into()),
         0,

@@ -1960,6 +1960,7 @@ mod tests {
                 start: 1,
                 reveal_ms: vec![0, 100, 200].into(),
             }),
+            unit_times: None,
             hidden_from: 4,
         };
         let plan = RevealPlan::new(

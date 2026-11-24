@@ -289,7 +289,7 @@ mod tests {
                 .load(nanatype_theme::DEFAULT_SKIN)
                 .unwrap()
                 .skin;
-            let mut core = nanatype_core::Core::new(settings.clone(), skin.clone());
+            let mut core = nanatype_core::Core::from_settings(&settings, &skin);
             for _ in 0..20 {
                 core.handle(
                     nanatype_core::Cmd::SendMarkup("测试台词 Test line".into()),

@@ -74,7 +74,7 @@ fn main() {
         let settings = Arc::new(settings);
         let ui = Ui::new(settings.clone(), skin.clone(), Locale::ZhCn);
         ui.reduced_motion.set(reduced);
-        let mut core = Core::new((*settings).clone(), skin.clone());
+        let mut core = Core::from_settings(&settings, &skin);
         for _ in 0..history_rows.max(1) {
             core.handle(Cmd::SendMarkup(text.into()), 0);
             if name != "reveal" {

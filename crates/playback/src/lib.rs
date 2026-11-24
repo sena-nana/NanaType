@@ -19,7 +19,10 @@ mod timeline;
 mod tests;
 
 pub use mirror::{MirrorDelta, mirror_delta, mirror_matches, mirror_offsets};
-pub use pacing::{PacingParams, PunctPauses, TypingSoundRule};
-pub use player::{Phase, Player, PlayerEffect, RevealSnapshot, SPEECH_WAIT_MS, WakeReason};
+pub use pacing::{PacingParams, PunctPauses, TypingClickFilter, TypingSoundRule};
+pub use player::{
+    ExitAction, ExitStyle, Phase, PlaybackProfile, Player, PlayerEffect, RevealSnapshot,
+    SPEECH_WAIT_MS, WakeReason,
+};
 pub use queue::{LineQueue, QueueDecision, QueuePolicy};
 pub use timeline::{Cue, CueKind, Segment, SegmentEnd, Timeline, compile};

@@ -267,10 +267,10 @@ impl Rig {
                     .push((now, "show", format!("{}-line{}", self.scenario, self.lines)));
             }
         }
-        if let Some(doc) = fx.replace_draft {
-            self.ui.draft.set(Arc::new(doc.clone()));
+        if let Some(draft) = fx.replace_draft {
+            self.ui.draft.set(Arc::new(draft.doc.clone()));
             let mut src = self.ui.source.get_untracked();
-            src.text = nanatype_markup::serialize(&doc);
+            src.text = nanatype_markup::serialize_line(&draft.doc, &draft.meta);
             src.selection = (src.text.len(), src.text.len());
             src.revision += 1;
             self.ui.source.set(src);

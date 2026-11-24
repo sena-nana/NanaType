@@ -122,7 +122,7 @@ fn p2p(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
     });
     let mut peer_settings = settings.clone();
     peer_settings.general.characters[0].name = "联机伙伴 / Partner".into();
-    let mut peer_core = Core::new(peer_settings, skin.clone());
+    let mut peer_core = Core::from_settings(&peer_settings, skin);
     peer_core.handle(
         Cmd::SendMarkup(
             "[color=#689fd7]我这边也能看到你的台词！[/color]\n两个人可以同时显示，也可以独立继续。"

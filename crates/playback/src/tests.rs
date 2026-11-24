@@ -19,6 +19,10 @@ fn quiet() -> TypingSoundRule {
     }
 }
 
+fn prof(after: AfterLine, auto_advance_ms: Option<u32>) -> PlaybackProfile {
+    PlaybackProfile::new(after, auto_advance_ms)
+}
+
 fn tl(markup: &str, pacing: &PacingParams) -> Arc<Timeline> {
     Arc::new(compile(&parse(markup).doc, pacing, &quiet()))
 }
@@ -102,7 +106,7 @@ fn pauses_split_segments_and_wait_for_continue() {
     assert_eq!(t.segments.len(), 2);
     assert_eq!(t.segments[0].units, 0..2);
     assert_eq!(t.segments[1].units, 2..4);
-    let (mut p, fx) = Player::start(LineId(1), t, AfterLine::Hold, None, 1_000);
+    let (mut p, fx) = Player::start(LineId(1), t, prof(AfterLine::Hold, None), 1_000);
     assert_eq!(wakes(&fx), vec![(1_100, WakeReason::SegmentEnd)]);
     let fx = p.on_wake(p.epoch(), WakeReason::SegmentEnd, 1_100);
     assert!(fx.contains(&PlayerEffect::ContinueIndicator(true)));
@@ -126,7 +130,7 @@ fn pauses_split_segments_and_wait_for_continue() {
 #[test]
 fn auto_pause_continues_on_its_own() {
     let t = tl("a[pause auto=300]b", &no_punct());
-    let (mut p, _) = Player::start(LineId(1), t, AfterLine::Hold, None, 0);
+    let (mut p, _) = Player::start(LineId(1), t, prof(AfterLine::Hold, None), 0);
     let fx = p.on_wake(p.epoch(), WakeReason::SegmentEnd, 50);
     assert_eq!(wakes(&fx), vec![(350, WakeReason::AutoContinue)]);
     let fx = p.on_wake(p.epoch(), WakeReason::AutoContinue, 350);
@@ -141,7 +145,7 @@ fn page_clears_what_came_before() {
     let t = tl("ab[page]cd", &no_punct());
     assert_eq!(t.segments[0].end, SegmentEnd::Page { auto_ms: None });
     assert_eq!(t.segments[1].visible_from, 2);
-    let (mut p, _) = Player::start(LineId(1), t, AfterLine::Hold, None, 0);
+    let (mut p, _) = Player::start(LineId(1), t, prof(AfterLine::Hold, None), 0);
     p.on_wake(p.epoch(), WakeReason::SegmentEnd, 100);
     p.advance(200);
     assert_eq!(p.snapshot(200).visible_from, 2);
@@ -150,7 +154,7 @@ fn page_clears_what_came_before() {
 #[test]
 fn hold_stays_and_fade_uses_delay_plus_per_unit() {
     let t = tl("abc", &no_punct());
-    let (mut p, _) = Player::start(LineId(7), t.clone(), AfterLine::Hold, None, 0);
+    let (mut p, _) = Player::start(LineId(7), t.clone(), prof(AfterLine::Hold, None), 0);
     let fx = p.on_wake(p.epoch(), WakeReason::SegmentEnd, 150);
     assert!(fx.contains(&PlayerEffect::LineRevealed(LineId(7))));
     assert!(wakes(&fx).is_empty());
@@ -160,13 +164,19 @@ fn hold_stays_and_fade_uses_delay_plus_per_unit() {
         delay_ms: 1_000,
         per_unit_ms: 40,
     };
-    let (mut p, _) = Player::start(LineId(8), t, fade, None, 0);
+    let (mut p, _) = Player::start(LineId(8), t, prof(fade, None), 0);
     let fx = p.on_wake(p.epoch(), WakeReason::SegmentEnd, 150);
     assert_eq!(wakes(&fx), vec![(150 + 1_000 + 120, WakeReason::AfterLine)]);
     let fx = p.on_wake(p.epoch(), WakeReason::AfterLine, 1_270);
-    assert!(matches!(fx[0], PlayerEffect::FadeOut { at_ms: 1_270, .. }));
+    assert!(matches!(
+        fx[1],
+        PlayerEffect::StartExit {
+            at_ms: 1_270,
+            style: ExitStyle::Fade { .. }
+        }
+    ));
     assert!(p.snapshot(1_270 + 225).opacity < 0.6);
-    let fx = p.on_wake(p.epoch(), WakeReason::FadeDone, 1_270 + 450);
+    let fx = p.on_wake(p.epoch(), WakeReason::ExitDone, 1_270 + 450);
     assert_eq!(fx, vec![PlayerEffect::LineFinished(LineId(8))]);
     assert_eq!(p.snapshot(9_999).opacity, 0.0);
 }
@@ -174,7 +184,7 @@ fn hold_stays_and_fade_uses_delay_plus_per_unit() {
 #[test]
 fn stale_wakes_are_ignored_after_a_skip() {
     let t = tl("abcdef", &no_punct());
-    let (mut p, fx) = Player::start(LineId(1), t, AfterLine::Hold, None, 0);
+    let (mut p, fx) = Player::start(LineId(1), t, prof(AfterLine::Hold, None), 0);
     let old = match &fx[1] {
         PlayerEffect::ShowSegment { epoch, .. } => *epoch,
         other => panic!("{other:?}"),
@@ -192,7 +202,7 @@ fn stale_wakes_are_ignored_after_a_skip() {
 fn skip_fires_pending_expressions_but_not_clicks() {
     let doc = parse("ab[expr=smile]cd[se=coin]").doc;
     let t = Arc::new(compile(&doc, &no_punct(), &TypingSoundRule::default()));
-    let (mut p, _) = Player::start(LineId(1), t, AfterLine::Hold, None, 0);
+    let (mut p, _) = Player::start(LineId(1), t, prof(AfterLine::Hold, None), 0);
     let (_, fx) = p.advance(10);
     let fired = fx
         .iter()
@@ -208,7 +218,7 @@ fn skip_fires_pending_expressions_but_not_clicks() {
 #[test]
 fn auto_advance_fires_after_the_reveal() {
     let t = tl("a", &no_punct());
-    let (mut p, _) = Player::start(LineId(3), t, AfterLine::Hold, Some(800), 0);
+    let (mut p, _) = Player::start(LineId(3), t, prof(AfterLine::Hold, Some(800)), 0);
     let fx = p.on_wake(p.epoch(), WakeReason::SegmentEnd, 50);
     assert_eq!(wakes(&fx), vec![(850, WakeReason::AutoAdvance)]);
     let fx = p.on_wake(p.epoch(), WakeReason::AutoAdvance, 850);
@@ -353,7 +363,7 @@ fn vts_markers_cue_and_survive_a_skip() {
 #[test]
 fn finishing_the_reveal_fires_later_segments_expressions() {
     let t = tl("a[pause]b[expr=smile]c[page]d[se=coin]", &no_punct());
-    let (mut p, _) = Player::start(LineId(1), t, AfterLine::Hold, None, 0);
+    let (mut p, _) = Player::start(LineId(1), t, prof(AfterLine::Hold, None), 0);
     let out = p.finish_reveal(10);
     let fired: Vec<_> = out
         .iter()
@@ -438,7 +448,7 @@ fn shown_until(effects: &[PlayerEffect], t: &Timeline) -> Option<u32> {
 #[test]
 fn paginating_before_the_cut_reschedules_the_segment() {
     let t = tl("abcdefgh", &no_punct());
-    let (mut p, _) = Player::start(LineId(1), t, AfterLine::Hold, None, 0);
+    let (mut p, _) = Player::start(LineId(1), t, prof(AfterLine::Hold, None), 0);
     let (touched, out) = p.paginate(&[4], None, 60);
     assert!(touched);
     assert_eq!(shown_until(&out, p.timeline()), Some(4));
@@ -457,7 +467,7 @@ fn paginating_before_the_cut_reschedules_the_segment() {
 #[test]
 fn paginating_past_the_cut_gates_at_once_and_auto_turns() {
     let t = tl("abcdefgh", &no_punct());
-    let (mut p, _) = Player::start(LineId(1), t, AfterLine::Hold, None, 0);
+    let (mut p, _) = Player::start(LineId(1), t, prof(AfterLine::Hold, None), 0);
     let (touched, out) = p.paginate(&[2], Some(800), 300);
     assert!(touched);
     assert_eq!(p.phase(), Phase::Gated);
@@ -472,7 +482,7 @@ fn a_line_shown_at_once_goes_back_to_its_first_page() {
         ..no_punct()
     };
     let t = tl("a[expr=smile]bcdef", &pacing);
-    let (mut p, _) = Player::start(LineId(1), t, AfterLine::Hold, None, 0);
+    let (mut p, _) = Player::start(LineId(1), t, prof(AfterLine::Hold, None), 0);
     let out = p.on_wake(p.epoch(), WakeReason::SegmentEnd, 0);
     assert!(out.contains(&PlayerEffect::LineRevealed(LineId(1))));
     let (touched, out) = p.paginate(&[3], None, 20);
@@ -490,7 +500,7 @@ fn a_line_shown_at_once_goes_back_to_its_first_page() {
 #[test]
 fn skipping_to_the_end_keeps_the_last_page() {
     let t = tl("abcdefgh", &no_punct());
-    let (mut p, _) = Player::start(LineId(1), t, AfterLine::Hold, None, 0);
+    let (mut p, _) = Player::start(LineId(1), t, prof(AfterLine::Hold, None), 0);
     p.finish_reveal(10);
     assert_eq!(p.paginate(&[4], None, 20), (false, vec![]));
 }
@@ -509,7 +519,7 @@ fn schedule(effects: &[PlayerEffect]) -> Option<(u64, Vec<u32>)> {
 #[test]
 fn typing_waits_for_speech_and_follows_its_words() {
     let t = tl("abcdef", &no_punct());
-    let (mut p, _) = Player::start(LineId(1), t.clone(), AfterLine::Hold, None, 1_000);
+    let (mut p, _) = Player::start(LineId(1), t.clone(), prof(AfterLine::Hold, None), 1_000);
     // 60 ms in, "a" and "b" are on screen; the rest waits for the voice.
     let (touched, out) = p.follow_speech(1_060);
     assert!(touched);
@@ -539,7 +549,7 @@ fn typing_waits_for_speech_and_follows_its_words() {
 #[test]
 fn without_a_word_in_time_typing_goes_on_alone() {
     let t = tl("abcd", &no_punct());
-    let (mut p, _) = Player::start(LineId(1), t.clone(), AfterLine::Hold, None, 0);
+    let (mut p, _) = Player::start(LineId(1), t.clone(), prof(AfterLine::Hold, None), 0);
     let (_, out) = p.follow_speech(0);
     assert_eq!(schedule(&out), Some((0, vec![0])));
     let out = p.on_wake(p.epoch(), WakeReason::SpeechTimeout, 300);
@@ -553,7 +563,7 @@ fn without_a_word_in_time_typing_goes_on_alone() {
 #[test]
 fn speech_said_during_a_pause_shows_when_the_next_segment_starts() {
     let t = tl("ab[pause]cd", &no_punct());
-    let (mut p, _) = Player::start(LineId(1), t.clone(), AfterLine::Hold, None, 0);
+    let (mut p, _) = Player::start(LineId(1), t.clone(), prof(AfterLine::Hold, None), 0);
     p.follow_speech(0);
     p.speech_reached(2, 100);
     let out = p.on_wake(p.epoch(), WakeReason::SegmentEnd, 400);
@@ -562,4 +572,104 @@ fn speech_said_during_a_pause_shows_when_the_next_segment_starts() {
     p.speech_reached(4, 500);
     let (_, out) = p.advance(900);
     assert_eq!(schedule(&out), Some((900, vec![0, 35])));
+}
+
+#[test]
+fn settling_and_presentation_exits_walk_full_lifecycle_fsm() {
+    let t = tl("ab[page]cd", &no_punct());
+    let profile = PlaybackProfile {
+        intro_ms: 200,
+        exit: ExitStyle::Presentation { ms: 320 },
+        after: AfterLine::Clear { delay_ms: 500 },
+        auto_advance_ms: None,
+    };
+    // "ab": reveal_ms = [0, 50], duration_ms = 100. Last unit at 50 -> settles at 250.
+    let (mut p, fx) = Player::start(LineId(9), t, profile, 1_000);
+    assert_eq!(wakes(&fx), vec![(1_100, WakeReason::SegmentEnd)]);
+    let fx = p.on_wake(p.epoch(), WakeReason::SegmentEnd, 1_100);
+    assert_eq!(p.phase(), Phase::Settling);
+    assert_eq!(wakes(&fx), vec![(1_250, WakeReason::Settled)]);
+    let fx = p.on_wake(p.epoch(), WakeReason::Settled, 1_250);
+    assert_eq!(p.phase(), Phase::Gated);
+    assert!(fx.contains(&PlayerEffect::ContinueIndicator(true)));
+
+    // Advancing across a page break enters Exiting -> PageNext.
+    let (did, fx) = p.advance(2_000);
+    assert!(did);
+    assert_eq!(p.phase(), Phase::Exiting);
+    assert!(fx.contains(&PlayerEffect::StartExit {
+        at_ms: 2_000,
+        style: ExitStyle::Presentation { ms: 320 },
+    }));
+    assert_eq!(wakes(&fx), vec![(2_320, WakeReason::ExitDone)]);
+    let fx = p.on_wake(p.epoch(), WakeReason::ExitDone, 2_320);
+    assert_eq!(p.phase(), Phase::Revealing);
+    assert!(
+        fx.iter()
+            .any(|e| matches!(e, PlayerEffect::ShowSegment { seg: 1, .. }))
+    );
+
+    // Finish seg 1 -> settle -> Done -> AfterLine -> Exiting { FinishLine } -> Finished.
+    let _ = p.on_wake(p.epoch(), WakeReason::SegmentEnd, 2_420);
+    assert_eq!(p.phase(), Phase::Settling);
+    let fx = p.on_wake(p.epoch(), WakeReason::Settled, 2_570);
+    assert_eq!(p.phase(), Phase::Done);
+    assert_eq!(wakes(&fx), vec![(3_070, WakeReason::AfterLine)]);
+    let fx = p.on_wake(p.epoch(), WakeReason::AfterLine, 3_070);
+    assert_eq!(p.phase(), Phase::Exiting);
+    assert_eq!(wakes(&fx), vec![(3_390, WakeReason::ExitDone)]);
+    let fx = p.on_wake(p.epoch(), WakeReason::ExitDone, 3_390);
+    assert_eq!(p.phase(), Phase::Finished);
+    assert_eq!(fx, vec![PlayerEffect::LineFinished(LineId(9))]);
+}
+
+#[test]
+fn start_completed_enters_done_directly_and_fires_kept_cues() {
+    let doc = parse("hi[expr=smile]").doc;
+    let t = Arc::new(compile(&doc, &no_punct(), &quiet()));
+    let (p, fx) = Player::start_completed(
+        LineId(42),
+        t,
+        prof(AfterLine::Clear { delay_ms: 500 }, None),
+        1_000,
+    );
+    assert_eq!(p.phase(), Phase::Done);
+    assert!(
+        !fx.iter()
+            .any(|e| matches!(e, PlayerEffect::ShowSegment { .. }))
+    );
+    assert!(
+        fx.iter()
+            .any(|e| matches!(e, PlayerEffect::FireNow { cues } if cues.len() == 1))
+    );
+    assert!(fx.contains(&PlayerEffect::LineRevealed(LineId(42))));
+    assert_eq!(wakes(&fx), vec![(1_500, WakeReason::AfterLine)]);
+}
+
+#[test]
+fn typing_click_filter_enforces_every_n_and_min_interval() {
+    use nanatype_model::CharClass;
+    let mut filter = TypingClickFilter::new(TypingSoundRule {
+        enabled: true,
+        every_n: 2,
+        skip_space: true,
+        skip_punct: true,
+        min_interval_ms: 40,
+        variants: 3,
+    });
+    assert!(filter.next(0, CharClass::Latin, 0).is_some());
+    assert!(filter.next(1, CharClass::Space, 10).is_none());
+    assert!(filter.next(2, CharClass::Latin, 20).is_none()); // every_n=2 skips eligible #1
+    assert!(filter.next(3, CharClass::Latin, 30).is_none()); // eligible #2 but < 40ms from 0
+    let c = filter.next(4, CharClass::Latin, 80); // eligible #3 skipped; wait: #3 is odd
+    assert!(c.is_none());
+    let c = filter.next(5, CharClass::Latin, 90).unwrap(); // eligible #4 -> clicks with variant 1
+    assert!(matches!(
+        c.kind,
+        CueKind::TypeSound {
+            unit: 5,
+            variant: 1,
+            ..
+        }
+    ));
 }

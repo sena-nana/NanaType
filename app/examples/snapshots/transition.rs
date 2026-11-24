@@ -20,7 +20,7 @@ pub fn audit(ui: Ui, out: &std::path::Path, w: u32, h: u32, theme: Arc<nana_ui::
     settings.history.hide_latest = nanatype_settings::HideLatest::Never;
     settings.overlays.history.size = Some([history_width as f32, history_height as f32]);
     ui.settings.set(Arc::new(settings.clone()));
-    let mut core = Core::new(settings, skin);
+    let mut core = Core::from_settings(&settings, &skin);
     core.handle(
         Cmd::SetReducedMotion(ui.reduced_motion.get_untracked()),
         base,
@@ -81,7 +81,7 @@ pub fn audit(ui: Ui, out: &std::path::Path, w: u32, h: u32, theme: Arc<nana_ui::
     let wake = fx
         .wakes
         .iter()
-        .find(|w| w.reason == nanatype_playback::WakeReason::PresentationDone)
+        .find(|w| w.reason == nanatype_playback::WakeReason::ExitDone)
         .copied();
     ui.display.set(Arc::new(core.display().clone()));
     ui.history

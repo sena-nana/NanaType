@@ -20,7 +20,7 @@ fn core_with(f: impl FnOnce(&mut Settings)) -> Core {
     s.playback.punctuation_pauses = false;
     s.general.characters[0].name = "奈奈".into();
     f(&mut s);
-    Core::new(s, skin())
+    Core::from_settings(&s, &skin())
 }
 
 fn type_and_send(core: &mut Core, markup: &str, now: Millis) -> Effects {
@@ -127,7 +127,7 @@ fn run_until(core: &mut Core, mut pending: Vec<Wake>, until: Millis) -> Vec<Effe
 fn sending_starts_the_reveal_clears_the_draft_and_adds_a_following_row() {
     let mut core = core_with(|_| {});
     let fx = type_and_send(&mut core, "你好", 1_000);
-    assert_eq!(fx.replace_draft, Some(Document::new()));
+    assert_eq!(fx.replace_draft, Some(Draft::default()));
     assert!(core.draft().is_blank());
     let d = core.display();
     assert!(!d.empty);
@@ -384,7 +384,7 @@ fn mirror_mode_follows_typing_including_repeats_and_commits_on_send() {
     assert_eq!(r.shown, 1, "first character stays");
     assert_eq!(r.unit_at(1), Some(100), "the repeat reveals");
     let fx = core.handle(Cmd::Send, 200);
-    assert_eq!(fx.replace_draft, Some(Document::new()));
+    assert_eq!(fx.replace_draft, Some(Draft::default()));
     assert_eq!(core.history().len(), 1);
     // The editor echoes the cleared draft; the committed line stays.
     core.handle(Cmd::DraftChanged(Document::new()), 210);
@@ -401,18 +401,18 @@ fn recall_walks_sent_lines_and_restores_the_stash() {
     type_and_send(&mut core, "two", 10);
     core.handle(Cmd::DraftChanged(Document::plain("draft")), 20);
     let fx = core.handle(Cmd::Recall(-1), 30);
-    assert_eq!(fx.replace_draft.unwrap().plain_text(), "two");
+    assert_eq!(fx.replace_draft.unwrap().doc.plain_text(), "two");
     let fx = core.handle(Cmd::Recall(-1), 31);
-    assert_eq!(fx.replace_draft.unwrap().plain_text(), "one");
+    assert_eq!(fx.replace_draft.unwrap().doc.plain_text(), "one");
     let fx = core.handle(Cmd::Recall(-1), 32);
     assert_eq!(
-        fx.replace_draft.unwrap().plain_text(),
+        fx.replace_draft.unwrap().doc.plain_text(),
         "one",
         "stays at the oldest"
     );
     core.handle(Cmd::Recall(1), 33);
     let fx = core.handle(Cmd::Recall(1), 34);
-    assert_eq!(fx.replace_draft.unwrap().plain_text(), "draft");
+    assert_eq!(fx.replace_draft.unwrap().doc.plain_text(), "draft");
 }
 
 #[test]
@@ -479,9 +479,9 @@ fn quick_phrases_send_markup_with_line_meta() {
 fn switching_modes_clears_the_queue_and_display() {
     let mut core = core_with(|_| {});
     type_and_send(&mut core, "x", 0);
-    let mut s = core.settings().clone();
-    s.general.input_mode = InputMode::Mirror;
-    core.handle(Cmd::SetSettings(Box::new(s)), 5);
+    let mut c = core.config().clone();
+    c.input_mode = InputMode::Mirror;
+    core.handle(Cmd::SetConfig(Box::new(c)), 5);
     assert_eq!(core.phase(), None);
     assert!(core.display().empty);
 }
@@ -502,7 +502,7 @@ fn mirror_recall_and_restore_publish_the_editor_contents_without_submitting() {
         assert_eq!(core.draft().plain_text(), expected);
         assert_eq!(core.display().doc.plain_text(), expected);
         assert!(core.display().line.is_none());
-        core.handle(Cmd::DraftChanged(fx.replace_draft.unwrap()), 3);
+        core.handle(Cmd::DraftChanged(fx.replace_draft.unwrap().doc), 3);
         assert_eq!(core.display().doc.plain_text(), expected);
     }
     assert_eq!(core.history().len(), 1);
@@ -520,8 +520,8 @@ fn recall_restores_line_headers_and_the_stashed_drafts_header() {
     core.handle(Cmd::DraftChanged(stashed.doc.clone()), 2);
     for (direction, expected) in [(-1, &original), (1, &stashed), (-1, &original)] {
         let fx = core.handle(Cmd::Recall(direction), 3);
-        let source =
-            nanatype_markup::serialize_line(&fx.replace_draft.unwrap(), &core.draft_meta());
+        let replaced = fx.replace_draft.unwrap();
+        let source = nanatype_markup::serialize_line(&replaced.doc, &replaced.meta);
         let restored = parse(&source);
         assert_eq!(restored.doc, expected.doc);
         assert_eq!(restored.meta, expected.meta);
@@ -548,9 +548,9 @@ fn mode_round_trips_and_edited_recall_preserve_sends_and_headers() {
         .into_iter()
         .enumerate()
     {
-        let mut s = core.settings().clone();
-        s.general.input_mode = mode;
-        core.handle(Cmd::SetSettings(Box::new(s)), at as u64 + 1);
+        let mut c = core.config().clone();
+        c.input_mode = mode;
+        core.handle(Cmd::SetConfig(Box::new(c)), at as u64 + 1);
         assert_eq!(core.draft(), &original.doc);
         assert_eq!(core.draft_meta(), original.meta);
         if mode == InputMode::Mirror {
@@ -626,6 +626,7 @@ fn rebasing_a_reveal_shifts_every_unit_by_the_page_start() {
             start: 2,
             reveal_ms: vec![0, 10, 20, 30, 40].into(),
         }),
+        unit_times: None,
         hidden_from: 7,
     };
     let page = reveal.rebased();
@@ -700,7 +701,7 @@ fn paged_core(overflow: nanatype_model::Overflow) -> Core {
     let mut skin = (*skin()).clone();
     skin.dialogue.overflow = overflow;
     skin.dialogue.overflow_auto_ms = None;
-    Core::new(s, Arc::new(skin))
+    Core::from_settings(&s, &skin)
 }
 
 fn started_line(fx: &Effects) -> nanatype_model::LineId {
@@ -763,12 +764,12 @@ fn crayon_core() -> Core {
         .load("nanatype.crayon")
         .unwrap()
         .skin;
-    Core::new(Settings::default(), skin)
+    Core::from_settings(&Settings::default(), &skin)
 }
 fn retire_wake(fx: &Effects) -> Wake {
     *fx.wakes
         .iter()
-        .find(|w| w.reason == WakeReason::PresentationDone)
+        .find(|w| w.reason == WakeReason::ExitDone)
         .expect("finite retirement deadline")
 }
 #[test]
@@ -780,7 +781,7 @@ fn crayon_replacement_defers_all_new_events_and_cancels_old_cues() {
     let wake = retire_wake(&fx);
     assert_eq!(wake.at_ms, 1370);
     assert_eq!(core.display().line, old);
-    assert!(core.display().text_exit.is_some());
+    assert!(core.display().exit.is_some());
     assert!(fx.cues.is_empty());
     assert!(!fx.events.iter().any(|e| matches!(e, Event::LineStarted(_))));
     assert!(!fx.cancel_epochs.is_empty());
@@ -792,7 +793,7 @@ fn crayon_replacement_defers_all_new_events_and_cancels_old_cues() {
         1370,
     );
     assert_ne!(core.display().line, old);
-    assert!(core.display().text_exit.is_none());
+    assert!(core.display().exit.is_none());
     assert!(fx.events.iter().any(|e| matches!(e, Event::LineStarted(_))));
     assert!(fx.cues.iter().all(|c| c.origin_ms >= 1370));
     assert_eq!(core.display().reveal.unit_at(0), Some(1370));
@@ -816,11 +817,11 @@ fn crayon_clear_is_idempotent_and_continue_finishes_retirement() {
     type_and_send(&mut core, "保留到擦完", 1000);
     let fx = core.handle(Cmd::ClearDisplay, 1080);
     let wake = retire_wake(&fx);
-    let exit = core.display().text_exit;
+    let exit = core.display().exit;
     assert!(!core.display().empty);
     let fx = core.handle(Cmd::ClearDisplay, 1100);
     assert!(fx.wakes.is_empty());
-    assert_eq!(core.display().text_exit, exit);
+    assert_eq!(core.display().exit, exit);
     core.handle(Cmd::Continue, 1110);
     assert!(core.display().empty);
     core.handle(
@@ -901,8 +902,9 @@ fn crayon_completion_waits_for_last_glyph_mask_and_after_line_erase() {
         },
         wake.at_ms,
     );
-    assert_eq!(core.phase(), Some(Phase::Revealing));
+    assert_eq!(core.phase(), Some(Phase::Settling));
     let tail = fx.wakes[0];
+    assert_eq!(tail.reason, WakeReason::Settled);
     assert_eq!(tail.at_ms, 1180);
     let fx = core.handle(
         Cmd::Wake {
@@ -916,9 +918,9 @@ fn crayon_completion_waits_for_last_glyph_mask_and_after_line_erase() {
             .iter()
             .any(|e| matches!(e, Event::LineRevealed(_)))
     );
-    let mut settings = core.settings().clone();
-    settings.playback.after = AfterLine::Clear { delay_ms: 10 };
-    core.handle(Cmd::SetSettings(Box::new(settings)), 1200);
+    let mut c = core.config().clone();
+    c.playback.after = AfterLine::Clear { delay_ms: 10 };
+    core.handle(Cmd::SetConfig(Box::new(c)), 1200);
     let fx = type_and_send(&mut core, "下一句", 1210);
     let retirement = retire_wake(&fx);
     let fx = core.handle(
@@ -943,7 +945,7 @@ fn crayon_skip_finishes_glyph_entry_and_stale_auto_page_wakes_are_ignored() {
         },
         1020,
     );
-    assert!(core.display().text_exit.is_none());
+    assert!(core.display().exit.is_none());
     core.handle(Cmd::Skip, 1030);
     assert_eq!(
         core.display().entrance.kind,
@@ -960,7 +962,7 @@ fn crayon_queue_does_not_replace_the_line_already_waiting_for_erasure() {
         .load("nanatype.crayon")
         .unwrap()
         .skin;
-    let mut core = Core::new(settings, skin);
+    let mut core = Core::from_settings(&settings, &skin);
     type_and_send(&mut core, "甲", 1000);
     core.handle(Cmd::Skip, 1010);
     let fx = type_and_send(&mut core, "乙", 1100);
@@ -987,12 +989,12 @@ fn crayon_mirror_edit_cancels_old_retirement_and_deletes_immediately() {
         .load("nanatype.crayon")
         .unwrap()
         .skin;
-    let mut core = Core::new(settings, skin);
+    let mut core = Core::from_settings(&settings, &skin);
     core.handle(Cmd::DraftChanged(parse("蜡笔文字").doc), 1000);
     let fx = core.handle(Cmd::ClearDisplay, 1100);
     let wake = retire_wake(&fx);
     core.handle(Cmd::DraftChanged(parse("蜡笔").doc), 1110);
-    assert!(core.display().text_exit.is_none());
+    assert!(core.display().exit.is_none());
     assert_eq!(core.display().doc.plain_text(), "蜡笔");
     core.handle(
         Cmd::Wake {
@@ -1012,7 +1014,10 @@ fn saving_skin_typography_and_dimensions_preserves_playback_progress() {
     let before = core.display().page();
     let before = (before.0.clone(), before.1.clone());
     let phase = core.phase();
-    let mut settings = core.settings().clone();
+    let rev_before = core.display().revision;
+    let mut settings = Settings::default();
+    settings.playback.punctuation_pauses = false;
+    settings.general.characters[0].name = "奈奈".into();
     let mut profile = nanatype_settings::SkinPersonalization::default();
     profile.display.size = Some([160.0, 96.0]);
     profile.display.text_size = Some(48.0);
@@ -1021,10 +1026,22 @@ fn saving_skin_typography_and_dimensions_preserves_playback_progress() {
         .skin
         .personalizations
         .insert(settings.skin.id.clone(), profile);
-    core.handle(Cmd::SetSettings(Box::new(settings)), 1010);
+    let fx = core.handle(Cmd::SetConfig(Box::new(CoreConfig::from(&settings))), 1010);
+    assert!(
+        !fx.display_changed,
+        "unrelated skin personalization edit must not bump revision"
+    );
     let mut modified_skin = (*skin()).clone();
     modified_skin.dialogue.text.size = 48.0;
-    core.handle(Cmd::SetSkin(Arc::new(modified_skin)), 1010);
+    let fx = core.handle(
+        Cmd::SetSkin(Box::new(SkinCapabilities::from(&modified_skin))),
+        1010,
+    );
+    assert!(
+        !fx.display_changed,
+        "unchanged SkinCapabilities must not bump revision"
+    );
+    assert_eq!(core.display().revision, rev_before);
     let after = core.display().page();
     assert_eq!(after.0, before.0);
     assert_eq!(after.1, before.1);
@@ -1082,10 +1099,10 @@ fn a_line_ends_when_its_last_character_has_finished_entering() {
     assert!(wake.at_ms < last + 140);
     assert_eq!(
         core.phase(),
-        Some(Phase::Revealing),
+        Some(Phase::Settling),
         "`b` is still fading in at the pause"
     );
-    let (wake, fx) = deliver(&mut core, &fx, WakeReason::SegmentEnd);
+    let (wake, fx) = deliver(&mut core, &fx, WakeReason::Settled);
     assert_eq!(wake.at_ms, last + 140);
     assert_eq!(core.phase(), Some(Phase::Gated));
     assert!(fx.wakes.is_empty());
@@ -1093,13 +1110,13 @@ fn a_line_ends_when_its_last_character_has_finished_entering() {
     let fx = core.handle(Cmd::Continue, 2000);
     let last = core.display().reveal.unit_at(3).unwrap();
     let (_, fx) = deliver(&mut core, &fx, WakeReason::SegmentEnd);
-    assert_eq!(core.phase(), Some(Phase::Revealing));
+    assert_eq!(core.phase(), Some(Phase::Settling));
     assert!(
         !fx.events
             .iter()
             .any(|e| matches!(e, Event::LineRevealed(_)))
     );
-    let (wake, fx) = deliver(&mut core, &fx, WakeReason::SegmentEnd);
+    let (wake, fx) = deliver(&mut core, &fx, WakeReason::Settled);
     assert_eq!(wake.at_ms, last + 140);
     assert_eq!(core.phase(), Some(Phase::Done));
     assert!(
@@ -1147,9 +1164,9 @@ fn switching_characters_changes_who_the_next_line_is_said_by() {
     });
     let fx = type_and_send(&mut core, "first", 0);
     assert_eq!(submitted(&fx)[0].speaker.name, "奈奈");
-    let mut next = core.settings().clone();
-    next.general.cycle_character(1);
-    core.handle(Cmd::SetSettings(Box::new(next)), 1);
+    let mut next = core.config().clone();
+    next.active_character = 1;
+    core.handle(Cmd::SetConfig(Box::new(next)), 1);
     let fx = type_and_send(&mut core, "second", 2);
     let line = submitted(&fx)[0];
     assert_eq!(line.speaker.name, "Two");
@@ -1178,9 +1195,9 @@ fn a_mirrored_draft_follows_the_character_switch() {
     });
     core.handle(Cmd::DraftChanged(parse("hi").doc), 0);
     assert_eq!(core.display().speaker.name, "奈奈");
-    let mut next = core.settings().clone();
-    next.general.select_character(1);
-    let fx = core.handle(Cmd::SetSettings(Box::new(next)), 1);
+    let mut next = core.config().clone();
+    next.active_character = 1;
+    let fx = core.handle(Cmd::SetConfig(Box::new(next)), 1);
     assert!(fx.display_changed);
     assert_eq!(core.display().speaker.name, "Two");
 }
@@ -1195,9 +1212,9 @@ fn replay_shows_the_last_line_again_without_sending_or_recording_it() {
     let fx = type_and_send(&mut core, "hello", 0);
     let sent = submitted(&fx)[0].clone();
     core.handle(Cmd::ClearDisplay, 1);
-    let mut next = core.settings().clone();
-    next.general.characters[0].name = "renamed".into();
-    core.handle(Cmd::SetSettings(Box::new(next)), 2);
+    let mut next = core.config().clone();
+    next.characters[0].name = "renamed".into();
+    core.handle(Cmd::SetConfig(Box::new(next)), 2);
     let fx = core.handle(Cmd::Replay, 3);
     assert!(submitted(&fx).is_empty(), "a replay is not a new line");
     let started = fx
@@ -1318,7 +1335,7 @@ fn separate_danmaku_routes_external_rows_and_isolates_max_items() {
     settings.history.sync = HistorySync::OnSubmit;
     settings.history.max_items = 3;
     settings.history.chat.separate = true;
-    let mut core = Core::new(settings.clone(), skin());
+    let mut core = Core::from_settings(&settings, &skin());
 
     type_and_send(&mut core, "host-1", 0);
     type_and_send(&mut core, "host-2", 1);
@@ -1328,8 +1345,16 @@ fn separate_danmaku_routes_external_rows_and_isolates_max_items() {
         assert!(fx.danmaku_changed);
     }
 
-    let history_texts: Vec<_> = core.history().iter().map(|r| r.doc.plain_text()).collect();
-    let danmaku_texts: Vec<_> = core.danmaku().iter().map(|r| r.doc.plain_text()).collect();
+    let history_texts: Vec<_> = core
+        .history()
+        .iter()
+        .map(|r| r.doc().plain_text())
+        .collect();
+    let danmaku_texts: Vec<_> = core
+        .danmaku()
+        .iter()
+        .map(|r| r.doc().plain_text())
+        .collect();
     assert_eq!(history_texts, ["host-1", "host-2"]);
     assert_eq!(danmaku_texts, ["chat-5", "chat-6", "chat-7"]);
 
@@ -1338,7 +1363,11 @@ fn separate_danmaku_routes_external_rows_and_isolates_max_items() {
     let fx = core.handle(Cmd::RemoveHistoryRows(vec![drop_key]), 30);
     assert!(!fx.history_changed);
     assert!(fx.danmaku_changed);
-    let danmaku_texts: Vec<_> = core.danmaku().iter().map(|r| r.doc.plain_text()).collect();
+    let danmaku_texts: Vec<_> = core
+        .danmaku()
+        .iter()
+        .map(|r| r.doc().plain_text())
+        .collect();
     assert_eq!(danmaku_texts, ["chat-5", "chat-7"]);
 
     let fx = core.handle(Cmd::ClearDanmaku, 31);
@@ -1353,7 +1382,7 @@ fn toggling_separate_danmaku_migrates_rows_and_preserves_keys() {
     let mut settings = Settings::default();
     settings.history.sync = HistorySync::OnSubmit;
     settings.history.chat.separate = false;
-    let mut core = Core::new(settings.clone(), skin());
+    let mut core = Core::from_settings(&settings, &skin());
 
     type_and_send(&mut core, "host-1", 0);
     core.handle(Cmd::External(chat_item("chat-1", 1)), 1);
@@ -1362,20 +1391,28 @@ fn toggling_separate_danmaku_migrates_rows_and_preserves_keys() {
 
     // Turning separate ON moves existing viewer rows out of history into danmaku.
     settings.history.chat.separate = true;
-    let fx = core.handle(Cmd::SetSettings(Box::new(settings.clone())), 3);
+    let fx = core.handle(Cmd::SetConfig(Box::new(CoreConfig::from(&settings))), 3);
     assert!(fx.history_changed);
     assert!(fx.danmaku_changed);
-    let history_texts: Vec<_> = core.history().iter().map(|r| r.doc.plain_text()).collect();
+    let history_texts: Vec<_> = core
+        .history()
+        .iter()
+        .map(|r| r.doc().plain_text())
+        .collect();
     let danmaku_keys: Vec<_> = core.danmaku().iter().map(|r| r.key).collect();
     assert_eq!(history_texts, ["host-1", "host-2"]);
     assert_eq!(danmaku_keys, [chat_key]);
 
     // Turning separate OFF restores rows sorted by key.
     settings.history.chat.separate = false;
-    let fx = core.handle(Cmd::SetSettings(Box::new(settings)), 4);
+    let fx = core.handle(Cmd::SetConfig(Box::new(CoreConfig::from(&settings))), 4);
     assert!(fx.history_changed);
     assert!(fx.danmaku_changed);
     assert!(core.danmaku().is_empty());
-    let history_texts: Vec<_> = core.history().iter().map(|r| r.doc.plain_text()).collect();
+    let history_texts: Vec<_> = core
+        .history()
+        .iter()
+        .map(|r| r.doc().plain_text())
+        .collect();
     assert_eq!(history_texts, ["host-1", "chat-1", "host-2"]);
 }

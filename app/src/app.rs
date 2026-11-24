@@ -307,7 +307,7 @@ impl App {
         let ui = startup::ui(ctx, &settings, &skin, locale, &geometry, system_dark);
 
         let workers = startup::Workers::start(&paths, &settings, steam, post.clone());
-        let mut core = Core::new(settings.clone(), skin.clone());
+        let mut core = Core::from_settings(&settings, &skin);
         core.handle(
             Cmd::SetReducedMotion(settings.playback.reduced_motion || ctx.reduced_motion()),
             clock::now_ms(),
@@ -830,7 +830,7 @@ impl App {
         let mut wanted = doc_assets(self.core.draft());
         wanted.extend(display_assets(self.core.display()));
         for row in self.core.history().iter().chain(self.core.danmaku().iter()) {
-            wanted.extend(row_assets(&row.item, &row.doc));
+            wanted.extend(row_assets(&row.item, row.doc()));
         }
         for m in &self.chat {
             wanted.extend(message_assets(m));
@@ -1104,7 +1104,10 @@ impl App {
         self.skin = skin.clone();
 
         self.ui.skin.set(skin.clone());
-        let fx = self.core.handle(Cmd::SetSkin(skin), clock::now_ms());
+        let fx = self.core.handle(
+            Cmd::SetSkin(Box::new(nanatype_core::SkinCapabilities::from(&*skin))),
+            clock::now_ms(),
+        );
         self.apply_effects(fx);
     }
 
@@ -1362,8 +1365,7 @@ impl App {
         let characters_changed = prev.general.characters != s.general.characters
             || prev.general.character != s.general.character;
         let look_changed = prev.skin.overrides != s.skin.overrides || active_profile_changed;
-        let chrome_changed =
-            prev.skin.chrome != s.skin.chrome || prev.accessibility != s.accessibility;
+        let chrome_changed = prev.accessibility != s.accessibility;
         let zoom_changed = prev.accessibility.ui_scale != s.accessibility.ui_scale
             || prev.accessibility.ui_scale_follows_system
                 != s.accessibility.ui_scale_follows_system;
@@ -1444,7 +1446,7 @@ impl App {
         self.audio_levels();
         self.apply_services();
         let fx = self.core.handle(
-            Cmd::SetSettings(Box::new(self.settings.clone())),
+            Cmd::SetConfig(Box::new(nanatype_core::CoreConfig::from(&self.settings))),
             clock::now_ms(),
         );
         self.apply_effects(fx);
@@ -1563,7 +1565,7 @@ impl App {
                 return;
             }
         };
-        let sent = is_send && fx.replace_draft.as_ref().is_some_and(Document::is_blank);
+        let sent = is_send && fx.replace_draft.as_ref().is_some_and(|d| d.doc.is_blank());
         self.apply_effects(fx);
         if is_send && !sent {
             self.speech_user_edit();
@@ -1647,8 +1649,8 @@ impl App {
             self.peer_submitted(event);
             self.bridge_event(event);
         }
-        if let Some(doc) = &fx.replace_draft {
-            self.set_source(serialize_line(doc, &self.core.draft_meta()), true);
+        if let Some(draft) = &fx.replace_draft {
+            self.set_source(serialize_line(&draft.doc, &draft.meta), true);
         }
         if fx.hide_input {
             self.summoned = false;
@@ -1695,10 +1697,10 @@ impl App {
         let mut assets = display_assets(self.core.display());
         assets.extend(doc_assets(self.core.draft()));
         if let Some(row) = self.core.history().back() {
-            assets.extend(row_assets(&row.item, &row.doc));
+            assets.extend(row_assets(&row.item, row.doc()));
         }
         if let Some(row) = self.core.danmaku().back() {
-            assets.extend(row_assets(&row.item, &row.doc));
+            assets.extend(row_assets(&row.item, row.doc()));
         }
         self.ensure_urls(assets);
     }

@@ -70,7 +70,7 @@ fn session(registry: &SkinRegistry, name: &'static str, track: usize) -> (Ui, Ru
             ),
             _ => "渲染效率 Rendering workload".into(),
         };
-        let mut core = Core::new((*settings).clone(), skin.clone());
+        let mut core = Core::from_settings(&settings, &skin);
         for _ in 0..if name == "chat_1000" { 1000 } else { 1 } {
             core.handle(Cmd::SendMarkup(text.clone()), 0);
             if !name.starts_with("reveal") {
