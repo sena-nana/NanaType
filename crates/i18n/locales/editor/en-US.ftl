@@ -186,8 +186,6 @@ pkgedit-preview-stale = Current content has not passed validation. Showing the l
 
 pkgedit-preview-size-error = Enter logical dimensions: width 160–8192, height 96–8192
 
-pkgedit-operation-stale = The project changed. Apply the operation again.
-
 
 pkgedit-property-select = Select a declaration group
 

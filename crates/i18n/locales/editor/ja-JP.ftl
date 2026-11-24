@@ -183,8 +183,6 @@ pkgedit-preview-stale = 現在の内容は検証未完了です。最後の有�
 
 pkgedit-preview-size-error = 論理サイズ：幅 160–8192、高さ 96–8192
 
-pkgedit-operation-stale = プロジェクトが変更されました。操作を再適用してください。
-
 
 pkgedit-property-select = 宣言グループを選択
 

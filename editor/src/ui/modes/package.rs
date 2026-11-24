@@ -470,7 +470,7 @@ fn metadata_form(ui: Ui, metadata: Metadata, view: &EditorView) -> AnyView {
                 )),
             ),
             rows::group(
-                ui.now_t("pkgedit-dependencies"),
+                ui.now_t("pkgedit-dependencies-title"),
                 kit::hint_mark(ui.now_t("pkgedit-dependencies-hint")),
                 (
                     dependency_rows

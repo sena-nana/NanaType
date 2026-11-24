@@ -183,8 +183,6 @@ pkgedit-preview-stale = 当前内容尚未通过校验，显示上一有效预�
 
 pkgedit-preview-size-error = 请输入有效逻辑尺寸：宽 160–8192，高 96–8192
 
-pkgedit-operation-stale = 工程已发生变化，请重新应用本次操作
-
 
 pkgedit-property-select = 请选择声明分组
 

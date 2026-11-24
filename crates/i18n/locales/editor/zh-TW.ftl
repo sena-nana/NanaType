@@ -183,8 +183,6 @@ pkgedit-preview-stale = 目前內容尚未通過校驗，顯示上一有效預�
 
 pkgedit-preview-size-error = 請輸入有效邏輯尺寸：寬 160–8192，高 96–8192
 
-pkgedit-operation-stale = 專案已發生變化，請重新應用本次操作
-
 
 pkgedit-property-select = 請選擇宣告分組
 
