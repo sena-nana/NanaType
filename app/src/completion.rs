@@ -110,6 +110,9 @@ pub struct Item {
 
 /// Where `needle` is found in `hay`: 0 for a prefix, 1 inside, else none.
 fn rank(hay: &str, needle: &str) -> Option<u8> {
+    if needle.is_empty() {
+        return Some(0);
+    }
     let hay = hay.to_lowercase();
     match hay.find(needle) {
         Some(0) => Some(0),
@@ -125,7 +128,7 @@ pub fn users<'a>(
     locale: Locale,
 ) -> Vec<Item> {
     let needle = needle.to_lowercase();
-    let mut seen: Vec<(Platform, &str)> = Vec::new();
+    let mut seen: std::collections::HashSet<(Platform, &str)> = std::collections::HashSet::new();
     let mut ranked: Vec<(u8, Item)> = Vec::new();
     for (platform, user) in newest_first {
         if user.name.trim().is_empty() {
@@ -136,10 +139,9 @@ pub fn users<'a>(
         } else {
             &user.uid
         };
-        if seen.contains(&(platform, key.as_str())) {
+        if !seen.insert((platform, key.as_str())) {
             continue;
         }
-        seen.push((platform, key.as_str()));
         if let Some(r) = rank(&user.name, &needle) {
             ranked.push((
                 r,

@@ -6,37 +6,97 @@
 //! forwarded as [`Msg`]s.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
 
 use nanatype_i18n::{I18n, Locale};
 use nanatype_settings::{InputMode, Settings};
-use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
+use tray_icon::menu::{
+    CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu,
+};
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 use crate::msg::{ChatMsg, GlobalAction, Msg, ProfileMsg, SpeechMsg, WindowMsg};
 use crate::windows::WindowKind;
 
-const ID_INPUT: &str = "nt.input";
-const ID_DISPLAY: &str = "nt.display";
-const ID_PEER_DISPLAY: &str = "nt.peer-display";
-const ID_HISTORY: &str = "nt.history";
-const ID_DANMAKU: &str = "nt.danmaku";
-const ID_CHAT: &str = "nt.chat";
-const ID_LOCK: &str = "nt.lock";
-const ID_CONTINUE: &str = "nt.continue";
-const ID_SAMPLE: &str = "nt.sample";
-const ID_COMPOSE: &str = "nt.mode.compose";
-const ID_MIRROR: &str = "nt.mode.mirror";
-const ID_SETTINGS: &str = "nt.settings";
-const ID_OBS: &str = "nt.obs";
-const ID_QUIT: &str = "nt.quit";
-const ID_SPEECH: &str = "nt.speech";
-const ID_REPLAY: &str = "nt.replay";
-const SKIN_PREFIX: &str = "nt.skin:";
-const CHARACTER_PREFIX: &str = "nt.character:";
-const PROFILE_PREFIX: &str = "nt.profile:";
-
 /// Windows keeps 128 UTF-16 units of a tooltip, terminator included.
 const TOOLTIP_MAX: usize = 120;
+
+/// Typed action bound to each native menu item's [`MenuId`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MenuAction {
+    ToggleWindow(WindowKind),
+    ToggleChat,
+    ToggleLock,
+    Continue,
+    Replay,
+    PlaySample,
+    InputMode(InputMode),
+    OpenSettings,
+    OpenObsSettings,
+    Quit,
+    ToggleSpeech,
+    Profile(String),
+    Character(usize),
+    Skin(String),
+    Overlay {
+        kind: WindowKind,
+        action: super::overlay_menu::Action,
+    },
+}
+
+impl MenuAction {
+    pub fn into_msg(self) -> Msg {
+        match self {
+            Self::ToggleWindow(kind) => Msg::Window(WindowMsg::Toggle(kind)),
+            Self::ToggleChat => Msg::Chat(ChatMsg::Toggle),
+            Self::ToggleLock => Msg::Hotkey(GlobalAction::ToggleLock),
+            Self::Continue => Msg::Hotkey(GlobalAction::Continue),
+            Self::Replay => Msg::Hotkey(GlobalAction::Replay),
+            Self::PlaySample => Msg::PlaySample,
+            Self::InputMode(mode) => Msg::Edit(Box::new(move |s: &mut Settings| {
+                s.general.input_mode = mode;
+            })),
+            Self::OpenSettings => Msg::Window(WindowMsg::OpenSettings),
+            Self::OpenObsSettings => {
+                Msg::Window(WindowMsg::SettingsPage(crate::ui::settings::Page::Output))
+            }
+            Self::Quit => Msg::Quit,
+            Self::ToggleSpeech => Msg::Speech(SpeechMsg::Toggle),
+            Self::Profile(id) => Msg::Profile(ProfileMsg::Switch(id)),
+            Self::Character(i) => Msg::Hotkey(GlobalAction::Character(i)),
+            Self::Skin(skin) => Msg::Edit(Box::new(move |s: &mut Settings| s.skin.id = skin)),
+            Self::Overlay { kind, action } => Msg::Window(WindowMsg::OverlayAction(kind, action)),
+        }
+    }
+}
+
+static MENU_ACTIONS: LazyLock<Mutex<HashMap<MenuId, MenuAction>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+pub(super) fn register_menu_action(id: &MenuId, action: MenuAction) {
+    MENU_ACTIONS.lock().unwrap().insert(id.clone(), action);
+}
+
+pub(super) fn unregister_menu_action(id: &MenuId) {
+    MENU_ACTIONS.lock().unwrap().remove(id);
+}
+
+pub(super) fn clear_overlay_actions() {
+    MENU_ACTIONS
+        .lock()
+        .unwrap()
+        .retain(|_, action| !matches!(action, MenuAction::Overlay { .. }));
+}
+
+fn dispatch_menu_id(id: &MenuId) -> Option<Msg> {
+    MENU_ACTIONS
+        .lock()
+        .unwrap()
+        .get(id)
+        .cloned()
+        .map(MenuAction::into_msg)
+}
 
 /// What the menu's labels and the tooltip were last built from.
 #[derive(Debug, Clone, PartialEq)]
@@ -102,10 +162,9 @@ pub struct Tray {
 }
 
 /// The tray image: on Windows the size of a small icon at the system DPI
-/// (16 at 100 %, 20 at 125 %, 24 at 150 %, 32 at 200 %), picked from the
-/// app's multi-size icon so the shell need not scale it; on macOS the 64 px
-/// PNG, which stays sharp when the status item draws it at 18 pt; elsewhere
-/// the 32 px PNG.
+/// (16 at 100 %, 20 at 125 %, 24 at 150 %, 32 at 200 %), resized from the
+/// app's `.ico`; on macOS the 64 px PNG, which stays sharp when the status
+/// item draws it at 18 pt; elsewhere the 32 px PNG.
 fn base_image() -> Result<image::RgbaImage, String> {
     if let Some(img) = sized_image() {
         return Ok(img);
@@ -145,9 +204,40 @@ fn sized_image() -> Option<image::RgbaImage> {
     None
 }
 
-/// The app icon's image that best fits `px` (from the multi-size `.ico`).
+/// The app icon's image at `px × px`.
 pub fn image_at(px: u32) -> Option<image::RgbaImage> {
-    decode(ico_png(include_bytes!("../../assets/nanatype.ico"), px)?).ok()
+    let entry = ico_png(include_bytes!("../../assets/nanatype.ico"), px)?;
+    image::load_from_memory_with_format(entry, image::ImageFormat::Png)
+        .ok()
+        .map(|i| i.into_rgba8())
+}
+
+fn ico_png(ico: &[u8], px: u32) -> Option<&[u8]> {
+    let u16_at = |at: usize| Some(u16::from_le_bytes(ico.get(at..at + 2)?.try_into().ok()?));
+    let u32_at = |at: usize| Some(u32::from_le_bytes(ico.get(at..at + 4)?.try_into().ok()?));
+    if u16_at(0)? != 0 || u16_at(2)? != 1 {
+        return None;
+    }
+    let count = usize::from(u16_at(4)?);
+    let mut entries: Vec<(u32, &[u8])> = (0..count)
+        .filter_map(|i| {
+            let at = 6 + i * 16;
+            let size = match *ico.get(at)? {
+                0 => 256,
+                n => u32::from(n),
+            };
+            let len = usize::try_from(u32_at(at + 8)?).ok()?;
+            let offset = usize::try_from(u32_at(at + 12)?).ok()?;
+            let data = ico.get(offset..offset.checked_add(len)?)?;
+            data.starts_with(b"\x89PNG").then_some((size, data))
+        })
+        .collect();
+    entries.sort_by_key(|(size, _)| *size);
+    entries
+        .iter()
+        .find(|(size, _)| *size >= px)
+        .or(entries.last())
+        .map(|(_, data)| *data)
 }
 
 /// The Nana highlight pink of the mirroring dot.
@@ -238,87 +328,15 @@ fn paint(img: &mut image::RgbaImage, inside: impl Fn(f32, f32) -> bool, color: [
     }
 }
 
-/// The PNG image of an `.ico` that best fits `px`: the smallest at least
-/// that large, or else the largest. Only PNG-compressed entries count.
-fn ico_png(ico: &[u8], px: u32) -> Option<&[u8]> {
-    let u16_at = |at: usize| Some(u16::from_le_bytes(ico.get(at..at + 2)?.try_into().ok()?));
-    let u32_at = |at: usize| Some(u32::from_le_bytes(ico.get(at..at + 4)?.try_into().ok()?));
-    if u16_at(0)? != 0 || u16_at(2)? != 1 {
-        return None;
-    }
-    let count = usize::from(u16_at(4)?);
-    let mut entries: Vec<(u32, &[u8])> = (0..count)
-        .filter_map(|i| {
-            let at = 6 + i * 16;
-            let size = match *ico.get(at)? {
-                0 => 256,
-                n => u32::from(n),
-            };
-            let len = usize::try_from(u32_at(at + 8)?).ok()?;
-            let offset = usize::try_from(u32_at(at + 12)?).ok()?;
-            let data = ico.get(offset..offset.checked_add(len)?)?;
-            data.starts_with(b"\x89PNG").then_some((size, data))
-        })
-        .collect();
-    entries.sort_by_key(|(size, _)| *size);
-    entries
-        .iter()
-        .find(|(size, _)| *size >= px)
-        .or(entries.last())
-        .map(|(_, data)| *data)
-}
-
 #[cfg(test)]
-fn output_toggle_id(kind: WindowKind) -> Option<&'static str> {
+fn output_toggle_action(kind: WindowKind) -> Option<MenuAction> {
     match kind {
-        WindowKind::Display => Some(ID_DISPLAY),
-        WindowKind::PeerDisplay(_) => Some(ID_PEER_DISPLAY),
-        WindowKind::History => Some(ID_HISTORY),
-        WindowKind::Danmaku => Some(ID_DANMAKU),
+        WindowKind::Display => Some(MenuAction::ToggleWindow(WindowKind::Display)),
+        WindowKind::PeerDisplay(_) => Some(MenuAction::ToggleWindow(WindowKind::PARTNER)),
+        WindowKind::History => Some(MenuAction::ToggleWindow(WindowKind::History)),
+        WindowKind::Danmaku => Some(MenuAction::ToggleWindow(WindowKind::Danmaku)),
         _ => None,
     }
-}
-
-fn toggle_msg(kind: WindowKind) -> Msg {
-    Msg::Window(WindowMsg::Toggle(kind))
-}
-
-fn menu_message(id: &str) -> Option<Msg> {
-    if let Some(message) = super::overlay_menu::message(id) {
-        return Some(message);
-    }
-    Some(match id {
-        ID_INPUT => toggle_msg(WindowKind::Input),
-        ID_DISPLAY => toggle_msg(WindowKind::Display),
-        ID_PEER_DISPLAY => toggle_msg(WindowKind::PARTNER),
-        ID_HISTORY => toggle_msg(WindowKind::History),
-        ID_DANMAKU => toggle_msg(WindowKind::Danmaku),
-        ID_CHAT => Msg::Chat(ChatMsg::Toggle),
-        ID_LOCK => Msg::Hotkey(GlobalAction::ToggleLock),
-        ID_CONTINUE => Msg::Hotkey(GlobalAction::Continue),
-        ID_REPLAY => Msg::Hotkey(GlobalAction::Replay),
-        ID_SAMPLE => Msg::PlaySample,
-        ID_COMPOSE => Msg::Edit(Box::new(|s: &mut Settings| {
-            s.general.input_mode = InputMode::Compose
-        })),
-        ID_MIRROR => Msg::Edit(Box::new(|s: &mut Settings| {
-            s.general.input_mode = InputMode::Mirror
-        })),
-        ID_SETTINGS => Msg::Window(WindowMsg::OpenSettings),
-        ID_OBS => Msg::Window(WindowMsg::SettingsPage(crate::ui::settings::Page::Output)),
-        ID_QUIT => Msg::Quit,
-        ID_SPEECH => Msg::Speech(SpeechMsg::Toggle),
-        other => {
-            if let Some(id) = other.strip_prefix(PROFILE_PREFIX) {
-                return Some(Msg::Profile(ProfileMsg::Switch(id.to_owned())));
-            }
-            if let Some(i) = other.strip_prefix(CHARACTER_PREFIX) {
-                return Some(Msg::Hotkey(GlobalAction::Character(i.parse().ok()?)));
-            }
-            let skin = other.strip_prefix(SKIN_PREFIX)?.to_owned();
-            Msg::Edit(Box::new(move |s: &mut Settings| s.skin.id = skin))
-        }
-    })
 }
 
 impl Tray {
@@ -329,24 +347,32 @@ impl Tray {
         // notification-area icon cannot be created.
         let menu_post = post.clone();
         MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
-            if let Some(message) = menu_message(event.id.0.as_str()) {
+            if let Some(message) = dispatch_menu_id(&event.id) {
                 menu_post(message);
             }
         }));
-        let item = |id: &str| MenuItem::with_id(id, "", true, None);
-        let check = |id: &str| CheckMenuItem::with_id(id, "", true, false, None);
-        let input = item(ID_INPUT);
-        let display = item(ID_DISPLAY);
-        let peer_display = item(ID_PEER_DISPLAY);
-        let history = item(ID_HISTORY);
-        let danmaku = item(ID_DANMAKU);
-        let chat = item(ID_CHAT);
-        let lock = item(ID_LOCK);
-        let continue_ = item(ID_CONTINUE);
-        let replay = item(ID_REPLAY);
-        let sample = item(ID_SAMPLE);
-        let compose = check(ID_COMPOSE);
-        let mirror = check(ID_MIRROR);
+        let item = |action: MenuAction| {
+            let item = MenuItem::new("", true, None);
+            register_menu_action(item.id(), action);
+            item
+        };
+        let check = |action: MenuAction| {
+            let item = CheckMenuItem::new("", true, false, None);
+            register_menu_action(item.id(), action);
+            item
+        };
+        let input = item(MenuAction::ToggleWindow(WindowKind::Input));
+        let display = item(MenuAction::ToggleWindow(WindowKind::Display));
+        let peer_display = item(MenuAction::ToggleWindow(WindowKind::PARTNER));
+        let history = item(MenuAction::ToggleWindow(WindowKind::History));
+        let danmaku = item(MenuAction::ToggleWindow(WindowKind::Danmaku));
+        let chat = item(MenuAction::ToggleChat);
+        let lock = item(MenuAction::ToggleLock);
+        let continue_ = item(MenuAction::Continue);
+        let replay = item(MenuAction::Replay);
+        let sample = item(MenuAction::PlaySample);
+        let compose = check(MenuAction::InputMode(InputMode::Compose));
+        let mirror = check(MenuAction::InputMode(InputMode::Mirror));
         let mode = Submenu::new("", true);
         mode.append_items(&[&compose, &mirror])
             .map_err(|e| e.to_string())?;
@@ -354,10 +380,10 @@ impl Tray {
         let characters_menu = Submenu::new("", true);
         // Enabled once there is a profile to switch to.
         let profiles_menu = Submenu::new("", false);
-        let settings = item(ID_SETTINGS);
-        let obs = item(ID_OBS);
-        let quit = item(ID_QUIT);
-        let speech = item(ID_SPEECH);
+        let settings = item(MenuAction::OpenSettings);
+        let obs = item(MenuAction::OpenObsSettings);
+        let quit = item(MenuAction::Quit);
+        let speech = item(MenuAction::ToggleSpeech);
         let menu = Menu::new();
         menu.append_items(&[
             &input,
@@ -563,56 +589,40 @@ impl Tray {
     /// Rebuild the skin submenu: `(id, display name)`.
     pub fn set_skins(&mut self, skins: &[(String, String)], active: &str) {
         for (_, item) in self.skins.drain(..) {
+            unregister_menu_action(item.id());
             let _ = self.skins_menu.remove(&item);
         }
         for (id, name) in skins {
-            let item = CheckMenuItem::with_id(
-                format!("{SKIN_PREFIX}{id}"),
-                name,
-                true,
-                id == active,
-                None,
-            );
+            let item = CheckMenuItem::new(name, true, id == active, None);
+            register_menu_action(item.id(), MenuAction::Skin(id.clone()));
             let _ = self.skins_menu.append(&item);
             self.skins.push((id.clone(), item));
         }
     }
-}
 
-impl Tray {
     /// Rebuild the character submenu from the characters' names.
     pub fn set_characters(&mut self, names: &[String], active: usize) {
         for item in self.characters.drain(..) {
+            unregister_menu_action(item.id());
             let _ = self.characters_menu.remove(&item);
         }
         for (i, name) in names.iter().enumerate() {
-            let item = CheckMenuItem::with_id(
-                format!("{CHARACTER_PREFIX}{i}"),
-                name,
-                true,
-                i == active,
-                None,
-            );
+            let item = CheckMenuItem::new(name, true, i == active, None);
+            register_menu_action(item.id(), MenuAction::Character(i));
             let _ = self.characters_menu.append(&item);
             self.characters.push(item);
         }
     }
-}
 
-impl Tray {
     /// Rebuild the profile submenu: `(id, name)`.
     pub fn set_profiles(&mut self, profiles: &[(String, String)], active: Option<&str>) {
         for (_, item) in self.profiles.drain(..) {
+            unregister_menu_action(item.id());
             let _ = self.profiles_menu.remove(&item);
         }
         for (id, name) in profiles {
-            let item = CheckMenuItem::with_id(
-                format!("{PROFILE_PREFIX}{id}"),
-                name,
-                true,
-                Some(id.as_str()) == active,
-                None,
-            );
+            let item = CheckMenuItem::new(name, true, Some(id.as_str()) == active, None);
+            register_menu_action(item.id(), MenuAction::Profile(id.clone()));
             let _ = self.profiles_menu.append(&item);
             self.profiles.push((id.clone(), item));
         }
@@ -677,62 +687,104 @@ mod tests {
 
     #[test]
     fn shared_handler_keeps_tray_and_overlay_targets_separate() {
+        let id_display = MenuId::new("test.display");
+        let id_peer = MenuId::new("test.peer");
+        let id_history = MenuId::new("test.history");
+        let id_danmaku = MenuId::new("test.danmaku");
+        let id_overlay = MenuId::new("test.overlay");
+        let id_skin = MenuId::new("test.skin");
+        let id_lock = MenuId::new("test.lock");
+        let id_replay = MenuId::new("test.replay");
+        let id_char = MenuId::new("test.char");
+        let id_prof = MenuId::new("test.prof");
+
+        register_menu_action(&id_display, MenuAction::ToggleWindow(WindowKind::Display));
+        register_menu_action(&id_peer, MenuAction::ToggleWindow(WindowKind::PARTNER));
+        register_menu_action(&id_history, MenuAction::ToggleWindow(WindowKind::History));
+        register_menu_action(&id_danmaku, MenuAction::ToggleWindow(WindowKind::Danmaku));
+        register_menu_action(
+            &id_overlay,
+            MenuAction::Overlay {
+                kind: WindowKind::PARTNER,
+                action: super::super::overlay_menu::Action::Close,
+            },
+        );
+        register_menu_action(&id_skin, MenuAction::Skin("nanatype.night".into()));
+        register_menu_action(&id_lock, MenuAction::ToggleLock);
+        register_menu_action(&id_replay, MenuAction::Replay);
+        register_menu_action(&id_char, MenuAction::Character(2));
+        register_menu_action(&id_prof, MenuAction::Profile("p1a".into()));
+
         assert!(matches!(
-            menu_message(ID_DISPLAY),
+            dispatch_menu_id(&id_display),
             Some(Msg::Window(WindowMsg::Toggle(WindowKind::Display)))
         ));
         assert!(matches!(
-            menu_message(ID_PEER_DISPLAY),
+            dispatch_menu_id(&id_peer),
             Some(Msg::Window(WindowMsg::Toggle(WindowKind::PARTNER)))
         ));
         assert!(matches!(
-            menu_message(ID_HISTORY),
+            dispatch_menu_id(&id_history),
             Some(Msg::Window(WindowMsg::Toggle(WindowKind::History)))
         ));
         assert!(matches!(
-            menu_message(ID_DANMAKU),
+            dispatch_menu_id(&id_danmaku),
             Some(Msg::Window(WindowMsg::Toggle(WindowKind::Danmaku)))
         ));
         assert!(matches!(
-            menu_message("nt.overlay:peer_display:close"),
+            dispatch_menu_id(&id_overlay),
             Some(Msg::Window(WindowMsg::OverlayAction(
                 WindowKind::PARTNER,
                 super::super::overlay_menu::Action::Close
             )))
         ));
-        let Some(Msg::Edit(edit)) = menu_message("nt.skin:nanatype.night") else {
+        let Some(Msg::Edit(edit)) = dispatch_menu_id(&id_skin) else {
             panic!("tray skin edit")
         };
         let mut settings = Settings::default();
         edit(&mut settings);
         assert_eq!(settings.skin.id, "nanatype.night");
-        assert!(menu_message("nt.unknown").is_none());
+        assert!(dispatch_menu_id(&MenuId::new("test.unknown")).is_none());
         assert!(matches!(
-            menu_message(ID_LOCK),
+            dispatch_menu_id(&id_lock),
             Some(Msg::Hotkey(GlobalAction::ToggleLock))
         ));
         assert!(matches!(
-            menu_message(ID_REPLAY),
+            dispatch_menu_id(&id_replay),
             Some(Msg::Hotkey(GlobalAction::Replay))
         ));
         assert!(matches!(
-            menu_message("nt.character:2"),
+            dispatch_menu_id(&id_char),
             Some(Msg::Hotkey(GlobalAction::Character(2)))
         ));
-        assert!(menu_message("nt.character:x").is_none());
         assert!(matches!(
-            menu_message("nt.profile:p1a"),
+            dispatch_menu_id(&id_prof),
             Some(Msg::Profile(ProfileMsg::Switch(id))) if id == "p1a"
         ));
+
+        for id in [
+            &id_display,
+            &id_peer,
+            &id_history,
+            &id_danmaku,
+            &id_overlay,
+            &id_skin,
+            &id_lock,
+            &id_replay,
+            &id_char,
+            &id_prof,
+        ] {
+            unregister_menu_action(id);
+        }
     }
 
     #[test]
     fn every_spout_output_kind_has_a_tray_window_toggle() {
         for kind in crate::output::KINDS {
-            let id = output_toggle_id(kind)
+            let action = output_toggle_action(kind)
                 .unwrap_or_else(|| panic!("missing tray window toggle for {kind:?}"));
-            let Some(Msg::Window(WindowMsg::Toggle(target))) = menu_message(id) else {
-                panic!("tray item {id} did not produce WindowMsg::Toggle");
+            let Msg::Window(WindowMsg::Toggle(target)) = action.into_msg() else {
+                panic!("tray action did not produce WindowMsg::Toggle");
             };
             let mut s = Settings::default();
             let before = kind.overlay(&s).unwrap().visible;
@@ -744,17 +796,10 @@ mod tests {
 
     #[test]
     fn icon_sizes_come_from_the_ico() {
-        let ico = include_bytes!("../../assets/nanatype.ico");
-        let size = |px| {
-            let png = ico_png(ico, px).expect("png entry");
-            image::load_from_memory(png).expect("decodes").width()
-        };
-        assert_eq!(size(16), 16);
-        assert_eq!(size(20), 20);
-        assert_eq!(size(24), 24);
-        assert_eq!(size(30), 32);
-        assert_eq!(size(48), 48);
-        assert_eq!(size(512), 256);
+        for px in [16, 20, 24, 32, 48, 256] {
+            let img = image_at(px).expect("ico entry");
+            assert_eq!(img.dimensions(), (px, px));
+        }
     }
 
     #[test]

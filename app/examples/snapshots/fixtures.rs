@@ -337,25 +337,33 @@ pub fn reported(
     locale: Locale,
     bridge: &[BridgeStatus],
     [display, history]: [WindowOutputStatus; 2],
-) -> Status {
-    let mut s = Status::default();
+) -> (LinkStatus, OutputStatuses) {
+    let mut links = LinkStatus::default();
     for report in bridge {
         if let Some((sink, state)) = link_text::bridge(locale, report) {
             match sink {
-                Sink::Vts => s.vts = state,
-                Sink::Osc => s.osc = state,
-                Sink::WebSocket => s.ws = state,
+                Sink::Vts => links.vts = state,
+                Sink::Osc => links.osc = state,
+                Sink::WebSocket => links.ws = state,
             }
         }
     }
-    s.spout_display = link_text::spout(locale, &display).unwrap_or_default();
-    s.spout_history = link_text::spout(locale, &history).unwrap_or_default();
-    s
+    let outputs = OutputStatuses {
+        display: link_text::spout(locale, &display).unwrap_or_default(),
+        history: link_text::spout(locale, &history).unwrap_or_default(),
+        ..Default::default()
+    };
+    (links, outputs)
 }
 
 /// A fixture never shows a switch on beside an "Off" badge, or the other
 /// way round: each link's state says off exactly when its switch is off.
-pub fn assert_consistent(settings: &Settings, status: &Status) {
+pub fn assert_consistent(
+    settings: &Settings,
+    status: &LinkStatus,
+    outputs: &OutputStatuses,
+    chat: &ChatSourceUi,
+) {
     let i = &settings.integrations;
     let links = [
         ("VTube Studio", i.vts.enabled, status.vts != LinkState::Off),
@@ -368,27 +376,27 @@ pub fn assert_consistent(settings: &Settings, status: &Status) {
         (
             "blivechat",
             i.blivechat_on(),
-            status.blivechat_link != danmaku::Link::Off,
+            chat.get(BliveFeedKind::Blivechat).link != danmaku::Link::Off,
         ),
         (
             "LAPLACE",
             i.laplace_on(),
-            status.laplace_link != danmaku::Link::Off,
+            chat.get(BliveFeedKind::Laplace).link != danmaku::Link::Off,
         ),
         (
             "彗星号",
             i.comet_rooms().bilibili || i.comet_rooms().others,
-            status.comet_link != danmaku::Link::Off,
+            chat.get(BliveFeedKind::Comet).link != danmaku::Link::Off,
         ),
         (
             "Spout display",
             settings.output.display.enabled,
-            status.spout_display != LinkState::Off,
+            outputs.display != LinkState::Off,
         ),
         (
             "Spout history",
             settings.output.history.enabled,
-            status.spout_history != LinkState::Off,
+            outputs.history != LinkState::Off,
         ),
     ];
     for (name, enabled, live) in links {

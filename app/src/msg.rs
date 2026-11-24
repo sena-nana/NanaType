@@ -392,7 +392,103 @@ pub enum FileTarget {
     ImportSettings,
 }
 
-pub enum Msg {
+/// Messages intercepted and handled directly by [`crate::host::Host`] before
+/// domain dispatch.
+pub enum HostMsg {
+    EditorContext {
+        source: bool,
+        x: f32,
+        y: f32,
+        keyboard: bool,
+    },
+    EditorAction {
+        source: bool,
+        action: nana_ui::runtime::TextEditAction,
+    },
+    /// A toast timed out or was closed; the host takes it out of its window.
+    ToastDismissed(
+        WindowKind,
+        nana_ui::runtime::Entity<nana_ui::runtime::Toast>,
+    ),
+}
+
+macro_rules! define_messages {
+    (
+        $(
+            $(#[$meta:meta])*
+            $variant:ident $({ $($sfield:ident : $sty:ty),* $(,)? })? $(( $($tfield:ty),* $(,)? ))?
+        ),* $(,)?
+    ) => {
+        pub enum Msg {
+            /// Handled on the window host before [`AppMsg`] dispatch.
+            Host(HostMsg),
+            $(
+                $(#[$meta])*
+                $variant $({ $($sfield : $sty),* })? $(( $($tfield),* ))?,
+            )*
+        }
+
+        /// Domain messages handled by [`crate::app::App::update`].
+        pub enum AppMsg {
+            $(
+                $(#[$meta])*
+                $variant $({ $($sfield : $sty),* })? $(( $($tfield),* ))?,
+            )*
+        }
+
+        impl Msg {
+            #[allow(unused_doc_comments)]
+            pub fn into_domain(self) -> Result<AppMsg, HostMsg> {
+                define_messages!(@into_domain self; [];
+                    $( $(#[$meta])* $variant $({ $($sfield),* })? $(( $($tfield),* ))?, )*
+                )
+            }
+        }
+    };
+    (@into_domain $self:ident; [ $($arms:tt)* ]; ) => {
+        match $self {
+            Self::Host(host) => Err(host),
+            $($arms)*
+        }
+    };
+    (@into_domain $self:ident; [ $($arms:tt)* ]; $(#[$meta:meta])* $variant:ident { $($sfield:ident),* }, $($rest:tt)* ) => {
+        define_messages!(@into_domain $self; [
+            $($arms)*
+            $(#[$meta])*
+            Self::$variant { $($sfield),* } => Ok(AppMsg::$variant { $($sfield),* }),
+        ]; $($rest)*)
+    };
+    (@into_domain $self:ident; [ $($arms:tt)* ]; $(#[$meta:meta])* $variant:ident ( ), $($rest:tt)* ) => {
+        define_messages!(@into_domain $self; [
+            $($arms)*
+            $(#[$meta])*
+            Self::$variant() => Ok(AppMsg::$variant()),
+        ]; $($rest)*)
+    };
+    (@into_domain $self:ident; [ $($arms:tt)* ]; $(#[$meta:meta])* $variant:ident ( $t0:ty ), $($rest:tt)* ) => {
+        define_messages!(@into_domain $self; [
+            $($arms)*
+            $(#[$meta])*
+            Self::$variant(v0) => Ok(AppMsg::$variant(v0)),
+        ]; $($rest)*)
+    };
+    (@into_domain $self:ident; [ $($arms:tt)* ]; $(#[$meta:meta])* $variant:ident ( $t0:ty, $t1:ty ), $($rest:tt)* ) => {
+        define_messages!(@into_domain $self; [
+            $($arms)*
+            $(#[$meta])*
+            Self::$variant(v0, v1) => Ok(AppMsg::$variant(v0, v1)),
+        ]; $($rest)*)
+    };
+    (@into_domain $self:ident; [ $($arms:tt)* ]; $(#[$meta:meta])* $variant:ident, $($rest:tt)* ) => {
+        define_messages!(@into_domain $self; [
+            $($arms)*
+            $(#[$meta])*
+            Self::$variant => Ok(AppMsg::$variant),
+        ]; $($rest)*)
+    };
+}
+
+define_messages! {
     PeerStart {
         invitation: Option<String>,
         password: String,
@@ -425,11 +521,6 @@ pub enum Msg {
     DismissNotice(u64),
     /// The tray stops showing error notice `id` in its tooltip.
     TrayErrorExpired(u64),
-    /// A toast timed out or was closed; the host takes it out of its window.
-    ToastDismissed(
-        WindowKind,
-        nana_ui::runtime::Entity<nana_ui::runtime::Toast>,
-    ),
     /// Release paused output resources at their bounded deadline.
     OutputCleanup,
     /// A scheduled wake from the timer thread.
@@ -441,13 +532,6 @@ pub enum Msg {
     Cue(CueKind),
     Audio(AudioStatus),
     Bridge(BridgeStatus),
-    /// The skin step's entrance has started; mount its preview when that
-    /// entrance is over. A newer hold drops the one it replaces.
-    HoldOnboardPreview,
-    /// Mount the skin step's preview, unless a newer hold replaced `generation`.
-    RevealOnboardPreview {
-        generation: u64,
-    },
     HotkeyStatus(std::collections::HashMap<GlobalAction, crate::services::hotkeys::HotkeyState>),
     /// The input window's native handle (for the summon hotkey).
     InputHwnd(isize),
@@ -463,8 +547,6 @@ pub enum Msg {
         error: bool,
         source: NoticeSource,
     },
-    /// A host callback changed UI signals outside a program update.
-    UiChanged,
     Quit,
     // Each domain's messages, handled by its own module in `app/`.
     Speech(SpeechMsg),
@@ -476,10 +558,7 @@ pub enum Msg {
     Sticker(StickerMsg),
     Chat(ChatMsg),
     Twitch(TwitchMsg),
-    Blive(BliveMsg),
-    Laplace(LaplaceMsg),
-    /// The 彗星号 connection reported.
-    Comet(nanatype_blive::BliveEvent),
+    BliveFeed(BliveFeedMsg),
     Obs(ObsMsg),
     #[cfg(feature = "updates")]
     Update(UpdateMsg),
@@ -583,16 +662,6 @@ pub enum EditorMsg {
     Complete(Complete),
     /// The rich editor found no text to paste (try an image).
     Paste,
-    Context {
-        source: bool,
-        x: f32,
-        y: f32,
-        keyboard: bool,
-    },
-    Action {
-        source: bool,
-        action: nana_ui::runtime::TextEditAction,
-    },
     /// Switch between the rich editor and the markup source.
     ToggleSource,
     InsertPhrase(usize),
@@ -713,18 +782,13 @@ pub enum TwitchMsg {
     SkipFailed(nanatype_model::LineId),
 }
 
-pub enum BliveMsg {
-    /// The blivechat connection reported.
-    Event(nanatype_blive::BliveEvent),
+pub enum BliveFeedMsg {
+    /// One of the Bilibili-shaped chat connections reported.
+    Event(crate::ui::BliveFeedKind, nanatype_blive::BliveEvent),
     /// A chat page's OBS link the user pasted, blivechat's or LAPLACE's:
     /// what it connects to goes to the settings, a 身份码 or token in it to
     /// the system's secret store.
     Link(String),
-}
-
-pub enum LaplaceMsg {
-    /// The LAPLACE Event Bridge connection reported.
-    Event(nanatype_blive::BliveEvent),
 }
 
 pub enum ObsMsg {
@@ -776,6 +840,7 @@ pub enum HistoryMsg {
     Loaded {
         name: String,
         records: Result<Vec<crate::archive::Record>, String>,
+        assets: Vec<nanatype_model::AssetRef>,
     },
     /// List a page of the open session's earlier lines.
     Earlier,

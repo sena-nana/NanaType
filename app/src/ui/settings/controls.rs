@@ -3,11 +3,11 @@
 
 use std::sync::{Arc, LazyLock};
 
-use nana_ui::runtime::view::{AnyView, IntoView, segmented_option, widget};
+use nana_ui::runtime::view::{AnyView, IntoView, segmented_option, signal, widget};
 use nana_ui::runtime::{
-    Activate, Button, Chip, ColorChanged, ColorField, NumberChanged, RangeField, RangeInput,
-    SegmentedControl, SegmentedOptionChosen, Select, SelectChanged, SelectOption, Stack,
-    StatusBadge, Switch, TextChanged, ToggleChanged,
+    Activate, Button, Chip, ColorChanged, ColorField, FocusWithinChanged, NumberChanged,
+    NumberInput, RangeField, RangeInput, SegmentedControl, SegmentedOptionChosen, Select,
+    SelectChanged, SelectOption, Stack, StatusBadge, Switch, TextChanged, TextInput, ToggleChanged,
 };
 use nana_ui::{ButtonKind, ControlSize, StatusTone};
 use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec};
@@ -16,7 +16,7 @@ use nanatype_model::Rgba8;
 use nanatype_settings::Settings;
 
 use crate::msg::Msg;
-use crate::ui::{I18N, LinkState, Status, Ui};
+use crate::ui::{BliveFeedKind, I18N, LinkState, LinkStatus, OutputStatuses, Ui};
 
 pub static ICON_PNG_B64: LazyLock<String> =
     LazyLock::new(|| base64(include_bytes!("../../../assets/tray-64.png")));
@@ -106,57 +106,45 @@ pub fn links_pulsing(ui: Ui) -> bool {
             super::Page::General => guide_links(),
             _ => false,
         }
-        && ui.status.with_untracked(|s| {
-            [
-                &s.vts,
-                &s.osc,
-                &s.ws,
-                &s.spout_display,
-                &s.spout_history,
-                &s.spout_danmaku,
-                &s.obs,
-            ]
-            .into_iter()
-            .chain(&s.spout_partners)
-            .any(|l| *l == LinkState::Connecting)
-                || s.blivechat_link == crate::ui::danmaku::Link::Connecting
-                || s.laplace_link == crate::ui::danmaku::Link::Connecting
-                || s.comet_link == crate::ui::danmaku::Link::Connecting
-        })
+        && (ui.links.with_untracked(|l| l.any_connecting())
+            || ui.output_status.with_untracked(|o| o.any_connecting())
+            || ui.chat_source.with_untracked(|c| c.any_connecting()))
 }
 
 /// A link's state as a dot-and-text badge: green connected, amber connecting
 /// or waiting for access, red failed, grey off. Connecting breathes unless
 /// motion is reduced.
-pub fn link_badge(ui: Ui, get: fn(&Status) -> &LinkState) -> AnyView {
-    link_badge_by(ui, move |s| get(s).clone())
+pub fn link_badge(ui: Ui, get: fn(&LinkStatus) -> &LinkState) -> AnyView {
+    state_badge(ui, move || ui.links.with(|s| get(s).clone()))
 }
 
-/// [`link_badge`] for a state that has to be looked up, such as one partner
-/// seat's sender.
-pub fn link_badge_by(
+/// An output sender's state as a dot-and-text badge.
+pub fn output_badge(
     ui: Ui,
-    get: impl Fn(&Status) -> LinkState + Send + Sync + Copy + 'static,
+    get: impl Fn(&OutputStatuses) -> &LinkState + Send + Sync + Copy + 'static,
 ) -> AnyView {
+    state_badge(ui, move || ui.output_status.with(|s| get(s).clone()))
+}
+
+/// A dot-and-text badge backed by any reactive [`LinkState`] reader.
+pub fn state_badge(ui: Ui, read: impl Fn() -> LinkState + Send + Sync + Copy + 'static) -> AnyView {
     let describe = move || {
         let locale = ui.locale.get();
-        ui.status.with(|s| match get(s) {
+        match read() {
             LinkState::Off => (I18N.t_in(locale, "int-status-off"), StatusTone::Neutral),
             LinkState::Connecting => (
                 I18N.t_in(locale, "int-status-connecting"),
                 StatusTone::Warning,
             ),
-            LinkState::Connected(text) => (text.clone(), StatusTone::Success),
+            LinkState::Connected(text) => (text, StatusTone::Success),
             LinkState::NeedsAuth => (
                 I18N.t_in(locale, "int-status-needs-token"),
                 StatusTone::Warning,
             ),
-            LinkState::Error(text) => (text.clone(), StatusTone::Danger),
-        })
+            LinkState::Error(text) => (text, StatusTone::Danger),
+        }
     };
-    breathing_badge(ui, describe, move || {
-        ui.status.with(|st| get(st) == LinkState::Connecting)
-    })
+    breathing_badge(ui, describe, move || read() == LinkState::Connecting)
 }
 
 /// The Bilibili switch's badge: whichever source carries its chat.
@@ -164,10 +152,13 @@ pub fn bilibili_badge(ui: Ui) -> AnyView {
     chat_badge(ui, move || {
         use nanatype_settings::{BilibiliLink, BilibiliSource};
         let b = ui.settings.with(|s| s.integrations.bilibili);
-        ui.status.with(|s| match (b.source, b.link) {
-            (BilibiliSource::Comet, _) => (s.comet.clone(), s.comet_link),
-            (_, BilibiliLink::Laplace) => (s.laplace.clone(), s.laplace_link),
-            (_, BilibiliLink::Blivechat) => (s.blivechat.clone(), s.blivechat_link),
+        ui.chat_source.with(|cs| {
+            let slot = match (b.source, b.link) {
+                (BilibiliSource::Comet, _) => cs.get(BliveFeedKind::Comet),
+                (_, BilibiliLink::Laplace) => cs.get(BliveFeedKind::Laplace),
+                (_, BilibiliLink::Blivechat) => cs.get(BliveFeedKind::Blivechat),
+            };
+            (slot.text.clone(), slot.link)
         })
     })
 }
@@ -176,7 +167,10 @@ pub fn bilibili_badge(ui: Ui) -> AnyView {
 pub fn comet_badge(ui: Ui) -> AnyView {
     chat_badge(ui, move || {
         if ui.settings.with(|s| s.integrations.comet.other_platforms) {
-            ui.status.with(|s| (s.comet.clone(), s.comet_link))
+            ui.chat_source.with(|cs| {
+                let slot = cs.get(BliveFeedKind::Comet);
+                (slot.text.clone(), slot.link)
+            })
         } else {
             (String::new(), crate::ui::danmaku::Link::Off)
         }
@@ -457,29 +451,28 @@ pub fn live_select(
     get: impl Fn(&Settings) -> String + Send + Sync + Copy + 'static,
     set: impl Fn(&mut Settings, &str) + Send + Sync + Copy + 'static,
 ) -> AnyView {
-    let build = move || -> Vec<SelectOption> {
-        options()
-            .into_iter()
-            .map(|(v, l)| SelectOption::new(v, l))
-            .collect()
-    };
-    let same = |a: &[SelectOption], b: &[SelectOption]| {
-        a.len() == b.len()
-            && a.iter()
-                .zip(b)
-                .all(|(a, b)| a.value == b.value && a.label == b.label)
-    };
+    let cached = signal(Vec::<(String, String)>::new());
+    let initial_raw = options();
+    let initial: Vec<SelectOption> = initial_raw
+        .iter()
+        .map(|(v, l)| SelectOption::new(v.clone(), l.clone()))
+        .collect();
+    cached.set(initial_raw);
     widget(Stack::row(0.0).width(LengthSpec::Px(field::MD)))
         .children(
             widget(
                 Select::new(Some(get(&ui.settings.get_untracked())))
-                    .options(build())
+                    .options(initial)
                     .size(ControlSize::Small),
             )
             .bind(move |s: &mut Select| {
-                let opts = build();
-                if !same(&s.options, &opts) {
-                    s.options = opts;
+                let raw = options();
+                if cached.with_untracked(|prev| prev.as_slice() != raw.as_slice()) {
+                    cached.set(raw.clone());
+                    s.options = raw
+                        .into_iter()
+                        .map(|(v, l)| SelectOption::new(v, l))
+                        .collect();
                 }
                 let v: Arc<str> = ui.settings.with(|x| get(x)).into();
                 if s.value.as_ref() != Some(&v) {
@@ -642,6 +635,7 @@ fn number_field(
     get: fn(&Settings) -> f64,
     set: fn(&mut Settings, f64),
 ) -> AnyView {
+    let focused = signal(false);
     widget(
         Stack::row(0.0)
             .width(LengthSpec::Px(field::SM))
@@ -658,6 +652,15 @@ fn number_field(
             crate::ui::tnum(Arc::make_mut(&mut n.style.layout));
             n
         })
+        .on(move |e: &FocusWithinChanged| {
+            focused.set_if_changed(e.focused);
+        })
+        .bind(move |n: &mut NumberInput| {
+            let want = ui.settings.with(|s| get(s));
+            if !focused.get() {
+                n.assign(want);
+            }
+        })
         .on_cx(move |_, e: &NumberChanged, cx| {
             let v = e.value;
             cx.dispatch_program_all(edit(move |s| set(s, v)));
@@ -669,6 +672,7 @@ fn number_field(
 /// A port: a short field without steppers, in the mono role. Text that is
 /// not a port number (yet) is left unsaved.
 pub fn port(ui: Ui, get: fn(&Settings) -> u16, set: fn(&mut Settings, u16)) -> AnyView {
+    let focused = signal(false);
     widget(
         Stack::row(0.0)
             .width(LengthSpec::Px(field::XS))
@@ -680,6 +684,15 @@ pub fn port(ui: Ui, get: fn(&Settings) -> u16, set: fn(&mut Settings, u16)) -> A
                 .size(ControlSize::Small);
             crate::ui::mono(Arc::make_mut(&mut input.style.layout));
             input
+        })
+        .on(move |e: &FocusWithinChanged| {
+            focused.set_if_changed(e.focused);
+        })
+        .bind(move |input: &mut TextInput| {
+            let want = ui.settings.with(|s| get(s)).to_string();
+            if !focused.get() && input.state.value.as_ref() != want.as_str() {
+                input.state.replace_value(want);
+            }
         })
         .on_cx(move |_, e: &TextChanged, cx| {
             if let Ok(v) = e.value.trim().parse::<u16>()
@@ -722,6 +735,7 @@ fn text_field(
     get: impl Fn(&Settings) -> String + Send + Sync + Copy + 'static,
     set: impl Fn(&mut Settings, String) + Send + Sync + Copy + 'static,
 ) -> AnyView {
+    let focused = signal(false);
     widget(
         Stack::row(0.0)
             .width(LengthSpec::Px(width))
@@ -740,6 +754,15 @@ fn text_field(
                 crate::ui::mono(Arc::make_mut(&mut input.style.layout));
             }
             input
+        })
+        .on(move |e: &FocusWithinChanged| {
+            focused.set_if_changed(e.focused);
+        })
+        .bind(move |input: &mut TextInput| {
+            let want = ui.settings.with(|s| get(s));
+            if !focused.get() && input.state.value.as_ref() != want.as_str() {
+                input.state.replace_value(want);
+            }
         })
         .on_cx(move |_, e: &TextChanged, cx| {
             let v = e.value.to_string();
@@ -763,14 +786,19 @@ pub fn color(
             .with_layout(crate::ui::mono),
     )
     .children(
-        widget(ColorField::new(crate::ui::c(start)).size(ControlSize::Small)).on_cx(
-            move |_, e: &ColorChanged, cx| {
+        widget(ColorField::new(crate::ui::c(start)).size(ControlSize::Small))
+            .bind(move |f: &mut ColorField| {
+                let want = crate::ui::c(ui.settings.with(|s| get(s)).unwrap_or(fallback));
+                if !f.opened && f.value != want {
+                    *f = f.clone().value(want);
+                }
+            })
+            .on_cx(move |_, e: &ColorChanged, cx| {
                 let [r, g, b, a] = e.value;
                 let to = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
                 let c = Rgba8::rgba(to(r), to(g), to(b), to(a)); // design-tokens: data
                 cx.dispatch_program_all(edit(move |s| set(s, Some(c))));
-            },
-        ),
+            }),
     )
     .into_any()
 }

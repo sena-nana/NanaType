@@ -36,19 +36,7 @@ pub use self::about::font_licence_panel;
 pub use self::hotkeys::action_name;
 pub use self::profiles::import_dialog;
 
-use self::about::*;
-use self::assets::*;
-use self::general::*;
-use self::history::*;
-use self::hotkeys::*;
-use self::integrations::*;
-use self::onboarding::*;
-use self::output::*;
-use self::platforms::*;
-use self::playback::*;
-use self::profiles::*;
-use self::skins::*;
-use self::windows::*;
+use self::about::{controls, icon_action};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -83,24 +71,24 @@ use crate::windows::WindowKind;
 
 pub fn page(ui: Ui, page: Page) -> AnyView {
     let body = match page {
-        Page::General => general(ui),
-        Page::Profiles => profiles_page(ui),
-        Page::Input => input_page(ui),
-        Page::Characters => characters_page(ui),
-        Page::Assets => assets(ui),
+        Page::General => general::general(ui),
+        Page::Profiles => general::profiles_page(ui),
+        Page::Input => general::input_page(ui),
+        Page::Characters => general::characters_page(ui),
+        Page::Assets => assets::assets(ui),
         Page::Speech => speech::settings(ui),
-        Page::Hotkeys => hotkeys(ui),
-        Page::Skins => skins(ui),
-        Page::Playback => playback(ui),
-        Page::Windows => windows(ui),
-        Page::History => history(ui),
-        Page::Platforms => platforms(ui),
-        Page::Output => output(ui),
-        Page::Integrations => integrations(ui),
+        Page::Hotkeys => hotkeys::hotkeys(ui),
+        Page::Skins => skins::skins(ui),
+        Page::Playback => playback::playback(ui),
+        Page::Windows => windows::windows(ui),
+        Page::History => history::history(ui),
+        Page::Platforms => platforms::platforms(ui),
+        Page::Output => output::output(ui),
+        Page::Integrations => integrations::integrations(ui),
         Page::Peer => peer::peer(ui),
         Page::Workshop => workshop::workshop(ui),
         Page::Packages => crate::ui::plugins::settings(ui),
-        Page::About => about(ui),
+        Page::About => about::about(ui),
     };
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children(body)

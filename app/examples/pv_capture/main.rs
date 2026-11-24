@@ -28,7 +28,11 @@ use std::sync::Arc;
 use nana_ui::WindowOutputStatus;
 use nanatype::assets::AssetLibrary;
 use nanatype::chat::{ChatKind, ChatMessage};
-use nanatype::ui::{LinkState, Status, StickerRow, Ui, danmaku, dialogue, link_text, settings};
+use nanatype::output::OutputStatuses;
+use nanatype::ui::{
+    BliveFeedKind, ChatSourceUi, LinkState, LinkStatus, StickerRow, Ui, danmaku, dialogue,
+    link_text, settings,
+};
 use nanatype_blive::chat::Guard;
 use nanatype_bridge::{BridgeStatus, Sink};
 use nanatype_core::{Cmd, Core};

@@ -6,12 +6,35 @@ use nanatype_core::Cmd;
 use nanatype_model::{Document, HistoryItem, Line, LineId, unix_millis};
 use nanatype_settings::{Character, TtsSettings};
 use nanatype_tts::{Event, Speak, Tts, speakable, speakable_units};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 /// Partner lines older than this when they arrive (a room just joined)
 /// are not read.
 const PARTNER_FRESH_MS: u64 = 10_000;
+/// Cap tracked partner line IDs so long sessions stay bounded in memory.
+const MAX_PARTNERS: usize = 4096;
+
+#[derive(Default)]
+struct BoundedPartners {
+    set: HashSet<(String, LineId)>,
+    order: VecDeque<(String, LineId)>,
+}
+
+impl BoundedPartners {
+    fn insert(&mut self, key: (String, LineId)) -> bool {
+        if !self.set.insert(key.clone()) {
+            return false;
+        }
+        self.order.push_back(key);
+        while self.order.len() > MAX_PARTNERS {
+            if let Some(evicted) = self.order.pop_front() {
+                self.set.remove(&evicted);
+            }
+        }
+        true
+    }
+}
 
 /// What is said and when it stops, over any [`Speak`] engine.
 pub struct Narrator<S: Speak> {
@@ -19,7 +42,7 @@ pub struct Narrator<S: Speak> {
     /// Utterances started and not finished.
     talking: HashSet<u64>,
     /// Partner lines already read.
-    partners: HashSet<(String, LineId)>,
+    partners: BoundedPartners,
     /// What each utterance says, while it is said (word sizes for the mouth).
     texts: HashMap<u64, String>,
     /// The line whose typing follows its voice.
@@ -39,7 +62,7 @@ impl<S: Speak> Narrator<S> {
         Self {
             engine,
             talking: HashSet::new(),
-            partners: HashSet::new(),
+            partners: BoundedPartners::default(),
             texts: HashMap::new(),
             paced: None,
         }
@@ -236,23 +259,27 @@ impl App {
     /// The display started `line`.
     pub(super) fn tts_line(&mut self, line: &Line) {
         let s = &self.settings;
-        self.tts.line_started(&s.tts, &s.general.characters, line);
-        if self.tts.paces(line.id) {
+        self.session
+            .tts
+            .line_started(&s.tts, &s.general.characters, line);
+        if self.session.tts.paces(line.id) {
             self.run(Cmd::SpeechPaced(line.id));
         }
     }
 
     pub(super) fn tts_chat(&mut self, doc: &Document) {
-        self.tts.chat(&self.settings.tts, doc);
+        self.session.tts.chat(&self.settings.tts, doc);
     }
 
     pub(crate) fn tts_partner_replay(&mut self, owner: &str, line: LineId, doc: &Document) {
-        self.tts
+        self.session
+            .tts
             .partner_replay(&self.settings.tts, owner, line, doc);
     }
 
     pub(crate) fn tts_partner(&mut self, owner: &str, line: LineId, item: &HistoryItem) {
-        self.tts
+        self.session
+            .tts
             .partner(&self.settings.tts, owner, line, item, unix_millis());
     }
 
@@ -260,22 +287,22 @@ impl App {
         match msg {
             TtsMsg::Event(Event::Voices(voices)) => self.ui.tts_voices.set(Arc::new(voices)),
             TtsMsg::Event(event) => {
-                if let Some(cmd) = self.tts.pace(&event) {
+                if let Some(cmd) = self.session.tts.pace(&event) {
                     self.run(cmd);
                 }
                 if self.settings.tts.enabled
-                    && let Some(chars) = self.tts.word_chars(&event)
+                    && let Some(chars) = self.session.tts.word_chars(&event)
                 {
-                    self.bridge.word(chars);
+                    self.integrations.bridge.word(chars);
                 }
                 // Switched off mid-line, the mouth still closes.
-                if let Some(speaking) = self.tts.event(&event)
+                if let Some(speaking) = self.session.tts.event(&event)
                     && (self.settings.tts.enabled || !speaking)
                 {
                     self.bridge_speaking(speaking);
                 }
             }
-            TtsMsg::Refresh => self.tts.engine.request_voices(),
+            TtsMsg::Refresh => self.session.tts.engine.request_voices(),
             TtsMsg::Test(character) => {
                 let s = &self.settings;
                 let voice = character
@@ -284,8 +311,11 @@ impl App {
                     .or_else(|| s.tts.voice.clone());
                 let text = self.ui.now_t("tts-sample");
                 let (rate, volume) = (s.tts.rate, s.tts.volume);
-                self.tts.silence();
-                self.tts.engine.speak(&text, voice.as_deref(), rate, volume);
+                self.session.tts.silence();
+                self.session
+                    .tts
+                    .engine
+                    .speak(&text, voice.as_deref(), rate, volume);
             }
         }
     }

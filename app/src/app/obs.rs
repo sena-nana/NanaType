@@ -11,7 +11,6 @@ use nanatype_obs::{ObsConfig, ObsEvent, ObsItem, ObsScene, ObsStatus, ObsUpdate}
 use nanatype_settings::{Settings, SpoutOutput, fit_output_size};
 
 use crate::app::App;
-use crate::msg::Msg;
 use crate::output::KINDS;
 use crate::services::spout_plugin::{self, State as SpoutPluginState};
 use crate::ui::LinkState;
@@ -96,7 +95,7 @@ impl App {
         match msg {
             ObsMsg::Event(event) => self.obs_event(event),
             ObsMsg::Password(password) => {
-                if let Err(e) = self.obs_password.set(&password) {
+                if let Err(e) = self.integrations.obs_password.set(&password) {
                     nanatype_diag::report!(crate::diag::OBS_SECRET_FAILED, op = 1u64; "{e}");
                     let text = self.ui.now_t("obs-password-not-stored");
                     self.notice(text, true);
@@ -125,9 +124,9 @@ impl App {
             }));
         let ctx = self.ctx.clone();
         spout_plugin::download(
-            self.paths.cache.join("obs-spout2"),
+            self.shell.paths.cache.join("obs-spout2"),
             &self.settings.update.proxy,
-            move |e| ctx.dispatch(Msg::Obs(ObsMsg::SpoutPlugin(e))),
+            move |e| ctx.dispatch(crate::msg::Msg::Obs(ObsMsg::SpoutPlugin(e))),
         );
     }
 
@@ -150,7 +149,7 @@ impl App {
     }
 
     fn obs_event(&mut self, event: ObsEvent) {
-        if event.epoch != self.obs.epoch() {
+        if event.epoch != self.integrations.obs.epoch() {
             return;
         }
         match event.update {
@@ -164,12 +163,12 @@ impl App {
                 if refused && let LinkState::Error(text) = &link {
                     self.notice(text.clone(), true);
                 }
-                self.edit_status(|s| s.obs = link);
+                self.ui.links.edit(|s| s.obs = link);
             }
             ObsUpdate::Scene(scene) => {
                 self.ui.obs.edit(|s| s.scene = scene);
                 let link = self.obs_link_state();
-                self.edit_status(|s| s.obs = link);
+                self.ui.links.edit(|s| s.obs = link);
                 self.publish_obs_sizes();
             }
             ObsUpdate::Refused(comment) => {
@@ -191,14 +190,14 @@ impl App {
         });
         // Only read the secret store once OBS is wanted.
         let config = config.map(|c| ObsConfig {
-            password: self.obs_password.get(),
+            password: self.integrations.obs_password.get(),
             ..c
         });
-        let epoch = self.obs.epoch();
+        let epoch = self.integrations.obs.epoch();
         let connecting = config.is_some();
-        self.obs.set(config);
-        let renewed = self.obs.epoch() != epoch;
-        let saved = self.obs_password.held();
+        self.integrations.obs.set(config);
+        let renewed = self.integrations.obs.epoch() != epoch;
+        let saved = self.integrations.obs_password.held();
         self.ui.obs.edit(|s| {
             s.password_saved = saved;
             if renewed {
@@ -211,14 +210,15 @@ impl App {
             }
         });
         let link = self.obs_link_state();
-        self.edit_status(|s| s.obs = link);
+        self.ui.links.edit(|s| s.obs = link);
         self.stamp_obs_sizes();
     }
 
-    /// Write each output's OBS size into the live settings (never saved).
-    /// Whether any changed.
+    /// Recompute each output's live OBS bounding-box size into `RuntimeOutputSizes`.
+    /// Never mutates persisted `Settings`. Returns whether any output changed.
     fn stamp_obs_sizes(&mut self) -> bool {
         let state = self.ui.obs.get_untracked();
+        let mut sizes = self.ui.runtime_output_sizes.get_untracked();
         let mut changed = false;
         for kind in KINDS {
             let size =
@@ -228,22 +228,20 @@ impl App {
                         _ => None,
                     }
                 });
-            if let Some(out) = crate::output::settings_for_mut(kind, &mut self.settings)
-                && out.obs_size != size
-            {
-                out.obs_size = size;
+            if sizes.set(kind, size) {
                 changed = true;
             }
+        }
+        if changed {
+            self.ui.runtime_output_sizes.set(sizes);
         }
         changed
     }
 
-    /// [`App::stamp_obs_sizes`], then let the page and the senders know. A
-    /// size is not configuration: no service restarts and nothing is saved.
+    /// [`App::stamp_obs_sizes`], then update live senders/status without cloning `Settings`.
     fn publish_obs_sizes(&mut self) {
         if self.stamp_obs_sizes() {
-            self.ui.settings.set(Arc::new(self.settings.clone()));
-            self.refresh_spout_status();
+            self.refresh_output_status();
         }
     }
 
@@ -258,7 +256,7 @@ impl App {
         };
         let window = kind.overlay(&self.settings).and_then(|o| o.size);
         let size = box_size(item, out, window);
-        self.obs.set_bounds(&out.obs_source, size);
+        self.integrations.obs.set_bounds(&out.obs_source, size);
     }
 
     fn obs_link_state(&self) -> LinkState {

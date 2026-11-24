@@ -1,25 +1,22 @@
 use super::App;
-use crate::msg::{ChatMsg, Msg, WindowMsg};
+use super::draft::DraftPolicy;
+use crate::msg::ChatMsg;
 use nanatype_core::{Cmd, Core, Effects};
 use nanatype_model::outgoing;
 use nanatype_settings::InputDockLayout;
-use std::sync::Arc;
 
 impl App {
     /// The live chat panel.
     pub(super) fn chat_msg(&mut self, msg: ChatMsg) {
         match msg {
             ChatMsg::Message(message) => {
-                if self.plugins.has_running() {
-                    self.plugins.broadcast(serde_json::json!({"type":"chat_message","platform":message.platform.source(),"author":message.user.name,"text":message.doc.plain_text()}),self.ui);
+                if self.integrations.plugins.has_running() {
+                    self.integrations.plugins.broadcast(serde_json::json!({"type":"chat_message","platform":message.platform.source(),"author":message.user.name,"text":message.doc.plain_text()}),self.ui);
                 }
                 self.chat_message(message);
             }
             ChatMsg::AssetReady(asset) => {
-                let mut urls = (*self.ui.asset_urls.get_untracked()).clone();
-                urls.remove(&asset.to_string());
-                self.ui.asset_urls.set(Arc::new(urls));
-                self.ensure_urls([asset]);
+                self.media.invalidate_and_resolve_asset(asset, self.ui);
             }
             ChatMsg::Mention { seq, reply } => self.mention(seq, reply),
             ChatMsg::Select(step) => self.select_chat(step),
@@ -40,7 +37,7 @@ impl App {
                 self.ui.chat_target.set(None);
             }
             ChatMsg::Clear => {
-                self.chat.clear();
+                self.session.chat.clear();
                 self.ui.chat_target.set(None);
                 self.publish_chat();
             }
@@ -58,9 +55,7 @@ impl App {
                 if !layout.chat_visible() {
                     self.dock(layout.toggle_chat());
                 }
-                self.update(Msg::Window(WindowMsg::Show(
-                    crate::windows::WindowKind::Input,
-                )));
+                self.show_input_window();
             }
         }
     }
@@ -116,10 +111,10 @@ fn step_selection(shown: &[u64], current: Option<u64>, step: i32) -> Option<u64>
 pub(super) fn handle_command(
     core: &mut Core,
     cmd: Cmd,
-    synchronizing: bool,
+    policy: DraftPolicy,
     now: u64,
 ) -> Result<Effects, ()> {
-    if synchronizing {
+    if policy.is_plain_text_only() {
         let invalid = match &cmd {
             Cmd::Send => !core.draft().is_blank() && outgoing::plain_text(core.draft()).is_err(),
             Cmd::SendMarkup(markup) => {

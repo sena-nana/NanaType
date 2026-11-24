@@ -8,7 +8,7 @@ impl App {
     pub(super) fn skin_msg(&mut self, msg: SkinMsg) {
         match msg {
             SkinMsg::Delete(id) => {
-                if let Err(e) = self.registry.remove(&id) {
+                if let Err(e) = self.appearance.registry.remove(&id) {
                     let text = self
                         .ui
                         .tr("skins-delete-failed", &[("message", e.to_string().into())]);
@@ -21,7 +21,7 @@ impl App {
                 }
             }
             SkinMsg::Export(id) => {
-                self.export_target = Some(id);
+                self.appearance.export_target = Some(id);
                 self.pick(FileTarget::ExportSkin);
             }
             SkinMsg::Duplicate(base) => self.duplicate_skin(&base),
@@ -29,36 +29,38 @@ impl App {
                 self.request_skin_reload(true);
             }
             SkinMsg::LayoutMaterialsReady => self.ui.layout_epoch.update(|e| *e += 1),
-            SkinMsg::ScanReady { ticket, result } => match self.skin_reload.finish(ticket) {
-                Err(latest) => {
-                    if let Ok(prepared) = result {
-                        crate::ui::retire_skin_urls(
-                            self.ui,
-                            prepared
-                                .image_urls
-                                .into_iter()
-                                .flat_map(|urls| urls.into_values()),
-                        );
-                    }
-                    self.scan_skins(latest);
-                }
-                Ok(()) => match result {
-                    Ok(prepared) => {
-                        self.skin_reload_scan = false;
-                        self.registry = prepared.registry;
-                        self.reapply_workshop();
-                        self.prepared_skin_urls = prepared.image_urls;
-                        self.apply_loaded_skin(prepared.loaded);
-                        if prepared.scanned {
-                            self.refresh_skin_rows();
+            SkinMsg::ScanReady { ticket, result } => {
+                match self.appearance.skin_reload.finish(ticket) {
+                    Err(latest) => {
+                        if let Ok(prepared) = result {
+                            crate::ui::retire_skin_urls(
+                                self.ui,
+                                prepared
+                                    .image_urls
+                                    .into_iter()
+                                    .flat_map(|urls| urls.into_values()),
+                            );
                         }
+                        self.scan_skins(latest);
                     }
-                    Err(error) => self.notice(error, true),
-                },
-            },
+                    Ok(()) => match result {
+                        Ok(prepared) => {
+                            self.appearance.skin_reload_scan = false;
+                            self.appearance.registry = prepared.registry;
+                            self.reapply_workshop();
+                            self.appearance.prepared_skin_urls = prepared.image_urls;
+                            self.apply_loaded_skin(prepared.loaded);
+                            if prepared.scanned {
+                                self.refresh_skin_rows();
+                            }
+                        }
+                        Err(error) => self.notice(error, true),
+                    },
+                }
+            }
             SkinMsg::PreparePreview { id, play } => self.prepare_skin_preview(id, play),
             SkinMsg::PreviewReady { ticket, result } => match result {
-                _ if ticket != self.skin_preview_ticket => {
+                _ if ticket != self.appearance.skin_preview_ticket => {
                     if let Ok(prepared) = result {
                         prepared.discard(self.ui);
                     }
@@ -78,10 +80,17 @@ impl App {
                 Err(error) => self.notice(error, true),
             },
             SkinMsg::SavePersonalization { id, mut profile } => {
-                if profile.valid() && self.registry.entries().iter().any(|r| r.id == id) {
+                if profile.valid()
+                    && self
+                        .appearance
+                        .registry
+                        .entries()
+                        .iter()
+                        .any(|r| r.id == id)
+                {
                     // Keep only values the skin's params accept and that
                     // differ from their defaults.
-                    match self.registry.load(&id) {
+                    match self.appearance.registry.load(&id) {
                         Ok(loaded) => {
                             nanatype_theme::retain_valid_params(&loaded.skin, &mut profile.params)
                         }
@@ -102,11 +111,11 @@ impl App {
                 bank,
                 errors,
             } => {
-                if skin == self.loaded.skin.meta.id
-                    && pack == self.sound_pack.as_ref().map(|p| p.id.clone())
+                if skin == self.appearance.loaded.skin.meta.id
+                    && pack == self.session.sound_pack.as_ref().map(|p| p.id.clone())
                 {
-                    sounds::install(&self.audio, &self.bank, &bank);
-                    self.bank = bank;
+                    sounds::install(&self.session.audio, &self.session.bank, &bank);
+                    self.session.bank = bank;
                     if let Some(e) = errors.first() {
                         self.notice(e.clone(), true);
                     }
@@ -118,10 +127,10 @@ impl App {
     /// Load, register the fonts of and theme skin `id`'s preview off the UI
     /// thread; only the newest request is shown.
     fn prepare_skin_preview(&mut self, id: String, play: bool) {
-        self.skin_preview_ticket += 1;
-        let ticket = self.skin_preview_ticket;
+        self.appearance.skin_preview_ticket += 1;
+        let ticket = self.appearance.skin_preview_ticket;
         let job = crate::ui::PreviewJob::new(self.ui, &id, play);
-        let registry = self.registry.clone();
+        let registry = self.appearance.registry.clone();
         if let Err(error) = crate::plugins::try_background("skin-preview", &self.ctx, move || {
             let result = crate::plugins::caught("Skin preview worker failed", || {
                 Box::new(job.run(&registry))
@@ -140,7 +149,7 @@ impl App {
                 if n == 1 { String::new() } else { n.to_string() }
             );
             let candidate = candidate.replace("nanatype.", "my.");
-            if self.registry.entry(&candidate).is_none() {
+            if self.appearance.registry.entry(&candidate).is_none() {
                 break candidate;
             }
             n += 1;
@@ -211,7 +220,7 @@ impl App {
             }
             over.insert("params".into(), params.into());
         }
-        match self.registry.duplicate(base, &id, &name, &over) {
+        match self.appearance.registry.duplicate(base, &id, &name, &over) {
             Ok(dir) => {
                 self.refresh_skin_rows();
                 self.sync_tray_skins();

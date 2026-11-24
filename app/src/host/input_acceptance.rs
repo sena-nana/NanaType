@@ -1,13 +1,18 @@
 //! Windowless acceptance of the production view, routing and host handoff.
+use super::editor_bridge::{mount_editor_menu, sync_editor};
+use super::input_router::{fence_speech_composition, input_key, key_may_edit_draft};
 use super::*;
-use crate::msg::{EditorMsg, SpeechMsg, WindowMsg};
+use crate::msg::{EditorMsg, HostMsg, SpeechMsg, Tool, WindowMsg};
 use crate::ui::settings::base64;
-use nana_ui::runtime::{HeadlessInput, RichEditCommand, TextArea, TextEditAction};
+use nana_ui::runtime::{HeadlessInput, RichEditCommand, RichTextEditor, TextArea, TextEditAction};
 use nana_ui::{NanaTextShaper, runtime::LayoutBox};
 use nana_ui_devtools::agent::RuntimeAgentSession;
 use nana_ui_platform::{
-    CompositionInput, InputModifiers, KeyInput, PointerInput, PointerPhase, WheelInput, WheelUnit,
+    CompositionInput, InputModifiers, InputPayload, KeyInput, KeyState, PointerInput, PointerPhase,
+    WheelInput, WheelUnit,
 };
+use nanatype_core::Cmd;
+use nanatype_settings::{Hotkey, InputKeys};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -34,6 +39,14 @@ struct Fixture {
     messages: Arc<Mutex<Vec<Msg>>>,
     pending: Vec<Msg>,
     edits: usize,
+}
+
+fn test_keys(ctrl_enter: bool) -> InputKeys {
+    let mut keys = InputKeys::default();
+    if ctrl_enter {
+        keys.send = Some(Hotkey::ctrl("Enter"));
+    }
+    keys
 }
 
 impl Fixture {
@@ -73,11 +86,23 @@ impl Fixture {
             // Same classifier and pre-editor callback phase as Host::mount.
             let keys = test_keys(ctrl_enter);
             let policy = move |key: &KeyInput| {
-                if fence_speech_key(ui, key) {
-                    observed.lock().unwrap().push(Msg::Speech(SpeechMsg::Edit));
-                }
                 let completing = ui.completion.with_untracked(Option::is_some);
-                match input_key(key, source_mode, completing, &keys) {
+                let action = input_key(key, source_mode, completing, &keys);
+                let mutates = match &action {
+                    Some((msg, _)) => !matches!(
+                        msg,
+                        Msg::Editor(EditorMsg::Complete(_))
+                            | Msg::Chat(crate::msg::ChatMsg::Select(_))
+                    ),
+                    None => key_may_edit_draft(key),
+                };
+                if mutates {
+                    ui.draft_fence.with_untracked(|f| f.bump_version());
+                    if ui.speech.with_untracked(|s| s.phase.active()) {
+                        observed.lock().unwrap().push(Msg::Speech(SpeechMsg::Edit));
+                    }
+                }
+                match action {
                     Some((msg, consumed)) => {
                         observed.lock().unwrap().push(msg);
                         consumed
@@ -1262,7 +1287,7 @@ fn secondary_press_mounts_the_production_menu_and_runs_its_selected_edit() {
             .pending
             .drain(..)
             .find_map(|m| match m {
-                Msg::Editor(EditorMsg::Context {
+                Msg::Host(HostMsg::EditorContext {
                     source: actual,
                     x,
                     y,
@@ -1320,7 +1345,7 @@ fn secondary_press_mounts_the_production_menu_and_runs_its_selected_edit() {
         );
         f.key("Enter", Default::default());
         assert!(
-            matches!(f.pending.pop(),Some(Msg::Editor(EditorMsg::Action { source: actual, action:TextEditAction::Cut })) if actual==source)
+            matches!(f.pending.pop(), Some(Msg::Host(HostMsg::EditorAction { source: actual, action: TextEditAction::Cut })) if actual == source)
         );
         assert!(
             f.messages.lock().unwrap().is_empty(),
@@ -2236,7 +2261,7 @@ fn speech_edit_classifier_catches_mutations_but_leaves_navigation_and_send_alone
         |logical, modifiers| KeyInput::named("Unidentified", logical, KeyState::Pressed, modifiers);
     for logical in ["x", "中", "Backspace", "Delete"] {
         assert!(
-            speech_edit_key(&key(logical, Default::default())),
+            key_may_edit_draft(&key(logical, Default::default())),
             "{logical}"
         );
     }
@@ -2247,18 +2272,17 @@ fn speech_edit_classifier_catches_mutations_but_leaves_navigation_and_send_alone
         "Home",
         "End",
         "Escape",
-        "Enter",
     ] {
         assert!(
-            !speech_edit_key(&key(logical, Default::default())),
+            !key_may_edit_draft(&key(logical, Default::default())),
             "{logical}"
         );
     }
     for logical in ["x", "v", "z", "y", "b", "i", "u"] {
-        assert!(speech_edit_key(&key(logical, CTRL)), "{logical}");
+        assert!(key_may_edit_draft(&key(logical, CTRL)), "{logical}");
     }
     for logical in ["c", "a", "ArrowLeft"] {
-        assert!(!speech_edit_key(&key(logical, CTRL)), "{logical}");
+        assert!(!key_may_edit_draft(&key(logical, CTRL)), "{logical}");
     }
 }
 
@@ -2273,16 +2297,28 @@ fn speech_fence_is_set_during_real_editor_routing_before_any_text_commit() {
                 remaining: 1,
                 ..Default::default()
             }));
+            let base_version = f.ui.draft_fence.with_untracked(|fence| fence.version());
             f.key("ArrowLeft", Default::default());
-            assert!(!f.ui.speech_edit_pending.get_untracked());
+            assert!(
+                f.ui.draft_fence
+                    .with_untracked(|fence| fence.allows_dictation(base_version))
+            );
             if composition {
                 f.event(InputPayload::Composition(CompositionInput::Start));
                 // Start arrives before preedit text; the fence must already exist.
                 assert_eq!(f.text(), "语音草稿");
+                assert!(
+                    f.ui.draft_fence
+                        .with_untracked(|fence| fence.is_composing())
+                );
             } else {
                 f.key("a", Default::default());
             }
-            assert!(f.ui.speech_edit_pending.get_untracked());
+            assert!(
+                !f.ui
+                    .draft_fence
+                    .with_untracked(|fence| fence.allows_dictation(base_version))
+            );
             assert!(
                 f.pending
                     .iter()

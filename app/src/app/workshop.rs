@@ -8,31 +8,31 @@ use nanatype_steam::Event;
 impl App {
     /// The Steam pipe for a session. Absent when Steam is not connected.
     pub(crate) fn peer_carrier(&self) -> Option<nanatype_p2p::Carrier> {
-        self.steam.session_carrier()
+        self.integrations.steam.session_carrier()
     }
 
     pub(crate) fn peer_open_invite(&self, invitation: &str) -> bool {
-        self.steam.invite_friends(invitation)
+        self.integrations.steam.invite_friends(invitation)
     }
 
     pub(crate) fn peer_close_lobby(&self) {
-        self.steam.close_session_lobby()
+        self.integrations.steam.close_session_lobby()
     }
 
     pub(super) fn workshop_msg(&mut self, msg: WorkshopMsg) {
         match msg {
             WorkshopMsg::Event(Event::Items(items)) => {
-                if self.workshop.set_items(items) {
+                if self.integrations.workshop.set_items(items) {
                     self.rescan_workshop();
                 }
                 self.publish_workshop();
             }
             WorkshopMsg::Event(Event::Details(details)) => {
-                self.workshop.set_details(details);
+                self.integrations.workshop.set_details(details);
                 self.publish_workshop();
             }
             WorkshopMsg::Event(Event::Author { owner, name }) => {
-                self.workshop.set_author(owner, name);
+                self.integrations.workshop.set_author(owner, name);
                 self.publish_workshop();
             }
             WorkshopMsg::Event(Event::InviteFailed) => {
@@ -57,13 +57,13 @@ impl App {
                 self.open_workshop(&nanatype_steam::browse_url(Some(tag.name())));
             }
             WorkshopMsg::Open(item) => self.open_workshop(&nanatype_steam::item_url(item)),
-            WorkshopMsg::Unsubscribe(item) => self.steam.unsubscribe(item),
-            WorkshopMsg::Download(item) => self.steam.download(item),
+            WorkshopMsg::Unsubscribe(item) => self.integrations.steam.unsubscribe(item),
+            WorkshopMsg::Download(item) => self.integrations.steam.download(item),
         }
     }
 
     fn open_workshop(&self, url: &str) {
-        if !self.steam.overlay(url) {
+        if !self.integrations.steam.overlay(url) {
             crate::services::open_url(&nanatype_steam::client_url(url));
         }
     }
@@ -71,21 +71,29 @@ impl App {
     /// Installed content changed: point the registry at the current folders
     /// and scan again, whether or not the folders themselves changed.
     fn rescan_workshop(&mut self) {
-        self.registry.set_external(self.workshop.roots());
+        self.appearance
+            .registry
+            .set_external(self.integrations.workshop.roots());
         self.request_skin_reload(true);
     }
 
     /// A registry that came back from a background scan or install was
     /// cloned before the latest subscriptions arrived: catch it up.
     pub(super) fn reapply_workshop(&mut self) {
-        if self.registry.set_external(self.workshop.roots()) {
+        if self
+            .appearance
+            .registry
+            .set_external(self.integrations.workshop.roots())
+        {
             self.request_skin_reload(true);
         }
     }
 
     pub(super) fn publish_workshop(&self) {
-        if self.workshop.availability != crate::workshop::Availability::Off {
-            self.ui.workshop.set(self.workshop.view(&self.registry));
+        if self.integrations.workshop.availability != crate::workshop::Availability::Off {
+            self.ui
+                .workshop
+                .set(self.integrations.workshop.view(&self.appearance.registry));
         }
     }
 
@@ -93,12 +101,13 @@ impl App {
     /// exit), and so does any choice that named it.
     fn unsubscribed(&mut self, item: u64) {
         let package = self
+            .appearance
             .registry
             .external_status()
             .iter()
             .find(|s| s.item == item && s.problem.is_none())
             .and_then(|s| s.id.clone());
-        self.workshop.forget(item);
+        self.integrations.workshop.forget(item);
         self.rescan_workshop();
         self.publish_workshop();
         if let Some(id) = package {

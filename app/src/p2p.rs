@@ -1,5 +1,5 @@
 //! Application adapter: networking never enters the local editor/player.
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use nanatype_core::{Cmd, DisplayView, Event as CoreEvent, HistoryRow};
@@ -53,6 +53,15 @@ impl Default for SessionUi {
     }
 }
 
+/// Incremental sync state cached per participant in the room.
+#[derive(Debug, Default, Clone)]
+pub struct PeerTrackState {
+    pub revision: u64,
+    pub rendered_line: Option<LineId>,
+    pub last_entry_order: u64,
+    pub portraits: HashMap<String, String>,
+}
+
 #[derive(Default)]
 pub struct Session {
     pub handle: Option<PeerHandle>,
@@ -60,7 +69,7 @@ pub struct Session {
     pub local: String,
     pub room: Option<Arc<Room>>,
     pub room_received: Option<std::time::Instant>,
-    pub remote_revision: Vec<(String, u64, Option<LineId>)>,
+    pub peers: HashMap<String, PeerTrackState>,
     /// Lines sent during this session; earlier ones stay private.
     pub lines: HashSet<LineId>,
     pub revision: u64,
@@ -95,7 +104,7 @@ impl App {
         let generation = self.peer.generation;
         let ctx = self.ctx.clone();
         let config = Config {
-            cache: self.paths.blobs(),
+            cache: self.shell.paths.blobs(),
         };
         match PeerHandle::start(config, invitation, password, carrier, move |event| {
             ctx.dispatch(Msg::PeerEvent(generation, event))
@@ -106,6 +115,7 @@ impl App {
                     generation,
                     ..Session::default()
                 };
+                self.sync_draft_policy();
                 self.ui.peer_panel.set(true);
                 self.ui.peer.set(Arc::new(SessionUi {
                     active: true,
@@ -113,38 +123,13 @@ impl App {
                     ..SessionUi::default()
                 }));
                 self.ui.history.set(Arc::new(Vec::new()));
-                if self.core.display().line.is_some() {
+                if self.session.core.display().line.is_some() {
                     self.ui.display.set(Arc::new(empty()));
                 }
                 self.peer_publish();
-                self.open_partner_windows();
-                self.refresh_spout_status();
+                self.refresh_output_status();
             }
             Err(error) => self.notice(error, true),
-        }
-    }
-
-    /// Open a window for every live seat that has none yet. A window stays
-    /// open (hidden) once its seat empties, for the next person to sit there.
-    fn open_partner_windows(&mut self) {
-        let locale = self.ui.locale.get_untracked();
-        for kind in crate::windows::WindowKind::PARTNERS
-            .into_iter()
-            .take(self.partner_seats())
-        {
-            if self.windows.should_open(kind) {
-                let descriptor = crate::windows::descriptor(
-                    kind,
-                    &kind.title(locale),
-                    &self.skin,
-                    &self.settings,
-                );
-                self.commands
-                    .push(nana_ui_platform::host::WindowCommand::Open {
-                        id: kind.id(),
-                        settings: descriptor,
-                    });
-            }
         }
     }
 
@@ -222,18 +207,21 @@ impl App {
             generation: self.peer.generation + 1,
             ..Session::default()
         };
+        self.sync_draft_policy();
         self.ui.peer.set(Arc::new(SessionUi::default()));
         self.ui.peer_seats.set(0);
         for lane in self.ui.peer_lanes {
             lane.display.set(Arc::new(empty()));
             lane.portraits.set(Arc::new(Default::default()));
         }
-        self.ui.display.set(Arc::new(self.core.display().clone()));
-        self.ui.peer_local_line.set(None);
         self.ui
-            .history
-            .set(Arc::new(self.core.history().iter().cloned().collect()));
-        self.refresh_spout_status();
+            .display
+            .set(Arc::new(self.session.core.display().clone()));
+        self.ui.peer_local_line.set(None);
+        self.ui.history.set(Arc::new(
+            self.session.core.history().iter().cloned().collect(),
+        ));
+        self.refresh_output_status();
     }
 
     pub(crate) fn peer_event(&mut self, generation: u64, event: Event) {
@@ -276,20 +264,14 @@ impl App {
             }
             Event::AssetReady(hash) => {
                 // The still preview may already be resolved under this key.
-                // Drop it so the full picture replaces it.
-                let key = AssetRef::Blob(format!("p2p-{hash}")).to_string();
-                if self
-                    .ui
-                    .asset_urls
-                    .with_untracked(|urls| urls.contains_key(&key))
-                {
-                    let mut urls = (*self.ui.asset_urls.get_untracked()).clone();
-                    urls.remove(&key);
-                    self.ui.asset_urls.set(Arc::new(urls));
+                // Drop and re-resolve it in one CoW pass so the full picture replaces it.
+                self.media
+                    .invalidate_and_resolve_asset(AssetRef::Blob(format!("p2p-{hash}")), self.ui);
+                // Force changed-display re-render so document objects re-read the new URL.
+                for state in self.peer.peers.values_mut() {
+                    state.revision = 0;
+                    state.portraits.clear();
                 }
-                // A box reads picture URLs once per document: draw it again
-                // even though the sender's revision did not move.
-                self.peer.remote_revision.clear();
                 self.peer_render();
             }
         }
@@ -323,7 +305,9 @@ impl App {
     /// sees it through the published display and history, when they show it.
     pub(crate) fn peer_submitted(&mut self, event: &CoreEvent) {
         if self.peer.handle.is_some() {
-            session_line(&mut self.peer.lines, event, |id| self.core.replay_of(id));
+            session_line(&mut self.peer.lines, event, |id| {
+                self.session.core.replay_of(id)
+            });
         }
     }
 
@@ -331,7 +315,7 @@ impl App {
     /// partner receives it.
     pub(crate) fn shared_display(&self) -> DisplayView {
         session_display(
-            self.core.display(),
+            self.session.core.display(),
             self.peer.handle.is_some().then_some(&self.peer.lines),
         )
     }
@@ -341,9 +325,9 @@ impl App {
             return;
         }
         self.peer.revision += 1;
-        let rows = session_rows(self.core.history(), &self.peer.lines);
+        let rows = session_rows(self.session.core.history(), &self.peer.lines);
         let display = self.shared_display();
-        let portrait = &self.skin.dialogue.portrait;
+        let portrait = &self.appearance.skin.dialogue.portrait;
         let mut portraits = Vec::new();
         if let Some(image) = &portrait.image {
             portraits.push(nanatype_p2p::PortraitAsset {
@@ -359,6 +343,13 @@ impl App {
                 asset: AssetRef::Skin(image.clone()),
             });
         }
+        let mut assets = crate::app::media::display_assets(&display);
+        for row in &rows {
+            assets.extend(crate::app::media::row_assets(&row.item, row.doc()));
+        }
+        for portrait in &portraits {
+            assets.push(portrait.asset.clone());
+        }
         let track = TrackSnapshot {
             revision: self.peer.revision,
             captured_ms: clock::now_ms(),
@@ -368,35 +359,40 @@ impl App {
             rows,
             portraits,
         };
-        let resources = self.peer_resources(&serde_json::to_value(&track).expect("track"));
+        let resources = self.peer_resources(assets);
         if let Some(handle) = &self.peer.handle {
             handle.publish(track, resources);
         }
     }
 
-    fn peer_resources(&self, value: &serde_json::Value) -> Resources {
-        nanatype_p2p::asset_references(value)
-            .into_iter()
-            .filter_map(|reference| {
-                let asset = reference
-                    .parse::<AssetRef>()
-                    .unwrap_or_else(|_| AssetRef::File(reference.into()));
-                self.assets
-                    .resolve(&asset, Some(&self.loaded))
-                    .map(|path| (reference.into(), path))
-            })
-            .collect()
+    fn peer_resources(&self, assets: Vec<AssetRef>) -> Resources {
+        let mut resources = Resources::new();
+        for asset in assets {
+            let reference = asset.to_string();
+            if resources.contains_key(reference.as_str()) {
+                continue;
+            }
+            if let Some(path) = self.media.resolve(&asset) {
+                resources.insert(reference, path);
+            }
+        }
+        resources
     }
 
     pub(crate) fn peer_render(&mut self) {
-        let Some(room) = &self.peer.room else { return };
+        let Some(room) = self.peer.room.clone() else {
+            return;
+        };
         let now = clock::now_ms();
         let elapsed = self
             .peer
             .room_received
             .map_or(0, |at| at.elapsed().as_millis() as u64);
         let members = room.guests.len().saturating_add(1);
-        let mut rows = Vec::new();
+        // Drop participants who left the room.
+        self.peer
+            .peers
+            .retain(|id, _| id == &self.peer.local || room.tracks.contains_key(id));
         // Seat order: the host, then guests. The local person stays on their own display.
         let mut seated = Vec::new();
         if room.host != self.peer.local {
@@ -409,63 +405,83 @@ impl App {
                 .cloned(),
         );
         seated.truncate(crate::ui::REMOTE_LANES);
-        let mut remote_revision = Vec::new();
+
         let mut replays = Vec::new();
         let mut names = Vec::new();
         let mut seat_names = Vec::new();
+        let mut new_assets = Vec::new();
+
         for (index, id) in seated.iter().enumerate() {
             let lane = self.ui.peer_lanes[index];
             let track = room.tracks.get(id);
-            let mut remote_view = track
-                .map(|track| track.display.clone())
-                .unwrap_or_else(empty);
-            let revision = track.map(|track| track.revision).unwrap_or(0);
+            let revision = track.map_or(0, |t| t.revision);
+            let rendered_line = track
+                .and_then(|t| t.display.line)
+                .map(|line| room.render_id(id, line));
+            let prev = self.peer.peers.get(id);
+            let display_changed =
+                prev.is_none_or(|p| p.revision != revision || p.rendered_line != rendered_line);
+
             if let Some(track) = track {
-                nanatype_p2p::rebase_display(
-                    &mut remote_view,
-                    track
-                        .captured_ms
-                        .saturating_add(track.age_ms)
-                        .saturating_add(elapsed),
-                    now,
-                );
                 if !track.name.is_empty() {
                     names.push(track.name.clone());
                 }
+                seat_names.push(track.name.clone());
+                // A replay has no history row to be read from: read it from the
+                // display, unless it was already there when the room arrived.
+                if track.display.replay
+                    && let Some(line) = track.display.line
+                    && prev.is_some_and(|p| p.revision != revision)
+                {
+                    replays.push((id.clone(), line, track.display.doc.clone()));
+                }
+            } else {
+                seat_names.push(String::new());
             }
-            seat_names.push(track.map(|track| track.name.clone()).unwrap_or_default());
-            // A replay has no history row to be read from: read it from the
-            // display, unless it was already there when the room arrived.
-            if remote_view.replay
-                && let Some(line) = remote_view.line
-                && self.peer.remote_revision.get(index).is_some()
-            {
-                replays.push((id.clone(), line, remote_view.doc.clone()));
-            }
-            remote_view.line = remote_view.line.map(|line| room.render_id(id, line));
-            let stamp = (id.clone(), revision, remote_view.line);
-            if self.peer.remote_revision.get(index) != Some(&stamp) {
+
+            if display_changed {
+                let mut remote_view = track.map(|t| t.display.clone()).unwrap_or_else(empty);
+                if let Some(track) = track {
+                    nanatype_p2p::rebase_display(
+                        &mut remote_view,
+                        track
+                            .captured_ms
+                            .saturating_add(track.age_ms)
+                            .saturating_add(elapsed),
+                        now,
+                    );
+                }
+                remote_view.line = rendered_line;
                 remote_view.revision = lane.display.get_untracked().revision + 1;
+                new_assets.extend(crate::app::media::display_assets(&remote_view));
                 lane.display.set(Arc::new(remote_view));
             }
-            let portraits = track
+
+            let portraits: HashMap<String, String> = track
                 .map(|track| {
                     track
                         .portraits
                         .iter()
                         .filter_map(|portrait| {
-                            self.assets
-                                .url(&portrait.asset, Some(&self.loaded))
+                            self.media
+                                .url(&portrait.asset)
                                 .map(|url| (portrait.variant.clone(), url))
                         })
                         .collect()
                 })
                 .unwrap_or_default();
-            if *lane.portraits.get_untracked() != portraits {
-                lane.portraits.set(Arc::new(portraits));
+            if prev.is_none_or(|p| p.portraits != portraits)
+                && *lane.portraits.get_untracked() != portraits
+            {
+                lane.portraits.set(Arc::new(portraits.clone()));
             }
-            remote_revision.push(stamp);
+
+            let entry = self.peer.peers.entry(id.clone()).or_default();
+            entry.revision = revision;
+            entry.rendered_line = rendered_line;
+            entry.portraits = portraits;
         }
+
         for lane in self.ui.peer_lanes.iter().skip(seated.len()) {
             if !lane.display.get_untracked().empty {
                 lane.display.set(Arc::new(empty()));
@@ -479,8 +495,10 @@ impl App {
         if reseated {
             self.ui.peer_seats.set(seated.len());
         }
+
         // Index every owner's rows once instead of scanning per entry.
-        let mut by_line: std::collections::HashMap<(&str, LineId), &HistoryRow> = self
+        let mut by_line: HashMap<(&str, LineId), &HistoryRow> = self
+            .session
             .core
             .history()
             .iter()
@@ -496,38 +514,49 @@ impl App {
                 );
             }
         }
-        let mut partner_lines = Vec::new();
+        let mut rows = Vec::with_capacity(room.entries.len());
+        let mut partner_lines: Vec<(String, LineId, nanatype_model::HistoryItem)> = Vec::new();
         for entry in &room.entries {
             let owner = &entry.participant;
             let track = room.tracks.get(owner);
             // Visibility and reveal follow the owner's history policy.
-            let source_row = by_line.get(&(owner.as_str(), entry.line)).copied();
-            if let Some(row) = source_row {
-                let mut row = row.clone();
+            let Some(source_row) = by_line.get(&(owner.as_str(), entry.line)).copied() else {
+                continue;
+            };
+            let mut row = source_row.clone();
+            row.key = entry.order;
+            row.item.line = Some(room.render_id(owner, entry.line));
+            row.item.source = SourceId(format!("peer:{owner}"));
+            if owner != &self.peer.local
+                && let Some(track) = track
+            {
+                nanatype_p2p::rebase_row(
+                    &mut row,
+                    track
+                        .captured_ms
+                        .saturating_add(track.age_ms)
+                        .saturating_add(elapsed),
+                    now,
+                );
+            }
+            let seen_order = self.peer.peers.get(owner).map_or(0, |p| p.last_entry_order);
+            if entry.order > seen_order {
+                self.peer
+                    .peers
+                    .entry(owner.clone())
+                    .or_default()
+                    .last_entry_order = entry.order;
+                new_assets.extend(crate::app::media::row_assets(&row.item, row.doc()));
                 if owner != &self.peer.local {
                     partner_lines.push((owner.clone(), entry.line, row.item.clone()));
                 }
-                row.key = entry.order;
-                row.item.line = Some(room.render_id(owner, entry.line));
-                row.item.source = SourceId(format!("peer:{owner}"));
-                if owner != &self.peer.local
-                    && let Some(track) = track
-                {
-                    nanatype_p2p::rebase_row(
-                        &mut row,
-                        track
-                            .captured_ms
-                            .saturating_add(track.age_ms)
-                            .saturating_add(elapsed),
-                        now,
-                    );
-                }
-                rows.push(row);
             }
+            rows.push(row);
         }
-        self.peer.remote_revision = remote_revision;
+
         self.ui.peer_local_line.set(
-            self.core
+            self.session
+                .core
                 .display()
                 .line
                 .filter(|id| self.peer.lines.contains(id))
@@ -547,11 +576,10 @@ impl App {
             self.ui.peer.set(Arc::new(state));
         }
         if reseated {
-            // Someone sat down or left: their window and output follow.
-            self.open_partner_windows();
-            self.refresh_spout_status();
+            // Someone sat down or left: their output status follows.
+            self.refresh_output_status();
         }
-        self.refresh_peer_urls();
+        self.media.ensure_urls(new_assets, self.ui);
         for (owner, line, doc) in replays {
             self.tts_partner_replay(&owner, line, &doc);
         }
@@ -559,26 +587,6 @@ impl App {
             self.tts_partner(&owner, line, &item);
             self.archive_partner(&owner, line, &item);
         }
-    }
-
-    fn refresh_peer_urls(&mut self) {
-        let seats = crate::ui::remote_bands(self.ui.peer_seats.get_untracked());
-        let displays: Vec<_> = self
-            .ui
-            .peer_lanes
-            .iter()
-            .take(seats)
-            .map(|lane| lane.display.get_untracked())
-            .collect();
-        let value = serde_json::json!({
-            "displays": displays,
-            "history": &*self.ui.history.get_untracked(),
-        });
-        self.ensure_urls(
-            nanatype_p2p::asset_references(&value)
-                .into_iter()
-                .filter_map(|reference| reference.parse().ok()),
-        );
     }
 }
 

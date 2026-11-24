@@ -1,3 +1,4 @@
+use super::onboarding::accent_bar_layout;
 use super::*;
 use crate::msg::{SkinMsg, WorkshopMsg};
 use nana_ui::runtime::view::El;
@@ -68,7 +69,7 @@ pub(super) fn skins(ui: Ui) -> AnyView {
     let list = dynamic(
         move || {
             (
-                ui.skins.with(|s| Arc::as_ptr(s) as usize),
+                ui.skins.get(),
                 ui.settings.with(|s| s.skin.id.clone()),
                 filter.get(),
                 grid.get(),

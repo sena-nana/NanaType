@@ -43,6 +43,94 @@ pub const QUICK_SIZE: (f32, f32) = (640.0, 56.0);
 /// Smallest a broadcast window may be dragged to.
 pub const OVERLAY_MIN: (f64, f64) = (160.0, 96.0);
 
+/// Static metadata describing a [`WindowKind`] in one table.
+#[derive(Debug, Clone, Copy)]
+pub struct WindowMeta {
+    pub id: WindowId,
+    pub tag: &'static str,
+    pub key: &'static str,
+    pub title_key: &'static str,
+    pub diag_code: u64,
+    pub canvas: Option<Canvas>,
+}
+
+const fn peer_meta(
+    seat: u8,
+    id: u64,
+    tag: &'static str,
+    key: &'static str,
+    diag_code: u64,
+) -> WindowMeta {
+    let _ = seat;
+    WindowMeta {
+        id: WindowId(id),
+        tag,
+        key,
+        title_key: "window-peer-display",
+        diag_code,
+        canvas: Some(Canvas::PeerDisplay),
+    }
+}
+
+const PEER_METAS: [WindowMeta; PARTNER_SEATS] = [
+    peer_meta(0, 6, "nt.peer-display", "peer_display", 2),
+    peer_meta(1, 8, "nt.peer-display-2", "peer_display_2", 6),
+    peer_meta(2, 9, "nt.peer-display-3", "peer_display_3", 7),
+    peer_meta(3, 10, "nt.peer-display-4", "peer_display_4", 8),
+    peer_meta(4, 11, "nt.peer-display-5", "peer_display_5", 9),
+    peer_meta(5, 12, "nt.peer-display-6", "peer_display_6", 10),
+    peer_meta(6, 13, "nt.peer-display-7", "peer_display_7", 11),
+];
+
+const INPUT_META: WindowMeta = WindowMeta {
+    id: WindowId::PRIMARY,
+    tag: "nt.input",
+    key: "input",
+    title_key: "window-input",
+    diag_code: 0,
+    canvas: None,
+};
+const DISPLAY_META: WindowMeta = WindowMeta {
+    id: WindowId(2),
+    tag: "nt.display",
+    key: "display",
+    title_key: "window-display",
+    diag_code: 1,
+    canvas: Some(Canvas::Display),
+};
+const HISTORY_META: WindowMeta = WindowMeta {
+    id: WindowId(3),
+    tag: "nt.history",
+    key: "history",
+    title_key: "window-history",
+    diag_code: 3,
+    canvas: Some(Canvas::History),
+};
+const DANMAKU_META: WindowMeta = WindowMeta {
+    id: WindowId(14),
+    tag: "nt.danmaku",
+    key: "danmaku",
+    title_key: "window-danmaku",
+    diag_code: 12,
+    canvas: Some(Canvas::Danmaku),
+};
+const SETTINGS_META: WindowMeta = WindowMeta {
+    id: WindowId(4),
+    tag: "nt.settings",
+    key: "settings",
+    title_key: "window-settings",
+    diag_code: 4,
+    canvas: None,
+};
+const QUICK_META: WindowMeta = WindowMeta {
+    id: WindowId(7),
+    tag: "nt.quick",
+    key: "quick",
+    title_key: "window-quick",
+    diag_code: 5,
+    canvas: None,
+};
+
 impl WindowKind {
     pub const OVERLAYS: [Self; 5] = [
         Self::Input,
@@ -75,18 +163,27 @@ impl WindowKind {
         }
     }
 
-    pub fn id(self) -> WindowId {
+    pub const fn meta(self) -> WindowMeta {
         match self {
-            Self::Input => WindowId::PRIMARY,
-            Self::Display => WindowId(2),
-            // The first seat keeps the single partner window's id.
-            Self::PeerDisplay(0) => WindowId(6),
-            Self::PeerDisplay(seat) => WindowId(7 + u64::from(seat)),
-            Self::History => WindowId(3),
-            Self::Danmaku => WindowId(14),
-            Self::Settings => WindowId(4),
-            Self::Quick => WindowId(7),
+            Self::Input => INPUT_META,
+            Self::Display => DISPLAY_META,
+            Self::PeerDisplay(seat) => {
+                let idx = if (seat as usize) < PARTNER_SEATS {
+                    seat as usize
+                } else {
+                    PARTNER_SEATS - 1
+                };
+                PEER_METAS[idx]
+            }
+            Self::History => HISTORY_META,
+            Self::Danmaku => DANMAKU_META,
+            Self::Settings => SETTINGS_META,
+            Self::Quick => QUICK_META,
         }
+    }
+
+    pub const fn id(self) -> WindowId {
+        self.meta().id
     }
 
     /// Windows the app manages, in reconcile order.
@@ -110,53 +207,20 @@ impl WindowKind {
         Self::ALL.into_iter().find(|k| k.id() == id)
     }
 
-    pub fn tag(self) -> &'static str {
-        match self {
-            Self::Input => "nt.input",
-            Self::Display => "nt.display",
-            Self::PeerDisplay(0) => "nt.peer-display",
-            Self::PeerDisplay(1) => "nt.peer-display-2",
-            Self::PeerDisplay(2) => "nt.peer-display-3",
-            Self::PeerDisplay(3) => "nt.peer-display-4",
-            Self::PeerDisplay(4) => "nt.peer-display-5",
-            Self::PeerDisplay(5) => "nt.peer-display-6",
-            Self::PeerDisplay(_) => "nt.peer-display-7",
-            Self::History => "nt.history",
-            Self::Danmaku => "nt.danmaku",
-            Self::Settings => "nt.settings",
-            Self::Quick => "nt.quick",
-        }
+    pub const fn tag(self) -> &'static str {
+        self.meta().tag
     }
 
-    pub fn key(self) -> &'static str {
-        match self {
-            Self::Input => "input",
-            Self::Display => "display",
-            // The first seat keeps the single partner window's saved place.
-            Self::PeerDisplay(0) => "peer_display",
-            Self::PeerDisplay(1) => "peer_display_2",
-            Self::PeerDisplay(2) => "peer_display_3",
-            Self::PeerDisplay(3) => "peer_display_4",
-            Self::PeerDisplay(4) => "peer_display_5",
-            Self::PeerDisplay(5) => "peer_display_6",
-            Self::PeerDisplay(_) => "peer_display_7",
-            Self::History => "history",
-            Self::Danmaku => "danmaku",
-            Self::Settings => "settings",
-            Self::Quick => "quick",
-        }
+    pub const fn key(self) -> &'static str {
+        self.meta().key
     }
 
-    pub fn title_key(self) -> &'static str {
-        match self {
-            Self::Input => "window-input",
-            Self::Display => "window-display",
-            Self::PeerDisplay(_) => "window-peer-display",
-            Self::History => "window-history",
-            Self::Danmaku => "window-danmaku",
-            Self::Settings => "window-settings",
-            Self::Quick => "window-quick",
-        }
+    pub const fn title_key(self) -> &'static str {
+        self.meta().title_key
+    }
+
+    pub const fn diag_code(self) -> u64 {
+        self.meta().diag_code
     }
 
     /// The window's title. Partner seats after the first are numbered, so a
@@ -170,14 +234,8 @@ impl WindowKind {
     }
 
     /// The canvas this window shows, for the broadcast windows the skin draws.
-    pub fn canvas(self) -> Option<Canvas> {
-        match self {
-            Self::Display => Some(Canvas::Display),
-            Self::PeerDisplay(_) => Some(Canvas::PeerDisplay),
-            Self::History => Some(Canvas::History),
-            Self::Danmaku => Some(Canvas::Danmaku),
-            Self::Input | Self::Settings | Self::Quick => None,
-        }
+    pub const fn canvas(self) -> Option<Canvas> {
+        self.meta().canvas
     }
 
     pub fn overlay(self, s: &Settings) -> Option<&OverlaySettings> {
@@ -398,6 +456,63 @@ pub fn descriptor(kind: WindowKind, title: &str, skin: &Skin, s: &Settings) -> W
     d
 }
 
+/// Quick input bar visibility, focus request, and native handle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuickBarState {
+    Hidden { hwnd: isize },
+    Visible { focus: bool, hwnd: isize },
+}
+
+impl Default for QuickBarState {
+    fn default() -> Self {
+        Self::Hidden { hwnd: 0 }
+    }
+}
+
+impl QuickBarState {
+    pub fn is_visible(self) -> bool {
+        matches!(self, Self::Visible { .. })
+    }
+
+    pub fn hwnd(self) -> isize {
+        match self {
+            Self::Hidden { hwnd } | Self::Visible { hwnd, .. } => hwnd,
+        }
+    }
+
+    pub fn set_hwnd(&mut self, next: isize) {
+        match self {
+            Self::Hidden { hwnd } | Self::Visible { hwnd, .. } => *hwnd = next,
+        }
+    }
+
+    pub fn show(&mut self) {
+        *self = Self::Visible {
+            focus: true,
+            hwnd: self.hwnd(),
+        };
+    }
+
+    pub fn hide(&mut self) {
+        *self = Self::Hidden { hwnd: self.hwnd() };
+    }
+
+    pub fn take_focus(&mut self) -> bool {
+        if let Self::Visible { focus, .. } = self
+            && *focus
+        {
+            *focus = false;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn closed(&mut self) {
+        *self = Self::Hidden { hwnd: 0 };
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Desired {
     pub visible: bool,
@@ -405,6 +520,13 @@ pub struct Desired {
     pub on_top: bool,
     pub resizable: bool,
     pub size: (f32, f32),
+}
+
+/// Declarative per-window target state for [`WindowManager::reconcile`].
+pub struct WindowSpec {
+    pub open: bool,
+    pub focus: bool,
+    pub desired: Desired,
 }
 
 /// Apply an explicit show/hide action while preserving summon-mode preference.
@@ -423,7 +545,7 @@ pub fn desired(kind: WindowKind, skin: &Skin, s: &Settings, input_summoned: bool
                 && (s.general.input_presence == InputPresence::Resident || input_summoned)
         }
         WindowKind::Settings => true,
-        // Shown by the app's own flag (`App::quick_open`).
+        // Shown by [`QuickBarState`].
         WindowKind::Quick => false,
         _ => o.is_some_and(|o| o.visible),
     };
@@ -478,11 +600,35 @@ pub struct WindowManager {
     pub monitors: Vec<MonitorInfo>,
     pub geometry: GeometryStore,
     pub geometry_dirty: bool,
+    /// Declarative open/focus intent for windows opened on demand (`Settings`).
+    settings_wanted: bool,
+    focus_requests: Vec<WindowKind>,
 }
 
 impl WindowManager {
     pub fn is_open(&self, kind: WindowKind) -> bool {
         self.slots.get(&kind).is_some_and(|s| s.handle.is_some())
+    }
+
+    pub fn request_settings(&mut self) {
+        self.settings_wanted = true;
+        if self.is_open(WindowKind::Settings) {
+            self.request_focus(WindowKind::Settings);
+        }
+    }
+
+    pub fn close_settings(&mut self) {
+        self.settings_wanted = false;
+    }
+
+    pub fn request_focus(&mut self, kind: WindowKind) {
+        if !self.focus_requests.contains(&kind) {
+            self.focus_requests.push(kind);
+        }
+    }
+
+    pub fn take_focus_requests(&mut self) -> Vec<WindowKind> {
+        std::mem::take(&mut self.focus_requests)
     }
 
     /// Whether to ask for `kind`'s window: it is neither open nor asked for.
@@ -508,6 +654,9 @@ impl WindowManager {
 
     pub fn closed(&mut self, kind: WindowKind) {
         self.slots.remove(&kind);
+        if kind == WindowKind::Settings {
+            self.settings_wanted = false;
+        }
     }
 
     pub fn frame(&self, kind: WindowKind) -> Option<Placement> {
@@ -602,14 +751,64 @@ impl WindowManager {
         }
     }
 
-    /// Commands that bring every open window to its desired state.
-    pub fn reconcile(&mut self, want: &[(WindowKind, Desired)]) -> Vec<WindowCommand> {
+    /// Declaratively reconcile every managed window: open missing windows whose
+    /// `spec.open` is true (once `WindowKind::Input` is open), apply bounds /
+    /// passthrough / topmost / resizable / visibility / focus, and return the
+    /// resulting platform commands.
+    #[allow(clippy::too_many_arguments)]
+    pub fn reconcile(
+        &mut self,
+        skin: &Skin,
+        settings: &Settings,
+        locale: nanatype_i18n::Locale,
+        system_text: Option<f32>,
+        input_summoned: bool,
+        quick_visible: bool,
+        partner_seats: usize,
+    ) -> Vec<WindowCommand> {
         let mut out = Vec::new();
         let monitors_known = !self.monitors.is_empty();
-        for (kind, d) in want {
+        let input_open = self.is_open(WindowKind::Input);
+        let focus_requests = self.take_focus_requests();
+
+        for kind in WindowKind::ALL {
+            let mut d = desired(kind, skin, settings, input_summoned);
+            d.size = own_size(kind, zoom(kind, settings, system_text))
+                .unwrap_or_else(|| size_of(kind, skin, settings));
+            if kind.seat().is_some_and(|seat| seat >= partner_seats) {
+                d.visible = false;
+            }
+            if kind == WindowKind::Danmaku && !settings.history.chat.separate {
+                d.visible = false;
+            }
+            if kind == WindowKind::Quick {
+                d.visible = quick_visible;
+            }
+
+            let wants_open = match kind {
+                WindowKind::Input => false, // Primary window opens at startup.
+                WindowKind::Display | WindowKind::History => input_open,
+                WindowKind::Danmaku => input_open && settings.history.chat.separate,
+                WindowKind::PeerDisplay(seat) => input_open && usize::from(seat) < partner_seats,
+                WindowKind::Quick => {
+                    input_open
+                        && (settings.general.input_presence == InputPresence::Summon
+                            || quick_visible)
+                }
+                WindowKind::Settings => self.settings_wanted,
+            };
+
+            if wants_open && self.should_open(kind) {
+                let desc = descriptor(kind, &kind.title(locale), skin, settings);
+                out.push(WindowCommand::Open {
+                    id: kind.id(),
+                    settings: desc,
+                });
+            }
+
             let placement = self.geometry.restore(&self.monitors, kind.key());
-            let default = self.default_place(*kind, d.size);
-            let Some(slot) = self.slots.get_mut(kind) else {
+            let default = self.default_place(kind, d.size);
+            let Some(slot) = self.slots.get_mut(&kind) else {
                 continue;
             };
             let Some(handle) = slot.handle.clone() else {
@@ -618,12 +817,11 @@ impl WindowManager {
             let id = kind.id();
             let prev = slot.applied.clone();
             // The quick bar opens centred each time, wherever it was left.
-            if *kind == WindowKind::Quick && d.visible && !prev.as_ref().is_some_and(|p| p.visible)
-            {
+            if kind == WindowKind::Quick && d.visible && !prev.as_ref().is_some_and(|p| p.visible) {
                 slot.placed = false;
             }
             if !slot.placed && monitors_known {
-                let (pos, size) = match (*kind, placement) {
+                let (pos, size) = match (kind, placement) {
                     // Overlays whose size follows the skin keep that size.
                     (WindowKind::Input, Some(p)) => {
                         let size = (
@@ -642,14 +840,14 @@ impl WindowManager {
                 });
                 slot.placed = true;
             } else if prev.as_ref().is_some_and(|p| p.size != d.size)
-                && prev.as_ref().is_some_and(|p| pins_size(*kind, p.resizable))
+                && prev.as_ref().is_some_and(|p| pins_size(kind, p.resizable))
                 && let Some(f) = slot.frame
             {
                 out.push(WindowCommand::SetBounds {
                     id,
                     position: (
                         f.x as f32,
-                        if *kind == WindowKind::Input {
+                        if kind == WindowKind::Input {
                             f.y as f32 + f.h as f32 - d.size.1
                         } else {
                             f.y as f32
@@ -659,14 +857,14 @@ impl WindowManager {
                 });
             }
             if prev.as_ref().map(|p| p.passthrough) != Some(d.passthrough)
-                && *kind != WindowKind::Settings
+                && kind != WindowKind::Settings
             {
                 out.push(WindowCommand::SetMousePassthrough {
                     id,
                     enabled: d.passthrough,
                 });
             }
-            if prev.as_ref().map(|p| p.on_top) != Some(d.on_top) && *kind != WindowKind::Settings {
+            if prev.as_ref().map(|p| p.on_top) != Some(d.on_top) && kind != WindowKind::Settings {
                 out.push(WindowCommand::SetAlwaysOnTop {
                     id,
                     always_on_top: d.on_top,
@@ -679,17 +877,17 @@ impl WindowManager {
             if prev.as_ref().map(|p| p.visible) != Some(visible) {
                 nanatype_diag::event!(
                     crate::diag::WINDOW_VISIBILITY,
-                    window = crate::diag::window(*kind),
+                    window = crate::diag::window(kind),
                     visible = visible,
                     placed = slot.placed,
                     monitors_known = monitors_known,
                 );
                 drop(handle.set_visible(visible));
             }
-            slot.applied = Some(Desired {
-                visible,
-                ..d.clone()
-            });
+            if focus_requests.contains(&kind) {
+                out.push(WindowCommand::Focus(id));
+            }
+            slot.applied = Some(Desired { visible, ..d });
         }
         out
     }

@@ -624,11 +624,8 @@ fn skin_preview_fits_first_run_and_settings_through_resizes() {
 }
 
 #[test]
-fn onboarding_skin_step_enters_before_it_mounts_the_preview() {
+fn onboarding_skin_step_mounts_the_preview_without_deferral() {
     let mut f = Fixture::new(Locale::ZhCn, true, Page::General);
-    f.ui.onboard_skin_shown.set(false);
-    f.ui.onboard_step.set(1);
-    f.session.flush().unwrap();
     let paths = |f: &Fixture| {
         f.session
             .accessibility_dump()
@@ -636,12 +633,12 @@ fn onboarding_skin_step_enters_before_it_mounts_the_preview() {
             .filter_map(|n| n.agent_path)
             .collect::<Vec<_>>()
     };
-    let held = paths(&f);
+    let step0 = paths(&f);
     assert!(
-        held.iter().all(|p| !p.ends_with("skin-preview")),
-        "{held:?}"
+        step0.iter().all(|p| !p.ends_with("skin-preview")),
+        "{step0:?}"
     );
-    f.ui.onboard_skin_shown.set(true);
+    f.ui.onboard_step.set(1);
     f.session.flush().unwrap();
     let shown = paths(&f);
     assert!(

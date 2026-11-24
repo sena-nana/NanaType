@@ -116,7 +116,7 @@ fn blive(locale: Locale, status: &BliveStatus, room: &str) -> (String, Link) {
 pub fn blivechat(
     locale: Locale,
     integrations: &Integrations,
-    state: &crate::app::blivechat::State,
+    state: &crate::ui::BliveFeedState,
 ) -> (String, Link) {
     if !integrations.blivechat_on() {
         return (I18N.t_in(locale, "int-status-off"), Link::Off);
@@ -126,7 +126,7 @@ pub fn blivechat(
     }
     let settings = &integrations.blivechat;
     // Never show the auth code itself.
-    let room = match crate::distribution::blive_room_kind(settings) {
+    let room = match settings.room_kind {
         BliveRoomKind::RoomId => settings.room_id.clone(),
         BliveRoomKind::AuthCode => I18N.t_in(locale, "int-blive-auth-code"),
     };
@@ -137,7 +137,7 @@ pub fn blivechat(
 pub fn laplace(
     locale: Locale,
     integrations: &Integrations,
-    state: &crate::app::laplace::State,
+    state: &crate::ui::BliveFeedState,
 ) -> (String, Link) {
     if !integrations.laplace_on() {
         return (I18N.t_in(locale, "int-status-off"), Link::Off);
@@ -152,7 +152,7 @@ pub fn laplace(
 pub fn comet(
     locale: Locale,
     integrations: &Integrations,
-    state: &crate::app::comet::State,
+    state: &crate::ui::BliveFeedState,
 ) -> (String, Link) {
     let rooms = integrations.comet_rooms();
     if !(rooms.bilibili || rooms.others) {
@@ -261,9 +261,10 @@ mod tests {
             i.bilibili.enabled = true;
             for status in [BliveStatus::Off, BliveStatus::Connected] {
                 i.bilibili.link = BilibiliLink::Blivechat;
-                let state = crate::app::blivechat::State {
+                let state = crate::ui::BliveFeedState {
                     status,
-                    auth_saved: false,
+                    secret_saved: false,
+                    ..Default::default()
                 };
                 texts.push(blivechat(locale, &i, &state).0);
             }
@@ -272,9 +273,10 @@ mod tests {
                 BliveStatus::Error(LinkFault::Unauthorized),
             ] {
                 i.bilibili.link = BilibiliLink::Laplace;
-                let state = crate::app::laplace::State {
+                let state = crate::ui::BliveFeedState {
                     status,
-                    token_saved: false,
+                    secret_saved: false,
+                    ..Default::default()
                 };
                 texts.push(laplace(locale, &i, &state).0);
             }
@@ -284,7 +286,10 @@ mod tests {
                 BliveStatus::Error(LinkFault::Refused),
                 BliveStatus::Connected,
             ] {
-                let state = crate::app::comet::State { status };
+                let state = crate::ui::BliveFeedState {
+                    status,
+                    ..Default::default()
+                };
                 texts.push(comet(locale, &i, &state).0);
             }
             for status in [

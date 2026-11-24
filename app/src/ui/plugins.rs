@@ -375,12 +375,13 @@ pub fn settings(ui: Ui) -> AnyView {
         move || {
             (
                 ui.packages.get(),
-                ui.settings.get(),
+                ui.settings
+                    .with(|s| (s.disabled_packages.clone(), s.enabled_plugins.clone())),
                 ui.plugin_errors.get(),
                 ui.workshop.get(),
             )
         },
-        move |(rows, settings, errors, workshop)| {
+        move |(rows, (disabled_packages, enabled_plugins), errors, workshop)| {
             let rows = rows
                 .iter()
                 .map(|row| {
@@ -396,12 +397,12 @@ pub fn settings(ui: Ui) -> AnyView {
                         row,
                         subscription,
                         // On unless switched off; a script also needs its consent.
-                        !settings.disabled_packages.contains(id)
+                        !disabled_packages.contains(id)
                             && (!row
                                 .manifest
                                 .capabilities
                                 .contains(&nanatype_theme::PackageCapability::Lua)
-                                || settings.enabled_plugins.contains(id)),
+                                || enabled_plugins.contains(id)),
                         errors.get(id),
                         open,
                     );

@@ -1,6 +1,6 @@
 use super::{App, EditorCommand};
 use crate::completion;
-use crate::msg::{Complete, EditorMsg, MarkupEdit, Msg, Tool};
+use crate::msg::{Complete, EditorMsg, MarkupEdit, Tool};
 use nana_ui::runtime::RichEditCommand;
 use nanatype_core::Cmd;
 use nanatype_markup::{parse, serialize_line};
@@ -19,6 +19,7 @@ impl App {
                 | EditorMsg::PasteImage { .. }
                 | EditorMsg::Complete(Complete::Accept(_))
         ) {
+            self.draft.bump_version();
             self.speech_user_edit();
         }
         // Moving through the list must not rebuild it.
@@ -33,30 +34,23 @@ impl App {
         match msg {
             EditorMsg::Complete(action) => self.complete(action),
             EditorMsg::Selection(selection) => {
-                self.completer.caret = (selection.start == selection.end).then_some(selection.end);
+                self.draft.completer.caret =
+                    (selection.start == selection.end).then_some(selection.end);
             }
             EditorMsg::Markup(edit) => self.markup(edit),
             EditorMsg::Tool(tool) => self.tool(tool),
-            EditorMsg::Command(command) => self.rich_commands.push(command.into()),
+            EditorMsg::Command(command) => self.draft.rich_commands.push(command.into()),
             EditorMsg::Changed(rich) => self.editor_changed(rich),
             EditorMsg::Paste => {
-                if let Ok(mut clipboard) = arboard::Clipboard::new()
-                    && let Ok(image) = clipboard.get_image()
-                {
-                    let (w, h) = (image.width as u32, image.height as u32);
-                    self.update(Msg::Editor(EditorMsg::PasteImage {
-                        width: w,
-                        height: h,
-                        rgba: image.bytes.into_owned(),
-                    }));
+                if let Some((width, height, rgba)) = self.draft.clipboard_image() {
+                    self.paste_image(width, height, rgba);
                 }
             }
             EditorMsg::ToggleSource => {
                 let on = !self.ui.source_mode.get_untracked();
                 self.ui.source_mode.set(on);
-                self.focus_editor = true;
+                self.draft.focus_editor = true;
             }
-            EditorMsg::Context { .. } | EditorMsg::Action { .. } => {}
             EditorMsg::InsertPhrase(i) => {
                 if let Some(p) = self.settings.assets.phrases.get(i).cloned() {
                     let speaker = self.ui.speaker.get_untracked().name.clone();
@@ -65,7 +59,7 @@ impl App {
                         "time" => Some(crate::ui::history::local_hm(nanatype_model::unix_millis())),
                         _ => None,
                     });
-                    if self.synchronizing()
+                    if self.draft.is_plain_text_only()
                         && nanatype_model::outgoing::image_count(&parse(&expanded).doc) > 0
                     {
                         self.notice(self.ui.now_t("chat-images-unavailable"), true);
@@ -77,12 +71,15 @@ impl App {
                         let parsed = parse(&expanded);
                         // A phrase starting an empty draft can also set its line
                         // header, as inserting the markup source did before.
-                        if self.core.draft().is_blank() && parsed.meta != Default::default() {
+                        if self.session.core.draft().is_blank() && parsed.meta != Default::default()
+                        {
                             self.set_source(serialize_line(&Document::new(), &parsed.meta), true);
                         }
                         let fragment = self.editor_rich(&parsed.doc);
-                        self.rich_commands.push(EditorCommand::Insert(fragment));
-                        self.focus_editor = true;
+                        self.draft
+                            .rich_commands
+                            .push(EditorCommand::Insert(fragment));
+                        self.draft.focus_editor = true;
                     }
                 }
             }
@@ -90,7 +87,8 @@ impl App {
                 if self.ui.source_mode.get_untracked() {
                     self.markup(MarkupEdit::Insert("\n".into()));
                 } else {
-                    self.rich_commands
+                    self.draft
+                        .rich_commands
                         .push(nana_ui::runtime::RichEditCommand::InsertText("\n".into()).into());
                 }
             }
@@ -98,21 +96,21 @@ impl App {
                 width,
                 height,
                 rgba,
-            } if self.synchronizing() => {
-                let _ = (width, height, rgba);
-                self.notice(self.ui.now_t("chat-images-unavailable"), true);
+            } => self.paste_image(width, height, rgba),
+        }
+    }
+
+    fn paste_image(&mut self, width: u32, height: u32, rgba: Vec<u8>) {
+        if !self.draft.allow_new_image() {
+            self.notice(self.ui.now_t("chat-images-unavailable"), true);
+            return;
+        }
+        match self.media.assets.store_rgba(width, height, &rgba) {
+            Ok(asset) => self.insert_asset(asset),
+            Err(e) => {
+                let text = self.ui.tr("err-image", &[("message", e.as_str().into())]);
+                self.notice(text, true);
             }
-            EditorMsg::PasteImage {
-                width,
-                height,
-                rgba,
-            } => match self.assets.store_rgba(width, height, &rgba) {
-                Ok(asset) => self.insert_asset(asset),
-                Err(e) => {
-                    let text = self.ui.tr("err-image", &[("message", e.as_str().into())]);
-                    self.notice(text, true);
-                }
-            },
         }
     }
 }
@@ -129,7 +127,8 @@ impl App {
         if self.ui.source_mode.get_untracked() {
             self.markup(MarkupEdit::Insert(" ".into()));
         } else {
-            self.rich_commands
+            self.draft
+                .rich_commands
                 .push(RichEditCommand::InsertText(" ".into()).into());
         }
     }
@@ -142,33 +141,37 @@ impl App {
                 (a == b).then(|| completion::token(&s.text, b)).flatten()
             })
         } else {
-            let caret = self.completer.caret;
+            let caret = self.draft.completer.caret;
             self.ui
                 .editor_value
                 .with_untracked(|v| caret.and_then(|c| completion::token(v.text(), c)))
         };
         let start = token.as_ref().map(|t| t.range.start);
-        if self.completer.dismissed.is_some() && self.completer.dismissed != start {
-            self.completer.dismissed = None;
+        if self.draft.completer.dismissed.is_some() && self.draft.completer.dismissed != start {
+            self.draft.completer.dismissed = None;
         }
         let open = token
-            .filter(|_| self.completer.dismissed.is_none())
+            .filter(|_| self.draft.completer.dismissed.is_none())
             .and_then(|token| {
                 let locale = self.ui.locale.get_untracked();
                 let items: std::sync::Arc<[completion::Item]> = match token.trigger {
                     completion::Trigger::Mention => completion::users(
-                        self.chat.iter().rev().map(|m| (m.platform, &m.user)),
+                        self.session
+                            .chat
+                            .iter()
+                            .rev()
+                            .map(|m| (m.platform, &m.user)),
                         &token.needle,
                         locale,
                     ),
                     completion::Trigger::Command => {
-                        let hotkeys: Vec<String> = self.ui.status.with_untracked(|s| {
+                        let hotkeys: Vec<String> = self.ui.links.with_untracked(|s| {
                             s.vts_hotkeys.iter().map(|(_, n)| n.clone()).collect()
                         });
                         let names = completion::Names {
                             vts_hotkeys: &hotkeys,
                         };
-                        completion::commands(&self.skin, names, &token.needle, locale)
+                        completion::commands(&self.appearance.skin, names, &token.needle, locale)
                     }
                 }
                 .into();
@@ -177,6 +180,7 @@ impl App {
                 }
                 // The choice holds while the rows stay the same.
                 let (selected, first) = self
+                    .draft
                     .completer
                     .open
                     .as_ref()
@@ -189,12 +193,12 @@ impl App {
                     first,
                 })
             });
-        self.completer.open = open;
+        self.draft.completer.open = open;
         self.publish_completion();
     }
 
     fn publish_completion(&self) {
-        let view = self.completer.view();
+        let view = self.draft.completer.view();
         if self
             .ui
             .completion
@@ -209,7 +213,7 @@ impl App {
     }
 
     fn source_completions(&self) -> std::sync::Arc<[nana_ui::runtime::TextCompletion]> {
-        match &self.completer.open {
+        match &self.draft.completer.open {
             Some(open) if self.ui.source_mode.get_untracked() => self
                 .ui
                 .source
@@ -221,17 +225,17 @@ impl App {
     fn complete(&mut self, action: Complete) {
         match action {
             Complete::Move(delta) => {
-                if let Some(open) = &mut self.completer.open {
+                if let Some(open) = &mut self.draft.completer.open {
                     open.move_by(delta);
                 }
             }
             Complete::Dismiss => {
-                if let Some(open) = self.completer.open.take() {
-                    self.completer.dismissed = Some(open.token.range.start);
+                if let Some(open) = self.draft.completer.open.take() {
+                    self.draft.completer.dismissed = Some(open.token.range.start);
                 }
             }
             Complete::Accept(row) => {
-                let Some(open) = self.completer.open.take() else {
+                let Some(open) = self.draft.completer.open.take() else {
                     return;
                 };
                 let Some(item) = open.items.get(row.unwrap_or(open.selected)).cloned() else {
@@ -241,7 +245,7 @@ impl App {
                 if !matches!(item.insert, completion::Insert::Text(_)) {
                     // The rich editor reports the new text later; the list
                     // must not reopen on the token it just replaced.
-                    self.completer.dismissed = Some(range.start);
+                    self.draft.completer.dismissed = Some(range.start);
                 }
                 if self.ui.source_mode.get_untracked() {
                     let mut src = self.ui.source.get_untracked();
@@ -251,7 +255,8 @@ impl App {
                     src.selection = (range.start, range.end);
                     self.ui.source.set(src);
                 } else {
-                    self.rich_commands
+                    self.draft
+                        .rich_commands
                         .push(RichEditCommand::Select(range).into());
                 }
                 match item.insert {
@@ -260,11 +265,11 @@ impl App {
                     completion::Insert::Text(text) => self.replace_token(text),
                     // Gone the token, the effect is set where it was.
                     completion::Insert::Tool(tool) => {
-                        self.focus_editor = true;
+                        self.draft.focus_editor = true;
                         if self.ui.source_mode.get_untracked() {
                             self.markup(MarkupEdit::Insert(String::new()));
                         } else {
-                            self.rich_commands.push(EditorCommand::Delete);
+                            self.draft.rich_commands.push(EditorCommand::Delete);
                         }
                         self.tool(tool);
                     }
@@ -276,11 +281,12 @@ impl App {
 
     /// Put `text` in place of the selected token.
     fn replace_token(&mut self, text: String) {
-        self.focus_editor = true;
+        self.draft.focus_editor = true;
         if self.ui.source_mode.get_untracked() {
             self.markup(MarkupEdit::Insert(text));
         } else {
-            self.rich_commands
+            self.draft
+                .rich_commands
                 .push(RichEditCommand::InsertText(text).into());
         }
     }

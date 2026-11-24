@@ -49,11 +49,11 @@ impl App {
             UpdateMsg::Event(event) => self.update_event(event),
             UpdateMsg::Check => self.check_update(Duration::ZERO, true),
             UpdateMsg::Download => self.download_update(),
-            UpdateMsg::Cancel => self.updater.cancel(),
+            UpdateMsg::Cancel => self.integrations.updater.cancel(),
             UpdateMsg::Install => self.install_update(),
             UpdateMsg::Skip => self.skip_update(),
             UpdateMsg::OpenNotes => {
-                if let Some((checked, _)) = &self.pending_update {
+                if let Some((checked, _)) = &self.integrations.pending_update {
                     crate::services::open_url(&checked.manifest.notes_url());
                 }
             }
@@ -77,7 +77,9 @@ impl App {
         if manual {
             self.set_update_state(State::Checking);
         }
-        self.updater.check(&self.settings.update, delay, manual);
+        self.integrations
+            .updater
+            .check(&self.settings.update, delay, manual);
     }
 
     fn update_event(&mut self, event: Event) {
@@ -131,21 +133,21 @@ impl App {
         }
         if !manual && !skipped {
             let text = self.ui.tr("update-toast", &[("version", version.into())]);
-            self.toasts.push(ToastRequest::new(
+            self.shell.toasts.push(ToastRequest::new(
                 text,
                 nana_ui::ToastTone::Info,
                 feedback::NOTICE_MS,
                 true,
             ));
         }
-        self.pending_update = Some((checked, asset));
+        self.integrations.pending_update = Some((checked, asset));
     }
 
     fn download_update(&mut self) {
-        let Some((checked, asset)) = &self.pending_update else {
+        let Some((checked, asset)) = &self.integrations.pending_update else {
             return;
         };
-        self.updater.download(checked, asset);
+        self.integrations.updater.download(checked, asset);
         self.set_update_state(State::Downloading {
             version: checked.manifest.version.clone(),
             done: 0,
@@ -155,7 +157,7 @@ impl App {
     }
 
     fn update_downloaded(&mut self, result: Result<PathBuf, Error>) {
-        let Some((checked, asset)) = &self.pending_update else {
+        let Some((checked, asset)) = &self.integrations.pending_update else {
             return;
         };
         let version = checked.manifest.version.clone();
@@ -185,11 +187,11 @@ impl App {
     }
 
     fn skip_update(&mut self) {
-        let Some((checked, _)) = &self.pending_update else {
+        let Some((checked, _)) = &self.integrations.pending_update else {
             return;
         };
         let version = checked.manifest.version.clone();
-        self.updater.cancel();
+        self.integrations.updater.cancel();
         self.edit(|s| s.update.skipped_version = Some(version));
         self.set_update_state(State::Idle);
     }

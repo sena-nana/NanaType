@@ -27,13 +27,15 @@ pub use nanatype_frame::ui::{
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, Weak};
 
-use nana_ui::runtime::view::{NodeRef, Signal, computed, node_ref, signal};
+use nana_ui::runtime::view::{Computed, NodeRef, Signal, computed, node_ref, signal};
+use nanatype_blive::BliveStatus;
 use nanatype_i18n::Locale;
 use nanatype_model::ChatRef;
 use nanatype_settings::Settings;
 use nanatype_theme::Skin;
 
 use crate::msg::{GlobalAction, Shortcut};
+use crate::output::{OutputStatuses, RuntimeOutputSizes};
 use crate::services::hotkeys::HotkeyState;
 
 /// Edit the value behind a `Signal<Arc<T>>` in place; it is copied only
@@ -70,34 +72,88 @@ pub enum LinkState {
     Error(String),
 }
 
-/// Connection and device states for the settings pages.
+/// Audio device status and enumerated output devices.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AudioStatusUi {
+    pub label: String,
+    pub devices: Vec<String>,
+}
+
+/// Outbound integration link states (VTube Studio, OSC, WebSocket, OBS).
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct Status {
-    pub audio: String,
+pub struct LinkStatus {
     pub vts: LinkState,
     pub vts_hotkeys: Vec<(String, String)>,
     pub osc: LinkState,
     pub ws: LinkState,
-    /// A blivechat room, likewise.
-    pub blivechat: String,
-    pub blivechat_link: danmaku::Link,
-    /// The LAPLACE Event Bridge, likewise.
-    pub laplace: String,
-    pub laplace_link: danmaku::Link,
-    /// The 彗星号 client, likewise.
-    pub comet: String,
-    pub comet_link: danmaku::Link,
-    pub spout_display: LinkState,
-    /// Each partner seat's sender, in seat order.
-    pub spout_partners: Vec<LinkState>,
-    pub spout_history: LinkState,
-    pub spout_danmaku: LinkState,
-    /// The obs-websocket link.
     pub obs: LinkState,
-    pub notices: Vec<Notice>,
-    pub queued: usize,
-    pub audio_devices: Vec<String>,
-    pub performance: Performance,
+}
+
+impl LinkStatus {
+    pub fn any_connecting(&self) -> bool {
+        [&self.vts, &self.osc, &self.ws, &self.obs]
+            .into_iter()
+            .any(|l| *l == LinkState::Connecting)
+    }
+}
+
+/// Which Bilibili-shaped chat feed a slot in [`ChatSourceUi`] describes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BliveFeedKind {
+    Blivechat,
+    Laplace,
+    Comet,
+}
+
+impl BliveFeedKind {
+    pub const ALL: [Self; 3] = [Self::Blivechat, Self::Laplace, Self::Comet];
+
+    pub fn index(self) -> usize {
+        match self {
+            Self::Blivechat => 0,
+            Self::Laplace => 1,
+            Self::Comet => 2,
+        }
+    }
+
+    pub fn platform(self) -> crate::chat::Platform {
+        match self {
+            Self::Blivechat => crate::chat::Platform::Blivechat,
+            Self::Laplace => crate::chat::Platform::Laplace,
+            Self::Comet => crate::chat::Platform::Comet,
+        }
+    }
+}
+
+/// Runtime state for one Bilibili-shaped chat feed.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BliveFeedState {
+    pub status: BliveStatus,
+    pub secret_saved: bool,
+    pub text: String,
+    pub link: danmaku::Link,
+}
+
+/// Unified chat-source runtime state across `blivechat`, `LAPLACE`, and `彗星号`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ChatSourceUi {
+    pub feeds: [BliveFeedState; 3],
+}
+
+impl ChatSourceUi {
+    pub fn get(&self, kind: BliveFeedKind) -> &BliveFeedState {
+        &self.feeds[kind.index()]
+    }
+
+    pub fn get_mut(&mut self, kind: BliveFeedKind) -> &mut BliveFeedState {
+        &mut self.feeds[kind.index()]
+    }
+
+    pub fn any_connecting(&self) -> bool {
+        self.feeds
+            .iter()
+            .any(|f| f.link == danmaku::Link::Connecting)
+    }
 }
 
 /// What the scheduling preferences achieved, for the Output page's hints.
@@ -191,8 +247,6 @@ pub struct Ui {
     pub speech: Signal<Arc<crate::app::speech::State>>,
     /// The system's voices for reading aloud, once listed.
     pub tts_voices: Signal<Arc<Vec<nanatype_tts::Voice>>>,
-    /// Set synchronously in the editor routing phase, before queued messages/timers.
-    pub speech_edit_pending: Signal<bool>,
     pub stage: Stage,
     pub packages: Signal<Arc<Vec<crate::plugins::PackageRow>>>,
     pub plugin_errors: Signal<Arc<HashMap<String, String>>>,
@@ -201,11 +255,12 @@ pub struct Ui {
     pub plugin_activation_busy: Signal<bool>,
     pub plugin_activation_error: Signal<Option<String>>,
     pub twitch: Signal<Arc<crate::app::twitch::State>>,
-    pub blivechat: Signal<Arc<crate::app::blivechat::State>>,
-    pub laplace: Signal<Arc<crate::app::laplace::State>>,
-    pub comet: Signal<Arc<crate::app::comet::State>>,
+    /// Unified Bilibili-shaped chat feed status (`blivechat`, `LAPLACE`, `彗星号`).
+    pub chat_source: Signal<Arc<ChatSourceUi>>,
     /// The OBS link and its program scene.
     pub obs: Signal<Arc<crate::app::obs::State>>,
+    /// Live OBS bounding-box sizes per output window (never stored in Settings).
+    pub runtime_output_sizes: Signal<RuntimeOutputSizes>,
     /// The OBS Spout2 plugin installer download.
     pub spout_plugin: Signal<Arc<crate::services::spout_plugin::State>>,
     #[cfg(feature = "updates")]
@@ -228,9 +283,18 @@ pub struct Ui {
     /// The management popover. A Steam invite opens it so the password can be typed.
     pub peer_popover: Signal<bool>,
     pub diagnostics: Signal<Arc<Vec<String>>>,
+    /// Monotonic draft mutation & IME composition fence shared across routing,
+    /// `DraftController`, and speech dictation.
+    pub draft_fence: Signal<crate::app::draft::DraftFence>,
     /// Skin previews animate only on the Skins page.
     pub page: Signal<settings::Page>,
-    pub status: Signal<Arc<Status>>,
+    /// Independent domain status signals (replacing the coarse `Status` struct).
+    pub notices: Signal<Arc<Vec<Notice>>>,
+    pub queued: Signal<usize>,
+    pub audio_status: Signal<Arc<AudioStatusUi>>,
+    pub links: Signal<Arc<LinkStatus>>,
+    pub output_status: Signal<Arc<OutputStatuses>>,
+    pub performance: Signal<Arc<Performance>>,
     pub skins: Signal<Arc<Vec<SkinRow>>>,
     /// The skin preview's prepared stage, kept while the page is away so
     /// coming back shows it at once.
@@ -253,12 +317,11 @@ pub struct Ui {
     /// The first-run guide's step, 0-based; kept while the user visits other
     /// pages (its "Connect OBS" goes to Output).
     pub onboard_step: Signal<u8>,
-    /// The skin step mounts its live preview. Navigation holds it for the
-    /// step's entrance; opening the step directly shows it at once.
-    pub onboard_skin_shown: Signal<bool>,
     pub settings_pulse_ms: Signal<u64>,
     /// Live chat, oldest first (capped).
     pub chat: Signal<Arc<Vec<Arc<crate::chat::ChatMessage>>>>,
+    /// O(1) index of `chat` messages by `seq`.
+    pub chat_index: Computed<Arc<HashMap<u64, usize>>>,
     /// The chat message the next sent line answers.
     pub reply: Signal<Option<ChatRef>>,
     /// The sidebar chat's width, so its rows can lay text out to it.
@@ -306,6 +369,10 @@ impl Ui {
                     && !stage_settings.with(|s| s.general.onboarding_done)
                     && onboard_step.get() == 1)
         });
+        let chat = signal(Arc::new(Vec::<Arc<crate::chat::ChatMessage>>::new()));
+        let chat_index = computed(move || {
+            Arc::new(chat.with(|rows| rows.iter().enumerate().map(|(i, m)| (m.seq, i)).collect()))
+        });
         Self {
             stage,
             packages: signal(Arc::new(Vec::new())),
@@ -316,12 +383,10 @@ impl Ui {
             plugin_activation_error: signal(None),
             speech: signal(Arc::new(crate::app::speech::State::default())),
             tts_voices: signal(Arc::new(Vec::new())),
-            speech_edit_pending: signal(false),
             twitch: signal(Arc::new(crate::app::twitch::State::default())),
-            blivechat: signal(Arc::new(crate::app::blivechat::State::default())),
-            laplace: signal(Arc::new(crate::app::laplace::State::default())),
-            comet: signal(Arc::new(crate::app::comet::State::default())),
+            chat_source: signal(Arc::new(ChatSourceUi::default())),
             obs: signal(Arc::new(crate::app::obs::State::default())),
+            runtime_output_sizes: signal(RuntimeOutputSizes::default()),
             spout_plugin: signal(Arc::new(crate::services::spout_plugin::State::default())),
             #[cfg(feature = "updates")]
             update: signal(Arc::new(crate::app::update::State::default())),
@@ -336,8 +401,14 @@ impl Ui {
             peer_invitation: signal(String::new()),
             peer_popover: signal(false),
             diagnostics: signal(Arc::new(Vec::new())),
+            draft_fence: signal(crate::app::draft::DraftFence::default()),
             page,
-            status: signal(Arc::new(Status::default())),
+            notices: signal(Arc::new(Vec::new())),
+            queued: signal(0),
+            audio_status: signal(Arc::new(AudioStatusUi::default())),
+            links: signal(Arc::new(LinkStatus::default())),
+            output_status: signal(Arc::new(OutputStatuses::default())),
+            performance: signal(Arc::new(Performance::default())),
             skins: signal(Arc::new(Vec::new())),
             skin_preview: signal(None),
             sound_packs: signal(Arc::new(Vec::new())),
@@ -351,9 +422,9 @@ impl Ui {
             system_text_scale: signal(None),
             input_shown: signal(true),
             onboard_step,
-            onboard_skin_shown: signal(true),
             settings_pulse_ms: signal(0),
-            chat: signal(Arc::new(Vec::new())),
+            chat,
+            chat_index,
             reply: signal(None),
             chat_width: signal(400.0),
             chat_target: signal(None),

@@ -270,11 +270,36 @@ pub fn load(dir: &Path, name: &str) -> std::io::Result<Vec<Record>> {
     Ok(parse(&std::fs::read_to_string(path)?))
 }
 
+/// Collect all inline asset references across `records`, for off-thread extraction.
+pub fn record_assets(records: &[Record]) -> Vec<nanatype_model::AssetRef> {
+    let mut out = Vec::new();
+    for record in records {
+        let Some(markup) = record.markup.as_deref() else {
+            continue;
+        };
+        let doc = nanatype_markup::parse(markup).doc;
+        for inline in doc.paragraphs.iter().flat_map(|p| &p.inlines) {
+            match inline {
+                Inline::Atom(atom) => out.push(atom.asset.clone()),
+                Inline::Mention(mention) => {
+                    if let Some(avatar) = &mention.user.avatar {
+                        out.push(avatar.clone());
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
 /// The saved sessions, newest first.
 pub fn list(dir: &Path) -> Vec<Session> {
+    use std::io::{BufRead, BufReader};
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
+    let mut buf = String::new();
     let mut sessions: Vec<Session> = entries
         .flatten()
         .filter_map(|e| {
@@ -284,14 +309,22 @@ pub fn list(dir: &Path) -> Vec<Session> {
             }
             let name = p.file_stem()?.to_str()?.to_owned();
             day_of_name(&name)?;
-            let text = std::fs::read_to_string(&p).ok()?;
-            Some(Session {
-                name,
-                lines: text
-                    .lines()
-                    .filter(|l| !l.trim().is_empty() && !l.starts_with(AMEND_PREFIX))
-                    .count(),
-            })
+            let file = std::fs::File::open(&p).ok()?;
+            let mut reader = BufReader::new(file);
+            let mut lines = 0usize;
+            loop {
+                buf.clear();
+                match reader.read_line(&mut buf) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        if !buf.trim().is_empty() && !buf.starts_with(AMEND_PREFIX) {
+                            lines += 1;
+                        }
+                    }
+                    Err(_) => return None,
+                }
+            }
+            Some(Session { name, lines })
         })
         .collect();
     sessions.sort_by(|a, b| b.name.cmp(&a.name));

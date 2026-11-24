@@ -41,33 +41,46 @@ impl LiveChat {
 
 impl App {
     pub(super) fn live_record_row(&mut self, message: &ChatMessage) {
-        if let Some(newest) = [self.core.history().back(), self.core.danmaku().back()]
-            .into_iter()
-            .flatten()
-            .map(|r| r.key)
-            .max()
+        if let Some(newest) = [
+            self.session.core.history().back(),
+            self.session.core.danmaku().back(),
+        ]
+        .into_iter()
+        .flatten()
+        .map(|r| r.key)
+        .max()
         {
-            self.live_chat
+            self.session
+                .live_chat
                 .rows
                 .insert((message.platform, message.id.clone()), newest);
         }
-        let oldest = [self.core.history().front(), self.core.danmaku().front()]
-            .into_iter()
-            .flatten()
-            .map(|r| r.key)
-            .min()
-            .unwrap_or(u64::MAX);
-        self.live_chat.rows.retain(|_, row| *row >= oldest);
+        let oldest = [
+            self.session.core.history().front(),
+            self.session.core.danmaku().front(),
+        ]
+        .into_iter()
+        .flatten()
+        .map(|r| r.key)
+        .min()
+        .unwrap_or(u64::MAX);
+        self.session.live_chat.rows.retain(|_, row| *row >= oldest);
     }
     /// A moderator removed the message: take it off the panel and history.
     pub(super) fn live_deleted(&mut self, platform: Platform, room: &str, id: &str) {
-        if let Some(row) = self.live_chat.rows.remove(&(platform, id.to_owned())) {
+        if let Some(row) = self
+            .session
+            .live_chat
+            .rows
+            .remove(&(platform, id.to_owned()))
+        {
             self.run(Cmd::RemoveHistoryRows(vec![row]));
         }
-        let before = self.chat.len();
-        self.chat
+        let before = self.session.chat.len();
+        self.session
+            .chat
             .retain(|m| !(m.platform == platform && m.room == room && m.id == id));
-        if self.chat.len() != before {
+        if self.session.chat.len() != before {
             self.publish_chat();
         }
     }
@@ -75,7 +88,7 @@ impl App {
     pub(super) fn live_sent(&mut self, ids: &[String]) {
         let rows: Vec<u64> = ids
             .iter()
-            .filter_map(|id| self.live_chat.sent(id))
+            .filter_map(|id| self.session.live_chat.sent(id))
             .collect();
         if !rows.is_empty() {
             self.run(Cmd::RemoveHistoryRows(rows));

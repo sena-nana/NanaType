@@ -390,16 +390,7 @@ pub static EVENTS: &[&EventDescriptor] = &[
 
 /// A window's code in event fields.
 pub fn window(kind: WindowKind) -> u64 {
-    match kind {
-        WindowKind::Input => 0,
-        WindowKind::Display => 1,
-        WindowKind::PeerDisplay(0) => 2,
-        WindowKind::PeerDisplay(seat) => 5 + u64::from(seat),
-        WindowKind::History => 3,
-        WindowKind::Danmaku => 12,
-        WindowKind::Settings => 4,
-        WindowKind::Quick => 5,
-    }
+    kind.diag_code()
 }
 
 /// The facts every session log starts with. Called once settings are

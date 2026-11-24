@@ -82,9 +82,9 @@ pub(super) fn playback(ui: Ui) -> AnyView {
     );
     let mut devices = vec![("default".to_owned(), ui.now_t("playback-device-default"))];
     devices.extend(
-        ui.status
+        ui.audio_status
             .get_untracked()
-            .audio_devices
+            .devices
             .iter()
             .map(|d| (d.clone(), d.clone())),
     );

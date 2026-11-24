@@ -1,7 +1,7 @@
 use super::App;
 use crate::msg::{Msg, Shortcut};
 use crate::services::sounds;
-use crate::ui::{Performance, problem_text};
+use crate::ui::{EditShared, Performance, problem_text};
 use nanatype_audio::AudioStatus;
 use nanatype_core::Cmd;
 use nanatype_settings::{Hotkey, PerformanceSettings};
@@ -28,15 +28,17 @@ impl App {
     /// system refused is also reported as a notice.
     pub(super) fn apply_performance(&mut self, prev: Option<&PerformanceSettings>) {
         let wanted = self.settings.performance.clone();
-        let mut status = (*self.ui.status.get_untracked()).clone();
+        let gpu_running = self
+            .ui
+            .performance
+            .with_untracked(|p| p.gpu_running.clone());
         let performance = Performance {
             gpu_high: nanatype_scheduling::apply_gpu(wanted.gpu_high),
             cpu: nanatype_scheduling::apply(wanted.cpu_high, wanted.cpu_performance_cores),
             gpu: nanatype_scheduling::gpu_choice(),
-            gpu_running: status.performance.gpu_running.take(),
+            gpu_running,
         };
-        status.performance = performance.clone();
-        self.ui.status.set(Arc::new(status));
+        self.ui.performance.set(Arc::new(performance.clone()));
         let Some(prev) = prev else {
             return;
         };
@@ -66,13 +68,13 @@ impl App {
     pub(crate) fn note_gpu(&self, gpu: &nana_ui::GpuContext) -> bool {
         if self
             .ui
-            .status
-            .with_untracked(|s| s.performance.gpu_running.is_some())
+            .performance
+            .with_untracked(|p| p.gpu_running.is_some())
         {
             return false;
         }
         let name = gpu.wgpu().adapter_info().name.clone();
-        self.edit_status(|s| s.performance.gpu_running = Some(name));
+        self.ui.performance.edit(|p| p.gpu_running = Some(name));
         true
     }
 
@@ -100,19 +102,24 @@ impl App {
         if !self.settings.integrations.vts.enabled {
             self.edit(|s| s.integrations.vts.enabled = true);
         }
-        self.bridge.vts_request_token();
+        self.integrations.bridge.vts_request_token();
     }
 
     pub(super) fn tray_error_expired(&mut self, id: u64) {
-        if self.tray_error.as_ref().is_some_and(|(e, _)| *e == id) {
-            self.tray_error = None;
+        if self
+            .shell
+            .tray_error
+            .as_ref()
+            .is_some_and(|(e, _)| *e == id)
+        {
+            self.shell.tray_error = None;
         }
     }
 
     /// Package the logs off the UI thread; the result comes back as
     /// [`Msg::DiagnosticsExported`].
     pub(super) fn export_diagnostics(&mut self) {
-        let paths = self.paths.clone();
+        let paths = self.shell.paths.clone();
         let locale = self.ui.locale.get_untracked();
         let summary = crate::services::diagnostics::summary(&self.settings, locale.tag());
         let spawned =
@@ -137,7 +144,7 @@ impl App {
                     .unwrap_or_default();
                 let text = self.ui.tr("diagnostics-exported", &[("file", name.into())]);
                 self.notice(text, false);
-                crate::services::reveal(&self.paths.logs);
+                crate::services::reveal(&self.shell.paths.logs);
             }
             Err(e) => {
                 let text = self
@@ -179,22 +186,22 @@ impl App {
         };
         if matches!(status, AudioStatus::Running { .. }) {
             // A fresh stream starts with an empty mixer.
-            sounds::install(&self.audio, &Vec::new(), &self.bank);
+            sounds::install(&self.session.audio, &Vec::new(), &self.session.bank);
             self.audio_levels();
         }
         let devices = nanatype_audio::list_devices();
-        self.edit_status(|s| {
-            s.audio = text;
-            s.audio_devices = devices;
+        self.ui.audio_status.edit(|a| {
+            a.label = text;
+            a.devices = devices;
         });
     }
 
     pub(super) fn quit(&mut self) {
-        self.speech.service.stop();
-        self.quitting = true;
+        self.session.speech.service.stop();
+        self.shell.quitting = true;
         crate::ui::shader_effects::close_guard();
         self.save_geometry();
-        self.persist.flush(Duration::from_secs(2));
+        self.shell.persist.flush(Duration::from_secs(2));
         nanatype_diag::marker("quit");
         nanatype_diag::flush_for_exit();
     }

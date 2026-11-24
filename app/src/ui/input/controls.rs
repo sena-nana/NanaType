@@ -2,6 +2,7 @@
 //! grouped list, one control per row. Markers that go in at the caret are drawn as the chip the
 //! editor shows for them; effects that wrap the selection say so in their
 //! group's heading. Hovering a tile names what it does and its markup.
+use super::cheat_sheet::marker_chip;
 use super::*;
 use crate::ui::kit::{Type, gap, inset};
 use nana_ui::runtime::PointerHoverChanged;
@@ -20,10 +21,12 @@ enum Face {
 struct Tile {
     face: Face,
     label: String,
-    /// Its markup, for the hint line and for search.
+    /// Its markup, for the hint line.
     markup: String,
     /// What it does, for the hint line.
     meaning: String,
+    /// Pre-lowercased concatenation of label, markup, and meaning for search.
+    search_haystack: String,
     tool: Tool,
 }
 
@@ -35,22 +38,27 @@ impl Tile {
         meaning: String,
         tool: Tool,
     ) -> Self {
+        let markup = markup.into();
+        let search_haystack = format!("{label}\0{markup}\0{meaning}").to_lowercase();
         Self {
             face,
             label,
-            markup: markup.into(),
+            markup,
             meaning,
+            search_haystack,
             tool,
         }
     }
 
-    /// Search by label, markup or meaning, ignoring case.
+    /// Search by label, markup or meaning, given a pre-trimmed, lowercased query.
+    fn matches_normalized(&self, lower_query: &str) -> bool {
+        lower_query.is_empty() || self.search_haystack.contains(lower_query)
+    }
+
+    /// Search by label, markup or meaning, normalizing `query`.
+    #[cfg(test)]
     fn matches(&self, query: &str) -> bool {
-        let q = query.trim().to_lowercase();
-        q.is_empty()
-            || [&self.label, &self.markup, &self.meaning]
-                .iter()
-                .any(|s| s.to_lowercase().contains(&q))
+        self.matches_normalized(&query.trim().to_lowercase())
     }
 }
 
@@ -339,7 +347,7 @@ fn tile_view(ui: Ui, tile: Tile, query: Signal<String>, hint: Signal<Option<Stri
             .style(st),
     )
     .children(row)
-    .visible(move || words.matches(&query.get()))
+    .visible(move || query.with(|q| words.matches_normalized(q)))
     .on(move |e: &PointerHoverChanged| {
         if e.hovered {
             hint.set(Some(line.clone()));
@@ -400,7 +408,8 @@ pub(super) fn panel(ui: Ui) -> AnyView {
                 .into_iter()
                 .map(|group| {
                     let tiles = group.tiles.clone();
-                    let shown = move || query.with(|q| tiles.iter().any(|t| t.matches(q)));
+                    let shown =
+                        move || query.with(|q| tiles.iter().any(|t| t.matches_normalized(q)));
                     let cells: Vec<AnyView> = group
                         .tiles
                         .iter()
@@ -447,7 +456,7 @@ pub(super) fn panel(ui: Ui) -> AnyView {
     .children((
         widget(search)
             .key("input-controls-search")
-            .on(move |e: &TextChanged| query.set(e.value.to_string())),
+            .on(move |e: &TextChanged| query.set(e.value.trim().to_lowercase())),
         widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
             l.width = Some(LengthSpec::Fill);
             l.height = Some(LengthSpec::Px(0.0));

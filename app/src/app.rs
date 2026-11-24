@@ -1,15 +1,20 @@
-//! Application state and the single update function.
+//! Application coordinator and domain message router.
+
+pub mod appearance;
 mod archive;
 pub mod backup;
-pub mod blivechat;
+pub mod blive_feeds;
 mod chat;
-pub mod comet;
+pub mod draft;
 mod editor;
-pub mod laplace;
+pub mod integrations;
 mod live;
+pub mod media;
 pub mod obs;
 mod packages;
 mod secret;
+pub mod session;
+pub mod shell;
 mod skins;
 pub mod speech;
 mod startup;
@@ -24,56 +29,50 @@ mod workshop;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock, RwLock};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use nana_ui::{CompiledTheme, RuntimeProgramContext, RuntimeProgramUpdate};
+use nana_ui::{RuntimeProgramContext, RuntimeProgramUpdate};
 use nana_ui_core::{FileDialogKind, FileDialogRequest, FileFilter};
 use nana_ui_platform::host::WindowCommand;
-use nanatype_audio::{AudioHandle, Bus, Scheduled};
-use nanatype_bridge::{
-    BridgeEvent, BridgeHandle, BridgeStatus, LipSync, OscConfig, Sink, VtsConfig, WsConfig,
-};
-use nanatype_core::{Cmd, Core, Effects, Event, UiSound};
+use nanatype_core::{Cmd, Core};
+use nanatype_frame::locale_of;
 use nanatype_i18n::Locale;
-use nanatype_markup::{parse, serialize, serialize_line};
+use nanatype_markup::serialize;
 use nanatype_model::{AssetRef, Document, Inline};
-use nanatype_playback::CueKind;
 use nanatype_settings::{GeometryStore, InputKeys, InputPresence, LoadNote, Settings};
-use nanatype_theme::{LoadedSkin, LoadedSoundPack, SkinRegistry};
+use nanatype_theme::SkinRegistry;
 
-use crate::assets::AssetLibrary;
 use crate::chat::ChatMessage;
 use crate::clock;
 use crate::msg::{
-    ChatMsg, EditorMsg, FileTarget, GlobalAction, MarkupEdit, Msg, NoticeSource, PackageMsg,
-    SkinMsg, StickerMsg, WindowMsg,
+    AppMsg, ChatMsg, EditorMsg, FileTarget, GlobalAction, Msg, NoticeSource, PackageMsg, SkinMsg,
+    StickerMsg, WindowMsg,
 };
+use crate::output::OutputManager;
 use crate::paths::Paths;
-use crate::scheduler::Scheduler;
-use crate::services::chat_assets::ChatAssets;
-use crate::services::hotkeys::{self, Hotkeys};
+use crate::services::hotkeys;
 use crate::services::persist::Persist;
-use crate::services::sounds::{self, Bank};
+use crate::services::sounds;
 use crate::services::tray::Tray;
-use crate::skin_theme;
 use crate::ui::feedback::{self, ToastRequest};
-use crate::ui::{I18N, LinkState, Notice, StickerRow, Ui};
-use crate::windows::{self, WindowKind, WindowManager};
+use crate::ui::{I18N, Notice, Ui};
+use crate::windows::{QuickBarState, WindowKind, WindowManager};
+
+pub use appearance::AppearanceState;
+pub use draft::{DraftController, DraftFence, DraftPolicy};
+#[cfg(test)]
+pub(crate) use draft::{apply_source_markup, sync_rich_draft};
+pub(crate) use draft::{markup_for, quote};
+pub use integrations::IntegrationsHub;
+pub use media::MediaHub;
+pub use session::SessionController;
+pub use shell::{SettingsSections, ShellState};
 
 /// Chat messages the panel keeps.
 const CHAT_CAP: usize = 500;
-
-/// The input window's own keys, shared with the editor's key handler.
-pub static INPUT_KEYS: LazyLock<RwLock<InputKeys>> = LazyLock::new(Default::default);
-
-fn share_input_keys(keys: &InputKeys) {
-    if let Ok(mut shared) = INPUT_KEYS.write()
-        && *shared != *keys
-    {
-        *shared = keys.clone();
-    }
-}
+/// How long an error stays in the tray tooltip.
+const TRAY_ERROR_SECS: u64 = 30;
 
 /// Editor operations applied by the host without replacing its editing state.
 // RichEditCommand is intentionally kept inline: the command queue owns these
@@ -93,123 +92,18 @@ impl From<nana_ui::runtime::RichEditCommand> for EditorCommand {
 }
 
 pub struct App {
-    pub plugins: crate::plugins::Manager,
-    plugin_activation: crate::plugins::Activation,
-    pub paths: Paths,
-    pub settings: Settings,
-    pub readonly_settings: bool,
-    pub registry: SkinRegistry,
-    pub loaded: LoadedSkin,
-    pub skin: Arc<nanatype_theme::Skin>,
-    pub core: Core,
+    pub appearance: AppearanceState,
+    pub session: SessionController,
+    pub integrations: IntegrationsHub,
+    pub media: MediaHub,
+    pub shell: ShellState,
+    pub draft: DraftController,
+    /// Shared input-window hotkeys read by the host input router without a global lock.
+    pub hotkey_input: Arc<RwLock<InputKeys>>,
     pub peer: crate::p2p::Session,
     pub ui: Ui,
-    pub assets: AssetLibrary,
-    pub sticker_manager: crate::stickers::Manager,
-    telegram: crate::stickers::telegram::Service,
-    pub windows: WindowManager,
-    pub scheduler: Scheduler,
-    pub speech: speech::Speech,
-    /// Lines read aloud.
-    pub tts: tts::Narrator<tts::Lazy>,
-    /// The onboarding skin preview waiting out its step's entrance.
-    /// A newer hold replaces it, and the old reveal does nothing.
-    onboard_preview_gen: u64,
-    pub audio: AudioHandle,
-    pub bank: Bank,
-    /// The chosen sound pack, layered over the skin's sounds.
-    sound_pack: Option<LoadedSoundPack>,
-    /// A chosen pack that is not installed (or does not load), already reported.
-    sound_pack_missing: Option<String>,
-    keys: sounds::Keys,
-    pub bridge: BridgeHandle,
-    pub twitch: nanatype_twitch::TwitchHandle,
-    /// A blivechat room.
-    pub blivechat: nanatype_blive::BliveHandle,
-    /// A LAPLACE Event Bridge.
-    pub laplace: nanatype_blive::BliveHandle,
-    /// The 彗星号 client.
-    pub comet: nanatype_blive::BliveHandle,
-    /// OBS's program scene, sizing the Spout/Syphon outputs.
-    pub obs: nanatype_obs::ObsHandle,
-    /// The obs-websocket password.
-    obs_password: secret::LazySecret,
-    /// Steam: Workshop subscriptions (inert outside the Steam build).
-    steam: nanatype_steam::SteamHandle,
-    workshop: crate::workshop::Workshop,
-    /// The blivechat 身份码.
-    blivechat_auth: secret::LazySecret,
-    /// The LAPLACE Event Bridge's token.
-    laplace_token: secret::LazySecret,
-    #[cfg(feature = "updates")]
-    updater: crate::services::updater::Updater,
-    #[cfg(feature = "updates")]
-    pending_update: update::Pending,
-    chat_assets: ChatAssets,
-    /// Live chat, oldest first, capped at the panel's size.
-    chat: VecDeque<Arc<ChatMessage>>,
-    live_chat: live::LiveChat,
-    /// Saved history: the session's file and what is already in it.
-    archive: archive::Archive,
-    /// The profiles, a checked import and the settings kept before one.
-    backup: backup::Backup,
-    pub hotkeys: Hotkeys,
-    pub tray: Option<Tray>,
-    pub persist: Persist,
-    /// The theme the app's own windows install: high contrast and the UI
-    /// scale included.
-    pub theme: Arc<CompiledTheme>,
-    /// The plain theme of the same lightness, for the output windows, whose
-    /// picture is broadcast. The same `Arc` as [`Self::theme`] when they agree.
-    pub output_theme: Arc<CompiledTheme>,
     pub ctx: RuntimeProgramContext<Msg>,
-    /// The input window was summoned (summon presence).
-    pub summoned: bool,
-    /// The quick input bar is up (summon presence).
-    pub quick_open: bool,
-    /// Its field should take focus on the next frame.
-    pub focus_quick: bool,
-    /// Its native handle, once ready; `0` before.
-    quick_hwnd: isize,
-    /// Its window was asked for and has not closed since.
-    quick_requested: bool,
-    pub system_dark: bool,
-    /// The system asks for high contrast (Windows and macOS report it).
-    pub system_high_contrast: bool,
-    next_notice: u64,
-    dialogs: HashMap<u64, FileTarget>,
-    next_dialog: u64,
-    /// Pending window commands for the next update result.
-    pub commands: Vec<WindowCommand>,
-    pub quitting: bool,
-    export_target: Option<String>,
-    pub spout: crate::output::Spout,
-    /// Editor commands for the host to apply to the input window's editor.
-    pub rich_commands: Vec<EditorCommand>,
-    pub focus_editor: bool,
-    pub source_edit_undoable: bool,
-    completer: crate::completion::Completer,
-    /// Fonts packaged with the active skin, registered while it is active.
-    fonts: nana_ui::HostFontScope,
-    /// Built-in (embedded) fonts the active skin names, each registered once.
-    builtin_fonts: crate::skin_fonts::BuiltinFontSet<nana_ui::HostFontScope>,
-    /// Family registered for each skin font role (body, name, accent).
-    skin_families: [Option<String>; 3],
-    skin_latin_family: Option<String>,
-    skin_watch: Option<crate::services::watch::Watch>,
-    skin_reload: crate::services::watch::ReloadGate,
-    /// The newest skin preview asked for; older ones are dropped when ready.
-    skin_preview_ticket: u64,
-    skin_reload_scan: bool,
-    prepared_skin_urls: Option<HashMap<String, String>>,
-    sticker_watch: Option<crate::services::watch::Watch>,
-    /// Toasts for the host to show in the settings, input and chat windows.
-    pub toasts: Vec<ToastRequest>,
-    /// The latest notice, while it is an error: the tray tooltip shows it.
-    tray_error: Option<(u64, String)>,
-    /// Keeps this, the UI thread, under the CPU preference: it draws every
-    /// window and sends it to Spout. Made and dropped on this thread.
-    _critical: nanatype_scheduling::Critical,
+    pub settings: Settings,
 }
 
 /// The settings file's state as the session log's first app event.
@@ -231,11 +125,6 @@ fn record_settings_load(note: &nanatype_settings::LoadNote) {
         from_schema = from
     );
 }
-
-/// How long an error stays in the tray tooltip.
-const TRAY_ERROR_SECS: u64 = 30;
-
-use nanatype_frame::locale_of;
 
 impl App {
     pub fn new(ctx: &RuntimeProgramContext<Msg>) -> Self {
@@ -288,7 +177,7 @@ impl App {
             workshop.roots(),
         );
         let (loaded, fallback) = registry.load_scanned_or_default(&settings.skin.id);
-        let skin = Arc::new(skin_theme::personalized(
+        let skin = Arc::new(crate::skin_theme::personalized(
             &loaded.skin,
             &settings,
             &settings.skin.id,
@@ -312,96 +201,20 @@ impl App {
             Cmd::SetReducedMotion(settings.playback.reduced_motion || ctx.reduced_motion()),
             clock::now_ms(),
         );
-        let blivechat_auth = secret::LazySecret::new(
-            &paths.config,
-            "blivechat-auth",
-            &crate::diag::BLIVECHAT_SECRET_FAILED,
-            true,
-        );
-        let laplace_token = secret::LazySecret::new(
-            &paths.config,
-            "laplace-token",
-            &crate::diag::LAPLACE_SECRET_FAILED,
-            true,
-        );
         let obs_password = secret::LazySecret::new(
             &paths.config,
             "obs-websocket",
             &crate::diag::OBS_SECRET_FAILED,
             false,
         );
-        let mut app = Self {
-            speech: speech::Speech::new(paths.data.join("speech"), post.clone()),
-            tts: tts::Narrator::new(tts::Lazy::new(post.clone(), workers.audio.clone())),
-            plugins: Default::default(),
-            plugin_activation: Default::default(),
-            assets: AssetLibrary::new(paths.blobs()),
-            sticker_manager: workers.sticker_manager,
-            telegram: workers.telegram,
-            paths,
-            readonly_settings: matches!(loaded_settings.note, LoadNote::TooNew { .. }),
+        let appearance = AppearanceState {
             registry,
-            loaded,
+            loaded: loaded.clone(),
             skin,
-            core,
-            peer: crate::p2p::Session::default(),
-            ui,
-            windows: {
-                let mut w = WindowManager::default();
-                w.geometry = geometry;
-                w
-            },
-            scheduler: workers.scheduler,
-            onboard_preview_gen: 0,
-            audio: workers.audio,
-            bank: Vec::new(),
-            sound_pack: None,
-            sound_pack_missing: None,
-            keys: sounds::Keys::default(),
-            bridge: workers.bridge,
-            twitch: workers.twitch,
-            blivechat: workers.blivechat,
-            laplace: workers.laplace,
-            comet: workers.comet,
-            obs: workers.obs,
-            obs_password,
-            steam: workers.steam,
-            workshop,
-            blivechat_auth,
-            laplace_token,
-            #[cfg(feature = "updates")]
-            updater: workers.updater,
-            #[cfg(feature = "updates")]
-            pending_update: Default::default(),
-            chat_assets: workers.chat_assets,
-            chat: VecDeque::new(),
-            live_chat: Default::default(),
-            archive: Default::default(),
-            backup: Default::default(),
-            hotkeys: workers.hotkeys,
-            tray: None,
-            persist,
             theme,
             output_theme,
-            ctx: ctx.clone(),
-            summoned: false,
-            quick_open: false,
-            focus_quick: false,
-            quick_hwnd: 0,
-            quick_requested: false,
             system_dark,
             system_high_contrast,
-            next_notice: 1,
-            dialogs: HashMap::new(),
-            next_dialog: 1,
-            commands: Vec::new(),
-            quitting: false,
-            export_target: None,
-            spout: crate::output::Spout::default(),
-            rich_commands: Vec::new(),
-            focus_editor: false,
-            source_edit_undoable: false,
-            completer: Default::default(),
             fonts: nana_ui::HostFontScope::new(),
             builtin_fonts: Default::default(),
             skin_families: [None, None, None],
@@ -411,17 +224,88 @@ impl App {
             skin_preview_ticket: 0,
             skin_reload_scan: false,
             prepared_skin_urls: None,
-            sticker_watch: None,
+            warned_skin_params: HashSet::new(),
+            export_target: None,
+        };
+        let session = SessionController {
+            core,
+            scheduler: workers.scheduler,
+            speech: speech::Speech::new(paths.data.join("speech"), post.clone()),
+            tts: tts::Narrator::new(tts::Lazy::new(post.clone(), workers.audio.clone())),
+            audio: workers.audio,
+            bank: Vec::new(),
+            sound_pack: None,
+            sound_pack_missing: None,
+            keys: sounds::Keys::default(),
+            archive: Default::default(),
+            live_chat: Default::default(),
+            chat: VecDeque::new(),
+        };
+        let blive = workers.blive;
+        let integrations = IntegrationsHub {
+            bridge: workers.bridge,
+            twitch: workers.twitch,
+            blive,
+            obs: workers.obs,
+            obs_password,
+            steam: workers.steam,
+            workshop,
+            #[cfg(feature = "updates")]
+            updater: workers.updater,
+            #[cfg(feature = "updates")]
+            pending_update: Default::default(),
+            chat_assets: workers.chat_assets,
+            plugins: Default::default(),
+            plugin_activation: Default::default(),
+        };
+        let media = MediaHub::new(
+            paths.blobs(),
+            workers.sticker_manager,
+            workers.telegram,
+            loaded,
+        );
+        let mut windows = WindowManager::default();
+        windows.geometry = geometry;
+        let shell = ShellState {
+            paths,
+            readonly_settings: matches!(loaded_settings.note, LoadNote::TooNew { .. }),
+            persist,
+            hotkeys: workers.hotkeys,
+            tray: None,
+            windows,
+            quick: QuickBarState::default(),
+            summoned: false,
+            output: OutputManager::default(),
+            backup: Default::default(),
+            next_notice: 1,
+            dialogs: HashMap::new(),
+            next_dialog: 1,
+            commands: Vec::new(),
             toasts: Vec::new(),
             tray_error: None,
+            quitting: false,
             _critical: nanatype_scheduling::latency_critical(),
+        };
+        let draft = DraftController::new(ui.draft_fence.get_untracked());
+        let hotkey_input = Arc::new(RwLock::new(settings.hotkeys.input.clone()));
+        let mut app = Self {
+            appearance,
+            session,
+            integrations,
+            media,
+            shell,
+            draft,
+            hotkey_input,
+            peer: crate::p2p::Session::default(),
+            ui,
+            ctx: ctx.clone(),
             settings,
         };
         app.publish_speech();
         app.apply_performance(None);
         app.startup_notices(loaded_settings.note, fallback.is_some(), locale);
         match Tray::build(post) {
-            Ok(tray) => app.tray = Some(tray),
+            Ok(tray) => app.shell.tray = Some(tray),
             Err(e) => {
                 let text = app.ui.tr("err-tray", &[("message", e.as_str().into())]);
                 app.notice(text, true);
@@ -433,14 +317,22 @@ impl App {
         crate::services::instance::serve(crate::services::instance::Product::APP, move || {
             ctx.dispatch(Msg::Window(WindowMsg::SecondInstance))
         });
-        app.plugins.sync(
-            &app.registry,
+        app.integrations.plugins.sync(
+            &app.appearance.registry,
             &app.settings.enabled_plugins,
             &app.settings.plugin_approvals,
             app.ctx.clone(),
             app.ui,
         );
         app
+    }
+
+    pub fn post(&self, msg: Msg) {
+        self.ctx.dispatch(msg);
+    }
+
+    pub fn notice(&mut self, text: String, error: bool) {
+        self.notice_from(text, error, NoticeSource::App);
     }
 
     /// Tells the user how settings and the saved skin loaded.
@@ -476,20 +368,21 @@ impl App {
         self.register_fonts();
         self.apply_skin();
         self.refresh_skin_rows();
-        self.sticker_manager
+        self.media
+            .sticker_manager
             .sync(&self.settings.assets.sticker_dirs);
         self.refresh_assets();
         self.load_sounds();
         self.apply_services();
         self.audio_levels();
-        if let Some(tray) = &mut self.tray {
+        if let Some(tray) = &mut self.shell.tray {
             tray.relabel(&I18N, locale);
             tray.sync(&self.settings);
         }
         self.sync_tray_skins();
         self.sync_tray_characters();
         self.sync_tray();
-        share_input_keys(&self.settings.hotkeys.input);
+        self.share_input_keys();
         self.request_displays();
         #[cfg(feature = "updates")]
         self.check_update_on_start();
@@ -501,17 +394,12 @@ impl App {
         }
     }
 
-    pub fn post(&self, msg: Msg) {
-        self.ctx.dispatch(msg);
-    }
-
-    /// Lines also go to a live chat, which accepts plain text only.
-    pub fn synchronizing(&self) -> bool {
-        self.ui.twitch.get_untracked().sending
-    }
-
-    pub fn notice(&mut self, text: String, error: bool) {
-        self.notice_from(text, error, NoticeSource::App);
+    fn share_input_keys(&self) {
+        if let Ok(mut shared) = self.hotkey_input.write()
+            && *shared != self.settings.hotkeys.input
+        {
+            *shared = self.settings.hotkeys.input.clone();
+        }
     }
 
     fn notice_from(&mut self, text: String, error: bool, source: NoticeSource) {
@@ -523,28 +411,30 @@ impl App {
                 "{text}"
             );
         }
-        let id = self.next_notice;
-        self.next_notice += 1;
-        let mut status = (*self.ui.status.get_untracked()).clone();
-        status.notices.push(Notice {
+        let id = self.shell.next_notice;
+        self.shell.next_notice += 1;
+        let mut notices = (*self.ui.notices.get_untracked()).clone();
+        notices.push(Notice {
             id,
             text: text.clone(),
             error,
         });
-        if status.notices.len() > 4 {
-            status.notices.remove(0);
+        if notices.len() > 4 {
+            notices.remove(0);
         }
-        self.ui.status.set(Arc::new(status));
-        self.toasts.push(ToastRequest::notice(text.clone(), error));
+        self.ui.notices.set(Arc::new(notices));
+        self.shell
+            .toasts
+            .push(ToastRequest::notice(text.clone(), error));
         // The tray says the latest error, so it is seen with every window
         // hidden (summon mode) too.
-        self.tray_error = error.then_some((id, text));
-        self.scheduler.post_after(
+        self.shell.tray_error = error.then_some((id, text));
+        self.session.scheduler.post_after(
             Duration::from_millis(feedback::NOTICE_MS),
             Msg::DismissNotice(id),
         );
         if error {
-            self.scheduler.post_after(
+            self.session.scheduler.post_after(
                 Duration::from_secs(TRAY_ERROR_SECS),
                 Msg::TrayErrorExpired(id),
             );
@@ -553,14 +443,19 @@ impl App {
 
     /// The input window is on screen (or about to be).
     pub fn input_visible(&self) -> bool {
-        self.windows.is_open(WindowKind::Input)
-            && windows::desired(WindowKind::Input, &self.skin, &self.settings, self.summoned)
-                .visible
+        self.shell.windows.is_open(WindowKind::Input)
+            && crate::windows::desired(
+                WindowKind::Input,
+                &self.appearance.skin,
+                &self.settings,
+                self.shell.summoned,
+            )
+            .visible
     }
 
     /// Tray labels and tooltip for the current state.
     fn sync_tray(&self) {
-        let Some(tray) = &self.tray else {
+        let Some(tray) = &self.shell.tray else {
             return;
         };
         let s = &self.settings;
@@ -581,11 +476,11 @@ impl App {
             s.general.input_mode,
             &skin,
             locked,
-            self.tray_error.as_ref().map(|(_, e)| e.as_str()),
+            self.shell.tray_error.as_ref().map(|(_, e)| e.as_str()),
         );
-        if self.speech.controller.active() {
+        if self.session.speech.controller.active() {
             tooltip.push_str(" · ");
-            tooltip.push_str(&self.speech.state.status(self.ui));
+            tooltip.push_str(&self.session.speech.state.status(self.ui));
         }
         let meta = if cfg!(target_os = "macos") {
             "⌘"
@@ -598,8 +493,14 @@ impl App {
             &I18N,
             crate::services::tray::TrayState {
                 locale,
-                speech_active: self.speech.controller.active(),
-                input: windows::desired(WindowKind::Input, &self.skin, s, self.summoned).visible,
+                speech_active: self.session.speech.controller.active(),
+                input: crate::windows::desired(
+                    WindowKind::Input,
+                    &self.appearance.skin,
+                    s,
+                    self.shell.summoned,
+                )
+                .visible,
                 display: s.overlays.display.visible,
                 peer_display: peer_active && s.overlays.peer_display.visible,
                 peer_active,
@@ -622,33 +523,14 @@ impl App {
         );
     }
 
-    /// Tint ordinary windows' system title bars with the application chrome.
-    pub fn tint_captions(&self) {
-        for kind in [WindowKind::Input, WindowKind::Settings] {
-            if let Some(handle) = self.windows.handle(kind) {
-                windows::tint_caption(handle, &self.theme);
-            }
-        }
-    }
-
-    fn edit_status(&self, f: impl FnOnce(&mut crate::ui::Status)) {
-        let previous = self.ui.status.get_untracked();
-        let mut status = (*previous).clone();
-        f(&mut status);
-        if status != *previous {
-            self.ui.status.set(Arc::new(status));
-        }
-    }
-
     fn request_displays(&self) {
         let service = self.ctx.windows().clone();
-        let ctx = self.ctx.clone();
-        std::thread::spawn(move || {
+        crate::plugins::background("nanatype-displays", &self.ctx, move || {
             let displays = match service.displays().wait() {
                 Ok(displays) => displays,
                 Err(e) => {
                     nanatype_diag::report!(crate::diag::DISPLAYS_UNAVAILABLE; "{e:?}");
-                    return;
+                    return Msg::Window(WindowMsg::Displays(Vec::new()));
                 }
             };
             let scale = displays
@@ -679,505 +561,8 @@ impl App {
                     })
                 })
                 .collect();
-            ctx.dispatch(Msg::Window(WindowMsg::Displays(monitors)));
+            Msg::Window(WindowMsg::Displays(monitors))
         });
-    }
-
-    // ---- skins and assets ------------------------------------------------
-
-    fn refresh_skin_rows(&mut self) {
-        self.skin_reload.invalidate();
-        let previous = self.ui.skins.with_untracked(|rows| {
-            rows.iter()
-                .flat_map(|r| r.image_urls.values().cloned())
-                .collect::<Vec<_>>()
-        });
-        let locale = self.ui.locale.get_untracked();
-        let off = &self.settings.disabled_packages;
-        let mut rows = crate::ui::skin_rows(&self.registry, locale);
-        rows.retain(|r| !off.contains(&r.id));
-        self.ui.skins.set(Arc::new(rows));
-        crate::ui::retire_skin_urls(self.ui, previous);
-        let mut packs = crate::ui::sound_pack_rows(&self.registry, locale);
-        packs.retain(|p| !off.contains(&p.id));
-        self.ui.sound_packs.set(Arc::new(packs));
-        self.publish_workshop();
-        if self.sync_sound_pack() {
-            self.apply_skin();
-            self.load_sounds();
-        }
-    }
-
-    /// Take the chosen sound pack from the last scan; true when what plays
-    /// changed. A pack that is missing or broken leaves the skin's sounds
-    /// playing and is reported once; the setting stays for when it returns.
-    fn sync_sound_pack(&mut self) -> bool {
-        let wanted = self.settings.sound.pack.clone();
-        let entry = wanted
-            .as_deref()
-            .and_then(|id| self.registry.sound_pack(id));
-        let next = entry.and_then(|e| e.pack.clone());
-        if let Some(id) = &wanted
-            && next.is_none()
-            && self.sound_pack_missing.as_ref() != Some(id)
-        {
-            let detail = entry
-                .and_then(|e| e.errors.first())
-                .map(|d| format!(": {d}"))
-                .unwrap_or_default();
-            let text = self
-                .ui
-                .tr("sound-pack-missing", &[("id", id.as_str().into())]);
-            self.notice(format!("{text}{detail}"), true);
-        }
-        self.sound_pack_missing = wanted.filter(|_| next.is_none());
-        let key =
-            |p: &Option<LoadedSoundPack>| p.as_ref().map(|p| (p.id.clone(), p.sounds.clone()));
-        let changed = key(&next) != key(&self.sound_pack);
-        self.sound_pack = next;
-        changed
-    }
-
-    fn sync_tray_characters(&mut self) {
-        let g = &self.settings.general;
-        let names: Vec<String> = g
-            .characters
-            .iter()
-            .enumerate()
-            .map(|(i, c)| crate::ui::character_name(self.ui, i, c))
-            .collect();
-        if let Some(tray) = &mut self.tray {
-            tray.set_characters(&names, g.character);
-        }
-    }
-
-    fn sync_tray_skins(&mut self) {
-        let skins: Vec<(String, String)> = self
-            .ui
-            .skins
-            .get_untracked()
-            .iter()
-            .filter(|r| r.error.is_none())
-            .map(|r| (r.id.clone(), r.name.clone()))
-            .collect();
-        if let Some(tray) = &mut self.tray {
-            tray.set_skins(&skins, &self.settings.skin.id);
-        }
-    }
-
-    fn publish_sticker_packs(&self) {
-        self.ui
-            .sticker_packs
-            .set(Arc::new(self.sticker_manager.rows.clone()));
-    }
-
-    /// Asset URLs for skin files and stickers, for the views.
-    fn refresh_assets(&mut self) {
-        let previous = self.ui.asset_urls.with_untracked(|urls| {
-            urls.iter()
-                .filter(|(key, _)| key.starts_with("skin:"))
-                .map(|(_, url)| url.clone())
-                .collect::<Vec<_>>()
-        });
-        let locale = self.ui.locale.get_untracked();
-        let mut seen = HashSet::new();
-        let mut stickers = Vec::new();
-        let mut rows = Vec::new();
-        let mut images = Vec::new();
-        let mut urls = self.prepared_skin_urls.take().unwrap_or_else(|| {
-            crate::assets::skin_preview_urls(&self.loaded.skin, &*self.loaded.files)
-        });
-        for dir in &self.settings.assets.sticker_dirs {
-            let root = crate::stickers::folder(std::path::Path::new(dir));
-            if let Some(pack) = self.sticker_manager.loaded.get(&root) {
-                for (entry, image) in pack.definition.entries.iter().zip(&pack.images) {
-                    let sticker = crate::assets::Sticker {
-                        lib: entry.lib.clone(),
-                        name: entry.name.clone(),
-                        path: image.frame_path(0),
-                        root: image.dir.clone(),
-                    };
-                    let asset = sticker.asset().to_string();
-                    if !seen.insert(asset.clone()) {
-                        continue;
-                    }
-                    if let Some(url) = sticker.url() {
-                        urls.insert(asset.clone(), url.clone());
-                        rows.push(StickerRow {
-                            asset,
-                            name: entry
-                                .translations
-                                .get(locale.tag())
-                                .unwrap_or(&entry.title)
-                                .clone(),
-                            lib: entry.lib.clone(),
-                            url,
-                            height_em: entry.height_em,
-                            pack_title: entry.pack_title.clone(),
-                        });
-                    }
-                    stickers.push(sticker);
-                    images.push(image.clone());
-                }
-            }
-        }
-        crate::stickers::cache::publish(images.into_iter());
-        stickers.sort_by(|a, b| (&a.lib, &a.name).cmp(&(&b.lib, &b.name)));
-        rows.sort_by(|a, b| (&a.lib, &a.asset).cmp(&(&b.lib, &b.asset)));
-        self.assets.stickers = stickers;
-        self.publish_sticker_packs();
-        // Pictures of files, pasted images and chat in the current views.
-        let mut wanted = doc_assets(self.core.draft());
-        wanted.extend(display_assets(self.core.display()));
-        for row in self.core.history().iter().chain(self.core.danmaku().iter()) {
-            wanted.extend(row_assets(&row.item, row.doc()));
-        }
-        for m in &self.chat {
-            wanted.extend(message_assets(m));
-        }
-        // Archived records may carry inline pictures too. Keep their asset
-        // references resolvable while the Settings history viewer is open;
-        // unlike live rows, they are not part of `core.history()`.
-        for record in &self.ui.archive.get_untracked().records {
-            if let Some(markup) = record.markup.as_deref() {
-                wanted.extend(doc_assets(&nanatype_markup::parse(markup).doc));
-            }
-        }
-        for asset in wanted {
-            let key = asset.to_string();
-            if !urls.contains_key(&key)
-                && let Some(u) = self.assets.url(&asset, Some(&self.loaded))
-            {
-                urls.insert(key, u);
-            }
-        }
-        let mut portraits = HashMap::new();
-        let p = &self.skin.dialogue.portrait;
-        if let Some(root) = self.loaded.files.root() {
-            if let Some(url) = p
-                .image
-                .as_deref()
-                .and_then(|img| crate::assets::skin_file_url(root, img))
-            {
-                portraits.insert("default".to_owned(), url);
-            }
-            for (name, img) in &p.variants {
-                if let Some(url) = crate::assets::skin_file_url(root, img) {
-                    portraits.insert(name.clone(), url);
-                }
-            }
-        }
-        self.ui.asset_urls.set(Arc::new(urls));
-        self.ui.stickers.set(Arc::new(rows));
-        self.ui.portraits.set(Arc::new(portraits));
-        crate::ui::retire_skin_urls(self.ui, previous);
-    }
-
-    fn load_sounds(&self) {
-        let skin = self.loaded.clone();
-        let pack = self.sound_pack.clone();
-        crate::plugins::background("nanatype-sounds", &self.ctx, move || {
-            let (bank, errors) = sounds::load(&skin, pack.as_ref());
-            Msg::Skin(SkinMsg::SoundsLoaded {
-                skin: skin.skin.meta.id.clone(),
-                pack: pack.map(|p| p.id),
-                bank,
-                errors,
-            })
-        });
-    }
-
-    fn reload_skin(&mut self, from_scan: bool) {
-        if !from_scan {
-            self.request_skin_reload(false);
-            return;
-        }
-        // A watcher/install already validated this scan. A manual switch must
-        // re-read inactive authoring folders, which are not being watched.
-        let result = self.registry.load_scanned(&self.settings.skin.id);
-        self.apply_loaded_skin(result);
-    }
-
-    fn apply_loaded_skin(
-        &mut self,
-        result: Result<LoadedSkin, Vec<nanatype_theme::SkinDiagnostic>>,
-    ) {
-        let (loaded, fallback) = match result {
-            Ok(loaded) => (loaded, None),
-            // Invalid edits keep the author's last working skin.
-            Err(errors) if self.settings.skin.id == self.loaded.skin.meta.id => {
-                self.notice(
-                    errors
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                    true,
-                );
-                return;
-            }
-            Err(errors) => (
-                self.registry
-                    .load(nanatype_theme::DEFAULT_SKIN)
-                    .expect("built-in default loads"),
-                Some(errors),
-            ),
-        };
-        if let Some(errors) = fallback {
-            let detail = errors.first().map(|d| d.to_string()).unwrap_or_default();
-            let text = self.ui.tr(
-                "skins-fallback",
-                &[("id", self.settings.skin.id.as_str().into())],
-            );
-            self.notice(format!("{text}: {detail}"), true);
-        }
-        let changed_files = loaded.skin.meta.id != self.loaded.skin.meta.id
-            || loaded.skin.sounds != self.loaded.skin.sounds;
-        self.loaded = loaded;
-        self.register_fonts();
-        self.apply_skin();
-        self.apply_saved_sizes();
-        if changed_files {
-            self.load_sounds();
-        }
-        self.refresh_assets();
-        self.refresh_watches();
-    }
-
-    fn scan_skins(&mut self, ticket: u64) {
-        let mut registry = self.registry.clone();
-        let scanned = self.skin_reload_scan;
-        let id = self.settings.skin.id.clone();
-        if let Err(error) = crate::plugins::try_background("skin-scan", &self.ctx, move || {
-            let result = crate::plugins::caught("Skin scan worker failed", || {
-                if scanned {
-                    registry.rescan();
-                }
-                let loaded = if scanned {
-                    registry.load_scanned(&id)
-                } else {
-                    registry.load(&id)
-                };
-                let image_urls = loaded
-                    .as_ref()
-                    .ok()
-                    .map(|skin| crate::assets::skin_preview_urls(&skin.skin, &*skin.files));
-                Box::new(crate::services::watch::PreparedSkins {
-                    registry,
-                    loaded,
-                    scanned,
-                    image_urls,
-                })
-            });
-            Msg::Skin(SkinMsg::ScanReady { ticket, result })
-        }) {
-            self.skin_reload.cancel();
-            self.notice(error.to_string(), true);
-        }
-    }
-
-    fn request_skin_reload(&mut self, scan: bool) {
-        self.skin_reload_scan |= scan;
-        if let Some(ticket) = self.skin_reload.request() {
-            self.scan_skins(ticket);
-        }
-    }
-
-    /// Register the skin's packaged fonts, replacing the previous skin's.
-    /// Built-in fonts (`builtin:`) are kept registered across skins that
-    /// share them; a file named by several roles is registered once.
-    fn register_fonts(&mut self) {
-        self.fonts.clear();
-        let f = self.loaded.skin.fonts.clone();
-        let files = self.loaded.files.clone();
-        let roles = [&f.body, &f.name, &f.accent];
-        let mut wanted: Vec<String> = roles
-            .iter()
-            .copied()
-            .chain(f.latin.as_ref())
-            .filter_map(|s| s.file.clone())
-            .filter(|p| nanatype_theme::is_builtin_font(p))
-            .collect();
-        if let Some(p) = self
-            .settings
-            .skin
-            .personalizations
-            .get(&self.settings.skin.id)
-        {
-            for family in [&p.display.font_family, &p.history.font_family]
-                .into_iter()
-                .flatten()
-            {
-                for font in nanatype_theme::BuiltinFonts::shipped().fonts() {
-                    if font
-                        .family()
-                        .is_some_and(|f| f.eq_ignore_ascii_case(family))
-                    {
-                        wanted.push(format!("builtin:{}", font.path));
-                    }
-                }
-            }
-        }
-        let mut errors = self.builtin_fonts.sync(
-            wanted.iter().map(String::as_str),
-            nanatype_theme::builtin_font,
-            crate::skin_fonts::register_with_nana_ui,
-        );
-        let mut families = [None, None, None, None];
-        let mut packaged: HashMap<String, Option<String>> = HashMap::new();
-        for (i, spec) in roles.into_iter().chain(f.latin.as_ref()).enumerate() {
-            let Some(file) = &spec.file else {
-                continue;
-            };
-            if nanatype_theme::is_builtin_font(file) {
-                // Not in this build: None, and the role keeps its families.
-                families[i] = self.builtin_fonts.family(file);
-                continue;
-            }
-            if let Some(family) = packaged.get(file) {
-                families[i] = family.clone();
-                continue;
-            }
-            let family = match files.read(file) {
-                Ok(bytes) => match self.fonts.add_bytes(bytes) {
-                    Ok(registration) => registration.families().first().cloned(),
-                    Err(e) => {
-                        errors.push(format!("{file}: {e}"));
-                        None
-                    }
-                },
-                Err(e) => {
-                    errors.push(e.to_string());
-                    None
-                }
-            };
-            packaged.insert(file.clone(), family.clone());
-            families[i] = family;
-        }
-        self.skin_latin_family = families[3].take();
-        self.skin_families = [families[0].take(), families[1].take(), families[2].take()];
-        for e in errors {
-            self.notice(e, true);
-        }
-    }
-
-    fn apply_skin(&mut self) {
-        let (mut personalized, warnings) = skin_theme::personalized_with_diagnostics(
-            &self.loaded.skin,
-            &self.settings,
-            &self.settings.skin.id,
-        );
-        // Saved param values the skin now refuses: say so once per skin and
-        // problem, and keep the stored values (a hot reload may fix them).
-        static TOLD: std::sync::LazyLock<std::sync::Mutex<HashSet<String>>> =
-            std::sync::LazyLock::new(Default::default);
-        for w in warnings {
-            let key = format!("{}\n{w}", self.settings.skin.id);
-            if TOLD.lock().unwrap_or_else(|e| e.into_inner()).insert(key) {
-                self.notice(
-                    format!(
-                        "{}: {w}",
-                        personalized.display_name(self.ui.locale.get_untracked().tag())
-                    ),
-                    false,
-                );
-            }
-        }
-        if let Some(pack) = &self.sound_pack {
-            personalized.sounds = nanatype_theme::layer_sounds(&personalized.sounds, &pack.sounds);
-        }
-        if let (Some(role), Some(family)) = (&mut personalized.fonts.latin, &self.skin_latin_family)
-        {
-            role.families.insert(0, family.clone());
-        }
-        let skin = Arc::new(skin_theme::prepare(
-            &personalized,
-            &Default::default(),
-            &self.skin_families,
-            self.ui.locale.get_untracked().tag(),
-        ));
-        // Recording the first per-skin window size may establish an otherwise
-        // identical profile. Geometry alone must not replace the playing text.
-        if skin.as_ref() == self.skin.as_ref() {
-            return;
-        }
-        self.skin = skin.clone();
-
-        self.ui.skin.set(skin.clone());
-        let fx = self.core.handle(
-            Cmd::SetSkin(Box::new(nanatype_core::SkinCapabilities::from(&*skin))),
-            clock::now_ms(),
-        );
-        self.apply_effects(fx);
-    }
-
-    /// How much `kind` zooms its content now ([`windows::zoom`]).
-    pub fn zoom(&self, kind: WindowKind) -> f32 {
-        windows::zoom(
-            kind,
-            &self.settings,
-            self.ui.system_text_scale.get_untracked(),
-        )
-    }
-
-    /// Zoom `kind`'s content to the UI scale, and give it the minimum size
-    /// that zoom needs (a smaller window grows to it at once). Broadcast
-    /// windows are left alone.
-    pub fn apply_zoom(&mut self, kind: WindowKind) {
-        let Some(minimum) = windows::minimum_size(kind, self.zoom(kind)) else {
-            return;
-        };
-        let id = kind.id();
-        self.commands.push(WindowCommand::SetContentZoom {
-            id,
-            zoom: self.zoom(kind),
-        });
-        self.commands.push(WindowCommand::SetSizeLimits {
-            id,
-            minimum: Some(minimum),
-            maximum: None,
-        });
-    }
-
-    /// [`Self::apply_zoom`] for every window that is open.
-    pub fn apply_zoom_all(&mut self) {
-        for kind in WindowKind::ALL {
-            if self.windows.is_open(kind) {
-                self.apply_zoom(kind);
-            }
-        }
-    }
-
-    fn apply_saved_sizes(&mut self) {
-        for kind in [
-            WindowKind::Display,
-            WindowKind::History,
-            WindowKind::Danmaku,
-        ] {
-            if let Some(frame) = self.windows.frame(kind) {
-                let size = self.window_size(kind);
-                self.commands.push(WindowCommand::SetBounds {
-                    id: kind.id(),
-                    position: (frame.x as f32, frame.y as f32),
-                    size,
-                });
-            }
-        }
-    }
-
-    /// Refresh operator chrome without reloading assets or changing content boxes.
-    pub fn refresh_theme(&mut self) {
-        let chrome = crate::ui::kit::theme::Chrome::of(
-            &self.settings,
-            self.system_dark,
-            self.system_high_contrast,
-        );
-        let (theme, output) = crate::ui::kit::theme::compile_both(chrome);
-        self.theme = theme;
-        self.output_theme = output;
-        self.ui.chrome_dark.set(chrome.dark);
-        self.ui.chrome_contrast.set(chrome.high_contrast);
-        self.tint_captions();
     }
 
     // ---- services ---------------------------------------------------------
@@ -1193,46 +578,16 @@ impl App {
     }
 
     fn apply_services(&mut self) {
-        self.hotkeys.apply(
+        self.shell.hotkeys.apply(
             self.hotkey_bindings(),
             self.ui.recording.get_untracked().is_some(),
         );
-        let i = self.settings.integrations.clone();
-        self.bridge.set_vts(i.vts.enabled.then(|| VtsConfig {
-            port: i.vts.port,
-            token: i.vts.token.clone(),
-            expressions: i.vts.expressions.clone(),
-            lip_sync: (i.vts.lip_sync && !i.vts.mouth_param.trim().is_empty()).then(|| LipSync {
-                param: i.vts.mouth_param.trim().to_owned(),
-                amp: i.vts.mouth_amp,
-            }),
-            reset: i.vts.reset_expressions,
-        }));
-        self.bridge.set_osc(i.osc.enabled.then(|| OscConfig {
-            host: i.osc.host.clone(),
-            port: i.osc.port,
-            prefix: i.osc.prefix.clone(),
-        }));
-        self.bridge.set_ws(i.websocket.enabled.then_some(WsConfig {
-            port: i.websocket.port,
-        }));
+        self.integrations
+            .apply_bridge_settings(&self.settings, self.ui);
         self.twitch_configure();
-        self.blivechat_configure();
-        self.laplace_configure();
-        self.comet_configure();
+        self.blive_configure_all();
         self.obs_configure();
-        self.edit_status(|s| {
-            if !i.vts.enabled {
-                s.vts = LinkState::Off;
-            }
-            if !i.osc.enabled {
-                s.osc = LinkState::Off;
-            }
-            if !i.websocket.enabled {
-                s.ws = LinkState::Off;
-            }
-        });
-        self.refresh_spout_status();
+        self.refresh_output_status();
         self.refresh_watches();
     }
 
@@ -1246,11 +601,15 @@ impl App {
             .settings
             .skin
             .hot_reload
-            .then(|| self.loaded.files.watch_roots())
+            .then(|| self.appearance.loaded.files.watch_roots())
             .filter(|paths| !paths.is_empty());
-        let current = self.skin_watch.as_ref().map(|w| w.paths().to_vec());
+        let current = self
+            .appearance
+            .skin_watch
+            .as_ref()
+            .map(|w| w.paths().to_vec());
         if skin_dir != current {
-            self.skin_watch = skin_dir.map(|paths| {
+            self.appearance.skin_watch = skin_dir.map(|paths| {
                 crate::services::watch::Watch::start(paths, post.clone(), || {
                     Msg::Skin(SkinMsg::FilesChanged)
                 })
@@ -1265,15 +624,16 @@ impl App {
             .filter(|p| p.is_dir())
             .collect();
         let current = self
+            .media
             .sticker_watch
             .as_ref()
             .map(|w| w.paths().to_vec())
             .unwrap_or_default();
         if stickers != current {
-            self.sticker_watch = (!stickers.is_empty()).then(|| {
+            self.media.sticker_watch = (!stickers.is_empty()).then(|| {
                 crate::services::watch::Watch::start_excluding(
                     stickers,
-                    vec![self.paths.data.join("media")],
+                    vec![self.shell.paths.data.join("media")],
                     post,
                     || Msg::Sticker(StickerMsg::AssetsChanged),
                 )
@@ -1292,51 +652,45 @@ impl App {
         }
     }
 
-    pub fn refresh_spout_status(&mut self) {
+    pub fn refresh_output_status(&mut self) {
         let locale = self.ui.locale.get_untracked();
         let partners = self.partner_seats();
-        self.spout.sync(&self.settings, locale, partners);
-        if let Some(at) = self.spout.take_cleanup_schedule() {
-            self.scheduler.output_cleanup(at);
+        let sizes = self.ui.runtime_output_sizes.get_untracked();
+        self.shell.output.sync(
+            &self.settings,
+            &sizes,
+            locale,
+            partners,
+            Some(self.ui.output_status),
+        );
+        if let Some(at) = self.shell.output.take_cleanup_schedule() {
+            self.session.scheduler.output_cleanup(at);
         }
-        let status = |kind| self.spout.status.get(&kind).cloned().unwrap_or_default();
-        let display = status(WindowKind::Display);
-        let history = status(WindowKind::History);
-        let danmaku = status(WindowKind::Danmaku);
-        let seats = WindowKind::PARTNERS.map(status).to_vec();
-        self.edit_status(|s| {
-            s.spout_display = display;
-            s.spout_partners = seats;
-            s.spout_history = history;
-            s.spout_danmaku = danmaku;
-        });
     }
 
-    fn audio_levels(&self) {
-        let s = &self.settings.sound;
-        self.audio.set_master(s.master);
-        self.audio.set_bus(Bus::Typing, s.typing_volume);
-        self.audio.set_bus(Bus::Effects, s.effects_volume);
-        self.audio.set_bus(Bus::Ui, s.ui_volume);
-        self.audio.set_bus(Bus::Keys, s.keystroke_volume);
+    pub fn refresh_spout_status(&mut self) {
+        self.refresh_output_status();
     }
 
     fn save_settings(&self) {
-        if !self.readonly_settings {
-            self.persist.json(self.paths.settings(), &self.settings);
+        if !self.shell.readonly_settings {
+            self.shell
+                .persist
+                .json(self.shell.paths.settings(), &self.settings);
         }
     }
 
     pub fn save_geometry(&mut self) {
         let dock = self.ui.input_dock.get_untracked();
-        if self.windows.geometry.input_dock != Some(dock) {
-            self.windows.geometry.input_dock = Some(dock);
-            self.windows.geometry_dirty = true;
+        if self.shell.windows.geometry.input_dock != Some(dock) {
+            self.shell.windows.geometry.input_dock = Some(dock);
+            self.shell.windows.geometry_dirty = true;
         }
-        if self.windows.geometry_dirty {
-            self.windows.geometry_dirty = false;
-            self.persist
-                .json(self.paths.geometry(), &self.windows.geometry);
+        if self.shell.windows.geometry_dirty {
+            self.shell.windows.geometry_dirty = false;
+            self.shell
+                .persist
+                .json(self.shell.paths.geometry(), &self.shell.windows.geometry);
         }
     }
 
@@ -1345,53 +699,34 @@ impl App {
             return;
         }
         let prev = std::mem::replace(&mut self.settings, next);
-        let s = &self.settings;
-        let locale_changed = locale_of(&prev) != locale_of(s);
-        let skin_changed = prev.skin.id != s.skin.id;
-        let body_profile = |settings: &Settings| {
-            settings
-                .skin
-                .personalizations
-                .get(&s.skin.id)
-                .cloned()
-                .map(|mut p| {
-                    p.display.size = None;
-                    p.history.size = None;
-                    p
-                })
-        };
-        let active_profile_changed = body_profile(&prev) != body_profile(s);
-        let speaker_changed = prev.general.active_character() != s.general.active_character();
-        let characters_changed = prev.general.characters != s.general.characters
-            || prev.general.character != s.general.character;
-        let look_changed = prev.skin.overrides != s.skin.overrides || active_profile_changed;
-        let chrome_changed = prev.accessibility != s.accessibility;
-        let zoom_changed = prev.accessibility.ui_scale != s.accessibility.ui_scale
-            || prev.accessibility.ui_scale_follows_system
-                != s.accessibility.ui_scale_follows_system;
-        let assets_changed = prev.assets.sticker_dirs != s.assets.sticker_dirs;
-        let device_changed = prev.sound.device != s.sound.device;
-        let pack_changed = prev.sound.pack != s.sound.pack;
-        let autostart_changed = prev.general.launch_at_login != s.general.launch_at_login;
-        let performance_changed = prev.performance != s.performance;
-        if prev.general.input_skin_preview != s.general.input_skin_preview {
-            self.focus_editor = true;
+        let sections = SettingsSections::diff(&prev, &self.settings);
+
+        if sections.contains(SettingsSections::INPUT_PREVIEW) {
+            self.draft.focus_editor = true;
         }
-        share_input_keys(&s.hotkeys.input);
-        if !prev.skin.advanced_effects && s.skin.advanced_effects {
+        if sections.contains(SettingsSections::HOTKEYS) {
+            self.share_input_keys();
+            self.shell.hotkeys.apply(
+                self.hotkey_bindings(),
+                self.ui.recording.get_untracked().is_some(),
+            );
+        }
+        if sections.contains(SettingsSections::EFFECTS_RETRY) {
             crate::ui::shader_effects::retry_disabled();
         }
-        self.sync_reduced_motion();
-        if chrome_changed {
+        if sections.contains(SettingsSections::REDUCED_MOTION) {
+            self.sync_reduced_motion();
+        }
+        if sections.contains(SettingsSections::CHROME) {
             self.refresh_theme();
         }
-        if zoom_changed {
+        if sections.contains(SettingsSections::ZOOM) {
             self.apply_zoom_all();
         }
-        if locale_changed {
+        if sections.contains(SettingsSections::LOCALE) {
             let locale = locale_of(&self.settings);
             self.ui.locale.set(locale);
-            if let Some(tray) = &self.tray {
+            if let Some(tray) = &self.shell.tray {
                 tray.relabel(&I18N, locale);
             }
             self.refresh_skin_rows();
@@ -1408,79 +743,103 @@ impl App {
             .into_iter()
             .chain(WindowKind::PARTNERS)
             {
-                self.commands.push(WindowCommand::SetTitle {
+                self.shell.commands.push(WindowCommand::SetTitle {
                     id: kind.id(),
                     title: kind.title(locale),
                 });
             }
         }
-        if skin_changed {
+        if sections.contains(SettingsSections::SKIN) {
             self.reload_skin(false);
             self.sync_tray_skins();
-        } else if look_changed {
-            if active_profile_changed {
+        } else if sections.contains(SettingsSections::SKIN_LOOK) {
+            if sections.contains(SettingsSections::SKIN_PROFILE) {
                 self.register_fonts();
             }
             self.apply_skin();
         }
-        if assets_changed {
-            self.sticker_manager
+        if sections.contains(SettingsSections::ASSETS) {
+            self.media
+                .sticker_manager
                 .sync(&self.settings.assets.sticker_dirs);
             self.refresh_assets();
+            self.refresh_watches();
+        } else if sections.contains(SettingsSections::SKIN_WATCH) {
+            self.refresh_watches();
         }
-        if device_changed {
-            self.audio.set_device(self.settings.sound.device.clone());
+        if sections.contains(SettingsSections::SOUND_DEVICE) {
+            self.session
+                .audio
+                .set_device(self.settings.sound.device.clone());
         }
-        if pack_changed && self.sync_sound_pack() {
+        if sections.contains(SettingsSections::SOUND_PACK) && self.sync_sound_pack() {
             self.apply_skin();
             self.load_sounds();
         }
-        if autostart_changed
+        if sections.contains(SettingsSections::SOUND_LEVELS) {
+            self.audio_levels();
+        }
+        if sections.contains(SettingsSections::AUTOSTART)
             && let Err(e) = crate::services::set_autostart(self.settings.general.launch_at_login)
         {
             self.notice(e, true);
         }
-        if performance_changed {
+        if sections.contains(SettingsSections::PERFORMANCE) {
             self.apply_performance(Some(&prev.performance));
         }
-        self.audio_levels();
-        self.apply_services();
-        let fx = self.core.handle(
-            Cmd::SetConfig(Box::new(nanatype_core::CoreConfig::from(&self.settings))),
-            clock::now_ms(),
-        );
-        self.apply_effects(fx);
-        self.ui.settings.set(Arc::new(self.settings.clone()));
-        self.open_danmaku_window();
-        if prev.enabled_plugins != self.settings.enabled_plugins
-            || prev.plugin_approvals != self.settings.plugin_approvals
+        if sections.contains(SettingsSections::INTEGRATIONS) {
+            self.integrations
+                .apply_bridge_settings(&self.settings, self.ui);
+            self.twitch_configure();
+            self.blive_configure_all();
+        }
+        if sections.any(SettingsSections::INTEGRATIONS | SettingsSections::OBS) {
+            self.obs_configure();
+        }
+        if sections.any(SettingsSections::OUTPUT | SettingsSections::OBS | SettingsSections::LOCALE)
         {
-            self.plugins.sync(
-                &self.registry,
+            self.refresh_output_status();
+        }
+        if sections.contains(SettingsSections::CORE_CONFIG) {
+            let fx = self.session.core.handle(
+                Cmd::SetConfig(Box::new(nanatype_core::CoreConfig::from(&self.settings))),
+                clock::now_ms(),
+            );
+            self.apply_effects(fx);
+        }
+
+        self.ui.settings.set(Arc::new(self.settings.clone()));
+
+        if sections.contains(SettingsSections::PLUGINS) {
+            self.integrations.plugins.sync(
+                &self.appearance.registry,
                 &self.settings.enabled_plugins,
                 &self.settings.plugin_approvals,
                 self.ctx.clone(),
                 self.ui,
             );
         }
-        if speaker_changed {
+        if sections.contains(SettingsSections::SPEAKER) {
             // The draft's name plate and the partner's lane label follow.
             self.ui
                 .speaker
                 .set(self.settings.general.active_character().speaker());
             self.peer_publish();
         }
-        if characters_changed && !locale_changed {
+        if sections.contains(SettingsSections::CHARACTERS)
+            && !sections.contains(SettingsSections::LOCALE)
+        {
             self.sync_tray_characters();
         }
-        if let Some(tray) = &self.tray {
+        if let Some(tray) = &self.shell.tray {
             tray.sync(&self.settings);
         }
-        if prev.tts.enabled && !self.settings.tts.enabled {
-            self.tts.silence();
+        if sections.contains(SettingsSections::TTS_OFF) {
+            self.session.tts.silence();
         }
-        if prev.speech != self.settings.speech
-            || (locale_changed && self.settings.speech.language.is_none())
+        if sections.contains(SettingsSections::SPEECH)
+            || (sections.contains(SettingsSections::LOCALE)
+                && self.settings.speech.language.is_none())
         {
             self.speech_user_edit();
         }
@@ -1494,564 +853,54 @@ impl App {
         self.apply_settings(next);
     }
 
-    /// Remember an overlay's size. Drags and wheel zoom arrive at event rate,
-    /// and a size is geometry, not configuration: no service, playback core,
-    /// tray or skin depends on it, so only the settings signal and the
-    /// (debounced) file are updated.
-    pub fn edit_geometry(&mut self, f: impl FnOnce(&mut Settings)) {
-        let mut next = self.settings.clone();
-        f(&mut next);
-        next.sanitize();
-        if next == self.settings {
+    /// Persist a window/split resize directly into settings without cloning
+    /// `Settings` for diffing or running unrelated service/skin dispatch.
+    pub fn remember_overlay_size(
+        &mut self,
+        kind: WindowKind,
+        size: [f32; 2],
+        profile: Option<nanatype_settings::SkinPersonalization>,
+    ) {
+        let before = kind.saved_size(&self.settings);
+        let materialized = matches!(kind, WindowKind::Display | WindowKind::History)
+            && profile.is_some()
+            && !self
+                .settings
+                .skin
+                .personalizations
+                .contains_key(&self.settings.skin.id);
+        kind.remember_size(&mut self.settings, size, profile);
+        self.settings.sanitize();
+        if !materialized && kind.saved_size(&self.settings) == before {
             return;
         }
-        // Remembering a size can first materialize a skin personalization;
-        // anything beyond sizes takes the full path.
-        let without_sizes = |s: &Settings| {
-            let mut s = s.clone();
-            for p in s.skin.personalizations.values_mut() {
-                p.display.size = None;
-                p.history.size = None;
-            }
-            for kind in [
-                WindowKind::Display,
-                WindowKind::PARTNER,
-                WindowKind::History,
-                WindowKind::Danmaku,
-            ] {
-                if let Some(o) = kind.overlay_mut(&mut s) {
-                    o.size = None;
-                }
-            }
-            s
-        };
-        if without_sizes(&next) != without_sizes(&self.settings) {
-            self.apply_settings(next);
-            return;
-        }
-        self.settings = next;
         self.ui.settings.set(Arc::new(self.settings.clone()));
         self.save_settings();
     }
 
-    // ---- the session ------------------------------------------------------
-
-    pub fn run(&mut self, cmd: Cmd) {
-        self.run_command(cmd, false);
-    }
-
-    fn run_command(&mut self, cmd: Cmd, automatic: bool) {
-        if matches!(cmd, Cmd::Recall(_) | Cmd::SendMarkup(_)) {
-            self.speech_user_edit();
-        }
-        if matches!(cmd, Cmd::Skip | Cmd::ClearDisplay) {
-            self.tts.silence();
-        }
-        if self.peer_blocked(&cmd) {
-            if matches!(cmd, Cmd::Send) {
-                self.speech_user_edit();
-            }
+    pub fn set_overlay_size(&mut self, kind: WindowKind, size: Option<[f32; 2]>) {
+        let Some(overlay) = kind.overlay_mut(&mut self.settings) else {
             return;
-        }
-        let is_send = matches!(cmd, Cmd::Send);
-        let synchronizing = self.synchronizing();
-        let fx = match chat::handle_command(&mut self.core, cmd, synchronizing, clock::now_ms()) {
-            Ok(fx) => fx,
-            Err(()) => {
-                if is_send {
-                    self.speech_user_edit();
-                }
-                self.notice(self.ui.now_t("chat-images-unavailable"), true);
-                return;
-            }
         };
-        let sent = is_send && fx.replace_draft.as_ref().is_some_and(|d| d.doc.is_blank());
-        self.apply_effects(fx);
-        if is_send && !sent {
-            self.speech_user_edit();
-        }
-        if sent {
-            self.speech_sent(automatic);
-            self.ui.chat_target.set(None);
-            let count = self.core.queued();
-            let feedback = if count > 0 {
-                self.ui.tr("chat-queued", &[("count", count.into())])
-            } else {
-                format!("{} ✓", self.ui.now_t("status-sent"))
-            };
-            self.toasts.push(ToastRequest::new(
-                feedback,
-                nana_ui::ToastTone::Success,
-                feedback::SENT_MS,
-                false,
-            ));
-        }
-    }
-
-    /// Click for a key pressed in the input window, when enabled.
-    pub fn keystroke(&mut self, key: sounds::Keystroke) {
-        if self.settings.sound.keystroke {
-            let scheme = self.settings.sound.keystroke_scheme;
-            self.audio.play(self.keys.voice(scheme, key));
-        }
-    }
-
-    fn play_cue_now(&mut self, cue: &CueKind) {
-        if let Some(v) = sounds::voice(cue, &self.skin.sounds) {
-            self.audio.play(v);
-        } else {
-            self.run(Cmd::CueFired(cue.clone()));
-        }
-    }
-
-    fn apply_effects(&mut self, fx: Effects) {
-        for epoch in &fx.cancel_epochs {
-            self.audio.cancel(*epoch);
-            self.scheduler.cancel(*epoch);
-        }
-        for wake in &fx.wakes {
-            self.scheduler.wake(*wake);
-        }
-        for batch in &fx.cues {
-            let mut audio = Vec::new();
-            for cue in batch.cues.iter() {
-                let at = batch.origin_ms + u64::from(cue.at_ms);
-                match sounds::voice(&cue.kind, &self.skin.sounds) {
-                    Some(voice) => audio.push(Scheduled {
-                        at: clock::instant(at),
-                        voice,
-                    }),
-                    None => self.scheduler.cue(batch.epoch, at, cue.kind.clone()),
-                }
-            }
-            self.audio.schedule(batch.epoch, audio);
-        }
-        for cue in &fx.fire_now {
-            self.play_cue_now(&cue.kind);
-        }
-        for sound in &fx.ui_sounds {
-            let id = match sound {
-                UiSound::Open => sounds::OPEN,
-                UiSound::Advance => sounds::ADVANCE,
-            };
-            self.audio.play(nanatype_audio::Voice {
-                sound: id.into(),
-                bus: Bus::Ui,
-                gain: 1.0,
-                pitch: 1.0,
-            });
-        }
-        for event in &fx.events {
-            if let Event::LineStarted(line) = event {
-                self.tts_line(line);
-            }
-            self.twitch_submitted(event);
-            self.peer_submitted(event);
-            self.bridge_event(event);
-        }
-        if let Some(draft) = &fx.replace_draft {
-            self.set_source(serialize_line(&draft.doc, &draft.meta), true);
-        }
-        if fx.hide_input {
-            self.summoned = false;
-        }
-        if fx.display_changed {
-            self.ui.display.set(Arc::new(self.shared_display()));
-            self.ui.now.set(clock::now_ms());
-        }
-        if fx.history_changed || fx.danmaku_changed {
-            self.archive_rows();
-        }
-        if fx.history_changed && self.peer.handle.is_none() {
-            self.ui
-                .history
-                .set(Arc::new(self.core.history().iter().cloned().collect()));
-        }
-        if fx.danmaku_changed {
-            self.ui
-                .danmaku
-                .set(Arc::new(self.core.danmaku().iter().cloned().collect()));
-        }
-        let queued = self.core.queued();
-        if self.ui.status.with_untracked(|s| s.queued != queued) {
-            self.edit_status(|s| s.queued = queued);
-        }
-        if fx.reply_changed {
-            self.ui.reply.set(self.core.pending_reply().cloned());
-        }
-        if fx.display_changed || fx.history_changed || fx.danmaku_changed {
-            self.refresh_atom_urls();
-        }
-        if fx.display_changed || fx.history_changed {
-            self.peer_publish();
-            if self.peer.handle.is_some() {
-                self.peer_render();
-            }
-        }
-    }
-
-    /// Make sure every atom on screen has a URL.
-    /// Resolve the pictures of the display, the draft and the newest
-    /// history row.
-    fn refresh_atom_urls(&mut self) {
-        let mut assets = display_assets(self.core.display());
-        assets.extend(doc_assets(self.core.draft()));
-        if let Some(row) = self.core.history().back() {
-            assets.extend(row_assets(&row.item, row.doc()));
-        }
-        if let Some(row) = self.core.danmaku().back() {
-            assets.extend(row_assets(&row.item, row.doc()));
-        }
-        self.ensure_urls(assets);
-    }
-
-    /// Give every asset of `assets` a URL the views can load.
-    pub(crate) fn ensure_urls(&mut self, assets: impl IntoIterator<Item = AssetRef>) {
-        let urls = self.ui.asset_urls.get_untracked();
-        let found: Vec<(String, String)> = assets
-            .into_iter()
-            .filter(|asset| !urls.contains_key(&asset.to_string()))
-            .filter_map(|asset| {
-                Some((
-                    asset.to_string(),
-                    self.assets.url(&asset, Some(&self.loaded))?,
-                ))
-            })
-            .collect();
-        if found.is_empty() {
+        if overlay.size == size {
             return;
         }
-        let mut next = (*urls).clone();
-        next.extend(found);
-        self.ui.asset_urls.set(Arc::new(next));
-    }
-
-    fn bridge_event(&mut self, event: &Event) {
-        let out = match event {
-            Event::LineStarted(line) => BridgeEvent::LineStart {
-                id: line.id.0,
-                text: line.doc.plain_text(),
-                markup: serialize(&line.doc),
-                speaker: line.speaker.name.clone(),
-            },
-            Event::LineFinished(id) => BridgeEvent::LineEnd { id: id.0 },
-            Event::Expression { name, intensity } => BridgeEvent::Expression {
-                name: name.clone(),
-                intensity: *intensity,
-            },
-            Event::Portrait(v) => BridgeEvent::Portrait { variant: v.clone() },
-            // Read aloud, the voice moves the mouth instead (`bridge_speaking`).
-            Event::Speaking(_) if self.settings.tts.enabled => return,
-            Event::Speaking(s) => BridgeEvent::Speaking { speaking: *s },
-            Event::Shake { amp, ms } => BridgeEvent::Shake { amp: *amp, ms: *ms },
-            Event::Vts(action) => BridgeEvent::Vts {
-                action: action.clone(),
-            },
-            Event::LineSubmitted(_) | Event::LineRevealed(_) | Event::Queued { .. } => return,
-        };
-        if self.plugins.has_running() {
-            // Plugins can draw into the streamed display slot: never hand
-            // them the user's absolute file paths.
-            let plugin_out = match (&out, event) {
-                (
-                    BridgeEvent::LineStart {
-                        id, text, speaker, ..
-                    },
-                    Event::LineStarted(line),
-                ) => BridgeEvent::LineStart {
-                    id: *id,
-                    text: text.clone(),
-                    markup: serialize(&without_local_paths(&line.doc)),
-                    speaker: speaker.clone(),
-                },
-                _ => out.clone(),
-            };
-            if let Ok(event) = serde_json::to_value(&plugin_out) {
-                self.plugins.broadcast(event, self.ui);
-            }
-        }
-        self.bridge.emit(out);
-    }
-
-    /// A voice started or stopped talking.
-    fn bridge_speaking(&mut self, speaking: bool) {
-        let out = BridgeEvent::Speaking { speaking };
-        if self.plugins.has_running()
-            && let Ok(event) = serde_json::to_value(&out)
-        {
-            self.plugins.broadcast(event, self.ui);
-        }
-        self.bridge.emit(out);
-    }
-
-    // ---- the editor ---------------------------------------------------------
-
-    /// Replace the editor text. `program` marks it as not typed by the user.
-    fn set_source(&mut self, text: String, program: bool) {
-        if !program
-            && self.synchronizing()
-            && nanatype_model::outgoing::image_count(&parse(&text).doc)
-                > nanatype_model::outgoing::image_count(self.core.draft())
-        {
-            self.notice(self.ui.now_t("chat-images-unavailable"), true);
-            return;
-        }
-
-        let mut src = self.ui.source.get_untracked();
-        if src.text == text && !program {
-            return;
-        }
-        let len = text.len();
-        src.text = text;
-        if program {
-            src.revision += 1;
-            src.selection = (len, len);
-        }
-        self.ui.source.set(src.clone());
-        self.reparse(&src.text);
-    }
-
-    fn reparse(&mut self, text: &str) {
-        let parsed = parse(text);
-        let locale = self.ui.locale.get_untracked();
-        let diags: Vec<String> = parsed
-            .diagnostics
-            .iter()
-            .filter(|d| !matches!(d.kind, nanatype_markup::DiagnosticKind::Unclosed(_)))
-            .map(|d| {
-                let pos = text[..d.range.start.min(text.len())].chars().count() + 1;
-                let message = match &d.kind {
-                    nanatype_markup::DiagnosticKind::UnknownTag(t) => format!("[{t}] ?"),
-                    nanatype_markup::DiagnosticKind::BadValue { tag, value } => {
-                        format!("[{tag}={value}] ?")
-                    }
-                    nanatype_markup::DiagnosticKind::UnmatchedClose(t) => format!("[/{t}] ?"),
-                    other => format!("{other:?}"),
-                };
-                I18N.tr_in(
-                    locale,
-                    "editor-diagnostic",
-                    &[("pos", pos.into()), ("message", message.into())],
-                )
-            })
-            .collect();
-        self.ui.diagnostics.set(Arc::new(diags));
-        let doc = parsed.doc;
-        self.ui.editor_value.set(self.editor_rich(&doc));
-        self.ui.draft.set(Arc::new(doc.clone()));
-        self.run(Cmd::DraftMeta(parsed.meta));
-        self.run(Cmd::DraftChanged(doc));
-        self.refresh_completion();
-    }
-
-    /// The editor's look: the dialogue text of the active skin.
-    fn editor_look(&self) -> crate::ui::rich::Look {
-        let mut base = crate::ui::dialogue::Base::editor(&self.skin);
-        base.sticker_scale = self.settings.assets.sticker_scale;
-        base.look()
-    }
-
-    /// `doc` as the editor's rich text.
-    fn editor_rich(&self, doc: &Document) -> nana_ui_core::RichText {
-        let look = self.editor_look();
-        let urls = self.ui.asset_urls.get_untracked();
-        crate::ui::rich::to_rich(
-            doc,
-            &crate::ui::rich::Env {
-                look: &look,
-                urls: &urls,
-                editor: true,
-                locale: self.ui.locale.get_untracked(),
-            },
-        )
-    }
-
-    /// The user edited the rich text.
-    fn editor_changed(&mut self, rich: nana_ui_core::RichText) {
-        let previous = self.core.draft().clone();
-        let doc = sync_rich_draft(self.ui, rich);
-        if self.synchronizing()
-            && nanatype_model::outgoing::image_count(&doc)
-                > nanatype_model::outgoing::image_count(&previous)
-        {
-            self.set_source(serialize_line(&previous, &self.core.draft_meta()), true);
-            self.notice(self.ui.now_t("chat-images-unavailable"), true);
-            return;
-        }
-        self.run(Cmd::DraftChanged(doc));
-        self.refresh_atom_urls();
-    }
-
-    /// A toolbar action: an editor command, or a markup edit in source mode.
-    fn tool(&mut self, tool: crate::msg::Tool) {
-        self.speech_user_edit();
-        if self.synchronizing() && matches!(tool, crate::msg::Tool::Insert(Inline::Atom(_))) {
-            self.notice(self.ui.now_t("chat-images-unavailable"), true);
-            return;
-        }
-        self.focus_editor = true;
-        use crate::msg::Tool;
-        use nana_ui::runtime::{RichAttrMask, RichEditCommand};
-        use nana_ui_core::{PaintColor, RichSpanStyle, RichTextShadow, RichTextStroke};
-
-        if self.ui.source_mode.get_untracked() {
-            if let Some(edit) = markup_for(&tool) {
-                self.markup(edit);
-            }
-            return;
-        }
-        let attrs = self.ui.sel_attrs.get_untracked();
-        let look = self.editor_look();
-        let uniform = |mask: RichAttrMask| !attrs.mixed.contains(mask);
-        let paint = |c: nanatype_model::Rgba8| PaintColor::srgb(skin_theme::rgba(c));
-        // Effects and pacing share one interned attribute per span.
-        let (mut effects, mut pace) = match attrs.style.effect {
-            Some(index) if uniform(RichAttrMask::EFFECT) => crate::ui::rich::attr_of(index),
-            _ => Default::default(),
-        };
-        let command = match tool {
-            Tool::Bold => {
-                let on = uniform(RichAttrMask::WEIGHT)
-                    && attrs.style.shape.weight.is_some_and(|w| w >= 600);
-                RichEditCommand::SetAttrs(RichSpanStyle::new().weight(if on {
-                    400.min(look.weight)
-                } else {
-                    700.max(look.weight + 200).min(900)
-                }))
-            }
-            Tool::Italic => {
-                let on = uniform(RichAttrMask::ITALIC) && attrs.style.shape.italic == Some(true);
-                RichEditCommand::SetAttrs(RichSpanStyle::new().italic(!on))
-            }
-            Tool::Underline | Tool::Strike => {
-                let mut d = attrs.style.paint.decoration.unwrap_or_default();
-                if matches!(tool, Tool::Underline) {
-                    d.underline = !(uniform(RichAttrMask::DECORATION) && d.underline);
-                } else {
-                    d.line_through = !(uniform(RichAttrMask::DECORATION) && d.line_through);
-                }
-                let mut s = RichSpanStyle::new();
-                s.paint.decoration = Some(d);
-                RichEditCommand::SetAttrs(s)
-            }
-            Tool::Color(c) => RichEditCommand::SetAttrs(RichSpanStyle::new().color(paint(c))),
-            Tool::Size(Some(nanatype_model::Size::Em(em))) => {
-                RichEditCommand::SetAttrs(RichSpanStyle::new().size_em(em))
-            }
-            Tool::Size(Some(nanatype_model::Size::Px(px))) => {
-                RichEditCommand::SetAttrs(RichSpanStyle::new().size(px))
-            }
-            Tool::Size(None) => RichEditCommand::ClearAttrs(RichAttrMask::SIZE),
-            Tool::Font(None) => RichEditCommand::ClearAttrs(RichAttrMask::FAMILY),
-            Tool::Font(Some(font)) => RichEditCommand::SetAttrs(look.font_style(&font)),
-            Tool::Align(align) => {
-                RichEditCommand::SetParagraphAlignment(align.map(crate::ui::rich::align_to_rich))
-            }
-            Tool::Stroke(st) => {
-                let (w, c) = st
-                    .map(|s| (s.width_px, s.color))
-                    .unwrap_or((0.0, look.color));
-                RichEditCommand::SetAttrs(
-                    RichSpanStyle::new().stroke(
-                        RichTextStroke::new(w, paint(c))
-                            .placement(nana_ui_core::TextStrokePlacement::Under),
-                    ),
-                )
-            }
-            Tool::Shadow(sh) => {
-                let mut s = RichSpanStyle::new();
-                s.paint.shadows = Some(match sh {
-                    Some(sh) => Arc::from([RichTextShadow::new(
-                        [sh.dx, sh.dy],
-                        sh.blur,
-                        paint(sh.color),
-                    )]),
-                    None => Arc::from([]),
-                });
-                RichEditCommand::SetAttrs(s)
-            }
-            Tool::Ruby(text) => {
-                RichEditCommand::SetRuby((!text.trim().is_empty()).then(|| text.trim().to_owned()))
-            }
-            Tool::Effect(_) | Tool::Emphasis(_) | Tool::Entrance(..) | Tool::Pace(_) => {
-                match tool {
-                    Tool::Effect(effect) => effects.switch(effect),
-                    Tool::Emphasis(em) => {
-                        effects.emphasis = match effects.emphasis {
-                            Some(on) if on == em => None,
-                            _ => Some(em),
-                        }
-                    }
-                    Tool::Entrance(kind, ms) => {
-                        effects.entrance = Some(nanatype_model::Entrance {
-                            kind,
-                            ms: ms.unwrap_or(self.skin.dialogue.reveal.entrance.ms.max(120)),
-                        })
-                    }
-                    Tool::Pace(p) => pace = p,
-                    _ => unreachable!(),
-                }
-                RichEditCommand::SetAttrs(
-                    RichSpanStyle::new().effect(crate::ui::rich::attr_index_any(&effects, pace)),
-                )
-            }
-            // Built the way the editor's text builds it: a tag for a marker,
-            // a picture at its own aspect.
-            Tool::Insert(inline) => {
-                let doc = Document::from_inlines(vec![inline]);
-                self.ensure_urls(doc_assets(&doc));
-                match self.editor_rich(&doc).objects().first() {
-                    Some((_, object)) => RichEditCommand::InsertObject(object.clone()),
-                    None => return,
-                }
-            }
-            Tool::ClearFormat => RichEditCommand::ClearFormatting,
-        };
-        self.rich_commands.push(command.into());
-    }
-
-    fn markup(&mut self, edit: MarkupEdit) {
-        self.speech_user_edit();
-        self.source_edit_undoable |= !matches!(&edit, MarkupEdit::Typed { .. });
-        let mut src = self.ui.source.get_untracked();
-        let before = src.text.clone();
-        if !apply_source_markup_guarded(&mut src, edit, self.synchronizing()) {
-            self.ui.source.set(src);
-            self.notice(self.ui.now_t("chat-images-unavailable"), true);
-            return;
-        }
-        self.ui.source.set(src.clone());
-        if src.text != before {
-            self.reparse(&src.text);
-        }
-    }
-
-    fn insert_asset(&mut self, asset: AssetRef) {
-        if self.synchronizing() {
-            self.notice(self.ui.now_t("chat-images-unavailable"), true);
-            return;
-        }
-        self.tool(crate::msg::Tool::Insert(nanatype_model::Inline::Atom(
-            nanatype_model::Atom {
-                kind: nanatype_model::AtomKind::Image,
-                asset,
-                height_em: 2.0,
-                alt: String::new(),
-                effects: Default::default(),
-            },
-        )));
+        overlay.size = size;
+        self.settings.sanitize();
+        self.ui.settings.set(Arc::new(self.settings.clone()));
+        self.save_settings();
     }
 
     // ---- files ----------------------------------------------------------------
 
     fn pick(&mut self, target: FileTarget) {
-        if target == FileTarget::InsertImage && self.synchronizing() {
+        if target == FileTarget::InsertImage && !self.draft.allow_new_image() {
             self.notice(self.ui.now_t("chat-images-unavailable"), true);
             return;
         }
-        let id = self.next_dialog;
-        self.next_dialog += 1;
-        self.dialogs.insert(id, target);
+        let id = self.shell.next_dialog;
+        self.shell.next_dialog += 1;
+        self.shell.dialogs.insert(id, target);
         let t = |k: &str| self.ui.now_t(k);
         let images = FileFilter::new(
             t("tb-image").trim_end_matches('…').to_owned(),
@@ -2076,7 +925,7 @@ impl App {
                 .filters([skin_filter])
                 .file_name(format!(
                     "{}.ntpkg",
-                    self.export_target.clone().unwrap_or_default()
+                    self.appearance.export_target.clone().unwrap_or_default()
                 )),
             FileTarget::StickerFolder => {
                 FileDialogRequest::new(id, FileDialogKind::PickFolder).title(t("assets-add-folder"))
@@ -2101,16 +950,16 @@ impl App {
         };
         let window = [WindowKind::Settings, WindowKind::Input]
             .into_iter()
-            .find(|k| self.windows.is_open(*k))
+            .find(|k| self.shell.windows.is_open(*k))
             .unwrap_or(WindowKind::Input);
-        self.commands.push(WindowCommand::OpenFileDialog {
+        self.shell.commands.push(WindowCommand::OpenFileDialog {
             id: window.id(),
             request,
         });
     }
 
     pub fn file_chosen(&mut self, request: u64, paths: Vec<PathBuf>) {
-        let Some(target) = self.dialogs.remove(&request) else {
+        let Some(target) = self.shell.dialogs.remove(&request) else {
             return;
         };
         let Some(path) = paths.into_iter().next() else {
@@ -2131,7 +980,7 @@ impl App {
             }
             FileTarget::ImportSkin => {
                 // Inspection validates every resource and signature: keep it off the UI thread.
-                let mut registry = self.registry.clone();
+                let mut registry = self.appearance.registry.clone();
                 crate::plugins::background("package-install", &self.ctx, move || {
                     Msg::Package(PackageMsg::Installed(
                         registry
@@ -2141,8 +990,8 @@ impl App {
                 });
             }
             FileTarget::ExportSkin => {
-                if let Some(id) = self.export_target.take() {
-                    let registry = self.registry.clone();
+                if let Some(id) = self.appearance.export_target.take() {
+                    let registry = self.appearance.registry.clone();
                     crate::plugins::background("package-export", &self.ctx, move || {
                         Msg::Package(PackageMsg::Exported(
                             registry.export(&id, &path).map_err(|e| e.to_string()),
@@ -2172,10 +1021,10 @@ impl App {
     ) {
         match result {
             Ok((outcome, registry)) => {
-                self.plugin_activation.cancel(self.ui);
-                self.registry = *registry;
+                self.integrations.plugin_activation.cancel(self.ui);
+                self.appearance.registry = *registry;
                 self.reapply_workshop();
-                self.skin_reload.invalidate();
+                self.appearance.skin_reload.invalidate();
                 self.refresh_skin_rows();
                 self.sync_tray_skins();
                 let (id, text) = match outcome {
@@ -2195,9 +1044,9 @@ impl App {
                 };
                 self.notice(text, false);
                 // An updated dependency may change another plugin's reviewed closure.
-                self.plugins = Default::default();
-                self.plugins.sync(
-                    &self.registry,
+                self.integrations.plugins = Default::default();
+                self.integrations.plugins.sync(
+                    &self.appearance.registry,
                     &self.settings.enabled_plugins,
                     &self.settings.plugin_approvals,
                     self.ctx.clone(),
@@ -2205,7 +1054,7 @@ impl App {
                 );
                 if id == self.settings.skin.id {
                     self.reload_skin(true);
-                } else if self.registry.entry(&id).is_some() {
+                } else if self.appearance.registry.entry(&id).is_some() {
                     self.edit(|s| s.skin.id = id);
                 }
             }
@@ -2217,139 +1066,94 @@ impl App {
         }
     }
 
-    // ---- update ---------------------------------------------------------------
-
     fn import_sticker_folders(&mut self, paths: Vec<PathBuf>) {
         self.edit(|s| crate::stickers::add_folders(&mut s.assets.sticker_dirs, &paths));
     }
 
-    pub fn update(&mut self, msg: Msg) {
+    // ---- update ---------------------------------------------------------------
+
+    pub fn update(&mut self, msg: AppMsg) {
         if matches!(
             msg,
-            Msg::Window(WindowMsg::SettingsPage(crate::ui::settings::Page::Speech))
+            AppMsg::Window(WindowMsg::SettingsPage(crate::ui::settings::Page::Speech))
         ) {
             self.speech_inventory();
-            self.tts.engine.request_voices();
+            self.session.tts.engine.request_voices();
         }
         match msg {
-            Msg::Speech(m) => self.speech_msg(m),
-            Msg::Tts(m) => self.tts_msg(m),
-            Msg::Package(m) => self.package_msg(m),
-            Msg::Sticker(m) => self.sticker_msg(m),
-            Msg::Editor(m) => self.editor_msg(m),
-            Msg::Window(m) => self.window_msg(m),
-            Msg::Skin(m) => self.skin_msg(m),
-            Msg::Chat(m) => self.chat_msg(m),
-            Msg::Twitch(m) => self.twitch_msg(m),
-            Msg::Blive(m) => self.blivechat_msg(m),
-            Msg::Laplace(m) => self.laplace_msg(m),
-            Msg::Comet(e) => self.comet_event(e),
-            Msg::Obs(m) => self.obs_msg(m),
-            Msg::Workshop(m) => self.workshop_msg(m),
-            Msg::History(m) => self.history_msg(m),
-            Msg::Backup(m) => self.backup_msg(m),
-            Msg::Profile(m) => self.profile_msg(m),
+            AppMsg::Speech(m) => self.speech_msg(m),
+            AppMsg::Tts(m) => self.tts_msg(m),
+            AppMsg::Package(m) => self.package_msg(m),
+            AppMsg::Sticker(m) => self.sticker_msg(m),
+            AppMsg::Editor(m) => self.editor_msg(m),
+            AppMsg::Window(m) => self.window_msg(m),
+            AppMsg::Skin(m) => self.skin_msg(m),
+            AppMsg::Chat(m) => self.chat_msg(m),
+            AppMsg::Twitch(m) => self.twitch_msg(m),
+            AppMsg::BliveFeed(m) => self.blive_feed_msg(m),
+            AppMsg::Obs(m) => self.obs_msg(m),
+            AppMsg::Workshop(m) => self.workshop_msg(m),
+            AppMsg::History(m) => self.history_msg(m),
+            AppMsg::Backup(m) => self.backup_msg(m),
+            AppMsg::Profile(m) => self.profile_msg(m),
             #[cfg(feature = "updates")]
-            Msg::Update(m) => self.update_msg(m),
-            Msg::HoldOnboardPreview => {
-                self.onboard_preview_gen = self.onboard_preview_gen.wrapping_add(1);
-                let generation = self.onboard_preview_gen;
-                // The entrance and this delay start together. The step draws
-                // the selector while it fades in; the preview mounts after.
-                self.scheduler.post_after(
-                    Duration::from_millis(crate::ui::motion::ENTER_MS),
-                    Msg::RevealOnboardPreview { generation },
-                );
-            }
-            Msg::RevealOnboardPreview { generation }
-                if generation == self.onboard_preview_gen
-                    && self.ui.onboard_step.get_untracked() == 1 =>
-            {
-                self.ui.onboard_skin_shown.set(true);
-            }
-            Msg::RevealOnboardPreview { .. } => {}
-            Msg::PeerStart {
+            AppMsg::Update(m) => self.update_msg(m),
+            AppMsg::PeerStart {
                 invitation,
                 password,
             } => self.peer_start(invitation, password),
-            Msg::PeerInviteFriends => self.peer_invite_friends(),
-            Msg::PeerLeave => self.peer_leave(),
-            Msg::PeerPanel(expanded) => self.ui.peer_panel.set(expanded),
-            Msg::PeerEvent(generation, event) => self.peer_event(generation, event),
-            Msg::Core(cmd) => {
+            AppMsg::PeerInviteFriends => self.peer_invite_friends(),
+            AppMsg::PeerLeave => self.peer_leave(),
+            AppMsg::PeerPanel(expanded) => self.ui.peer_panel.set(expanded),
+            AppMsg::PeerEvent(generation, event) => self.peer_event(generation, event),
+            AppMsg::Core(cmd) => {
                 if matches!(cmd, Cmd::DraftChanged(_)) {
+                    self.draft.bump_version();
                     self.speech_user_edit();
                 }
                 self.run(cmd);
             }
-            Msg::Edit(f) => self.edit(f),
-            Msg::Hotkey(action) => self.hotkey(action),
-            Msg::RecordHotkey(action) => self.record_hotkey(action),
-            Msg::HotkeyCaptured(hotkey) => self.hotkey_captured(hotkey),
-            Msg::HotkeyStatus(status) => self.ui.hotkeys.set(Arc::new(status)),
-            Msg::InputHwnd(hwnd) => self.hotkeys.set_input_window(hwnd),
-            Msg::QuickHwnd(hwnd) => {
-                self.quick_hwnd = hwnd;
+            AppMsg::Edit(f) => self.edit(f),
+            AppMsg::Hotkey(action) => self.hotkey(action),
+            AppMsg::RecordHotkey(action) => self.record_hotkey(action),
+            AppMsg::HotkeyCaptured(hotkey) => self.hotkey_captured(hotkey),
+            AppMsg::HotkeyStatus(status) => self.ui.hotkeys.set(Arc::new(status)),
+            AppMsg::InputHwnd(hwnd) => self.shell.hotkeys.set_input_window(hwnd),
+            AppMsg::QuickHwnd(hwnd) => {
+                self.shell.quick.set_hwnd(hwnd);
                 self.sync_quick();
             }
-            Msg::QuickSend(text) => self.quick_send(&text),
-            Msg::QuickHide => self.hide_quick(),
-            Msg::PickFile(target) => self.pick(target),
-            Msg::OpenFolder(path) => crate::services::reveal(&path),
-            Msg::ExportDiagnostics => self.export_diagnostics(),
-            Msg::DiagnosticsExported(result) => self.diagnostics_exported(result),
-            Msg::OpenUrl(url) => crate::services::open_url(url),
-            Msg::CopyText(text) => self.copy_text(text),
-            Msg::PlaySample => self.play_sample(),
-            Msg::VtsAuthorize => self.vts_authorize(),
-            Msg::VtsRefresh => self.bridge.vts_refresh_hotkeys(),
-            Msg::Notice {
+            AppMsg::QuickSend(text) => self.quick_send(&text),
+            AppMsg::QuickHide => self.hide_quick(),
+            AppMsg::PickFile(target) => self.pick(target),
+            AppMsg::OpenFolder(path) => crate::services::reveal(&path),
+            AppMsg::ExportDiagnostics => self.export_diagnostics(),
+            AppMsg::DiagnosticsExported(result) => self.diagnostics_exported(result),
+            AppMsg::OpenUrl(url) => crate::services::open_url(url),
+            AppMsg::CopyText(text) => self.copy_text(text),
+            AppMsg::PlaySample => self.play_sample(),
+            AppMsg::VtsAuthorize => self.vts_authorize(),
+            AppMsg::VtsRefresh => self.integrations.bridge.vts_refresh_hotkeys(),
+            AppMsg::Notice {
                 text,
                 error,
                 source,
             } => self.notice_from(text, error, source),
-            Msg::DismissNotice(id) => self.edit_status(|s| s.notices.retain(|n| n.id != id)),
-            Msg::TrayErrorExpired(id) => self.tray_error_expired(id),
-            // The host removes toasts from its documents.
-            Msg::ToastDismissed(..) => {}
-            Msg::UiChanged => {}
-            Msg::OutputCleanup => self.refresh_spout_status(),
-            Msg::Wake { epoch, reason } => self.run(Cmd::Wake { epoch, reason }),
-            Msg::Cue(kind) => self.run(Cmd::CueFired(kind)),
-            Msg::Audio(status) => self.audio_status(status),
-            Msg::Bridge(status) => self.bridge_status(status),
-            Msg::Quit => self.quit(),
-        }
-    }
-
-    fn bridge_status(&mut self, status: BridgeStatus) {
-        let set = |app: &mut Self, sink: Sink, state: LinkState| {
-            app.edit_status(|s| match sink {
-                Sink::Vts => s.vts = state,
-                Sink::Osc => s.osc = state,
-                Sink::WebSocket => s.ws = state,
-            });
-        };
-        if let BridgeStatus::Error(sink, fault) = &status {
-            let code = match sink {
-                Sink::Vts => 0u64,
-                Sink::Osc => 1,
-                Sink::WebSocket => 2,
-            };
-            nanatype_diag::report!(crate::diag::BRIDGE_ERROR, sink = code; "{fault}");
-        }
-        let locale = self.ui.locale.get_untracked();
-        if let Some((sink, state)) = crate::ui::link_text::bridge(locale, &status) {
-            set(self, sink, state);
-        }
-        match status {
-            BridgeStatus::VtsToken(token) => self.edit(|s| s.integrations.vts.token = Some(token)),
-            BridgeStatus::VtsTokenRejected => self.edit(|s| s.integrations.vts.token = None),
-            BridgeStatus::VtsHotkeys(keys) => {
-                let list = keys.into_iter().map(|k| (k.id, k.name)).collect();
-                self.edit_status(|s| s.vts_hotkeys = list);
+            AppMsg::DismissNotice(id) => {
+                let mut notices = (*self.ui.notices.get_untracked()).clone();
+                let before = notices.len();
+                notices.retain(|n| n.id != id);
+                if notices.len() != before {
+                    self.ui.notices.set(Arc::new(notices));
+                }
             }
-            _ => {}
+            AppMsg::TrayErrorExpired(id) => self.tray_error_expired(id),
+            AppMsg::OutputCleanup => self.refresh_output_status(),
+            AppMsg::Wake { epoch, reason } => self.run(Cmd::Wake { epoch, reason }),
+            AppMsg::Cue(kind) => self.run(Cmd::CueFired(kind)),
+            AppMsg::Audio(status) => self.audio_status(status),
+            AppMsg::Bridge(status) => self.bridge_status(status),
+            AppMsg::Quit => self.quit(),
         }
     }
 
@@ -2357,16 +1161,25 @@ impl App {
 
     fn chat_message(&mut self, message: Arc<ChatMessage>) {
         let epoch = match message.platform {
-            crate::chat::Platform::Blivechat => self.blivechat.epoch(),
-            crate::chat::Platform::Laplace => self.laplace.epoch(),
-            crate::chat::Platform::Comet => self.comet.epoch(),
-            crate::chat::Platform::Twitch => self.twitch.epoch(),
+            crate::chat::Platform::Blivechat => self
+                .integrations
+                .blive
+                .epoch(blive_feeds::BliveFeedKind::Blivechat),
+            crate::chat::Platform::Laplace => self
+                .integrations
+                .blive
+                .epoch(blive_feeds::BliveFeedKind::Laplace),
+            crate::chat::Platform::Comet => self
+                .integrations
+                .blive
+                .epoch(blive_feeds::BliveFeedKind::Comet),
+            crate::chat::Platform::Twitch => self.integrations.twitch.epoch(),
         };
         if message.epoch != 0 && message.epoch != epoch {
             return;
         }
-        let include = !self.live_chat.echo(&message);
-        self.ensure_urls(message_assets(&message));
+        let include = !self.session.live_chat.echo(&message);
+        self.ensure_urls(media::message_assets(&message));
         let history = &self.settings.history.chat;
         if include && message.passes(&history.filter) {
             let locale = self.ui.locale.get_untracked();
@@ -2375,9 +1188,9 @@ impl App {
             self.run(Cmd::External(item.clone()));
             self.live_record_row(&message);
         }
-        self.chat.push_back(message);
-        while self.chat.len() > CHAT_CAP {
-            self.chat.pop_front();
+        self.session.chat.push_back(message);
+        while self.session.chat.len() > CHAT_CAP {
+            self.session.chat.pop_front();
         }
         self.publish_chat();
     }
@@ -2385,14 +1198,21 @@ impl App {
     fn publish_chat(&mut self) {
         self.ui
             .chat
-            .set(Arc::new(self.chat.iter().cloned().collect()));
-        if self.completer.open.is_some() {
+            .set(Arc::new(self.session.chat.iter().cloned().collect()));
+        if self.draft.completer.open.is_some() {
             self.refresh_completion();
         }
     }
 
     fn mention(&mut self, seq: u64, reply: bool) {
-        let Some(message) = self.chat.iter().rev().find(|m| m.seq == seq).cloned() else {
+        let Some(message) = self
+            .session
+            .chat
+            .iter()
+            .rev()
+            .find(|m| m.seq == seq)
+            .cloned()
+        else {
             return;
         };
         if reply {
@@ -2407,7 +1227,7 @@ impl App {
         // Keep reply inside the resident input window, even when its chat
         // rail is folded or another panel is open.
         let show_chat = reply && !self.ui.input_dock.get_untracked().chat_visible();
-        self.focus_editor = true;
+        self.draft.focus_editor = true;
         let text = self.ui.tr(
             if reply {
                 "chat-replying"
@@ -2416,53 +1236,55 @@ impl App {
             },
             &[("name", message.user.name.as_str().into())],
         );
-        self.toasts.push(ToastRequest::new(
+        self.shell.toasts.push(ToastRequest::new(
             text,
             nana_ui::ToastTone::Success,
             1600,
             false,
         ));
         if show_chat {
-            self.update(Msg::Chat(ChatMsg::Show));
-        } else {
-            self.update(Msg::Window(WindowMsg::Show(WindowKind::Input)));
+            let layout = self.ui.input_dock.get_untracked();
+            if !layout.chat_visible() {
+                self.chat_msg(ChatMsg::Show);
+                return;
+            }
         }
+        self.show_input_window();
     }
 
     /// Show the input window for a hotkey and bring it forward.
     fn raise_input(&mut self) {
-        self.update(Msg::Window(WindowMsg::Show(WindowKind::Input)));
+        self.show_input_window();
         // Carbon does not grant foreground the way WM_HOTKEY does, and
         // AppKit has to be touched on this thread.
         #[cfg(target_os = "macos")]
         {
-            hotkeys::activate(self.hotkeys.input_window());
+            hotkeys::activate(self.shell.hotkeys.input_window());
         }
     }
 
     /// Bring up the quick input bar, centred and focused.
     fn show_quick(&mut self) {
-        self.quick_open = true;
-        self.focus_quick = true;
-        self.commands
+        self.shell.quick.show();
+        self.shell
+            .commands
             .push(WindowCommand::Focus(WindowKind::Quick.id()));
         #[cfg(target_os = "macos")]
         {
-            hotkeys::activate(self.hotkeys.quick_window());
+            hotkeys::activate(self.shell.hotkeys.quick_window());
         }
         #[cfg(windows)]
         {
             // WM_HOTKEY owns the foreground right; request activation there even
             // when the Quick HWND is published after this callback.
-            self.hotkeys.request_quick_activation();
+            self.shell.hotkeys.request_quick_activation();
         }
     }
 
     fn hide_quick(&mut self) {
-        self.quick_open = false;
-        self.focus_quick = false;
+        self.shell.quick.hide();
         #[cfg(windows)]
-        self.hotkeys.cancel_quick_activation();
+        self.shell.hotkeys.cancel_quick_activation();
         self.ui.quick_text.set_if_changed(String::new());
     }
 
@@ -2472,48 +1294,33 @@ impl App {
         if text.is_empty() {
             return;
         }
-        let doc = nanatype_model::Document::plain(text);
+        let doc = Document::plain(text);
         self.run(Cmd::SendMarkup(serialize(&doc)));
         self.hide_quick();
     }
 
-    /// Keep the quick bar's window open while summon presence or QuickInput
-    /// wants it, and publish its HWND to the hotkey worker.
+    /// Publish the quick bar's HWND to the hotkey worker while summon presence or
+    /// the bar itself wants it.
     fn sync_quick(&mut self) {
         let summon = self.settings.general.input_presence == InputPresence::Summon;
-        let wants_quick = summon || self.quick_open;
-        if !wants_quick && self.quick_open {
+        let quick_open = self.quick_bar_open();
+        if !(summon || quick_open) && quick_open {
             self.hide_quick();
         }
-        // Like the overlays, it opens once the primary window is ready.
-        if wants_quick
-            && !self.quick_requested
-            && self.windows.is_open(WindowKind::Input)
-            && !self.windows.is_open(WindowKind::Quick)
-        {
-            self.quick_requested = true;
-            let title = self.ui.now_t(WindowKind::Quick.title_key());
-            let desc = windows::descriptor(WindowKind::Quick, &title, &self.skin, &self.settings);
-            self.commands.push(WindowCommand::Open {
-                id: WindowKind::Quick.id(),
-                settings: desc,
-            });
-        }
-        self.hotkeys.set_quick_window(if summon || self.quick_open {
-            self.quick_hwnd
+        let hwnd = if summon || self.quick_bar_open() {
+            self.shell.quick.hwnd()
         } else {
             0
-        });
+        };
+        self.shell.hotkeys.set_quick_window(hwnd);
     }
 
-    /// The quick bar's window closed: ask for it again when wanted.
+    /// The quick bar's window closed: reset its visible state so it opens again.
     pub(crate) fn quick_closed(&mut self) {
-        self.quick_open = false;
-        self.quick_hwnd = 0;
-        self.quick_requested = false;
+        self.shell.quick.closed();
         #[cfg(windows)]
-        self.hotkeys.cancel_quick_activation();
-        self.hotkeys.set_quick_window(0);
+        self.shell.hotkeys.cancel_quick_activation();
+        self.shell.hotkeys.set_quick_window(0);
     }
 
     /// The chat messages the panel lists, oldest first.
@@ -2524,27 +1331,27 @@ impl App {
     }
 
     fn set_input_visibility(&mut self, visible: bool) {
-        let mut summoned = self.summoned;
-        self.edit(|s| windows::set_input_visibility(s, &mut summoned, visible));
-        self.summoned = summoned;
+        let mut summoned = self.shell.summoned;
+        self.edit(|s| crate::windows::set_input_visibility(s, &mut summoned, visible));
+        self.shell.summoned = summoned;
     }
 
     fn hotkey(&mut self, action: GlobalAction) {
         match action {
             GlobalAction::Summon => {
                 // Only the input window can come back minimized.
-                let _ = self.hotkeys.take_summon_restore();
+                let _ = self.shell.hotkeys.take_summon_restore();
                 self.raise_input();
             }
             GlobalAction::QuickInput => {
-                if self.quick_open {
+                if self.quick_bar_open() {
                     self.hide_quick();
                 } else {
                     self.show_quick();
                 }
             }
             GlobalAction::ShowChat => {
-                self.update(Msg::Chat(ChatMsg::Show));
+                self.chat_msg(ChatMsg::Show);
                 self.raise_input();
             }
             GlobalAction::ReplyLatest => {
@@ -2559,7 +1366,7 @@ impl App {
                     collapsed: false,
                     ..self.ui.input_dock.get_untracked()
                 };
-                self.update(Msg::Chat(ChatMsg::Dock(open)));
+                self.chat_msg(ChatMsg::Dock(open));
                 self.raise_input();
             }
             GlobalAction::Continue => self.run(Cmd::Continue),
@@ -2586,7 +1393,7 @@ impl App {
                     }
                 });
             }
-            GlobalAction::Phrase(i) => self.update(Msg::Editor(EditorMsg::InsertPhrase(i))),
+            GlobalAction::Phrase(i) => self.editor_msg(EditorMsg::InsertPhrase(i)),
             GlobalAction::ToggleLock
             | GlobalAction::Replay
             | GlobalAction::ToggleHistory
@@ -2594,98 +1401,58 @@ impl App {
             | GlobalAction::PrevCharacter
             | GlobalAction::NextProfile
             | GlobalAction::Character(_) => {
-                if let Some(msg) = action.message() {
-                    self.update(msg);
+                if let Some(msg) = action.message()
+                    && let Ok(app_msg) = msg.into_domain()
+                {
+                    self.update(app_msg);
                 }
             }
             GlobalAction::Profile(i) => {
                 if let Some(p) = self.settings.hotkeys.profiles.get(i) {
                     let id = p.id.clone();
-                    self.update(Msg::Profile(crate::msg::ProfileMsg::Switch(id)));
+                    self.profile_msg(crate::msg::ProfileMsg::Switch(id));
                 }
             }
         }
     }
 
     pub fn open_settings(&mut self) {
-        if self.windows.is_open(WindowKind::Settings) {
-            self.commands
+        self.shell.windows.request_settings();
+        if self.shell.windows.is_open(WindowKind::Settings) {
+            self.shell
+                .commands
                 .push(WindowCommand::Focus(WindowKind::Settings.id()));
-            if let Some(h) = self.windows.handle(WindowKind::Settings) {
+            if let Some(h) = self.shell.windows.handle(WindowKind::Settings) {
                 drop(h.set_visible(true));
                 drop(h.focus());
             }
-            return;
         }
-        let title = self.ui.now_t("window-settings");
-        let desc = windows::descriptor(WindowKind::Settings, &title, &self.skin, &self.settings);
-        self.commands.push(WindowCommand::Open {
-            id: WindowKind::Settings.id(),
-            settings: desc,
-        });
     }
 
     pub fn window_size(&self, kind: WindowKind) -> (f32, f32) {
-        windows::own_size(kind, self.zoom(kind))
-            .unwrap_or_else(|| windows::size_of(kind, &self.skin, &self.settings))
-    }
-
-    pub(crate) fn open_danmaku_window(&mut self) {
-        let kind = WindowKind::Danmaku;
-        if self.settings.history.chat.separate
-            && self.windows.is_open(WindowKind::Input)
-            && self.windows.should_open(kind)
-        {
-            let locale = self.ui.locale.get_untracked();
-            let desc = windows::descriptor(kind, &kind.title(locale), &self.skin, &self.settings);
-            self.commands.push(WindowCommand::Open {
-                id: kind.id(),
-                settings: desc,
-            });
-        }
+        crate::windows::own_size(kind, self.zoom(kind))
+            .unwrap_or_else(|| crate::windows::size_of(kind, &self.appearance.skin, &self.settings))
     }
 
     /// Native window state for this frame.
     pub fn reconcile_windows(&mut self) -> Vec<WindowCommand> {
         self.sync_quick();
-        let want: Vec<_> = WindowKind::ALL
-            .into_iter()
-            .map(|k| {
-                (k, {
-                    let mut desired =
-                        windows::desired(k, &self.skin, &self.settings, self.summoned);
-                    desired.size = self.window_size(k);
-                    // A partner window shows only while someone sits there.
-                    if k.seat().is_some_and(|seat| seat >= self.partner_seats()) {
-                        desired.visible = false;
-                    }
-                    if k == WindowKind::Danmaku && !self.settings.history.chat.separate {
-                        desired.visible = false;
-                    }
-                    if k == WindowKind::Quick {
-                        desired.visible = self.quick_open;
-                    }
-                    desired
-                })
-            })
-            .collect();
-        let mut out = std::mem::take(&mut self.commands);
-        out.extend(self.windows.reconcile(&want));
+        let mut out = std::mem::take(&mut self.shell.commands);
+        let locale = self.ui.locale.get_untracked();
+        let system_text = self.ui.system_text_scale.get_untracked();
+        let quick_visible = self.quick_bar_open();
+        let partners = self.partner_seats();
+        out.extend(self.shell.windows.reconcile(
+            &self.appearance.skin,
+            &self.settings,
+            locale,
+            system_text,
+            self.shell.summoned,
+            quick_visible,
+            partners,
+        ));
         self.save_geometry();
         out
-    }
-
-    /// Motion is reduced when the setting or the system asks for it.
-    pub fn sync_reduced_motion(&mut self) {
-        let reduced =
-            self.settings.playback.reduced_motion || self.ui.system_reduced_motion.get_untracked();
-        if self.ui.reduced_motion.get_untracked() != reduced {
-            self.ui.reduced_motion.set(reduced);
-        }
-        let fx = self
-            .core
-            .handle(Cmd::SetReducedMotion(reduced), clock::now_ms());
-        self.apply_effects(fx);
     }
 
     pub fn update_result(&mut self) -> RuntimeProgramUpdate {
@@ -2698,197 +1465,9 @@ impl App {
         self.sync_tray();
         RuntimeProgramUpdate {
             window_commands,
-            exit: self.quitting,
+            exit: self.shell.quitting,
             ..RuntimeProgramUpdate::default()
         }
-    }
-}
-
-/// Pictures `doc` shows: atoms and the avatars of mentioned viewers.
-fn doc_assets(doc: &Document) -> Vec<AssetRef> {
-    doc.paragraphs
-        .iter()
-        .flat_map(|p| &p.inlines)
-        .filter_map(|i| match i {
-            Inline::Atom(a) => Some(a.asset.clone()),
-            Inline::Mention(m) => m.user.avatar.clone(),
-            _ => None,
-        })
-        .collect()
-}
-
-fn display_assets(view: &nanatype_core::DisplayView) -> Vec<AssetRef> {
-    let mut out = doc_assets(&view.doc);
-    out.extend(view.speaker.avatar.as_ref().and_then(|a| a.parse().ok()));
-    out.extend(view.reply.as_ref().and_then(|r| r.user.avatar.clone()));
-    out
-}
-
-/// A history row's pictures: its text's, its avatar (chat rows name a
-/// saved one) and the avatar of the message it answers.
-fn row_assets(item: &nanatype_model::HistoryItem, doc: &Document) -> Vec<AssetRef> {
-    let mut out = doc_assets(doc);
-    out.extend(
-        item.avatar
-            .as_deref()
-            .and_then(|a| a.parse::<AssetRef>().ok()),
-    );
-    out.extend(item.reply.as_ref().and_then(|r| r.user.avatar.clone()));
-    out
-}
-
-fn message_assets(m: &ChatMessage) -> Vec<AssetRef> {
-    let mut out = doc_assets(&m.doc);
-    out.extend(m.user.avatar.clone());
-    out
-}
-
-/// Synchronize an actual editor event before reactive views read the draft.
-pub(crate) fn sync_rich_draft(ui: Ui, rich: nana_ui_core::RichText) -> Document {
-    let look = crate::ui::dialogue::Base::editor(&ui.skin.get_untracked()).look();
-    let doc = crate::ui::rich::from_rich(&rich, &look);
-    ui.editor_value.set(rich);
-    let meta = parse(&ui.source.get_untracked().text).meta;
-    let text = serialize_line(&doc, &meta);
-    let mut src = ui.source.get_untracked();
-    if src.text != text {
-        let len = text.len();
-        src.text = text;
-        src.selection = (len, len);
-        src.revision += 1;
-        ui.source.set(src);
-    }
-    ui.diagnostics.set(Arc::new(Vec::new()));
-    ui.draft.set(Arc::new(doc.clone()));
-    doc
-}
-
-pub(crate) fn apply_source_markup_guarded(
-    src: &mut crate::ui::Source,
-    edit: MarkupEdit,
-    synchronizing: bool,
-) -> bool {
-    let mut candidate = src.clone();
-    apply_source_markup(&mut candidate, edit);
-    if synchronizing
-        && nanatype_model::outgoing::image_count(&parse(&candidate.text).doc)
-            > nanatype_model::outgoing::image_count(&parse(&src.text).doc)
-    {
-        // Trigger the retained editor binding to restore its pre-edit value.
-        src.revision += 1;
-        return false;
-    }
-    *src = candidate;
-    true
-}
-
-pub(crate) fn apply_source_markup(src: &mut crate::ui::Source, edit: MarkupEdit) {
-    match edit {
-        MarkupEdit::Typed { text, selection } => {
-            src.text = text;
-            src.selection = selection;
-        }
-        MarkupEdit::Wrap { open, close } => {
-            let (a, b) = clamp_sel(&src.text, src.selection);
-            src.text.insert_str(b, &close);
-            src.text.insert_str(a, &open);
-            let caret = if a == b {
-                a + open.len()
-            } else {
-                b + open.len() + close.len()
-            };
-            src.selection = (caret, caret);
-            src.revision += 1;
-        }
-        MarkupEdit::Insert(tag) => {
-            let (a, b) = clamp_sel(&src.text, src.selection);
-            src.text.replace_range(a..b, &tag);
-            src.selection = (a + tag.len(), a + tag.len());
-            src.revision += 1;
-        }
-        MarkupEdit::Align(align) => {
-            let (a, b) = clamp_sel(&src.text, src.selection);
-            let first = src.text[..a].bytes().filter(|v| *v == b'\n').count();
-            let last_byte = if b > a { b - 1 } else { b };
-            let last = src.text.as_bytes()[..last_byte]
-                .iter()
-                .filter(|v| **v == b'\n')
-                .count();
-            let mut parsed = parse(&src.text);
-            for paragraph in parsed.doc.paragraphs.iter_mut().take(last + 1).skip(first) {
-                paragraph.align = align;
-            }
-            src.text = nanatype_markup::serialize_line(&parsed.doc, &parsed.meta);
-            let start = src
-                .text
-                .split_inclusive('\n')
-                .take(first)
-                .map(str::len)
-                .sum::<usize>();
-            let end = src
-                .text
-                .split_inclusive('\n')
-                .take(last + 1)
-                .map(str::len)
-                .sum::<usize>()
-                .min(src.text.len());
-            src.selection = (start, end);
-            src.revision += 1;
-        }
-        MarkupEdit::ClearFormat => {
-            let (a, b) = clamp_sel(&src.text, src.selection);
-            let (a, b) = if a == b { (0, src.text.len()) } else { (a, b) };
-            let plain = strip_tags(&src.text[a..b]);
-            src.text.replace_range(a..b, &plain);
-            src.selection = (a, a + plain.len());
-            if parse(&src.text)
-                .doc
-                .paragraphs
-                .iter()
-                .any(|p| p.align.is_some())
-            {
-                apply_source_markup(src, MarkupEdit::Align(None));
-            } else {
-                src.revision += 1;
-            }
-        }
-    }
-}
-
-fn clamp_sel(text: &str, (a, b): (usize, usize)) -> (usize, usize) {
-    let fix = |mut i: usize| {
-        i = i.min(text.len());
-        while i > 0 && !text.is_char_boundary(i) {
-            i -= 1;
-        }
-        i
-    };
-    let (a, b) = (fix(a), fix(b));
-    (a.min(b), a.max(b))
-}
-
-/// Remove `[tag]` and `[/tag]` but keep `[[` escapes and the text.
-fn strip_tags(text: &str) -> String {
-    let parsed = parse(text);
-    let mut doc = parsed.doc;
-    for paragraph in &mut doc.paragraphs {
-        paragraph.align = None;
-    }
-    for run in doc.runs_mut() {
-        run.style = Default::default();
-        run.effects = Default::default();
-        run.pace = Default::default();
-    }
-    serialize(&doc.normalized())
-}
-
-pub(crate) fn quote(v: &str) -> String {
-    if v.chars()
-        .any(|c| c.is_whitespace() || matches!(c, ']' | '"' | '[' | '\\'))
-    {
-        format!("\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\""))
-    } else {
-        v.to_owned()
     }
 }
 
@@ -2929,178 +1508,8 @@ fn demo_editor(ctx: &RuntimeProgramContext<Msg>) {
     ctx.dispatch(Msg::Core(Cmd::Send));
 }
 
-/// The markup equivalent of a toolbar action (source mode).
-pub(crate) fn markup_for(tool: &crate::msg::Tool) -> Option<MarkupEdit> {
-    use crate::msg::Tool;
-    let wrap = |open: String, close: &str| MarkupEdit::Wrap {
-        open,
-        close: close.to_owned(),
-    };
-    Some(match tool {
-        Tool::Bold => wrap("[b]".into(), "[/b]"),
-        Tool::Italic => wrap("[i]".into(), "[/i]"),
-        Tool::Underline => wrap("[u]".into(), "[/u]"),
-        Tool::Strike => wrap("[s]".into(), "[/s]"),
-        Tool::Color(c) => wrap(format!("[color={c}]"), "[/color]"),
-        Tool::Size(Some(nanatype_model::Size::Em(em))) => wrap(format!("[size={em}]"), "[/size]"),
-        Tool::Size(Some(nanatype_model::Size::Px(px))) => wrap(format!("[size={px}px]"), "[/size]"),
-        Tool::Size(None) => wrap("[size=inherit]".into(), "[/size]"),
-        Tool::Font(font) => {
-            let value = match font {
-                None => "inherit".into(),
-                Some(nanatype_model::FontSlot::Body) => "body".into(),
-                Some(nanatype_model::FontSlot::Name) => "name".into(),
-                Some(nanatype_model::FontSlot::Accent) => "accent".into(),
-                Some(nanatype_model::FontSlot::Family(f)) => {
-                    format!("\"{}\"", f.replace('\\', "\\\\").replace('\"', "\\\""))
-                }
-            };
-            wrap(format!("[font={value}]"), "[/font]")
-        }
-        Tool::Align(align) => MarkupEdit::Align(*align),
-        Tool::Stroke(Some(s)) => wrap(format!("[stroke={},{}]", s.color, s.width_px), "[/stroke]"),
-        Tool::Shadow(Some(s)) => wrap(
-            format!("[shadow={},{},{},{}]", s.color, s.dx, s.dy, s.blur),
-            "[/shadow]",
-        ),
-        Tool::Ruby(r) => wrap(format!("[ruby={}]", quote(r)), "[/ruby]"),
-        Tool::Effect(e) => {
-            let mut open = format!("[{}", e.kind.key());
-            if e.amp != 1.0 {
-                open.push_str(&format!(" amp={}", e.amp));
-            }
-            if e.speed != 1.0 {
-                open.push_str(&format!(" speed={}", e.speed));
-            }
-            open.push(']');
-            wrap(open, &format!("[/{}]", e.kind.key()))
-        }
-        Tool::Emphasis(em) if *em == nanatype_model::Emphasis::default() => {
-            wrap("[em]".into(), "[/em]")
-        }
-        Tool::Emphasis(em) => wrap(format!("[em={}]", em.ms), "[/em]"),
-        Tool::Entrance(k, ms) => {
-            let tag = match k {
-                nanatype_model::EntranceKind::Fade => "fade",
-                nanatype_model::EntranceKind::Pop => "pop",
-                nanatype_model::EntranceKind::SlideUp => "slide",
-                nanatype_model::EntranceKind::None => "noentrance",
-            };
-            let open = match ms {
-                Some(ms) => format!("[{tag}={ms}]"),
-                None => format!("[{tag}]"),
-            };
-            wrap(open, &format!("[/{tag}]"))
-        }
-        Tool::Pace(nanatype_model::Pace::Instant) => wrap("[instant]".into(), "[/instant]"),
-        Tool::Pace(nanatype_model::Pace::Scale(s)) => wrap(format!("[speed={s}]"), "[/speed]"),
-        Tool::Pace(nanatype_model::Pace::FixedMs(ms)) => {
-            wrap(format!("[speed={ms}ms]"), "[/speed]")
-        }
-        Tool::Insert(inline) => {
-            let doc = Document::from_inlines(vec![inline.clone()]);
-            MarkupEdit::Insert(serialize(&doc))
-        }
-        Tool::ClearFormat => MarkupEdit::ClearFormat,
-        _ => return None,
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn selections_clamp_to_char_boundaries() {
-        assert_eq!(clamp_sel("你好", (1, 99)), (0, 6));
-        assert_eq!(clamp_sel("abc", (2, 1)), (1, 2));
-    }
-
-    #[test]
-    fn clearing_format_keeps_text_and_markers() {
-        assert_eq!(
-            strip_tags("[b]你[color=#ff0000]好[/color][/b][wait=300]"),
-            "你好[wait=300]"
-        );
-    }
-
-    #[test]
-    fn quoting_only_when_needed() {
-        assert_eq!(quote("cats/hi"), "cats/hi");
-        assert_eq!(quote("file:C:/My Pics/a.png"), "\"file:C:/My Pics/a.png\"");
-    }
-
-    #[test]
-    fn synchronized_source_edits_reject_images_without_changing_the_draft() {
-        for tag in ["[img=blob:fixture]", "[sticker=cats/hello]", "[emote=wave]"] {
-            for edit in [
-                MarkupEdit::Insert(tag.into()),
-                MarkupEdit::Typed {
-                    text: tag.into(),
-                    selection: (tag.len(), tag.len()),
-                },
-            ] {
-                let mut source = crate::ui::Source {
-                    text: "original".into(),
-                    selection: (8, 8),
-                    revision: 0,
-                };
-                assert!(
-                    !apply_source_markup_guarded(&mut source, edit, true),
-                    "{tag}"
-                );
-                assert_eq!(source.text, "original");
-                assert_eq!(source.selection, (8, 8));
-                assert_eq!(source.revision, 1);
-            }
-        }
-        let mut source = crate::ui::Source {
-            text: "[emote=wave]".into(),
-            ..Default::default()
-        };
-        assert!(apply_source_markup_guarded(
-            &mut source,
-            MarkupEdit::Typed {
-                text: "text only".into(),
-                selection: (9, 9)
-            },
-            true
-        ));
-        assert_eq!(source.text, "text only");
-    }
-}
-
-#[cfg(test)]
-mod typography_tests {
-    use super::*;
-    #[test]
-    fn source_alignment_targets_whole_paragraphs_and_preserves_meta_and_styles() {
-        let mut src = crate::ui::Source {
-            text: "[@auto=50][b]one[/b]\n[size=32px]two[/size]\n".into(),
-            selection: (0, 25),
-            revision: 0,
-        };
-        let boundary = src.text.find('\n').unwrap() + 1;
-        src.selection = (1, boundary);
-        let before = parse(&src.text);
-        apply_source_markup(
-            &mut src,
-            MarkupEdit::Align(Some(nanatype_model::ParagraphAlign::Center)),
-        );
-        let after = parse(&src.text);
-        assert_eq!(after.meta, before.meta);
-        assert_eq!(
-            after.doc.paragraphs[0].align,
-            Some(nanatype_model::ParagraphAlign::Center)
-        );
-        assert_eq!(after.doc.paragraphs[1], before.doc.paragraphs[1]);
-        apply_source_markup(&mut src, MarkupEdit::Align(None));
-        assert_eq!(parse(&src.text).doc, before.doc);
-    }
-}
-
 /// `doc` with picked files reduced to their names.
-fn without_local_paths(doc: &Document) -> Document {
+pub(crate) fn without_local_paths(doc: &Document) -> Document {
     let mut doc = doc.clone();
     for inline in doc.paragraphs.iter_mut().flat_map(|p| p.inlines.iter_mut()) {
         if let Inline::Atom(atom) = inline
@@ -3122,8 +1531,8 @@ fn without_local_paths(doc: &Document) -> Document {
 impl Drop for App {
     fn drop(&mut self) {
         crate::ui::shader_effects::close_guard();
-        if !self.quitting {
-            self.persist.flush(Duration::from_secs(2));
+        if !self.shell.quitting {
+            self.shell.persist.flush(Duration::from_secs(2));
             nanatype_diag::marker("exit without quit");
             nanatype_diag::flush_for_exit();
         }

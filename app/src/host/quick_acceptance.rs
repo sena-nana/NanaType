@@ -1,10 +1,13 @@
 //! Windowless acceptance of the quick input bar: its view, keys and the
 //! plain text it sends.
+use super::input_router::{quick_key, quick_send_key};
 use super::*;
 use nana_ui::NanaTextShaper;
 use nana_ui::runtime::{HeadlessInput, StableNodeId, TextInput};
 use nana_ui_devtools::agent::RuntimeAgentSession;
-use nana_ui_platform::{CommittedText, CompositionInput, InputModifiers, KeyInput};
+use nana_ui_platform::{
+    CommittedText, CompositionInput, InputModifiers, InputPayload, KeyInput, KeyState,
+};
 use nanatype_settings::{Hotkey, Settings};
 use std::sync::Mutex;
 
