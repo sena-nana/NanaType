@@ -355,6 +355,78 @@ impl Unit {
     }
 }
 
+/// One reveal step paired with its borrowed text slice and parent inline.
+///
+/// Built in a single pass by [`Document::unit_slices`] so mirror diffing and
+/// typing-cue generation can share one grapheme segmentation pass without
+/// re-walking the document or re-indexing paragraphs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnitSlice<'a> {
+    pub unit: Unit,
+    pub text: &'a str,
+    pub inline: &'a Inline,
+}
+
+impl<'a> UnitSlice<'a> {
+    pub fn class(&self) -> CharClass {
+        self.unit.class()
+    }
+
+    /// Whether two units share the same text and inline attributes, ignoring
+    /// paragraph index (used by middle-edit diffing).
+    pub fn same_content(&self, other: &UnitSlice<'_>) -> bool {
+        if self.text != other.text {
+            return false;
+        }
+        match (self.inline, other.inline) {
+            (Inline::Text(x), Inline::Text(y)) => x.same_attrs(y),
+            (Inline::Ruby(x), Inline::Ruby(y)) => {
+                x.annotation == y.annotation && x.base.same_attrs(&y.base)
+            }
+            (Inline::Atom(x), Inline::Atom(y)) => x == y,
+            (Inline::Mention(x), Inline::Mention(y)) => x == y,
+            _ => false,
+        }
+    }
+
+    /// Whether two units match in paragraph index, text, and attributes.
+    pub fn same(&self, other: &UnitSlice<'_>) -> bool {
+        self.unit.para == other.unit.para && self.same_content(other)
+    }
+}
+
+fn grapheme_unit(
+    para: usize,
+    inline: usize,
+    start: usize,
+    cluster: &str,
+    run: &TextRun,
+    ruby: bool,
+) -> Unit {
+    Unit {
+        para,
+        inline,
+        bytes: start..start + cluster.len(),
+        kind: UnitKind::Grapheme {
+            class: classify(cluster),
+            ruby,
+        },
+        pace: run.pace,
+        emphasis: run.effects.emphasis,
+    }
+}
+
+fn atom_unit(para: usize, inline: usize) -> Unit {
+    Unit {
+        para,
+        inline,
+        bytes: 0..0,
+        kind: UnitKind::Atom,
+        pace: Pace::Inherit,
+        emphasis: None,
+    }
+}
+
 /// A dialogue line's content.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Document {
@@ -382,6 +454,10 @@ impl Document {
         };
         doc.normalize();
         doc
+    }
+
+    pub fn from_paragraphs(paragraphs: Vec<Paragraph>) -> Self {
+        Self { paragraphs }.normalized()
     }
 
     /// No graphemes and no atoms. Markers alone do not make a line.
@@ -430,22 +506,64 @@ impl Document {
     /// Reveal units in document order.
     pub fn units(&self) -> Vec<Unit> {
         let mut units = Vec::new();
-        self.walk(|item| {
-            if let Item::Unit(unit) = item {
-                units.push(unit);
-            }
-        });
+        self.walk_units(|slice| units.push(slice.unit));
         units
+    }
+
+    /// Reveal units paired with their borrowed text slice and parent inline,
+    /// computed in a single grapheme-segmentation pass.
+    pub fn unit_slices(&self) -> Vec<UnitSlice<'_>> {
+        let mut slices = Vec::new();
+        self.unit_slices_into(&mut slices);
+        slices
+    }
+
+    /// Populate `out` with [`Self::unit_slices`], reusing the buffer's capacity.
+    pub fn unit_slices_into<'a>(&'a self, out: &mut Vec<UnitSlice<'a>>) {
+        out.clear();
+        self.walk_units(|slice| out.push(slice));
     }
 
     pub fn unit_count(&self) -> usize {
         let mut count = 0;
-        self.walk(|item| {
-            if matches!(item, Item::Unit(_)) {
-                count += 1;
+        for paragraph in &self.paragraphs {
+            for inline in &paragraph.inlines {
+                match inline {
+                    Inline::Text(run) => count += run.text.graphemes(true).count(),
+                    Inline::Ruby(ruby) => count += ruby.base.text.graphemes(true).count(),
+                    Inline::Atom(_) | Inline::Mention(_) => count += 1,
+                    Inline::Marker(_) => {}
+                }
             }
-        });
+        }
         count
+    }
+
+    fn walk_units<'a>(&'a self, mut visit: impl FnMut(UnitSlice<'a>)) {
+        for (para, paragraph) in self.paragraphs.iter().enumerate() {
+            for (inline_index, inline) in paragraph.inlines.iter().enumerate() {
+                let (run, ruby) = match inline {
+                    Inline::Text(run) => (run, false),
+                    Inline::Ruby(ruby) => (&ruby.base, true),
+                    Inline::Atom(_) | Inline::Mention(_) => {
+                        visit(UnitSlice {
+                            unit: atom_unit(para, inline_index),
+                            text: "",
+                            inline,
+                        });
+                        continue;
+                    }
+                    Inline::Marker(_) => continue,
+                };
+                for (start, cluster) in run.text.grapheme_indices(true) {
+                    visit(UnitSlice {
+                        unit: grapheme_unit(para, inline_index, start, cluster, run, ruby),
+                        text: cluster,
+                        inline,
+                    });
+                }
+            }
+        }
     }
 
     /// Markers with the number of units revealed before them.
@@ -469,33 +587,27 @@ impl Document {
     pub fn walk(&self, mut visit: impl FnMut(Item<'_>)) {
         for (para, paragraph) in self.paragraphs.iter().enumerate() {
             for (inline_index, inline) in paragraph.inlines.iter().enumerate() {
-                let text_units = |run: &TextRun, ruby: bool, visit: &mut dyn FnMut(Item<'_>)| {
-                    for (start, cluster) in run.text.grapheme_indices(true) {
-                        visit(Item::Unit(Unit {
-                            para,
-                            inline: inline_index,
-                            bytes: start..start + cluster.len(),
-                            kind: UnitKind::Grapheme {
-                                class: classify(cluster),
-                                ruby,
-                            },
-                            pace: run.pace,
-                            emphasis: run.effects.emphasis,
-                        }));
+                let (run, ruby) = match inline {
+                    Inline::Text(run) => (run, false),
+                    Inline::Ruby(ruby) => (&ruby.base, true),
+                    Inline::Atom(_) | Inline::Mention(_) => {
+                        visit(Item::Unit(atom_unit(para, inline_index)));
+                        continue;
+                    }
+                    Inline::Marker(marker) => {
+                        visit(Item::Marker(marker));
+                        continue;
                     }
                 };
-                match inline {
-                    Inline::Text(run) => text_units(run, false, &mut visit),
-                    Inline::Ruby(ruby) => text_units(&ruby.base, true, &mut visit),
-                    Inline::Atom(_) | Inline::Mention(_) => visit(Item::Unit(Unit {
+                for (start, cluster) in run.text.grapheme_indices(true) {
+                    visit(Item::Unit(grapheme_unit(
                         para,
-                        inline: inline_index,
-                        bytes: 0..0,
-                        kind: UnitKind::Atom,
-                        pace: Pace::Inherit,
-                        emphasis: None,
-                    })),
-                    Inline::Marker(marker) => visit(Item::Marker(marker)),
+                        inline_index,
+                        start,
+                        cluster,
+                        run,
+                        ruby,
+                    )));
                 }
             }
         }
@@ -636,19 +748,29 @@ impl Document {
     pub fn entrance(&self) -> Option<crate::Entrance> {
         let mut votes: Vec<(crate::Entrance, usize)> = Vec::new();
         for inline in self.paragraphs.iter().flat_map(|p| &p.inlines) {
-            let (entrance, units) = match inline {
-                Inline::Text(run) => (run.effects.entrance, run.text.graphemes(true).count()),
+            let (Some(mut entrance), units) = (match inline {
+                Inline::Text(run) => (
+                    run.effects.entrance,
+                    run.effects
+                        .entrance
+                        .map_or(0, |_| run.text.graphemes(true).count()),
+                ),
                 Inline::Ruby(ruby) => (
                     ruby.base.effects.entrance,
-                    ruby.base.text.graphemes(true).count(),
+                    ruby.base
+                        .effects
+                        .entrance
+                        .map_or(0, |_| ruby.base.text.graphemes(true).count()),
                 ),
                 Inline::Atom(atom) => (atom.effects.entrance, 1),
                 Inline::Mention(mention) => (mention.effects.entrance, 1),
                 Inline::Marker(_) => continue,
-            };
-            let Some(mut entrance) = entrance.filter(|_| units > 0) else {
+            }) else {
                 continue;
             };
+            if units == 0 {
+                continue;
+            }
             if entrance.kind == crate::EntranceKind::None {
                 entrance.ms = 0;
             }

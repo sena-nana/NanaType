@@ -38,7 +38,7 @@ impl SecretStore {
             match std::fs::read(&self.path) {
                 Ok(b) => protect(&b, false).map(Some),
                 Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-                Err(_) => Err(unavailable()),
+                Err(e) => Err(e),
             }
         }
         #[cfg(target_os = "macos")]
@@ -46,7 +46,7 @@ impl SecretStore {
             match security_framework::passwords::get_generic_password(&self.service, ACCOUNT) {
                 Ok(b) => Ok(Some(b)),
                 Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(None),
-                Err(_) => Err(unavailable()),
+                Err(e) => Err(keychain_error("load", &e)),
             }
         }
         #[cfg(not(any(windows, target_os = "macos")))]
@@ -59,44 +59,61 @@ impl SecretStore {
         #[cfg(windows)]
         {
             let encrypted = protect(bytes, true)?;
-            std::fs::create_dir_all(self.path.parent().ok_or_else(unavailable)?)
-                .map_err(|_| unavailable())?;
+            let parent = self.path.parent().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "secret path has no parent directory",
+                )
+            })?;
+            std::fs::create_dir_all(parent)?;
             // Atomic replacement contains only DPAPI ciphertext, including the temporary file.
-            let temporary = self.path.with_extension("tmp");
-            std::fs::write(&temporary, encrypted).map_err(|_| unavailable())?;
-            std::fs::rename(temporary, &self.path).map_err(|_| unavailable())
+            let temporary = temp_path(&self.path);
+            std::fs::write(&temporary, encrypted)?;
+            if let Err(err) = std::fs::rename(&temporary, &self.path) {
+                let _ = std::fs::remove_file(&temporary);
+                return Err(err);
+            }
+            Ok(())
         }
         #[cfg(target_os = "macos")]
         {
             security_framework::passwords::set_generic_password(&self.service, ACCOUNT, bytes)
-                .map_err(|_| unavailable())
+                .map_err(|e| keychain_error("save", &e))
         }
         #[cfg(not(any(windows, target_os = "macos")))]
         {
             let _ = bytes;
-            Err(unavailable())
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "protected account storage unavailable on this platform",
+            ))
         }
     }
 
     pub fn clear(&self) -> io::Result<()> {
         #[cfg(windows)]
         {
-            let mut failed = false;
-            for path in [&self.path, &self.path.with_extension("tmp")] {
+            let mut first_err: Option<io::Error> = None;
+            let temporary = temp_path(&self.path);
+            for path in [&self.path, &temporary] {
                 match std::fs::remove_file(path) {
                     Ok(()) => {}
                     Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-                    Err(_) => failed = true,
+                    Err(e) if first_err.is_none() => first_err = Some(e),
+                    Err(_) => {}
                 }
             }
-            if failed { Err(unavailable()) } else { Ok(()) }
+            match first_err {
+                Some(err) => Err(err),
+                None => Ok(()),
+            }
         }
         #[cfg(target_os = "macos")]
         {
             match security_framework::passwords::delete_generic_password(&self.service, ACCOUNT) {
                 Ok(()) => Ok(()),
                 Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
-                Err(_) => Err(unavailable()),
+                Err(e) => Err(keychain_error("clear", &e)),
             }
         }
         #[cfg(not(any(windows, target_os = "macos")))]
@@ -106,8 +123,25 @@ impl SecretStore {
     }
 }
 
-fn unavailable() -> io::Error {
-    io::Error::other("protected account storage unavailable")
+#[cfg(any(windows, test))]
+fn temp_path(path: &Path) -> PathBuf {
+    let mut os = path.as_os_str().to_os_string();
+    os.push(".tmp");
+    PathBuf::from(os)
+}
+
+#[cfg(target_os = "macos")]
+fn keychain_error(op: &str, err: &security_framework::base::Error) -> io::Error {
+    let code = err.code();
+    // Preserve OSStatus code and Security framework message; never include secret bytes.
+    let kind = match code {
+        -25293 | -25244 | -25308 => io::ErrorKind::PermissionDenied,
+        _ => io::ErrorKind::Other,
+    };
+    io::Error::new(
+        kind,
+        format!("keychain {op} failed (OSStatus {code}): {err}"),
+    )
 }
 
 #[cfg(windows)]
@@ -119,7 +153,12 @@ fn protect(bytes: &[u8], encrypt: bool) -> io::Result<Vec<u8>> {
         },
     };
     let input = CRYPT_INTEGER_BLOB {
-        cbData: bytes.len().try_into().map_err(|_| unavailable())?,
+        cbData: bytes.len().try_into().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "secret exceeds DPAPI size limit",
+            )
+        })?,
         pbData: bytes.as_ptr().cast_mut(),
     };
     let mut output = CRYPT_INTEGER_BLOB {
@@ -150,11 +189,37 @@ fn protect(bytes: &[u8], encrypt: bool) -> io::Result<Vec<u8>> {
             )
         };
         if ok == 0 {
-            return Err(unavailable());
+            return Err(io::Error::last_os_error());
         }
         let result = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();
         LocalFree(output.pbData.cast());
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod common_tests {
+    use super::*;
+
+    #[test]
+    fn temp_path_appends_tmp_without_replacing_extension() {
+        assert_eq!(
+            temp_path(Path::new("dir/twitch.dpapi")),
+            PathBuf::from("dir/twitch.dpapi.tmp")
+        );
+        assert_eq!(
+            temp_path(Path::new("dir/plain")),
+            PathBuf::from("dir/plain.tmp")
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn keychain_error_preserves_osstatus_and_kind_without_secrets() {
+        let err = security_framework::base::Error::from(-25293);
+        let io_err = keychain_error("load", &err);
+        assert_eq!(io_err.kind(), io::ErrorKind::PermissionDenied);
+        assert!(io_err.to_string().contains("-25293"));
     }
 }
 
@@ -177,10 +242,11 @@ mod tests {
         assert_eq!(store.load().unwrap().unwrap(), fixture);
         store.save(b"replacement fixture").unwrap();
         assert_eq!(store.load().unwrap().unwrap(), b"replacement fixture");
-        std::fs::copy(&store.path, store.path.with_extension("tmp")).unwrap();
+        let tmp = temp_path(&store.path);
+        std::fs::copy(&store.path, &tmp).unwrap();
         store.clear().unwrap();
         assert!(store.load().unwrap().is_none());
-        assert!(!store.path.with_extension("tmp").exists());
+        assert!(!tmp.exists());
     }
     #[test]
     fn unavailable_storage_reports_failure_without_plaintext_fallback() {

@@ -71,6 +71,8 @@ struct RubyOpen {
 struct Builder<'a> {
     source: &'a str,
     open: Vec<Open>,
+    cached_run: TextRun,
+    run_dirty: bool,
     ruby: Option<RubyOpen>,
     paragraphs: Vec<Paragraph>,
     current: Vec<Inline>,
@@ -88,6 +90,8 @@ pub fn parse(source: &str) -> Parsed {
     let mut b = Builder {
         source,
         open: Vec::new(),
+        cached_run: TextRun::default(),
+        run_dirty: false,
         ruby: None,
         paragraphs: Vec::new(),
         current: Vec::new(),
@@ -113,11 +117,13 @@ pub fn parse(source: &str) -> Parsed {
                 i = end + 1;
                 continue;
             }
+            b.push_text("[");
+            i += 1;
+            continue;
         }
-        let ch = source[i..].chars().next().expect("in bounds");
-        let mut buf = [0u8; 4];
-        b.push_text(ch.encode_utf8(&mut buf));
-        i += ch.len_utf8();
+        let next = source[i..].find('[').map_or(bytes.len(), |off| i + off);
+        b.push_text(&source[i..next]);
+        i = next;
     }
     b.finish()
 }
@@ -153,22 +159,22 @@ impl Builder<'_> {
         self.diagnostics.push(Diagnostic { range, kind });
     }
 
-    fn push_text(&mut self, text: &str) {
-        if text == "\n" {
-            if self.ruby.is_some() {
-                return;
-            }
-            self.flush();
-            self.paragraphs.push(Paragraph {
-                inlines: std::mem::take(&mut self.current),
-                align: self.align,
-            });
-            if let Some(align) = self.next_align.take() {
-                self.align = align;
-            }
-            self.started = true;
+    fn push_newline(&mut self) {
+        if self.ruby.is_some() {
             return;
         }
+        self.flush();
+        self.paragraphs.push(Paragraph {
+            inlines: std::mem::take(&mut self.current),
+            align: self.align,
+        });
+        if let Some(align) = self.next_align.take() {
+            self.align = align;
+        }
+        self.started = true;
+    }
+
+    fn push_plain_segment(&mut self, text: &str) {
         if !text.trim().is_empty() {
             self.started = true;
         }
@@ -178,15 +184,33 @@ impl Builder<'_> {
         }
     }
 
-    fn literal(&mut self, range: Range<usize>) {
-        let raw = &self.source[range];
-        for ch in raw.chars() {
-            let mut buf = [0u8; 4];
-            self.push_text(ch.encode_utf8(&mut buf));
+    fn push_text(&mut self, mut text: &str) {
+        while let Some(nl) = text.find('\n') {
+            let head = &text[..nl];
+            if !head.is_empty() {
+                self.push_plain_segment(head);
+            }
+            self.push_newline();
+            text = &text[nl + 1..];
+        }
+        if !text.is_empty() {
+            self.push_plain_segment(text);
         }
     }
 
-    fn current_run(&self) -> TextRun {
+    fn literal(&mut self, range: Range<usize>) {
+        self.push_text(&self.source[range]);
+    }
+
+    fn current_run(&mut self) -> TextRun {
+        if self.run_dirty {
+            self.cached_run = self.rebuild_run();
+            self.run_dirty = false;
+        }
+        self.cached_run.clone()
+    }
+
+    fn rebuild_run(&self) -> TextRun {
         let mut run = TextRun::default();
         let mut style = Style::default();
         let mut effects = Effects::default();
@@ -299,6 +323,7 @@ impl Builder<'_> {
                         attr,
                         range,
                     });
+                    self.run_dirty = true;
                 }
                 None => self.bad_value(&tag, range),
             }
@@ -410,6 +435,7 @@ impl Builder<'_> {
         {
             self.flush();
             self.open.remove(index);
+            self.run_dirty = true;
             return;
         }
         self.diag(
@@ -419,7 +445,7 @@ impl Builder<'_> {
         self.literal(range);
     }
 
-    fn point(&self, tag: &Tag) -> Option<Option<Inline>> {
+    fn point(&mut self, tag: &Tag) -> Option<Option<Inline>> {
         let v = tag.value.as_deref();
         let marker = |m: Option<Marker>| Some(m.map(Inline::Marker));
         Some(match tag.name.as_str() {
