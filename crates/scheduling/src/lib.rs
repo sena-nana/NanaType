@@ -18,7 +18,7 @@ mod gpu;
 
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
-pub use adapter::{GpuChoice, choose_adapter, gpu_choice};
+pub use adapter::{AdapterPreference, GpuChoice, available_adapters, choose_adapter, gpu_choice};
 pub use gpu::apply_gpu;
 
 /// Why a CPU preference is not in effect.

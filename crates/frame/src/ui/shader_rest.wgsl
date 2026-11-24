@@ -11,8 +11,7 @@ struct Rest {
 @group(0) @binding(2) var rest_sampler: sampler;
 
 @vertex fn rest_vertex(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
-    let points = array<vec2<f32>, 6>(vec2(0.,0.), vec2(1.,0.), vec2(0.,1.), vec2(0.,1.), vec2(1.,0.), vec2(1.,1.));
-    let pos = (rest.dest.zw + points[i] * rest.frame.xy) / rest.dest.xy;
+    let pos = (rest.dest.zw + fullscreen_quad_uv(i) * rest.frame.xy) / rest.dest.xy;
     return vec4(pos.x * 2. - 1., 1. - pos.y * 2., 0., 1.);
 }
 @fragment fn rest_fragment(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {

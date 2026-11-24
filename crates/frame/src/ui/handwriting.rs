@@ -4,20 +4,20 @@
 use nana_ui::runtime::{StableNodeId, TextShaper, UiWorld};
 use nana_ui_core::MaterialTexture;
 use nanatype_theme::{StrokeCommand, StrokeData, StrokeGlyph};
-use std::{
-    collections::HashMap,
-    sync::{Arc, LazyLock, Mutex},
-};
+use std::sync::{Arc, LazyLock, Mutex};
+
+use super::effects::LruMap;
 
 const CELL: usize = 96;
-/// Partial maps go out at most this often while a job works.
-const PUBLISH_EVERY: std::time::Duration = std::time::Duration::from_millis(16);
+/// Partial maps go out at most this often after the initial glyph while a job works.
+const PUBLISH_EVERY: std::time::Duration = std::time::Duration::from_millis(64);
 /// A stroke glyph whose cell is not stamped yet: hidden until the reveal ends,
 /// so a later partial map never takes back ink an earlier one showed.
 const PENDING: u8 = 255;
 const MAX_SIDE: f32 = nanatype_theme::MAX_PIPELINE_TEXTURE_SIDE as f32;
 type CellKey = ([u8; 32], char);
-static CELLS: LazyLock<Mutex<HashMap<CellKey, Arc<[u8]>>>> = LazyLock::new(Default::default);
+static CELLS: LazyLock<Mutex<LruMap<CellKey, Arc<[u8]>>>> =
+    LazyLock::new(|| Mutex::new(LruMap::new(1024)));
 
 /// Layout snapshot for `text.stroke_time_map` v1, taken on the UI thread.
 /// Owned and `Send`: rasterising strokes and stamping cells run elsewhere.
@@ -95,9 +95,24 @@ pub(super) fn stroke_time_job(
     })
 }
 
+/// Expand the compact 1-byte-per-texel `r8` stroke-time buffer into the
+/// 4-channel `MaterialTexture` layout (`[255, 255, 255, t]` or `[0, 0, 0, 0]`).
+fn expand_r8(r8: &[u8], width: u32, height: u32) -> MaterialTexture {
+    let mut rgba = vec![0u8; r8.len() * 4];
+    for (&t, dst) in r8.iter().zip(rgba.as_chunks_mut::<4>().0.iter_mut()) {
+        if t != 0 {
+            *dst = [255, 255, 255, t];
+        }
+    }
+    MaterialTexture {
+        size: [width, height],
+        rgba: rgba.into(),
+    }
+}
+
 impl StrokeJob {
-    /// Per-texel writing time: alpha is the threshold, B marks stroke-covered
-    /// cells; the extent maps target coordinates onto the texture.
+    /// Per-texel writing time: works in a compact 1-byte-per-texel `R8` buffer
+    /// instead of holding and cloning a 4× RGBA buffer every 16 ms.
     ///
     /// Glyphs are stamped in reveal order and `publish` receives partial maps
     /// meanwhile, the first right after the first stroke glyph. Glyphs with
@@ -113,12 +128,12 @@ impl StrokeJob {
             scale,
             glyphs,
         } = self;
-        let mut rgba = vec![0; width as usize * height as usize * 4];
+        let mut r8 = vec![0u8; width as usize * height as usize];
         let extent = [width as f32 / scale, height as f32 / scale, 0., 0.];
         let mut remaining = 0;
         for (character, bbox, transform) in &glyphs {
             if data.contains(*character) {
-                stamp(&mut rgba, width, height, scale, None, *bbox, *transform);
+                stamp(&mut r8, width, height, scale, None, *bbox, *transform);
                 remaining += 1;
             }
         }
@@ -130,9 +145,6 @@ impl StrokeJob {
             };
             let cell = {
                 let mut cells = CELLS.lock().unwrap_or_else(|e| e.into_inner());
-                if cells.len() >= 1024 {
-                    cells.clear();
-                }
                 cells.get(&(data.hash, character)).cloned()
             };
             // Rasterise outside the lock so concurrent jobs do not serialise.
@@ -144,34 +156,14 @@ impl StrokeJob {
                     .insert((data.hash, character), cell.clone());
                 cell
             });
-            stamp(
-                &mut rgba,
-                width,
-                height,
-                scale,
-                Some(&cell),
-                bbox,
-                transform,
-            );
+            stamp(&mut r8, width, height, scale, Some(&cell), bbox, transform);
             remaining -= 1;
             if remaining > 0 && published.is_none_or(|at| at.elapsed() >= PUBLISH_EVERY) {
-                publish(
-                    MaterialTexture {
-                        size: [width, height],
-                        rgba: rgba.clone().into(),
-                    },
-                    extent,
-                );
+                publish(expand_r8(&r8, width, height), extent);
                 published = Some(std::time::Instant::now());
             }
         }
-        (
-            MaterialTexture {
-                size: [width, height],
-                rgba: rgba.into(),
-            },
-            extent,
-        )
+        (expand_r8(&r8, width, height), extent)
     }
 }
 
@@ -203,10 +195,11 @@ fn stamp(
     let bw = f32::from(bbox.x_max - bbox.x_min).max(1.);
     let bh = f32::from(bbox.y_max - bbox.y_min).max(1.);
     for y in y0..y1 {
+        let row = y as usize * width as usize;
         for x in x0..x1 {
-            let i = (y as usize * width as usize + x as usize) * 4;
+            let i = row + x as usize;
             let Some(cell) = cell else {
-                out[i..i + 4].copy_from_slice(&[255, 255, 255, PENDING]);
+                out[i] = PENDING;
                 continue;
             };
             let mut p =
@@ -216,7 +209,7 @@ fn stamp(
                 as usize;
             let v = ((bbox.y_max as f32 - p.y) / bh * CELL as f32).clamp(0., (CELL - 1) as f32)
                 as usize;
-            out[i..i + 4].copy_from_slice(&[255, 255, 255, cell[v * CELL + u]]);
+            out[i] = cell[v * CELL + u];
         }
     }
 }

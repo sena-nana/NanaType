@@ -164,7 +164,7 @@ pub fn periodic(
             return;
         };
         let period = f64::from(period_s.max(0.1));
-        let origin = crate::clock::now_ms() as f64 / 1000.0;
+        let origin = crate::clock::frame_ms() as f64 / 1000.0;
         let values: Vec<_> = (0..=64)
             .map(|i| sample(origin + period * i as f64 / 64.0))
             .collect();
@@ -207,6 +207,9 @@ pub fn periodic(
                 ),
                 velocity: from.zero_velocity(),
             }));
+        }
+        if tracks.is_empty() {
+            return;
         }
         let now = cx.animation_now();
         let mut queue = nana_ui::runtime::MutationQueue::new();

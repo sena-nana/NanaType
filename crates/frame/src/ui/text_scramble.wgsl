@@ -13,8 +13,7 @@ struct Vertex {
 };
 @vertex fn vertex_main(@builtin(vertex_index) i: u32, @location(0) rect: vec4<f32>,
     @location(1) timing: vec4<f32>) -> Vertex {
-    let points = array<vec2<f32>,6>(vec2(0.,0.),vec2(1.,0.),vec2(0.,1.),vec2(0.,1.),vec2(1.,0.),vec2(1.,1.));
-    let uv=points[i];
+    let uv=fullscreen_quad_uv(i);
     let pos=(p.origin+(p.text_origin+rect.xy+uv*rect.zw-p.crop)*p.scale)/p.destination;
     var out:Vertex;
     out.position=vec4(pos.x*2.-1.,1.-pos.y*2.,0.,1.);
@@ -42,7 +41,7 @@ fn hash(value:u32)->u32 {
     let columns=16u;
     let rows=u32(ceil(p.alphabet/16.));
     let uv=(vec2(f32(index%columns),f32(index/columns))+clamp(v.uv,vec2(0.01),vec2(0.99)))/vec2(16.,f32(rows));
-    let coverage=textureSampleLevel(atlas,atlas_sampler,uv,0.).a;
+    let coverage=textureSampleLevel(atlas,atlas_sampler,uv,0.).r;
     let alpha=coverage*keep*p.opacity*p.color.a;
     let tint=mix(p.color.rgb,vec3(0.39,0.32,1.),select(0.,0.12,base%7u==0u));
     return vec4(tint*alpha,alpha);

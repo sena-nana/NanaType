@@ -19,12 +19,159 @@ use super::c;
 mod painter;
 pub use painter::SurfacePainter;
 
+use std::hash::{Hash, Hasher};
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Border {
     /// `[top, right, bottom, left]`.
     pub widths: [f32; 4],
     pub color: [f32; 4],
     pub style: BorderStyleSpec,
+}
+
+fn hash_f32<H: Hasher>(v: f32, state: &mut H) {
+    // Normalize -0.0 to +0.0 so PartialEq-equal floats hash identically.
+    (if v == 0.0 { 0.0f32 } else { v }).to_bits().hash(state);
+}
+
+fn hash_f32s<H: Hasher>(slice: &[f32], state: &mut H) {
+    for &v in slice {
+        hash_f32(v, state);
+    }
+}
+
+fn hash_paint_color<H: Hasher>(c: nana_ui_core::PaintColor, state: &mut H) {
+    match c {
+        nana_ui_core::PaintColor::Srgb { rgba } => {
+            0u8.hash(state);
+            hash_f32s(&rgba, state);
+        }
+        nana_ui_core::PaintColor::Oklch { l, c, h, alpha } => {
+            1u8.hash(state);
+            hash_f32(l, state);
+            hash_f32(c, state);
+            h.is_some().hash(state);
+            if let Some(h) = h {
+                hash_f32(h, state);
+            }
+            hash_f32(alpha, state);
+        }
+        nana_ui_core::PaintColor::Hsv { h, s, v, alpha } => {
+            2u8.hash(state);
+            hash_f32s(&[h, s, v, alpha], state);
+        }
+        nana_ui_core::PaintColor::LinearScRgb { channels, alpha } => {
+            3u8.hash(state);
+            hash_f32s(&channels, state);
+            hash_f32(alpha, state);
+        }
+    }
+}
+
+fn hash_length<H: Hasher>(len: LengthSpec, state: &mut H) {
+    std::mem::discriminant(&len).hash(state);
+    match len {
+        LengthSpec::Px(v) | LengthSpec::Percent(v) | LengthSpec::Em(v) | LengthSpec::Rem(v) => {
+            hash_f32(v, state);
+        }
+        LengthSpec::Viewport { axis, value } => {
+            std::mem::discriminant(&axis).hash(state);
+            hash_f32(value, state);
+        }
+        LengthSpec::PercentOffset { offset_q7, percent } => {
+            offset_q7.hash(state);
+            hash_f32(percent, state);
+        }
+        LengthSpec::Calc(c) => c.hash(state),
+        LengthSpec::Fill
+        | LengthSpec::Shrink
+        | LengthSpec::Auto
+        | LengthSpec::MinContent
+        | LengthSpec::MaxContent => {}
+        _ => {}
+    }
+}
+
+fn hash_background<H: Hasher>(bg: &BackgroundImage, state: &mut H) {
+    match bg {
+        BackgroundImage::Gradient(CssGradient::Linear(g)) => {
+            0u8.hash(state);
+            hash_f32(g.angle_deg, state);
+            g.stops.len().hash(state);
+            for s in &g.stops {
+                s.paint_color.is_some().hash(state);
+                if let Some(pc) = s.paint_color {
+                    hash_paint_color(pc, state);
+                }
+                hash_f32(s.position, state);
+                hash_f32s(&s.color, state);
+            }
+        }
+        BackgroundImage::Gradient(CssGradient::Radial(g)) => {
+            1u8.hash(state);
+            g.circle.hash(state);
+            for c in g.center {
+                hash_length(c, state);
+            }
+            g.stops.len().hash(state);
+            for s in &g.stops {
+                s.paint_color.is_some().hash(state);
+                if let Some(pc) = s.paint_color {
+                    hash_paint_color(pc, state);
+                }
+                hash_f32(s.position, state);
+                hash_f32s(&s.color, state);
+            }
+        }
+        BackgroundImage::Url {
+            url,
+            fit,
+            size_width,
+            size_height,
+            position,
+            repeat,
+            sampling,
+        } => {
+            2u8.hash(state);
+            url.hash(state);
+            std::mem::discriminant(fit).hash(state);
+            size_width.is_some().hash(state);
+            if let Some(w) = size_width {
+                hash_length(*w, state);
+            }
+            size_height.is_some().hash(state);
+            if let Some(h) = size_height {
+                hash_length(*h, state);
+            }
+            hash_length(position.x, state);
+            hash_length(position.y, state);
+            std::mem::discriminant(repeat).hash(state);
+            std::mem::discriminant(sampling).hash(state);
+        }
+    }
+}
+
+fn hash_tail<H: Hasher>(t: &nanatype_theme::TailSpec, state: &mut H) {
+    std::mem::discriminant(&t.side).hash(state);
+    hash_f32s(&[t.at, t.width, t.length, t.lean], state);
+    t.color.is_some().hash(state);
+    if let Some(c) = t.color {
+        std::mem::discriminant(&c).hash(state);
+        if let ColorRef::Rgba(rgba) = c {
+            [rgba.r, rgba.g, rgba.b, rgba.a].hash(state);
+        } else if let ColorRef::Role(role) = c {
+            std::mem::discriminant(&role).hash(state);
+        }
+    }
+    t.shadow.hash(state);
+}
+
+impl Hash for Border {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        hash_f32s(&self.widths, state);
+        hash_f32s(&self.color, state);
+        std::mem::discriminant(&self.style).hash(state);
+    }
 }
 
 /// Everything a skin can paint on one node.
@@ -49,13 +196,82 @@ pub struct Surface {
     pub opacity: Option<f32>,
 }
 
-/// One precedence rule for layout paint, retained paths and coverage masks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum SurfaceRoute {
-    Frame,
+impl Hash for Surface {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.material.as_ref().map(|m| m.key()).hash(state);
+        self.border_material.as_ref().map(|m| m.key()).hash(state);
+        self.contour.map(|c| c as u8).hash(state);
+        self.motif.map(|m| m as u8).hash(state);
+        self.tail.is_some().hash(state);
+        if let Some(t) = &self.tail {
+            hash_tail(t, state);
+        }
+        self.fill.is_some().hash(state);
+        if let Some(fill) = self.fill {
+            hash_f32s(&fill, state);
+        }
+        self.gradient.is_some().hash(state);
+        if let Some(bg) = &self.gradient {
+            hash_background(bg, state);
+        }
+        hash_f32s(&self.radii, state);
+        self.border.hash(state);
+        self.shadows.len().hash(state);
+        for s in &self.shadows {
+            s.paint_color.is_some().hash(state);
+            if let Some(pc) = s.paint_color {
+                hash_paint_color(pc, state);
+            }
+            hash_f32s(
+                &[s.offset_x, s.offset_y, s.blur_radius, s.spread_radius],
+                state,
+            );
+            hash_f32s(&s.color, state);
+            s.inset.hash(state);
+        }
+        self.frame.is_some().hash(state);
+        if let Some((spec, widths)) = &self.frame {
+            hash_background(&spec.source, state);
+            for slice in spec.slice {
+                match slice {
+                    BorderImageSlice::Number(v) => {
+                        0u8.hash(state);
+                        hash_f32(v, state);
+                    }
+                    BorderImageSlice::Percent(v) => {
+                        1u8.hash(state);
+                        hash_f32(v, state);
+                    }
+                }
+            }
+            spec.fill.hash(state);
+            hash_f32s(widths, state);
+        }
+        self.polygon.is_some().hash(state);
+        if let Some(poly) = &self.polygon {
+            poly.len().hash(state);
+            for pt in poly {
+                hash_f32s(pt, state);
+            }
+        }
+        hash_f32(self.rotate_deg, state);
+        self.opacity.is_some().hash(state);
+        if let Some(opacity) = self.opacity {
+            hash_f32(opacity, state);
+        }
+    }
+}
+
+/// Tagged surface rendering variant (precedence: Frame > Motif > Contour > StyledBox).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum SurfaceKind<'a> {
+    Frame {
+        spec: &'a BorderImageSpec,
+        widths: [f32; 4],
+    },
     Motif(nanatype_theme::MotifPreset),
     Contour(nanatype_theme::ContourPreset),
-    Style,
+    StyledBox,
 }
 
 pub fn gradient(skin: &Skin, g: &GradientSpec) -> BackgroundImage {
@@ -407,42 +623,36 @@ impl Surface {
         l.background = None;
         l.paint.background_image = None;
         l.paint.border_image = None;
-        l.border_radius = None;
-        l.paint.border_radii = None;
         l.border_color = None;
         l.border_style = None;
         set_border_widths(l, [0.0; 4]);
-        l.paint.box_shadows.clear();
-        if let Some((spec, widths)) = &self.frame {
-            if !spec.fill {
-                l.background = self.fill;
+        l.border_radius = Some(self.radii[0]);
+        l.paint.border_radii = (self.radii.iter().any(|r| *r != self.radii[0]))
+            .then(|| self.radii.map(LengthSpec::Px));
+        match self.kind() {
+            SurfaceKind::Frame { spec, widths } => {
+                if !spec.fill {
+                    l.background = self.fill;
+                }
+                l.paint.border_image = Some(spec.clone());
+                set_border_widths(l, widths);
             }
-            l.paint.border_image = Some(spec.clone());
-            set_border_widths(l, *widths);
-        } else {
-            l.background = self.fill;
-            l.paint.background_image = self.gradient.clone();
-            l.border_radius = Some(self.radii[0]);
-            l.paint.border_radii = (self.radii.iter().any(|r| *r != self.radii[0]))
-                .then(|| self.radii.map(LengthSpec::Px));
-            if let Some(b) = &self.border {
-                set_border_widths(l, b.widths);
-                l.border_color = Some(b.color);
-                l.border_style = Some(match b.style {
-                    BorderStyleSpec::Solid => BorderStyle::Solid,
-                    BorderStyleSpec::Dashed => BorderStyle::Dashed,
-                    BorderStyleSpec::Dotted => BorderStyle::Dotted,
-                });
+            SurfaceKind::Motif(_) | SurfaceKind::Contour(_) | SurfaceKind::StyledBox => {
+                l.background = self.fill;
+                l.paint.background_image = self.gradient.clone();
+                if let Some(b) = &self.border {
+                    set_border_widths(l, b.widths);
+                    l.border_color = Some(b.color);
+                    l.border_style = Some(match b.style {
+                        BorderStyleSpec::Solid => BorderStyle::Solid,
+                        BorderStyleSpec::Dashed => BorderStyle::Dashed,
+                        BorderStyleSpec::Dotted => BorderStyle::Dotted,
+                    });
+                }
             }
         }
         // External shadows belong to the box, including an image-backed box.
-        // They must survive the frame route as well as the ordinary fill route.
         l.paint.box_shadows = self.shadows.clone();
-        if self.frame.is_some() {
-            l.border_radius = Some(self.radii[0]);
-            l.paint.border_radii = (self.radii.iter().any(|r| *r != self.radii[0]))
-                .then(|| self.radii.map(LengthSpec::Px));
-        }
         l.paint.clip_path = self
             .polygon
             .as_ref()
@@ -467,25 +677,25 @@ impl Surface {
     }
 
     pub fn is_vector(&self) -> bool {
-        matches!(
-            self.route(),
-            SurfaceRoute::Contour(_) | SurfaceRoute::Motif(_)
-        )
+        matches!(self.kind(), SurfaceKind::Contour(_) | SurfaceKind::Motif(_))
     }
 
     pub fn integrates_tail(&self) -> bool {
-        matches!(self.route(), SurfaceRoute::Contour(_)) && self.tail.is_some()
+        matches!(self.kind(), SurfaceKind::Contour(_)) && self.tail.is_some()
     }
 
-    pub(super) fn route(&self) -> SurfaceRoute {
-        if self.frame.is_some() {
-            SurfaceRoute::Frame
+    pub(super) fn kind(&self) -> SurfaceKind<'_> {
+        if let Some((spec, widths)) = &self.frame {
+            SurfaceKind::Frame {
+                spec,
+                widths: *widths,
+            }
         } else if let Some(motif) = self.motif {
-            SurfaceRoute::Motif(motif)
+            SurfaceKind::Motif(motif)
         } else if let Some(contour) = self.contour {
-            SurfaceRoute::Contour(contour)
+            SurfaceKind::Contour(contour)
         } else {
-            SurfaceRoute::Style
+            SurfaceKind::StyledBox
         }
     }
 
@@ -496,7 +706,7 @@ impl Surface {
     }
 
     pub(super) fn contour_path(&self, size: [f32; 2]) -> Option<nanatype_theme::ShapePath> {
-        let SurfaceRoute::Contour(contour) = self.route() else {
+        let SurfaceKind::Contour(contour) = self.kind() else {
             return None;
         };
         Some(nanatype_theme::contour_path(
@@ -532,9 +742,9 @@ impl Surface {
 
     /// Actual path bounds, including an integrated tail, before rotation.
     pub fn paint_bounds(&self, size: [f32; 2]) -> [f32; 4] {
-        match self.route() {
-            SurfaceRoute::Frame | SurfaceRoute::Style => [0.0, 0.0, size[0], size[1]],
-            SurfaceRoute::Motif(motif) => {
+        match self.kind() {
+            SurfaceKind::Frame { .. } | SurfaceKind::StyledBox => [0.0, 0.0, size[0], size[1]],
+            SurfaceKind::Motif(motif) => {
                 let paths = nanatype_theme::motif_paths(motif, size);
                 let mut bounds = [0.0, 0.0, size[0], size[1]];
                 for p in paths {
@@ -550,7 +760,7 @@ impl Surface {
                 }
                 bounds
             }
-            SurfaceRoute::Contour(_) => {
+            SurfaceKind::Contour(_) => {
                 let width = self.border_width();
                 let p = self.contour_path(size).expect("contour route");
                 p.bounds()
@@ -866,7 +1076,7 @@ mod tests {
             opacity: Some(0.5),
             ..Default::default()
         };
-        assert!(matches!(surface.route(), SurfaceRoute::Motif(_)));
+        assert!(matches!(surface.kind(), SurfaceKind::Motif(_)));
         assert!(surface.contour_path([100.0, 50.0]).is_none());
         surface.frame = Some(nine_slice(
             &NineSlice {
@@ -881,19 +1091,19 @@ mod tests {
         ));
         let mut layout = LayoutStyle::default();
         surface.apply(&mut layout);
-        assert_eq!(surface.route(), SurfaceRoute::Frame);
+        assert!(matches!(surface.kind(), SurfaceKind::Frame { .. }));
         assert!(layout.paint.border_image.is_some());
         surface.frame = None;
         surface.motif = None;
         surface.rotate_deg = 0.0;
         surface.opacity = None;
         surface.apply(&mut layout);
-        assert!(matches!(surface.route(), SurfaceRoute::Contour(_)));
+        assert!(matches!(surface.kind(), SurfaceKind::Contour(_)));
         assert!(layout.paint.border_image.is_none());
         assert_eq!(layout.border_sides.top_width, Some(0.0));
         assert!(layout.transforms.transform.is_none() && layout.opacity.is_none());
         assert!(surface.contour_path([100.0, 50.0]).is_some());
         surface.contour = None;
-        assert_eq!(surface.route(), SurfaceRoute::Style);
+        assert!(matches!(surface.kind(), SurfaceKind::StyledBox));
     }
 }
