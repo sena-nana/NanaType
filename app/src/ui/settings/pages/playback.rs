@@ -13,13 +13,12 @@ fn sound_pack(ui: Ui) -> AnyView {
         },
         move |(packs, chosen)| {
             let mut options = vec![(String::new(), ui.now_t("sound-pack-skin"))];
-            options.extend(packs.iter().filter(|p| p.error.is_none()).map(|p| {
-                let name = match p.workshop {
-                    Some(_) => ui.tr("sound-pack-workshop", &[("name", p.name.as_str().into())]),
-                    None => p.name.clone(),
-                };
-                (p.id.clone(), name)
-            }));
+            options.extend(
+                packs
+                    .iter()
+                    .filter(|p| p.error.is_none())
+                    .map(|p| (p.id.clone(), p.name.clone())),
+            );
             // A pack this build cannot see stays chosen, and says so.
             if let Some(id) = chosen
                 && !options.iter().any(|(v, _)| v == id)

@@ -53,27 +53,17 @@ pub struct PageText {
     pub glyphs: Vec<Glyph>,
 }
 
-static PUBLISHED: [Mutex<Option<Arc<PageText>>>; super::TRACK_SLOTS] =
-    [const { Mutex::new(None) }; super::TRACK_SLOTS];
+static PUBLISHED: Mutex<Option<Arc<PageText>>> = Mutex::new(None);
 
 /// Record the page the typewriter just built.
-pub fn publish_on(track: usize, page: PageText) {
-    if let Ok(mut slot) = PUBLISHED[track].lock() {
+pub fn publish(page: PageText) {
+    if let Ok(mut slot) = PUBLISHED.lock() {
         *slot = Some(Arc::new(page));
     }
 }
 
-pub fn published_on(track: usize) -> Option<Arc<PageText>> {
-    PUBLISHED[track].lock().ok().and_then(|slot| slot.clone())
-}
-
-/// The original single-track API addresses the local track.
-pub fn publish(page: PageText) {
-    publish_on(0, page);
-}
-
 pub fn published() -> Option<Arc<PageText>> {
-    published_on(0)
+    PUBLISHED.lock().ok().and_then(|slot| slot.clone())
 }
 
 /// Pair the graphemes of `text` with a reveal plan's times (one per

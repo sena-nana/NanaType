@@ -7,7 +7,6 @@ history-count = { $count } 條
 
 ## 視窗標題
 window-input = 輸入框
-input-management = 直播與聯機
 input-character = 角色：{ $name }
 dock-stickers = 表情包
 dock-tab-controls = 控制
@@ -44,8 +43,6 @@ tray-action-show-input = 顯示輸入框
 tray-action-hide-input = 隱藏輸入框
 tray-action-show-display = 顯示對話方塊
 tray-action-hide-display = 隱藏對話方塊
-tray-action-show-peer-display = 顯示聯機夥伴展示框
-tray-action-hide-peer-display = 隱藏聯機夥伴展示框
 tray-action-show-history = 顯示歷史記錄
 tray-action-hide-history = 隱藏曆史記錄
 tray-action-show-danmaku = 顯示彈幕視窗
@@ -139,8 +136,6 @@ settings-assets = 素材
 settings-profiles = 配置與備份
 settings-input = 輸入
 settings-characters = 角色資訊
-settings-peer = 聯機
-settings-workshop = 創意工坊
 settings-about = 關於
 settings-theme-switch-light = 切換到淺色主題
 settings-theme-switch-dark = 切換到深色主題
@@ -604,7 +599,8 @@ update-error-rejected = 更新資訊未通過簽名校驗，已忽略
 update-error-no-asset = 新版本沒有適合此係統的安裝包
 update-error-download = 下載失敗，或檔案與釋出的校驗值不一致
 update-error-other = 更新出錯
-about-logs = 日誌資料夾
+about-logs = 開啟日誌資料夾
+about-logs-hint = 如果你遇到問題，請在關閉應用後將日誌傳送給開發者
 about-data = 資料資料夾
 about-folders = 本機資料夾
 about-verbose-logs = 詳細日誌
@@ -858,51 +854,9 @@ chat-queued = 已排隊 · { $count } 條
 chat-room-owner = 房主
 chat-moderator = 房管
 
-# Sessions of up to eight people
-peer-title = 聯機
-peer-expand = 展開
-peer-collapse = 收起
-peer-off = 未聯機
-peer-connecting = 正在連線…
-peer-waiting = 等待對方加入
-peer-reconnecting = 正在重連…
-peer-direct = 直連
-peer-relay = 中繼
-peer-error = 聯機失敗
-peer-steam-required = 聯機需要 Steam 正在執行
-peer-page-hint = 聯機通過 Steam 連線，需要 Steam 正在執行；輸入視窗底部的「直播與聯機」面板也能進行同樣的操作
-peer-create = 建立聯機
-peer-join = 加入
-peer-leave = 離開聯機
-peer-copy = 複製邀請
-peer-invite = 邀請好友
-peer-invite-idle = 邀請好友加入這個房間
-peer-invite-waiting = 等待對方接受邀請
-peer-invite-accepted = { $name } 已接受邀請
-peer-invite-accepted-many = 已有 { $n } 人接受邀請
 # Between the names of the other people in the room.
 peer-name-separator = 、
-peer-invite-accepted-unnamed = 對方已接受邀請
-peer-room-full = 房間已滿（最多 8 人）
-peer-invitation = 貼上對方的聯機邀請
-peer-password = 房間密碼（可選）
-peer-password-needed = 請輸入房間密碼後再加入
-peer-password-invalid = 房間密碼不能超過 64 個字，也不能包含換行
-peer-invite-unavailable = 無法開啟 Steam 邀請。請確認 Steam 浮層已開啟
-peer-invite-invalid = 沒能加入這個 Steam 邀請
-peer-paused = 等待聯機恢復後再發送或控制播放；可以繼續編輯草稿。
 
-# Independent partner output
-window-peer-display = 聯機夥伴展示框
-windows-peer-display = 聯機夥伴
-output-peer-display = 展示框 · 聯機夥伴
-peer-window-toggle = 顯示或隱藏夥伴視窗
-peer-outputs = 推流輸出
-peer-outputs-hint = 每個座位一路 Spout/Syphon，按座位記憶：誰坐在這個座位，就從這一路輸出
-peer-seat = 座位 { $n }
-peer-seat-named = 座位 { $n } · { $name }
-peer-seat-output = 輸出座位 { $n }
-output-partners-moved = 聯機夥伴每人一路輸出，在「聯機」頁按座位開啟
 output-name-conflict = 輸出名稱重複，請為每個輸出設定不同的名稱。
 tb-effect-pulse = 脈動
 tb-effect-flicker = 閃爍
@@ -950,16 +904,6 @@ skin-edit-draft-hint = 僅預覽，尚未儲存
 skin-edit-unavailable = 此皮膚暫時無法預覽。
 skin-edit-save = 儲存
 skin-edit-saved = 已儲存
-
-
-
-
-
-
-
-
-
-
 
 settings-packages = 外掛與資源包
 packages-import = 匯入包
@@ -1077,31 +1021,6 @@ tw-retry = 重試未成功部分
 tw-skip-failed = 跳過此條，繼續佇列
 tw-enable = 開啟發送
 
-## 創意工坊
-workshop-browse = 瀏覽創意工坊
-workshop-badge = 創意工坊
-workshop-kind-skins = 皮膚
-workshop-kind-sounds = 音效包
-workshop-kind-other = 其他
-workshop-steam-only = 創意工坊僅在 Steam 版中提供
-workshop-find = 在創意工坊尋找更多
-workshop-find-hint = 在 Steam 中訂閱後會自動下載並出現在這裡
-workshop-none = 還沒有訂閱的內容
-workshop-unavailable = 創意工坊不可用：請啟動 Steam 後重新開啟 NanaType
-workshop-ready = 已安裝
-workshop-downloading = 下載中 { $percent }%
-workshop-pending = 等待下載
-workshop-not-installed = 未下載
-workshop-invalid = 無法使用：{ $message }
-workshop-shadowed = 與已安裝的 { $id } 重名，未啟用
-workshop-view = 在創意工坊檢視
-workshop-download = 重新下載
-workshop-update = 更新
-workshop-unsubscribe = 取消訂閱
-workshop-unsubscribe-confirm = 取消訂閱「{ $name }」？Steam 會在退出後刪除它的檔案。
-workshop-unsubscribe-failed = 取消訂閱失敗：{ $message }
-sound-pack-workshop = { $name }（創意工坊）
-
 ## OBS 聯動
 obs-link = 連線 OBS
 obs-link-hint = 通過 OBS 自帶的 WebSocket 伺服器（工具 › WebSocket 伺服器設定）讀取來源的包圍框，按它決定輸出解析度
@@ -1193,7 +1112,7 @@ tts-unavailable = 這個系統沒有可用的朗讀引擎。
 tts-language = 語音語言
 tts-language-all = 全部語言
 tts-voice = 預設語音
-tts-voice-hint = 沒有單獨設定語音的角色、彈幕和搭檔台詞都用它。
+tts-voice-hint = 沒有單獨設定語音的角色和彈幕都用它。
 tts-voice-system = 系統預設
 tts-voice-default = 使用預設語音
 tts-character-voice = { $name } 的語音
@@ -1201,8 +1120,6 @@ tts-rate = 語速
 tts-volume = 音量
 tts-chat = 也朗讀觀眾彈幕
 tts-chat-hint = 進入歷史記錄的彈幕，排在正在讀的內容之後。
-tts-partners = 也朗讀聯動搭檔的台詞
-tts-partners-hint = 搭檔台詞出現時朗讀一次，排在正在讀的內容之後。
 tts-pace = 打字跟隨朗讀
 tts-pace-hint = 讀到哪個詞就打出哪個詞。語音在片刻內沒有給出詞的時間時，按原來的節奏打字。
 tts-hint = 系統語音在系統設定中安裝和管理；安裝後點「重新整理語音」。

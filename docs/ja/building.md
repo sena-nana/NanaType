@@ -62,18 +62,6 @@ Syphon は nanalive-spout リポジトリの `nanalive-syphon` をプログラ�
 
 `vX.Y.Z` タグを push すると、`.github/workflows/release.yml` が Windows と macOS でこの 2 つのスクリプトを実行し、署名付きの更新マニフェストを生成してドラフト Release を作成します。[アップデートの確認](updates.md) を参照してください。
 
-Steam 版は `steam` フィーチャーでビルドします。更新確認はなく、スキンと再生のページから Steam ワークショップの購読アイテムにアクセスでき、設定は GitHub 版と共通です。Steam ID はコミットしない `.cargo/config.toml` に書き（`.cargo/config.example.toml` を参照）、次を実行します。
-
-```bash
-pwsh scripts/package.ps1 -Steam
-```
-
-```bash
-scripts/package-macos.sh --steam
-```
-
-詳しくは [Steam 版](steam.md) を参照してください。
-
 開発用の環境変数（デバッグビルドか、明示的に設定したときのみ有効）：
 
 | 変数 | 効果 |
@@ -102,7 +90,6 @@ scripts/package-macos.sh --steam
 | `crates/twitch` | Twitch IRC の匿名受信、デバイスコードによるログインと Helix 送信 |
 | `crates/blive` | blivechat・LAPLACE Event Bridge・彗星号のクライアント（プロトコル解析、復号、接続と再接続） |
 | `crates/core` | セッションロジック：下書き、送信、続行、キュー、履歴、巻き戻し |
-| `crates/p2p` | Steam のオンライン接続（最大 8 人）、セッションの順序付け、再接続と画像の転送 |
 | `crates/update` | アップデートの確認：署名付き Release マニフェスト、ファイルプロキシ、検証付きダウンロード |
 | `crates/frame` | 2 つのプログラムで共有するフレームワーク：スキン描画（表示ウィンドウ、履歴、入力ウィンドウ）、UI コンポーネント、スキンプレビュー、プラグインホスト、メディアサービスとパス |
 | `app` | NanaType：NanaUI ホスト、ウィンドウ、ビュー、ホットキー、トレイ、Spout |

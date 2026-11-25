@@ -48,7 +48,7 @@ Exports carry the full set of dependencies and license files, with dependencies 
 
 The general UI uses NanaUI's own neutral palette; pick Follow system, Light or Dark under **Settings › General › Appearance**.
 
-Only the display box (including the partner's display box), the history window and the input editing area follow the skin; thumbnails, samples and swatches in the skin picker keep the skin's look too.
+Only the display box, the history window and the input editing area follow the skin; thumbnails, samples and swatches in the skin picker keep the skin's look too.
 
 The input window's toolbar, status bar and chat panel all use the general palette. `chrome` supplies the content accent, inline tag background and text contrast color; it does not change the app's interface.
 
@@ -56,7 +56,7 @@ The input window's toolbar, status bar and chat panel all use the general palett
 
 Each entry below is a separate skin package living in `crates/theme/builtin/<ID without the nanatype. prefix>/`; its manifest, styling and assets ship with the package.
 
-The built-in skins are not compiled into the executable. They ship as a folder of the package: `runtime/resources/skins/` on Windows and Linux, `NanaType.app/Contents/Resources/skins/` on macOS (the Steam edition too, so changing one skin updates only its own files); the fonts they name are in `fonts/` beside it (see [fonts.md](fonts.md)). The package scripts copy `crates/theme/builtin`, leaving out SVG masters and dotfiles. A development build (`cargo run`, tests) reads `crates/theme/builtin` in the source tree; `NANATYPE_BUILTIN_SKINS` names another folder. The folder is read-only: it is read once at startup, not watched, and nothing is installed into or removed from it; your own skins go in the user skin folder. The default skin, Halo, also has a copy in the executable and cannot be deleted: with its folder or the whole `skins/` gone the program still starts and Halo is still there. Any other built-in skin whose folder is deleted simply leaves the library; reinstalling (on Steam, verifying the integrity of the files) brings it back.
+The built-in skins are not compiled into the executable. They ship as a folder of the package: `runtime/resources/skins/` on Windows and Linux, `NanaType.app/Contents/Resources/skins/` on macOS, so changing one skin updates only its own files; the fonts they name are in `fonts/` beside it (see [fonts.md](fonts.md)). The package scripts copy `crates/theme/builtin`, leaving out SVG masters and dotfiles. A development build (`cargo run`, tests) reads `crates/theme/builtin` in the source tree; `NANATYPE_BUILTIN_SKINS` names another folder. The folder is read-only: it is read once at startup, not watched, and nothing is installed into or removed from it; your own skins go in the user skin folder. The default skin, Halo, also has a copy in the executable and cannot be deleted: with its folder or the whole `skins/` gone the program still starts and Halo is still there. Any other built-in skin whose folder is deleted simply leaves the library; reinstalling brings it back.
 
 In **Settings › Skins › Preview**, switch between the display box and the history to adjust the body font (dropdown), font size (number box), line height (slider), text color (color picker) and window size, and edit the test text.
 
@@ -166,7 +166,7 @@ Once you pick it under **Settings › Playback › Sound pack**: if the pack def
 
 Referenced files must be inside the pack (or in a dependency, `pkg:<package ID>/<path>`); if any is missing, the whole pack is rejected.
 
-If the selected sound pack is deleted, fails to load or isn't visible in the current build (for example, the GitHub build can't see Steam Workshop items), the skin's own sounds are used for now with a one-time notice, and the setting is left as it is. A sound pack can live in the same package as a skin (`capabilities = ["skin", "sounds"]`).
+If the selected sound pack is deleted, fails to load or isn't visible in the current build, the skin's own sounds are used for now with a one-time notice, and the setting is left as it is. A sound pack can live in the same package as a skin (`capabilities = ["skin", "sounds"]`).
 
 ## General layout of the history window
 

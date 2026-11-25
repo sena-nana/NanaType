@@ -164,7 +164,6 @@ fn installed(ui: Ui) -> AnyView {
                             *ui,
                             super::plugin_view::Provenance::of(&row.origin, &row.integrity),
                             &row.integrity,
-                            None,
                         );
                         let name =
                             nanatype_theme::localized(&row.manifest.meta.name, locale.tag(), &id);

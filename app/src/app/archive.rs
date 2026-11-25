@@ -1,18 +1,15 @@
 //! Saved history: lines appended to the session's file as they reach the
 //! history (through the persist worker), and the Settings › History viewer's
 //! listing, loading, export and deletion on background threads.
-use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use nanatype_model::{HistoryItem, LineId, SourceKind};
+use nanatype_model::{HistoryItem, SourceKind};
 
 use super::App;
 use crate::archive::{self, Format, Record};
 use crate::msg::{FileTarget, HistoryMsg, Msg};
 use crate::plugins::background;
-
-const MAX_ARCHIVE_PARTNERS: usize = 4096;
 
 #[derive(Default)]
 pub(super) struct Archive {
@@ -20,9 +17,6 @@ pub(super) struct Archive {
     file: Option<PathBuf>,
     /// The newest history row already looked at.
     seen: Option<u64>,
-    /// Partner lines already saved, by owner and line (FIFO-bounded).
-    partners: HashSet<(String, LineId)>,
-    partner_order: VecDeque<(String, LineId)>,
     /// The session a save dialog is open for.
     export: Option<String>,
 }
@@ -100,23 +94,6 @@ impl App {
         }
         for record in fresh {
             self.archive_save(record);
-        }
-    }
-
-    /// Save a co-op partner's line the first time the room shows it.
-    pub(crate) fn archive_partner(&mut self, owner: &str, line: LineId, item: &HistoryItem) {
-        if !self.archive_wants(item) {
-            return;
-        }
-        let key = (owner.to_owned(), line);
-        if self.session.archive.partners.insert(key.clone()) {
-            self.session.archive.partner_order.push_back(key);
-            while self.session.archive.partner_order.len() > MAX_ARCHIVE_PARTNERS {
-                if let Some(evicted) = self.session.archive.partner_order.pop_front() {
-                    self.session.archive.partners.remove(&evicted);
-                }
-            }
-            self.archive_save(Record::of(item, true));
         }
     }
 

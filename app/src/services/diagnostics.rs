@@ -61,12 +61,12 @@ fn zip_dir(dir: &Path, archive: &Path) -> io::Result<()> {
 /// What the package says about this installation besides its logs. Only
 /// facts that identify no one: no account, room, channel, name or path.
 pub fn summary(settings: &nanatype_settings::Settings, locale: &str) -> serde_json::Value {
-    use crate::distribution::{STEAM, UPDATES};
+    use crate::distribution::UPDATES;
     let i = &settings.integrations;
     serde_json::json!({
         "version": env!("CARGO_PKG_VERSION"),
         "build": env!("NANATYPE_BUILD_ID"),
-        "edition": if STEAM { "steam" } else { "standalone" },
+        "edition": "standalone",
         "features": { "updates": UPDATES },
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,

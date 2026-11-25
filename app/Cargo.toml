@@ -25,12 +25,8 @@ default = ["builtin-fonts", "updates"]
 # built-in skins (docs/fonts.md). Build with `--no-default-features` to
 # ignore them: those skins then fall back to installed fonts.
 builtin-fonts = ["nanatype-frame/builtin-fonts"]
-# The GitHub Releases update check (docs/updates.md). Steam builds update
-# through SteamPipe instead.
+# The GitHub Releases update check (docs/updates.md).
 updates = ["dep:nanatype-update"]
-# The Steam build: launches through Steam and reads Workshop subscriptions.
-# Build it with --no-default-features --features builtin-fonts,steam.
-steam = ["nanatype-steam/steamworks"]
 
 [dependencies]
 nanatype-model.workspace = true
@@ -46,12 +42,10 @@ nanatype-bridge.workspace = true
 nanatype-blive.workspace = true
 nanatype-twitch.workspace = true
 nanatype-core.workspace = true
-nanatype-p2p.workspace = true
 nanatype-plugins.workspace = true
 nanatype-secrets.workspace = true
 nanatype-obs.workspace = true
 nanatype-update = { workspace = true, optional = true }
-nanatype-steam.workspace = true
 nanatype-frame.workspace = true
 nanatype-diag.workspace = true
 nanatype-scheduling.workspace = true

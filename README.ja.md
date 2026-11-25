@@ -55,7 +55,7 @@ NanaType は VTuber のための配信用タイプライターです。入力ボ
     </td>
     <td valign="top">
       <h4>📺 ゼロコピーで OBS へ</h4>
-      Windows では Spout2、macOS では Syphon で GPU テクスチャを共有します。表示ボックス、オンラインの相手、履歴はそれぞれ別々に出力でき、透明ウィンドウをキャプチャする方法も選べます。
+      Windows では Spout2、macOS では Syphon で GPU テクスチャを共有します。表示ボックス、履歴、個別コメント画面はそれぞれ別々に出力でき、透明ウィンドウをキャプチャする方法も選べます。
     </td>
   </tr>
   <tr>
@@ -64,26 +64,22 @@ NanaType は VTuber のための配信用タイプライターです。入力ボ
       システムの音声認識を優先し、小さな多言語オフラインモデルをダウンロードして使うこともできます。話し終えて間が空くと自動で送信し、編集中は自動で一時停止します。
     </td>
     <td valign="top">
-      <h4>🤝 Steam オンライン</h4>
-      1 ルーム最大 8 人。相手のセリフがそれぞれの表示ボックスにリアルタイムで現れ、履歴も共有されます。直接つながれるときは直接、無理なときは Steam のリレーを経由します。
-    </td>
-  </tr>
-  <tr>
-    <td valign="top">
       <h4>🔗 配信ツール連携</h4>
       VTube Studio の表情・ホットキー・パラメーター・リップシンクに対応し、マークアップで入力位置に合わせて発動できます。OSC とローカル WebSocket での配信も可能です。
     </td>
+  </tr>
+  <tr>
     <td valign="top">
       <h4>💬 コメント連携</h4>
       Twitch チャットの受信と送信に対応。<a href="https://github.com/xfgryujk/blivechat">blivechat</a>、<a href="https://huixinghao.cn/">彗星号</a> クライアントへの直接接続、または <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>（LAPLACE が認証コードで接続している場合のみ）を接続すれば、bilibili・抖音（Douyin）・快手（Kuaishou）のコメントも取り込めます。
     </td>
-  </tr>
-  <tr>
     <td valign="top">
       <h4>😺 スタンプ</h4>
       ローカルフォルダー、Echo-Live の表情、Telegram のスタンプパックを読み込めます。GIF / WebP / TGS / WebM のアニメーションは、表示ボックスでも OBS 出力でも再生されます。
     </td>
-    <td valign="top">
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
       <h4>🧰 パッケージエディター</h4>
       独立したアプリ <a href="docs/ja/package-editor.md">NanaType Editor</a> で、スキンパッケージやプラグインの作成・署名・隔離デバッグができます。
     </td>
@@ -113,7 +109,7 @@ NanaType は VTuber のための配信用タイプライターです。入力ボ
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd> | 太字 / 斜体 / 下線 |
 | <kbd>Esc</kbd> | 入力ボックスを隠す |
 
-Twitch、コメント連携、オンライン、OBS の複数出力、スタンプなどの詳しい使い方は **[使い方ガイド](docs/ja/usage.md)** をご覧ください。
+Twitch、コメント連携、OBS の複数出力、スタンプなどの詳しい使い方は **[使い方ガイド](docs/ja/usage.md)** をご覧ください。
 
 ## ✍️ セリフのマークアップ
 
@@ -131,7 +127,7 @@ Twitch、コメント連携、オンライン、OBS の複数出力、スタン�
 
 | | |
 | --- | --- |
-| **ユーザー** | [使い方ガイド](docs/ja/usage.md) · [音声入力](docs/ja/voice-input.md) · [Twitch](docs/ja/twitch.md) · [彗星号](docs/ja/comet.md) · [LAPLACE](docs/ja/laplace.md) · [OBS / Spout 出力](docs/ja/obs-spout.md) · [アップデートの確認](docs/ja/updates.md) · [Steam 版](docs/ja/steam.md) |
+| **ユーザー** | [使い方ガイド](docs/ja/usage.md) · [音声入力](docs/ja/voice-input.md) · [Twitch](docs/ja/twitch.md) · [彗星号](docs/ja/comet.md) · [LAPLACE](docs/ja/laplace.md) · [OBS / Spout 出力](docs/ja/obs-spout.md) · [アップデートの確認](docs/ja/updates.md) |
 | **クリエイター** | [セリフのマークアップ](docs/ja/markup.md) · [スキン形式](docs/ja/skins.md) · [プラグインとパッケージ API](docs/ja/plugins.md) · [パッケージエディター](docs/ja/package-editor.md) · [フォント](docs/ja/fonts.md) |
 | **開発者** | [ソースからビルド](docs/ja/building.md) · [レンダリングパイプライン](docs/rendering-pipeline.md)（中国語） · [ログ](docs/ja/logging.md) |
 
@@ -145,7 +141,7 @@ cargo run -p nanatype-editor   # NanaType Editor
 cargo test --workspace --exclude nanatype
 ```
 
-プラットフォームごとの依存関係、パッケージング、Steam 版、開発用の環境変数は [ソースからビルド](docs/ja/building.md) にまとめています。
+プラットフォームごとの依存関係、パッケージング、開発用の環境変数は [ソースからビルド](docs/ja/building.md) にまとめています。
 
 ## 💝 謝辞
 

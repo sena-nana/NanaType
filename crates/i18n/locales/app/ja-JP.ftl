@@ -7,7 +7,6 @@ history-count = { $count } 件
 
 ## ウィンドウタイトル
 window-input = 入力ウィンドウ
-input-management = 配信とセッション
 input-character = キャラクター：{ $name }
 dock-stickers = スタンプ
 dock-tab-controls = コントロール
@@ -44,8 +43,6 @@ tray-action-show-input = 入力ウィンドウを表示
 tray-action-hide-input = 入力ウィンドウを隠す
 tray-action-show-display = ダイアログを表示
 tray-action-hide-display = ダイアログを隠す
-tray-action-show-peer-display = 接続相手の表示枠を表示
-tray-action-hide-peer-display = 接続相手の表示枠を隠す
 tray-action-show-history = 履歴を表示
 tray-action-hide-history = 履歴を隠す
 tray-action-show-danmaku = コメントウィンドウを表示
@@ -139,8 +136,6 @@ settings-assets = 素材
 settings-profiles = プロファイルとバックアップ
 settings-input = 入力
 settings-characters = キャラクター情報
-settings-peer = 接続
-settings-workshop = ワークショップ
 settings-about = 情報
 settings-theme-switch-light = ライトテーマに切り替え
 settings-theme-switch-dark = ダークテーマに切り替え
@@ -604,7 +599,8 @@ update-error-rejected = リリース情報の署名検証に失敗したため�
 update-error-no-asset = 新しいバージョンにこのシステム向けのダウンロードがありません
 update-error-download = ダウンロードに失敗したか、公開されたチェックサムと一致しません
 update-error-other = アップデートに失敗しました
-about-logs = ログフォルダー
+about-logs = ログフォルダーを開く
+about-logs-hint = 問題が発生した場合は、アプリを終了してからログを開発者にお送りください
 about-data = データフォルダー
 about-folders = ローカルフォルダー
 about-verbose-logs = 詳細ログ
@@ -858,51 +854,9 @@ chat-queued = 待機中 · { $count } 件
 chat-room-owner = 配信者
 chat-moderator = モデレーター
 
-# Sessions of up to eight people
-peer-title = 接続
-peer-expand = 開く
-peer-collapse = 閉じる
-peer-off = 未接続
-peer-connecting = 接続中…
-peer-waiting = 相手の参加待ち
-peer-reconnecting = 再接続中…
-peer-direct = 直接接続
-peer-relay = リレー
-peer-error = 接続失敗
-peer-steam-required = 接続には起動中の Steam が必要です
-peer-page-hint = 接続は Steam を経由するため、Steam の起動が必要です。入力ウィンドウ下部のパネルでも同じ操作ができます
-peer-create = 接続を作成
-peer-join = 参加
-peer-leave = 退出
-peer-copy = 招待をコピー
-peer-invite = フレンドを招待
-peer-invite-idle = フレンドをこの部屋に招待
-peer-invite-waiting = 相手の承諾を待っています
-peer-invite-accepted = { $name } が招待を承諾しました
-peer-invite-accepted-many = { $n } 人が招待を承諾しました
 # Between the names of the other people in the room.
 peer-name-separator = 、
-peer-invite-accepted-unnamed = 相手が招待を承諾しました
-peer-room-full = 部屋はいっぱいです（最大 8 人）
-peer-invitation = 相手の招待を貼り付け
-peer-password = 部屋のパスワード（任意）
-peer-password-needed = 参加するには部屋のパスワードを入力してください
-peer-password-invalid = 部屋のパスワードは 64 文字以内で、改行は使えません
-peer-invite-unavailable = Steam の招待を開けません。Steam オーバーレイを有効にしてください
-peer-invite-invalid = この Steam 招待には参加できません
-peer-paused = 再接続後に送信・再生操作できます。下書きは続けて編集できます。
 
-# Independent partner output
-window-peer-display = 接続相手の表示枠
-windows-peer-display = 接続相手
-output-peer-display = 接続相手の表示枠
-peer-window-toggle = 相手の表示枠を表示／非表示
-peer-outputs = 配信出力
-peer-outputs-hint = 席ごとに Spout/Syphon を1つ。席で記憶し、その席に座った人がその出力に送られます
-peer-seat = 席 { $n }
-peer-seat-named = 席 { $n } · { $name }
-peer-seat-output = 席 { $n } を送信
-output-partners-moved = 接続相手は一人ずつ出力があり、「接続」ページで席ごとにオンにします
 output-name-conflict = 出力名が重複しています。出力ごとに異なる名前を指定してください。
 tb-effect-pulse = 脈動
 tb-effect-flicker = 明滅
@@ -950,16 +904,6 @@ skin-edit-draft-hint = プレビューのみ（未保存）
 skin-edit-unavailable = このスキンは現在プレビューできません。
 skin-edit-save = 保存
 skin-edit-saved = 保存済み
-
-
-
-
-
-
-
-
-
-
 
 settings-packages = プラグインとパッケージ
 packages-import = パッケージを読み込む
@@ -1077,31 +1021,6 @@ tw-retry = 未送信部分を再試行
 tw-skip-failed = このセリフをスキップして続行
 tw-enable = 送信を有効化
 
-## Steam ワークショップ
-workshop-browse = ワークショップを見る
-workshop-badge = ワークショップ
-workshop-kind-skins = スキン
-workshop-kind-sounds = サウンドパック
-workshop-kind-other = その他
-workshop-steam-only = ワークショップは Steam 版で利用できます
-workshop-find = ワークショップでさらに探す
-workshop-find-hint = Steam でサブスクライブすると自動でダウンロードされ、ここに表示されます
-workshop-none = サブスクライブしたアイテムはまだありません
-workshop-unavailable = ワークショップを使えません：Steam を起動してから NanaType を開き直してください
-workshop-ready = インストール済み
-workshop-downloading = ダウンロード中 { $percent }%
-workshop-pending = ダウンロード待ち
-workshop-not-installed = 未ダウンロード
-workshop-invalid = 使用できません：{ $message }
-workshop-shadowed = { $id } がインストール済みのため使用されていません
-workshop-view = ワークショップで見る
-workshop-download = 再ダウンロード
-workshop-update = 更新
-workshop-unsubscribe = サブスクライブ解除
-workshop-unsubscribe-confirm = 「{ $name }」のサブスクライブを解除しますか？終了後に Steam がファイルを削除します。
-workshop-unsubscribe-failed = サブスクライブを解除できませんでした：{ $message }
-sound-pack-workshop = { $name }（ワークショップ）
-
 ## OBS 連携
 obs-link = OBS に接続
 obs-link-hint = OBS 内蔵の WebSocket サーバー（ツール › WebSocket サーバー設定）でソースのバウンディングボックスを読み取り、その大きさで出力します
@@ -1193,7 +1112,7 @@ tts-unavailable = このシステムでは読み上げエンジンを利用で�
 tts-language = 音声の言語
 tts-language-all = すべての言語
 tts-voice = 既定の音声
-tts-voice-hint = 音声を設定していないキャラクター、視聴者コメント、パートナーのセリフに使います。
+tts-voice-hint = 音声を設定していないキャラクターと視聴者コメントに使います。
 tts-voice-system = システムの既定
 tts-voice-default = 既定の音声を使う
 tts-character-voice = { $name } の音声
@@ -1201,8 +1120,6 @@ tts-rate = 速さ
 tts-volume = 音量
 tts-chat = 視聴者のコメントも読み上げる
 tts-chat-hint = 履歴に入るコメントを、読み上げ中の内容の後に読みます。
-tts-partners = コラボ相手のセリフも読み上げる
-tts-partners-hint = 相手のセリフが表示されたときに一度だけ、読み上げ中の内容の後に読みます。
 tts-pace = 読み上げに合わせて表示
 tts-pace-hint = 読まれた語から順に表示します。音声が少し待っても語のタイミングを返さないときは、いつもの速さで表示します。
 tts-hint = 音声はシステム設定でインストール・管理します。追加したら「音声を更新」を押してください。

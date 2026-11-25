@@ -84,11 +84,10 @@ Each crate declares its events as `static EventDescriptor` in its own `diag` mod
 | `0x0102` | `output.` | Spout/Syphon, window output state, VTS/OSC/WebSocket bridges |
 | `0x0103` | `chat.` | Shared parts such as chat images |
 | `0x0107` | `twitch.` | Connection (1), connection error (2), account (3), account failure (4), warning (5), send failure (6), received chat event count (metric 50) |
-| `0x0108` | `p2p.` | Endpoints, relay online, resource transfer |
 | `0x0109` | `plugins.` | Worker ready time, failures (with the tail of stderr), script errors |
 | `0x010A` | `plugin_log.` | Lines plugins write with `nana.log` |
 | `0x010B` | `update.` | Per-source check result and duration, downloads, version parse failures |
-| `0x010C` `0x010D` `0x010F` | `steam.` `stickers.` `audio.` | Why Steam is unavailable, sticker preview, upload and cache cleanup failures, audio device open and loss |
+| `0x010D` `0x010F` | `stickers.` `audio.` | Sticker preview, upload and cache cleanup failures, audio device open and loss |
 | `0x010E` | `skin.` | Reserved; skin loading and shader errors are currently logged as `app.error_notice` |
 | `0x0110` | `editor.` | The editor |
 | `0x01F0` | `external.` | Dependency logs |
@@ -98,11 +97,11 @@ Connection and account states share one encoding: connection `0` off, `1` connec
 ### Adding an event
 
 ```rust
-use nanatype_diag::domains::P2P;
+use nanatype_diag::domains::OUTPUT;
 use nanatype_diag::{EventDescriptor, FieldDescriptor, Severity};
 
-pub static RELAY_SWITCHED: EventDescriptor = EventDescriptor::new(
-    P2P, 5, "p2p.relay_switched", Severity::Info, &[FieldDescriptor::u64("ms")],
+pub static STREAM_SWITCHED: EventDescriptor = EventDescriptor::new(
+    OUTPUT, 5, "output.stream_switched", Severity::Info, &[FieldDescriptor::u64("ms")],
 );
 ```
 

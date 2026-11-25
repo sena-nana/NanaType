@@ -4,16 +4,15 @@
 
 ## まず読むページ
 
-1. [使い方ガイド](usage.md)：初回再生、ウィンドウ、OBS、チャット、オンライン、履歴、トラブル対処。
+1. [使い方ガイド](usage.md)：初回再生、ウィンドウ、OBS、チャット、履歴、トラブル対処。
 2. [台詞マークアップ](markup.md)：一時停止、効果、音声、立ち絵、外部連携。
-3. [OBS / Spout 出力](obs-spout.md)：表示・パートナー・履歴画面を OBS に送る方法。
+3. [OBS / Spout 出力](obs-spout.md)：表示・履歴画面を OBS に送る方法。
 
 ## ユーザー向け機能
 
 - [音声入力](voice-input.md)
 - [Twitch](twitch.md)
 - [コメット（彗星号）](comet.md) と [LAPLACE](laplace.md)
-- [Steam 版](steam.md)
 - [アップデートの確認](updates.md)
 
 ## クリエイター向け

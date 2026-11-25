@@ -4,16 +4,15 @@ Choose a task below. Start with **User guide** if you are new to NanaType; creat
 
 ## Start here
 
-1. [User guide](usage.md): first playback, windows, OBS, chat, sessions, history and troubleshooting.
+1. [User guide](usage.md): first playback, windows, OBS, chat, history and troubleshooting.
 2. [Dialogue markup](markup.md): pauses, effects, sound, portraits and integrations.
-3. [OBS / Spout output](obs-spout.md): send the display, partner windows or history to OBS.
+3. [OBS / Spout output](obs-spout.md): send the display, history or separate danmaku window to OBS.
 
 ## User features
 
 - [Voice input](voice-input.md)
 - [Twitch](twitch.md)
 - [Comet (彗星号)](comet.md) and [LAPLACE](laplace.md)
-- [Steam edition](steam.md)
 - [Checking for updates](updates.md)
 
 ## Creators

@@ -22,7 +22,6 @@ mod hotkeys;
 mod integrations;
 mod onboarding;
 mod output;
-mod peer;
 mod platforms;
 mod playback;
 mod profiles;
@@ -30,7 +29,6 @@ mod skin_grid;
 mod skins;
 mod speech;
 mod windows;
-mod workshop;
 
 pub use self::about::font_licence_panel;
 pub use self::hotkeys::action_name;
@@ -85,8 +83,6 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
         Page::Platforms => platforms::platforms(ui),
         Page::Output => output::output(ui),
         Page::Integrations => integrations::integrations(ui),
-        Page::Peer => peer::peer(ui),
-        Page::Workshop => workshop::workshop(ui),
         Page::Packages => crate::ui::plugins::settings(ui),
         Page::About => about::about(ui),
     };
@@ -98,15 +94,9 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
 /// The open page's page-wide actions, shown in its header.
 pub fn actions(ui: Ui, page: Page) -> Option<AnyView> {
     match page {
-        Page::Skins => Some(crate::ui::kit::hstack((
-            crate::distribution::STEAM
-                .then(|| workshop::browse_button(ui, crate::workshop::Tag::Skins)),
-            tool(ui, ti::DOWNLOAD, "skins-import", || {
-                Msg::PickFile(FileTarget::ImportSkin)
-            }),
-        ))),
-        Page::Workshop => crate::distribution::STEAM
-            .then(|| workshop::browse_button(ui, crate::workshop::Tag::Skins)),
+        Page::Skins => Some(tool(ui, ti::DOWNLOAD, "skins-import", || {
+            Msg::PickFile(FileTarget::ImportSkin)
+        })),
         Page::Packages => Some(crate::ui::plugins::actions(ui)),
         Page::Platforms => Some(tool(ui, ti::MESSAGES, "chat-open-panel", || {
             Msg::Chat(ChatMsg::Show)

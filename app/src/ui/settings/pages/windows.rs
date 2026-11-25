@@ -2,9 +2,8 @@ use super::*;
 use crate::msg::WindowMsg;
 
 /// The overlay windows, one group each, in page order.
-pub(super) const OVERLAYS: [WindowKind; 5] = [
+pub(super) const OVERLAYS: [WindowKind; 4] = [
     WindowKind::Display,
-    WindowKind::PARTNER,
     WindowKind::History,
     WindowKind::Danmaku,
     WindowKind::Input,
@@ -14,7 +13,6 @@ pub(super) const OVERLAYS: [WindowKind; 5] = [
 fn title_key(kind: WindowKind) -> &'static str {
     match kind {
         WindowKind::Display => "windows-display",
-        WindowKind::PeerDisplay(_) => "windows-peer-display",
         WindowKind::History => "windows-history",
         WindowKind::Danmaku => "windows-danmaku",
         _ => "windows-input",
@@ -106,7 +104,7 @@ pub(super) fn overlay_select(
 /// A setting that does not apply to the window is left out.
 fn window_group(ui: Ui, kind: WindowKind) -> AnyView {
     let overlay = kind != WindowKind::Input;
-    let display = matches!(kind, WindowKind::Display | WindowKind::PeerDisplay(_));
+    let display = kind == WindowKind::Display;
     let mut rows = vec![row(
         ui,
         "windows-visible",

@@ -7,11 +7,11 @@ use super::super::dialogue;
 use super::super::{SceneFrameDemand, Stage};
 use super::row::{FADE_FRAME_SLACK_MS, ROW_FADE_MS};
 
-/// The visible suffix, excluding the lines still on either dialogue box.
+/// The visible suffix, excluding the line still on the dialogue box.
 #[derive(Clone, Copy)]
 pub(super) struct Selection {
     pub visible: usize,
-    pub hidden: [Option<LineId>; super::super::TRACK_SLOTS],
+    pub hidden: Option<LineId>,
 }
 
 pub(super) fn selection(ui: Stage) -> Selection {
@@ -19,18 +19,11 @@ pub(super) fn selection(ui: Stage) -> Selection {
         .settings
         .with(|s| (s.history.visible_items as usize, s.history.hide_latest));
     let hide = hide.resolve(ui.skin.with(|s| s.history.hide_latest));
-    let mut hidden = [None; super::super::TRACK_SLOTS];
-    if hide && ui.log_canvas == crate::canvas::Canvas::History {
-        if ui.peer_active.get() {
-            hidden[0] = ui.peer_local_line.get();
-            let count = super::super::remote_bands(ui.peer_seats.get());
-            for (slot, lane) in ui.peer_lanes.iter().take(count).enumerate() {
-                hidden[slot + 1] = lane.display.with(|d| d.line);
-            }
-        } else {
-            hidden[0] = ui.display.with(|d| d.line);
-        }
-    }
+    let hidden = if hide && ui.log_canvas == crate::canvas::Canvas::History {
+        ui.display.with(|d| d.line)
+    } else {
+        None
+    };
     Selection { visible, hidden }
 }
 
@@ -41,7 +34,7 @@ pub(super) fn selected_rows(
 ) -> impl Iterator<Item = &HistoryRow> {
     rows.iter()
         .rev()
-        .filter(move |row| row.item.line.is_none() || !selection.hidden.contains(&row.item.line))
+        .filter(move |row| row.item.line.is_none() || row.item.line != selection.hidden)
         .take(selection.visible)
 }
 
@@ -109,7 +102,7 @@ pub(super) fn visible_rows(ui: Stage) -> Arc<Vec<HistoryRow>> {
     if let Some(q) = query(ui) {
         return Arc::new(ui.history_rows.with(|rows| {
             rows.iter()
-                .filter(|row| row.item.line.is_none() || !selection.hidden.contains(&row.item.line))
+                .filter(|row| row.item.line.is_none() || row.item.line != selection.hidden)
                 .filter(|row| row_matches(row, &q))
                 .cloned()
                 .collect()
@@ -127,7 +120,7 @@ pub(super) fn visible_keys(ui: Stage) -> Vec<u64> {
     if let Some(q) = query(ui) {
         return ui.history_rows.with(|rows| {
             rows.iter()
-                .filter(|row| row.item.line.is_none() || !selection.hidden.contains(&row.item.line))
+                .filter(|row| row.item.line.is_none() || row.item.line != selection.hidden)
                 .filter(|row| row_matches(row, &q))
                 .map(|row| row.key)
                 .collect()

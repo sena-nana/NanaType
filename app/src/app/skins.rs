@@ -47,7 +47,6 @@ impl App {
                         Ok(prepared) => {
                             self.appearance.skin_reload_scan = false;
                             self.appearance.registry = prepared.registry;
-                            self.reapply_workshop();
                             self.appearance.prepared_skin_urls = prepared.image_urls;
                             self.apply_loaded_skin(prepared.loaded);
                             if prepared.scanned {

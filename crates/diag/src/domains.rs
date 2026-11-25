@@ -10,12 +10,11 @@ pub const OUTPUT: Domain = Domain(0x0102);
 pub const CHAT: Domain = Domain(0x0103);
 /// Twitch live chat. The numeric id remains stable for existing logs.
 pub const TWITCH: Domain = Domain(0x0107);
-pub const P2P: Domain = Domain(0x0108);
 pub const PLUGINS: Domain = Domain(0x0109);
 /// What plugins write with `nana.log`.
 pub const PLUGIN_LOG: Domain = Domain(0x010A);
 pub const UPDATE: Domain = Domain(0x010B);
-pub const STEAM: Domain = Domain(0x010C);
+// 0x0108 (`p2p.`) and 0x010C (`steam.`) are reserved for the Steam edition.
 pub const STICKERS: Domain = Domain(0x010D);
 pub const SKIN: Domain = Domain(0x010E);
 pub const AUDIO: Domain = Domain(0x010F);
@@ -30,11 +29,9 @@ pub const ALL: &[(Domain, &str)] = &[
     (OUTPUT, "output."),
     (CHAT, "chat."),
     (TWITCH, "twitch."),
-    (P2P, "p2p."),
     (PLUGINS, "plugins."),
     (PLUGIN_LOG, "plugin_log."),
     (UPDATE, "update."),
-    (STEAM, "steam."),
     (STICKERS, "stickers."),
     (SKIN, "skin."),
     (AUDIO, "audio."),

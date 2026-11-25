@@ -53,8 +53,7 @@ fn doc(ui: Ui, track: usize) -> RuntimeAgentSession {
         .unwrap();
     doc.context_mut()
         .mount_view_root(id, move || match track {
-            0 => dialogue::display_window(ui).into_any(),
-            1 => dialogue::display_window(ui.remote()).into_any(),
+            0 | 1 => dialogue::display_window(ui).into_any(),
             _ => history::history_window(ui).into_any(),
         })
         .unwrap();
@@ -333,7 +332,6 @@ fn main() {
     );
     core.handle(Cmd::Skip, 1);
     ui.display.set(Arc::new(core.display().clone()));
-    ui.peer_lanes[0].display.set(ui.display.get_untracked());
     ui.history
         .set(Arc::new(core.history().iter().cloned().collect()));
     let g = gpu();

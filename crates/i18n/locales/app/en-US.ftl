@@ -10,7 +10,6 @@ history-count = { $count ->
 
 ## Window titles
 window-input = Input
-input-management = Stream & session
 input-character = Character: { $name }
 dock-stickers = Stickers
 dock-tab-controls = Controls
@@ -47,8 +46,6 @@ tray-action-show-input = Show input window
 tray-action-hide-input = Hide input window
 tray-action-show-display = Show dialogue box
 tray-action-hide-display = Hide dialogue box
-tray-action-show-peer-display = Show partner display
-tray-action-hide-peer-display = Hide partner display
 tray-action-show-history = Show history
 tray-action-hide-history = Hide history
 tray-action-show-danmaku = Show live chat window
@@ -142,8 +139,6 @@ settings-assets = Assets
 settings-profiles = Profiles & backup
 settings-input = Input
 settings-characters = Character info
-settings-peer = Co-op
-settings-workshop = Workshop
 settings-about = About
 settings-theme-switch-light = Switch to light theme
 settings-theme-switch-dark = Switch to dark theme
@@ -610,7 +605,8 @@ update-error-rejected = Release information failed its signature check and was i
 update-error-no-asset = The new version has no download for this system
 update-error-download = The download failed or did not match the published checksum
 update-error-other = Update failed
-about-logs = Logs folder
+about-logs = Open logs folder
+about-logs-hint = If you run into a problem, please close the app and send the logs to the developer
 about-data = Data folder
 about-folders = Local folders
 about-verbose-logs = Detailed logs
@@ -867,51 +863,9 @@ chat-queued = Queued · { $count }
 chat-room-owner = Room owner
 chat-moderator = Moderator
 
-# Sessions of up to eight people
-peer-title = Session
-peer-expand = Expand
-peer-collapse = Collapse
-peer-off = Offline
-peer-connecting = Connecting…
-peer-waiting = Waiting for partner
-peer-reconnecting = Reconnecting…
-peer-direct = Direct
-peer-relay = Relay
-peer-error = Connection failed
-peer-steam-required = Sessions need Steam to be running
-peer-page-hint = Sessions connect through Steam, which has to be running. The same controls are in the panel at the foot of the input window
-peer-create = Create session
-peer-join = Join
-peer-leave = Leave
-peer-copy = Copy invitation
-peer-invite = Invite friend
-peer-invite-idle = Invite a friend into this room
-peer-invite-waiting = Waiting for them to accept
-peer-invite-accepted = { $name } accepted the invite
-peer-invite-accepted-many = { $n } people accepted the invite
 # Between the names of the other people in the room.
 peer-name-separator = { ", " }
-peer-invite-accepted-unnamed = They accepted the invite
-peer-room-full = The room is full (8 people)
-peer-invitation = Paste your partner's invitation
-peer-password = Room password (optional)
-peer-password-needed = Enter the room password to join
-peer-password-invalid = A room password can be at most 64 characters and cannot contain line breaks
-peer-invite-unavailable = Couldn't open the Steam invite. Turn on the Steam overlay
-peer-invite-invalid = Couldn't join that Steam invite
-peer-paused = Wait for the session to reconnect before sending or controlling playback. You can keep editing.
 
-# Independent partner output
-window-peer-display = Partner display
-windows-peer-display = Partner
-output-peer-display = Partner display
-peer-window-toggle = Show or hide the partner window
-peer-outputs = Stream outputs
-peer-outputs-hint = One Spout/Syphon sender per seat, kept by seat: whoever sits there goes out on it
-peer-seat = Seat { $n }
-peer-seat-named = Seat { $n } · { $name }
-peer-seat-output = Send seat { $n }
-output-partners-moved = Each co-op partner has their own output, switched on by seat on the Co-op page
 output-name-conflict = Output names must be unique. Choose a different name for each output.
 tb-effect-pulse = Pulse
 tb-effect-flicker = Flicker
@@ -959,16 +913,6 @@ skin-edit-draft-hint = Preview only, not saved
 skin-edit-unavailable = This skin cannot be previewed right now.
 skin-edit-save = Save
 skin-edit-saved = Saved
-
-
-
-
-
-
-
-
-
-
 
 settings-packages = Plugins & packages
 packages-import = Import package
@@ -1086,31 +1030,6 @@ tw-retry = Retry unsent parts
 tw-skip-failed = Skip this line and continue
 tw-enable = Enable sending
 
-## Steam Workshop
-workshop-browse = Browse Workshop
-workshop-badge = Workshop
-workshop-kind-skins = Skins
-workshop-kind-sounds = Sound packs
-workshop-kind-other = Other
-workshop-steam-only = The Workshop is part of the Steam edition
-workshop-find = Find more in the Workshop
-workshop-find-hint = Items you subscribe to in Steam download and appear here
-workshop-none = No subscriptions yet
-workshop-unavailable = The Workshop is unavailable: start Steam, then reopen NanaType
-workshop-ready = Installed
-workshop-downloading = Downloading { $percent }%
-workshop-pending = Waiting to download
-workshop-not-installed = Not downloaded
-workshop-invalid = Cannot be used: { $message }
-workshop-shadowed = Not used: { $id } is already installed
-workshop-view = View in the Workshop
-workshop-download = Download again
-workshop-update = Update
-workshop-unsubscribe = Unsubscribe
-workshop-unsubscribe-confirm = Unsubscribe from "{ $name }"? Steam deletes its files after you quit.
-workshop-unsubscribe-failed = Could not unsubscribe: { $message }
-sound-pack-workshop = { $name } (Workshop)
-
 ## OBS link
 obs-link = Connect to OBS
 obs-link-hint = Reads each source's bounding box through OBS's own WebSocket server (Tools › WebSocket Server Settings) and sends at that size
@@ -1202,7 +1121,7 @@ tts-unavailable = No speech engine is available on this system.
 tts-language = Voice language
 tts-language-all = All languages
 tts-voice = Default voice
-tts-voice-hint = Used for characters without their own voice, viewer chat and partners' lines.
+tts-voice-hint = Used for characters without their own voice and viewer chat.
 tts-voice-system = System default
 tts-voice-default = Use the default voice
 tts-character-voice = Voice of { $name }
@@ -1210,8 +1129,6 @@ tts-rate = Rate
 tts-volume = Volume
 tts-chat = Also read viewer chat
 tts-chat-hint = Messages that reach the history, read after what is being said.
-tts-partners = Also read co-op partners' lines
-tts-partners-hint = Each partner line is read once as it shows, after what is being said.
 tts-pace = Type along with the voice
 tts-pace-hint = Each word appears as it is spoken. If the voice gives no word timing within a moment, the line types at its own pace.
 tts-hint = Voices are installed and managed in the system settings; choose Refresh voices after installing one.

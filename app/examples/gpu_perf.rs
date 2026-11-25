@@ -95,7 +95,6 @@ fn session(registry: &SkinRegistry, name: &'static str, track: usize) -> (Ui, Ru
                 }
             });
         }
-        ui.peer_lanes[0].display.set(ui.display.get_untracked());
         ui.history
             .set(Arc::new(core.history().iter().cloned().collect()));
         let id = DocumentId::new((track + 1) as u64).unwrap();
@@ -111,8 +110,6 @@ fn session(registry: &SkinRegistry, name: &'static str, track: usize) -> (Ui, Ru
                     danmaku::chat_panel(ui).into_any()
                 } else if track == 2 {
                     history::history_window(ui).into_any()
-                } else if track == 1 {
-                    dialogue::display_window(ui.remote()).into_any()
                 } else {
                     dialogue::display_window(ui).into_any()
                 }
@@ -303,7 +300,8 @@ fn main() {
                                     update.clone(),
                                 )])));
                         }
-                        let track_ui = if i == 1 { ui.remote() } else { *ui };
+                        let _ = i;
+                        let track_ui = *ui;
                         let runtime_animation = dialogue::display_animating(*track_ui, ms);
                         let animate = runtime_animation
                             || nanatype::ui::sweep::animating(*track_ui)

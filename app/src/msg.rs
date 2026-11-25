@@ -489,15 +489,6 @@ macro_rules! define_messages {
 }
 
 define_messages! {
-    PeerStart {
-        invitation: Option<String>,
-        password: String,
-    },
-    /// Open the Steam overlay and invite friends into the room being hosted.
-    PeerInviteFriends,
-    PeerLeave,
-    PeerPanel(bool),
-    PeerEvent(u64, nanatype_p2p::Event),
     /// A session command (send, continue, draft changed…).
     Core(Cmd),
     /// Change settings.
@@ -562,7 +553,6 @@ define_messages! {
     Obs(ObsMsg),
     #[cfg(feature = "updates")]
     Update(UpdateMsg),
-    Workshop(WorkshopMsg),
     History(HistoryMsg),
     Backup(BackupMsg),
     Profile(ProfileMsg),
@@ -817,18 +807,6 @@ pub enum UpdateMsg {
     /// Stop reminding about the release on offer.
     Skip,
     OpenNotes,
-}
-
-pub enum WorkshopMsg {
-    /// The Steam Workshop reported.
-    Event(nanatype_steam::Event),
-    /// Browse the Workshop for this kind of content.
-    Browse(crate::workshop::Tag),
-    /// Open a subscribed item's Workshop page.
-    Open(u64),
-    Unsubscribe(u64),
-    /// Download a subscribed item again.
-    Download(u64),
 }
 
 /// Saved history (Settings › History).

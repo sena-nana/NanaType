@@ -44,7 +44,7 @@ scripts/package-macos.sh --product editor
 
 `-Product editor` 只构建编辑器；脚本固定使用锁文件、关闭发布增量编译，并在编译、许可或发布自检失败时停止。便携包不携带自检生成的 `data/` 用户数据，字体、解码器、GPU 后备渲染和异常恢复仍保留。macOS 的 Syphon 由 `nanalive-syphon` 静态编译；许可文本写入 `Contents/Resources/THIRD_PARTY_LICENSES.txt`。
 
-推送 `vX.Y.Z` 标签后，CI 会在 Windows 和 macOS 执行打包脚本，生成签名更新清单并创建草稿 Release；见 [检查更新](updates.md)。Steam 构建另见 [Steam 版](steam.md)。
+推送 `vX.Y.Z` 标签后，CI 会在 Windows 和 macOS 执行打包脚本，生成签名更新清单并创建草稿 Release；见 [检查更新](updates.md)。
 
 ## 开发辅助
 
@@ -63,6 +63,6 @@ scripts/package-macos.sh --product editor
 
 ## 代码地图
 
-`crates/model` 台词模型；`crates/markup` 标记；`crates/playback` 时间线；`crates/theme` 皮肤包；`crates/i18n` 文案；`crates/settings` 设置；`crates/audio` 音频；`crates/bridge` VTube Studio/OSC/WebSocket；`crates/twitch` Twitch；`crates/blive` 弹幕接入；`crates/core` 会话逻辑；`crates/p2p` Steam 联机；`crates/update` 更新；`crates/frame` 两个程序共用的渲染与插件宿主；`app` 应用；`editor` 编辑器。纯逻辑 crate 不依赖界面框架，可单独测试。
+`crates/model` 台词模型；`crates/markup` 标记；`crates/playback` 时间线；`crates/theme` 皮肤包；`crates/i18n` 文案；`crates/settings` 设置；`crates/audio` 音频；`crates/bridge` VTube Studio/OSC/WebSocket；`crates/twitch` Twitch；`crates/blive` 弹幕接入；`crates/core` 会话逻辑；`crates/update` 更新；`crates/frame` 两个程序共用的渲染与插件宿主；`app` 应用；`editor` 编辑器。纯逻辑 crate 不依赖界面框架，可单独测试。
 
 渲染流程、GPU 测量与发布配置属于项目记录，不是跨设备性能承诺；对应报告保留固定 revision、命令和限制。

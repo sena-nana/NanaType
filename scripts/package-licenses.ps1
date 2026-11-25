@@ -3,10 +3,7 @@
 param(
     [string]$Staged = (Join-Path (Split-Path -Parent $PSScriptRoot) "target\licenses"),
     [string]$Destination,
-    [ValidateSet("app", "editor")][string]$Product = "app",
-    # The Steam edition: its LICENSE and notices come staged by
-    # third-party-notices.ps1 -Steam.
-    [switch]$Steam
+    [ValidateSet("app", "editor")][string]$Product = "app"
 )
 # packaging\licenses files only NanaType ships.
 $appOnly = @("libvpx-BSD.txt", "KeySounds-CC0.txt", "KeySounds-Bubble-CC-BY-3.0.txt", "WhisperCpp-MIT.txt", "WhisperModel-MIT.txt", "WebRTC-VAD-BSD.txt")
@@ -28,7 +25,7 @@ function Add-LicenseSource([string]$Name, [string]$Path, [string]$Category) {
     $licenseSources[$Name] = $Path
 }
 
-$project = if ($Steam) { @("LICENSE-MIT") } else { @("LICENSE", "LICENSE-MIT", "THIRD_PARTY_NOTICES.md") }
+$project = @("LICENSE", "LICENSE-MIT", "THIRD_PARTY_NOTICES.md")
 foreach ($name in $project) {
     Add-LicenseSource $name (Join-Path $repoRoot $name) "project"
 }
@@ -62,7 +59,7 @@ foreach ($folder in @((Join-Path $repoRoot "packaging\licenses"), $Staged)) {
 }
 
 $text = [Text.StringBuilder]::new()
-$title = if ($Product -eq "editor") { "NanaType Editor" } elseif ($Steam) { "NanaType (Steam edition)" } else { "NanaType" }
+$title = if ($Product -eq "editor") { "NanaType Editor" } else { "NanaType" }
 [void]$text.AppendLine("$title redistribution licences and notices")
 [void]$text.AppendLine("Every named section below retains the complete source text.")
 [void]$text.AppendLine()

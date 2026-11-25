@@ -3,46 +3,17 @@
 use super::App;
 use crate::msg::{Msg, TtsMsg};
 use nanatype_core::Cmd;
-use nanatype_model::{Document, HistoryItem, Line, LineId, unix_millis};
+use nanatype_model::{Document, Line, LineId};
 use nanatype_settings::{Character, TtsSettings};
 use nanatype_tts::{Event, Speak, Tts, speakable, speakable_units};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-
-/// Partner lines older than this when they arrive (a room just joined)
-/// are not read.
-const PARTNER_FRESH_MS: u64 = 10_000;
-/// Cap tracked partner line IDs so long sessions stay bounded in memory.
-const MAX_PARTNERS: usize = 4096;
-
-#[derive(Default)]
-struct BoundedPartners {
-    set: HashSet<(String, LineId)>,
-    order: VecDeque<(String, LineId)>,
-}
-
-impl BoundedPartners {
-    fn insert(&mut self, key: (String, LineId)) -> bool {
-        if !self.set.insert(key.clone()) {
-            return false;
-        }
-        self.order.push_back(key);
-        while self.order.len() > MAX_PARTNERS {
-            if let Some(evicted) = self.order.pop_front() {
-                self.set.remove(&evicted);
-            }
-        }
-        true
-    }
-}
 
 /// What is said and when it stops, over any [`Speak`] engine.
 pub struct Narrator<S: Speak> {
     pub engine: S,
     /// Utterances started and not finished.
     talking: HashSet<u64>,
-    /// Partner lines already read.
-    partners: BoundedPartners,
     /// What each utterance says, while it is said (word sizes for the mouth).
     texts: HashMap<u64, String>,
     /// The line whose typing follows its voice.
@@ -62,7 +33,6 @@ impl<S: Speak> Narrator<S> {
         Self {
             engine,
             talking: HashSet::new(),
-            partners: BoundedPartners::default(),
             texts: HashMap::new(),
             paced: None,
         }
@@ -143,39 +113,6 @@ impl<S: Speak> Narrator<S> {
     /// A viewer's message reached the history; read after what is said.
     pub fn chat(&mut self, tts: &TtsSettings, doc: &Document) -> Option<u64> {
         if !(tts.enabled && tts.chat) {
-            return None;
-        }
-        self.queue(tts, None, doc)
-    }
-
-    /// A partner's line showed; read once, after what is said.
-    pub fn partner(
-        &mut self,
-        tts: &TtsSettings,
-        owner: &str,
-        line: LineId,
-        item: &HistoryItem,
-        now: u64,
-    ) -> Option<u64> {
-        if !(tts.enabled && tts.partners) || !self.partners.insert((owner.to_owned(), line)) {
-            return None;
-        }
-        if now.saturating_sub(item.at) > PARTNER_FRESH_MS {
-            return None;
-        }
-        self.queue(tts, None, &item.doc)
-    }
-
-    /// A partner replayed a line: their display shows it again with no new
-    /// history row. Read once, after what is said.
-    pub fn partner_replay(
-        &mut self,
-        tts: &TtsSettings,
-        owner: &str,
-        line: LineId,
-        doc: &Document,
-    ) -> Option<u64> {
-        if !(tts.enabled && tts.partners) || !self.partners.insert((owner.to_owned(), line)) {
             return None;
         }
         self.queue(tts, None, doc)
@@ -269,18 +206,6 @@ impl App {
 
     pub(super) fn tts_chat(&mut self, doc: &Document) {
         self.session.tts.chat(&self.settings.tts, doc);
-    }
-
-    pub(crate) fn tts_partner_replay(&mut self, owner: &str, line: LineId, doc: &Document) {
-        self.session
-            .tts
-            .partner_replay(&self.settings.tts, owner, line, doc);
-    }
-
-    pub(crate) fn tts_partner(&mut self, owner: &str, line: LineId, item: &HistoryItem) {
-        self.session
-            .tts
-            .partner(&self.settings.tts, owner, line, item, unix_millis());
     }
 
     pub(super) fn tts_msg(&mut self, msg: TtsMsg) {
@@ -439,48 +364,13 @@ mod tests {
     }
 
     #[test]
-    fn chat_and_partners_queue_only_when_asked_and_partners_once() {
+    fn chat_queues_only_when_asked() {
         let mut n = Narrator::new(Fake::default());
         let doc = Document::plain("gg");
         assert_eq!(n.chat(&on(), &doc), None);
-        let all = TtsSettings {
-            chat: true,
-            partners: true,
-            ..on()
-        };
+        let all = TtsSettings { chat: true, ..on() };
         assert!(n.chat(&all, &doc).is_some());
-        let now = unix_millis();
-        let item = HistoryItem {
-            source: nanatype_model::SourceId("peer:b".into()),
-            kind: nanatype_model::SourceKind::Typewriter,
-            line: None,
-            author: "B".into(),
-            avatar: None,
-            doc: Document::plain("partner line"),
-            at: now,
-            uid: None,
-            reply: None,
-            event: None,
-        };
-        let id = LineId::next();
-        assert!(n.partner(&all, "b", id, &item, now).is_some());
-        assert_eq!(n.partner(&all, "b", id, &item, now), None);
-        let old = HistoryItem { at: 0, ..item };
-        assert_eq!(n.partner(&all, "b", LineId::next(), &old, now), None);
-        // A replay is a line of its own, read once too.
-        let again = LineId::next();
-        assert!(n.partner_replay(&all, "b", again, &old.doc).is_some());
-        assert_eq!(n.partner_replay(&all, "b", again, &old.doc), None);
-        assert_eq!(n.partner_replay(&on(), "b", LineId::next(), &old.doc), None);
-        // Neither cuts off what is being said.
-        assert_eq!(
-            n.engine.calls,
-            [
-                speak("gg", "default"),
-                speak("partner line", "default"),
-                speak("partner line", "default")
-            ]
-        );
+        assert_eq!(n.engine.calls, [speak("gg", "default")]);
     }
 
     #[test]

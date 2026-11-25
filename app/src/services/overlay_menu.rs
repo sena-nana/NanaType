@@ -13,17 +13,10 @@ use crate::{
     windows::WindowKind,
 };
 
-const WINDOWS: [WindowKind; 3 + nanatype_settings::PARTNER_SEATS] = [
+const WINDOWS: [WindowKind; 3] = [
     WindowKind::Display,
     WindowKind::History,
     WindowKind::Danmaku,
-    WindowKind::PeerDisplay(0),
-    WindowKind::PeerDisplay(1),
-    WindowKind::PeerDisplay(2),
-    WindowKind::PeerDisplay(3),
-    WindowKind::PeerDisplay(4),
-    WindowKind::PeerDisplay(5),
-    WindowKind::PeerDisplay(6),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,8 +97,6 @@ pub(crate) struct Snapshot {
     settings: Arc<Settings>,
     skins: Arc<Vec<SkinRow>>,
     locale: Locale,
-    peer_active: bool,
-    connected: bool,
     history_empty: bool,
     danmaku_empty: bool,
 }
@@ -117,15 +108,11 @@ impl Snapshot {
         if !WINDOWS.contains(&kind) || !overlay.visible || overlay.lock == Lock::Locked {
             return None;
         }
-        let peer = ui.peer.get_untracked();
         Some(Self {
             kind,
             settings,
             skins: ui.skins.get_untracked(),
             locale: ui.locale.get_untracked(),
-            peer_active: peer.active,
-            connected: !peer.active
-                || matches!(peer.status, nanatype_p2p::Status::Connected { .. }),
             history_empty: ui.history.get_untracked().is_empty(),
             danmaku_empty: ui.danmaku.get_untracked().is_empty(),
         })
@@ -139,19 +126,14 @@ impl Snapshot {
                 .any(|skin| skin.id == *id && skin.error.is_none()),
             Action::Continue | Action::Skip => {
                 self.kind == WindowKind::Display
-                    && self.connected
                     && self.settings.general.input_mode == InputMode::Compose
             }
-            Action::ClearDisplay => self.kind == WindowKind::Display && self.connected,
-            Action::VerticalText => {
-                matches!(self.kind, WindowKind::Display | WindowKind::PeerDisplay(_))
-            }
+            Action::ClearDisplay => self.kind == WindowKind::Display,
+            Action::VerticalText => self.kind == WindowKind::Display,
             Action::Avatar | Action::Name | Action::Time => {
                 matches!(self.kind, WindowKind::History | WindowKind::Danmaku)
             }
-            Action::ClearHistory => {
-                self.kind == WindowKind::History && !self.peer_active && !self.history_empty
-            }
+            Action::ClearHistory => self.kind == WindowKind::History && !self.history_empty,
             Action::ClearDanmaku => self.kind == WindowKind::Danmaku && !self.danmaku_empty,
             _ => true,
         }
@@ -387,14 +369,11 @@ mod tests {
         assert!(enabled(WindowKind::Display, Action::ClearDisplay));
         let danmaku_row = ui.history.get_untracked()[0].clone();
         ui.danmaku.set(Arc::new(vec![danmaku_row]));
-        ui.peer.update(|p| Arc::make_mut(p).active = true);
-        assert!(!enabled(WindowKind::Display, Action::ClearDisplay));
-        assert!(!enabled(WindowKind::History, Action::ClearHistory));
+        assert!(enabled(WindowKind::History, Action::ClearHistory));
         assert!(enabled(WindowKind::History, Action::Avatar));
         assert!(enabled(WindowKind::Danmaku, Action::ClearDanmaku));
         ui.danmaku.set(Arc::new(Vec::new()));
         assert!(!enabled(WindowKind::Danmaku, Action::ClearDanmaku));
-        ui.peer.update(|p| Arc::make_mut(p).active = false);
         ui.history.set(Arc::new(Vec::new()));
         assert!(!enabled(WindowKind::History, Action::ClearHistory));
         for kind in WINDOWS {
@@ -441,8 +420,7 @@ mod tests {
                 edit(&mut settings);
             }
             for other in WINDOWS {
-                // Partner seats share one set of window settings.
-                let same = kind == other || (kind.seat().is_some() && other.seat().is_some());
+                let same = kind == other;
                 let o = other.overlay(&settings).unwrap();
                 assert_eq!(o.visible, !same);
                 assert_eq!(o.always_on_top, !same);
@@ -479,7 +457,7 @@ mod tests {
                 assert!(!items.iter().any(|i| matches!(i, MenuItemKind::MenuItem(i) if registered_action(i.id()) == Some(MenuAction::Overlay { kind, action: Action::ClearHistory }))));
                 assert_eq!(
                     items.iter().any(|i| matches!(i, MenuItemKind::Check(i) if registered_action(i.id()) == Some(MenuAction::Overlay { kind, action: Action::VerticalText }) && !i.is_checked())),
-                    matches!(kind, WindowKind::Display | WindowKind::PeerDisplay(_))
+                    kind == WindowKind::Display
                 );
             }
         }

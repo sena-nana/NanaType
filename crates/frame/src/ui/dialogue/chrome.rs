@@ -1066,8 +1066,8 @@ fn content(ui: Stage, source: Source) -> impl IntoView {
                 base.masks.freeze_reveal = Some(std::time::Duration::ZERO);
             }
             let (doc, reveal) = view.page();
-            let follow = (ui.track_slot > 0 || skin.dialogue.overflow != Overflow::Clip)
-                .then(|| overflow::PageKey::of(&view));
+            let follow =
+                (skin.dialogue.overflow != Overflow::Clip).then(|| overflow::PageKey::of(&view));
             document_on(ui, &doc, &base, Timing::Reveal(reveal), follow, source)
         },
     )

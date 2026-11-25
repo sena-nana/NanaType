@@ -1,5 +1,5 @@
 //! Host-owned widgets and paths generated from a validated, retained value tree.
-use crate::msg::{PackageMsg, SkinMsg, WorkshopMsg};
+use crate::msg::{PackageMsg, SkinMsg};
 use crate::ui::kit::{self, Tone, Type, gap, inset};
 use crate::{
     msg::{FileTarget, Msg},
@@ -72,13 +72,11 @@ fn icon_action(
 }
 
 /// One installed package as a row of the list: what it is and where it comes
-/// from on the left, what can be done with it at the top right (update,
-/// export, remove, the on/off switch), and its
-/// credits folded away until `open` names it.
+/// from on the left, what can be done with it at the top right (export,
+/// remove, the on/off switch), and its credits folded away until `open` names it.
 fn package_row(
     ui: Ui,
     row: &crate::plugins::PackageRow,
-    subscription: Option<&crate::workshop::Row>,
     on: bool,
     error: Option<&String>,
     open: Signal<Vec<String>>,
@@ -89,12 +87,6 @@ fn package_row(
     let name = nanatype_theme::localized(&package.meta.name, ui.locale.get_untracked().tag(), &id);
     let functional = package.capabilities.contains(&Cap::Lua);
     let builtin = row.origin == nanatype_theme::SkinOrigin::Builtin;
-    // Steam owns a Workshop package's folder: unsubscribing removes it, and
-    // sharing it is its author's call.
-    let workshop = match row.origin {
-        nanatype_theme::SkinOrigin::Workshop { item, .. } => Some(item),
-        _ => None,
-    };
     let glyph = if functional {
         ti::CODE
     } else if package.capabilities.contains(&Cap::Skin) {
@@ -104,7 +96,7 @@ fn package_row(
     };
     let provenance = Provenance::of(&row.origin, &row.integrity);
     let source_tone = match provenance {
-        Provenance::Builtin | Provenance::Workshop => Tone::Success,
+        Provenance::Builtin => Tone::Success,
         Provenance::ThirdParty => Tone::Warning,
         Provenance::Tampered => Tone::Danger,
     };
@@ -112,12 +104,7 @@ fn package_row(
     // sentence, and goes under the row.
     let source = match provenance {
         Provenance::Tampered => ui.now_t("package-integrity-failed"),
-        _ => provenance_label(
-            *ui,
-            provenance,
-            &row.integrity,
-            subscription.and_then(|r| r.author.as_deref()),
-        ),
+        _ => provenance_label(*ui, provenance, &row.integrity),
     };
     let tampered = (provenance == Provenance::Tampered)
         .then(|| kit::callout(Tone::Danger, integrity_label(*ui, &row.integrity)));
@@ -189,25 +176,12 @@ fn package_row(
         )),
     ));
 
-    let update = subscription.filter(|r| r.update).map(|r| {
-        let item = r.item;
-        widget(
-            IconButton::new(ti::CLOUD_DOWNLOAD, ui.now_t("workshop-update"))
-                .size(ControlSize::Small)
-                .kind(ButtonKind::Primary)
-                .with_tooltip(ui.now_t("workshop-update")),
-        )
-        .on_cx(move |_, _: &Activate, cx| {
-            cx.dispatch_program_all(Msg::Workshop(WorkshopMsg::Download(item)))
-        })
-        .into_any()
-    });
-    let export = workshop.is_none().then(|| {
+    let export = {
         let id = id.clone();
         icon_action(ui, "skins-export", ti::FILE_EXPORT, move || {
             Msg::Skin(SkinMsg::Export(id.clone()))
         })
-    });
+    };
     // Removing is asked first: the icon is one slip away from the others.
     // The built-in package cannot go, and its button says so by being off.
     let remove = if builtin {
@@ -218,28 +192,21 @@ fn package_row(
         )
         .into_any()
     } else {
-        let (key, question) = match workshop {
-            Some(_) => ("workshop-unsubscribe", "workshop-unsubscribe-confirm"),
-            None => ("packages-remove", "packages-remove-confirm"),
-        };
         let remove_id = id.clone();
         nanatype_frame::ui::controls::confirm(
             *ui,
-            ui.tr(question, &[("name", name.as_str().into())]),
-            ui.now_t(key),
+            ui.tr("packages-remove-confirm", &[("name", name.as_str().into())]),
+            ui.now_t("packages-remove"),
             move |armed| {
                 widget(
-                    IconButton::new(ti::TRASH, ui.now_t(key))
+                    IconButton::new(ti::TRASH, ui.now_t("packages-remove"))
                         .size(ControlSize::Small)
-                        .with_tooltip(ui.now_t(key)),
+                        .with_tooltip(ui.now_t("packages-remove")),
                 )
                 .on(move |_: &Activate| armed.set(true))
                 .into_any()
             },
-            move || match workshop {
-                Some(item) => Msg::Workshop(WorkshopMsg::Unsubscribe(item)),
-                None => Msg::Package(PackageMsg::Remove(remove_id.clone())),
-            },
+            move || Msg::Package(PackageMsg::Remove(remove_id.clone())),
         )
     };
     // Every package has the switch. Turning a functional one on asks for
@@ -308,7 +275,7 @@ fn package_row(
             .shrink(1.0)
             .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
     )
-    .children((update, export, remove, toggle, fold));
+    .children((export, remove, toggle, fold));
 
     let third_party = (provenance == Provenance::ThirdParty)
         .then(|| kit::callout(Tone::Warning, ui.now_t("package-third-party-warning")));
@@ -378,24 +345,16 @@ pub fn settings(ui: Ui) -> AnyView {
                 ui.settings
                     .with(|s| (s.disabled_packages.clone(), s.enabled_plugins.clone())),
                 ui.plugin_errors.get(),
-                ui.workshop.get(),
             )
         },
-        move |(rows, (disabled_packages, enabled_plugins), errors, workshop)| {
+        move |(rows, (disabled_packages, enabled_plugins), errors)| {
             let rows = rows
                 .iter()
                 .map(|row| {
                     let id = &row.manifest.meta.id;
-                    let subscription = match row.origin {
-                        nanatype_theme::SkinOrigin::Workshop { item, .. } => {
-                            workshop.rows.iter().find(|r| r.item == item)
-                        }
-                        _ => None,
-                    };
                     let view = package_row(
                         ui,
                         row,
-                        subscription,
                         // On unless switched off; a script also needs its consent.
                         !disabled_packages.contains(id)
                             && (!row
@@ -595,7 +554,6 @@ pub fn activation(ui: Ui) -> AnyView {
                             *ui,
                             Provenance::of(&review.origin, &Ok(None)),
                             &Ok(None),
-                            None,
                         ))),
                         review.integrity.is_some().then(|| {
                             widget(readable(integrity_label(

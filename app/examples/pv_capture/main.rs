@@ -1,12 +1,11 @@
-//! Animated offscreen footage for NanaPVMaker's Steam trailer.
+//! Animated offscreen footage.
 //!
-//! `cargo run -p nanatype --no-default-features --features builtin-fonts,steam --example pv_capture -- <out> [scenario|all] [skin-id|auto] [locale] [gif-sticker-dir]`
+//! `cargo run -p nanatype --example pv_capture -- <out> [scenario|all] [skin-id|auto] [locale] [gif-sticker-dir]`
 //!
-//! Each scenario scripts real interaction (typing, clicks, speech, partner
-//! lines, Twitch chat) on the deterministic capture clock and writes one
+//! Each scenario scripts real interaction (typing, clicks, speech,
+//! Twitch chat) on the deterministic capture clock and writes one
 //! folder per surface: `<out>/<scenario>-<surface>/frame-%04d.png` plus the
-//! NanaPVMaker capture contract `capture.json` (schema 1) with its events.
-//! The Workshop subscriptions only exist in the Steam build.
+//! capture contract `capture.json` (schema 1) with its events.
 
 #![allow(dead_code)]
 

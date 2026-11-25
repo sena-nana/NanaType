@@ -63,18 +63,6 @@ The full license text (including the Syphon Metal server notice) is in `Contents
 
 When a `vX.Y.Z` tag is pushed, `.github/workflows/release.yml` runs both scripts on Windows and macOS, generates a signed update manifest and creates a draft Release; see [Checking for updates](updates.md).
 
-The Steam edition is built with the `steam` feature: it has no update check, the skins and playback pages can reach Steam Workshop subscriptions, and settings are shared with the GitHub edition. Put the Steam IDs in an uncommitted `.cargo/config.toml` (see `.cargo/config.example.toml`), then:
-
-```bash
-pwsh scripts/package.ps1 -Steam
-```
-
-```bash
-scripts/package-macos.sh --steam
-```
-
-See [Steam edition](steam.md) for details.
-
 Development environment variables (only effective in debug builds or when set explicitly):
 
 | Variable | Effect |
@@ -103,7 +91,6 @@ For the render flow, frame scheduling and surface branches, see [Rendering pipel
 | `crates/twitch` | Anonymous Twitch IRC receiving, device-code sign-in and Helix sending |
 | `crates/blive` | blivechat, LAPLACE Event Bridge and Comet (彗星号) clients (protocol parsing, decryption, connect and reconnect) |
 | `crates/core` | Session logic: drafts, sending, continue, queue, history, rewind |
-| `crates/p2p` | Steam sessions (up to 8 people), session ordering, reconnects and image forwarding |
 | `crates/update` | Update checks: signed Release manifest, file proxies, verified downloads |
 | `crates/frame` | Framework shared by both programs: skin rendering (display, history, input), UI components, skin preview, plugin host, media services and paths |
 | `app` | NanaType: NanaUI host, windows, views, hotkeys, tray, Spout |

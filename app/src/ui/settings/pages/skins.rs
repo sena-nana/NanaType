@@ -1,6 +1,6 @@
 use super::onboarding::accent_bar_layout;
 use super::*;
-use crate::msg::{SkinMsg, WorkshopMsg};
+use crate::msg::SkinMsg;
 use nana_ui::runtime::view::El;
 
 /// The current skin's accent bar: its width, and how far it stays off a
@@ -304,32 +304,22 @@ pub(super) fn apply_button(
 }
 
 /// A skin's "⋯" menu: duplicate, export, open folder and, for a skin the
-/// user added, delete (asked before it acts). A Workshop skin is the
-/// author's to share: it has its Workshop page and unsubscribing instead of
-/// export and delete.
+/// user added, delete (asked before it acts).
 pub(super) fn skin_actions(ui: Ui, skin: &SkinRow, locale: Locale) -> AnyView {
     let (eid, did, rid) = (skin.id.clone(), skin.id.clone(), skin.id.clone());
     let folder = skin.folder.clone();
-    let workshop = skin.workshop;
     let menu_open = signal(false);
     let menu = move |armed: Option<Signal<bool>>| {
-        let mut items = vec![menu_item(ui, menu_open, "skins-duplicate", ti::COPY, {
-            let id = did.clone();
-            move || Msg::Skin(SkinMsg::Duplicate(id.clone()))
-        })];
-        match workshop {
-            Some(item) => items.push(menu_item(
-                ui,
-                menu_open,
-                "workshop-view",
-                ti::EXTERNAL_LINK,
-                move || Msg::Workshop(WorkshopMsg::Open(item)),
-            )),
-            None => items.push(menu_item(ui, menu_open, "skins-export", ti::FILE_EXPORT, {
+        let mut items = vec![
+            menu_item(ui, menu_open, "skins-duplicate", ti::COPY, {
+                let id = did.clone();
+                move || Msg::Skin(SkinMsg::Duplicate(id.clone()))
+            }),
+            menu_item(ui, menu_open, "skins-export", ti::FILE_EXPORT, {
                 let id = eid.clone();
                 move || Msg::Skin(SkinMsg::Export(id.clone()))
-            })),
-        }
+            }),
+        ];
         if let Some(f) = folder.clone() {
             items.push(menu_item(
                 ui,
@@ -340,14 +330,9 @@ pub(super) fn skin_actions(ui: Ui, skin: &SkinRow, locale: Locale) -> AnyView {
             ));
         }
         if let Some(armed) = armed {
-            let key = if workshop.is_some() {
-                "workshop-unsubscribe"
-            } else {
-                "skins-delete"
-            };
             items.push(
                 widget(
-                    ActionMenuItem::new(ui.now_t(key))
+                    ActionMenuItem::new(ui.now_t("skins-delete"))
                         .leading(ti::TRASH)
                         .danger(true),
                 )
@@ -371,18 +356,6 @@ pub(super) fn skin_actions(ui: Ui, skin: &SkinRow, locale: Locale) -> AnyView {
     };
     if skin.builtin {
         menu(None)
-    } else if let Some(item) = workshop {
-        confirm(
-            *ui,
-            I18N.tr_in(
-                locale,
-                "workshop-unsubscribe-confirm",
-                &[("name", skin.name.as_str().into())],
-            ),
-            ui.now_t("workshop-unsubscribe"),
-            move |armed| menu(Some(armed)),
-            move || Msg::Workshop(WorkshopMsg::Unsubscribe(item)),
-        )
     } else {
         confirm(
             *ui,
@@ -801,25 +774,12 @@ pub(super) fn badges(locale: Locale, row: &SkinRow) -> Vec<AnyView> {
         return Vec::new();
     }
     let tone = if row.dark { "dark" } else { "light" };
-    let workshop = row.workshop.map(|_| {
-        widget(
-            StatusBadge::new(I18N.t_in(locale, "workshop-badge"), StatusTone::Success)
-                .compact(true),
-        )
-        .into_any()
-    });
-    workshop
-        .into_iter()
-        .chain(
-            std::iter::once(tone)
-                .chain(row.tags.iter().map(String::as_str))
-                .map(|t| {
-                    widget(
-                        StatusBadge::new(tag_label(locale, t), StatusTone::Neutral).compact(true),
-                    )
-                    .into_any()
-                }),
-        )
+    std::iter::once(tone)
+        .chain(row.tags.iter().map(String::as_str))
+        .map(|t| {
+            widget(StatusBadge::new(tag_label(locale, t), StatusTone::Neutral).compact(true))
+                .into_any()
+        })
         .collect()
 }
 

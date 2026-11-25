@@ -8,12 +8,6 @@
 
 #![recursion_limit = "512"]
 
-// A Steam build updates through SteamPipe; see docs/steam.md for the feature set.
-#[cfg(all(feature = "steam", feature = "updates"))]
-compile_error!(
-    "the `steam` feature excludes `updates`: build with --no-default-features --features builtin-fonts,steam"
-);
-
 pub mod app;
 pub mod archive;
 pub mod assets;
@@ -24,7 +18,6 @@ pub mod distribution;
 pub mod host;
 pub mod msg;
 pub mod output;
-pub mod p2p;
 mod perf;
 pub mod plugins;
 pub mod scheduler;
@@ -32,7 +25,6 @@ pub mod services;
 pub mod stickers;
 pub mod ui;
 pub mod windows;
-pub mod workshop;
 
 pub use nanatype_frame::{clock, localtime, paths, skin_fonts, skin_theme};
 
@@ -48,13 +40,6 @@ pub fn run() -> ExitCode {
     if nanatype_frame::worker_entry() {
         return ExitCode::SUCCESS;
     }
-    // Started outside Steam, a Steam release relaunches through it; the copy
-    // Steam starts must find the single-instance lock free.
-    if std::env::var_os(nana_ui::SELF_CHECK_ENV).is_none()
-        && nanatype_steam::restart_through_steam()
-    {
-        return ExitCode::SUCCESS;
-    }
     // The renderer picks its GPU from the environment once, at startup; the
     // single-instance listener is the first thread that could race the write.
     let saved = nanatype_settings::peek_performance(&paths::Paths::of_app().settings());
@@ -63,7 +48,6 @@ pub fn run() -> ExitCode {
     if !instance::claim(Product::APP) {
         return ExitCode::SUCCESS;
     }
-    services::steam::connect();
     clock::now_ms();
 
     // The macro embeds the identity marker the packager validates against.

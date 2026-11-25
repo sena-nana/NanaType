@@ -76,8 +76,5 @@ pub use load::{
     standalone_manifest,
 };
 pub use manifest::*;
-pub use registry::{
-    DEFAULT_SKIN, ExternalProblem, ExternalRoot, ExternalStatus, InstallOutcome, SkinEntry,
-    SkinRegistry, builtin_dir,
-};
+pub use registry::{DEFAULT_SKIN, InstallOutcome, SkinEntry, SkinRegistry, builtin_dir};
 pub use toml::Table as TomlTable;

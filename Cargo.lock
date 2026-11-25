@@ -2724,16 +2724,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libwebp-sys"
-version = "0.9.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54cd30df7c7165ce74a456e4ca9732c603e8dc5e60784558c1c6dc047f876733"
-dependencies = [
- "cc",
- "glob",
-]
-
-[[package]]
 name = "linux-raw-sys"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3340,14 +3330,12 @@ dependencies = [
  "nanatype-markup",
  "nanatype-model",
  "nanatype-obs",
- "nanatype-p2p",
  "nanatype-playback",
  "nanatype-plugins",
  "nanatype-scheduling",
  "nanatype-secrets",
  "nanatype-settings",
  "nanatype-speech",
- "nanatype-steam",
  "nanatype-theme",
  "nanatype-tts",
  "nanatype-twitch",
@@ -3540,24 +3528,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nanatype-p2p"
-version = "0.4.0"
-dependencies = [
- "base64 0.22.1",
- "blake3",
- "flate2",
- "getrandom 0.4.3",
- "image",
- "nanatype-core",
- "nanatype-diag",
- "nanatype-model",
- "serde",
- "serde_json",
- "tokio",
- "webp",
-]
-
-[[package]]
 name = "nanatype-playback"
 version = "0.4.0"
 dependencies = [
@@ -3621,16 +3591,6 @@ dependencies = [
  "ureq",
  "webrtc-vad",
  "whisper-rs",
-]
-
-[[package]]
-name = "nanatype-steam"
-version = "0.4.0"
-dependencies = [
- "crossbeam-channel",
- "nanatype-p2p",
- "steamworks",
- "tokio",
 ]
 
 [[package]]
@@ -4312,12 +4272,6 @@ dependencies = [
  "smallvec",
  "windows-link",
 ]
-
-[[package]]
-name = "paste"
-version = "1.0.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pastey"
@@ -5352,24 +5306,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "steamworks"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ff29921f6a7e8c85b0c971ec3c42002b9f535e3b8f4358cb22911d43709739a"
-dependencies = [
- "bitflags 2.13.2",
- "paste",
- "steamworks-sys",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "steamworks-sys"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae139f051204a4af015d4f0ed3a1f7a51020d03a44c7cf249168c543d88131e9"
 
 [[package]]
 name = "strength_reduce"
@@ -6614,16 +6550,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b1f0c637f1c2b46d58a1b42b150135f8a31b024bfdcd56cc82febfbb20ba4c0"
 dependencies = [
  "ebml-iterable",
-]
-
-[[package]]
-name = "webp"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c071456adef4aca59bf6a583c46b90ff5eb0b4f758fc347cea81290288f37ce1"
-dependencies = [
- "image",
- "libwebp-sys",
 ]
 
 [[package]]

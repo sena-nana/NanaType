@@ -123,12 +123,6 @@ impl super::App {
         if matches!(cmd, Cmd::Skip | Cmd::ClearDisplay) {
             self.session.tts.silence();
         }
-        if self.peer_blocked(&cmd) {
-            if matches!(cmd, Cmd::Send) {
-                self.speech_user_edit();
-            }
-            return;
-        }
         let is_send = matches!(cmd, Cmd::Send);
         let fx = match super::chat::handle_command(
             &mut self.session.core,
@@ -233,7 +227,6 @@ impl super::App {
                 self.tts_line(line);
             }
             self.twitch_submitted(event);
-            self.peer_submitted(event);
             self.bridge_event(event);
         }
         if let Some(draft) = &fx.replace_draft {
@@ -246,13 +239,15 @@ impl super::App {
             self.shell.summoned = false;
         }
         if fx.display_changed {
-            self.ui.display.set(Arc::new(self.shared_display()));
+            self.ui
+                .display
+                .set(Arc::new(self.session.core.display().clone()));
             self.ui.now.set(crate::clock::now_ms());
         }
         if fx.history_changed || fx.danmaku_changed {
             self.archive_rows();
         }
-        if fx.history_changed && self.peer.handle.is_none() {
+        if fx.history_changed {
             self.ui.history.set(Arc::new(
                 self.session.core.history().iter().cloned().collect(),
             ));
@@ -273,12 +268,6 @@ impl super::App {
         }
         if fx.display_changed || fx.history_changed || fx.danmaku_changed {
             self.refresh_atom_urls();
-        }
-        if fx.display_changed || fx.history_changed {
-            self.peer_publish();
-            if self.peer.handle.is_some() {
-                self.peer_render();
-            }
         }
     }
 }

@@ -134,20 +134,6 @@ impl Rig {
         })
     }
 
-    /// A partner's box.
-    pub fn partner_display(&mut self, name: &'static str, scale: f32) -> usize {
-        let skin = self.ui.skin.get_untracked();
-        let d = &skin.dialogue;
-        let size = (
-            (d.region[0] + d.overscan * 2.0) as u32,
-            (d.region[1] + d.overscan * 2.0) as u32,
-        );
-        let ui = self.ui;
-        self.mount(name, size, scale, true, move || {
-            dialogue::peer_window(ui, 0)
-        })
-    }
-
     pub fn history(&mut self, name: &'static str, scale: f32) -> usize {
         let skin = self.ui.skin.get_untracked();
         let size = (skin.history.width as u32, skin.history.height as u32);
@@ -447,7 +433,6 @@ impl Rig {
                 nanatype::clock::capture_at(ms(f), || {
                     let now = ms(f);
                     self.ui.now.set(now);
-                    self.ui.peer_now.set(now);
                     self.ui.history_now.set(now);
                     while let Some(i) = self.wakes.iter().position(|w| w.at_ms <= now) {
                         let w = self.wakes.remove(i);

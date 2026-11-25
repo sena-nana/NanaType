@@ -1,8 +1,5 @@
-//! What this build ships. Steam updates through SteamPipe while the regular
-//! build uses the GitHub Releases updater.
+//! What this build ships.
 
-/// Built for Steam: Workshop content, no self-update.
-pub const STEAM: bool = cfg!(feature = "steam");
 /// The GitHub Releases update check.
 pub const UPDATES: bool = cfg!(feature = "updates");
 

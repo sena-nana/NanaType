@@ -2,7 +2,7 @@
 
 # 检查更新
 
-GitHub 版 NanaType 可以在应用内检查并安装新版本。Steam 版由 Steam 管理更新，不使用本文的更新检查。
+NanaType 可以在应用内检查并安装新版本。
 
 ## 检查并安装
 
@@ -18,7 +18,6 @@ GitHub 版 NanaType 可以在应用内检查并安装新版本。Steam 版由 St
 - **Windows 安装版**：下载完成后运行 `setup.exe`，NanaType 会先退出。程序目录中通常有 `unins000.exe`。
 - **Windows 便携版**：打开 zip 所在文件夹，解压新版本并替换旧文件。
 - **macOS**：打开下载的 `.dmg` 并替换应用。当前没有 Intel Mac 构建产物。
-- **Steam 版**：在 Steam 客户端中下载和安装更新，详见[Steam 版](steam.md)。
 
 ## 下载代理
 
@@ -52,4 +51,3 @@ NanaType 使用内置 Ed25519 公钥验证 `latest.json.sig`，再根据清单�
 - **下载失败**：删除缓存后重试，或添加其他 `https://` 代理前缀。
 - **签名 / SHA-256 校验失败**：不要继续安装；切换到官方 GitHub Releases 页面重新下载。
 - **Windows 安装程序无法打开**：关闭 NanaType 后重试，确认下载的是 Windows 安装包而不是便携版。
-- **Steam 版没有更新入口**：这是正常行为，请在 Steam 中检查更新。

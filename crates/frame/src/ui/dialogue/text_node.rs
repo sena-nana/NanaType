@@ -390,15 +390,12 @@ pub(super) fn document_on(
         rich.text(),
     );
     if let (Some(key), Some(plan)) = (follow, &reveal) {
-        overflow::publish_on(
-            ui.track_slot,
-            overflow::PageText {
-                key,
-                text_len: rich.text().len(),
-                text_trimmed: rich.text().trim_end().len(),
-                glyphs: overflow::glyphs(rich.text(), &plan.at_ms),
-            },
-        );
+        overflow::publish(overflow::PageText {
+            key,
+            text_len: rich.text().len(),
+            text_trimmed: rich.text().trim_end().len(),
+            glyphs: overflow::glyphs(rich.text(), &plan.at_ms),
+        });
     }
     let mut text_style = base.node_style();
     if !materials_enabled {

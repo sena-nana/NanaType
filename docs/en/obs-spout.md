@@ -7,7 +7,7 @@
 > **On this page:** [Sender lifecycle](#sender-lifecycle) · [Performance settings](#running-alongside-games) · [Debug example](#debug-example)
 
 
-On Windows, the display, the partner display and the history can each send a shared GPU texture over Spout2, which OBS receives with the Spout2 plugin's *Spout2 Capture*. For setup, see the OBS section of the [usage guide](usage.md); this page describes the sender lifecycle and performance settings.
+On Windows, the display, the history and the separate danmaku window can each send a shared GPU texture over Spout2, which OBS receives with the Spout2 plugin's *Spout2 Capture*. For setup, see the OBS section of the [usage guide](usage.md); this page describes the sender lifecycle and performance settings.
 
 ## Sender lifecycle
 

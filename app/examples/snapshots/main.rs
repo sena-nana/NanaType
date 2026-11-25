@@ -4,8 +4,8 @@
 //!
 //! With `all`, every built-in skin is rendered into `<out-dir>/<skin-id>/`.
 //! `NANATYPE_THEME_SNAPSHOTS_ONLY=1` captures dialogue, input, history and
-//! the skin library. `NANATYPE_THEME_AUDIT=1` adds motion cycles, a partner
-//! track, reduced-motion poses and long-name/narrow-region fixtures.
+//! the skin library. `NANATYPE_THEME_AUDIT=1` adds motion cycles,
+//! reduced-motion poses and long-name/narrow-region fixtures.
 //! `NANATYPE_SNAPSHOT_SKINS_DIR` loads saved `id/skin.toml` manifests for
 //! comparisons of built-in skins (self-contained manifests, no inheritance).
 //! `NANATYPE_SNAPSHOT_APPEARANCE=dark` selects neutral dark application chrome.

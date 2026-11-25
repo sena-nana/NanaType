@@ -200,7 +200,6 @@ impl Scene {
                 .collect(),
         ));
         ui.now.set(nanatype::clock::now_ms());
-        ui.peer_now.set(nanatype::clock::now_ms());
         ui.history_now.set(nanatype::clock::now_ms());
 
         let d = &skin.dialogue;

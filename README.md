@@ -45,19 +45,18 @@ NanaType 是为虚拟主播做的直播打字机。你在输入框里打字，�
   </tr>
   <tr>
     <td valign="top"><h4>🎨 28 套内置皮肤</h4>从情书、蜡笔画、羊皮纸到终端、掌机像素和 Echo-Live 样式。皮肤是统一格式的 <code>.ntpkg</code> 包，也可以制作自己的皮肤和插件。</td>
-    <td valign="top"><h4>📺 直接接入 OBS</h4>Windows 用 Spout2，macOS 用 Syphon，共享 GPU 纹理。展示框、联机伙伴和历史记录可分别输出，也可以捕获透明窗口。</td>
+    <td valign="top"><h4>📺 直接接入 OBS</h4>Windows 用 Spout2，macOS 用 Syphon，共享 GPU 纹理。展示框、历史记录和独立弹幕可分别输出，也可以捕获透明窗口。</td>
   </tr>
   <tr>
     <td valign="top"><h4>🎙️ 语音输入</h4>优先使用系统识别，也可下载小型多语言离线模型；停顿后自动发送，编辑时自动让出。</td>
-    <td valign="top"><h4>🤝 Steam 联机</h4>最多 8 人同房间。伙伴的台词实时出现在各自的展示框里，共享一份历史；能直连则直连，否则经 Steam 中继。</td>
-  </tr>
-  <tr>
     <td valign="top"><h4>🔗 主播工具联动</h4>VTube Studio 表情、热键、参数与口型同步，标记按打字位置触发；另有 OSC 与本地 WebSocket 广播。</td>
-    <td valign="top"><h4>💬 弹幕与聊天</h4>收发 Twitch 聊天，也能接入 <a href="https://github.com/xfgryujk/blivechat">blivechat</a>、<a href="https://huixinghao.cn/">彗星号</a> 和 <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>。</td>
   </tr>
   <tr>
+    <td valign="top"><h4>💬 弹幕与聊天</h4>收发 Twitch 聊天，也能接入 <a href="https://github.com/xfgryujk/blivechat">blivechat</a>、<a href="https://huixinghao.cn/">彗星号</a> 和 <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>。</td>
     <td valign="top"><h4>😺 表情包与贴纸</h4>导入本地文件夹、Echo-Live 表情或 Telegram 贴纸包；GIF / WebP / TGS / WebM 动图在展示框和 OBS 输出中都会播放。</td>
-    <td valign="top"><h4>🧰 NanaType Editor</h4>独立的包编辑器，用来制作、签名、预览和隔离调试皮肤包与插件。</td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top"><h4>🧰 NanaType Editor</h4>独立的包编辑器，用来制作、签名、预览和隔离调试皮肤包与插件。</td>
   </tr>
 </table>
 
@@ -88,7 +87,7 @@ NanaType 是为虚拟主播做的直播打字机。你在输入框里打字，�
 
 | 读者 | 从这里开始 |
 | --- | --- |
-| **用户** | [使用指南](docs/usage.md) · [语音输入](docs/voice-input.md) · [OBS / Spout 输出](docs/obs-spout.md) · [检查更新](docs/updates.md) · [Steam 版](docs/steam.md) |
+| **用户** | [使用指南](docs/usage.md) · [语音输入](docs/voice-input.md) · [OBS / Spout 输出](docs/obs-spout.md) · [检查更新](docs/updates.md) |
 | **创作者** | [台词标记](docs/markup.md) · [皮肤格式](docs/skins.md) · [包编辑器](docs/package-editor.md) · [插件与包接口](docs/plugins.md) · [字体](docs/fonts.md) |
 | **开发者** | [从源码构建](docs/building.md) · [渲染管线](docs/rendering-pipeline.md) · [日志](docs/logging.md) |
 
@@ -116,7 +115,7 @@ cargo run -p nanatype-editor   # NanaType Editor
 cargo test --workspace --exclude nanatype
 ```
 
-平台依赖、打包、Steam 版和开发用环境变量见 [从源码构建](docs/building.md)。
+平台依赖、打包和开发用环境变量见 [从源码构建](docs/building.md)。
 
 ## 💝 致谢与许可
 

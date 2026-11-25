@@ -77,11 +77,10 @@ nana-nlog text <文件.nlog> --redact-home
 | `0x0102` | `output.` | Spout/Syphon、ウィンドウ出力の状態、VTS/OSC/WebSocket ブリッジ |
 | `0x0103` | `chat.` | チャット画像などの共通部分 |
 | `0x0107` | `twitch.` | 接続（1）、接続エラー（2）、アカウント（3）、アカウント失敗（4）、警告（5）、送信失敗（6）、受信したチャットイベント数（メトリクス 50） |
-| `0x0108` | `p2p.` | エンドポイント、リレーのオンライン化、リソース転送 |
 | `0x0109` | `plugins.` | ワーカーの準備完了までの時間、失敗（stderr の末尾付き）、スクリプトエラー |
 | `0x010A` | `plugin_log.` | プラグインが `nana.log` で書いた行 |
 | `0x010B` | `update.` | 更新元ごとのチェック結果と所要時間、ダウンロード、バージョン番号の解析失敗 |
-| `0x010C` `0x010D` `0x010F` | `steam.` `stickers.` `audio.` | Steam が使えない理由、スタンプのプレビュー・アップロード・キャッシュ削除の失敗、オーディオデバイスのオープンと喪失 |
+| `0x010D` `0x010F` | `stickers.` `audio.` | スタンプのプレビュー・アップロード・キャッシュ削除の失敗、オーディオデバイスのオープンと喪失 |
 | `0x010E` | `skin.` | 予約。スキンの読み込みとシェーダーのエラーは現在 `app.error_notice` として記録 |
 | `0x0110` | `editor.` | エディター |
 | `0x01F0` | `external.` | 依存ライブラリのログ |
@@ -91,11 +90,11 @@ nana-nlog text <文件.nlog> --redact-home
 ### イベントを追加する
 
 ```rust
-use nanatype_diag::domains::P2P;
+use nanatype_diag::domains::OUTPUT;
 use nanatype_diag::{EventDescriptor, FieldDescriptor, Severity};
 
-pub static RELAY_SWITCHED: EventDescriptor = EventDescriptor::new(
-    P2P, 5, "p2p.relay_switched", Severity::Info, &[FieldDescriptor::u64("ms")],
+pub static STREAM_SWITCHED: EventDescriptor = EventDescriptor::new(
+    OUTPUT, 5, "output.stream_switched", Severity::Info, &[FieldDescriptor::u64("ms")],
 );
 ```
 

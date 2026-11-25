@@ -234,7 +234,7 @@ fn follow_typing(ui: Ui, skin: &nanatype_theme::Skin, session: &RuntimeAgentSess
     use nanatype::ui::overflow::{self, Follow, Measure, PageKey};
     let view = ui.display.get_untracked();
     let key = PageKey::of(&view);
-    let Some(page) = overflow::published_on(ui.track_slot).filter(|p| p.key == key) else {
+    let Some(page) = overflow::published().filter(|p| p.key == key) else {
         return;
     };
     let world = session.document().context().world();

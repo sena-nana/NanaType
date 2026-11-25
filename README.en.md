@@ -55,7 +55,7 @@ NanaType is a streaming typewriter built for VTubers. You type in the input box,
     </td>
     <td valign="top">
       <h4>📺 Zero-copy OBS output</h4>
-      Spout2 on Windows and Syphon on macOS share the GPU texture directly. The display box, online partners and history can each be sent as a separate output, or you can capture the transparent windows instead.
+      Spout2 on Windows and Syphon on macOS share the GPU texture directly. The display box, history and separate danmaku window can each be sent as a separate output, or you can capture the transparent windows instead.
     </td>
   </tr>
   <tr>
@@ -64,26 +64,22 @@ NanaType is a streaming typewriter built for VTubers. You type in the input box,
       Uses the system recogniser first, with an optional small multilingual offline model. Sends automatically after you pause, and steps aside while you edit.
     </td>
     <td valign="top">
-      <h4>🤝 Steam online play</h4>
-      Up to 8 people per room. Partners' lines show up live in everyone's display box, with one shared history. Connects directly when it can, and through Steam relays when it can't.
-    </td>
-  </tr>
-  <tr>
-    <td valign="top">
       <h4>🔗 Streaming tool integration</h4>
       VTube Studio expressions, hotkeys, parameters and lip sync, triggered by markup at the exact typing position. OSC and a local WebSocket broadcast are also available.
     </td>
+  </tr>
+  <tr>
     <td valign="top">
       <h4>💬 Live chat</h4>
       Read and send Twitch chat. You can also bring in <a href="https://github.com/xfgryujk/blivechat">blivechat</a>, connect straight to the <a href="https://huixinghao.cn/">Comet (彗星号)</a> client, or connect a <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a> (with LAPLACE joining by auth code only), which relay Bilibili, Douyin and Kuaishou comments.
     </td>
-  </tr>
-  <tr>
     <td valign="top">
       <h4>😺 Stickers</h4>
       Import a local folder, Echo-Live emotes or Telegram sticker packs. Animated GIF / WebP / TGS / WebM stickers play both in the display box and in the OBS output.
     </td>
-    <td valign="top">
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
       <h4>🧰 Package editor</h4>
       The standalone <a href="docs/en/package-editor.md">NanaType Editor</a> is for building, signing and debugging skin packages and plugins in isolation.
     </td>
@@ -113,7 +109,7 @@ NanaType is a streaming typewriter built for VTubers. You type in the input box,
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd> | Bold / italic / underline |
 | <kbd>Esc</kbd> | Hide the input box |
 
-For Twitch, live chat, online play, multiple OBS outputs, stickers and more, see the **[user guide](docs/en/usage.md)**.
+For Twitch, live chat, multiple OBS outputs, stickers and more, see the **[user guide](docs/en/usage.md)**.
 
 ## ✍️ Dialogue markup
 
@@ -131,7 +127,7 @@ See [Dialogue markup](docs/en/markup.md) for the full syntax.
 
 | | |
 | --- | --- |
-| **Users** | [User guide](docs/en/usage.md) · [Voice input](docs/en/voice-input.md) · [Twitch](docs/en/twitch.md) · [Comet](docs/en/comet.md) · [LAPLACE](docs/en/laplace.md) · [OBS / Spout output](docs/en/obs-spout.md) · [Checking for updates](docs/en/updates.md) · [Steam edition](docs/en/steam.md) |
+| **Users** | [User guide](docs/en/usage.md) · [Voice input](docs/en/voice-input.md) · [Twitch](docs/en/twitch.md) · [Comet](docs/en/comet.md) · [LAPLACE](docs/en/laplace.md) · [OBS / Spout output](docs/en/obs-spout.md) · [Checking for updates](docs/en/updates.md) |
 | **Creators** | [Dialogue markup](docs/en/markup.md) · [Skin format](docs/en/skins.md) · [Plugins and package API](docs/en/plugins.md) · [Package editor](docs/en/package-editor.md) · [Fonts](docs/en/fonts.md) |
 | **Developers** | [Building from source](docs/en/building.md) · [Rendering pipeline](docs/rendering-pipeline.md) (Chinese) · [Logging](docs/en/logging.md) |
 
@@ -145,7 +141,7 @@ cargo run -p nanatype-editor   # NanaType Editor
 cargo test --workspace --exclude nanatype
 ```
 
-Platform dependencies, packaging, the Steam edition and development environment variables are covered in [Building from source](docs/en/building.md).
+Platform dependencies, packaging and development environment variables are covered in [Building from source](docs/en/building.md).
 
 ## 💝 Acknowledgements
 

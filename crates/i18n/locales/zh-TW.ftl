@@ -75,15 +75,12 @@ package-protected-files = 個受保護檔案
 package-unsigned = 未簽名：來源及完整性未經簽名驗證
 package-integrity-failed = 完整性校驗失敗，禁止載入
 package-source-builtin = 內建
-package-source-workshop = Steam 創意工坊
-package-source-workshop-by = Steam 創意工坊 · { $author }
 package-source-third-party = 第三方匯入
 package-third-party-warning = 第三方匯入的包來源未經驗證。只安裝你信任的作者提供的包，啟用功能包前請先審閱它的腳本。
 package-data-source = 來源
 package-data-license = 許可
 package-data-protected = 受簽名保護
 package-data-unprotected = 未受簽名保護
-
 
 # Shared skin parameter controls
 skin-params-title = 皮膚參數

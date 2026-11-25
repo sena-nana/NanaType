@@ -65,15 +65,13 @@ pub enum Page {
     Platforms,
     Output,
     Integrations,
-    Peer,
-    Workshop,
     Packages,
     About,
 }
 
 impl Page {
     /// Every page, in sidebar order.
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 16] = [
         Self::General,
         Self::Profiles,
         Self::Input,
@@ -88,8 +86,6 @@ impl Page {
         Self::Platforms,
         Self::Output,
         Self::Integrations,
-        Self::Peer,
-        Self::Workshop,
         Self::Packages,
         Self::About,
     ];
@@ -110,16 +106,13 @@ impl Page {
             Self::Platforms => "settings-platforms",
             Self::Output => "settings-output",
             Self::Integrations => "settings-integrations",
-            Self::Peer => "settings-peer",
-            Self::Workshop => "settings-workshop",
             Self::Packages => "settings-packages",
             Self::About => "settings-about",
         }
     }
 
-    /// Whether this build lists the page: the Workshop is the Steam build's.
     pub fn listed(self) -> bool {
-        self != Self::Workshop || crate::distribution::STEAM
+        true
     }
 
     fn icon(self) -> nana_ui::runtime::Icon {
@@ -138,8 +131,6 @@ impl Page {
             Self::Platforms => ti::LIVE_VIEW,
             Self::Output => ti::BROADCAST,
             Self::Integrations => ti::LINK,
-            Self::Peer => ti::USERS,
-            Self::Workshop => ti::BUILDING_STORE,
             Self::Packages => ti::PLUG_CONNECTED,
             Self::About => ti::INFO_CIRCLE,
         }
@@ -166,14 +157,9 @@ const GROUPS: &[(&str, &[Page])] = &[
     ),
     (
         "settings-group-stream",
-        &[
-            Page::Platforms,
-            Page::Output,
-            Page::Integrations,
-            Page::Peer,
-        ],
+        &[Page::Platforms, Page::Output, Page::Integrations],
     ),
-    ("settings-group-extend", &[Page::Workshop, Page::Packages]),
+    ("settings-group-extend", &[Page::Packages]),
 ];
 
 /// One page's row: an icon (muted, accent when selected) and its name, on

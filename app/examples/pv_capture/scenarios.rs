@@ -4,15 +4,13 @@ use super::*;
 use crate::lines::{self, Lines};
 use crate::rig::{Rig, ms, typed_end};
 use crate::skin_lines;
-use nanatype::workshop::{Availability, Kind, Row, RowState, View};
-use nanatype_core::HistoryRow;
 use nanatype_settings::{InputMode, SpeechMode};
 use nanatype_speech::controller::Phase;
 use std::path::Path;
 
 pub const ALL: &[&str] = &[
-    "hook", "type", "markup", "rhythm", "mirror", "sticker", "keys", "room", "twitch", "workshop",
-    "skins", "effects", "complete", "telegram",
+    "hook", "type", "markup", "rhythm", "mirror", "sticker", "keys", "twitch", "skins", "effects",
+    "complete", "telegram",
 ];
 
 /// The skin each scenario is shown in when the skin argument is `auto`: the
@@ -26,7 +24,6 @@ pub fn skin_for(scenario: &str) -> &'static str {
         "mirror" => "nanatype.terminal",
         "sticker" | "telegram" => "nanatype.bubble",
         "complete" => "nanatype.crayon",
-        "room" => "nanatype.celestial",
         "twitch" => "nanatype.livechat",
         _ => "nanatype.halo",
     }
@@ -58,11 +55,7 @@ fn setup(
     // Capture-clock timestamps are near the epoch; a clock would read 08:00.
     s.history.show_time = false;
     // Locked, as on stream: an empty box is clear, not the drag outline.
-    for o in [
-        &mut s.overlays.display,
-        &mut s.overlays.peer_display,
-        &mut s.overlays.history,
-    ] {
+    for o in [&mut s.overlays.display, &mut s.overlays.history] {
         o.lock = nanatype_settings::Lock::Locked;
     }
     edit(&mut s);
@@ -125,23 +118,12 @@ pub fn run(
             });
             mirror(scene, core, out, l)
         }
-        "room" => {
-            // Mirror: the local box speaks while it is typed, so it is never empty for long.
-            let (scene, core) = setup(registry, work, skin_id, locale, |s| {
-                s.general.input_mode = InputMode::Mirror
-            });
-            room(scene, core, out, l)
-        }
         "twitch" => {
             let (scene, core) = setup(registry, work, skin_id, locale, |s| {
                 s.integrations.twitch.enabled = true;
                 s.integrations.twitch.channel = "nana_ch".into();
             });
             twitch(scene, core, out, work, l)
-        }
-        "workshop" => {
-            let (scene, core) = setup(registry, work, skin_id, locale, plain);
-            workshop(scene, core, out, l)
         }
         "skins" => skins(registry, out, work, locale, l),
         "effects" => effects(registry, out, work, locale, l),
@@ -371,113 +353,6 @@ fn mirror(scene: Scene, core: Core, out: &Path, l: &Lines) {
     });
 }
 
-/// A Steam room: friends join, then everyone's box speaks in turn and the
-/// shared history collects every line.
-fn room(scene: Scene, core: Core, out: &Path, l: &Lines) {
-    use nanatype::p2p::SessionUi;
-    let ui = scene.ui;
-    ui.peer_panel.set(true);
-    let mut partners: Vec<Core> = l
-        .partners
-        .iter()
-        .map(|name| {
-            let mut s = (*ui.settings.get_untracked()).clone();
-            s.general.characters[0].name = (*name).into();
-            Core::from_settings(&s, &scene.skin)
-        })
-        .collect();
-    let mut rig = Rig::new("room", out, ui, core, scene.theme.clone());
-    rig.input("input", 2.0);
-    rig.display("display", 2.0);
-    let skin = scene.skin.clone();
-    let d = &skin.dialogue;
-    let size = (
-        (d.region[0] + d.overscan * 2.0) as u32,
-        ((d.region[1] + d.overscan * 2.0) * 2.0) as u32,
-    );
-    rig.mount("partners", size, 2.0, true, move || {
-        dialogue::peer_window(ui, 0)
-    });
-    rig.history("history", 2.0);
-    let session = |members: usize, names: &[&str], connected: bool| {
-        ui.peer.set(Arc::new(SessionUi {
-            active: true,
-            host: true,
-            invitation: "nanatype1:steam".into(),
-            name: names.join(&ui.now_t("peer-name-separator")),
-            status: if connected {
-                nanatype_p2p::Status::Connected {
-                    route: "relay".into(),
-                    rtt_ms: 32,
-                }
-            } else {
-                nanatype_p2p::Status::Waiting
-            },
-            invite_names: names.iter().map(|n| (*n).to_owned()).collect(),
-            members,
-            ..Default::default()
-        }));
-    };
-    let (start, every) = (16, 1);
-    let send = typed_end(start, every, l.room_local) + 4;
-    let speak = [send + 20, send + 50];
-    // Everyone's rows in one list, in the order they were said.
-    let merge = |r: &Rig, partners: &[Core]| {
-        let mut rows: Vec<HistoryRow> = r.core.history().iter().cloned().collect();
-        for (i, p) in partners.iter().enumerate() {
-            rows.extend(p.history().iter().cloned().map(|mut row| {
-                row.item.source = nanatype_model::SourceId(format!("peer:{i}"));
-                row
-            }));
-        }
-        rows.sort_by_key(|row| row.item.at);
-        for (key, row) in rows.iter_mut().enumerate() {
-            row.key = key as u64 + 1;
-        }
-        rows
-    };
-    rig.run(speak[1] + 80, |r, f| {
-        match f {
-            0 => session(1, &[], false),
-            4 => {
-                r.event(f, "show", "room-join1");
-                session(2, &l.partners[..1], true);
-                ui.peer_seats.set(1);
-            }
-            10 => {
-                r.event(f, "show", "room-join2");
-                session(3, &l.partners, true);
-                ui.peer_seats.set(2);
-            }
-            _ => {}
-        }
-        if f == start {
-            r.event(f, "type", "room-text");
-        }
-        r.typing(f, start, every, l.room_local);
-        if f == send {
-            r.event(f, "click", "room-send");
-            r.send(ms(f));
-        }
-        for (i, at) in speak.iter().enumerate() {
-            if f == *at {
-                r.event(f, "show", format!("room-partner{}", i + 1));
-                partners[i].handle(Cmd::SendMarkup(l.room_partner[i].into()), ms(f));
-                let lane = ui.peer_lanes[i];
-                let mut view = partners[i].display().clone();
-                view.revision = lane.display.get_untracked().revision + 1;
-                lane.display.set(Arc::new(view));
-            }
-        }
-        if f >= send {
-            let rows = merge(r, &partners);
-            if ui.history.with_untracked(|h| **h != rows) {
-                ui.history.set(Arc::new(rows));
-            }
-        }
-    });
-}
-
 /// Twitch chat arrives, the streamer quotes one viewer and answers.
 fn twitch(scene: Scene, core: Core, out: &Path, work: &Path, l: &Lines) {
     use nanatype::app::twitch::State;
@@ -585,53 +460,6 @@ fn viewers(work: &Path, ui: Ui, l: &Lines) -> Vec<ChatMessage> {
         .collect();
     ui.asset_urls.set(Arc::new(urls));
     out
-}
-
-/// Workshop subscriptions download and become ready to use.
-fn workshop(scene: Scene, core: Core, out: &Path, l: &Lines) {
-    let ui = scene.ui;
-    ui.page.set(settings::Page::Skins);
-    let rows = |done: u8| View {
-        availability: Availability::Ready,
-        rows: [
-            (l.workshop[0], Kind::Skin, "community.sakura-letter"),
-            (l.workshop[1], Kind::Skin, "community.retro-arcade"),
-            (l.workshop[2], Kind::SoundPack, "community.pixel-se"),
-        ]
-        .into_iter()
-        .enumerate()
-        .map(|(i, (title, kind, package))| Row {
-            item: 3_100_000_000 + i as u64,
-            title: title.into(),
-            kind,
-            state: if done >= 100 || i > 0 {
-                RowState::Ready
-            } else {
-                RowState::Downloading(Some(done))
-            },
-            package: Some(package.into()),
-            folder: None,
-            author: None,
-            update: false,
-        })
-        .collect(),
-    };
-    let mut rig = Rig::new("workshop", out, ui, core, scene.theme.clone());
-    // Tall enough to hold the subscriptions under the skin library; the
-    // trailer crops to them (offscreen wheel scrolling does not move the page).
-    rig.mount("settings", (920, 2800), 1.0, false, move || {
-        settings::settings_window(ui)
-    });
-    let ready = 45;
-    rig.run(90, |r, f| {
-        if f <= ready {
-            let done = (f * 100 / ready) as u8;
-            if f == ready {
-                r.event(f, "show", "workshop-ready");
-            }
-            ui.workshop.set(Arc::new(rows(done)));
-        }
-    });
 }
 
 /// The skins the trailer's scenes are shown in.

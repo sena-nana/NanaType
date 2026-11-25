@@ -241,19 +241,12 @@ mod tests {
             keys.reverse();
             keys
         };
-        let hide = |first, second| {
-            let mut hidden = [None; crate::ui::TRACK_SLOTS];
-            hidden[0] = first;
-            hidden[1] = second;
-            hidden
-        };
-        assert_eq!(keys(30, hide(None, None)), [1, 2, 3]);
+        assert_eq!(keys(30, None), [1, 2, 3]);
         // Only the line still on the box is left out; external rows stay.
-        assert_eq!(keys(30, hide(Some(LineId(11)), None)), [1, 2]);
+        assert_eq!(keys(30, Some(LineId(11))), [1, 2]);
         // The cap counts the rows that show.
-        assert_eq!(keys(1, hide(Some(LineId(11)), None)), [2]);
-        assert_eq!(keys(30, hide(Some(LineId(10)), Some(LineId(11)))), [2]);
-        assert!(keys(0, hide(None, None)).is_empty());
+        assert_eq!(keys(1, Some(LineId(11))), [2]);
+        assert!(keys(0, None).is_empty());
     }
 
     fn row(key: u64, at: u64) -> HistoryRow {
@@ -273,13 +266,11 @@ mod tests {
         settings.history.visible_items = 1;
         settings.history.fade_after_s = Some(2);
         settings.history.hide_latest = HideLatest::Never;
-        let mut ui = Stage::new(
+        let ui = Stage::new(
             Arc::new(settings),
             Arc::new(Skin::default()),
             nanatype_i18n::Locale::ZhCn,
         );
-        let peer = nana_ui::runtime::view::signal(false);
-        ui.peer_active = nana_ui::runtime::view::computed(move || peer.get());
         let base = crate::clock::unix_of(0);
         ui.history
             .set(Arc::new(vec![row(1, base), row(2, base + 3000)]));
@@ -315,15 +306,6 @@ mod tests {
             .update(|d| Arc::make_mut(d).line = Some(LineId(10)));
         assert_eq!(visible_keys(ui), [2]);
         assert!(!fade_schedule(ui, 2000).animating);
-        peer.set(true);
-        ui.peer_local_line.set(Some(LineId(10)));
-        ui.peer_lanes[0]
-            .display
-            .update(|d| Arc::make_mut(d).line = Some(LineId(11)));
-        assert!(visible_keys(ui).is_empty());
-        assert_eq!(fade_schedule(ui, 2000), FadeSchedule::default());
-        peer.set(false);
-        assert_eq!(visible_keys(ui), [2]);
     }
 
     #[test]

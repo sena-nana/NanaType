@@ -85,7 +85,6 @@ impl super::App {
         let mut packs = crate::ui::sound_pack_rows(&self.appearance.registry, locale);
         packs.retain(|p| !off.contains(&p.id));
         self.ui.sound_packs.set(Arc::new(packs));
-        self.publish_workshop();
         if self.sync_sound_pack() {
             self.apply_skin();
             self.load_sounds();

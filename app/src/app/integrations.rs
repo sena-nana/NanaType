@@ -1,4 +1,4 @@
-//! External bridges, chat sources, OBS, Steam Workshop, plugins, and updates.
+//! External bridges, chat sources, OBS, plugins, and updates.
 
 use nanatype_bridge::{BridgeHandle, LipSync, OscConfig, VtsConfig, WsConfig};
 use nanatype_settings::Settings;
@@ -14,8 +14,6 @@ pub struct IntegrationsHub {
     pub blive: BliveFeedManager,
     pub obs: nanatype_obs::ObsHandle,
     pub obs_password: LazySecret,
-    pub steam: nanatype_steam::SteamHandle,
-    pub workshop: crate::workshop::Workshop,
     #[cfg(feature = "updates")]
     pub updater: crate::services::updater::Updater,
     #[cfg(feature = "updates")]

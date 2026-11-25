@@ -133,7 +133,6 @@ impl super::OutputTransport for Outputs {
         &mut self,
         _s: &nanatype_settings::Settings,
         _runtime_sizes: &super::config::RuntimeOutputSizes,
-        _partners: usize,
         live: &[(WindowKind, &nanatype_settings::SpoutOutput)],
     ) {
         let pairs: Vec<(WindowKind, String)> = live

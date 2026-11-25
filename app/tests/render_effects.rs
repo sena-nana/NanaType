@@ -12,7 +12,7 @@ use std::{sync::Arc, time::Duration};
 use common::pixel;
 
 #[test]
-fn combined_effects_keep_ruby_objects_and_partner_animation_without_layout() {
+fn combined_effects_keep_ruby_objects_and_animation_without_layout() {
     use nanatype::ui::{Ui, dialogue};
     use nanatype_core::{Cmd, Core};
     use nanatype_i18n::Locale;
@@ -24,37 +24,29 @@ fn combined_effects_keep_ruby_objects_and_partner_animation_without_layout() {
         nanatype_markup::parse(&nanatype_markup::serialize(&parsed.doc)).doc,
         parsed.doc
     );
-    for remote in [false, true] {
-        let skin = common::skin("nanatype.vanilla");
-        let settings = Settings::default();
-        let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-        let mut core = Core::from_settings(&settings, &skin);
-        core.handle(Cmd::SendMarkup(markup.into()), 0);
-        core.handle(Cmd::Skip, 1);
-        ui.display.set(Arc::new(core.display().clone()));
-        ui.peer_lanes[0].display.set(ui.display.get_untracked());
-        ui.now.set(100_000);
-        ui.peer_now.set(100_000);
-        let mut session = common::session().mount_at(100_000, 796, 236, move || {
-            dialogue::display_window(if remote { ui.remote() } else { ui })
-        });
-        let (_, first) = session.screenshot_rgba().unwrap();
-        let layout = session.document().context().world().layout_generation();
-        session
-            .document_mut()
-            .sync_presentation_clock(Duration::from_millis(250));
-        assert!(session.flush().unwrap().is_idle());
-        let (_, next) = session.screenshot_rgba().unwrap();
-        assert_ne!(
-            first, next,
-            "all effects continue on the selected display track"
-        );
-        assert_eq!(
-            session.document().context().world().layout_generation(),
-            layout
-        );
-        assert!(session.document().compositor_needs_tick());
-    }
+    let skin = common::skin("nanatype.vanilla");
+    let settings = Settings::default();
+    let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
+    let mut core = Core::from_settings(&settings, &skin);
+    core.handle(Cmd::SendMarkup(markup.into()), 0);
+    core.handle(Cmd::Skip, 1);
+    ui.display.set(Arc::new(core.display().clone()));
+    ui.now.set(100_000);
+    let mut session =
+        common::session().mount_at(100_000, 796, 236, move || dialogue::display_window(ui));
+    let (_, first) = session.screenshot_rgba().unwrap();
+    let layout = session.document().context().world().layout_generation();
+    session
+        .document_mut()
+        .sync_presentation_clock(Duration::from_millis(250));
+    assert!(session.flush().unwrap().is_idle());
+    let (_, next) = session.screenshot_rgba().unwrap();
+    assert_ne!(first, next, "all effects continue on the display track");
+    assert_eq!(
+        session.document().context().world().layout_generation(),
+        layout
+    );
+    assert!(session.document().compositor_needs_tick());
 }
 
 #[test]

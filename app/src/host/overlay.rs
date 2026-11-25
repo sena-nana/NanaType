@@ -9,10 +9,7 @@ fn interactive(kind: WindowKind, lock: Lock, handled: bool) -> bool {
         && !handled
         && matches!(
             kind,
-            WindowKind::Display
-                | WindowKind::PeerDisplay(_)
-                | WindowKind::History
-                | WindowKind::Danmaku
+            WindowKind::Display | WindowKind::History | WindowKind::Danmaku
         )
 }
 
@@ -130,10 +127,7 @@ mod tests {
                     let allowed = lock != Lock::Locked
                         && matches!(
                             kind,
-                            WindowKind::Display
-                                | WindowKind::PeerDisplay(_)
-                                | WindowKind::History
-                                | WindowKind::Danmaku
+                            WindowKind::Display | WindowKind::History | WindowKind::Danmaku
                         );
                     assert_eq!(
                         command(kind, lock, payload, false, Some(FRAME)).is_some(),
@@ -159,10 +153,7 @@ mod tests {
                 let allowed = lock == Lock::Interactive
                     && matches!(
                         kind,
-                        WindowKind::Display
-                            | WindowKind::PeerDisplay(_)
-                            | WindowKind::History
-                            | WindowKind::Danmaku
+                        WindowKind::Display | WindowKind::History | WindowKind::Danmaku
                     );
                 assert_eq!(
                     menu_position(kind, lock, &payload, false),
@@ -277,7 +268,6 @@ mod tests {
 
         for kind in [
             WindowKind::Display,
-            WindowKind::PARTNER,
             WindowKind::History,
             WindowKind::Danmaku,
         ] {
@@ -299,7 +289,6 @@ mod tests {
             }
             let ui = Ui::new(Arc::new(settings), skin, nanatype_i18n::Locale::ZhCn);
             ui.display.set(Arc::new(core.display().clone()));
-            ui.peer_lanes[0].display.set(ui.display.get_untracked());
             let rows: Arc<Vec<_>> = Arc::new(core.history().iter().cloned().collect());
             ui.history.set(rows.clone());
             ui.danmaku.set(rows);
@@ -309,9 +298,6 @@ mod tests {
                 .mount_view_root(id, move || -> AnyView {
                     match kind {
                         WindowKind::Display => dialogue::display_window(ui).into_any(),
-                        WindowKind::PeerDisplay(_) => {
-                            dialogue::display_window(ui.remote()).into_any()
-                        }
                         WindowKind::Danmaku => history::danmaku_window(ui).into_any(),
                         _ => history::history_window(ui).into_any(),
                     }

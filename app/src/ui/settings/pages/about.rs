@@ -11,11 +11,13 @@ const LICENCE_H: f32 = 300.0;
 /// The logo's size in the About header.
 const ABOUT_ICON: f32 = 56.0;
 
-/// Who made NanaType and where to find them; the local folders; then the
-/// notices and licences, each folded until asked for.
+/// Who made NanaType and where to find them; the logs card; the local data
+/// folder and diagnostics; then the notices and licences, each folded until
+/// asked for.
 pub(super) fn about(ui: Ui) -> AnyView {
     let sections = vec![
         section_with(ui, "", identity(ui)),
+        section(ui, "", vec![logs_card(ui)]),
         section(ui, "", local(ui)),
         section_with(ui, "about-disclaimer", notices(ui)),
         section_with(ui, "about-licenses", licences(ui)),
@@ -176,10 +178,25 @@ fn megabytes(bytes: u64) -> String {
     format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
 }
 
-/// The log and data folders on one row, and the first-run guide again.
+/// Guidance for sending logs after closing the app, above a full-width primary
+/// button that opens the logs folder.
+fn logs_card(ui: Ui) -> Row {
+    let logs = crate::paths::Paths::resolve().logs;
+    let mut open = Button::new(ui.now_t("about-logs"))
+        .icon(ti::FOLDER_OPEN)
+        .kind(ButtonKind::Primary);
+    Arc::make_mut(&mut open.style.layout).width = Some(LengthSpec::Fill);
+    block((
+        hint(ui.now_t("about-logs-hint")),
+        widget(open).on_cx(move |_, _: &Activate, cx| {
+            cx.dispatch_program_all(Msg::OpenFolder(logs.clone()))
+        }),
+    ))
+}
+
+/// The data folder, logging/diagnostics options, and the first-run guide again.
 fn local(ui: Ui) -> Vec<Row> {
-    let paths = crate::paths::Paths::resolve();
-    let (logs, data) = (paths.logs.clone(), paths.data.clone());
+    let data = crate::paths::Paths::resolve().data;
     let folder = |key: &str, path: std::path::PathBuf| {
         widget(
             Button::new(ui.now_t(key))
@@ -194,7 +211,7 @@ fn local(ui: Ui) -> Vec<Row> {
             ui,
             "about-folders",
             None,
-            controls(vec![folder("about-logs", logs), folder("about-data", data)]),
+            controls(vec![folder("about-data", data)]),
         ),
         toggle_row!(ui, "about-verbose-logs", diagnostics.verbose),
         row(

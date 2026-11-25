@@ -2,7 +2,7 @@
 
 # OBS 输出
 
-NanaType 可以把展示框、联机伙伴和历史记录分别送进 OBS。Windows 推荐 **Spout2**，macOS 推荐 **Syphon**；也可以直接捕获透明窗口。
+NanaType 可以把展示框和历史记录（以及独立的弹幕窗口）分别送进 OBS。Windows 推荐 **Spout2**，macOS 推荐 **Syphon**；也可以直接捕获透明窗口。
 
 完整的首次设置步骤见[使用指南 › 接入 OBS](usage.md#接入-obs)。本页主要处理多路输出、性能设置和常见问题。
 
@@ -17,17 +17,17 @@ NanaType 可以把展示框、联机伙伴和历史记录分别送进 OBS。Wind
 
 | 画面 | 发送端 |
 | --- | --- |
-| 自己的展示框 | `NanaType Display` |
-| 联机伙伴 | `NanaType Partner 1` 至 `NanaType Partner 7` |
-| 共享历史 | `NanaType History` |
+| 展示框 | `NanaType Display` |
+| 历史记录 | `NanaType History` |
+| 独立弹幕窗口 | `NanaType Danmaku` |
 
-伙伴输出按座位工作：谁坐在某个座位，谁的画面就从对应发送端输出；座位空着时不会输出。名称必须互不重复。
+名称必须互不重复。
 
 ## macOS：使用 Syphon
 
 1. 在 NanaType 打开“设置 › 输出 / OBS › Syphon 输出”。
 2. 在 OBS 添加 *Syphon Client* 来源。
-3. 选择对应的 `NanaType Display`、`NanaType Partner …` 或 `NanaType History` 发送端。
+3. 选择对应的 `NanaType Display`、`NanaType History` 或 `NanaType Danmaku` 发送端。
 4. 合成模式使用 *Premultiplied Alpha*。
 
 也可以使用 macOS 的屏幕捕获捕获展示框窗口。Spout2 仅适用于 Windows。

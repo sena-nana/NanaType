@@ -316,7 +316,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn local_peer_and_history_quotes_keep_independent_directions() {
+    fn local_and_history_quotes_keep_independent_directions() {
         use nana_ui::runtime::{DocumentId, RuntimeDocument, StableNodeId};
         use nana_ui_devtools::agent::RuntimeAgentSession;
         let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
@@ -327,7 +327,6 @@ mod tests {
             nanatype_i18n::Locale::ZhCn,
         );
         ui.display_size.set([300., 1200.]);
-        ui.remote().display_size.set([1200., 300.]);
         let id = DocumentId::new(1).unwrap();
         let mut document = RuntimeDocument::new(id);
         document
@@ -361,16 +360,6 @@ mod tests {
                             None,
                         )),
                     widget(Stack::fill_column(0.))
-                        .key("peer")
-                        .children(display_quote_view(
-                            ui.remote(),
-                            &skin,
-                            &skin.dialogue.reply,
-                            &quote("对方回复"),
-                            &skin.dialogue.text,
-                            None,
-                        )),
-                    widget(Stack::fill_column(0.))
                         .key("history")
                         .children(quote_view(
                             ui,
@@ -385,7 +374,7 @@ mod tests {
             .unwrap();
         let mut session = RuntimeAgentSession::new(document, 900, 500).unwrap();
         session.flush().unwrap();
-        let nodes: Vec<_> = ["本地回复", "对方回复", "历史引用"]
+        let nodes: Vec<_> = ["本地回复", "历史引用"]
             .iter()
             .map(|label| {
                 let node = session
@@ -404,15 +393,13 @@ mod tests {
             (false, [1200., 300.]),
         ] {
             ui.display_size.set(size);
-            ui.remote().display_size.set(size);
             ui.settings.update(|s| {
                 let o = &mut Arc::make_mut(s).overlays;
                 o.display.vertical_text = local_vertical;
-                o.peer_display.vertical_text = !local_vertical;
             });
             session.flush().unwrap();
             let world = session.document().context().world();
-            for (&node, expected) in nodes.iter().zip([local_vertical, !local_vertical, false]) {
+            for (&node, expected) in nodes.iter().zip([local_vertical, false]) {
                 assert_eq!(world.text_layout(node).unwrap().1.is_vertical(), expected);
             }
         }

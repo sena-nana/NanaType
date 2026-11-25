@@ -6,7 +6,7 @@
 
 1. [下载与启动](../README.md)：安装、首次打开和第一次发送台词。
 2. [使用指南](usage.md)：输入、播放、窗口、历史记录和配置方案。
-3. [接入 OBS](obs-spout.md)：把展示框、历史记录或联机伙伴送进直播画面。
+3. [接入 OBS](obs-spout.md)：把展示框、历史记录或独立弹幕送进直播画面。
 4. [台词标记](markup.md)：为文字加入停顿、动效、音效和角色联动。
 
 ## 常用功能
@@ -16,8 +16,6 @@
 | 使用语音输入 | [语音输入](voice-input.md) |
 | 读取或发送 Twitch 聊天 | [Twitch](twitch.md) |
 | 接入 blivechat、彗星号或 LAPLACE | [彗星号](comet.md) · [LAPLACE](laplace.md) |
-| 和其他主播联机 | [使用指南：联机](usage.md#联机) |
-| 使用 Steam 版 | [Steam 版](steam.md) |
 | 安装皮肤 | [使用指南：表情包与皮肤](usage.md#表情包与皮肤) |
 | 制作皮肤（高级参考） | [皮肤格式](skins.md) |
 | 导入 Telegram 或本地表情包 | [使用指南：表情包与皮肤](usage.md#表情包与皮肤) |

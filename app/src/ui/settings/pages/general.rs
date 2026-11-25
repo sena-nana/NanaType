@@ -446,7 +446,6 @@ fn settings_body(ui: Ui) -> AnyView {
                 ],
             ),
             accessibility(ui),
-            // A Steam build updates through Steam.
             crate::distribution::UPDATES.then(|| section_with(ui, "general-updates", updates(ui))),
         ))
         .into_any()

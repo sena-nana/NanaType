@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Collect the macOS package's complete licence texts into one file.
 
-    python3 scripts/macos-licenses.py <target-triple> <out-file> [nanatype|nanatype-editor|nanatype-steam]
+    python3 scripts/macos-licenses.py <target-triple> <out-file> [nanatype|nanatype-editor]
 
 The macOS counterpart of scripts/package-licenses.ps1 plus the crate part of
 scripts/third-party-notices.ps1 -Texts: the same sections in the same form,
@@ -12,7 +12,6 @@ what only NanaType ships (live chat sources, libvpx, Syphon).
 """
 
 import json
-import os
 import re
 import subprocess
 import sys
@@ -26,16 +25,11 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8").replace("\r\n", "\n")
 
 
-# The Steam edition's feature set (app/Cargo.toml).
-STEAM_FEATURES = ["--no-default-features", "--features", "nanatype/builtin-fonts,nanatype/steam"]
-
-
-def rust_crates(target: str, package: str, product: str, steam: bool = False) -> str:
+def rust_crates(target: str, package: str, product: str) -> str:
     """Each linked crate's own licence files, identical texts written once."""
     meta = json.loads(subprocess.check_output([
         "cargo", "metadata", "--format-version", "1", "--offline",
         "--filter-platform", target, "--manifest-path", str(ROOT / "Cargo.toml"),
-        *(STEAM_FEATURES if steam else []),
     ]))
     packages = {p["id"]: p for p in meta["packages"]}
     nodes = {n["id"]: n for n in meta["resolve"]["nodes"]}
@@ -80,7 +74,6 @@ def rust_crates(target: str, package: str, product: str, steam: bool = False) ->
 # packaging/licenses files only NanaType ships, by package.
 APP_ONLY = {
     "nanatype": set(),
-    "nanatype-steam": set(),
     "nanatype-editor": {"libvpx-BSD.txt", "KeySounds-CC0.txt",
                         "KeySounds-Bubble-CC-BY-3.0.txt", "WhisperCpp-MIT.txt", "WhisperModel-MIT.txt",
                         "WebRTC-VAD-BSD.txt"},
@@ -92,11 +85,7 @@ def main() -> None:
     package = sys.argv[3] if len(sys.argv) > 3 else "nanatype"
     if package not in APP_ONLY:
         sys.exit(f"unknown package {package}")
-    steam = package == "nanatype-steam"
-    product = {
-        "nanatype-editor": "NanaType Editor",
-        "nanatype-steam": "NanaType (Steam edition)",
-    }.get(package, "NanaType")
+    product = "NanaType Editor" if package == "nanatype-editor" else "NanaType"
     sections: dict[str, str] = {}
 
     def add(name: str, text: str, category: str) -> None:
@@ -108,13 +97,8 @@ def main() -> None:
             sys.exit(f"Duplicate licence section: {name}")
         sections[name] = text
 
-    if steam:
-        add("LICENSE", read(ROOT / "packaging/steam/LICENSE"), "project")
-        add("LICENSE-MIT", read(ROOT / "LICENSE-MIT"), "project")
-        add("THIRD_PARTY_NOTICES.md", read(ROOT / "THIRD_PARTY_NOTICES.md"), "project")
-    else:
-        for name in ("LICENSE", "LICENSE-MIT", "THIRD_PARTY_NOTICES.md"):
-            add(name, read(ROOT / name), "project")
+    for name in ("LICENSE", "LICENSE-MIT", "THIRD_PARTY_NOTICES.md"):
+        add(name, read(ROOT / name), "project")
     for name in ("WASMOON-LICENSE", "LUA-LICENSE"):
         add(name, read(ROOT / "crates/plugins/runtime" / name), "plugins")
     for path in sorted((ROOT / "crates/theme/fonts").glob("*.LICENSE.txt")):
@@ -133,8 +117,7 @@ def main() -> None:
         name = path.relative_to(ROOT / "packaging/licenses").as_posix()
         if path.is_file() and name not in APP_ONLY[package]:
             add(name, read(path), "packaging")
-    crates = "nanatype" if steam else package
-    add("rust-crates.txt", rust_crates(target, crates, product, steam), "packaging")
+    add("rust-crates.txt", rust_crates(target, package, product), "packaging")
 
     text = [f"{product} redistribution licences and notices",
             "Every named section below retains the complete source text.", ""]

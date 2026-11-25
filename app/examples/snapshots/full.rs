@@ -5,10 +5,6 @@ use super::*;
 /// Every window, page and state, in the order the review reads them.
 pub fn capture(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
     blivechat(scene, out);
-    p2p(scene, out, iw, ih);
-    if std::env::var_os("NANATYPE_P2P_SNAPSHOTS_ONLY").is_some() {
-        return;
-    }
     overlays(scene, out);
     completion(scene, out, iw, ih);
     settings_pages(scene, out);
@@ -109,124 +105,6 @@ fn blivechat(scene: &Scene, out: &std::path::Path) {
     ui.chat_source.set(before_chat);
     ui.page.set(before_page);
     ui.platform_tab.set(before_tab);
-}
-
-/// The partner session: its input panel, both displays and the settings it adds.
-fn p2p(scene: &Scene, out: &std::path::Path, iw: u32, ih: u32) {
-    let (ui, w, h) = (scene.ui, scene.w, scene.h);
-    let theme = &scene.theme;
-    let skin = &scene.skin;
-    let settings = &scene.settings;
-    ui.peer_panel.set(true);
-    shot("p2p-create", out, iw, ih, theme.clone(), |doc, id| {
-        doc.context_mut()
-            .mount_view_root(id, move || input::input_window(ui))
-            .unwrap();
-    });
-    let mut peer_settings = settings.clone();
-    peer_settings.general.characters[0].name = "联机伙伴 / Partner".into();
-    let mut peer_core = Core::from_settings(&peer_settings, skin);
-    peer_core.handle(
-        Cmd::SendMarkup(
-            "[color=#689fd7]我这边也能看到你的台词！[/color]\n两个人可以同时显示，也可以独立继续。"
-                .into(),
-        ),
-        0,
-    );
-    peer_core.handle(Cmd::Skip, 1);
-    ui.peer_lanes[0]
-        .display
-        .set(Arc::new(peer_core.display().clone()));
-    ui.peer.set(Arc::new(nanatype::p2p::SessionUi {
-        active: true,
-        host: true,
-        invitation: "nanatype1:preview".into(),
-        name: "联机伙伴".into(),
-        status: nanatype_p2p::Status::Connected {
-            route: "direct".into(),
-            rtt_ms: 28,
-        },
-        ..Default::default()
-    }));
-    shot("p2p-input", out, iw, ih, theme.clone(), |doc, id| {
-        doc.context_mut()
-            .mount_view_root(id, move || input::input_window(ui))
-            .unwrap();
-    });
-    shot("p2p-local-display", out, w, h, theme.clone(), |doc, id| {
-        doc.context_mut()
-            .mount_view_root(id, move || dialogue::display_window(ui))
-            .unwrap();
-    });
-    shot(
-        "p2p-partner-display",
-        out,
-        w,
-        h,
-        theme.clone(),
-        |doc, id| {
-            doc.context_mut()
-                .mount_view_root(id, move || dialogue::peer_window(ui, 0))
-                .unwrap();
-        },
-    );
-    for page in [settings::Page::Windows, settings::Page::Output] {
-        ui.page.set(page);
-        shot(
-            &format!("p2p-settings-{page:?}"),
-            out,
-            920,
-            900,
-            theme.clone(),
-            |doc, id| {
-                doc.context_mut()
-                    .mount_view_root(id, move || settings::settings_window(ui))
-                    .unwrap();
-            },
-        );
-    }
-    ui.page.set(settings::Page::Windows);
-    shot(
-        "p2p-settings-Windows-narrow",
-        out,
-        720,
-        660,
-        theme.clone(),
-        |doc, id| {
-            doc.context_mut()
-                .mount_view_root(id, move || settings::settings_window(ui))
-                .unwrap();
-        },
-    );
-    let before_output = ui.settings.get_untracked();
-    let mut enabled_output = (*before_output).clone();
-    enabled_output.output.display.enabled = true;
-    enabled_output.output.partners[0].enabled = true;
-    enabled_output.output.history.enabled = true;
-    ui.settings.set(Arc::new(enabled_output));
-    let before_output_status = ui.output_status.get_untracked();
-    let mut output_status = (*before_output_status).clone();
-    output_status.display = LinkState::Connecting;
-    output_status.partners = vec![LinkState::Connecting; nanatype_settings::PARTNER_SEATS];
-    output_status.history = LinkState::Connecting;
-    ui.output_status.set(Arc::new(output_status));
-    ui.page.set(settings::Page::Output);
-    shot(
-        "p2p-settings-Output-enabled",
-        out,
-        920,
-        1400,
-        theme.clone(),
-        |doc, id| {
-            doc.context_mut()
-                .mount_view_root(id, move || settings::settings_window(ui))
-                .unwrap();
-        },
-    );
-    ui.settings.set(before_output);
-    ui.output_status.set(before_output_status);
-    ui.peer.set(Arc::new(nanatype::p2p::SessionUi::default()));
-    ui.peer_panel.set(false);
 }
 
 /// The toolbar's sheets, the history window and the chat panel.
@@ -647,13 +525,11 @@ fn links(scene: &Scene, out: &std::path::Path) {
     }
 
     // OBS linked: the display follows a box past 1080p, the history's
-    // source has no box yet, the partner's source is not in the scene.
+    // source has no box yet.
     let mut on = (*ui.settings.get_untracked()).clone();
     on.output.obs.enabled = true;
-    on.output.partners[0].enabled = true;
     on.output.display.obs_source = "NanaType Display".into();
     on.output.history.obs_source = "NanaType History".into();
-    on.output.partners[0].obs_source = "Partner".into();
     on.output.history.size = Some([1280, 720]);
     let obs = |name: &str, bounds: Option<[f64; 2]>| nanatype_obs::ObsItem {
         id: 1,

@@ -355,7 +355,7 @@ fn pinned_chat_sits_above_the_insert_panels_and_unpins_into_its_own_panel() {
 }
 
 #[test]
-fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
+fn sidebar_keeps_the_editor_across_resizes() {
     for locale in Locale::ALL {
         let skin = common::skin("nanatype.halo");
         let ui = Ui::new(Arc::new(preview_settings()), skin, locale);
@@ -395,44 +395,7 @@ fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
             preview.bounds.y >= 0.0
                 && preview.bounds.y + preview.bounds.height <= nanatype::windows::TOOLBAR_H
         );
-        click_label(&mut session, &ui.now_t("input-management"), "menu");
-        let invitation = keyed(&session, "peer-invitation-input");
-        assert!(invitation.bounds.width > 190.0);
-        assert!(
-            session
-                .set_value(invitation.id, "private invitation draft")
-                .unwrap()
-        );
-        ui.peer_panel.set(false);
-        session.flush().unwrap();
-        assert_eq!(
-            session
-                .document()
-                .context()
-                .world()
-                .layout_box(editor.stable_id())
-                .unwrap(),
-            before
-        );
-        ui.peer_panel.set(true);
-        session
-            .key_press("Escape", "Escape", Default::default())
-            .unwrap();
         session.set_viewport(720, 360, 1.0).unwrap();
-        click_label(&mut session, &ui.now_t("input-management"), "menu");
-        let invitation = keyed(&session, "peer-invitation-input");
-        assert_eq!(
-            invitation.value.as_deref(),
-            Some("private invitation draft")
-        );
-        assert!(
-            session
-                .set_value(invitation.id, "continued in compact layout")
-                .unwrap()
-        );
-        session
-            .key_press("Escape", "Escape", Default::default())
-            .unwrap();
         open_panel(&mut session, "controls");
         if let Some(out) = std::env::var_os("NANATYPE_INPUT_WINDOW_CAPTURE_DIR") {
             std::fs::create_dir_all(&out).unwrap();
@@ -460,11 +423,7 @@ fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
         );
         assert!((keyed(&session, "input-insertion-dock").bounds.width - 320.0).abs() < 1.0);
         session.set_viewport(1200, 640, 1.0).unwrap();
-        click_label(&mut session, &ui.now_t("input-management"), "menu");
-        assert_eq!(
-            keyed(&session, "peer-invitation-input").value.as_deref(),
-            Some("continued in compact layout")
-        );
+        session.flush().unwrap();
         assert_eq!(
             session
                 .document()
@@ -474,23 +433,6 @@ fn sidebar_keeps_the_editor_and_peer_form_across_resizes() {
                 .unwrap(),
             before
         );
-        ui.peer.set(Arc::new(nanatype::p2p::SessionUi {
-            active: true,
-            host: true,
-            invitation: "preview".into(),
-            status: nanatype_p2p::Status::Waiting,
-            ..Default::default()
-        }));
-        session.flush().unwrap();
-        for key in ["peer-copy", "peer-window-toggle", "peer-leave"] {
-            let label = ui.now_t(key);
-            let node = session
-                .accessibility_dump()
-                .into_iter()
-                .find(|n| n.label.as_deref() == Some(&label))
-                .unwrap();
-            assert!(node.bounds.x >= 0.0 && node.bounds.x + node.bounds.width <= 1201.0);
-        }
     }
 }
 
@@ -814,7 +756,7 @@ fn toolbar_popovers_remain_clickable_over_the_scrolling_preview() {
 }
 
 #[test]
-fn fixed_canvas_and_controls_survive_resize_theme_scale_and_peer_panel_changes() {
+fn fixed_canvas_and_controls_survive_resize_theme_and_scale_changes() {
     let registry = common::registry();
     let captures = std::env::var_os("NANATYPE_INPUT_WINDOW_CAPTURE_DIR").map(PathBuf::from);
     if let Some(out) = &captures {
@@ -836,7 +778,7 @@ fn fixed_canvas_and_controls_survive_resize_theme_scale_and_peer_panel_changes()
                     .scale(scale)
                     .mount_output(920, 480, move || input::input_window(ui));
                 session.set_gpu_renderers(nanatype::ui::sweep::renderers());
-                for state in ["empty", "long", "peer"] {
+                for state in ["empty", "long"] {
                     let text = if state == "empty" {
                         String::new()
                     } else {
@@ -844,7 +786,6 @@ fn fixed_canvas_and_controls_survive_resize_theme_scale_and_peer_panel_changes()
                             .repeat(15)
                     };
                     ui.draft.set(Arc::new(Document::plain(&text)));
-                    ui.peer_panel.set(state != "long");
                     let mut editor_width: Option<f32> = None;
                     for (w, h) in [(720, 360), (920, 480), (1200, 640), (1280, 720)] {
                         session.set_viewport(w, h, scale).unwrap();
@@ -916,9 +857,6 @@ fn fixed_canvas_and_controls_survive_resize_theme_scale_and_peer_panel_changes()
                                 "{skin_id} dark={dark} {state} {w} {scale} {node:?}"
                             );
                         }
-                        if state == "peer" {
-                            click_label(&mut session, &ui.now_t("input-management"), "menu");
-                        }
                         if let Some(out) = &captures {
                             session
                                 .document_mut()
@@ -931,11 +869,6 @@ fn fixed_canvas_and_controls_survive_resize_theme_scale_and_peer_panel_changes()
                                 .screenshot_png(out.join(format!(
                                     "{skin_id}-dark{dark}-{state}-{w}x{h}-{scale}x.png"
                                 )))
-                                .unwrap();
-                        }
-                        if state == "peer" {
-                            session
-                                .key_press("Escape", "Escape", Default::default())
                                 .unwrap();
                         }
                         // Scroll from the preview's padding, away from the editor's own scroller.
@@ -1326,7 +1259,6 @@ fn every_icon_in_the_toolbar_and_footer_has_a_tooltip() {
             "input-skin-preview",
             "tb-source",
             "tb-cheatsheet",
-            "input-management",
             "settings-speech",
             "speech-options",
             "window-settings",

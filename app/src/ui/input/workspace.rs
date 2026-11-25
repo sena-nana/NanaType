@@ -7,9 +7,6 @@ use crate::msg::{ChatMsg, EditorMsg, SpeechMsg, StickerMsg, WindowMsg};
 use crate::ui::kit::{gap, inset};
 use nanatype_settings::{INPUT_CHAT_MIN, InputDockLayout, InputDockTab as Tab};
 
-/// The partner card's scroll height in its footer popover.
-const MANAGEMENT_H: f32 = 260.0;
-
 const EDITOR_MIN: f32 = 320.0;
 const HANDLE_W: f32 = 8.0;
 /// The rail of panel icons at the sidebar's outer edge; all that is left of
@@ -585,7 +582,7 @@ fn character_picker(ui: Ui) -> AnyView {
     .into_any()
 }
 
-pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String>) -> AnyView {
+pub(super) fn footer(ui: Ui) -> AnyView {
     dynamic(
         move || {
             (
@@ -623,20 +620,6 @@ pub(super) fn footer(ui: Ui, invitation: Signal<String>, password: Signal<String
                 mode_control,
                 character_picker(ui),
                 status_content(ui),
-                popover(
-                    ti::USERS,
-                    ui.now_t("input-management"),
-                    Tip::Above,
-                    crate::ui::kit::popover::LG,
-                    ui.peer_popover,
-                    widget(ScrollView::new(ScrollAxes::Vertical).with_layout(|l| {
-                        l.height = Some(LengthSpec::Px(MANAGEMENT_H));
-                        l.min_height = Some(LengthSpec::Px(0.0));
-                    }))
-                    .children(super::super::p2p::card_with_fields(
-                        ui, invitation, password, true, true,
-                    )),
-                ),
                 pressed_tool(
                     ti::MICROPHONE,
                     ui.now_t("settings-speech"),

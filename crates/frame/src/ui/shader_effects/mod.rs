@@ -459,7 +459,6 @@ struct EventState {
 
 struct EventEntry {
     source: u8,
-    track_slot: usize,
     signal: Signal<Arc<DisplayView>>,
     state: EventState,
 }
@@ -468,8 +467,8 @@ const MAX_EVENTS: usize = 32;
 static EVENTS: LazyLock<Mutex<Vec<EventEntry>>> = LazyLock::new(Default::default);
 
 /// Line age, speaker age, reveal progress and the continue flag.
-/// Keyed by `(source, track_slot, display_signal)` so multiple `Source::Preview`
-/// stages do not collide on `(Preview, 0)`, while outputs of the same track share ages.
+/// Keyed by `(source, display_signal)` so multiple `Source::Preview`
+/// stages do not collide, while outputs of the same track share ages.
 pub(super) fn event_values(ui: Stage, source: Source, now: u64) -> [f32; 4] {
     let signal = if source == Source::Preview {
         ui.preview_display
@@ -479,9 +478,9 @@ pub(super) fn event_values(ui: Stage, source: Source, now: u64) -> [f32; 4] {
     let v = signal.get_untracked();
     let source_tag = source as u8;
     let mut states = EVENTS.lock().unwrap_or_else(|e| e.into_inner());
-    let pos = states.iter().position(|e| {
-        e.source == source_tag && e.track_slot == ui.track_slot && e.signal == signal
-    });
+    let pos = states
+        .iter()
+        .position(|e| e.source == source_tag && e.signal == signal);
     let mut entry = if let Some(pos) = pos {
         states.remove(pos)
     } else {
@@ -490,7 +489,6 @@ pub(super) fn event_values(ui: Stage, source: Source, now: u64) -> [f32; 4] {
         }
         EventEntry {
             source: source_tag,
-            track_slot: ui.track_slot,
             signal,
             state: EventState::default(),
         }
@@ -590,16 +588,6 @@ mod tests {
             v.continue_indicator = true;
         });
         assert_eq!(event_values(ui, Source::Display, 2000), [0., 1., 0., 1.]);
-        ui.peer_lanes[0].display.update(|v| {
-            let v = Arc::make_mut(v);
-            v.empty = false;
-            v.line = Some(nanatype_model::LineId(900));
-            v.speaker.name = "B".into();
-        });
-        assert_eq!(
-            &event_values(ui.remote(), Source::Display, 2000)[..2],
-            &[0., 0.]
-        );
         assert_eq!(&event_values(ui, Source::Display, 2500)[..2], &[0.5, 1.5]);
     }
 
@@ -699,22 +687,21 @@ mod tests {
     #[test]
     fn declared_programs_wake_only_while_they_move() {
         let ui = ui();
-        let lane = ui.lane(5);
         let mut skin = (*ui.skin.get_untracked()).clone();
         for s in skin.shaders.values_mut() {
             s.active = vec![ShaderActive::Line(0.6)];
         }
         ui.skin.set(Arc::new(skin.clone()));
-        lane.display.update(|v| {
+        ui.display.update(|v| {
             let v = Arc::make_mut(v);
             v.empty = false;
             v.line = Some(nanatype_model::LineId(7));
         });
-        let at = |ms| crate::clock::capture_at(ms, || wake(lane));
+        let at = |ms| crate::clock::capture_at(ms, || wake(ui));
         assert_eq!(at(10_000), Wake::Continuous);
         assert_eq!(at(10_500), Wake::Continuous);
         assert_eq!(at(10_700), Wake::Idle);
-        lane.display
+        ui.display
             .update(|v| Arc::make_mut(v).line = Some(nanatype_model::LineId(8)));
         assert_eq!(at(11_000), Wake::Continuous);
         for s in skin.shaders.values_mut() {
@@ -815,20 +802,19 @@ mod tests {
     #[test]
     fn event_and_stepped_classics_never_loop_at_the_frame_rate() {
         let ui = ui();
-        let lane = ui.lane(6);
         let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
-        lane.display.update(|v| {
+        ui.display.update(|v| {
             let v = Arc::make_mut(v);
             v.empty = false;
             v.line = Some(nanatype_model::LineId(1));
         });
-        let at = |ms| crate::clock::capture_at(ms, || wake(lane));
+        let at = |ms| crate::clock::capture_at(ms, || wake(ui));
         let sizes = [[952., 252.], [300., 1200.], [300., 240.], [160., 96.]];
         ui.skin.set(registry.load("nanatype.night").unwrap().skin);
-        lane.display_size.set(sizes[0]);
+        ui.display_size.set(sizes[0]);
         assert_eq!(at(60_000), Wake::Continuous);
         for size in sizes {
-            lane.display_size.set(size);
+            ui.display_size.set(size);
             assert_eq!(at(61_000), Wake::Idle, "night {size:?}");
         }
         for (name, waiting, steps) in [
@@ -839,10 +825,10 @@ mod tests {
         ] {
             ui.skin
                 .set(registry.load(&format!("nanatype.{name}")).unwrap().skin);
-            lane.display
+            ui.display
                 .update(|v| Arc::make_mut(v).continue_indicator = waiting);
             for size in sizes {
-                lane.display_size.set(size);
+                ui.display_size.set(size);
                 let wake = at(62_000);
                 assert_ne!(wake, Wake::Continuous, "{name} {size:?}");
                 if size == sizes[0] {

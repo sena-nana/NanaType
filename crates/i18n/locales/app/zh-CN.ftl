@@ -7,7 +7,6 @@ history-count = { $count } 条
 
 ## 窗口标题
 window-input = 输入框
-input-management = 直播与联机
 input-character = 角色：{ $name }
 dock-stickers = 表情包
 dock-tab-controls = 控制
@@ -44,8 +43,6 @@ tray-action-show-input = 显示输入框
 tray-action-hide-input = 隐藏输入框
 tray-action-show-display = 显示对话框
 tray-action-hide-display = 隐藏对话框
-tray-action-show-peer-display = 显示联机伙伴展示框
-tray-action-hide-peer-display = 隐藏联机伙伴展示框
 tray-action-show-history = 显示历史记录
 tray-action-hide-history = 隐藏历史记录
 tray-action-show-danmaku = 显示弹幕窗口
@@ -139,8 +136,6 @@ settings-assets = 素材
 settings-profiles = 配置与备份
 settings-input = 输入
 settings-characters = 角色信息
-settings-peer = 联机
-settings-workshop = 创意工坊
 settings-about = 关于
 settings-theme-switch-light = 切换到浅色主题
 settings-theme-switch-dark = 切换到深色主题
@@ -604,7 +599,8 @@ update-error-rejected = 更新信息未通过签名校验，已忽略
 update-error-no-asset = 新版本没有适合此系统的安装包
 update-error-download = 下载失败，或文件与发布的校验值不一致
 update-error-other = 更新出错
-about-logs = 日志文件夹
+about-logs = 打开日志文件夹
+about-logs-hint = 如果你遇到问题，请在关闭应用后将日志发送给开发者
 about-data = 数据文件夹
 about-folders = 本地文件夹
 about-verbose-logs = 详细日志
@@ -858,51 +854,9 @@ chat-queued = 已排队 · { $count } 条
 chat-room-owner = 房主
 chat-moderator = 房管
 
-# Sessions of up to eight people
-peer-title = 联机
-peer-expand = 展开
-peer-collapse = 收起
-peer-off = 未联机
-peer-connecting = 正在连接…
-peer-waiting = 等待对方加入
-peer-reconnecting = 正在重连…
-peer-direct = 直连
-peer-relay = 中继
-peer-error = 联机失败
-peer-steam-required = 联机需要 Steam 正在运行
-peer-page-hint = 联机通过 Steam 连接，需要 Steam 正在运行；输入窗口底部的「直播与联机」面板也能进行同样的操作
-peer-create = 创建联机
-peer-join = 加入
-peer-leave = 离开联机
-peer-copy = 复制邀请
-peer-invite = 邀请好友
-peer-invite-idle = 邀请好友加入这个房间
-peer-invite-waiting = 等待对方接受邀请
-peer-invite-accepted = { $name } 已接受邀请
-peer-invite-accepted-many = 已有 { $n } 人接受邀请
 # Between the names of the other people in the room.
 peer-name-separator = 、
-peer-invite-accepted-unnamed = 对方已接受邀请
-peer-room-full = 房间已满（最多 8 人）
-peer-invitation = 粘贴对方的联机邀请
-peer-password = 房间密码（可选）
-peer-password-needed = 请输入房间密码后再加入
-peer-password-invalid = 房间密码不能超过 64 个字，也不能包含换行
-peer-invite-unavailable = 无法打开 Steam 邀请。请确认 Steam 浮层已开启
-peer-invite-invalid = 没能加入这个 Steam 邀请
-peer-paused = 等待联机恢复后再发送或控制播放；可以继续编辑草稿。
 
-# Independent partner output
-window-peer-display = 联机伙伴展示框
-windows-peer-display = 联机伙伴
-output-peer-display = 展示框 · 联机伙伴
-peer-window-toggle = 显示或隐藏伙伴窗口
-peer-outputs = 推流输出
-peer-outputs-hint = 每个座位一路 Spout/Syphon，按座位记忆：谁坐在这个座位，就从这一路输出
-peer-seat = 座位 { $n }
-peer-seat-named = 座位 { $n } · { $name }
-peer-seat-output = 输出座位 { $n }
-output-partners-moved = 联机伙伴每人一路输出，在「联机」页按座位开启
 output-name-conflict = 输出名称重复，请为每个输出设置不同的名称。
 tb-effect-pulse = 脉动
 tb-effect-flicker = 闪烁
@@ -950,16 +904,6 @@ skin-edit-draft-hint = 仅预览，尚未保存
 skin-edit-unavailable = 此皮肤暂时无法预览。
 skin-edit-save = 保存
 skin-edit-saved = 已保存
-
-
-
-
-
-
-
-
-
-
 
 settings-packages = 插件与资源包
 packages-import = 导入包
@@ -1077,31 +1021,6 @@ tw-retry = 重试未成功部分
 tw-skip-failed = 跳过此条，继续队列
 tw-enable = 开启发送
 
-## 创意工坊
-workshop-browse = 浏览创意工坊
-workshop-badge = 创意工坊
-workshop-kind-skins = 皮肤
-workshop-kind-sounds = 音效包
-workshop-kind-other = 其他
-workshop-steam-only = 创意工坊仅在 Steam 版中提供
-workshop-find = 在创意工坊寻找更多
-workshop-find-hint = 在 Steam 中订阅后会自动下载并出现在这里
-workshop-none = 还没有订阅的内容
-workshop-unavailable = 创意工坊不可用：请启动 Steam 后重新打开 NanaType
-workshop-ready = 已安装
-workshop-downloading = 下载中 { $percent }%
-workshop-pending = 等待下载
-workshop-not-installed = 未下载
-workshop-invalid = 无法使用：{ $message }
-workshop-shadowed = 与已安装的 { $id } 重名，未启用
-workshop-view = 在创意工坊查看
-workshop-download = 重新下载
-workshop-update = 更新
-workshop-unsubscribe = 取消订阅
-workshop-unsubscribe-confirm = 取消订阅「{ $name }」？Steam 会在退出后删除它的文件。
-workshop-unsubscribe-failed = 取消订阅失败：{ $message }
-sound-pack-workshop = { $name }（创意工坊）
-
 ## OBS 联动
 obs-link = 连接 OBS
 obs-link-hint = 通过 OBS 自带的 WebSocket 服务器（工具 › WebSocket 服务器设置）读取来源的包围框，按它决定输出分辨率
@@ -1193,7 +1112,7 @@ tts-unavailable = 这个系统没有可用的朗读引擎。
 tts-language = 语音语言
 tts-language-all = 全部语言
 tts-voice = 默认语音
-tts-voice-hint = 没有单独设置语音的角色、弹幕和搭档台词都用它。
+tts-voice-hint = 没有单独设置语音的角色和弹幕都用它。
 tts-voice-system = 系统默认
 tts-voice-default = 使用默认语音
 tts-character-voice = { $name } 的语音
@@ -1201,8 +1120,6 @@ tts-rate = 语速
 tts-volume = 音量
 tts-chat = 也朗读观众弹幕
 tts-chat-hint = 进入历史记录的弹幕，排在正在读的内容之后。
-tts-partners = 也朗读联动搭档的台词
-tts-partners-hint = 搭档台词出现时朗读一次，排在正在读的内容之后。
 tts-pace = 打字跟随朗读
 tts-pace-hint = 读到哪个词就打出哪个词。语音在片刻内没有给出词的时间时，按原来的节奏打字。
 tts-hint = 系统语音在系统设置中安装和管理；安装后点「刷新语音」。

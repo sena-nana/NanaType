@@ -143,13 +143,6 @@ unmodified and only varies their pitch during playback.
 
 Licence text: `KeySounds-Bubble-CC-BY-3.0.txt`.
 
-## Steamworks (Steam edition)
-
-The Steam edition ships Valve's `steam_api64.dll` (Windows) or
-`libsteam_api.dylib` (macOS) from the Steamworks SDK, through
-[steamworks-rs](https://github.com/Noxime/steamworks-rs) (MIT OR Apache-2.0),
-redistributed under the Steamworks SDK Access Agreement.
-
 ## DirectX Shader Compiler
 
 The Windows package ships `dxcompiler.dll` beside `NanaType.exe`: Microsoft's
@@ -170,7 +163,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 455 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 453 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -232,7 +225,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - rustls 0.23.46 — <https://github.com/rustls/rustls>
 
-### Apache-2.0 OR MIT (284)
+### Apache-2.0 OR MIT (283)
 
 - accesskit 0.25.1 — <https://github.com/AccessKit/accesskit>
 - accesskit_consumer 0.39.1 — <https://github.com/AccessKit/accesskit>
@@ -491,7 +484,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - utf8-zero 0.8.1 — <https://github.com/algesten/utf8-zero>
 - utf8_iter 1.0.4 — <https://github.com/hsivonen/utf8_iter>
 - uuid 1.26.1 — <https://github.com/uuid-rs/uuid>
-- webp 0.3.1 — <https://github.com/jaredforth/webp>
 - weezl 0.1.12 — <https://github.com/image-rs/weezl>
 - wgpu 30.0.1 — <https://github.com/gfx-rs/wgpu>
 - wgpu-core 30.0.1 — <https://github.com/gfx-rs/wgpu>
@@ -605,7 +597,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - rustls-webpki 0.103.15 — <https://github.com/rustls/webpki>
 - untrusted 0.9.0 — <https://github.com/briansmith/untrusted>
 
-### MIT (48)
+### MIT (47)
 
 - bincode 1.3.3 — <https://github.com/servo/bincode>
 - bytes 1.12.1 — <https://github.com/tokio-rs/bytes>
@@ -623,7 +615,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - harfrust 0.12.0 — <https://github.com/harfbuzz/harfrust>
 - imagesize 0.15.0 — <https://github.com/Roughsketch/imagesize>
 - libm 0.2.16 — <https://github.com/rust-lang/compiler-builtins>
-- libwebp-sys 0.9.6 — <https://github.com/NoXF/libwebp-sys>
 - mime_guess 2.0.5 — <https://github.com/abonander/mime_guess>
 - mio 1.2.4 — <https://github.com/tokio-rs/mio>
 - nana-icons-tabler 0.1.0 — <https://github.com/sena-nana/NanaUI>

@@ -35,7 +35,7 @@ use std::sync::{Arc, LazyLock};
 use nana_ui::runtime::view::{Computed, NodeRef, Signal, computed, node_ref, signal};
 use nanatype_core::{DisplayView, HistoryRow};
 use nanatype_i18n::{Arg, I18n, Locale};
-use nanatype_model::{Document, Entrance, EntranceKind, LineId};
+use nanatype_model::{Document, Entrance, EntranceKind};
 use nanatype_settings::Settings;
 use nanatype_theme::Skin;
 
@@ -90,32 +90,6 @@ pub struct SceneFrameDemand {
     pub next_at: Option<u64>,
 }
 
-/// Local display plus one lane for every other person in an eight-person room.
-pub const REMOTE_LANES: usize = 7;
-pub const TRACK_SLOTS: usize = REMOTE_LANES + 1;
-
-/// How many remote lanes are live. Before a room snapshot (`seats == 0`) lane
-/// 0 still carries the first remote track.
-pub fn remote_bands(seats: usize) -> usize {
-    match seats.min(REMOTE_LANES) {
-        0 => 1,
-        seats => seats,
-    }
-}
-
-/// One remote person's dialogue inside the partner window.
-#[derive(Clone, Copy)]
-pub struct PeerLane {
-    pub display: Signal<Arc<DisplayView>>,
-    pub track: dialogue::DisplayTrackState,
-    pub text_node: NodeRef,
-    pub text_port: NodeRef,
-    pub text_scroll: Signal<f32>,
-    pub display_size: Signal<[f32; 2]>,
-    pub text_area_height: Signal<f32>,
-    pub portraits: Signal<Arc<HashMap<String, String>>>,
-}
-
 /// What the skin renderer reads. `Copy`: views capture it freely.
 ///
 /// A product keeps one for its windows; the skin preview builds a private one
@@ -150,24 +124,11 @@ pub struct Stage {
     pub preview_text_exit_ms: Signal<u16>,
     /// Speaker label used by the isolated display preview.
     pub preview_name: Signal<String>,
-    /// How many remote people the partner window is showing, in seat order.
-    /// Zero means the room snapshot has not arrived: one box if lane 0
-    /// has a line, otherwise none.
-    pub peer_seats: Signal<usize>,
-    /// Remote lanes, in seat order.
-    pub peer_lanes: [PeerLane; REMOTE_LANES],
-    /// A remote participant's track is shown (it hides their latest line
-    /// from the history like the local one).
-    pub peer_active: Computed<bool>,
-    pub peer_local_line: Signal<Option<LineId>>,
-    /// Stable slot for per-track animation and layout caches.
-    pub track_slot: usize,
     /// Animation clock (ms); advanced every frame while something moves.
     pub now: Signal<u64>,
     /// History-sample playback: messages revealed, and the wall time of the
     /// latest step. A zero time means playback has not started.
     pub preview_playback: Signal<(u64, u64)>,
-    pub peer_now: Signal<u64>,
     pub history_now: Signal<u64>,
     pub history: Signal<Arc<Vec<HistoryRow>>>,
     /// Reactive row source read by the history renderer (equals `history` in the
@@ -250,16 +211,6 @@ impl Stage {
         let preview_name = speaker.name.clone();
         let entrance_view = Arc::new(DisplayView::empty(entrance));
         let track = dialogue::DisplayTrackState::new(entrance_view.clone());
-        let peer_lanes = std::array::from_fn(|_| PeerLane {
-            display: signal(entrance_view.clone()),
-            track: dialogue::DisplayTrackState::new(entrance_view.clone()),
-            text_node: node_ref(),
-            text_port: node_ref(),
-            text_scroll: signal(0.0),
-            display_size: signal([0.0; 2]),
-            text_area_height: signal(0.),
-            portraits: signal(Arc::new(HashMap::new())),
-        });
         Self {
             preview_options: PreviewOptions::default(),
             speaker: signal(speaker),
@@ -282,14 +233,8 @@ impl Stage {
             preview_display: signal(Arc::new(DisplayView::empty(entrance))),
             preview_text_exit_ms: signal(0),
             preview_name: signal(preview_name),
-            peer_seats: signal(0),
-            peer_lanes,
-            peer_active: computed(|| false),
-            peer_local_line: signal(None),
-            track_slot: 0,
             now: signal(crate::clock::now_ms()),
             preview_playback: signal((0, 0)),
-            peer_now: signal(crate::clock::now_ms()),
             history_now: signal(crate::clock::now_ms()),
             history,
             history_rows,
@@ -327,34 +272,7 @@ impl Stage {
 
     /// The dialogue canvas this track draws.
     pub fn canvas(self) -> Canvas {
-        if self.track_slot > 0 {
-            Canvas::PeerDisplay
-        } else {
-            Canvas::Display
-        }
-    }
-
-    /// Remote person `index` in seat order. Lane 0 is [`Self::remote`].
-    pub fn lane(self, index: usize) -> Self {
-        let lane = self.peer_lanes[index];
-        Self {
-            display: lane.display,
-            track: lane.track,
-            now: self.peer_now,
-            text_node: lane.text_node,
-            text_port: lane.text_port,
-            text_scroll: lane.text_scroll,
-            display_size: lane.display_size,
-            text_area_height: lane.text_area_height,
-            portraits: lane.portraits,
-            track_slot: index + 1,
-            ..self
-        }
-    }
-
-    /// The first remote person's track: their display, clock and text nodes.
-    pub fn remote(self) -> Self {
-        self.lane(0)
+        Canvas::Display
     }
 
     /// View of this state whose history log draws the separate viewer danmaku

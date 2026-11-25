@@ -1,7 +1,7 @@
 //! NanaType's own events (docs/logging.md). Typed fields carry codes and
 //! counts; messages go through `nanatype_diag::report!`, which redacts them.
 
-use nanatype_diag::domains::{APP, AUDIO, CHAT, OUTPUT, STEAM, STICKERS, TWITCH};
+use nanatype_diag::domains::{APP, AUDIO, CHAT, OUTPUT, STICKERS, TWITCH};
 use nanatype_diag::{EventDescriptor, FieldDescriptor, Metric, Severity};
 
 use crate::windows::WindowKind;
@@ -147,9 +147,6 @@ pub static AUDIO_FAILED: EventDescriptor = EventDescriptor::new(
     // 0 could not open, 1 lost while playing.
     &[FieldDescriptor::bool("lost")],
 );
-
-pub static STEAM_UNAVAILABLE: EventDescriptor =
-    EventDescriptor::new(STEAM, 1, "steam.unavailable", Severity::Info, &[]);
 
 pub static STICKER_PREVIEW_FAILED: EventDescriptor =
     EventDescriptor::new(STICKERS, 1, "stickers.preview_failed", Severity::Warn, &[]);
@@ -373,7 +370,6 @@ pub static EVENTS: &[&EventDescriptor] = &[
     &SPOUT_PLUGIN_FAILED,
     &AUDIO_RUNNING,
     &AUDIO_FAILED,
-    &STEAM_UNAVAILABLE,
     &STICKER_PREVIEW_FAILED,
     &STICKER_FRAME_REBUILD,
     &STICKER_UPLOAD_FAILED,
@@ -396,9 +392,8 @@ pub fn window(kind: WindowKind) -> u64 {
 /// The facts every session log starts with. Called once settings are
 /// loaded; nothing here identifies the user.
 pub fn session_info(settings: &nanatype_settings::Settings, locale: &str) {
-    use crate::distribution::{STEAM, UPDATES};
-    let edition = if STEAM { "steam" } else { "standalone" };
-    nanatype_diag::set_session_info("edition", edition);
+    use crate::distribution::UPDATES;
+    nanatype_diag::set_session_info("edition", "standalone");
     nanatype_diag::set_session_info("features", format!("updates={UPDATES}"));
     nanatype_diag::set_session_info(
         "os",

@@ -1203,7 +1203,6 @@ fn resizing_and_dock_tabs_preserve_both_editors_selection_and_undo_history() {
         let size = (f.bounds().width, f.bounds().height);
         for (width, height) in [(720, 360), (1280, 720), (920, 480)] {
             f.session.set_viewport(width, height, 1.0).unwrap();
-            f.ui.peer_panel.set(width == 720);
             f.session.flush().unwrap();
             assert_eq!(f.node(), editor);
             assert_eq!(f.text(), text);

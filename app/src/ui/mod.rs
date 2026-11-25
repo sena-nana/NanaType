@@ -9,7 +9,6 @@ pub mod dialogue;
 pub mod history;
 pub mod input;
 pub mod link_text;
-pub mod p2p;
 pub mod plugins;
 pub mod quick;
 pub mod settings;
@@ -18,10 +17,9 @@ pub(crate) mod speech;
 pub mod twitch;
 
 pub use nanatype_frame::ui::{
-    I18N, MONO, REMOTE_LANES, Source, Stage, avatar, c, collect_effect_garbage, controls,
-    editor_view, feedback, kit, materials, mono, motion, overflow, pipeline, plugin_view, preview,
-    quote, remote_bands, restyle, rich, shader_effects, surface, sweep, text_light, text_scramble,
-    tnum,
+    I18N, MONO, Source, Stage, avatar, c, collect_effect_garbage, controls, editor_view, feedback,
+    kit, materials, mono, motion, overflow, pipeline, plugin_view, preview, quote, restyle, rich,
+    shader_effects, surface, sweep, text_light, text_scramble, tnum,
 };
 
 use std::collections::HashMap;
@@ -199,8 +197,6 @@ pub struct SkinRow {
     pub builtin: bool,
     pub error: Option<String>,
     pub folder: Option<std::path::PathBuf>,
-    /// The Steam Workshop item it comes from.
-    pub workshop: Option<u64>,
     pub image_urls: Arc<HashMap<String, String>>,
     pub accent: [f32; 4],
     pub box_color: [f32; 4],
@@ -219,8 +215,6 @@ pub struct SoundPackRow {
     pub author: String,
     pub error: Option<String>,
     pub folder: Option<std::path::PathBuf>,
-    /// The Steam Workshop item it comes from.
-    pub workshop: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -276,12 +270,6 @@ pub struct Ui {
     pub(crate) input_split: NodeRef,
     /// The split between pinned chat and the insert panels.
     pub(crate) input_chat_split: NodeRef,
-    pub peer: Signal<Arc<crate::p2p::SessionUi>>,
-    pub peer_panel: Signal<bool>,
-    /// The invitation field. A Steam friend invite fills it from outside the card.
-    pub peer_invitation: Signal<String>,
-    /// The management popover. A Steam invite opens it so the password can be typed.
-    pub peer_popover: Signal<bool>,
     pub diagnostics: Signal<Arc<Vec<String>>>,
     /// Monotonic draft mutation & IME composition fence shared across routing,
     /// `DraftController`, and speech dictation.
@@ -300,8 +288,6 @@ pub struct Ui {
     /// coming back shows it at once.
     pub skin_preview: Signal<Option<Arc<SkinPreview>>>,
     pub sound_packs: Signal<Arc<Vec<SoundPackRow>>>,
-    /// Steam Workshop subscriptions; empty and hidden outside the Steam build.
-    pub workshop: Signal<Arc<crate::workshop::View>>,
     pub stickers: Signal<Arc<Vec<StickerRow>>>,
     pub sticker_packs: Signal<Arc<Vec<crate::stickers::PackRow>>>,
     pub telegram: Signal<Arc<crate::stickers::telegram::State>>,
@@ -356,12 +342,10 @@ impl std::ops::Deref for Ui {
 
 impl Ui {
     pub fn new(settings: Arc<Settings>, skin: Arc<Skin>, locale: Locale) -> Self {
-        let peer = signal(Arc::new(crate::p2p::SessionUi::default()));
         let page = signal(settings::Page::General);
         // The guide reopens on the step it was left at.
         let onboard_step = signal(settings.general.onboarding_step);
         let mut stage = Stage::new(settings, skin, locale);
-        stage.peer_active = computed(move || peer.with(|p| p.active));
         let stage_settings = stage.settings;
         stage.live_preview = computed(move || {
             page.get() == settings::Page::Skins
@@ -395,11 +379,7 @@ impl Ui {
             input_dock: signal(nanatype_settings::InputDockLayout::default()),
             input_split: node_ref(),
             input_chat_split: node_ref(),
-            peer,
             platform_tab: signal(sources::PlatformTab::ALL[0]),
-            peer_panel: signal(true),
-            peer_invitation: signal(String::new()),
-            peer_popover: signal(false),
             diagnostics: signal(Arc::new(Vec::new())),
             draft_fence: signal(crate::app::draft::DraftFence::default()),
             page,
@@ -412,7 +392,6 @@ impl Ui {
             skins: signal(Arc::new(Vec::new())),
             skin_preview: signal(None),
             sound_packs: signal(Arc::new(Vec::new())),
-            workshop: signal(Arc::new(crate::workshop::View::default())),
             stickers: signal(Arc::new(Vec::new())),
             sticker_packs: signal(Arc::new(Vec::new())),
             telegram: signal(Arc::new(Default::default())),
@@ -437,28 +416,6 @@ impl Ui {
             archive: signal(Arc::new(crate::archive::View::default())),
             backup: signal(Arc::new(crate::app::backup::View::default())),
         }
-    }
-
-    /// The broadcast window this track's display draws in.
-    pub fn display_kind(self) -> crate::windows::WindowKind {
-        if self.track_slot > 0 {
-            crate::windows::WindowKind::PARTNERS[self.track_slot - 1]
-        } else {
-            crate::windows::WindowKind::Display
-        }
-    }
-
-    /// Remote person `index` in seat order.
-    pub fn lane(self, index: usize) -> Self {
-        Self {
-            stage: self.stage.lane(index),
-            ..self
-        }
-    }
-
-    /// The first remote person's track (see [`Stage::remote`]).
-    pub fn remote(self) -> Self {
-        self.lane(0)
     }
 }
 
@@ -504,10 +461,8 @@ pub fn skin_rows(registry: &nanatype_theme::SkinRegistry, locale: Locale) -> Vec
                 error: e.errors.first().map(|d| d.to_string()),
                 folder: match &e.origin {
                     nanatype_theme::SkinOrigin::Directory(p) => Some(p.clone()),
-                    nanatype_theme::SkinOrigin::Workshop { folder, .. } => Some(folder.clone()),
                     _ => None,
                 },
-                workshop: e.workshop_item(),
                 image_urls: picker_image_urls(e),
                 accent: [0.5; 4],
                 box_color: [0.5; 4],
@@ -550,11 +505,6 @@ pub fn sound_pack_rows(
             error: p.errors.first().map(|d| d.to_string()),
             folder: match &p.origin {
                 nanatype_theme::SkinOrigin::Directory(path) => Some(path.clone()),
-                nanatype_theme::SkinOrigin::Workshop { folder, .. } => Some(folder.clone()),
-                _ => None,
-            },
-            workshop: match p.origin {
-                nanatype_theme::SkinOrigin::Workshop { item, .. } => Some(item),
                 _ => None,
             },
         })

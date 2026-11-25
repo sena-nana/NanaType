@@ -13,19 +13,6 @@ type Read = fn(&Settings) -> &nanatype_settings::SpoutOutput;
 type Write = fn(&mut Settings) -> &mut nanatype_settings::SpoutOutput;
 
 pub(super) fn output(ui: Ui) -> AnyView {
-    // Partner seats are switched on where the co-op session is: this row
-    // only says so.
-    let partners = (
-        row(
-            ui,
-            "output-peer-display",
-            Some("output-partners-moved"),
-            tool(ui, ti::USERS, "settings-peer", || {
-                Msg::Window(crate::msg::WindowMsg::SettingsPage(Page::Peer))
-            }),
-        ),
-        None,
-    );
     let senders = [
         spout::spout_rows(ui, WindowKind::Display, "output-display", None),
         spout::spout_rows(ui, WindowKind::History, "output-history", None),
@@ -38,7 +25,6 @@ pub(super) fn output(ui: Ui) -> AnyView {
     ]
     .into_iter()
     .flatten()
-    .chain([partners])
     .collect();
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((

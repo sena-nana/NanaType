@@ -89,20 +89,12 @@ impl SenderLease {
         kind: WindowKind,
         s: &Settings,
         runtime_sizes: &RuntimeOutputSizes,
-        partners: usize,
     ) -> Option<WindowOutputConfig> {
         // Only sync mutates the lease. A live clock query here could cross the
         // deadline halfway through NanaUI's window loop: the first retirement
         // callback would cancel cleanup while another window still had its pool.
         if self.expires.is_none()
-            || !can_pause(
-                kind,
-                &self.output,
-                self.runtime_size,
-                s,
-                runtime_sizes,
-                partners,
-            )
+            || !can_pause(kind, &self.output, self.runtime_size, s, runtime_sizes)
         {
             return None;
         }
@@ -202,13 +194,12 @@ fn can_pause(
     previous_runtime_size: Option<[u32; 2]>,
     s: &Settings,
     runtime_sizes: &RuntimeOutputSizes,
-    partners: usize,
 ) -> bool {
     let Some(out) = settings_for(kind, s) else {
         return false;
     };
     !out.enabled
-        && active_window(kind, s, partners)
+        && active_window(kind, s)
         && out.name == previous.name
         && runtime_sizes.extent_for(kind, out) == previous_runtime_size.or(previous.size)
         && out.straight_alpha == previous.straight_alpha
@@ -336,13 +327,12 @@ impl OutputTransport for SpoutTransport {
         &mut self,
         s: &Settings,
         runtime_sizes: &RuntimeOutputSizes,
-        partners: usize,
         _live: &[(WindowKind, &SpoutOutput)],
     ) {
         let now = crate::clock::now_ms();
         let active = KINDS
             .into_iter()
-            .any(|kind| super::config::resolve(kind, s, partners).output().is_some());
+            .any(|kind| super::config::resolve(kind, s).output().is_some());
         if self
             .bridge
             .as_ref()
@@ -362,10 +352,9 @@ impl OutputTransport for SpoutTransport {
                 sender.lease.runtime_size,
                 s,
                 runtime_sizes,
-                partners,
             );
             sender.lease.reconcile(
-                super::config::resolve(*kind, s, partners).output(),
+                super::config::resolve(*kind, s).output(),
                 runtime_sizes.get(*kind),
                 pause,
                 now,
@@ -385,11 +374,10 @@ impl OutputTransport for SpoutTransport {
         kind: WindowKind,
         s: &Settings,
         runtime_sizes: &RuntimeOutputSizes,
-        partners: usize,
     ) -> Option<WindowOutputConfig> {
         self.senders
             .get(&kind)
-            .and_then(|sender| sender.lease.paused_config(kind, s, runtime_sizes, partners))
+            .and_then(|sender| sender.lease.paused_config(kind, s, runtime_sizes))
     }
 
     fn cleanup_deadline(&self) -> Option<u64> {
@@ -404,7 +392,6 @@ impl OutputTransport for SpoutTransport {
         &mut self,
         s: &Settings,
         runtime_sizes: &RuntimeOutputSizes,
-        partners: usize,
         gpu: &GpuContext,
         locale: Locale,
     ) -> Vec<(WindowKind, LinkState)> {
@@ -420,7 +407,7 @@ impl OutputTransport for SpoutTransport {
         let generation = gpu.generation();
         let now = crate::clock::now_ms();
         let pending = KINDS.map(|kind| {
-            super::config::resolve(kind, s, partners)
+            super::config::resolve(kind, s)
                 .output()
                 .filter(|out| {
                     let rsize = runtime_sizes.get(kind);
@@ -616,10 +603,10 @@ mod tests {
             expires: Some(5_000),
         };
         let before = crate::clock::capture_at(4_999, || {
-            lease.paused_config(WindowKind::Display, &s, &sizes, 0)
+            lease.paused_config(WindowKind::Display, &s, &sizes)
         });
         let after = crate::clock::capture_at(5_001, || {
-            lease.paused_config(WindowKind::Display, &s, &sizes, 0)
+            lease.paused_config(WindowKind::Display, &s, &sizes)
         });
         assert_eq!(before, after);
         assert!(after.unwrap().suspended);
@@ -693,61 +680,23 @@ mod tests {
     }
 
     #[test]
-    fn paused_sender_rejects_rename_resize_alpha_collision_and_peer_departure() {
+    fn paused_sender_rejects_rename_resize_alpha_and_collision() {
         let mut s = Settings::default();
         let sizes = RuntimeOutputSizes::default();
         let previous = s.output.display.clone();
-        assert!(can_pause(
-            WindowKind::Display,
-            &previous,
-            None,
-            &s,
-            &sizes,
-            0
-        ));
+        assert!(can_pause(WindowKind::Display, &previous, None, &s, &sizes));
         s.output.display.name.push('x');
-        assert!(!can_pause(
-            WindowKind::Display,
-            &previous,
-            None,
-            &s,
-            &sizes,
-            0
-        ));
+        assert!(!can_pause(WindowKind::Display, &previous, None, &s, &sizes,));
         s.output.display = previous.clone();
         s.output.display.size = Some([100, 100]);
-        assert!(!can_pause(
-            WindowKind::Display,
-            &previous,
-            None,
-            &s,
-            &sizes,
-            0
-        ));
+        assert!(!can_pause(WindowKind::Display, &previous, None, &s, &sizes,));
         s.output.display = previous.clone();
         s.output.display.straight_alpha = !previous.straight_alpha;
-        assert!(!can_pause(
-            WindowKind::Display,
-            &previous,
-            None,
-            &s,
-            &sizes,
-            0
-        ));
+        assert!(!can_pause(WindowKind::Display, &previous, None, &s, &sizes,));
         s.output.display = previous.clone();
         s.output.history.enabled = true;
         s.output.history.name = previous.name.clone();
-        assert!(!can_pause(
-            WindowKind::Display,
-            &previous,
-            None,
-            &s,
-            &sizes,
-            0
-        ));
-        let peer = s.output.partners[0].clone();
-        assert!(!can_pause(WindowKind::PARTNER, &peer, None, &s, &sizes, 0));
-        assert!(can_pause(WindowKind::PARTNER, &peer, None, &s, &sizes, 1));
+        assert!(!can_pause(WindowKind::Display, &previous, None, &s, &sizes,));
         let mut lease = SenderLease {
             output: previous,
             runtime_size: None,

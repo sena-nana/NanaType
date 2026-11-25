@@ -75,15 +75,12 @@ package-protected-files = protected files
 package-unsigned = Unsigned: source and integrity are not authenticated
 package-integrity-failed = Integrity check failed; loading refused
 package-source-builtin = Built-in
-package-source-workshop = Steam Workshop
-package-source-workshop-by = Steam Workshop · { $author }
 package-source-third-party = Third-party import
 package-third-party-warning = This package was imported from outside NanaType and its source is not verified. Only install packages from authors you trust, and review a function package's script before enabling it.
 package-data-source = Source
 package-data-license = License
 package-data-protected = covered by the signature
 package-data-unprotected = not covered by a signature
-
 
 # Shared skin parameter controls
 skin-params-title = Skin options

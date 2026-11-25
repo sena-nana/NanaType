@@ -91,35 +91,20 @@ fn frame_policy(
     kind: Option<WindowKind>,
     now: u64,
     follow: &overflow::Follow,
-    peer_follows: &[overflow::Follow],
     pager: &overflow::Pager,
 ) -> FramePolicy {
     let skin_fps = skin_fps(ui);
     let (clock, tick_clock, render_only, next_at, fps) = match kind {
-        Some(WindowKind::Display | WindowKind::PeerDisplay(_)) => {
-            let seat = kind.and_then(WindowKind::seat);
-            if let Some(seat) = seat
-                && (!ui.peer.get_untracked().active
-                    || seat >= crate::ui::remote_bands(ui.peer_seats.get_untracked()))
-            {
-                return FramePolicy::default();
-            }
-            let track = seat.map_or(ui, |seat| ui.lane(seat));
-            let scene = dialogue::frame_demand(*track, now);
-            let follow_wants = match seat {
-                Some(seat) => peer_follows[seat].wants_frame(),
-                None => follow.wants_frame() || pager.wants_frame(),
-            };
-            let follow_next = match seat {
-                Some(seat) => peer_follows[seat].next_line_at(),
-                None => follow.next_line_at(),
-            };
+        Some(WindowKind::Display) => {
+            let scene = dialogue::frame_demand(*ui, now);
+            let follow_wants = follow.wants_frame() || pager.wants_frame();
+            let follow_next = follow.next_line_at();
             let next_at = match (scene.next_at, follow_next) {
                 (Some(a), Some(b)) => Some(a.min(b)),
                 (a, b) => a.or(b),
             };
             (
-                track.now,
+                ui.now,
                 scene.tick_clock,
                 scene.render_only || follow_wants,
                 next_at,
@@ -211,12 +196,10 @@ impl Host {
     fn prepare_outputs(&mut self, context: &RuntimeProgramContext<Msg>) {
         self.app.note_gpu(context.gpu());
         let locale = self.app.ui.locale.get_untracked();
-        let partners = self.app.partner_seats();
         let sizes = self.app.ui.runtime_output_sizes.get_untracked();
         self.app.shell.output.prepare(
             &self.app.settings,
             &sizes,
-            partners,
             context.gpu(),
             locale,
             self.app.ui.output_status,
@@ -280,12 +263,6 @@ impl Host {
             WindowKind::Display => {
                 context
                     .mount_view_root(doc_id, move || dialogue::display_window(ui))
-                    .map_err(err)?;
-            }
-            WindowKind::PeerDisplay(seat) => {
-                let seat = usize::from(seat);
-                context
-                    .mount_view_root(doc_id, move || dialogue::peer_window(ui, seat))
                     .map_err(err)?;
             }
             WindowKind::History => {
@@ -511,7 +488,6 @@ impl RuntimeProgram for Host {
                     if matches!(
                         kind,
                         WindowKind::Display
-                            | WindowKind::PeerDisplay(_)
                             | WindowKind::History
                             | WindowKind::Danmaku
                             | WindowKind::Quick
@@ -713,7 +689,7 @@ impl RuntimeProgram for Host {
         self.app
             .shell
             .output
-            .config(kind, &self.app.settings, &sizes, self.app.partner_seats())
+            .config(kind, &self.app.settings, &sizes)
     }
 
     fn window_frame_presented(
@@ -743,7 +719,7 @@ impl RuntimeProgram for Host {
             .output
             .paused_output(kind, clock::now_ms())
             .cloned();
-        let Some(out) = crate::output::resolve(kind, &self.app.settings, self.app.partner_seats())
+        let Some(out) = crate::output::resolve(kind, &self.app.settings)
             .output()
             .or(paused.as_ref())
         else {
@@ -805,7 +781,7 @@ impl RuntimeProgram for Host {
         if let Some(kind) = WindowKind::from_id(id) {
             nanatype_diag::report!(crate::diag::WINDOW_OUTPUT, window = crate::diag::window(kind); "{status:?}");
             let locale = self.app.ui.locale.get_untracked();
-            if crate::output::resolve(kind, &self.app.settings, self.app.partner_seats())
+            if crate::output::resolve(kind, &self.app.settings)
                 .output()
                 .is_some()
             {
@@ -828,7 +804,6 @@ impl RuntimeProgram for Host {
             WindowKind::from_id(id),
             clock::now_ms(),
             &self.viewport.follow,
-            &self.viewport.peer_follows,
             &self.viewport.pager,
         )
         .demand;
@@ -891,12 +866,8 @@ impl RuntimeProgram for Host {
         match WindowKind::from_id(id) {
             Some(WindowKind::Input) => self.editor.anchor_completion(&self.app, &self.docs),
             Some(WindowKind::Display) => {
-                self.viewport
-                    .follow_track(&mut self.app, &self.docs, now, None)
+                self.viewport.follow_display(&mut self.app, &self.docs, now)
             }
-            Some(WindowKind::PeerDisplay(seat)) if self.app.peer.handle.is_some() => self
-                .viewport
-                .follow_track(&mut self.app, &self.docs, now, Some(usize::from(seat))),
             Some(WindowKind::Settings) => {
                 let ui = *self.app.ui;
                 crate::ui::preview::tick_history_playback(ui, now);
@@ -909,7 +880,6 @@ impl RuntimeProgram for Host {
             WindowKind::from_id(id),
             now,
             &self.viewport.follow,
-            &self.viewport.peer_follows,
             &self.viewport.pager,
         );
         let changed = self.docs.get(&id).is_some_and(|doc| {
@@ -1123,7 +1093,7 @@ mod tests {
     }
 
     #[test]
-    fn gpu_only_frames_leave_application_clocks_idle_and_keep_tracks_independent() {
+    fn gpu_only_frames_leave_application_clocks_idle() {
         let mut skin = nanatype_theme::Skin::default();
         skin.dialogue.sweep.enabled = true;
         let ui = crate::ui::Ui::new(
@@ -1132,22 +1102,11 @@ mod tests {
             nanatype_i18n::Locale::ZhCn,
         );
         ui.display.update(|view| Arc::make_mut(view).empty = false);
-        ui.peer_lanes[0].display.set(ui.display.get_untracked());
         ui.now.set(123);
-        ui.peer_now.set(456);
         let follow = overflow::Follow::default();
         let pager = overflow::Pager::default();
         let now = 1_000_000_000;
-        let policy = |kind| {
-            frame_policy(
-                ui,
-                Some(kind),
-                now,
-                &follow,
-                std::slice::from_ref(&follow),
-                &pager,
-            )
-        };
+        let policy = |kind| frame_policy(ui, Some(kind), now, &follow, &pager);
         let local = policy(WindowKind::Display);
         assert!(matches!(local.demand, FrameDemand::Continuous(_)));
         assert!(!local.tick_clock);
@@ -1155,16 +1114,6 @@ mod tests {
         assert_eq!(ui.now.get_untracked(), 123);
         local.advance(now, true);
         assert_eq!(ui.now.get_untracked(), now);
-        assert_eq!(ui.peer_now.get_untracked(), 456);
-        let peer = policy(WindowKind::PARTNER);
-        assert!(matches!(peer.demand, FrameDemand::OnDemand));
-        peer.advance(now, true);
-        assert_eq!(ui.peer_now.get_untracked(), 456);
-        ui.peer.update(|peer| Arc::make_mut(peer).active = true);
-        let peer = policy(WindowKind::PARTNER);
-        assert!(matches!(peer.demand, FrameDemand::Continuous(_)));
-        peer.advance(now, false);
-        assert_eq!(ui.peer_now.get_untracked(), 456);
         ui.reduced_motion.set(true);
         assert!(matches!(
             policy(WindowKind::Display).demand,
@@ -1188,14 +1137,7 @@ mod tests {
         let pager = overflow::Pager::default();
         let now = 10_000;
         let policy = clock::capture_at(now, || {
-            frame_policy(
-                ui,
-                Some(WindowKind::Display),
-                now,
-                &follow,
-                std::slice::from_ref(&follow),
-                &pager,
-            )
+            frame_policy(ui, Some(WindowKind::Display), now, &follow, &pager)
         });
         assert!(!policy.tick_clock);
         assert!(matches!(policy.demand, FrameDemand::At(at) if at == clock::instant(10_667)));
@@ -1231,24 +1173,10 @@ mod tests {
         });
         let follow = overflow::Follow::default();
         let pager = overflow::Pager::default();
-        let live = frame_policy(
-            ui,
-            Some(WindowKind::Display),
-            now + 299,
-            &follow,
-            &[],
-            &pager,
-        );
+        let live = frame_policy(ui, Some(WindowKind::Display), now + 299, &follow, &pager);
         assert!(live.tick_clock);
         assert!(matches!(live.demand, FrameDemand::Continuous(_)));
-        let settled = frame_policy(
-            ui,
-            Some(WindowKind::Display),
-            now + 300,
-            &follow,
-            &[],
-            &pager,
-        );
+        let settled = frame_policy(ui, Some(WindowKind::Display), now + 300, &follow, &pager);
         assert!(!settled.tick_clock);
         assert!(matches!(settled.demand, FrameDemand::OnDemand));
     }
@@ -1290,17 +1218,10 @@ mod tests {
         }]));
         let follow = overflow::Follow::default();
         let pager = overflow::Pager::default();
-        let live = frame_policy(ui, Some(WindowKind::History), now, &follow, &[], &pager);
+        let live = frame_policy(ui, Some(WindowKind::History), now, &follow, &pager);
         assert!(live.tick_clock);
         assert!(matches!(live.demand, FrameDemand::Continuous(_)));
-        let settled = frame_policy(
-            ui,
-            Some(WindowKind::History),
-            now + 1_000,
-            &follow,
-            &[],
-            &pager,
-        );
+        let settled = frame_policy(ui, Some(WindowKind::History), now + 1_000, &follow, &pager);
         assert!(!settled.tick_clock);
         assert!(matches!(settled.demand, FrameDemand::OnDemand));
     }
@@ -1322,28 +1243,12 @@ mod tests {
             });
         });
         let mut follow = overflow::Follow::default();
-        let peer_follow = overflow::Follow::default();
         let mut pager = overflow::Pager::default();
-        let policy = frame_policy(
-            ui,
-            Some(WindowKind::Display),
-            now,
-            &follow,
-            std::slice::from_ref(&peer_follow),
-            &pager,
-        );
+        let policy = frame_policy(ui, Some(WindowKind::Display), now, &follow, &pager);
         assert!(policy.tick_clock && matches!(policy.demand, FrameDemand::Continuous(_)));
         let now = now + 200;
         assert!(matches!(
-            frame_policy(
-                ui,
-                Some(WindowKind::Display),
-                now,
-                &follow,
-                std::slice::from_ref(&peer_follow),
-                &pager
-            )
-            .demand,
+            frame_policy(ui, Some(WindowKind::Display), now, &follow, &pager).demand,
             FrameDemand::OnDemand
         ));
         let key = PageKey {
@@ -1380,34 +1285,18 @@ mod tests {
             glyphs: &glyphs,
         };
         follow.frame(Some(key), Some(&measure), now, false);
-        let policy = frame_policy(
-            ui,
-            Some(WindowKind::Display),
-            now,
-            &follow,
-            std::slice::from_ref(&peer_follow),
-            &pager,
-        );
+        let policy = frame_policy(ui, Some(WindowKind::Display), now, &follow, &pager);
         assert!(!policy.tick_clock);
         assert!(matches!(policy.demand, FrameDemand::At(at) if at == clock::instant(now + 100)));
         pager.frame(Some(key), None);
-        let policy = frame_policy(
-            ui,
-            Some(WindowKind::Display),
-            now,
-            &follow,
-            std::slice::from_ref(&peer_follow),
-            &pager,
-        );
+        let policy = frame_policy(ui, Some(WindowKind::Display), now, &follow, &pager);
         assert!(matches!(policy.demand, FrameDemand::Continuous(_)) && !policy.tick_clock);
     }
 
     #[test]
     fn glyph_motion_keeps_to_each_windows_frame_rate() {
         let rate = |kind| max_frame_rate(kind).map(NonZeroU32::get);
-        for kind in [WindowKind::Display, WindowKind::PARTNER] {
-            assert_eq!(rate(Some(kind)), None, "{kind:?}");
-        }
+        assert_eq!(rate(Some(WindowKind::Display)), None);
         assert_eq!(rate(Some(WindowKind::Input)), Some(INPUT_FPS));
         assert_eq!(rate(Some(WindowKind::History)), Some(HISTORY_FPS));
         assert_eq!(rate(Some(WindowKind::Danmaku)), Some(HISTORY_FPS));
@@ -1429,7 +1318,7 @@ mod tests {
         let follow = overflow::Follow::default();
         let pager = overflow::Pager::default();
         assert!(matches!(
-            frame_policy(ui, Some(WindowKind::Danmaku), now, &follow, &[], &pager).demand,
+            frame_policy(ui, Some(WindowKind::Danmaku), now, &follow, &pager).demand,
             FrameDemand::OnDemand
         ));
         settings.history.chat.separate = true;
@@ -1453,28 +1342,14 @@ mod tests {
             },
             reveal: None,
         }]));
-        let scheduled = frame_policy(ui, Some(WindowKind::Danmaku), now, &follow, &[], &pager);
+        let scheduled = frame_policy(ui, Some(WindowKind::Danmaku), now, &follow, &pager);
         assert!(matches!(scheduled.demand, FrameDemand::At(_)));
-        let fading = frame_policy(
-            ui,
-            Some(WindowKind::Danmaku),
-            now + 5_100,
-            &follow,
-            &[],
-            &pager,
-        );
+        let fading = frame_policy(ui, Some(WindowKind::Danmaku), now + 5_100, &follow, &pager);
         assert!(fading.tick_clock);
         assert!(matches!(fading.demand, FrameDemand::Continuous(_)));
         ui.settings
             .update(|s| Arc::make_mut(s).history.chat.separate = false);
-        let disabled = frame_policy(
-            ui,
-            Some(WindowKind::Danmaku),
-            now + 5_100,
-            &follow,
-            &[],
-            &pager,
-        );
+        let disabled = frame_policy(ui, Some(WindowKind::Danmaku), now + 5_100, &follow, &pager);
         assert!(!disabled.tick_clock);
         assert!(matches!(disabled.demand, FrameDemand::OnDemand));
     }

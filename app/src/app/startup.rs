@@ -3,7 +3,7 @@ use super::demo_editor;
 use crate::msg::Msg;
 #[cfg(feature = "updates")]
 use crate::msg::UpdateMsg;
-use crate::msg::{ChatMsg, ObsMsg, StickerMsg, TwitchMsg, WorkshopMsg};
+use crate::msg::{ChatMsg, ObsMsg, StickerMsg, TwitchMsg};
 use crate::paths::Paths;
 use crate::scheduler::Scheduler;
 use crate::services::chat_assets::ChatAssets;
@@ -28,7 +28,6 @@ pub(super) struct Workers {
     pub twitch: nanatype_twitch::TwitchHandle,
     pub blive: BliveFeedManager,
     pub obs: nanatype_obs::ObsHandle,
-    pub steam: nanatype_steam::SteamHandle,
     pub sticker_manager: crate::stickers::Manager,
     pub telegram: crate::stickers::telegram::Service,
     #[cfg(feature = "updates")]
@@ -39,7 +38,6 @@ impl Workers {
     pub fn start(
         paths: &Paths,
         settings: &Settings,
-        steam: Option<nanatype_steam::Steam>,
         post: impl Fn(Msg) + Clone + Send + Sync + 'static,
     ) -> Self {
         Self {
@@ -75,10 +73,6 @@ impl Workers {
                 ),
             ),
             obs: nanatype_obs::ObsHandle::new(forward(&post, |e| Msg::Obs(ObsMsg::Event(e)))),
-            steam: nanatype_steam::SteamHandle::start(
-                steam,
-                forward(&post, |e| Msg::Workshop(WorkshopMsg::Event(e))),
-            ),
             sticker_manager: crate::stickers::Manager::new(
                 &paths.data,
                 forward(&post, |e| Msg::Sticker(StickerMsg::Event(e))),

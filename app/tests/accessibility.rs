@@ -117,7 +117,7 @@ fn a_window_setting_is_named_by_its_row_and_window() {
         .into_iter()
         .filter_map(|n| n.label)
         .collect();
-    for name in ["Always on top: History", "Interaction: Partner"] {
+    for name in ["Always on top: History", "Interaction: Display"] {
         assert!(
             labels.iter().any(|l| l == name),
             "no {name:?} in {labels:?}"

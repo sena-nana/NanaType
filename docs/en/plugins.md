@@ -19,8 +19,6 @@ The format version is `format = 1`, `schema = 3`.
 
 Packages are stored together in `packages/` under the app data directory.
 
-The Steam edition also reads subscribed Workshop items; these are read-only external package directories and are not copied into `packages/` ([Steam edition](steam.md)).
-
 Older formats are not supported, and the old `skins/` directory is neither migrated nor deleted.
 
 Dependencies are listed in `[dependencies]` by package ID with an exact three-part version; resource references are either paths relative to the package or `pkg:<package ID>/<path>`.

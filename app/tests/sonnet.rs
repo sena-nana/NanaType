@@ -39,13 +39,12 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
         &families,
         "zh-CN",
     ));
-    for (case, width, height, reduced, enabled, remote) in [
-        ("wide", 992, 222, false, true, false),
-        ("narrow", 300, 260, false, true, false),
-        ("portrait", 260, 600, false, true, false),
-        ("remote", 992, 222, false, true, true),
-        ("reduced", 992, 222, true, true, false),
-        ("disabled", 992, 222, false, false, false),
+    for (case, width, height, reduced, enabled) in [
+        ("wide", 992, 222, false, true),
+        ("narrow", 300, 260, false, true),
+        ("portrait", 260, 600, false, true),
+        ("reduced", 992, 222, true, true),
+        ("disabled", 992, 222, false, false),
     ] {
         if std::env::var("NANATYPE_SONNET_CASE").is_ok_and(|v| v != case) {
             continue;
@@ -56,9 +55,8 @@ fn sonnet_renders_finite_glyph_light_and_synchronized_retirement() {
         settings.skin.advanced_effects = enabled;
         settings.playback.reduced_motion = reduced;
         settings.playback.punctuation_pauses = false;
-        let root = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-        root.reduced_motion.set(reduced);
-        let ui = if remote { root.remote() } else { root };
+        let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
+        ui.reduced_motion.set(reduced);
         let mut core = Core::from_settings(&settings, &skin);
         core.handle(
             Cmd::SendMarkup("[speed=50ms]瞬息已是夜晚 A sonnet\n星光写成了诗 Light[/speed]".into()),

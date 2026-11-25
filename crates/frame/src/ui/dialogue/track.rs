@@ -298,25 +298,4 @@ mod tests {
         assert_eq!(stage.presence(0, false), (1.0, 0.0));
         assert_eq!(stage.presence(48, false), (1.0, 0.0));
     }
-
-    #[test]
-    fn partner_decoration_demand_does_not_follow_the_local_empty_track() {
-        let registry = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
-        let ui = Stage::new(
-            Arc::new(nanatype_settings::Settings::default()),
-            registry.load("nanatype.sakura").unwrap().skin,
-            nanatype_i18n::Locale::ZhCn,
-        );
-        let mut remote = (*ui.peer_lanes[0].display.get_untracked()).clone();
-        remote.empty = false;
-        ui.peer_lanes[0].display.set(Arc::new(remote));
-        assert!(!display_animating(ui, 100_000));
-        assert!(
-            !display_animating(ui.remote(), 100_000),
-            "decor uses the compositor clock"
-        );
-        assert!(!frame_demand(ui.remote(), 100_000).tick_clock);
-        ui.reduced_motion.set(true);
-        assert!(!display_animating(ui.remote(), 100_000));
-    }
 }

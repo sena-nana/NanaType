@@ -11,7 +11,6 @@ fn catalog() -> Vec<&'static EventDescriptor> {
         nanatype_diag::EVENTS,
         nanatype_frame::diag::EVENTS,
         nanatype_twitch::diag::EVENTS,
-        nanatype_p2p::diag::EVENTS,
         nanatype_plugins::diag::EVENTS,
     ] {
         all.extend_from_slice(events);

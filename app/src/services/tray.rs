@@ -105,8 +105,6 @@ pub struct TrayState {
     pub locale: Locale,
     pub input: bool,
     pub display: bool,
-    pub peer_display: bool,
-    pub peer_active: bool,
     pub history: bool,
     pub danmaku: bool,
     pub danmaku_separate: bool,
@@ -138,7 +136,6 @@ pub struct Tray {
     drawn: Cell<Badge>,
     input: MenuItem,
     display: MenuItem,
-    peer_display: MenuItem,
     history: MenuItem,
     danmaku: MenuItem,
     chat: MenuItem,
@@ -332,7 +329,6 @@ fn paint(img: &mut image::RgbaImage, inside: impl Fn(f32, f32) -> bool, color: [
 fn output_toggle_action(kind: WindowKind) -> Option<MenuAction> {
     match kind {
         WindowKind::Display => Some(MenuAction::ToggleWindow(WindowKind::Display)),
-        WindowKind::PeerDisplay(_) => Some(MenuAction::ToggleWindow(WindowKind::PARTNER)),
         WindowKind::History => Some(MenuAction::ToggleWindow(WindowKind::History)),
         WindowKind::Danmaku => Some(MenuAction::ToggleWindow(WindowKind::Danmaku)),
         _ => None,
@@ -363,7 +359,6 @@ impl Tray {
         };
         let input = item(MenuAction::ToggleWindow(WindowKind::Input));
         let display = item(MenuAction::ToggleWindow(WindowKind::Display));
-        let peer_display = item(MenuAction::ToggleWindow(WindowKind::PARTNER));
         let history = item(MenuAction::ToggleWindow(WindowKind::History));
         let danmaku = item(MenuAction::ToggleWindow(WindowKind::Danmaku));
         let chat = item(MenuAction::ToggleChat);
@@ -388,7 +383,6 @@ impl Tray {
         menu.append_items(&[
             &input,
             &display,
-            &peer_display,
             &history,
             &danmaku,
             &chat,
@@ -436,7 +430,6 @@ impl Tray {
             drawn: Cell::new(Badge::default()),
             input,
             display,
-            peer_display,
             history,
             danmaku,
             chat,
@@ -522,16 +515,6 @@ impl Tray {
                 "tray-action-show-display",
                 "tray-action-hide-display",
             ));
-        }
-        if changed(|s| s.peer_display) {
-            self.peer_display.set_text(label(
-                state.peer_display,
-                "tray-action-show-peer-display",
-                "tray-action-hide-peer-display",
-            ));
-        }
-        if changed(|s| s.peer_active) {
-            self.peer_display.set_enabled(state.peer_active);
         }
         if changed(|s| s.history) {
             self.history.set_text(label(
@@ -688,7 +671,6 @@ mod tests {
     #[test]
     fn shared_handler_keeps_tray_and_overlay_targets_separate() {
         let id_display = MenuId::new("test.display");
-        let id_peer = MenuId::new("test.peer");
         let id_history = MenuId::new("test.history");
         let id_danmaku = MenuId::new("test.danmaku");
         let id_overlay = MenuId::new("test.overlay");
@@ -699,13 +681,12 @@ mod tests {
         let id_prof = MenuId::new("test.prof");
 
         register_menu_action(&id_display, MenuAction::ToggleWindow(WindowKind::Display));
-        register_menu_action(&id_peer, MenuAction::ToggleWindow(WindowKind::PARTNER));
         register_menu_action(&id_history, MenuAction::ToggleWindow(WindowKind::History));
         register_menu_action(&id_danmaku, MenuAction::ToggleWindow(WindowKind::Danmaku));
         register_menu_action(
             &id_overlay,
             MenuAction::Overlay {
-                kind: WindowKind::PARTNER,
+                kind: WindowKind::Display,
                 action: super::super::overlay_menu::Action::Close,
             },
         );
@@ -720,10 +701,6 @@ mod tests {
             Some(Msg::Window(WindowMsg::Toggle(WindowKind::Display)))
         ));
         assert!(matches!(
-            dispatch_menu_id(&id_peer),
-            Some(Msg::Window(WindowMsg::Toggle(WindowKind::PARTNER)))
-        ));
-        assert!(matches!(
             dispatch_menu_id(&id_history),
             Some(Msg::Window(WindowMsg::Toggle(WindowKind::History)))
         ));
@@ -734,7 +711,7 @@ mod tests {
         assert!(matches!(
             dispatch_menu_id(&id_overlay),
             Some(Msg::Window(WindowMsg::OverlayAction(
-                WindowKind::PARTNER,
+                WindowKind::Display,
                 super::super::overlay_menu::Action::Close
             )))
         ));
@@ -764,7 +741,6 @@ mod tests {
 
         for id in [
             &id_display,
-            &id_peer,
             &id_history,
             &id_danmaku,
             &id_overlay,

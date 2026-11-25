@@ -167,10 +167,7 @@ impl SettingsSections {
         {
             s.insert(Self::OBS);
         }
-        if prev.output != next.output
-            || prev.history.chat.separate != next.history.chat.separate
-            || prev.overlays.peer_display.visible != next.overlays.peer_display.visible
-        {
+        if prev.output != next.output || prev.history.chat.separate != next.history.chat.separate {
             s.insert(Self::OUTPUT);
         }
         if prev.enabled_plugins != next.enabled_plugins

@@ -1,5 +1,4 @@
-//! What the trailer's footage says, per language. NanaPVMaker's
-//! `projects/nanatype-steam/copy.ts` quotes the same strings.
+//! What the trailer's footage says, per language.
 
 use nanatype_i18n::Locale;
 
@@ -32,10 +31,6 @@ pub struct Lines {
     /// Typed into the summoned input over a fullscreen game.
     pub keys: &'static str,
     pub skins: &'static str,
-    pub workshop: [&'static str; 3],
-    pub partners: [&'static str; 2],
-    pub room_local: &'static str,
-    pub room_partner: [&'static str; 2],
     /// Twitch viewers and what they write.
     pub chat: [(&'static str, &'static str); 3],
     pub reply: &'static str,
@@ -74,10 +69,6 @@ const ZH: Lines = Lines {
     ),
     keys: "Boss 战开始了，大家帮我加油！",
     skins: "换一套皮肤，换一种心情～",
-    workshop: ["樱花信笺", "复古街机", "像素音效包"],
-    partners: ["小林", "澪"],
-    room_local: "我们一起来配音吧！",
-    room_partner: ["好呀，我来演反派！", "那旁白就交给我～"],
     chat: [
         ("pixel_cat", "主播晚上好！"),
         ("mochi", "今天玩什么游戏？"),
@@ -111,10 +102,6 @@ const EN: Lines = Lines {
     ),
     keys: "Boss fight! Cheer me on, chat!",
     skins: "New skin, new mood~",
-    workshop: ["Sakura Letter", "Retro Arcade", "Pixel Sound Pack"],
-    partners: ["Rin", "Mio"],
-    room_local: "Let's do a voice drama together!",
-    room_partner: ["Sure, I'll play the villain!", "And I'll narrate~"],
     chat: [
         ("pixel_cat", "Good evening!"),
         ("mochi", "What are we playing today?"),
@@ -148,10 +135,6 @@ const JA: Lines = Lines {
     ),
     keys: "ボス戦開始！みんな応援してね！",
     skins: "スキンを変えて、気分も変えて～",
-    workshop: ["桜の便箋", "レトロアーケード", "ピクセル効果音パック"],
-    partners: ["リン", "ミオ"],
-    room_local: "一緒にボイスドラマやろう！",
-    room_partner: ["いいよ、悪役やるね！", "じゃあナレーションは私～"],
     chat: [
         ("pixel_cat", "こんばんは！"),
         ("mochi", "今日は何のゲーム？"),

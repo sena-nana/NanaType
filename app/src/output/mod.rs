@@ -45,7 +45,6 @@ pub trait OutputTransport {
         &mut self,
         s: &Settings,
         runtime_sizes: &RuntimeOutputSizes,
-        partners: usize,
         live: &[(WindowKind, &SpoutOutput)],
     );
 
@@ -58,7 +57,6 @@ pub trait OutputTransport {
         kind: WindowKind,
         s: &Settings,
         runtime_sizes: &RuntimeOutputSizes,
-        partners: usize,
     ) -> Option<WindowOutputConfig> {
         None
     }
@@ -71,7 +69,6 @@ pub trait OutputTransport {
         &mut self,
         s: &Settings,
         runtime_sizes: &RuntimeOutputSizes,
-        partners: usize,
         gpu: &GpuContext,
         locale: Locale,
     ) -> Vec<(WindowKind, LinkState)> {
@@ -111,7 +108,6 @@ impl OutputTransport for NullTransport {
         &mut self,
         _s: &Settings,
         _runtime_sizes: &RuntimeOutputSizes,
-        _partners: usize,
         _live: &[(WindowKind, &SpoutOutput)],
     ) {
     }
@@ -156,18 +152,17 @@ impl OutputManager {
         s: &Settings,
         runtime_sizes: &RuntimeOutputSizes,
         locale: Locale,
-        partners: usize,
         output_status: Option<Signal<Arc<OutputStatuses>>>,
     ) {
         let mut live = Vec::new();
         for kind in KINDS {
-            if let Some(out) = resolve(kind, s, partners).output() {
+            if let Some(out) = resolve(kind, s).output() {
                 live.push((kind, out));
             }
         }
-        OutputTransport::sync(&mut self.transport, s, runtime_sizes, partners, &live);
+        OutputTransport::sync(&mut self.transport, s, runtime_sizes, &live);
         for kind in KINDS {
-            let resolved = resolve(kind, s, partners);
+            let resolved = resolve(kind, s);
             let wanted = resolved.output();
             let renamed = wanted.is_some_and(|o| self.names.get(&kind) != Some(&o.name));
             let state = match resolved {
@@ -214,16 +209,13 @@ impl OutputManager {
         kind: WindowKind,
         s: &Settings,
         runtime_sizes: &RuntimeOutputSizes,
-        partners: usize,
     ) -> Option<WindowOutputConfig> {
-        let resolved = resolve(kind, s, partners);
+        let resolved = resolve(kind, s);
         if let Some(cfg) = resolved.config(runtime_sizes.get(kind)) {
             return Some(cfg);
         }
         if matches!(resolved, ResolvedOutput::Off) {
-            return self
-                .transport
-                .paused_config(kind, s, runtime_sizes, partners);
+            return self.transport.paused_config(kind, s, runtime_sizes);
         }
         None
     }
@@ -254,14 +246,11 @@ impl OutputManager {
         &mut self,
         s: &Settings,
         runtime_sizes: &RuntimeOutputSizes,
-        partners: usize,
         gpu: &GpuContext,
         locale: Locale,
         output_status: Signal<Arc<OutputStatuses>>,
     ) {
-        let failures = self
-            .transport
-            .prepare(s, runtime_sizes, partners, gpu, locale);
+        let failures = self.transport.prepare(s, runtime_sizes, gpu, locale);
         let mut changed = false;
         for (kind, state) in failures {
             changed |= self.status.set(kind, state);
@@ -334,7 +323,7 @@ mod tests {
         settings.output.display.enabled = true;
         settings.output.display.name = "   ".into();
         let mut outputs = OutputManager::default();
-        outputs.sync(&settings, &sizes, Locale::ZhCn, 0, None);
+        outputs.sync(&settings, &sizes, Locale::ZhCn, None);
         assert!(config(WindowKind::Display, &settings).is_none());
         assert!(outputs.names.is_empty());
         assert_eq!(
@@ -342,7 +331,7 @@ mod tests {
             &LinkState::Error(t(Locale::ZhCn, "spout-error-name"))
         );
         settings.output.display.name = "Renamed".into();
-        outputs.sync(&settings, &sizes, Locale::ZhCn, 0, None);
+        outputs.sync(&settings, &sizes, Locale::ZhCn, None);
         assert!(config(WindowKind::Display, &settings).unwrap().while_hidden);
         assert_eq!(
             outputs.status.get(WindowKind::Display),
@@ -351,43 +340,18 @@ mod tests {
         outputs
             .status
             .set(WindowKind::Display, LinkState::Connected("ready".into()));
-        outputs.sync(&settings, &sizes, Locale::ZhCn, 0, None);
+        outputs.sync(&settings, &sizes, Locale::ZhCn, None);
         assert!(matches!(
             outputs.status.get(WindowKind::Display),
             LinkState::Connected(_)
         ));
         settings.output.display.name = "Renamed again".into();
-        outputs.sync(&settings, &sizes, Locale::ZhCn, 0, None);
+        outputs.sync(&settings, &sizes, Locale::ZhCn, None);
         assert_eq!(
             outputs.status.get(WindowKind::Display),
             &LinkState::Connecting
         );
         assert_eq!(outputs.names[&WindowKind::Display], "Renamed again");
-        settings.output.partners[0].enabled = true;
-        assert!(
-            resolve(WindowKind::PARTNER, &settings, 0)
-                .config(None)
-                .is_none()
-        );
-        assert!(
-            resolve(WindowKind::PARTNER, &settings, 1)
-                .config(None)
-                .is_some()
-        );
-        settings.output.partners[0].name = settings.output.display.name.clone();
-        outputs.sync(&settings, &sizes, Locale::ZhCn, 1, None);
-        assert!(outputs.names.is_empty());
-        assert!(
-            resolve(WindowKind::Display, &settings, 1)
-                .output()
-                .is_none()
-        );
-        settings.output.partners[0].enabled = false;
-        outputs.sync(&settings, &sizes, Locale::ZhCn, 0, None);
-        assert_eq!(
-            outputs.status.get(WindowKind::Display),
-            &LinkState::Connecting
-        );
     }
 
     #[test]
@@ -398,11 +362,11 @@ mod tests {
         let mut s = Settings::default();
         s.output.display.enabled = true;
         s.output.display.size = Some([1280, 720]);
-        s.output.partners[0].enabled = true;
-        s.output.partners[0].size = Some([640, 360]);
-        s.output.partners[0].straight_alpha = true;
+        s.output.history.enabled = true;
+        s.output.history.size = Some([640, 360]);
+        s.output.history.straight_alpha = true;
         let own = config(WindowKind::Display, &s).unwrap();
-        let peer = config(WindowKind::PARTNER, &s).unwrap();
+        let hist = config(WindowKind::History, &s).unwrap();
         assert_eq!(
             own.extent,
             WindowOutputExtent::Fixed {
@@ -411,100 +375,18 @@ mod tests {
             }
         );
         assert_eq!(
-            peer.extent,
+            hist.extent,
             WindowOutputExtent::Fixed {
                 width: 640,
                 height: 360
             }
         );
         assert_eq!(own.alpha, WindowOutputAlpha::Premultiplied);
-        assert_eq!(peer.alpha, WindowOutputAlpha::Straight);
-        assert!(own.while_hidden && peer.while_hidden);
-        s.output.partners[0].enabled = false;
-        assert!(config(WindowKind::PARTNER, &s).is_none());
-        assert_eq!(config(WindowKind::Display, &s), Some(own));
+        assert_eq!(hist.alpha, WindowOutputAlpha::Straight);
+        assert!(own.while_hidden && hist.while_hidden);
+        s.output.history.enabled = false;
         assert!(config(WindowKind::History, &s).is_none());
-    }
-
-    #[test]
-    fn partner_output_stops_on_leave_and_can_start_again() {
-        if !(cfg!(windows) || cfg!(target_os = "macos")) {
-            return;
-        }
-        let mut s = Settings::default();
-        let sizes = RuntimeOutputSizes::default();
-        s.output.display.enabled = true;
-        s.output.partners[0].enabled = true;
-        let mut outputs = OutputManager::default();
-        let locale = Locale::ZhCn;
-        outputs.sync(&s, &sizes, locale, 0, None);
-        assert!(matches!(
-            outputs.status.get(WindowKind::PARTNER),
-            LinkState::Off
-        ));
-        outputs.sync(&s, &sizes, locale, 1, None);
-        assert!(matches!(
-            outputs.status.get(WindowKind::PARTNER),
-            LinkState::Connecting
-        ));
-        outputs
-            .status
-            .set(WindowKind::Display, LinkState::Connected("self".into()));
-        outputs
-            .status
-            .set(WindowKind::PARTNER, LinkState::Connected("partner".into()));
-        outputs.sync(&s, &sizes, locale, 0, None);
-        assert!(matches!(
-            outputs.status.get(WindowKind::PARTNER),
-            LinkState::Off
-        ));
-        assert!(matches!(
-            outputs.status.get(WindowKind::Display),
-            LinkState::Connected(_)
-        ));
-        outputs.sync(&s, &sizes, locale, 1, None);
-        assert!(matches!(
-            outputs.status.get(WindowKind::PARTNER),
-            LinkState::Connecting
-        ));
-    }
-
-    #[test]
-    fn each_partner_seat_sends_on_its_own_while_someone_sits_there() {
-        if !(cfg!(windows) || cfg!(target_os = "macos")) {
-            return;
-        }
-        let mut s = Settings::default();
-        let sizes = RuntimeOutputSizes::default();
-        for seat in &mut s.output.partners {
-            seat.enabled = true;
-        }
-        let seat = |n: u8| WindowKind::PeerDisplay(n);
-        for kind in WindowKind::PARTNERS {
-            assert!(!name_conflicts(kind, &s), "{kind:?}");
-        }
-        assert!(resolve(seat(0), &s, 0).output().is_none());
-        assert!(resolve(seat(0), &s, 1).output().is_some());
-        assert!(resolve(seat(1), &s, 1).output().is_none());
-        assert_eq!(
-            resolve(seat(2), &s, 3).output().map(|o| o.name.as_str()),
-            Some("NanaType Partner 3")
-        );
-        let mut outputs = OutputManager::default();
-        outputs.sync(&s, &sizes, Locale::ZhCn, 2, None);
-        assert_eq!(outputs.status.get(seat(1)), &LinkState::Connecting);
-        assert_eq!(outputs.status.get(seat(2)), &LinkState::Off);
-        outputs
-            .status
-            .set(seat(0), LinkState::Connected("first".into()));
-        outputs.sync(&s, &sizes, Locale::ZhCn, 1, None);
-        assert!(matches!(
-            outputs.status.get(seat(0)),
-            LinkState::Connected(_)
-        ));
-        assert_eq!(outputs.status.get(seat(1)), &LinkState::Off);
-        s.output.partners[0].enabled = false;
-        assert!(resolve(seat(0), &s, 7).output().is_none());
+        assert_eq!(config(WindowKind::Display, &s), Some(own));
     }
 
     #[test]
@@ -512,20 +394,20 @@ mod tests {
         let mut s = Settings::default();
         let sizes = RuntimeOutputSizes::default();
         s.output.display.enabled = true;
-        s.output.partners[0].enabled = true;
-        s.output.partners[0].name = s.output.display.name.clone();
+        s.output.history.enabled = true;
+        s.output.history.name = s.output.display.name.clone();
         assert!(name_conflicts(WindowKind::Display, &s));
-        assert!(name_conflicts(WindowKind::PARTNER, &s));
-        assert!(!name_conflicts(WindowKind::History, &s));
+        assert!(name_conflicts(WindowKind::History, &s));
+        assert!(!name_conflicts(WindowKind::Danmaku, &s));
         assert!(config(WindowKind::Display, &s).is_none());
-        assert!(config(WindowKind::PARTNER, &s).is_none());
+        assert!(config(WindowKind::History, &s).is_none());
         let mut outputs = OutputManager::default();
-        outputs.sync(&s, &sizes, Locale::ZhCn, 1, None);
+        outputs.sync(&s, &sizes, Locale::ZhCn, None);
         assert!(matches!(
-            outputs.status.get(WindowKind::PARTNER),
+            outputs.status.get(WindowKind::History),
             LinkState::Error(_)
         ));
-        s.output.partners[0].enabled = false;
+        s.output.history.enabled = false;
         assert!(!name_conflicts(WindowKind::Display, &s));
     }
 
@@ -538,7 +420,7 @@ mod tests {
         let sizes = RuntimeOutputSizes::default();
         s.output.danmaku.enabled = true;
         let mut outputs = OutputManager::default();
-        outputs.sync(&s, &sizes, Locale::ZhCn, 0, None);
+        outputs.sync(&s, &sizes, Locale::ZhCn, None);
         assert!(matches!(
             outputs.status.get(WindowKind::Danmaku),
             LinkState::Off
@@ -546,7 +428,7 @@ mod tests {
         assert!(config(WindowKind::Danmaku, &s).is_none());
 
         s.history.chat.separate = true;
-        outputs.sync(&s, &sizes, Locale::ZhCn, 0, None);
+        outputs.sync(&s, &sizes, Locale::ZhCn, None);
         assert!(matches!(
             outputs.status.get(WindowKind::Danmaku),
             LinkState::Connecting
@@ -556,7 +438,7 @@ mod tests {
         let mut prev_s = s.clone();
         prev_s.history.chat.separate = false;
         prev_s.output.danmaku.enabled = false;
-        outputs.sync(&prev_s, &sizes, Locale::ZhCn, 0, None);
+        outputs.sync(&prev_s, &sizes, Locale::ZhCn, None);
         assert!(matches!(
             outputs.status.get(WindowKind::Danmaku),
             LinkState::Off

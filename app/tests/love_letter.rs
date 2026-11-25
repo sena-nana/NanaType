@@ -32,14 +32,13 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
         &families,
         "zh-CN",
     ));
-    for (case, width, height, reduced, enabled, remote, typing) in [
-        ("wide", 932, 272, false, true, false, true),
-        ("narrow", 300, 300, false, true, false, true),
-        ("portrait", 300, 650, false, true, false, true),
-        ("remote", 932, 272, false, true, true, true),
-        ("reduced", 932, 272, true, true, false, true),
-        ("disabled", 932, 272, false, false, false, true),
-        ("instant", 932, 272, false, true, false, false),
+    for (case, width, height, reduced, enabled, typing) in [
+        ("wide", 932, 272, false, true, true),
+        ("narrow", 300, 300, false, true, true),
+        ("portrait", 300, 650, false, true, true),
+        ("reduced", 932, 272, true, true, true),
+        ("disabled", 932, 272, false, false, true),
+        ("instant", 932, 272, false, true, false),
     ] {
         if std::env::var("NANATYPE_LOVE_LETTER_CASE").is_ok_and(|v| v != case) {
             continue;
@@ -50,9 +49,8 @@ fn love_letter_retains_font_geometry_writes_overlapping_strokes_and_dissolves_to
         settings.playback.reduced_motion = reduced;
         settings.playback.punctuation_pauses = false;
         settings.playback.typing = typing;
-        let root = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-        root.reduced_motion.set(reduced);
-        let ui = if remote { root.remote() } else { root };
+        let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
+        ui.reduced_motion.set(reduced);
         let mut core = Core::from_settings(&settings, &skin);
         let base = 100_000;
         core.handle(Cmd::SendMarkup("[speed=90ms]情书写给你，喜欢你的心，永远温柔。\n[b]想念[/b] Love ♡ [color=#A96077]喜欢[/color] 龘🙂[/speed]".into()),base);

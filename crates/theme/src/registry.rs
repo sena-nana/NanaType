@@ -165,33 +165,6 @@ impl SkinFiles for BuiltinPackage {
     }
 }
 
-/// A read-only package folder outside the user's, such as a downloaded
-/// Steam Workshop item (`item` is its published file id). Its folder name
-/// says nothing; the package id comes from its `package.toml`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExternalRoot {
-    pub folder: PathBuf,
-    pub item: u64,
-}
-
-/// What the last scan made of an external folder.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExternalStatus {
-    pub item: u64,
-    /// The package id, when `package.toml` reads.
-    pub id: Option<String>,
-    pub problem: Option<ExternalProblem>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExternalProblem {
-    /// No readable `package.toml` at the folder's root.
-    Unreadable(String),
-    /// A built-in, installed or earlier external package has the same id,
-    /// and wins.
-    Shadowed,
-}
-
 /// One row of the skin picker.
 #[derive(Debug, Clone)]
 pub struct SkinEntry {
@@ -229,14 +202,6 @@ impl SkinEntry {
         self.origin == SkinOrigin::Builtin
     }
 
-    /// The Workshop item it comes from, if any.
-    pub fn workshop_item(&self) -> Option<u64> {
-        match self.origin {
-            SkinOrigin::Workshop { item, .. } => Some(item),
-            _ => None,
-        }
-    }
-
     pub fn loads(&self) -> bool {
         self.errors.is_empty()
     }
@@ -264,10 +229,6 @@ pub struct SkinRegistry {
     entries: Vec<SkinEntry>,
     sound_packs: Vec<SoundPackEntry>,
     packages: Vec<(PackageManifest, SkinOrigin)>,
-    external: Vec<ExternalRoot>,
-    /// Package id → the external folder providing it, as of the last scan.
-    external_index: BTreeMap<String, ExternalRoot>,
-    external_status: Vec<ExternalStatus>,
 }
 
 struct ScopedResolver(Arc<dyn SkinFiles>);
@@ -317,101 +278,19 @@ pub(crate) fn bundled_path(path: &str) -> Result<String, FileError> {
 
 impl SkinRegistry {
     pub fn new(user_dir: Option<PathBuf>, app_version: impl Into<String>) -> Self {
-        Self::with_external(user_dir, app_version, Vec::new())
-    }
-
-    /// [`SkinRegistry::new`], also reading the `external` folders (see
-    /// [`SkinRegistry::set_external`]) in its first scan.
-    pub fn with_external(
-        user_dir: Option<PathBuf>,
-        app_version: impl Into<String>,
-        external: Vec<ExternalRoot>,
-    ) -> Self {
         let mut registry = Self {
             user_dir,
             app_version: app_version.into(),
             entries: Vec::new(),
             sound_packs: Vec::new(),
             packages: Vec::new(),
-            external: Vec::new(),
-            external_index: BTreeMap::new(),
-            external_status: Vec::new(),
         };
-        registry.set_external(external);
         registry.rescan();
         registry
     }
 
     pub fn user_dir(&self) -> Option<&Path> {
         self.user_dir.as_deref()
-    }
-
-    /// Read packages from these folders too, on the next scan. They are never
-    /// written: not installed into, duplicated over or removed. Returns
-    /// whether the set changed.
-    pub fn set_external(&mut self, mut roots: Vec<ExternalRoot>) -> bool {
-        roots.sort_by_key(|r| r.item);
-        let changed = roots != self.external;
-        self.external = roots;
-        changed
-    }
-
-    pub fn external(&self) -> &[ExternalRoot] {
-        &self.external
-    }
-
-    /// Each external folder's package id or problem, as of the last scan.
-    pub fn external_status(&self) -> &[ExternalStatus] {
-        &self.external_status
-    }
-
-    /// The external folder providing `id`, as of the last scan.
-    pub fn external_root(&self, id: &str) -> Option<&ExternalRoot> {
-        self.external_index.get(id)
-    }
-
-    fn external_origin(root: &ExternalRoot) -> SkinOrigin {
-        SkinOrigin::Workshop {
-            folder: root.folder.clone(),
-            item: root.item,
-        }
-    }
-
-    /// Index the external folders: built-ins, then the user's folder, then
-    /// the lowest item id keep an id; the rest are reported as shadowed.
-    fn index_external(&mut self) -> Vec<(PackageManifest, Arc<dyn SkinFiles>, SkinOrigin)> {
-        let mut index = BTreeMap::new();
-        let mut status = Vec::new();
-        let mut found = Vec::new();
-        for root in &self.external {
-            let files: Arc<dyn SkinFiles> = Arc::new(DirFiles::new(&root.folder));
-            let package = match PackageManifest::read(&*files) {
-                Ok(package) => package,
-                Err(e) => {
-                    status.push(ExternalStatus {
-                        item: root.item,
-                        id: None,
-                        problem: Some(ExternalProblem::Unreadable(e.to_string())),
-                    });
-                    continue;
-                }
-            };
-            let id = package.meta.id.clone();
-            let shadowed =
-                is_builtin_id(&id) || self.user_folder(&id).is_some() || index.contains_key(&id);
-            if !shadowed {
-                index.insert(id.clone(), root.clone());
-                found.push((package, files, Self::external_origin(root)));
-            }
-            status.push(ExternalStatus {
-                item: root.item,
-                id: Some(id),
-                problem: shadowed.then_some(ExternalProblem::Shadowed),
-            });
-        }
-        self.external_index = index;
-        self.external_status = status;
-        found
     }
 
     pub fn entries(&self) -> &[SkinEntry] {
@@ -552,7 +431,6 @@ impl SkinRegistry {
             return Some(builtin_files(b));
         }
         self.user_folder(id)
-            .or_else(|| self.external_index.get(id).map(|r| r.folder.clone()))
             .map(|dir| Arc::new(DirFiles::new(dir)) as Arc<dyn SkinFiles>)
     }
 
@@ -687,10 +565,9 @@ impl SkinRegistry {
         Ok(files)
     }
 
-    /// Re-read the user and external folders in a single pass shared across
-    /// skins, sound packs, and package listings.
+    /// Re-read the user folder in a single pass shared across skins, sound
+    /// packs, and package listings.
     pub fn rescan(&mut self) {
-        let external_packages = self.index_external();
         let mut entries = Vec::new();
         let mut sound_packs = Vec::new();
         let mut packages = Vec::new();
@@ -783,35 +660,6 @@ impl SkinRegistry {
                 // Legacy/broken skin folder without a valid package.toml still
                 // surfaces its diagnostic entry.
                 entries.push(self.describe(folder_id, files, origin));
-            }
-        }
-
-        for (pkg, files, origin) in external_packages {
-            let has_skin =
-                pkg.capabilities.contains(&PackageCapability::Skin) || files.exists(MANIFEST);
-            let has_sounds = pkg.capabilities.contains(&PackageCapability::Sounds);
-            let id = pkg.meta.id.clone();
-            let version = pkg.meta.version.clone();
-            let name = pkg.meta.name.clone();
-            let author = pkg.meta.author.clone();
-            packages.push((pkg, origin.clone()));
-            if has_skin {
-                entries.push(self.describe(id.clone(), files.clone(), origin.clone()));
-            }
-            if has_sounds {
-                let (pack, errors) = match self.read_sound_pack(files) {
-                    Ok(pack) => (Some(pack), Vec::new()),
-                    Err(errors) => (None, errors),
-                };
-                sound_packs.push(SoundPackEntry {
-                    pack,
-                    errors,
-                    id,
-                    version,
-                    name,
-                    author,
-                    origin,
-                });
             }
         }
 
@@ -915,10 +763,7 @@ impl SkinRegistry {
         })?;
         let origin = match self.user_folder(id) {
             Some(dir) if !is_builtin_id(id) => SkinOrigin::Directory(dir),
-            _ => match self.external_index.get(id) {
-                Some(root) => Self::external_origin(root),
-                None => SkinOrigin::Builtin,
-            },
+            _ => SkinOrigin::Builtin,
         };
         let resolver = ScopedResolver(files.clone());
         load(files, origin, &resolver, &self.app_version)
@@ -1126,30 +971,6 @@ impl SkinRegistry {
         table.remove("meta");
         let dir = user_dir.join(new_id);
         fs::create_dir_all(&dir).map_err(|e| err(e.to_string()))?;
-        // A copy of an external package carries its base, so it keeps
-        // working once the base is gone or in a build that cannot see it.
-        if self.user_folder(base).is_none() && self.external_index.contains_key(base) {
-            let bundle = || -> Result<(), FileError> {
-                let files = self.package_files(base)?;
-                for path in files.list() {
-                    let bundled = match path.strip_prefix("pkg:") {
-                        Some(_) => bundled_path(&path)?,
-                        None => clean_path(&format!("dependencies/{base}/{path}"))?,
-                    };
-                    let target = dir.join(bundled);
-                    if let Some(parent) = target.parent() {
-                        fs::create_dir_all(parent).map_err(|e| FileError::Io(e.to_string()))?;
-                    }
-                    fs::write(&target, files.read(&path)?)
-                        .map_err(|e| FileError::Io(e.to_string()))?;
-                }
-                Ok(())
-            };
-            if let Err(e) = bundle() {
-                let _ = fs::remove_dir_all(&dir);
-                return Err(err(e.to_string()));
-            }
-        }
         fs::write(
             dir.join(PACKAGE_MANIFEST),
             toml::to_string_pretty(&package).map_err(|e| err(e.to_string()))?,
@@ -1171,14 +992,8 @@ impl SkinRegistry {
         }
     }
 
-    /// Delete a user skin. Built-ins cannot be removed, nor can external
-    /// packages: their owner (Steam) removes them.
+    /// Delete a user skin. Built-ins cannot be removed.
     pub fn remove(&mut self, id: &str) -> Result<(), FileError> {
-        if self.user_folder(id).is_none() && self.external_index.contains_key(id) {
-            return Err(FileError::Io(format!(
-                "{id} is a Workshop item; unsubscribe from it instead"
-            )));
-        }
         if let Some(dir) = &self.user_dir {
             for entry in fs::read_dir(dir)
                 .map_err(|e| FileError::Io(e.to_string()))?
@@ -1206,26 +1021,8 @@ impl SkinRegistry {
 }
 
 #[cfg(test)]
-mod external_tests {
+mod registry_tests {
     use super::*;
-
-    fn package(root: &Path, id: &str, dependencies: &str) {
-        fs::create_dir_all(root).unwrap();
-        fs::write(
-            root.join(PACKAGE_MANIFEST),
-            format!(
-                "format = 1\nschema = 3\nid = \"{id}\"\nversion = \"1.0.0\"\nmin_app = \"0.1.0\"\ncapabilities = [\"skin\"]\n{dependencies}\n[name]\nen-US = \"{id}\"\n"
-            ),
-        )
-        .unwrap();
-        fs::write(root.join(MANIFEST), "[chrome]\naccent = \"#7c6cf0\"\n").unwrap();
-    }
-
-    fn workshop(dir: &Path, item: u64, id: &str) -> ExternalRoot {
-        let folder = dir.join("workshop").join(item.to_string());
-        package(&folder, id, "");
-        ExternalRoot { folder, item }
-    }
 
     #[test]
     fn the_binary_carries_a_default_skin_that_loads_without_the_folder() {
@@ -1246,74 +1043,5 @@ mod external_tests {
                 .iter()
                 .all(|b| b.source != BuiltinSource::Embedded)
         );
-    }
-
-    #[test]
-    fn external_packages_load_read_only_and_yield_to_installed_ones() {
-        let dir = tempfile::tempdir().unwrap();
-        let user = dir.path().join("packages");
-        package(&user.join("test.local"), "test.local", "");
-        let mut registry = SkinRegistry::new(Some(user.clone()), "1.0.0");
-        assert!(registry.set_external(vec![
-            workshop(dir.path(), 30, "test.shared"),
-            workshop(dir.path(), 20, "test.shared"),
-            workshop(dir.path(), 10, "test.local"),
-            ExternalRoot {
-                folder: dir.path().join("workshop/40"),
-                item: 40,
-            },
-        ]));
-        assert!(!registry.set_external(registry.external().to_vec()));
-        registry.rescan();
-
-        // The lowest item wins a shared id; the user's own folder beats both.
-        let shared = registry.entry("test.shared").unwrap();
-        assert_eq!(shared.workshop_item(), Some(20));
-        assert!(shared.loads(), "{:?}", shared.errors);
-        assert_eq!(registry.entry("test.local").unwrap().workshop_item(), None);
-        let problem = |item| {
-            registry
-                .external_status()
-                .iter()
-                .find(|s| s.item == item)
-                .unwrap()
-                .problem
-                .clone()
-        };
-        assert_eq!(problem(10), Some(ExternalProblem::Shadowed));
-        assert_eq!(problem(20), None);
-        assert_eq!(problem(30), Some(ExternalProblem::Shadowed));
-        assert!(matches!(problem(40), Some(ExternalProblem::Unreadable(_))));
-        assert!(matches!(
-            registry.load("test.shared").unwrap().origin,
-            SkinOrigin::Workshop { item: 20, .. }
-        ));
-        assert!(registry.packages().iter().any(|(p, origin)| {
-            p.meta.id == "test.shared" && matches!(origin, SkinOrigin::Workshop { item: 20, .. })
-        }));
-
-        // Steam owns the folder: removing is refused and touches nothing.
-        assert!(registry.remove("test.shared").is_err());
-        assert!(dir.path().join("workshop/20/package.toml").is_file());
-
-        // An installed package may depend on a Workshop one.
-        package(
-            &user.join("test.child"),
-            "test.child",
-            "[dependencies]\n\"test.shared\" = \"1.0.0\"\n",
-        );
-        registry.rescan();
-        assert!(registry.load("test.child").is_ok());
-
-        // A copy bundles its Workshop base and outlives the subscription.
-        let copy = registry
-            .duplicate("test.shared", "test.copy", &Localized::new(), &Table::new())
-            .unwrap();
-        assert!(copy.join("dependencies/test.shared/package.toml").is_file());
-        registry.set_external(Vec::new());
-        registry.rescan();
-        assert!(registry.entry("test.shared").is_none());
-        assert!(registry.load("test.copy").is_ok());
-        assert!(registry.load("test.child").is_err());
     }
 }

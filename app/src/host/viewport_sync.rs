@@ -14,52 +14,20 @@ use crate::ui::overflow::{self, Measure, PageKey};
 use crate::ui::{Ui, input};
 use crate::windows::WindowKind;
 
+#[derive(Default)]
 pub(super) struct ViewportSync {
     pub follow: overflow::Follow,
-    pub peer_follows: [overflow::Follow; crate::ui::REMOTE_LANES],
     pub pager: overflow::Pager,
 }
 
-impl Default for ViewportSync {
-    fn default() -> Self {
-        Self {
-            follow: overflow::Follow::default(),
-            peer_follows: std::array::from_fn(|_| overflow::Follow::default()),
-            pager: overflow::Pager::default(),
-        }
-    }
-}
-
 impl ViewportSync {
-    pub fn follow_track(
+    pub fn follow_display(
         &mut self,
         app: &mut App,
         docs: &HashMap<WindowId, RuntimeDocument>,
         now: u64,
-        seat: Option<usize>,
     ) {
-        let Some(seat) = seat else {
-            let ui = app.ui;
-            apply_follow(
-                app,
-                docs,
-                now,
-                ui,
-                false,
-                &mut self.follow,
-                Some(&mut self.pager),
-            );
-            return;
-        };
-        let Some(follow) = self.peer_follows.get_mut(seat) else {
-            return;
-        };
-        if seat >= crate::ui::remote_bands(app.ui.peer_seats.get_untracked()) {
-            *follow = overflow::Follow::default();
-            return;
-        }
-        let ui = app.ui.lane(seat);
-        apply_follow(app, docs, now, ui, true, follow, None);
+        apply_follow(app, docs, now, app.ui, &mut self.follow, &mut self.pager);
     }
 }
 
@@ -68,27 +36,22 @@ fn apply_follow(
     docs: &HashMap<WindowId, RuntimeDocument>,
     now: u64,
     ui: Ui,
-    remote: bool,
     follower: &mut overflow::Follow,
-    pager: Option<&mut overflow::Pager>,
+    pager: &mut overflow::Pager,
 ) {
     let view = ui.display.get_untracked();
     if view.exit.and_then(|e| e.presentation()).is_some() {
         return;
     }
-    let mut mode = if remote {
-        Overflow::Scroll
-    } else {
-        app.appearance.skin.dialogue.overflow
-    };
+    let mut mode = app.appearance.skin.dialogue.overflow;
     let mirror = app.settings.general.input_mode == nanatype_settings::InputMode::Mirror;
     if mode == Overflow::Page && (mirror || view.line.is_none()) {
         mode = Overflow::Scroll;
     }
     let key = (!view.empty && mode != Overflow::Clip).then(|| PageKey::of(&view));
-    let page = overflow::published_on(ui.track_slot).filter(|p| Some(p.key) == key);
+    let page = overflow::published().filter(|p| Some(p.key) == key);
     let measure = page.as_ref().and_then(|page| {
-        let world = docs.get(&ui.display_kind().id())?.context().world();
+        let world = docs.get(&WindowKind::Display.id())?.context().world();
         let (_, layout) = world.text_layout(ui.text_node.get_untracked()?)?;
         let vertical = ui
             .canvas()
@@ -116,9 +79,7 @@ fn apply_follow(
         _ => (key, None),
     };
     let y = follower.frame(page_key, measure.as_ref(), now, reduced);
-    if !remote
-        && let Some(pager) = pager
-        && let Some(breaks) = pager.frame(break_key, measure.as_ref())
+    if let Some(breaks) = pager.frame(break_key, measure.as_ref())
         && let Some(line) = view.line
     {
         app.post(Msg::Core(Cmd::PageBreaks { line, breaks }));
@@ -165,10 +126,7 @@ pub(super) fn record_overlay_move_or_resize(
     if unlocked
         && matches!(
             kind,
-            WindowKind::Display
-                | WindowKind::PeerDisplay(_)
-                | WindowKind::History
-                | WindowKind::Danmaku
+            WindowKind::Display | WindowKind::History | WindowKind::Danmaku
         )
         && ((current.0 - w).abs() > 1.0 || (current.1 - h).abs() > 1.0)
     {

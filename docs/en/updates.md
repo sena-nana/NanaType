@@ -7,7 +7,7 @@
 > **On this page:** [Verification flow](#how-it-works) · [Proxies](#proxies) · [Install](#checking-and-installing) · [Release signing](#signing-key)
 
 
-NanaType gets new versions from GitHub Releases. The Steam edition doesn't include the update check described here (the `updates` feature isn't compiled in) and is updated by SteamPipe instead; see [Steam edition](steam.md). Files may be downloaded through third-party proxies: trust depends only on the signature and digest, never on where the download came from.
+NanaType gets new versions from GitHub Releases. Files may be downloaded through third-party proxies: trust depends only on the signature and digest, never on where the download came from.
 
 ## How it works
 

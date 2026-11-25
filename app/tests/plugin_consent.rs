@@ -890,10 +890,6 @@ fn package_metadata_and_signature_states_are_visible_in_every_locale_and_width()
     for locale in Locale::ALL {
         for width in [900, 440, 300] {
             let imported = nanatype_theme::SkinOrigin::Directory(script.clone());
-            let workshop = nanatype_theme::SkinOrigin::Workshop {
-                folder: script.clone(),
-                item: 7,
-            };
             for (name, origin, integrity, label) in [
                 (
                     "builtin",
@@ -901,7 +897,6 @@ fn package_metadata_and_signature_states_are_visible_in_every_locale_and_width()
                     Ok(None),
                     "package-source-builtin",
                 ),
-                ("workshop", workshop, Ok(None), "package-source-workshop"),
                 (
                     "unsigned",
                     imported.clone(),

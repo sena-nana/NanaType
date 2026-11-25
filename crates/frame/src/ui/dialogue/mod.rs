@@ -390,7 +390,6 @@ mod decor_tests {
                 assert!(physical(0).3 > physical(0).2);
             }
             assert!(Arc::ptr_eq(&ui.display.get_untracked(), &original));
-            assert_eq!(ui.remote().display_size.get_untracked(), [0.; 2]);
             ui.settings
                 .update(|s| Arc::make_mut(s).overlays.display.size = Some([w as f32, h as f32]));
             session.flush().unwrap();

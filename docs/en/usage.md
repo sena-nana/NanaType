@@ -69,38 +69,20 @@ For Comet mode, a mock server can stand in for the Comet client:
 cargo run -p nanatype-blive --example mock_comet
 ```
 
-### Sessions with friends
-
-1. Steam must be running. Open the session entry from the bar at the bottom of the input window; the host clicks **Create session**. A room holds up to 8 people and can have a password; the password is never included in invites.
-2. **Invite friend** opens the Steam invite dialog. Invited friends don't need to enter the password. If you copy an invite and hand it to someone else, they must enter the password before joining when the room is locked.
-3. The **Display** always shows your own lines. Every other member gets a **Partner display** window of their own, by seat (seat 1 is the host, then guests in the order they joined); seat 1's window offers invites and acceptance status while nobody has joined yet. These windows share one set of visibility, lock and size settings, and each seat remembers its own position. The shared history contains everything anyone has sent, in the order confirmed by the host. Everyone keeps their own skin and window layout; live mirror reveals what you are typing, while compose & send only reveals what you have sent. F9, skip and clear display only affect you.
-4. During a session the history window shows this session's lines. History from before the session and live-room chat are not shared. When you leave, your local history comes back; a session is not restored across a process restart. A session keeps at most the latest 1000 lines, trimmed further by message-size limits.
-5. If you disconnect you can keep editing, but sending and manual playback controls are paused. Disconnecting frees your seat; the same person can reconnect while a seat is free, and lines already sent are kept. If the host leaves, the room ends.
-
-Images, stickers, avatars, avatars inside quotes and the current portrait are distributed by content hash.
-
-Previews are relayed by the host; full images are fetched directly from whoever posted them, falling back to the host if a direct connection fails.
-
-Each resource is capped at 16 MiB; oversized or missing resources show a placeholder.
-
-Only your own lines drive character controls such as your local VTube Studio / OSC.
-
-Connections go direct when Steam can manage it, otherwise through Steam's relay. With a direct connection, peers can see your network address.
-
 ### Connecting to OBS
 
-- **Spout2**: turn on Spout2 output in **Settings › Output / OBS**. In OBS, install the Spout2 plugin, add *Spout2 Capture*, pick the sender name (default `NanaType Display` / `NanaType Partner 1`… / `NanaType History`) and set the composite mode to *Premultiplied Alpha*.
-- **Separate outputs**: enable your own **Display** in **Settings › Output / OBS** and pick `NanaType Display` in OBS. Each co-op partner has an output of their own, switched on by seat under **Stream outputs** in the input window's co-op panel; pick `NanaType Partner 1` … `NanaType Partner 7` in OBS. Outputs are kept by seat: whoever sits there goes out on it, and an empty seat sends nothing. Enabled sender names must all be different. For the shared history, pick `NanaType History`.
+- **Spout2**: turn on Spout2 output in **Settings › Output / OBS**. In OBS, install the Spout2 plugin, add *Spout2 Capture*, pick the sender name (default `NanaType Display` / `NanaType History` / `NanaType Danmaku`) and set the composite mode to *Premultiplied Alpha*.
+- **Separate outputs**: enable **Display**, **History** or the separate **Danmaku** window under **Settings › Output / OBS** and pick `NanaType Display`, `NanaType History` or `NanaType Danmaku` in OBS. Enabled sender names must all be different.
 - **Window capture**: *Window Capture* with the capture method *Windows 10 (1903 and up)*.
-- **Syphon** (macOS): turn on Syphon output in **Settings › Output / OBS**. In OBS, add *Syphon Client*, pick the sender name (default `NanaType Display` / `NanaType Partner 1`… / `NanaType History`) and set the composite mode to *Premultiplied Alpha*. You can also capture the display window with *macOS Screen Capture*. Spout2 is Windows-only.
+- **Syphon** (macOS): turn on Syphon output in **Settings › Output / OBS**. In OBS, add *Syphon Client*, pick the sender name (default `NanaType Display` / `NanaType History` / `NanaType Danmaku`) and set the composite mode to *Premultiplied Alpha*. You can also capture the display window with *macOS Screen Capture*. Spout2 is Windows-only.
 
 Turning an output off and back on within 5 seconds reuses the original sender, and the OBS picture comes back in a median of about 15–30 ms. For sender lifecycles and measurements with real OBS, see [OBS / Spout output](obs-spout.md).
 
 ### Character info
 
 - **Settings › Character info** lists who your lines are said by. Each character has a name, an avatar, a name colour for the name plate (**Use skin colour** goes back to the skin's). Add, reorder and remove them; the last one cannot be removed. An empty name hides the name plate. The name and avatar of older versions become the first character.
-- Switch with the character button in the input window's bottom bar (shown once there are two or more), the tray's **Character** submenu, or **Next character**, **Previous character** and each character's own key under **Settings › Hotkeys › Character switching**. The current character is remembered. Each line records its speaker when sent, so a later switch or rename never changes the history, the saved sessions, what a partner sees or the `speaker` of `line_start` events.
-- **Settings › Hotkeys** can also bind **Lock/unlock overlays**, **Replay the last line** (plays it on the display again, without sending it to live chat or adding a history row; in a co-op room partners see it replayed too, and hear it again if they read partner lines aloud, unless the line was said before the room) and **Show/hide history**, all unbound by default. The tray's lock and **Replay the last line** items do the same.
+- Switch with the character button in the input window's bottom bar (shown once there are two or more), the tray's **Character** submenu, or **Next character**, **Previous character** and each character's own key under **Settings › Hotkeys › Character switching**. The current character is remembered. Each line records its speaker when sent, so a later switch or rename never changes the history, the saved sessions or the `speaker` of `line_start` events.
+- **Settings › Hotkeys** can also bind **Lock/unlock overlays**, **Replay the last line** (plays it on the display again, without sending it to live chat or adding a history row) and **Show/hide history**, all unbound by default. The tray's lock and **Replay the last line** items do the same.
 
 ### Text to speech
 
@@ -108,14 +90,14 @@ Turning an output off and back on within 5 seconds reuses the original sender, a
 - What is read is the line's text: ruby reads as its base, a mention as the viewer's name, and stickers, images and markers are left out. A line of only stickers or punctuation is not read.
 - A new line cuts off the one being read. **Skip line** and **Clear display** stop reading; **Replay the last line** reads it again.
 - Pick a **Default voice** and one per character (the list shows the interface language's voices first; **Voice language** shows others or all). **Rate** and **Volume** apply to every voice, and **Test** plays a sample.
-- **Also read viewer chat** and **Also read co-op partners' lines** are off by default. They read with the default voice, after what is being said, and only chat that joins the history; a partner's line is read once, when it shows.
+- **Also read viewer chat** is off by default. It reads with the default voice, after what is being said, and only chat that joins the history.
 - **Type along with the voice** (off by default) makes the typewriter type word by word as the voice says them, each word up to where it is spoken. If the voice gives no word timing within 0.3 seconds (or reading fails or ends), the rest types at its own pace; continue and skip show it at once as always.
 - While reading aloud is on, VTube Studio lip sync (and the `speaking` event) follows the voice instead of the typewriter. When the voice gives word timing, the mouth opens on each word's syllables and closes between words; otherwise it flaps at a steady pace.
 - The switch, default voice, rate, volume and the options are global; each character's voice travels with the characters in a profile.
 
 ### Saving and searching the history
 
-- **Autosave**: sent lines (a partner's too, in a session with friends) are saved by default to `history/` in the data folder, one JSON Lines file per session (e.g. `2026-11-02_213005.jsonl`), appended line by line, so a crash loses at most the line being written. Viewer chat is saved only with **Settings › History › Saved history › Also save viewer chat** on (off by default), and only the chat that joins the history. **Keep for (days)** defaults to 30: older sessions are deleted at startup, and 0 keeps them forever. **Clear history** only clears the window, never the saved files.
+- **Autosave**: sent lines are saved by default to `history/` in the data folder, one JSON Lines file per session (e.g. `2026-11-02_213005.jsonl`), appended line by line, so a crash loses at most the line being written. Viewer chat is saved only with **Settings › History › Saved history › Also save viewer chat** on (off by default), and only the chat that joins the history. **Keep for (days)** defaults to 30: older sessions are deleted at startup, and 0 keeps them forever. **Clear history** only clears the window, never the saved files.
 - **Viewing and exporting**: **Settings › History › Saved sessions** lists each session's start time and line count. **View** shows its lines (time · name · text; the newest 500 first, and **Show … earlier lines** at the top loads the batch before, back to the session's start), which export as `.txt`, or as `.srt` subtitles timed from the session's first line, each shown until the next starts or for a reading time by its length. **Delete** removes the session's file after a confirmation; **Open folder** shows where they are kept.
 - **Search**: while the history window is unlocked, the search button in its top corner opens a field that filters the log by text or name (case-insensitive). The button again, or Esc, closes it and clears the filter. While the history window's Spout2/Syphon output is on there is no search, so the output always shows the whole log.
 
@@ -129,7 +111,7 @@ Turning an output off and back on within 5 seconds reuses the original sender, a
 
 ### Accessibility
 
-- **Settings › General › Accessibility** changes only the app's own windows: Settings, the input window (with its history and chat panels) and the package editor. Skins, and what the display, partner and history windows show (Spout2 / Syphon output included), always stay as they are.
+- **Settings › General › Accessibility** changes only the app's own windows: Settings, the input window (with its history and chat panels) and the package editor. Skins, and what the display and history windows show (Spout2 / Syphon output included), always stay as they are.
 - **High contrast**: **Follow system**, **Off** or **On**. On, the interface switches to opaque black and white with text at 7:1 or more, borders, control outlines and focus indicators at 3:1 or more, and heavier rules and focus rings. **Follow system** follows the Windows high-contrast theme and macOS **Increase contrast**, and changes the moment they do.
 - **Interface size**: 80%–200% (100% by default) enlarges everything in the window together on top of the system's display scale: text, controls, icons and spacing, skin previews included. Windows' minimum sizes change at once, and an open window that is too small grows to fit. The package editor takes the new size the next time it opens.
 - **Follow the system text size** (Windows only): uses **Settings › Accessibility › Text size** as the interface size, and follows it as it changes.
@@ -139,9 +121,7 @@ Turning an output off and back on within 5 seconds reuses the original sender, a
 
 ### Checking for updates
 
-The Steam edition is updated by Steam and has no such option.
-
-The GitHub edition checks GitHub Releases for new versions from **Settings › About**, and **Settings › General › Updates** checks automatically once a day by default.
+NanaType checks GitHub Releases for new versions from **Settings › About**, and **Settings › General › Updates** checks automatically once a day by default.
 
 A new installer is only opened after it passes verification.
 

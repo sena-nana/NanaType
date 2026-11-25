@@ -28,22 +28,20 @@ fn scramble_renders_locks_and_retires_without_relayout() {
     .unwrap();
     let picture_url = nanatype::services::media::url(&picture, Some(&fixtures)).unwrap();
     let skin = common::skin("nanatype.machine_learning");
-    for (case, w, h, reduced, enabled, remote) in [
-        ("wide", 892, 232, false, true, false),
-        ("narrow", 300, 260, false, true, false),
-        ("portrait", 280, 600, false, true, false),
-        ("remote", 892, 232, false, true, true),
-        ("reduced", 892, 232, true, true, false),
-        ("disabled", 892, 232, false, false, false),
+    for (case, w, h, reduced, enabled) in [
+        ("wide", 892, 232, false, true),
+        ("narrow", 300, 260, false, true),
+        ("portrait", 280, 600, false, true),
+        ("reduced", 892, 232, true, true),
+        ("disabled", 892, 232, false, false),
     ] {
         let mut settings = Settings::default();
         settings.skin.id = "nanatype.machine_learning".into();
         settings.skin.advanced_effects = enabled;
         settings.playback.reduced_motion = reduced;
         settings.general.characters[0].name = "奈奈 / ML".into();
-        let root = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
-        root.reduced_motion.set(reduced);
-        let ui = if remote { root.remote() } else { root };
+        let ui = Ui::new(Arc::new(settings.clone()), skin.clone(), Locale::ZhCn);
+        ui.reduced_motion.set(reduced);
         ui.asset_urls
             .set(Arc::new(std::collections::HashMap::from([(
                 "lib:ml/test".into(),

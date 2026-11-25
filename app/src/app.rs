@@ -25,7 +25,6 @@ pub mod twitch;
 #[cfg(feature = "updates")]
 pub mod update;
 mod window;
-mod workshop;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -100,7 +99,6 @@ pub struct App {
     pub draft: DraftController,
     /// Shared input-window hotkeys read by the host input router without a global lock.
     pub hotkey_input: Arc<RwLock<InputKeys>>,
-    pub peer: crate::p2p::Session,
     pub ui: Ui,
     pub ctx: RuntimeProgramContext<Msg>,
     pub settings: Settings,
@@ -164,18 +162,7 @@ impl App {
                 })
             }
         });
-        // Installed Workshop items are read from the first scan, so a chosen
-        // Workshop skin starts without falling back first.
-        let (steam, availability) = crate::services::steam::take();
-        let workshop = crate::workshop::Workshop::new(
-            availability,
-            steam.as_ref().map(|s| s.items()).unwrap_or_default(),
-        );
-        let registry = SkinRegistry::with_external(
-            Some(paths.packages()),
-            env!("CARGO_PKG_VERSION"),
-            workshop.roots(),
-        );
+        let registry = SkinRegistry::new(Some(paths.packages()), env!("CARGO_PKG_VERSION"));
         let (loaded, fallback) = registry.load_scanned_or_default(&settings.skin.id);
         let skin = Arc::new(crate::skin_theme::personalized(
             &loaded.skin,
@@ -195,7 +182,7 @@ impl App {
         );
         let ui = startup::ui(ctx, &settings, &skin, locale, &geometry, system_dark);
 
-        let workers = startup::Workers::start(&paths, &settings, steam, post.clone());
+        let workers = startup::Workers::start(&paths, &settings, post.clone());
         let mut core = Core::from_settings(&settings, &skin);
         core.handle(
             Cmd::SetReducedMotion(settings.playback.reduced_motion || ctx.reduced_motion()),
@@ -248,8 +235,6 @@ impl App {
             blive,
             obs: workers.obs,
             obs_password,
-            steam: workers.steam,
-            workshop,
             #[cfg(feature = "updates")]
             updater: workers.updater,
             #[cfg(feature = "updates")]
@@ -296,7 +281,6 @@ impl App {
             shell,
             draft,
             hotkey_input,
-            peer: crate::p2p::Session::default(),
             ui,
             ctx: ctx.clone(),
             settings,
@@ -487,7 +471,6 @@ impl App {
         } else {
             "Win"
         };
-        let peer_active = self.peer.handle.is_some();
         let danmaku_separate = s.history.chat.separate;
         tray.show(
             &I18N,
@@ -502,8 +485,6 @@ impl App {
                 )
                 .visible,
                 display: s.overlays.display.visible,
-                peer_display: peer_active && s.overlays.peer_display.visible,
-                peer_active,
                 history: s.overlays.history.visible,
                 danmaku: danmaku_separate && s.overlays.danmaku.visible,
                 danmaku_separate,
@@ -515,8 +496,7 @@ impl App {
                     mirroring: s.general.input_mode == nanatype_settings::InputMode::Mirror,
                     hidden: !s.overlays.display.visible
                         && !s.overlays.history.visible
-                        && !(danmaku_separate && s.overlays.danmaku.visible)
-                        && !(peer_active && s.overlays.peer_display.visible),
+                        && !(danmaku_separate && s.overlays.danmaku.visible),
                     locked,
                 },
             },
@@ -641,28 +621,12 @@ impl App {
         }
     }
 
-    /// How many partner seats are live: one window (and output) each. None
-    /// without a co-op session; before the first room snapshot, the first
-    /// seat already holds the waiting room.
-    pub fn partner_seats(&self) -> usize {
-        if self.peer.handle.is_some() {
-            crate::ui::remote_bands(self.ui.peer_seats.get_untracked())
-        } else {
-            0
-        }
-    }
-
     pub fn refresh_output_status(&mut self) {
         let locale = self.ui.locale.get_untracked();
-        let partners = self.partner_seats();
         let sizes = self.ui.runtime_output_sizes.get_untracked();
-        self.shell.output.sync(
-            &self.settings,
-            &sizes,
-            locale,
-            partners,
-            Some(self.ui.output_status),
-        );
+        self.shell
+            .output
+            .sync(&self.settings, &sizes, locale, Some(self.ui.output_status));
         if let Some(at) = self.shell.output.take_cleanup_schedule() {
             self.session.scheduler.output_cleanup(at);
         }
@@ -739,10 +703,7 @@ impl App {
                 WindowKind::History,
                 WindowKind::Danmaku,
                 WindowKind::Settings,
-            ]
-            .into_iter()
-            .chain(WindowKind::PARTNERS)
-            {
+            ] {
                 self.shell.commands.push(WindowCommand::SetTitle {
                     id: kind.id(),
                     title: kind.title(locale),
@@ -820,11 +781,9 @@ impl App {
             );
         }
         if sections.contains(SettingsSections::SPEAKER) {
-            // The draft's name plate and the partner's lane label follow.
             self.ui
                 .speaker
                 .set(self.settings.general.active_character().speaker());
-            self.peer_publish();
         }
         if sections.contains(SettingsSections::CHARACTERS)
             && !sections.contains(SettingsSections::LOCALE)
@@ -1023,7 +982,6 @@ impl App {
             Ok((outcome, registry)) => {
                 self.integrations.plugin_activation.cancel(self.ui);
                 self.appearance.registry = *registry;
-                self.reapply_workshop();
                 self.appearance.skin_reload.invalidate();
                 self.refresh_skin_rows();
                 self.sync_tray_skins();
@@ -1092,20 +1050,11 @@ impl App {
             AppMsg::Twitch(m) => self.twitch_msg(m),
             AppMsg::BliveFeed(m) => self.blive_feed_msg(m),
             AppMsg::Obs(m) => self.obs_msg(m),
-            AppMsg::Workshop(m) => self.workshop_msg(m),
             AppMsg::History(m) => self.history_msg(m),
             AppMsg::Backup(m) => self.backup_msg(m),
             AppMsg::Profile(m) => self.profile_msg(m),
             #[cfg(feature = "updates")]
             AppMsg::Update(m) => self.update_msg(m),
-            AppMsg::PeerStart {
-                invitation,
-                password,
-            } => self.peer_start(invitation, password),
-            AppMsg::PeerInviteFriends => self.peer_invite_friends(),
-            AppMsg::PeerLeave => self.peer_leave(),
-            AppMsg::PeerPanel(expanded) => self.ui.peer_panel.set(expanded),
-            AppMsg::PeerEvent(generation, event) => self.peer_event(generation, event),
             AppMsg::Core(cmd) => {
                 if matches!(cmd, Cmd::DraftChanged(_)) {
                     self.draft.bump_version();
@@ -1379,14 +1328,11 @@ impl App {
                 }
             }),
             GlobalAction::ToggleOverlays => {
-                let peer_active = self.peer.handle.is_some();
                 self.edit(|s| {
                     let show = !(s.overlays.display.visible
                         || s.overlays.history.visible
-                        || (s.history.chat.separate && s.overlays.danmaku.visible)
-                        || (peer_active && s.overlays.peer_display.visible));
+                        || (s.history.chat.separate && s.overlays.danmaku.visible));
                     s.overlays.display.visible = show;
-                    s.overlays.peer_display.visible = show;
                     s.overlays.history.visible = show;
                     if s.history.chat.separate {
                         s.overlays.danmaku.visible = show;
@@ -1441,7 +1387,6 @@ impl App {
         let locale = self.ui.locale.get_untracked();
         let system_text = self.ui.system_text_scale.get_untracked();
         let quick_visible = self.quick_bar_open();
-        let partners = self.partner_seats();
         out.extend(self.shell.windows.reconcile(
             &self.appearance.skin,
             &self.settings,
@@ -1449,7 +1394,6 @@ impl App {
             system_text,
             self.shell.summoned,
             quick_visible,
-            partners,
         ));
         self.save_geometry();
         out
