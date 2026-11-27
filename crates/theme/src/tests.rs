@@ -2443,21 +2443,33 @@ fn nameplate_typography_parses_resolves_and_validates() {
     assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
     let typo = loaded.skin.dialogue.nameplate.typography.as_ref().unwrap();
     assert_eq!(typo.initial_scale, 1.8);
-    assert_eq!(typo.initial_color, Some(ColorRef::Rgba(Rgba8::rgb(0xb5, 0xdf, 0x52))));
+    assert_eq!(
+        typo.initial_color,
+        Some(ColorRef::Rgba(Rgba8::rgb(0xb5, 0xdf, 0x52)))
+    );
     assert!(typo.speaker_color_on_initial);
     assert_eq!(typo.initial_weight, Some(700));
     assert_eq!(typo.glyph_scales, vec![0.92, 1.25, 0.92]);
     assert_eq!(typo.letter_spacing, 1.5);
 
     let mut overrides = std::collections::BTreeMap::new();
-    overrides.insert("init_scale".to_owned(), nanatype_model::ParamValue::Number(2.1));
-    overrides.insert("init_col".to_owned(), nanatype_model::ParamValue::Text("#ff5577".to_owned()));
+    overrides.insert(
+        "init_scale".to_owned(),
+        nanatype_model::ParamValue::Number(2.1),
+    );
+    overrides.insert(
+        "init_col".to_owned(),
+        nanatype_model::ParamValue::Text("#ff5577".to_owned()),
+    );
     overrides.insert("rhythm".to_owned(), nanatype_model::ParamValue::Number(1.4));
     let (resolved, warnings) = resolve_params(&loaded.skin, &overrides, env!("CARGO_PKG_VERSION"));
     assert!(warnings.is_empty(), "{warnings:?}");
     let typo = resolved.dialogue.nameplate.typography.as_ref().unwrap();
     assert_eq!(typo.initial_scale, 2.1);
-    assert_eq!(typo.initial_color, Some(ColorRef::Rgba(Rgba8::rgb(0xff, 0x55, 0x77))));
+    assert_eq!(
+        typo.initial_color,
+        Some(ColorRef::Rgba(Rgba8::rgb(0xff, 0x55, 0x77)))
+    );
     assert_eq!(typo.glyph_scales, vec![0.92, 1.4, 0.92]);
 
     let bad = tempfile::tempdir().unwrap();
@@ -2470,6 +2482,14 @@ fn nameplate_typography_parses_resolves_and_validates() {
     let Err(diags) = load_dir(bad.path()) else {
         panic!("expected validation failure");
     };
-    assert!(diags.iter().any(|d| d.field == "dialogue.nameplate.typography.initial_scale"));
-    assert!(diags.iter().any(|d| d.field == "dialogue.nameplate.typography.initial_weight"));
+    assert!(
+        diags
+            .iter()
+            .any(|d| d.field == "dialogue.nameplate.typography.initial_scale")
+    );
+    assert!(
+        diags
+            .iter()
+            .any(|d| d.field == "dialogue.nameplate.typography.initial_weight")
+    );
 }
