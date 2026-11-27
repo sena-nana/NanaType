@@ -689,7 +689,6 @@ fn transcode(
             cycles = Some(1);
         }
     }
-    drop(save);
     if let Some((first, first_delay)) = first_frame {
         let (_, hash) = write_preview_png(&mut cached, &first, &mut disk_bytes)?;
         cached.hashes.push(hash);
