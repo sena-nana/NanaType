@@ -442,6 +442,15 @@ impl_patch_struct!(TextSpec {
     "align" => align,
 });
 
+impl_patch_struct!(NameplateTypographySpec {
+    "initial_scale" => initial_scale,
+    "initial_color" => initial_color,
+    "speaker_color_on_initial" => speaker_color_on_initial,
+    "initial_weight" => initial_weight,
+    "glyph_scales" => glyph_scales,
+    "letter_spacing" => letter_spacing,
+});
+
 impl_patch_struct!(NameplateSpec, flatten: shape {
     "visible" => visible,
     "color" => color,
@@ -455,6 +464,7 @@ impl_patch_struct!(NameplateSpec, flatten: shape {
     "border_color" => border_color,
     "border_width" => border_width,
     "text_shadow" => text_shadow,
+    "typography" => typography,
     "anchor" => anchor,
     "rotate" => rotate,
 });

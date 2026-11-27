@@ -2420,3 +2420,56 @@ fn responsive_layouts_merge_onto_the_base_dialogue() {
             .any(|w| w.field == "dialogue.responsive.unset")
     );
 }
+
+#[test]
+fn nameplate_typography_parses_resolves_and_validates() {
+    let dir = tempfile::tempdir().unwrap();
+    write_skin(
+        dir.path(),
+        "[meta]\nid = \"user.typo\"\n\
+         [dialogue.nameplate.typography]\n\
+         initial_scale = { param = \"init_scale\" }\n\
+         initial_color = { param = \"init_col\" }\n\
+         speaker_color_on_initial = true\n\
+         initial_weight = 700\n\
+         glyph_scales = [0.92, { param = \"rhythm\" }, 0.92]\n\
+         letter_spacing = 1.5\n\
+         [params.init_scale]\ntype = \"number\"\ndefault = 1.8\nmin = 1.0\nmax = 2.5\nstep = 0.05\n\
+         [params.init_col]\ntype = \"color\"\ndefault = \"#b5df52\"\n\
+         [params.rhythm]\ntype = \"number\"\ndefault = 1.25\nmin = 1.0\nmax = 1.6\nstep = 0.05\n",
+        &[],
+    );
+    let loaded = load_dir(dir.path()).unwrap();
+    assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+    let typo = loaded.skin.dialogue.nameplate.typography.as_ref().unwrap();
+    assert_eq!(typo.initial_scale, 1.8);
+    assert_eq!(typo.initial_color, Some(ColorRef::Rgba(Rgba8::rgb(0xb5, 0xdf, 0x52))));
+    assert!(typo.speaker_color_on_initial);
+    assert_eq!(typo.initial_weight, Some(700));
+    assert_eq!(typo.glyph_scales, vec![0.92, 1.25, 0.92]);
+    assert_eq!(typo.letter_spacing, 1.5);
+
+    let mut overrides = std::collections::BTreeMap::new();
+    overrides.insert("init_scale".to_owned(), nanatype_model::ParamValue::Number(2.1));
+    overrides.insert("init_col".to_owned(), nanatype_model::ParamValue::Text("#ff5577".to_owned()));
+    overrides.insert("rhythm".to_owned(), nanatype_model::ParamValue::Number(1.4));
+    let (resolved, warnings) = resolve_params(&loaded.skin, &overrides, env!("CARGO_PKG_VERSION"));
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let typo = resolved.dialogue.nameplate.typography.as_ref().unwrap();
+    assert_eq!(typo.initial_scale, 2.1);
+    assert_eq!(typo.initial_color, Some(ColorRef::Rgba(Rgba8::rgb(0xff, 0x55, 0x77))));
+    assert_eq!(typo.glyph_scales, vec![0.92, 1.4, 0.92]);
+
+    let bad = tempfile::tempdir().unwrap();
+    write_skin(
+        bad.path(),
+        "[meta]\nid = \"user.typo_bad\"\n\
+         [dialogue.nameplate.typography]\ninitial_scale = 8.0\ninitial_weight = 50\n",
+        &[],
+    );
+    let Err(diags) = load_dir(bad.path()) else {
+        panic!("expected validation failure");
+    };
+    assert!(diags.iter().any(|d| d.field == "dialogue.nameplate.typography.initial_scale"));
+    assert!(diags.iter().any(|d| d.field == "dialogue.nameplate.typography.initial_weight"));
+}

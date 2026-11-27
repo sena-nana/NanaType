@@ -11,18 +11,20 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use nana_ui::runtime::view::{
     AnyView, Computed, IntoView, computed, dynamic, watch_effect, widget,
 };
-use nana_ui::runtime::{NodeStyle, SizeChanged, Stack, Text};
+use nana_ui::runtime::{NodeStyle, RichTextView, SizeChanged, Stack, Text};
 use nana_ui_core::{
     AlignSpec, BackgroundImage, BackgroundImageFit, BackgroundPosition, BackgroundRepeat,
+    RichSpanStyle, RichText,
     JustifySpec, LayoutStyle, LengthSpec, OverflowSpec, PointerEventsSpec, PositionSpec,
 };
 use nanatype_core::{DisplayView, Reveal};
 use nanatype_model::{Document, Entrance, EntranceKind, Overflow, Rgba8};
 use nanatype_theme::{
     Anchor, ColorRef, ColorRole, ContinueMotion, DecorLayer, DecorSpec, DecorWhen, Dialogue, Edge,
-    NameplateSpec, ResolvedDialogue, ShapeSpec, Side, Skin, anchor_frac, continue_motion,
-    decor_motion, place, sprite_frame, tail_geometry,
+    NameplateSpec, NameplateTypographySpec, ResolvedDialogue, ShapeSpec, Side, Skin, anchor_frac,
+    continue_motion, decor_motion, place, sprite_frame, tail_geometry,
 };
+use unicode_segmentation::UnicodeSegmentation;
 
 use super::super::editor_geometry::Capture;
 use super::super::overflow;
@@ -1151,6 +1153,58 @@ fn plate_label_style(ui: Stage, skin: &Skin, d: &Dialogue) -> NodeStyle {
     st
 }
 
+/// Build per-grapheme [`RichText`] for a nameplate with [`NameplateTypographySpec`].
+fn build_nameplate_rich(
+    name: &str,
+    typo: &NameplateTypographySpec,
+    skin: &Skin,
+    speaker_col: Option<Rgba8>,
+    p: &NameplateSpec,
+) -> RichText {
+    let mut b = RichText::builder();
+    for (idx, g) in name.graphemes(true).enumerate() {
+        let mut span = RichSpanStyle::new();
+        if idx == 0 {
+            if (typo.initial_scale - 1.0).abs() > f32::EPSILON {
+                span = span.size_em(typo.initial_scale);
+            }
+            let col = if typo.speaker_color_on_initial {
+                speaker_col
+                    .or_else(|| typo.initial_color.map(|cr| skin.color(cr)))
+                    .unwrap_or(p.text_color)
+            } else if let Some(cr) = typo.initial_color {
+                skin.color(cr)
+            } else {
+                speaker_col.unwrap_or(p.text_color)
+            };
+            span = span.color(nana_ui_core::PaintColor::srgb(c(col)));
+            if let Some(w) = typo.initial_weight {
+                span = span.weight(w);
+            }
+        } else {
+            let scale = if typo.glyph_scales.is_empty() {
+                1.0
+            } else {
+                typo.glyph_scales[(idx - 1) % typo.glyph_scales.len()]
+            };
+            if (scale - 1.0).abs() > f32::EPSILON {
+                span = span.size_em(scale);
+            }
+            let col = if typo.speaker_color_on_initial {
+                p.text_color
+            } else {
+                speaker_col.unwrap_or(p.text_color)
+            };
+            span = span.color(nana_ui_core::PaintColor::srgb(c(col)));
+        }
+        if typo.letter_spacing != 0.0 {
+            span = span.letter_spacing(typo.letter_spacing);
+        }
+        b.push(g, span);
+    }
+    b.build()
+}
+
 fn column_nameplate(ui: Stage, ctx: &BoxCtx, resolved: Computed<Arc<ResolvedDialogue>>) -> AnyView {
     let ctx = ctx.clone();
     let label_ctx = ctx.clone();
@@ -1200,28 +1254,68 @@ fn column_nameplate(ui: Stage, ctx: &BoxCtx, resolved: Computed<Arc<ResolvedDial
                     l.transforms.transform = (rotate != 0.0).then(|| affine(0.0, 0.0, rotate, 1.0));
                 });
         })
-        .children(widget(Text::new("")).bind(move |t: &mut Text| {
-            let (r, shown) = spec(&label_ctx.skin);
-            if shown {
-                let p = &r.dialogue.nameplate;
-                let mut st = plate_label_style(ui, &label_ctx.skin, &r.dialogue);
-                let l = Arc::make_mut(&mut st.layout);
-                l.writing_mode = Some(nana_ui_core::WritingModeSpec::VerticalRl);
-                l.text_ext.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
-                l.max_height = Some(LengthSpec::Px(
-                    (ui.text_area_height.get() - 2.0 * p.padding[0]).max(p.size),
-                ));
-                l.text_overflow_ellipsis = true;
-                let st = tinted(&st, color());
-                if t.style != st {
-                    t.style = st;
-                }
-            }
-            let n = name();
-            if t.value != n {
-                t.value = n;
-            }
-        }))
+        .children(if let Some(typo) = label_ctx.skin.dialogue.nameplate.typography.clone() {
+            let col_skin = label_ctx.skin.clone();
+            widget(RichTextView::new(RichText::default()).decorative())
+                .bind(move |v: &mut RichTextView| {
+                    let (r, shown) = spec(&col_skin);
+                    if shown {
+                        let p = &r.dialogue.nameplate;
+                        let mut st = plate_label_style(ui, &col_skin, &r.dialogue);
+                        let l = Arc::make_mut(&mut st.layout);
+                        l.writing_mode = Some(nana_ui_core::WritingModeSpec::VerticalRl);
+                        l.text_ext.text_orientation =
+                            Some(nana_ui_core::TextOrientationSpec::Mixed);
+                        l.max_height = Some(LengthSpec::Px(
+                            (ui.text_area_height.get() - 2.0 * p.padding[0]).max(p.size),
+                        ));
+                        l.text_overflow_ellipsis = true;
+                        let sc = color();
+                        let st = tinted(
+                            &st,
+                            if typo.speaker_color_on_initial {
+                                None
+                            } else {
+                                sc
+                            },
+                        );
+                        if v.style != st {
+                            v.style = st;
+                        }
+                        let rich = build_nameplate_rich(&name(), &typo, &col_skin, sc, p);
+                        if v.value != rich {
+                            v.value = rich;
+                        }
+                    }
+                })
+                .into_any()
+        } else {
+            widget(Text::new(""))
+                .bind(move |t: &mut Text| {
+                    let (r, shown) = spec(&label_ctx.skin);
+                    if shown {
+                        let p = &r.dialogue.nameplate;
+                        let mut st = plate_label_style(ui, &label_ctx.skin, &r.dialogue);
+                        let l = Arc::make_mut(&mut st.layout);
+                        l.writing_mode = Some(nana_ui_core::WritingModeSpec::VerticalRl);
+                        l.text_ext.text_orientation =
+                            Some(nana_ui_core::TextOrientationSpec::Mixed);
+                        l.max_height = Some(LengthSpec::Px(
+                            (ui.text_area_height.get() - 2.0 * p.padding[0]).max(p.size),
+                        ));
+                        l.text_overflow_ellipsis = true;
+                        let st = tinted(&st, color());
+                        if t.style != st {
+                            t.style = st;
+                        }
+                    }
+                    let n = name();
+                    if t.value != n {
+                        t.value = n;
+                    }
+                })
+                .into_any()
+        })
         .into_any()
 }
 
@@ -1310,18 +1404,43 @@ pub(super) fn nameplate(ui: Stage, ctx: &BoxCtx, resolved: &ResolvedDialogue) ->
             )
             .key("dialogue-nameplate")
             .editor_part(ui, "nameplate")
-            .children(
-                widget(Text::new("").style(st.clone())).bind(move |t: &mut Text| {
-                    let want = tinted(&st, color());
-                    if t.style != want {
-                        t.style = want;
-                    }
-                    let n = name();
-                    if t.value != n {
-                        t.value = n;
-                    }
-                }),
-            ),
+            .children(if let Some(typo) = p.typography.clone() {
+                let skin_for_rich = skin.clone();
+                let plate_spec = p.clone();
+                widget(RichTextView::new(RichText::default()).decorative().style(st.clone()))
+                    .bind(move |v: &mut RichTextView| {
+                        let sc = color();
+                        let want = tinted(
+                            &st,
+                            if typo.speaker_color_on_initial {
+                                None
+                            } else {
+                                sc
+                            },
+                        );
+                        if v.style != want {
+                            v.style = want;
+                        }
+                        let rich = build_nameplate_rich(&name(), &typo, &skin_for_rich, sc, &plate_spec);
+                        if v.value != rich {
+                            v.value = rich;
+                        }
+                    })
+                    .into_any()
+            } else {
+                widget(Text::new("").style(st.clone()))
+                    .bind(move |t: &mut Text| {
+                        let want = tinted(&st, color());
+                        if t.style != want {
+                            t.style = want;
+                        }
+                        let n = name();
+                        if t.value != n {
+                            t.value = n;
+                        }
+                    })
+                    .into_any()
+            }),
         )
         .into_any()
 }

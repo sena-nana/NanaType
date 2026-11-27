@@ -1260,6 +1260,32 @@ fn validate_dialogue_shapes(d: &crate::manifest::Dialogue, out: &mut Vec<SkinDia
             "must be -360–360",
         ));
     }
+    if let Some(t) = &p.typography {
+        if !in_range(t.initial_scale, 0.25, 4.0) {
+            out.push(SkinDiagnostic::error(
+                "dialogue.nameplate.typography.initial_scale",
+                "must be 0.25–4",
+            ));
+        }
+        if t.glyph_scales.len() > 16 || t.glyph_scales.iter().any(|s| !in_range(*s, 0.25, 4.0)) {
+            out.push(SkinDiagnostic::error(
+                "dialogue.nameplate.typography.glyph_scales",
+                "at most 16 entries, each 0.25–4",
+            ));
+        }
+        if t.initial_weight.is_some_and(|w| !(100..=900).contains(&w)) {
+            out.push(SkinDiagnostic::error(
+                "dialogue.nameplate.typography.initial_weight",
+                "must be 100–900",
+            ));
+        }
+        if !in_range(t.letter_spacing, -32.0, 64.0) {
+            out.push(SkinDiagnostic::error(
+                "dialogue.nameplate.typography.letter_spacing",
+                "must be -32–64",
+            ));
+        }
+    }
 
     if let Some(t) = &d.tail
         && (!in_range(t.at, 0.0, 1.0)

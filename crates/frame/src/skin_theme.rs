@@ -138,6 +138,9 @@ fn scale_nameplate(p: &mut nanatype_theme::NameplateSpec, k: f32) {
         shadow.dy *= k;
         shadow.blur *= k;
     }
+    if let Some(typo) = &mut p.typography {
+        typo.letter_spacing *= k;
+    }
     scale_shape(&mut p.shape, k);
 }
 

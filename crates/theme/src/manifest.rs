@@ -823,6 +823,39 @@ impl Default for TextSpec {
     }
 }
 
+/// Per-grapheme nameplate styling: oversized tinted initial glyph and stepped
+/// character scaling along the baseline.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NameplateTypographySpec {
+    /// Font-size multiplier (`em`) for the first grapheme of the speaker name.
+    pub initial_scale: f32,
+    /// Optional colour override for the first grapheme.
+    pub initial_color: Option<ColorRef>,
+    /// When true, a per-speaker colour tints only the initial grapheme while the
+    /// remaining characters stay `nameplate.text_color`.
+    pub speaker_color_on_initial: bool,
+    /// Optional CSS font weight (`100`–`900`) for the first grapheme.
+    pub initial_weight: Option<u16>,
+    /// Repeating `em` scale pattern applied to graphemes from index `1` onward.
+    pub glyph_scales: Vec<f32>,
+    /// Extra tracking in logical px between nameplate graphemes.
+    pub letter_spacing: f32,
+}
+
+impl Default for NameplateTypographySpec {
+    fn default() -> Self {
+        Self {
+            initial_scale: 1.0,
+            initial_color: None,
+            speaker_color_on_initial: false,
+            initial_weight: None,
+            glyph_scales: Vec::new(),
+            letter_spacing: 0.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NameplateSpec {
@@ -842,6 +875,8 @@ pub struct NameplateSpec {
     #[serde(flatten)]
     pub shape: ShapeSpec,
     pub text_shadow: Option<TextShadowSpec>,
+    /// Optional per-grapheme sizing and initial-glyph styling.
+    pub typography: Option<NameplateTypographySpec>,
     /// The plate's own point of this name is placed at the box's, then moved
     /// by `offset`.
     pub anchor: Anchor,
@@ -865,6 +900,7 @@ impl Default for NameplateSpec {
             border_width: 0.0,
             shape: ShapeSpec::default(),
             text_shadow: None,
+            typography: None,
             anchor: Anchor::TopLeft,
             rotate: 0.0,
         }
