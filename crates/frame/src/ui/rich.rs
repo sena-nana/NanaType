@@ -695,6 +695,8 @@ pub fn vertical_extent(
                         width_px,
                         ascent_px,
                         descent_px,
+                        align: nana_text::InlineObjectAlign::default(),
+                        baseline_shift_px: 0.0,
                         envelope: None,
                     },
                 }
@@ -1573,6 +1575,7 @@ fn style_back(
     if let Some(TextDecorationLine {
         underline,
         line_through,
+        ..
     }) = s.paint.decoration
     {
         style.underline = underline.then_some(true);

@@ -187,7 +187,10 @@ mod tests {
                             Stack::row(0.0)
                                 .width(LengthSpec::Px(80.0))
                                 .height(LengthSpec::Px(12.0))
-                                .with_layout(|l| l.background = Some(c(Rgba8::WHITE))),
+                                .with_layout(|l| {
+                                    l.paint_colors.background =
+                                        Some(nana_ui_core::PaintColor::srgb(c(Rgba8::WHITE)))
+                                }),
                         )
                         .into_any();
                         widget(Stack::column(0.0).padding(12.0)).children(bubble_view(

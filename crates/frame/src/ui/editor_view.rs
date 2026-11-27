@@ -105,7 +105,7 @@ pub fn editor_area<M: Send + 'static>(
         }
         let l = Arc::make_mut(&mut st.layout);
         if !preview {
-            l.color = None;
+            l.paint_colors.color = None;
         }
         l.width = Some(LengthSpec::Fill);
         l.min_width = Some(LengthSpec::Px(0.0));
@@ -131,7 +131,7 @@ pub fn editor_area<M: Send + 'static>(
         l.offset_left = Some(LengthSpec::Px(0.0));
         l.offset_right = Some(LengthSpec::Px(0.0));
         l.offset_top = Some(LengthSpec::Px(0.0));
-        l.color = None;
+        l.paint_colors.color = None;
         l.pointer_events = Some(PointerEventsSpec::None);
         st.foreground = Some(SemanticColorRole::Muted);
         st

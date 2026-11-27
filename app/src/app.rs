@@ -1187,7 +1187,7 @@ impl App {
         );
         self.shell.toasts.push(ToastRequest::new(
             text,
-            nana_ui::ToastTone::Success,
+            nana_ui_core::ToastTone::Success,
             1600,
             false,
         ));

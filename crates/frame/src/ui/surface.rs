@@ -65,6 +65,18 @@ fn hash_paint_color<H: Hasher>(c: nana_ui_core::PaintColor, state: &mut H) {
             hash_f32s(&channels, state);
             hash_f32(alpha, state);
         }
+        nana_ui_core::PaintColor::ThemeRole { role } => {
+            4u8.hash(state);
+            role.hash(state);
+        }
+        nana_ui_core::PaintColor::ThemeMix(mix) => {
+            5u8.hash(state);
+            mix.hash(state);
+        }
+        nana_ui_core::PaintColor::ThemePair(pair) => {
+            6u8.hash(state);
+            pair.hash(state);
+        }
     }
 }
 
@@ -99,12 +111,8 @@ fn hash_background<H: Hasher>(bg: &BackgroundImage, state: &mut H) {
             hash_f32(g.angle_deg, state);
             g.stops.len().hash(state);
             for s in &g.stops {
-                s.paint_color.is_some().hash(state);
-                if let Some(pc) = s.paint_color {
-                    hash_paint_color(pc, state);
-                }
                 hash_f32(s.position, state);
-                hash_f32s(&s.color, state);
+                hash_paint_color(s.color, state);
             }
         }
         BackgroundImage::Gradient(CssGradient::Radial(g)) => {
@@ -115,12 +123,8 @@ fn hash_background<H: Hasher>(bg: &BackgroundImage, state: &mut H) {
             }
             g.stops.len().hash(state);
             for s in &g.stops {
-                s.paint_color.is_some().hash(state);
-                if let Some(pc) = s.paint_color {
-                    hash_paint_color(pc, state);
-                }
                 hash_f32(s.position, state);
-                hash_f32s(&s.color, state);
+                hash_paint_color(s.color, state);
             }
         }
         BackgroundImage::Url {
@@ -218,15 +222,11 @@ impl Hash for Surface {
         self.border.hash(state);
         self.shadows.len().hash(state);
         for s in &self.shadows {
-            s.paint_color.is_some().hash(state);
-            if let Some(pc) = s.paint_color {
-                hash_paint_color(pc, state);
-            }
             hash_f32s(
                 &[s.offset_x, s.offset_y, s.blur_radius, s.spread_radius],
                 state,
             );
-            hash_f32s(&s.color, state);
+            hash_paint_color(s.color, state);
             s.inset.hash(state);
         }
         self.frame.is_some().hash(state);
@@ -279,9 +279,8 @@ pub fn gradient(skin: &Skin, g: &GradientSpec) -> BackgroundImage {
         .stops
         .iter()
         .map(|(position, color)| GradientStop {
-            paint_color: None,
             position: *position,
-            color: c(skin.color(*color)),
+            color: nana_ui_core::PaintColor::srgb(c(skin.color(*color))),
         })
         .collect();
     BackgroundImage::Gradient(match g.kind {
@@ -299,12 +298,11 @@ pub fn gradient(skin: &Skin, g: &GradientSpec) -> BackgroundImage {
 
 pub fn shadow(skin: &Skin, s: &ShadowSpec) -> BoxShadowSpec {
     BoxShadowSpec {
-        paint_color: None,
         offset_x: s.dx,
         offset_y: s.dy,
         blur_radius: s.blur,
         spread_radius: s.spread,
-        color: c(skin.color(s.color)),
+        color: nana_ui_core::PaintColor::srgb(c(skin.color(s.color))),
         inset: s.inset,
     }
 }
@@ -332,8 +330,7 @@ pub fn nine_slice(frame: &NineSlice, url: String) -> (BorderImageSpec, [f32; 4])
 pub fn text_stroke(l: &mut LayoutStyle, s: &SkinStroke) {
     l.paint.text_stroke = Some(TextStrokeSpec {
         width: s.width,
-        color: Some(c(s.color)),
-        paint_color: None,
+        color: Some(nana_ui_core::PaintColor::srgb(c(s.color))),
     });
     l.paint.paint_order_stroke_first = true;
 }
@@ -343,8 +340,7 @@ pub fn text_shadow(l: &mut LayoutStyle, s: &SkinShadow) {
         offset_x: s.dx,
         offset_y: s.dy,
         blur_radius: s.blur,
-        color: c(s.color),
-        paint_color: None,
+        color: nana_ui_core::PaintColor::srgb(c(s.color)),
     }];
 }
 
@@ -620,10 +616,10 @@ impl Surface {
         l.paint.border_material = self.border_material.clone();
         // Surface owns these fields. Clear them even when changing routes on
         // the same retained node (image -> path -> ordinary box, for example).
-        l.background = None;
-        l.paint.background_image = None;
+        l.paint_colors.background = None;
+        l.paint.background_layers.clear();
         l.paint.border_image = None;
-        l.border_color = None;
+        l.paint_colors.border = None;
         l.border_style = None;
         set_border_widths(l, [0.0; 4]);
         l.border_radius = Some(self.radii[0]);
@@ -632,17 +628,17 @@ impl Surface {
         match self.kind() {
             SurfaceKind::Frame { spec, widths } => {
                 if !spec.fill {
-                    l.background = self.fill;
+                    l.paint_colors.background = (self.fill).map(nana_ui_core::PaintColor::srgb);
                 }
                 l.paint.border_image = Some(spec.clone());
                 set_border_widths(l, widths);
             }
             SurfaceKind::Motif(_) | SurfaceKind::Contour(_) | SurfaceKind::StyledBox => {
-                l.background = self.fill;
-                l.paint.background_image = self.gradient.clone();
+                l.paint_colors.background = (self.fill).map(nana_ui_core::PaintColor::srgb);
+                l.paint.background_layers = self.gradient.clone().into_iter().collect();
                 if let Some(b) = &self.border {
                     set_border_widths(l, b.widths);
-                    l.border_color = Some(b.color);
+                    l.paint_colors.border = Some(nana_ui_core::PaintColor::srgb(b.color));
                     l.border_style = Some(match b.style {
                         BorderStyleSpec::Solid => BorderStyle::Solid,
                         BorderStyleSpec::Dashed => BorderStyle::Dashed,
@@ -986,7 +982,7 @@ mod tests {
         let mut l = LayoutStyle::default();
         s.apply(&mut l);
         assert!(matches!(
-            l.paint.background_image,
+            l.paint.primary_background_image(),
             Some(BackgroundImage::Gradient(CssGradient::Linear(_)))
         ));
         assert_eq!(
@@ -1048,8 +1044,14 @@ mod tests {
         let mut style = LayoutStyle::default();
         surface.materials(false).apply(&mut style);
         assert!(!style.paint.border_image.as_ref().unwrap().fill);
-        assert_eq!(style.background, Some(c(skin.dialogue.box_.color)));
-        assert!(style.paint.background_image.is_none());
+        assert_eq!(
+            style
+                .paint_colors
+                .background
+                .map(nana_ui_core::PaintColor::to_srgb),
+            Some(c(skin.dialogue.box_.color))
+        );
+        assert!(style.paint.background_layers.is_empty());
     }
 
     #[test]

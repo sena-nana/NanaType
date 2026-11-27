@@ -5,12 +5,13 @@ use crate::{
     msg::{FileTarget, Msg},
     ui::Ui,
 };
+use nana_ui::ButtonKind;
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, widget};
 use nana_ui::runtime::{
     Activate, Button, Checkbox, IconButton, Stack, Switch, Text, ToggleChanged,
 };
-use nana_ui::{ButtonKind, ControlSize};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_plugins::Mount;
 use std::sync::Arc;

@@ -27,7 +27,7 @@ fn main() {
                     .width(LengthSpec::Px(w as f32))
                     .height(LengthSpec::Px(h as f32))
                     .with_layout(move |l| {
-                        l.background = Some([1.; 4]);
+                        l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb([1.; 4]));
                         l.paint.background_material = Some(material);
                     }),
             )

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use nana_ui::ButtonKind;
 use nana_ui::runtime::view::{
     AnyView, Computed, Implicit, IntoView, Signal, computed, dynamic, each, signal, watch_effect,
     widget,
@@ -9,7 +10,7 @@ use nana_ui::runtime::{
     Activate, AnimatableProperty, IconButton, NodeStyle, ScrollAxes, ScrollView, SizeChanged,
     Stack, Text, TextChanged, TextInput, TextInputState,
 };
-use nana_ui::{ButtonKind, ControlSize};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec, PointerEventsSpec, PositionSpec};
 use nanatype_core::HistoryRow;
 use nanatype_theme::{DecorLayer, HistoryLayout, HistoryTitle, Skin};
@@ -668,8 +669,8 @@ fn title_view(skin: &Skin, t: &HistoryTitle) -> AnyView {
         l.font_size = Some(t.size);
         l.font_weight = Some(t.weight);
         l.text_ext.font_family = skin.fonts.name.families.first().cloned();
-        l.color = Some(c(t.color));
-        l.white_space_nowrap = true;
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(t.color)));
+        l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
     }
     let background = c(t.background);
     widget(
@@ -679,7 +680,7 @@ fn title_view(skin: &Skin, t: &HistoryTitle) -> AnyView {
             .padding_xy(t.padding, 0.0)
             .align(AlignSpec::Center)
             .with_layout(move |l| {
-                l.background = Some(background);
+                l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(background));
                 l.flex_shrink = Some(0.0);
             }),
     )

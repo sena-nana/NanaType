@@ -6,11 +6,10 @@ use crate::{
     ui::Ui,
 };
 use nana_ui::{
-    ControlSize,
     runtime::view::{AnyView, IntoView, Signal, dynamic, signal, widget},
     runtime::{Activate, Button, Stack, Text, TextChanged, TextInput},
 };
-use nana_ui_core::LengthSpec;
+use nana_ui_core::{ControlSize, LengthSpec};
 
 fn action(ui: Ui, key: &str, command: impl Fn() -> Command + Send + 'static) -> AnyView {
     let connect = key == "telegram-connect";

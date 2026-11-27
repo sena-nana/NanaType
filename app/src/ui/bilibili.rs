@@ -9,9 +9,9 @@ use super::{
 };
 use crate::msg::{BliveFeedMsg, Msg};
 use crate::ui::kit::{self, Type, gap};
-use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, signal, widget};
 use nana_ui::runtime::{Stack, Text, TextChanged, TextInput, TextSubmitted};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_settings::{BilibiliLink, BilibiliSource, BliveRoomKind, ChatSource, Settings};
 

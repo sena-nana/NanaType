@@ -197,6 +197,15 @@ pub fn compile(chrome: impl Into<Chrome>) -> Arc<CompiledTheme> {
         }))
         .with_display_name("NanaType");
     def.motion.hover_color_ms = crate::ui::motion::HOVER_MS as u16;
+    // A focused field keeps a firmer neutral edge and the focus fill, never
+    // the accent edge NanaUI's input recipe gives it.
+    def.components.input = Some(nana_ui_core::InputRecipe {
+        focus_border: nana_ui_core::SemanticColorRole::BorderStrong,
+        ..def
+            .components
+            .input
+            .unwrap_or(nana_ui_core::InputRecipe::DEFAULT)
+    });
     if chrome.high_contrast {
         // Outlines and rules twice as heavy, and a title bar that matches
         // the opaque background rather than a tinted strip.

@@ -11,7 +11,8 @@ use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{
     Activate, Button, Checkbox, IconButton, Stack, TextChanged, TextSubmitted, ToggleChanged,
 };
-use nana_ui::{ButtonKind, ControlSize, icons_tabler as ti};
+use nana_ui::{ButtonKind, icons_tabler as ti};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_theme::PackageCapability;
 use nanatype_theme::editor::{AssetKind, ProjectKind};

@@ -13,9 +13,10 @@ use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, watch_e
 use nana_ui::runtime::{
     Activate, Button, CodeEditing, FocusWithinChanged, ScrollAxes, ScrollView, Stack, Text,
     TextArea, TextChanged, TextDiagnosticSeverity, TextDiagnosticSpan, TextMatchSpan,
-    TextSelection, TextSubmitted, TreeSelectionChanged, TreeView,
+    TextSelection, TextSubmitted, TreeSelectionRequested, TreeView,
 };
-use nana_ui::{ButtonKind, ControlSize, icons_tabler as ti};
+use nana_ui::{ButtonKind, icons_tabler as ti};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec, TreeNode};
 use nanatype_theme::PACKAGE_MANIFEST;
 use nanatype_theme::editor::{AssetKind, DraftOrigin, FileInfo, Level};
@@ -118,11 +119,7 @@ fn file_icon(file: &FileInfo) -> nana_ui::runtime::Icon {
 }
 
 /// Nest `a/b/c` paths into folders; `dependencies/` starts collapsed.
-fn tree(
-    files: &[FileInfo],
-    selected: Option<&str>,
-    broken: &BTreeSet<String>,
-) -> Vec<TreeNode<Arc<str>>> {
+fn tree(files: &[FileInfo], broken: &BTreeSet<String>) -> Vec<TreeNode<Arc<str>>> {
     #[derive(Default)]
     struct Folder<'a> {
         folders: BTreeMap<&'a str, Folder<'a>>,
@@ -140,7 +137,6 @@ fn tree(
     fn build(
         prefix: &str,
         folder: &Folder<'_>,
-        selected: Option<&str>,
         broken: &BTreeSet<String>,
     ) -> Vec<TreeNode<Arc<str>>> {
         let mut nodes = Vec::new();
@@ -152,7 +148,7 @@ fn tree(
                     Arc::from(path.as_str()),
                     *name,
                     expanded,
-                    build(&path, sub, selected, broken),
+                    build(&path, sub, broken),
                 )
                 .icon(ti::FOLDER),
             );
@@ -166,13 +162,12 @@ fn tree(
                         ti::ALERT_CIRCLE
                     } else {
                         file_icon(file)
-                    })
-                    .selected(selected == Some(file.path.as_str())),
+                    }),
             );
         }
         nodes
     }
-    build("", &root, selected, broken)
+    build("", &root, broken)
 }
 
 /// What the name row under the files' tools is for.
@@ -549,12 +544,13 @@ pub(crate) fn file_tree(ui: Ui, keep: fn(&FileInfo) -> bool, key: &'static str) 
                 return hint(ui.now_t("pkgedit-files-none"));
             }
             widget(
-                TreeView::new(tree(&files, view.selected.as_deref(), &broken))
+                TreeView::new(tree(&files, &broken))
+                    .selection(super::tree_selection(view.selected.as_deref()))
                     .label(ui.now_t("pkgedit-tab-files")),
             )
             .key(key)
-            .on_cx(|_, e: &TreeSelectionChanged, cx| {
-                if let Some(path) = &e.active
+            .on_cx(|tree, e: &TreeSelectionRequested, cx| {
+                if let Some(path) = super::requested_row(tree, e)
                     && !path.ends_with('/')
                 {
                     cx.dispatch_program_all(Msg::PackageEditor(Action::Select(path.to_string())));

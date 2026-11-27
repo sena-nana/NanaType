@@ -33,6 +33,7 @@ pub fn package(dest: &Path) -> io::Result<PathBuf> {
             max_snapshots: 5,
             include_raw: false,
             redact_home: true,
+            filter: None,
         },
     )
 }

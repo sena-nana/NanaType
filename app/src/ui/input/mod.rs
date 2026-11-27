@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use nana_ui::ButtonKind;
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{
     AnyView, EntityRef, IntoView, Signal, WithRefs, dynamic, entity_ref, segmented_option, signal,
@@ -17,11 +18,11 @@ use nana_ui::runtime::{
     TextSubmitted,
 };
 use nana_ui::theme::space;
-use nana_ui::{ButtonKind, ControlSize, PopoverPlacement};
 use nana_ui_core::{
     AlignSpec, JustifySpec, LengthSpec, OverflowSpec, PointerEventsSpec, PositionSpec,
     SemanticColorRole, SquareSize,
 };
+use nana_ui_core::{ControlSize, PopoverPlacement};
 use nanatype_core::Cmd;
 use nanatype_model::{
     AssetRef, Atom, AtomKind, Continuous, ContinuousKind, Emphasis, EntranceKind, Inline, Marker,

@@ -11,7 +11,7 @@ use crate::ui::{Ui, canvas_controls, preview_panel, properties};
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, node_ref, watch_effect, widget};
 use nana_ui::runtime::{
-    Activate, IconButton, ScrollAxes, ScrollView, Stack, Toolbar, TreeSelectionChanged, TreeView,
+    Activate, IconButton, ScrollAxes, ScrollView, Stack, Toolbar, TreeSelectionRequested, TreeView,
 };
 use nana_ui_core::{
     AlignSpec, JustifySpec, LengthSpec, SemanticColorRole, SplitAxis, SplitPaneModel, TreeNode,
@@ -164,14 +164,10 @@ fn layers(ui: Ui, table: &TomlTable, selected: &[String]) -> Vec<TreeNode<Arc<st
             _ => return None,
         };
         Some(if children.is_empty() {
-            TreeNode::leaf(id, label)
-                .icon(icon)
-                .selected(selected == path.as_slice())
+            TreeNode::leaf(id, label).icon(icon)
         } else {
             let expanded = on_path || path == ["dialogue"];
-            TreeNode::branch(id, label, expanded, children)
-                .icon(icon)
-                .selected(selected == path.as_slice())
+            TreeNode::branch(id, label, expanded, children).icon(icon)
         })
     }
     fn children(
@@ -293,17 +289,22 @@ pub fn side(ui: Ui) -> AnyView {
                 Ok((table, _)) => table,
                 Err(e) => return hint(e),
             };
-            widget(TreeView::new(layers(ui, &table, selected)).label(ui.now_t("pkgedit-layers")))
-                .key("editor-layers")
-                .on_cx(move |_, e: &TreeSelectionChanged, cx| {
-                    if let Some(id) = &e.active {
-                        let path = id.split(SEP).map(str::to_owned).collect::<Vec<_>>();
-                        if let Some(msg) = select(ui, path) {
-                            cx.dispatch_program_all(msg);
-                        }
+            let current = (!selected.is_empty()).then(|| selected.join(SEP));
+            widget(
+                TreeView::new(layers(ui, &table, selected))
+                    .selection(super::tree_selection(current.as_deref()))
+                    .label(ui.now_t("pkgedit-layers")),
+            )
+            .key("editor-layers")
+            .on_cx(move |tree, e: &TreeSelectionRequested, cx| {
+                if let Some(id) = super::requested_row(tree, e) {
+                    let path = id.split(SEP).map(str::to_owned).collect::<Vec<_>>();
+                    if let Some(msg) = select(ui, path) {
+                        cx.dispatch_program_all(msg);
                     }
-                })
-                .into_any()
+                }
+            })
+            .into_any()
         },
     );
     widget(Stack::fill_column(0.))

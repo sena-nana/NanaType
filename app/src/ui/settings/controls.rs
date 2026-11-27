@@ -3,14 +3,15 @@
 
 use std::sync::{Arc, LazyLock};
 
+use nana_ui::ButtonKind;
 use nana_ui::runtime::view::{AnyView, IntoView, segmented_option, signal, widget};
 use nana_ui::runtime::{
     Activate, Button, Chip, ColorChanged, ColorField, FocusWithinChanged, NumberChanged,
     NumberInput, RangeField, RangeInput, SegmentedControl, SegmentedOptionChosen, Select,
     SelectChanged, SelectOption, Stack, StatusBadge, Switch, TextChanged, TextInput, ToggleChanged,
 };
-use nana_ui::{ButtonKind, ControlSize, StatusTone};
 use nana_ui_core::{AlignSpec, JustifySpec, LengthSpec};
+use nana_ui_core::{ControlSize, StatusTone};
 use nanatype_i18n::Locale;
 use nanatype_model::Rgba8;
 use nanatype_settings::Settings;

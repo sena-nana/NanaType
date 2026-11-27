@@ -665,12 +665,16 @@ pub(crate) fn empty_placeholder(
     {
         let l = Arc::make_mut(&mut st.layout);
         l.font_size = Some(14.0);
-        l.color = Some(c(Rgba8::rgba(255, 255, 255, 220)));
-        l.white_space_nowrap = true;
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(Rgba8::rgba(
+            255, 255, 255, 220,
+        ))));
+        l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
     }
     widget(Stack::column(0.).with_layout(|l| {
         overlay(l);
-        l.background = Some(c(Rgba8::rgba(24, 24, 28, 140)));
+        l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(c(Rgba8::rgba(
+            24, 24, 28, 140,
+        ))));
     }))
     .css(nana_ui::runtime::view::css! {
         inset: 6px;
@@ -1109,7 +1113,8 @@ fn speaker_color(ui: Stage, ctx: &BoxCtx) -> impl Fn() -> Option<Rgba8> + Send +
 fn tinted(st: &NodeStyle, color: Option<Rgba8>) -> NodeStyle {
     let mut st = st.clone();
     if let Some(color) = color {
-        Arc::make_mut(&mut st.layout).color = Some(c(color));
+        Arc::make_mut(&mut st.layout).paint_colors.color =
+            Some(nana_ui_core::PaintColor::srgb(c(color)));
     }
     st
 }
@@ -1142,8 +1147,8 @@ fn plate_label_style(ui: Stage, skin: &Skin, d: &Dialogue) -> NodeStyle {
     l.font_size = Some(p.size);
     l.font_weight = Some(skin.fonts.name.weight);
     l.text_ext.font_family = skin.fonts.name.families.first().cloned();
-    l.color = Some(c(p.text_color));
-    l.white_space_nowrap = true;
+    l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(p.text_color)));
+    l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
     if let Some(stroke) = &p.stroke {
         surface::text_stroke(l, stroke);
     }
@@ -1374,7 +1379,7 @@ pub(super) fn nameplate(ui: Stage, ctx: &BoxCtx, resolved: &ResolvedDialogue) ->
         let l = Arc::make_mut(&mut st.layout);
         l.writing_mode = Some(nana_ui_core::WritingModeSpec::VerticalRl);
         l.text_ext.text_orientation = Some(nana_ui_core::TextOrientationSpec::Mixed);
-        l.white_space_nowrap = true;
+        l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
         l.max_height = Some(LengthSpec::Px(
             (ui.display_size.get_untracked()[1] * 0.25).max(p.size),
         ));
@@ -1488,8 +1493,10 @@ fn portrait(ui: Stage, ctx: &BoxCtx, d: &Dialogue) -> impl IntoView + use<> {
         let url =
             url.or_else(|| avatar.and_then(|a| ui.asset_urls.with(|urls| urls.get(&a).cloned())));
         restyle(s, |l| {
-            l.paint.background_image =
-                url.map(|u| BackgroundImage::url_with_fit(u, BackgroundImageFit::Contain));
+            l.paint.background_layers = url
+                .map(|u| BackgroundImage::url_with_fit(u, BackgroundImageFit::Contain))
+                .into_iter()
+                .collect();
         });
     })
 }
@@ -1637,8 +1644,8 @@ where
         l.font_size = Some(dec.text_size);
         l.font_weight = Some(font.weight);
         l.text_ext.font_family = font.families.first().cloned();
-        l.color = Some(c(skin.color(dec.text_color)));
-        l.white_space_nowrap = true;
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(skin.color(dec.text_color))));
+        l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
         l.line_height = Some(nana_ui_core::LineHeightSpec::Absolute(dec.text_size * 1.2));
     }
     el.children(widget(Text::new(dec.text.clone()).decorative().style(st)))
@@ -1781,7 +1788,7 @@ fn continue_indicator_on(
                 Stack::row(0.0)
                     .width(LengthSpec::Px(iw))
                     .height(LengthSpec::Px(ih))
-                    .with_layout(move |l| l.paint.background_image = Some(first)),
+                    .with_layout(move |l| l.paint.background_layers = vec![first]),
             );
             if frames > 1 && animate {
                 let shown = AtomicU32::new(0);
@@ -1789,7 +1796,7 @@ fn continue_indicator_on(
                     let f = sprite_frame(frames, fps, ui.now.get() as f32 / 1000.0);
                     if shown.swap(f, Ordering::Relaxed) != f {
                         let image = sheet[f as usize].clone();
-                        restyle(s, |l| l.paint.background_image = Some(image));
+                        restyle(s, |l| l.paint.background_layers = vec![image]);
                     }
                 });
             }
@@ -1802,8 +1809,8 @@ fn continue_indicator_on(
             {
                 let l = Arc::make_mut(&mut st.layout);
                 l.font_size = Some(cs.size);
-                l.color = Some(c(cs.color));
-                l.white_space_nowrap = true;
+                l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(cs.color)));
+                l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
             }
             widget(Text::new(cs.glyph.clone()).decorative().style(st))
                 .key("dialogue-continue-glyph")

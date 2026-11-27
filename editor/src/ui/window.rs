@@ -3,7 +3,8 @@
 
 use nana_ui::runtime::view::{AnyView, EntityRef, IntoView, dynamic, widget};
 use nana_ui::runtime::{Activate, Button, ScrollAxes, ScrollView, Stack, ToastStack};
-use nana_ui::{ButtonKind, ControlSize, icons_tabler as ti};
+use nana_ui::{ButtonKind, icons_tabler as ti};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_theme::SkinOrigin;
 

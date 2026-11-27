@@ -18,12 +18,13 @@ pub(super) fn marker_chip(
     let ink = c(look.text);
     let mut glyph = IconGlyph::new(icon).size(icon::SM).decorative();
     glyph.style.foreground = None;
-    Arc::make_mut(&mut glyph.style.layout).color = Some(ink);
+    Arc::make_mut(&mut glyph.style.layout).paint_colors.color =
+        Some(nana_ui_core::PaintColor::srgb(ink));
     let mut st = Type::Overline.style();
     {
         let l = Arc::make_mut(&mut st.layout);
-        l.color = Some(ink);
-        l.white_space_nowrap = true;
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(ink));
+        l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
     }
     let fill = c(look.fill);
     let hue = c(kind.hue());
@@ -35,7 +36,7 @@ pub(super) fn marker_chip(
             .with_layout(move |l| {
                 l.height = Some(LengthSpec::Px(crate::ui::kit::keycap::H));
                 l.flex_shrink = Some(0.0);
-                l.background = Some(fill);
+                l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(fill));
                 l.padding_right = Some(LengthSpec::Px(inset::CHIP_X));
                 l.overflow_x = nana_ui_core::OverflowSpec::Hidden;
                 l.overflow_y = nana_ui_core::OverflowSpec::Hidden;
@@ -46,7 +47,7 @@ pub(super) fn marker_chip(
             l.width = Some(LengthSpec::Px(CHIP_STRIPE));
             l.height = Some(LengthSpec::Px(crate::ui::kit::keycap::H));
             l.flex_shrink = Some(0.0);
-            l.background = Some(hue);
+            l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(hue));
         })),
         widget(glyph),
         widget(Text::new(markup).decorative().style(st)),
@@ -58,7 +59,7 @@ pub(super) fn marker_chip(
 /// what it does.
 fn sheet_row(lead: AnyView, lead_w: f32, meaning: String) -> AnyView {
     let mut st = Type::Caption.style();
-    Arc::make_mut(&mut st.layout).white_space_nowrap = true;
+    Arc::make_mut(&mut st.layout).white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
     widget(
         Stack::row(0.0)
             .gap_step(gap::step::CONTROL)

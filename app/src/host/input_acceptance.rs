@@ -822,7 +822,7 @@ fn skin_preview_refreshes_without_resetting_either_editor() {
                 name.text_ext.font_family,
                 skin.fonts.name.families.first().cloned()
             );
-            assert_eq!(name.color, Some(crate::ui::c(np.text_color)));
+            assert_eq!(name.color_srgb(), Some(crate::ui::c(np.text_color)));
             let p = &skin.dialogue.portrait;
             let portrait = layout(&f, "dialogue-portrait");
             assert_eq!(
@@ -858,7 +858,7 @@ fn skin_preview_refreshes_without_resetting_either_editor() {
                     (Some(LengthSpec::Px(w)), Some(LengthSpec::Px(h)))
                 );
                 assert_eq!(
-                    style.background,
+                    style.background_srgb(),
                     spec.color.map(|c| crate::ui::c(skin.color(c)))
                 );
             }
@@ -874,7 +874,10 @@ fn skin_preview_refreshes_without_resetting_either_editor() {
                 Some(cs.size)
             );
             assert_eq!(
-                layout(&f, "dialogue-continue-glyph").color,
+                layout(&f, "dialogue-continue-glyph")
+                    .paint_colors
+                    .color
+                    .map(nana_ui_core::PaintColor::to_srgb),
                 Some(crate::ui::c(cs.color))
             );
             assert!(!world.computed_style(glyph).unwrap().visible);
@@ -903,7 +906,7 @@ fn skin_preview_refreshes_without_resetting_either_editor() {
         flush(&mut f);
         for key in ["dialogue-continue-image", "dialogue-portrait"] {
             assert_eq!(
-                layout(&f, key).paint.background_image,
+                layout(&f, key).paint.primary_background_image().cloned(),
                 Some(BackgroundImage::url_with_fit(
                     url.clone(),
                     BackgroundImageFit::Contain
@@ -913,7 +916,7 @@ fn skin_preview_refreshes_without_resetting_either_editor() {
         let world = f.session.document().context().world();
         for node in decorations(&f) {
             assert!(
-                matches!(&world.node_style(node).unwrap().layout.paint.background_image, Some(BackgroundImage::Url { url: actual, .. }) if *actual == url)
+                matches!(world.node_style(node).unwrap().layout.paint.primary_background_image(), Some(BackgroundImage::Url { url: actual, .. }) if *actual == url)
             );
         }
         assert!(
@@ -2246,8 +2249,8 @@ fn zz_probe_caret_geometry() {
             let n = f.text().len();
             (
                 l.is_vertical(),
-                nana_ui::runtime::rich_editor_caret_box(l, n),
-                nana_ui::runtime::rich_editor_caret_box(l, 0),
+                nana_ui::runtime::internal::rich_editor_caret_box(l, n),
+                nana_ui::runtime::internal::rich_editor_caret_box(l, 0),
             )
         });
         eprintln!("source={source} layout={lb:?} pres={pb:?} scroll={so:?} caret={tl:?}");

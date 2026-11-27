@@ -104,7 +104,8 @@ fn mount_material(skin: &Skin) -> RuntimeAgentSession {
                 .width(LengthSpec::Px(120.))
                 .height(LengthSpec::Px(80.))
                 .with_layout(|l| {
-                    l.background = Some([0., 0., 1., 1.]);
+                    l.paint_colors.background =
+                        Some(nana_ui_core::PaintColor::srgb([0., 0., 1., 1.]));
                     l.paint.background_material = material.clone();
                 }),
         )

@@ -1,9 +1,9 @@
 //! The canvas's layout target, the layers a preview size hits, and the
 //! selection drawn over the stage.
 use super::{Ui, kit};
-use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{Select, SelectChanged, SelectOption, Stack, Text};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{LengthSpec, PointerEventsSpec, PositionSpec, SemanticColorRole};
 
 /// The base, orientation and breakpoint layers the open skin declares.

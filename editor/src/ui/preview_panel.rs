@@ -4,13 +4,14 @@
 //!
 //! [`Stage`]: super::Stage
 use super::{ProjectUi, Ui, controls::hint, kit, preview};
+use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, signal, widget};
 use nana_ui::runtime::{
     Activate, Checkbox, Popover, PopoverClosed, PopoverToggled, Select, SelectChanged,
     SelectOption, Stack, TextChanged, ToggleChanged,
 };
-use nana_ui::{ControlSize, PopoverPlacement, icons_tabler as ti};
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
+use nana_ui_core::{ControlSize, PopoverPlacement};
 use std::sync::Arc;
 
 /// The size presets the toolbar offers: label and logical width × height.

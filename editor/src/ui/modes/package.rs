@@ -8,12 +8,13 @@ use crate::ui::kit::{self, Type, gap};
 use crate::ui::rows;
 use crate::ui::shell::tool;
 use crate::ui::views::*;
+use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, widget};
 use nana_ui::runtime::{
     Activate, Checkbox, Select, SelectChanged, SelectOption, Stack, Text, TextChanged,
     TextSubmitted, ToggleChanged,
 };
-use nana_ui::{ControlSize, icons_tabler as ti};
+use nana_ui_core::ControlSize;
 use nana_ui_core::LengthSpec;
 use nanatype_theme::editor::{AssetKind, Metadata};
 use nanatype_theme::{PACKAGE_MANIFEST, PackageCapability};

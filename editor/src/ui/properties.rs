@@ -14,7 +14,8 @@ use nana_ui::runtime::{
     Activate, Button, Checkbox, ColorChanged, ColorField, IconButton, ScrubChanged, ScrubField,
     Select, SelectChanged, SelectOption, Stack, Text, TextChanged, ToggleChanged,
 };
-use nana_ui::{ButtonKind, ControlSize, icons_tabler as ti};
+use nana_ui::{ButtonKind, icons_tabler as ti};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 pub use nanatype_theme::editor::table_range;
 use nanatype_theme::{

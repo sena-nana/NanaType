@@ -186,7 +186,7 @@ pub fn view(ui: Ui) -> AnyView {
                             } else {
                                 ButtonKind::Subtle
                             })
-                            .size(nana_ui::ControlSize::Small),
+                            .size(nana_ui_core::ControlSize::Small),
                     )
                     .key("package-editor-publish-export")
                     .on_cx(send(|| Action::Export)),

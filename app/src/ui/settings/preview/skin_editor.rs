@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 
+use nana_ui::ButtonKind;
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{
@@ -9,7 +10,7 @@ use nana_ui::runtime::{
     RangeField, RangeInput, RangeMarker, Select, SelectChanged, SelectOption, SizeField,
     SizeFieldChanged, SizePreset, Stack,
 };
-use nana_ui::{ButtonKind, ControlSize};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec};
 use nanatype_model::Rgba8;
 use nanatype_theme::Skin;

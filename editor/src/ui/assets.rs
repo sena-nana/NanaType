@@ -65,10 +65,10 @@ pub fn preview(ui: Ui) -> AnyView {
                                 l.paint.background_layers = vec![BackgroundImage::url(
                                     kit::checker_url(ui.chrome_dark.get_untracked()),
                                 )];
-                                l.paint.background_image = Some(BackgroundImage::url_with_fit(
+                                l.paint.background_layers = vec![BackgroundImage::url_with_fit(
                                     url,
                                     BackgroundImageFit::Contain,
-                                ));
+                                )];
                             }),
                     )
                     .key("editor-asset-image")
@@ -153,7 +153,7 @@ fn player(ui: Ui, facts: String) -> AnyView {
         100.,
         1.,
     )
-    .size(nana_ui::ControlSize::Small)
+    .size(nana_ui_core::ControlSize::Small)
     .show_label(false);
     {
         let l = std::sync::Arc::make_mut(&mut volume.style.layout);

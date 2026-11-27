@@ -4,7 +4,7 @@ use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{Activate, Button, Stack};
 /// The bar's buttons, the size of every other one in the editor.
 fn small(label: String) -> Button {
-    Button::new(label).size(nana_ui::ControlSize::Small)
+    Button::new(label).size(nana_ui_core::ControlSize::Small)
 }
 
 pub fn view(ui: Ui) -> AnyView {

@@ -692,16 +692,16 @@ fn gradient_alpha(stops: &[nana_ui_core::GradientStop], t: f32) -> f32 {
         return 0.0;
     };
     if t <= first.position {
-        return first.color[3];
+        return first.color.to_srgb()[3];
     }
     for pair in stops.windows(2) {
         if t <= pair[1].position {
             let f = ((t - pair[0].position) / (pair[1].position - pair[0].position).max(0.0001))
                 .clamp(0.0, 1.0);
-            return pair[0].color[3] * (1.0 - f) + pair[1].color[3] * f;
+            return pair[0].color.to_srgb()[3] * (1.0 - f) + pair[1].color.to_srgb()[3] * f;
         }
     }
-    stops.last().unwrap().color[3]
+    stops.last().unwrap().color.to_srgb()[3]
 }
 
 #[derive(Clone)]

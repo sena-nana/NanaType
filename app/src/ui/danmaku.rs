@@ -9,7 +9,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-use nana_ui::ControlSize;
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{
     AnyView, IntoView, Signal, computed, dynamic, each_virtual, node_ref, signal, widget,
@@ -19,6 +18,7 @@ use nana_ui::runtime::{
     ScrollAxes, ScrollView, SizeChanged, Stack, Text, UserScroll,
 };
 use nana_ui::theme::space;
+use nana_ui_core::ControlSize;
 use nana_ui_core::{
     AlignSpec, JustifySpec, LengthSpec, OverflowSpec, PointerEventsSpec, SemanticColorRole,
 };
@@ -247,15 +247,15 @@ fn row_view(ui: Ui, source: RowSource, width: f32) -> AnyView {
             0.0
         };
         let l = s.layout_mut();
-        l.background = Some(if !active {
+        l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(if !active {
             paid.map_or(accent, |mut p| {
                 p[3] = 0.18;
                 p
             })
         } else {
             accent
-        });
-        l.border_color = Some(border);
+        }));
+        l.paint_colors.border = Some(nana_ui_core::PaintColor::srgb(border));
     })
     .children(content)
     .into_any()

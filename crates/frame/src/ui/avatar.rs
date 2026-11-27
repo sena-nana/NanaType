@@ -28,7 +28,7 @@ pub fn asset_avatar(
         let l = Arc::make_mut(&mut st.layout);
         // The initial scales with the avatar.
         l.font_size = Some(size * 0.45);
-        l.color = Some([1.0; 4]);
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb([1.0; 4]));
     }
     let initial = name.chars().next().map(String::from).unwrap_or_default();
     widget(
@@ -41,7 +41,7 @@ pub fn asset_avatar(
             .with_layout(move |l| {
                 l.position = nana_ui_core::PositionSpec::Relative;
                 l.flex_shrink = Some(0.0);
-                l.background = Some(accent);
+                l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(accent));
             }),
     )
     .children((
@@ -76,7 +76,7 @@ pub fn reactive_picture(ui: Stage, asset: Option<String>, radius: f32) -> AnyVie
             })
         });
         let image = url.map(|u| BackgroundImage::url_with_fit(u, BackgroundImageFit::Cover));
-        s.layout_mut().paint.background_image = image;
+        s.layout_mut().paint.background_layers = image.into_iter().collect();
     })
     .into_any()
 }

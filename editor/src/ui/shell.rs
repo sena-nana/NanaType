@@ -15,7 +15,8 @@ use nana_ui::runtime::{
     ActionMenu, ActionMenuItem, Activate, Button, IconButton, PopoverClosed, PopoverToggled,
     ScrollAxes, ScrollView, SizeChanged, SplitPane, Stack, StatusBar, Text, Toolbar,
 };
-use nana_ui::{ButtonKind, ControlSize, icons_tabler as ti};
+use nana_ui::{ButtonKind, icons_tabler as ti};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole, SplitAxis, SplitPaneModel};
 use nanatype_theme::editor::{AssetKind, DraftOrigin, Level};
 use std::collections::BTreeSet;

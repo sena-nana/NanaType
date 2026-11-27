@@ -75,7 +75,7 @@ fn reply_bar(ui: Ui) -> AnyView {
             let mut label = Type::Overline.style();
             {
                 let l = Arc::make_mut(&mut label.layout);
-                l.white_space_nowrap = true;
+                l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
                 l.flex_shrink = Some(1.0);
                 l.min_width = Some(LengthSpec::Px(0.0));
                 l.max_width = Some(LengthSpec::Percent(45.0));

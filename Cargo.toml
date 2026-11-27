@@ -54,13 +54,13 @@ nanatype-secrets = { path = "crates/secrets" }
 nanatype-update = { path = "crates/update" }
 nanatype-frame = { path = "crates/frame" }
 nanatype-scheduling = { path = "crates/scheduling" }
-nana-ui-platform = { git = "https://github.com/sena-nana/NanaUI", rev = "60df7a2527bf805ef731b269c305a5616fa8d366", default-features = false }
-nana-ui-core = { git = "https://github.com/sena-nana/NanaUI", rev = "60df7a2527bf805ef731b269c305a5616fa8d366", default-features = false }
-nana-text = { git = "https://github.com/sena-nana/NanaUI", rev = "60df7a2527bf805ef731b269c305a5616fa8d366" }
+nana-ui-platform = { git = "https://github.com/sena-nana/NanaUI", rev = "c62a016064a92d89057404a7b547682a93685cdf", default-features = false }
+nana-ui-core = { git = "https://github.com/sena-nana/NanaUI", rev = "c62a016064a92d89057404a7b547682a93685cdf", default-features = false }
+nana-text = { git = "https://github.com/sena-nana/NanaUI", rev = "c62a016064a92d89057404a7b547682a93685cdf" }
 # The same source as nana-ui's, so both see one diagnostics runtime.
-nana-diagnostics = { git = "https://github.com/sena-nana/NanaUI", rev = "60df7a2527bf805ef731b269c305a5616fa8d366" }
-nana-ui-devtools = { git = "https://github.com/sena-nana/NanaUI", rev = "60df7a2527bf805ef731b269c305a5616fa8d366" }
-nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "60df7a2527bf805ef731b269c305a5616fa8d366", default-features = false, features = [
+nana-diagnostics = { git = "https://github.com/sena-nana/NanaUI", rev = "c62a016064a92d89057404a7b547682a93685cdf" }
+nana-ui-devtools = { git = "https://github.com/sena-nana/NanaUI", rev = "c62a016064a92d89057404a7b547682a93685cdf" }
+nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "c62a016064a92d89057404a7b547682a93685cdf", default-features = false, features = [
     "hosted",
     "bundled-fonts",
     "wgpu-interop",
@@ -76,8 +76,8 @@ nana-ui = { git = "https://github.com/sena-nana/NanaUI", rev = "60df7a2527bf805e
 ] }
 # NanaUI's own WGPU and Naga. Members name the backends (nanatype-frame does)
 # instead of taking every one through nana-ui's `wgpu-backends`.
-wgpu = { git = "https://github.com/sena-nana/NanaUI", rev = "60df7a2527bf805ef731b269c305a5616fa8d366", default-features = false, features = ["wgsl"] }
-naga = { git = "https://github.com/sena-nana/NanaUI", rev = "60df7a2527bf805ef731b269c305a5616fa8d366", default-features = false }
+wgpu = { package = "nana-wgpu", git = "https://github.com/sena-nana/NanaUI", rev = "c62a016064a92d89057404a7b547682a93685cdf", default-features = false, features = ["wgsl"] }
+naga = { package = "nana-naga", git = "https://github.com/sena-nana/NanaUI", rev = "c62a016064a92d89057404a7b547682a93685cdf", default-features = false }
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 unicode-segmentation = "1"

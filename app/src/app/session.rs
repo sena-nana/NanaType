@@ -157,7 +157,7 @@ impl super::App {
                 .toasts
                 .push(crate::ui::feedback::ToastRequest::new(
                     feedback,
-                    nana_ui::ToastTone::Success,
+                    nana_ui_core::ToastTone::Success,
                     crate::ui::feedback::SENT_MS,
                     false,
                 ));

@@ -386,7 +386,9 @@ pub(super) fn skin_list_row(
                 .height(LengthSpec::Px(SWATCH))
                 .radius(RadiusTier::Full)
                 .border(SemanticColorRole::BorderStrong, 1.0)
-                .with_layout(move |l| l.background = Some(color)),
+                .with_layout(move |l| {
+                    l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(color))
+                }),
         )
         .into_any()
     };
@@ -606,7 +608,7 @@ pub(super) fn skin_card(
                 l.position = PositionSpec::Relative;
                 l.overflow_x = OverflowSpec::Hidden;
                 l.overflow_y = OverflowSpec::Hidden;
-                l.paint.background_image = Some(backdrop);
+                l.paint.background_layers = vec![backdrop];
             }),
     )
     .children(super::skin_grid::miniature(&super::skin_grid::thumb(skin)));
@@ -619,7 +621,7 @@ pub(super) fn skin_card(
     let font_note = uses_fallback_font(skin).then(|| {
         let mut st = Type::Caption.style();
         let l = Arc::make_mut(&mut st.layout);
-        l.white_space_nowrap = true;
+        l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
         l.flex_shrink = Some(0.0);
         widget(
             Text::new(format!(" · {}", I18N.t_in(locale, "skins-fallback-font")))

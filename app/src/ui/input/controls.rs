@@ -276,7 +276,7 @@ fn tile_view(ui: Ui, tile: Tile, query: Signal<String>, hint: Signal<Option<Stri
         Face::Chip(kind, icon) => marker_chip(&look, kind, icon, &tile.label),
         Face::Plain(icon) => {
             let mut label = Type::Caption.style();
-            Arc::make_mut(&mut label.layout).white_space_nowrap = true;
+            Arc::make_mut(&mut label.layout).white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
             widget(
                 Stack::row(0.0)
                     .gap_step(gap::step::TIGHT)

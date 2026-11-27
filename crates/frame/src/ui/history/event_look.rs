@@ -173,8 +173,8 @@ impl EventLook {
         let l = Arc::make_mut(&mut style.layout);
         l.font_size = Some(size);
         l.text_ext.font_family = skin.fonts.accent.families.first().cloned();
-        l.color = Some(c(self.icon));
-        l.white_space_nowrap = true;
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(self.icon)));
+        l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
         l.flex_shrink = Some(0.0);
         Some(widget(Text::new(glyph).decorative().style(style)).into_any())
     }
@@ -187,8 +187,8 @@ impl EventLook {
         l.font_size = Some(size);
         l.font_weight = Some(700);
         l.text_ext.font_family = skin.fonts.name.families.first().cloned();
-        l.color = Some(c(lettering));
-        l.white_space_nowrap = true;
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(lettering)));
+        l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
         super::super::tnum(l);
         let border = spec
             .border_color
@@ -199,12 +199,12 @@ impl EventLook {
                 Stack::row(0.0)
                     .padding_xy((size * 0.6).round(), 1.0)
                     .with_layout(move |l| {
-                        l.background = Some(c(plate));
+                        l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(c(plate)));
                         l.border_radius = Some(spec.radius);
                         l.flex_shrink = Some(0.0);
                         if let Some((width, color)) = border {
                             l.border_width = Some(width);
-                            l.border_color = Some(color);
+                            l.paint_colors.border = Some(nana_ui_core::PaintColor::srgb(color));
                             l.border_style = Some(nana_ui_core::BorderStyle::Solid);
                         }
                     }),

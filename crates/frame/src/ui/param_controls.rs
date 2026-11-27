@@ -3,13 +3,13 @@
 //! writes them to settings.
 use std::sync::Arc;
 
-use nana_ui::ControlSize;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, segmented_option, widget};
 use nana_ui::runtime::{
     Activate, Chip, ColorChanged, ColorField, RangeField, RangeInput, SegmentedControl,
     SegmentedOptionChosen, Select, SelectChanged, SelectOption, Stack, Switch, Text, TextChanged,
     TextInput, TextInputState, ToggleChanged,
 };
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_model::{ParamValue, Rgba8};
 use nanatype_theme::{ParamError, ParamSpec, ParamType, Resolved, Skin, localized};
@@ -151,7 +151,7 @@ fn number(p: Param) -> AnyView {
                     let mut st = Type::Small.style();
                     let l = Arc::make_mut(&mut st.layout);
                     l.width = Some(LengthSpec::Px(READOUT_W));
-                    l.white_space_nowrap = true;
+                    l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
                     super::tnum(l);
                     st
                 })

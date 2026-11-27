@@ -103,9 +103,8 @@ fn lighten(col: Rgba8, t: f32) -> Rgba8 {
 /// bottom right.
 fn avatar_gradient(from: Rgba8, to: Rgba8) -> BackgroundImage {
     let stop = |position: f32, col: Rgba8| GradientStop {
-        paint_color: None,
         position,
-        color: c(col),
+        color: nana_ui_core::PaintColor::srgb(c(col)),
     };
     BackgroundImage::Gradient(CssGradient::Linear(LinearGradient {
         angle_deg: 135.0,
@@ -271,9 +270,8 @@ pub(super) fn separator_view(skin: &Skin, gap: f32) -> Option<AnyView> {
     let (width, inset, fade) = (rule.width, rule.inset, rule.fade);
     let clear = Rgba8::rgba(color.r, color.g, color.b, 0);
     let stop = |position: f32, col: Rgba8| GradientStop {
-        paint_color: None,
         position,
-        color: c(col),
+        color: nana_ui_core::PaintColor::srgb(c(col)),
     };
     Some(
         widget(Stack::row(0.0).with_layout(move |l| {
@@ -284,7 +282,7 @@ pub(super) fn separator_view(skin: &Skin, gap: f32) -> Option<AnyView> {
             l.height = Some(LengthSpec::Px(width));
             l.pointer_events = Some(PointerEventsSpec::None);
             if fade {
-                l.paint.background_image = Some(BackgroundImage::Gradient(CssGradient::Linear(
+                l.paint.background_layers = vec![BackgroundImage::Gradient(CssGradient::Linear(
                     LinearGradient {
                         angle_deg: 90.0,
                         stops: vec![
@@ -294,9 +292,9 @@ pub(super) fn separator_view(skin: &Skin, gap: f32) -> Option<AnyView> {
                             stop(1.0, clear),
                         ],
                     },
-                )));
+                ))];
             } else {
-                l.background = Some(c(color));
+                l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(c(color)));
             }
         }))
         .into_any(),
@@ -445,13 +443,13 @@ pub(super) fn message_view(
         l.font_size = Some(h.name_size.min(size * 0.7));
         l.font_weight = Some(h.name_weight);
         l.text_ext.font_family = skin.fonts.name.families.first().cloned();
-        l.color = Some(c(
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(
             if crate::skin_theme::contrast(h.text.color, fill) >= 4.5 {
                 h.text.color
             } else {
                 crate::skin_theme::on(fill)
             },
-        ));
+        )));
     }
     let avatar: AnyView = if show_avatar && follows {
         // The group's later rows keep the slot, so bubbles line up.
@@ -477,13 +475,13 @@ pub(super) fn message_view(
                     l.flex_shrink = Some(0.0);
                     if let Some((w, col)) = ring {
                         l.border_width = Some(w);
-                        l.border_color = Some(col);
+                        l.paint_colors.border = Some(nana_ui_core::PaintColor::srgb(col));
                         l.border_style = Some(nana_ui_core::BorderStyle::Solid);
                     }
                     l.overflow_x = OverflowSpec::Hidden;
                     l.overflow_y = OverflowSpec::Hidden;
-                    l.background = Some(c(fill));
-                    l.paint.background_image = fill_gradient;
+                    l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(c(fill)));
+                    l.paint.background_layers = fill_gradient.into_iter().collect();
                 }),
         )
         .children((
@@ -508,11 +506,12 @@ pub(super) fn message_view(
         l.font_size = Some(h.name_size);
         l.font_weight = Some(h.name_weight);
         l.text_ext.font_family = skin.fonts.name.families.first().cloned();
-        l.color = Some(c(h.name_color));
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(h.name_color)));
         if let Some(p) = &h.name_plate {
-            l.color = Some(c(skin.color(p.text_color)));
+            l.paint_colors.color =
+                Some(nana_ui_core::PaintColor::srgb(c(skin.color(p.text_color))));
         } else if let Some(col) = look.as_ref().and_then(|l| l.style.name_color) {
-            l.color = Some(c(skin.color(col)));
+            l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(skin.color(col))));
         }
         if let Some(stroke) = &h.name_stroke {
             surface::text_stroke(l, stroke);
@@ -538,7 +537,7 @@ pub(super) fn message_view(
         l.font_size = Some(time_size(&h));
         l.font_weight = Some(skin.fonts.body.weight);
         l.text_ext.font_family = skin.fonts.body.families.first().cloned();
-        l.color = Some(c(h.time_color));
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(h.time_color)));
         if exposed {
             surface::text_stroke(
                 l,
@@ -548,7 +547,7 @@ pub(super) fn message_view(
                 },
             );
         }
-        l.white_space_nowrap = true;
+        l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
         super::super::tnum(l);
     }
     let show_name = settings.history.show_name && !row.item.author.is_empty() && !follows;
@@ -572,7 +571,7 @@ pub(super) fn message_view(
         let opaque = look.fill.a >= 128;
         for (style, color) in [(&mut name, look.name), (&mut time, look.text)] {
             let l = Arc::make_mut(&mut style.layout);
-            l.color = Some(c(color));
+            l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(color)));
             if opaque {
                 l.paint.text_stroke = None;
             }

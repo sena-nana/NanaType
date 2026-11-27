@@ -39,6 +39,7 @@ use self::about::{controls, icon_action};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use nana_ui::ButtonKind;
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, widget};
 use nana_ui::runtime::{
@@ -47,11 +48,11 @@ use nana_ui::runtime::{
     SelectChanged, SelectOption, Stack, StatusBadge, Switch, Text, TextChanged, ToggleChanged,
 };
 use nana_ui::theme::space;
-use nana_ui::{ButtonKind, ControlSize, StatusTone};
 use nana_ui_core::{
     AlignSpec, BackgroundImage, JustifySpec, LengthSpec, OverflowSpec, PositionSpec, RadiusTier,
     SemanticColorMix, SemanticColorRole,
 };
+use nana_ui_core::{ControlSize, StatusTone};
 use nanatype_i18n::Locale;
 use nanatype_model::{AfterLine, EntranceKind, Overflow, Rgba8, VtsReset};
 use nanatype_playback::QueuePolicy;

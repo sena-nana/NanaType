@@ -966,7 +966,7 @@ fn size_caption([w, h]: [f32; 2], scale: f32) -> String {
 fn metrics_badge(key: &'static str, caption: String) -> AnyView {
     let mut style = super::kit::Type::Micro.style();
     let layout = Arc::make_mut(&mut style.layout);
-    layout.white_space_nowrap = true;
+    layout.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
     super::tnum(layout);
     widget(
         Stack::row(0.0)
@@ -999,8 +999,8 @@ fn labeled_preview(
                 l.padding_bottom = Some(LengthSpec::Px(inset::PANEL));
                 // Higher than the old inset over the sample, and clear of it.
                 l.padding_top = Some(LengthSpec::Px(gap::TIGHT));
-                l.paint.background_image =
-                    Some(BackgroundImage::url(super::kit::checker_url(dark)));
+                l.paint.background_layers =
+                    vec![BackgroundImage::url(super::kit::checker_url(dark))];
             }),
     )
     .children((metrics_badge(metrics_key, caption), stage))
@@ -1013,8 +1013,8 @@ fn checkerboard(dark: bool, content: impl IntoView) -> AnyView {
         Stack::column(0.0)
             .padding_step(inset::step::PANEL, inset::step::PANEL)
             .with_layout(move |l| {
-                l.paint.background_image =
-                    Some(BackgroundImage::url(super::kit::checker_url(dark)));
+                l.paint.background_layers =
+                    vec![BackgroundImage::url(super::kit::checker_url(dark))];
             }),
     )
     .children(content)
@@ -1234,7 +1234,10 @@ pub fn stage_view_options(
                         widget(
                             Stack::column(0.)
                                 .padding_xy(12., 12.)
-                                .with_layout(move |l| l.background = Some(color)),
+                                .with_layout(move |l| {
+                                    l.paint_colors.background =
+                                        Some(nana_ui_core::PaintColor::srgb(color))
+                                }),
                         )
                         .children(stage),
                         hint(size_caption([w, h], scale)),

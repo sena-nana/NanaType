@@ -414,12 +414,12 @@ fn bar(w: LengthSpec, h: f32, color: [f32; 4], stroke: Option<([f32; 4], f32)>) 
             .width(w)
             .height(LengthSpec::Px(h))
             .with_layout(move |l| {
-                l.background = Some(color);
+                l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(color));
                 l.border_radius = Some(h / 2.0);
                 l.flex_shrink = Some(0.0);
                 if let Some((color, width)) = stroke {
                     l.border_width = Some(width);
-                    l.border_color = Some(color);
+                    l.paint_colors.border = Some(nana_ui_core::PaintColor::srgb(color));
                     l.border_style = Some(nana_ui_core::BorderStyle::Solid);
                 }
             }),
@@ -435,8 +435,8 @@ fn part_view(part: &Part) -> AnyView {
         l.font_size = Some(g.size);
         l.text_ext.font_family = g.family.clone();
         l.font_weight = Some(g.weight);
-        l.color = Some(g.color);
-        l.white_space_nowrap = true;
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(g.color));
+        l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
         widget(Text::new(g.text.clone()).decorative().style(style))
     });
     widget(
@@ -499,7 +499,8 @@ pub fn miniature(t: &Thumb) -> AnyView {
                             l.position = PositionSpec::Absolute;
                             l.offset_right = Some(LengthSpec::Px(pr.max(dot)));
                             l.offset_bottom = Some(LengthSpec::Px(pb.max(dot) * 0.8));
-                            l.background = Some(accent);
+                            l.paint_colors.background =
+                                Some(nana_ui_core::PaintColor::srgb(accent));
                             l.border_radius = Some(dot / 2.0);
                         }
                     }),

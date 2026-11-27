@@ -52,7 +52,8 @@ pub fn anchor(
     // A layout from before the last keystroke ends short of the word.
     let laid_out = layout.lines.last().map_or(0, |l| l.source.end);
     let current = ui.editor_value.with_untracked(|v| v.text().len()) == laid_out;
-    let (x, top, height) = nana_ui::runtime::rich_editor_caret_box(layout, start.min(laid_out))?;
+    let (x, top, height) =
+        nana_ui::runtime::internal::rich_editor_caret_box(layout, start.min(laid_out))?;
     // The preview may scale the editor: map its own space onto the window.
     let local = world.layout_box(editor)?;
     let shown = world.presentation_input_bounds(editor)?;

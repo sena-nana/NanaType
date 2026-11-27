@@ -127,8 +127,8 @@ fn quote_view_on(
         .families
         .first()
         .cloned();
-        l.color = Some(c(color));
-        l.white_space_nowrap = true;
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(color)));
+        l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
         let stroke = text
             .stroke
             .as_ref()
@@ -177,7 +177,7 @@ fn quote_view_on(
                 l.border_sides.right_width = Some(0.0);
                 l.border_sides.bottom_width = Some(0.0);
                 l.border_sides.left_width = Some(3.0);
-                l.border_color = Some(bar);
+                l.paint_colors.border = Some(nana_ui_core::PaintColor::srgb(bar));
                 l.border_style = Some(nana_ui_core::BorderStyle::Solid);
                 l.padding_left = Some(LengthSpec::Px((size * 0.5).round().max(6.0)));
             }),

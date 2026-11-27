@@ -13,10 +13,10 @@ pub use pages::{action_name, font_licence_panel};
 
 use std::sync::Arc;
 
-use nana_ui::ControlSize;
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{Activate, IconButton, ListItem, ScrollAxes, ScrollView, Stack, Text};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{LengthSpec, SemanticColorRole};
 
 use super::Ui;
@@ -166,7 +166,7 @@ const GROUPS: &[(&str, &[Page])] = &[
 /// the selected fill when it is the open page.
 fn nav_row(ui: Ui, page: Page) -> AnyView {
     let selected = move || ui.page.get() == page;
-    let mut item = ListItem::new("").size(nana_ui::ControlSize::Small);
+    let mut item = ListItem::new("").size(nana_ui_core::ControlSize::Small);
     if page == Page::About {
         let layout = Arc::make_mut(&mut item.style.layout);
         layout.flex_grow = Some(1.0);
@@ -281,10 +281,10 @@ pub(crate) fn logo(size: f32) -> AnyView {
             .height(LengthSpec::Px(size))
             .with_layout(|l| {
                 l.flex_shrink = Some(0.0);
-                l.paint.background_image = Some(nana_ui_core::BackgroundImage::url_with_fit(
+                l.paint.background_layers = vec![nana_ui_core::BackgroundImage::url_with_fit(
                     format!("data:image/png;base64,{}", controls::ICON_PNG_B64.as_str()),
                     nana_ui_core::BackgroundImageFit::Contain,
-                ));
+                )];
             }),
     )
     .into_any()

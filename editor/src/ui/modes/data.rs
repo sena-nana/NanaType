@@ -14,7 +14,8 @@ use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, widget};
 use nana_ui::runtime::{
     Activate, Button, Select, SelectChanged, SelectOption, Stack, Text, TextChanged,
 };
-use nana_ui::{ButtonKind, ControlSize, icons_tabler as ti};
+use nana_ui::{ButtonKind, icons_tabler as ti};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nanatype_theme::{DataFormat, DataSpec, MANIFEST, PACKAGE_MANIFEST, PipelineSpec, PortSource};
 use std::collections::BTreeMap;

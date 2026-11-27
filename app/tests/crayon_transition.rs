@@ -27,7 +27,7 @@ fn render(material: Option<MaterialRef>, scale: f32) -> Vec<u8> {
                 .width(LengthSpec::Px(160.))
                 .height(LengthSpec::Px(80.))
                 .with_layout(move |layout| {
-                    layout.background = Some([1.; 4]);
+                    layout.paint_colors.background = Some(nana_ui_core::PaintColor::srgb([1.; 4]));
                     layout.paint.background_material = material;
                 }),
         )

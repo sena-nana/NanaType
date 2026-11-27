@@ -19,7 +19,7 @@ fn swatch_button(label: String, color: [f32; 4]) -> Button {
         l.width = Some(LengthSpec::Px(SWATCH));
         l.height = Some(LengthSpec::Px(SWATCH));
         l.min_width = Some(LengthSpec::Px(SWATCH));
-        l.background = Some(color);
+        l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(color));
         l.border_width = Some(1.0);
         l.border_style = Some(nana_ui_core::BorderStyle::Solid);
     }
@@ -43,10 +43,10 @@ pub(super) fn image_button(label: String, url: String) -> Button {
         let l = Arc::make_mut(&mut st.layout);
         l.width = Some(LengthSpec::Px(PICTURE_SWATCH));
         l.height = Some(LengthSpec::Px(PICTURE_SWATCH));
-        l.paint.background_image = Some(nana_ui_core::BackgroundImage::url_with_fit(
+        l.paint.background_layers = vec![nana_ui_core::BackgroundImage::url_with_fit(
             url,
             nana_ui_core::BackgroundImageFit::Contain,
-        ));
+        )];
     }
     st.radius = Some(nana_ui_core::RadiusTier::Sm);
     Button::new("")
@@ -101,7 +101,7 @@ pub(super) fn color_face(ui: Ui, open: Signal<bool>) -> AnyView {
             l.width = Some(LengthSpec::Px(GLYPH - 2.0));
             l.height = Some(LengthSpec::Px(BAR_H));
             l.flex_shrink = Some(0.0);
-            l.background = Some(color);
+            l.paint_colors.background = Some(nana_ui_core::PaintColor::srgb(color));
         }),
     ))
     .into_any()

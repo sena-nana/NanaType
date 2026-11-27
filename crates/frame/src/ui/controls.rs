@@ -1,10 +1,11 @@
 //! Small building blocks both products' forms use.
 
+use nana_ui::ButtonKind;
 use nana_ui::runtime::view::{
     AnyView, IntoView, NodeRef, Signal, entity_ref, node_ref, on_mount, signal, when, widget,
 };
 use nana_ui::runtime::{Activate, Button, Stack};
-use nana_ui::{ButtonKind, ControlSize};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
 use nana_ui_platform::KeyState;
 use std::sync::{Arc, Mutex};

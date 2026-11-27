@@ -5,10 +5,10 @@
 
 use std::sync::Arc;
 
-use nana_ui::StatusTone;
 use nana_ui::runtime::view::{AnyView, IntoView, widget};
 use nana_ui::runtime::{NodeStyle, Text};
 use nana_ui::theme::{space, type_scale};
+use nana_ui_core::StatusTone;
 use nana_ui_core::{LengthSpec, SemanticColorRole, TextWeight, TypeRole};
 
 /// A text role: size, weight and (for the quiet roles) colour.
@@ -112,7 +112,7 @@ impl Type {
     pub fn one_line(self) -> NodeStyle {
         let mut st = self.style();
         let l = Arc::make_mut(&mut st.layout);
-        l.white_space_nowrap = true;
+        l.white_space = nana_ui_core::WhiteSpaceSpec::Nowrap;
         l.text_overflow_ellipsis = true;
         l.min_width = Some(LengthSpec::Px(0.0));
         l.flex_grow = Some(1.0);

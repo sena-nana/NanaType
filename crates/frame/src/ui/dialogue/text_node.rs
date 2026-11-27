@@ -211,7 +211,7 @@ impl Base {
         l.white_space = nana_ui_core::WhiteSpaceSpec::PreWrap;
         l.text_ext.overflow_wrap = Some(nana_ui_core::OverflowWrapSpec::Anywhere);
         l.min_width = Some(LengthSpec::Px(0.0));
-        l.color = Some(c(self.color));
+        l.paint_colors.color = Some(nana_ui_core::PaintColor::srgb(c(self.color)));
         l.line_height = Some(nana_ui_core::LineHeightSpec::Absolute(
             self.size * self.line_height,
         ));

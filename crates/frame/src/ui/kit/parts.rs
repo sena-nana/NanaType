@@ -4,13 +4,14 @@
 
 use std::sync::Arc;
 
+use nana_ui::ButtonKind;
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{AnyView, IntoView, widget};
 use nana_ui::runtime::{
     Activate, Button, EmptyState, Icon, IconGlyph, NodeStyle, NumberInput, SemanticPaint, Stack,
     StatusBadge, Text, TextArea, TextInput,
 };
-use nana_ui::{ButtonKind, ControlSize};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{
     AlignSpec, JustifySpec, LengthSpec, RadiusTier, SemanticColorMix, SemanticColorRole,
 };

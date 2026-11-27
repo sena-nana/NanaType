@@ -4,10 +4,10 @@
 
 use std::sync::Arc;
 
-use nana_ui::ControlSize;
 use nana_ui::icons_tabler as ti;
 use nana_ui::runtime::view::{EntityRef, IntoView, WithRefs, entity_ref, widget, with_refs};
 use nana_ui::runtime::{IconGlyph, Stack, TextChanged, TextInput, TextSubmitted};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, SemanticColorRole};
 use nanatype_settings::Hotkey;
 

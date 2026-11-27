@@ -135,7 +135,7 @@ impl App {
             let text = self.ui.tr("update-toast", &[("version", version.into())]);
             self.shell.toasts.push(ToastRequest::new(
                 text,
-                nana_ui::ToastTone::Info,
+                nana_ui_core::ToastTone::Info,
                 feedback::NOTICE_MS,
                 true,
             ));

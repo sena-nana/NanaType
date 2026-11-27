@@ -5,11 +5,12 @@ use crate::session::{Action, EditorView};
 use crate::ui::Ui;
 use crate::ui::controls::{confirm, hint, label};
 use crate::ui::kit::{self, Type, gap};
+use nana_ui::ButtonKind;
 use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, widget};
 use nana_ui::runtime::{
     Activate, Button, Select, SelectChanged, SelectOption, Stack, Text, TextChanged, ViewContext,
 };
-use nana_ui::{ButtonKind, ControlSize};
+use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec};
 use nanatype_theme::editor::ProjectKind;
 use std::sync::Arc;
