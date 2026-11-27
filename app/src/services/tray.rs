@@ -78,6 +78,12 @@ pub(super) fn register_menu_action(id: &MenuId, action: MenuAction) {
     MENU_ACTIONS.lock().unwrap().insert(id.clone(), action);
 }
 
+/// The action a native menu item was registered with, for the menu tests.
+#[cfg(all(test, windows))]
+pub(super) fn registered_action(id: &MenuId) -> Option<MenuAction> {
+    MENU_ACTIONS.lock().unwrap().get(id).cloned()
+}
+
 pub(super) fn unregister_menu_action(id: &MenuId) {
     MENU_ACTIONS.lock().unwrap().remove(id);
 }

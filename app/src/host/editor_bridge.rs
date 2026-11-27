@@ -17,7 +17,7 @@ const COMPLETION_RETRIES: u8 = 3;
 /// Cached clipboard service for editor context-menu Cut/Copy/Paste without
 /// re-allocating `arboard::Clipboard::new()` on every action.
 #[derive(Default)]
-struct EditorClipboard {
+pub(super) struct EditorClipboard {
     inner: Option<arboard::Clipboard>,
 }
 

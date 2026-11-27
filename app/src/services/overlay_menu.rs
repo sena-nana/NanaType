@@ -433,6 +433,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn native_menus_localize_checkmarks_skins_and_clear_confirmation() {
+        use crate::services::tray::registered_action;
         use tray_icon::menu::MenuItemKind;
         let ui = fixture();
         for locale in Locale::ALL {

@@ -1481,6 +1481,8 @@ fn unicode_navigation_deletion_multiclick_and_ime_geometry_follow_the_visible_ca
 #[test]
 #[ignore = "explicit acceptance only: temporarily uses the system clipboard and restores it"]
 fn windows_system_clipboard_round_trip_and_image_fallback() {
+    use super::editor_bridge::{EditorClipboard, clipboard_image};
+    use super::input_router::input_shortcut;
     use nana_ui_platform::HostServices;
     use windows::Win32::System::{Com::*, Ole::*};
     use windows::core::{GUID, Interface};
@@ -1519,7 +1521,7 @@ fn windows_system_clipboard_round_trip_and_image_fallback() {
         }
     }
     let _restore = ClipboardRestore(Some(snapshot));
-    let mut services = EditorClipboard;
+    let mut services = EditorClipboard::default();
     services.write_clipboard("NanaType 离屏验收 👩‍💻").unwrap();
     assert_eq!(
         services.read_clipboard().unwrap().as_deref(),
