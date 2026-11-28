@@ -268,8 +268,8 @@ impl Default for HotkeySettings {
     fn default() -> Self {
         Self {
             summon: Some(Hotkey::bare("F8")),
-            quick_input: None,
-            continue_: Some(Hotkey::bare("F9")),
+            quick_input: Some(Hotkey::bare("F9")),
+            continue_: None,
             skip: None,
             clear: None,
             toggle_mode: None,

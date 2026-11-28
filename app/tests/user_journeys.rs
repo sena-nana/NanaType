@@ -315,7 +315,7 @@ fn first_run_last_step_sets_hotkeys_and_links_obs() {
         .into_iter()
         .filter(|n| n.role == "button" && n.label.as_deref() == Some(record.as_str()))
         .count();
-    assert_eq!(recorders, 4, "summon, quick input, continue and skip");
+    assert_eq!(recorders, 2, "summon and quick input");
     let summon = f.reach(650.0, 480.0, |f| {
         f.session
             .accessibility_dump()

@@ -301,7 +301,10 @@ fn input_keys_default_round_trip_and_match_their_chords() {
         assert_eq!(key.refusal(chord), None, "{key:?}");
     }
     let hotkeys = HotkeySettings::default();
-    for chord in [&hotkeys.summon, &hotkeys.continue_].into_iter().flatten() {
+    for chord in [&hotkeys.summon, &hotkeys.quick_input]
+        .into_iter()
+        .flatten()
+    {
         assert_eq!(chord.refusal_global(false), None, "{chord:?}");
     }
     let tmp = tempfile::tempdir().unwrap();
@@ -369,7 +372,7 @@ fn v0_settings_migrate_into_the_new_schema() {
     assert_eq!(
         s.hotkeys.continue_,
         HotkeySettings::default().continue_,
-        "F10 moves to F9"
+        "F10 falls back to the default"
     );
     assert!(!s.overlays.history.visible);
     assert!(s.output.display.enabled);

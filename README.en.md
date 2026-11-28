@@ -104,7 +104,7 @@ NanaType is a streaming typewriter built for VTubers. You type in the input box,
 | Shortcut | Action |
 | --- | --- |
 | <kbd>F8</kbd> | Bring up the input box |
-| <kbd>F9</kbd> | Continue: get past a pause / skip the current section |
+| <kbd>F9</kbd> | Bring up quick input: one plain-text line, sent as typed |
 | <kbd>Ctrl</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> | Recall lines you've already sent |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd> | Bold / italic / underline |
 | <kbd>Esc</kbd> | Hide the input box |

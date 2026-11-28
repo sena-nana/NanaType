@@ -78,7 +78,7 @@ NanaType 是为虚拟主播做的直播打字机。你在输入框里打字，�
 | 快捷键 | 作用 |
 | --- | --- |
 | <kbd>F8</kbd> | 唤出输入框 |
-| <kbd>F9</kbd> | 继续：越过停顿 / 跳过当前段 |
+| <kbd>F9</kbd> | 唤出快速输入：一行纯文本，发送即播 |
 | <kbd>Ctrl</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> | 调回发过的台词 |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd> | 加粗 / 斜体 / 下划线 |
 | <kbd>Esc</kbd> | 隐藏输入框 |

@@ -15,7 +15,7 @@ Everything about day-to-day use: streaming platforms, OBS, sessions with friends
 2. Type your line straight into the input window and press **Enter** to send (Shift+Enter for a new line; you can switch to Ctrl+Enter in settings). Ctrl+↑ / ↓ recalls lines you have already sent, and Esc hides the window.
 3. Select text and use the toolbar (or Ctrl+B / I / U) to make it bold, color it, add an outline, ruby, effects or rhythm. With nothing selected, the setting applies to whatever you type next. Pauses, page breaks, sounds, expressions and other markers appear as thin vertical bars between characters and take up no layout width, so line wrapping in the input window matches the display exactly.
 4. The `</>` button on the toolbar switches to the markup source; both views edit the same line.
-5. Global hotkeys: **F8** shows the input window, **F9** continues (past a pause / skips the current segment).
+5. Global hotkeys: **F8** shows the input window, **F9** brings up quick input (one plain-text line, sent as typed). Continue (past a pause) and Skip line are unbound by default; bind them under **Settings › Hotkeys**.
 6. From the tray menu you can show or hide each window, lock the overlays, switch modes and skins, and open settings. The tray icon also shows the current state: a pink dot while mirroring, grayed out when both the display and history are hidden, and a small padlock while the overlays are locked.
 
 The display, the partner display and the history window can be dragged with the left mouse button and scaled proportionally with the scroll wheel.

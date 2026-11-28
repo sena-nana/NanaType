@@ -222,13 +222,9 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
     widget(Stack::column(0.0)).children(body).into_any()
 }
 
-/// The hotkeys the last step offers to set; the Hotkeys page has the rest.
-const COMMON_KEYS: [GlobalAction; 4] = [
-    GlobalAction::Summon,
-    GlobalAction::QuickInput,
-    GlobalAction::Continue,
-    GlobalAction::Skip,
-];
+/// The hotkeys the last step offers to set: the two ways to start typing.
+/// Continue, skip and the rest are on the Hotkeys page.
+const COMMON_KEYS: [GlobalAction; 2] = [GlobalAction::Summon, GlobalAction::QuickInput];
 
 /// The narrowest a hotkey cell gets before the grid drops to one column.
 const KEY_CELL_MIN: f32 = 240.0;
