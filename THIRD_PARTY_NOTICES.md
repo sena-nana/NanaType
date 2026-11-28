@@ -167,7 +167,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 471 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 473 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -609,7 +609,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - rustls-webpki 0.103.15 — <https://github.com/rustls/webpki>
 - untrusted 0.9.0 — <https://github.com/briansmith/untrusted>
 
-### MIT (57)
+### MIT (59)
 
 - block2 0.6.2 — <https://github.com/madsmtm/objc2>
 - bytes 1.12.1 — <https://github.com/tokio-rs/bytes>
@@ -644,6 +644,8 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - pico-args 0.5.0 — <https://github.com/RazrFalcon/pico-args>
 - realfft 3.5.0 — <https://github.com/HEnquist/realfft>
 - rgb 0.8.53 — <https://github.com/kornelski/rust-rgb>
+- rmp 0.8.15 — <https://github.com/3Hren/msgpack-rust>
+- rmp-serde 1.3.1 — <https://github.com/3Hren/msgpack-rust>
 - rubato 0.16.2 — <https://github.com/HEnquist/rubato>
 - ruzstd 0.9.0 — <https://github.com/KillingSpark/zstd-rs>
 - simd-adler32 0.3.10 — <https://github.com/mcountryman/simd-adler32>
