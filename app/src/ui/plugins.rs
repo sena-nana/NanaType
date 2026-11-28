@@ -59,6 +59,16 @@ impl PackageFilter {
             Self::Disabled => !on,
         }
     }
+
+    /// A collab sticker pack has no off switch: it is in use once
+    /// downloaded, and otherwise only in the full list.
+    fn admits_stickers(self, ready: bool) -> bool {
+        match self {
+            Self::All => true,
+            Self::Enabled => ready,
+            Self::Disabled => false,
+        }
+    }
 }
 
 /// The installed / enabled / disabled tabs over the package list.
@@ -272,32 +282,7 @@ fn package_row(
         let id = id.clone();
         move || open.with(|o| o.contains(&id))
     };
-    let fold = {
-        let (id, shown) = (id.clone(), is_open.clone());
-        widget(
-            IconButton::new(ti::CHEVRON_DOWN, ui.now_t("packages-details"))
-                .size(ControlSize::Small)
-                .with_tooltip(ui.now_t("packages-details")),
-        )
-        .key(format!("package-details:{id}"))
-        .bind(move |b: &mut IconButton| {
-            let open = shown();
-            b.selected = open;
-            b.icon = if open {
-                ti::CHEVRON_UP
-            } else {
-                ti::CHEVRON_DOWN
-            };
-        })
-        .on(move |_: &Activate| {
-            open.update(|o| match o.iter().position(|p| *p == id) {
-                Some(at) => {
-                    o.remove(at);
-                }
-                None => o.push(id.clone()),
-            })
-        })
-    };
+    let fold = fold_button(ui, &id, open, is_open.clone());
     let actions = widget(
         Stack::row(0.0)
             .gap_step(gap::step::TIGHT)
@@ -365,6 +350,234 @@ fn package_row(
     .into_any()
 }
 
+/// What a sticker pack is doing, in a few words.
+pub(crate) fn sticker_status(ui: Ui, pack: &crate::stickers::PackRow) -> String {
+    use crate::stickers::Phase;
+    let progress = |key: &str, done: usize, total: usize| {
+        ui.tr(
+            key,
+            &[
+                ("done", (done as u64).into()),
+                ("total", (total as u64).into()),
+            ],
+        )
+    };
+    match &pack.phase {
+        Phase::NotDownloaded => ui.now_t("stickers-not-downloaded"),
+        Phase::Downloading(done, total) => progress("stickers-downloading", *done, *total),
+        Phase::Processing(done, total) => progress("stickers-processing", *done, *total),
+        Phase::Ready => ui.tr("stickers-ready", &[("count", (pack.count as u64).into())]),
+        Phase::Failed(error) => ui.tr("stickers-failed", &[("message", error.clone().into())]),
+    }
+}
+
+/// A collab sticker pack (one NanaType downloads from its partner project on
+/// request) as a row of the package list, laid out like an installed
+/// package: download it, open its repository, remove it, and its credits
+/// folded away until `open` names it.
+fn sticker_row(ui: Ui, pack: &crate::stickers::PackRow, open: Signal<Vec<String>>) -> AnyView {
+    use crate::msg::StickerMsg;
+    use crate::stickers::Phase;
+    let Some(preset) = pack.preset else {
+        return widget(Stack::column(0.0)).into_any();
+    };
+    let id = format!("stickers:{}", preset.id());
+    let name = ui.now_t(preset.title_key());
+    let ready = pack.phase == Phase::Ready;
+    let failed = match &pack.phase {
+        Phase::Failed(error) => Some(error.clone()),
+        _ => None,
+    };
+    // The failure is a sentence, and goes under the row.
+    let summary = if failed.is_some() {
+        preset.id().to_owned()
+    } else {
+        format!("{} · {}", preset.id(), sticker_status(ui, pack))
+    };
+    let identity = widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::CONTROL)
+            .align(AlignSpec::Center)
+            .width(LengthSpec::Px(IDENTITY_MIN))
+            .grow(1.0)
+            .shrink(1.0)
+            .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
+    )
+    .children((
+        kit::icon_tile(
+            ti::MOOD_SMILE,
+            PACKAGE_TILE,
+            if ready { Tone::Accent } else { Tone::Neutral },
+        ),
+        widget(kit::grow_column(gap::HAIR)).children((
+            widget(
+                Stack::row(0.0)
+                    .gap_step(gap::step::TIGHT)
+                    .align(AlignSpec::Center)
+                    .width(LengthSpec::Fill)
+                    .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
+            )
+            .children((
+                widget(Text::new(name.clone()).style({
+                    let mut st = Type::Strong.one_line();
+                    Arc::make_mut(&mut st.layout).flex_grow = Some(0.0);
+                    st
+                })),
+                kit::badge(ui.now_t("package-source-collab"), Tone::Accent),
+                widget(Stack::row(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
+                    .children(kit::tag(ui.now_t("packages-kind-stickers"))),
+            )),
+            widget(
+                Text::new(summary)
+                    .style(Type::Caption.one_line())
+                    .color(SemanticColorRole::Muted),
+            ),
+        )),
+    ));
+
+    let mut actions = Vec::new();
+    if pack
+        .repository
+        .as_deref()
+        .is_some_and(|url| url.starts_with("https://"))
+    {
+        let root = pack.root.clone();
+        actions.push(icon_action(
+            ui,
+            "stickers-repository",
+            ti::EXTERNAL_LINK,
+            move || Msg::Sticker(StickerMsg::Repository(root.clone())),
+        ));
+    }
+    if !pack.phase.busy() && !ready {
+        let (key, glyph) = if pack.phase == Phase::NotDownloaded {
+            ("stickers-download", ti::CLOUD_DOWNLOAD)
+        } else {
+            ("stickers-retry", ti::REFRESH)
+        };
+        actions.push(icon_action(ui, key, glyph, move || {
+            Msg::Sticker(StickerMsg::Download(preset))
+        }));
+    }
+    if pack.phase.busy() {
+        let root = pack.root.clone();
+        actions.push(icon_action(ui, "common-cancel", ti::X, move || {
+            Msg::Sticker(StickerMsg::Remove(root.clone()))
+        }));
+    } else if pack.phase != Phase::NotDownloaded {
+        let root = pack.root.clone();
+        actions.push(nanatype_frame::ui::controls::confirm(
+            *ui,
+            ui.tr("packages-remove-confirm", &[("name", name.as_str().into())]),
+            ui.now_t("packages-remove"),
+            move |armed| {
+                widget(
+                    IconButton::new(ti::TRASH, ui.now_t("packages-remove"))
+                        .size(ControlSize::Small)
+                        .with_tooltip(ui.now_t("packages-remove")),
+                )
+                .on(move |_: &Activate| armed.set(true))
+                .into_any()
+            },
+            move || Msg::Sticker(StickerMsg::Remove(root.clone())),
+        ));
+    }
+    let is_open = {
+        let id = id.clone();
+        move || open.with(|o| o.contains(&id))
+    };
+    actions.push(fold_button(ui, &id, open, is_open.clone()));
+    let actions = widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::TIGHT)
+            .align(AlignSpec::Center)
+            .wrap(true)
+            .shrink(1.0)
+            .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
+    )
+    .children(actions);
+
+    let location = (pack.phase != Phase::NotDownloaded).then(|| {
+        widget(caption(format!(
+            "{}: {}",
+            ui.now_t("packages-location"),
+            pack.root.display()
+        )))
+    });
+    let details = widget(Stack::column(0.0).gap_step(gap::step::TIGHT))
+        .visible(is_open)
+        .children((
+            widget(caption(format!(
+                "{}: {} · {}: {}",
+                ui.now_t("package-author"),
+                provided(ui, &pack.author),
+                ui.now_t("package-license"),
+                provided(ui, &pack.license)
+            ))),
+            location,
+        ));
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::CONTROL)
+            .padding_step(inset::step::CARD, inset::step::BAR_Y),
+    )
+    .key(id)
+    .children((
+        widget(
+            Stack::row(0.0)
+                .gap_step(gap::step::CONTROL)
+                .align(AlignSpec::Center)
+                .wrap(true)
+                .width(LengthSpec::Fill)
+                .with_layout(|l| l.row_gap = Some(LengthSpec::Px(gap::TIGHT))),
+        )
+        .children((identity, actions)),
+        failed.map(|e| {
+            kit::callout(
+                Tone::Danger,
+                ui.tr("stickers-failed", &[("message", e.into())]),
+            )
+        }),
+        details,
+    ))
+    .into_any()
+}
+
+/// The chevron that shows or folds a row's credits; `open` keeps which
+/// rows are showing them.
+fn fold_button(
+    ui: Ui,
+    id: &str,
+    open: Signal<Vec<String>>,
+    shown: impl Fn() -> bool + Clone + Send + 'static,
+) -> AnyView {
+    let id = id.to_owned();
+    widget(
+        IconButton::new(ti::CHEVRON_DOWN, ui.now_t("packages-details"))
+            .size(ControlSize::Small)
+            .with_tooltip(ui.now_t("packages-details")),
+    )
+    .key(format!("package-details:{id}"))
+    .bind(move |b: &mut IconButton| {
+        let open = shown();
+        b.selected = open;
+        b.icon = if open {
+            ti::CHEVRON_UP
+        } else {
+            ti::CHEVRON_DOWN
+        };
+    })
+    .on(move |_: &Activate| {
+        open.update(|o| match o.iter().position(|p| *p == id) {
+            Some(at) => {
+                o.remove(at);
+            }
+            None => o.push(id.clone()),
+        })
+    })
+    .into_any()
+}
+
 pub fn settings(ui: Ui) -> AnyView {
     // Which rows show their credits; kept here so a reload of the list (a
     // setting changed, a download moved on) leaves them as they were.
@@ -377,10 +590,12 @@ pub fn settings(ui: Ui) -> AnyView {
                     .with(|s| (s.disabled_packages.clone(), s.enabled_plugins.clone())),
                 ui.plugin_errors.get(),
                 ui.packages_filter.get(),
+                ui.sticker_packs.get(),
             )
         },
-        move |(rows, (disabled_packages, enabled_plugins), errors, filter)| {
-            if rows.is_empty() {
+        move |(rows, (disabled_packages, enabled_plugins), errors, filter, stickers)| {
+            let collab: Vec<_> = stickers.iter().filter(|p| p.preset.is_some()).collect();
+            if rows.is_empty() && collab.is_empty() {
                 return kit::empty_state::<Msg>(ui.now_t("packages-none"), None);
             }
             let rows = rows
@@ -398,6 +613,14 @@ pub fn settings(ui: Ui) -> AnyView {
                         .admits(on)
                         .then(|| (package_row(ui, row, on, errors.get(id), open), None))
                 })
+                .chain(
+                    collab
+                        .into_iter()
+                        .filter(|pack| {
+                            filter.admits_stickers(pack.phase == crate::stickers::Phase::Ready)
+                        })
+                        .map(|pack| (sticker_row(ui, pack, open), None)),
+                )
                 .collect::<Vec<_>>();
             if rows.is_empty() {
                 return kit::empty_state::<Msg>(ui.now_t("packages-none-filtered"), None);

@@ -67,6 +67,7 @@ packages-kind-skin = スキン
 packages-kind-resources = 共有素材
 packages-kind-function = 機能プラグイン
 packages-kind-sounds = サウンドパック
+packages-kind-stickers = スタンプパック
 
 # Package provenance and explicit script consent
 package-author = 作者
@@ -79,6 +80,7 @@ package-unsigned = 未署名：出所と完全性は署名で確認されてい�
 package-integrity-failed = 完全性の検証失敗、読み込み拒否
 package-source-builtin = 内蔵
 package-source-third-party = サードパーティからのインポート
+package-source-collab = コラボ
 package-third-party-warning = このパッケージは外部から読み込まれ、出所は確認されていません。信頼できる作者のパッケージだけを導入し、機能パッケージは有効にする前にスクリプトを確認してください。
 package-data-source = 出典
 package-data-license = ライセンス

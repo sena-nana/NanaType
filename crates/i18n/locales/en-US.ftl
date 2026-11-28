@@ -67,6 +67,7 @@ packages-kind-skin = Skin
 packages-kind-resources = Shared resources
 packages-kind-function = Functional plugin
 packages-kind-sounds = Sound pack
+packages-kind-stickers = Sticker pack
 
 # Package provenance and explicit script consent
 package-author = Author
@@ -79,6 +80,7 @@ package-unsigned = Unsigned: source and integrity are not authenticated
 package-integrity-failed = Integrity check failed; loading refused
 package-source-builtin = Built-in
 package-source-third-party = Third-party import
+package-source-collab = Collab
 package-third-party-warning = This package was imported from outside NanaType and its source is not verified. Only install packages from authors you trust, and review a function package's script before enabling it.
 package-data-source = Source
 package-data-license = License

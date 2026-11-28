@@ -143,7 +143,9 @@ Lines are stored as BBCode-style markup, shared by source mode, quick phrases an
 
 ## Sticker packs
 
-In **Settings › Assets › Sticker packs** you can download the **Sheep's pixel heads (static)** and **Sheep's animated emotes** presets, or add a local image folder, an Echo-Live root folder (containing `res/data/emoji.js`) or an Echo-Live emote extension folder (containing `main.js`). Presets only go online when you click them; after that they use the same import and management flow as local folders.
+In **Settings › Assets › Sticker packs** you can add a local image folder, an Echo-Live root folder (containing `res/data/emoji.js`) or an Echo-Live emote extension folder (containing `main.js`).
+
+The **Sheep's pixel heads (static)** and **Sheep's animated emotes** presets are collab sticker packs, managed as sticker-pack plugins in **Settings › Plugins & packages** with a **Collab** label. They start out not downloaded and only go online when you click download; after that they use the same import and management flow as local folders.
 
 On import, images, thumbnails and full GIF frame caches are prepared in the background; the list shows downloading, processing, ready or failed.
 

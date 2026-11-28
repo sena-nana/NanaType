@@ -15,17 +15,24 @@ use nanatype::windows::WindowKind;
 use nanatype_i18n::Locale;
 
 #[test]
-fn settings_show_presets_and_local_folders_in_one_list() {
+fn collab_presets_sit_with_packages_and_local_folders_stay_in_assets() {
     use nanatype::stickers::{Manager, PackRow, Phase};
     use nanatype::ui::{Ui, settings};
     let out = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../target/sticker-animation-acceptance");
     std::fs::create_dir_all(&out).unwrap();
     let manager = Manager::new(&out, |_| {});
+    assert!(
+        manager
+            .rows
+            .iter()
+            .all(|r| r.preset.is_some() && r.phase == Phase::NotDownloaded),
+        "collab presets start out not downloaded"
+    );
+    let presets = ["绵羊的像素头像（静态）", "绵羊的动态表情包"];
     for dark in [false, true] {
         let skin = common::skin("nanatype.vanilla");
         let ui = Ui::new(Arc::new(Default::default()), skin, Locale::ZhCn);
-        ui.page.set(settings::Page::Assets);
         let mut rows = manager.rows.clone();
         rows[1].phase = Phase::Processing(7, 20);
         rows.push(PackRow {
@@ -39,34 +46,38 @@ fn settings_show_presets_and_local_folders_in_one_list() {
             phase: Phase::Ready,
         });
         ui.sticker_packs.set(Arc::new(rows));
-        let mut session = common::session()
-            .themed(dark)
-            .mount(1040, 800, move || settings::settings_window(ui));
-        session
-            .screenshot_png(out.join(format!(
-                "settings-{}.png",
-                if dark { "dark" } else { "light" }
-            )))
-            .unwrap();
-        let nodes = session.accessibility_dump();
-        for label in [
-            "绵羊的像素头像（静态）",
-            "绵羊的动态表情包",
-            "我的表情包",
-            "下载",
-        ] {
-            assert!(
-                nodes.iter().any(|n| n.label.as_deref() == Some(label)),
-                "missing {label}"
-            );
-        }
-        for node in nodes.iter().filter(|n| {
-            n.role == "button" && matches!(n.label.as_deref(), Some("下载" | "GitHub 仓库"))
-        }) {
-            assert!(
-                node.bounds.x >= 0.0 && node.bounds.x + node.bounds.width <= 1040.0,
-                "action must fit: {node:?}"
-            );
+        for page in [settings::Page::Packages, settings::Page::Assets] {
+            ui.page.set(page);
+            let mut session = common::session()
+                .themed(dark)
+                .mount(1040, 800, move || settings::settings_window(ui));
+            session
+                .screenshot_png(out.join(format!(
+                    "settings-{page:?}-{}.png",
+                    if dark { "dark" } else { "light" }
+                )))
+                .unwrap();
+            let nodes = session.accessibility_dump();
+            let has = |label: &str| nodes.iter().any(|n| n.label.as_deref() == Some(label));
+            if page == settings::Page::Packages {
+                for label in presets.into_iter().chain(["联动", "表情包", "下载"]) {
+                    assert!(has(label), "missing {label}");
+                }
+                assert!(!has("我的表情包"), "local folders stay in Assets");
+            } else {
+                assert!(has("我的表情包"));
+                for label in presets {
+                    assert!(!has(label), "{label} moved to Packages");
+                }
+            }
+            for node in nodes.iter().filter(|n| {
+                n.role == "button" && matches!(n.label.as_deref(), Some("下载" | "GitHub 仓库"))
+            }) {
+                assert!(
+                    node.bounds.x >= 0.0 && node.bounds.x + node.bounds.width <= 1040.0,
+                    "action must fit: {node:?}"
+                );
+            }
         }
     }
 }

@@ -67,6 +67,7 @@ packages-kind-skin = 皮膚
 packages-kind-resources = 共享資源
 packages-kind-function = 功能外掛
 packages-kind-sounds = 音效包
+packages-kind-stickers = 表情包
 
 # Package provenance and explicit script consent
 package-author = 作者
@@ -79,6 +80,7 @@ package-unsigned = 未簽名：來源及完整性未經簽名驗證
 package-integrity-failed = 完整性校驗失敗，禁止載入
 package-source-builtin = 內建
 package-source-third-party = 第三方匯入
+package-source-collab = 聯動
 package-third-party-warning = 第三方匯入的包來源未經驗證。只安裝你信任的作者提供的包，啟用功能包前請先審閱它的腳本。
 package-data-source = 來源
 package-data-license = 許可

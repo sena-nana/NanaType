@@ -70,45 +70,17 @@ pub(super) fn assets(ui: Ui) -> AnyView {
         move || (ui.sticker_packs.get(), ui.locale.get()),
         move |(packs, _)| {
             use crate::stickers::Phase;
+            // The collab presets live on the Packages page; this list is the
+            // folders the user brought.
             let rows: Vec<Row> = packs
                 .iter()
+                .filter(|pack| pack.preset.is_none())
                 .map(|pack| {
-                    let title = pack
-                        .preset
-                        .map(|p| ui.now_t(p.title_key()))
-                        .unwrap_or_else(|| pack.title.clone());
-                    let status = match &pack.phase {
-                        Phase::NotDownloaded => ui.now_t("stickers-not-downloaded"),
-                        Phase::Downloading(done, total) => ui.tr(
-                            "stickers-downloading",
-                            &[
-                                ("done", (*done as u64).into()),
-                                ("total", (*total as u64).into()),
-                            ],
-                        ),
-                        Phase::Processing(done, total) => ui.tr(
-                            "stickers-processing",
-                            &[
-                                ("done", (*done as u64).into()),
-                                ("total", (*total as u64).into()),
-                            ],
-                        ),
-                        Phase::Ready => {
-                            ui.tr("stickers-ready", &[("count", (pack.count as u64).into())])
-                        }
-                        Phase::Failed(error) => {
-                            ui.tr("stickers-failed", &[("message", error.clone().into())])
-                        }
-                    };
                     let details = [
-                        status,
+                        crate::ui::plugins::sticker_status(ui, pack),
                         pack.author.clone(),
                         pack.license.clone(),
-                        if pack.preset.is_none() {
-                            pack.root.display().to_string()
-                        } else {
-                            String::new()
-                        },
+                        pack.root.display().to_string(),
                     ]
                     .into_iter()
                     .filter(|s| !s.is_empty())
@@ -134,18 +106,10 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                             Msg::Sticker(StickerMsg::Repository(root.clone()))
                         }));
                     }
-                    if !pack.phase.busy() && pack.phase != Phase::Ready {
+                    if matches!(pack.phase, Phase::Failed(_)) {
                         let root = pack.root.clone();
-                        let preset = pack.preset;
-                        let (key, glyph) = if pack.phase == Phase::NotDownloaded {
-                            ("stickers-download", ti::CLOUD_DOWNLOAD)
-                        } else {
-                            ("stickers-retry", ti::REFRESH)
-                        };
-                        actions.push(icon_action(ui, key, glyph, move || {
-                            preset
-                                .map(|e| Msg::Sticker(StickerMsg::Download(e)))
-                                .unwrap_or_else(|| Msg::Sticker(StickerMsg::Retry(root.clone())))
+                        actions.push(icon_action(ui, "stickers-retry", ti::REFRESH, move || {
+                            Msg::Sticker(StickerMsg::Retry(root.clone()))
                         }));
                     }
                     if pack.phase != Phase::NotDownloaded {
@@ -165,7 +129,7 @@ pub(super) fn assets(ui: Ui) -> AnyView {
                         }
                     }
                     row_text(
-                        title,
+                        pack.title.clone(),
                         Some(details),
                         widget(
                             Stack::row(0.0)
