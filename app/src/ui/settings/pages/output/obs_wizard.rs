@@ -9,7 +9,7 @@ use super::spout::spout_plugin;
 const STEP_DOT: f32 = 22.0;
 
 /// A numbered step: a numbered accent circle, then what to do.
-fn step(n: u8, body: impl IntoView) -> AnyView {
+pub(in crate::ui::settings::pages) fn step(n: u8, body: impl IntoView) -> AnyView {
     widget(
         Stack::row(0.0)
             .gap_step(gap::step::CONTROL)
@@ -49,60 +49,130 @@ fn step(n: u8, body: impl IntoView) -> AnyView {
 pub(super) fn obs_guide(ui: Ui) -> Row {
     Row::inset(
         widget(Stack::column(0.0).padding_step(inset::step::CARD, inset::step::ROW_Y))
-            .children(obs_steps(ui, false)),
+            .children(obs_steps(ui)),
     )
 }
 
-/// Getting the display into OBS: enable output before selecting its live sender
-/// name, other capture methods folded under one line. In the first-run
-/// `guide` the steps sit closer, and a last one plays a sample line to see
+/// A step's words, in body text.
+pub(in crate::ui::settings::pages) fn step_text(ui: Ui, key: &str) -> AnyView {
+    widget(
+        Text::new(ui.now_t(key))
+            .style(Type::Body.style())
+            .color(SemanticColorRole::Text),
+    )
+    .into_any()
+}
+
+/// Step `n`: the `key` words, then a button that plays a sample line to see
 /// it arrive.
-pub(in crate::ui::settings::pages) fn obs_steps(ui: Ui, guide: bool) -> AnyView {
-    let sample = guide;
-    let body = |key: &str| {
-        widget(
-            Text::new(ui.now_t(key))
-                .style(Type::Body.style())
-                .color(SemanticColorRole::Text),
-        )
-        .into_any()
+pub(in crate::ui::settings::pages) fn sample_step(ui: Ui, n: u8, key: &str) -> AnyView {
+    step(
+        n,
+        (
+            step_text(ui, key),
+            widget(
+                Button::new(ui.now_t("output-sample"))
+                    .icon(ti::PLAYER_PLAY)
+                    .size(ControlSize::Small),
+            )
+            .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::PlaySample)),
+        ),
+    )
+}
+
+/// The first-run guide's Spout2 (Syphon on macOS) steps into OBS. Choosing
+/// that route turns the display output on, so they start on OBS's side and
+/// end on a sample line.
+pub(in crate::ui::settings::pages) fn shared_steps(ui: Ui) -> Vec<AnyView> {
+    let first = if cfg!(target_os = "macos") {
+        [
+            step(1, step_text(ui, "output-obs-step-syphon")),
+            step(
+                2,
+                (
+                    step_text(ui, "output-obs-step-syphon-source"),
+                    sender_tag(ui),
+                ),
+            ),
+        ]
+    } else {
+        [
+            step(
+                1,
+                (step_text(ui, "output-obs-step-plugin"), spout_plugin(ui)),
+            ),
+            step(2, (step_text(ui, "output-obs-step-source"), sender_tag(ui))),
+        ]
     };
-    let sender = widget(crate::ui::kit::tag_action_frame()).children((
-        widget(Text::new(String::new()).style(Type::Small.mono())).bind(move |t: &mut Text| {
-            let name = ui.settings.with(|s| s.output.display.name.clone());
-            if t.value != name {
-                t.value = name;
-            }
-        }),
-        widget(
-            IconButton::new(ti::COPY, ui.now_t("output-spout-copy"))
-                .size(ControlSize::Small)
-                .with_tooltip(ui.now_t("output-spout-copy")),
+    first
+        .into_iter()
+        .chain([
+            step(3, step_text(ui, "output-obs-step-alpha")),
+            sample_step(ui, 4, "output-obs-step-check"),
+        ])
+        .collect()
+}
+
+/// The display's sender name, live, with a button that copies it.
+fn sender_tag(ui: Ui) -> AnyView {
+    widget(crate::ui::kit::tag_action_frame())
+        .children((
+            widget(Text::new(String::new()).style(Type::Small.mono())).bind(move |t: &mut Text| {
+                let name = ui.settings.with(|s| s.output.display.name.clone());
+                if t.value != name {
+                    t.value = name;
+                }
+            }),
+            widget(
+                IconButton::new(ti::COPY, ui.now_t("output-spout-copy"))
+                    .size(ControlSize::Small)
+                    .with_tooltip(ui.now_t("output-spout-copy")),
+            )
+            .on_cx(move |_, _: &Activate, cx| {
+                let name = ui
+                    .settings
+                    .with_untracked(|s| s.output.display.name.clone());
+                cx.dispatch_program_all(Msg::CopyText(name))
+            }),
+        ))
+        .into_any()
+}
+
+/// Getting the display into OBS: turn its Spout2 (Syphon) sender on before
+/// selecting its live name, other capture methods folded under one line.
+/// The sender is the display's own output, apart from its window.
+fn obs_steps(ui: Ui) -> AnyView {
+    let body = |key: &str| step_text(ui, key);
+    let sender = sender_tag(ui);
+    // Named for the sender it turns on, so it never reads as opening the
+    // display window.
+    let mac = cfg!(target_os = "macos");
+    let (step_key, enable_key, enabled_key) = if mac {
+        (
+            "output-obs-step-enable-mac",
+            "output-obs-enable-mac",
+            "output-obs-enabled-mac",
         )
-        .on_cx(move |_, _: &Activate, cx| {
-            let name = ui
-                .settings
-                .with_untracked(|s| s.output.display.name.clone());
-            cx.dispatch_program_all(Msg::CopyText(name))
-        }),
-    ));
+    } else {
+        (
+            "output-obs-step-enable",
+            "output-obs-enable",
+            "output-obs-enabled",
+        )
+    };
     let enable = || {
         step(
             1,
             (
-                body("output-obs-step-enable"),
+                body(step_key),
                 widget(
-                    Button::new(ui.now_t("output-obs-enable"))
+                    Button::new(ui.now_t(enable_key))
                         .size(ControlSize::Small)
                         .kind(ButtonKind::Primary),
                 )
                 .bind(move |b: &mut Button| {
                     let enabled = ui.settings.with(|s| s.output.display.enabled);
-                    b.label = ui.now_t(if enabled {
-                        "output-obs-enabled"
-                    } else {
-                        "output-obs-enable"
-                    });
+                    b.label = ui.now_t(if enabled { enabled_key } else { enable_key });
                     b.disabled = enabled;
                 })
                 .on_cx(|_, _: &Activate, cx| {
@@ -112,44 +182,20 @@ pub(in crate::ui::settings::pages) fn obs_steps(ui: Ui, guide: bool) -> AnyView 
             ),
         )
     };
-    let check = move || {
-        sample.then(|| {
-            step(
-                5,
-                (
-                    body("output-obs-step-check"),
-                    widget(
-                        Button::new(ui.now_t("output-sample"))
-                            .icon(ti::PLAYER_PLAY)
-                            .size(ControlSize::Small),
-                    )
-                    .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::PlaySample)),
-                ),
-            )
-        })
-    };
     let steps: Vec<AnyView> = if cfg!(windows) {
-        [
-            Some(enable()),
-            Some(step(2, (body("output-obs-step-plugin"), spout_plugin(ui)))),
-            Some(step(3, (body("output-obs-step-source"), sender))),
-            Some(step(4, body("output-obs-step-alpha"))),
-            check(),
+        vec![
+            enable(),
+            step(2, (body("output-obs-step-plugin"), spout_plugin(ui))),
+            step(3, (body("output-obs-step-source"), sender)),
+            step(4, body("output-obs-step-alpha")),
         ]
-        .into_iter()
-        .flatten()
-        .collect()
     } else if cfg!(target_os = "macos") {
-        [
-            Some(enable()),
-            Some(step(2, body("output-obs-step-syphon"))),
-            Some(step(3, (body("output-obs-step-syphon-source"), sender))),
-            Some(step(4, body("output-obs-step-alpha"))),
-            check(),
+        vec![
+            enable(),
+            step(2, body("output-obs-step-syphon")),
+            step(3, (body("output-obs-step-syphon-source"), sender)),
+            step(4, body("output-obs-step-alpha")),
         ]
-        .into_iter()
-        .flatten()
-        .collect()
     } else {
         let _ = sender;
         vec![hint(ui.now_t("output-spout-unsupported"))]
@@ -188,13 +234,9 @@ pub(in crate::ui::settings::pages) fn obs_steps(ui: Ui, guide: bool) -> AnyView 
             "output-obs-window"
         }))),
     ));
-    widget(Stack::column(0.0).gap_step(if guide {
-        nana_ui_core::SpacingStep::Sm
-    } else {
-        nana_ui_core::SpacingStep::Lg
-    }))
-    .children((steps, other))
-    .into_any()
+    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Lg))
+        .children((steps, other))
+        .into_any()
 }
 
 /// The obs-websocket password: kept in the system's secret store, never in

@@ -16,7 +16,7 @@ use serde_json::Value;
 pub use general::{
     AccessibilitySettings, AssetSettings, Character, ChromeMode, ContrastMode, DiagnosticsSettings,
     General, InputMode, InputPresence, MAX_CHARACTERS, ONBOARDING_STEPS, PerformanceSettings,
-    QuickPhrase, STICKER_SCALE, TelegramSettings, UI_SCALE, UpdateSettings,
+    QuickPhrase, STICKER_SCALE, StreamRoute, TelegramSettings, UI_SCALE, UpdateSettings,
 };
 pub use hotkeys::{Hotkey, HotkeySettings, InputKey, InputKeys, ProfileHotkey, Refusal};
 pub use integrations::{

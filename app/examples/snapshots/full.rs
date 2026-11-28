@@ -234,7 +234,7 @@ fn settings_pages(scene: &Scene, out: &std::path::Path) {
     let builtin = nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION"));
     let active = ui.settings.with_untracked(|s| s.skin.id.clone());
     let _ = nanatype::ui::prepare_skin_preview(ui, &builtin, &active, false);
-    for n in 0..4u8 {
+    for n in 0..nanatype_settings::ONBOARDING_STEPS {
         ui.onboard_step.set(n);
         shot(
             &format!("settings-General-onboard-{}", n + 1),

@@ -1,14 +1,28 @@
 use super::hotkeys::{hotkey_control, hotkey_issue_caption};
-use super::output::{display_source, obs_address, obs_password_field, obs_steps};
+use super::output::{
+    display_source, obs_address, obs_password_field, sample_step, shared_steps, step as numbered,
+    step_text,
+};
 use super::*;
 use crate::msg::WindowMsg;
 use crate::ui::settings::preview::{guide_save, guide_tools};
+use nanatype_settings::StreamRoute;
 
 /// The diagram's text caret and the dialogue box's live edge (width, height).
 const CARET: (f32, f32) = (2.0, 12.0);
 
 /// The step that picks a skin and adjusts it.
 const SKIN_STEP: u8 = 1;
+
+/// The step that records the common hotkeys; the one after it is the last.
+const HOTKEY_STEP: u8 = 3;
+
+/// Whether the display can go to OBS as a shared texture here (Spout2 on
+/// Windows, Syphon on macOS); elsewhere only window capture is offered.
+const SHARED: bool = cfg!(windows) || cfg!(target_os = "macos");
+
+/// The side of an app card's glyph tile.
+const APP_TILE: f32 = 34.0;
 
 /// How many steps the first-run guide has.
 pub(super) const ONBOARD_STEPS: u8 = nanatype_settings::ONBOARDING_STEPS;
@@ -19,10 +33,10 @@ fn go_to(ui: Ui, cx: &mut nana_ui::runtime::ViewContext<'_, Button>, n: u8) {
     cx.dispatch_program_all(edit(move |s| s.general.onboarding_step = n));
 }
 
-/// The first-run guide: one card marked by a 3px accent bar, four steps
+/// The first-run guide: one card marked by a 3px accent bar, five steps
 /// (language and name, a skin with its name plate and part scales and its
-/// live preview, the input mode, the
-/// common hotkeys and OBS) with Back / Next and a step indicator. Skip or
+/// live preview, the input mode, the common hotkeys, and the streaming app
+/// the display goes into) with Back / Next and a step indicator. Skip or
 /// the last step's "Get started" closes it for good; About opens it again.
 pub(super) fn onboarding(ui: Ui) -> AnyView {
     let step = ui.onboard_step;
@@ -217,7 +231,8 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
                 mode_card(ui, InputMode::Mirror),
             )),
         )],
-        _ => finish_step(ui),
+        HOTKEY_STEP => hotkeys_step(ui),
+        _ => stream_step(ui),
     };
     widget(Stack::column(0.0)).children(body).into_any()
 }
@@ -229,11 +244,21 @@ const COMMON_KEYS: [GlobalAction; 2] = [GlobalAction::Summon, GlobalAction::Quic
 /// The narrowest a hotkey cell gets before the grid drops to one column.
 const KEY_CELL_MIN: f32 = 240.0;
 
-/// The last step, as three framed groups: the common hotkeys, recorded in
-/// place; the display's picture into OBS over Spout (Syphon on macOS),
-/// ending in a sample line to see it arrive; and the optional
-/// obs-websocket link that sizes the output from its source's box in OBS.
-fn finish_step(ui: Ui) -> Vec<Row> {
+/// A step's content on the card's content line, its parts `Md` apart.
+fn guide_column(children: impl IntoView) -> Row {
+    Row::inset(
+        widget(
+            Stack::column(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Md)
+                .padding_xy(inset::CARD, 0.0),
+        )
+        .children(children),
+    )
+}
+
+/// The common hotkeys, recorded in place, in a framed group that links to
+/// the Hotkeys page for the rest.
+fn hotkeys_step(ui: Ui) -> Vec<Row> {
     let more = widget(
         Button::new(ui.now_t("onboard-hotkeys-more"))
             .kind(ButtonKind::Text)
@@ -244,45 +269,344 @@ fn finish_step(ui: Ui) -> Vec<Row> {
         cx.dispatch_program_all(Msg::Window(WindowMsg::SettingsPage(Page::Hotkeys)))
     })
     .into_any();
-    let hotkeys = group(
+    vec![guide_column(group(
         ui,
         ti::KEYBOARD,
         "onboard-hotkeys",
         (None, Some(more)),
         None,
         hotkey_grid(ui),
-    );
-    let obs = group(
-        ui,
-        ti::BROADCAST,
-        "onboard-obs",
-        (None, None),
-        Some(if cfg!(target_os = "macos") {
-            "onboard-obs-hint-mac"
+    ))]
+}
+
+/// The last step: which app the stream runs in, as two cards; for OBS, how
+/// it takes the picture (Spout2, or Syphon on macOS, recommended; window
+/// capture still offered); then the steps for that route. Nothing is
+/// chosen at first, and "Get started" never waits on it.
+fn stream_step(ui: Ui) -> Vec<Row> {
+    let route = move || ui.settings.with(|s| s.general.onboarding_route);
+    let question = widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Xxs)).children((
+        subheading(ui, "onboard-stream"),
+        hint(ui.now_t("onboard-stream-hint")),
+    ));
+    let apps = widget(
+        Stack::row(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Xl)
+            .align(AlignSpec::Stretch)
+            .width(LengthSpec::Fill),
+    )
+    .children((app_card(ui, false), app_card(ui, true)));
+    let methods = widget(
+        Stack::column(0.0)
+            .gap_step(nana_ui_core::SpacingStep::Sm)
+            .width(LengthSpec::Fill),
+    )
+    .visible(move || {
+        SHARED
+            && matches!(
+                route(),
+                Some(StreamRoute::ObsShared | StreamRoute::ObsWindow)
+            )
+    })
+    .children((
+        subheading(ui, "onboard-method"),
+        widget(
+            Stack::row(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Md)
+                .align(AlignSpec::Stretch)
+                .width(LengthSpec::Fill),
+        )
+        .children((method_card(ui, true), method_card(ui, false))),
+    ));
+    let guide = dynamic(route, move |r| route_guide(ui, *r));
+    vec![guide_column((question, apps, methods, guide))]
+}
+
+/// Answer the last step with `route`. The display's Spout2 (Syphon) sender
+/// starts off and is apart from its window, so choosing it turns the sender
+/// on instead of asking; the window is left as it is.
+fn choose_route(s: &mut Settings, route: StreamRoute) {
+    s.general.onboarding_route = Some(route);
+    if route == StreamRoute::ObsShared {
+        s.output.display.enabled = true;
+    }
+}
+
+/// OBS or another app, as a card to pick. OBS starts on the shared texture
+/// where there is one, and keeps window capture if that was chosen before.
+fn app_card(ui: Ui, other: bool) -> AnyView {
+    let (glyph, name, about) = if other {
+        (
+            ti::DEVICE_DESKTOP,
+            "onboard-stream-other",
+            "onboard-stream-other-hint",
+        )
+    } else {
+        (
+            ti::BROADCAST,
+            "onboard-stream-obs",
+            if cfg!(target_os = "macos") {
+                "onboard-stream-obs-hint-mac"
+            } else if SHARED {
+                "onboard-stream-obs-hint"
+            } else {
+                "onboard-stream-obs-hint-window"
+            },
+        )
+    };
+    let chosen = move || {
+        ui.settings.with(|s| match s.general.onboarding_route {
+            Some(StreamRoute::OtherWindow) => other,
+            Some(_) => !other,
+            None => false,
+        })
+    };
+    let pick = move || {
+        edit(move |s| {
+            let route = match s.general.onboarding_route {
+                _ if other => StreamRoute::OtherWindow,
+                Some(StreamRoute::ObsWindow) => StreamRoute::ObsWindow,
+                _ if SHARED => StreamRoute::ObsShared,
+                _ => StreamRoute::ObsWindow,
+            };
+            choose_route(s, route);
+        })
+    };
+    let tile = widget({
+        let tile = Stack::row(0.0)
+            .width(LengthSpec::Px(APP_TILE))
+            .height(LengthSpec::Px(APP_TILE))
+            .align(AlignSpec::Center)
+            .justify(JustifySpec::Center)
+            .radius(RadiusTier::Sm)
+            .with_layout(|l| l.flex_shrink = Some(0.0));
+        if other {
+            tile.surface(SemanticColorRole::Subtle)
         } else {
-            "onboard-obs-hint"
-        }),
-        obs_steps(ui, true),
-    );
+            tile.surface_mix(SemanticColorMix::alpha(SemanticColorRole::Accent, 0.12))
+        }
+    })
+    .children(widget(IconGlyph::new(glyph).size(icon::MD).role(
+        if other {
+            SemanticColorRole::Muted
+        } else {
+            SemanticColorRole::Accent
+        },
+    )));
+    pick_card(
+        ui.now_t(name),
+        chosen,
+        pick,
+        widget(
+            Stack::column(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Sm)
+                .width(LengthSpec::Fill),
+        )
+        .children((
+            widget(
+                Stack::row(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Md)
+                    .align(AlignSpec::Center),
+            )
+            .children((
+                tile,
+                widget(Text::new(ui.now_t(name)).style(Type::Strong.style())),
+            )),
+            hint(ui.now_t(about)),
+        ))
+        .into_any(),
+    )
+}
+
+/// How OBS takes the picture, as a card to pick: the shared texture,
+/// marked recommended, or window capture.
+fn method_card(ui: Ui, shared: bool) -> AnyView {
+    let route = if shared {
+        StreamRoute::ObsShared
+    } else {
+        StreamRoute::ObsWindow
+    };
+    let (name, about) = match (shared, cfg!(target_os = "macos")) {
+        (true, true) => ("onboard-method-syphon", "onboard-method-shared-hint"),
+        (true, false) => ("onboard-method-spout", "onboard-method-shared-hint"),
+        (false, _) => ("onboard-method-window", "onboard-method-window-hint"),
+    };
+    let chosen = move || {
+        ui.settings
+            .with(|s| s.general.onboarding_route == Some(route))
+    };
+    let recommended = shared.then(|| {
+        widget(StatusBadge::new(ui.now_t("onboard-recommended"), StatusTone::Info).compact(true))
+    });
+    pick_card(
+        ui.now_t(name),
+        chosen,
+        move || edit(move |s| choose_route(s, route)),
+        widget(
+            Stack::column(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Xxs)
+                .width(LengthSpec::Fill),
+        )
+        .children((
+            widget(
+                Stack::row(0.0)
+                    .gap_step(nana_ui_core::SpacingStep::Sm)
+                    .align(AlignSpec::Center),
+            )
+            .children((
+                widget(Text::new(ui.now_t(name)).style(Type::Strong.style())),
+                recommended,
+            )),
+            hint(ui.now_t(about)),
+        ))
+        .into_any(),
+    )
+}
+
+/// The steps for the chosen route; nothing until one is chosen.
+fn route_guide(ui: Ui, route: Option<StreamRoute>) -> Option<AnyView> {
+    let mac = cfg!(target_os = "macos");
+    Some(match route? {
+        StreamRoute::ObsShared => {
+            let shared = group(
+                ui,
+                ti::BROADCAST,
+                if mac {
+                    "onboard-guide-syphon"
+                } else {
+                    "onboard-guide-spout"
+                },
+                (None, Some(output_badge(ui, |s| s.get(WindowKind::Display)))),
+                None,
+                steps_column(shared_steps(ui)),
+            );
+            widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Md))
+                .children((shared, link_group(ui)))
+                .into_any()
+        }
+        StreamRoute::ObsWindow => group(
+            ui,
+            ti::APP_WINDOW,
+            "onboard-guide-window-obs",
+            (None, None),
+            None,
+            window_steps(ui, false),
+        ),
+        StreamRoute::OtherWindow => group(
+            ui,
+            ti::APP_WINDOW,
+            "onboard-guide-window-other",
+            (None, None),
+            None,
+            window_steps(ui, true),
+        ),
+    })
+}
+
+/// Numbered steps, a little apart.
+fn steps_column(steps: Vec<AnyView>) -> AnyView {
+    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm))
+        .children(steps)
+        .into_any()
+}
+
+/// The optional obs-websocket link that sizes the Spout2 (Syphon) output
+/// from its source's box in OBS. Window capture has no output to size, so
+/// only the shared route shows it.
+fn link_group(ui: Ui) -> AnyView {
     let optional =
         widget(StatusBadge::new(ui.now_t("onboard-optional"), StatusTone::Neutral).compact(true))
             .into_any();
-    let link = group(
+    group(
         ui,
         ti::PLUG_CONNECTED,
         "onboard-obs-link",
         (Some(optional), Some(link_switch(ui))),
         Some("onboard-obs-link-hint"),
         link_fields(ui),
+    )
+}
+
+/// Window capture, into OBS or another app: open the display window, add a
+/// capture of it there, and play a sample line; then what keeps it showing.
+/// Into OBS, the note offers the shared texture instead.
+fn window_steps(ui: Ui, other: bool) -> AnyView {
+    let open = widget(
+        Button::new(ui.now_t("onboard-window-open"))
+            .size(ControlSize::Small)
+            .kind(ButtonKind::Primary),
+    )
+    .bind(move |b: &mut Button| {
+        let shown = ui.settings.with(|s| s.overlays.display.visible);
+        let label = ui.now_t(if shown {
+            "onboard-window-opened"
+        } else {
+            "onboard-window-open"
+        });
+        if b.label != label {
+            b.label = label;
+        }
+        b.disabled = shown;
+    })
+    .on_cx(|_, _: &Activate, cx| {
+        cx.dispatch_program_all(Msg::Window(WindowMsg::Show(WindowKind::Display)))
+    });
+    let window = widget(crate::ui::kit::tag_frame()).children(
+        widget(Text::new(String::new()).style(Type::Small.style())).bind(move |t: &mut Text| {
+            let title = WindowKind::Display.title(ui.locale.get());
+            if t.value != title {
+                t.value = title;
+            }
+        }),
     );
-    vec![Row::inset(
+    let mut steps = vec![numbered(1, (step_text(ui, "onboard-window-show"), open))];
+    let note = if other {
+        steps.push(numbered(
+            2,
+            (step_text(ui, "onboard-window-other-source"), window),
+        ));
+        steps.push(sample_step(ui, 3, "onboard-window-other-check"));
+        hint(ui.now_t("onboard-window-other-note"))
+    } else {
+        let source = if cfg!(target_os = "macos") {
+            "onboard-window-mac-source"
+        } else {
+            "onboard-window-obs-source"
+        };
+        steps.push(numbered(2, (step_text(ui, source), window)));
+        let check = if cfg!(windows) {
+            steps.push(numbered(3, step_text(ui, "onboard-window-obs-method")));
+            4
+        } else {
+            3
+        };
+        steps.push(sample_step(ui, check, "output-obs-step-check"));
+        let switch_back = SHARED.then(|| {
+            widget(
+                Button::new(ui.now_t(if cfg!(target_os = "macos") {
+                    "onboard-use-syphon"
+                } else {
+                    "onboard-use-spout"
+                }))
+                .kind(ButtonKind::Text)
+                .size(ControlSize::Small),
+            )
+            .on_cx(|_, _: &Activate, cx| {
+                cx.dispatch_program_all(edit(|s| choose_route(s, StreamRoute::ObsShared)))
+            })
+        });
         widget(
-            Stack::column(0.0)
-                .gap_step(nana_ui_core::SpacingStep::Md)
-                .padding_xy(inset::CARD, 0.0),
+            Stack::row(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Xs)
+                .align(AlignSpec::Center)
+                .wrap(true),
         )
-        .children((hotkeys, obs, link)),
-    )]
+        .children((hint(ui.now_t("onboard-window-obs-note")), switch_back))
+        .into_any()
+    };
+    widget(Stack::column(0.0).gap_step(nana_ui_core::SpacingStep::Sm))
+        .children((steps, note))
+        .into_any()
 }
 
 /// One of the last step's groups: a hairline frame around its title line
@@ -551,14 +875,39 @@ pub(super) fn mode_diagram(mode: InputMode) -> AnyView {
 }
 
 /// One input mode as a card to pick: its picture, its name and what it
-/// does. The chosen one takes the selected fill, an accent border and an
-/// accent ring.
+/// does.
 pub(super) fn mode_card(ui: Ui, mode: InputMode) -> AnyView {
     let (name, about) = match mode {
         InputMode::Compose => ("mode-compose", "mode-compose-hint"),
         InputMode::Mirror => ("mode-mirror", "mode-mirror-hint"),
     };
-    let chosen = move || ui.settings.with(|s| s.general.input_mode == mode);
+    pick_card(
+        ui.now_t(name),
+        move || ui.settings.with(|s| s.general.input_mode == mode),
+        move || edit(move |s| s.general.input_mode = mode),
+        widget(
+            Stack::column(0.0)
+                .gap_step(nana_ui_core::SpacingStep::Md)
+                .width(LengthSpec::Fill),
+        )
+        .children((
+            mode_diagram(mode),
+            widget(Text::new(ui.now_t(name)).style(Type::Strong.style())),
+            hint(ui.now_t(about)),
+        ))
+        .into_any(),
+    )
+}
+
+/// A card to pick, an equal share of its row: `content`, named `name` for
+/// assistive tech; activating it sends `pick()`. The `chosen` one takes the
+/// selected fill, an accent border and an accent ring.
+fn pick_card(
+    name: String,
+    chosen: impl Fn() -> bool + Send + Sync + Copy + 'static,
+    pick: impl Fn() -> Msg + Send + Sync + 'static,
+    content: AnyView,
+) -> AnyView {
     let base = {
         let mut st = ListItem::new("").style;
         let l = Arc::make_mut(&mut st.layout);
@@ -594,35 +943,18 @@ pub(super) fn mode_card(ui: Ui, mode: InputMode) -> AnyView {
             .border(border, 1.0)
             .ring(SemanticColorRole::Accent, if on { 1.0 } else { 0.0 })
     };
-    let item = widget(
-        ListItem::new(ui.now_t(name))
-            .style(paint(chosen()))
-            .auto_height(true),
-    )
-    .bind(move |i: &mut ListItem| {
-        let on = chosen();
-        i.selected = on;
-        let style = paint(on);
-        if i.style != style {
-            i.style = style;
-        }
-    })
-    .on_cx(move |_, _: &Activate, cx| {
-        cx.dispatch_program_all(edit(move |s| s.general.input_mode = mode));
-    })
-    .content(
-        widget(
-            Stack::column(0.0)
-                .gap_step(nana_ui_core::SpacingStep::Md)
-                .width(LengthSpec::Fill),
-        )
-        .children((
-            mode_diagram(mode),
-            widget(Text::new(ui.now_t(name)).style(Type::Strong.style())),
-            hint(ui.now_t(about)),
-        )),
-    );
-    item.into_any()
+    widget(ListItem::new(name).style(paint(chosen())).auto_height(true))
+        .bind(move |i: &mut ListItem| {
+            let on = chosen();
+            i.selected = on;
+            let style = paint(on);
+            if i.style != style {
+                i.style = style;
+            }
+        })
+        .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(pick()))
+        .content(content)
+        .into_any()
 }
 
 /// A 3px bar pinned down the left edge of a relatively positioned parent.

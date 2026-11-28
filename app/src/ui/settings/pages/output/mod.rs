@@ -6,7 +6,9 @@ mod spout;
 use super::*;
 
 pub(super) use self::capture::display_source;
-pub(super) use self::obs_wizard::{obs_address, obs_password_field, obs_steps};
+pub(super) use self::obs_wizard::{
+    obs_address, obs_password_field, sample_step, shared_steps, step, step_text,
+};
 
 /// How an output's settings are read and written.
 type Read = fn(&Settings) -> &nanatype_settings::SpoutOutput;

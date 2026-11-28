@@ -6,11 +6,24 @@ use super::{Hotkey, clamp_f32, clamp_ord, set_if, trim_take};
 /// Most characters a profile keeps.
 pub const MAX_CHARACTERS: usize = 32;
 /// How many steps the first-run guide has.
-pub const ONBOARDING_STEPS: u8 = 4;
+pub const ONBOARDING_STEPS: u8 = 5;
 /// The smallest and largest UI scale, in percent, and its step.
 pub const UI_SCALE: (u32, u32, u32) = (80, 200, 10);
 /// Heights [`AssetSettings::sticker_scale`] keeps, in line heights.
 pub const STICKER_SCALE: (f32, f32) = (0.8, 2.0);
+
+/// How the first-run guide was told the display reaches the stream: which
+/// streaming app, and how it takes the picture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StreamRoute {
+    /// OBS, over Spout2 (Syphon on macOS).
+    ObsShared,
+    /// OBS, capturing the display window.
+    ObsWindow,
+    /// Another streaming app, capturing the display window.
+    OtherWindow,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -178,6 +191,9 @@ pub struct General {
     /// The first-run guide's step (0-based) when it was last left, so a
     /// guide closed halfway opens there again.
     pub onboarding_step: u8,
+    /// What the guide's last step was told about the stream; `None` until
+    /// it is answered.
+    pub onboarding_route: Option<StreamRoute>,
     pub check_updates: bool,
     /// The profile last switched to (profiles/<id>.json); its sections are
     /// saved back into it before another is switched to.
@@ -197,6 +213,7 @@ impl Default for General {
             launch_at_login: false,
             onboarding_done: false,
             onboarding_step: 0,
+            onboarding_route: None,
             check_updates: true,
             profile: None,
         }

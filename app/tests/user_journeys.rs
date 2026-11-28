@@ -17,7 +17,7 @@ use nanatype::{
     },
 };
 use nanatype_i18n::Locale;
-use nanatype_settings::Settings;
+use nanatype_settings::{ONBOARDING_STEPS, Settings, StreamRoute};
 
 struct Fixture {
     ui: Ui,
@@ -257,10 +257,10 @@ fn the_empty_speaker_field_takes_a_click_typing_and_backspace() {
 fn first_run_finishes_all_steps_by_pointer_at_minimum_size() {
     for locale in Locale::ALL {
         let mut f = Fixture::new(locale, true, Page::General);
-        for step in 0..4 {
+        for step in 0..ONBOARDING_STEPS {
             assert_eq!(f.ui.onboard_step.get_untracked(), step);
             f.settle(u64::from(step) * 2 + 1);
-            let key = if step == 3 {
+            let key = if step + 1 == ONBOARDING_STEPS {
                 "onboard-done"
             } else {
                 "onboard-next"
@@ -299,11 +299,9 @@ fn first_run_resumes_at_the_step_it_was_left_at() {
     assert_eq!(reopened.onboard_step.get_untracked(), 1);
 }
 
-/// The last step records the common hotkeys in place, plays a sample line
-/// to check OBS, and its OBS link shows the address and the display's
-/// source once switched on.
+/// The hotkeys step records the common hotkeys in place.
 #[test]
-fn first_run_last_step_sets_hotkeys_and_links_obs() {
+fn first_run_hotkeys_step_records_in_place() {
     use nanatype::msg::{GlobalAction, Shortcut};
     let mut f = Fixture::new(Locale::ZhCn, true, Page::General);
     f.ui.onboard_step.set(3);
@@ -328,25 +326,94 @@ fn first_run_last_step_sets_hotkeys_and_links_obs() {
         m,
         Msg::RecordHotkey(Some(Shortcut::Global(GlobalAction::Summon)))
     )));
-
-    let sample = f.reach(650.0, 480.0, |f| f.find("button", "output-sample"));
-    f.click(&sample);
-    assert!(f.messages().iter().any(|m| matches!(m, Msg::PlaySample)));
-
-    let address = f.ui.now_t("obs-address");
-    let shown = |f: &Fixture| {
+    let shown = |f: &Fixture, key: &str| {
+        let label = f.ui.now_t(key);
         f.session
             .accessibility_dump()
             .iter()
-            .any(|n| n.label.as_deref() == Some(address.as_str()))
+            .any(|n| n.label.as_deref() == Some(label.as_str()))
     };
-    assert!(!shown(&f), "the link's fields wait for its switch");
+    assert!(!shown(&f, "output-sample"), "OBS has a step of its own");
+}
+
+/// The last step asks which app the stream runs in and shows nothing more
+/// until it is answered. OBS starts on Spout2, which turns the display
+/// output on, plays a sample line and offers the obs-websocket link; window
+/// capture opens the display window and drops the link; another app gets
+/// window capture alone.
+#[test]
+fn first_run_stream_step_guides_the_chosen_route() {
+    let mut f = Fixture::new(Locale::ZhCn, true, Page::General);
+    f.ui.onboard_step.set(ONBOARDING_STEPS - 1);
+    f.settle(1);
+    let shown = |f: &Fixture, key: &str| {
+        let label = f.ui.now_t(key);
+        f.session
+            .accessibility_dump()
+            .iter()
+            .any(|n| n.label.as_deref() == Some(label.as_str()))
+    };
+    let route = |f: &Fixture| f.ui.settings.get_untracked().general.onboarding_route;
+    assert_eq!(route(&f), None);
+    for key in ["output-sample", "onboard-method", "obs-link"] {
+        assert!(!shown(&f, key), "{key} waits for an answer");
+    }
+
+    let obs = f.reach(650.0, 480.0, |f| f.find("list-item", "onboard-stream-obs"));
+    f.click(&obs);
+    f.apply_edits();
+    assert_eq!(route(&f), Some(StreamRoute::ObsShared));
+    assert!(f.ui.settings.get_untracked().output.display.enabled);
+    assert!(
+        !shown(&f, "output-obs-step-enable"),
+        "Spout2 needs no enable step"
+    );
+    let sample = f.reach(650.0, 480.0, |f| f.find("button", "output-sample"));
+    f.click(&sample);
+    assert!(f.messages().iter().any(|m| matches!(m, Msg::PlaySample)));
+    assert!(
+        !shown(&f, "obs-address"),
+        "the link's fields wait for its switch"
+    );
     let link = f.reach(650.0, 480.0, |f| f.find("switch", "obs-link"));
     f.click(&link);
     f.apply_edits();
     assert!(f.ui.settings.get_untracked().output.obs.enabled);
-    assert!(shown(&f));
+    assert!(shown(&f, "obs-address"));
     f.reach(650.0, 480.0, |f| f.find("text", "obs-source"));
+
+    let window = f.reach(650.0, 480.0, |f| {
+        f.find("list-item", "onboard-method-window")
+    });
+    f.click(&window);
+    f.apply_edits();
+    assert_eq!(route(&f), Some(StreamRoute::ObsWindow));
+    assert!(
+        !shown(&f, "obs-link"),
+        "window capture has no output to size"
+    );
+    let open = f.reach(650.0, 480.0, |f| f.find("button", "onboard-window-open"));
+    f.click(&open);
+    assert!(f.messages().iter().any(|m| matches!(
+        m,
+        Msg::Window(WindowMsg::Show(nanatype::windows::WindowKind::Display))
+    )));
+    let spout = f.reach(650.0, 480.0, |f| f.find("button", "onboard-use-spout"));
+    f.click(&spout);
+    f.apply_edits();
+    assert_eq!(route(&f), Some(StreamRoute::ObsShared));
+
+    let other = f.reach(650.0, 480.0, |f| {
+        f.find("list-item", "onboard-stream-other")
+    });
+    f.click(&other);
+    f.apply_edits();
+    assert_eq!(route(&f), Some(StreamRoute::OtherWindow));
+    for key in ["onboard-method", "obs-link"] {
+        assert!(!shown(&f, key), "{key} is for OBS");
+    }
+    assert!(shown(&f, "onboard-window-other-source"));
+    assert!(shown(&f, "onboard-window-open"));
 }
 
 #[test]
@@ -663,6 +730,7 @@ fn onboarding_skin_step_enables_the_live_preview_clock() {
 fn builtin_skins_can_be_previewed_and_applied_in_a_narrow_window() {
     for locale in Locale::ALL {
         let mut f = Fixture::new(locale, false, Page::Skins);
+        f.ui.skins_library.set(true);
         f.ui.skins_grid.set(false);
         let rows = f.ui.skins.get_untracked();
         f.session.flush().unwrap();
