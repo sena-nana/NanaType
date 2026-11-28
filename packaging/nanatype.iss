@@ -40,7 +40,6 @@ Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "autostart"; Description: "Launch NanaType at login"; Flags: unchecked
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -51,7 +50,8 @@ Name: "{group}\NanaType"; Filename: "{app}\NanaType.exe"
 Name: "{autodesktop}\NanaType"; Filename: "{app}\NanaType.exe"; Tasks: desktopicon
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "NanaType"; ValueData: """{app}\NanaType.exe"""; Tasks: autostart; Flags: uninsdeletevalue
+; Launch at login was removed: clear the entry older versions registered.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "NanaType"; Flags: deletevalue uninsdeletevalue
 
 [Run]
 Filename: "{app}\NanaType.exe"; Description: "{cm:LaunchProgram,NanaType}"; Flags: nowait postinstall skipifsilent

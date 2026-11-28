@@ -740,11 +740,6 @@ impl App {
         if sections.contains(SettingsSections::SOUND_LEVELS) {
             self.audio_levels();
         }
-        if sections.contains(SettingsSections::AUTOSTART)
-            && let Err(e) = crate::services::set_autostart(self.settings.general.launch_at_login)
-        {
-            self.notice(e, true);
-        }
         if sections.contains(SettingsSections::PERFORMANCE) {
             self.apply_performance(Some(&prev.performance));
         }

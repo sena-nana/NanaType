@@ -60,7 +60,7 @@ const PROXIES: &[&str] = &["/update/proxy", "/assets/telegram/proxy"];
 /// history overlay and the quick phrases. Everything else is global: the
 /// language, hotkeys, input behaviour, integrations and their endpoints,
 /// outputs, speech input and text to speech (each character's voice
-/// travels with the characters), updates, autostart, plugins and devices.
+/// travels with the characters), updates, plugins and devices.
 pub const PROFILE_SCOPE: &[&str] = &[
     "/general/characters",
     "/general/character",

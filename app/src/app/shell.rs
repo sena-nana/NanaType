@@ -54,7 +54,6 @@ impl SettingsSections {
     pub const SOUND_DEVICE: Self = Self(1 << 9);
     pub const SOUND_PACK: Self = Self(1 << 10);
     pub const SOUND_LEVELS: Self = Self(1 << 11);
-    pub const AUTOSTART: Self = Self(1 << 12);
     pub const PERFORMANCE: Self = Self(1 << 13);
     pub const HOTKEYS: Self = Self(1 << 14);
     pub const INTEGRATIONS: Self = Self(1 << 15);
@@ -138,9 +137,6 @@ impl SettingsSections {
             || prev.sound.keystroke_volume != next.sound.keystroke_volume
         {
             s.insert(Self::SOUND_LEVELS);
-        }
-        if prev.general.launch_at_login != next.general.launch_at_login {
-            s.insert(Self::AUTOSTART);
         }
         if prev.performance != next.performance {
             s.insert(Self::PERFORMANCE);

@@ -186,7 +186,6 @@ pub struct General {
     pub input_skin_preview: bool,
     /// Opacity of the summon hotkey's one-line quick input bar.
     pub quick_opacity: f32,
-    pub launch_at_login: bool,
     pub onboarding_done: bool,
     /// The first-run guide's step (0-based) when it was last left, so a
     /// guide closed halfway opens there again.
@@ -210,7 +209,6 @@ impl Default for General {
             input_mode: InputMode::Compose,
             input_skin_preview: false,
             quick_opacity: 1.0,
-            launch_at_login: false,
             onboarding_done: false,
             onboarding_step: 0,
             onboarding_route: None,

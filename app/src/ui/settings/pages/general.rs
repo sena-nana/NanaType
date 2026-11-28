@@ -442,7 +442,6 @@ fn settings_body(ui: Ui) -> AnyView {
                             },
                         ),
                     ),
-                    toggle_row!(ui, "general-autostart", general.launch_at_login),
                 ],
             ),
             accessibility(ui),
