@@ -1,4 +1,4 @@
-﻿# Regenerate the generated part of THIRD_PARTY_NOTICES.md: every Rust crate
+# Regenerate the generated part of THIRD_PARTY_NOTICES.md: every Rust crate
 # linked into the Windows build of nanatype.exe, grouped by licence, from
 # `cargo metadata --offline` (no network). Also refreshes
 # packaging/licenses/NotoSansSC-OFL.txt from the locked NanaUI checkout.
@@ -134,11 +134,18 @@ $stop = $current.IndexOf($end)
 if ($at -lt 0 -or $stop -lt $at) { throw "THIRD_PARTY_NOTICES.md has no generated section markers" }
 $updated = $current.Substring(0, $at) + $generated + $current.Substring($stop + $end.Length)
 
-# NanaUI's Noto Sans SC licence, from the checkout Cargo.lock names.
-$nanaUi = $sorted | Where-Object { $_.Name -eq "nana-ui" } | Select-Object -First 1
-if (-not $nanaUi) { throw "nana-ui is not a dependency" }
-$oflSource = Join-Path $nanaUi.Dir "assets\fonts\OFL.txt"
-if (-not (Test-Path $oflSource)) { throw "Missing $oflSource" }
+# NanaUI's Noto Sans SC licence, from the checkouts Cargo.lock names. NanaUI
+# moved the font from nana-ui to nana-ui-core; an older pin still has it in the
+# first place.
+$oflSource = $null
+foreach ($name in "nana-ui-core", "nana-ui") {
+    $crate = $sorted | Where-Object { $_.Name -eq $name } | Select-Object -First 1
+    if ($crate) {
+        $candidate = Join-Path $crate.Dir "assets\fonts\OFL.txt"
+        if (Test-Path -LiteralPath $candidate) { $oflSource = $candidate; break }
+    }
+}
+if (-not $oflSource) { throw "Missing assets\fonts\OFL.txt in the nana-ui-core and nana-ui checkouts" }
 $oflText = [System.IO.File]::ReadAllText($oflSource) -replace "`r`n", "`n"
 
 $utf8 = [System.Text.UTF8Encoding]::new($false)

@@ -110,7 +110,7 @@ with the NanaUI toolkit. Copyright 2014-2021 Adobe (http://www.adobe.com/),
 with Reserved Font Name 'Source'. SIL Open Font License 1.1.
 
 Licence text: `NotoSansSC-OFL.txt` (copied from NanaUI's
-`crates/nana-ui/assets/fonts/OFL.txt` at the revision in `Cargo.lock`).
+`crates/nana-ui-core/assets/fonts/OFL.txt` at the revision in `Cargo.lock`).
 
 ## Sounds embedded in NanaType
 
@@ -163,7 +163,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 453 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 471 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -183,7 +183,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - adler2 2.0.1 — <https://github.com/oyvindln/adler2>
 
-### Apache-2.0 (9)
+### Apache-2.0 (10)
 
 - codespan-reporting 0.13.1 — <https://github.com/brendanzab/codespan>
 - cpal 0.18.2 — <https://github.com/RustAudio/cpal>
@@ -191,9 +191,10 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - shiguredo_libvpx 2026.2.0-canary.3 — <https://github.com/shiguredo/libvpx-rs>
 - spirv 0.4.0+sdk-1.4.341.0 — <https://github.com/gfx-rs/rspirv>
 - unicode-linebreak 0.1.5 — <https://github.com/axelf4/unicode-linebreak>
-- winit 0.31.0-beta.2 — <https://github.com/rust-windowing/winit>
-- winit-core 0.31.0-beta.2 — <https://github.com/rust-windowing/winit>
-- winit-win32 0.31.0-beta.2 — <https://github.com/rust-windowing/winit>
+- winit 0.31.0-beta.4 — <https://github.com/rust-windowing/winit>
+- winit-common 0.31.0-beta.4 — <https://github.com/rust-windowing/winit>
+- winit-core 0.31.0-beta.4 — <https://github.com/rust-windowing/winit>
+- winit-win32 0.31.0-beta.4 — <https://github.com/rust-windowing/winit>
 
 ### Apache-2.0 AND ISC (1)
 
@@ -225,11 +226,10 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - rustls 0.23.46 — <https://github.com/rustls/rustls>
 
-### Apache-2.0 OR MIT (283)
+### Apache-2.0 OR MIT (287)
 
-- accesskit 0.25.1 — <https://github.com/AccessKit/accesskit>
-- accesskit_consumer 0.39.1 — <https://github.com/AccessKit/accesskit>
-- accesskit_windows 0.35.1 — <https://github.com/AccessKit/accesskit>
+- accesskit 0.25.2 — <https://github.com/AccessKit/accesskit>
+- accesskit_consumer 0.39.2 — <https://github.com/AccessKit/accesskit>
 - addr2line 0.26.1 — <https://github.com/gimli-rs/addr2line>
 - aead 0.6.1 — <https://github.com/RustCrypto/traits>
 - aes 0.9.3 — <https://github.com/RustCrypto/block-ciphers>
@@ -331,6 +331,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - http 1.5.0 — <https://github.com/hyperium/http>
 - httparse 1.10.1 — <https://github.com/seanmonstar/httparse>
 - hybrid-array 0.4.15 — <https://github.com/RustCrypto/hybrid-array>
+- i_overlay 9.2.0 — <https://github.com/iShape-Rust/iOverlay>
 - idna 1.1.0 — <https://github.com/servo/rust-url>
 - idna_adapter 1.2.2 — <https://github.com/hsivonen/idna_adapter>
 - image 0.25.10 — <https://github.com/image-rs/image>
@@ -362,26 +363,33 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - minimal-lexical 0.2.1 — <https://github.com/Alexhuszagh/minimal-lexical>
 - muda 0.21.2 — <https://github.com/tauri-apps/muda>
 - multiversion_no_op 1.0.0 — <https://github.com/hsivonen/multiversion_no_op>
-- naga 30.0.1 — <https://github.com/gfx-rs/wgpu>
-- naga-types 30.0.1 — <https://github.com/gfx-rs/wgpu>
-- nana-app-icon 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-diagnostics 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-frame-exchange 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-gpu 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-package 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-svg-raster 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-text 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-ui 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-ui-core 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-ui-css 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-ui-input 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-ui-platform 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-ui-runtime 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-ui-scene 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-ui-view-codegen 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-ui-view-macros 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-ui-view-schema 0.1.0 — <https://github.com/sena-nana/NanaUI>
-- nana-window 0.1.0 — <https://github.com/sena-nana/NanaUI>
+- nana-accesskit-windows 0.35.1-nana.1 — <https://github.com/sena-nana/NanaUI>
+- nana-app-icon 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-diagnostics 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-frame-exchange 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-gpu 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-naga 30.0.1-nana.1 — <https://github.com/sena-nana/NanaUI>
+- nana-naga-types 30.0.1-nana.1 — <https://github.com/sena-nana/NanaUI>
+- nana-package 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-svg-raster 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-text 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-ui 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-ui-core 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-ui-css 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-ui-input 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-ui-platform 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-ui-runtime 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-ui-scene 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-ui-view-codegen 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-ui-view-macros 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-ui-view-schema 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
+- nana-wgpu 30.0.1-nana.1 — <https://github.com/sena-nana/NanaUI>
+- nana-wgpu-core 30.0.1-nana.1 — <https://github.com/sena-nana/NanaUI>
+- nana-wgpu-core-deps-windows-linux-android 30.0.1-nana.1 — <https://github.com/sena-nana/NanaUI>
+- nana-wgpu-hal 30.0.1-nana.1 — <https://github.com/sena-nana/NanaUI>
+- nana-wgpu-naga-bridge 30.0.1-nana.1 — <https://github.com/sena-nana/NanaUI>
+- nana-wgpu-types 30.0.1-nana.1 — <https://github.com/sena-nana/NanaUI>
+- nana-window 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
 - notify-types 2.1.0 — <https://github.com/notify-rs/notify>
 - num-bigint 0.5.1 — <https://github.com/rust-num/num-bigint>
 - num-complex 0.4.6 — <https://github.com/rust-num/num-complex>
@@ -485,12 +493,6 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - utf8_iter 1.0.4 — <https://github.com/hsivonen/utf8_iter>
 - uuid 1.26.1 — <https://github.com/uuid-rs/uuid>
 - weezl 0.1.12 — <https://github.com/image-rs/weezl>
-- wgpu 30.0.1 — <https://github.com/gfx-rs/wgpu>
-- wgpu-core 30.0.1 — <https://github.com/gfx-rs/wgpu>
-- wgpu-core-deps-windows-linux-android 30.0.1 — <https://github.com/gfx-rs/wgpu>
-- wgpu-hal 30.0.1 — <https://github.com/gfx-rs/wgpu>
-- wgpu-naga-bridge 30.0.1 — <https://github.com/gfx-rs/wgpu>
-- wgpu-types 30.0.1 — <https://github.com/gfx-rs/wgpu>
 - widestring 1.2.1 — <https://github.com/VoidStarKat/widestring-rs>
 - winapi 0.3.9 — <https://github.com/retep998/winapi-rs>
 - window-vibrancy 0.8.1 — <https://github.com/tauri-apps/tauri-plugin-vibrancy>
@@ -505,23 +507,29 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - windows-registry 0.6.1 — <https://github.com/microsoft/windows-rs>
 - windows-result 0.4.1 — <https://github.com/microsoft/windows-rs>
 - windows-strings 0.5.1 — <https://github.com/microsoft/windows-rs>
+- windows-sys 0.52.0 — <https://github.com/microsoft/windows-rs>
 - windows-sys 0.61.2 — <https://github.com/microsoft/windows-rs>
+- windows-targets 0.52.6 — <https://github.com/microsoft/windows-rs>
 - windows-threading 0.2.1 — <https://github.com/microsoft/windows-rs>
 - windows-version 0.1.7 — <https://github.com/microsoft/windows-rs>
+- windows_x86_64_msvc 0.52.6 — <https://github.com/microsoft/windows-rs>
 - zeno 0.3.3 — <https://github.com/dfrg/zeno>
 - zeroize 1.9.0 — <https://github.com/RustCrypto/utils>
 
-### Apache-2.0 OR MIT OR Zlib (11)
+### Apache-2.0 OR MIT OR Zlib (14)
 
 - bytemuck 1.25.2 — <https://github.com/Lokathor/bytemuck>
 - bytemuck_derive 1.12.1 — <https://github.com/Lokathor/bytemuck>
 - cursor-icon 1.2.0 — <https://github.com/rust-windowing/cursor-icon>
+- dispatch2 0.3.1 — <https://github.com/madsmtm/objc2>
 - glow 0.17.0 — <https://github.com/grovesNL/glow>
 - miniz_oxide 0.8.9 — <https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide>
 - miniz_oxide 0.9.1 — <https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide>
+- objc2-core-foundation 0.3.2 — <https://github.com/madsmtm/objc2>
 - raw-window-handle 0.6.2 — <https://github.com/rust-windowing/raw-window-handle>
 - tinyvec 1.13.2 — <https://github.com/Lokathor/tinyvec>
 - tinyvec_macros 0.1.1 — <https://github.com/Soveu/tinyvec_macros>
+- xkeysym 0.2.1 — <https://github.com/notgull/xkeysym>
 - zune-core 0.5.3 — <https://github.com/etemesi254/zune-image>
 - zune-jpeg 0.5.15 — <https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpeg>
 
@@ -597,12 +605,13 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - rustls-webpki 0.103.15 — <https://github.com/rustls/webpki>
 - untrusted 0.9.0 — <https://github.com/briansmith/untrusted>
 
-### MIT (47)
+### MIT (57)
 
-- bincode 1.3.3 — <https://github.com/servo/bincode>
+- block2 0.6.2 — <https://github.com/madsmtm/objc2>
 - bytes 1.12.1 — <https://github.com/tokio-rs/bytes>
 - color_quant 1.1.0 — <https://github.com/image-rs/color_quant>
 - data-encoding 2.11.1 — <https://github.com/ia0/data-encoding>
+- dlib 0.5.3 — <https://github.com/elinorbgr/dlib>
 - ebml-iterable 0.7.1 — <https://github.com/austinleroy/ebml-iterable>
 - ebml-iterable-specification 0.4.0 — <https://github.com/austinleroy/ebml-iterable>
 - ebml-iterable-specification-derive 0.4.0 — <https://github.com/austinleroy/ebml-iterable>
@@ -613,12 +622,19 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - fontdb 0.24.0 — <https://github.com/RazrFalcon/fontdb>
 - generic-array 0.14.7 — <https://github.com/fizyk20/generic-array>
 - harfrust 0.12.0 — <https://github.com/harfbuzz/harfrust>
+- i_float 5.0.0 — <https://github.com/iShape-Rust/iFloat>
+- i_key_sort 0.12.0 — <https://github.com/iShape-Rust/iKeySort>
+- i_shape 5.0.0 — <https://github.com/iShape-Rust/i_shape>
+- i_tree 0.20.0 — <https://github.com/iShape-Rust/iTree>
 - imagesize 0.15.0 — <https://github.com/Roughsketch/imagesize>
 - libm 0.2.16 — <https://github.com/rust-lang/compiler-builtins>
 - mime_guess 2.0.5 — <https://github.com/abonander/mime_guess>
 - mio 1.2.4 — <https://github.com/tokio-rs/mio>
-- nana-icons-tabler 0.1.0 — <https://github.com/sena-nana/NanaUI>
+- nana-icons-tabler 0.1.0-alpha.1 — <https://github.com/sena-nana/NanaUI>
 - nom 7.1.3 — <https://github.com/Geal/nom>
+- objc2 0.6.4 — <https://github.com/madsmtm/objc2>
+- objc2-encode 4.1.0 — <https://github.com/madsmtm/objc2>
+- objc2-foundation 0.3.2 — <https://github.com/madsmtm/objc2>
 - ordered-float 5.5.0 — <https://github.com/reem/rust-ordered-float>
 - os_info 3.15.0 — <https://github.com/stanislav-tkach/os_info>
 - pico-args 0.5.0 — <https://github.com/RazrFalcon/pico-args>
@@ -643,6 +659,8 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - webview2-com-macros 0.8.1 — <https://github.com/wravery/webview2-rs>
 - webview2-com-sys 0.39.1 — <https://github.com/wravery/webview2-rs>
 - winnow 1.0.4 — <https://github.com/winnow-rs/winnow>
+- x11-dl 2.21.0 — <https://github.com/AltF02/x11-rs>
+- xkbcommon-dl 0.4.2 — <https://github.com/rust-windowing/xkbcommon-dl>
 - xmlwriter 0.1.0 — <https://github.com/RazrFalcon/xmlwriter>
 - zip 9.1.3 — <https://github.com/zip-rs/zip2>
 - zmij 1.0.23 — <https://github.com/dtolnay/zmij>
