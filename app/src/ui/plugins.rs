@@ -79,13 +79,17 @@ fn filter_tabs(ui: Ui) -> AnyView {
             .on(move |_: &SegmentedOptionChosen| ui.packages_filter.set(filter))
             .into_any()
     };
-    widget(SegmentedControl::new().size(ControlSize::Small))
-        .children((
-            tab(PackageFilter::All, "packages-installed"),
-            tab(PackageFilter::Enabled, "packages-enabled"),
-            tab(PackageFilter::Disabled, "packages-disabled"),
-        ))
-        .into_any()
+    widget(
+        SegmentedControl::new()
+            .size(ControlSize::Small)
+            .label(ui.now_t("settings-packages")),
+    )
+    .children((
+        tab(PackageFilter::All, "packages-installed"),
+        tab(PackageFilter::Enabled, "packages-enabled"),
+        tab(PackageFilter::Disabled, "packages-disabled"),
+    ))
+    .into_any()
 }
 
 /// The Packages page's header: the list's tabs, then import a package and
