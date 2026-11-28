@@ -14,7 +14,7 @@ pub const MAX_SKIN_PARAMS: usize = 64;
 const MAX_PARAM_TEXT_BYTES: usize = 256;
 /// The smallest and largest [`SkinOverrides::name_scale`] and
 /// [`SkinOverrides::decor_scale`], and their slider's step.
-pub const SKIN_PART_SCALE: (f64, f64, f64) = (0.25, 4.0, 0.05);
+pub const SKIN_PART_SCALE: (f64, f64, f64) = (0.5, 2.0, 0.05);
 
 /// An output's longest side: no output is larger than 1080p, either way round.
 pub const OUTPUT_MAX_LONG: u32 = 1920;
