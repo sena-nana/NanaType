@@ -37,7 +37,11 @@ jobs:
           toolchain: "1.98"
       - uses: Swatinem/rust-cache@v2
       - name: nana-packager
-        run: cargo install --git https://github.com/sena-nana/NanaUI --rev ${{ env.NANAUI_REV }} nana-packager --locked
+        # The packager is a build tool from NanaUI, whose workspace only parses
+        # with the current stable cargo (`cargo install` loads every member,
+        # and the 1.98 above rejects some of their manifests). NanaType itself
+        # still builds on 1.98.
+        run: rustup run --install stable cargo install --git https://github.com/sena-nana/NanaUI --rev ${{ env.NANAUI_REV }} nana-packager --locked
       - name: Inno Setup
         if: runner.os == 'Windows'
         shell: pwsh
