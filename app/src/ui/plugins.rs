@@ -7,9 +7,12 @@ use crate::{
 };
 use nana_ui::ButtonKind;
 use nana_ui::icons_tabler as ti;
-use nana_ui::runtime::view::{AnyView, IntoView, Signal, dynamic, signal, widget};
+use nana_ui::runtime::view::{
+    AnyView, IntoView, Signal, dynamic, segmented_option, signal, widget,
+};
 use nana_ui::runtime::{
-    Activate, Button, Checkbox, IconButton, Stack, Switch, Text, ToggleChanged,
+    Activate, Button, Checkbox, IconButton, SegmentedControl, SegmentedOptionChosen, Stack, Switch,
+    Text, ToggleChanged,
 };
 use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec, SemanticColorRole};
@@ -40,9 +43,46 @@ pub fn mounted(ui: Ui, slot: Mount) -> AnyView {
     })
 }
 
-/// The Packages page's header actions: import a package, reload them all.
+/// Which installed packages the Packages page lists.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PackageFilter {
+    All,
+    Enabled,
+    Disabled,
+}
+
+impl PackageFilter {
+    fn admits(self, on: bool) -> bool {
+        match self {
+            Self::All => true,
+            Self::Enabled => on,
+            Self::Disabled => !on,
+        }
+    }
+}
+
+/// The installed / enabled / disabled tabs over the package list.
+fn filter_tabs(ui: Ui) -> AnyView {
+    let tab = |filter: PackageFilter, key: &str| {
+        segmented_option(ui.now_t(key))
+            .selected(move || ui.packages_filter.get() == filter)
+            .on(move |_: &SegmentedOptionChosen| ui.packages_filter.set(filter))
+            .into_any()
+    };
+    widget(SegmentedControl::new().size(ControlSize::Small))
+        .children((
+            tab(PackageFilter::All, "packages-installed"),
+            tab(PackageFilter::Enabled, "packages-enabled"),
+            tab(PackageFilter::Disabled, "packages-disabled"),
+        ))
+        .into_any()
+}
+
+/// The Packages page's header: the list's tabs, then import a package and
+/// reload them all.
 pub fn actions(ui: Ui) -> AnyView {
     kit::hstack((
+        filter_tabs(ui),
         kit::tool(
             nana_ui::icons_tabler::REFRESH,
             ui.now_t("packages-refresh"),
@@ -142,7 +182,7 @@ fn package_row(
             if on { Tone::Accent } else { Tone::Neutral },
         ),
         widget(kit::grow_column(gap::HAIR)).children((
-            // A long name is cut before the source badge is.
+            // A long name is cut before the source badge and labels are.
             widget(
                 Stack::row(0.0)
                     .gap_step(gap::step::TIGHT)
@@ -157,23 +197,13 @@ fn package_row(
                     st
                 })),
                 kit::badge(source, source_tone),
-            )),
-            // The id is cut before the labels are.
-            widget(
-                Stack::row(0.0)
-                    .gap_step(gap::step::TIGHT)
-                    .align(AlignSpec::Center)
-                    .width(LengthSpec::Fill)
-                    .with_layout(|l| l.min_width = Some(LengthSpec::Px(0.0))),
-            )
-            .children((
                 capabilities,
-                widget(
-                    Text::new(version)
-                        .style(Type::Caption.one_line())
-                        .color(SemanticColorRole::Muted),
-                ),
             )),
+            widget(
+                Text::new(version)
+                    .style(Type::Caption.one_line())
+                    .color(SemanticColorRole::Muted),
+            ),
         )),
     ));
 
@@ -346,31 +376,31 @@ pub fn settings(ui: Ui) -> AnyView {
                 ui.settings
                     .with(|s| (s.disabled_packages.clone(), s.enabled_plugins.clone())),
                 ui.plugin_errors.get(),
+                ui.packages_filter.get(),
             )
         },
-        move |(rows, (disabled_packages, enabled_plugins), errors)| {
+        move |(rows, (disabled_packages, enabled_plugins), errors, filter)| {
+            if rows.is_empty() {
+                return kit::empty_state::<Msg>(ui.now_t("packages-none"), None);
+            }
             let rows = rows
                 .iter()
-                .map(|row| {
+                .filter_map(|row| {
                     let id = &row.manifest.meta.id;
-                    let view = package_row(
-                        ui,
-                        row,
-                        // On unless switched off; a script also needs its consent.
-                        !disabled_packages.contains(id)
-                            && (!row
-                                .manifest
-                                .capabilities
-                                .contains(&nanatype_theme::PackageCapability::Lua)
-                                || enabled_plugins.contains(id)),
-                        errors.get(id),
-                        open,
-                    );
-                    (view, None)
+                    // On unless switched off; a script also needs its consent.
+                    let on = !disabled_packages.contains(id)
+                        && (!row
+                            .manifest
+                            .capabilities
+                            .contains(&nanatype_theme::PackageCapability::Lua)
+                            || enabled_plugins.contains(id));
+                    filter
+                        .admits(on)
+                        .then(|| (package_row(ui, row, on, errors.get(id), open), None))
                 })
                 .collect::<Vec<_>>();
             if rows.is_empty() {
-                return kit::empty_state::<Msg>(ui.now_t("packages-none"), None);
+                return kit::empty_state::<Msg>(ui.now_t("packages-none-filtered"), None);
             }
             kit::section_titled(None, rows)
         },
@@ -423,8 +453,7 @@ pub fn settings(ui: Ui) -> AnyView {
         widget(Stack::column(0.0))
             .visible(reviewing)
             .children(activation(ui)),
-        widget(Stack::column(0.0).gap_step(gap::step::CONTROL))
-            .children((overline(ui.now_t("packages-installed")), packages)),
+        packages,
         widget(Stack::column(0.0))
             .visible(has_commands)
             .children(commands),
@@ -432,13 +461,6 @@ pub fn settings(ui: Ui) -> AnyView {
             .visible(has_panels)
             .children(mounted(ui, Mount::Panel)),
     ))
-}
-
-/// A section's title, inset like the cards' contents.
-fn overline(text: String) -> AnyView {
-    widget(Stack::row(0.0).padding_xy(gap::TIGHT, 0.0))
-        .children(Type::Overline.view(text))
-        .into_any()
 }
 
 /// [`readable`] in the caption role.

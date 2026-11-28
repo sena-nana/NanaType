@@ -328,6 +328,9 @@ pub struct Ui {
     /// The Skins page shows its skin library, a page under it, instead of
     /// the page itself; navigating to a page closes it.
     pub skins_library: Signal<bool>,
+    /// Which packages the Packages page lists; kept while the user visits
+    /// other pages.
+    pub packages_filter: Signal<plugins::PackageFilter>,
     /// The quick input bar's line, cleared once sent or dismissed.
     pub quick_text: Signal<String>,
     /// Saved history sessions and the one open in the viewer.
@@ -416,6 +419,7 @@ impl Ui {
             input_height: signal(crate::windows::INPUT_SIZE.1),
             skins_grid: signal(true),
             skins_library: signal(false),
+            packages_filter: signal(plugins::PackageFilter::All),
             quick_text: signal(String::new()),
             archive: signal(Arc::new(crate::archive::View::default())),
             backup: signal(Arc::new(crate::app::backup::View::default())),

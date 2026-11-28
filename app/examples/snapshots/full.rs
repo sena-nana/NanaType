@@ -212,6 +212,11 @@ fn settings_pages(scene: &Scene, out: &std::path::Path) {
     let theme = &scene.theme;
     let settings = &scene.settings;
     ui.settings.set(Arc::new(settings.clone()));
+    // The Packages page lists the built-in package, as the app does once
+    // its background listing lands.
+    ui.packages.set(Arc::new(nanatype::plugins::package_rows(
+        &nanatype_theme::SkinRegistry::new(None, env!("CARGO_PKG_VERSION")),
+    )));
     for page in settings::Page::ALL {
         ui.page.set(page);
         shot(
