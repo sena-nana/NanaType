@@ -325,6 +325,9 @@ pub struct Ui {
     /// The skin library shows cards (`true`) or the list; kept while the
     /// user visits other pages.
     pub skins_grid: Signal<bool>,
+    /// The Skins page shows its skin library, a page under it, instead of
+    /// the page itself; navigating to a page closes it.
+    pub skins_library: Signal<bool>,
     /// The quick input bar's line, cleared once sent or dismissed.
     pub quick_text: Signal<String>,
     /// Saved history sessions and the one open in the viewer.
@@ -412,6 +415,7 @@ impl Ui {
             completion_node: node_ref(),
             input_height: signal(crate::windows::INPUT_SIZE.1),
             skins_grid: signal(true),
+            skins_library: signal(false),
             quick_text: signal(String::new()),
             archive: signal(Arc::new(crate::archive::View::default())),
             backup: signal(Arc::new(crate::app::backup::View::default())),

@@ -77,6 +77,7 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
         Page::Assets => assets::assets(ui),
         Page::Speech => speech::settings(ui),
         Page::Hotkeys => hotkeys::hotkeys(ui),
+        Page::Skins if ui.skins_library.get_untracked() => skins::library(ui),
         Page::Skins => skins::skins(ui),
         Page::Playback => playback::playback(ui),
         Page::Windows => windows::windows(ui),
@@ -92,12 +93,29 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
         .into_any()
 }
 
+/// The page under `page` that is open in its place, if one is: its title
+/// key and its back button's label key.
+pub fn subpage(ui: Ui, page: Page) -> Option<(&'static str, &'static str)> {
+    (page == Page::Skins && ui.skins_library.get_untracked())
+        .then_some(("skins-library", "skins-library-back"))
+}
+
+/// Back from the page under `page` to `page` itself.
+pub fn close_subpage(ui: Ui, page: Page) {
+    if page == Page::Skins {
+        ui.skins_library.set(false);
+    }
+}
+
 /// The open page's page-wide actions, shown in its header.
 pub fn actions(ui: Ui, page: Page) -> Option<AnyView> {
     match page {
-        Page::Skins => Some(tool(ui, ti::DOWNLOAD, "skins-import", || {
-            Msg::PickFile(FileTarget::ImportSkin)
-        })),
+        Page::Skins if ui.skins_library.get_untracked() => {
+            Some(tool(ui, ti::DOWNLOAD, "skins-import", || {
+                Msg::PickFile(FileTarget::ImportSkin)
+            }))
+        }
+        Page::Skins => Some(skins::library_button(ui)),
         Page::Packages => Some(crate::ui::plugins::actions(ui)),
         Page::Platforms => Some(tool(ui, ti::MESSAGES, "chat-open-panel", || {
             Msg::Chat(ChatMsg::Show)

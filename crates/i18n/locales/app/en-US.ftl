@@ -281,6 +281,8 @@ playback-device-default = System default
 ## Skins
 skins-active = Current
 skins-library = Skin library
+skins-library-open = Open skin library
+skins-library-back = Back to Skins
 skins-import = Import skin…
 skins-export = Export…
 skins-duplicate = Duplicate to edit

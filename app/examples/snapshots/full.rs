@@ -315,9 +315,22 @@ fn settings_pages(scene: &Scene, out: &std::path::Path) {
         }
         ui.settings.set(Arc::new(settings.clone()));
     }
-    // The skin library as a list (the view switch's other state), in the
-    // window and whole.
+    // The skin library, the page under Skins: as cards whole, then as a
+    // list (the view switch's other state), in the window and whole.
     ui.page.set(settings::Page::Skins);
+    ui.skins_library.set(true);
+    shot(
+        "settings-SkinsLibrary-full",
+        out,
+        920,
+        1700,
+        theme.clone(),
+        |doc, id| {
+            doc.context_mut()
+                .mount_view_root(id, move || settings::settings_window(ui))
+                .unwrap();
+        },
+    );
     ui.skins_grid.set(false);
     for (name, h) in [
         ("settings-Skins-list", 660),
@@ -330,6 +343,7 @@ fn settings_pages(scene: &Scene, out: &std::path::Path) {
         });
     }
     ui.skins_grid.set(true);
+    ui.skins_library.set(false);
 }
 
 /// The input window with nothing typed.

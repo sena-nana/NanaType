@@ -351,8 +351,20 @@ fn sidebar(ui: Ui) -> AnyView {
 }
 
 /// A page's fixed header: its title, its page-wide actions on the right, a
-/// hairline under it.
+/// hairline under it. A page under another (the skin library) leads with a
+/// back button to it.
 fn page_header(ui: Ui, page: Page) -> AnyView {
+    let sub = pages::subpage(ui, page);
+    let title = sub.map_or(page.label_key(), |(title, _)| title);
+    let back = sub.map(|(_, back)| {
+        let label = ui.now_t(back);
+        widget(
+            IconButton::new(ti::ARROW_LEFT, label.clone())
+                .size(ControlSize::Small)
+                .with_tooltip(label),
+        )
+        .on(move |_: &Activate| pages::close_subpage(ui, page))
+    });
     widget(Stack::column(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
         .children((
             widget(
@@ -364,8 +376,9 @@ fn page_header(ui: Ui, page: Page) -> AnyView {
                     .with_layout(|l| l.min_height = Some(LengthSpec::Px(PAGE_HEADER_H))),
             )
             .children((
+                back,
                 widget(crate::ui::kit::grow_column(gap::HAIR))
-                    .children(controls::heading(ui, page.label_key())),
+                    .children(controls::heading(ui, title)),
                 pages::actions(ui, page),
             )),
             crate::ui::kit::rule(),
@@ -397,8 +410,8 @@ pub fn settings_window(ui: Ui) -> impl IntoView {
             dynamic(
                 // A newly opened page starts at its top, regardless of how far
                 // the previous page was scrolled.
-                move || (ui.page.get(), ui.locale.get()),
-                move |(page, _)| {
+                move || (ui.page.get(), ui.locale.get(), ui.skins_library.get()),
+                move |(page, _, _)| {
                     widget(Stack::fill_column(0.0))
                         .children((
                             page_header(ui, *page),

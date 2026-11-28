@@ -278,6 +278,8 @@ playback-device-default = 系統預設
 ## 皮膚
 skins-active = 目前
 skins-library = 皮膚庫
+skins-library-open = 開啟皮膚庫
+skins-library-back = 返回皮膚
 skins-import = 匯入皮膚…
 skins-export = 匯出…
 skins-duplicate = 複製為可編輯

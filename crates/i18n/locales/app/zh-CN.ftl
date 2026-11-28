@@ -278,6 +278,8 @@ playback-device-default = 系统默认
 ## 皮肤
 skins-active = 当前
 skins-library = 皮肤库
+skins-library-open = 打开皮肤库
+skins-library-back = 返回皮肤
 skins-import = 导入皮肤…
 skins-export = 导出…
 skins-duplicate = 复制为可编辑

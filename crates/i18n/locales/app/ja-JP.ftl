@@ -278,6 +278,8 @@ playback-device-default = システムの既定
 ## スキン
 skins-active = 使用中
 skins-library = スキン一覧
+skins-library-open = スキン一覧を開く
+skins-library-back = スキンに戻る
 skins-import = スキンを読み込む…
 skins-export = 書き出す…
 skins-duplicate = 複製して編集

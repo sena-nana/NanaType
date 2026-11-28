@@ -75,6 +75,7 @@ impl App {
 
     pub(super) fn open_settings_page(&mut self, page: crate::ui::settings::Page) {
         self.ui.page.set(page);
+        self.ui.skins_library.set_if_changed(false);
         if page == crate::ui::settings::Page::History {
             self.archive_page_shown();
         }

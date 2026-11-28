@@ -60,7 +60,26 @@ pub(super) fn part_rows(ui: Ui) -> Vec<Row> {
     ]
 }
 
-pub(super) fn skins(ui: Ui) -> AnyView {
+/// The header's "Skin library" capsule: a labelled pill that opens the
+/// library, the page under this one.
+pub(super) fn library_button(ui: Ui) -> AnyView {
+    let mut button = Button::new(ui.now_t("skins-library-open"))
+        .icon(ti::LAYOUT_GRID)
+        .trailing_icon(ti::CHEVRON_RIGHT)
+        .size(ControlSize::Small)
+        .kind(ButtonKind::Subtle);
+    button.style = button
+        .style
+        .radius(RadiusTier::Full)
+        .border(SemanticColorRole::BorderSoft, 1.0);
+    widget(button)
+        .on(move |_: &Activate| ui.skins_library.set(true))
+        .into_any()
+}
+
+/// The skin library, a page under Skins: the preview of the skin picked,
+/// over every skin as cards or a list, with filters.
+pub(super) fn library(ui: Ui) -> AnyView {
     let filter: Signal<Option<String>> = signal(None);
     let previewing: Signal<Option<String>> = signal(None);
     // Cards with thumbnails by default; the list stays for skins whose card
@@ -105,7 +124,6 @@ pub(super) fn skins(ui: Ui) -> AnyView {
             }
         },
     );
-    let fallback = ui.skin.get_untracked();
     widget(Stack::column(0.0).gap_step(gap::step::SECTION))
         .children((
             section(
@@ -115,7 +133,7 @@ pub(super) fn skins(ui: Ui) -> AnyView {
             ),
             section(
                 ui,
-                "skins-library",
+                "",
                 vec![
                     Row::inset(
                         widget(
@@ -127,6 +145,22 @@ pub(super) fn skins(ui: Ui) -> AnyView {
                     // The grid insets itself; list rows run to the card's edge.
                     Row::inset(list),
                 ],
+            ),
+        ))
+        .into_any()
+}
+
+/// The Skins page: the active skin's preview, the user's overrides and the
+/// interface's effects. The library opens from the header.
+pub(super) fn skins(ui: Ui) -> AnyView {
+    let previewing: Signal<Option<String>> = signal(None);
+    let fallback = ui.skin.get_untracked();
+    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
+        .children((
+            section(
+                ui,
+                "skins-preview",
+                vec![block(skin_preview(ui, previewing))],
             ),
             section(
                 ui,
