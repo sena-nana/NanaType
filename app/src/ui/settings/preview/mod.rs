@@ -313,6 +313,75 @@ mod tests {
     }
 
     #[test]
+    fn name_plate_and_ornament_fields_sit_with_the_display_and_edit_this_skins_draft() {
+        let (ui, base) = fixture();
+        let active = ui.settings.get_untracked();
+        let id = "nanatype.night";
+        let doc_id = DocumentId::new(11).unwrap();
+        let mut doc = RuntimeDocument::new(doc_id);
+        let render_base = base.clone();
+        doc.context_mut()
+            .mount_view_root(doc_id, move || {
+                controls(ui, id, render_base, false, Host::Page)
+            })
+            .unwrap();
+        let mut session = RuntimeAgentSession::new(doc, 700, 1600).unwrap();
+        session.flush().unwrap();
+        let find = |session: &mut RuntimeAgentSession, key: &str| {
+            session
+                .accessibility_dump()
+                .into_iter()
+                .filter(|n| n.agent_path.as_deref().is_some_and(|p| p.ends_with(key)))
+                .collect::<Vec<_>>()
+        };
+        // One of each: the display has them, the history does not.
+        for key in [
+            "skin-part-name-visible",
+            "skin-part-name-scale",
+            "skin-part-decor-scale",
+        ] {
+            // A slider and its back-to-default button share the field's path.
+            let mut paths: Vec<_> = find(&mut session, key)
+                .into_iter()
+                .filter_map(|n| n.agent_path)
+                .collect();
+            paths.dedup();
+            assert_eq!(paths.len(), 1, "{key}");
+        }
+        let switch = find(&mut session, "skin-part-name-visible")[0].id;
+        session.click_node(switch).unwrap();
+        session.flush().unwrap();
+        assert_eq!(draft(ui, id).name_visible, Some(false));
+        // Only the draft changes; nothing is saved yet.
+        assert_eq!(ui.settings.get_untracked(), active);
+        change(ui, id, |d| d.name_scale = Some(1.5));
+        click(&mut session, &ui.now_t("skin-edit-save"));
+        let saved = session
+            .document_mut()
+            .context_mut()
+            .take_program_messages()
+            .into_iter()
+            .find_map(|m| m.downcast::<Msg>().ok())
+            .unwrap();
+        let Msg::Skin(SkinMsg::SavePersonalization {
+            id: saved_id,
+            profile,
+        }) = *saved
+        else {
+            panic!("save message");
+        };
+        assert_eq!(saved_id, id);
+        assert_eq!(profile.name_visible, Some(false));
+        assert_eq!(profile.name_scale, Some(1.5));
+        assert_eq!(profile.decor_scale, None);
+        // Reset takes them back to the skin's own.
+        click(&mut session, &ui.now_t("skin-edit-reset"));
+        let d = draft(ui, id);
+        assert_eq!((d.name_visible, d.name_scale), (None, None));
+        assert!(follows_skin(&d));
+    }
+
+    #[test]
     fn the_guide_saves_the_active_draft_on_next_and_undoes_beside_the_picker() {
         let (ui, _) = fixture();
         let id = ui.settings.with_untracked(|s| s.skin.id.clone());

@@ -12,8 +12,8 @@ pub const SKIN_FRAME_RATES: [u32; 2] = [30, 60];
 /// Most params a skin can declare, and so most values one profile keeps.
 pub const MAX_SKIN_PARAMS: usize = 64;
 const MAX_PARAM_TEXT_BYTES: usize = 256;
-/// The smallest and largest [`SkinOverrides::name_scale`] and
-/// [`SkinOverrides::decor_scale`], and their slider's step.
+/// The smallest and largest [`SkinPersonalization::name_scale`] and
+/// [`SkinPersonalization::decor_scale`], and their slider's step.
 pub const SKIN_PART_SCALE: (f64, f64, f64) = (0.5, 2.0, 0.05);
 
 /// An output's longest side: no output is larger than 1080p, either way round.
@@ -95,6 +95,31 @@ pub struct SkinPersonalization {
         deserialize_with = "lenient_params"
     )]
     pub params: BTreeMap<String, ParamValue>,
+    /// `Some(false)` hides the dialogue name plate; `None` leaves it to the skin.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name_visible: Option<bool>,
+    /// The name plate's size as a multiple of the skin's ([`SKIN_PART_SCALE`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name_scale: Option<f32>,
+    /// The dialogue box's ornaments' size as a multiple of the skin's
+    /// ([`SKIN_PART_SCALE`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decor_scale: Option<f32>,
+}
+
+/// Whether `v` is a part scale a profile keeps: in [`SKIN_PART_SCALE`].
+fn part_scale_valid(v: Option<f32>) -> bool {
+    v.is_none_or(|v| {
+        v.is_finite() && (SKIN_PART_SCALE.0 as f32..=SKIN_PART_SCALE.1 as f32).contains(&v)
+    })
+}
+
+/// `scale` within [`SKIN_PART_SCALE`], and `None` at the skin's own size.
+fn sanitize_part_scale(scale: &mut Option<f32>, dirty: &mut bool) {
+    let next = scale
+        .map(|v| finite_or(v, 1.0).clamp(SKIN_PART_SCALE.0 as f32, SKIN_PART_SCALE.1 as f32))
+        .filter(|v| (v - 1.0).abs() > 1e-3);
+    set_if(scale, next, dirty);
 }
 
 fn param_entry_valid(id: &str, value: &ParamValue) -> bool {
@@ -135,6 +160,8 @@ impl SkinPersonalization {
             && self.history.valid()
             && self.params.len() <= MAX_SKIN_PARAMS
             && self.params.iter().all(|(id, v)| param_entry_valid(id, v))
+            && part_scale_valid(self.name_scale)
+            && part_scale_valid(self.decor_scale)
     }
 
     pub(crate) fn sanitize(&mut self) -> bool {
@@ -146,6 +173,8 @@ impl SkinPersonalization {
             self.params.pop_last();
         }
         dirty |= self.params.len() != before;
+        sanitize_part_scale(&mut self.name_scale, &mut dirty);
+        sanitize_part_scale(&mut self.decor_scale, &mut dirty);
         dirty
     }
 }
@@ -162,12 +191,14 @@ pub struct SkinOverrides {
     pub overflow: Option<Overflow>,
     /// In page mode, turn a full page on its own after this many ms.
     pub overflow_auto_ms: Option<u32>,
-    /// `Some(false)` hides the dialogue name plate; `None` leaves it to the skin.
+    /// Legacy: whether the name plate shows, for skins without a profile.
+    /// Each skin's profile keeps its own ([`SkinPersonalization::name_visible`]).
     pub name_visible: Option<bool>,
-    /// The name plate's size as a multiple of the skin's ([`SKIN_PART_SCALE`]).
+    /// Legacy: the name plate's scale, for skins without a profile
+    /// ([`SkinPersonalization::name_scale`]).
     pub name_scale: Option<f32>,
-    /// The dialogue box's ornaments' size as a multiple of the skin's
-    /// ([`SKIN_PART_SCALE`]).
+    /// Legacy: the ornaments' scale, for skins without a profile
+    /// ([`SkinPersonalization::decor_scale`]).
     pub decor_scale: Option<f32>,
 }
 
@@ -217,17 +248,8 @@ impl SkinSettings {
             dirty = true;
         }
         clamp_f32_opt(&mut self.overrides.text_size, 28.0, 8.0, 200.0, &mut dirty);
-        for scale in [
-            &mut self.overrides.name_scale,
-            &mut self.overrides.decor_scale,
-        ] {
-            let next = scale
-                .map(|v| {
-                    finite_or(v, 1.0).clamp(SKIN_PART_SCALE.0 as f32, SKIN_PART_SCALE.1 as f32)
-                })
-                .filter(|v| (v - 1.0).abs() > 1e-3);
-            set_if(scale, next, &mut dirty);
-        }
+        sanitize_part_scale(&mut self.overrides.name_scale, &mut dirty);
+        sanitize_part_scale(&mut self.overrides.decor_scale, &mut dirty);
         for profile in self.personalizations.values_mut() {
             dirty |= profile.sanitize();
         }

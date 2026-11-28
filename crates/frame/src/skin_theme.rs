@@ -54,6 +54,7 @@ pub fn with_overrides(skin: &Skin, o: &SkinOverrides) -> Skin {
         s.dialogue.overflow_auto_ms = o.overflow_auto_ms;
     }
     if let Some(k) = o.name_scale {
+        s.name_scale = Some(k);
         scale_nameplate(&mut s.dialogue.nameplate, k);
     }
     if o.name_visible == Some(false) {
@@ -71,7 +72,8 @@ pub fn with_overrides(skin: &Skin, o: &SkinOverrides) -> Skin {
 
 /// Resolve dialogue layout for `size` via [`Skin::resolve_dialogue`] and apply
 /// user overrides once after layout selection, without cloning the full [`Skin`]
-/// or looping over `responsive.layouts_mut()`.
+/// or looping over `responsive.layouts_mut()`. The name plate's visibility and
+/// scale come from `skin`, which [`personalized`] gave its own skin's values.
 pub fn resolve_dialogue(
     skin: &Skin,
     size: (f32, f32),
@@ -109,10 +111,10 @@ pub fn resolve_dialogue(
     if let Some(c) = o.accent {
         d.continue_.color = c;
     }
-    if o.name_visible == Some(false) {
+    if skin.speaker_decor_hidden {
         d.nameplate.visible = false;
     }
-    if nameplate_from_responsive && let Some(k) = o.name_scale {
+    if nameplate_from_responsive && let Some(k) = skin.name_scale {
         scale_nameplate(&mut d.nameplate, k);
     }
     resolved
@@ -196,10 +198,15 @@ pub fn personalized_with_diagnostics(
 ) -> (Skin, Vec<nanatype_theme::SkinDiagnostic>) {
     let mut overrides = settings.skin.overrides.clone();
     let profile = settings.skin.personalizations.get(id);
-    if profile.is_some() {
+    if let Some(p) = profile {
         overrides.text_color = None;
         overrides.text_size = None;
         overrides.region = None;
+        // The skin's own name plate and ornament settings replace the
+        // legacy ones that held for every skin.
+        overrides.name_visible = p.name_visible;
+        overrides.name_scale = p.name_scale;
+        overrides.decor_scale = p.decor_scale;
     }
     let (resolved, diagnostics) = match profile {
         Some(p) if !base.params.is_empty() => {
@@ -480,6 +487,40 @@ mod tests {
         assert_eq!(custom.dialogue.nameplate, skin.dialogue.nameplate);
         assert_eq!(custom.history.name_size, skin.history.name_size);
         assert_eq!(super::personalized(&skin, &settings, "other"), legacy);
+    }
+
+    #[test]
+    fn each_skin_keeps_its_own_name_plate_and_ornament_settings() {
+        let mut skin = nanatype_theme::Skin::default();
+        skin.dialogue.nameplate.visible = true;
+        let size = skin.dialogue.nameplate.size;
+        let mut settings = nanatype_settings::Settings::default();
+        // Legacy overrides hold for a skin without a profile...
+        settings.skin.overrides.name_visible = Some(false);
+        settings.skin.overrides.name_scale = Some(2.0);
+        let legacy = super::personalized(&skin, &settings, "plain");
+        assert!(!legacy.dialogue.nameplate.visible);
+        assert_eq!(legacy.dialogue.nameplate.size, size * 2.0);
+        // ...and a profile replaces them with its own.
+        settings.skin.personalizations.insert(
+            "mine".into(),
+            nanatype_settings::SkinPersonalization {
+                name_scale: Some(0.5),
+                decor_scale: Some(1.5),
+                ..Default::default()
+            },
+        );
+        let mine = super::personalized(&skin, &settings, "mine");
+        assert!(mine.dialogue.nameplate.visible);
+        assert!(!mine.speaker_decor_hidden);
+        assert_eq!(mine.dialogue.nameplate.size, size * 0.5);
+        assert_eq!(mine.name_scale, Some(0.5));
+        assert_eq!(mine.decor_scale, Some(1.5));
+        // Layout resolution reads the skin, not the legacy overrides.
+        let resolved = super::resolve_dialogue(&mine, (920.0, 220.0), &settings.skin.overrides);
+        assert!(resolved.dialogue.nameplate.visible);
+        let resolved = super::resolve_dialogue(&legacy, (920.0, 220.0), &Default::default());
+        assert!(!resolved.dialogue.nameplate.visible);
     }
 
     use super::*;

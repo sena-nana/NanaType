@@ -37,7 +37,7 @@ pub use skin::{
     SpoutOutput, SurfacePersonalization, fit_output_size, partner_output, partner_output_name,
 };
 
-pub const SETTINGS_SCHEMA: u32 = 10;
+pub const SETTINGS_SCHEMA: u32 = 11;
 /// Raised whenever scripts gain data or host interfaces: 1 granted events and
 /// views, 2 adds declared data reads. Older approvals must be reviewed again.
 pub const PLUGIN_CONSENT_POLICY: u32 = 2;

@@ -8,7 +8,7 @@ use nana_ui::runtime::view::{AnyView, IntoView, dynamic, widget};
 use nana_ui::runtime::{
     Activate, Button, ColorChanged, ColorField, Icon, IconButton, NumberChanged, NumberInput,
     RangeField, RangeInput, RangeMarker, Select, SelectChanged, SelectOption, SizeField,
-    SizeFieldChanged, SizePreset, Stack,
+    SizeFieldChanged, SizePreset, Stack, Switch, ToggleChanged,
 };
 use nana_ui_core::ControlSize;
 use nana_ui_core::{AlignSpec, LengthSpec};
@@ -384,6 +384,107 @@ fn pane_fields(ui: Ui, id: &str, base: &Skin, history: bool) -> AnyView {
         color_field(ui, id, history, text.color),
         line_slider(ui, id, history, text.line_height),
         resolution_field(ui, id, history, default_size(base, history)),
+        (!history).then(|| part_fields(ui, id)),
+    ))
+    .into_any()
+}
+
+/// Whether the dialogue name plate shows, and the name plate's and the box
+/// ornaments' scale: this skin's own, kept in the draft with the fields above.
+fn part_fields(ui: Ui, id: &str) -> AnyView {
+    let read_id = id.to_owned();
+    let write_id = id.to_owned();
+    let shown = move || draft(ui, &read_id).name_visible != Some(false);
+    widget(
+        Stack::column(0.0)
+            .gap_step(gap::step::TIGHT)
+            .width(LengthSpec::Fill),
+    )
+    .children((
+        kit::dense_row(
+            ui.now_t("skins-override-name-visible"),
+            widget(Switch::new("", shown()))
+                .key("skin-part-name-visible")
+                .bind(move |s: &mut Switch| {
+                    let v = shown();
+                    if s.checked != v {
+                        s.checked = v;
+                    }
+                })
+                .on(move |e: &ToggleChanged| {
+                    let v = e.checked;
+                    change(ui, &write_id, |d| d.name_visible = (!v).then_some(false));
+                }),
+        ),
+        part_scale_slider(
+            ui,
+            id,
+            "skins-override-name-scale",
+            "skin-part-name-scale",
+            |d| d.name_scale,
+            |d, v| d.name_scale = v,
+        ),
+        part_scale_slider(
+            ui,
+            id,
+            "skins-override-decor-scale",
+            "skin-part-decor-scale",
+            |d| d.decor_scale,
+            |d, v| d.decor_scale = v,
+        ),
+    ))
+    .into_any()
+}
+
+/// A part's scale across [`nanatype_settings::SKIN_PART_SCALE`], laid out
+/// like the line height: a slider across the row with its reading in the
+/// thumb. The skin's own size leaves the draft empty.
+fn part_scale_slider(
+    ui: Ui,
+    id: &str,
+    label_key: &str,
+    key: &str,
+    get: fn(&Draft) -> Option<f32>,
+    set: fn(&mut Draft, Option<f32>),
+) -> AnyView {
+    let read_id = id.to_owned();
+    let write_id = id.to_owned();
+    let (min, max, step) = nanatype_settings::SKIN_PART_SCALE;
+    let value = move || f64::from(get(&draft(ui, &read_id)).unwrap_or(1.0)).clamp(min, max);
+    let mut range = crate::ui::settings::controls::compact_thumb(
+        RangeField::new(value(), min, max, step)
+            .value_thumb(true)
+            .markers(vec![RangeMarker::new(1.0, "")])
+            .unit("×")
+            .default_value(Some(1.0))
+            .label(ui.now_t(label_key))
+            .show_label(false),
+    );
+    let l = Arc::make_mut(&mut range.style.layout);
+    l.flex_grow = Some(1.0);
+    l.min_width = Some(LengthSpec::Px(0.0));
+    widget(
+        Stack::row(0.0)
+            .gap_step(gap::step::GROUP)
+            .align(AlignSpec::Center)
+            .width(LengthSpec::Fill)
+            .padding_xy(0.0, gap::HAIR),
+    )
+    .children((
+        kit::Type::Caption.view(ui.now_t(label_key)),
+        widget(range)
+            .key(key.to_owned())
+            .bind(move |r: &mut RangeField| {
+                let v = value();
+                if (r.value - v).abs() > f64::EPSILON {
+                    r.value = v;
+                }
+            })
+            .on(move |e: &RangeInput| {
+                let v = ((e.value / step).round() * step).clamp(min, max);
+                let kept = ((v - 1.0).abs() > 1e-3).then_some(v as f32);
+                change(ui, &write_id, |d| set(d, kept));
+            }),
     ))
     .into_any()
 }
@@ -479,6 +580,7 @@ pub(in crate::ui::settings) fn guide_tools(ui: Ui) -> AnyView {
                         };
                     }
                     d.params = Default::default();
+                    clear_parts(d);
                 })
             }),
         widget(action(ui, ti::ARROW_BACK_UP, "skin-edit-discard"))
@@ -508,7 +610,19 @@ pub(super) fn follows_skin(d: &Draft) -> bool {
             ..p.clone()
         } == Pane::default()
     };
-    blank(&d.display) && blank(&d.history) && d.params == Default::default()
+    blank(&d.display)
+        && blank(&d.history)
+        && d.params == Default::default()
+        && d.name_visible.is_none()
+        && d.name_scale.is_none()
+        && d.decor_scale.is_none()
+}
+
+/// The name plate and ornaments back to the skin's own.
+fn clear_parts(d: &mut Draft) {
+    d.name_visible = None;
+    d.name_scale = None;
+    d.decor_scale = None;
 }
 
 /// What the guide's Next saves: the active skin's unsaved fields, `None`
@@ -662,6 +776,7 @@ pub(super) fn controls(
                         d.display = Pane::default();
                         d.history = Pane::default();
                         d.params = Default::default();
+                        clear_parts(d);
                     })
                 }),
                 widget(action(ui, ti::ARROW_BACK_UP, "skin-edit-discard")).on(

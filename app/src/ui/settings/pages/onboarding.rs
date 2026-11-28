@@ -212,8 +212,7 @@ pub(super) fn onboard_step(ui: Ui, n: u8) -> AnyView {
             ),
         ]
         .into_iter()
-        // The name plate switch and the part scales, as the Skins page has them.
-        .chain(super::skins::part_rows(ui))
+        // The name plate and part scales sit in the preview's display group.
         .chain([Row::inset(block(crate::ui::settings::preview::guide_view(
             ui,
         )))])

@@ -1847,7 +1847,7 @@ fn v9_to_v10_migration_retires_dead_fields_and_moves_chrome() {
         }
     });
     assert_eq!(migrate(&mut value), Ok(9));
-    assert_eq!(value["schema"], 10);
+    assert_eq!(value["schema"], SETTINGS_SCHEMA);
     assert!(value["skin"].get("chrome").is_none());
     assert_eq!(value["accessibility"]["chrome"], "dark");
     assert!(value["output"].get("peer_display").is_none());
@@ -1861,4 +1861,54 @@ fn v9_to_v10_migration_retires_dead_fields_and_moves_chrome() {
     assert_eq!(settings.output.partners[0].name, "LegacySeat");
     assert!(!settings.integrations.chat.quote_on_display);
     assert_eq!(settings.integrations.comet.port, COMET_PORT);
+}
+
+#[test]
+fn v10_to_v11_gives_each_saved_profile_the_name_plate_and_ornament_overrides() {
+    let mut value = serde_json::json!({
+        "schema": 10,
+        "skin": {
+            "overrides": { "name_visible": false, "name_scale": 1.5, "decor_scale": null },
+            "personalizations": {
+                "nanatype.halo": { "display": { "text_size": 40.0 } },
+                "nanatype.night": { "name_scale": 0.75 }
+            }
+        }
+    });
+    assert_eq!(migrate(&mut value), Ok(10));
+    assert_eq!(value["schema"], SETTINGS_SCHEMA);
+    let mut settings: Settings = serde_json::from_value(value).unwrap();
+    assert!(!settings.sanitize());
+    let halo = &settings.skin.personalizations["nanatype.halo"];
+    assert_eq!(halo.name_visible, Some(false));
+    assert_eq!(halo.name_scale, Some(1.5));
+    assert_eq!(halo.decor_scale, None);
+    assert_eq!(halo.display.text_size, Some(40.0));
+    // A profile's own value stays.
+    let night = &settings.skin.personalizations["nanatype.night"];
+    assert_eq!(night.name_visible, Some(false));
+    assert_eq!(night.name_scale, Some(0.75));
+    // Skins without a profile keep reading the overrides.
+    assert_eq!(settings.skin.overrides.name_visible, Some(false));
+    assert_eq!(settings.skin.overrides.name_scale, Some(1.5));
+}
+
+#[test]
+fn profile_part_scales_are_kept_in_range_and_dropped_at_the_skins_size() {
+    let mut s = Settings::default();
+    let mut p = SkinPersonalization {
+        name_scale: Some(9.0),
+        decor_scale: Some(1.0),
+        ..Default::default()
+    };
+    assert!(!p.valid());
+    s.skin.personalizations.insert("test".into(), p.clone());
+    assert!(s.sanitize());
+    p = s.skin.personalizations["test"].clone();
+    assert!(p.valid());
+    assert_eq!(p.name_scale, Some(SKIN_PART_SCALE.1 as f32));
+    assert_eq!(p.decor_scale, None);
+    // Unset parts are not written out.
+    let json = serde_json::to_value(SkinPersonalization::default()).unwrap();
+    assert!(json.get("name_visible").is_none());
 }

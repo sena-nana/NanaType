@@ -84,6 +84,10 @@ pub struct Draft {
     pub display: Pane,
     pub history: Pane,
     pub params: ParamDraft,
+    /// The name plate and ornament settings, as the profile keeps them.
+    pub name_visible: Option<bool>,
+    pub name_scale: Option<f32>,
+    pub decor_scale: Option<f32>,
 }
 
 /// Unsaved param values. `values` holds the last valid value of each param
@@ -198,6 +202,9 @@ impl Draft {
                     ..Default::default()
                 },
                 params: Default::default(),
+                name_visible: settings.skin.overrides.name_visible,
+                name_scale: settings.skin.overrides.name_scale,
+                decor_scale: settings.skin.overrides.decor_scale,
             });
         Self {
             display: Pane::from_saved(&p.display, ui.now_t("skin-edit-sample")),
@@ -206,6 +213,9 @@ impl Draft {
                 values: p.params,
                 raw: Default::default(),
             },
+            name_visible: p.name_visible,
+            name_scale: p.name_scale,
+            decor_scale: p.decor_scale,
         }
     }
 
@@ -239,6 +249,9 @@ impl Draft {
                 nanatype_theme::retain_valid_params(base, &mut values);
                 values
             },
+            name_visible: self.name_visible,
+            name_scale: self.name_scale,
+            decor_scale: self.decor_scale,
         })
     }
 }

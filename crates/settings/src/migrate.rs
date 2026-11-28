@@ -184,7 +184,42 @@ pub fn migrate(value: &mut Value) -> Result<u32, MigrateError> {
         v9_to_v10(obj);
         obj.insert("schema".into(), json!(10));
     }
+    if from < 11 {
+        v10_to_v11(obj);
+        obj.insert("schema".into(), json!(11));
+    }
     Ok(from)
+}
+
+/// The name plate's visibility and scale and the ornaments' scale moved from
+/// the overrides, which held for every skin, into each skin's profile. Every
+/// profile saved so far takes the values it was drawn with; skins without a
+/// profile keep reading the overrides until one is saved.
+fn v10_to_v11(obj: &mut Map<String, Value>) {
+    let Some(skin) = obj.get_mut("skin").and_then(Value::as_object_mut) else {
+        return;
+    };
+    let parts: Vec<(&str, Value)> = ["name_visible", "name_scale", "decor_scale"]
+        .into_iter()
+        .filter_map(|key| {
+            let v = skin.get("overrides")?.get(key)?;
+            (!v.is_null()).then(|| (key, v.clone()))
+        })
+        .collect();
+    if parts.is_empty() {
+        return;
+    }
+    let Some(profiles) = skin
+        .get_mut("personalizations")
+        .and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+    for profile in profiles.values_mut().filter_map(Value::as_object_mut) {
+        for (key, v) in &parts {
+            profile.entry(*key).or_insert_with(|| v.clone());
+        }
+    }
 }
 
 fn v9_to_v10(obj: &mut Map<String, Value>) {

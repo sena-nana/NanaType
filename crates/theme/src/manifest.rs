@@ -1893,6 +1893,10 @@ pub struct Skin {
     /// from the window; `None` is 1.
     #[serde(skip)]
     pub decor_scale: Option<f32>,
+    /// The user's name plate scale, for a name plate the responsive layout
+    /// replaces; `None` is 1.
+    #[serde(skip)]
+    pub name_scale: Option<f32>,
     /// The user hid the name plate: ornaments shown only with a speaker
     /// ([`DecorWhen::Speaker`]) go with it.
     #[serde(skip)]

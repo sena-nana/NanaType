@@ -202,9 +202,19 @@ impl App {
             ch.insert("accent".into(), c.to_hex().into());
             over.insert("chrome".into(), ch.into());
         }
+        // The overrides are cleared below, so legacy name plate and ornament
+        // settings go with the copy in its profile.
+        let mut profile = profile.or_else(|| {
+            let p = nanatype_settings::SkinPersonalization {
+                name_visible: o.name_visible,
+                name_scale: o.name_scale,
+                decor_scale: o.decor_scale,
+                ..Default::default()
+            };
+            (p != Default::default()).then_some(p)
+        });
         // Param values become the copy's defaults, so the copy carries the
         // look on its own and its profile starts without them.
-        let mut profile = profile;
         if let Some(p) = profile.as_mut().filter(|p| !p.params.is_empty()) {
             let mut params = TomlTable::new();
             for (key, value) in std::mem::take(&mut p.params) {
