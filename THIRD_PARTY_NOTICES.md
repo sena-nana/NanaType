@@ -167,7 +167,7 @@ which NanaUI uses to compile its DirectX 12 shaders.
 
 ## Rust crates
 
-The 473 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
+The 470 crates below are compiled into `nanatype.exe` (Windows, `x86_64-pc-windows-msvc`), as
 locked in `Cargo.lock`; NanaType's own crates are left out. Each crate's
 licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt`.
 
@@ -230,7 +230,7 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 
 - rustls 0.23.46 — <https://github.com/rustls/rustls>
 
-### Apache-2.0 OR MIT (287)
+### Apache-2.0 OR MIT (284)
 
 - accesskit 0.25.2 — <https://github.com/AccessKit/accesskit>
 - accesskit_consumer 0.39.2 — <https://github.com/AccessKit/accesskit>
@@ -511,12 +511,9 @@ licence files ship in the `rust-crates.txt` section of `THIRD_PARTY_LICENSES.txt
 - windows-registry 0.6.1 — <https://github.com/microsoft/windows-rs>
 - windows-result 0.4.1 — <https://github.com/microsoft/windows-rs>
 - windows-strings 0.5.1 — <https://github.com/microsoft/windows-rs>
-- windows-sys 0.52.0 — <https://github.com/microsoft/windows-rs>
 - windows-sys 0.61.2 — <https://github.com/microsoft/windows-rs>
-- windows-targets 0.52.6 — <https://github.com/microsoft/windows-rs>
 - windows-threading 0.2.1 — <https://github.com/microsoft/windows-rs>
 - windows-version 0.1.7 — <https://github.com/microsoft/windows-rs>
-- windows_x86_64_msvc 0.52.6 — <https://github.com/microsoft/windows-rs>
 - zeno 0.3.3 — <https://github.com/dfrg/zeno>
 - zeroize 1.9.0 — <https://github.com/RustCrypto/utils>
 
