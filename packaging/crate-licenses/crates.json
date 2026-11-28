@@ -1,0 +1,162 @@
+{
+  "block2": {
+    "upstream": [
+      "objc2-LICENSE.md",
+      "objc2-LICENSE-MIT.txt"
+    ]
+  },
+  "ebml-iterable-specification": {
+    "upstream": [
+      "ebml-iterable-LICENSE.txt"
+    ]
+  },
+  "ebml-iterable-specification-derive": {
+    "upstream": [
+      "ebml-iterable-LICENSE.txt"
+    ]
+  },
+  "i_key_sort": {
+    "upstream": [
+      "iKeySort-LICENSE.txt"
+    ]
+  },
+  "nana-icons-tabler": {
+    "crate": [
+      "../../LICENSE-MIT"
+    ],
+    "upstream": [
+      "tabler-icons-LICENSE.txt"
+    ]
+  },
+  "nanalive-spout-sys": {
+    "crate": [
+      "vendor/Spout2/LICENSE",
+      "vendor/Spout2/SPOUTSDK/licence.txt",
+      "vendor/Spout2/SPOUTSDK/SpoutLibrary/licence.txt"
+    ]
+  },
+  "objc-sys": {
+    "upstream": [
+      "objc2-LICENSE.md",
+      "objc2-LICENSE-MIT.txt"
+    ]
+  },
+  "objc2": {
+    "upstream": [
+      "objc2-LICENSE.md",
+      "objc2-LICENSE-MIT.txt"
+    ]
+  },
+  "objc2-app-kit": {
+    "upstream": [
+      "objc2-LICENSE.md",
+      "objc2-LICENSE-MIT.txt"
+    ]
+  },
+  "objc2-core-data": {
+    "upstream": [
+      "objc2-LICENSE.md",
+      "objc2-LICENSE-MIT.txt"
+    ]
+  },
+  "objc2-core-image": {
+    "upstream": [
+      "objc2-LICENSE.md",
+      "objc2-LICENSE-MIT.txt"
+    ]
+  },
+  "objc2-encode": {
+    "upstream": [
+      "objc2-LICENSE.md",
+      "objc2-LICENSE-MIT.txt"
+    ]
+  },
+  "objc2-foundation": {
+    "upstream": [
+      "objc2-LICENSE.md",
+      "objc2-LICENSE-MIT.txt"
+    ]
+  },
+  "objc2-metal": {
+    "upstream": [
+      "objc2-LICENSE.md",
+      "objc2-LICENSE-MIT.txt"
+    ]
+  },
+  "objc2-quartz-core": {
+    "upstream": [
+      "objc2-LICENSE.md",
+      "objc2-LICENSE-MIT.txt"
+    ]
+  },
+  "realfft": {
+    "upstream": [
+      "realfft-LICENSE.txt"
+    ]
+  },
+  "symphonia": {
+    "upstream": [
+      "Symphonia-LICENSE.txt"
+    ]
+  },
+  "symphonia-bundle-flac": {
+    "upstream": [
+      "Symphonia-LICENSE.txt"
+    ]
+  },
+  "symphonia-bundle-mp3": {
+    "upstream": [
+      "Symphonia-LICENSE.txt"
+    ]
+  },
+  "symphonia-codec-pcm": {
+    "upstream": [
+      "Symphonia-LICENSE.txt"
+    ]
+  },
+  "symphonia-codec-vorbis": {
+    "upstream": [
+      "Symphonia-LICENSE.txt"
+    ]
+  },
+  "symphonia-core": {
+    "upstream": [
+      "Symphonia-LICENSE.txt"
+    ]
+  },
+  "symphonia-format-ogg": {
+    "upstream": [
+      "Symphonia-LICENSE.txt"
+    ]
+  },
+  "symphonia-format-riff": {
+    "upstream": [
+      "Symphonia-LICENSE.txt"
+    ]
+  },
+  "symphonia-metadata": {
+    "upstream": [
+      "Symphonia-LICENSE.txt"
+    ]
+  },
+  "symphonia-utils-xiph": {
+    "upstream": [
+      "Symphonia-LICENSE.txt"
+    ]
+  },
+  "webview2-com": {
+    "upstream": [
+      "webview2-rs-LICENSE.txt"
+    ]
+  },
+  "webview2-com-macros": {
+    "upstream": [
+      "webview2-rs-LICENSE.txt"
+    ]
+  },
+  "webview2-com-sys": {
+    "upstream": [
+      "webview2-rs-LICENSE.txt"
+    ]
+  }
+}

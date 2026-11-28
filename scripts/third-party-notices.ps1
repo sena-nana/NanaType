@@ -8,7 +8,9 @@
 #                                                   # licence or a file is stale
 #   pwsh scripts/third-party-notices.ps1 -Texts <dir>
 #                                                   # also write <dir>/rust-crates.txt:
-#                                                   # each crate's own licence files
+#                                                   # each crate's own licence files,
+#                                                   # plus packaging/crate-licenses;
+#                                                   # fails if a crate has no text
 #   ... -Texts <dir> -Package nanatype-editor       # the same for NanaType Editor
 #
 # THIRD_PARTY_NOTICES.md always lists nanatype.exe's crates; NanaType Editor
@@ -190,21 +192,47 @@ if ($Texts) {
         if ($r -eq 0) { $r = $ordinal.Compare($a.Version, $b.Version) }
         $r
     })
+    # Texts a package leaves out (packaging/crate-licenses/README.md).
+    $extraDir = Join-Path $root "packaging\crate-licenses"
+    $extra = Get-Content -Raw -LiteralPath (Join-Path $extraDir "crates.json") | ConvertFrom-Json -AsHashtable
+    # A licence term that needs no text of the crate's own.
+    $textFree = @("Apache-2.0", "Apache-2.0 WITH LLVM-exception", "BSL-1.0", "Unlicense", "CC0-1.0")
+    $gaps = [System.Collections.Generic.List[string]]::new()
     foreach ($c in $byName) {
-        $files = Get-ChildItem -LiteralPath $c.Dir -File |
-            Where-Object { $_.Name -match '^(LICEN[CS]E|COPYING|COPYRIGHT|NOTICE|UNLICENSE)' } |
-            Sort-Object -Property { [string]::Join(',', [int[]][char[]]$_.Name) }
+        $files = @(Get-ChildItem -LiteralPath $c.Dir -File |
+            Where-Object { $_.Name -match '^(LICEN[CS]E|COPYING|COPYRIGHT|NOTICE|UNLICENSE|THIRD_PARTY_NOTICES)' } |
+            Sort-Object -Property { [string]::Join(',', [int[]][char[]]$_.Name) } |
+            ForEach-Object { [pscustomobject]@{ Label = $_.Name; Path = $_.FullName } })
+        if ($extra.ContainsKey($c.Name)) {
+            $more = @(foreach ($rel in @($extra[$c.Name]["crate"] | Where-Object { $_ })) {
+                [pscustomobject]@{ Label = $rel; Path = Join-Path $c.Dir $rel }
+            }) + @(foreach ($rel in @($extra[$c.Name]["upstream"] | Where-Object { $_ })) {
+                [pscustomobject]@{ Label = "packaging/crate-licenses/$rel"; Path = Join-Path $extraDir $rel }
+            })
+            foreach ($f in $more) {
+                if (-not (Test-Path -LiteralPath $f.Path -PathType Leaf)) {
+                    throw "packaging/crate-licenses/crates.json names a missing file for $($c.Name) $($c.Version): $($f.Label)"
+                }
+            }
+            $files += $more
+        }
         if (-not $files) {
+            if (-not ($c.License -split " OR " | Where-Object { $textFree -ccontains $_.Trim() })) {
+                $gaps.Add("$($c.Name) $($c.Version) ($($c.License))")
+            }
             $key = "(no licence file in the package; licence expression: $($c.License))"
             if (-not $byText.Contains($key)) { $byText[$key] = [System.Collections.Generic.List[string]]::new() }
             $byText[$key].Add("$($c.Name) $($c.Version)")
             continue
         }
         foreach ($f in $files) {
-            $text = ([System.IO.File]::ReadAllText($f.FullName) -replace "`r`n", "`n").Trim()
+            $text = ([System.IO.File]::ReadAllText($f.Path) -replace "`r`n", "`n").Trim()
             if (-not $byText.Contains($text)) { $byText[$text] = [System.Collections.Generic.List[string]]::new() }
-            $byText[$text].Add("$($c.Name) $($c.Version) ($($f.Name))")
+            $byText[$text].Add("$($c.Name) $($c.Version) ($($f.Label))")
         }
+    }
+    if ($gaps.Count -gt 0) {
+        throw "No licence text for: $($gaps -join ', '). Add it to packaging/crate-licenses/crates.json"
     }
     $out = [System.Collections.Generic.List[string]]::new()
     $product = if ($Package -eq "nanatype") { "NanaType" } else { "NanaType Editor" }

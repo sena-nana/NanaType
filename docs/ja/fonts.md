@@ -81,7 +81,7 @@ OFL 1.1 第 2 条は、すべての複製に著作権表示とライセンス全
 
 - `crates/theme/fonts/<名前>.LICENSE.txt`：上流のライセンスをそのままコピーしたもの（ビルドで必須）。フォントと一緒にアプリに組み込まれます（`BuiltinFont::license`）。
 - **情報ページ**：「オープンソースフォント」の行のトグルを開くとスクロールできるパネルが展開し、今回のビルドに埋め込まれたフォントを 1 つずつ一覧します。ファミリー名、作者、バージョン、ライセンス名とライセンス全文です（どれも埋め込んだフォントとライセンスから読み取ります。フォントなしのビルドではこの行は表示されません）。
-- **インストーラー**：`packaging/nanatype.iss` が `crates/theme/fonts/*.LICENSE.txt`、`packaging/licenses/`（NanaUI 同梱の Noto Sans SC 用の `NotoSansSC-OFL.txt`）、リポジトリ直下の `THIRD_PARTY_NOTICES.md`、パッケージ作成時に生成する `rust-crates.txt`（各 Rust 依存クレート自身のライセンスファイル）を `{app}\licenses\` にインストールします。`scripts/package.ps1 -Portable` の圧縮ファイルにも同じ `licenses/` フォルダーが入っています。
+- **インストーラー**：`packaging/nanatype.iss` が `crates/theme/fonts/*.LICENSE.txt`、`packaging/licenses/`（NanaUI 同梱の Noto Sans SC 用の `NotoSansSC-OFL.txt`）、リポジトリ直下の `THIRD_PARTY_NOTICES.md`、パッケージ作成時に生成する `rust-crates.txt`（各 Rust 依存クレート自身のライセンスファイルと、パッケージに含まれないテキストを補う `packaging/crate-licenses/`）を `{app}\licenses\` にインストールします。`scripts/package.ps1 -Portable` の圧縮ファイルにも同じ `licenses/` フォルダーが入っています。
 - リポジトリ直下の [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) にクレジットをまとめています。フォント、`dxcompiler.dll`、すべての Rust 依存クレートです（後者は `pwsh scripts/third-party-notices.ps1` が `cargo metadata --offline` から生成し、CI は `-Check` で内容が古くなっていないか、各依存にライセンス表記があるかを確認します）。
 
 ## フォントを追加する手順
