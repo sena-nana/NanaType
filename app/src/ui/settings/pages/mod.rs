@@ -16,6 +16,7 @@ macro_rules! toggle_row {
 
 mod about;
 mod assets;
+mod chat_panel;
 mod general;
 mod history;
 mod hotkeys;
@@ -76,6 +77,7 @@ pub fn page(ui: Ui, page: Page) -> AnyView {
         Page::Characters => general::characters_page(ui),
         Page::Assets => assets::assets(ui),
         Page::Speech => speech::settings(ui),
+        Page::ChatPanel => chat_panel::chat_panel(ui),
         Page::Hotkeys => hotkeys::hotkeys(ui),
         Page::Skins if ui.skins_library.get_untracked() => skins::library(ui),
         Page::Skins => skins::skins(ui),
@@ -117,7 +119,8 @@ pub fn actions(ui: Ui, page: Page) -> Option<AnyView> {
         }
         Page::Skins => Some(skins::library_button(ui)),
         Page::Packages => Some(crate::ui::plugins::actions(ui)),
-        Page::Platforms => Some(tool(ui, ti::MESSAGES, "chat-open-panel", || {
+        Page::Platforms => Some(platforms::tabs(ui)),
+        Page::ChatPanel => Some(tool(ui, ti::MESSAGES, "chat-open-panel", || {
             Msg::Chat(ChatMsg::Show)
         })),
         Page::Output => Some(tool(ui, ti::PLAYER_PLAY, "output-sample", || {

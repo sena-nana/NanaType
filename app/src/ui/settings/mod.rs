@@ -57,6 +57,7 @@ pub enum Page {
     Characters,
     Assets,
     Speech,
+    ChatPanel,
     Hotkeys,
     Skins,
     Playback,
@@ -71,13 +72,14 @@ pub enum Page {
 
 impl Page {
     /// Every page, in sidebar order.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 17] = [
         Self::General,
         Self::Profiles,
         Self::Input,
         Self::Characters,
         Self::Assets,
         Self::Speech,
+        Self::ChatPanel,
         Self::Hotkeys,
         Self::Skins,
         Self::Playback,
@@ -98,6 +100,7 @@ impl Page {
             Self::Characters => "settings-characters",
             Self::Assets => "settings-assets",
             Self::Speech => "settings-voice",
+            Self::ChatPanel => "settings-chat-panel",
             Self::Hotkeys => "settings-hotkeys",
             Self::Skins => "settings-skins",
             Self::Playback => "settings-playback",
@@ -123,6 +126,7 @@ impl Page {
             Self::Characters => ti::USER_CIRCLE,
             Self::Assets => ti::STICKER,
             Self::Speech => ti::MICROPHONE,
+            Self::ChatPanel => ti::MESSAGE_2,
             Self::Hotkeys => ti::KEYBOARD,
             Self::Skins => ti::PALETTE,
             Self::Playback => ti::PLAYER_PLAY,
@@ -148,6 +152,7 @@ const GROUPS: &[(&str, &[Page])] = &[
             Page::Characters,
             Page::Assets,
             Page::Speech,
+            Page::ChatPanel,
             Page::Hotkeys,
         ],
     ),

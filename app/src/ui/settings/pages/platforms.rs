@@ -1,5 +1,5 @@
-//! The live platforms: one page, a segment per platform, and the chat
-//! panel's settings that every platform shares.
+//! The live platforms: one page, a segment per platform. The platform
+//! switch sits in the page header.
 
 use super::*;
 use crate::msg::WindowMsg;
@@ -8,8 +8,8 @@ use crate::ui::sources::PlatformTab;
 use nana_ui::runtime::view::segmented_option;
 use nana_ui::runtime::{SegmentedControl, SegmentedOptionChosen};
 
-/// The platform switch.
-fn tabs(ui: Ui) -> AnyView {
+/// The platform switch, shown in the page header.
+pub(super) fn tabs(ui: Ui) -> AnyView {
     let options: Vec<AnyView> = PlatformTab::ALL
         .iter()
         .copied()
@@ -22,92 +22,19 @@ fn tabs(ui: Ui) -> AnyView {
                 .into_any()
         })
         .collect();
-    // One source connects at a time: turning one on turns the others off.
-    let note = widget(
-        Text::new(ui.now_t("settings-platforms-one-source"))
-            .style(crate::ui::kit::Type::Small.style())
-            .color(SemanticColorRole::Muted),
-    );
     widget(
-        Stack::row(0.0)
-            .gap_step(gap::step::TIGHT)
-            .align(nana_ui_core::AlignSpec::Center)
-            .wrap(true),
+        SegmentedControl::new()
+            .size(ControlSize::Small)
+            .label(ui.now_t("settings-platforms")),
     )
-    .children((
-        widget(
-            SegmentedControl::new()
-                .size(ControlSize::Small)
-                .label(ui.now_t("settings-platforms")),
-        )
-        .children(options),
-        note,
-    ))
+    .children(options)
     .into_any()
 }
 
-/// How the chat panel reads, whichever platforms feed it: its style, which
-/// kinds of message it lists, and quoting the replied-to message on the box.
-/// (The settings are shared by all chat sources.)
-fn panel(ui: Ui) -> AnyView {
-    section(
-        ui,
-        "chat-panel",
-        vec![
-            row(
-                ui,
-                "chat-panel-style",
-                None,
-                crate::ui::settings::chat_panel_style(ui),
-            ),
-            row(
-                ui,
-                "chat-filter-kinds",
-                None,
-                chip_toggles(
-                    ui,
-                    &[
-                        (
-                            "chat-filter-text",
-                            |s| s.integrations.chat.panel.text,
-                            |s, v| s.integrations.chat.panel.text = v,
-                        ),
-                        (
-                            "chat-filter-super-chat",
-                            |s| s.integrations.chat.panel.super_chat,
-                            |s, v| s.integrations.chat.panel.super_chat = v,
-                        ),
-                        (
-                            "chat-filter-gift",
-                            |s| s.integrations.chat.panel.gift,
-                            |s, v| s.integrations.chat.panel.gift = v,
-                        ),
-                        (
-                            "chat-filter-member",
-                            |s| s.integrations.chat.panel.member,
-                            |s, v| s.integrations.chat.panel.member = v,
-                        ),
-                    ],
-                ),
-            ),
-            toggle_row!(
-                ui,
-                "int-chat-quote-display",
-                integrations.chat.quote_on_display
-            ),
-        ],
-    )
-}
-
 pub(super) fn platforms(ui: Ui) -> AnyView {
-    widget(Stack::column(0.0).gap_step(gap::step::SECTION))
-        .children((
-            tabs(ui),
-            dynamic(
-                move || ui.platform_tab.get(),
-                move |platform| crate::ui::sources::platform_page(ui, *platform),
-            ),
-            panel(ui),
-        ))
-        .into_any()
+    dynamic(
+        move || ui.platform_tab.get(),
+        move |platform| crate::ui::sources::platform_page(ui, *platform),
+    )
+    .into_any()
 }

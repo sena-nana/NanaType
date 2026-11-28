@@ -753,7 +753,7 @@ fn filters(ui: Ui) -> AnyView {
             widget(Stack::spacer()),
             action(ui, ti::TRASH, "chat-clear", || Msg::Chat(ChatMsg::Clear)),
             action(ui, ti::SETTINGS, "window-settings", || {
-                Msg::Window(WindowMsg::SettingsPage(super::settings::Page::Platforms))
+                Msg::Window(WindowMsg::SettingsPage(super::settings::Page::ChatPanel))
             }),
         )),
         super::settings::chat_panel_style(ui),
