@@ -328,7 +328,9 @@ fn sidebar(ui: Ui) -> AnyView {
                     .with_layout(|l| l.flex_shrink = Some(0.0)),
             )
             .children((logo(icon::LG + gap::TIGHT), Type::Brand.view("NanaType"))),
-            widget(scroll_view())
+            // Run the scrollbar out into the sidebar's own padding, so it sits
+            // beside the rows instead of over them.
+            widget(scroll_view().gutter_theme(nana_ui_core::ThemeToken::Space(inset::step::BAR_X)))
                 .children(widget(Stack::column(0.0).gap_step(gap::step::HAIR)).children(items)),
             // Keep About reachable while the navigation above scrolls on short screens.
             widget(Stack::column(0.0).with_layout(|l| l.flex_shrink = Some(0.0)))
