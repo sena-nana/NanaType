@@ -3,7 +3,7 @@ use super::assets::remove_button;
 use super::*;
 use crate::msg::{BackupMsg, ProfileMsg};
 use nana_ui::runtime::{ConfirmDialog, ConfirmIntent, DialogCloseRequested};
-use nanatype_settings::ExportOptions;
+use nanatype_settings::ImportMode;
 
 /// The profiles: each one's name, switch, save, duplicate and delete; then
 /// a name and "Save as profile". Adding, removing or switching rebuilds the
@@ -112,59 +112,14 @@ fn profile_row(ui: Ui, id: String, active: bool) -> Row {
     crate::ui::kit::line(rename, controls(vec![switch, update, duplicate, delete]))
 }
 
-/// Export with its options, import, the backup and reset.
+/// Export, import, the backup and reset.
 pub(super) fn backup(ui: Ui) -> Vec<(Row, Shown)> {
-    type Pick = (
-        &'static str,
-        fn(&ExportOptions) -> bool,
-        fn(&mut ExportOptions),
-    );
-    let options: [Pick; 3] = [
-        (
-            "backup-include-integrations",
-            |o| o.integrations,
-            |o| o.integrations = !o.integrations,
-        ),
-        (
-            "backup-include-avatars",
-            |o| o.avatars,
-            |o| o.avatars = !o.avatars,
-        ),
-        (
-            "backup-include-positions",
-            |o| o.window_positions,
-            |o| o.window_positions = !o.window_positions,
-        ),
-    ];
-    let chips: Vec<AnyView> = options
-        .into_iter()
-        .map(|(key, get, flip)| {
-            widget(
-                Chip::new(ui.now_t(key))
-                    .selected(get(&ui.backup.get_untracked().options))
-                    .size(ControlSize::Small),
-            )
-            .bind(move |c: &mut Chip| c.selected = ui.backup.with(|b| get(&b.options)))
-            .on(move |_: &Activate| {
-                let mut view = (*ui.backup.get_untracked()).clone();
-                flip(&mut view.options);
-                ui.backup.set(Arc::new(view));
-            })
-            .into_any()
-        })
-        .collect();
-    let mut export = chips;
-    export.push(icon_action(ui, "backup-export-button", ti::UPLOAD, || {
+    let export = icon_action(ui, "backup-export-button", ti::UPLOAD, || {
         Msg::Backup(BackupMsg::Export)
-    }));
+    });
     vec![
         (
-            row(
-                ui,
-                "backup-export",
-                Some("backup-export-hint"),
-                controls(export),
-            ),
+            row(ui, "backup-export", Some("backup-export-hint"), export),
             None,
         ),
         (
@@ -215,19 +170,20 @@ pub(super) fn backup(ui: Ui) -> Vec<(Row, Shown)> {
     ]
 }
 
-/// What a checked import will change, with Import and Cancel.
+/// What a checked import will change, with Merge, Replace and Cancel.
 pub fn import_dialog(ui: Ui) -> AnyView {
-    // It opens on Import: Enter imports (a backup is kept), Esc cancels.
-    let import = nana_ui::runtime::view::entity_ref::<Button>();
+    // It opens on Merge: Enter merges (a backup is kept), Esc cancels.
+    let merge = nana_ui::runtime::view::entity_ref::<Button>();
     widget(
         ConfirmDialog::new(ui.now_t("backup-import-title"), String::new())
             .cancel_label(ui.now_t("common-cancel")),
     )
+    .secondary(widget(Button::new(ui.now_t("backup-import-replace"))))
     .confirm(
-        widget(Button::new(ui.now_t("backup-import-button")).kind(ButtonKind::Primary))
-            .entity_ref(import),
+        widget(Button::new(ui.now_t("backup-import-merge")).kind(ButtonKind::Primary))
+            .entity_ref(merge),
     )
-    .initial_focus_on(import)
+    .initial_focus_on(merge)
     .bind(move |dialog: &mut ConfirmDialog| {
         if let Some(p) = &ui.backup.get().pending {
             dialog.message = crate::app::backup::summary(ui, p).into();
@@ -235,13 +191,15 @@ pub fn import_dialog(ui: Ui) -> AnyView {
     })
     .open(move || ui.backup.with(|b| b.pending.is_some()))
     .on_cx(|_, intent: &ConfirmIntent, cx| {
-        cx.dispatch_program_all(Msg::Backup(BackupMsg::Confirm(matches!(
-            intent,
-            ConfirmIntent::Confirm { .. }
-        ))))
+        let mode = match intent {
+            ConfirmIntent::Confirm { .. } => Some(ImportMode::Merge),
+            ConfirmIntent::Secondary => Some(ImportMode::Replace),
+            ConfirmIntent::Cancel => None,
+        };
+        cx.dispatch_program_all(Msg::Backup(BackupMsg::Confirm(mode)))
     })
     .on_cx(|_, _: &DialogCloseRequested, cx| {
-        cx.dispatch_program_all(Msg::Backup(BackupMsg::Confirm(false)))
+        cx.dispatch_program_all(Msg::Backup(BackupMsg::Confirm(None)))
     })
     .into_any()
 }

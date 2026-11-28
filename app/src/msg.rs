@@ -834,7 +834,7 @@ pub enum HistoryMsg {
 /// Settings export, import, reset and the backup kept before them
 /// (Settings › General).
 pub enum BackupMsg {
-    /// Ask where to save an export with the page's options.
+    /// Ask where to save an export.
     Export,
     /// The export's path and how many avatars stayed behind.
     Exported(Result<(std::path::PathBuf, usize), String>),
@@ -842,8 +842,9 @@ pub enum BackupMsg {
     Import,
     /// A chosen file was read, checked and migrated off the UI thread.
     Checked(Result<Box<nanatype_settings::Incoming>, nanatype_settings::ImportError>),
-    /// Apply the checked import (`true`) or drop it.
-    Confirm(bool),
+    /// Apply the checked import, merged into these settings or in their
+    /// place; `None` drops it.
+    Confirm(Option<nanatype_settings::ImportMode>),
     /// The import's avatars are written; apply its settings.
     Unpacked(Box<Settings>, Option<Box<nanatype_settings::GeometryStore>>),
     /// Everything back to defaults (asked first on the page).

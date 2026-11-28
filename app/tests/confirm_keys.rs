@@ -15,6 +15,7 @@ use nanatype::ui::{
     settings::{self, Page},
 };
 use nanatype_i18n::Locale;
+use nanatype_settings::ImportMode;
 use nanatype_settings::Settings;
 
 struct Fixture {
@@ -76,9 +77,9 @@ fn pending() -> Pending {
 }
 
 #[test]
-fn the_import_confirmation_closes_on_esc_and_imports_on_enter() {
+fn the_import_confirmation_closes_on_esc_and_merges_on_enter() {
     let mut f = Fixture::new(Page::General);
-    for (key, confirmed) in [("Escape", false), ("Enter", true)] {
+    for (key, confirmed) in [("Escape", None), ("Enter", Some(ImportMode::Merge))] {
         f.ui.backup.set(Arc::new(View {
             pending: Some(pending()),
             ..View::default()
@@ -95,7 +96,7 @@ fn the_import_confirmation_closes_on_esc_and_imports_on_enter() {
             messages
                 .iter()
                 .map(|m| match m {
-                    Msg::Backup(BackupMsg::Confirm(c)) => format!("confirm {c}"),
+                    Msg::Backup(BackupMsg::Confirm(c)) => format!("confirm {c:?}"),
                     _ => "other".to_owned(),
                 })
                 .collect::<Vec<_>>()
@@ -103,6 +104,27 @@ fn the_import_confirmation_closes_on_esc_and_imports_on_enter() {
         f.ui.backup.set(Arc::new(View::default()));
         f.session.flush().unwrap();
     }
+}
+
+#[test]
+fn the_import_confirmation_replaces_from_its_replace_button() {
+    let mut f = Fixture::new(Page::General);
+    f.ui.backup.set(Arc::new(View {
+        pending: Some(pending()),
+        ..View::default()
+    }));
+    f.session.flush().unwrap();
+    assert_eq!(f.buttons("backup-import-merge").len(), 1);
+    focus(&mut f, "backup-import-replace");
+    f.messages();
+    f.key("Enter");
+    assert!(
+        f.messages().iter().any(|m| matches!(
+            m,
+            Msg::Backup(BackupMsg::Confirm(Some(ImportMode::Replace)))
+        )),
+        "Replace"
+    );
 }
 
 fn armed(f: &Fixture) -> bool {

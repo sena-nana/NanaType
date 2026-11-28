@@ -6,7 +6,11 @@
 //! `settings.json`. Secrets live in the system's secret store and never
 //! reach settings.json; the few credentials that do (VTube Studio's plugin
 //! token, the 彗星号 page token, a proxy's `user:password@`) are left out of
-//! exports as well, and an import keeps this install's.
+//! exports as well, and an import keeps this install's. So is what only
+//! fits this computer: devices, folders on its disks, window positions.
+//!
+//! An import either merges into the settings here or replaces them
+//! ([`ImportMode`]).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -17,7 +21,7 @@ use serde_json::{Map, Value};
 
 use crate::geometry::GeometryStore;
 use crate::migrate::{MigrateError, migrate};
-use crate::schema::{SETTINGS_SCHEMA, Settings};
+use crate::schema::{MAX_CHARACTERS, SETTINGS_SCHEMA, Settings};
 
 /// The `app` of every export.
 pub const EXPORT_APP: &str = "NanaType";
@@ -32,7 +36,8 @@ pub const PREVIOUS_FILE: &str = "settings.previous.json";
 
 /// Never exported, and kept from this install on import: credentials that
 /// sit in settings.json, and what belongs to this computer (plugin consent,
-/// devices, GPU and log choices, update reminders, the active profile).
+/// devices, GPU and log choices, update reminders, sticker folders on its
+/// disks, the profiles here: the active one and their hotkeys).
 const LOCAL: &[&str] = &[
     "/enabled_plugins",
     "/disabled_packages",
@@ -46,10 +51,12 @@ const LOCAL: &[&str] = &[
     "/sound/device",
     "/speech/device",
     "/general/profile",
+    "/hotkeys/profiles",
+    "/assets/sticker_dirs",
 ];
 
-/// Exported only when integrations are included: services, their hosts,
-/// ports and channels.
+/// Integration services, their hosts, ports and channels: kept from this
+/// install when a file from an earlier version left them out.
 const INTEGRATIONS: &[&str] = &["/integrations", "/output/obs", "/assets/telegram"];
 
 /// Proxies whose `user:password@` is dropped from exports.
@@ -77,12 +84,14 @@ pub const PROFILE_SCOPE: &[&str] = &[
 /// saved history and skin hot reload.
 const PROFILE_EXCEPT: &[&str] = &["/sound/device", "/history/archive", "/skin/hot_reload"];
 
-/// What an export carries besides the settings themselves.
+/// What an export carries besides the settings themselves. Every export
+/// carries integrations and avatars and no window positions
+/// ([`ExportOptions::default`]); files from earlier versions, where these
+/// were choices, may differ.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ExportOptions {
-    /// Window positions per monitor layout (geometry.json). They rarely fit
-    /// another computer's monitors, so they stay behind unless asked for.
+    /// Window positions per monitor layout (geometry.json).
     pub window_positions: bool,
     /// Integration hosts, ports and channels.
     pub integrations: bool,
@@ -143,22 +152,12 @@ pub struct Exported {
     pub missing_avatars: usize,
 }
 
-/// `settings` as an export file. Reads the avatar files when asked to.
-pub fn export(
-    settings: &Settings,
-    geometry: &GeometryStore,
-    options: ExportOptions,
-    version: &str,
-    now: u64,
-) -> Exported {
-    let mut doc = serde_json::to_value(settings).unwrap_or_else(|_| Value::Object(Map::new()));
+/// `settings` as an export file: everything but credentials and what only
+/// fits this computer, with the characters' avatars read into it.
+pub fn export(settings: &Settings, version: &str, now: u64) -> Exported {
+    let mut doc = to_value(settings);
     for path in LOCAL {
         remove(&mut doc, path);
-    }
-    if !options.integrations {
-        for path in INTEGRATIONS {
-            remove(&mut doc, path);
-        }
     }
     for path in PROXIES {
         if let Some(Value::String(url)) = doc.pointer_mut(path) {
@@ -167,26 +166,24 @@ pub fn export(
     }
     let mut avatars = BTreeMap::new();
     let mut missing_avatars = 0;
-    if options.avatars {
-        for (i, c) in settings.general.characters.iter().enumerate() {
-            let Some(path) = c.avatar.as_deref().map(Path::new) else {
-                continue;
-            };
-            let read = std::fs::metadata(path)
-                .ok()
-                .filter(|m| m.is_file() && m.len() <= MAX_AVATAR_BYTES)
-                .and_then(|_| std::fs::read(path).ok());
-            match read {
-                Some(bytes) => {
-                    let name = path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().into_owned())
-                        .unwrap_or_default();
-                    let data = base64::engine::general_purpose::STANDARD.encode(bytes);
-                    avatars.insert(i, EmbeddedFile { name, data });
-                }
-                None => missing_avatars += 1,
+    for (i, c) in settings.general.characters.iter().enumerate() {
+        let Some(path) = c.avatar.as_deref().map(Path::new) else {
+            continue;
+        };
+        let read = std::fs::metadata(path)
+            .ok()
+            .filter(|m| m.is_file() && m.len() <= MAX_AVATAR_BYTES)
+            .and_then(|_| std::fs::read(path).ok());
+        match read {
+            Some(bytes) => {
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+                avatars.insert(i, EmbeddedFile { name, data });
             }
+            None => missing_avatars += 1,
         }
     }
     Exported {
@@ -196,9 +193,9 @@ pub fn export(
             schema: SETTINGS_SCHEMA,
             version: version.into(),
             exported_at: now,
-            includes: options,
+            includes: ExportOptions::default(),
             settings: doc,
-            geometry: options.window_positions.then(|| geometry.clone()),
+            geometry: None,
             avatars,
         },
         missing_avatars,
@@ -228,6 +225,27 @@ pub enum ImportError {
     TooNew(u32),
     /// An envelope from a newer NanaType (its format).
     FormatTooNew(u32),
+}
+
+/// How an import meets the settings already here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportMode {
+    /// What the file carries goes over the settings here and what it does
+    /// not carry stays. Its characters and quick phrases join the ones
+    /// here: one with the name (label) of one here takes its place, the
+    /// rest are added.
+    Merge,
+    /// The file's settings in place of these: what it does not carry goes
+    /// back to its default.
+    Replace,
+}
+
+/// The settings an import leaves.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Applied {
+    pub settings: Settings,
+    /// The file's character index → its index in `settings`.
+    slots: BTreeMap<usize, usize>,
 }
 
 /// A checked, migrated import waiting for confirmation.
@@ -301,44 +319,79 @@ pub fn parse_import(text: &str) -> Result<Incoming, ImportError> {
 }
 
 impl Incoming {
-    /// The settings after the import: what the file carries over `current`,
-    /// keeping this install's credentials and computer-bound state, and its
-    /// integrations when the file has none.
-    pub fn merge(&self, current: &Settings) -> Settings {
-        let mut next: Settings = serde_json::from_value(self.settings.clone()).unwrap_or_default();
-        next.enabled_plugins = current.enabled_plugins.clone();
-        next.disabled_packages = current.disabled_packages.clone();
-        next.plugin_approvals = current.plugin_approvals.clone();
-        next.integrations.vts.token = current.integrations.vts.token.clone();
-        next.integrations.nanalive.token = current.integrations.nanalive.token.clone();
-        next.update.skipped_version = current.update.skipped_version.clone();
-        next.update.last_check = current.update.last_check;
-        next.diagnostics = current.diagnostics.clone();
-        next.performance = current.performance.clone();
-        next.sound.device = current.sound.device.clone();
-        next.speech.device = current.speech.device.clone();
-        next.general.profile = current.general.profile.clone();
-        if !self.includes.integrations {
-            next.integrations = current.integrations.clone();
-            next.output.obs = current.output.obs.clone();
-            next.assets.telegram = current.assets.telegram.clone();
+    /// The settings after the import, by `mode`, keeping this install's
+    /// credentials and computer-bound state, and its integrations when the
+    /// file has none.
+    pub fn apply(&self, current: &Settings, mode: ImportMode) -> Applied {
+        let here = to_value(current);
+        let (mut next, slots) = match mode {
+            ImportMode::Replace => {
+                let n = self
+                    .settings
+                    .pointer("/general/characters")
+                    .and_then(Value::as_array)
+                    .map_or(0, Vec::len);
+                (self.settings.clone(), (0..n).map(|i| (i, i)).collect())
+            }
+            ImportMode::Merge => self.merged(&here),
+        };
+        for path in LOCAL {
+            graft(&mut next, &here, path);
         }
-        next.sanitize();
-        next.schema = SETTINGS_SCHEMA;
-        next
+        if !self.includes.integrations {
+            for path in INTEGRATIONS {
+                graft(&mut next, &here, path);
+            }
+        }
+        Applied {
+            settings: from_value(next),
+            slots,
+        }
     }
 
-    /// Write the embedded avatars into `dir` and point their characters at
-    /// them. Returns how many were written.
+    /// The file over `here`, its lists joined to the ones here.
+    fn merged(&self, here: &Value) -> (Value, BTreeMap<usize, usize>) {
+        let mut file = self.settings.clone();
+        let characters = take(&mut file, "/general/characters");
+        let phrases = take(&mut file, "/assets/phrases");
+        // The active character stays the one here: the file's index is
+        // into its own list.
+        remove(&mut file, "/general/character");
+        let mut next = here.clone();
+        overlay(&mut next, file.clone());
+        if serde_json::from_value::<Settings>(next.clone()).is_err() {
+            // A value whose shape differs between the two (an enum's
+            // fields, say) does not merge: each section the file has comes
+            // whole from it instead.
+            next = here.clone();
+            if let (Value::Object(next), Value::Object(file)) = (&mut next, file) {
+                next.extend(file);
+            }
+        }
+        let slots = characters
+            .map(|c| join_list(&mut next, "/general/characters", c, "name", MAX_CHARACTERS))
+            .unwrap_or_default();
+        if let Some(p) = phrases {
+            join_list(&mut next, "/assets/phrases", p, "label", usize::MAX);
+        }
+        (next, slots)
+    }
+
+    /// Write the embedded avatars into `dir` and point their characters in
+    /// `applied` at them. Returns how many were written.
     pub fn unpack_avatars(
         &self,
         dir: &Path,
-        settings: &mut Settings,
+        applied: &mut Applied,
         now: u64,
     ) -> std::io::Result<usize> {
         let mut written = 0;
         for (i, file) in &self.avatars {
-            let Some(character) = settings.general.characters.get_mut(*i) else {
+            let Some(character) = applied
+                .slots
+                .get(i)
+                .and_then(|slot| applied.settings.general.characters.get_mut(*slot))
+            else {
                 continue;
             };
             let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&file.data) else {
@@ -616,4 +669,80 @@ fn remove(dst: &mut Value, pointer: &str) {
     if let Some(Value::Object(obj)) = parent {
         obj.remove(key);
     }
+}
+
+/// The value at `pointer`, taken out of `dst`.
+fn take(dst: &mut Value, pointer: &str) -> Option<Value> {
+    let (parent, key) = pointer.rsplit_once('/')?;
+    match dst.pointer_mut(parent)? {
+        Value::Object(obj) => obj.remove(key),
+        _ => None,
+    }
+}
+
+/// `src` over `dst`: objects key by key, anything else replaced.
+fn overlay(dst: &mut Value, src: Value) {
+    match (dst, src) {
+        (Value::Object(dst), Value::Object(src)) => {
+            for (key, value) in src {
+                match dst.get_mut(&key) {
+                    Some(slot) => overlay(slot, value),
+                    None => {
+                        dst.insert(key, value);
+                    }
+                }
+            }
+        }
+        (dst, src) => *dst = src,
+    }
+}
+
+/// Join `incoming`'s items to the list at `pointer`: one whose `key` (a
+/// string, trimmed) matches an item there takes its place, the rest go at
+/// the end while the list is shorter than `cap`. Returns where each
+/// incoming item went, by its index.
+fn join_list(
+    doc: &mut Value,
+    pointer: &str,
+    incoming: Value,
+    key: &str,
+    cap: usize,
+) -> BTreeMap<usize, usize> {
+    let Value::Array(incoming) = incoming else {
+        return BTreeMap::new();
+    };
+    if !doc.pointer(pointer).is_some_and(Value::is_array) {
+        set(doc, pointer, Value::Array(Vec::new()));
+    }
+    let Some(Value::Array(list)) = doc.pointer_mut(pointer) else {
+        return BTreeMap::new();
+    };
+    let name = |v: &Value| {
+        v.get(key)
+            .and_then(Value::as_str)
+            .map(|s| s.trim().to_owned())
+    };
+    // Each item here is matched at most once, so two of one name in the
+    // file both arrive.
+    let mut claimed = vec![false; list.len()];
+    let mut slots = BTreeMap::new();
+    for (i, item) in incoming.into_iter().enumerate() {
+        let wanted = name(&item);
+        let found = (0..list.len()).find(|&j| !claimed[j] && name(&list[j]) == wanted);
+        let slot = match found {
+            Some(j) => {
+                list[j] = item;
+                j
+            }
+            None if list.len() < cap => {
+                list.push(item);
+                claimed.push(false);
+                list.len() - 1
+            }
+            None => continue,
+        };
+        claimed[slot] = true;
+        slots.insert(i, slot);
+    }
+    slots
 }

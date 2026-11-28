@@ -1521,13 +1521,7 @@ fn busy_settings() -> Settings {
 #[test]
 fn export_then_import_round_trips_without_credentials() {
     let s = busy_settings();
-    let exported = export(
-        &s,
-        &GeometryStore::default(),
-        ExportOptions::default(),
-        "1.0",
-        7,
-    );
+    let exported = export(&s, "1.0", 7);
     let text = serde_json::to_string(&exported.envelope).unwrap();
     assert!(!text.contains("vts-secret"));
     assert!(!text.contains("nanalive-secret"));
@@ -1542,7 +1536,7 @@ fn export_then_import_round_trips_without_credentials() {
     let mut other = Settings::default();
     other.integrations.vts.token = Some("theirs".into());
     other.integrations.nanalive.token = Some("their-nanalive".into());
-    let merged = incoming.merge(&other);
+    let merged = incoming.apply(&other, ImportMode::Replace).settings;
     assert_eq!(merged.playback, s.playback);
     assert_eq!(merged.skin, s.skin);
     assert_eq!(merged.hotkeys, s.hotkeys);
@@ -1558,45 +1552,167 @@ fn export_then_import_round_trips_without_credentials() {
     // Back onto itself, nothing changes.
     let mut same = s.clone();
     same.update.proxy = "http://proxy.example:8080/".into();
-    assert_eq!(incoming.merge(&s), same);
+    for mode in [ImportMode::Replace, ImportMode::Merge] {
+        assert_eq!(incoming.apply(&s, mode).settings, same, "{mode:?}");
+    }
     assert_eq!(changed_sections(&s, &same), vec!["update"]);
 }
 
 #[test]
-fn integrations_and_window_positions_are_optional() {
+fn exports_carry_everything_but_what_fits_only_this_computer() {
+    let mut s = busy_settings();
+    s.assets.sticker_dirs = vec!["D:/stickers".into()];
+    s.hotkeys.profiles = vec![ProfileHotkey {
+        id: "p1".into(),
+        name: "Mine".into(),
+        hotkey: Some(Hotkey::bare("F2")),
+    }];
+    let envelope = export(&s, "1.0", 1).envelope;
+    assert_eq!(envelope.includes, ExportOptions::default());
+    assert!(envelope.includes.integrations && envelope.includes.avatars);
+    assert!(envelope.geometry.is_none(), "window positions stay");
+    assert_eq!(
+        envelope.settings["integrations"]["twitch"]["channel"],
+        "nana"
+    );
+    assert!(envelope.settings.pointer("/assets/sticker_dirs").is_none());
+    assert!(envelope.settings.pointer("/hotkeys/profiles").is_none());
+    assert!(envelope.settings.pointer("/sound/device").is_none());
+
+    // This install's folders and profile hotkeys stay through an import.
+    let incoming = parse_import(&serde_json::to_string(&envelope).unwrap()).unwrap();
+    let mut here = Settings::default();
+    here.assets.sticker_dirs = vec!["E:/mine".into()];
+    for mode in [ImportMode::Replace, ImportMode::Merge] {
+        let next = incoming.apply(&here, mode).settings;
+        assert_eq!(
+            next.assets.sticker_dirs, here.assets.sticker_dirs,
+            "{mode:?}"
+        );
+        assert!(next.hotkeys.profiles.is_empty(), "{mode:?}");
+    }
+}
+
+#[test]
+fn an_earlier_file_without_integrations_keeps_these() {
     let s = busy_settings();
+    let mut envelope = export(&s, "0.9", 1).envelope;
+    envelope
+        .settings
+        .as_object_mut()
+        .unwrap()
+        .remove("integrations");
+    envelope.includes.integrations = false;
+    envelope.includes.window_positions = true;
     let geometry = GeometryStore {
         input_dock: Some(InputDockLayout::default()),
         ..GeometryStore::default()
     };
-    let options = ExportOptions {
-        window_positions: true,
-        integrations: false,
-        avatars: false,
-    };
-    let envelope = export(&s, &geometry, options, "1.0", 1).envelope;
-    assert!(envelope.settings.get("integrations").is_none());
-    assert_eq!(envelope.geometry, Some(geometry));
-    let text = serde_json::to_string(&envelope).unwrap();
-    let incoming = parse_import(&text).unwrap();
+    envelope.geometry = Some(geometry.clone());
+    let incoming = parse_import(&serde_json::to_string(&envelope).unwrap()).unwrap();
+    assert_eq!(incoming.geometry, Some(geometry));
     let mut here = Settings::default();
     here.integrations.twitch.channel = "mine".into();
-    let merged = incoming.merge(&here);
+    let merged = incoming.apply(&here, ImportMode::Replace).settings;
     assert_eq!(
         merged.integrations, here.integrations,
         "kept when not carried"
     );
     assert_eq!(merged.playback, s.playback);
-    let without = export(
-        &s,
-        &GeometryStore::default(),
-        ExportOptions::default(),
-        "",
-        1,
+}
+
+#[test]
+fn merge_keeps_what_the_file_lacks_and_joins_characters_and_phrases() {
+    let phrase = |label: &str, markup: &str| QuickPhrase {
+        label: label.into(),
+        markup: markup.into(),
+        send: false,
+        hotkey: None,
+    };
+    let character = |name: &str, voice: Option<&str>| Character {
+        name: name.into(),
+        voice: voice.map(Into::into),
+        ..Character::default()
+    };
+    let mut theirs = Settings::default();
+    theirs.general.characters = vec![character("Nana", Some("v2")), character("Kai", None)];
+    theirs.general.character = 1;
+    theirs.assets.phrases = vec![phrase("hi", "hello!"), phrase("bye", "bye")];
+    theirs.playback.speed_scale = 1.5;
+    let mut envelope = export(&theirs, "1.0", 1).envelope;
+    // A section the file does not carry.
+    envelope.settings.as_object_mut().unwrap().remove("sound");
+
+    let mut here = Settings::default();
+    here.general.characters = vec![character("Mio", None), character("Nana", Some("v1"))];
+    here.general.character = 0;
+    here.assets.phrases = vec![phrase("hi", "hey"), phrase("gg", "good game")];
+    here.sound.master = 0.3;
+    let incoming = parse_import(&serde_json::to_string(&envelope).unwrap()).unwrap();
+
+    let merged = incoming.apply(&here, ImportMode::Merge);
+    let names: Vec<_> = merged
+        .settings
+        .general
+        .characters
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
+    assert_eq!(names, ["Mio", "Nana", "Kai"]);
+    assert_eq!(
+        merged.settings.general.characters[1].voice.as_deref(),
+        Some("v2")
     );
-    assert!(
-        without.envelope.geometry.is_none(),
-        "positions stay by default"
+    assert_eq!(merged.settings.general.character, 0, "the active one stays");
+    let phrases: Vec<_> = merged
+        .settings
+        .assets
+        .phrases
+        .iter()
+        .map(|p| (p.label.as_str(), p.markup.as_str()))
+        .collect();
+    assert_eq!(
+        phrases,
+        [("hi", "hello!"), ("gg", "good game"), ("bye", "bye")]
+    );
+    assert_eq!(merged.settings.playback.speed_scale, 1.5);
+    assert_eq!(merged.settings.sound.master, 0.3, "not in the file: kept");
+
+    let replaced = incoming.apply(&here, ImportMode::Replace).settings;
+    assert_eq!(replaced.general.characters, theirs.general.characters);
+    assert_eq!(replaced.general.character, 1);
+    assert_eq!(replaced.assets.phrases, theirs.assets.phrases);
+    assert_eq!(
+        replaced.sound,
+        SoundSettings::default(),
+        "not in the file: default"
+    );
+}
+
+#[test]
+fn merged_avatars_land_on_their_characters() {
+    let tmp = tempfile::tempdir().unwrap();
+    let avatar = tmp.path().join("kai.png");
+    fs::write(&avatar, b"kai").unwrap();
+    let mut theirs = Settings::default();
+    theirs.general.characters = vec![Character {
+        name: "Kai".into(),
+        avatar: Some(avatar.display().to_string()),
+        ..Character::default()
+    }];
+    let text = serde_json::to_string(&export(&theirs, "", 1).envelope).unwrap();
+    let incoming = parse_import(&text).unwrap();
+    let mut here = Settings::default();
+    here.general.characters[0].name = "Mio".into();
+    let mut applied = incoming.apply(&here, ImportMode::Merge);
+    let dir = tmp.path().join("avatars");
+    assert_eq!(incoming.unpack_avatars(&dir, &mut applied, 9).unwrap(), 1);
+    let characters = &applied.settings.general.characters;
+    assert_eq!(characters[0].avatar, None);
+    assert_eq!(characters[1].name, "Kai");
+    assert_eq!(
+        fs::read(characters[1].avatar.as_ref().unwrap()).unwrap(),
+        b"kai"
     );
 }
 
@@ -1611,20 +1727,17 @@ fn avatars_travel_inside_the_export() {
         avatar: Some(tmp.path().join("gone.png").display().to_string()),
         ..Character::default()
     });
-    let exported = export(
-        &s,
-        &GeometryStore::default(),
-        ExportOptions::default(),
-        "",
-        1,
-    );
+    let exported = export(&s, "", 1);
     assert_eq!(exported.missing_avatars, 1);
     let text = serde_json::to_string(&exported.envelope).unwrap();
     let incoming = parse_import(&text).unwrap();
-    let mut merged = incoming.merge(&Settings::default());
+    let mut applied = incoming.apply(&Settings::default(), ImportMode::Replace);
     let dir = tmp.path().join("avatars");
-    assert_eq!(incoming.unpack_avatars(&dir, &mut merged, 9).unwrap(), 1);
-    let placed = merged.general.characters[0].avatar.clone().unwrap();
+    assert_eq!(incoming.unpack_avatars(&dir, &mut applied, 9).unwrap(), 1);
+    let placed = applied.settings.general.characters[0]
+        .avatar
+        .clone()
+        .unwrap();
     assert!(placed.starts_with(&dir.display().to_string()) && placed.ends_with(".png"));
     assert_eq!(fs::read(placed).unwrap(), b"not really a png");
 }
@@ -1635,7 +1748,9 @@ fn older_imports_migrate_and_newer_ones_are_refused() {
         {"schema":4,"general":{"speaker_name":"Old","onboarding_done":true}}}"#;
     let incoming = parse_import(v4).unwrap();
     assert_eq!(incoming.from_schema, 4);
-    let merged = incoming.merge(&Settings::default());
+    let merged = incoming
+        .apply(&Settings::default(), ImportMode::Replace)
+        .settings;
     assert_eq!(merged.general.characters[0].name, "Old");
     assert_eq!(merged.schema, SETTINGS_SCHEMA);
     // A bare settings.json from the very first build.
@@ -1772,13 +1887,7 @@ fn retired_translation_section_is_dropped_at_schema_9() {
     assert!(!settings.unknown.contains_key("translate"));
     assert!(settings.unknown.contains_key("future_feature"));
 
-    let exported = export(
-        &settings,
-        &GeometryStore::default(),
-        ExportOptions::default(),
-        "1",
-        1,
-    );
+    let exported = export(&settings, "1", 1);
     let text = serde_json::to_string(&exported.envelope).unwrap();
     assert!(!text.contains("translate"), "{text}");
     assert!(!text.contains("secret"), "{text}");
@@ -1832,17 +1941,11 @@ fn accessibility_changes_are_reported_by_changed_sections_and_preserved_on_impor
     imported.accessibility.ui_scale = 150;
     imported.accessibility.contrast = ContrastMode::On;
     imported.accessibility.chrome = ChromeMode::Dark;
-    let exported = export(
-        &imported,
-        &GeometryStore::default(),
-        ExportOptions::default(),
-        "1.0",
-        1,
-    );
+    let exported = export(&imported, "1.0", 1);
     let text = serde_json::to_string(&exported.envelope).unwrap();
     let incoming = parse_import(&text).unwrap();
     let current = Settings::default();
-    let merged = incoming.merge(&current);
+    let merged = incoming.apply(&current, ImportMode::Merge).settings;
     assert_eq!(merged.accessibility, imported.accessibility);
     assert_eq!(changed_sections(&current, &merged), vec!["accessibility"]);
 }

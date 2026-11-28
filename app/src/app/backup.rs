@@ -1,5 +1,7 @@
-//! Settings management (Settings › General): export to a file, import one
-//! after a confirmation, reset to defaults, and profiles. An import, reset
+//! Settings management (Settings › General): export everything but what
+//! fits only this computer to a file, import one after asking whether to
+//! merge it into these settings or replace them, reset to defaults, and
+//! profiles. An import, reset
 //! or restore first keeps the settings as they were in
 //! `settings.previous.json`, so "Restore previous settings" undoes it.
 //! Secrets stay in the system's secret store throughout.
@@ -7,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use nanatype_settings::{
-    ExportOptions, GeometryStore, ImportError, Incoming, LoadNote, PREVIOUS_FILE, PROFILE_DIR,
+    GeometryStore, ImportError, ImportMode, Incoming, LoadNote, PREVIOUS_FILE, PROFILE_DIR,
     Profile, Settings,
 };
 
@@ -31,7 +33,6 @@ pub(super) struct Backup {
 /// What the page shows.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct View {
-    pub options: ExportOptions,
     /// The import waiting for confirmation.
     pub pending: Option<Pending>,
     /// Whether there are earlier settings to go back to.
@@ -43,7 +44,8 @@ pub struct View {
 /// An import's summary, for its confirmation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pending {
-    /// The settings sections it changes, by their key in settings.json.
+    /// The settings sections replacing would change, by their key in
+    /// settings.json (merging changes these or fewer).
     pub sections: Vec<&'static str>,
     pub from_schema: u32,
     pub version: String,
@@ -105,6 +107,7 @@ pub fn summary(ui: crate::ui::Ui, p: &Pending) -> String {
     if p.positions {
         lines.push(ui.now_t("backup-import-positions"));
     }
+    lines.push(ui.now_t("backup-import-modes"));
     lines.push(ui.now_t("backup-import-undo"));
     lines.join("\n")
 }
@@ -195,9 +198,9 @@ impl App {
                 if self.refuse_readonly() {
                     return;
                 }
-                let merged = incoming.merge(&self.settings);
+                let replaced = incoming.apply(&self.settings, ImportMode::Replace).settings;
                 let pending = Pending {
-                    sections: nanatype_settings::changed_sections(&self.settings, &merged),
+                    sections: nanatype_settings::changed_sections(&self.settings, &replaced),
                     from_schema: incoming.from_schema,
                     version: incoming.version.clone(),
                     avatars: incoming.avatars.len(),
@@ -212,26 +215,26 @@ impl App {
                 self.shell.backup.pending = Some(incoming);
                 self.edit_backup_view(|v| v.pending = Some(pending));
             }
-            BackupMsg::Confirm(accept) => {
+            BackupMsg::Confirm(mode) => {
                 let incoming = self.shell.backup.pending.take();
                 self.edit_backup_view(|v| v.pending = None);
-                let Some(incoming) = incoming.filter(|_| accept) else {
+                let (Some(incoming), Some(mode)) = (incoming, mode) else {
                     return;
                 };
-                let merged = incoming.merge(&self.settings);
+                let applied = incoming.apply(&self.settings, mode);
                 let geometry = incoming.geometry.clone().map(Box::new);
                 if incoming.avatars.is_empty() {
-                    self.finish_backup_unpack(merged, geometry);
+                    self.finish_backup_unpack(applied.settings, geometry);
                     return;
                 }
                 let dir = self.shell.paths.data.join(AVATAR_DIR);
                 background("settings-avatars", &self.ctx, move || {
-                    let mut merged = merged;
+                    let mut applied = applied;
                     let now = nanatype_model::unix_millis();
-                    if let Err(e) = incoming.unpack_avatars(&dir, &mut merged, now) {
+                    if let Err(e) = incoming.unpack_avatars(&dir, &mut applied, now) {
                         nanatype_diag::report!(crate::diag::PERSIST_FAILED; "{}: {e}", dir.display());
                     }
-                    Msg::Backup(BackupMsg::Unpacked(Box::new(merged), geometry))
+                    Msg::Backup(BackupMsg::Unpacked(Box::new(applied.settings), geometry))
                 });
             }
             BackupMsg::Unpacked(settings, geometry) => {
@@ -310,13 +313,9 @@ impl App {
     /// Write an export to `path`, reading avatars off the UI thread.
     pub(super) fn settings_export(&mut self, path: PathBuf) {
         let settings = self.settings.clone();
-        let geometry: GeometryStore = self.shell.windows.geometry.clone();
-        let options = self.ui.backup.get_untracked().options;
         background("settings-export", &self.ctx, move || {
             let exported = nanatype_settings::export(
                 &settings,
-                &geometry,
-                options,
                 env!("CARGO_PKG_VERSION"),
                 nanatype_model::unix_millis(),
             );
