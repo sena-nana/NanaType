@@ -165,8 +165,15 @@ impl App {
                         locale,
                     ),
                     completion::Trigger::Command => {
+                        // `[vts hotkey=...]` reaches VTube Studio and NanaLive.
                         let hotkeys: Vec<String> = self.ui.links.with_untracked(|s| {
-                            s.vts_hotkeys.iter().map(|(_, n)| n.clone()).collect()
+                            let mut names: Vec<String> = Vec::new();
+                            for (_, n) in s.vts_hotkeys.iter().chain(&s.nanalive_hotkeys) {
+                                if !names.contains(n) {
+                                    names.push(n.clone());
+                                }
+                            }
+                            names
                         });
                         let names = completion::Names {
                             vts_hotkeys: &hotkeys,

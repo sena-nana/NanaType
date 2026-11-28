@@ -501,6 +501,7 @@ fn links(scene: &Scene, out: &std::path::Path) {
     // way the app does, so the pages read in the shot's language.
     let mut on = settings.clone();
     on.integrations.vts.enabled = true;
+    on.integrations.nanalive.enabled = true;
     on.integrations.osc.enabled = true;
     on.integrations.websocket.enabled = true;
     on.output.display.enabled = true;
@@ -508,7 +509,8 @@ fn links(scene: &Scene, out: &std::path::Path) {
     let (links, outputs) = reported(
         locale,
         &[
-            BridgeStatus::VtsNeedsToken,
+            BridgeStatus::NeedsToken(Sink::Vts),
+            BridgeStatus::NeedsToken(Sink::NanaLive),
             BridgeStatus::Connecting(Sink::Osc),
             BridgeStatus::Connected(Sink::WebSocket),
             BridgeStatus::Clients(2),
@@ -603,6 +605,7 @@ fn links(scene: &Scene, out: &std::path::Path) {
         .vts
         .expressions
         .insert("blush".into(), "hk-3".into());
+    on.integrations.nanalive.token = Some("token".into());
     on.assets.phrases = vec![
         nanatype_settings::QuickPhrase {
             label: "开场".into(),
@@ -625,6 +628,7 @@ fn links(scene: &Scene, out: &std::path::Path) {
         locale,
         &[
             BridgeStatus::Connected(Sink::Vts),
+            BridgeStatus::Connected(Sink::NanaLive),
             BridgeStatus::Connected(Sink::Osc),
             BridgeStatus::Connected(Sink::WebSocket),
             BridgeStatus::Clients(1),
@@ -644,6 +648,10 @@ fn links(scene: &Scene, out: &std::path::Path) {
         ("hk-1".into(), "Smile".into()),
         ("hk-2".into(), "Angry Face".into()),
         ("hk-3".into(), "Heart Eyes".into()),
+    ];
+    links.nanalive_hotkeys = vec![
+        ("exp-smile".into(), "Smile".into()),
+        ("perf-1a2b".into(), "Wave".into()),
     ];
     assert_consistent(&on, &links, &outputs, &ui.chat_source.get_untracked());
     ui.settings.set(Arc::new(on));

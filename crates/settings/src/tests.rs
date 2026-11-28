@@ -1506,6 +1506,7 @@ fn busy_settings() -> Settings {
     s.hotkeys.summon = Some(Hotkey::ctrl("KeyJ"));
     s.integrations.twitch.channel = "nana".into();
     s.integrations.vts.token = Some("vts-secret".into());
+    s.integrations.nanalive.token = Some("nanalive-secret".into());
     s.update.proxy = "http://user:pass@proxy.example:8080/".into();
     s.assets.phrases.push(QuickPhrase {
         label: "hi".into(),
@@ -1529,6 +1530,7 @@ fn export_then_import_round_trips_without_credentials() {
     );
     let text = serde_json::to_string(&exported.envelope).unwrap();
     assert!(!text.contains("vts-secret"));
+    assert!(!text.contains("nanalive-secret"));
     assert!(!text.contains("user:pass"), "proxy credentials stay behind");
     assert!(text.contains(r#""app":"NanaType""#));
 
@@ -1539,6 +1541,7 @@ fn export_then_import_round_trips_without_credentials() {
     // this computer's devices.
     let mut other = Settings::default();
     other.integrations.vts.token = Some("theirs".into());
+    other.integrations.nanalive.token = Some("their-nanalive".into());
     let merged = incoming.merge(&other);
     assert_eq!(merged.playback, s.playback);
     assert_eq!(merged.skin, s.skin);
@@ -1546,6 +1549,10 @@ fn export_then_import_round_trips_without_credentials() {
     assert_eq!(merged.general.locale, s.general.locale);
     assert_eq!(merged.integrations.twitch.channel, "nana");
     assert_eq!(merged.integrations.vts.token.as_deref(), Some("theirs"));
+    assert_eq!(
+        merged.integrations.nanalive.token.as_deref(),
+        Some("their-nanalive")
+    );
     assert_eq!(merged.sound.device, None);
     assert_eq!(merged.update.proxy, "http://proxy.example:8080/");
     // Back onto itself, nothing changes.
@@ -1670,10 +1677,15 @@ fn reset_keeps_credentials_and_language() {
     s.general.onboarding_done = true;
     let reset = s.reset_from();
     assert_eq!(reset.integrations.vts.token.as_deref(), Some("vts-secret"));
+    assert_eq!(
+        reset.integrations.nanalive.token.as_deref(),
+        Some("nanalive-secret")
+    );
     assert_eq!(reset.general.locale.as_deref(), Some("ja-JP"));
     assert!(reset.general.onboarding_done);
     let mut expected = Settings::default();
     expected.integrations.vts.token = s.integrations.vts.token.clone();
+    expected.integrations.nanalive.token = s.integrations.nanalive.token.clone();
     expected.general.locale = s.general.locale.clone();
     expected.general.onboarding_done = true;
     assert_eq!(reset, expected);

@@ -52,7 +52,7 @@ When a line is taller than the display, the skin's `overflow` decides what happe
 | Markup | Effect |
 | --- | --- |
 | `[se=coin]` `[se=coin vol=0.6]` | Play the skin's sound effect named `coin` |
-| `[expr=smile]` | Trigger an expression: switch to the portrait variant of the same name and send it to VTube Studio / OSC / WebSocket. In VTube Studio this activates the expression bound to the hotkey of the same name (or the one mapped in settings) |
+| `[expr=smile]` | Trigger an expression: switch to the portrait variant of the same name and send it to VTube Studio / NanaLive / OSC / WebSocket. In VTube Studio and NanaLive this activates the expression bound to the hotkey of the same name (or the one mapped in settings) |
 | `[portrait=happy]` | Only switch the portrait variant |
 | `[screenshake=6,300]` | Shake the display: amplitude, milliseconds |
 | `[sticker=cats/hello h=1.6]` | Insert `hello` from sticker library `cats`, 1.6 times the font size tall |
@@ -60,9 +60,9 @@ When a line is taller than the display, the skin's `overflow` decides what happe
 | `[img="file:C:/pic.png" alt="图"]` | Insert an image |
 | `[at=1234 name="观众" avatar=blob:bili-face-1234]` | Mention a viewer from the live room: shown as a tag with avatar and nickname (styled by the skin's `[mention]`), counted as a single character. `at` is the Bilibili uid and may be omitted; `avatar` may be omitted. Usually inserted by the chat panel's "@" button; "Reply" only attaches a quote of the original message |
 
-## VTube Studio
+## VTube Studio and NanaLive
 
-Each of these is sent when typing reaches its position; when you skip, the markers inside the skipped part are sent immediately.
+These markers reach VTube Studio and NanaLive alike. Each of these is sent when typing reaches its position; when you skip, the markers inside the skipped part are sent immediately.
 
 | Markup | Effect |
 | --- | --- |
@@ -71,7 +71,9 @@ Each of these is sent when typing reaches its position; when you skip, the marke
 | `[vts expr=Smile.exp3.json active=off fade=0.3]` | Turn off an expression file, fading out over 0.3 s |
 | `[vts param=MouthSmile value=0.8 ms=1500]` | Set a parameter to 0.8 and hold it for 1.5 s (omit `ms` to set it once) |
 
-In the integration settings you can also turn on lip sync (drives `MouthOpen` and similar parameters while typing, closing the mouth during pauses), and reset the expressions a line turned on when the line leaves the display or the next line starts.
+In NanaLive, `param` names a Live2D parameter ID, as in `[vts param=ParamMouthForm value=1 ms=1500]`.
+
+In the Third-party output settings you can also turn on lip sync (drives `MouthOpen` and similar parameters while typing, closing the mouth during pauses), and reset the expressions a line turned on when the line leaves the display or the next line starts.
 
 ## Whole-line settings
 

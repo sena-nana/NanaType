@@ -4,12 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "NanaType expression bridge: VTube Studio, OSC and a local WebSocket broadcast"
+description = "NanaType expression bridge: VTube Studio, NanaLive, OSC and a local WebSocket broadcast"
 
 [dependencies]
 nanatype-model = { workspace = true, features = ["ws"] }
 serde.workspace = true
 serde_json.workspace = true
 rosc = "0.10"
+# NanaLive's control API speaks MessagePack.
+rmp-serde = "1.3"
 tungstenite = { workspace = true, features = ["handshake"] }
 crossbeam-channel.workspace = true

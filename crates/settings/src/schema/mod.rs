@@ -22,8 +22,8 @@ pub use hotkeys::{Hotkey, HotkeySettings, InputKey, InputKeys, ProfileHotkey, Re
 pub use integrations::{
     BLIVECHAT_PORT, BilibiliLink, BilibiliSettings, BilibiliSource, BliveRoomKind,
     BlivechatSettings, COMET_PORT, ChatPanelStyle, ChatSettings, ChatSource, CometRooms,
-    CometSettings, Integrations, LAPLACE_URL, LaplaceSettings, OscSettings, TwitchSettings,
-    VtsSettings, WsSettings,
+    CometSettings, Integrations, LAPLACE_URL, LaplaceSettings, NANALIVE_PORT, NanaLiveSettings,
+    OscSettings, TwitchSettings, VtsSettings, WsSettings,
 };
 pub use playback::{
     ChatFilter, HideLatest, HistoryArchive, HistoryChat, HistorySettings, HistorySync,

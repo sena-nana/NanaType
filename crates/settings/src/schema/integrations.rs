@@ -43,6 +43,45 @@ impl Default for VtsSettings {
     }
 }
 
+/// NanaLive's control API port.
+pub const NANALIVE_PORT: u16 = 8312;
+
+/// NanaLive, as a plugin on its control API: the same markers and lip sync
+/// as VTube Studio.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NanaLiveSettings {
+    pub enabled: bool,
+    pub port: u16,
+    /// Plugin token approved on NanaLive's plugin page.
+    pub token: Option<String>,
+    /// Expression name → NanaLive hotkey id.
+    pub expressions: BTreeMap<String, String>,
+    /// Move the model's mouth while the speaker is talking.
+    pub lip_sync: bool,
+    /// The Live2D parameter lip sync writes.
+    pub mouth_param: String,
+    /// How far the mouth opens (the parameter's peak value).
+    pub mouth_amp: f32,
+    /// When expressions turned on by a line are turned off again.
+    pub reset_expressions: VtsReset,
+}
+
+impl Default for NanaLiveSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: NANALIVE_PORT,
+            token: None,
+            expressions: BTreeMap::new(),
+            lip_sync: true,
+            mouth_param: "ParamMouthOpenY".into(),
+            mouth_amp: 1.0,
+            reset_expressions: VtsReset::LineEnd,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OscSettings {
@@ -242,6 +281,7 @@ impl ChatSource {
 #[serde(default)]
 pub struct Integrations {
     pub vts: VtsSettings,
+    pub nanalive: NanaLiveSettings,
     pub osc: OscSettings,
     pub websocket: WsSettings,
     pub chat: ChatSettings,
@@ -335,6 +375,10 @@ impl Integrations {
             dirty = true;
         }
         trim_take(&mut self.blivechat.room_id, 20, &mut dirty);
+        if self.nanalive.port == 0 {
+            self.nanalive.port = NANALIVE_PORT;
+            dirty = true;
+        }
         if self.comet.port == 0 {
             self.comet.port = COMET_PORT;
             dirty = true;

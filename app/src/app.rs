@@ -1076,8 +1076,8 @@ impl App {
             AppMsg::OpenUrl(url) => crate::services::open_url(url),
             AppMsg::CopyText(text) => self.copy_text(text),
             AppMsg::PlaySample => self.play_sample(),
-            AppMsg::VtsAuthorize => self.vts_authorize(),
-            AppMsg::VtsRefresh => self.integrations.bridge.vts_refresh_hotkeys(),
+            AppMsg::AvatarAuthorize(sink) => self.avatar_authorize(sink),
+            AppMsg::AvatarRefresh(sink) => self.integrations.bridge.refresh_hotkeys(sink),
             AppMsg::Notice {
                 text,
                 error,

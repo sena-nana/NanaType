@@ -98,11 +98,19 @@ impl App {
         self.run(Cmd::SendMarkup(line));
     }
 
-    pub(super) fn vts_authorize(&mut self) {
-        if !self.settings.integrations.vts.enabled {
-            self.edit(|s| s.integrations.vts.enabled = true);
+    /// Turn the avatar app on if it is off, then ask it for a token.
+    pub(super) fn avatar_authorize(&mut self, sink: nanatype_bridge::Sink) {
+        use nanatype_bridge::Sink;
+        match sink {
+            Sink::Vts if !self.settings.integrations.vts.enabled => {
+                self.edit(|s| s.integrations.vts.enabled = true)
+            }
+            Sink::NanaLive if !self.settings.integrations.nanalive.enabled => {
+                self.edit(|s| s.integrations.nanalive.enabled = true)
+            }
+            _ => {}
         }
-        self.integrations.bridge.vts_request_token();
+        self.integrations.bridge.request_token(sink);
     }
 
     pub(super) fn tray_error_expired(&mut self, id: u64) {

@@ -65,7 +65,7 @@ NanaType is a streaming typewriter built for VTubers. You type in the input box,
     </td>
     <td valign="top">
       <h4>🔗 Streaming tool integration</h4>
-      VTube Studio expressions, hotkeys, parameters and lip sync, triggered by markup at the exact typing position. OSC and a local WebSocket broadcast are also available.
+      VTube Studio and NanaLive expressions, hotkeys, parameters and lip sync, triggered by markup at the exact typing position. OSC and a local WebSocket broadcast are also available.
     </td>
   </tr>
   <tr>

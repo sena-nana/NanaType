@@ -1,16 +1,90 @@
-use super::*;
+use std::collections::BTreeMap;
 
-/// Width of the hotkey column of the VTS mapping table.
+use nanatype_bridge::Sink;
+
+use super::*;
+use crate::ui::LinkStatus;
+
+/// Width of the hotkey column of the hotkey mapping table.
 pub(super) const VTS_SELECT_W: f32 = field::MD;
 
-/// One marker's row: its chip, then the VTS hotkey it presses ("Auto" lets
-/// the bridge match the hotkey of the same name).
-pub(super) fn vts_map_row(ui: Ui, key: String, options: Vec<SelectOption>) -> Row {
+/// An avatar app whose hotkeys `[expr=...]` markers press: VTube Studio or
+/// NanaLive. Both map markers to hotkeys the same way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum AvatarApp {
+    Vts,
+    NanaLive,
+}
+
+impl AvatarApp {
+    fn sink(self) -> Sink {
+        match self {
+            Self::Vts => Sink::Vts,
+            Self::NanaLive => Sink::NanaLive,
+        }
+    }
+
+    fn expressions(self, s: &Settings) -> &BTreeMap<String, String> {
+        match self {
+            Self::Vts => &s.integrations.vts.expressions,
+            Self::NanaLive => &s.integrations.nanalive.expressions,
+        }
+    }
+
+    fn expressions_mut(self, s: &mut Settings) -> &mut BTreeMap<String, String> {
+        match self {
+            Self::Vts => &mut s.integrations.vts.expressions,
+            Self::NanaLive => &mut s.integrations.nanalive.expressions,
+        }
+    }
+
+    fn has_token(self, s: &Settings) -> bool {
+        match self {
+            Self::Vts => s.integrations.vts.token.is_some(),
+            Self::NanaLive => s.integrations.nanalive.token.is_some(),
+        }
+    }
+
+    fn link(self, l: &LinkStatus) -> &LinkState {
+        match self {
+            Self::Vts => &l.vts,
+            Self::NanaLive => &l.nanalive,
+        }
+    }
+
+    fn hotkeys(self, l: &LinkStatus) -> &[(String, String)] {
+        match self {
+            Self::Vts => &l.vts_hotkeys,
+            Self::NanaLive => &l.nanalive_hotkeys,
+        }
+    }
+
+    /// The app's own wording where it differs: the hotkey column, and what
+    /// an empty table says.
+    fn keys(self) -> (&'static str, &'static str, &'static str) {
+        match self {
+            Self::Vts => (
+                "int-vts-map-hotkey",
+                "empty-vts-hotkeys",
+                "int-vts-map-empty",
+            ),
+            Self::NanaLive => (
+                "int-nanalive-map-hotkey",
+                "empty-nanalive-hotkeys",
+                "int-nanalive-map-empty",
+            ),
+        }
+    }
+}
+
+/// One marker's row: its chip, then the hotkey it presses ("Auto" lets the
+/// bridge match the hotkey of the same name).
+pub(super) fn vts_map_row(ui: Ui, app: AvatarApp, key: String, options: Vec<SelectOption>) -> Row {
     let current = {
         let key = key.clone();
         move || {
             ui.settings
-                .with(|s| s.integrations.vts.expressions.get(&key).cloned())
+                .with(|s| app.expressions(s).get(&key).cloned())
                 .unwrap_or_default()
         }
     };
@@ -50,7 +124,7 @@ pub(super) fn vts_map_row(ui: Ui, key: String, options: Vec<SelectOption>) -> Ro
                 .on_cx(move |_, e: &SelectChanged, cx| {
                     let (k, id) = (set_key.clone(), e.value.to_string());
                     cx.dispatch_program_all(edit(move |s| {
-                        let map = &mut s.integrations.vts.expressions;
+                        let map = app.expressions_mut(s);
                         if id.is_empty() {
                             map.remove(&k);
                         } else {
@@ -63,13 +137,15 @@ pub(super) fn vts_map_row(ui: Ui, key: String, options: Vec<SelectOption>) -> Ro
     )
 }
 
-/// Expression markers mapped to VTube Studio hotkeys: access first, then a
-/// two-column table of every marker the model's hotkeys (or a saved
+/// Expression markers mapped to the avatar app's hotkeys: access first,
+/// then a two-column table of every marker the model's hotkeys (or a saved
 /// mapping) give.
-pub(super) fn vts_mapping(ui: Ui) -> Row {
+pub(super) fn vts_mapping(ui: Ui, app: AvatarApp) -> Row {
+    let sink = app.sink();
+    let (hotkey_key, empty_key, map_empty_key) = app.keys();
     let authorized = move || {
-        ui.settings.with(|s| s.integrations.vts.token.is_some())
-            && ui.links.with(|s| s.vts != LinkState::NeedsAuth)
+        ui.settings.with(|s| app.has_token(s))
+            && ui.links.with(|s| *app.link(s) != LinkState::NeedsAuth)
     };
     let header = widget(
         Stack::bar(0.0)
@@ -99,32 +175,30 @@ pub(super) fn vts_mapping(ui: Ui) -> Row {
             widget(Stack::row(0.0))
                 .visible(move || {
                     !authorized()
-                        && (ui.links.with(|s| !s.vts_hotkeys.is_empty())
-                            || ui
-                                .settings
-                                .with(|s| !s.integrations.vts.expressions.is_empty()))
+                        && (ui.links.with(|s| !app.hotkeys(s).is_empty())
+                            || ui.settings.with(|s| !app.expressions(s).is_empty()))
                 })
-                .children(button(ui, "int-vts-authorize", || Msg::VtsAuthorize)),
+                .children(button(ui, "int-vts-authorize", move || {
+                    Msg::AvatarAuthorize(sink)
+                })),
             widget(
                 IconButton::new(ti::REFRESH, ui.now_t("int-vts-refresh"))
                     .size(ControlSize::Small)
                     .with_tooltip(ui.now_t("int-vts-refresh")),
             )
-            .on_cx(|_, _: &Activate, cx| cx.dispatch_program_all(Msg::VtsRefresh)),
+            .on_cx(move |_, _: &Activate, cx| cx.dispatch_program_all(Msg::AvatarRefresh(sink))),
         )),
     ));
     let table = dynamic(
         move || {
             let (hotkeys, connected) = ui.links.with(|s| {
                 (
-                    s.vts_hotkeys.clone(),
-                    matches!(s.vts, LinkState::Connected(_)),
+                    app.hotkeys(s).to_vec(),
+                    matches!(app.link(s), LinkState::Connected(_)),
                 )
             });
             let mapped = ui.settings.with(|s| {
-                s.integrations
-                    .vts
-                    .expressions
+                app.expressions(s)
                     .iter()
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect::<Vec<_>>()
@@ -141,12 +215,12 @@ pub(super) fn vts_mapping(ui: Ui) -> Row {
             }
             if markers.is_empty() {
                 return if *connected {
-                    block(hint(ui.now_t("empty-vts-hotkeys")))
+                    block(hint(ui.now_t(empty_key)))
                 } else {
                     empty_row(
                         ui,
-                        "int-vts-map-empty",
-                        button(ui, "int-vts-authorize", || Msg::VtsAuthorize),
+                        map_empty_key,
+                        button(ui, "int-vts-authorize", move || Msg::AvatarAuthorize(sink)),
                     )
                 };
             }
@@ -178,11 +252,11 @@ pub(super) fn vts_mapping(ui: Ui) -> Row {
             .children((
                 widget(Stack::row(0.0).grow(1.0)).children(caption("int-vts-map-expression")),
                 widget(Stack::row(0.0).width(LengthSpec::Px(VTS_SELECT_W)))
-                    .children(caption("int-vts-map-hotkey")),
+                    .children(caption(hotkey_key)),
             ));
             let rows: Vec<Row> = markers
                 .into_iter()
-                .map(|key| vts_map_row(ui, key, options.clone()))
+                .map(|key| vts_map_row(ui, app, key, options.clone()))
                 .collect();
             Row::inset(
                 widget(Stack::column(0.0).with_layout(|l| {
@@ -193,6 +267,90 @@ pub(super) fn vts_mapping(ui: Ui) -> Row {
         },
     );
     Row::inset(widget(Stack::column(0.0)).children((header, table)))
+}
+
+/// The reset choices shared by VTube Studio and NanaLive.
+fn reset_options(ui: Ui) -> Vec<(String, String)> {
+    select_keys(
+        ui,
+        &[
+            ("line_end", "int-vts-reset-line-end"),
+            ("next_line", "int-vts-reset-next-line"),
+            ("off", "int-vts-reset-off"),
+        ],
+    )
+}
+
+/// NanaLive: its port, the hotkey mapping, lip sync and resets.
+fn nanalive_section(ui: Ui) -> AnyView {
+    toggled_section(
+        ui,
+        "",
+        row_status(
+            ui,
+            "int-nanalive",
+            Some("int-nanalive-hint"),
+            link_badge(ui, |s| &s.nanalive),
+            switch(
+                ui,
+                |s| s.integrations.nanalive.enabled,
+                |s, v| s.integrations.nanalive.enabled = v,
+            ),
+        ),
+        |s| s.integrations.nanalive.enabled,
+        vec![
+            row(
+                ui,
+                "int-vts-port",
+                None,
+                port(
+                    ui,
+                    |s| s.integrations.nanalive.port,
+                    |s, v| s.integrations.nanalive.port = v,
+                ),
+            ),
+            vts_mapping(ui, AvatarApp::NanaLive),
+            toggle_row!(ui, "int-vts-lipsync", integrations.nanalive.lip_sync),
+            row(
+                ui,
+                "int-vts-mouth-param",
+                Some("int-nanalive-mouth-param-hint"),
+                text(
+                    ui,
+                    "ParamMouthOpenY".into(),
+                    field::SM,
+                    |s| s.integrations.nanalive.mouth_param.clone(),
+                    |s, v| s.integrations.nanalive.mouth_param = v,
+                ),
+            ),
+            row(
+                ui,
+                "int-vts-mouth-amp",
+                None,
+                slider(
+                    ui,
+                    (0.1, 1.0, 0.05),
+                    "",
+                    |s| f64::from(s.integrations.nanalive.mouth_amp),
+                    |s, v| s.integrations.nanalive.mouth_amp = v as f32,
+                ),
+            ),
+            row(
+                ui,
+                "int-vts-reset",
+                None,
+                select(
+                    ui,
+                    reset_options(ui),
+                    |s| s.integrations.nanalive.reset_expressions.key().into(),
+                    |s, v| {
+                        s.integrations.nanalive.reset_expressions =
+                            VtsReset::from_key(v).unwrap_or_default()
+                    },
+                ),
+            ),
+        ],
+    )
 }
 
 pub(super) fn integrations(ui: Ui) -> AnyView {
@@ -224,7 +382,7 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                             |s, v| s.integrations.vts.port = v,
                         ),
                     ),
-                    vts_mapping(ui),
+                    vts_mapping(ui, AvatarApp::Vts),
                     toggle_row!(ui, "int-vts-lipsync", integrations.vts.lip_sync),
                     row(
                         ui,
@@ -256,14 +414,7 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                         None,
                         select(
                             ui,
-                            select_keys(
-                                ui,
-                                &[
-                                    ("line_end", "int-vts-reset-line-end"),
-                                    ("next_line", "int-vts-reset-next-line"),
-                                    ("off", "int-vts-reset-off"),
-                                ],
-                            ),
+                            reset_options(ui),
                             |s| s.integrations.vts.reset_expressions.key().into(),
                             |s, v| {
                                 s.integrations.vts.reset_expressions =
@@ -273,6 +424,7 @@ pub(super) fn integrations(ui: Ui) -> AnyView {
                     ),
                 ],
             ),
+            nanalive_section(ui),
             toggled_section(
                 ui,
                 "",

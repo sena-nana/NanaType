@@ -38,6 +38,7 @@ const LOCAL: &[&str] = &[
     "/disabled_packages",
     "/plugin_approvals",
     "/integrations/vts/token",
+    "/integrations/nanalive/token",
     "/update/skipped_version",
     "/update/last_check",
     "/diagnostics",
@@ -309,6 +310,7 @@ impl Incoming {
         next.disabled_packages = current.disabled_packages.clone();
         next.plugin_approvals = current.plugin_approvals.clone();
         next.integrations.vts.token = current.integrations.vts.token.clone();
+        next.integrations.nanalive.token = current.integrations.nanalive.token.clone();
         next.update.skipped_version = current.update.skipped_version.clone();
         next.update.last_check = current.update.last_check;
         next.diagnostics = current.diagnostics.clone();
@@ -421,6 +423,7 @@ impl Settings {
     pub fn reset_from(&self) -> Self {
         let mut next = Self::default();
         next.integrations.vts.token = self.integrations.vts.token.clone();
+        next.integrations.nanalive.token = self.integrations.nanalive.token.clone();
         next.general.locale = self.general.locale.clone();
         next.general.onboarding_done = self.general.onboarding_done;
         next.diagnostics.crash_seen = self.diagnostics.crash_seen;

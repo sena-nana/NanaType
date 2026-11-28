@@ -3,33 +3,57 @@
 //! * **VTube Studio**: a plugin client on the public API that turns on
 //!   expressions and presses hotkeys as `[expr=...]` and `[vts ...]` markers
 //!   are reached, and moves the model's mouth while the speaker talks.
+//! * **NanaLive**: the same, as a plugin on NanaLive's control API.
 //! * **OSC**: UDP messages under a prefix (`/nanatype/expression "smile"`),
 //!   for VNyan, Warudo, VSeeFace and anything else that speaks OSC.
 //! * **WebSocket broadcast**: a localhost server that pushes JSON events to
-//!   every connected client (browser sources, NanaLive, custom scripts).
+//!   every connected client (browser sources, custom scripts).
 //!
 //! Each sink runs on its own thread; [`BridgeHandle::emit`] never blocks.
 
+mod avatar;
 mod events;
+mod nanalive;
 mod osc;
 mod vts;
 mod ws;
 
+pub use avatar::{AvatarConfig, AvatarHotkey, LipSync, mapping_key};
 pub use events::{BridgeEvent, BridgeStatus, Sink};
+pub use nanalive::DEFAULT_PORT as NANALIVE_PORT;
 pub use osc::OscConfig;
-pub use vts::{LipSync, VtsConfig, VtsHotkey, mapping_key};
 pub use ws::WsConfig;
 
 use std::sync::Arc;
+
+use avatar::{AvatarClient, Protocol};
 
 type StatusFn = Arc<dyn Fn(BridgeStatus) + Send + Sync>;
 
 /// Owns the sink threads. Dropping it stops them.
 pub struct BridgeHandle {
     status: StatusFn,
-    vts: Option<vts::VtsClient>,
+    vts: Option<AvatarClient>,
+    nanalive: Option<AvatarClient>,
     osc: Option<osc::OscSender>,
     ws: Option<ws::WsServer>,
+}
+
+/// Start, update or stop an avatar client. Only a new port reconnects.
+fn set_avatar<P: Protocol>(
+    slot: &mut Option<AvatarClient>,
+    config: Option<AvatarConfig>,
+    status: &StatusFn,
+) {
+    match (slot.as_mut(), config) {
+        (Some(c), Some(cfg)) if c.port() == cfg.port => c.update(cfg),
+        (_, Some(cfg)) => *slot = Some(AvatarClient::start::<P>(cfg, status.clone())),
+        (_, None) => {
+            if slot.take().is_some() {
+                status(BridgeStatus::Off(P::SINK));
+            }
+        }
+    }
 }
 
 impl BridgeHandle {
@@ -37,22 +61,28 @@ impl BridgeHandle {
         Self {
             status: Arc::new(status),
             vts: None,
+            nanalive: None,
             osc: None,
             ws: None,
         }
     }
 
-    /// Start, update or stop VTube Studio. Only a new port reconnects.
-    pub fn set_vts(&mut self, config: Option<VtsConfig>) {
-        match (&mut self.vts, config) {
-            (Some(c), Some(cfg)) if c.port() == cfg.port => c.update(cfg),
-            (_, Some(cfg)) => self.vts = Some(vts::VtsClient::start(cfg, self.status.clone())),
-            (_, None) => {
-                if self.vts.take().is_some() {
-                    (self.status)(BridgeStatus::Off(Sink::Vts));
-                }
-            }
+    fn avatar(&self, sink: Sink) -> Option<&AvatarClient> {
+        match sink {
+            Sink::Vts => self.vts.as_ref(),
+            Sink::NanaLive => self.nanalive.as_ref(),
+            Sink::Osc | Sink::WebSocket => None,
         }
+    }
+
+    /// Start, update or stop VTube Studio. Only a new port reconnects.
+    pub fn set_vts(&mut self, config: Option<AvatarConfig>) {
+        set_avatar::<vts::Vts>(&mut self.vts, config, &self.status);
+    }
+
+    /// Start, update or stop NanaLive. Only a new port reconnects.
+    pub fn set_nanalive(&mut self, config: Option<AvatarConfig>) {
+        set_avatar::<nanalive::NanaLive>(&mut self.nanalive, config, &self.status);
     }
 
     pub fn set_osc(&mut self, config: Option<OscConfig>) {
@@ -79,30 +109,31 @@ impl BridgeHandle {
         }
     }
 
-    /// Ask VTube Studio for a plugin token (the user confirms inside VTS).
-    pub fn vts_request_token(&self) {
-        if let Some(v) = &self.vts {
-            v.request_token();
+    /// Ask the avatar app (VTube Studio or NanaLive) for a plugin token; the
+    /// user confirms inside the app.
+    pub fn request_token(&self, sink: Sink) {
+        if let Some(c) = self.avatar(sink) {
+            c.request_token();
         }
     }
 
-    pub fn vts_refresh_hotkeys(&self) {
-        if let Some(v) = &self.vts {
-            v.refresh_hotkeys();
+    pub fn refresh_hotkeys(&self, sink: Sink) {
+        if let Some(c) = self.avatar(sink) {
+            c.refresh_hotkeys();
         }
     }
 
     /// The voice reading the line began a word of `chars` characters: the
-    /// VTube Studio mouth opens with it instead of flapping on its own.
+    /// avatar's mouth opens with it instead of flapping on its own.
     pub fn word(&self, chars: usize) {
-        if let Some(v) = &self.vts {
-            v.word(chars);
+        for c in [&self.vts, &self.nanalive].into_iter().flatten() {
+            c.word(chars);
         }
     }
 
     pub fn emit(&self, event: BridgeEvent) {
-        if let Some(v) = &self.vts {
-            v.emit(&event);
+        for c in [&self.vts, &self.nanalive].into_iter().flatten() {
+            c.emit(&event);
         }
         if let Some(o) = &self.osc {
             o.emit(&event);

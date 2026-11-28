@@ -1,6 +1,6 @@
 //! External bridges, chat sources, OBS, plugins, and updates.
 
-use nanatype_bridge::{BridgeHandle, LipSync, OscConfig, VtsConfig, WsConfig};
+use nanatype_bridge::{AvatarConfig, BridgeHandle, LipSync, OscConfig, WsConfig};
 use nanatype_settings::Settings;
 
 use super::blive_feeds::BliveFeedManager;
@@ -26,15 +26,26 @@ pub struct IntegrationsHub {
 impl IntegrationsHub {
     pub fn apply_bridge_settings(&mut self, settings: &Settings, ui: Ui) {
         let i = &settings.integrations;
-        self.bridge.set_vts(i.vts.enabled.then(|| VtsConfig {
+        let lip_sync = |on: bool, param: &str, amp: f32| {
+            (on && !param.trim().is_empty()).then(|| LipSync {
+                param: param.trim().to_owned(),
+                amp,
+            })
+        };
+        self.bridge.set_vts(i.vts.enabled.then(|| AvatarConfig {
             port: i.vts.port,
             token: i.vts.token.clone(),
             expressions: i.vts.expressions.clone(),
-            lip_sync: (i.vts.lip_sync && !i.vts.mouth_param.trim().is_empty()).then(|| LipSync {
-                param: i.vts.mouth_param.trim().to_owned(),
-                amp: i.vts.mouth_amp,
-            }),
+            lip_sync: lip_sync(i.vts.lip_sync, &i.vts.mouth_param, i.vts.mouth_amp),
             reset: i.vts.reset_expressions,
+        }));
+        let n = &i.nanalive;
+        self.bridge.set_nanalive(n.enabled.then(|| AvatarConfig {
+            port: n.port,
+            token: n.token.clone(),
+            expressions: n.expressions.clone(),
+            lip_sync: lip_sync(n.lip_sync, &n.mouth_param, n.mouth_amp),
+            reset: n.reset_expressions,
         }));
         self.bridge.set_osc(i.osc.enabled.then(|| OscConfig {
             host: i.osc.host.clone(),
@@ -47,6 +58,9 @@ impl IntegrationsHub {
         ui.links.edit(|links| {
             if !i.vts.enabled {
                 links.vts = LinkState::Off;
+            }
+            if !n.enabled {
+                links.nanalive = LinkState::Off;
             }
             if !i.osc.enabled {
                 links.osc = LinkState::Off;
@@ -126,6 +140,7 @@ impl super::App {
                 Sink::Vts => 0u64,
                 Sink::Osc => 1,
                 Sink::WebSocket => 2,
+                Sink::NanaLive => 3,
             };
             nanatype_diag::report!(crate::diag::BRIDGE_ERROR, sink = code; "{fault}");
         }
@@ -133,16 +148,30 @@ impl super::App {
         if let Some((sink, state)) = crate::ui::link_text::bridge(locale, &status) {
             self.ui.links.edit(|links| match sink {
                 Sink::Vts => links.vts = state,
+                Sink::NanaLive => links.nanalive = state,
                 Sink::Osc => links.osc = state,
                 Sink::WebSocket => links.ws = state,
             });
         }
         match status {
-            BridgeStatus::VtsToken(token) => self.edit(|s| s.integrations.vts.token = Some(token)),
-            BridgeStatus::VtsTokenRejected => self.edit(|s| s.integrations.vts.token = None),
-            BridgeStatus::VtsHotkeys(keys) => {
+            BridgeStatus::Token(Sink::Vts, token) => {
+                self.edit(|s| s.integrations.vts.token = Some(token))
+            }
+            BridgeStatus::Token(Sink::NanaLive, token) => {
+                self.edit(|s| s.integrations.nanalive.token = Some(token))
+            }
+            BridgeStatus::TokenRejected(Sink::Vts) => {
+                self.edit(|s| s.integrations.vts.token = None)
+            }
+            BridgeStatus::TokenRejected(Sink::NanaLive) => {
+                self.edit(|s| s.integrations.nanalive.token = None)
+            }
+            BridgeStatus::Hotkeys(sink, keys) => {
                 let list = keys.into_iter().map(|k| (k.id, k.name)).collect();
-                self.ui.links.edit(|links| links.vts_hotkeys = list);
+                self.ui.links.edit(|links| match sink {
+                    Sink::NanaLive => links.nanalive_hotkeys = list,
+                    _ => links.vts_hotkeys = list,
+                });
             }
             _ => {}
         }

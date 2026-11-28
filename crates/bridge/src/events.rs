@@ -1,11 +1,12 @@
 pub use nanatype_model::BridgeEvent;
 use nanatype_model::LinkFault;
 
-use crate::VtsHotkey;
+use crate::AvatarHotkey;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Sink {
     Vts,
+    NanaLive,
     Osc,
     WebSocket,
 }
@@ -15,13 +16,15 @@ pub enum BridgeStatus {
     Off(Sink),
     Connecting(Sink),
     Connected(Sink),
-    /// VTube Studio is reachable but the plugin is not authorized yet.
-    VtsNeedsToken,
-    /// A new token was granted; persist it.
-    VtsToken(String),
-    /// VTube Studio refused the stored token; forget it.
-    VtsTokenRejected,
-    VtsHotkeys(Vec<VtsHotkey>),
+    /// The avatar app (VTube Studio, NanaLive) is reachable but the plugin
+    /// is not authorized yet.
+    NeedsToken(Sink),
+    /// The avatar app granted a new token; persist it.
+    Token(Sink, String),
+    /// The avatar app refused the stored token; forget it.
+    TokenRejected(Sink),
+    /// The current model's hotkeys in the avatar app.
+    Hotkeys(Sink, Vec<AvatarHotkey>),
     /// WebSocket clients currently connected.
     Clients(usize),
     /// The sink failed; it retries where it can.

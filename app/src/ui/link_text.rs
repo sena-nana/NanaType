@@ -61,8 +61,8 @@ pub fn bridge(locale: Locale, status: &BridgeStatus) -> Option<(Sink, LinkState)
             Sink::WebSocket,
             LinkState::Connected(I18N.tr_in(locale, "int-ws-clients", &[("count", (*n).into())])),
         ),
-        BridgeStatus::VtsNeedsToken | BridgeStatus::VtsTokenRejected => {
-            (Sink::Vts, LinkState::NeedsAuth)
+        BridgeStatus::NeedsToken(sink) | BridgeStatus::TokenRejected(sink) => {
+            (*sink, LinkState::NeedsAuth)
         }
         BridgeStatus::Error(sink, f) => (
             *sink,
@@ -72,7 +72,7 @@ pub fn bridge(locale: Locale, status: &BridgeStatus) -> Option<(Sink, LinkState)
                 &[("message", fault(locale, f).into())],
             )),
         ),
-        BridgeStatus::VtsToken(_) | BridgeStatus::VtsHotkeys(_) => return None,
+        BridgeStatus::Token(..) | BridgeStatus::Hotkeys(..) => return None,
     })
 }
 
@@ -344,7 +344,7 @@ mod tests {
     #[test]
     fn data_reports_leave_the_state_alone() {
         assert_eq!(
-            bridge(Locale::ZhCn, &BridgeStatus::VtsToken("t".into())),
+            bridge(Locale::ZhCn, &BridgeStatus::Token(Sink::Vts, "t".into())),
             None
         );
         assert_eq!(

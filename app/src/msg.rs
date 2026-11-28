@@ -507,8 +507,10 @@ define_messages! {
     OpenUrl(&'static str),
     CopyText(String),
     PlaySample,
-    VtsAuthorize,
-    VtsRefresh,
+    /// Ask VTube Studio or NanaLive for a plugin token.
+    AvatarAuthorize(nanatype_bridge::Sink),
+    /// List the avatar app's hotkeys again.
+    AvatarRefresh(nanatype_bridge::Sink),
     DismissNotice(u64),
     /// The tray stops showing error notice `id` in its tooltip.
     TrayErrorExpired(u64),

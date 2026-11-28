@@ -49,7 +49,7 @@ NanaType 是为虚拟主播做的直播打字机。你在输入框里打字，�
   </tr>
   <tr>
     <td valign="top"><h4>🎙️ 语音输入</h4>优先使用系统识别，也可下载小型多语言离线模型；停顿后自动发送，编辑时自动让出。</td>
-    <td valign="top"><h4>🔗 主播工具联动</h4>VTube Studio 表情、热键、参数与口型同步，标记按打字位置触发；另有 OSC 与本地 WebSocket 广播。</td>
+    <td valign="top"><h4>🔗 主播工具联动</h4>VTube Studio 与 NanaLive 的表情、热键、参数与口型同步，标记按打字位置触发；另有 OSC 与本地 WebSocket 广播。</td>
   </tr>
   <tr>
     <td valign="top"><h4>💬 弹幕与聊天</h4>收发 Twitch 聊天，也能接入 <a href="https://github.com/xfgryujk/blivechat">blivechat</a>、<a href="https://huixinghao.cn/">彗星号</a> 和 <a href="https://github.com/laplace-live/event-bridge">LAPLACE Event Bridge</a>。</td>

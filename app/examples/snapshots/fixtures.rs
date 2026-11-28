@@ -343,6 +343,7 @@ pub fn reported(
         if let Some((sink, state)) = link_text::bridge(locale, report) {
             match sink {
                 Sink::Vts => links.vts = state,
+                Sink::NanaLive => links.nanalive = state,
                 Sink::Osc => links.osc = state,
                 Sink::WebSocket => links.ws = state,
             }
@@ -367,6 +368,11 @@ pub fn assert_consistent(
     let i = &settings.integrations;
     let links = [
         ("VTube Studio", i.vts.enabled, status.vts != LinkState::Off),
+        (
+            "NanaLive",
+            i.nanalive.enabled,
+            status.nanalive != LinkState::Off,
+        ),
         ("OSC", i.osc.enabled, status.osc != LinkState::Off),
         (
             "WebSocket",

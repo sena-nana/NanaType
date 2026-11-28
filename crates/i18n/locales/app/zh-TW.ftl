@@ -120,6 +120,7 @@ status-sent = 已傳送
 empty-phrases = 還沒有快捷短語
 empty-stickers = 還沒有貼紙目錄
 empty-vts-hotkeys = 還沒有讀取到 VTube Studio 熱鍵
+empty-nanalive-hotkeys = 還沒有讀取到 NanaLive 熱鍵
 
 ## 設定導航
 settings-general = 常規
@@ -131,7 +132,7 @@ settings-hotkeys = 快捷鍵
 settings-output = 輸出 / OBS
 settings-platforms = 直播平台
 settings-platforms-one-source = 同一時間只連線一個彈幕來源，開啟一個會關閉其他
-settings-integrations = 聯動
+settings-integrations = 第三方輸出
 settings-assets = 素材
 settings-profiles = 配置與備份
 settings-input = 輸入
@@ -493,7 +494,7 @@ perf-no-hybrid = 無需設定：未偵測到效能核和能效核
 perf-no-performance-cores = 無需設定：未偵測到可用的效能核
 perf-unsupported = 目前平台不支援 CPU 排程設定
 
-## 聯動
+## 第三方輸出
 int-vts = VTube Studio
 int-vts-hint = 按 [expr] 和 [vts] 標記切換表情、觸發熱鍵
 int-vts-port = 埠
@@ -510,6 +511,11 @@ int-vts-reset = 表情復位
 int-vts-reset-line-end = 台詞離開展示框時
 int-vts-reset-next-line = 下一句開始時
 int-vts-reset-off = 不復位
+int-nanalive = NanaLive
+int-nanalive-hint = 按 [expr] 和 [vts] 標記切換表情、觸發熱鍵，在 NanaLive 外掛頁批准授權
+int-nanalive-map-hotkey = NanaLive 熱鍵
+int-nanalive-map-empty = 連線後請求授權，並在 NanaLive 的外掛頁批准，即可列出 NanaLive 熱鍵
+int-nanalive-mouth-param-hint = 填 Live2D 參數 ID，如 ParamMouthOpenY；[vts param] 標記同樣按參數 ID 寫入
 int-osc = OSC
 int-osc-hint = 傳送到 VNyan、Warudo、VSeeFace 等
 int-osc-host = 目標地址

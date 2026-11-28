@@ -77,11 +77,15 @@ pub struct AudioStatusUi {
     pub devices: Vec<String>,
 }
 
-/// Outbound integration link states (VTube Studio, OSC, WebSocket, OBS).
+/// Outbound integration link states (VTube Studio, NanaLive, OSC,
+/// WebSocket, OBS).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct LinkStatus {
     pub vts: LinkState,
     pub vts_hotkeys: Vec<(String, String)>,
+    pub nanalive: LinkState,
+    /// NanaLive's hotkeys: id and name.
+    pub nanalive_hotkeys: Vec<(String, String)>,
     pub osc: LinkState,
     pub ws: LinkState,
     pub obs: LinkState,
@@ -89,7 +93,7 @@ pub struct LinkStatus {
 
 impl LinkStatus {
     pub fn any_connecting(&self) -> bool {
-        [&self.vts, &self.osc, &self.ws, &self.obs]
+        [&self.vts, &self.nanalive, &self.osc, &self.ws, &self.obs]
             .into_iter()
             .any(|l| *l == LinkState::Connecting)
     }

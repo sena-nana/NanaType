@@ -20,9 +20,9 @@
 
 ## 音效、画面与联动
 
-`[se=coin vol=0.6]` 播放皮肤音效；`[expr=smile]` 联动立绘及 VTube Studio/OSC/WebSocket；`[portrait=happy]` 只换立绘；`[screenshake=6,300]` 震屏；`[sticker=cats/hello h=1.6]`、`[emote=wave]` 插入贴纸或皮肤表情；`[img="file:C:/pic.png" alt="图"]` 插图；`[at=1234 name="观众" avatar=blob:bili-face-1234]` 插入观众提及。
+`[se=coin vol=0.6]` 播放皮肤音效；`[expr=smile]` 联动立绘及 VTube Studio/NanaLive/OSC/WebSocket；`[portrait=happy]` 只换立绘；`[screenshake=6,300]` 震屏；`[sticker=cats/hello h=1.6]`、`[emote=wave]` 插入贴纸或皮肤表情；`[img="file:C:/pic.png" alt="图"]` 插图；`[at=1234 name="观众" avatar=blob:bili-face-1234]` 插入观众提及。
 
-VTube Studio 标记：`[vts hotkey=挥手]`、`[vts expr=Smile.exp3.json]`、`[vts expr=Smile.exp3.json active=off fade=0.3]`、`[vts param=MouthSmile value=0.8 ms=1500]`。标记在打字到对应位置时发送；Skip 会立即补发跳过部分。联动设置还可启用口型同步和句末复位。
+VTube Studio 标记（NanaLive 同样响应）：`[vts hotkey=挥手]`、`[vts expr=Smile.exp3.json]`、`[vts expr=Smile.exp3.json active=off fade=0.3]`、`[vts param=MouthSmile value=0.8 ms=1500]`。标记在打字到对应位置时发送；Skip 会立即补发跳过部分。“第三方输出”设置还可启用口型同步和句末复位。NanaLive 里 `param` 按 Live2D 参数 ID 写入，如 `[vts param=ParamMouthForm value=1 ms=1500]`。
 
 ## 句首设置与模板
 

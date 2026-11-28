@@ -65,7 +65,7 @@ NanaType は VTuber のための配信用タイプライターです。入力ボ
     </td>
     <td valign="top">
       <h4>🔗 配信ツール連携</h4>
-      VTube Studio の表情・ホットキー・パラメーター・リップシンクに対応し、マークアップで入力位置に合わせて発動できます。OSC とローカル WebSocket での配信も可能です。
+      VTube Studio と NanaLive の表情・ホットキー・パラメーター・リップシンクに対応し、マークアップで入力位置に合わせて発動できます。OSC とローカル WebSocket での配信も可能です。
     </td>
   </tr>
   <tr>

@@ -79,7 +79,12 @@ pub fn summary(settings: &nanatype_settings::Settings, locale: &str) -> serde_js
             "comet": i.comet_rooms().bilibili || i.comet_rooms().others,
             "twitch": i.twitch.enabled,
         },
-        "outputs": { "vts": i.vts.enabled, "osc": i.osc.enabled, "websocket": i.websocket.enabled },
+        "outputs": {
+            "vts": i.vts.enabled,
+            "nanalive": i.nanalive.enabled,
+            "osc": i.osc.enabled,
+            "websocket": i.websocket.enabled,
+        },
         "plugins": settings.enabled_plugins.len(),
         "verbose_logs": settings.diagnostics.verbose,
     })

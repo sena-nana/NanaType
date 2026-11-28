@@ -127,7 +127,7 @@ pub static BRIDGE_ERROR: EventDescriptor = EventDescriptor::new(
     3,
     "output.bridge_error",
     Severity::Warn,
-    // 0 VTube Studio, 1 OSC, 2 WebSocket.
+    // 0 VTube Studio, 1 OSC, 2 WebSocket, 3 NanaLive.
     &[FieldDescriptor::u64("sink")],
 );
 
