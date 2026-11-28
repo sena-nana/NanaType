@@ -246,7 +246,7 @@ pub(super) fn spout_rows(
         } else {
             "output-spout-name-hint"
         }),
-        widget(crate::ui::kit::tag_frame())
+        widget(crate::ui::kit::tag_action_frame())
             .children((
                 widget(
                     Text::new(read(&ui.settings.get_untracked()).name.clone())

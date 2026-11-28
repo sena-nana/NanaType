@@ -67,7 +67,7 @@ pub(in crate::ui::settings::pages) fn obs_steps(ui: Ui, guide: bool) -> AnyView 
         )
         .into_any()
     };
-    let sender = widget(crate::ui::kit::tag_frame()).children((
+    let sender = widget(crate::ui::kit::tag_action_frame()).children((
         widget(Text::new(String::new()).style(Type::Small.mono())).bind(move |t: &mut Text| {
             let name = ui.settings.with(|s| s.output.display.name.clone());
             if t.value != name {

@@ -52,6 +52,24 @@ pub fn tag_frame() -> Stack {
     nana_ui::runtime::view::tag_frame()
 }
 
+/// [`tag_frame`] that ends in an icon button (a sender name and its copy
+/// button). The button's square already holds its glyph off the edge, so
+/// its side keeps only the tag's vertical inset, the same on its top, end
+/// and bottom; the chip inset there doubled the gap after the glyph.
+pub fn tag_action_frame() -> Stack {
+    let frame = tag_frame();
+    let mut style = frame.node_style();
+    // The inset step would rewrite all four edges when it resolves.
+    style.padding_step = None;
+    frame.style(style).with_layout(|l| {
+        l.padding = None;
+        l.padding_left = Some(LengthSpec::Px(inset::CHIP_X));
+        l.padding_right = Some(LengthSpec::Px(inset::CHIP_Y));
+        l.padding_top = Some(LengthSpec::Px(inset::CHIP_Y));
+        l.padding_bottom = Some(LengthSpec::Px(inset::CHIP_Y));
+    })
+}
+
 /// `stack` with a corner `radius` px that comes from content, not chrome (a
 /// skin's history avatar). Chrome names a [`RadiusTier`]; a round frame is
 /// [`RadiusTier::Full`].
